@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import SkillInstallApprovalDialog, { type SkillInstallApproval } from '../SkillInstallApprovalDialog.vue'
+import SkillInstallApprovalDialog, {
+  type SkillDeliveryApproval,
+  type SkillInstallApproval,
+} from '../SkillInstallApprovalDialog.vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import { createMockBackend } from '../../composables/__tests__/mockBackend'
 
@@ -16,6 +19,23 @@ function approval(over: Partial<SkillInstallApproval> = {}): SkillInstallApprova
     skill_md: '---\nname: verify\n---\n<b>not html</b>',
     warnings: ['The package contains scripts'],
     targets: null,
+    expires_at: Date.now() / 1000 + 600,
+    status: 'pending',
+    ...over,
+  }
+}
+
+function delivery(over: Partial<SkillDeliveryApproval> = {}): SkillDeliveryApproval {
+  return {
+    approval_id: 'd1',
+    action: 'delivery',
+    owner: 'pane:p1',
+    name: 'verify',
+    skill_id: 'shared:verify',
+    real_path: '',
+    targets: ['claude', 'codex'],
+    enabled: true,
+    current: { targets: ['claude'], enabled: false },
     expires_at: Date.now() / 1000 + 600,
     status: 'pending',
     ...over,
@@ -86,6 +106,18 @@ describe('SkillInstallApprovalDialog', () => {
     expect(wrapper.find('.sa-dialog').exists()).toBe(false)
   })
 
+  it('names a skill that ships with Navide as bundled, not as a path', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('skills.install_approvals.list', { approvals: [] })
+    wrapper = await open(mock)
+
+    mock.emit('skills.install_approval_request', approval({ source: { kind: 'bundled', name: 'plugin-authoring' } }))
+    await flushPromises()
+    expect(wrapper.text()).toContain(
+      i18n.global.t('skill-approval.source-bundled', { name: 'navide:plugin-authoring' }),
+    )
+  })
+
   it('sends a rejection', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('skills.install_approvals.list', { approvals: [approval()] })
@@ -137,6 +169,44 @@ describe('SkillInstallApprovalDialog', () => {
     expect(wrapper.find('.sa-approve').exists()).toBe(false)
     expect(wrapper.find('.sa-dismiss').exists()).toBe(true)
     expect(mock.sent.some((s) => s.type === 'skills.install_approval.decide')).toBe(false)
+  })
+
+  it('shows a delivery change as before and after, and approves it through the same decide', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('skills.install_approvals.list', { approvals: [delivery()] })
+    mock.setResponse('skills.install_approval.decide', { approval: { status: 'installed', error: null } })
+    wrapper = await open(mock)
+    const text = wrapper.text()
+    expect(text).toContain(i18n.global.t('skill-approval.delivery-title', { name: 'verify' }))
+    expect(text).toContain(i18n.global.t('skill-approval.delivery-shared'))
+    expect(wrapper.find('.sa-before').text()).toBe('claude')
+    expect(wrapper.find('.sa-after').text()).toBe('claude, codex')
+    expect(wrapper.find('.sa-turns-on').exists()).toBe(true)
+    expect(wrapper.find('.sa-files').exists()).toBe(false)
+    expect(wrapper.find('.sa-approve').text()).toBe(i18n.global.t('skill-approval.delivery-approve'))
+    await wrapper.find('.sa-approve').trigger('click')
+    await flushPromises()
+    const decide = mock.sent.find((s) => s.type === 'skills.install_approval.decide')
+    expect(decide?.payload).toEqual({
+      approval_id: 'd1', approve: true,
+      confirm: { nonce: 'n', expires: '0', mac: 'skills.install_approval.decide||d1:approve' },
+    })
+    expect(wrapper.find('.sa-dialog').exists()).toBe(false)
+  })
+
+  it('names a native skill by its folder and shows a failed delivery change', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('skills.install_approvals.list', {
+      approvals: [delivery({ real_path: '/home/u/.claude/skills/x', enabled: null, targets: ['codex'], current: { targets: [], enabled: null } })],
+    })
+    mock.setResponse('skills.install_approval.decide', { approval: { status: 'failed', error: '' } })
+    wrapper = await open(mock)
+    expect(wrapper.text()).toContain('/home/u/.claude/skills/x')
+    expect(wrapper.find('.sa-before').text()).toBe(i18n.global.t('skill-approval.delivery-none'))
+    expect(wrapper.find('.sa-turns-on').exists()).toBe(false)
+    await wrapper.find('.sa-approve').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.sa-error').text()).toBe(i18n.global.t('skill-approval.delivery-failed'))
   })
 
   it('offers only a dismiss for an expired request', async () => {

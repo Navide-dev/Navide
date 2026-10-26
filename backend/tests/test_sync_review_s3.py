@@ -35,13 +35,13 @@ async def _b_holds_third(tmp_path, s3, monkeypatch):
     a.use(); sa.replace_servers([{**_mcp("runner"), "command": "/usr/bin/first"}]); await a.sync()
     a.use(); sa.replace_servers([{**_mcp("runner"), "command": "/usr/bin/second"}]); await a.sync()
     await b.sync(); b.use()
-    (row,) = [h for h in sync_approvals.listing() if h["itemId"] == "runner"]
-    sync_approvals.decide(b.adapter, "runner", True, row["digest"])
+    (row,) = [h for h in sync_approvals.listing() if h["itemId"] in ("runner", "i:" + "runner")]
+    sync_approvals.decide(b.adapter, row["itemId"], True, row["digest"])
     await b.sync()
     assert _runs(sb)["runner"] == "/usr/bin/second"
     a.use(); sa.replace_servers([{**_mcp("runner"), "command": "/usr/bin/third"}]); await a.sync()
     await b.sync(); b.use()
-    assert sync_approvals.entry("mcp", "runner")["status"] == "pending"
+    assert sync_approvals.entry("mcp", "i:runner")["status"] == "pending"
     return server, a, b, sa, sb
 
 
@@ -50,15 +50,15 @@ async def test_restore_is_refused_while_an_incoming_change_waits_for_approval(
     tmp_path, account_key, s3, monkeypatch
 ):
     server, a, b, sa, sb = await _b_holds_third(tmp_path, s3, monkeypatch)
-    pending = sync_approvals.entry("mcp", "runner")
+    pending = sync_approvals.entry("mcp", "i:runner")
     pushes = server.pushes
     b.use()
-    oldest = (await b.engine.versions("mcp", "runner"))[-1]
+    oldest = (await b.engine.versions("mcp", "i:runner"))[-1]
     with pytest.raises(sync_engine.SyncError) as err:
-        await b.engine.restore("mcp", "runner", oldest["rev"])
+        await b.engine.restore("mcp", "i:runner", oldest["rev"])
     assert err.value.code == "RESTORE_BLOCKED"
     # The pulled hold is untouched and nothing goes up over "third".
-    assert sync_approvals.entry("mcp", "runner") == pending
+    assert sync_approvals.entry("mcp", "i:runner") == pending
     await b.sync()
     assert server.pushes == pushes
     a.use(); await a.sync()
@@ -281,8 +281,8 @@ async def test_a_held_restore_reads_held(tmp_path, account_key, s3, monkeypatch)
     a.use()
     store.replace_servers([{**_mcp("runner"), "command": "/usr/bin/first"}]); await a.sync()
     store.replace_servers([{**_mcp("runner"), "command": "/usr/bin/second"}]); await a.sync()
-    (old,) = await a.engine.versions("mcp", "runner")
-    result = await a.engine.restore("mcp", "runner", old["rev"])
+    (old,) = await a.engine.versions("mcp", "i:runner")
+    result = await a.engine.restore("mcp", "i:runner", old["rev"])
     assert result["outcome"] == "held" and result["held"] is True
 
 
@@ -714,7 +714,7 @@ async def test_on_a_legacy_account_a_delete_that_meets_a_delete_is_still_a_confl
     await b.sync()
     assert state["raced"]
     (clash,) = b.store.conflicts("prompts")
-    assert clash["itemId"] == "p1" and clash["local"] is None and clash["remote"] is None
+    assert clash["itemId"] in ("p1", "i:" + "p1") and clash["local"] is None and clash["remote"] is None
 
 
 # ── contract c7 ─────────────────────────────────────────────────────────────

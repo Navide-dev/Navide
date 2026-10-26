@@ -153,7 +153,7 @@ const STRINGS: HostStringTable<DigestBlockStrings> = {
       'testplace-withdrawn': () => 'Its developer or Navide withdrew this Testplace build.',
       none: () => 'Navide put this file on its blocked list without giving a reason.',
     },
-    warnedDetail: 'It still runs. You can keep using it, disable it or remove it; Settings → Extensions keeps showing that it is blocked.',
+    warnedDetail: 'It still runs. You can keep using it, disable it or remove it; Settings → Navide Plugins keeps showing that it is blocked.',
     disabledDetail: 'It cannot be enabled again. Choose Remove to delete it.',
     warnButtons: ['Keep using', 'Disable', 'Remove'],
     disabledButtons: ['OK', 'Remove'],

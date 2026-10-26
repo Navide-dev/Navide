@@ -233,6 +233,10 @@ declare global {
       stabilizeDroppedPaths: (paths: string[]) => Promise<{ ok: boolean; paths: string[] }>
       saveClipboardImage: (args: { bytes: Uint8Array; mediaType: string }) => Promise<{ ok: boolean; path?: string }>
       openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>
+      trashCreatedMemoryFile: (
+        path: string,
+        acceptChanged?: boolean,
+      ) => Promise<{ ok: boolean; code?: string; error?: string; created?: string; current?: string }>
       legalLinks: Readonly<Record<LegalRoute, string>>
       trustConfirm: (
         action: string,
@@ -515,6 +519,9 @@ declare global {
         prepareLocalRollback?: (id: string) => Promise<PreparedInstallSummary & { rollbackFrom: string }>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
+        developerModeReminderDismissed?: () => Promise<boolean>
+        dismissDeveloperModeReminder?: () => Promise<void>
+        onDeveloperModeReminderDismissed?: (cb: () => void) => () => void
         setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
         loadFromFolder?: () => Promise<PreparedInstallSummary | null>
         commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean; expectedFolder?: string }) => Promise<DeveloperModeState>
@@ -743,6 +750,8 @@ declare global {
     workspaceWrite: string[]
     lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
     shell?: 'allowlist' | 'full'
+    allowedBy?: 'pre-0.2.31-install'
+    declined?: boolean
   }
 
   interface NativeBackendOverview {

@@ -87,6 +87,23 @@ _OURS_RE = re.compile(r"/plan-mcp\b")
 #: Query parameters are named like env vars, so the same secret test applies;
 #: this only has to spot that a string *is* a URL worth taking apart.
 _URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+#: Credentials recognisable by their shape alone, whatever they are named:
+#: a ``DATABASE_URL``-style name says nothing, ``ghp_…`` says everything.
+_TOKEN_SHAPE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:"
+    r"gh[pousr]_[A-Za-z0-9]{20,}"
+    r"|github_pat_[A-Za-z0-9_]{20,}"
+    r"|glpat-[A-Za-z0-9_-]{20,}"
+    r"|sk-[A-Za-z0-9_-]{20,}"
+    r"|[spr]k_(?:live|test)_[A-Za-z0-9]{16,}"
+    r"|xox[abposr]-[A-Za-z0-9-]{10,}"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|AIza[0-9A-Za-z_-]{35}"
+    r"|npm_[A-Za-z0-9]{36}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
+    r"|[Bb]earer\s+\S{8,}"
+    r")"
+)
 
 
 @dataclass(frozen=True)
@@ -425,12 +442,23 @@ def _mask_map(value: Any) -> tuple[tuple[str, str], ...]:
             text = ""
         else:
             text = json.dumps(raw, ensure_ascii=False)
-        masked.append((key, REDACTED_SECRET if text and _looks_secret(key) else text))
+        masked.append((key, REDACTED_SECRET if text and _looks_secret(key) else _mask_value(text)))
     return tuple(masked)
 
 
-def _mask_url(url: str) -> str:
-    """``url`` with credentials in it replaced by the sentinel.
+def _mask_value(text: str, placeholder: str = REDACTED_SECRET) -> str:
+    """``text`` judged by what it holds rather than what it is called: a
+    token-shaped value becomes the sentinel, and any URL in it loses its
+    userinfo and secret query parameters (``postgres://u:p@h`` under a
+    harmless-looking ``DATABASE_URL``)."""
+    if _TOKEN_SHAPE_RE.search(text):
+        return placeholder
+    return mask_urls_in_text(text, placeholder)
+
+
+def _mask_url(url: str, placeholder: str = REDACTED_SECRET) -> str:
+    """``url`` with credentials in it replaced by *placeholder* (the sentinel;
+    sync passes ``""``).
 
     Two places a URL carries one: the userinfo before ``@`` and a query
     parameter named like a secret. Everything else is kept — the host and path
@@ -445,39 +473,43 @@ def _mask_url(url: str) -> str:
         hostname = parts.hostname or ""
         port = parts.port
     except ValueError:
-        return REDACTED_SECRET
+        return placeholder
+    pairs = parse_qsl(parts.query, keep_blank_values=True)
+    secret_query = any(value and _looks_secret(key) for key, value in pairs)
+    if not (username or password or secret_query):
+        # Nothing to mask: kept as written rather than re-assembled.
+        return url
     netloc = parts.netloc
     if username or password:
         host = hostname
         if port:
             host = f"{host}:{port}"
-        netloc = f"{REDACTED_SECRET}@{host}"
+        netloc = f"{placeholder}@{host}"
     query = parts.query
-    if query:
-        pairs = parse_qsl(query, keep_blank_values=True)
-        if pairs:
-            query = urlencode(
-                [
-                    (key, REDACTED_SECRET if value and _looks_secret(key) else value)
-                    for key, value in pairs
-                ],
-                # Keep the sentinel readable; percent-encoded it reads as data.
-                safe="*",
-            )
+    if secret_query:
+        query = urlencode(
+            [
+                (key, placeholder if value and _looks_secret(key) else value)
+                for key, value in pairs
+            ],
+            # Keep the sentinel readable; percent-encoded it reads as data.
+            safe="*",
+        )
     return urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
 
 
 _URL_IN_TEXT_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"<>]+")
 
 
-def mask_urls_in_text(text: str) -> str:
+def mask_urls_in_text(text: str, placeholder: str = REDACTED_SECRET) -> str:
     """``text`` (an error message, say) with every URL in it masked as
     `_mask_url` masks a configured one: userinfo and secret query parameters."""
-    return _URL_IN_TEXT_RE.sub(lambda m: _mask_url(m.group(0)), text)
+    return _URL_IN_TEXT_RE.sub(lambda m: _mask_url(m.group(0), placeholder), text)
 
 
-def _mask_args(args: tuple[str, ...]) -> tuple[str, ...]:
-    """``args`` with credential-shaped values replaced by the sentinel.
+def _mask_args(args: tuple[str, ...], placeholder: str = REDACTED_SECRET) -> tuple[str, ...]:
+    """``args`` with credential-shaped values replaced by *placeholder* (the
+    sentinel; sync passes ``""``).
 
     Two shapes cover what MCP configs really hold: the value *after* a
     secret-named flag (``--header X-Api-Key: abc``) and a single argument
@@ -488,25 +520,25 @@ def _mask_args(args: tuple[str, ...]) -> tuple[str, ...]:
     take_next = False
     for arg in args:
         if take_next:
-            masked.append(_mask_named_value(arg) or REDACTED_SECRET)
+            masked.append(_mask_named_value(arg, placeholder) or placeholder)
             take_next = False
             continue
         # A URL argument is the third place a credential hides (mcp-remote is
         # routinely handed ``https://host/mcp?apikey=…``), and it is not a
         # name/value pair, so it needs the URL rule rather than this one.
         if _URL_RE.match(arg):
-            masked.append(_mask_url(arg))
+            masked.append(_mask_url(arg, placeholder))
             continue
-        named = _mask_named_value(arg)
+        named = _mask_named_value(arg, placeholder)
         if named:
             masked.append(named)
             continue
-        masked.append(arg)
+        masked.append(_mask_value(arg, placeholder))
         take_next = bool(_SECRET_FLAG_RE.match(arg))
     return tuple(masked)
 
 
-def _mask_named_value(arg: str) -> str:
+def _mask_named_value(arg: str, placeholder: str = REDACTED_SECRET) -> str:
     """``"name=***"`` when ``arg`` is a secret-named pair, else ``""``."""
     for separator in ("=", ":"):
         name, found, _ = arg.partition(separator)
@@ -515,7 +547,7 @@ def _mask_named_value(arg: str) -> str:
         if not _ARG_NAME_RE.fullmatch(name):
             continue
         if _SECRET_FLAG_RE.match(name) or _looks_secret(name):
-            return f"{name}{separator}{REDACTED_SECRET}"
+            return f"{name}{separator}{placeholder}"
     return ""
 
 

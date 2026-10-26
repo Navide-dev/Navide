@@ -171,6 +171,7 @@ import {
   type PermissionKey,
 } from './permissions'
 import { resolveBackendDataDir, readUiSettingsText, UI_SETTINGS_FILE } from './ui-settings-bootstrap'
+import { trashCreatedMemoryFile } from './memoryUndoCreate'
 import { PlanWindowRegistry } from './plan-windows'
 import { createTokenMonitorWindowOpener } from './token-monitor-window'
 import { errorMain, infoMain, logMain, logRendererConsole, warnMain } from './main-log'
@@ -213,6 +214,7 @@ import {
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
   packageContentDigest,
+  preInstallConsentCandidates,
   type ThirdPartyLaunchSpec,
   ThirdPartyBackendController,
   type AgentToolWritePrompt,
@@ -1399,7 +1401,7 @@ async function promptNativeBackendWorkspaceWrite(prompt: NativeBackendWritePromp
     type: 'warning',
     title: 'Allow file changes',
     message: `Allow ${prompt.name} to change files in this workspace?`,
-    detail: `${prompt.workspacePath}\n\nYou can revoke this in Settings → Extensions.`,
+    detail: `${prompt.workspacePath}\n\nYou can revoke this in Settings → Navide Plugins.`,
     buttons: ['Don\'t allow', 'Allow'],
     defaultId: 0,
     cancelId: 0,
@@ -1484,6 +1486,19 @@ for (const activation of installedPluginLoad.activationCatalog) {
       }`,
     )
   }
+}
+// 0.2.32, once per profile: the third-party backends installed before 0.2.31
+// (no install recorded its consent then) count as consented, as the
+// installs of 0.2.31 and later do. Developer Mode folders keep their own
+// folder-bound consent.
+try {
+  const granted = nativeBackendStore.migratePreInstallConsent(preInstallConsentCandidates(
+    installedPluginLoad.activationCatalog,
+    new Set(pluginDeveloperModeStore.folders().map((folder) => folder.pluginId)),
+  ))
+  if (granted.length > 0) console.info(`[main] native backends installed before 0.2.31 allowed: ${granted.join(', ')}`)
+} catch (error) {
+  console.warn(`[main] pre-0.2.31 native backend consent not recorded: ${error instanceof Error ? error.message : String(error)}`)
 }
 
 frontendPluginManager.setUiLocaleResolver(() => currentUiLocale())
@@ -2714,7 +2729,12 @@ async function autoRestartBackend(): Promise<void> {
   const inFlight = new Promise<void>((resolve) => { settle = resolve })
   backendStarting = inFlight
   try {
-    const started = await startBackend(readHealthCheckTimeoutSec(healthTimeoutPath()) * 1000)
+    // Pass the approved catalog like every other spawn: without it startBackend
+    // overwrites the on-disk catalog with an empty one.
+    const started = await startBackend(
+      readHealthCheckTimeoutSec(healthTimeoutPath()) * 1000,
+      approvedBackendPluginCatalog()
+    )
     if (epoch !== backendLifecycleEpoch) {
       // A stop/restart/quit landed while this was spawning. What the user asked
       // for wins; this process must not become the live backend, and must not
@@ -3676,7 +3696,7 @@ async function handleMiniIdeUnavailable(
         : kind === 'file'
           ? 'This file can only be opened through the Mini-IDE in the current configuration. '
           : '') +
-      'The Mini-IDE extension is not installed or could not be loaded. Open Settings → Extensions to inspect its status.',
+      'The Navide plugin Mini-IDE is not installed or could not be loaded. Open Settings → Navide Plugins to inspect its status.',
   }
   void (target && !target.isDestroyed()
     ? dialog.showMessageBox(target, options)
@@ -3692,7 +3712,7 @@ function showPlansRecoveryUnavailable(workspacePath: string): void {
     type: 'error',
     title: 'Plans unavailable',
     message: 'Plans could not be opened because its data could not be read.',
-    detail: 'Open Settings → Extensions to inspect the Plans extension, or restart Navide.',
+    detail: 'Open Settings → Navide Plugins to inspect the Navide plugin Plans, or restart Navide.',
   }
   void (target && !target.isDestroyed()
     ? dialog.showMessageBox(target, options)
@@ -3713,8 +3733,8 @@ function showPlansPreviewUnavailable(workspacePath: string): void {
       ? 'Unable to preview this HTML file because Plans is not installed.'
       : 'Unable to preview this HTML file because Plans is unavailable.',
     detail: missing
-      ? 'The Plans extension is not installed. Open Settings → Extensions to inspect its status.'
-      : 'The installed Plans extension could not be loaded. Open Settings → Extensions to inspect its status.',
+      ? 'The Navide plugin Plans is not installed. Open Settings → Navide Plugins to inspect its status.'
+      : 'The installed Navide plugin Plans could not be loaded. Open Settings → Navide Plugins to inspect its status.',
   }
   void (target && !target.isDestroyed()
     ? dialog.showMessageBox(target, options)
@@ -3761,7 +3781,7 @@ async function showGitViewUnavailable(target: BrowserWindow | null): Promise<voi
     type: 'error',
     title: 'Git view unavailable',
     message: 'Unable to open the diff because the Git extension is unavailable.',
-    detail: 'The Git extension is not installed or could not be loaded. Open Settings → Extensions to inspect its status.',
+    detail: 'The Navide plugin Git is not installed or could not be loaded. Open Settings → Navide Plugins to inspect its status.',
   }
   await (target && !target.isDestroyed()
     ? dialog.showMessageBox(target, options)
@@ -5359,6 +5379,23 @@ ipcMain.handle('legal:open', async (_event, route: unknown) => {
   } catch (e) {
     return { ok: false, error: String(e) }
   }
+})
+
+// Memory page "Undo create": only a file the backend recorded creating, and
+// only ever to the Trash (memoryUndoCreate.ts).
+ipcMain.handle('memory:trashCreated', async (event, path: unknown, acceptChanged: unknown) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
+  if (typeof path !== 'string' || !path) return { ok: false, code: 'not-created', error: 'invalid path' }
+  const dataDir = resolveBackendDataDir({
+    envOverride: process.env.AGENT_TEAM_DATA_DIR,
+    isPackaged: app.isPackaged,
+    appDataPath: app.getPath('appData'),
+    platform: process.platform,
+    homeDir: app.getPath('home'),
+    xdgDataHome: process.env.XDG_DATA_HOME,
+    appData: process.env.APPDATA
+  })
+  return trashCreatedMemoryFile(dataDir, path, acceptChanged === true, (target) => shell.trashItem(target))
 })
 
 ipcMain.handle('shell:openExternal', async (event, url: string) => {

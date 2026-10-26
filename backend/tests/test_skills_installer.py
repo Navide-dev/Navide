@@ -451,3 +451,67 @@ def test_non_github_urls_never_download(setup, monkeypatch, source):
     monkeypatch.setattr(module, "_download", unexpected)
     with pytest.raises(SkillValidationError):
         installer.preview(source, owner_key="pane-one")
+
+
+def test_bundled_plugin_authoring_skill_installs_through_the_normal_path(setup):
+    store, installer, _ = setup
+    item = installer.preview("navide:plugin-authoring", owner_key="pane-one")
+    assert item["name"] == "navide-plugin-authoring"
+    assert item["source"] == {"kind": "bundled", "name": "plugin-authoring"}
+    assert [entry["path"] for entry in item["files"]] == ["SKILL.md"]
+    assert not store.root.exists()
+    result = install(installer, item, consent=True)
+    assert result["skill"]["provenance"]["source"] == {"kind": "bundled", "name": "plugin-authoring"}
+    shipped = module.BUNDLED_ROOT / "plugin-authoring" / "SKILL.md"
+    assert (store.root / "navide-plugin-authoring" / "SKILL.md").read_bytes() == shipped.read_bytes()
+    reloaded = SkillsStore(root=store.root, state_path=store.state_path,
+                           runtime_root=store.runtime_root, native_roots=[])
+    assert reloaded.get_skill("navide-plugin-authoring")["skill"]["provenance"] == result["skill"]["provenance"]
+
+
+@pytest.mark.parametrize("source", [
+    "navide:", "navide:../plugin-authoring", "navide:plugin-authoring/../plugin-authoring",
+    "navide:/etc", "navide:..", "navide:Plugin-Authoring", "navide:plugin_authoring",
+    "navide:no-such-skill", "navide:plugin-authoring/SKILL.md", "navide:plugin-authoring\x00",
+])
+def test_bundled_source_resolves_only_folders_shipped_with_navide(setup, source):
+    store, installer, _ = setup
+    with pytest.raises(SkillValidationError, match="unknown Navide-bundled skill"):
+        installer.preview(source, owner_key="pane-one")
+    assert not store.root.exists()
+
+
+def test_bundled_source_takes_no_ref_or_subdir(setup):
+    _, installer, _ = setup
+    with pytest.raises(SkillValidationError, match="no ref or subdir"):
+        installer.preview("navide:plugin-authoring", owner_key="pane-one", subdir="x")
+
+
+def test_bundled_source_never_reaches_the_network(setup, monkeypatch):
+    _, installer, _ = setup
+    def unexpected(*args):
+        pytest.fail("a bundled skill must not trigger a request")
+    monkeypatch.setattr(module, "_download", unexpected)
+    installer.preview("navide:plugin-authoring", owner_key="pane-one")
+
+
+def test_local_preview_source_is_unchanged_by_bundled_sources(setup):
+    # Any source not starting with navide: keeps main's behaviour and shape.
+    _, installer, source = setup
+    item = preview(installer, source)
+    assert item["source"] == {"kind": "local", "path": str(source.absolute())}
+
+
+@pytest.mark.parametrize("source", [
+    {"kind": "bundled", "name": "../x"},
+    {"kind": "bundled", "name": "plugin-authoring", "path": "/tmp/x"},
+    {"kind": "bundled"},
+])
+def test_malformed_bundled_receipt_is_refused(setup, source):
+    store, installer, _ = setup
+    item = installer.preview("navide:plugin-authoring", owner_key="pane-one")
+    bundle = {"SKILL.md": {"data": (module.BUNDLED_ROOT / "plugin-authoring" / "SKILL.md").read_bytes(),
+                           "executable": False}}
+    with pytest.raises(SkillValidationError, match="provenance"):
+        store.install_bundle("navide-plugin-authoring", bundle, targets=["codex"], consent=True,
+                             provenance={"source": source, "digest": item["digest"]})

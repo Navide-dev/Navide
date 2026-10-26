@@ -176,7 +176,7 @@ Editor 使用 Monaco，並提供 File Editing、Diagnostics、Plan Rendering、D
 1. 呼叫 `skills_list`，再把回傳的 ID 傳給 `skills_inspect`，讀取指示、檔案、所有權、來源紀錄與目前的 `delivery_revision`。
 2. 呼叫 `skills_prepare_install`，來源可用 `owner/repo`、HTTPS `github.com/owner/repo` URL 或本機 skill 資料夾的絕對路徑（支援展開 `~`）。GitHub 的 `ref` 與 `subdir` 分開提供；`subdir: "."` 選擇 repository 根目錄。多個候選會回傳 `selection_required` 與 `candidates`，不產生可安裝的 preview ID；選好路徑後重新 prepare。不支援私人 repository、任意 URL 或 GitHub tree URL。
 3. 檢視完整指示、檔案清單、腳本警示、來源與 digest，再以 preview ID、相同 digest 及明確 targets 呼叫 `skills_install`。這只會送出請求：使用者在 Navide 視窗核准或拒絕（核准同時代表同意首次寫入共用根），結果以 `skills_install_status` 查詢；Agent 無法代使用者核准。任何同名受管、使用者或原生 skill 都會拒絕。安裝獨占建立目的目錄，寫完附件與 metadata 後才發布 `SKILL.md`，讓掃描不會讀到半套內容；這不是整個目錄的原子 rename。
-4. 之後用 skill ID 與最新 `delivery_revision` 呼叫 `skills_set_delivery`。過時 revision 會失敗，不覆蓋其他呼叫端的決定。此流程只新增 skill，不更新或重新取得既有安裝。
+4. 之後用 skill ID 與最新 `delivery_revision` 呼叫 `skills_set_delivery`。過時 revision 會失敗，不覆蓋其他呼叫端的決定。只移除 CLI 或停用 skill 的變更會立即套用；投遞給其他 CLI 或啟用 skill 的變更，要像安裝一樣在 Navide 視窗經你核准。此流程只新增 skill，不更新或重新取得既有安裝。
 
 準備的 bytes 綁定已驗證的呼叫端，15 分鐘後或 backend 重啟時失效；安裝不重讀本機來源或再次下載。許可重試可沿用尚未到期的 preview；重試收據仍保留時，成功重送只回傳原結果，不重複寫入。同時最多 8 份有效準備，另有最多 8 份不含套件內容的輕量完成收據。安裝成功即釋放套件 bytes 與有效準備名額。收據沿用原 preview 到期時間；快取滿時，最早安裝成功的收據優先淘汰。到期或淘汰後重送回傳 missing/expired，不重新安裝。GitHub archive 限壓縮 10 MiB、展開 32 MiB、4,096 個 entries；選定 skill 限 64 檔、每檔 256 KiB、總量 512 KiB。不安全路徑、連結、特殊檔、保留 metadata 與無效 manifest 直接拒絕，不靜默略過。
 
@@ -198,7 +198,7 @@ Settings 涵蓋 Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider�
 
 安裝區段管理已安裝的 Coding CLI：版本、安裝方式、重複安裝、該 CLI 上次自我更新的結果，以及在終端機執行該 CLI 官方更新與診斷指令的按鈕。開啟工作區時可設定恢復單一 CLI、第一個 Grid 頁面或目前分頁；即使上次不是 Grid layout，Grid 頁面仍會依 Grid preset 計算。Navide 只呈現並執行官方指令，不會自行更新 CLI。Exported Setting 會遮蔽 API Key 與 Token。啟用第三方 Server 前，請先檢查 MCP Command 與 Environment Variable。
 
-**帳號**分頁為每個 CLI 帳號放一張卡片。除了 CLI 自己的登入，卡片還能保存一份**可攜憑證**：各家官方為「在任何機器上使用」而設計的值（例如 Claude Code 的 `claude setup-token`）。貼入一次，該 CLI 的新 pane 會在環境變數裡拿到它，CLI 自己的登入檔不會被動到。每個 CLI 同時只有一份憑證在*使用中*；卡片會標示是哪一份，並在本機登入檔會蓋過它時提出警告。移除憑證只影響這台裝置。
+**帳號**分頁為每個 CLI 帳號放一張卡片，用的是 CLI 自己的登入。Navide 0.2.32 移除了卡片上的可攜憑證（貼入的值，例如 `claude setup-token` 印出的 token）：用過的裝置在更新時會清除存著的值，新的 Claude pane 改用 Claude 自己的登入，可能是另一個帳號，額度也各自計算。
 
 **為帳號命名。**每個帳號都能取一個你自己的名字，內建的 Default 也可以：在「帳號」分頁滑到卡片上按鉛筆，或在額度徽章的帳號清單那一列按鉛筆。這個名字會成為各處顯示帳號時的主要文字——pane 標題列、帳號清單、卡片、切換通知與 Turn Stats——登入身分則留在它旁邊；把欄位清空就回到自動產生的名稱（Account 1、Account 2…）。對於憑證不帶身分的 CLI，你取的名字是唯一能分辨兩個帳號的方式。名字屬於帳號槽，不屬於登入身分：這個槽位之後改登別的 email 時，名字不會跟著變。
 
@@ -210,6 +210,6 @@ Claude Code 每次請求都會重讀憑證，因此切換不需重啟任何東�
 
 Claude Code、Codex、Grok、Kimi、Pi、Droid、MiniMax Code 的新帳號登入是隔離的：登入 pane 使用私有 home，使用中的帳號與執行中的 pane 不受影響。其他 CLI 只有一個憑證儲存位置，登入會暫時取代目前的憑證；Navide 會先為使用中的帳號留下快照，登入完成後把新登入停放到它自己的帳號卡片，再把使用中的帳號還原——登入被放棄時也一樣。這類登入進行中時，Navide 不會開啟該 CLI 的其他 pane；該 CLI 有 pane 在執行時也不會開始這類登入。所有 CLI 的帳號切換版面都是從各家程式碼讀出來的；還沒有任何 CLI 在 Navide 裡以兩個真實帳號完成來回切換，而 MiniMax Code 的支援是最新加入的。
 
-這些憑證**永遠不會離開這台機器**：帳號憑證與金鑰只留在本機，所以**同步**區段（設定 → 同步）沒有「憑證」這一列，舊版留下開著的憑證開關一律視為關閉。同步區段會顯示同步金鑰的 id——用來加密你同步的資產，不是 CLI 憑證——並在你懷疑外洩時提供更換：所有記錄重新加密，已配對的裝置會收到新金鑰。
+這些憑證**永遠不會離開這台機器**：帳號憑證與金鑰只留在本機，所以**同步**區段（設定 → 同步）沒有「憑證與金鑰」這一列，舊版留下開著的憑證開關一律視為關閉。同步區段會顯示同步金鑰的 id——用來加密你同步的資產，不是 CLI 憑證——並在你懷疑外洩時提供更換：所有記錄重新加密，已配對的裝置會收到新金鑰。
 
 `.agent-team/` 目前不是可攜機制。未來在不同裝置間移轉時，應使用具有 Redaction 與 Retention Control 的明確本機 Export／Import，而不是透過 Git 同步。

@@ -3,8 +3,8 @@
 Review D-M2: credentials were only retired on the v3 wire, so a v1 fallback
 (sync.caps timing out once) pushed them. The block now sits in the sync layer
 — the switch, the link's engine wiring, the item-level and listing entries —
-and a switch left on by an older build counts as off. CredentialsScope and
-the credential vault are untouched.
+and a switch left on by an older build counts as off. The credential vault
+is untouched.
 """
 
 from __future__ import annotations

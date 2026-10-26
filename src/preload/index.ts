@@ -967,6 +967,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('dialog:pickFiles', args),
   openExternal: (url: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:openExternal', url),
+  /** Move an instruction file the Memory page created to the Trash; main
+   *  accepts only a path the backend recorded creating (memoryUndoCreate.ts). */
+  trashCreatedMemoryFile: (
+    path: string,
+    acceptChanged = false,
+  ): Promise<{ ok: boolean; code?: string; error?: string; created?: string; current?: string }> =>
+    ipcRenderer.invoke('memory:trashCreated', path, acceptChanged),
   /** The legal pages on navide.dev, by route; the same table main's Help menu uses. */
   legalLinks: { ...LEGAL_LINKS } as Readonly<Record<LegalRoute, string>>,
   /**
@@ -1489,6 +1496,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     /** Card K4: the Developer Mode switch and the developer folders. The main
      *  process owns the switch; it opens its own folder dialog. */
     developerMode: (): Promise<DeveloperModeState> => ipcRenderer.invoke('plugins:developerMode'),
+    /** The launch reminder was closed in some window during this launch. */
+    developerModeReminderDismissed: (): Promise<boolean> => ipcRenderer.invoke('plugins:developerModeReminderDismissed'),
+    dismissDeveloperModeReminder: (): Promise<void> => ipcRenderer.invoke('plugins:dismissDeveloperModeReminder'),
+    onDeveloperModeReminderDismissed: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('plugins:developerModeReminderDismissed', listener)
+      return () => ipcRenderer.removeListener('plugins:developerModeReminderDismissed', listener)
+    },
     setDeveloperMode: (enabled: boolean): Promise<DeveloperModeState> =>
       ipcRenderer.invoke('plugins:setDeveloperMode', { enabled }),
     loadFromFolder: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:loadFromFolder'),

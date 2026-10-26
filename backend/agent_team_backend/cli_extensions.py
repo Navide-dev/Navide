@@ -5,7 +5,8 @@ that belongs to one AI CLI: Claude plugins and mods, Codex plugins and hooks,
 opencode plugins, Pi extensions and the rest. Navide's own plugins are not
 listed here; they have their own page.
 
-Where each CLI keeps them is declared on its vendor spec (``ExtensionsSpec``);
+Where each CLI keeps them is declared on its vendor spec (``ExtensionsSpec``),
+or in ``_UNMANAGED_CLIS`` for a CLI Navide does not run in a pane (Gemini CLI);
 this module holds the per-format readers. Like ``native_skills`` and
 ``native_mcp`` it has no write path at all, by construction, and every call is
 a fresh scan. Four rules it keeps:
@@ -38,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from .cli_vendors.base import ExtensionsSource, ExtensionsSpec
 from .native_mcp import REDACTED_SECRET, _home, _mask_args, _strip_jsonc
 from .osplat import paths as platform_paths
 
@@ -58,8 +60,8 @@ _CODE_SUFFIXES = (".ts", ".tsx", ".js", ".mjs", ".cjs", ".mts", ".cts", ".jsx")
 _NAVIDE_HOOK_RE = re.compile(r"agent-team-hook|X-Agent-Team-Event|Agent-Team[/\\]backend-port|/hooks/copilot|navide-guard\.cmd")
 
 #: Hook events whose handler sees, and may veto or rewrite, a tool call.
-_TOOL_EVENT_RE = re.compile(r"pre_?tool|beforeshell|beforemcp|permission|tool\.check", re.I)
-_PROMPT_EVENT_RE = re.compile(r"prompt", re.I)
+_TOOL_EVENT_RE = re.compile(r"pre_?tool|beforetool|beforeshell|beforemcp|permission|tool\.check", re.I)
+_PROMPT_EVENT_RE = re.compile(r"prompt|beforemodel", re.I)
 
 #: Credential shapes a shell command line carries that ``_mask_args`` (built
 #: for MCP argv) does not see once the line is split on spaces: a quoted
@@ -142,6 +144,9 @@ class CliExtension:
     detail: str = ""
     valid: bool = True
     error: str = ""
+    #: Why ``enabled`` is a default, not a reading: the file holding the
+    #: CLI's on/off switch could not be read. Empty when the state is known.
+    enabled_error: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -168,6 +173,7 @@ class CliExtension:
             "native_consent": self.native_consent,
             "owner": self.owner,
             "evidence": self.evidence,
+            "enabled_error": self.enabled_error,
         }
 
 
@@ -180,22 +186,47 @@ class Inventory:
         return {"vendors": self.vendors, "items": [item.as_dict() for item in self.items]}
 
     def public_dict(self) -> dict[str, Any]:
+        """``unreadable`` names what could not be read, so an agent does not
+        take a file it could not open for an extension that is not there."""
         return {
             "vendors": self.vendors,
             "items": [item.public_dict() for item in self.items if item.valid],
+            "unreadable": [
+                {
+                    "cli": item.cli, "id": item.id, "name": item.name, "kind": item.kind,
+                    "type_label": item.type_label, "error": _without_path(item.error, item.path),
+                }
+                for item in self.items if not item.valid
+            ],
         }
 
 
+#: CLIs Navide does not run in a pane (no vendor spec) whose extensions are
+#: still listed: key -> (label, where they live). Gemini CLI, verified
+#: 2026-10-26 against @google/gemini-cli 0.49.0: it loads only
+#: ``~/.gemini/extensions/<dir>`` (no per-workspace extensions), reads the
+#: same ``gemini-extension.json`` / ``extension-enablement.json`` pair Qwen
+#: Code forked from it, and ``~/.gemini/settings.json`` ``hooks`` in the
+#: ``{event: [{hooks: [{command}]}]}`` shape.
+_UNMANAGED_CLIS: dict[str, tuple[str, ExtensionsSpec]] = {
+    "gemini": ("Gemini CLI (Google)", ExtensionsSpec(sources=(
+        ExtensionsSource("qwen-extensions", (".gemini", "extensions"), "Gemini extension"),
+        ExtensionsSource("hooks", (".gemini", "settings.json"), "Gemini hook", section=("hooks",)),
+    ))),
+}
+
+
 def scan(home: Path | None = None, runner: Runner | None = None) -> Inventory:
-    """Every CLI extension on this machine, CLI by CLI in registry order."""
+    """Every CLI extension on this machine, CLI by CLI in key order."""
     from .cli_vendors.registry import VENDORS
 
     base = home or _home()
     run = runner or _run_readonly
     inventory = Inventory()
-    for key in sorted(VENDORS):
-        spec = VENDORS[key]
-        ext = spec.extensions
+    clis = {key: (spec.label, spec.extensions) for key, spec in VENDORS.items()}
+    clis.update({key: entry for key, entry in _UNMANAGED_CLIS.items() if key not in VENDORS})
+    for key in sorted(clis):
+        label, ext = clis[key]
         if ext is None:
             continue
         found: list[CliExtension] = []
@@ -204,10 +235,11 @@ def scan(home: Path | None = None, runner: Runner | None = None) -> Inventory:
                 found.extend(_read_source(key, source, base, run))
         inventory.vendors.append({
             "cli": key,
-            "label": spec.label,
+            "label": label,
             "supported": ext.supported,
             "note": ext.note,
             "count": sum(1 for item in found if item.valid),
+            "unreadable": sum(1 for item in found if not item.valid),
         })
         inventory.items.extend(found)
     return inventory
@@ -232,7 +264,7 @@ _CHANGE_CLIS: dict[str, tuple[str, ...]] = {
 
 def navide_changes(features: list[dict[str, Any]]) -> list[CliExtension]:
     """What Navide wrote into a CLI's world for a convenience feature, one row
-    per recorded target, so the CLI Extensions page shows them with owner
+    per recorded target, so the Extensions page shows them with owner
     navide. ``features`` is ``ConvenienceGate.listing()["features"]``.
 
     The id names the target by a hash of its path: the agent's copy of this
@@ -268,7 +300,7 @@ def _read_plugins_json(cli: str, source: Any, home: Path, run: Runner) -> list[C
     if not path.is_file():
         return []
     document = _load(path)
-    enabled = _enabled_map(home, source)
+    enabled, enabled_error = _enabled_map(home, source)
     records = document.get("plugins") if isinstance(document, dict) else None
     if not isinstance(records, dict):
         return [_broken(cli, source, path, "no plugins map")]
@@ -283,6 +315,7 @@ def _read_plugins_json(cli: str, source: Any, home: Path, run: Runner) -> list[C
                 version=str(install.get("version", "")),
                 scope=str(install.get("scope", "user")),
                 enabled=enabled.get(plugin_id, True),
+                enabled_error=enabled_error,
             ))
     return out
 
@@ -299,7 +332,7 @@ def _read_plugin_dirs(cli: str, source: Any, home: Path, run: Runner) -> list[Cl
     root = home.joinpath(*source.relative)
     if not root.is_dir():
         return []
-    enabled = _enabled_map(home, source)
+    enabled, enabled_error = _enabled_map(home, source)
     out = []
     for plugin, top in _plugin_roots(root, source.depth or 3):
         manifest = _manifest(plugin)
@@ -309,6 +342,7 @@ def _read_plugin_dirs(cli: str, source: Any, home: Path, run: Runner) -> list[Cl
             cli, source, plugin_id, plugin,
             version=str(manifest.get("version", "")),
             enabled=enabled.get(plugin_id, enabled.get(name, True)),
+            enabled_error=enabled_error,
         ))
     return out
 
@@ -431,7 +465,11 @@ def _read_qwen_extensions(cli: str, source: Any, home: Path, run: Runner) -> lis
     if not root.is_dir():
         return []
     enablement = root / "extension-enablement.json"
-    overrides = _load(enablement) if enablement.is_file() else {}
+    enabled_error = ""
+    try:
+        overrides = _load(enablement) if enablement.is_file() else {}
+    except (OSError, ValueError) as err:
+        overrides, enabled_error = {}, _read_error(enablement, err)
     out = []
     for directory in _subdirs(root):
         manifest = _manifest(directory)
@@ -447,7 +485,7 @@ def _read_qwen_extensions(cli: str, source: Any, home: Path, run: Runner) -> lis
         out.append(_finish(CliExtension(
             cli=cli, id=name, name=name, version=str(manifest.get("version", "")),
             kind="extension", type_label=source.type_label,
-            enabled="!/*" not in rules, native_consent=source.native_consent,
+            enabled="!/*" not in rules, enabled_error=enabled_error, native_consent=source.native_consent,
             path=str(directory), components=tuple(sorted(components)),
         ), directory))
     return out
@@ -498,14 +536,14 @@ _READERS: dict[str, Callable[[str, Any, Path, Runner], list[CliExtension]]] = {
 
 def _plugin_record(
     cli: str, source: Any, plugin_id: str, root: Path, *, version: str = "",
-    scope: str = "user", enabled: bool = True,
+    scope: str = "user", enabled: bool = True, enabled_error: str = "",
 ) -> CliExtension:
     name = plugin_id.partition("@")[0] or plugin_id
     hooks_doc = _hooks_document(root)
     is_mod = bool(source.mod_label) and isinstance(hooks_doc, dict) and bool(hooks_doc.get("modules"))
     record = CliExtension(
         cli=cli, id=plugin_id, name=name, version=version, scope=scope, enabled=enabled,
-        kind="mod" if is_mod else "plugin",
+        enabled_error=enabled_error, kind="mod" if is_mod else "plugin",
         type_label=source.mod_label if is_mod else source.type_label,
         native_consent="hot-reload" if is_mod else source.native_consent,
         path=str(root) if root.is_dir() else "",
@@ -681,16 +719,30 @@ def _newest_version(directory: Path) -> Path:
     return max(versions, key=lambda p: p.stat().st_mtime)
 
 
-def _enabled_map(home: Path, source: Any) -> dict[str, bool]:
+def _enabled_map(home: Path, source: Any) -> tuple[dict[str, bool], str]:
+    """The settings' on/off map, and why it is empty when the file holding it
+    could not be read (every plugin then shows its default, not its state)."""
     if not source.settings:
-        return {}
+        return {}, ""
     path = home.joinpath(*source.settings)
     try:
         document = _load(path) if path.is_file() else {}
-    except (OSError, ValueError):
-        return {}
+    except (OSError, ValueError) as err:
+        return {}, _read_error(path, err)
     plugins = document.get("enabledPlugins") if isinstance(document, dict) else None
-    return {str(k): bool(v) for k, v in plugins.items()} if isinstance(plugins, dict) else {}
+    return ({str(k): bool(v) for k, v in plugins.items()} if isinstance(plugins, dict) else {}), ""
+
+
+def _read_error(path: Path, err: Exception) -> str:
+    """Why a file could not be read, naming the file but not where it is."""
+    if isinstance(err, OSError):
+        return f"cannot read {path.name}: {err.strerror or type(err).__name__}"
+    return f"cannot parse {path.name}: {err}"
+
+
+def _without_path(error: str, path: str) -> str:
+    """An error for the agent's copy, which carries no paths."""
+    return error.replace(path, Path(path).name) if path else error
 
 
 def _load(path: Path) -> Any:

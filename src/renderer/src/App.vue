@@ -307,6 +307,7 @@ const SlotHistory = defineAsyncComponent(() => import('./components/HistoryPanel
 const SlotTasker = defineAsyncComponent(() => import('./components/TaskerPanel.vue'))
 const SlotMessages = defineAsyncComponent(() => import('./components/AgentMessagesPanel.vue'))
 import { pickWhatsNew, pickWhatsNewOnDemand, type WhatsNewEntry } from './lib/whatsNew'
+import { showPortableRemovalNotice } from './lib/portableRemovalNotice'
 import type { TourPrepare } from './lib/tours'
 import { useReleaseTour } from './composables/useReleaseTour'
 import { useWelcomeTour, welcomeActionTimes } from './composables/useWelcomeTour'
@@ -724,6 +725,7 @@ async function checkOnboarding(): Promise<void> {
       resp = await backend.send<OnboardStatus>('onboarding.status', {}, ONBOARDING_STATUS_TIMEOUT_MS)
     }
     cliHealthGuide.value = cliHealthGuideForLaunch(resp.payload)
+    void showPortableRemovalNotice(backend, notifyRestore.toast, (key) => i18n.global.t(key))
   } catch (e) {
     console.warn('[onboarding] status check failed; failing open and retrying:', e)
     // If the check fails, don't lock the user out — fail open.
@@ -5224,6 +5226,7 @@ async function togglePaneLoop(paneId: string, skillId?: string): Promise<void> {
   if (loopGen.get(paneId) !== gen) return
   if (!ok) {
     console.warn(`[loop] pane ${paneId}: loop-start injection failed — loop disarmed`)
+    notifyRestore.toast(i18n.global.t('pane.terminal.loop-start-failed', { name: skill.name }), { type: 'error' })
     pane.loopActive = false
     pane.loopSkillId = null
     pane.loopEstimateResetAt = null
@@ -9146,9 +9149,21 @@ async function unpinAllAccountPanes(): Promise<void> {
   await moveFollowPanes(ids, '', sessions)
 }
 
+/** The badge's list on a fixed pane: reopen only that pane in `profileId`'s
+ *  own dir, like fixing it (the rebuild asks before stopping a pane that is
+ *  working). It stays fixed; the live login and other panes are not
+ *  touched. */
+async function moveFixedAccountPane(paneId: string, profileId: string): Promise<void> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
+  if (!pane || pane.isLogin || !paneAccountFixed(pane) || !followDirSignedIn(profileId)) return
+  await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
+}
+
 provide(accountPinKey, {
   fixedCount: () => panes.value.filter((p) => paneAccountFixed(p)).length,
   unpinAll: unpinAllAccountPanes,
+  movePane: moveFixedAccountPane,
 })
 
 async function rebuildPanesViaResume(

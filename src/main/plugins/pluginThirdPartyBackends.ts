@@ -16,7 +16,12 @@ import {
   type PlansBridgeRequest,
   type PlansFilesystemPort,
 } from './plansBridge'
-import { firstPartyBridgePorts, isFirstPartyAgentToolActivation, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
+import {
+  firstPartyBridgePorts,
+  isFirstPartyAgentToolActivation,
+  isFirstPartyAgentToolPlugin,
+  isFirstPartyBackendPlugin,
+} from './pluginFirstPartyBackends'
 import { validateAgentsOperation } from './agentsCapability'
 import {
   createHostSandboxProbe,
@@ -38,7 +43,7 @@ import {
   type SandboxIdentity,
 } from './pluginBackendResourceWatchdog'
 import type { PluginResourceDecision, PluginResourceDecisionRow } from '../../shared/pluginResourceDecision'
-import type { NativeBackendStore } from './pluginNativeBackendStore'
+import { PRE_INSTALL_CONSENT, type NativeBackendStore } from './pluginNativeBackendStore'
 import { OFFICIAL_RECEIPT_NAME, type PluginActivationCatalogEntry } from './installedPlugins'
 import {
   REGISTRY_ARTIFACT_NAME,
@@ -51,7 +56,7 @@ import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
-import { revealInvisibleText, validateAgentTools } from '../../shared/pluginAgentTools'
+import { validateAgentTools } from '../../shared/pluginAgentTools'
 import {
   canonicalContractJson,
   computeDisclosure,
@@ -166,6 +171,21 @@ const FIRST_PARTY_WRITE_GRANT = 'first-party'
 const FIRST_PARTY_PORT_NAMESPACE: Partial<Record<PlansBridgePort, PluginSystemNamespace>> = {
   filesystem: 'fs',
   web: 'web',
+}
+
+/** The installed packages the 0.2.32 pre-0.2.31 install migration looks at
+ * (NativeBackendStore.migratePreInstallConsent): every installed backend
+ * that goes through the third-party gate, except a Developer Mode folder's,
+ * which keeps its folder-bound consent. */
+export function preInstallConsentCandidates(
+  catalog: readonly PluginActivationCatalogEntry[],
+  developerFolderIds: ReadonlySet<string>,
+): Array<{ pluginId: string; packageVersion: string }> {
+  return catalog
+    .filter((activation) =>
+      activation.backend !== undefined && activation.pluginId !== 'navide.plans' &&
+      !isFirstPartyBackendPlugin(activation.pluginId) && !developerFolderIds.has(activation.pluginId))
+    .map((activation) => ({ pluginId: activation.pluginId, packageVersion: activation.packageVersion }))
 }
 
 /**
@@ -409,6 +429,13 @@ export interface NativeBackendStatusRow {
   lastViolation?: ResourceViolation
   /** Declared shell mode, so the panel keeps the high-risk grant visible. */
   shell?: 'allowlist' | 'full'
+  /** 0.2.32: the user declined this content at its first-start dialog, so
+   * it is not asked again; Allow on this row runs it. */
+  declined?: boolean
+  /** Allowed without the user's answer: installed before 0.2.31 (the 0.2.32
+   * migration, migratePreInstallConsent). Set while that grant is pending or
+   * is the consent that covers this version. */
+  allowedBy?: typeof PRE_INSTALL_CONSENT
 }
 
 /** One view's child stdout waiting for a newline, from the backend usage
@@ -473,8 +500,9 @@ interface NativeBackendConsentStrings {
   allow: string
   separator: string
   agentToolsIntro: (count: number, name: string, bytes: number) => string
-  agentTool: (tool: string, method: string, write: boolean, seconds: number, description: string) => string
-  agentToolSchema: string
+  agentTool: (tool: string, method: string, write: boolean, seconds: number) => string
+  agentToolsMore: (count: number, writes: number, names: string) => string
+  agentToolsDetailIn: string
   agentToolsOutro: string
 }
 
@@ -501,11 +529,13 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     disable: 'You can disable it at any time in Settings → Navide Plugins.',
     agentToolsIntro: (count, name, bytes) =>
       `Agents will be able to call these ${count} tools of ${name} (their text and input schemas total ${bytes} bytes):`,
-    agentTool: (tool, method, write, seconds, description) =>
-      `• ${tool} → ${method} (declared ${write ? 'as changing data' : 'read-only'}, times out after ${seconds} s): ${description}`,
-    agentToolSchema: 'Input schema: ',
+    agentTool: (tool, method, write, seconds) =>
+      `• ${tool} → ${method} (declared ${write ? 'as changing data' : 'read-only'}, times out after ${seconds} s)`,
+    agentToolsMore: (count, writes, names) =>
+      `• and ${count} more${writes ? ` (${writes} declared as changing data)` : ''}: ${names}`,
+    agentToolsDetailIn: 'Each tool\'s full description and input schema are shown in Settings → Navide Plugins.',
     agentToolsOutro: 'What these tools return is shown to the agent, which may pass it on elsewhere.',
-    notNow: 'Not now',
+    notNow: 'Don\'t allow',
     allow: 'Allow',
     separator: ', ',
   },
@@ -527,11 +557,13 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     disable: '你隨時可以在「設定 → Navide 外掛」停用它。',
     agentToolsIntro: (count, name, bytes) =>
       `agent 將可以呼叫 ${name} 的這 ${count} 個工具（文字和輸入結構描述共 ${bytes} 位元組）：`,
-    agentTool: (tool, method, write, seconds, description) =>
-      `• ${tool} → ${method}（外掛宣告為${write ? '寫入' : '唯讀'}，${seconds} 秒後逾時）：${description}`,
-    agentToolSchema: '輸入結構描述：',
+    agentTool: (tool, method, write, seconds) =>
+      `• ${tool} → ${method}（外掛宣告為${write ? '寫入' : '唯讀'}，${seconds} 秒後逾時）`,
+    agentToolsMore: (count, writes, names) =>
+      `• 另外 ${count} 個${writes ? `（其中 ${writes} 個外掛宣告為寫入）` : ''}：${names}`,
+    agentToolsDetailIn: '每個工具的完整說明和輸入結構描述，都在「設定 → Navide 外掛」。',
     agentToolsOutro: '這些工具回傳的內容會交給 agent，agent 可能再把它傳到別處。',
-    notNow: '暫不',
+    notNow: '不允許',
     allow: '允許',
     separator: '、',
   },
@@ -553,29 +585,43 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     disable: '「設定 → Navide プラグイン」でいつでも無効にできます。',
     agentToolsIntro: (count, name, bytes) =>
       `agent は ${name} のこれら ${count} 個のツールを呼び出せるようになります（テキストと入力スキーマの合計 ${bytes} バイト）：`,
-    agentTool: (tool, method, write, seconds, description) =>
-      `• ${tool} → ${method}（プラグインの宣言：${write ? '書き込み' : '読み取り専用'}、${seconds} 秒でタイムアウト）：${description}`,
-    agentToolSchema: '入力スキーマ：',
+    agentTool: (tool, method, write, seconds) =>
+      `• ${tool} → ${method}（プラグインの宣言：${write ? '書き込み' : '読み取り専用'}、${seconds} 秒でタイムアウト）`,
+    agentToolsMore: (count, writes, names) =>
+      `• ほか ${count} 個${writes ? `（うち ${writes} 個はプラグインの宣言：書き込み）` : ''}：${names}`,
+    agentToolsDetailIn: '各ツールの説明と入力スキーマの全文は「設定 → Navide プラグイン」に表示されます。',
     agentToolsOutro: 'これらのツールが返す内容は agent に渡され、agent がそれを別の場所に渡すことがあります。',
-    notNow: '今はしない',
+    notNow: '許可しない',
     allow: '許可',
     separator: '、',
   },
 }
 
-/** The declared agent tools, each with the method it calls, its full
- * description, the plugin's own read/write claim, its timeout and its whole
- * input schema: allowing the backend also allows agents to call these. */
+/** Agent tools listed one per line in the native dialog; the rest are named
+ * on one line. A native message box does not scroll, so an unbounded list
+ * pushes its buttons off the screen. */
+export const NATIVE_DIALOG_LISTED_AGENT_TOOLS = 8
+
+/** The declared agent tools, each with the method it calls, the plugin's own
+ * read/write claim and its timeout, every tool's name and how many of the
+ * rest change data: allowing the backend also allows agents to call these.
+ * The full descriptions and input schemas are on the Settings page
+ * (NativeBackendPanel), not in this box. */
 function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt, s: NativeBackendConsentStrings): string {
   if (prompt.agentTools.length === 0) return ''
+  const listed = prompt.agentTools.slice(0, NATIVE_DIALOG_LISTED_AGENT_TOOLS)
+  const rest = prompt.agentTools.slice(NATIVE_DIALOG_LISTED_AGENT_TOOLS)
   return [
     s.agentToolsIntro(prompt.agentTools.length, prompt.name, Buffer.byteLength(JSON.stringify(prompt.agentTools))),
-    ...prompt.agentTools.map((tool) => [
-      s.agentTool(tool.name, tool.method, tool.risk === 'write', tool.timeoutMs / 1000, tool.description),
-      // Keys and enum values may hold invisible characters (never refused):
-      // spelled out so they cannot reorder or hide the dialog's text.
-      `  ${s.agentToolSchema}${revealInvisibleText(JSON.stringify(tool.inputSchema))}`,
-    ].join('\n')),
+    ...listed.map((tool) => s.agentTool(tool.name, tool.method, tool.risk === 'write', tool.timeoutMs / 1000)),
+    ...(rest.length
+      ? [s.agentToolsMore(
+          rest.length,
+          rest.filter((tool) => tool.risk === 'write').length,
+          rest.map((tool) => tool.name).join(s.separator),
+        )]
+      : []),
+    s.agentToolsDetailIn,
     s.agentToolsOutro,
   ].join('\n')
 }
@@ -851,6 +897,12 @@ export class ThirdPartyBackendController {
     if (refusal) throw unavailable(refusal.reason)
   }
 
+  /** 0.2.32: the user declined this exact content and permission set. */
+  private declineMatches(spec: ThirdPartyLaunchSpec, digest: string): boolean {
+    const declined = this.store.record(spec.pluginId).consentDeclined
+    return declined?.binarySha256 === digest && declined.permissionsKey === backendPermissionsKey(spec)
+  }
+
   private consentMatches(spec: ThirdPartyLaunchSpec, digest: string): boolean {
     const consent = this.store.record(spec.pluginId).consent
     return consent?.binarySha256 === digest && consent.permissionsKey === backendPermissionsKey(spec)
@@ -1034,14 +1086,20 @@ export class ThirdPartyBackendController {
     // changed since (an update, a rollback, edited files: the install-time
     // disclosure of those does not always show the backend change), one
     // whose consent was taken away (revoked, or forgotten to fail closed),
-    // one installed before 0.2.31, and a version no install dialog showed.
+    // and a version no install dialog showed. 0.2.32: a package installed
+    // before 0.2.31 counts like an install consent (the store's
+    // migratePreInstallConsent), and its consent says so.
+    // 0.2.32: a saved "not now" for this content is not asked again and is
+    // never overridden by an install consent; the Settings page's Allow (or a
+    // new install dialog) is the way back.
+    if (this.declineMatches(spec, digest)) throw unavailable('the user did not allow the native backend')
     const record = this.store.record(spec.pluginId)
     if (
       record.consent === undefined &&
       !record.consentRevoked &&
       record.installConsent?.packageVersion === spec.packageVersion
     ) {
-      this.recordConsent(spec, digest)
+      this.recordConsent(spec, digest, record.installConsent.grantedBy)
       return
     }
     const identity = `${spec.pluginId}\n${digest}\n${backendPermissionsKey(spec)}`
@@ -1061,7 +1119,11 @@ export class ThirdPartyBackendController {
         methods: [...spec.approvedMethods],
         agentTools: [...(spec.thirdParty.agentTools ?? [])],
         update: consent !== undefined,
-      }).catch(() => false)
+      }).then((allowed) => {
+        // Only the user's answer is saved, never a dialog that failed.
+        if (!allowed) this.saveDecline(spec, digest)
+        return allowed
+      }, () => false)
       this.pendingPrompts.set(identity, pending)
       void pending.finally(() => this.pendingPrompts.delete(identity))
     }
@@ -1072,16 +1134,33 @@ export class ThirdPartyBackendController {
     this.recordConsent(spec, digest)
   }
 
-  private recordConsent(spec: ThirdPartyLaunchSpec, digest: string): void {
+  private recordConsent(spec: ThirdPartyLaunchSpec, digest: string, grantedBy?: typeof PRE_INSTALL_CONSENT): void {
     if (!this.store.isEnabled()) throw unavailable('third-party native backends are turned off')
     if (!this.consentMatches(spec, digest)) {
       this.store.grantConsent(spec.pluginId, {
         binarySha256: digest,
         permissionsKey: backendPermissionsKey(spec),
         packageVersion: spec.packageVersion,
+        ...(grantedBy ? { grantedBy } : {}),
       })
+      if (grantedBy) {
+        console.info(`[plugin-backend] ${spec.pluginId} ${spec.packageVersion} allowed without asking: installed before 0.2.31`)
+      }
       this.noteAgentTools(spec)
       this.options.onConsentGranted?.(spec.pluginId)
+    }
+  }
+
+  /** Bookkeeping only: a failed save keeps the "not now" for this run. */
+  private saveDecline(spec: ThirdPartyLaunchSpec, digest: string): void {
+    try {
+      this.store.declineConsent(spec.pluginId, {
+        binarySha256: digest,
+        permissionsKey: backendPermissionsKey(spec),
+        packageVersion: spec.packageVersion,
+      })
+    } catch (error) {
+      console.warn(`[plugin-backend] decline of ${spec.pluginId} not saved: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -1298,6 +1377,13 @@ export class ThirdPartyBackendController {
       status = matches ? 'ready' : 'needs-consent'
     }
     const lastViolation = this.lastViolation.get(spec.pluginId)
+    const declined = !matches && digest !== null && this.declineMatches(spec, digest)
+    const allowedBy = matches
+      ? record.consent?.grantedBy
+      : !declined && record.consent === undefined && !record.consentRevoked &&
+        record.installConsent?.packageVersion === spec.packageVersion
+        ? record.installConsent.grantedBy
+        : undefined
     return {
       pluginId: spec.pluginId,
       packageVersion: spec.packageVersion,
@@ -1322,6 +1408,8 @@ export class ThirdPartyBackendController {
           }
         : {}),
       ...(spec.thirdParty.shell ? { shell: spec.thirdParty.shell } : {}),
+      ...(allowedBy ? { allowedBy } : {}),
+      ...(declined ? { declined: true } : {}),
     }
   }
 

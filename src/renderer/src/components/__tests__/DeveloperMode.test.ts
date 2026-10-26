@@ -50,6 +50,67 @@ describe('DeveloperModeReminder (K4)', () => {
   })
 })
 
+// One launch with several workspace windows: the main process keeps the
+// dismissal and tells every open window.
+function launch(state: Record<string, unknown>): void {
+  let dismissed = false
+  const listeners = new Set<() => void>()
+  ;(window as unknown as { agentTeam: unknown }).agentTeam = {
+    plugins: {
+      developerMode: async () => ({ folders: [], ...state }),
+      developerModeReminderDismissed: async () => dismissed,
+      dismissDeveloperModeReminder: async () => {
+        dismissed = true
+        for (const cb of listeners) cb()
+      },
+      onDeveloperModeReminderDismissed: (cb: () => void) => {
+        listeners.add(cb)
+        return () => listeners.delete(cb)
+      },
+    },
+  }
+}
+
+describe('DeveloperModeReminder: closed once, closed in every workspace window for the launch', () => {
+  const open = async () => {
+    const reminder = mount(DeveloperModeReminder, { global: { plugins: [i18n] } })
+    await flushPromises()
+    return reminder
+  }
+
+  it('stays closed in a window already open and in one opened after, while an unclosed launch still reminds', async () => {
+    launch({ enabled: true })
+    const first = await open()
+    const second = await open()
+    expect(first.find('[role="status"]').exists()).toBe(true)
+    expect(second.find('[role="status"]').exists()).toBe(true)
+    await first.get('.nv-devmode-reminder-close').trigger('click')
+    await flushPromises()
+    expect(first.find('[role="status"]').exists()).toBe(false)
+    expect(second.find('[role="status"]').exists()).toBe(false)
+    first.unmount()
+    second.unmount()
+    expect((await open()).find('[role="status"]').exists()).toBe(false)
+    // The next launch reminds again.
+    launch({ enabled: true })
+    expect((await open()).find('[role="status"]').exists()).toBe(true)
+  })
+
+  it('says nothing while Developer Mode is off', async () => {
+    launch({ enabled: false })
+    expect((await open()).find('[role="status"]').exists()).toBe(false)
+  })
+
+  it('still says settings changed outside Navide until closed, then not in any window', async () => {
+    launch({ enabled: false, externalChange: { detectedAt: '2026-10-21T01:00:00.000Z', modifiedAt: null } })
+    const first = await open()
+    expect(first.find('.nv-devmode-reminder-external').exists()).toBe(true)
+    await first.get('.nv-devmode-reminder-close').trigger('click')
+    await flushPromises()
+    expect((await open()).find('[role="status"]').exists()).toBe(false)
+  })
+})
+
 describe('DeveloperModeReminder: settings changed outside Navide (A2-5, G5)', () => {
   it('says so on launch in every locale, also while the switch it turned on is not applied', async () => {
     ;(window as unknown as { agentTeam: unknown }).agentTeam = {

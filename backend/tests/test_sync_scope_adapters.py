@@ -332,17 +332,21 @@ async def test_an_mcp_conflict_preview_never_shows_env_or_header_values(tmp_path
     a = Dev(tmp_path, server, "A", monkeypatch, sync_scopes.McpScope(), mcp_settings_store=a_store)
     b = Dev(tmp_path, server, "B", monkeypatch, sync_scopes.McpScope(), mcp_settings_store=b_store)
     await a.sync(); await b.sync()
-    a.use(); a_store.replace_servers([{**_mcp("api"), "env": {"API_KEY": "sk-new-a"}}])
-    b.use(); b_store.replace_servers([{**_mcp("api"), "env": {"API_KEY": "sk-new-b"}}])
+    a.use(); a_store.replace_servers([{**_mcp("api"), "args": ["a"], "env": {"API_KEY": "sk-new-a"}}])
+    b.use(); b_store.replace_servers([{**_mcp("api"), "args": ["b"], "env": {"API_KEY": "sk-new-b"}}])
     await a.sync(); await b.sync()
     monkeypatch.setattr(app, "sync_store", b.store)
     rows = server_link.sync_conflicts("mcp")
-    assert rows and rows[0]["itemId"] == "api"
+    assert rows and rows[0]["itemId"] == "i:api"
     text = repr(rows)
     assert "sk-" not in text
     assert rows[0]["local"]["env"] == {"API_KEY": sync_scopes.MASKED_VALUE}
-    # resolve still works from the real payloads
-    assert b.store.conflict_payloads("mcp", "api")["local"]["env"] == {"API_KEY": "sk-new-b"}
+    # Install-only sync: neither side of the clash holds a value at all.
+    assert "sk-" not in repr(b.store.conflict_payloads("mcp", "i:api"))
+    b.engine.resolve("mcp", "i:api", sync_engine.KEEP_REMOTE)
+    b.use()
+    kept = next(s for s in b_store.list_servers() if s["name"] == "api")
+    assert kept["args"] == ["a"] and kept["env"] == {"API_KEY": "sk-new-b"}
 
 
 # ── skills: what export sends is what import takes ──────────────────────────
@@ -623,12 +627,13 @@ async def test_an_mcp_conflict_preview_says_which_masked_values_differ(tmp_path,
     a = Dev(tmp_path, server, "A", monkeypatch, sync_scopes.McpScope(), mcp_settings_store=a_store)
     b = Dev(tmp_path, server, "B", monkeypatch, sync_scopes.McpScope(), mcp_settings_store=b_store)
     await a.sync(); await b.sync()
-    a.use(); a_store.replace_servers([{**base, "env": {"KEY": "ka", "SAME": "s", "ONLY_A": "x"}}])
-    b.use(); b_store.replace_servers([{**base, "env": {"KEY": "kb", "SAME": "s"}}])
+    a.use(); a_store.replace_servers([{**base, "args": ["a"], "env": {"KEY": "ka", "SAME": "s", "ONLY_A": "x"}}])
+    b.use(); b_store.replace_servers([{**base, "args": ["b"], "env": {"KEY": "kb", "SAME": "s"}}])
     await a.sync(); await b.sync()
     monkeypatch.setattr(app, "sync_store", b.store)
     row = server_link.sync_conflicts("mcp")[0]
-    assert row["masked"] == {"env": {"KEY": "differs", "SAME": "same", "ONLY_A": "remote-only"}}
+    # Values never travel (install-only sync): only the names can differ.
+    assert row["masked"] == {"env": {"KEY": "same", "SAME": "same", "ONLY_A": "remote-only"}}
     assert "ka" not in repr(row) and "kb" not in repr(row)
 
     remote_row = {"scope": "mcp", "itemId": "web", "sealed": False,

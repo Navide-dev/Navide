@@ -186,6 +186,12 @@ watch(installed, refresh)
             {{ $t('settings.extensions.nativeBackends.shellRiskDetail') }}
           </span>
           <span v-if="row.changedSinceConsent">{{ $t('settings.extensions.nativeBackends.changed') }}</span>
+          <span v-if="row.allowedBy === 'pre-0.2.31-install'" class="native-backend-pre-install">
+            {{ $t('settings.extensions.nativeBackends.allowedPreInstall') }}
+          </span>
+          <span v-if="row.declined" class="native-backend-declined">
+            {{ $t('settings.extensions.nativeBackends.declined') }}
+          </span>
           <span v-if="row.reason && row.status !== 'needs-consent'">{{ row.reason }}</span>
           <span v-if="row.lastViolation">
             {{

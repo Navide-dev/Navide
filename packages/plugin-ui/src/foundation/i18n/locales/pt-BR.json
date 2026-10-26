@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop: envia o prompt de loop configurado para este pane",
       "skill-cast-failed": "Não foi possível enviar a skill “{name}” a este pane",
       "skill-cast-busy": "O loop está enviando o próximo prompt: lance “{name}” de novo daqui a pouco",
+      "loop-start-failed": "Não foi possível iniciar o loop com “{name}” neste pane",
       "loop-badge-tooltip": "O prompt de loop foi enviado a este pane: clique para desativar o loop",
       "loop-waiting-tooltip": "Loop pausado: limite da session atingido; retomada automática às {time}. Clique para retomar agora",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -1474,6 +1475,8 @@
       "unsupported": "O Navide ainda não consegue ler onde esta CLI guarda as extensões de CLI.",
       "invalid": "Não foi possível ler: {error}",
       "disabled": "Desativada",
+      "enabledUnknown": "Estado desconhecido",
+      "enabledUnknownReason": "Não foi possível saber se está ativada: {error}",
       "ownerNavide": "Instalada pelo Navide",
       "inferred": "inferido",
       "inferredHint": "Lido do texto-fonte; o manifesto da CLI não informa isso.",
@@ -1573,7 +1576,7 @@
           "summary": "Crie, edite, ative, desative e inspecione as skills de agent gerenciadas pelo app."
         },
         "prompts": {
-          "title": "Skills de prompt",
+          "title": "Prompts",
           "summary": "Crie e edite as skills de prompt que um pane de CLI pode lançar pelo botão de loop."
         },
         "memory": {
@@ -1730,6 +1733,7 @@
       "export-failed": "Falha ao exportar",
       "import-dialog-title": "Importar JSON do pacote de configurações",
       "imported": "Importado: {items}",
+      "mcp-needs-secrets": "Segredos de MCP a preencher neste computador: {items}",
       "import-failed": "Falha ao importar"
     },
     "executionPolicy": {
@@ -1894,6 +1898,8 @@
         "disable": "Desativar",
         "enable_plugin": "Ativar",
         "changed": "O código nativo ou as permissões dele mudaram desde que você o permitiu.",
+        "allowedPreInstall": "Permitido sem perguntar: foi instalado antes do Navide 0.2.31, que não registrava o consentimento da instalação.",
+        "declined": "Você recusou quando ele ia iniciar, então o Navide não pergunta de novo para esta versão e ele continua desligado. Pressione Permitir para executá-lo.",
         "writeAllowed": "Pode alterar arquivos em {path}",
         "revoke": "Revogar",
         "violation": "Parado após exceder o limite de {kind}.",
@@ -2122,7 +2128,7 @@
         },
         "reloadFailed": "Não foi possível carregar a alteração mais recente; a versão anterior continua em execução: {error}",
         "autoReloadNeedsConsent": "As permissões ou o back-end de {id} mudaram, então ele foi descarregado. Dê o consentimento novamente em Configurações → Plug-ins do Navide.",
-        "autoReloadMixedHint": "Recarregar enquanto um build ou salvamento ainda está gravando arquivos pode carregar uma mistura incompleta de arquivos antigos e novos.",
+        "autoReloadMixedHint": "Recarregar enquanto um build ou salvamento ainda está gravando arquivos pode carregar uma mistura incompleta de arquivos antigos e novos. Um build que grava .navide-build-complete na pasta por último evita isso: a pasta só é recarregada quando esse arquivo é gravado de novo.",
         "reloadFailedNothingRunning": "O último recarregamento falhou e nenhuma versão está em execução agora: {error}",
         "removeFolder": "Remover",
         "needsConsent": "Permissões ou back-end alterados; dê o consentimento novamente",
@@ -3117,7 +3123,7 @@
           "p11": "O primeiro bloco de Configurações ▸ Navide Cloud se chama Sincronização. <strong>Não é uma guia separada</strong>: é a seção superior desta mesma página. Cada escopo sincronizável tem uma linha com uma chave; ative uma, e esse escopo fica igual em todos os dispositivos conectados à <strong>mesma conta</strong>. Os registros são <strong>criptografados nesta máquina</strong>, e o servidor só guarda texto cifrado para o qual não tem chave.",
           "sync": {
             "scopes": "<strong>Cinco linhas, uma por página de Recursos de agent e na ordem da barra lateral; três podem ser ativadas</strong>: <em>MCP</em> (os servidores que você adicionou no Navide; os segredos deles são criptografados antes de sair), <em>Skills</em> (quais skills estão ativas e para quais CLIs cada uma vai, além dos arquivos das skills criadas no Navide; as skills que você mesmo colocou na pasta sincronizam só as configurações) e <em>Prompts</em> (as skills de prompt e o prompt do Loop).",
-            "credentials": "<em>Memória</em> e <em>Extensões de CLI</em> <strong>aparecem, mas em cinza</strong>, e a linha delas diz “ainda não sincronizável”. Isso não significa “desativado por padrão, esperando você ativar”: a chave não se move. Uma chave de Memória que uma versão anterior deixou ativada ainda pode ser desativada. <em>Credenciais e chaves</em> não tem linha nenhuma: as credenciais de conta e as chaves nunca saem desta máquina. Uma chave de Credenciais que uma versão anterior deixou ativada é tratada como desativada. As configurações de MCP, com a sincronização ativada, são criptografadas nesta máquina antes do envio, e o servidor não tem chave para descriptografá-las.",
+            "credentials": "<em>Memória</em> e <em>Extensões</em> <strong>aparecem, mas em cinza</strong>, e a linha delas diz “ainda não sincronizável”. Isso não significa “desativado por padrão, esperando você ativar”: a chave não se move. Uma chave de Memória que uma versão anterior deixou ativada ainda pode ser desativada. <em>Credenciais e chaves</em> não tem linha nenhuma: as credenciais de conta e as chaves nunca saem desta máquina. Uma chave de Credenciais e chaves que uma versão anterior deixou ativada é tratada como desativada. As configurações de MCP, com a sincronização ativada, são criptografadas nesta máquina antes do envio, e o servidor não tem chave para descriptografá-las.",
             "states": "Dois estados são indicados abaixo do bloco: <em>não conectado</em> (os escopos que você ativou se atualizam quando a conexão volta) e <em>este dispositivo ainda não tem chave de sincronização</em> (nada é enviado até que tenha). Há também um botão <em>Sincronizar agora</em>, ativo apenas com conexão.",
             "key": "<strong>A chave de sincronização é exibida como os 8 primeiros caracteres do ID dela</strong>, nunca como a própria chave. <em>Trocar chave</em> exige <strong>dois cliques</strong>: o primeiro a transforma em <em>Trocar agora</em> e adiciona <em>Cancelar</em> ao lado. A troca aposenta a chave atual, sela de novo cada registro sincronizado com uma chave nova e entrega a nova chave aos seus outros dispositivos na próxima troca de chaves: é o que fazer quando você acha que uma chave vazou.",
             "legacy": "<em>Adotar para esta conta</em> só aparece quando este dispositivo tem uma chave de sincronização de antes da vinculação das contas <em>e</em> esta conta ainda não tem chave. É uma escolha única: sem adotá-la, você não consegue ler o que foi sincronizado com essa chave, e gerar uma chave nova no lugar deixaria esses registros ilegíveis para sempre.",
@@ -3489,7 +3495,7 @@
             "git": {
               "title": "Git (controle do código-fonte)",
               "tag": "4ª guia da barra lateral",
-              "text": "A dica de ferramenta diz <em>Git (⌘4)</em>. Na janela principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre direto a <strong>janela separada do Git</strong>; <em>Abrir em nova janela</em>, no cabeçalho do painel, faz o mesmo."
+              "text": "Quando o Git é carregado como plug-in do Navide, a dica de ferramenta diz <em>Plug-in do Navide: Git · navide.git · Publicador: navide · Integrado ao Navide (⌘4)</em>; caso contrário, diz <em>Git (⌘4)</em>. Na janela principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre direto a <strong>janela separada do Git</strong>; <em>Abrir em nova janela</em>, no cabeçalho do painel, faz o mesmo."
             },
             "plans": {
               "title": "Plans (documentos de plano)",
@@ -4399,10 +4405,6 @@
             "title": "A vinculação é feita em outro lugar",
             "text": "“Qual conta do Git este workspace usa” é escolhido com a pílula da conta no <strong>painel do Git da barra lateral</strong>. A página de configurações só adiciona, edita e exclui contas. Excluir uma conta também remove qualquer vinculação que apontava para ela."
           },
-          "hPortable": "Credenciais portáteis",
-          "portable1": "Os cartões de conta ganharam um campo <strong>Credencial portátil</strong>: execute o comando do próprio fornecedor para obter uma e cole o resultado. Hoje <strong>só o Claude Code declara uma credencial portátil</strong> (o comando é <code>claude setup-token</code>); as outras treze não têm esse campo. O que você cola é criptografado nesta máquina e entregue aos <strong>panes iniciados depois</strong> por meio do ambiente deles; <strong>nunca é gravado nos arquivos de credenciais próprios da CLI</strong>.",
-          "portable2": "O cartão mostra <em>Não definida</em> ou <em>Definida</em> e, quando a credencial é superada por outra, diz isso claramente (“sem efeito”, citando o que tem prioridade), porque a maioria das CLIs coloca o próprio arquivo de login, um helper de chaves ou a pasta de políticas de um administrador à frente do ambiente. Para que uma credencial colada tenha efeito, saia primeiro da CLI nesse local.",
-          "portableNote": "O cartão também traz marcações como “Da nuvem” e “Em uso”; elas pertencem a credenciais que chegaram pela sincronização na nuvem. O escopo Credenciais do Navide Cloud está atualmente <strong>listado, mas não pode ser ativado</strong>, então ainda não é possível reutilizar uma credencial colada em outro dispositivo: o que você cola fica nesta máquina.",
           "switchToast": "<strong>Uma troca que falhou agora sempre aparece.</strong> Antes, só duas recusas geravam uma notificação: “há panes em execução” e “trocas frequentes demais”. Todo o resto, inclusive uma falha na troca de credenciais, ia para o banner do próprio painel Contas, que já tinha saído da tela enquanto você olhava as linhas de um fornecedor; clicar em “Definir como padrão” parecia não fazer nada. Agora qualquer tipo de falha na troca gera uma notificação."
         },
         "s6": {
@@ -6784,7 +6786,7 @@
         "s7": {
           "title": "Uma pessoa, várias máquinas",
           "p1": "Conectar duas máquinas com sistemas operacionais diferentes não é em si uma questão de plataforma: entrar no Navide Cloud, parear e enviar mensagens entre dispositivos funciona igual nas três, e isso está em <strong>Configurações e sistema</strong>. Esta seção só acrescenta o que muda quando as máquinas não são da mesma plataforma.",
-          "p2": "Em <strong>Configurações ▸ Navide Cloud</strong>, a lista de sincronização permite ativar hoje quatro coisas: skills de prompt, MCP, skills e memória. <em>Credenciais</em> também aparece, mas o interruptor fica desativado e a descrição diz que a sincronização ainda não é suportada — ele está lá para você saber que esse escopo existe, não para ativá-lo.",
+          "p2": "Em <strong>Configurações ▸ Navide Cloud</strong>, a lista de sincronização permite ativar três coisas: MCP, Skills e Prompts. <em>Memória</em> e <em>Extensões</em> também aparecem, esmaecidas e descritas como “Ainda não sincronizável.”; um interruptor de memória que uma versão anterior deixou ativado ainda pode ser desativado. Não há linha <em>Credenciais e chaves</em>: as credenciais das contas de CLI ficam salvas só neste computador e nunca são sincronizadas.",
           "note": "O que nunca viaja com você de qualquer forma: a instalação e o login de cada CLI, as credenciais (guardadas no cofre de cada plataforma, em formatos que não se intercambiam) e qualquer caminho absoluto. Uma segunda máquina precisa ter as CLIs instaladas e com login feito por conta própria."
         },
         "mock": {
@@ -6814,6 +6816,9 @@
       "no-arguments": "Sem argumentos",
       "env": "Variáveis de ambiente",
       "no-env": "Sem variáveis de ambiente",
+      "needs-setup": "Requer configuração",
+      "fill-locally": "Alguns valores estão vazios. Preencha-os neste computador — valores de variáveis de ambiente e cabeçalhos nunca são sincronizados entre dispositivos.",
+      "fill-credentials-locally": "Alguns valores na URL ou nos argumentos estão vazios. Se era uma credencial, preencha-a neste computador — credenciais na URL e nos argumentos nunca são sincronizadas entre dispositivos.",
       "headers": "Cabeçalhos",
       "no-headers": "Sem cabeçalhos",
       "show": "Mostrar",
@@ -6860,6 +6865,7 @@
       "status": "Status: {status}",
       "starting-note": "Ainda iniciando após {seconds} s. Se ele roda via npx ou uvx, a primeira execução pode estar baixando o pacote.",
       "error-reason": "Falha ao iniciar: {reason}",
+      "tools-error": "Não foi possível listar as ferramentas: {reason}",
       "stderr-tail": "Últimas linhas exibidas pelo servidor",
       "open-config-file": "Abrir arquivo de configuração",
       "native-readonly-hint": "O Navide lê esses arquivos e nunca grava neles. Só a configuração de usuário de cada CLI é verificada; o MCP de projeto não é mostrado. Altere um servidor onde a CLI dele espera e depois atualize.",
@@ -7240,7 +7246,7 @@
       "scope-hint-mcp": "Servidores MCP que você adicionou no Navide. Os segredos deles são criptografados antes de sair.",
       "scope-hint-skills": "Quais skills estão ativadas e para quais CLIs cada uma vai, além dos arquivos das skills criadas no Navide (as grandes trafegam como blobs criptografados). As skills que você mesmo colocou na pasta sincronizam apenas as configurações.",
       "scope-hint-memory": "Arquivos de instruções globais, como ~/.claude/CLAUDE.md. Os arquivos dentro de um projeto ficam com o git.",
-      "scope-credentials": "Credenciais",
+      "scope-credentials": "Credenciais e chaves",
       "sealed": "(credencial: não é mostrada)",
       "key-id": "Chave de sincronização {id}",
       "rotate": "Trocar chave",
@@ -7378,7 +7384,7 @@
       }
     },
     "memory": {
-      "title": "Arquivos de instruções das CLIs",
+      "title": "Memória",
       "intro": "Toda CLI lê um arquivo de instruções antes de começar a trabalhar: CLAUDE.md, AGENTS.md, QWEN.md, regras de .cursor. Cada arquivo aparece uma vez, com todas as CLIs que o carregam, e pode ser editado no próprio lugar.",
       "scope-user": "Nível de usuário",
       "scope-project": "Nível de projeto",
@@ -7390,6 +7396,25 @@
       "conflict-title": "Este arquivo foi alterado no disco",
       "conflict-body": "Outro programa — uma CLI ou um editor — alterou este arquivo enquanto você o editava. Salvar agora sobrescreveria essa alteração.",
       "conflict-reload": "Recarregar do disco (descarta seu rascunho)",
+      "discard-confirm": "Descartar as alterações não salvas em {name}?",
+      "previous-kept": "Versão anterior mantida · {when}",
+      "restore-previous": "Restaurar versão anterior",
+      "restore-hint": "Cada salvamento mantém a versão substituída na própria pasta do Navide. Ao restaurar, o texto atual vira a versão anterior, então a restauração pode ser desfeita do mesmo jeito.",
+      "error-restore": "Não foi possível restaurar a versão anterior.",
+      "created-by-navide": "Arquivo criado pelo Navide · {when}",
+      "undo-create": "Desfazer criação (mover para a Lixeira)",
+      "undo-create-hint": "Este arquivo não existia antes de o Navide salvá-lo. Desfazer o move para a Lixeira do sistema, de onde ainda pode ser recuperado.",
+      "undo-create-changed": "Este arquivo mudou depois que o Navide o criou — outro programa, como uma CLI, escreveu nele. Revise a diferença antes de movê-lo para a Lixeira.",
+      "undo-create-diff-legend": "− o que o Navide escreveu · + o conteúdo atual do arquivo",
+      "undo-create-confirm": "Mover para a Lixeira mesmo assim",
+      "undo-create-keep": "Manter arquivo",
+      "undo-create-failed": "O arquivo não foi movido para a Lixeira: {reason}",
+      "undo-create-unavailable": "A Lixeira não está disponível aqui, então o arquivo foi mantido no lugar.",
+      "scope-auto": "Memória automática do Claude",
+      "auto-intro": "Notas que o Claude Code escreve sozinho sobre este projeto enquanto trabalha. Ele carrega o índice MEMORY.md no início de cada sessão. Você pode editá-las aqui, mas o Claude pode reescrevê-las depois.",
+      "auto-empty": "O Claude ainda não salvou nenhuma nota para este projeto.",
+      "auto-tag": "Escrito pelo Claude",
+      "auto-editor-hint": "O Claude Code escreveu este arquivo sozinho e pode alterá-lo de novo em uma sessão posterior.",
       "agents-title": "Cobertura das CLIs",
       "agents-mapped": "Mapeadas",
       "agents-mapped-hint": "O Navide sabe onde estas CLIs guardam as instruções.",
@@ -7402,7 +7427,7 @@
       "error-save": "Não foi possível salvar este arquivo. Seu rascunho continua no editor."
     },
     "prompts": {
-      "title": "Skills de prompt",
+      "title": "Prompts",
       "intro": "Instruções completas e reutilizáveis que um pane de CLI pode lançar pelo botão ∞. Uma skill é um prompt completo: escolher uma skill substitui o prompt, nunca se soma a outro. Só a skill padrão é executada em loop; todas as outras são enviadas uma vez.",
       "new": "Nova skill",
       "new-name": "Nova skill",
@@ -7434,7 +7459,9 @@
       "advanced": "Avançado",
       "send-once": "Enviada uma vez",
       "send-once-hint": "Só a skill padrão é executada em loop; esta é enviada uma vez, sem retomada nem limite de turnos.",
-      "untitled-name": "Skill sem título"
+      "untitled-name": "Skill sem título",
+      "prompt-empty": "Um prompt não pode ficar vazio: o texto anterior foi mantido. Para remover esta skill, use Excluir.",
+      "delete-confirm": "Excluir “{name}”? Não é possível desfazer, e as máquinas que sincronizam prompts também vão removê-la."
     },
     "section": {
       "general-behavior": "Comportamento geral",
@@ -8175,43 +8202,8 @@
         "active-error": "Esta conta está ativa e não pode ser excluída. Troque para outra conta primeiro.",
         "login-in-progress-error": "Um login desta conta ainda está em andamento. Conclua-o ou feche o pane de login dele primeiro.",
         "account-dir-in-use-error": "{count} pane em execução usa a pasta própria desta conta. Feche-o antes de excluir a conta. | {count} panes em execução usam a pasta própria desta conta. Feche-os antes de excluir a conta.",
-        "portable-label": "Credencial portátil",
-        "portable-present": "Definida",
-        "portable-absent": "Não definida",
-        "portable-paste": "Colar credencial",
-        "portable-replace": "Substituir",
-        "portable-remove": "Remover deste dispositivo",
-        "portable-save": "Salvar",
-        "portable-docs": "Como obter uma",
-        "portable-placeholder": "Execute {command} e cole o resultado",
-        "portable-placeholder-plain": "Cole a credencial",
-        "portable-saved": "Credencial salva neste dispositivo. Ela é entregue aos novos panes no ambiente deles e nunca é gravada nos arquivos da própria CLI.",
-        "portable-save-failed": "Não foi possível salvar a credencial.",
-        "portable-clear-failed": "Não foi possível remover a credencial.",
-        "portable-shadowed": "Sem efeito: esta CLI dá prioridade a {files} sobre a credencial colada. Saia da CLI lá para usá-la.",
-        "cloud-off": "A sincronização de credenciais na nuvem está desativada (Configurações → Sincronização).",
-        "cloud-status-no-key": "Este dispositivo ainda não tem chave de sincronização: pareie-o com um dispositivo que tenha.",
-        "cloud-status-not-connected": "Não conectado ao Navide Cloud.",
-        "cloud-status-error": "Não foi possível ler o estado da nuvem: {error}",
-        "cloud-none": "Não está na nuvem.",
-        "cloud-state-in-sync": "Sincronizada",
-        "cloud-state-local-only": "Só neste dispositivo",
-        "cloud-state-remote-only": "Na nuvem, não usada aqui",
-        "cloud-state-diverged": "Diferente da nuvem",
-        "cloud-state-conflict": "Precisa da sua decisão (Configurações → Sincronização)",
-        "cloud-updated": "Cópia na nuvem atualizada {when} por {device}",
-        "cloud-unreadable": "Selada com uma chave que este dispositivo não tem.",
-        "cloud-use": "Usar neste dispositivo",
-        "cloud-using": "Obtendo…",
-        "cloud-use-failed": "Não foi possível obter a credencial da nuvem.",
-        "portable-imported": "Da nuvem",
-        "portable-selected": "Em uso",
-        "portable-select": "Usar nos novos panes",
-        "portable-deselect": "Parar de usar",
-        "portable-select-failed": "Não foi possível selecionar a credencial.",
-        "portable-unavailable": "Armazenada, mas não pode ser aberta neste dispositivo agora (a chave de sincronização está ausente ou desatualizada).",
-        "imported-account": "Conta de outro dispositivo",
-        "imported-account-hint": "Uma credencial colada em uma conta nomeada em outro lugar; use-a aqui nos novos panes ou remova-a deste dispositivo."
+        "portable-removed-title": "“Colar credencial” foi removido",
+        "portable-removed-text": "O Navide não entrega mais credenciais coladas aos novos panes, e as que estavam salvas neste dispositivo foram apagadas durante a atualização. Os novos panes do Claude agora usam o login do próprio Claude, que pode ser outra conta e consumir a cota dessa conta."
       }
     },
     "color": {
@@ -9661,6 +9653,7 @@
     "queue": "{count} pendentes",
     "requester": "Solicitado por",
     "source": "Origem",
+    "source-bundled": "Incluído com o Navide ({name})",
     "digest": "Hash",
     "targets": "Entrega",
     "targets-all": "Todas as CLIs conectadas",
@@ -9676,7 +9669,21 @@
     "installing": "Instalando…",
     "failed": "Falha na instalação",
     "dismiss": "Fechar",
-    "expired": "Este pedido expirou antes de ser aprovado. Peça ao agent para preparar a skill novamente."
+    "expired": "Este pedido expirou antes de ser aprovado. Peça ao agent para preparar a skill novamente.",
+    "delivery-kicker": "Pedido de entrega de skill",
+    "delivery-title": "Entregar a skill “{name}” a mais CLIs?",
+    "delivery-desc": "Um agente pediu para mudar para quais CLIs esta skill é entregue. Nada muda até você aprovar aqui; o agente não pode aprovar por você.",
+    "delivery-shared": "Biblioteca de skills compartilhada",
+    "delivery-current": "Entrega atual",
+    "delivery-next": "Depois da mudança",
+    "delivery-none": "Nenhuma outra CLI",
+    "delivery-state": "Estado",
+    "delivery-turns-on": "Ativa a skill (está desativada agora)",
+    "delivery-note": "Ao aprovar, as CLIs acima carregam esta skill nas novas sessões. Os arquivos da skill não são alterados. Remover uma CLI depois nunca precisa de aprovação.",
+    "delivery-approve": "Aprovar mudança",
+    "delivery-applying": "Aplicando…",
+    "delivery-failed": "Não foi possível aplicar a mudança de entrega",
+    "delivery-expired": "Este pedido expirou antes de ser aprovado. Peça ao agente para inspecionar a skill de novo e tentar outra vez."
   },
   "cli-manage": {
     "title": "Instalação e atualizações",
@@ -11485,7 +11492,7 @@
     "follow-wait": "Mover ao terminar",
     "follow-skip-running": "Ignorar panes em execução",
     "follow-switch-label": "Acompanhar a troca de conta",
-    "follow-switch-hint": "Ativado: este pane passa para a nova conta no próximo turno. Desativado: ele fica na pasta própria da conta dele. As duas mudanças o reabrem uma vez.",
+    "follow-switch-hint": "Ativado: escolher uma conta abaixo troca a conta padrão, e este pane passa para ela no próximo turno. Desativado: escolher uma conta move só este pane, reabrindo-o uma vez na pasta própria dessa conta; a padrão e os outros panes ficam como estão. Mudar esta chave também o reabre uma vez.",
     "pinned-indicator-label": "Fixado na conta",
     "pinned-indicator-tooltip": "Fixado: trocar de conta não move este pane. Abra o selo da conta para que ele volte a acompanhar.",
     "unpin-title": "{count} pane que vai passar a acompanhar está trabalhando | {count} panes que vão passar a acompanhar estão trabalhando",

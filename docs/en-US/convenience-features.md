@@ -403,7 +403,7 @@ gated, a notice was added, or a state changed. The renderer re-reads
 The overview is titled 「便利功能與 Navide 對你電腦的修改」 (en "Convenience
 features and what Navide changes on your computer", ja
 「便利機能と Navide があなたのコンピューターに加えた変更」). It is a tab of
-Settings → CLI Extensions. Every feature has a name, a one-line benefit, what it
+Settings → Extensions. Every feature has a name, a one-line benefit, what it
 writes and where, the cost of turning it off, an Allowed/Off switch and its
 history.
 
