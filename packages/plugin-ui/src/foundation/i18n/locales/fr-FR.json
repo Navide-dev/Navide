@@ -6817,6 +6817,8 @@
       "no-arguments": "Aucun argument",
       "env": "Variables d’environnement",
       "no-env": "Aucune variable d’environnement",
+      "needs-setup": "À configurer",
+      "fill-locally": "Certaines valeurs sont vides. Renseignez-les sur cet appareil : les valeurs des variables d’environnement et des en-têtes ne sont jamais synchronisées entre appareils.",
       "headers": "En-têtes",
       "no-headers": "Aucun en-tête",
       "show": "Afficher",

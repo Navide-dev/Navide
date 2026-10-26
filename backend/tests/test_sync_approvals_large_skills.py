@@ -37,7 +37,7 @@ def _settings(monkeypatch):
 
 
 def _held(item_id):
-    return [h for h in sync_approvals.listing() if h["itemId"] == item_id]
+    return [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
 
 
 def _use(dev, monkeypatch):
@@ -151,11 +151,11 @@ async def test_a_rejected_hold_that_no_longer_opens_pushes_nothing(tmp_path, acc
     await a.sync(); await b.sync()
     b.use()
     (row,) = _held("legit")
-    sync_approvals.decide(b.adapter, "legit", False, row["digest"])
-    sync_approvals._stash_path("mcp", "legit").write_text("not a sealed payload")
+    sync_approvals.decide(b.adapter, row["itemId"], False, row["digest"])
+    sync_approvals._stash_path("mcp", "i:legit").write_text("not a sealed payload")
     result = await b.sync()
-    assert "legit" in result["held"]                          # surfaced in the round
-    assert server.rows[("mcp", "legit")]["deleted"] == 0     # no delete pushed
+    assert "i:legit" in result["held"]                          # surfaced in the round
+    assert server.rows[("mcp", "i:legit")]["deleted"] == 0     # no delete pushed
     b.use()
     assert _held("legit")[0]["status"] == sync_approvals.REJECTED
     await a.sync()

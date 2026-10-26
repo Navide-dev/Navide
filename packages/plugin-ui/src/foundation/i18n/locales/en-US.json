@@ -6817,6 +6817,8 @@
       "no-arguments": "No arguments",
       "env": "Environment variables",
       "no-env": "No environment variables",
+      "needs-setup": "Needs setup",
+      "fill-locally": "Some values are empty. Fill them in on this machine — env and header values never sync between devices.",
       "headers": "Headers",
       "no-headers": "No headers",
       "show": "Show",

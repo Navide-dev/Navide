@@ -6817,6 +6817,8 @@
       "no-arguments": "Keine Argumente",
       "env": "Umgebungsvariablen",
       "no-env": "Keine Umgebungsvariablen",
+      "needs-setup": "Einrichtung nötig",
+      "fill-locally": "Einige Werte sind leer. Tragen Sie sie auf diesem Gerät ein – Werte von Umgebungsvariablen und Headern werden nie zwischen Geräten synchronisiert.",
       "headers": "Header",
       "no-headers": "Keine Header",
       "show": "Anzeigen",

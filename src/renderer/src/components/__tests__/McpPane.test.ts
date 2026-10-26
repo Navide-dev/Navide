@@ -199,6 +199,18 @@ describe('McpPane', () => {
     expect(secretRow!.findAll('input')[1].attributes('type')).toBe('text')
   })
 
+  it('says which servers still need a value filled in on this machine', async () => {
+    const synced = { ...navideServers()[0], env: { API_KEY: '', LOG_LEVEL: 'debug' } }
+    wrapper = mountPane({ servers: [synced] })
+    expect(wrapper.find('.mcp-card .pchip.needs').text()).toBe('Needs setup')
+    await openCard(wrapper, 'context7')
+    expect(wrapper.find('.mcp-drawer-hint.warn').text()).toContain('never sync between devices')
+
+    await wrapper.setProps({ servers: navideServers() })
+    await flushPromises()
+    expect(wrapper.find('.pchip.needs').exists()).toBe(false)
+  })
+
   it('asks the parent to remove a server rather than deleting it itself', async () => {
     wrapper = mountPane()
     await openCard(wrapper, 'context7')
