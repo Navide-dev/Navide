@@ -30,6 +30,8 @@ interface CliExtension {
   detail: string
   valid: boolean
   error: string
+  /** Set when the file holding the on/off switch could not be read: `enabled` is then a default. */
+  enabled_error?: string
 }
 
 interface CliVendor {
@@ -151,7 +153,7 @@ onMounted(() => { void load() })
             class="cli-ext-card"
             :data-id="item.id"
             :data-tier="item.exec_tier"
-            :class="{ off: !item.enabled, broken: !item.valid }"
+            :class="{ off: !item.enabled && !item.enabled_error, broken: !item.valid }"
           >
             <div class="cli-ext-title">
               <button
@@ -170,10 +172,12 @@ onMounted(() => { void load() })
                 {{ t(`settings.cliExtensions.tier.${item.exec_tier}`) }}
               </span>
               <span v-if="item.owner === 'navide'" v-truncate class="cli-ext-owner">{{ t('settings.cliExtensions.ownerNavide') }}</span>
-              <span v-if="!item.enabled" v-truncate class="cli-ext-disabled">{{ t('settings.cliExtensions.disabled') }}</span>
+              <span v-if="item.enabled_error" v-truncate class="cli-ext-unknown">{{ t('settings.cliExtensions.enabledUnknown') }}</span>
+              <span v-else-if="!item.enabled" v-truncate class="cli-ext-disabled">{{ t('settings.cliExtensions.disabled') }}</span>
             </div>
             <p v-if="!item.valid" class="cli-ext-error">{{ t('settings.cliExtensions.invalid', { error: item.error }) }}</p>
             <template v-else>
+              <p v-if="item.enabled_error" class="cli-ext-warning">{{ t('settings.cliExtensions.enabledUnknownReason', { error: item.enabled_error }) }}</p>
               <div v-if="item.capabilities.length" class="cli-ext-caps">
                 <span v-for="cap in item.capabilities" :key="cap" v-truncate class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
                 <span v-if="item.evidence === 'inferred'" v-truncate class="cli-ext-inferred" :title="t('settings.cliExtensions.inferredHint')">{{ t('settings.cliExtensions.inferred') }}</span>
@@ -221,6 +225,7 @@ onMounted(() => { void load() })
 .cli-ext-rescan:hover:not(:disabled) { background: var(--bg-elevated); color: var(--text-bright); }
 .cli-ext-rescan:disabled { opacity: 0.5; cursor: default; }
 .cli-ext-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
+.cli-ext-warning { margin: 0; font-size: var(--font-2xs); color: var(--warning-fg, var(--text-primary)); overflow-wrap: anywhere; }
 
 .cli-ext-group { min-width: 0; border: 1px solid var(--border-muted); border-radius: var(--radius-md); background: var(--bg-inset); }
 .cli-ext-group-head { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 12px; font-size: var(--font-sm); color: var(--text-bright); }
@@ -250,12 +255,13 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
 }
 .cli-ext-version { min-width: 0; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-secondary); overflow-wrap: anywhere; }
 .cli-ext-badges, .cli-ext-caps { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.cli-ext-type, .cli-ext-tier, .cli-ext-owner, .cli-ext-disabled, .cli-ext-cap, .cli-ext-inferred { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; font-size: 10.5px; line-height: 16px; border-radius: var(--radius-pill); padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
+.cli-ext-type, .cli-ext-tier, .cli-ext-owner, .cli-ext-disabled, .cli-ext-unknown, .cli-ext-cap, .cli-ext-inferred { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; font-size: 10.5px; line-height: 16px; border-radius: var(--radius-pill); padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
 .cli-ext-type { color: var(--text-primary); background: var(--bg-muted); }
 .cli-ext-tier.tier-L3 { color: var(--danger-fg); border-color: var(--danger-muted); background: var(--danger-subtle); }
 .cli-ext-tier.tier-L2 { color: var(--warning-fg, var(--text-primary)); border-color: var(--attention-muted); background: var(--attention-subtle); }
 .cli-ext-owner { color: var(--accent-fg, var(--text-primary)); border-color: var(--accent-muted); background: var(--accent-subtle); }
 .cli-ext-disabled { border-style: dashed; }
+.cli-ext-unknown { border-style: dashed; color: var(--warning-fg, var(--text-primary)); border-color: var(--attention-muted); }
 .cli-ext-cap { border-color: var(--border-muted); }
 .cli-ext-feature-link { font: inherit; font-weight: 600; background: none; border: none; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; }
 .cli-ext-inferred { border-style: dashed; }

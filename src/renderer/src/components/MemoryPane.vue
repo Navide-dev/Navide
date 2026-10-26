@@ -8,6 +8,10 @@
  * but that do not exist yet are listed too, so the page can offer to create
  * them rather than hiding what a CLI would load if it were there.
  *
+ * Claude Code's auto-memory — the notes Claude writes about the workspace by
+ * itself — is listed as a group of its own, so it is never mistaken for a file
+ * the user wrote; it goes through the same read/save/restore path.
+ *
  * Coverage is honest: a CLI that has no instruction file name of its own — the
  * files it loads are whatever its config names — must not look like one Navide
  * knows a path for, so the footer keeps those two states apart.
@@ -36,6 +40,9 @@ interface MemoryFile {
   /** Epoch seconds, 0 when the file does not exist. */
   modified: number
   error: string
+  /** A Claude Code auto-memory file: written by Claude itself, and `relative`
+   *  is relative to the memory folder rather than the workspace. */
+  autoMemory: boolean
 }
 
 /** One CLI vendor and what Navide knows about its instruction file. */
@@ -58,6 +65,8 @@ const { t } = useI18n()
 
 const files = ref<MemoryFile[]>([])
 const agents = ref<AgentTarget[]>([])
+/** Where Claude keeps its auto-memory for this workspace; empty without one. */
+const autoMemoryDir = ref('')
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
@@ -72,6 +81,9 @@ const savedText = ref('')
 const expectedModified = ref(0)
 /** True once a save was refused because the file moved on under the editor. */
 const conflict = ref(false)
+/** The version the last save replaced, kept in Navide's own folder; null when
+ *  there is none to restore. `savedAt` is epoch seconds. */
+const previous = ref<{ savedAt: number; size: number } | null>(null)
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -99,6 +111,7 @@ function normalizeFile(value: unknown): MemoryFile | null {
     size: numberValue(value.size),
     modified: numberValue(value.modified),
     error: stringValue(value.error),
+    autoMemory: value.auto_memory === true,
   }
 }
 
@@ -115,6 +128,11 @@ function normalizeAgent(value: unknown): AgentTarget | null {
   }
 }
 
+function normalizePrevious(value: unknown): { savedAt: number; size: number } | null {
+  if (!isRecord(value)) return null
+  return { savedAt: numberValue(value.saved_at), size: numberValue(value.size) }
+}
+
 function workspacePayload(): Record<string, string> {
   return { workspace_path: props.workspacePath ?? '' }
 }
@@ -123,7 +141,7 @@ async function reload(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const resp = await props.backend.send<{ files?: unknown; agents?: unknown }>(
+    const resp = await props.backend.send<{ files?: unknown; agents?: unknown; auto_memory_dir?: unknown }>(
       'memory.list',
       workspacePayload(),
     )
@@ -137,6 +155,7 @@ async function reload(): Promise<void> {
     agents.value = (Array.isArray(resp.payload.agents) ? resp.payload.agents : [])
       .map(normalizeAgent)
       .filter((entry): entry is AgentTarget => entry !== null)
+    autoMemoryDir.value = stringValue(resp.payload.auto_memory_dir)
     if (selectedPath.value && !files.value.some((file) => file.path === selectedPath.value)) {
       closeEditor()
     }
@@ -153,14 +172,17 @@ const agentLabels = computed(() => {
   return map
 })
 
-/** The two scopes, always both, so an empty project list explains itself. */
+/** The two scopes, always both, so an empty project list explains itself.
+ *  Claude's auto-memory is kept out of them: it is listed on its own below. */
 const groups = computed(() =>
   (['user', 'project'] as const).map((scope) => ({
     scope,
     label: t(`settings.memory.scope-${scope}`),
-    files: files.value.filter((file) => file.scope === scope),
+    files: files.value.filter((file) => file.scope === scope && !file.autoMemory),
   })),
 )
+
+const autoMemoryFiles = computed(() => files.value.filter((file) => file.autoMemory))
 
 const selectedFile = computed(
   () => files.value.find((file) => file.path === selectedPath.value) ?? null,
@@ -189,12 +211,27 @@ function modifiedLabel(file: MemoryFile): string {
   return new Date(file.modified * 1000).toLocaleString()
 }
 
+const previousLabel = computed(() =>
+  previous.value?.savedAt ? new Date(previous.value.savedAt * 1000).toLocaleString() : '',
+)
+
+/** True when nothing unsaved would be lost, or the user agreed to lose it. */
+function confirmDiscard(): boolean {
+  if (!selectedFile.value || !dirty.value) return true
+  return window.confirm(t('settings.memory.discard-confirm', { name: selectedFile.value.relative }))
+}
+
 async function openFile(file: MemoryFile): Promise<void> {
+  if (!confirmDiscard()) return
+  await loadFile(file)
+}
+
+async function loadFile(file: MemoryFile): Promise<void> {
   error.value = ''
   conflict.value = false
   busy.value = true
   try {
-    const resp = await props.backend.send<{ text?: unknown; modified?: unknown }>('memory.get', {
+    const resp = await props.backend.send<{ text?: unknown; modified?: unknown; previous?: unknown }>('memory.get', {
       path: file.path,
       ...workspacePayload(),
     })
@@ -209,6 +246,7 @@ async function openFile(file: MemoryFile): Promise<void> {
     // A file that does not exist reports no mtime; 0 is what the backend
     // compares against, so creating it twice from two windows still conflicts.
     expectedModified.value = numberValue(resp.payload.modified)
+    previous.value = normalizePrevious(resp.payload.previous)
   } catch (err) {
     error.value = String((err as Error).message ?? err)
   } finally {
@@ -223,7 +261,7 @@ async function save(): Promise<void> {
   conflict.value = false
   busy.value = true
   try {
-    const resp = await props.backend.send<{ modified?: unknown }>('memory.save', {
+    const resp = await props.backend.send<{ modified?: unknown; previous?: unknown }>('memory.save', {
       path: file.path,
       text: draftText.value,
       expected_modified: expectedModified.value,
@@ -240,11 +278,44 @@ async function save(): Promise<void> {
     // Saving moved the file on; adopt the new mtime so a second save in a row
     // is not refused as a conflict with the user's own write.
     expectedModified.value = numberValue(resp.payload?.modified)
+    previous.value = normalizePrevious(resp.payload?.previous)
     await reload()
   } catch (err) {
     error.value = String((err as Error).message ?? err)
   } finally {
     busy.value = false
+  }
+}
+
+/** Write back the version the last save replaced. The backend keeps the text
+ *  it replaces as the new previous version, so this is undone the same way. */
+async function restorePrevious(): Promise<void> {
+  const file = selectedFile.value
+  if (!file || !confirmDiscard()) return
+  error.value = ''
+  conflict.value = false
+  busy.value = true
+  let restored = false
+  try {
+    const resp = await props.backend.send('memory.restore', {
+      path: file.path,
+      expected_modified: expectedModified.value,
+      ...workspacePayload(),
+    })
+    if (!resp.ok) {
+      if (resp.error?.code === 'MEMORY_FILE_CONFLICT') conflict.value = true
+      else error.value = resp.error?.message ?? t('settings.memory.error-restore')
+      return
+    }
+    restored = true
+  } catch (err) {
+    error.value = String((err as Error).message ?? err)
+  } finally {
+    busy.value = false
+  }
+  if (restored) {
+    await loadFile(file)
+    await reload()
   }
 }
 
@@ -254,17 +325,23 @@ function closeEditor(): void {
   savedText.value = ''
   expectedModified.value = 0
   conflict.value = false
+  previous.value = null
+}
+
+/** Cancel and ✕: close, but never drop a draft without asking. */
+function requestClose(): void {
+  if (confirmDiscard()) closeEditor()
 }
 
 /** Re-read the open file, throwing the draft away. Only ever user-initiated. */
 async function reloadFile(): Promise<void> {
   const file = selectedFile.value
-  if (file) await openFile(file)
+  if (file) await loadFile(file)
 }
 
 onMounted(reload)
 
-defineExpose({ reload })
+defineExpose({ reload, confirmDiscard })
 </script>
 
 <template>
@@ -335,6 +412,37 @@ defineExpose({ reload })
               </li>
             </ul>
           </section>
+
+          <!-- Claude's auto-memory: written by Claude, editable like the rest. -->
+          <section v-if="props.workspacePath" class="memory-group memory-auto">
+            <h3 class="memory-group-title">
+              {{ t('settings.memory.scope-auto') }}<span class="count">{{ autoMemoryFiles.length }}</span>
+            </h3>
+            <p class="memory-group-note">{{ t('settings.memory.auto-intro') }}</p>
+            <code v-if="autoMemoryDir" class="memory-auto-dir">{{ autoMemoryDir }}</code>
+            <p v-if="autoMemoryFiles.length === 0" class="memory-group-note">
+              {{ t('settings.memory.auto-empty') }}
+            </p>
+            <ul v-else class="memory-list">
+              <li
+                v-for="file in autoMemoryFiles"
+                :key="file.path"
+                class="memory-row"
+                :class="{ active: selectedPath === file.path }"
+              >
+                <button type="button" class="memory-open" :disabled="busy" @click="openFile(file)">
+                  <span class="memory-row-head">
+                    <strong class="memory-relative" v-truncate>{{ file.relative }}</strong>
+                    <span class="memory-tag">{{ t('settings.memory.auto-tag') }}</span>
+                    <span v-if="file.error" class="memory-tag danger">{{ file.error }}</span>
+                  </span>
+                  <span class="memory-row-meta">
+                    {{ formatBytes(file.size) }} · {{ modifiedLabel(file) }}
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </section>
         </template>
 
         <!-- Coverage: which CLIs Navide can point at a file, and which it cannot. -->
@@ -373,10 +481,13 @@ defineExpose({ reload })
             type="button"
             class="memory-editor-close"
             :aria-label="t('action.close')"
-            @click="closeEditor"
+            @click="requestClose"
           >✕</button>
         </header>
         <code class="memory-editor-path">{{ selectedFile.path }}</code>
+        <p v-if="selectedFile.autoMemory" class="memory-editor-hint">
+          {{ t('settings.memory.auto-editor-hint') }}
+        </p>
         <p v-if="!selectedFile.exists" class="memory-editor-hint">
           {{ t('settings.memory.create-hint') }}
         </p>
@@ -387,6 +498,13 @@ defineExpose({ reload })
             {{ t('settings.memory.conflict-reload') }}
           </button>
         </div>
+        <div v-if="previous" class="memory-previous">
+          <strong>{{ t('settings.memory.previous-kept', { when: previousLabel }) }}</strong>
+          <span>{{ t('settings.memory.restore-hint') }}</span>
+          <button type="button" :disabled="busy" @click="restorePrevious">
+            {{ t('settings.memory.restore-previous') }}
+          </button>
+        </div>
         <textarea
           v-model="draftText"
           class="memory-editor-text"
@@ -394,7 +512,7 @@ defineExpose({ reload })
           :aria-label="selectedFile.relative"
         ></textarea>
         <div class="memory-editor-actions">
-          <button type="button" @click="closeEditor">{{ t('action.cancel') }}</button>
+          <button type="button" @click="requestClose">{{ t('action.cancel') }}</button>
           <button
             type="button"
             class="nv-btn nv-btn--primary"
@@ -466,6 +584,15 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 }
 .memory-group-title .count { font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
 .memory-group-note { margin: 0 4px; color: var(--text-secondary); font-size: var(--font-2xs); }
+.memory-auto { display: flex; flex-direction: column; gap: 6px; }
+.memory-auto .memory-group-title { margin-bottom: 0; }
+.memory-auto-dir {
+  display: block;
+  margin: 0 4px;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
 .memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .memory-row {
   display: flex;
@@ -589,6 +716,18 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 }
 .memory-conflict strong { color: var(--danger-fg); }
 .memory-conflict span { color: var(--text-secondary); line-height: 1.4; }
+.memory-previous {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--bg-subtle);
+  font-size: var(--font-2xs);
+}
+.memory-previous span { color: var(--text-secondary); line-height: 1.4; }
 .memory-editor-text {
   min-height: 320px;
   resize: vertical;

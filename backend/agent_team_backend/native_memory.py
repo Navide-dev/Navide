@@ -22,6 +22,12 @@ feeds is an editor, not a mirror. Two rules keep that safe:
   file something else has touched since, because these files are edited by
   the CLIs themselves as often as by hand.
 
+These files live outside Navide's own folder, so a save must stay reversible:
+before it replaces a file, the text it is about to overwrite is kept in
+Navide's data dir (``memory-backups``, one previous version per file), and
+``restore_previous`` writes that text back -- through ``save``, so a restore
+can itself be undone the same way.
+
 The unit listed is the *file*, not the CLI, because one file is usually read by
 several CLIs: ``~/.claude/CLAUDE.md`` is claude's own and is also loaded by
 kilo and opencode. A row therefore carries every reader, and the same path is
@@ -37,6 +43,21 @@ user-scope loader at all -- its ancestor walk simply reaches ``$HOME`` while
 the workspace lives under it -- and aider has no filename of its own, so its
 rows come from whatever ``read:`` in the user's ``.aider.conf.yml`` names.
 
+Claude Code's auto-memory is listed too, as project rows: the notes Claude
+writes about a project by itself while it works -- ``MEMORY.md``, the index it
+loads at the start of every session, plus one ``.md`` per topic -- kept in
+``~/.claude/projects/<slug>/memory/``. Verified 2026-10-26 against Claude Code
+2.1.310: ``<slug>`` is the project root with every non-alphanumeric UTF-16
+unit replaced by ``-`` (past 200 characters, cut and suffixed with a hash), and
+the project root is the main working tree of the git repository, so every
+worktree and subdirectory of one repo shares a folder. Navide's per-account
+config dirs (``CLAUDE_CONFIG_DIR``) always link their ``projects`` back to the
+real ``~/.claude`` (``credential_vault.CLAUDE_SHARED_ENTRIES``), and the backend
+drops an inherited ``CLAUDE_CONFIG_DIR`` at startup, so the real home is the
+one location for every account. Not modelled: the ``autoMemoryDirectory``
+setting, which moves the folder elsewhere -- the page then shows the default
+folder's files, which Claude no longer updates.
+
 One limit the table does not model: several CLIs let an environment variable
 move their config root -- ``XDG_CONFIG_HOME`` (muse, opencode, kilo),
 ``FACTORY_HOME_OVERRIDE`` (droid), ``KIMI_CODE_HOME``, ``KILO_CONFIG_DIR``,
@@ -47,15 +68,19 @@ nothing, so the failure is quiet. Model them here if that ever bites.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from .applog import app_data_dir
 from .cli_vendors.registry import VENDORS
 
 log = logging.getLogger("agent_team_backend.native_memory")
@@ -64,8 +89,16 @@ log = logging.getLogger("agent_team_backend.native_memory")
 #: refusing it keeps a stray binary out of the editor.
 FILE_SIZE_LIMIT = 1_000_000
 
+#: Under the app data dir: the previous version of each file a save replaced.
+BACKUP_DIR_NAME = "memory-backups"
+
 USER_SCOPE = "user"
 PROJECT_SCOPE = "project"
+
+#: The reader of auto-memory rows: Claude writes and loads them itself.
+AUTO_MEMORY_AGENT = "claude"
+#: Claude Code cuts a longer project folder name and appends a hash.
+_CLAUDE_SLUG_LIMIT = 200
 
 
 class MemoryConflictError(RuntimeError):
@@ -235,6 +268,9 @@ class MemoryFile:
     modified: float = 0.0
     #: Non-empty when the file exists but could not be stat'ed or read.
     error: str = ""
+    #: True for a Claude Code auto-memory file: written by Claude itself, and
+    #: ``relative`` is then relative to the memory folder, not the workspace.
+    auto_memory: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -247,6 +283,7 @@ class MemoryFile:
             "size": self.size,
             "modified": self.modified,
             "error": self.error,
+            "auto_memory": self.auto_memory,
         }
 
 
@@ -326,6 +363,89 @@ def _aider_reads(home: Path, workspace: Path | None) -> list[tuple[Path, str]]:
     return found
 
 
+def auto_memory_dir(home: Path | None = None, workspace: Path | None = None) -> Path | None:
+    """Claude Code's auto-memory folder for the workspace, or None without one.
+
+    The folder need not exist: Claude creates it the first time it saves a
+    note for the project.
+    """
+    if workspace is None:
+        return None
+    root = _git_project_root(workspace)
+    return (home or _home()) / ".claude" / "projects" / _claude_project_slug(str(root)) / "memory"
+
+
+def _git_project_root(workspace: Path) -> Path:
+    """The main working tree of the repository holding ``workspace``.
+
+    Claude keys auto-memory by the repository, so a linked worktree resolves
+    to the main checkout through its ``commondir``. Outside a repository (or
+    in a bare or unreadable one) the workspace itself is the project.
+    """
+    try:
+        start = workspace.resolve()
+    except OSError:
+        return workspace
+    for folder in (start, *start.parents):
+        marker = folder / ".git"
+        if marker.is_dir():
+            return folder
+        if not marker.is_file():
+            continue
+        try:
+            line = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            return folder
+        if not line.startswith("gitdir:"):
+            return folder
+        gitdir = Path(line[len("gitdir:"):].strip())
+        if not gitdir.is_absolute():
+            gitdir = folder / gitdir
+        try:
+            common = (gitdir / "commondir").read_text(encoding="utf-8").strip()
+        except OSError:
+            # A submodule: its own gitdir, no shared one, so it is its own project.
+            return folder
+        common_dir = Path(common) if Path(common).is_absolute() else gitdir / common
+        try:
+            common_dir = common_dir.resolve()
+        except OSError:
+            return folder
+        return common_dir.parent if common_dir.name == ".git" else folder
+    return start
+
+
+def _claude_project_slug(root: str) -> str:
+    """Claude Code's folder name for a project root under ``~/.claude/projects``.
+
+    Claude works on JavaScript strings, so the replacement and the hash run
+    over UTF-16 code units: a character outside the BMP becomes two dashes.
+    """
+    data = root.encode("utf-16-le")
+    units = [int.from_bytes(data[i:i + 2], "little") for i in range(0, len(data), 2)]
+    slug = "".join(
+        chr(unit) if unit < 128 and chr(unit).isalnum() else "-" for unit in units
+    )
+    if len(slug) <= _CLAUDE_SLUG_LIMIT:
+        return slug
+    value = 0
+    for unit in units:
+        value = (value * 31 + unit) & 0xFFFFFFFF
+    if value >= 0x80000000:
+        value -= 0x100000000
+    return f"{slug[:_CLAUDE_SLUG_LIMIT]}-{_base36(abs(value))}"
+
+
+def _base36(value: int) -> str:
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    while True:
+        value, rest = divmod(value, 36)
+        out = digits[rest] + out
+        if value == 0:
+            return out
+
+
 def _within(path: Path, root: Path) -> bool:
     """True when ``path`` is ``root`` or sits under it, both fully resolved."""
     try:
@@ -378,6 +498,13 @@ def candidates(
     for path, scope in _aider_reads(home, workspace):
         root = workspace if scope == PROJECT_SCOPE and workspace else home
         add(path, scope, _relative(path, root), "aider", False)
+    # Claude's auto-memory: only the files it has written, never offered for
+    # creation, and only those that really sit in the folder.
+    memory_dir = auto_memory_dir(home, workspace)
+    if memory_dir is not None and memory_dir.is_dir():
+        for path in sorted(memory_dir.glob("*.md")):
+            if path.is_file() and _within(path, memory_dir):
+                add(path, PROJECT_SCOPE, path.name, AUTO_MEMORY_AGENT, False)
     # Readers are merged first, then the rows are filtered: a canonical file
     # that does not exist yet is still read by every CLI naming it, so
     # dropping the non-canonical rows earlier would make ~/.claude/CLAUDE.md
@@ -390,9 +517,17 @@ def candidates(
 def scan(home: Path | None = None, workspace: Path | None = None) -> list[MemoryFile]:
     """Every instruction file the table reaches, existing files first."""
     files: list[MemoryFile] = []
+    memory_dir = auto_memory_dir(home, workspace)
     for path, (scope, relative, readers, canonical) in candidates(home, workspace).items():
         files.append(
-            _describe(path, scope, relative, tuple(sorted(readers)), canonical)
+            _describe(
+                path,
+                scope,
+                relative,
+                tuple(sorted(readers)),
+                canonical,
+                auto_memory=memory_dir is not None and path.parent == memory_dir,
+            )
         )
     files.sort(key=lambda f: (not f.exists, f.scope != USER_SCOPE, f.relative))
     return files
@@ -401,17 +536,24 @@ def scan(home: Path | None = None, workspace: Path | None = None) -> list[Memory
 def read(path: str, home: Path | None = None, workspace: Path | None = None) -> dict[str, Any]:
     """The text of one listed file. Raises ``ValueError`` for anything else."""
     target, _scope, _root = _allowed(path, home, workspace)
+    kept = _previous_meta(target)
     if not target.is_file():
-        return {"path": str(target), "text": "", "exists": False}
-    size = target.stat().st_size
-    if size > FILE_SIZE_LIMIT:
-        raise ValueError(f"file is too large to edit ({size} bytes)")
-    return {
-        "path": str(target),
-        "text": target.read_text(encoding="utf-8", errors="replace"),
-        "exists": True,
-        "modified": target.stat().st_mtime,
-    }
+        result: dict[str, Any] = {"path": str(target), "text": "", "exists": False}
+    else:
+        size = target.stat().st_size
+        if size > FILE_SIZE_LIMIT:
+            raise ValueError(f"file is too large to edit ({size} bytes)")
+        result = {
+            "path": str(target),
+            "text": target.read_text(encoding="utf-8", errors="replace"),
+            "exists": True,
+            "modified": target.stat().st_mtime,
+        }
+    # Only present when there is one, so a reply for a file Navide never
+    # saved keeps the shape older clients know.
+    if kept is not None:
+        result["previous"] = kept
+    return result
 
 
 def save(
@@ -450,6 +592,9 @@ def save(
             raise ValueError("the instruction file is a link to nothing") from exc
         if not written.is_file():
             raise ValueError("the instruction file links to something that is not a file")
+    # Keep what is about to be overwritten before touching the file; if that
+    # cannot be kept, the save is refused rather than made irreversible.
+    _keep_previous(target, written, text)
     handle, temp = tempfile.mkstemp(dir=str(written.parent), prefix=".navide-", suffix=".tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
@@ -460,7 +605,88 @@ def save(
         raise
     log.info("memory file saved: %s (%d bytes)", target, len(text))
     stat = target.stat()
-    return {"path": str(target), "size": stat.st_size, "modified": stat.st_mtime}
+    result: dict[str, Any] = {"path": str(target), "size": stat.st_size, "modified": stat.st_mtime}
+    kept = _previous_meta(target)
+    if kept is not None:
+        result["previous"] = kept
+    return result
+
+
+def restore_previous(
+    path: str,
+    home: Path | None = None,
+    workspace: Path | None = None,
+    expected_modified: float | None = None,
+) -> dict[str, Any]:
+    """Write back the version the last save replaced.
+
+    It goes through ``save``, so the same table, size and conflict checks
+    apply, and the text being replaced becomes the new previous version: a
+    restore is undone by restoring again.
+    """
+    target, _scope, _root = _allowed(path, home, workspace)
+    stored = _backup_paths(target)[0]
+    try:
+        text = stored.read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError as exc:
+        raise ValueError("there is no previous version to restore") from exc
+    return save(str(target), text, home, workspace, expected_modified)
+
+
+def _backup_paths(target: Path) -> tuple[Path, Path]:
+    """Where the previous text of ``target`` and its description are kept."""
+    key = hashlib.sha256(str(target).encode("utf-8")).hexdigest()[:32]
+    folder = app_data_dir() / BACKUP_DIR_NAME
+    return folder / f"{key}.txt", folder / f"{key}.json"
+
+
+def _keep_previous(target: Path, written: Path, text: str) -> None:
+    """Copy the file's current text aside before ``save`` replaces it.
+
+    Nothing is kept for a file that does not exist yet, and a save that
+    would not change the text keeps the older previous version instead of
+    replacing it with an identical copy.
+    """
+    try:
+        current = written.read_bytes()
+    except FileNotFoundError:
+        return
+    if current == text.encode("utf-8"):
+        return
+    stored, meta = _backup_paths(target)
+    stored.parent.mkdir(parents=True, exist_ok=True)
+    description = {"path": str(target), "saved_at": time.time(), "size": len(current)}
+    for destination, data in (
+        (stored, current),
+        (meta, json.dumps(description).encode("utf-8")),
+    ):
+        handle, temp = tempfile.mkstemp(
+            dir=str(destination.parent), prefix=".navide-", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(handle, "wb") as stream:
+                stream.write(data)
+            os.replace(temp, destination)
+        except BaseException:
+            Path(temp).unlink(missing_ok=True)
+            raise
+
+
+def _previous_meta(target: Path) -> dict[str, Any] | None:
+    """``{saved_at, size}`` of the kept previous version, or None."""
+    stored, meta = _backup_paths(target)
+    if not stored.is_file():
+        return None
+    try:
+        description = json.loads(meta.read_text(encoding="utf-8"))
+        saved_at = float(description.get("saved_at") or 0)
+    except (OSError, ValueError, AttributeError, TypeError):
+        saved_at = 0.0
+    try:
+        size = stored.stat().st_size
+    except OSError:
+        return None
+    return {"saved_at": saved_at, "size": size}
 
 
 def _contained(path: Path, scope: str, root: Path) -> bool:
@@ -500,25 +726,44 @@ def _allowed(
     """``path`` with its scope and root, or ``ValueError`` if unlisted."""
     target = Path(path).expanduser()
     home = home or _home()
+    memory_dir = auto_memory_dir(home, workspace)
     for candidate, (scope, _relative_path, _readers, _canonical) in candidates(
         home, workspace
     ).items():
         if candidate == target:
             root = workspace if scope == PROJECT_SCOPE and workspace else home
+            # An auto-memory file lives outside the workspace: its folder is
+            # the root the save re-checks containment against.
+            if memory_dir is not None and candidate.parent == memory_dir:
+                root = memory_dir
             return candidate, scope, root
     raise ValueError("not a known instruction file")
 
 
 def _describe(
-    path: Path, scope: str, relative: str, readers: tuple[str, ...], canonical: bool
+    path: Path,
+    scope: str,
+    relative: str,
+    readers: tuple[str, ...],
+    canonical: bool,
+    auto_memory: bool = False,
 ) -> MemoryFile:
     try:
         stat = path.stat()
     except FileNotFoundError:
-        return MemoryFile(scope, str(path), relative, readers, canonical, exists=False)
+        return MemoryFile(
+            scope, str(path), relative, readers, canonical, exists=False, auto_memory=auto_memory
+        )
     except OSError as exc:
         return MemoryFile(
-            scope, str(path), relative, readers, canonical, exists=True, error=str(exc)
+            scope,
+            str(path),
+            relative,
+            readers,
+            canonical,
+            exists=True,
+            error=str(exc),
+            auto_memory=auto_memory,
         )
     return MemoryFile(
         scope,
@@ -529,6 +774,7 @@ def _describe(
         exists=True,
         size=stat.st_size,
         modified=stat.st_mtime,
+        auto_memory=auto_memory,
     )
 
 

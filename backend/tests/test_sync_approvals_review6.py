@@ -22,13 +22,13 @@ def _own_app_data(tmp_path, monkeypatch):
 
 
 def _held(item_id):
-    return [h for h in sync_approvals.listing() if h["itemId"] == item_id]
+    return [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
 
 
 def _decide(dev, item_id, approve):
     dev.use()
     (row,) = _held(item_id)
-    return sync_approvals.decide(dev.adapter, item_id, approve, row["digest"])
+    return sync_approvals.decide(dev.adapter, row["itemId"], approve, row["digest"])
 
 
 async def _approved_base(tmp_path, monkeypatch, base):
@@ -115,12 +115,12 @@ async def test_a_pending_new_hold_that_does_not_open_pushes_no_delete(tmp_path, 
     await a.sync(); await b.sync()
     b.use()
     assert _held("legit")
-    sync_approvals._stash_path("mcp", "legit").write_text("garbage")
+    sync_approvals._stash_path("mcp", "i:legit").write_text("garbage")
     r = await b.sync()
-    assert "legit" in r["held"]
+    assert "i:legit" in r["held"]
     await b.sync(); await a.sync()
     a.use()
-    assert "legit" in _names(a_store) and server.rows[("mcp", "legit")]["deleted"] == 0
+    assert "legit" in _names(a_store) and server.rows[("mcp", "i:legit")]["deleted"] == 0
 
 
 async def test_a_pending_change_whose_payload_is_lost_pushes_nothing(tmp_path, account_key, monkeypatch):
@@ -129,9 +129,9 @@ async def test_a_pending_change_whose_payload_is_lost_pushes_nothing(tmp_path, a
     a.use(); a_store.replace_servers([{**base, "command": "/opt/new-legit"}])
     await a.sync(); await b.sync()
     b.use()
-    sync_approvals._stash_path("mcp", "x").unlink()
+    sync_approvals._stash_path("mcp", "i:x").unlink()
     r = await b.sync()
-    assert "x" in r["held"]
+    assert "i:x" in r["held"]
     await a.sync()
     a.use()
     assert _server(a_store, "x")["command"] == "/opt/new-legit"

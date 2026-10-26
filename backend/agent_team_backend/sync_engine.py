@@ -324,6 +324,28 @@ def _describe(adapter: Any, payload: Any) -> dict[str, Any] | None:
     return out if isinstance(out, dict) else None
 
 
+def _inbound(adapter: Any, payload: Any) -> Any:
+    """*payload* as *adapter* compares a remote copy, when it reads one in a
+    narrower form than the record (``McpScope.inbound``: no env or header
+    values), so a field it never sends cannot make two copies differ."""
+    fn = getattr(adapter, "inbound", None)
+    return payload if fn is None or payload is None else fn(payload)
+
+
+def _pushes(adapter: Any, item_id: str) -> bool:
+    """Whether a push may write or delete *item_id* (``McpScope.pushes``):
+    an adapter may keep reading rows it must leave exactly as they are."""
+    fn = getattr(adapter, "pushes", None)
+    return True if fn is None else bool(fn(item_id))
+
+
+def _seal_scope(adapter: Any, scope: str, wire_id: str) -> str:
+    """The scope a body under *wire_id* is sealed with (``McpScope.seal_scope``),
+    *scope* itself unless the adapter seals some ids apart."""
+    fn = getattr(adapter, "seal_scope", None)
+    return scope if fn is None else str(fn(wire_id))
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -1570,7 +1592,9 @@ class SyncEngine:
         try:
             remote = None if deleted else (
                 opened if opened is not _UNOPENED
-                else json.loads(sync_keyring.decrypt(body, scope=scope, item_id=wire_id))
+                else json.loads(sync_keyring.decrypt(
+                    body, scope=_seal_scope(adapter, scope, wire_id), item_id=wire_id
+                ))
             )
         except sync_keyring.UnknownKeyId:
             raise _HoldPull(rev, item_id)
@@ -1582,11 +1606,32 @@ class SyncEngine:
                 raise SyncError(f"{scope}/{item_id} could not be opened ({type(err).__name__})") from err
             log.warning("dropping %s/%s: %s", scope, item_id, _why(err))
             return False
+        remote = _inbound(adapter, remote)
+        superseded_by = getattr(adapter, "superseded_by", None)
+        newer_id = superseded_by(item_id) if superseded_by is not None else ""
+        if newer_id and self._store.state(scope, newer_id) is not None:
+            # An older build's row of an item this machine now knows by its
+            # newer id: noted, so it is not read again, and never applied.
+            self._store.set_state(
+                scope,
+                item_id,
+                rev=rev,
+                synced_hash="" if remote is None else digest(remote),
+                deleted=remote is None,
+                sealed_kid="" if deleted else _kid_of(body),
+                synced_updated_at=stamp,
+                wire_id=hashed_wire,
+            )
+            return False
 
         state = self._store.state(scope, item_id)
         local = snapshot.get(item_id)
         local_hash = digest(local) if item_id in snapshot else ""
         agreed_hash = state.synced_hash if state else ""
+        if not _pushes(adapter, item_id):
+            # A row this machine reads but never writes: it holds no edit of
+            # it that applying could lose, so the row is applied as it stands.
+            agreed_hash = local_hash
         remote_hash = "" if remote is None else digest(remote)
         # Applying over an edit this machine has not pushed yet would lose it.
         # That is the one thing this engine must never do, so it becomes a
@@ -1739,10 +1784,11 @@ class SyncEngine:
     def _open_payload(self, scope: str, wire_id: str, body: str) -> Any:
         """A record's payload, opened under the id it travels by (and, for a
         hashed id, unwrapped). On a legacy id exactly what v1 always did."""
-        text = sync_keyring.decrypt(body, scope=scope, item_id=wire_id)
+        adapter = self._adapters.get(scope)
+        text = sync_keyring.decrypt(body, scope=_seal_scope(adapter, scope, wire_id), item_id=wire_id)
         if not sync_keyring.is_hashed_item_id(wire_id):
-            return json.loads(text)
-        return self._unwrap(scope, wire_id, text)[1]
+            return _inbound(adapter, json.loads(text))
+        return _inbound(adapter, self._unwrap(scope, wire_id, text)[1])
 
     def _reverse(self, scope: str, snapshot: dict[str, Any]) -> dict[str, str]:
         """Hashed id → name for every item this machine knows of: what it
@@ -2003,7 +2049,7 @@ class SyncEngine:
         rotated = held_ring is not None and len(held_ring.get("keys") or {}) > 1
         id_kid = _hmac_kid(_caps_now())
         for item_id, payload in snapshot.items():
-            if item_id in blocked or item_id in withheld:
+            if item_id in blocked or item_id in withheld or not _pushes(adapter, item_id):
                 continue
             if item_id in oversized:
                 self._note(scope, "tooLarge", item_id)
@@ -2045,7 +2091,7 @@ class SyncEngine:
             waiting = self._reset_deletes.get(scope, set())
             for item_id, state in states.items():
                 if item_id in snapshot or item_id in blocked or state.deleted or item_id in oversized \
-                        or item_id in withheld:
+                        or item_id in withheld or not _pushes(adapter, item_id):
                     continue
                 if item_id in waiting and state.rev == 0:
                     # A delete carried across a reset whose row the re-read
@@ -2064,7 +2110,8 @@ class SyncEngine:
             # still owes the server that tombstone, on its own — the hashed
             # copy is never sent again from rev 0.
             for name, state in sorted(states.items()):
-                if state.legacy_rev <= 0 or not state.wire_id or name in blocked or name in withheld:
+                if state.legacy_rev <= 0 or not state.wire_id or name in blocked or name in withheld \
+                        or not _pushes(adapter, name):
                     continue
                 owed = self._wire_item(scope, name, name, state.legacy_rev, updated_at, None, "")
                 owed[0][_OWED_KEY] = True
@@ -2095,7 +2142,9 @@ class SyncEngine:
         deleted = payload is None
         body = ""
         if not deleted:
-            body = sync_keyring.encrypt(canonical(payload), scope=scope, item_id=item_id)
+            body = sync_keyring.encrypt(
+                canonical(payload), scope=_seal_scope(self._adapters.get(scope), scope, item_id), item_id=item_id
+            )
             if len(body.encode("utf-8")) > MAX_BODY_BYTES:
                 log.warning(
                     "skipping %s/%s: %d bytes is over the %d byte record limit",

@@ -43,8 +43,8 @@ def _mcp_pair(tmp_path, monkeypatch):
 def _decide(dev, item_id, approve):
     """As the window decides: on the row it listed, by that row's digest."""
     dev.use()
-    (row,) = [h for h in sync_approvals.listing() if h["itemId"] == item_id]
-    return sync_approvals.decide(dev.adapter, item_id, approve, row["digest"])
+    (row,) = [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
+    return sync_approvals.decide(dev.adapter, row["itemId"], approve, row["digest"])
 
 
 # ── MCP ──────────────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ async def test_a_new_mcp_server_waits_for_approval(tmp_path, account_key, monkey
     await a.sync(); await b.sync()
     assert "runner" not in _names(b_store)
     b.use()
-    (held,) = [h for h in sync_approvals.listing() if h["itemId"] == "runner"]
+    (held,) = [h for h in sync_approvals.listing() if h["itemId"] in ("runner", "i:" + "runner")]
     assert held["scope"] == "mcp" and held["status"] == "pending" and held["kind"] == "new"
     assert held["summary"]["command"] == "/tmp/evil" and held["summary"]["args"] == ["--x"]
     pushes = server.pushes
@@ -74,11 +74,13 @@ async def test_a_changed_command_waits_but_a_rotated_env_value_does_not(tmp_path
     a.use(); a_store.replace_servers([base])
     await a.sync(); await b.sync()
     _decide(b, "api", True)
-    # A token rotation: what runs is the same.
+    b.use(); b_store.replace_servers([{**_server(b_store, "api"), "env": {"API_TOKEN": "b1"}}])
+    # A token rotation: what runs is the same, and values stay on each
+    # machine (install-only sync), so nothing reaches B and nothing waits.
     a.use(); a_store.replace_servers([{**base, "env": {"API_TOKEN": "t2"}}])
     await a.sync(); await b.sync()
     b.use()
-    assert _server(b_store, "api")["env"] == {"API_TOKEN": "t2"}
+    assert _server(b_store, "api")["env"] == {"API_TOKEN": "b1"}
     assert sync_approvals.listing() == []
     # A new env name (NODE_OPTIONS, say) or a new command does change what runs.
     a.use(); a_store.replace_servers([{**base, "env": {"API_TOKEN": "t2"}, "command": "/tmp/other"}])
@@ -92,7 +94,8 @@ async def test_a_changed_command_waits_but_a_rotated_env_value_does_not(tmp_path
     await a.sync(); await b.sync()
     b.use()
     (held,) = sync_approvals.listing()
-    assert held["summary"]["env"] == {"API_TOKEN": sync_scopes.MASKED_VALUE, "NODE_OPTIONS": "--require x"}
+    # The new name arrives without its value, to be filled in here.
+    assert held["summary"]["env"] == {"API_TOKEN": sync_scopes.MASKED_VALUE, "NODE_OPTIONS": ""}
     assert "NODE_OPTIONS" not in _server(b_store, "api")["env"]
 
 
@@ -124,7 +127,7 @@ async def test_a_hold_survives_a_restart(tmp_path, account_key, monkeypatch):
     await b.sync()
     assert server.pushes == pushes
     b.use()
-    assert [h["itemId"] for h in sync_approvals.listing()] == ["x"]
+    assert [h["itemId"] for h in sync_approvals.listing()] == ["i:x"]
 
 
 async def test_a_local_edit_while_waiting_wins(tmp_path, account_key, monkeypatch):
@@ -139,7 +142,7 @@ async def test_a_local_edit_while_waiting_wins(tmp_path, account_key, monkeypatc
     await a.sync()
     a.use()
     assert _server(a_store, "x")["command"] == "npx"
-    (held,) = [h for h in sync_approvals.listing() if h["itemId"] == "x"]
+    (held,) = [h for h in sync_approvals.listing() if h["itemId"] in ("x", "i:" + "x")]
     assert held["kind"] == "changed" and held["summary"]["command"] == "mine"
 
 
@@ -238,11 +241,11 @@ async def test_the_window_lists_and_decides_through_the_link(tmp_path, account_k
 
     monkeypatch.setattr(server_link, "_link", Link())
     b.use()
-    assert [h["itemId"] for h in server_link.sync_approvals()] == ["x"]
+    assert [h["itemId"] for h in server_link.sync_approvals()] == ["i:x"]
     with pytest.raises(Exception):
         server_link.decide_sync_approval("prompts", "x", True, "d")
     digest = server_link.sync_approvals()[0]["digest"]
-    result = server_link.decide_sync_approval("mcp", "x", True, digest)
+    result = server_link.decide_sync_approval("mcp", "i:x", True, digest)
     assert result["status"] == "applied" and "x" in _names(b_store)
     assert server_link.sync_approvals() == []
 

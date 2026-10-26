@@ -8163,15 +8163,24 @@ async def cli_extensions_list(ctx: Context) -> dict[str, Any]:
     has, or lacks, an add-on. Read-only: installing, enabling or removing a
     CLI extension is the user's decision and there is no tool here for it.
 
-    Returns {vendors, items}. `vendors` is every CLI with an extension system
-    ({cli, label, supported, note, count}); `supported: false` means Navide
-    cannot read where that CLI keeps them yet. Each item is {cli, id, name,
-    version, kind (plugin / mod / extension / hook / package), type_label
-    (the vendor's own name), scope, enabled, exec_tier (L1 text assets, L2
-    subprocess such as hooks and MCP, L3 code inside the CLI's own process),
-    capabilities, native_consent (what the CLI itself asks before running
-    it), owner (navide when Navide installed it), evidence (inferred when
-    capabilities were read off source text)}.
+    Returns {vendors, items, unreadable}. `vendors` is every CLI with an
+    extension system ({cli, label, supported, note, count, unreadable});
+    `supported: false` means Navide cannot read where that CLI keeps them yet.
+    Each item is {cli, id, name, version, kind (plugin / mod / extension /
+    hook / package), type_label (the vendor's own name), scope, enabled,
+    exec_tier (L1 text assets, L2 subprocess such as hooks and MCP, L3 code
+    inside the CLI's own process), capabilities, native_consent (what the
+    CLI itself asks before running it), owner (navide when Navide installed
+    it), evidence (inferred when capabilities were read off source text),
+    enabled_error}. A non-empty `enabled_error` says the file holding the
+    on/off switch could not be read: `enabled` is then a default, not the
+    extension's real state — say it is unknown.
+
+    `unreadable` lists what could not be read at all ({cli, id, name, kind,
+    type_label, error}); `vendors[].unreadable` counts them per CLI. A CLI
+    with unreadable entries may have extensions that are not in `items`, so
+    do not report "not installed" for it — report that it could not be read
+    and why.
 
     Items of kind `navide-change` are what Navide itself wrote into a CLI's
     world for a convenience feature (name = the feature id, enabled = the

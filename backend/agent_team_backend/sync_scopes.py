@@ -378,17 +378,44 @@ class McpScope:
     and syncing them would mean this feature rewriting ``~/.codex`` and
     ``~/.cursor`` on a machine nobody was looking at.
 
-    Secrets ride along inside the encrypted body, which is the decision the
-    plan records: url, args and env go up sealed, and the server has no key.
+    Sync is install-only (0.2.32): what travels is the server's definition —
+    transport, command, args, url, cwd, enabled and the *names* of its env
+    entries and headers. Their values never leave this machine: every copy
+    goes up with them empty (``_install_only``), and a record that arrives
+    keeps the values this machine already has (``_with_local_values``). A
+    name new here lands empty, which the MCP page shows as a field to fill
+    in. Records an older build pushed with values in them still open; the
+    values in them are read as empty, so the two forms compare as one.
+
+    Install-only records travel under their own item ids, ``i:<name>``
+    (``INSTALL_PREFIX``), and the rows older builds keep under ``<name>``
+    are never written or deleted from here (``pushes``): an older build
+    applies a record as it comes, so a definition without values would empty
+    its own. A ``<name>`` row is read as a definition until this machine has
+    seen the server's ``i:`` row (``superseded_by``). Older builds cannot use
+    an ``i:`` row: no server name may hold ":" (``mcp_settings._NAME_RE``),
+    and on legacy item ids the row is sealed apart (``seal_scope``) so the
+    builds before 0.2.18, which record a refused row as held and later push
+    a delete for it, cannot open it at all.
     """
 
     scope = "mcp"
 
-    def __init__(self, on_change: Callable[[], Any] | None = None, *, gate: bool = True) -> None:
+    def __init__(
+        self,
+        on_change: Callable[[], Any] | None = None,
+        *,
+        gate: bool = True,
+        keep_local_values: bool = True,
+    ) -> None:
         #: False for a caller that already asked the user about this very
         #: record (a settings-bundle import the user picked items from):
         #: then nothing is held for approval.
         self._gate = gate
+        #: False for a caller that filled the env and header values itself
+        #: by its own rules (a settings-bundle import: ``restore_secrets``):
+        #: then the values it hands ``apply`` are written as they are.
+        self._keep_local_values = keep_local_values
         #: Coroutine function run on the loop after a synced write, so the
         #: running servers and the open windows follow it the way they follow
         #: a save in Settings. One run covers every write before it starts.
@@ -428,7 +455,38 @@ class McpScope:
     def snapshot(self) -> dict[str, Any]:
         # A record waiting for approval stands in for the local one, so the
         # engine pushes nothing over it (see ``sync_approvals``).
-        return sync_approvals.overlay(self.scope, self.local_snapshot())
+        # Each server is listed under both its ids: ``<name>`` only so an
+        # older build's row of it compares with something (``pushes``).
+        local = self.local_snapshot()
+        by_id = {INSTALL_PREFIX + name: server for name, server in local.items()}
+        by_id.update(local)
+        return {item_id: _install_only(server) for item_id, server in sync_approvals.overlay(self.scope, by_id).items()}
+
+    def inbound(self, payload: Any) -> Any:
+        """A record from elsewhere as this machine compares it: its env and
+        header values dropped, as the ones it sends are."""
+        return _install_only(payload)
+
+    def pushes(self, item_id: str) -> bool:
+        """Whether the engine may write or delete this item: only ``i:`` rows.
+        A ``<name>`` row is an older build's, values and all, and stays as it
+        is, so older builds keep syncing it among themselves."""
+        return item_id.startswith(INSTALL_PREFIX)
+
+    def superseded_by(self, item_id: str) -> str:
+        """The ``i:`` id that replaces a ``<name>`` row, or "" for an ``i:``
+        row. Once this machine has seen it, the older row is not read."""
+        return "" if item_id.startswith(INSTALL_PREFIX) else INSTALL_PREFIX + item_id
+
+    def seal_scope(self, wire_id: str) -> str:
+        """The scope an item is sealed under. An ``i:`` row on legacy item ids
+        is sealed apart, so a build before 0.2.32 cannot open it (see the
+        class docstring); a hashed id names no prefix and keeps ``mcp``."""
+        return INSTALL_SEAL_SCOPE if wire_id.startswith(INSTALL_PREFIX) else self.scope
+
+    def approval_local(self, item_id: str) -> Any:
+        """The local server a hold under *item_id* was filed against."""
+        return self.local_snapshot().get(_server_name(item_id))
 
     def withheld(self) -> list[str]:
         """Rejected records whose held copy no longer opens: nothing goes up
@@ -449,7 +507,12 @@ class McpScope:
         it would run here otherwise. A record held that way counts as taken."""
         store = self._store()
         servers = [s for s in store.list_servers() if isinstance(s, dict)]
-        index = next((i for i, s in enumerate(servers) if s.get("name") == item_id), -1)
+        name = _server_name(item_id)
+        if name != item_id:
+            # The server's install-only row answers for it now: a change held
+            # from its older row is not asked about as well.
+            sync_approvals.drop(self.scope, name)
+        index = next((i for i, s in enumerate(servers) if s.get("name") == name), -1)
         if payload is None:
             sync_approvals.drop(self.scope, item_id)
             if index < 0:
@@ -460,9 +523,11 @@ class McpScope:
                 log.warning("MCP record %s arrived as %s", item_id, type(payload).__name__)
                 return False
             local = servers[index] if index >= 0 else None
-            if self._gate and _mcp_needs_approval(local, {**payload, "name": item_id}) \
+            if self._keep_local_values:
+                payload = _with_local_values(payload, local)
+            if self._gate and _mcp_needs_approval(local, {**payload, "name": name}) \
                     and not sync_approvals.is_approved(self.scope, item_id, payload):
-                if not _mcp_valid(servers, index, {**payload, "name": item_id}):
+                if not _mcp_valid(servers, index, {**payload, "name": name}):
                     # The store would refuse it on approval anyway; holding it
                     # would only let one device fill this machine's disk.
                     log.warning("MCP record %s is not a valid server here; refused", item_id)
@@ -472,13 +537,13 @@ class McpScope:
                 return sync_approvals.hold(
                     self.scope, item_id, payload, local=local,
                     kind=sync_approvals.KIND_NEW if local is None else sync_approvals.KIND_CHANGED,
-                    summary=_mcp_summary(item_id, payload),
+                    summary=_mcp_summary(name, payload),
                 )
             if self._gate and _mcp_hides(payload):
                 # Checked again when an approved record lands.
                 raise sync_engine.SyncError(f"MCP record {item_id} hides characters in what it runs; refused")
             incoming = dict(payload)
-            incoming["name"] = item_id
+            incoming["name"] = name
             if index < 0:
                 servers.append(incoming)
             else:
@@ -641,6 +706,42 @@ MASKED_VALUE = "••••••"
 #: The MCP record fields whose values are secrets (settings_bundle blanks the
 #: same two on export).
 _MCP_SECRET_FIELDS = ("env", "headers")
+
+
+#: The item id prefix of an install-only MCP record (see ``McpScope``).
+INSTALL_PREFIX = "i:"
+#: What an install-only record is sealed under on legacy item ids.
+INSTALL_SEAL_SCOPE = "mcp-install"
+
+
+def _server_name(item_id: str) -> str:
+    return item_id[len(INSTALL_PREFIX):] if item_id.startswith(INSTALL_PREFIX) else item_id
+
+
+def _install_only(server: Any) -> Any:
+    """An MCP record as it travels: every env and header value empty, the
+    names kept, so the far side can tell which fields it has to fill in."""
+    if not isinstance(server, dict):
+        return server
+    out = dict(server)
+    for field_name in _MCP_SECRET_FIELDS:
+        values = out.get(field_name)
+        if isinstance(values, dict):
+            out[field_name] = {str(k): "" for k in values}
+    return out
+
+
+def _with_local_values(incoming: dict[str, Any], local: Any) -> dict[str, Any]:
+    """*incoming* with whatever values it carried replaced by this machine's
+    own for the same names; a name this machine has no value for is empty."""
+    out = _install_only(incoming)
+    for field_name in _MCP_SECRET_FIELDS:
+        values = out.get(field_name)
+        have = local.get(field_name) if isinstance(local, dict) else None
+        if not isinstance(values, dict) or not isinstance(have, dict):
+            continue
+        out[field_name] = {k: have[k] if isinstance(have.get(k), str) else "" for k in values}
+    return out
 
 
 def _mask_mcp(payload: Any) -> Any:

@@ -645,7 +645,7 @@ def _apply_mcp(items: dict[str, Any]) -> list[dict[str, Any]]:
     # Not held for approval: the import preview showed the user each of these
     # records whole (the presenters a sync approval uses) and the user ticked
     # them; the same checks refused what could not be shown (_import_summary).
-    adapter = sync_scopes.McpScope(gate=False)
+    adapter = sync_scopes.McpScope(gate=False, keep_local_values=False)
     before = adapter.local_snapshot()
     run = _Run()
     for name, payload in items.items():

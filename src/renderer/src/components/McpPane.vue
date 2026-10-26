@@ -240,6 +240,14 @@ function placeChips(row: McpRow): { key: string; label: string; off: boolean }[]
   return chips
 }
 
+/** How many env entries (stdio) or headers (http/sse) have no value. A synced
+ *  server arrives that way: values never leave the machine they were typed on. */
+function emptyFields(server: McpServer | null | undefined): number {
+  if (!server) return 0
+  const record = server.transport === 'stdio' ? server.env : server.headers
+  return Object.values(record ?? {}).filter((value) => value === '').length
+}
+
 function nativeFor(row: McpRow, agentKey: string): NativeMcpServer | undefined {
   return row.natives.find((native) => native.agent === agentKey)
 }
@@ -523,6 +531,9 @@ function entries(map: Record<string, string>): [string, string][] {
                   <span v-if="(row.navide?.tool_count ?? 0) > 0" class="pchip tools">
                     {{ t('settings.mcp.tool-count', { n: row.navide?.tool_count ?? 0 }) }}
                   </span>
+                  <span v-if="emptyFields(row.navide) > 0" class="pchip needs">
+                    {{ t('settings.mcp.needs-setup') }}
+                  </span>
                 </span>
               </button>
             </div>
@@ -715,6 +726,9 @@ function entries(map: Record<string, string>): [string, string][] {
               <p v-if="!Object.keys(draft.env ?? {}).length" class="mcp-drawer-hint">
                 {{ t('settings.mcp.no-env') }}
               </p>
+              <p v-else-if="emptyFields(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-locally') }}
+              </p>
             </div>
           </template>
 
@@ -760,6 +774,9 @@ function entries(map: Record<string, string>): [string, string][] {
               </div>
               <p v-if="!Object.keys(draft.headers ?? {}).length" class="mcp-drawer-hint">
                 {{ t('settings.mcp.no-headers') }}
+              </p>
+              <p v-else-if="emptyFields(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-locally') }}
               </p>
             </div>
           </template>
@@ -943,6 +960,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 }
 .pchip.off { color: var(--text-secondary); border-color: var(--border-muted); opacity: 0.75; }
 .pchip.tools { color: var(--text-secondary); border-color: var(--border-muted); font-weight: 500; }
+.pchip.needs { color: var(--warning-fg); border-color: var(--warning-fg); }
 .mcp-tag {
   display: inline-block;
   padding: 1px 6px;
@@ -1049,6 +1067,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-drawer-section h4 { margin: 0; font-size: var(--font-3xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .mcp-drawer-hint { margin: 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; }
 .mcp-drawer-hint.danger { color: var(--danger-fg); }
+.mcp-drawer-hint.warn { color: var(--warning-fg); }
 .mcp-drawer-meta { font-size: 10.5px; color: var(--text-secondary); }
 .mcp-drawer-path {
   display: block;

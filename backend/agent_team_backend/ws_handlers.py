@@ -4242,6 +4242,9 @@ async def memory_list(session: "Session", msg_id: str, msg_type: str, payload: d
     # The scan stats every candidate in the home and the workspace; a thread
     # keeps that file I/O off the loop, as the native MCP scan does.
     files = await asyncio.to_thread(native_memory.scan, None, workspace)
+    # Shown even before Claude has written anything, so the page can say where
+    # its notes for this project will appear.
+    memory_dir = await asyncio.to_thread(native_memory.auto_memory_dir, None, workspace)
     await session.send_json(
         make_response(
             msg_id,
@@ -4250,6 +4253,7 @@ async def memory_list(session: "Session", msg_id: str, msg_type: str, payload: d
                 "files": [f.as_dict() for f in files],
                 "agents": native_memory.agent_targets(),
                 "workspace_path": str(workspace) if workspace else "",
+                "auto_memory_dir": str(memory_dir) if memory_dir else "",
             },
         )
     )
@@ -4307,6 +4311,35 @@ async def memory_save(session: "Session", msg_id: str, msg_type: str, payload: d
         return
     await session.send_json(make_response(msg_id, msg_type, result))
     server_link.sync_soon("memory")
+
+
+@handler("memory.restore")
+async def memory_restore(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Write back the version the last save replaced, kept in Navide's data dir."""
+    workspace = _memory_workspace(payload)
+    path = str(payload.get("path") or "")
+    expected_raw = payload.get("expected_modified")
+    expected = float(expected_raw) if isinstance(expected_raw, (int, float)) else None
+    try:
+        result = await asyncio.to_thread(
+            native_memory.restore_previous, path, None, workspace, expected
+        )
+    except native_memory.MemoryConflictError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_FILE_CONFLICT", str(err), {"path": path})
+        )
+        return
+    except ValueError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_FILE_REJECTED", str(err), {"path": path})
+        )
+        return
+    except OSError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_WRITE_FAILED", str(err), {"path": path})
+        )
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
 
 
 # ── Cross-device sync (sync.*) ──────────────────────────────────────────────

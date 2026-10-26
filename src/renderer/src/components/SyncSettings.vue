@@ -289,6 +289,12 @@ async function loadApprovals(): Promise<void> {
   secretWarnings.value = Array.isArray(found) ? (found as SecretWarning[]) : []
 }
 
+/** An MCP server's install-only record travels as `i:<name>`; the card
+ *  names the server. */
+function shownId(scope: string, itemId: string): string {
+  return scope === 'mcp' && itemId.startsWith('i:') ? itemId.slice(2) : itemId
+}
+
 function approvalKind(a: Approval): string {
   if (a.status === 'approved') return t('settings.sync.approval-downloading')
   return a.kind === 'changed' ? t('settings.sync.approval-changed') : t('settings.sync.approval-new')
@@ -625,7 +631,7 @@ onBeforeUnmount(() => offResult?.())
       <div v-for="a in waiting" :key="a.scope + '/' + a.itemId" class="sync-conflict sync-approval">
         <div class="sync-conflict-head">
           <strong>{{ t('settings.sync.scope-' + a.scope) }}</strong>
-          <code>{{ visible(a.itemId) }}</code>
+          <code>{{ visible(shownId(a.scope, a.itemId)) }}</code>
           <span class="sync-hint">{{ approvalKind(a) }}</span>
         </div>
         <p v-if="a.displayable === false" class="sync-note sync-result-error sync-approval-undisplayable">
@@ -683,7 +689,7 @@ onBeforeUnmount(() => offResult?.())
       <div v-for="c in conflicts" :key="c.scope + '/' + c.itemId" class="sync-conflict">
         <div class="sync-conflict-head">
           <strong>{{ t('settings.sync.scope-' + c.scope) }}</strong>
-          <code>{{ c.itemId }}</code>
+          <code>{{ shownId(c.scope, c.itemId) }}</code>
         </div>
         <div v-if="secretStates(c).length" class="sync-secrets">
           <span class="sync-hint">{{ t('settings.sync.secrets-title') }}</span>
