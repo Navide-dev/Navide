@@ -9433,6 +9433,18 @@ describe('opaque view instance ownership', () => {
         }
       })
 
+      it('is not reclaimed for the first-party packages, which end their own', async () => {
+        vi.useFakeTimers()
+        try {
+          const { internal, kills } = await withDetachedSession('navide.mini-ide')
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS * 2)
+          expect(kills()).toHaveLength(0)
+          expect(internal.aiSessions.has('left-session')).toBe(true)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
       // 0.2.32 must-do: the sessions kept past a close are listed on the
       // package's Settings entry, each with an End button.
       describe('listed in Settings while it keeps running', () => {
@@ -9489,18 +9501,6 @@ describe('opaque view instance ownership', () => {
           dispatchEvent(bundled.mgr, 'terminal.exit', exit('left-session', 0))
           expect(bundled.internal.aiSessions.has('left-session')).toBe(true)
         })
-      })
-
-      it('is not reclaimed for the first-party packages, which end their own', async () => {
-        vi.useFakeTimers()
-        try {
-          const { internal, kills } = await withDetachedSession('navide.mini-ide')
-          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS * 2)
-          expect(kills()).toHaveLength(0)
-          expect(internal.aiSessions.has('left-session')).toBe(true)
-        } finally {
-          vi.useRealTimers()
-        }
       })
     })
   })
