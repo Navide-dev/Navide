@@ -722,9 +722,6 @@ export interface StagedInstall {
   descriptor: PluginLaunchDescriptor | undefined
 }
 
-/** Write a verified package beside, never over, the current active package.
- * Candidate discovery/activation is intentionally a separate Host lifecycle
- * decision: staging does not revoke instances, change grants, or expose routes. */
 /** True when staging this local package would be refused because its id,
  *  version and target are already installed and referenced: the version has
  *  to be bumped. The same test {@link stageInstallCandidate} makes, asked at
@@ -744,6 +741,9 @@ export function localVersionAlreadyInstalled(prepared: PreparedInstall, pluginsR
   }
 }
 
+/** Write a verified package beside, never over, the current active package.
+ * Candidate discovery/activation is intentionally a separate Host lifecycle
+ * decision: staging does not revoke instances, change grants, or expose routes. */
 export function stageInstallCandidate(
   prepared: PreparedInstall,
   pluginsRoot: string,

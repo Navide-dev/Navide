@@ -238,6 +238,30 @@ describe('PluginTrustDialog after a failed approval', () => {
     expect(dialog.get('.ext-confirm-risk').attributes('disabled')).toBeUndefined()
   })
 
+  it.each([
+    ['replace', '.ext-confirm-replace'],
+    ['publisher', '.ext-confirm-publisher'],
+  ] as const)('does not offer a used-up file again on the %s step either (#643 L5)', (step, button) => {
+    const shown = (needsFileAgain: boolean) => mount(PluginTrustDialog, {
+      props: { pending: { ...pending(), commitError: 'x', ...(needsFileAgain ? { needsFileAgain } : {}) }, step } as never,
+      global: { plugins: [i18n] },
+    })
+    expect(shown(true).get(button).attributes('disabled')).toBeDefined()
+    expect(shown(false).get(button).attributes('disabled')).toBeUndefined()
+  })
+
+  it('shows the next step it was given, under the reason', () => {
+    const dialog = renderWith({ commitError: 'Could not install.', commitNextStep: 'Ask the agent again.' })
+    expect(dialog.get('.ext-trust-error').text()).toContain('Ask the agent again.')
+  })
+
+  it('announces a repeated failure again: a new alert, not an updated one (#643 L3)', async () => {
+    const dialog = renderWith({ commitError: 'Could not install.', commitFailures: 1 })
+    const first = dialog.get('.ext-trust-error').element
+    await dialog.setProps({ pending: { ...pending(), commitError: 'Could not install.', commitFailures: 2 } } as never)
+    expect(dialog.get('.ext-trust-error').element).not.toBe(first)
+  })
+
   it('shows nothing before any approval failed', () => {
     expect(render('risk').find('.ext-trust-error').exists()).toBe(false)
   })
