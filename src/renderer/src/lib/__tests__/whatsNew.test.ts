@@ -325,9 +325,10 @@ describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () 
   })
 })
 
-// The 0.2.32 entry: the removal of Paste Credential and what it means for
-// the sign-in and quota new Claude panes use.
-describe('0.2.32 — Paste Credential removed', () => {
+// The 0.2.32 entry: MCP sync install-only, the removal of Paste Credential and
+// what it means for the sign-in and quota new Claude panes use, and the Agent
+// Assets, Navide plugin and reliability fixes.
+describe('0.2.32 — secrets stay on this machine, Paste Credential removed', () => {
   const entry = whatsNewFor('0.2.32')
 
   it('is authored and carries ja-JP for every line', () => {
@@ -341,6 +342,23 @@ describe('0.2.32 — Paste Credential removed', () => {
     expect(all).toContain('draws on that account’s quota')
     expect(all).toContain('a device that never used it is not touched')
     expect(all).toContain('until they are closed or restarted')
+  })
+
+  it('says MCP sync carries only what is installed and old values are not deleted', () => {
+    const all = entry!.highlights.map((text) => text['en-US']).join('\n')
+    expect(all).toContain('MCP sync now carries only which servers are installed')
+    expect(all).toContain('Their values never leave this machine')
+    expect(all).toContain('Needs setup')
+    expect(all).toContain('are not deleted by this release')
+    expect(all).toContain('only if it still runs the same command and arguments, or the same URL')
+  })
+
+  it('names the Agent Assets safeguards and the background AI CLI sessions', () => {
+    const all = entry!.highlights.map((text) => text['en-US']).join('\n')
+    expect(all).toContain('Restore Previous Version')
+    expect(all).toContain('clearing a prompt’s text no longer deletes the prompt')
+    expect(all).toContain('you now approve it in the main window')
+    expect(all).toContain('each with an End button')
   })
 
   it('shows once to someone updating from 0.2.31, as the newest entry, and not to a build still running 0.2.31', () => {
