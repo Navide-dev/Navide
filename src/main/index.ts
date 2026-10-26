@@ -2728,7 +2728,12 @@ async function autoRestartBackend(): Promise<void> {
   const inFlight = new Promise<void>((resolve) => { settle = resolve })
   backendStarting = inFlight
   try {
-    const started = await startBackend(readHealthCheckTimeoutSec(healthTimeoutPath()) * 1000)
+    // Pass the approved catalog like every other spawn: without it startBackend
+    // overwrites the on-disk catalog with an empty one.
+    const started = await startBackend(
+      readHealthCheckTimeoutSec(healthTimeoutPath()) * 1000,
+      approvedBackendPluginCatalog()
+    )
     if (epoch !== backendLifecycleEpoch) {
       // A stop/restart/quit landed while this was spawning. What the user asked
       // for wins; this process must not become the live backend, and must not
