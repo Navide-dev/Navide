@@ -100,24 +100,24 @@ Every commit and every release below was produced by one engineer directing agen
 
 | Since 2026-05-28 | |
 |---|---|
-| Commits | **3,805** |
-| Releases | **77** |
-| Commits per month | **~1,344** |
+| Commits | **4,182** |
+| Releases | **87** |
+| Commits per month | **~1,384** |
 
-Commits per week over the last eight weeks - the rate is still climbing, not settling:
+Commits per week over the last eight weeks - never fewer than 130:
 
 | Week | | Commits |
 |---|---|---|
-| 8 weeks ago | █████████ | 182 |
-| 7 weeks ago | ███████ | 148 |
-| 6 weeks ago | ████████ | 165 |
-| 5 weeks ago | █████████████████ | 335 |
-| 4 weeks ago | █████████ | 187 |
-| 3 weeks ago | ██████████ | 201 |
-| 2 weeks ago | ██████████████████ | 353 |
-| last week | █████████████████████████ | 501 |
+| 8 weeks ago | ██████ | 137 |
+| 7 weeks ago | ██████████████ | 324 |
+| 6 weeks ago | ████████ | 185 |
+| 5 weeks ago | █████████ | 209 |
+| 4 weeks ago | ███████████ | 253 |
+| 3 weeks ago | █████████████████████████ | 577 |
+| 2 weeks ago | █████████████ | 293 |
+| last week | █████████ | 204 |
 
-Counts as of 2026-10-15. The badges at the top track the live numbers.
+Counts as of 2026-10-27 (v0.2.32). The badges at the top track the live numbers.
 
 ## Available today
 
