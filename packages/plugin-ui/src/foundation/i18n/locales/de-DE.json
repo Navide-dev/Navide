@@ -2195,6 +2195,7 @@
         "versionExists": "Diese Versionsnummer ist bereits installiert. Erhöhen Sie die Version und packen Sie das Paket neu.",
         "installFailed": "Das Navide-Plug-in konnte nicht installiert werden.",
         "chooseAgain": "Schließen Sie diesen Dialog und wählen Sie die Datei erneut aus, um es noch einmal zu versuchen.",
+        "approveAgain": "Die Datei liegt noch bereit, Sie können sie also erneut genehmigen.",
         "askAgentAgain": "Schließen Sie diesen Dialog und bitten Sie den Agenten, die Anfrage erneut zu senden.",
         "startAgain": "Schließen Sie diesen Dialog und versuchen Sie es von vorn.",
         "rollbackFailed": "Die Rückkehr zu dieser Version ist fehlgeschlagen.",

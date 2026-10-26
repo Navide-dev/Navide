@@ -521,6 +521,8 @@ declare global {
           id: string,
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
         ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
+        /** #643 review L1: absent on an older Host. */
+        preparedLocalInstall?: (id: string, digest: string) => Promise<{ present: boolean }>
         prepareAgentFileInstall?: (
           stagingId: string,
           requester?: { callerKind: string; paneName?: string },

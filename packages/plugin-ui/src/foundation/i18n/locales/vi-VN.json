@@ -2195,6 +2195,7 @@
         "versionExists": "Số phiên bản này đã được cài đặt. Hãy tăng số phiên bản rồi đóng gói lại.",
         "installFailed": "Không thể cài plugin Navide này.",
         "chooseAgain": "Hãy đóng hộp thoại này và chọn lại tệp để thử lại.",
+        "approveAgain": "Tệp vẫn sẵn sàng, nên bạn có thể phê duyệt lại.",
         "askAgentAgain": "Hãy đóng hộp thoại này và nhờ agent gửi lại yêu cầu.",
         "startAgain": "Hãy đóng hộp thoại này và thử lại từ đầu.",
         "rollbackFailed": "Không thể quay lại phiên bản này.",

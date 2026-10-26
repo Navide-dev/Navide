@@ -2195,6 +2195,7 @@
         "versionExists": "This version number is already installed. Bump the version and package it again.",
         "installFailed": "The Navide plugin could not be installed.",
         "chooseAgain": "Close this dialog and choose the file again to try once more.",
+        "approveAgain": "The file is still ready, so you can approve it again.",
         "askAgentAgain": "Close this dialog and ask the agent to send the request again.",
         "startAgain": "Close this dialog and try again from the start.",
         "rollbackFailed": "Could not go back to this version.",

@@ -2195,6 +2195,7 @@
         "versionExists": "这个版本号已经安装过了。请提高版本号后重新打包。",
         "installFailed": "无法安装这个 Navide 插件。",
         "chooseAgain": "请关闭这个对话框，重新选择文件再试一次。",
+        "approveAgain": "文件仍然就绪，可以直接再批准一次。",
         "askAgentAgain": "请关闭这个对话框，再请 agent 重新发送请求。",
         "startAgain": "请关闭这个对话框，从头再试一次。",
         "rollbackFailed": "无法回到这个版本。",

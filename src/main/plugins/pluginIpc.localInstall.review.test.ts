@@ -372,6 +372,19 @@ describe('HIGH-2: view storage when the source changes', () => {
     await expect(call('plugins:installFromFile')).resolves.toMatchObject({ id: 'acme.todo', version: '1.0.0' })
   })
 
+  it('says whether the file copy the dialog showed is still held after a failed approval (#643 L1)', async () => {
+    writeFileSync(picked, vsix('acme.todo', '1.0.0'))
+    const prepared = await call('plugins:installFromFile') as { digest: string }
+    // Refused before the copy is used: it is still there, for that digest only.
+    await expect(call('plugins:commitLocalInstall', { id: 'acme.todo' })).rejects.toThrow(/consent is required/)
+    expect(await call('plugins:preparedLocalInstall', { id: 'acme.todo', digest: prepared.digest })).toEqual({ present: true })
+    expect(await call('plugins:preparedLocalInstall', { id: 'acme.todo', digest: 'b'.repeat(64) })).toEqual({ present: false })
+    expect(await call('plugins:preparedLocalInstall', { id: 'acme.todo' })).toEqual({ present: false })
+    // Used by an approval (here a successful one): gone.
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })
+    expect(await call('plugins:preparedLocalInstall', { id: 'acme.todo', digest: prepared.digest })).toEqual({ present: false })
+  })
+
   it('keeps the storage of an update within the Marketplace exactly as on main', async () => {
     await marketplaceInstall('acme.todo', '1.0.0')
     const stored = writeStorage('acme.todo', '1.0.0')

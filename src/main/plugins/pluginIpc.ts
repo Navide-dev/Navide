@@ -2821,6 +2821,15 @@ export function registerPluginIpc(
     }
   }
 
+  // #643 review L1: after a failed approval of a file install, whether the
+  // copy the dialog showed (its digest) is still held here, refused before it
+  // was used, so the dialog asks for the file again only once it is gone.
+  ipcMain.handle('plugins:preparedLocalInstall', (event, args: { id?: unknown; digest?: unknown } | null) => {
+    assertAuthorized(event)
+    const pkg = typeof args?.id === 'string' ? preparedLocal.get(args.id) : undefined
+    return { present: pkg !== undefined && typeof args?.digest === 'string' && pkg.digest === args.digest }
+  })
+
   ipcMain.handle('plugins:installFromFile', async (event) => {
     assertAuthorized(event)
     const pickFile = options.pickLocalPackageFile
