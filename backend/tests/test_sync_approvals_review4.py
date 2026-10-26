@@ -262,14 +262,14 @@ async def test_a_server_switched_off_here_is_not_switched_on_remotely_without_as
 
 # ── D1-11: the stored summary carries no secret ─────────────────────────────
 async def test_a_secret_in_args_is_shown_whole_but_never_stored_in_the_clear(tmp_path, account_key, monkeypatch):
-    # Round 5 (N3): masked by name only, so args show whole to the user;
-    # the index seals the summary, so the file still holds no secret.
+    # Round 5 (N3): the index seals the summary, so the file holds no secret.
+    # From 0.2.32 the token never arrives at all: sync empties it in place.
     server, a, b, a_store, b_store = _mcp_pair(tmp_path, monkeypatch)
     a.use(); a_store.replace_servers([{**_mcp("gh"), "args": ["--token", TOKEN, "--verbose"]}])
     await a.sync(); await b.sync()
     b.use()
     (held,) = _held("gh")
-    assert held["summary"]["args"] == ["--token", TOKEN, "--verbose"]
+    assert held["summary"]["args"] == ["--token", "", "--verbose"]
     assert TOKEN not in sync_approvals._index_path().read_text()
 
 

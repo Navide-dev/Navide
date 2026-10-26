@@ -6822,6 +6822,7 @@
       "no-env": "Sin variables de entorno",
       "needs-setup": "Requiere configuración",
       "fill-locally": "Algunos valores están vacíos. Complételos en este equipo: los valores de las variables de entorno y los encabezados nunca se sincronizan entre dispositivos.",
+      "fill-credentials-locally": "Algunos valores de la URL o de los argumentos están vacíos. Si era una credencial, complétela en este equipo: las credenciales de la URL y los argumentos nunca se sincronizan entre dispositivos.",
       "headers": "Cabeceras",
       "no-headers": "Sin cabeceras",
       "show": "Mostrar",

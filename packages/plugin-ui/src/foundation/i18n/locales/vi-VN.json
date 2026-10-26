@@ -6822,6 +6822,7 @@
       "no-env": "Không có biến môi trường",
       "needs-setup": "Cần thiết lập",
       "fill-locally": "Một số giá trị đang trống. Hãy điền trên máy này — giá trị biến môi trường và header không bao giờ được đồng bộ giữa các thiết bị.",
+      "fill-credentials-locally": "Một số giá trị trong URL hoặc đối số đang trống. Nếu đó là thông tin xác thực, hãy điền trên máy này — thông tin xác thực trong URL và đối số không bao giờ được đồng bộ giữa các thiết bị.",
       "headers": "Header",
       "no-headers": "Không có header",
       "show": "Hiện",

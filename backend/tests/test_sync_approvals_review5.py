@@ -123,7 +123,7 @@ async def test_the_index_still_keeps_no_secret_in_the_clear(tmp_path, account_ke
     token = "sk-" + "A1b2C3d4" * 6
     server, a, b, a_store, b_store = await _offer(tmp_path, monkeypatch, {**_mcp("gh"), "args": ["--token", token]})
     (row,) = _held("gh")
-    assert row["summary"]["args"] == ["--token", token]          # the window sees it whole
+    assert row["summary"]["args"] == ["--token", ""]             # sync emptied it (0.2.32)
     assert token not in sync_approvals._index_path().read_text()  # the store keeps it sealed
 
 

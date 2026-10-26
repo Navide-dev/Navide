@@ -248,6 +248,23 @@ function emptyFields(server: McpServer | null | undefined): number {
   return Object.values(record ?? {}).filter((value) => value === '').length
 }
 
+/** Whether a URL has an emptied credential slot: `scheme://@host` userinfo or
+ *  a query parameter with no value. Sync leaves one where a credential was. */
+function emptyUrlSlot(url: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\/:?@/i.test(url) || /[?&][^=&#]+=(?=[&#]|$)/.test(url)
+}
+
+/** How many credentials in the URL (http/sse) or arguments (stdio) are empty:
+ *  an empty argument, a `--name=` / `Name:` one, or an emptied URL slot.
+ *  Sync empties them on the way out, as it does env and header values. */
+function emptyCredentials(server: McpServer | null | undefined): number {
+  if (!server) return 0
+  if (server.transport !== 'stdio') return server.url && emptyUrlSlot(server.url) ? 1 : 0
+  return (server.args ?? []).filter(
+    (arg) => arg === '' || /^[A-Za-z0-9_.-]+[=:]$/.test(arg) || emptyUrlSlot(arg),
+  ).length
+}
+
 function nativeFor(row: McpRow, agentKey: string): NativeMcpServer | undefined {
   return row.natives.find((native) => native.agent === agentKey)
 }
@@ -531,7 +548,10 @@ function entries(map: Record<string, string>): [string, string][] {
                   <span v-if="(row.navide?.tool_count ?? 0) > 0" class="pchip tools">
                     {{ t('settings.mcp.tool-count', { n: row.navide?.tool_count ?? 0 }) }}
                   </span>
-                  <span v-if="emptyFields(row.navide) > 0" class="pchip needs">
+                  <span
+                    v-if="emptyFields(row.navide) + emptyCredentials(row.navide) > 0"
+                    class="pchip needs"
+                  >
                     {{ t('settings.mcp.needs-setup') }}
                   </span>
                 </span>
@@ -692,6 +712,9 @@ function entries(map: Record<string, string>): [string, string][] {
               <p v-if="!draft.args?.length" class="mcp-drawer-hint">
                 {{ t('settings.mcp.no-arguments') }}
               </p>
+              <p v-else-if="emptyCredentials(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-credentials-locally') }}
+              </p>
             </div>
             <div class="mcp-field">
               <span class="mcp-field-head">
@@ -741,6 +764,9 @@ function entries(map: Record<string, string>): [string, string][] {
                 spellcheck="false"
                 placeholder="https://example.com/mcp"
               />
+              <span v-if="emptyCredentials(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-credentials-locally') }}
+              </span>
             </label>
             <div class="mcp-field">
               <span class="mcp-field-head">

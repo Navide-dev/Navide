@@ -211,6 +211,23 @@ describe('McpPane', () => {
     expect(wrapper.find('.pchip.needs').exists()).toBe(false)
   })
 
+  it('says a server needs setup when a credential in its arguments or URL arrived empty', async () => {
+    const synced = { ...navideServers()[0], args: ['-y', 'srv', '--token', ''] }
+    wrapper = mountPane({ servers: [synced] })
+    expect(wrapper.find('.mcp-card .pchip.needs').text()).toBe('Needs setup')
+    await openCard(wrapper, 'context7')
+    expect(wrapper.find('.mcp-drawer-hint.warn').text()).toContain('credentials in the URL and arguments')
+
+    const remote = { name: 'remote', transport: 'http', url: 'https://@mcp.example.test/v1?api_key=', headers: {}, enabled: true }
+    await wrapper.setProps({ servers: [remote] })
+    await flushPromises()
+    expect(wrapper.find('.mcp-card .pchip.needs').exists()).toBe(true)
+
+    await wrapper.setProps({ servers: [{ ...remote, url: 'https://mcp.example.test/v1?region=eu' }, navideServers()[0]] })
+    await flushPromises()
+    expect(wrapper.find('.pchip.needs').exists()).toBe(false)
+  })
+
   it('asks the parent to remove a server rather than deleting it itself', async () => {
     wrapper = mountPane()
     await openCard(wrapper, 'context7')
