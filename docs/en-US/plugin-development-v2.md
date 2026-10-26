@@ -532,11 +532,15 @@ A package with any invalid tool is refused at install and at publish, exactly
 like a schema error. `agentTools` needs a native backend, so frontend-only
 packages cannot declare it.
 
-What the user sees and consents to: the install confirmation and the native
-backend consent dialog list every declared tool with its name, the method it
-calls, its full description, its declared read-only or changes-data claim (the
-package's own claim), its timeout and its whole input schema, plus the number
-of tools and their total size. There is no limit on the number of tools. The tools are part of
+What the user sees and consents to: the install confirmation lists every
+declared tool with its name, the method it calls, its full description, its
+declared read-only or changes-data claim (the package's own claim), its timeout
+and its whole input schema, plus the number of tools and their total size, and
+Settings → Navide Plugins shows the same. The native backend consent dialog is a
+message box that cannot scroll, so it shows the number of tools and their total
+size, the first eight tools with their method, claim and timeout, the names of
+the rest on one line with how many of them are declared as changing data, and points to Settings → Navide Plugins for the full
+descriptions and input schemas. There is no limit on the number of tools. The tools are part of
 the consent: any change to any tool (name, method, risk, text, schema, timeout)
 asks again. A package that declares no tools keeps exactly the consent it had
 before this field existed.

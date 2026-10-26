@@ -56,7 +56,7 @@ import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
-import { revealInvisibleText, validateAgentTools } from '../../shared/pluginAgentTools'
+import { validateAgentTools } from '../../shared/pluginAgentTools'
 import {
   canonicalContractJson,
   computeDisclosure,
@@ -500,8 +500,9 @@ interface NativeBackendConsentStrings {
   allow: string
   separator: string
   agentToolsIntro: (count: number, name: string, bytes: number) => string
-  agentTool: (tool: string, method: string, write: boolean, seconds: number, description: string) => string
-  agentToolSchema: string
+  agentTool: (tool: string, method: string, write: boolean, seconds: number) => string
+  agentToolsMore: (count: number, writes: number, names: string) => string
+  agentToolsDetailIn: string
   agentToolsOutro: string
 }
 
@@ -528,9 +529,11 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     disable: 'You can disable it at any time in Settings → Navide Plugins.',
     agentToolsIntro: (count, name, bytes) =>
       `Agents will be able to call these ${count} tools of ${name} (their text and input schemas total ${bytes} bytes):`,
-    agentTool: (tool, method, write, seconds, description) =>
-      `• ${tool} → ${method} (declared ${write ? 'as changing data' : 'read-only'}, times out after ${seconds} s): ${description}`,
-    agentToolSchema: 'Input schema: ',
+    agentTool: (tool, method, write, seconds) =>
+      `• ${tool} → ${method} (declared ${write ? 'as changing data' : 'read-only'}, times out after ${seconds} s)`,
+    agentToolsMore: (count, writes, names) =>
+      `• and ${count} more${writes ? ` (${writes} declared as changing data)` : ''}: ${names}`,
+    agentToolsDetailIn: 'Each tool\'s full description and input schema are shown in Settings → Navide Plugins.',
     agentToolsOutro: 'What these tools return is shown to the agent, which may pass it on elsewhere.',
     notNow: 'Not now',
     allow: 'Allow',
@@ -554,9 +557,11 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     disable: '你隨時可以在「設定 → Navide 外掛」停用它。',
     agentToolsIntro: (count, name, bytes) =>
       `agent 將可以呼叫 ${name} 的這 ${count} 個工具（文字和輸入結構描述共 ${bytes} 位元組）：`,
-    agentTool: (tool, method, write, seconds, description) =>
-      `• ${tool} → ${method}（外掛宣告為${write ? '寫入' : '唯讀'}，${seconds} 秒後逾時）：${description}`,
-    agentToolSchema: '輸入結構描述：',
+    agentTool: (tool, method, write, seconds) =>
+      `• ${tool} → ${method}（外掛宣告為${write ? '寫入' : '唯讀'}，${seconds} 秒後逾時）`,
+    agentToolsMore: (count, writes, names) =>
+      `• 另外 ${count} 個${writes ? `（其中 ${writes} 個外掛宣告為寫入）` : ''}：${names}`,
+    agentToolsDetailIn: '每個工具的完整說明和輸入結構描述，都在「設定 → Navide 外掛」。',
     agentToolsOutro: '這些工具回傳的內容會交給 agent，agent 可能再把它傳到別處。',
     notNow: '暫不',
     allow: '允許',
@@ -580,9 +585,11 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     disable: '「設定 → Navide プラグイン」でいつでも無効にできます。',
     agentToolsIntro: (count, name, bytes) =>
       `agent は ${name} のこれら ${count} 個のツールを呼び出せるようになります（テキストと入力スキーマの合計 ${bytes} バイト）：`,
-    agentTool: (tool, method, write, seconds, description) =>
-      `• ${tool} → ${method}（プラグインの宣言：${write ? '書き込み' : '読み取り専用'}、${seconds} 秒でタイムアウト）：${description}`,
-    agentToolSchema: '入力スキーマ：',
+    agentTool: (tool, method, write, seconds) =>
+      `• ${tool} → ${method}（プラグインの宣言：${write ? '書き込み' : '読み取り専用'}、${seconds} 秒でタイムアウト）`,
+    agentToolsMore: (count, writes, names) =>
+      `• ほか ${count} 個${writes ? `（うち ${writes} 個はプラグインの宣言：書き込み）` : ''}：${names}`,
+    agentToolsDetailIn: '各ツールの説明と入力スキーマの全文は「設定 → Navide プラグイン」に表示されます。',
     agentToolsOutro: 'これらのツールが返す内容は agent に渡され、agent がそれを別の場所に渡すことがあります。',
     notNow: '今はしない',
     allow: '許可',
@@ -590,19 +597,31 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
   },
 }
 
-/** The declared agent tools, each with the method it calls, its full
- * description, the plugin's own read/write claim, its timeout and its whole
- * input schema: allowing the backend also allows agents to call these. */
+/** Agent tools listed one per line in the native dialog; the rest are named
+ * on one line. A native message box does not scroll, so an unbounded list
+ * pushes its buttons off the screen. */
+export const NATIVE_DIALOG_LISTED_AGENT_TOOLS = 8
+
+/** The declared agent tools, each with the method it calls, the plugin's own
+ * read/write claim and its timeout, every tool's name and how many of the
+ * rest change data: allowing the backend also allows agents to call these.
+ * The full descriptions and input schemas are on the Settings page
+ * (NativeBackendPanel), not in this box. */
 function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt, s: NativeBackendConsentStrings): string {
   if (prompt.agentTools.length === 0) return ''
+  const listed = prompt.agentTools.slice(0, NATIVE_DIALOG_LISTED_AGENT_TOOLS)
+  const rest = prompt.agentTools.slice(NATIVE_DIALOG_LISTED_AGENT_TOOLS)
   return [
     s.agentToolsIntro(prompt.agentTools.length, prompt.name, Buffer.byteLength(JSON.stringify(prompt.agentTools))),
-    ...prompt.agentTools.map((tool) => [
-      s.agentTool(tool.name, tool.method, tool.risk === 'write', tool.timeoutMs / 1000, tool.description),
-      // Keys and enum values may hold invisible characters (never refused):
-      // spelled out so they cannot reorder or hide the dialog's text.
-      `  ${s.agentToolSchema}${revealInvisibleText(JSON.stringify(tool.inputSchema))}`,
-    ].join('\n')),
+    ...listed.map((tool) => s.agentTool(tool.name, tool.method, tool.risk === 'write', tool.timeoutMs / 1000)),
+    ...(rest.length
+      ? [s.agentToolsMore(
+          rest.length,
+          rest.filter((tool) => tool.risk === 'write').length,
+          rest.map((tool) => tool.name).join(s.separator),
+        )]
+      : []),
+    s.agentToolsDetailIn,
     s.agentToolsOutro,
   ].join('\n')
 }
