@@ -1400,7 +1400,7 @@ async function promptNativeBackendWorkspaceWrite(prompt: NativeBackendWritePromp
     type: 'warning',
     title: 'Allow file changes',
     message: `Allow ${prompt.name} to change files in this workspace?`,
-    detail: `${prompt.workspacePath}\n\nYou can revoke this in Settings → Extensions.`,
+    detail: `${prompt.workspacePath}\n\nYou can revoke this in Settings → Navide Plugins.`,
     buttons: ['Don\'t allow', 'Allow'],
     defaultId: 0,
     cancelId: 0,
@@ -3690,7 +3690,7 @@ async function handleMiniIdeUnavailable(
         : kind === 'file'
           ? 'This file can only be opened through the Mini-IDE in the current configuration. '
           : '') +
-      'The Mini-IDE extension is not installed or could not be loaded. Open Settings → Extensions to inspect its status.',
+      'The Navide plugin Mini-IDE is not installed or could not be loaded. Open Settings → Navide Plugins to inspect its status.',
   }
   void (target && !target.isDestroyed()
     ? dialog.showMessageBox(target, options)
@@ -3706,7 +3706,7 @@ function showPlansRecoveryUnavailable(workspacePath: string): void {
     type: 'error',
     title: 'Plans unavailable',
     message: 'Plans could not be opened because its data could not be read.',
-    detail: 'Open Settings → Extensions to inspect the Plans extension, or restart Navide.',
+    detail: 'Open Settings → Navide Plugins to inspect the Navide plugin Plans, or restart Navide.',
   }
   void (target && !target.isDestroyed()
     ? dialog.showMessageBox(target, options)
@@ -3727,8 +3727,8 @@ function showPlansPreviewUnavailable(workspacePath: string): void {
       ? 'Unable to preview this HTML file because Plans is not installed.'
       : 'Unable to preview this HTML file because Plans is unavailable.',
     detail: missing
-      ? 'The Plans extension is not installed. Open Settings → Extensions to inspect its status.'
-      : 'The installed Plans extension could not be loaded. Open Settings → Extensions to inspect its status.',
+      ? 'The Navide plugin Plans is not installed. Open Settings → Navide Plugins to inspect its status.'
+      : 'The installed Navide plugin Plans could not be loaded. Open Settings → Navide Plugins to inspect its status.',
   }
   void (target && !target.isDestroyed()
     ? dialog.showMessageBox(target, options)
@@ -3775,7 +3775,7 @@ async function showGitViewUnavailable(target: BrowserWindow | null): Promise<voi
     type: 'error',
     title: 'Git view unavailable',
     message: 'Unable to open the diff because the Git extension is unavailable.',
-    detail: 'The Git extension is not installed or could not be loaded. Open Settings → Extensions to inspect its status.',
+    detail: 'The Navide plugin Git is not installed or could not be loaded. Open Settings → Navide Plugins to inspect its status.',
   }
   await (target && !target.isDestroyed()
     ? dialog.showMessageBox(target, options)

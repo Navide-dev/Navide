@@ -2367,7 +2367,7 @@ not restart. In-window views come back on the new version in place. Every
 switch is recorded in the main window's announcements with a one-click way
 back to the version it replaced; a failed switch keeps the previous version
 running and leaves the update staged. For an update the user approved, the
-Extensions page shows the reason at once, its row keeps Restart and Discard,
+Navide Plugins page shows the reason at once, its row keeps Restart and Discard,
 and the main window lists it with **Apply now** on the next launch; for an
 agent's automatic update the main window shows the reason with **Apply now**
 at once. A first install or update that is still staged when Navide starts

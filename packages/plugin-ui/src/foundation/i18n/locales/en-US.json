@@ -1568,7 +1568,7 @@
           "summary": "Read-only view of the MCP servers each CLI keeps in its own config, and where each server is set up."
         },
         "credentials": {
-          "title": "Credentials & keys",
+          "title": "Credentials & Keys",
           "summary": "Read-only scan of where credentials and keys live on this machine, with reminders."
         },
         "skills": {
@@ -1576,7 +1576,7 @@
           "summary": "Create, edit, enable, disable, and inspect app-managed agent skills."
         },
         "prompts": {
-          "title": "Prompt Skills",
+          "title": "Prompts",
           "summary": "Create and edit the prompt skills a CLI pane can cast from its loop button."
         },
         "memory": {
@@ -3123,7 +3123,7 @@
           "p11": "The first block on Settings ▸ Navide Cloud is called Sync. <strong>It is not a separate tab</strong> — it is the top section of this one page. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
           "sync": {
             "scopes": "<strong>Five rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
-            "credentials": "<em>Memory</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory switch an older build left on can still be turned off. <em>Credentials &amp; keys</em> has no row at all: account credentials and keys never leave this machine. A Credentials switch an older build left on is treated as off. MCP settings, when their sync is on, are encrypted on this machine before they are uploaded, and the server has no key to decrypt them.",
+            "credentials": "<em>Memory</em> and <em>Extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory switch an older build left on can still be turned off. <em>Credentials &amp; Keys</em> has no row at all: account credentials and keys never leave this machine. A Credentials &amp; Keys switch an older build left on is treated as off. MCP settings, when their sync is on, are encrypted on this machine before they are uploaded, and the server has no key to decrypt them.",
             "states": "Two states are spelled out under the block: <em>not connected</em> (scopes you turned on catch up once the link is back) and <em>this device has no sync key yet</em> (nothing is uploaded until it has one). There is also a <em>Sync Now</em> button, enabled only while connected.",
             "key": "<strong>The sync key is shown as the first 8 characters of its id</strong>, never as the key itself. <em>Rotate Key</em> takes <strong>two clicks</strong>: the first turns it into <em>Rotate Now</em> and adds a <em>Cancel</em> beside it. Rotating retires the current key, re-seals every synced record under a new one, and hands the new key to your other devices the next time they exchange keys — it is the move for a key you think has leaked.",
             "legacy": "<em>Adopt for This Account</em> appears only when this device holds a sync key from before accounts were bound <em>and</em> this account has no key yet. It is a one-time choice: without adopting it you cannot read what was synced under that key, and minting a fresh key instead would leave those records permanently unreadable.",
@@ -6790,7 +6790,7 @@
         "s7": {
           "title": "One person, several machines",
           "p1": "Connecting two machines running different operating systems is not itself a platform matter: signing in to Navide Cloud, pairing, and cross-device messaging work the same way on all three, and are covered in <strong>Settings &amp; System</strong>. This section only adds what changes when the machines are not the same platform.",
-          "p2": "In <strong>Settings ▸ Navide Cloud</strong>, the sync list lets you turn on three things: MCP, Skills and Prompts. <em>Memory</em> and <em>CLI extensions</em> are listed too, greyed out and described as “Not syncable yet.”; a memory switch an older version left on can still be turned off. There is no row for credentials: CLI account credentials are stored only on this computer and are never synced.",
+          "p2": "In <strong>Settings ▸ Navide Cloud</strong>, the sync list lets you turn on three things: MCP, Skills and Prompts. <em>Memory</em> and <em>Extensions</em> are listed too, greyed out and described as “Not syncable yet.”; a memory switch an older version left on can still be turned off. There is no <em>Credentials &amp; Keys</em> row: CLI account credentials are stored only on this computer and are never synced.",
           "note": "Things that never travel with you anyway: each CLI's own installation and sign-in, credentials (held in each platform's own vault, in formats that do not interchange), and every absolute path. A second machine needs its CLIs installed and signed in on its own."
         },
         "mock": {
@@ -6888,7 +6888,7 @@
       "header-name-placeholder": "Header"
     },
     "credentials": {
-      "title": "Credentials & keys",
+      "title": "Credentials & Keys",
       "intro": "A read-only scan of where credentials and keys live on this machine. Nothing is changed, moved or sent anywhere.",
       "meta": "Local only · values never shown · sync off",
       "keyring-ok": "Keyring available: {backend}",
@@ -7249,7 +7249,7 @@
       "scope-hint-mcp": "MCP servers you added in Navide. Their secrets are encrypted before they leave.",
       "scope-hint-skills": "Which skills are on and which CLIs each one goes to, plus the files of skills created in Navide (large ones travel as encrypted blobs). Skills you put in the folder yourself sync their settings only.",
       "scope-hint-memory": "Global instruction files such as ~/.claude/CLAUDE.md. Files inside a project stay with git.",
-      "scope-credentials": "Credentials",
+      "scope-credentials": "Credentials & Keys",
       "sealed": "(credential — not shown)",
       "key-id": "Sync key {id}",
       "rotate": "Rotate Key",
@@ -7387,7 +7387,7 @@
       }
     },
     "memory": {
-      "title": "CLI Instruction Files",
+      "title": "Memory",
       "intro": "Every CLI reads an instruction file before it starts working — CLAUDE.md, AGENTS.md, QWEN.md, .cursor rules. Each file is listed once, with every CLI that loads it, and can be edited in place.",
       "scope-user": "User level",
       "scope-project": "Project level",
@@ -7421,7 +7421,7 @@
       "error-save": "Could not save this file. Your draft remains in the editor."
     },
     "prompts": {
-      "title": "Prompt Skills",
+      "title": "Prompts",
       "intro": "Reusable whole instructions a CLI pane can cast from its ∞ button. One skill is one complete prompt — picking a skill replaces the prompt, it never appends to another. Only the default skill runs as a loop; every other skill is sent once.",
       "new": "New Skill",
       "new-name": "New skill",

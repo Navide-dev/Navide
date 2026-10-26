@@ -67,7 +67,7 @@ _NO_HOST_SESSION_HINTS = {
 #: worded like the Host's.
 PLANS_DISABLED_MESSAGE = (
     "PLUGIN_TOOL_UNAVAILABLE (plugin-disabled): Navide plugin Plans is disabled. "
-    "Enable it in Settings → Extensions."
+    "Enable it in Settings → Navide Plugins."
 )
 
 

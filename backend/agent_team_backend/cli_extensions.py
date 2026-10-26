@@ -264,7 +264,7 @@ _CHANGE_CLIS: dict[str, tuple[str, ...]] = {
 
 def navide_changes(features: list[dict[str, Any]]) -> list[CliExtension]:
     """What Navide wrote into a CLI's world for a convenience feature, one row
-    per recorded target, so the CLI Extensions page shows them with owner
+    per recorded target, so the Extensions page shows them with owner
     navide. ``features`` is ``ConvenienceGate.listing()["features"]``.
 
     The id names the target by a hash of its path: the agent's copy of this
