@@ -11485,7 +11485,7 @@
     "follow-wait": "Déplacer une fois terminés",
     "follow-skip-running": "Ignorer les panes en cours",
     "follow-switch-label": "Suivre le changement de compte",
-    "follow-switch-hint": "Activé : choisir un compte ci-dessous change le compte par défaut, et ce pane y passe à son prochain tour. Désactivé : choisir un compte ne déplace que ce pane, rouvert une fois dans le dossier propre à ce compte ; le compte par défaut et les autres panes ne changent pas. Basculer cet interrupteur le rouvre aussi une fois.",
+    "follow-switch-hint": "Activé : choisir un compte ci-dessous change le compte par défaut, et ce pane y passe à son prochain tour. Désactivé : choisir un compte ne déplace que ce pane, rouvert une fois dans le dossier propre à ce compte ; le compte par défaut et les autres panes ne changent pas. Basculer cet interrupteur le rouvre aussi une fois.",
     "pinned-indicator-label": "Rattaché à son compte",
     "pinned-indicator-tooltip": "Rattaché : un changement de compte ne déplace pas ce pane. Ouvrez le badge du compte pour qu’il suive de nouveau.",
     "unpin-title": "{count} pane à faire suivre est en cours de travail | {count} panes à faire suivre sont en cours de travail",
