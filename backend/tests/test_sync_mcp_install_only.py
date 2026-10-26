@@ -123,10 +123,11 @@ async def test_a_changed_definition_keeps_this_machines_values(tmp_path, account
     await a.sync(); await b.sync()
     _set(b, b_store, _api(env={"API_KEY": SECRET_B}))
     await b.sync()
-    _set(a, a_store, _api(env={"API_KEY": SECRET_A, "EXTRA": "1"}, args=["api", "--fast"]))
+    # Only the env names changed: the endpoint is B's, so B's values stay.
+    _set(a, a_store, _api(env={"API_KEY": SECRET_A, "EXTRA": "1"}))
     await a.sync(); await b.sync()
     landed = _named(b_store)
-    assert landed["args"] == ["api", "--fast"]
+    assert landed["args"] == ["api"]
     assert landed["env"] == {"API_KEY": SECRET_B, "EXTRA": ""}
     assert not b.store.conflicts("mcp")
 
@@ -147,7 +148,8 @@ async def test_an_older_row_is_read_as_a_definition_until_the_install_row_exists
     await new.sync()  # no i: row yet: the older row is read, its value is not
     new.use()
     landed = _named(new_store)
-    assert landed["args"] == ["api", "--old"] and landed["env"] == {"API_KEY": SECRET_B}
+    # Its args changed, so NEW's own value is not handed to them either.
+    assert landed["args"] == ["api", "--old"] and landed["env"] == {"API_KEY": ""}
     assert _body(server, "i:api")["args"] == ["api", "--old"]
     assert SECRET_B not in repr(server.rows)
     assert _row(server, "api")["rev"] == legacy_rev and SECRET_A in repr(_body(server, "api"))
@@ -310,25 +312,29 @@ async def test_a_round_trip_keeps_each_machines_own_credentials(tmp_path, accoun
     assert _named(b_store, "remote")["url"] == "https://@mcp.example.test/v1?api_key="
     assert _named(b_store, "cli")["args"] == ["srv", "--token", ""]
 
-    _set(b, b_store, _remote(url_b), _cli(["srv", "--token", "tok-b"]))
+    _set(b, b_store, _remote(url_b), {**_cli(["srv", "--token", "tok-b"]), "env": {"KEY": "b-key"}})
     await b.sync()
-    _set(a, a_store, _remote(url_a + "&region=eu"), _cli(["srv", "--token", "tok-a", "--fast"]))
+    # A edits around the endpoint (an env name, on/off): B keeps its own.
+    _set(a, a_store, {**_remote(url_a), "enabled": False}, {**_cli(["srv", "--token", "tok-a"]), "env": {"KEY": "a-key"}})
     await a.sync(); await b.sync()
     b.use()
-    # The url changed around the credential, so B's is not handed to it.
-    assert _named(b_store, "remote")["url"] == "https://@mcp.example.test/v1?api_key=&region=eu"
-    assert _named(b_store, "cli")["args"] == ["srv", "--token", "tok-b", "--fast"]
-    assert not b.store.conflicts("mcp")
+    assert _named(b_store, "remote")["url"] == url_b and _named(b_store, "remote")["enabled"] is False
+    assert _named(b_store, "cli")["args"] == ["srv", "--token", "tok-b"]
+    assert _named(b_store, "cli")["env"] == {"KEY": "b-key"}
+    a.use()
+    assert _named(a_store, "remote")["url"] == url_a and _named(a_store, "cli")["env"] == {"KEY": "a-key"}
+    assert not a.store.conflicts("mcp") and not b.store.conflicts("mcp")
 
-    _set(a, a_store, _remote(url_a + "&region=eu"), _cli(["srv", "--token", "tok-a", "--fast", "--log"]))
-    _set(b, b_store, _remote(url_b + "&region=eu"), _cli(["srv", "--token", "tok-b", "--fast"]))
-    await b.sync(); await a.sync(); await b.sync()
+    # A changes the endpoint itself: B gets none of its own values for it.
+    _set(a, a_store, _remote(url_a + "&region=eu"), {**_cli(["srv", "--token", "tok-a", "--fast"]), "env": {"KEY": "a-key"}})
+    await a.sync(); await b.sync()
+    b.use()
+    assert _named(b_store, "remote")["url"] == "https://@mcp.example.test/v1?api_key=&region=eu"
+    assert _named(b_store, "cli")["args"] == ["srv", "--token", "", "--fast"]
+    assert _named(b_store, "cli")["env"] == {"KEY": ""}
     a.use()
     assert _named(a_store, "remote")["url"] == url_a + "&region=eu"
-    assert _named(a_store, "cli")["args"] == ["srv", "--token", "tok-a", "--fast", "--log"]
-    b.use()
-    assert _named(b_store, "remote")["url"] == url_b + "&region=eu"
-    assert _named(b_store, "cli")["args"] == ["srv", "--token", "tok-b", "--fast", "--log"]
+    assert _named(a_store, "cli")["args"] == ["srv", "--token", "tok-a", "--fast"]
     assert not a.store.conflicts("mcp") and not b.store.conflicts("mcp")
 
 
@@ -339,16 +345,22 @@ async def test_an_older_install_row_with_a_credential_keeps_this_machines_value(
     fresh, fresh_store = _dev(tmp_path, monkeypatch, server, "FRESH")
     _set(new, new_store, _cli(["srv", "--token", "mine", "--a"]))
     await new.sync(); await pre.sync()
-    _set(pre, pre_store, _cli(["srv", "--token", "theirs", "--b"]))
+    _set(pre, pre_store, _cli(["srv", "--token", "theirs", "--a"]))
     await pre.sync()
     assert "theirs" in repr(_body(server, "i:cli"))
     await new.sync(); await fresh.sync()
     new.use()
-    assert _named(new_store, "cli")["args"] == ["srv", "--token", "mine", "--b"]
+    assert _named(new_store, "cli")["args"] == ["srv", "--token", "mine", "--a"]
     fresh.use()
-    assert _named(fresh_store, "cli")["args"] == ["srv", "--token", "", "--b"]
+    assert _named(fresh_store, "cli")["args"] == ["srv", "--token", "", "--a"]
     for dev in (new, fresh):  # FRESH still holds the default server NEW dropped
         assert not [c for c in dev.store.conflicts("mcp") if c["itemId"] == "i:cli"]
+
+    # The same older row with its args changed: NEW's token is not handed over.
+    _set(pre, pre_store, _cli(["srv", "--token", "theirs", "--b"]))
+    await pre.sync(); await new.sync()
+    new.use()
+    assert _named(new_store, "cli")["args"] == ["srv", "--token", "", "--b"]
 
 
 async def test_an_upgrade_with_url_credentials_pushes_nothing_secret_and_no_conflict(tmp_path, account_key, monkeypatch):
@@ -395,3 +407,55 @@ async def test_a_pre_strip_build_upgrading_resends_its_row_once_without_the_cred
     assert _named(a_store, "cli")["args"] == ["srv", "--token", "tok-a"]
     b.use()
     assert _named(b_store, "cli")["args"] == ["srv", "--token", ""]
+
+
+async def test_a_changed_endpoint_gets_none_of_this_machines_values(tmp_path, account_key, monkeypatch):
+    # Approving a changed record (every record counts as approved here) must
+    # not hand this machine's values to what the record runs now.
+    server = StrictServer()
+    a, a_store = _dev(tmp_path, monkeypatch, server, "A")
+    b, b_store = _dev(tmp_path, monkeypatch, server, "B")
+    _set(a, a_store, _api(env={"API_KEY": SECRET_A}),
+         {**_api(headers={"Authorization": ""}), "name": "web"})
+    await a.sync(); await b.sync()
+    b.use()
+    b_store.replace_servers([_api(env={"API_KEY": SECRET_B}),
+                             {**_api(headers={"Authorization": "Bearer " + SECRET_B}), "name": "web"}])
+    for change, check in (
+        (_api(env={"API_KEY": SECRET_A}, command="node"), lambda s: s["command"] == "node"),
+        (_api(env={"API_KEY": SECRET_A}, args=["api", "--other"]), lambda s: s["args"] == ["api", "--other"]),
+        ({**_api(headers={"Authorization": ""}), "name": "web", "url": "https://elsewhere.example.test"},
+         lambda s: s["url"] == "https://elsewhere.example.test"),
+    ):
+        name = change["name"]
+        _set(a, a_store, *([change] + [s for s in a_store.list_servers() if s["name"] != name]))
+        await a.sync(); await b.sync()
+        b.use()
+        landed = _named(b_store, name)
+        assert check(landed)
+        assert set((landed.get("env") or {}).values()) | set((landed.get("headers") or {}).values()) == {""}
+        assert SECRET_B not in repr(server.rows)
+        # Put B's own endpoint and value back for the next case.
+        restore = _api(env={"API_KEY": SECRET_B}) if name == "api" else \
+            {**_api(headers={"Authorization": "Bearer " + SECRET_B}), "name": "web"}
+        b_store.replace_servers([restore] + [s for s in b_store.list_servers() if s["name"] != name])
+        await b.sync(); await a.sync()
+
+
+async def test_an_unchanged_endpoint_keeps_every_value_as_on_main(tmp_path, account_key, monkeypatch):
+    server = StrictServer()
+    a, a_store = _dev(tmp_path, monkeypatch, server, "A")
+    b, b_store = _dev(tmp_path, monkeypatch, server, "B")
+    url = "https://me:" + "pa55@mcp.example.test/v1?api_key=" + SK
+    _set(a, a_store, _api(env={"API_KEY": SECRET_A}), {**_remote(url), "headers": {"Authorization": "a"}})
+    await a.sync(); await b.sync()
+    b.use()
+    mine = [_api(env={"API_KEY": SECRET_B}), {**_remote(url), "headers": {"Authorization": "b"}}]
+    b_store.replace_servers(mine)
+    await b.sync()
+    _set(a, a_store, {**_api(env={"API_KEY": SECRET_A}), "enabled": False},
+         {**_remote(url), "headers": {"Authorization": "a"}, "enabled": False})
+    await a.sync(); await b.sync()
+    b.use()
+    assert _named(b_store) == {**mine[0], "enabled": False}
+    assert _named(b_store, "remote") == {**mine[1], "enabled": False}

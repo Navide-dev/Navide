@@ -737,16 +737,20 @@ def _with_local_values(incoming: dict[str, Any], local: Any) -> dict[str, Any]:
     """*incoming* with whatever values it carried replaced by this machine's
     own for the same names; a name this machine has no value for is empty.
     A credential emptied in the url or args is filled back from this
-    machine's own copy where everything else there reads the same."""
+    machine's own copy where everything else there reads the same.
+
+    Only while the endpoint is this machine's (``_same_endpoint``): a record
+    that changed the transport, command, args or url gets no value of this
+    machine's at all, so approving it never hands them to what it runs now."""
     out = _install_only(incoming)
+    if not isinstance(local, dict) or not _same_endpoint(out, local):
+        return out
     for field_name in _MCP_SECRET_FIELDS:
         values = out.get(field_name)
         have = local.get(field_name) if isinstance(local, dict) else None
         if not isinstance(values, dict) or not isinstance(have, dict):
             continue
         out[field_name] = {k: have[k] if isinstance(have.get(k), str) else "" for k in values}
-    if not isinstance(local, dict):
-        return out
     mine = local.get("url")
     if isinstance(out.get("url"), str) and isinstance(mine, str) and out["url"] == _stripped_url(mine):
         out["url"] = mine
@@ -754,6 +758,21 @@ def _with_local_values(incoming: dict[str, Any], local: Any) -> dict[str, Any]:
     if _string_list(out.get("args")) and _string_list(mine):
         out["args"] = _args_with_local_values(out["args"], mine)
     return out
+
+
+def _same_endpoint(incoming: dict[str, Any], local: dict[str, Any]) -> bool:
+    """Whether *incoming* (stripped) runs what *local* runs: the same
+    transport, and the same command and args, or the same url, both compared
+    stripped (``_install_only``). The rule a settings-bundle import restores
+    secrets by (``mcp_settings._same_endpoint``), without its env and header
+    check: a synced record carries no values, and a name it adds lands empty."""
+    from .mcp_settings import _same_endpoint as same_endpoint
+
+    def endpoint(server: dict[str, Any]) -> dict[str, Any]:
+        stripped = _install_only(server)
+        return {key: stripped.get(key) for key in ("transport", "command", "args", "url") if key in stripped}
+
+    return same_endpoint(endpoint(incoming), endpoint(local))
 
 
 def _string_list(value: Any) -> bool:

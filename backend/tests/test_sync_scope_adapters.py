@@ -346,7 +346,8 @@ async def test_an_mcp_conflict_preview_never_shows_env_or_header_values(tmp_path
     b.engine.resolve("mcp", "i:api", sync_engine.KEEP_REMOTE)
     b.use()
     kept = next(s for s in b_store.list_servers() if s["name"] == "api")
-    assert kept["args"] == ["a"] and kept["env"] == {"API_KEY": "sk-new-b"}
+    # A's args are not what B ran, so B's value is not handed to them (0.2.32).
+    assert kept["args"] == ["a"] and kept["env"] == {"API_KEY": ""}
 
 
 # ── skills: what export sends is what import takes ──────────────────────────
