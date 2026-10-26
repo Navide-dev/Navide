@@ -27,12 +27,12 @@ def _own_app_data(tmp_path, monkeypatch):
 def _decide(dev, item_id, approve):
     """Decide the way the window does: on the row as it was listed."""
     dev.use()
-    (row,) = [h for h in sync_approvals.listing() if h["itemId"] == item_id]
-    return sync_approvals.decide(dev.adapter, item_id, approve, row["digest"])
+    (row,) = [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
+    return sync_approvals.decide(dev.adapter, row["itemId"], approve, row["digest"])
 
 
 def _held(item_id):
-    return [h for h in sync_approvals.listing() if h["itemId"] == item_id]
+    return [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
 
 
 # ── D1-1 (H): env values that change what runs are held ─────────────────────
@@ -104,7 +104,7 @@ async def test_approving_a_version_that_changed_since_it_was_shown_is_refused(tm
     await a.sync(); await b.sync()
     b.use()
     with pytest.raises(sync_engine.SyncError, match="changed since"):
-        sync_approvals.decide(b.adapter, "x", True, shown["digest"])
+        sync_approvals.decide(b.adapter, shown["itemId"], True, shown["digest"])
     assert "x" not in _names(b_store)
     (now,) = _held("x")
     assert now["summary"]["args"] == ["-y", "evil-mcp"] and now["digest"] != shown["digest"]

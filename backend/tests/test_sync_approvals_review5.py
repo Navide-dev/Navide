@@ -22,12 +22,12 @@ def _own_app_data(tmp_path, monkeypatch):
 
 def _decide(dev, item_id, approve):
     dev.use()
-    (row,) = [h for h in sync_approvals.listing() if h["itemId"] == item_id]
-    return sync_approvals.decide(dev.adapter, item_id, approve, row["digest"])
+    (row,) = [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
+    return sync_approvals.decide(dev.adapter, row["itemId"], approve, row["digest"])
 
 
 def _held(item_id):
-    return [h for h in sync_approvals.listing() if h["itemId"] == item_id]
+    return [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
 
 
 async def _approved_base(tmp_path, monkeypatch, base):

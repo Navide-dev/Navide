@@ -337,13 +337,13 @@ async def test_an_mcp_conflict_preview_never_shows_env_or_header_values(tmp_path
     await a.sync(); await b.sync()
     monkeypatch.setattr(app, "sync_store", b.store)
     rows = server_link.sync_conflicts("mcp")
-    assert rows and rows[0]["itemId"] == "api"
+    assert rows and rows[0]["itemId"] == "i:api"
     text = repr(rows)
     assert "sk-" not in text
     assert rows[0]["local"]["env"] == {"API_KEY": sync_scopes.MASKED_VALUE}
     # Install-only sync: neither side of the clash holds a value at all.
-    assert "sk-" not in repr(b.store.conflict_payloads("mcp", "api"))
-    b.engine.resolve("mcp", "api", sync_engine.KEEP_REMOTE)
+    assert "sk-" not in repr(b.store.conflict_payloads("mcp", "i:api"))
+    b.engine.resolve("mcp", "i:api", sync_engine.KEEP_REMOTE)
     b.use()
     kept = next(s for s in b_store.list_servers() if s["name"] == "api")
     assert kept["args"] == ["a"] and kept["env"] == {"API_KEY": "sk-new-b"}

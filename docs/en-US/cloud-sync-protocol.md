@@ -43,9 +43,24 @@ erased by the first old client that saw it. Old clients never pull
 2026-10-21). MCP records, when their sync is on, still travel as ciphertext
 sealed on the device; the server has no key to open them. From 0.2.32 they are
 install-only: a client sends every env and header value as `""` (names kept)
-and, on receive, ignores the values a record carries and keeps its own, so a
-record an older client pushed with values in it still opens and compares as
-the same definition. The
+and, on receive, ignores the values a record carries and keeps its own.
+
+Install-only records travel under their own item ids, `i:<name>`. A 0.2.32
+client never writes or deletes a `<name>` row: those rows are what clients
+before 0.2.32 keep, values included, and they apply a record as it comes, so
+a definition without values there would empty theirs. It reads a `<name>` row
+as a definition only until it has seen that server's `i:` row. Deleting a
+server deletes its `i:` row; a device before 0.2.32 keeps its copy.
+
+Older clients cannot use an `i:` row. 0.2.18 to 0.2.31 refuse it: no MCP
+server name may hold ":" (`mcp_settings._NAME_RE`), `McpScope.apply` returns
+False, and the engine records nothing for a refused row. 0.2.3 to 0.2.17 do
+not: their `apply` swallows the store's refusal, the engine records the row
+as held, and the next push sends a delete for it. So on legacy item ids an
+`i:` row is sealed under the scope `mcp-install`
+(`McpScope.seal_scope`): those builds cannot open it, drop it with a log
+line, and record nothing. Hashed item ids keep `mcp`, because an account
+that adopted them refuses clients before protocol v3. The
 `credentials` scope name stays in the protocol only so rows an older desktop
 already pushed can be pulled and purged: no client engine registers an adapter
 for it or names it in a push (`sync_engine.LOCAL_ONLY_SCOPES`), a switch an
