@@ -2128,7 +2128,7 @@
         },
         "reloadFailed": "最近一次變更無法載入，仍在執行上一版：{error}",
         "autoReloadNeedsConsent": "{id} 的權限或後端改了，已停止載入；請到「設定 → Navide 外掛」重新同意。",
-        "autoReloadMixedHint": "建置或存檔進行到一半時重新載入，可能載入新舊檔案混雜、不完整的版本。",
+        "autoReloadMixedHint": "建置或存檔進行到一半時重新載入，可能載入新舊檔案混雜、不完整的版本。建置最後把 .navide-build-complete 寫進資料夾即可避免：之後只有這個檔案重新寫入時才會重新載入。",
         "reloadFailedNothingRunning": "最近一次重新載入失敗，目前沒有任何版本在執行：{error}",
         "removeFolder": "移除",
         "needsConsent": "權限或後端已變更，需要重新同意",

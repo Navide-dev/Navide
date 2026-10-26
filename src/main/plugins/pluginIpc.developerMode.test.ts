@@ -94,11 +94,13 @@ let installConsents: Array<[string, string]>
 const openWatches = () => watches.filter((entry) => !entry.closed)
 const fireChange = () => { for (const entry of openWatches()) entry.onChange() }
 let integrity: DeveloperModeIntegrity | undefined
+/** Plan 4a05af P1: the hidden-view readiness check, recorded per call. */
+let preflightFrontend: ReturnType<typeof vi.fn>
 
 function register(authorize: () => boolean = () => true, manager = new FrontendPluginManager()) {
   const controller = registerPluginIpc(manager, pluginsRoot, authorize, TRUST_CONFIG, undefined, {
     cleanupPluginStorage: async () => undefined,
-    preflightCandidateFrontend: async () => undefined,
+    preflightCandidateFrontend: preflightFrontend,
     preflightCandidateBackend: async () => undefined,
     onActivationChange: (change) => activations.push(change),
     pickDeveloperFolder: pickFolder,
@@ -174,6 +176,7 @@ beforeEach(() => {
   watches = []
   folderEvents = []
   integrity = undefined
+  preflightFrontend = vi.fn(async () => undefined)
   delete process.env['AGENT_TEAM_PLUGIN_DEV']
 })
 
@@ -781,6 +784,83 @@ describe('G1: automatic reload on file change', () => {
   it('only the main window turns it on or off', async () => {
     register(() => false)
     await expect(call('plugins:setDeveloperFolderAutoReload', { id: 'acme.devtodo', enabled: false })).rejects.toThrow(/unauthorized/)
+  })
+})
+
+describe('plan 4a05af P1: the new version is ready before the running one is unloaded', () => {
+  it('opens the new views hidden before unloading, then swaps', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const order: string[] = []
+    preflightFrontend.mockImplementation(async (descriptor: { id: string }) => { order.push(`preflight ${descriptor.id}`) })
+    const remove = manager.removeInstalledPlugin.bind(manager)
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementation((id: string) => { order.push('unload'); return remove(id) })
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents).toContainEqual({ pluginId: 'acme.devtodo', kind: 'reloaded' }))
+    expect(order).toEqual(['preflight acme.devtodo', 'unload'])
+  })
+
+  it('keeps the running version when a new view never reports ready (automatic reload)', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const remove = vi.spyOn(manager, 'removeInstalledPlugin')
+    preflightFrontend.mockRejectedValueOnce(new Error('plugin view did not report ready'))
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toMatchObject({
+      pluginId: 'acme.devtodo', kind: 'reload-failed', running: true, error: expect.stringMatching(/did not report ready/),
+    }))
+    expect(remove).not.toHaveBeenCalled()
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+    expect(openWatches()).toHaveLength(1)
+    // The next good build swaps as usual and clears the error.
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toEqual({ pluginId: 'acme.devtodo', kind: 'reloaded' }))
+  })
+
+  it('keeps the running version when a new view never reports ready (Reload button)', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const remove = vi.spyOn(manager, 'removeInstalledPlugin')
+    preflightFrontend.mockRejectedValueOnce(new Error('plugin view did not report ready'))
+    await expect(call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).rejects.toThrow(/did not report ready/)
+    expect(remove).not.toHaveBeenCalled()
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+  })
+
+  it('never starts the backend early: a view + backend folder checks only its views before the swap', async () => {
+    writeFolder(folder, manifest('acme.devtodo', {}, true))
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const load = vi.spyOn(manager, 'loadExplicitDeveloperPlugin')
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents).toContainEqual({ pluginId: 'acme.devtodo', kind: 'reloaded' }))
+    expect(preflightFrontend).toHaveBeenCalledTimes(1)
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('RULE ZERO: with Developer Mode off, an installed package installs and restarts exactly as on main', async () => {
+    register()
+    await marketplaceInstall('acme.files')
+    // One hidden-view check, the install's own; nothing watched, nothing reloaded.
+    expect(preflightFrontend).toHaveBeenCalledTimes(1)
+    expect(watches).toEqual([])
+    expect(folderEvents).toEqual([])
+    await call('plugins:restart', { id: 'acme.files' })
+    expect(preflightFrontend).toHaveBeenCalledTimes(1)
+    expect(watches).toEqual([])
+    expect(folderEvents).toEqual([])
+  })
+
+  it('RULE ZERO: with Developer Mode off, no folder is checked, loaded or watched', async () => {
+    register()
+    await expect(call('plugins:loadFromFolder')).rejects.toThrow()
+    expect(preflightFrontend).not.toHaveBeenCalled()
+    expect(watches).toEqual([])
+    expect(call('plugins:listInstalled')).toEqual([])
   })
 })
 

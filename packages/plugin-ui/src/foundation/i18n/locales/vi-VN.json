@@ -2128,7 +2128,7 @@
         },
         "reloadFailed": "Không tải được thay đổi mới nhất; phiên bản trước vẫn đang chạy: {error}",
         "autoReloadNeedsConsent": "Quyền hoặc backend của {id} đã thay đổi, nên nó đã bị gỡ tải. Hãy đồng ý lại trong Cài đặt → Plugin Navide.",
-        "autoReloadMixedHint": "Tải lại trong lúc quá trình build hoặc lưu vẫn đang ghi tệp có thể tải một hỗn hợp tệp cũ và mới chưa hoàn chỉnh.",
+        "autoReloadMixedHint": "Tải lại trong lúc quá trình build hoặc lưu vẫn đang ghi tệp có thể tải một hỗn hợp tệp cũ và mới chưa hoàn chỉnh. Bản build ghi tệp .navide-build-complete vào thư mục sau cùng sẽ tránh được điều này: khi đó thư mục chỉ tải lại khi tệp đó được ghi lại.",
         "reloadFailedNothingRunning": "Lần tải lại cuối không thành công và hiện không có phiên bản nào đang chạy: {error}",
         "removeFolder": "Gỡ",
         "needsConsent": "Quyền hoặc backend đã thay đổi; hãy đồng ý lại",

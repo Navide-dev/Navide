@@ -2128,7 +2128,7 @@
         },
         "reloadFailed": "The latest change could not be loaded; the previous version keeps running: {error}",
         "autoReloadNeedsConsent": "The permissions or backend of {id} changed, so it was unloaded. Consent again in Settings → Navide Plugins.",
-        "autoReloadMixedHint": "A reload while a build or save is still writing files may load an incomplete mix of old and new files.",
+        "autoReloadMixedHint": "A reload while a build or save is still writing files may load an incomplete mix of old and new files. A build that writes .navide-build-complete into the folder last avoids this: the folder then reloads only when that file is written again.",
         "reloadFailedNothingRunning": "The last reload failed and no version is running now: {error}",
         "removeFolder": "Remove",
         "needsConsent": "Permissions or backend changed; consent again",

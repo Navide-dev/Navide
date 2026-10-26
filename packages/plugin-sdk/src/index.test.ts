@@ -6,6 +6,7 @@ import {
   createPluginBackendClient,
   PluginBackendError,
   createPluginSettingsStore,
+  createPluginViewState,
   hideView,
   onBackendStatus,
   onOpenTarget,
@@ -814,5 +815,50 @@ describe('standalone view runtime functions', () => {
   it('reports an unavailable runtime the same way as the client', () => {
     expect(() => viewReady()).toThrow('Plugin view runtime is unavailable.')
     expect(() => onBackendStatus(vi.fn())).toThrow('Plugin capability runtime is unavailable.')
+  })
+})
+
+describe('createPluginViewState', () => {
+  function storage() {
+    const stored = new Map<string, unknown>()
+    const invoke = vi.fn(async (method: string, params: { key: string; value?: unknown }) => {
+      if (method === 'storage.set') { stored.set(params.key, params.value); return null }
+      if (method === 'storage.get') {
+        return stored.has(params.key) ? { found: true, value: stored.get(params.key) } : { found: false, value: null }
+      }
+      throw new Error(`unexpected ${method}`)
+    })
+    return { stored, invoke, context: { capabilities: { invoke } } as unknown as Pick<PluginContext, 'capabilities'> }
+  }
+
+  it('restores what the view saved before a reload, under view-state:<key>', async () => {
+    const { invoke, context } = storage()
+    const before = createPluginViewState<{ open: boolean }>('filters', { open: false }, { context })
+    await expect(before.restore()).resolves.toEqual({ open: false })
+    before.save({ open: true })
+    await before.flush()
+    const after = createPluginViewState<{ open: boolean }>('filters', { open: false }, { context })
+    await expect(after.restore()).resolves.toEqual({ open: true })
+    expect(invoke).toHaveBeenCalledWith('storage.set', { scope: 'plugin', key: 'view-state:filters', value: { open: true } })
+  })
+
+  it('writes one value at a time and only the newest pending one', async () => {
+    const { invoke, context, stored } = storage()
+    const state = createPluginViewState<number>('n', 0, { context, scope: 'workspace' })
+    state.save(1)
+    state.save(2)
+    state.save(3)
+    await state.flush()
+    expect(invoke.mock.calls.map(([, params]) => params.value)).toEqual([1, 3])
+    expect(stored.get('view-state:n')).toBe(3)
+  })
+
+  it('never rejects: unreadable or failed storage gives the fallback and keeps going', async () => {
+    const invoke = vi.fn(async () => { throw new Error('CAPABILITY_DENIED') })
+    const state = createPluginViewState<string>('x', 'fallback', { context: { capabilities: { invoke } } as unknown as Pick<PluginContext, 'capabilities'> })
+    await expect(state.restore()).resolves.toBe('fallback')
+    state.save('a')
+    await expect(state.flush()).resolves.toBeUndefined()
+    expect(() => createPluginViewState('', 0, { context: { capabilities: { invoke } } as unknown as Pick<PluginContext, 'capabilities'> })).toThrow(TypeError)
   })
 })

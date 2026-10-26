@@ -2128,7 +2128,7 @@
         },
         "reloadFailed": "Não foi possível carregar a alteração mais recente; a versão anterior continua em execução: {error}",
         "autoReloadNeedsConsent": "As permissões ou o back-end de {id} mudaram, então ele foi descarregado. Dê o consentimento novamente em Configurações → Plug-ins do Navide.",
-        "autoReloadMixedHint": "Recarregar enquanto um build ou salvamento ainda está gravando arquivos pode carregar uma mistura incompleta de arquivos antigos e novos.",
+        "autoReloadMixedHint": "Recarregar enquanto um build ou salvamento ainda está gravando arquivos pode carregar uma mistura incompleta de arquivos antigos e novos. Um build que grava .navide-build-complete na pasta por último evita isso: a pasta só é recarregada quando esse arquivo é gravado de novo.",
         "reloadFailedNothingRunning": "O último recarregamento falhou e nenhuma versão está em execução agora: {error}",
         "removeFolder": "Remover",
         "needsConsent": "Permissões ou back-end alterados; dê o consentimento novamente",

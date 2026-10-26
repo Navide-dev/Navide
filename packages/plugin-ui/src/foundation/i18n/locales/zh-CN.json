@@ -2128,7 +2128,7 @@
         },
         "reloadFailed": "最近一次变更无法加载，仍在运行上一版：{error}",
         "autoReloadNeedsConsent": "{id} 的权限或后端改了，已停止加载；请到“设置 → Navide 插件”重新同意。",
-        "autoReloadMixedHint": "建置或存盘进行到一半时重新加载，可能加载新旧文件混杂、不完整的版本。",
+        "autoReloadMixedHint": "建置或存盘进行到一半时重新加载，可能加载新旧文件混杂、不完整的版本。建置最后把 .navide-build-complete 写进文件夹即可避免：之后只有这个文件重新写入时才会重新加载。",
         "reloadFailedNothingRunning": "最近一次重新加载失败，目前没有任何版本在运行：{error}",
         "removeFolder": "移除",
         "needsConsent": "权限或后端已变更，需要重新同意",

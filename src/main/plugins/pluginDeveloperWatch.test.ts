@@ -1,10 +1,16 @@
 // DESIGN-A2 G1: the folder watch behind automatic reload.
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ignoredDeveloperFolderChange, watchDeveloperFolder, type FolderWatch } from './pluginDeveloperWatch'
+import {
+  DEVELOPER_FOLDER_BUILD_MARKER,
+  developerFolderBuildGate,
+  ignoredDeveloperFolderChange,
+  watchDeveloperFolder,
+  type FolderWatch,
+} from './pluginDeveloperWatch'
 
 let dir = ''
 let watched: FolderWatch | null = null
@@ -51,4 +57,41 @@ describe('watchDeveloperFolder', () => {
     await new Promise((resolve) => setTimeout(resolve, 800))
     expect(onChange).not.toHaveBeenCalled()
   }, 60_000)
+})
+
+describe('developerFolderBuildGate (plan 4a05af P1)', () => {
+  const mark = (seconds: number) => {
+    const marker = join(dir, DEVELOPER_FOLDER_BUILD_MARKER)
+    writeFileSync(marker, '')
+    utimesSync(marker, seconds, seconds)
+  }
+
+  it('lets every change reload a folder that has no marker, as before', () => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), 'navide-devgate-')))
+    const gate = developerFolderBuildGate(dir)
+    expect([gate(), gate(), gate()]).toEqual([true, true, true])
+  })
+
+  it('once the folder has a marker, reloads only when a newer marker is written', () => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), 'navide-devgate-')))
+    mark(1_000)
+    const gate = developerFolderBuildGate(dir)
+    // The build is writing: files change, the marker does not.
+    expect([gate(), gate()]).toEqual([false, false])
+    // A build that cleans its output removes the marker first.
+    rmSync(join(dir, DEVELOPER_FOLDER_BUILD_MARKER))
+    expect(gate()).toBe(false)
+    mark(2_000)
+    expect(gate()).toBe(true)
+    expect(gate()).toBe(false)
+  })
+
+  it('switches to waiting for the marker when one first appears', () => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), 'navide-devgate-')))
+    const gate = developerFolderBuildGate(dir)
+    expect(gate()).toBe(true)
+    mark(1_000)
+    expect(gate()).toBe(true)
+    expect(gate()).toBe(false)
+  })
 })
