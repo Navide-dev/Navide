@@ -67,7 +67,7 @@ simply missing at runtime.
 | Run a command | `permissions.shell: "allowlist"`, `shell.run` | `plugins/navide-git` |
 | Drive an AI CLI pane | `permissions.system: ["aiCli"]` | `plugins/navide-git` |
 | Open real web pages | `permissions.system: ["web"]` (disclosed as high risk) | `plugins/navide-browser` |
-| Remember settings or view state | `storage.get` / `storage.set` (no permission to declare) | spec, "Host-managed storage partitions" |
+| Remember settings or view state | `createPluginViewState(key, fallback)` from `@navide/plugin-sdk` (keeps state across reloads), or `storage.get` / `storage.set`; no permission to declare | spec, "SDK interface" and "Host-managed storage partitions" |
 | Logic that outlives the view | `backend` (one native executable, Backend Wire v1) | `plugins/navide-plans` |
 | A tool agents can call | `backend.methods` + `backend.agentTools` | `plugins/navide-browser`; spec, "Agent tools" |
 
@@ -113,7 +113,12 @@ needs is `docs/plugin-contracts/capabilities-v1.json`.
    the user approves it in Navide's main window. You cannot approve it
    yourself.
 4. Let the user try it. A loaded folder reloads by itself when its files
-   change, so later edits only need step 2 again.
+   change, so later edits only need step 2 again. Before the running version
+   is replaced, the new views must call `ready()` in a hidden check; if they
+   do not, the running version stays and the card shows why. With a build
+   step, make the build write `.navide-build-complete` into the folder last:
+   the folder then reloads only when that file is written again, never in
+   the middle of a build.
 5. To hand it over as a file, call `plugins_package` (or
    `npx navide-plugin package <folder>`); install a `.vsix` the same way with
    `plugins_install_file_fill`. Signing and publishing to the Marketplace are

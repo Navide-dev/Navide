@@ -2128,7 +2128,7 @@
         },
         "reloadFailed": "최신 변경 사항을 로드하지 못해 이전 버전이 계속 실행돼요: {error}",
         "autoReloadNeedsConsent": "{id}의 권한이나 백엔드가 바뀌어 언로드했어요. 설정 → Navide 플러그인에서 다시 동의하세요.",
-        "autoReloadMixedHint": "빌드나 저장이 아직 파일을 쓰는 중에 다시 로드하면, 이전 파일과 새 파일이 섞인 불완전한 상태로 로드될 수 있어요.",
+        "autoReloadMixedHint": "빌드나 저장이 아직 파일을 쓰는 중에 다시 로드하면, 이전 파일과 새 파일이 섞인 불완전한 상태로 로드될 수 있어요. 빌드 마지막에 폴더에 .navide-build-complete를 쓰면 이를 막을 수 있어요. 그 뒤로는 이 파일이 다시 쓰일 때만 다시 로드해요.",
         "reloadFailedNothingRunning": "마지막 다시 로드가 실패해서 지금은 실행 중인 버전이 없어요: {error}",
         "removeFolder": "제거",
         "needsConsent": "권한이나 백엔드가 바뀌었어요. 다시 동의하세요",

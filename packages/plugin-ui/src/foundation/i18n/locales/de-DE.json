@@ -2128,7 +2128,7 @@
         },
         "reloadFailed": "Die neueste Änderung konnte nicht geladen werden; die vorherige Version läuft weiter: {error}",
         "autoReloadNeedsConsent": "Die Berechtigungen oder das Backend von {id} haben sich geändert, daher wurde es entladen. Stimmen Sie unter „Einstellungen → Navide-Plug-ins“ erneut zu.",
-        "autoReloadMixedHint": "Ein Neuladen, während ein Build oder Speichervorgang noch Dateien schreibt, kann eine unvollständige Mischung aus alten und neuen Dateien laden.",
+        "autoReloadMixedHint": "Ein Neuladen, während ein Build oder Speichervorgang noch Dateien schreibt, kann eine unvollständige Mischung aus alten und neuen Dateien laden. Ein Build, der zuletzt .navide-build-complete in den Ordner schreibt, vermeidet das: Der Ordner wird dann nur neu geladen, wenn diese Datei erneut geschrieben wird.",
         "reloadFailedNothingRunning": "Das letzte Neuladen ist fehlgeschlagen, und derzeit läuft keine Version: {error}",
         "removeFolder": "Entfernen",
         "needsConsent": "Berechtigungen oder Backend geändert; erneut zustimmen",

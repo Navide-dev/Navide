@@ -2128,7 +2128,7 @@
         },
         "reloadFailed": "Impossible de charger la dernière modification ; la version précédente continue de s’exécuter : {error}",
         "autoReloadNeedsConsent": "Les autorisations ou le backend de {id} ont changé ; il a donc été déchargé. Donnez de nouveau votre consentement dans Paramètres → Plugins Navide.",
-        "autoReloadMixedHint": "Un rechargement pendant qu’un build ou un enregistrement écrit encore des fichiers peut charger un mélange incomplet d’anciens et de nouveaux fichiers.",
+        "autoReloadMixedHint": "Un rechargement pendant qu’un build ou un enregistrement écrit encore des fichiers peut charger un mélange incomplet d’anciens et de nouveaux fichiers. Un build qui écrit .navide-build-complete dans le dossier en dernier l’évite : le dossier n’est alors rechargé que lorsque ce fichier est réécrit.",
         "reloadFailedNothingRunning": "Le dernier rechargement a échoué et aucune version ne s’exécute actuellement : {error}",
         "removeFolder": "Supprimer",
         "needsConsent": "Autorisations ou backend modifiés ; donnez de nouveau votre consentement",

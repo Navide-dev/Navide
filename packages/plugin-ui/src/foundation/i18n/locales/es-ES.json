@@ -2128,7 +2128,7 @@
         },
         "reloadFailed": "No se pudo cargar el último cambio; la versión anterior sigue ejecutándose: {error}",
         "autoReloadNeedsConsent": "Los permisos o el backend de {id} han cambiado, así que se ha descargado. Vuelve a dar tu consentimiento en «Ajustes → Complementos de Navide».",
-        "autoReloadMixedHint": "Una recarga mientras una compilación o un guardado aún está escribiendo archivos puede cargar una mezcla incompleta de archivos antiguos y nuevos.",
+        "autoReloadMixedHint": "Una recarga mientras una compilación o un guardado aún está escribiendo archivos puede cargar una mezcla incompleta de archivos antiguos y nuevos. Una compilación que escribe .navide-build-complete en la carpeta al final lo evita: la carpeta solo se recarga cuando ese archivo se vuelve a escribir.",
         "reloadFailedNothingRunning": "La última recarga falló y ahora no se está ejecutando ninguna versión: {error}",
         "removeFolder": "Quitar",
         "needsConsent": "Los permisos o el backend han cambiado; vuelve a dar tu consentimiento",
