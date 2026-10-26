@@ -1546,6 +1546,18 @@ SPEC = VendorSpec(
         # An API key / auth token in the environment, or Navide's own
         # portable long-lived token, replaces the OAuth login entirely.
         shadowing_env=("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"),
+        # The OAuth token variable, then everything the documented precedence
+        # list ranks above it, plus the endpoint override.
+        credential_env_vars=(
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_VERTEX",
+            "CLAUDE_CODE_USE_FOUNDRY",
+            "CLAUDE_CODE_USE_MANTLE",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL",
+        ),
         resume="native",
         todo="hot swap shipped and used on real accounts; record an A -> B -> A round-trip against 2.1.278",
     ),
