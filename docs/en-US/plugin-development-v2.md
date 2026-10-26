@@ -361,8 +361,8 @@ all of these hold, and they are checked again before every restart:
   0.2.32 a package installed before 0.2.31 is treated the same way: the
   first start of 0.2.32 (or later) on a profile looks once at the installed
   third-party backends (the active version of each; Developer Mode folders
-  are left out), and each one with no consent, no install consent and no
-  revocation gets an install consent for its installed version, marked as
+  are left out), and each one with no consent, no install consent, no
+  revocation and no saved decline gets an install consent for its installed version, marked as
   given by this migration. Its first start then records the consent without a
   dialog, the consent keeps that mark, and Settings → Navide Plugins says on
   its row that it was allowed without asking because it was installed before
@@ -374,7 +374,15 @@ all of these hold, and they are checked again before every restart:
   waits when the decision file cannot be read. A version no install dialog
   showed (an agent's update, a rollback) and a package whose consent was
   revoked or dropped to fail closed are still asked before they start. A
-  Developer Mode folder keeps its folder-bound consent. Any new version that changes any
+  Developer Mode folder keeps its folder-bound consent. Since 0.2.32 a "not
+  now" answer to the dialog shown before a backend starts (closing it or
+  pressing Esc counts the same) is saved for that exact content and
+  permission set: later starts of the same content are refused without
+  asking, Settings → Navide Plugins says on the row that it was declined and
+  stays off, and its Allow action runs it and clears the decline. New content
+  or a changed permission set asks again, and so does a new install dialog
+  for the version. A dialog that fails to open saves nothing. Re-enabling a
+  disabled plugin does not clear a saved decline. Any new version that changes any
   file - frontend files included - is staged but not started until the user
   allows it again, in the dialog shown before it starts.
 - The platform sandbox is available. There is no unsandboxed fallback.

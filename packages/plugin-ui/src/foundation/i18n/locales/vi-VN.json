@@ -1895,6 +1895,7 @@
         "enable_plugin": "Bật",
         "changed": "Mã gốc hoặc quyền của nó đã thay đổi kể từ khi bạn cho phép.",
         "allowedPreInstall": "Được cho phép mà không hỏi: nó được cài trước Navide 0.2.31, phiên bản chưa ghi lại sự đồng ý khi cài.",
+        "declined": "Bạn đã không cho phép khi nó sắp khởi động, nên Navide không hỏi lại cho phiên bản này và nó vẫn tắt. Nhấn Cho phép để chạy nó.",
         "writeAllowed": "Được thay đổi tệp trong {path}",
         "revoke": "Thu hồi",
         "violation": "Đã dừng sau khi vượt giới hạn {kind}.",

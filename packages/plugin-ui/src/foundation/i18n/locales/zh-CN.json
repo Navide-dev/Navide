@@ -1895,6 +1895,7 @@
         "enable_plugin": "激活",
         "changed": "在你允许之后，它的原生程序或权限已变更。",
         "allowedPreInstall": "未询问即允许：它是在 Navide 0.2.31 之前安装的，当时的版本不会记录安装同意。",
+        "declined": "它要启动时你选择不允许，所以 Navide 不会再为这个版本询问，它会保持关闭。按“允许”即可运行。",
         "writeAllowed": "可修改 {path} 中的文件",
         "revoke": "撤销",
         "violation": "因超过{kind}上限而被停止。",

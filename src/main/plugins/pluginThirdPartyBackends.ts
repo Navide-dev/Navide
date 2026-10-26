@@ -429,6 +429,9 @@ export interface NativeBackendStatusRow {
   lastViolation?: ResourceViolation
   /** Declared shell mode, so the panel keeps the high-risk grant visible. */
   shell?: 'allowlist' | 'full'
+  /** 0.2.32: the user declined this content at its first-start dialog, so
+   * it is not asked again; Allow on this row runs it. */
+  declined?: boolean
   /** Allowed without the user's answer: installed before 0.2.31 (the 0.2.32
    * migration, migratePreInstallConsent). Set while that grant is pending or
    * is the consent that covers this version. */
@@ -875,6 +878,12 @@ export class ThirdPartyBackendController {
     if (refusal) throw unavailable(refusal.reason)
   }
 
+  /** 0.2.32: the user declined this exact content and permission set. */
+  private declineMatches(spec: ThirdPartyLaunchSpec, digest: string): boolean {
+    const declined = this.store.record(spec.pluginId).consentDeclined
+    return declined?.binarySha256 === digest && declined.permissionsKey === backendPermissionsKey(spec)
+  }
+
   private consentMatches(spec: ThirdPartyLaunchSpec, digest: string): boolean {
     const consent = this.store.record(spec.pluginId).consent
     return consent?.binarySha256 === digest && consent.permissionsKey === backendPermissionsKey(spec)
@@ -1061,6 +1070,10 @@ export class ThirdPartyBackendController {
     // and a version no install dialog showed. 0.2.32: a package installed
     // before 0.2.31 counts like an install consent (the store's
     // migratePreInstallConsent), and its consent says so.
+    // 0.2.32: a saved "not now" for this content is not asked again and is
+    // never overridden by an install consent; the Settings page's Allow (or a
+    // new install dialog) is the way back.
+    if (this.declineMatches(spec, digest)) throw unavailable('the user did not allow the native backend')
     const record = this.store.record(spec.pluginId)
     if (
       record.consent === undefined &&
@@ -1087,7 +1100,11 @@ export class ThirdPartyBackendController {
         methods: [...spec.approvedMethods],
         agentTools: [...(spec.thirdParty.agentTools ?? [])],
         update: consent !== undefined,
-      }).catch(() => false)
+      }).then((allowed) => {
+        // Only the user's answer is saved, never a dialog that failed.
+        if (!allowed) this.saveDecline(spec, digest)
+        return allowed
+      }, () => false)
       this.pendingPrompts.set(identity, pending)
       void pending.finally(() => this.pendingPrompts.delete(identity))
     }
@@ -1112,6 +1129,19 @@ export class ThirdPartyBackendController {
       }
       this.noteAgentTools(spec)
       this.options.onConsentGranted?.(spec.pluginId)
+    }
+  }
+
+  /** Bookkeeping only: a failed save keeps the "not now" for this run. */
+  private saveDecline(spec: ThirdPartyLaunchSpec, digest: string): void {
+    try {
+      this.store.declineConsent(spec.pluginId, {
+        binarySha256: digest,
+        permissionsKey: backendPermissionsKey(spec),
+        packageVersion: spec.packageVersion,
+      })
+    } catch (error) {
+      console.warn(`[plugin-backend] decline of ${spec.pluginId} not saved: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -1328,9 +1358,10 @@ export class ThirdPartyBackendController {
       status = matches ? 'ready' : 'needs-consent'
     }
     const lastViolation = this.lastViolation.get(spec.pluginId)
+    const declined = !matches && digest !== null && this.declineMatches(spec, digest)
     const allowedBy = matches
       ? record.consent?.grantedBy
-      : record.consent === undefined && !record.consentRevoked &&
+      : !declined && record.consent === undefined && !record.consentRevoked &&
         record.installConsent?.packageVersion === spec.packageVersion
         ? record.installConsent.grantedBy
         : undefined
@@ -1359,6 +1390,7 @@ export class ThirdPartyBackendController {
         : {}),
       ...(spec.thirdParty.shell ? { shell: spec.thirdParty.shell } : {}),
       ...(allowedBy ? { allowedBy } : {}),
+      ...(declined ? { declined: true } : {}),
     }
   }
 

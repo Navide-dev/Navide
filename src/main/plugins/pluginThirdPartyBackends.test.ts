@@ -231,9 +231,11 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     await refusal(instance.admit(changed))
     expect(deny).toHaveBeenCalledTimes(1)
     expect(store.record('acme.indexer').consent).toEqual(first)
+    // 0.2.32: the "not now" is saved, so clearing the session's answers
+    // (re-enabling the plugin) does not ask again; Allow does.
     instance.resetFailures('acme.indexer')
     await refusal(instance.admit(changed))
-    expect(deny).toHaveBeenCalledTimes(2)
+    expect(deny).toHaveBeenCalledTimes(1)
   })
 
   it('asks again, instead of counting the install, once a consent was taken away; uninstall resets that', async () => {
@@ -1168,6 +1170,69 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('packages installed before 0.2.31 (0.2.32
     writeFileSync(file, '{"schemaVersion":1,"enabled":true,"plugins":', { mode: 0o600 })
     expect(new NativeBackendStore(join(root, 'store')).migratePreInstallConsent(installed)).toEqual([])
     expect(readFileSync(file, 'utf8')).toBe('{"schemaVersion":1,"enabled":true,"plugins":')
+  })
+})
+
+describe.skipIf(POSIX_SANDBOX_SKIPPED)('a saved "not now" (0.2.32)', () => {
+  beforeEach(() => {
+    // Installed by 0.2.30, the migration already ran: the first start asks.
+    store.forget('acme.indexer')
+    store.migratePreInstallConsent([])
+  })
+
+  it('is not asked again after a relaunch, and its row says so', async () => {
+    const spec = writePackage()
+    await refusal(controller({ promptConsent: deny }).instance.admit(spec))
+    expect(deny).toHaveBeenCalledTimes(1)
+    expect(store.record('acme.indexer').consentDeclined).toMatchObject({ packageVersion: '1.0.0' })
+    store = new NativeBackendStore(join(root, 'store'))
+    const { instance } = controller({ promptConsent: allow })
+    expect((await refusal(instance.admit(spec))).message).toBe('the user did not allow the native backend')
+    expect(allow).not.toHaveBeenCalled()
+    expect(await instance.status(spec)).toMatchObject({ status: 'needs-consent', declined: true })
+  })
+
+  it('Allow on the Settings page runs it and clears the decline', async () => {
+    const spec = writePackage()
+    const { instance } = controller({ promptConsent: deny })
+    await refusal(instance.admit(spec))
+    await instance.allow(spec)
+    expect(store.record('acme.indexer')).not.toHaveProperty('consentDeclined')
+    await instance.admit(spec)
+    expect(deny).toHaveBeenCalledTimes(1)
+    expect(await instance.status(spec)).not.toHaveProperty('declined')
+  })
+
+  it('asks again for new content', async () => {
+    await refusal(controller({ promptConsent: deny }).instance.admit(writePackage({}, 'binary-v1')))
+    const { instance } = controller({ promptConsent: allow })
+    await instance.admit(writePackage({}, 'binary-v2'))
+    expect(allow).toHaveBeenCalledTimes(1)
+    expect(store.record('acme.indexer')).not.toHaveProperty('consentDeclined')
+  })
+
+  it('is cleared by a new install dialog', async () => {
+    const spec = writePackage()
+    await refusal(controller({ promptConsent: deny }).instance.admit(spec))
+    store.noteInstallConsent('acme.indexer', '1.0.0')
+    await controller({ promptConsent: deny }).instance.admit(spec)
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('is not saved when the dialog itself failed', async () => {
+    const broken = vi.fn(async (_prompt: NativeBackendConsentPrompt): Promise<boolean> => { throw new Error('no window') })
+    await refusal(controller({ promptConsent: broken }).instance.admit(writePackage()))
+    expect(store.record('acme.indexer')).not.toHaveProperty('consentDeclined')
+  })
+
+  it('keeps the migration from granting a declined package', () => {
+    const fresh = join(root, 'store-declined')
+    const declined = new NativeBackendStore(fresh)
+    declined.declineConsent('acme.indexer', { binarySha256: 'c'.repeat(64), permissionsKey: '{}', packageVersion: '1.0.0' })
+    const reloaded = new NativeBackendStore(fresh)
+    expect(reloaded.record('acme.indexer').consentDeclined).toMatchObject({ binarySha256: 'c'.repeat(64) })
+    expect(reloaded.migratePreInstallConsent([{ pluginId: 'acme.indexer', packageVersion: '1.0.0' }])).toEqual([])
+    expect(reloaded.record('acme.indexer')).not.toHaveProperty('installConsent')
   })
 })
 

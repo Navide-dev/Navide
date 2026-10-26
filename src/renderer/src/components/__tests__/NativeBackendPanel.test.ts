@@ -71,3 +71,12 @@ describe('NativeBackendPanel pre-0.2.31 install disclosure', () => {
       .toBe('Allowed without asking: it was installed before Navide 0.2.31, which did not record install consent.')
   })
 })
+
+describe('NativeBackendPanel saved decline', () => {
+  it('says a declined package stays off and offers Allow', async () => {
+    const panel = await mountPanel([row('acme.indexer', { status: 'needs-consent', declined: true })])
+    const item = panel.get('[data-native-backend-id="acme.indexer"]')
+    expect(item.get('.native-backend-declined').text()).toContain('Press Allow to run it.')
+    expect(item.findAll('button').some((button) => button.text() === 'Allow')).toBe(true)
+  })
+})

@@ -30,6 +30,16 @@ export interface NativeBackendConsent {
   grantedBy?: typeof PRE_INSTALL_CONSENT
 }
 
+/** 0.2.32: the user answered the first-start dialog with "not now" (or
+ * closed it) for this exact content and permission set: later starts of the
+ * same content are not asked again and stay off. New content asks again. */
+export interface NativeBackendDecline {
+  binarySha256: string
+  permissionsKey: string
+  packageVersion: string
+  declinedAt: string
+}
+
 /** How a consent given by the pre-0.2.31 install migration is marked. */
 export const PRE_INSTALL_CONSENT = 'pre-0.2.31-install'
 
@@ -51,6 +61,9 @@ export interface NativeBackendPluginRecord {
    * discloses its native backend, so its first start counts as consent. A
    * package installed earlier, or of another version, is asked instead. */
   installConsent?: { packageVersion: string; grantedBy?: typeof PRE_INSTALL_CONSENT }
+  /** 0.2.32: the user declined this content; cleared by the next consent or
+   * install dialog. */
+  consentDeclined?: NativeBackendDecline
   disabled?: boolean
   /** Canonical workspace paths where workspace writes are allowed. */
   workspaceWrite?: string[]
@@ -111,6 +124,18 @@ function parseConsent(value: unknown): NativeBackendConsent | undefined {
   }
 }
 
+function parseDecline(value: unknown): NativeBackendDecline | undefined {
+  if (!isRecord(value)) return undefined
+  const { binarySha256, permissionsKey, packageVersion, declinedAt } = value
+  if (
+    typeof binarySha256 !== 'string' || !/^[0-9a-f]{64}$/.test(binarySha256) ||
+    typeof permissionsKey !== 'string' ||
+    typeof packageVersion !== 'string' ||
+    typeof declinedAt !== 'string'
+  ) return undefined
+  return { binarySha256, permissionsKey, packageVersion, declinedAt }
+}
+
 function parseAgentToolWrite(value: unknown): AgentToolWriteGrant | undefined {
   if (!isRecord(value)) return undefined
   const { packageVersion, consentGrantedAt, workspaces } = value
@@ -134,6 +159,8 @@ function parseState(value: unknown): NativeBackendState {
         ...(raw.installConsent.grantedBy === PRE_INSTALL_CONSENT ? { grantedBy: PRE_INSTALL_CONSENT } : {}),
       }
     }
+    const declined = parseDecline(raw.consentDeclined)
+    if (declined) record.consentDeclined = declined
     if (raw.disabled === true) record.disabled = true
     if (Array.isArray(raw.workspaceWrite)) {
       const paths = raw.workspaceWrite.filter((path): path is string => typeof path === 'string')
@@ -256,8 +283,15 @@ export class NativeBackendStore {
       // A new consent asks the agent write-tool questions again (DB3).
       delete record.agentToolWrite
       delete record.consentRevoked
+      delete record.consentDeclined
       return { ...record, consent: { ...consent, grantedAt: now.toISOString() } }
     })
+  }
+
+  /** 0.2.32: the user declined this exact content at its first-start dialog.
+   * Restricting: it holds for this run even when the save fails. */
+  declineConsent(pluginId: string, decline: Omit<NativeBackendDecline, 'declinedAt'>, now = new Date()): void {
+    this.update(pluginId, (record) => ({ ...record, consentDeclined: { ...decline, declinedAt: now.toISOString() } }), true)
   }
 
   /** The user confirmed the install dialog of this version: a new disclosure,
@@ -265,6 +299,7 @@ export class NativeBackendStore {
   noteInstallConsent(pluginId: string, packageVersion: string): void {
     this.update(pluginId, (record) => {
       delete record.consentRevoked
+      delete record.consentDeclined
       return { ...record, installConsent: { packageVersion } }
     })
   }
@@ -275,7 +310,8 @@ export class NativeBackendStore {
    * recorded `installConsent`, and nothing on disk tells such an install from
    * a 0.2.31 one that recorded none; so a package counts when, the first time
    * this runs, it is installed (`installed`: the caller leaves out Developer
-   * Mode folders) and has no consent, no install consent and no revocation.
+   * Mode folders) and has no consent, no install consent, no revocation and
+   * no saved decline.
    * Its record gets an install consent marked PRE_INSTALL_CONSENT for that
    * version; the first start then records the consent like any install
    * consent (requestConsent). With the global switch off nothing is granted
@@ -294,7 +330,7 @@ export class NativeBackendStore {
     if (this.state.enabled) {
       for (const { pluginId, packageVersion } of installed) {
         const record = plugins[pluginId] ?? {}
-        if (record.consent || record.installConsent || record.consentRevoked) continue
+        if (record.consent || record.installConsent || record.consentRevoked || record.consentDeclined) continue
         plugins[pluginId] = { ...record, installConsent: { packageVersion, grantedBy: PRE_INSTALL_CONSENT } }
         granted.push(pluginId)
       }

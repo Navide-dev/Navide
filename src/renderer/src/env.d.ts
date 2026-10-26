@@ -744,6 +744,7 @@ declare global {
     lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
     shell?: 'allowlist' | 'full'
     allowedBy?: 'pre-0.2.31-install'
+    declined?: boolean
   }
 
   interface NativeBackendOverview {
