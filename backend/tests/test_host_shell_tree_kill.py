@@ -6,6 +6,7 @@ run this file in their unsandboxed pass. The slot-leak half, which needs no
 real process, is in test_host_shell.py.
 """
 
+import os
 import sys
 import time
 
@@ -124,3 +125,44 @@ async def test_a_run_that_ends_normally_leaves_what_it_started_running(tmp_path,
             osplat.process_tree.kill(stay_pid, force=True)
         except OSError:
             pass
+
+
+#: Prints its cwd and one variable, writes stderr and exits 3.
+_REPORT = (
+    "import os, sys; print(os.getcwd()); print(os.environ.get('NAVIDE_TEST_VALUE')); "
+    "sys.stderr.write('to stderr'); sys.exit(3)"
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    osplat.paths.resolve_program("git") is None,
+    reason="git is not resolvable through osplat.paths on this host",
+)
+async def test_a_run_that_ends_normally_reports_as_before(tmp_path, monkeypatch) -> None:
+    """The group (POSIX) or job (Windows) a run starts in changes nothing it
+    reports: cwd, environment, stdout, stderr and exit code are the run's."""
+    monkeypatch.setenv("NAVIDE_TEST_PY", sys.executable)
+    monkeypatch.setenv("NAVIDE_TEST_CODE", _REPORT)
+    monkeypatch.setenv("NAVIDE_TEST_VALUE", "inherited")
+
+    rc, stdout, stderr = await host_shell.run_allowlisted_text(
+        ["git", "-c", 'alias.report=!"$NAVIDE_TEST_PY" -c "$NAVIDE_TEST_CODE"', "report"],
+        str(tmp_path),
+        timeout=30,
+    )
+
+    assert rc == 3
+    cwd, value = stdout.splitlines()
+    assert os.path.samefile(cwd, tmp_path)
+    assert value == "inherited"
+    assert stderr == "to stderr"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the POSIX implementation")
+def test_on_posix_a_run_gets_nothing_but_its_process_group() -> None:
+    """POSIX keeps what #673 shipped: a process group, no job, nothing to release."""
+    tree = osplat.process_tree
+    assert tree.own_group_spawn_kwargs() == {"process_group": 0}
+    assert tree.start_own_group(os.getpid()) is None
+    assert tree.release_contained(os.getpid(), 1) is None
