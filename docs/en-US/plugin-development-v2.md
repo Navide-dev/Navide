@@ -1423,7 +1423,12 @@ under the key `view-state:<key>`, so it needs no permission:
 ```ts
 import { createPluginViewState, viewReady } from '@navide/plugin-sdk'
 
-const filters = createPluginViewState<{ query: string; open: boolean }>('filters', { query: '', open: true })
+type Filters = { query: string; open: boolean }
+declare function mountApp(): void // your view's own render code
+declare function applyFilters(filters: Filters): void
+declare function onFiltersChange(listener: (filters: Filters) => void): void
+
+const filters = createPluginViewState<Filters>('filters', { query: '', open: true })
 
 mountApp()
 viewReady() // do not wait for restore()
