@@ -11672,6 +11672,7 @@
       "added": "새로 추가",
       "removed": "제거됨",
       "declaredScope": "선언된 범위(참고용)",
+      "declaredScopeNote": "Navide는 선언된 범위를 강제하지 않아요. 파일 권한이 있는 Navide 플러그인은 범위 밖의 파일도 읽고 바꿀 수 있어요.",
       "unchanged": "변경 없음({count})",
       "fullCard": "전체 공개 정보 카드",
       "badgeMore": "권한 늘어남",

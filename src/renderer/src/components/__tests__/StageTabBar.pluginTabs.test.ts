@@ -54,7 +54,8 @@ describe('StageTabBar – plugin main tabs', () => {
 
   it('marks a plugin tab as a Navide plugin and names its id, publisher and source', () => {
     const tab = mountBar(null).get('[data-plugin-tab="devmap.main"]')
-    expect(tab.find('.tab-plugin-mark').exists()).toBe(true)
+    // #644 review I1 (from #638): the third-party mark is the ◇ glyph itself.
+    expect(tab.get('.tab-plugin-mark').text()).toBe('\u25c7')
     const title = tab.attributes('title')!
     expect(title).toContain(i18n.global.t('stageTab.plugin-tab', { title: 'Devmap' }))
     expect(title).toContain('nerdtechnic.devmap')

@@ -11672,6 +11672,7 @@
       "added": "Nova",
       "removed": "Removida",
       "declaredScope": "Escopo declarado (informativo)",
+      "declaredScopeNote": "O Navide não impõe um escopo declarado. Um plug-in do Navide com acesso a arquivos ainda pode ler e alterar arquivos fora dele.",
       "unchanged": "Inalteradas ({count})",
       "fullCard": "Cartão de divulgação completo",
       "badgeMore": "Mais permissões",
