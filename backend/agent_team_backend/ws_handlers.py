@@ -13072,7 +13072,7 @@ async def evolve_badges(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 # ── CLI extensions (cli_extensions.*) ──────────────────────────────────────
-# The read-only inventory behind Settings → CLI Extensions. Scanning reads
+# The read-only inventory behind Settings → Extensions. Scanning reads
 # files and at most a declared listing command with a timeout, so a thread
 # keeps it off the loop.
 @handler("cli_extensions.list")

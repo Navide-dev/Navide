@@ -106,6 +106,18 @@ describe('SkillInstallApprovalDialog', () => {
     expect(wrapper.find('.sa-dialog').exists()).toBe(false)
   })
 
+  it('names a skill that ships with Navide as bundled, not as a path', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('skills.install_approvals.list', { approvals: [] })
+    wrapper = await open(mock)
+
+    mock.emit('skills.install_approval_request', approval({ source: { kind: 'bundled', name: 'plugin-authoring' } }))
+    await flushPromises()
+    expect(wrapper.text()).toContain(
+      i18n.global.t('skill-approval.source-bundled', { name: 'navide:plugin-authoring' }),
+    )
+  })
+
   it('sends a rejection', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('skills.install_approvals.list', { approvals: [approval()] })

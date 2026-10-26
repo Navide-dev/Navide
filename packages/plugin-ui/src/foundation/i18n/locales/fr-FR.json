@@ -1576,7 +1576,7 @@
           "summary": "Créer, modifier, activer, désactiver et inspecter les skills d’agent gérés par l’application."
         },
         "prompts": {
-          "title": "Skills de prompt",
+          "title": "Prompts",
           "summary": "Créer et modifier les skills de prompt qu’un pane CLI peut lancer depuis son bouton de boucle."
         },
         "memory": {
@@ -3123,7 +3123,7 @@
           "p11": "Le premier bloc de Paramètres ▸ Navide Cloud s’appelle Synchronisation. <strong>Ce n’est pas un onglet à part</strong> : c’est la section supérieure de cette même page. Chaque portée synchronisable dispose d’une ligne avec un interrupteur ; activez-en une et cette portée reste identique sur tous les appareils connectés au <strong>même compte</strong>. Les enregistrements sont <strong>chiffrés sur cette machine</strong>, et le serveur ne stocke que du texte chiffré dont il n’a pas la clé.",
           "sync": {
             "scopes": "<strong>Cinq lignes, une par page des ressources d’agent et dans l’ordre de la barre latérale ; trois peuvent être activées</strong> : <em>MCP</em> (les serveurs ajoutés dans Navide ; leurs secrets sont chiffrés avant de partir), <em>Skills</em> (les skills activés et les CLI auxquelles chacun est attribué, ainsi que les fichiers des skills créés dans Navide ; les skills que vous avez placés vous-même dans le dossier ne synchronisent que leurs réglages) et <em>Prompts</em> (les skills de prompt et le prompt de boucle).",
-            "credentials": "<em>Mémoire</em> et <em>Extensions CLI</em> sont <strong>listées mais grisées</strong>, et leur ligne indique « pas encore synchronisable ». Cela ne signifie pas « désactivé par défaut, en attente de votre activation » : l’interrupteur ne bouge pas. Un interrupteur Mémoire laissé activé par une ancienne version peut encore être désactivé. <em>Identifiants et clés</em> n’a aucune ligne : les identifiants de compte et les clés ne quittent jamais cette machine. Un interrupteur Identifiants laissé activé par une ancienne version est traité comme désactivé. Les paramètres MCP, lorsque leur synchronisation est activée, sont chiffrés sur cette machine avant d’être envoyés, et le serveur n’a aucune clé pour les déchiffrer.",
+            "credentials": "<em>Mémoire</em> et <em>Extensions</em> sont <strong>listées mais grisées</strong>, et leur ligne indique « pas encore synchronisable ». Cela ne signifie pas « désactivé par défaut, en attente de votre activation » : l’interrupteur ne bouge pas. Un interrupteur Mémoire laissé activé par une ancienne version peut encore être désactivé. <em>Identifiants et clés</em> n’a aucune ligne : les identifiants de compte et les clés ne quittent jamais cette machine. Un interrupteur Identifiants et clés laissé activé par une ancienne version est traité comme désactivé. Les paramètres MCP, lorsque leur synchronisation est activée, sont chiffrés sur cette machine avant d’être envoyés, et le serveur n’a aucune clé pour les déchiffrer.",
             "states": "Deux états sont indiqués sous le bloc : <em>non connecté</em> (les portées que vous avez activées se rattrapent dès le retour de la liaison) et <em>cet appareil n’a pas encore de clé de synchronisation</em> (rien n’est envoyé tant qu’il n’en a pas). Il y a aussi un bouton <em>Synchroniser maintenant</em>, actif uniquement lorsque la liaison est établie.",
             "key": "<strong>La clé de synchronisation est affichée sous la forme des 8 premiers caractères de son identifiant</strong>, jamais en clair. <em>Renouveler la clé</em> demande <strong>deux clics</strong> : le premier le transforme en <em>Renouveler maintenant</em> et ajoute <em>Annuler</em> à côté. Le renouvellement retire la clé actuelle, rescelle chaque enregistrement synchronisé avec une nouvelle clé et transmet celle-ci à vos autres appareils lors du prochain échange de clés : c’est la marche à suivre pour une clé que vous pensez compromise.",
             "legacy": "<em>Adopter pour ce compte</em> n’apparaît que si cet appareil possède une clé de synchronisation datant d’avant l’association des comptes <em>et</em> si ce compte n’a pas encore de clé. C’est un choix définitif : sans adoption, vous ne pouvez pas lire ce qui a été synchronisé avec cette clé, et générer une nouvelle clé à la place rendrait ces enregistrements définitivement illisibles.",
@@ -6790,7 +6790,7 @@
         "s7": {
           "title": "Une personne, plusieurs machines",
           "p1": "Relier deux machines sous des systèmes d’exploitation différents n’est pas en soi une question de plateforme : la connexion à Navide Cloud, l’appairage et la messagerie entre appareils fonctionnent de la même façon sur les trois, et sont décrits dans <strong>Paramètres et système</strong>. Cette section ajoute seulement ce qui change quand les machines ne sont pas sur la même plateforme.",
-          "p2": "Dans <strong>Paramètres ▸ Navide Cloud</strong>, la liste de synchronisation permet d’activer trois éléments : MCP, Skills et Prompts. <em>Mémoire</em> et <em>extensions CLI</em> figurent aussi dans la liste, grisés et décrits comme « Pas encore synchronisable. » ; un commutateur de mémoire qu’une ancienne version a laissé activé peut toujours être désactivé. Il n’y a pas de ligne pour les identifiants : les identifiants des comptes CLI sont enregistrés uniquement sur cet ordinateur et ne sont jamais synchronisés.",
+          "p2": "Dans <strong>Paramètres ▸ Navide Cloud</strong>, la liste de synchronisation permet d’activer trois éléments : MCP, Skills et Prompts. <em>Mémoire</em> et <em>Extensions</em> figurent aussi dans la liste, grisés et décrits comme « Pas encore synchronisable. » ; un commutateur de mémoire qu’une ancienne version a laissé activé peut toujours être désactivé. Il n’y a pas de ligne <em>Identifiants et clés</em> : les identifiants des comptes CLI sont enregistrés uniquement sur cet ordinateur et ne sont jamais synchronisés.",
           "note": "Ce qui ne vous suit jamais de toute façon : l’installation et la connexion propres à chaque CLI, les identifiants (conservés dans le coffre-fort propre à chaque plateforme, dans des formats non interchangeables) et tous les chemins absolus. Une seconde machine a besoin que ses CLI soient installées et connectées de leur côté."
         },
         "mock": {
@@ -7249,7 +7249,7 @@
       "scope-hint-mcp": "Les serveurs MCP ajoutés dans Navide. Leurs secrets sont chiffrés avant de partir.",
       "scope-hint-skills": "Quels skills sont activés et vers quelles CLI chacun est envoyé, plus les fichiers des skills créés dans Navide (les gros transitent sous forme de blobs chiffrés). Les skills que vous avez placés vous-même dans le dossier ne synchronisent que leurs paramètres.",
       "scope-hint-memory": "Fichiers d’instructions globaux comme ~/.claude/CLAUDE.md. Les fichiers d’un projet restent gérés par git.",
-      "scope-credentials": "Identifiants",
+      "scope-credentials": "Identifiants et clés",
       "sealed": "(identifiant – non affiché)",
       "key-id": "Clé de synchronisation {id}",
       "rotate": "Renouveler la clé",
@@ -7387,7 +7387,7 @@
       }
     },
     "memory": {
-      "title": "Fichiers d’instructions des CLI",
+      "title": "Mémoire",
       "intro": "Chaque CLI lit un fichier d’instructions avant de commencer à travailler – CLAUDE.md, AGENTS.md, QWEN.md, règles .cursor. Chaque fichier est listé une seule fois, avec toutes les CLI qui le chargent, et peut être modifié sur place.",
       "scope-user": "Niveau utilisateur",
       "scope-project": "Niveau projet",
@@ -7421,7 +7421,7 @@
       "error-save": "Impossible d’enregistrer ce fichier. Votre brouillon reste dans l’éditeur."
     },
     "prompts": {
-      "title": "Skills de prompt",
+      "title": "Prompts",
       "intro": "Des instructions complètes réutilisables qu’un pane CLI peut lancer depuis son bouton ∞. Un skill correspond à un prompt complet – choisir un skill remplace le prompt, il ne s’ajoute jamais à un autre. Seul le skill par défaut s’exécute en boucle ; tous les autres sont envoyés une seule fois.",
       "new": "Nouveau skill",
       "new-name": "Nouveau skill",
@@ -9682,6 +9682,7 @@
     "queue": "{count} en attente",
     "requester": "Demandé par",
     "source": "Source",
+    "source-bundled": "Fourni avec Navide ({name})",
     "digest": "Empreinte",
     "targets": "Distribution",
     "targets-all": "Toutes les CLI connectées",

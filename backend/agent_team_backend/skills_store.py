@@ -1465,6 +1465,12 @@ def _valid_installation_receipt(receipt: Any) -> bool:
         return False
     if source.get("kind") == "local":
         return set(source) == {"kind", "path"} and isinstance(source["path"], str) and os.path.isabs(source["path"])
+    if source.get("kind") == "bundled":
+        return (
+            set(source) == {"kind", "name"}
+            and isinstance(source["name"], str)
+            and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", source["name"]) is not None
+        )
     if source.get("kind") == "github":
         return (
             {"kind", "repository", "commit", "subdir"} <= set(source)

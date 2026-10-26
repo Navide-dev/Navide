@@ -1576,7 +1576,7 @@
           "summary": "Crea, edita, activa, desactiva e inspecciona las skills de agent gestionadas por la app."
         },
         "prompts": {
-          "title": "Skills de prompt",
+          "title": "Prompts",
           "summary": "Crea y edita las skills de prompt que un pane de CLI puede lanzar desde su botón de loop."
         },
         "memory": {
@@ -3123,7 +3123,7 @@
           "p11": "El primer bloque de Ajustes ▸ Navide Cloud se llama Sincronización. <strong>No es una pestaña aparte</strong>: es la sección superior de esta misma página. Cada ámbito sincronizable tiene una fila con un interruptor; al activar uno, ese ámbito se mantiene igual en todos los dispositivos con <strong>la misma cuenta</strong>. Los registros <strong>se cifran en esta máquina</strong>, y el servidor solo guarda texto cifrado del que no tiene clave.",
           "sync": {
             "scopes": "<strong>Cinco filas, una por página de Recursos de agente y en el orden de la barra lateral; tres se pueden activar</strong>: <em>MCP</em> (los servidores que añadiste en Navide; sus secretos se cifran antes de salir), <em>Skills</em> (qué skills están activas y a qué CLI va cada una, además de los archivos de las skills creadas en Navide; las skills que pusiste tú en la carpeta solo sincronizan sus ajustes) y <em>Prompts</em> (las skills de prompt y el prompt del Loop).",
-            "credentials": "<em>Memoria</em> y <em>Extensiones de CLI</em> <strong>aparecen pero en gris</strong>, y su línea dice «aún no se puede sincronizar». No significa «desactivado de forma predeterminada, esperando a que lo actives»: el interruptor no se mueve. Un interruptor de Memoria que una versión anterior dejó activado todavía se puede desactivar. <em>Credenciales y claves</em> no tiene ninguna fila: las credenciales de cuenta y las claves nunca salen de esta máquina. Un interruptor de Credenciales que una versión anterior dejó activado se trata como desactivado. Los ajustes de MCP, con su sincronización activada, se cifran en esta máquina antes de subirse, y el servidor no tiene ninguna clave para descifrarlos.",
+            "credentials": "<em>Memoria</em> y <em>Extensiones</em> <strong>aparecen pero en gris</strong>, y su línea dice «aún no se puede sincronizar». No significa «desactivado de forma predeterminada, esperando a que lo actives»: el interruptor no se mueve. Un interruptor de Memoria que una versión anterior dejó activado todavía se puede desactivar. <em>Credenciales y claves</em> no tiene ninguna fila: las credenciales de cuenta y las claves nunca salen de esta máquina. Un interruptor de Credenciales y claves que una versión anterior dejó activado se trata como desactivado. Los ajustes de MCP, con su sincronización activada, se cifran en esta máquina antes de subirse, y el servidor no tiene ninguna clave para descifrarlos.",
             "states": "Debajo del bloque se indican dos estados: <em>no conectado</em> (los ámbitos que activaste se ponen al día cuando vuelve la conexión) y <em>este dispositivo aún no tiene clave de sincronización</em> (no se sube nada hasta que la tenga). También hay un botón <em>Sincronizar ahora</em>, activo solo con conexión.",
             "key": "<strong>La clave de sincronización se muestra como los 8 primeros caracteres de su ID</strong>, nunca como la clave en sí. <em>Rotar clave</em> requiere <strong>dos clics</strong>: el primero lo convierte en <em>Rotar ahora</em> y añade <em>Cancelar</em> al lado. Rotar retira la clave actual, vuelve a sellar cada registro sincronizado con una nueva y entrega la nueva clave a tus otros dispositivos la próxima vez que intercambien claves: es lo que debes hacer con una clave que crees que se ha filtrado.",
             "legacy": "<em>Adoptar para esta cuenta</em> solo aparece cuando este dispositivo tiene una clave de sincronización de antes de que se vincularan las cuentas <em>y</em> esta cuenta aún no tiene clave. Es una decisión única: sin adoptarla no puedes leer lo que se sincronizó con esa clave, y generar una clave nueva en su lugar dejaría esos registros ilegibles para siempre.",
@@ -6790,7 +6790,7 @@
         "s7": {
           "title": "Una persona, varios equipos",
           "p1": "Conectar dos equipos con sistemas operativos distintos no es en sí una cuestión de plataforma: iniciar sesión en Navide Cloud, emparejar y enviar mensajes entre dispositivos funciona igual en los tres, y se explica en <strong>Ajustes y sistema</strong>. Esta sección solo añade lo que cambia cuando los equipos no son de la misma plataforma.",
-          "p2": "En <strong>Ajustes ▸ Navide Cloud</strong>, la lista de sincronización permite activar tres cosas: MCP, Skills y Prompts. <em>Memoria</em> y <em>extensiones de CLI</em> también aparecen, atenuadas y con la descripción «Aún no se puede sincronizar.»; un interruptor de memoria que una versión anterior dejó activado todavía se puede desactivar. No hay ninguna fila para credenciales: las credenciales de las cuentas de CLI se guardan solo en este ordenador y nunca se sincronizan.",
+          "p2": "En <strong>Ajustes ▸ Navide Cloud</strong>, la lista de sincronización permite activar tres cosas: MCP, Skills y Prompts. <em>Memoria</em> y <em>Extensiones</em> también aparecen, atenuadas y con la descripción «Aún no se puede sincronizar.»; un interruptor de memoria que una versión anterior dejó activado todavía se puede desactivar. No hay ninguna fila <em>Credenciales y claves</em>: las credenciales de las cuentas de CLI se guardan solo en este ordenador y nunca se sincronizan.",
           "note": "Lo que nunca viaja contigo de todas formas: la instalación y el inicio de sesión de cada CLI, las credenciales (guardadas en el almacén propio de cada plataforma, en formatos que no son intercambiables) y cualquier ruta absoluta. Un segundo equipo necesita sus CLI instaladas y con la sesión iniciada por su cuenta."
         },
         "mock": {
@@ -7249,7 +7249,7 @@
       "scope-hint-mcp": "Servidores MCP que añadiste en Navide. Sus secretos se cifran antes de salir.",
       "scope-hint-skills": "Qué skills están activadas y a qué CLI va cada una, además de los archivos de las skills creadas en Navide (las grandes viajan como blobs cifrados). Las skills que pusiste tú en la carpeta solo sincronizan sus ajustes.",
       "scope-hint-memory": "Archivos de instrucciones globales como ~/.claude/CLAUDE.md. Los archivos de dentro de un proyecto se quedan con git.",
-      "scope-credentials": "Credenciales",
+      "scope-credentials": "Credenciales y claves",
       "sealed": "(credencial: no se muestra)",
       "key-id": "Clave de sincronización {id}",
       "rotate": "Rotar clave",
@@ -7387,7 +7387,7 @@
       }
     },
     "memory": {
-      "title": "Archivos de instrucciones de las CLI",
+      "title": "Memoria",
       "intro": "Cada CLI lee un archivo de instrucciones antes de empezar a trabajar: CLAUDE.md, AGENTS.md, QWEN.md, reglas de .cursor. Cada archivo aparece una vez, con todas las CLI que lo cargan, y se puede editar directamente.",
       "scope-user": "Nivel de usuario",
       "scope-project": "Nivel de proyecto",
@@ -7421,7 +7421,7 @@
       "error-save": "No se pudo guardar este archivo. Tu borrador sigue en el editor."
     },
     "prompts": {
-      "title": "Skills de prompt",
+      "title": "Prompts",
       "intro": "Instrucciones completas reutilizables que un pane de CLI puede lanzar desde su botón ∞. Una skill es un prompt completo: elegir una skill sustituye el prompt, nunca se añade a otro. Solo la skill predeterminada se ejecuta como loop; todas las demás se envían una vez.",
       "new": "Nueva skill",
       "new-name": "Nueva skill",
@@ -9682,6 +9682,7 @@
     "queue": "{count} pendientes",
     "requester": "Solicitado por",
     "source": "Origen",
+    "source-bundled": "Incluido con Navide ({name})",
     "digest": "Resumen criptográfico",
     "targets": "Entrega",
     "targets-all": "Todas las CLI conectadas",

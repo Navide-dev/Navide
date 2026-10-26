@@ -397,7 +397,7 @@ async def test_cli_extensions_list_tool_answers_with_metadata_only(
 async def test_cli_extensions_list_tool_also_names_what_navide_changed(
     _isolated_convenience_gate, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """C6: the agent reads the same inventory as Settings → CLI Extensions,
+    """C6: the agent reads the same inventory as Settings → Extensions,
     so it must see Navide's own changes too, or it cannot tell the user."""
     from agent_team_backend import app
 

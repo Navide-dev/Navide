@@ -2397,7 +2397,7 @@ not restart. In-window views come back on the new version in place. Every
 switch is recorded in the main window's announcements with a one-click way
 back to the version it replaced; a failed switch keeps the previous version
 running and leaves the update staged. For an update the user approved, the
-Extensions page shows the reason at once, its row keeps Restart and Discard,
+Navide Plugins page shows the reason at once, its row keeps Restart and Discard,
 and the main window lists it with **Apply now** on the next launch; for an
 agent's automatic update the main window shows the reason with **Apply now**
 at once. A first install or update that is still staged when Navide starts
@@ -2700,6 +2700,13 @@ Issue 06 supports the following external frontend workflow:
 Scaffolding, per-target backend packaging, signing, sign-in and publishing
 to the Navide Marketplace are covered step by step in
 [Publishing to the Navide Marketplace](marketplace-publishing.md).
+
+An agent learns this workflow from the skill that ships with Navide: it calls
+`skills_prepare_install` with the source `navide:plugin-authoring`, and the
+user approves the install in the main window like any other skill. The skill
+lives at `backend/agent_team_backend/bundled_skills/plugin-authoring/SKILL.md`
+and summarises this document; change it in the same pull request as any change
+here that it describes.
 
 There is no `navide-plugin dev` command and no in-app hot-reload loop. Test a
 backend with `navide-plugin dev-backend`, whose Host bridge refuses every

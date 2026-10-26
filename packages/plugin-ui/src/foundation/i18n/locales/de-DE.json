@@ -1568,7 +1568,7 @@
           "summary": "Nur lesende Ansicht der MCP-Server, die jede CLI in ihrer eigenen Konfiguration führt, und wo jeder Server eingerichtet ist."
         },
         "credentials": {
-          "title": "Anmeldeinformationen und Schlüssel",
+          "title": "Zugangsdaten",
           "summary": "Nur lesender Scan, wo auf diesem Rechner Anmeldeinformationen und Schlüssel liegen, mit Hinweisen."
         },
         "skills": {
@@ -1576,7 +1576,7 @@
           "summary": "Von der App verwaltete Agent-Skills erstellen, bearbeiten, aktivieren, deaktivieren und prüfen."
         },
         "prompts": {
-          "title": "Prompt-Skills",
+          "title": "Prompts",
           "summary": "Die Prompt-Skills erstellen und bearbeiten, die ein CLI-pane über seine Loop-Schaltfläche auslösen kann."
         },
         "memory": {
@@ -3123,7 +3123,7 @@
           "p11": "Der erste Block unter Einstellungen ▸ Navide Cloud heißt Sync. <strong>Er ist kein eigener Tab</strong> – er ist der oberste Abschnitt dieser einen Seite. Jeder synchronisierbare Bereich erhält eine Zeile mit einem Schalter; schalten Sie einen ein, bleibt dieser Bereich auf jedem mit <strong>demselben Konto</strong> angemeldeten Gerät gleich. Einträge werden <strong>auf diesem Rechner verschlüsselt</strong>, und der Server speichert nur Chiffretext, für den er keinen Schlüssel hat.",
           "sync": {
             "scopes": "<strong>Fünf Zeilen, eine pro Seite der Agent-Assets und in der Reihenfolge der Seitenleiste; drei lassen sich einschalten</strong>: <em>MCP</em> (die in Navide hinzugefügten Server; ihre Geheimnisse werden verschlüsselt, bevor sie den Rechner verlassen), <em>Skills</em> (welche Skills aktiv sind und an welche CLIs jeder geht, dazu die Dateien der in Navide erstellten Skills; Skills, die Sie selbst in den Ordner gelegt haben, synchronisieren nur ihre Einstellungen) und <em>Prompts</em> (Prompt-Skills und der Loop-Prompt).",
-            "credentials": "<em>Gedächtnis</em> und <em>CLI-Erweiterungen</em> sind <strong>aufgeführt, aber ausgegraut</strong>, und ihre Zeile lautet „noch nicht synchronisierbar“. Das bedeutet nicht „standardmäßig aus, wartet darauf, dass Sie es einschalten“ – der Schalter bewegt sich nicht. Ein Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, lässt sich noch ausschalten. <em>Anmeldeinformationen &amp; Schlüssel</em> hat überhaupt keine Zeile: Kontoanmeldeinformationen und Schlüssel verlassen diesen Rechner nie. Ein Schalter für Anmeldeinformationen, den eine ältere Version eingeschaltet gelassen hat, gilt als ausgeschaltet. MCP-Einstellungen werden bei eingeschaltetem Sync auf diesem Rechner verschlüsselt, bevor sie hochgeladen werden, und der Server hat keinen Schlüssel, um sie zu entschlüsseln.",
+            "credentials": "<em>Gedächtnis</em> und <em>Erweiterungen</em> sind <strong>aufgeführt, aber ausgegraut</strong>, und ihre Zeile lautet „noch nicht synchronisierbar“. Das bedeutet nicht „standardmäßig aus, wartet darauf, dass Sie es einschalten“ – der Schalter bewegt sich nicht. Ein Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, lässt sich noch ausschalten. <em>Zugangsdaten</em> hat überhaupt keine Zeile: Kontoanmeldeinformationen und Schlüssel verlassen diesen Rechner nie. Ein Zugangsdaten-Schalter, den eine ältere Version eingeschaltet gelassen hat, gilt als ausgeschaltet. MCP-Einstellungen werden bei eingeschaltetem Sync auf diesem Rechner verschlüsselt, bevor sie hochgeladen werden, und der Server hat keinen Schlüssel, um sie zu entschlüsseln.",
             "states": "Zwei Zustände werden unter dem Block ausdrücklich genannt: <em>nicht verbunden</em> (eingeschaltete Bereiche holen auf, sobald die Verbindung wieder besteht) und <em>dieses Gerät hat noch keinen Sync-Schlüssel</em> (nichts wird hochgeladen, bis es einen hat). Außerdem gibt es eine Schaltfläche <em>Jetzt synchronisieren</em>, die nur bei bestehender Verbindung aktiv ist.",
             "key": "<strong>Der Sync-Schlüssel wird als die ersten 8 Zeichen seiner ID angezeigt</strong>, nie als der Schlüssel selbst. <em>Schlüssel rotieren</em> erfordert <strong>zwei Klicks</strong>: Der erste macht daraus <em>Jetzt rotieren</em> und fügt daneben <em>Abbrechen</em> hinzu. Das Rotieren setzt den aktuellen Schlüssel außer Dienst, versiegelt jeden synchronisierten Eintrag unter einem neuen und übergibt den neuen Schlüssel Ihren anderen Geräten beim nächsten Schlüsselaustausch – der richtige Schritt bei einem Schlüssel, den Sie für kompromittiert halten.",
             "legacy": "<em>Für dieses Konto übernehmen</em> erscheint nur, wenn dieses Gerät einen Sync-Schlüssel aus der Zeit vor der Kontobindung besitzt <em>und</em> dieses Konto noch keinen Schlüssel hat. Es ist eine einmalige Entscheidung: Ohne Übernahme können Sie nicht lesen, was unter diesem Schlüssel synchronisiert wurde, und ein stattdessen neu erzeugter Schlüssel würde diese Einträge dauerhaft unlesbar machen.",
@@ -6790,7 +6790,7 @@
         "s7": {
           "title": "Eine Person, mehrere Rechner",
           "p1": "Zwei Rechner mit unterschiedlichen Betriebssystemen zu verbinden, ist an sich keine Plattformfrage: Die Anmeldung bei Navide Cloud, das Koppeln und geräteübergreifende Nachrichten funktionieren auf allen dreien gleich und werden unter <strong>Einstellungen und System</strong> behandelt. Dieser Abschnitt ergänzt nur, was sich ändert, wenn die Rechner nicht dieselbe Plattform haben.",
-          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste drei Dinge einschalten: MCP, Skills und Prompts. <em>Gedächtnis</em> und <em>CLI-Erweiterungen</em> sind ebenfalls aufgeführt, aber ausgegraut und mit „Noch nicht synchronisierbar.“ beschrieben; einen Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, können Sie weiterhin ausschalten. Für Anmeldeinformationen gibt es keinen Eintrag: Die Anmeldeinformationen von CLI-Konten werden nur auf diesem Computer gespeichert und nie synchronisiert.",
+          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste drei Dinge einschalten: MCP, Skills und Prompts. <em>Gedächtnis</em> und <em>Erweiterungen</em> sind ebenfalls aufgeführt, aber ausgegraut und mit „Noch nicht synchronisierbar.“ beschrieben; einen Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, können Sie weiterhin ausschalten. Für <em>Zugangsdaten</em> gibt es keinen Eintrag: Die Anmeldeinformationen von CLI-Konten werden nur auf diesem Computer gespeichert und nie synchronisiert.",
           "note": "Was ohnehin nie mitreist: die Installation und Anmeldung jeder CLI, Anmeldeinformationen (im eigenen Tresor jeder Plattform gespeichert, in nicht austauschbaren Formaten) und jeder absolute Pfad. Auf einem zweiten Rechner müssen die CLIs eigens installiert und angemeldet werden."
         },
         "mock": {
@@ -6888,7 +6888,7 @@
       "header-name-placeholder": "Headername"
     },
     "credentials": {
-      "title": "Anmeldeinformationen und Schlüssel",
+      "title": "Zugangsdaten",
       "intro": "Ein nur lesender Scan, wo auf diesem Rechner Anmeldeinformationen und Schlüssel liegen. Nichts wird geändert, verschoben oder irgendwohin gesendet.",
       "meta": "Nur lokal · Werte werden nie angezeigt · Synchronisierung aus",
       "keyring-ok": "Schlüsselbund verfügbar: {backend}",
@@ -7249,7 +7249,7 @@
       "scope-hint-mcp": "MCP-Server, die Sie in Navide hinzugefügt haben. Ihre Geheimnisse werden verschlüsselt, bevor sie den Rechner verlassen.",
       "scope-hint-skills": "Welche Skills eingeschaltet sind und an welche CLIs jeder geht, sowie die Dateien der in Navide erstellten Skills (große werden als verschlüsselte Blobs übertragen). Skills, die Sie selbst in den Ordner gelegt haben, synchronisieren nur ihre Einstellungen.",
       "scope-hint-memory": "Globale Anweisungsdateien wie ~/.claude/CLAUDE.md. Dateien innerhalb eines Projekts bleiben bei git.",
-      "scope-credentials": "Anmeldeinformationen",
+      "scope-credentials": "Zugangsdaten",
       "sealed": "(Anmeldeinformation – nicht angezeigt)",
       "key-id": "Synchronisierungsschlüssel {id}",
       "rotate": "Schlüssel rotieren",
@@ -7387,7 +7387,7 @@
       }
     },
     "memory": {
-      "title": "Anweisungsdateien der CLIs",
+      "title": "Gedächtnis",
       "intro": "Jede CLI liest eine Anweisungsdatei, bevor sie mit der Arbeit beginnt – CLAUDE.md, AGENTS.md, QWEN.md, .cursor-Regeln. Jede Datei wird einmal aufgeführt, zusammen mit allen CLIs, die sie laden, und kann direkt bearbeitet werden.",
       "scope-user": "Benutzerebene",
       "scope-project": "Projektebene",
@@ -7421,7 +7421,7 @@
       "error-save": "Diese Datei konnte nicht gespeichert werden. Ihr Entwurf bleibt im Editor."
     },
     "prompts": {
-      "title": "Prompt-Skills",
+      "title": "Prompts",
       "intro": "Wiederverwendbare vollständige Anweisungen, die ein CLI-pane über seine ∞-Schaltfläche auslösen kann. Ein Skill ist ein vollständiger Prompt – die Wahl eines Skills ersetzt den Prompt und hängt nie an einen anderen an. Nur der Standard-Skill läuft als Loop; jeder andere Skill wird einmal gesendet.",
       "new": "Neuer Skill",
       "new-name": "Neuer Skill",
@@ -9682,6 +9682,7 @@
     "queue": "{count} ausstehend",
     "requester": "Angefordert von",
     "source": "Quelle",
+    "source-bundled": "Mit Navide ausgeliefert ({name})",
     "digest": "Prüfsumme",
     "targets": "Zustellung",
     "targets-all": "Alle angebundenen CLIs",
