@@ -94,11 +94,25 @@ function syncDraft(): void {
   draft.value = found ? { ...found } : null
 }
 
-watch(selectedId, syncDraft)
+/** Set when an emptied prompt was put back, so the drawer says why. */
+const promptEmpty = ref(false)
+/** Delete is two steps: the first click asks, the second removes. */
+const confirmingDelete = ref(false)
+
+watch(selectedId, () => {
+  promptEmpty.value = false
+  confirmingDelete.value = false
+  syncDraft()
+})
 
 function commit(): void {
   const d = draft.value
   if (!d) return
+  // normalize drops a skill whose prompt is empty, so saving one would delete
+  // it without a word (and sync the deletion to other machines). Keep the
+  // stored text; removing a skill is what Delete is for.
+  promptEmpty.value = !d.prompt.trim()
+  if (promptEmpty.value) d.prompt = skills.value.find((s) => s.id === d.id)?.prompt ?? d.prompt
   save(skills.value.map((s) => (s.id === d.id ? { ...d } : s)))
   syncDraft()
 }
@@ -136,6 +150,7 @@ function duplicate(skill: PromptSkill): void {
 }
 
 function remove(skill: PromptSkill): void {
+  confirmingDelete.value = false
   if (skills.value.length <= 1) return // normalize would resurrect the builtin
   if (selectedId.value === skill.id) selectedId.value = null
   save(skills.value.filter((s) => s.id !== skill.id))
@@ -327,6 +342,7 @@ function applyCustomIcon(): void {
         <div class="drawer-section">
           <h4>{{ t('settings.prompts.prompt') }}</h4>
           <textarea v-model="draft.prompt" class="prompt-body" rows="8" spellcheck="false" @change="commit"></textarea>
+          <p v-if="promptEmpty" class="drawer-error" role="alert">{{ t('settings.prompts.prompt-empty') }}</p>
         </div>
 
         <div class="drawer-section">
@@ -364,8 +380,25 @@ function applyCustomIcon(): void {
           </button>
         </div>
         <p class="drawer-hint">{{ t('settings.prompts.hint') }}</p>
-        <div class="drawer-actions">
-          <button type="button" class="danger" :disabled="skills.length <= 1" @click="remove(draft)">
+        <div v-if="confirmingDelete" class="drawer-confirm" role="alert">
+          <p>{{ t('settings.prompts.delete-confirm', { name: draft.name }) }}</p>
+          <div class="drawer-actions">
+            <button type="button" data-action="cancel-delete" @click="confirmingDelete = false">
+              {{ t('action.cancel') }}
+            </button>
+            <button type="button" class="danger" data-action="confirm-delete" @click="remove(draft)">
+              {{ t('settings.prompts.delete') }}
+            </button>
+          </div>
+        </div>
+        <div v-else class="drawer-actions">
+          <button
+            type="button"
+            class="danger"
+            data-action="delete"
+            :disabled="skills.length <= 1"
+            @click="confirmingDelete = true"
+          >
             {{ t('settings.prompts.delete') }}
           </button>
         </div>
@@ -742,6 +775,28 @@ textarea:focus {
   font-size: 10.5px;
   color: var(--text-secondary);
   line-height: 1.4;
+}
+.drawer-error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--danger-fg);
+  line-height: 1.4;
+}
+.drawer-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--danger-fg);
+  border-radius: var(--radius-control);
+}
+.drawer-confirm p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.drawer-confirm .drawer-actions {
+  margin-top: 0;
 }
 
 @media (max-width: 900px) {

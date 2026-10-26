@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop – den konfigurierten Loop-Prompt an dieses pane senden",
       "skill-cast-failed": "Der Skill „{name}“ konnte nicht an dieses pane gesendet werden",
       "skill-cast-busy": "Der Loop sendet gerade seinen nächsten Prompt – lösen Sie „{name}“ gleich erneut aus",
+      "loop-start-failed": "Der Loop mit „{name}“ konnte in diesem pane nicht gestartet werden",
       "loop-badge-tooltip": "Der Loop-Prompt wurde an dieses pane gesendet – klicken, um den Loop auszuschalten",
       "loop-waiting-tooltip": "Loop pausiert – Session-Limit erreicht; automatische Fortsetzung um {time}. Klicken, um jetzt fortzusetzen",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -7436,7 +7437,9 @@
       "advanced": "Erweitert",
       "send-once": "Wird einmal gesendet",
       "send-once-hint": "Nur der Standard-Skill läuft als Loop; dieser wird einmal gesendet, ohne Fortsetzung oder Turn-Limit.",
-      "untitled-name": "Unbenannter Skill"
+      "untitled-name": "Unbenannter Skill",
+      "prompt-empty": "Ein Prompt darf nicht leer sein – der bisherige Text wurde beibehalten. Um diesen Skill zu entfernen, „Löschen“ verwenden.",
+      "delete-confirm": "„{name}“ löschen? Das lässt sich nicht rückgängig machen, und Geräte, die Prompts synchronisieren, entfernen ihn ebenfalls."
     },
     "section": {
       "general-behavior": "Allgemeines Verhalten",

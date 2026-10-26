@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop — 将设置的 Loop 提示词送入此 pane",
       "skill-cast-failed": "无法将技能“{name}”送入此 pane",
       "skill-cast-busy": "Loop 正在送出下一则提示词 — 请稍后再施放“{name}”",
+      "loop-start-failed": "无法在此 pane 以“{name}”启动 Loop",
       "loop-badge-tooltip": "已对此 pane 送出 Loop 提示词 — 点击标签可关闭 Loop",
       "loop-waiting-tooltip": "Loop 暂停 — 已达工作阶段上限；将于 {time} 自动续跑，点击标签可立即续跑",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -7436,7 +7437,9 @@
       "advanced": "高级",
       "send-once": "单次送出",
       "send-once-hint": "只有默认技能会以 loop 方式运行；这个技能只送出一次，没有续跑词与轮次上限。",
-      "untitled-name": "未命名技能"
+      "untitled-name": "未命名技能",
+      "prompt-empty": "Prompt 不能为空，已保留原本的内容。要移除这个技能，请使用“删除”。",
+      "delete-confirm": "删除“{name}”？此操作无法撤销，同步 prompt 的其他机器也会一并删除。"
     },
     "section": {
       "general-behavior": "一般行为",
