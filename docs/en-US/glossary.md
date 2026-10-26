@@ -13,7 +13,7 @@ The rule behind every term: **name a thing by who owns its files.**
 | A package that extends Navide itself | Navide 外掛 | Navide plugin | Navide プラグイン | Manifest v1/v2 packages, the plugin SDK and `navide-plugin`, the plugin backend sandbox, the bundled `navide.git`, `navide.plans` and `navide.mini-ide` |
 | Where Navide plugins are published | Navide 市集 | Navide Marketplace | Navide マーケットプレイス | `server.navide.dev/registry` |
 | A bundle of Navide plugins | Navide 外掛組合 | Navide Plugin Pack | Navide プラグインパック | Packages that declare `extensionPack` |
-| Content Navide owns and delivers to the CLIs | Agent 資產 | Agent Assets | エージェント資産 | Skills, MCP servers, prompts, memory. Not credentials: they never sync |
+| The Settings group for what the AI CLIs work with | Agent 資產 | Agent Assets | エージェント資産 | The pages listed under it in the Settings sidebar, in its order: MCP, Skills, Prompts, Memory, Credentials & Keys, Extensions. Being an Agent Asset says nothing about sync: credentials and keys never leave the machine, and Memory and Extensions do not sync |
 | An add-on that belongs to one AI CLI | CLI 擴充 | CLI extension | CLI 拡張 | That CLI's plugins, mods, extensions, hooks, agents, commands, themes |
 | The kind of a CLI extension | vendor's own name, untranslated | vendor's own name | vendor's own name | Shown as a badge: "Claude plugin", "Claude mod", "Codex hook", "Pi extension", … |
 | A CLI's marketplace | CLI 擴充來源 | CLI extension source | CLI 拡張のソース | Claude, Codex, Droid … marketplaces; only Navide's is called a marketplace in prose |
@@ -27,7 +27,8 @@ The rule behind every term: **name a thing by who owns its files.**
 - **One exception, the CLI extensions page.** The Settings page that lists
   CLI extensions is shown as **Extensions / 擴充 / 拡張機能** (the user's call,
   2026-10-11): its nav label, page title and search title, and prose that
-  points at it ("Settings → Extensions", 「設定 → 擴充」, 「設定 → 拡張機能」).
+  points at it ("Settings → Extensions", 「設定 → 擴充」, 「設定 → 拡張機能」,
+  or help prose quoting the label as `<em>Extensions</em>`).
   The guard test allows the bare name there and nowhere else. Navide's own
   packages are still always written Navide Plugins / Navide 外掛.
 - **Never use** 插件, 外掛程式, 擴充功能, 拡張機能 or "extension pack" for
@@ -54,6 +55,19 @@ patterns are NFC-normalized, word boundaries mean "no letter, digit or
 underscore next to it" in any script, and Latin and Cyrillic terms match
 case-insensitively. vi-VN strings must already be NFC, and fr-FR needs a
 no-break space before `: ; ? !`.
+
+## Page names under Agent Assets
+
+The Settings sidebar is the source of truth for these page names (the
+user's call, 2026-10-26: 「命名統一，選單的名稱是對的」). A page's title, its
+in-page heading, its search title, its row in Navide Cloud › Sync and any
+prose or doc that names the page use the sidebar label of that locale,
+word for word: **MCP, Skills, Prompts, Memory, Credentials & Keys,
+Extensions** (zh-TW: MCP、技能、Prompt 技能、記憶、憑證與金鑰、擴充; ja-JP:
+MCP、スキル、プロンプト、メモリ、認証情報とキー、拡張機能). Write the i18n
+value once under `settings.nav.*` and keep the other keys equal to it; the
+key names stay as they are. What a page *lists* keeps its own noun: prompt
+skills, instruction files, CLI extensions.
 
 ## Capitalization (en-US)
 

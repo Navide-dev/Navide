@@ -1576,7 +1576,7 @@
           "summary": "Tạo, sửa, bật, tắt và xem các skill agent do ứng dụng quản lý."
         },
         "prompts": {
-          "title": "Skill prompt",
+          "title": "Prompt",
           "summary": "Tạo và sửa các skill prompt mà pane CLI có thể dùng từ nút loop của nó."
         },
         "memory": {
@@ -3123,7 +3123,7 @@
           "p11": "Khối đầu tiên trong Cài đặt ▸ Navide Cloud tên là Đồng bộ. <strong>Đây không phải một tab riêng</strong> — mà là phần trên cùng của chính trang này. Mỗi phạm vi đồng bộ được có một hàng với công tắc; bật một phạm vi lên thì phạm vi đó sẽ giống nhau trên mọi thiết bị đăng nhập <strong>cùng một tài khoản</strong>. Bản ghi được <strong>mã hóa trên máy này</strong>, và máy chủ chỉ lưu bản mã mà nó không có khóa.",
           "sync": {
             "scopes": "<strong>Năm hàng, mỗi hàng ứng với một trang tài nguyên agent và theo thứ tự của thanh bên; bật được ba hàng</strong>: <em>MCP</em> (các máy chủ bạn đã thêm trong Navide; bí mật của chúng được mã hóa trước khi gửi đi), <em>Skill</em> (skill nào đang bật và mỗi skill được gửi cho CLI nào, cùng các tệp của skill tạo trong Navide; skill bạn tự đặt vào thư mục chỉ đồng bộ phần cài đặt) và <em>Prompt</em> (skill prompt và prompt của Loop).",
-            "credentials": "<em>Bộ nhớ</em> và <em>Tiện ích mở rộng CLI</em> <strong>có trong danh sách nhưng bị làm mờ</strong>, và dòng của chúng ghi “chưa đồng bộ được”. Điều này không có nghĩa là “mặc định tắt, chờ bạn bật” — công tắc không di chuyển. Công tắc Bộ nhớ mà phiên bản cũ để ở trạng thái bật vẫn có thể tắt. <em>Thông tin xác thực và khóa</em> hoàn toàn không có hàng nào: thông tin xác thực tài khoản và khóa không bao giờ rời khỏi máy này. Công tắc Thông tin xác thực mà phiên bản cũ để bật được coi là đã tắt. Cài đặt MCP, khi bật đồng bộ, được mã hóa trên máy này trước khi tải lên, và máy chủ không có khóa để giải mã.",
+            "credentials": "<em>Bộ nhớ</em> và <em>Tiện ích mở rộng</em> <strong>có trong danh sách nhưng bị làm mờ</strong>, và dòng của chúng ghi “chưa đồng bộ được”. Điều này không có nghĩa là “mặc định tắt, chờ bạn bật” — công tắc không di chuyển. Công tắc Bộ nhớ mà phiên bản cũ để ở trạng thái bật vẫn có thể tắt. <em>Thông tin xác thực và khóa</em> hoàn toàn không có hàng nào: thông tin xác thực tài khoản và khóa không bao giờ rời khỏi máy này. Công tắc Thông tin xác thực mà phiên bản cũ để bật được coi là đã tắt. Cài đặt MCP, khi bật đồng bộ, được mã hóa trên máy này trước khi tải lên, và máy chủ không có khóa để giải mã.",
             "states": "Bên dưới khối nêu rõ hai trạng thái: <em>chưa kết nối</em> (các phạm vi bạn đã bật sẽ bắt kịp khi liên kết trở lại) và <em>thiết bị này chưa có khóa đồng bộ</em> (không tải lên gì cho đến khi có khóa). Ngoài ra có nút <em>Đồng bộ ngay</em>, chỉ bật khi có kết nối.",
             "key": "<strong>Khóa đồng bộ được hiển thị bằng 8 ký tự đầu của ID</strong>, không bao giờ hiện chính khóa. <em>Xoay vòng khóa</em> cần <strong>nhấp hai lần</strong>: lần đầu biến nút thành <em>Xoay vòng ngay</em> và thêm <em>Hủy</em> bên cạnh. Đổi khóa sẽ cho khóa hiện tại ngừng dùng, niêm phong lại mọi bản ghi đã đồng bộ bằng khóa mới và trao khóa mới cho các thiết bị khác của bạn vào lần trao đổi khóa tiếp theo — đó là việc cần làm với khóa mà bạn nghĩ đã bị lộ.",
             "legacy": "<em>Dùng cho tài khoản này</em> chỉ xuất hiện khi thiết bị này giữ một khóa đồng bộ từ trước khi có liên kết tài khoản <em>và</em> tài khoản này chưa có khóa. Đây là lựa chọn một lần: nếu không dùng khóa đó, bạn không đọc được những gì đã đồng bộ bằng khóa ấy, còn nếu tạo khóa mới thay thế thì các bản ghi đó sẽ vĩnh viễn không đọc được.",
@@ -5562,7 +5562,7 @@
             "legend": {
               "nav": {
                 "label": "Thanh bên của Cài đặt",
-                "text": "MCP nằm trong Tài nguyên agent, cùng với Skills, Prompts và Bộ nhớ."
+                "text": "MCP nằm trong Tài nguyên agent, cùng với Skill, Prompt và Bộ nhớ."
               },
               "actions": {
                 "label": "Thao tác trên thanh trên cùng",
@@ -6790,7 +6790,7 @@
         "s7": {
           "title": "Một người, nhiều máy",
           "p1": "Kết nối hai máy chạy hệ điều hành khác nhau bản thân không phải vấn đề nền tảng: đăng nhập Navide Cloud, ghép đôi và nhắn tin giữa các thiết bị đều hoạt động như nhau trên cả ba, và được trình bày trong <strong>Cài đặt và hệ thống</strong>. Phần này chỉ bổ sung những gì thay đổi khi các máy không cùng nền tảng.",
-          "p2": "Trong <strong>Cài đặt ▸ Navide Cloud</strong>, danh sách đồng bộ cho phép bật ba thứ: MCP, Skill và Prompt. <em>Bộ nhớ</em> và <em>tiện ích mở rộng CLI</em> cũng có trong danh sách, nhưng bị làm mờ và được mô tả là “Chưa đồng bộ được.”; công tắc bộ nhớ mà phiên bản cũ để bật vẫn có thể tắt được. Không có mục cho thông tin xác thực: thông tin xác thực của tài khoản CLI chỉ được lưu trên máy tính này và không bao giờ được đồng bộ.",
+          "p2": "Trong <strong>Cài đặt ▸ Navide Cloud</strong>, danh sách đồng bộ cho phép bật ba thứ: MCP, Skill và Prompt. <em>Bộ nhớ</em> và <em>Tiện ích mở rộng</em> cũng có trong danh sách, nhưng bị làm mờ và được mô tả là “Chưa đồng bộ được.”; công tắc bộ nhớ mà phiên bản cũ để bật vẫn có thể tắt được. Không có mục <em>Thông tin xác thực và khóa</em>: thông tin xác thực của tài khoản CLI chỉ được lưu trên máy tính này và không bao giờ được đồng bộ.",
           "note": "Những thứ vốn không bao giờ đi theo bạn: bản cài và phần đăng nhập của từng CLI, thông tin xác thực (lưu trong kho bảo mật riêng của từng nền tảng, với định dạng không trao đổi được) và mọi đường dẫn tuyệt đối. Máy thứ hai cần tự cài CLI và tự đăng nhập."
         },
         "mock": {
@@ -7249,7 +7249,7 @@
       "scope-hint-mcp": "Máy chủ MCP bạn đã thêm trong Navide. Bí mật của chúng được mã hóa trước khi rời máy.",
       "scope-hint-skills": "Skill nào đang bật và mỗi skill đi tới CLI nào, cùng các tệp của skill tạo trong Navide (skill lớn được chuyển dưới dạng blob mã hóa). Skill bạn tự đặt vào thư mục chỉ đồng bộ cài đặt.",
       "scope-hint-memory": "Các tệp hướng dẫn chung như ~/.claude/CLAUDE.md. Tệp bên trong dự án vẫn đi theo git.",
-      "scope-credentials": "Thông tin xác thực",
+      "scope-credentials": "Thông tin xác thực và khóa",
       "sealed": "(thông tin xác thực — không hiển thị)",
       "key-id": "Khóa đồng bộ {id}",
       "rotate": "Xoay vòng khóa",
@@ -7387,7 +7387,7 @@
       }
     },
     "memory": {
-      "title": "Tệp hướng dẫn CLI",
+      "title": "Bộ nhớ",
       "intro": "Mọi CLI đều đọc một tệp hướng dẫn trước khi bắt đầu làm việc — CLAUDE.md, AGENTS.md, QWEN.md, quy tắc .cursor. Mỗi tệp được liệt kê một lần, kèm mọi CLI tải nó và có thể sửa ngay tại chỗ.",
       "scope-user": "Cấp người dùng",
       "scope-project": "Cấp dự án",
@@ -7421,7 +7421,7 @@
       "error-save": "Không lưu được tệp này. Bản nháp của bạn vẫn còn trong trình soạn thảo."
     },
     "prompts": {
-      "title": "Skill prompt",
+      "title": "Prompt",
       "intro": "Các chỉ thị hoàn chỉnh dùng lại được mà pane CLI có thể dùng từ nút ∞ của nó. Một skill là một prompt hoàn chỉnh — chọn skill sẽ thay thế prompt, không bao giờ nối thêm vào prompt khác. Chỉ skill mặc định chạy dạng loop; mọi skill khác chỉ được gửi một lần.",
       "new": "Skill mới",
       "new-name": "Skill mới",

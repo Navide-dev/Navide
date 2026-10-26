@@ -3,7 +3,7 @@
 // (docs/en-US/convenience-features.md). The backend owns the registry, the
 // ledger and the log (`convenience.*` RPC, `convenience.changed` broadcast);
 // this module mirrors `convenience.list` for the announcements centre and the
-// overview in Settings → CLI Extensions.
+// overview in Settings → Extensions.
 //
 // Module-level singleton state, like useEvolve: App.vue calls
 // useConvenience(backend) once, which subscribes to the broadcast and feeds

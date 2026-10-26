@@ -6,7 +6,7 @@ import { consumeConvenienceOverviewRequest, useConvenienceState } from '../compo
 import ConvenienceOverview from './ConvenienceOverview.vue'
 import { convenienceText } from '../lib/convenienceText'
 
-// Settings → CLI Extensions: what each AI CLI installed for itself, as the
+// Settings → Extensions: what each AI CLI installed for itself, as the
 // backend's `cli_extensions.list` reflects it. Read-only on purpose (Phase 1 of
 // the CLI extensions plan): the only button rescans. Terms follow
 // docs/en-US/glossary.md — the vendor's own type label is shown untranslated.
