@@ -24,7 +24,7 @@ dependencies = [
     # Every advisory against 46.0.3 sits in code this backend never calls
     # (X.509 verification, PKCS#7/CMS, the `ec` module); any future use of
     # those lands on the vulnerable version on Windows on Arm first.
-    "cryptography==46.0.3; sys_platform == 'win32' and platform_machine == 'ARM64'",
+    "cryptography==50.0.2; sys_platform == 'win32' and platform_machine == 'ARM64'",
     "fastapi>=0.115",
     "mammoth>=1.12.0",
     # Pinned below 2.0: 1.28.1 carries the PYSEC-2026-3481/3482/3483 fixes,
