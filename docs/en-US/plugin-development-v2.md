@@ -2671,6 +2671,13 @@ Scaffolding, per-target backend packaging, signing, sign-in and publishing
 to the Navide Marketplace are covered step by step in
 [Publishing to the Navide Marketplace](marketplace-publishing.md).
 
+An agent learns this workflow from the skill that ships with Navide: it calls
+`skills_prepare_install` with the source `navide:plugin-authoring`, and the
+user approves the install in the main window like any other skill. The skill
+lives at `backend/agent_team_backend/bundled_skills/plugin-authoring/SKILL.md`
+and summarises this document; change it in the same pull request as any change
+here that it describes.
+
 There is no `navide-plugin dev` command and no in-app hot-reload loop. Test a
 backend with `navide-plugin dev-backend`, whose Host bridge refuses every
 request, and test the complete package inside Navide by loading its folder

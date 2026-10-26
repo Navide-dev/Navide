@@ -9682,6 +9682,7 @@
     "queue": "{count} đang chờ",
     "requester": "Người yêu cầu",
     "source": "Nguồn",
+    "source-bundled": "Đi kèm Navide ({name})",
     "digest": "Mã băm",
     "targets": "Phân phối",
     "targets-all": "Mọi CLI đã kết nối",

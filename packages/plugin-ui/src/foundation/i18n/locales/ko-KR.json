@@ -9682,6 +9682,7 @@
     "queue": "{count}개 대기 중",
     "requester": "요청자",
     "source": "출처",
+    "source-bundled": "Navide 기본 제공 ({name})",
     "digest": "다이제스트",
     "targets": "전달 대상",
     "targets-all": "연결된 모든 CLI",

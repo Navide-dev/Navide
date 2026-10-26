@@ -9682,6 +9682,7 @@
     "queue": "{count} pendientes",
     "requester": "Solicitado por",
     "source": "Origen",
+    "source-bundled": "Incluido con Navide ({name})",
     "digest": "Resumen criptográfico",
     "targets": "Entrega",
     "targets-all": "Todas las CLI conectadas",

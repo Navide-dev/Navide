@@ -9682,6 +9682,7 @@
     "queue": "{count} ausstehend",
     "requester": "Angefordert von",
     "source": "Quelle",
+    "source-bundled": "Mit Navide ausgeliefert ({name})",
     "digest": "Prüfsumme",
     "targets": "Zustellung",
     "targets-all": "Alle angebundenen CLIs",

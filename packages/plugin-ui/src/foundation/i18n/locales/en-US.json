@@ -9682,6 +9682,7 @@
     "queue": "{count} pending",
     "requester": "Requested by",
     "source": "Source",
+    "source-bundled": "Bundled with Navide ({name})",
     "digest": "Digest",
     "targets": "Delivery",
     "targets-all": "All wired CLIs",

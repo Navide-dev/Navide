@@ -9682,6 +9682,7 @@
     "queue": "{count} 筆待處理",
     "requester": "請求者",
     "source": "來源",
+    "source-bundled": "Navide 內建（{name}）",
     "digest": "摘要值",
     "targets": "投遞目標",
     "targets-all": "所有已接線的 CLI",
