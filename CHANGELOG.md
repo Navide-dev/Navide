@@ -70,6 +70,12 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Navide plugins (0.2.32): an update's permission diff now says, under a "Declared scope (informational)" item, that Navide does not enforce a declared scope and that a Navide plugin with file access can still read and change files outside it (#682). One new string in all 11 interface languages.
 
+- Navide plugins (0.2.32): when turning third-party native backends off cannot be saved, the backends still stop at once, and Navide now retries the save after 250 ms, 1 s and 2 s, stopping if the switch is turned on meanwhile (#684). If every attempt fails, Settings → Navide Plugins → Developer and native code shows the real state of the switch (off) and a lasting notice under it saying that they are off for now, that this was not saved and that they will be on again after Navide restarts, with Try Again. The notice is held in memory only. The `plugins:nativeBackends` overviews carry an optional `offUnsaved` field while it holds. Two new strings in all 11 interface languages.
+
+- Navide plugins (0.2.32): a Developer Mode folder's info card now says what asks for consent again (#684): changing the folder's files, its native backend program included, does not; changing its declared permissions or backend does, and the plugin is unloaded until you consent again. This is how it already worked; the plugin development guide and the user guides (en-US, zh-TW, ja-JP) say the same. One new string in all 11 interface languages.
+
+- Navide plugins (0.2.32): when approving an install from a file fails while Navide still holds the prepared copy of that file (for example consent was missing or replacing was not confirmed), the approve button stays enabled and the dialog says the file is still ready, so you can approve it again without choosing it again (#686). When the copy is gone, or an older Host cannot say, the dialog asks for the file again as before. One new string in all 11 interface languages.
+
 - Backend (0.2.32): an automatic restart after the backend crashes no longer writes an empty list of approved plugin backends; it passes the same list as a normal start (#666). Nothing reads that list for a decision today, so there is no visible change.
 
 ## [0.2.31] — 2026-10-26 — signed release

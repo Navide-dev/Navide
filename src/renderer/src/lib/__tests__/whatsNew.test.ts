@@ -350,6 +350,7 @@ describe('0.2.32 — secrets stay on this machine, Paste Credential removed', ()
     expect(all).toContain('Their values never leave this machine')
     expect(all).toContain('Needs setup')
     expect(all).toContain('are not deleted by this release')
+    expect(all).toContain('only if it still runs the same command and arguments, or the same URL')
   })
 
   it('names the Agent Assets safeguards and the background AI CLI sessions', () => {
