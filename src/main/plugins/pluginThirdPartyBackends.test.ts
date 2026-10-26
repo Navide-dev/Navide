@@ -16,6 +16,7 @@ import {
   consentedAgentMethods,
   readInstalledManifestV2,
   nativeBackendConsentText,
+  preInstallConsentCandidates,
   ThirdPartyBackendController,
   thirdPartyBackendLaunchSpec,
   type NativeBackendConsentPrompt,
@@ -1059,6 +1060,114 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('install-time preflight', () => {
     expect(await controller({ probe: { platform: 'win32', sandboxExec: () => null, bubblewrap: () => null } })
       .instance.preflightAdmission(spec)).toBeNull()
     expect(allow).not.toHaveBeenCalled()
+  })
+})
+
+describe.skipIf(POSIX_SANDBOX_SKIPPED)('packages installed before 0.2.31 (0.2.32 migration)', () => {
+  const installed = [{ pluginId: 'acme.indexer', packageVersion: '1.0.0' }]
+  beforeEach(() => {
+    // Installed by 0.2.30: no install consent, no consent.
+    store.forget('acme.indexer')
+  })
+
+  it('allows it without a prompt, records the consent as the migration\'s and says so on its row', async () => {
+    expect(store.migratePreInstallConsent(installed)).toEqual(['acme.indexer'])
+    const { instance } = controller({ promptConsent: deny })
+    const spec = writePackage()
+    expect(await instance.status(spec)).toMatchObject({ status: 'needs-consent', allowedBy: 'pre-0.2.31-install' })
+    await instance.admit(spec)
+    expect(deny).not.toHaveBeenCalled()
+    expect(store.record('acme.indexer').consent).toMatchObject({ packageVersion: '1.0.0', grantedBy: 'pre-0.2.31-install' })
+    expect(await instance.status(spec)).toMatchObject({ status: 'ready', allowedBy: 'pre-0.2.31-install' })
+    // Kept across a restart.
+    const reloaded = new NativeBackendStore(join(root, 'store'))
+    expect(reloaded.record('acme.indexer').consent?.grantedBy).toBe('pre-0.2.31-install')
+    expect(reloaded.snapshot().preInstallConsentMigratedAt).toEqual(expect.any(String))
+  })
+
+  it('runs once per profile: a package installed later without an install consent is asked', async () => {
+    expect(store.migratePreInstallConsent([])).toEqual([])
+    expect(new NativeBackendStore(join(root, 'store')).migratePreInstallConsent(installed)).toEqual([])
+    store = new NativeBackendStore(join(root, 'store'))
+    const { instance } = controller({ promptConsent: deny })
+    await refusal(instance.admit(writePackage()))
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('never grants a package whose consent the user revoked', async () => {
+    store.grantConsent('acme.indexer', { binarySha256: 'b'.repeat(64), permissionsKey: '{}', packageVersion: '1.0.0' })
+    store.revokeConsent('acme.indexer')
+    expect(store.migratePreInstallConsent(installed)).toEqual([])
+    expect(store.record('acme.indexer')).not.toHaveProperty('installConsent')
+    const { instance } = controller({ promptConsent: deny })
+    expect((await refusal(instance.admit(writePackage()))).message).toBe('the user did not allow the native backend')
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks again when the content changed after the migrated consent', async () => {
+    store.migratePreInstallConsent(installed)
+    const { instance } = controller({ promptConsent: allow })
+    await instance.admit(writePackage({}, 'binary-v1'))
+    expect(allow).not.toHaveBeenCalled()
+    const changed = writePackage({}, 'binary-v2')
+    expect(await instance.status(changed)).toMatchObject({ changedSinceConsent: true })
+    expect(await instance.status(changed)).not.toHaveProperty('allowedBy')
+    await instance.admit(changed)
+    expect(allow).toHaveBeenCalledTimes(1)
+    expect(allow.mock.calls[0][0]).toMatchObject({ update: true })
+    // The user's own answer replaces the migration's mark.
+    expect(store.record('acme.indexer').consent).not.toHaveProperty('grantedBy')
+  })
+
+  it('grants nothing while the global switch is off, and does not run it later', async () => {
+    store.setEnabled(false)
+    expect(store.migratePreInstallConsent(installed)).toEqual([])
+    const { instance } = controller({ promptConsent: deny })
+    const spec = writePackage()
+    expect((await refusal(instance.admit(spec))).message).toBe('third-party native backends are turned off')
+    expect(deny).not.toHaveBeenCalled()
+    store.setEnabled(true)
+    expect(store.migratePreInstallConsent(installed)).toEqual([])
+    await refusal(instance.admit(spec))
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves Developer Mode folders, Plans and first-party backends out', async () => {
+    const entry = (pluginId: string, backend = true): PluginActivationCatalogEntry => ({
+      pluginId,
+      packageVersion: '1.0.0',
+      packageDir: join(root, pluginId),
+      views: [],
+      ...(backend ? { backend: { entryFile: join(root, pluginId, 'b'), protocolVersion: 1, activation: 'startup' as const } } : {}),
+    })
+    expect(preInstallConsentCandidates(
+      [entry('acme.indexer'), entry('acme.folder'), entry('navide.plans'), entry('navide.browser'), entry('acme.viewonly', false)],
+      new Set(['acme.folder']),
+    )).toEqual([{ pluginId: 'acme.indexer', packageVersion: '1.0.0' }])
+    // A folder left out keeps being asked under its folder-bound rule.
+    store.migratePreInstallConsent([])
+    const { instance } = controller({ promptConsent: deny })
+    await refusal(instance.admit(writePackage()))
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves an install of 0.2.31 or later as it was', async () => {
+    store.noteInstallConsent('acme.indexer', '1.0.0')
+    expect(store.migratePreInstallConsent(installed)).toEqual([])
+    expect(store.record('acme.indexer').installConsent).toEqual({ packageVersion: '1.0.0' })
+    const { instance } = controller({ promptConsent: deny })
+    const spec = writePackage()
+    await instance.admit(spec)
+    expect(deny).not.toHaveBeenCalled()
+    expect(store.record('acme.indexer').consent).not.toHaveProperty('grantedBy')
+    expect(await instance.status(spec)).not.toHaveProperty('allowedBy')
+  })
+
+  it('does not write over a decision file it could not read', () => {
+    const file = join(root, 'store', 'native-backends.json')
+    writeFileSync(file, '{"schemaVersion":1,"enabled":true,"plugins":', { mode: 0o600 })
+    expect(new NativeBackendStore(join(root, 'store')).migratePreInstallConsent(installed)).toEqual([])
+    expect(readFileSync(file, 'utf8')).toBe('{"schemaVersion":1,"enabled":true,"plugins":')
   })
 })
 

@@ -1894,6 +1894,7 @@
         "disable": "Deaktivieren",
         "enable_plugin": "Aktivieren",
         "changed": "Sein nativer Code oder seine Berechtigungen haben sich geändert, seit Sie es erlaubt haben.",
+        "allowedPreInstall": "Ohne Nachfrage erlaubt: Es wurde vor Navide 0.2.31 installiert, das die Zustimmung bei der Installation noch nicht gespeichert hat.",
         "writeAllowed": "Darf Dateien in {path} ändern",
         "revoke": "Widerrufen",
         "violation": "Nach Überschreiten seines Limits für {kind} beendet.",

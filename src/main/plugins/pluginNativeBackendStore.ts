@@ -24,7 +24,14 @@ export interface NativeBackendConsent {
   permissionsKey: string
   packageVersion: string
   grantedAt: string
+  /** Set when the consent was not the user's own answer but the 0.2.32
+   * migration of a package installed before 0.2.31 (see
+   * migratePreInstallConsent). A later consent of the user drops it. */
+  grantedBy?: typeof PRE_INSTALL_CONSENT
 }
+
+/** How a consent given by the pre-0.2.31 install migration is marked. */
+export const PRE_INSTALL_CONSENT = 'pre-0.2.31-install'
 
 /** DB3: workspaces where the user allowed agent write-risk tools of one
  * package version under one consent. A new version or consent drops it. */
@@ -43,7 +50,7 @@ export interface NativeBackendPluginRecord {
   /** 0.2.31: the user confirmed the install dialog of this version, which
    * discloses its native backend, so its first start counts as consent. A
    * package installed earlier, or of another version, is asked instead. */
-  installConsent?: { packageVersion: string }
+  installConsent?: { packageVersion: string; grantedBy?: typeof PRE_INSTALL_CONSENT }
   disabled?: boolean
   /** Canonical workspace paths where workspace writes are allowed. */
   workspaceWrite?: string[]
@@ -73,6 +80,9 @@ export interface NativeBackendState {
   enabled: boolean
   plugins: Record<string, NativeBackendPluginRecord>
   agentTools?: AgentToolSwitches
+  /** 0.2.32: when migratePreInstallConsent ran (ISO 8601). Absent = it has
+   * not run on this profile yet. */
+  preInstallConsentMigratedAt?: string
 }
 
 const FILE_NAME = 'native-backends.json'
@@ -95,7 +105,10 @@ function parseConsent(value: unknown): NativeBackendConsent | undefined {
     typeof packageVersion !== 'string' ||
     typeof grantedAt !== 'string'
   ) return undefined
-  return { binarySha256, permissionsKey, packageVersion, grantedAt }
+  return {
+    binarySha256, permissionsKey, packageVersion, grantedAt,
+    ...(value.grantedBy === PRE_INSTALL_CONSENT ? { grantedBy: PRE_INSTALL_CONSENT } : {}),
+  }
 }
 
 function parseAgentToolWrite(value: unknown): AgentToolWriteGrant | undefined {
@@ -116,7 +129,10 @@ function parseState(value: unknown): NativeBackendState {
     if (consent) record.consent = consent
     if (raw.consentRevoked === true) record.consentRevoked = true
     if (isRecord(raw.installConsent) && typeof raw.installConsent.packageVersion === 'string') {
-      record.installConsent = { packageVersion: raw.installConsent.packageVersion }
+      record.installConsent = {
+        packageVersion: raw.installConsent.packageVersion,
+        ...(raw.installConsent.grantedBy === PRE_INSTALL_CONSENT ? { grantedBy: PRE_INSTALL_CONSENT } : {}),
+      }
     }
     if (raw.disabled === true) record.disabled = true
     if (Array.isArray(raw.workspaceWrite)) {
@@ -137,13 +153,21 @@ function parseState(value: unknown): NativeBackendState {
   const agentTools = isRecord(value.agentTools)
     ? { enabled: value.agentTools.enabled === true, externalCallers: value.agentTools.externalCallers === true }
     : undefined
-  return { schemaVersion: 1, enabled: value.enabled === true, plugins, ...(agentTools ? { agentTools } : {}) }
+  const migratedAt = typeof value.preInstallConsentMigratedAt === 'string' ? value.preInstallConsentMigratedAt : undefined
+  return {
+    schemaVersion: 1, enabled: value.enabled === true, plugins,
+    ...(agentTools ? { agentTools } : {}),
+    ...(migratedAt !== undefined ? { preInstallConsentMigratedAt: migratedAt } : {}),
+  }
 }
 
 export class NativeBackendStore {
   private readonly persistence: OwnerOnlyJsonPersistence
   private readonly file: string
   private state: NativeBackendState
+  /** False when the file exists but could not be read: nothing is migrated
+   * into it (a save would replace what could not be read). */
+  private readable = true
 
   constructor(directory: string) {
     this.persistence = new OwnerOnlyJsonPersistence(directory, MAX_BYTES, MAX_BYTES)
@@ -156,10 +180,16 @@ export class NativeBackendStore {
     // the switch is on. Anything unreadable still reads as nothing allowed.
     const directory = this.persistence.ensureDirectory(false)
     if (directory === 'missing') return emptyState(true)
+    this.readable = false
     if (directory !== 'ready') return emptyState()
     const read = this.persistence.read(this.file, 'native backend decisions')
-    if (read.kind === 'missing') return emptyState(true)
-    return read.kind === 'present' ? parseState(read.value) : emptyState()
+    if (read.kind === 'missing') {
+      this.readable = true
+      return emptyState(true)
+    }
+    if (read.kind !== 'present') return emptyState()
+    this.readable = isRecord(read.value) && read.value.schemaVersion === 1 && isRecord(read.value.plugins)
+    return parseState(read.value)
   }
 
   /**
@@ -237,6 +267,40 @@ export class NativeBackendStore {
       delete record.consentRevoked
       return { ...record, installConsent: { packageVersion } }
     })
+  }
+
+  /**
+   * 0.2.32, once per profile: count the packages installed before 0.2.31 as
+   * consented, as 0.2.31 does for its own installs. Before 0.2.31 no install
+   * recorded `installConsent`, and nothing on disk tells such an install from
+   * a 0.2.31 one that recorded none; so a package counts when, the first time
+   * this runs, it is installed (`installed`: the caller leaves out Developer
+   * Mode folders) and has no consent, no install consent and no revocation.
+   * Its record gets an install consent marked PRE_INSTALL_CONSENT for that
+   * version; the first start then records the consent like any install
+   * consent (requestConsent). With the global switch off nothing is granted
+   * (the user turned every native backend off: each is asked once it is on).
+   * Never runs again once it ran; a file that could not be read is left
+   * alone and the migration waits for a readable one. Returns the ids it
+   * granted. A failed save throws and the next start tries again.
+   */
+  migratePreInstallConsent(
+    installed: ReadonlyArray<{ pluginId: string; packageVersion: string }>,
+    now = new Date(),
+  ): string[] {
+    if (!this.readable || this.state.preInstallConsentMigratedAt !== undefined) return []
+    const plugins = { ...this.state.plugins }
+    const granted: string[] = []
+    if (this.state.enabled) {
+      for (const { pluginId, packageVersion } of installed) {
+        const record = plugins[pluginId] ?? {}
+        if (record.consent || record.installConsent || record.consentRevoked) continue
+        plugins[pluginId] = { ...record, installConsent: { packageVersion, grantedBy: PRE_INSTALL_CONSENT } }
+        granted.push(pluginId)
+      }
+    }
+    this.save({ ...this.state, plugins, preInstallConsentMigratedAt: now.toISOString() })
+    return granted
   }
 
   /** DB3: the user allowed agent write-risk tools of this exact package version,

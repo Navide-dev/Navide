@@ -16,7 +16,12 @@ import {
   type PlansBridgeRequest,
   type PlansFilesystemPort,
 } from './plansBridge'
-import { firstPartyBridgePorts, isFirstPartyAgentToolActivation, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
+import {
+  firstPartyBridgePorts,
+  isFirstPartyAgentToolActivation,
+  isFirstPartyAgentToolPlugin,
+  isFirstPartyBackendPlugin,
+} from './pluginFirstPartyBackends'
 import { validateAgentsOperation } from './agentsCapability'
 import {
   createHostSandboxProbe,
@@ -38,7 +43,7 @@ import {
   type SandboxIdentity,
 } from './pluginBackendResourceWatchdog'
 import type { PluginResourceDecision, PluginResourceDecisionRow } from '../../shared/pluginResourceDecision'
-import type { NativeBackendStore } from './pluginNativeBackendStore'
+import { PRE_INSTALL_CONSENT, type NativeBackendStore } from './pluginNativeBackendStore'
 import { OFFICIAL_RECEIPT_NAME, type PluginActivationCatalogEntry } from './installedPlugins'
 import {
   REGISTRY_ARTIFACT_NAME,
@@ -166,6 +171,21 @@ const FIRST_PARTY_WRITE_GRANT = 'first-party'
 const FIRST_PARTY_PORT_NAMESPACE: Partial<Record<PlansBridgePort, PluginSystemNamespace>> = {
   filesystem: 'fs',
   web: 'web',
+}
+
+/** The installed packages the 0.2.32 pre-0.2.31 install migration looks at
+ * (NativeBackendStore.migratePreInstallConsent): every installed backend
+ * that goes through the third-party gate, except a Developer Mode folder's,
+ * which keeps its folder-bound consent. */
+export function preInstallConsentCandidates(
+  catalog: readonly PluginActivationCatalogEntry[],
+  developerFolderIds: ReadonlySet<string>,
+): Array<{ pluginId: string; packageVersion: string }> {
+  return catalog
+    .filter((activation) =>
+      activation.backend !== undefined && activation.pluginId !== 'navide.plans' &&
+      !isFirstPartyBackendPlugin(activation.pluginId) && !developerFolderIds.has(activation.pluginId))
+    .map((activation) => ({ pluginId: activation.pluginId, packageVersion: activation.packageVersion }))
 }
 
 /**
@@ -409,6 +429,10 @@ export interface NativeBackendStatusRow {
   lastViolation?: ResourceViolation
   /** Declared shell mode, so the panel keeps the high-risk grant visible. */
   shell?: 'allowlist' | 'full'
+  /** Allowed without the user's answer: installed before 0.2.31 (the 0.2.32
+   * migration, migratePreInstallConsent). Set while that grant is pending or
+   * is the consent that covers this version. */
+  allowedBy?: typeof PRE_INSTALL_CONSENT
 }
 
 /** One view's child stdout waiting for a newline, from the backend usage
@@ -1034,14 +1058,16 @@ export class ThirdPartyBackendController {
     // changed since (an update, a rollback, edited files: the install-time
     // disclosure of those does not always show the backend change), one
     // whose consent was taken away (revoked, or forgotten to fail closed),
-    // one installed before 0.2.31, and a version no install dialog showed.
+    // and a version no install dialog showed. 0.2.32: a package installed
+    // before 0.2.31 counts like an install consent (the store's
+    // migratePreInstallConsent), and its consent says so.
     const record = this.store.record(spec.pluginId)
     if (
       record.consent === undefined &&
       !record.consentRevoked &&
       record.installConsent?.packageVersion === spec.packageVersion
     ) {
-      this.recordConsent(spec, digest)
+      this.recordConsent(spec, digest, record.installConsent.grantedBy)
       return
     }
     const identity = `${spec.pluginId}\n${digest}\n${backendPermissionsKey(spec)}`
@@ -1072,14 +1098,18 @@ export class ThirdPartyBackendController {
     this.recordConsent(spec, digest)
   }
 
-  private recordConsent(spec: ThirdPartyLaunchSpec, digest: string): void {
+  private recordConsent(spec: ThirdPartyLaunchSpec, digest: string, grantedBy?: typeof PRE_INSTALL_CONSENT): void {
     if (!this.store.isEnabled()) throw unavailable('third-party native backends are turned off')
     if (!this.consentMatches(spec, digest)) {
       this.store.grantConsent(spec.pluginId, {
         binarySha256: digest,
         permissionsKey: backendPermissionsKey(spec),
         packageVersion: spec.packageVersion,
+        ...(grantedBy ? { grantedBy } : {}),
       })
+      if (grantedBy) {
+        console.info(`[plugin-backend] ${spec.pluginId} ${spec.packageVersion} allowed without asking: installed before 0.2.31`)
+      }
       this.noteAgentTools(spec)
       this.options.onConsentGranted?.(spec.pluginId)
     }
@@ -1298,6 +1328,12 @@ export class ThirdPartyBackendController {
       status = matches ? 'ready' : 'needs-consent'
     }
     const lastViolation = this.lastViolation.get(spec.pluginId)
+    const allowedBy = matches
+      ? record.consent?.grantedBy
+      : record.consent === undefined && !record.consentRevoked &&
+        record.installConsent?.packageVersion === spec.packageVersion
+        ? record.installConsent.grantedBy
+        : undefined
     return {
       pluginId: spec.pluginId,
       packageVersion: spec.packageVersion,
@@ -1322,6 +1358,7 @@ export class ThirdPartyBackendController {
           }
         : {}),
       ...(spec.thirdParty.shell ? { shell: spec.thirdParty.shell } : {}),
+      ...(allowedBy ? { allowedBy } : {}),
     }
   }
 

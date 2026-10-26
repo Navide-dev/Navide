@@ -1894,6 +1894,7 @@
         "disable": "停用",
         "enable_plugin": "啟用",
         "changed": "在你允許之後，它的原生程式或權限已變更。",
+        "allowedPreInstall": "未詢問即允許：它是在 Navide 0.2.31 之前安裝的，當時的版本不會記錄安裝同意。",
         "writeAllowed": "可修改 {path} 中的檔案",
         "revoke": "撤銷",
         "violation": "因超過{kind}上限而被停止。",

@@ -213,6 +213,7 @@ import {
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
   packageContentDigest,
+  preInstallConsentCandidates,
   type ThirdPartyLaunchSpec,
   ThirdPartyBackendController,
   type AgentToolWritePrompt,
@@ -1484,6 +1485,19 @@ for (const activation of installedPluginLoad.activationCatalog) {
       }`,
     )
   }
+}
+// 0.2.32, once per profile: the third-party backends installed before 0.2.31
+// (no install recorded its consent then) count as consented, as the
+// installs of 0.2.31 and later do. Developer Mode folders keep their own
+// folder-bound consent.
+try {
+  const granted = nativeBackendStore.migratePreInstallConsent(preInstallConsentCandidates(
+    installedPluginLoad.activationCatalog,
+    new Set(pluginDeveloperModeStore.folders().map((folder) => folder.pluginId)),
+  ))
+  if (granted.length > 0) console.info(`[main] native backends installed before 0.2.31 allowed: ${granted.join(', ')}`)
+} catch (error) {
+  console.warn(`[main] pre-0.2.31 native backend consent not recorded: ${error instanceof Error ? error.message : String(error)}`)
 }
 
 frontendPluginManager.setUiLocaleResolver(() => currentUiLocale())

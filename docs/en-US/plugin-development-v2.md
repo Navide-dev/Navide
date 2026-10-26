@@ -357,10 +357,24 @@ all of these hold, and they are checked again before every restart:
   any package file and turn it into code at run time. Installing is that
   consent: every install path discloses the native backend and its shell
   allowlist before it commits and records the version it installed, so that
-  version's first start records the consent without another dialog. A
-  package installed before 0.2.31, a version no install dialog showed (an
-  agent's update, a rollback) and a package whose consent was revoked or
-  dropped to fail closed are asked before they start. Any new version that changes any
+  version's first start records the consent without another dialog. Since
+  0.2.32 a package installed before 0.2.31 is treated the same way: the
+  first start of 0.2.32 (or later) on a profile looks once at the installed
+  third-party backends (the active version of each; Developer Mode folders
+  are left out), and each one with no consent, no install consent and no
+  revocation gets an install consent for its installed version, marked as
+  given by this migration. Its first start then records the consent without a
+  dialog, the consent keeps that mark, and Settings → Navide Plugins says on
+  its row that it was allowed without asking because it was installed before
+  0.2.31. Nothing on disk tells an install of 0.2.30 or earlier from a 0.2.31
+  install that recorded no install consent, so the migration counts both. It
+  runs once per profile and never again: a package installed later without an
+  install consent is asked, as before. It grants nothing while the global
+  switch is off (the user is then asked per package after turning it on), and
+  waits when the decision file cannot be read. A version no install dialog
+  showed (an agent's update, a rollback) and a package whose consent was
+  revoked or dropped to fail closed are still asked before they start. A
+  Developer Mode folder keeps its folder-bound consent. Any new version that changes any
   file - frontend files included - is staged but not started until the user
   allows it again, in the dialog shown before it starts.
 - The platform sandbox is available. There is no unsandboxed fallback.
