@@ -4241,6 +4241,9 @@ async def memory_list(session: "Session", msg_id: str, msg_type: str, payload: d
     # The scan stats every candidate in the home and the workspace; a thread
     # keeps that file I/O off the loop, as the native MCP scan does.
     files = await asyncio.to_thread(native_memory.scan, None, workspace)
+    # Shown even before Claude has written anything, so the page can say where
+    # its notes for this project will appear.
+    memory_dir = await asyncio.to_thread(native_memory.auto_memory_dir, None, workspace)
     await session.send_json(
         make_response(
             msg_id,
@@ -4249,6 +4252,7 @@ async def memory_list(session: "Session", msg_id: str, msg_type: str, payload: d
                 "files": [f.as_dict() for f in files],
                 "agents": native_memory.agent_targets(),
                 "workspace_path": str(workspace) if workspace else "",
+                "auto_memory_dir": str(memory_dir) if memory_dir else "",
             },
         )
     )

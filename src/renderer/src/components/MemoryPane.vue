@@ -8,6 +8,10 @@
  * but that do not exist yet are listed too, so the page can offer to create
  * them rather than hiding what a CLI would load if it were there.
  *
+ * Claude Code's auto-memory — the notes Claude writes about the workspace by
+ * itself — is listed as a group of its own, so it is never mistaken for a file
+ * the user wrote; it goes through the same read/save/restore path.
+ *
  * Coverage is honest: a CLI that has no instruction file name of its own — the
  * files it loads are whatever its config names — must not look like one Navide
  * knows a path for, so the footer keeps those two states apart.
@@ -36,6 +40,9 @@ interface MemoryFile {
   /** Epoch seconds, 0 when the file does not exist. */
   modified: number
   error: string
+  /** A Claude Code auto-memory file: written by Claude itself, and `relative`
+   *  is relative to the memory folder rather than the workspace. */
+  autoMemory: boolean
 }
 
 /** One CLI vendor and what Navide knows about its instruction file. */
@@ -58,6 +65,8 @@ const { t } = useI18n()
 
 const files = ref<MemoryFile[]>([])
 const agents = ref<AgentTarget[]>([])
+/** Where Claude keeps its auto-memory for this workspace; empty without one. */
+const autoMemoryDir = ref('')
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
@@ -102,6 +111,7 @@ function normalizeFile(value: unknown): MemoryFile | null {
     size: numberValue(value.size),
     modified: numberValue(value.modified),
     error: stringValue(value.error),
+    autoMemory: value.auto_memory === true,
   }
 }
 
@@ -131,7 +141,7 @@ async function reload(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const resp = await props.backend.send<{ files?: unknown; agents?: unknown }>(
+    const resp = await props.backend.send<{ files?: unknown; agents?: unknown; auto_memory_dir?: unknown }>(
       'memory.list',
       workspacePayload(),
     )
@@ -145,6 +155,7 @@ async function reload(): Promise<void> {
     agents.value = (Array.isArray(resp.payload.agents) ? resp.payload.agents : [])
       .map(normalizeAgent)
       .filter((entry): entry is AgentTarget => entry !== null)
+    autoMemoryDir.value = stringValue(resp.payload.auto_memory_dir)
     if (selectedPath.value && !files.value.some((file) => file.path === selectedPath.value)) {
       closeEditor()
     }
@@ -161,14 +172,17 @@ const agentLabels = computed(() => {
   return map
 })
 
-/** The two scopes, always both, so an empty project list explains itself. */
+/** The two scopes, always both, so an empty project list explains itself.
+ *  Claude's auto-memory is kept out of them: it is listed on its own below. */
 const groups = computed(() =>
   (['user', 'project'] as const).map((scope) => ({
     scope,
     label: t(`settings.memory.scope-${scope}`),
-    files: files.value.filter((file) => file.scope === scope),
+    files: files.value.filter((file) => file.scope === scope && !file.autoMemory),
   })),
 )
+
+const autoMemoryFiles = computed(() => files.value.filter((file) => file.autoMemory))
 
 const selectedFile = computed(
   () => files.value.find((file) => file.path === selectedPath.value) ?? null,
@@ -398,6 +412,37 @@ defineExpose({ reload, confirmDiscard })
               </li>
             </ul>
           </section>
+
+          <!-- Claude's auto-memory: written by Claude, editable like the rest. -->
+          <section v-if="props.workspacePath" class="memory-group memory-auto">
+            <h3 class="memory-group-title">
+              {{ t('settings.memory.scope-auto') }}<span class="count">{{ autoMemoryFiles.length }}</span>
+            </h3>
+            <p class="memory-group-note">{{ t('settings.memory.auto-intro') }}</p>
+            <code v-if="autoMemoryDir" class="memory-auto-dir">{{ autoMemoryDir }}</code>
+            <p v-if="autoMemoryFiles.length === 0" class="memory-group-note">
+              {{ t('settings.memory.auto-empty') }}
+            </p>
+            <ul v-else class="memory-list">
+              <li
+                v-for="file in autoMemoryFiles"
+                :key="file.path"
+                class="memory-row"
+                :class="{ active: selectedPath === file.path }"
+              >
+                <button type="button" class="memory-open" :disabled="busy" @click="openFile(file)">
+                  <span class="memory-row-head">
+                    <strong class="memory-relative" v-truncate>{{ file.relative }}</strong>
+                    <span class="memory-tag">{{ t('settings.memory.auto-tag') }}</span>
+                    <span v-if="file.error" class="memory-tag danger">{{ file.error }}</span>
+                  </span>
+                  <span class="memory-row-meta">
+                    {{ formatBytes(file.size) }} · {{ modifiedLabel(file) }}
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </section>
         </template>
 
         <!-- Coverage: which CLIs Navide can point at a file, and which it cannot. -->
@@ -440,6 +485,9 @@ defineExpose({ reload, confirmDiscard })
           >✕</button>
         </header>
         <code class="memory-editor-path">{{ selectedFile.path }}</code>
+        <p v-if="selectedFile.autoMemory" class="memory-editor-hint">
+          {{ t('settings.memory.auto-editor-hint') }}
+        </p>
         <p v-if="!selectedFile.exists" class="memory-editor-hint">
           {{ t('settings.memory.create-hint') }}
         </p>
@@ -536,6 +584,15 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 }
 .memory-group-title .count { font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
 .memory-group-note { margin: 0 4px; color: var(--text-secondary); font-size: var(--font-2xs); }
+.memory-auto { display: flex; flex-direction: column; gap: 6px; }
+.memory-auto .memory-group-title { margin-bottom: 0; }
+.memory-auto-dir {
+  display: block;
+  margin: 0 4px;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
 .memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .memory-row {
   display: flex;
