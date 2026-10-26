@@ -20,7 +20,7 @@ import re
 import time
 from typing import Any, Callable
 
-from . import sync_approvals, sync_engine, sync_keyring
+from . import native_mcp, sync_approvals, sync_engine, sync_keyring
 
 log = logging.getLogger("agent_team_backend.sync_scopes")
 
@@ -716,7 +716,9 @@ def _server_name(item_id: str) -> str:
 
 def _install_only(server: Any) -> Any:
     """An MCP record as it travels: every env and header value empty, the
-    names kept, so the far side can tell which fields it has to fill in."""
+    names kept, so the far side can tell which fields it has to fill in; and
+    a credential inside the url or the args emptied where it stands
+    (``_stripped_url``, ``_stripped_args``)."""
     if not isinstance(server, dict):
         return server
     out = dict(server)
@@ -724,12 +726,18 @@ def _install_only(server: Any) -> Any:
         values = out.get(field_name)
         if isinstance(values, dict):
             out[field_name] = {str(k): "" for k in values}
+    if isinstance(out.get("url"), str):
+        out["url"] = _stripped_url(out["url"])
+    if _string_list(out.get("args")):
+        out["args"] = _stripped_args(out["args"])
     return out
 
 
 def _with_local_values(incoming: dict[str, Any], local: Any) -> dict[str, Any]:
     """*incoming* with whatever values it carried replaced by this machine's
-    own for the same names; a name this machine has no value for is empty."""
+    own for the same names; a name this machine has no value for is empty.
+    A credential emptied in the url or args is filled back from this
+    machine's own copy where everything else there reads the same."""
     out = _install_only(incoming)
     for field_name in _MCP_SECRET_FIELDS:
         values = out.get(field_name)
@@ -737,6 +745,49 @@ def _with_local_values(incoming: dict[str, Any], local: Any) -> dict[str, Any]:
         if not isinstance(values, dict) or not isinstance(have, dict):
             continue
         out[field_name] = {k: have[k] if isinstance(have.get(k), str) else "" for k in values}
+    if not isinstance(local, dict):
+        return out
+    mine = local.get("url")
+    if isinstance(out.get("url"), str) and isinstance(mine, str) and out["url"] == _stripped_url(mine):
+        out["url"] = mine
+    mine = local.get("args")
+    if _string_list(out.get("args")) and _string_list(mine):
+        out["args"] = _args_with_local_values(out["args"], mine)
+    return out
+
+
+def _string_list(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _stripped_url(url: str) -> str:
+    """*url* with its userinfo and secret query values emptied, by the rules
+    the MCP page masks with (``native_mcp._mask_url``); as written when it
+    holds none."""
+    return native_mcp._mask_url(url, placeholder="")
+
+
+def _stripped_args(args: list[str]) -> list[str]:
+    """*args* with every credential ``native_mcp._mask_args`` finds emptied
+    in place (``--token ""``, ``--api-key=``, a ``ghp_…`` argument as ``""``),
+    so each argument keeps its position; the rest as written."""
+    return list(native_mcp._mask_args(tuple(args), placeholder=""))
+
+
+def _args_with_local_values(incoming: list[str], mine: list[str]) -> list[str]:
+    """*incoming* (stripped) with each emptied argument filled from this
+    machine's own *mine* at the same position, when that argument and the one
+    before it (the ``--token`` of ``--token X``) strip to the same text there.
+    One whose surroundings differ stays empty: this machine's credential is
+    not handed to a different flag or endpoint."""
+    stripped = _stripped_args(mine)
+    out = list(incoming)
+    for index, arg in enumerate(incoming):
+        if index >= len(mine) or stripped[index] == mine[index] or arg != stripped[index]:
+            continue
+        if index and (index - 1 >= len(stripped) or incoming[index - 1] != stripped[index - 1]):
+            continue
+        out[index] = mine[index]
     return out
 
 

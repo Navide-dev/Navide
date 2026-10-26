@@ -6818,6 +6818,7 @@
       "no-env": "No environment variables",
       "needs-setup": "Needs setup",
       "fill-locally": "Some values are empty. Fill them in on this machine — env and header values never sync between devices.",
+      "fill-credentials-locally": "Some values in the URL or arguments are empty. If one held a credential, fill it in on this machine — credentials in the URL and arguments never sync between devices.",
       "headers": "Headers",
       "no-headers": "No headers",
       "show": "Show",

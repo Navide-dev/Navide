@@ -6818,6 +6818,7 @@
       "no-env": "Aucune variable d’environnement",
       "needs-setup": "À configurer",
       "fill-locally": "Certaines valeurs sont vides. Renseignez-les sur cet appareil : les valeurs des variables d’environnement et des en-têtes ne sont jamais synchronisées entre appareils.",
+      "fill-credentials-locally": "Certaines valeurs de l’URL ou des arguments sont vides. S’il s’agissait d’un identifiant, renseignez-le sur cet appareil : les identifiants dans l’URL et les arguments ne sont jamais synchronisés entre appareils.",
       "headers": "En-têtes",
       "no-headers": "Aucun en-tête",
       "show": "Afficher",
