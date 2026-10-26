@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop: envia o prompt de loop configurado para este pane",
       "skill-cast-failed": "Não foi possível enviar a skill “{name}” a este pane",
       "skill-cast-busy": "O loop está enviando o próximo prompt: lance “{name}” de novo daqui a pouco",
+      "loop-start-failed": "Não foi possível iniciar o loop com “{name}” neste pane",
       "loop-badge-tooltip": "O prompt de loop foi enviado a este pane: clique para desativar o loop",
       "loop-waiting-tooltip": "Loop pausado: limite da session atingido; retomada automática às {time}. Clique para retomar agora",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -7394,6 +7395,11 @@
       "conflict-title": "Este arquivo foi alterado no disco",
       "conflict-body": "Outro programa — uma CLI ou um editor — alterou este arquivo enquanto você o editava. Salvar agora sobrescreveria essa alteração.",
       "conflict-reload": "Recarregar do disco (descarta seu rascunho)",
+      "discard-confirm": "Descartar as alterações não salvas em {name}?",
+      "previous-kept": "Versão anterior mantida · {when}",
+      "restore-previous": "Restaurar versão anterior",
+      "restore-hint": "Cada salvamento mantém a versão substituída na própria pasta do Navide. Ao restaurar, o texto atual vira a versão anterior, então a restauração pode ser desfeita do mesmo jeito.",
+      "error-restore": "Não foi possível restaurar a versão anterior.",
       "agents-title": "Cobertura das CLIs",
       "agents-mapped": "Mapeadas",
       "agents-mapped-hint": "O Navide sabe onde estas CLIs guardam as instruções.",
@@ -7438,7 +7444,9 @@
       "advanced": "Avançado",
       "send-once": "Enviada uma vez",
       "send-once-hint": "Só a skill padrão é executada em loop; esta é enviada uma vez, sem retomada nem limite de turnos.",
-      "untitled-name": "Skill sem título"
+      "untitled-name": "Skill sem título",
+      "prompt-empty": "Um prompt não pode ficar vazio: o texto anterior foi mantido. Para remover esta skill, use Excluir.",
+      "delete-confirm": "Excluir “{name}”? Não é possível desfazer, e as máquinas que sincronizam prompts também vão removê-la."
     },
     "section": {
       "general-behavior": "Comportamento geral",

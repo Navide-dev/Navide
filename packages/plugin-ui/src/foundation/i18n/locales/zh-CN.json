@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop — 将设置的 Loop 提示词送入此 pane",
       "skill-cast-failed": "无法将技能“{name}”送入此 pane",
       "skill-cast-busy": "Loop 正在送出下一则提示词 — 请稍后再施放“{name}”",
+      "loop-start-failed": "无法在此 pane 以“{name}”启动 Loop",
       "loop-badge-tooltip": "已对此 pane 送出 Loop 提示词 — 点击标签可关闭 Loop",
       "loop-waiting-tooltip": "Loop 暂停 — 已达工作阶段上限；将于 {time} 自动续跑，点击标签可立即续跑",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -7394,6 +7395,11 @@
       "conflict-title": "这个文件在磁盘上被改过",
       "conflict-body": "你编辑的期间，有其他程序（CLI 或编辑器）改过这个文件。现在保存会盖掉对方的修改。",
       "conflict-reload": "重新加载（会放弃你的草稿）",
+      "discard-confirm": "要放弃 {name} 尚未保存的修改吗？",
+      "previous-kept": "已保留上一版 · {when}",
+      "restore-previous": "还原上一版",
+      "restore-hint": "每次保存时，Navide 会把被替换的版本保留在 Navide 自己的文件夹中。还原时，当前内容会成为新的上一版，因此还原也能用同样方式撤销。",
+      "error-restore": "无法还原上一版。",
       "agents-title": "CLI 涵盖范围",
       "agents-mapped": "已对应",
       "agents-mapped-hint": "Navide 知道这些 CLI 的指示档放在哪里。",
@@ -7438,7 +7444,9 @@
       "advanced": "高级",
       "send-once": "单次送出",
       "send-once-hint": "只有默认技能会以 loop 方式运行；这个技能只送出一次，没有续跑词与轮次上限。",
-      "untitled-name": "未命名技能"
+      "untitled-name": "未命名技能",
+      "prompt-empty": "Prompt 不能为空，已保留原本的内容。要移除这个技能，请使用“删除”。",
+      "delete-confirm": "删除“{name}”？此操作无法撤销，同步 prompt 的其他机器也会一并删除。"
     },
     "section": {
       "general-behavior": "一般行为",

@@ -72,6 +72,9 @@ const savedText = ref('')
 const expectedModified = ref(0)
 /** True once a save was refused because the file moved on under the editor. */
 const conflict = ref(false)
+/** The version the last save replaced, kept in Navide's own folder; null when
+ *  there is none to restore. `savedAt` is epoch seconds. */
+const previous = ref<{ savedAt: number; size: number } | null>(null)
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -113,6 +116,11 @@ function normalizeAgent(value: unknown): AgentTarget | null {
       ? value.scopes.filter((item): item is string => typeof item === 'string')
       : [],
   }
+}
+
+function normalizePrevious(value: unknown): { savedAt: number; size: number } | null {
+  if (!isRecord(value)) return null
+  return { savedAt: numberValue(value.saved_at), size: numberValue(value.size) }
 }
 
 function workspacePayload(): Record<string, string> {
@@ -189,12 +197,27 @@ function modifiedLabel(file: MemoryFile): string {
   return new Date(file.modified * 1000).toLocaleString()
 }
 
+const previousLabel = computed(() =>
+  previous.value?.savedAt ? new Date(previous.value.savedAt * 1000).toLocaleString() : '',
+)
+
+/** True when nothing unsaved would be lost, or the user agreed to lose it. */
+function confirmDiscard(): boolean {
+  if (!selectedFile.value || !dirty.value) return true
+  return window.confirm(t('settings.memory.discard-confirm', { name: selectedFile.value.relative }))
+}
+
 async function openFile(file: MemoryFile): Promise<void> {
+  if (!confirmDiscard()) return
+  await loadFile(file)
+}
+
+async function loadFile(file: MemoryFile): Promise<void> {
   error.value = ''
   conflict.value = false
   busy.value = true
   try {
-    const resp = await props.backend.send<{ text?: unknown; modified?: unknown }>('memory.get', {
+    const resp = await props.backend.send<{ text?: unknown; modified?: unknown; previous?: unknown }>('memory.get', {
       path: file.path,
       ...workspacePayload(),
     })
@@ -209,6 +232,7 @@ async function openFile(file: MemoryFile): Promise<void> {
     // A file that does not exist reports no mtime; 0 is what the backend
     // compares against, so creating it twice from two windows still conflicts.
     expectedModified.value = numberValue(resp.payload.modified)
+    previous.value = normalizePrevious(resp.payload.previous)
   } catch (err) {
     error.value = String((err as Error).message ?? err)
   } finally {
@@ -223,7 +247,7 @@ async function save(): Promise<void> {
   conflict.value = false
   busy.value = true
   try {
-    const resp = await props.backend.send<{ modified?: unknown }>('memory.save', {
+    const resp = await props.backend.send<{ modified?: unknown; previous?: unknown }>('memory.save', {
       path: file.path,
       text: draftText.value,
       expected_modified: expectedModified.value,
@@ -240,11 +264,44 @@ async function save(): Promise<void> {
     // Saving moved the file on; adopt the new mtime so a second save in a row
     // is not refused as a conflict with the user's own write.
     expectedModified.value = numberValue(resp.payload?.modified)
+    previous.value = normalizePrevious(resp.payload?.previous)
     await reload()
   } catch (err) {
     error.value = String((err as Error).message ?? err)
   } finally {
     busy.value = false
+  }
+}
+
+/** Write back the version the last save replaced. The backend keeps the text
+ *  it replaces as the new previous version, so this is undone the same way. */
+async function restorePrevious(): Promise<void> {
+  const file = selectedFile.value
+  if (!file || !confirmDiscard()) return
+  error.value = ''
+  conflict.value = false
+  busy.value = true
+  let restored = false
+  try {
+    const resp = await props.backend.send('memory.restore', {
+      path: file.path,
+      expected_modified: expectedModified.value,
+      ...workspacePayload(),
+    })
+    if (!resp.ok) {
+      if (resp.error?.code === 'MEMORY_FILE_CONFLICT') conflict.value = true
+      else error.value = resp.error?.message ?? t('settings.memory.error-restore')
+      return
+    }
+    restored = true
+  } catch (err) {
+    error.value = String((err as Error).message ?? err)
+  } finally {
+    busy.value = false
+  }
+  if (restored) {
+    await loadFile(file)
+    await reload()
   }
 }
 
@@ -254,17 +311,23 @@ function closeEditor(): void {
   savedText.value = ''
   expectedModified.value = 0
   conflict.value = false
+  previous.value = null
+}
+
+/** Cancel and ✕: close, but never drop a draft without asking. */
+function requestClose(): void {
+  if (confirmDiscard()) closeEditor()
 }
 
 /** Re-read the open file, throwing the draft away. Only ever user-initiated. */
 async function reloadFile(): Promise<void> {
   const file = selectedFile.value
-  if (file) await openFile(file)
+  if (file) await loadFile(file)
 }
 
 onMounted(reload)
 
-defineExpose({ reload })
+defineExpose({ reload, confirmDiscard })
 </script>
 
 <template>
@@ -373,7 +436,7 @@ defineExpose({ reload })
             type="button"
             class="memory-editor-close"
             :aria-label="t('action.close')"
-            @click="closeEditor"
+            @click="requestClose"
           >✕</button>
         </header>
         <code class="memory-editor-path">{{ selectedFile.path }}</code>
@@ -387,6 +450,13 @@ defineExpose({ reload })
             {{ t('settings.memory.conflict-reload') }}
           </button>
         </div>
+        <div v-if="previous" class="memory-previous">
+          <strong>{{ t('settings.memory.previous-kept', { when: previousLabel }) }}</strong>
+          <span>{{ t('settings.memory.restore-hint') }}</span>
+          <button type="button" :disabled="busy" @click="restorePrevious">
+            {{ t('settings.memory.restore-previous') }}
+          </button>
+        </div>
         <textarea
           v-model="draftText"
           class="memory-editor-text"
@@ -394,7 +464,7 @@ defineExpose({ reload })
           :aria-label="selectedFile.relative"
         ></textarea>
         <div class="memory-editor-actions">
-          <button type="button" @click="closeEditor">{{ t('action.cancel') }}</button>
+          <button type="button" @click="requestClose">{{ t('action.cancel') }}</button>
           <button
             type="button"
             class="nv-btn nv-btn--primary"
@@ -589,6 +659,18 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 }
 .memory-conflict strong { color: var(--danger-fg); }
 .memory-conflict span { color: var(--text-secondary); line-height: 1.4; }
+.memory-previous {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--bg-subtle);
+  font-size: var(--font-2xs);
+}
+.memory-previous span { color: var(--text-secondary); line-height: 1.4; }
 .memory-editor-text {
   min-height: 320px;
   resize: vertical;

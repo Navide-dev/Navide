@@ -975,6 +975,7 @@
       "loop-tooltip": "Boucle – envoyer le prompt de boucle configuré à ce pane",
       "skill-cast-failed": "Impossible d’envoyer le skill « {name} » à ce pane",
       "skill-cast-busy": "La boucle envoie son prochain prompt – relancez « {name} » dans un instant",
+      "loop-start-failed": "Impossible de démarrer la boucle avec « {name} » dans ce pane",
       "loop-badge-tooltip": "Le prompt de boucle a été envoyé à ce pane – cliquer pour désactiver la boucle",
       "loop-waiting-tooltip": "Boucle en pause – limite de session atteinte ; reprise automatique à {time}. Cliquer pour reprendre maintenant",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -7394,6 +7395,11 @@
       "conflict-title": "Ce fichier a été modifié sur le disque",
       "conflict-body": "Un autre programme – une CLI ou un éditeur – a modifié ce fichier pendant que vous le modifiiez. Enregistrer maintenant écraserait cette modification.",
       "conflict-reload": "Recharger depuis le disque (abandonne votre brouillon)",
+      "discard-confirm": "Abandonner les modifications non enregistrées de {name} ?",
+      "previous-kept": "Version précédente conservée · {when}",
+      "restore-previous": "Restaurer la version précédente",
+      "restore-hint": "Chaque enregistrement conserve la version remplacée dans le dossier de Navide. La restauration conserve le texte actuel comme version précédente, elle peut donc être annulée de la même façon.",
+      "error-restore": "Impossible de restaurer la version précédente.",
       "agents-title": "Couverture des CLI",
       "agents-mapped": "Pris en charge",
       "agents-mapped-hint": "Navide sait où ces CLI rangent leurs instructions.",
@@ -7438,7 +7444,9 @@
       "advanced": "Avancé",
       "send-once": "Envoyé une fois",
       "send-once-hint": "Seul le skill par défaut s’exécute en boucle ; celui-ci est envoyé une seule fois, sans reprise ni limite de tours.",
-      "untitled-name": "Skill sans titre"
+      "untitled-name": "Skill sans titre",
+      "prompt-empty": "Un prompt ne peut pas être vide – le texte précédent a été conservé. Pour retirer ce skill, utilisez Supprimer.",
+      "delete-confirm": "Supprimer « {name} » ? Cette action est irréversible, et les machines qui synchronisent les prompts le supprimeront aussi."
     },
     "section": {
       "general-behavior": "Comportement général",

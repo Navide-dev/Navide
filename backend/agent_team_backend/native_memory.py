@@ -22,6 +22,12 @@ feeds is an editor, not a mirror. Two rules keep that safe:
   file something else has touched since, because these files are edited by
   the CLIs themselves as often as by hand.
 
+These files live outside Navide's own folder, so a save must stay reversible:
+before it replaces a file, the text it is about to overwrite is kept in
+Navide's data dir (``memory-backups``, one previous version per file), and
+``restore_previous`` writes that text back -- through ``save``, so a restore
+can itself be undone the same way.
+
 The unit listed is the *file*, not the CLI, because one file is usually read by
 several CLIs: ``~/.claude/CLAUDE.md`` is claude's own and is also loaded by
 kilo and opencode. A row therefore carries every reader, and the same path is
@@ -47,15 +53,19 @@ nothing, so the failure is quiet. Model them here if that ever bites.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from .applog import app_data_dir
 from .cli_vendors.registry import VENDORS
 
 log = logging.getLogger("agent_team_backend.native_memory")
@@ -63,6 +73,9 @@ log = logging.getLogger("agent_team_backend.native_memory")
 #: An instruction file bigger than this is not something the CLIs load either;
 #: refusing it keeps a stray binary out of the editor.
 FILE_SIZE_LIMIT = 1_000_000
+
+#: Under the app data dir: the previous version of each file a save replaced.
+BACKUP_DIR_NAME = "memory-backups"
 
 USER_SCOPE = "user"
 PROJECT_SCOPE = "project"
@@ -401,17 +414,24 @@ def scan(home: Path | None = None, workspace: Path | None = None) -> list[Memory
 def read(path: str, home: Path | None = None, workspace: Path | None = None) -> dict[str, Any]:
     """The text of one listed file. Raises ``ValueError`` for anything else."""
     target, _scope, _root = _allowed(path, home, workspace)
+    kept = _previous_meta(target)
     if not target.is_file():
-        return {"path": str(target), "text": "", "exists": False}
-    size = target.stat().st_size
-    if size > FILE_SIZE_LIMIT:
-        raise ValueError(f"file is too large to edit ({size} bytes)")
-    return {
-        "path": str(target),
-        "text": target.read_text(encoding="utf-8", errors="replace"),
-        "exists": True,
-        "modified": target.stat().st_mtime,
-    }
+        result: dict[str, Any] = {"path": str(target), "text": "", "exists": False}
+    else:
+        size = target.stat().st_size
+        if size > FILE_SIZE_LIMIT:
+            raise ValueError(f"file is too large to edit ({size} bytes)")
+        result = {
+            "path": str(target),
+            "text": target.read_text(encoding="utf-8", errors="replace"),
+            "exists": True,
+            "modified": target.stat().st_mtime,
+        }
+    # Only present when there is one, so a reply for a file Navide never
+    # saved keeps the shape older clients know.
+    if kept is not None:
+        result["previous"] = kept
+    return result
 
 
 def save(
@@ -450,6 +470,9 @@ def save(
             raise ValueError("the instruction file is a link to nothing") from exc
         if not written.is_file():
             raise ValueError("the instruction file links to something that is not a file")
+    # Keep what is about to be overwritten before touching the file; if that
+    # cannot be kept, the save is refused rather than made irreversible.
+    _keep_previous(target, written, text)
     handle, temp = tempfile.mkstemp(dir=str(written.parent), prefix=".navide-", suffix=".tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
@@ -460,7 +483,88 @@ def save(
         raise
     log.info("memory file saved: %s (%d bytes)", target, len(text))
     stat = target.stat()
-    return {"path": str(target), "size": stat.st_size, "modified": stat.st_mtime}
+    result: dict[str, Any] = {"path": str(target), "size": stat.st_size, "modified": stat.st_mtime}
+    kept = _previous_meta(target)
+    if kept is not None:
+        result["previous"] = kept
+    return result
+
+
+def restore_previous(
+    path: str,
+    home: Path | None = None,
+    workspace: Path | None = None,
+    expected_modified: float | None = None,
+) -> dict[str, Any]:
+    """Write back the version the last save replaced.
+
+    It goes through ``save``, so the same table, size and conflict checks
+    apply, and the text being replaced becomes the new previous version: a
+    restore is undone by restoring again.
+    """
+    target, _scope, _root = _allowed(path, home, workspace)
+    stored = _backup_paths(target)[0]
+    try:
+        text = stored.read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError as exc:
+        raise ValueError("there is no previous version to restore") from exc
+    return save(str(target), text, home, workspace, expected_modified)
+
+
+def _backup_paths(target: Path) -> tuple[Path, Path]:
+    """Where the previous text of ``target`` and its description are kept."""
+    key = hashlib.sha256(str(target).encode("utf-8")).hexdigest()[:32]
+    folder = app_data_dir() / BACKUP_DIR_NAME
+    return folder / f"{key}.txt", folder / f"{key}.json"
+
+
+def _keep_previous(target: Path, written: Path, text: str) -> None:
+    """Copy the file's current text aside before ``save`` replaces it.
+
+    Nothing is kept for a file that does not exist yet, and a save that
+    would not change the text keeps the older previous version instead of
+    replacing it with an identical copy.
+    """
+    try:
+        current = written.read_bytes()
+    except FileNotFoundError:
+        return
+    if current == text.encode("utf-8"):
+        return
+    stored, meta = _backup_paths(target)
+    stored.parent.mkdir(parents=True, exist_ok=True)
+    description = {"path": str(target), "saved_at": time.time(), "size": len(current)}
+    for destination, data in (
+        (stored, current),
+        (meta, json.dumps(description).encode("utf-8")),
+    ):
+        handle, temp = tempfile.mkstemp(
+            dir=str(destination.parent), prefix=".navide-", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(handle, "wb") as stream:
+                stream.write(data)
+            os.replace(temp, destination)
+        except BaseException:
+            Path(temp).unlink(missing_ok=True)
+            raise
+
+
+def _previous_meta(target: Path) -> dict[str, Any] | None:
+    """``{saved_at, size}`` of the kept previous version, or None."""
+    stored, meta = _backup_paths(target)
+    if not stored.is_file():
+        return None
+    try:
+        description = json.loads(meta.read_text(encoding="utf-8"))
+        saved_at = float(description.get("saved_at") or 0)
+    except (OSError, ValueError, AttributeError, TypeError):
+        saved_at = 0.0
+    try:
+        size = stored.stat().st_size
+    except OSError:
+        return None
+    return {"saved_at": saved_at, "size": size}
 
 
 def _contained(path: Path, scope: str, root: Path) -> bool:

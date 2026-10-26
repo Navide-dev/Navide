@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop: envía a este pane el prompt de loop configurado",
       "skill-cast-failed": "No se pudo enviar la skill «{name}» a este pane",
       "skill-cast-busy": "El loop está enviando su siguiente prompt: vuelve a lanzar «{name}» en un momento",
+      "loop-start-failed": "No se pudo iniciar el loop con «{name}» en este pane",
       "loop-badge-tooltip": "Se envió el prompt de loop a este pane: haz clic para desactivar el loop",
       "loop-waiting-tooltip": "Loop en pausa: se alcanzó el límite de la session; se reanudará automáticamente a las {time}. Haz clic para reanudarlo ahora",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -7394,6 +7395,11 @@
       "conflict-title": "Este archivo ha cambiado en el disco",
       "conflict-body": "Otro programa —una CLI o un editor— cambió este archivo mientras lo editabas. Si guardas ahora, se sobrescribirá ese cambio.",
       "conflict-reload": "Recargar desde el disco (descarta tu borrador)",
+      "discard-confirm": "¿Descartar los cambios sin guardar de {name}?",
+      "previous-kept": "Versión anterior guardada · {when}",
+      "restore-previous": "Restaurar versión anterior",
+      "restore-hint": "Cada vez que guardas, Navide conserva la versión reemplazada en su propia carpeta. Al restaurar, el texto actual pasa a ser la versión anterior, así que la restauración se puede deshacer de la misma forma.",
+      "error-restore": "No se pudo restaurar la versión anterior.",
       "agents-title": "Cobertura de las CLI",
       "agents-mapped": "Asignadas",
       "agents-mapped-hint": "Navide sabe dónde guardan sus instrucciones estas CLI.",
@@ -7438,7 +7444,9 @@
       "advanced": "Avanzado",
       "send-once": "Se envía una vez",
       "send-once-hint": "Solo la skill predeterminada se ejecuta como loop; esta se envía una vez, sin reanudación ni límite de turnos.",
-      "untitled-name": "Skill sin título"
+      "untitled-name": "Skill sin título",
+      "prompt-empty": "Un prompt no puede quedar vacío: se conservó el texto anterior. Para quitar esta skill, usa Eliminar.",
+      "delete-confirm": "¿Eliminar «{name}»? No se puede deshacer, y los equipos que sincronizan prompts también la eliminarán."
     },
     "section": {
       "general-behavior": "Comportamiento general",

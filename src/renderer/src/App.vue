@@ -5224,6 +5224,7 @@ async function togglePaneLoop(paneId: string, skillId?: string): Promise<void> {
   if (loopGen.get(paneId) !== gen) return
   if (!ok) {
     console.warn(`[loop] pane ${paneId}: loop-start injection failed — loop disarmed`)
+    notifyRestore.toast(i18n.global.t('pane.terminal.loop-start-failed', { name: skill.name }), { type: 'error' })
     pane.loopActive = false
     pane.loopSkillId = null
     pane.loopEstimateResetAt = null
