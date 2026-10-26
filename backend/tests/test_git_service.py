@@ -3204,6 +3204,7 @@ class TestGitProcLimit:
 
         class FakeProc:
             returncode = 0
+            pid = 4_194_305  # only the stubbed process tree ever sees it
 
             async def communicate(self):
                 nonlocal in_flight, peak
@@ -3223,6 +3224,7 @@ class TestGitProcLimit:
             return FakeProc()
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
 
         tasks = [
             asyncio.create_task(git_service._run(["git", "status"], "."))
@@ -3273,6 +3275,7 @@ class TestGitProcLimit:
             return await real_wait_for(awaitable, timeout=0.01)
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
         monkeypatch.setattr(asyncio, "wait_for", fast_wait_for)
         # The tree kill reads the fake's pid: keep it off the real process table.
         tree_reads: list = []
@@ -3320,6 +3323,7 @@ class TestGitProcLimit:
             return await real_wait_for(awaitable, timeout=0.01)
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
         monkeypatch.setattr(asyncio, "wait_for", fast_wait_for)
         # The tree kill reads the fake's pid: keep it off the real process table.
         tree_reads: list = []
