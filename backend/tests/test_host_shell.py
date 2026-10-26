@@ -1217,6 +1217,8 @@ async def test_a_hung_git_does_not_hold_its_slot_forever(monkeypatch, caplog) ->
     monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(host_shell.process_tree, "descendants", descendants)
+    # 4242 is a made-up pid: never signal whatever group it may name here.
+    monkeypatch.setattr(host_shell.process_tree, "kill_group", lambda gid, *, force: None)
     monkeypatch.setattr(host_shell.process_tree, "identity", lambda pid: f"id-{pid}")
     monkeypatch.setattr(
         host_shell.process_tree, "kill", lambda pid, *, force: killed.append(pid)
@@ -1273,6 +1275,8 @@ async def test_a_descendant_whose_pid_was_reused_is_not_killed(monkeypatch) -> N
     monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(host_shell.process_tree, "descendants", lambda pid: [4243, 4244])
+    # 4242 is a made-up pid: never signal whatever group it may name here.
+    monkeypatch.setattr(host_shell.process_tree, "kill_group", lambda gid, *, force: None)
     monkeypatch.setattr(host_shell.process_tree, "identity", lambda pid: identities.get(pid, ""))
     monkeypatch.setattr(
         host_shell.process_tree, "kill", lambda pid, *, force: killed.append(pid)
@@ -1322,6 +1326,8 @@ async def test_a_run_cancelled_during_the_tree_read_still_kills_the_root(monkeyp
     monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(host_shell.process_tree, "descendants", slow_descendants)
+    # 4242 is a made-up pid: never signal whatever group it may name here.
+    monkeypatch.setattr(host_shell.process_tree, "kill_group", lambda gid, *, force: None)
 
     task = asyncio.ensure_future(run_allowlisted_text(["git", "status"], timeout=0.05))
     try:
@@ -1356,6 +1362,8 @@ async def test_a_tree_read_that_raises_still_kills_the_root_and_returns_the_enve
     monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(host_shell.process_tree, "descendants", broken_descendants)
+    # 4242 is a made-up pid: never signal whatever group it may name here.
+    monkeypatch.setattr(host_shell.process_tree, "kill_group", lambda gid, *, force: None)
     caplog.set_level("WARNING", logger="agent_team_backend.host_shell")
 
     rc, _, stderr = await run_allowlisted_text(["git", "status"], timeout=0.05)

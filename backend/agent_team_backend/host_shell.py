@@ -775,6 +775,13 @@ def _prepare_public_provider_git_context(
 # and every later git call queued behind it.
 _KILL_REAP_TIMEOUT_S = 2.0
 
+# POSIX: each run leads its own process group, so a timed-out run's whole tree
+# can be ended at once -- a grandchild forked after the snapshot below
+# included, which the snapshot cannot see and which reparents to init (out of
+# any later snapshot's reach) once the root dies. Not a new session: the
+# controlling terminal stays the same. Windows has no process groups.
+_OWN_PROCESS_GROUP: dict[str, int] = {} if os.name == "nt" else {"process_group": 0}
+
 
 def _descendants_with_identity(pid: int) -> list[tuple[int, str]]:
     """Every descendant of *pid* with the identity (pid + start time) it had."""
@@ -784,6 +791,20 @@ def _descendants_with_identity(pid: int) -> list[tuple[int, str]]:
         if identity:
             found.append((child, identity))
     return found
+
+
+def _kill_own_group(pid: int) -> None:
+    """POSIX: end the process group *pid* leads (``_OWN_PROCESS_GROUP``): only
+    while *pid* still leads it, and never the backend's own group."""
+    if os.name == "nt":
+        return
+    try:
+        group = os.getpgid(pid)
+        if group != pid or group == os.getpgrp():
+            return
+        process_tree.kill_group(group, force=True)
+    except OSError:
+        pass
 
 
 def _end_descendants(descendants: list[tuple[int, str]]) -> None:
@@ -811,6 +832,7 @@ async def _kill_tree_and_reap(process: asyncio.subprocess.Process) -> None:
     finally:
         # Also when the caller is cancelled mid-snapshot: the hung root must not
         # be left running because the read in front of its kill never finished.
+        _kill_own_group(pid)
         try:
             process.kill()
         except ProcessLookupError:
@@ -873,6 +895,7 @@ async def run_allowlisted(
             stdin=asyncio.subprocess.PIPE if input_bytes is not None else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **_OWN_PROCESS_GROUP,
         )
         communication = process.communicate() if input_bytes is None else process.communicate(input_bytes)
         stdout, stderr = await asyncio.wait_for(communication, timeout=timeout)
@@ -962,6 +985,7 @@ async def run_allowlisted_capped(
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **_OWN_PROCESS_GROUP,
         )
         return await asyncio.wait_for(
             _read_stdout_capped(process, max_stdout_bytes), timeout=timeout
