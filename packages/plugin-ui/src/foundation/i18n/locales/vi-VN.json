@@ -1730,6 +1730,7 @@
       "export-failed": "Không xuất được",
       "import-dialog-title": "Nhập JSON gói cài đặt",
       "imported": "Đã nhập: {items}",
+      "mcp-needs-secrets": "Khóa bí mật MCP cần tự điền trên máy này: {items}",
       "import-failed": "Không nhập được"
     },
     "executionPolicy": {
@@ -6862,6 +6863,7 @@
       "status": "Trạng thái: {status}",
       "starting-note": "Vẫn đang khởi động sau {seconds} giây. Nếu máy chủ chạy qua npx hoặc uvx, lần chạy đầu có thể đang tải gói về.",
       "error-reason": "Không khởi động được: {reason}",
+      "tools-error": "Không thể liệt kê công cụ: {reason}",
       "stderr-tail": "Những dòng cuối máy chủ đã in ra",
       "open-config-file": "Mở tệp cấu hình",
       "native-readonly-hint": "Navide đọc các tệp này và không bao giờ ghi vào chúng. Chỉ quét cấu hình cấp người dùng của từng CLI — MCP cấp dự án không được hiển thị. Hãy thay đổi máy chủ ở nơi CLI của nó quy định, rồi làm mới.",

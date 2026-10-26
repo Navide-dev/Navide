@@ -245,6 +245,40 @@ def is_secret_setting_name(name: str) -> bool:
     return any(token in _SECRET_TOKENS for token in tokens)
 
 
+#: Unseparated credential spellings whole-token matching misses (``APIKEY``
+#: never splits into ``API`` + ``KEY``). Matched as substrings of the squashed
+#: name, so ``XAPIKEY`` and ``githubApiKey`` both count.
+_BUNDLE_SECRET_SUBSTRINGS = ("APIKEY", "ACCESSKEY", "SECRETKEY", "PRIVATEKEY")
+#: Tokens that only mean "credential" as a whole word: ``GITHUB_PAT`` is one,
+#: ``PATH`` is not.
+_BUNDLE_SECRET_WORDS = {"PAT", "BEARER"}
+
+
+def _is_bundle_secret_name(name: str) -> bool:
+    """What the legacy settings bundle treats as a secret: the canonical
+    tokens plus the ``*_PAT`` / ``*APIKEY*`` spellings people actually use."""
+    if is_secret_setting_name(name):
+        return True
+    words = {token for token in re.split(r"[^A-Za-z0-9]+", name.upper()) if token}
+    if words & _BUNDLE_SECRET_WORDS:
+        return True
+    squashed = re.sub(r"[^A-Za-z0-9]+", "", name).upper()
+    return any(token in squashed for token in _BUNDLE_SECRET_SUBSTRINGS)
+
+
+def _same_endpoint(incoming: dict[str, Any], existing: dict[str, Any]) -> bool:
+    """Whether both records run or call the same thing: the same command and
+    args for stdio, the same url for http/sse."""
+    if incoming.get("transport", "stdio") != existing.get("transport", "stdio"):
+        return False
+    if incoming.get("transport", "stdio") == "stdio":
+        return (
+            incoming.get("command") == existing.get("command")
+            and list(incoming.get("args") or []) == list(existing.get("args") or [])
+        )
+    return bool(incoming.get("url")) and incoming.get("url") == existing.get("url")
+
+
 def redact_mcp_server_secrets(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return a deep copy with secret-looking env/header values redacted."""
     redacted = copy.deepcopy(servers)
@@ -254,7 +288,7 @@ def redact_mcp_server_secrets(servers: list[dict[str, Any]]) -> list[dict[str, A
             if not isinstance(values, dict):
                 continue
             for key in values:
-                if is_secret_setting_name(str(key)) and values[key]:
+                if _is_bundle_secret_name(str(key)) and values[key]:
                     values[key] = REDACTED_SECRET
     return redacted
 
@@ -265,8 +299,11 @@ def restore_mcp_server_secrets(
 ) -> list[dict[str, Any]]:
     """Restore redacted env/header values from matching existing servers.
 
-    A redacted value with no matching local value is omitted so the sentinel is
-    never persisted as a credential.
+    A local value is filled back only when the server has the same name AND
+    the same endpoint (url, or command + args): otherwise a bundle could
+    point this machine's token at someone else's server. A redacted value
+    with no matching local value is left empty -- never the sentinel -- so
+    the user can see it needs filling.
     """
     restored = copy.deepcopy(servers)
     existing_by_name = {
@@ -276,6 +313,8 @@ def restore_mcp_server_secrets(
     }
     for server in restored:
         existing = existing_by_name.get(server.get("name"), {})
+        if not _same_endpoint(server, existing):
+            existing = {}
         for field_name in ("env", "headers"):
             values = server.get(field_name)
             if not isinstance(values, dict):
@@ -284,13 +323,30 @@ def restore_mcp_server_secrets(
             if not isinstance(existing_values, dict):
                 existing_values = {}
             for key, value in list(values.items()):
-                if value != REDACTED_SECRET or not is_secret_setting_name(str(key)):
+                if value != REDACTED_SECRET or not _is_bundle_secret_name(str(key)):
                     continue
-                if key in existing_values:
-                    values[key] = existing_values[key]
-                else:
-                    del values[key]
+                local = existing_values.get(key)
+                values[key] = local if isinstance(local, str) else ""
     return restored
+
+
+def unfilled_mcp_secrets(
+    servers: list[dict[str, Any]],
+    restored: list[dict[str, Any]],
+) -> list[str]:
+    """``server.KEY`` for each redacted value ``restore_mcp_server_secrets``
+    had nothing local to fill, i.e. what the user must fill in by hand."""
+    unfilled: list[str] = []
+    for server, result in zip(servers, restored):
+        for field_name in ("env", "headers"):
+            values = server.get(field_name)
+            filled = result.get(field_name)
+            if not isinstance(values, dict) or not isinstance(filled, dict):
+                continue
+            for key, value in values.items():
+                if value == REDACTED_SECRET and filled.get(key) == "":
+                    unfilled.append(f"{server.get('name')}.{key}")
+    return unfilled
 
 
 class MCPSettingsStore:

@@ -18,6 +18,7 @@ from agent_team_backend.mcp_settings import (
     is_secret_setting_name,
     redact_mcp_server_secrets,
     restore_mcp_server_secrets,
+    unfilled_mcp_secrets,
 )
 
 
@@ -306,7 +307,7 @@ def test_secret_name_predicate_uses_canonical_tokens(name: str, expected: bool) 
     assert is_secret_setting_name(name) is expected
 
 
-def test_restore_secrets_uses_matching_local_values_and_drops_unknown_sentinels() -> None:
+def test_restore_secrets_uses_matching_local_values_and_blanks_unknown_sentinels() -> None:
     imported = [
         {
             "name": "remote",
@@ -323,7 +324,7 @@ def test_restore_secrets_uses_matching_local_values_and_drops_unknown_sentinels(
         {
             "name": "remote",
             "transport": "http",
-            "url": "https://old.test",
+            "url": "https://example.test",
             "headers": {"Authorization": "Bearer local"},
         }
     ]
@@ -332,6 +333,97 @@ def test_restore_secrets_uses_matching_local_values_and_drops_unknown_sentinels(
 
     assert restored[0]["headers"] == {
         "Authorization": "Bearer local",
+        "X-New-Token": "",
         "Accept": REDACTED_SECRET,
     }
     assert imported[0]["headers"]["Authorization"] == REDACTED_SECRET
+    assert unfilled_mcp_secrets(imported, restored) == ["remote.X-New-Token"]
+
+
+def test_restore_secrets_never_sends_a_local_token_to_another_url() -> None:
+    """Same name, someone else's server: the local token must stay here."""
+    imported = [
+        {
+            "name": "remote",
+            "transport": "http",
+            "url": "https://attacker.test/mcp",
+            "headers": {"Authorization": REDACTED_SECRET},
+        }
+    ]
+    existing = [
+        {
+            "name": "remote",
+            "transport": "http",
+            "url": "https://example.test",
+            "headers": {"Authorization": "Bearer local"},
+        }
+    ]
+
+    restored = restore_mcp_server_secrets(imported, existing)
+
+    assert restored[0]["headers"] == {"Authorization": ""}
+    assert unfilled_mcp_secrets(imported, restored) == ["remote.Authorization"]
+
+
+@pytest.mark.parametrize(
+    ("command", "args", "filled"),
+    [
+        ("npx", ["-y", "server"], True),
+        ("npx", ["-y", "other-server"], False),
+        ("uvx", ["-y", "server"], False),
+    ],
+)
+def test_restore_secrets_for_stdio_needs_the_same_command_and_args(
+    command: str, args: list[str], filled: bool
+) -> None:
+    imported = [
+        {
+            "name": "local",
+            "transport": "stdio",
+            "command": command,
+            "args": args,
+            "env": {"GITHUB_PAT": REDACTED_SECRET},
+        }
+    ]
+    existing = [
+        {
+            "name": "local",
+            "transport": "stdio",
+            "command": "npx",
+            "args": ["-y", "server"],
+            "env": {"GITHUB_PAT": "pat-local"},
+        }
+    ]
+
+    restored = restore_mcp_server_secrets(imported, existing)
+
+    assert restored[0]["env"] == {"GITHUB_PAT": "pat-local" if filled else ""}
+
+
+def test_redact_secrets_covers_pat_and_unseparated_api_key_names() -> None:
+    servers = [
+        {
+            "name": "local",
+            "transport": "stdio",
+            "command": "npx",
+            "env": {
+                "GITHUB_PAT": "pat",
+                "XAPIKEY": "k1",
+                "githubApiKey": "k2",
+                "AWS_SECRETKEY": "k3",
+                "PATH": "/usr/bin",
+                "LOG_LEVEL": "debug",
+            },
+        }
+    ]
+
+    redacted = redact_mcp_server_secrets(servers)
+
+    assert redacted[0]["env"] == {
+        "GITHUB_PAT": REDACTED_SECRET,
+        "XAPIKEY": REDACTED_SECRET,
+        "githubApiKey": REDACTED_SECRET,
+        "AWS_SECRETKEY": REDACTED_SECRET,
+        "PATH": "/usr/bin",
+        "LOG_LEVEL": "debug",
+    }

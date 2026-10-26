@@ -58,6 +58,7 @@ from .mcp_settings import (
     MCPSettingsConflictError,
     MCPSettingsError,
     restore_mcp_server_secrets,
+    unfilled_mcp_secrets,
 )
 from .plan_index import resolve_plan_root
 from .stages_store import GraphNonLinearError
@@ -3684,7 +3685,7 @@ async def agent_reap_orphans(session: "Session", msg_id: str, msg_type: str, pay
 
 # ── MCP servers (mcp.*) ─────────────────────────────────────────────────────
 # Live MCP status fields passed through to Settings -> MCP as they are.
-_MCP_LIVE_DETAIL = ("starting_seconds", "slow_start", "error", "stderr_tail")
+_MCP_LIVE_DETAIL = ("starting_seconds", "slow_start", "error", "stderr_tail", "tools_error")
 
 
 @handler("mcp.list_servers")
@@ -6110,6 +6111,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
         # stages still name, and an imported document can name a key this
         # machine has never had.
         await _clear_dangling_role_refs("bundle_import")
+    mcp_needs_secrets: list[str] = []
     if isinstance(bundle.get("mcp_servers"), list):
         incoming_servers = bundle["mcp_servers"]
         if not all(isinstance(server, dict) for server in incoming_servers):
@@ -6128,6 +6130,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
                 incoming_servers,
                 existing_servers,
             )
+            mcp_needs_secrets = unfilled_mcp_secrets(incoming_servers, restored_servers)
             app.mcp_settings_store.replace_servers(restored_servers)
         except ValidationError as err:
             await session.send_json(
@@ -6162,6 +6165,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
     await session.send_json(make_response(msg_id, msg_type, {
         "ok": True,
         "applied": applied,
+        "mcp_needs_secrets": mcp_needs_secrets,
         "paths": app._settings_paths(),
     }))
 

@@ -8138,10 +8138,13 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
             status = info.get("status", "unknown")
         # The tool list itself stays out: this is a summary, and a server with
         # dozens of tools would swamp the answer.
-        detail = {key: info[key] for key in ("starting_seconds", "error") if key in info}
-        if "error" in detail:
-            # Masked like the URL above: a library may quote the URL it failed on.
-            detail["error"] = native_mcp.mask_urls_in_text(str(detail["error"]))
+        # tools_error: the tool list could not be read, so a tool_count of 0
+        # is unknown rather than zero (the docstring is pinned by a snapshot).
+        detail = {key: info[key] for key in ("starting_seconds", "error", "tools_error") if key in info}
+        for key in ("error", "tools_error"):
+            if key in detail:
+                # Masked like the URL above: a library may quote the URL it failed on.
+                detail[key] = native_mcp.mask_urls_in_text(str(detail[key]))
         servers.append({**row, "status": status, "tool_count": info.get("tool_count", 0), **detail})
     reflected = await asyncio.to_thread(_native_mcp_inventory)
     return {"servers": servers, **reflected}

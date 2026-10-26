@@ -1730,6 +1730,7 @@
       "export-failed": "Export fehlgeschlagen",
       "import-dialog-title": "JSON-Einstellungspaket importieren",
       "imported": "Importiert: {items}",
+      "mcp-needs-secrets": "Auf diesem Rechner einzutragende MCP-Geheimnisse: {items}",
       "import-failed": "Import fehlgeschlagen"
     },
     "executionPolicy": {
@@ -6862,6 +6863,7 @@
       "status": "Status: {status}",
       "starting-note": "Startet nach {seconds} s immer noch. Läuft der Server über npx oder uvx, lädt der erste Start möglicherweise noch das Paket herunter.",
       "error-reason": "Start fehlgeschlagen: {reason}",
+      "tools-error": "Werkzeugliste konnte nicht gelesen werden: {reason}",
       "stderr-tail": "Letzte Zeilen, die der Server ausgegeben hat",
       "open-config-file": "Konfigurationsdatei öffnen",
       "native-readonly-hint": "Navide liest diese Dateien und schreibt nie hinein. Gescannt wird nur die Konfiguration jeder CLI auf Benutzerebene – MCP auf Projektebene wird nicht angezeigt. Ändern Sie einen Server dort, wo seine CLI ihn erwartet, und aktualisieren Sie dann.",
