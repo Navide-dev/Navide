@@ -11485,7 +11485,7 @@
     "follow-wait": "Mover al terminar",
     "follow-skip-running": "Omitir los panes en ejecución",
     "follow-switch-label": "Seguir el cambio de cuenta",
-    "follow-switch-hint": "Activado: este pane pasa a la cuenta nueva en su siguiente turno. Desactivado: se queda en la carpeta propia de su cuenta. Cualquiera de los dos cambios lo vuelve a abrir una vez.",
+    "follow-switch-hint": "Activado: elegir una cuenta abajo cambia la cuenta predeterminada, y este pane pasa a ella en su siguiente turno. Desactivado: elegir una cuenta mueve solo este pane y lo vuelve a abrir una vez en la carpeta propia de esa cuenta; la predeterminada y los demás panes no cambian. Cambiar este interruptor también lo vuelve a abrir una vez.",
     "pinned-indicator-label": "Fijado a su cuenta",
     "pinned-indicator-tooltip": "Fijado: cambiar de cuenta no mueve este pane. Abre la insignia de la cuenta para que vuelva a seguirla.",
     "unpin-title": "{count} pane que va a seguir la cuenta está trabajando | {count} panes que van a seguir la cuenta están trabajando",

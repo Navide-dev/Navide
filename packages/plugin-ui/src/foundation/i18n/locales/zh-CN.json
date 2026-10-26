@@ -11485,7 +11485,7 @@
     "follow-wait": "跑完就换",
     "follow-skip-running": "跳过正在跑的",
     "follow-switch-label": "跟随账号切换",
-    "follow-switch-hint": "打开：这个 pane 下一回合就改用新账号。关闭：留在它的账号文件夹里。切换时会重开一次。",
+    "follow-switch-hint": "打开：在下方选账号会切换默认账号，这个 pane 下一回合就改用它。关闭：选账号只会把这个 pane 移到该账号自己的文件夹（重开一次），默认账号和其他 pane 都不变。切换这个开关也会重开一次。",
     "pinned-indicator-label": "已固定账号",
     "pinned-indicator-tooltip": "已固定：切换账号时这个 pane 不会跟着换。点开账号标签可以改回跟随。",
     "unpin-title": "有 {count} 个要改为跟随的 pane 正在运行",

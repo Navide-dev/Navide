@@ -11485,7 +11485,7 @@
     "follow-wait": "跑完就換",
     "follow-skip-running": "跳過正在跑的",
     "follow-switch-label": "跟隨帳號切換",
-    "follow-switch-hint": "開啟：這個 pane 下一回合就改用新帳號。關閉：留在它的帳號資料夾裡。切換時會重開一次。",
+    "follow-switch-hint": "開啟：在下方選帳號會切換預設帳號，這個 pane 下一回合就改用它。關閉：選帳號只會把這個 pane 移到該帳號自己的資料夾（重開一次），預設帳號和其他 pane 都不變。切換這個開關也會重開一次。",
     "pinned-indicator-label": "已固定帳號",
     "pinned-indicator-tooltip": "已固定：切換帳號時這個 pane 不會跟著換。點開帳號標籤可以改回跟隨。",
     "unpin-title": "有 {count} 個要改為跟隨的 pane 正在執行",

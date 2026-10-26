@@ -226,6 +226,17 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     expect(functionBody('moveFollowPanes')).not.toContain('freshWhenNoTranscript')
   })
 
+  it('moves one fixed pane through the follow batch, not the live switch or the default', () => {
+    const start = appSource.indexOf('provide(accountPinKey, {')
+    expect(appSource.slice(start, appSource.indexOf('\n})\n', start))).toContain('movePane: moveFixedAccountPane,')
+    const body = functionBody('moveFixedAccountPane')
+    expect(body).toContain('if (!pane || pane.isLogin || !paneAccountFixed(pane) || !followDirSignedIn(profileId)) return')
+    expect(body).toContain('await moveFollowPanes([paneId], profileId)')
+    for (const banned of ['setPaneDefault', 'setDefault', 'cliAccountSwitch', 'accountFollow.add', 'continueWith']) {
+      expect(body).not.toContain(banned)
+    }
+  })
+
   it("keeps #194's follow flow wired but no longer offered in this window", () => {
     expect(appSource).toContain('provide(accountFollowKey, {')
     expect(appSource).toContain('provide(accountPinKey, {')

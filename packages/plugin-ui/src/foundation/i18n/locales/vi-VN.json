@@ -11485,7 +11485,7 @@
     "follow-wait": "Chuyển khi xong",
     "follow-skip-running": "Bỏ qua các pane đang chạy",
     "follow-switch-label": "Đi theo khi chuyển tài khoản",
-    "follow-switch-hint": "Bật: pane này chuyển sang tài khoản mới ở lượt tiếp theo. Tắt: nó ở lại thư mục riêng của tài khoản. Thay đổi theo hướng nào cũng mở lại pane một lần.",
+    "follow-switch-hint": "Bật: chọn tài khoản bên dưới sẽ đổi tài khoản mặc định, và pane này chuyển sang nó ở lượt tiếp theo. Tắt: chọn tài khoản chỉ chuyển pane này, mở lại một lần trong thư mục riêng của tài khoản đó; tài khoản mặc định và các pane khác giữ nguyên. Gạt công tắc này cũng mở lại pane một lần.",
     "pinned-indicator-label": "Cố định vào tài khoản",
     "pinned-indicator-tooltip": "Đã cố định: chuyển tài khoản không di chuyển pane này. Mở huy hiệu tài khoản để cho nó đi theo lại.",
     "unpin-title": "{count} pane cần cho đi theo đang làm việc",

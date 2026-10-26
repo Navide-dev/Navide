@@ -11485,7 +11485,7 @@
     "follow-wait": "Move When Finished",
     "follow-skip-running": "Skip Running Panes",
     "follow-switch-label": "Follow account switch",
-    "follow-switch-hint": "On: this pane moves to the new account on its next turn. Off: it stays in its account’s own folder. Either change reopens it once.",
+    "follow-switch-hint": "On: choosing an account below switches the default, and this pane moves to it on its next turn. Off: choosing an account moves only this pane, reopening it once in that account’s own folder; the default and other panes stay as they are. Flipping this switch also reopens it once.",
     "pinned-indicator-label": "Fixed to its account",
     "pinned-indicator-tooltip": "Fixed: switching accounts does not move this pane. Open the account badge to make it follow again.",
     "unpin-title": "{count} pane to make follow is working | {count} panes to make follow are working",
