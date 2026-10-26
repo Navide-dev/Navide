@@ -8158,7 +8158,8 @@ async def cli_extensions_list(ctx: Context) -> dict[str, Any]:
     These are the CLIs' own add-ons, not Navide plugins (see
     docs/en-US/glossary.md): Claude plugins and mods, Codex plugins and
     hooks, Copilot and Droid plugins, opencode and Kilo plugins, Pi
-    extensions, Qwen extensions, and every CLI's hooks. The same inventory
+    extensions, Qwen and Gemini CLI extensions, and every CLI's hooks. Gemini
+    CLI is listed though Navide does not run it in a pane. The same inventory
     Settings → CLI Extensions shows. Read it before telling the user a CLI
     has, or lacks, an add-on. Read-only: installing, enabling or removing a
     CLI extension is the user's decision and there is no tool here for it.

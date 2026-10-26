@@ -396,7 +396,7 @@ def _project_config_takeback() -> list[Takeback]:
 # ── Cursor: project skills (H2) ────────────────────────────────────────────
 
 
-def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
+def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str, *, errors: list[str] | None = None) -> bool:
     """``skills_wiring.sync_project_dir`` as the feature cursor.project-skills.
 
     The manifest of planted links is the marker. A planted link the user
@@ -406,23 +406,24 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     as well; the .cursor folder gone is the workspace's reset. When a sync
     leaves nothing planted, Navide removed the manifest itself, so the target
     is forgotten rather than later read as a removal by the user.
+    ``errors`` collects why a sync failed, for the pane to print.
     """
     from .plugins.builtin.navide_skills import skills_wiring
 
     g = _gate
     if g is None or not cwd:
-        return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+        return skills_wiring.sync_project_dir(agent_key, wiring, cwd, errors=errors)
     cwd = str(canonical_path(cwd))  # one key per workspace, however it is spelled
     target = Path(cwd).joinpath(*wiring.project_rel)
     if not skills_wiring.project_target_safe(target, Path(cwd)):
         # Not the workspace's folder: nothing is written, so nothing is gated.
         _refused_unsafe("cursor.project-skills", target)
-        return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+        return skills_wiring.sync_project_dir(agent_key, wiring, cwd, errors=errors)
     if not skills_wiring.manifest_safe(target):
         # The repository put a link (or a pipe) where the manifest goes: it
         # is never read, written or gated, so the folder is left alone too.
         _refused_unsafe("cursor.project-skills", target)
-        return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+        return skills_wiring.sync_project_dir(agent_key, wiring, cwd, errors=errors)
     manifest = target / skills_wiring.MANIFEST_FILE
     delivered = [False]
     skipped: list[Path] = []
@@ -431,7 +432,7 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     refused = skills_wiring.refuse_missing_links(target) if g.allowed("cursor.project-skills") else []
 
     def write() -> None:
-        delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd, skipped=skipped)
+        delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd, skipped=skipped, errors=errors)
 
     outcome = g.apply(
         "cursor.project-skills", target, write=write,

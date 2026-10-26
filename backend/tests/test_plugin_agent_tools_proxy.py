@@ -81,11 +81,14 @@ pytestmark = pytest.mark.asyncio
 #: core-tools snapshot, tests/data/mcp_core_tools_main.json, differs from
 #: main in those three descriptions only).
 #: Re-pinned for 0.2.32 C8 (previous pin 11c38bd5…): the cli_extensions_list
-#: description documents `enabled_error` and the `unreadable` list.
-#: Re-pinned again for #659 on top of C8 (C8 pin f4395697…, #659 alone
-#: e89ec327…): the mcp_list description documents `tools_error` and masking
-#: by value. The snapshot differs from main in those two descriptions only.
-MAIN_TOOLS_LIST_SHA256 = "1978fc35220145e107a444d98932edeef463d159826802e92193bc2603d43852"
+#: description documents `enabled_error` and the `unreadable` list. No other
+#: tool changed.
+#: Re-pinned for 0.2.32 Gemini CLI extensions (previous pin f4395697…): the
+#: cli_extensions_list description names Gemini CLI. No other tool changed.
+#: Re-pinned for #659 on top of both (main pin ba95cc9a…): the mcp_list
+#: description documents `tools_error` and masking by value. No other tool
+#: changed.
+MAIN_TOOLS_LIST_SHA256 = "2dc3e75156ce9045c943244e85204a0c3a9ba8f6f6ceeea85b8a63ad325d8679"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -114,8 +117,9 @@ W1_CORE_TOOLS = frozenset({
 #: Core tools added after that digest by DESIGN-C S3 (mcp_server/window_tools.py).
 DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", "workspace_close", "window_move_pane"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
-#: packages install (computed on a probe server).
-MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"
+#: packages install (computed on a probe server). Re-pinned in 0.2.32 when
+#: skills_set_delivery's description gained the approval for widening.
+MAIN_PLAN_SKILLS_TOOLS_SHA256 = "4c9bc609cad55f1e17c5a93f5d5f9a568c625fffa459307d13c6232849e05db9"
 
 PERMISSIONS = {
     "system": ["fs", "ui"],

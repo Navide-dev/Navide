@@ -176,7 +176,7 @@ Editor 使用 Monaco，並提供 File Editing、Diagnostics、Plan Rendering、D
 1. 呼叫 `skills_list`，再把回傳的 ID 傳給 `skills_inspect`，讀取指示、檔案、所有權、來源紀錄與目前的 `delivery_revision`。
 2. 呼叫 `skills_prepare_install`，來源可用 `owner/repo`、HTTPS `github.com/owner/repo` URL 或本機 skill 資料夾的絕對路徑（支援展開 `~`）。GitHub 的 `ref` 與 `subdir` 分開提供；`subdir: "."` 選擇 repository 根目錄。多個候選會回傳 `selection_required` 與 `candidates`，不產生可安裝的 preview ID；選好路徑後重新 prepare。不支援私人 repository、任意 URL 或 GitHub tree URL。
 3. 檢視完整指示、檔案清單、腳本警示、來源與 digest，再以 preview ID、相同 digest 及明確 targets 呼叫 `skills_install`。這只會送出請求：使用者在 Navide 視窗核准或拒絕（核准同時代表同意首次寫入共用根），結果以 `skills_install_status` 查詢；Agent 無法代使用者核准。任何同名受管、使用者或原生 skill 都會拒絕。安裝獨占建立目的目錄，寫完附件與 metadata 後才發布 `SKILL.md`，讓掃描不會讀到半套內容；這不是整個目錄的原子 rename。
-4. 之後用 skill ID 與最新 `delivery_revision` 呼叫 `skills_set_delivery`。過時 revision 會失敗，不覆蓋其他呼叫端的決定。此流程只新增 skill，不更新或重新取得既有安裝。
+4. 之後用 skill ID 與最新 `delivery_revision` 呼叫 `skills_set_delivery`。過時 revision 會失敗，不覆蓋其他呼叫端的決定。只移除 CLI 或停用 skill 的變更會立即套用；投遞給其他 CLI 或啟用 skill 的變更，要像安裝一樣在 Navide 視窗經你核准。此流程只新增 skill，不更新或重新取得既有安裝。
 
 準備的 bytes 綁定已驗證的呼叫端，15 分鐘後或 backend 重啟時失效；安裝不重讀本機來源或再次下載。許可重試可沿用尚未到期的 preview；重試收據仍保留時，成功重送只回傳原結果，不重複寫入。同時最多 8 份有效準備，另有最多 8 份不含套件內容的輕量完成收據。安裝成功即釋放套件 bytes 與有效準備名額。收據沿用原 preview 到期時間；快取滿時，最早安裝成功的收據優先淘汰。到期或淘汰後重送回傳 missing/expired，不重新安裝。GitHub archive 限壓縮 10 MiB、展開 32 MiB、4,096 個 entries；選定 skill 限 64 檔、每檔 256 KiB、總量 512 KiB。不安全路徑、連結、特殊檔、保留 metadata 與無效 manifest 直接拒絕，不靜默略過。
 

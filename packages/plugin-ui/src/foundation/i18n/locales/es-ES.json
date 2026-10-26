@@ -9697,7 +9697,21 @@
     "installing": "Instalando…",
     "failed": "Falló la instalación",
     "dismiss": "Cerrar",
-    "expired": "Esta solicitud caducó antes de aprobarse. Pide al agent que vuelva a preparar la skill."
+    "expired": "Esta solicitud caducó antes de aprobarse. Pide al agent que vuelva a preparar la skill.",
+    "delivery-kicker": "Solicitud de entrega de skill",
+    "delivery-title": "¿Entregar la skill «{name}» a más CLI?",
+    "delivery-desc": "Un agente pidió cambiar a qué CLI se entrega esta skill. No cambia nada hasta que lo apruebes aquí; el agente no puede aprobarlo por ti.",
+    "delivery-shared": "Biblioteca de skills compartida",
+    "delivery-current": "Entrega actual",
+    "delivery-next": "Después del cambio",
+    "delivery-none": "Ninguna otra CLI",
+    "delivery-state": "Estado",
+    "delivery-turns-on": "Activa la skill (ahora está desactivada)",
+    "delivery-note": "Al aprobar, las CLI indicadas arriba cargarán esta skill en las sesiones nuevas. Los archivos de la skill no se modifican. Quitar una CLI más adelante nunca requiere aprobación.",
+    "delivery-approve": "Aprobar cambio",
+    "delivery-applying": "Aplicando…",
+    "delivery-failed": "No se pudo aplicar el cambio de entrega",
+    "delivery-expired": "Esta solicitud caducó antes de aprobarse. Pide al agente que vuelva a revisar la skill e inténtalo de nuevo."
   },
   "cli-manage": {
     "title": "Instalación y actualizaciones",

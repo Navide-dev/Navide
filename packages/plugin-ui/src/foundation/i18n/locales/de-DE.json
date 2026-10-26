@@ -9697,7 +9697,21 @@
     "installing": "Wird installiert …",
     "failed": "Installation fehlgeschlagen",
     "dismiss": "Schließen",
-    "expired": "Diese Anfrage ist abgelaufen, bevor sie genehmigt wurde. Bitten Sie den Agent, den Skill erneut vorzubereiten."
+    "expired": "Diese Anfrage ist abgelaufen, bevor sie genehmigt wurde. Bitten Sie den Agent, den Skill erneut vorzubereiten.",
+    "delivery-kicker": "Anfrage zur Skill-Zustellung",
+    "delivery-title": "Skill „{name}“ an weitere CLIs zustellen?",
+    "delivery-desc": "Ein Agent möchte ändern, an welche CLIs dieser Skill zugestellt wird. Nichts ändert sich, bis du hier zustimmst; der Agent kann nicht für dich zustimmen.",
+    "delivery-shared": "Gemeinsame Skill-Bibliothek",
+    "delivery-current": "Aktuell zugestellt an",
+    "delivery-next": "Nach der Änderung",
+    "delivery-none": "Keine weitere CLI",
+    "delivery-state": "Status",
+    "delivery-turns-on": "Schaltet den Skill ein (derzeit aus)",
+    "delivery-note": "Mit der Zustimmung laden die oben genannten CLIs diesen Skill in neuen Sitzungen. Die Dateien des Skills werden nicht geändert. Eine CLI später zu entfernen braucht nie eine Zustimmung.",
+    "delivery-approve": "Änderung genehmigen",
+    "delivery-applying": "Wird angewendet…",
+    "delivery-failed": "Die Zustellungsänderung konnte nicht angewendet werden",
+    "delivery-expired": "Diese Anfrage ist abgelaufen, bevor sie genehmigt wurde. Bitte den Agenten, den Skill erneut zu prüfen und es noch einmal zu versuchen."
   },
   "cli-manage": {
     "title": "Installation und Updates",

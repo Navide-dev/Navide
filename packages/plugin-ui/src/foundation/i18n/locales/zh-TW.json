@@ -9697,7 +9697,21 @@
     "installing": "安裝中…",
     "failed": "安裝失敗",
     "dismiss": "關閉",
-    "expired": "這筆請求在核准前已過期，請讓 agent 重新準備預覽。"
+    "expired": "這筆請求在核准前已過期，請讓 agent 重新準備預覽。",
+    "delivery-kicker": "技能投遞請求",
+    "delivery-title": "要把技能「{name}」投遞給更多 CLI 嗎？",
+    "delivery-desc": "有 agent 要求變更這個技能的投遞範圍。你在這裡核准之前不會有任何變更；agent 無法代你同意。",
+    "delivery-shared": "共用技能庫",
+    "delivery-current": "目前投遞",
+    "delivery-next": "變更後",
+    "delivery-none": "不投遞給其他 CLI",
+    "delivery-state": "狀態",
+    "delivery-turns-on": "會啟用這個技能（目前停用）",
+    "delivery-note": "核准後，上面列出的 CLI 在新的 session 會載入這個技能。技能檔案不會被修改。之後移除 CLI 不需要核准。",
+    "delivery-approve": "核准變更",
+    "delivery-applying": "套用中…",
+    "delivery-failed": "無法套用投遞變更",
+    "delivery-expired": "這筆請求在核准前已過期，請讓 agent 重新檢視技能後再試一次。"
   },
   "cli-manage": {
     "title": "安裝與更新",
