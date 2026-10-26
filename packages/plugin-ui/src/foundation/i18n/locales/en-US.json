@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop — send the configured loop prompt to this pane",
       "skill-cast-failed": "Could not send the skill \"{name}\" to this pane",
       "skill-cast-busy": "The loop is sending its next prompt — cast \"{name}\" again in a moment",
+      "loop-start-failed": "Could not start the loop with \"{name}\" in this pane",
       "loop-badge-tooltip": "Loop prompt was sent to this pane — click to turn the loop off",
       "loop-waiting-tooltip": "Loop paused — session limit hit; auto-resume at {time}. Click to resume now",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -7436,7 +7437,9 @@
       "advanced": "Advanced",
       "send-once": "Sends once",
       "send-once-hint": "Only the default skill runs as a loop; this one is sent once, with no resume or turn cap.",
-      "untitled-name": "Untitled skill"
+      "untitled-name": "Untitled skill",
+      "prompt-empty": "A prompt can't be empty — the previous text was kept. To remove this skill, use Delete.",
+      "delete-confirm": "Delete \"{name}\"? This can't be undone, and machines that sync prompts will remove it too."
     },
     "section": {
       "general-behavior": "General behavior",

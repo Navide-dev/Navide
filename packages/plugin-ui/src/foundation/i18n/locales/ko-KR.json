@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop — 설정된 Loop 프롬프트를 이 pane에 보내요",
       "skill-cast-failed": "스킬 \"{name}\"을(를) 이 pane에 보내지 못했어요",
       "skill-cast-busy": "Loop가 다음 프롬프트를 보내는 중이에요 — 잠시 후 \"{name}\"을(를) 다시 보내세요",
+      "loop-start-failed": "\"{name}\"(으)로 이 pane의 Loop를 시작하지 못했어요",
       "loop-badge-tooltip": "Loop 프롬프트를 이 pane에 보냈어요 — 클릭해서 Loop 끄기",
       "loop-waiting-tooltip": "Loop 일시 중지 — session 한도에 도달했어요. {time}에 자동 재개해요. 클릭하면 지금 재개해요",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -7436,7 +7437,9 @@
       "advanced": "고급",
       "send-once": "한 번만 전송",
       "send-once-hint": "기본 스킬만 루프로 실행돼요. 이 스킬은 재개나 턴 제한 없이 한 번만 전송돼요.",
-      "untitled-name": "제목 없는 스킬"
+      "untitled-name": "제목 없는 스킬",
+      "prompt-empty": "프롬프트는 비울 수 없어요. 이전 내용을 그대로 두었어요. 이 스킬을 없애려면 삭제를 사용하세요.",
+      "delete-confirm": "\"{name}\"을(를) 삭제할까요? 되돌릴 수 없으며, 프롬프트를 동기화하는 다른 기기에서도 삭제돼요."
     },
     "section": {
       "general-behavior": "일반 동작",
