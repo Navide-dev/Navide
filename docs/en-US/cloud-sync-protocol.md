@@ -41,7 +41,11 @@ erased by the first old client that saw it. Old clients never pull
 
 **Account credentials and keys never leave the user's machine** (policy of
 2026-10-21). MCP records, when their sync is on, still travel as ciphertext
-sealed on the device; the server has no key to open them. The
+sealed on the device; the server has no key to open them. From 0.2.32 they are
+install-only: a client sends every env and header value as `""` (names kept)
+and, on receive, ignores the values a record carries and keeps its own, so a
+record an older client pushed with values in it still opens and compares as
+the same definition. The
 `credentials` scope name stays in the protocol only so rows an older desktop
 already pushed can be pulled and purged: no client engine registers an adapter
 for it or names it in a push (`sync_engine.LOCAL_ONLY_SCOPES`), a switch an

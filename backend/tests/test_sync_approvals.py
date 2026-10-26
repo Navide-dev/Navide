@@ -74,11 +74,13 @@ async def test_a_changed_command_waits_but_a_rotated_env_value_does_not(tmp_path
     a.use(); a_store.replace_servers([base])
     await a.sync(); await b.sync()
     _decide(b, "api", True)
-    # A token rotation: what runs is the same.
+    b.use(); b_store.replace_servers([{**_server(b_store, "api"), "env": {"API_TOKEN": "b1"}}])
+    # A token rotation: what runs is the same, and values stay on each
+    # machine (install-only sync), so nothing reaches B and nothing waits.
     a.use(); a_store.replace_servers([{**base, "env": {"API_TOKEN": "t2"}}])
     await a.sync(); await b.sync()
     b.use()
-    assert _server(b_store, "api")["env"] == {"API_TOKEN": "t2"}
+    assert _server(b_store, "api")["env"] == {"API_TOKEN": "b1"}
     assert sync_approvals.listing() == []
     # A new env name (NODE_OPTIONS, say) or a new command does change what runs.
     a.use(); a_store.replace_servers([{**base, "env": {"API_TOKEN": "t2"}, "command": "/tmp/other"}])
@@ -92,7 +94,8 @@ async def test_a_changed_command_waits_but_a_rotated_env_value_does_not(tmp_path
     await a.sync(); await b.sync()
     b.use()
     (held,) = sync_approvals.listing()
-    assert held["summary"]["env"] == {"API_TOKEN": sync_scopes.MASKED_VALUE, "NODE_OPTIONS": "--require x"}
+    # The new name arrives without its value, to be filled in here.
+    assert held["summary"]["env"] == {"API_TOKEN": sync_scopes.MASKED_VALUE, "NODE_OPTIONS": ""}
     assert "NODE_OPTIONS" not in _server(b_store, "api")["env"]
 
 

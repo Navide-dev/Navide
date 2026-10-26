@@ -6816,6 +6816,8 @@
       "no-arguments": "沒有參數",
       "env": "環境變數",
       "no-env": "沒有環境變數",
+      "needs-setup": "需要設定",
+      "fill-locally": "有些值是空的，請在這台電腦上填入。環境變數和標頭的值不會在裝置之間同步。",
       "headers": "標頭",
       "no-headers": "沒有標頭",
       "show": "顯示",

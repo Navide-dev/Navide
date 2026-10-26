@@ -324,6 +324,25 @@ def _describe(adapter: Any, payload: Any) -> dict[str, Any] | None:
     return out if isinstance(out, dict) else None
 
 
+def _inbound(adapter: Any, payload: Any) -> Any:
+    """*payload* as *adapter* compares a remote copy, when it reads one in a
+    narrower form than the record (``McpScope.inbound``: no env or header
+    values), so a field it never sends cannot make two copies differ."""
+    fn = getattr(adapter, "inbound", None)
+    return payload if fn is None or payload is None else fn(payload)
+
+
+def _agreed_before(adapter: Any, item_id: str, agreed_hash: str) -> bool:
+    """Whether *agreed_hash* is this item as an older build sent it
+    (``former_snapshot``): unchanged since, only the sent form moved on, and
+    not an edit to push or a reason for a conflict."""
+    fn = getattr(adapter, "former_snapshot", None)
+    if fn is None or not agreed_hash:
+        return False
+    former = fn()
+    return item_id in former and digest(former[item_id]) == agreed_hash
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -1582,11 +1601,14 @@ class SyncEngine:
                 raise SyncError(f"{scope}/{item_id} could not be opened ({type(err).__name__})") from err
             log.warning("dropping %s/%s: %s", scope, item_id, _why(err))
             return False
+        remote = _inbound(adapter, remote)
 
         state = self._store.state(scope, item_id)
         local = snapshot.get(item_id)
         local_hash = digest(local) if item_id in snapshot else ""
         agreed_hash = state.synced_hash if state else ""
+        if agreed_hash != local_hash and _agreed_before(adapter, item_id, agreed_hash):
+            agreed_hash = local_hash
         remote_hash = "" if remote is None else digest(remote)
         # Applying over an edit this machine has not pushed yet would lose it.
         # That is the one thing this engine must never do, so it becomes a
@@ -1740,9 +1762,10 @@ class SyncEngine:
         """A record's payload, opened under the id it travels by (and, for a
         hashed id, unwrapped). On a legacy id exactly what v1 always did."""
         text = sync_keyring.decrypt(body, scope=scope, item_id=wire_id)
+        adapter = self._adapters.get(scope)
         if not sync_keyring.is_hashed_item_id(wire_id):
-            return json.loads(text)
-        return self._unwrap(scope, wire_id, text)[1]
+            return _inbound(adapter, json.loads(text))
+        return _inbound(adapter, self._unwrap(scope, wire_id, text)[1])
 
     def _reverse(self, scope: str, snapshot: dict[str, Any]) -> dict[str, str]:
         """Hashed id → name for every item this machine knows of: what it
@@ -2010,6 +2033,22 @@ class SyncEngine:
                 continue
             item_hash = digest(payload)
             state = states.get(item_id)
+            if state is not None and not state.deleted and state.synced_hash != item_hash \
+                    and _agreed_before(adapter, item_id, state.synced_hash):
+                # Agreed on in the form an older build sent and unchanged
+                # since: the agreed hash moves to the form sent now, and
+                # nothing goes up for the upgrade alone.
+                self._store.set_state(
+                    scope,
+                    item_id,
+                    rev=state.rev,
+                    synced_hash=item_hash,
+                    deleted=False,
+                    sealed_kid=state.sealed_kid,
+                    synced_updated_at=state.synced_updated_at,
+                    wire_id=state.wire_id,
+                )
+                state = states[item_id] = self._store.state(scope, item_id) or state
             if state is not None and not state.deleted and state.synced_hash == item_hash:
                 # Unchanged — unless the key it went up under has since been
                 # retired, in which case the same bytes go up again under the

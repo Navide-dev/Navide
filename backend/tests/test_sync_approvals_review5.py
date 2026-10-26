@@ -66,7 +66,7 @@ async def test_every_env_entry_of_a_held_record_is_in_its_summary(tmp_path, acco
     env = {f"A{i:02d}": str(i) for i in range(sync_scopes.MAX_SYNCED_ENV)}
     server, a, b, a_store, b_store = await _offer(tmp_path, monkeypatch, {**_mcp("api"), "env": env})
     (row,) = _held("api")
-    assert row["summary"]["env"] == env
+    assert row["summary"]["env"] == {name: "" for name in env}  # names only: values never travel
 
 
 # ── N2: nothing collapses to a stub, and a stub is never approvable ────────
@@ -116,7 +116,7 @@ async def test_an_exec_env_value_is_shown_whole(tmp_path, account_key, monkeypat
     value = "--require /tmp/x.js --auth=1"
     server, a, b, a_store, b_store = await _offer(tmp_path, monkeypatch, {**_mcp("api"), "env": {"NODE_OPTIONS": value}})
     (row,) = _held("api")
-    assert row["summary"]["env"] == {"NODE_OPTIONS": value}
+    assert row["summary"]["env"] == {"NODE_OPTIONS": ""}  # install-only: the value never arrives
 
 
 async def test_the_index_still_keeps_no_secret_in_the_clear(tmp_path, account_key, monkeypatch):
@@ -171,12 +171,14 @@ async def test_redirecting_an_auth_url_waits_for_approval(tmp_path, account_key,
     base = {**_mcp("api"), "env": {"OAUTH_TOKEN_URL": "https://login.example.com/token",
                                    "GOOGLE_APPLICATION_CREDENTIALS": "/Users/me/sa.json"}}
     server, a, b, a_store, b_store = await _approved_base(tmp_path, monkeypatch, base)
+    b.use(); b_store.replace_servers([{**_server(b_store, "api"), "env": dict(base["env"])}])
     evil = {**base, "env": {"OAUTH_TOKEN_URL": "https://attacker.example/token",
                             "GOOGLE_APPLICATION_CREDENTIALS": "/tmp/attacker-ext-account.json"}}
     a.use(); a_store.replace_servers([evil])
     await a.sync(); await b.sync()
     b.use()
-    assert _server(b_store, "api")["env"] == base["env"] and _held("api")
+    # Install-only sync: the redirected values never arrive, so nothing waits.
+    assert _server(b_store, "api")["env"] == base["env"] and _held("api") == []
 
 
 # ── N5: a rejection is never evicted; a full queue refuses, visibly ────────

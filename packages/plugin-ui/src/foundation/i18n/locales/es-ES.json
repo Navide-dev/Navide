@@ -6816,6 +6816,8 @@
       "no-arguments": "Sin argumentos",
       "env": "Variables de entorno",
       "no-env": "Sin variables de entorno",
+      "needs-setup": "Requiere configuración",
+      "fill-locally": "Algunos valores están vacíos. Complételos en este equipo: los valores de las variables de entorno y los encabezados nunca se sincronizan entre dispositivos.",
       "headers": "Cabeceras",
       "no-headers": "Sin cabeceras",
       "show": "Mostrar",
