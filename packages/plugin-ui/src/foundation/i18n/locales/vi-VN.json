@@ -1474,6 +1474,8 @@
       "unsupported": "Navide chưa đọc được nơi CLI này lưu tiện ích mở rộng CLI.",
       "invalid": "Không đọc được: {error}",
       "disabled": "Đã tắt",
+      "enabledUnknown": "Không rõ trạng thái",
+      "enabledUnknownReason": "Không xác định được có đang bật hay không: {error}",
       "ownerNavide": "Do Navide cài",
       "inferred": "suy ra",
       "inferredHint": "Đọc từ mã nguồn; manifest của CLI không nêu những điều này.",

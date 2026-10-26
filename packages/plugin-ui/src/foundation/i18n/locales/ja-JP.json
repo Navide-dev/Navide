@@ -1474,6 +1474,8 @@
       "unsupported": "Navide はまだこの CLI の CLI 拡張の保存場所を読み取れません。",
       "invalid": "読み取れません：{error}",
       "disabled": "無効",
+      "enabledUnknown": "状態不明",
+      "enabledUnknownReason": "有効かどうか判断できません: {error}",
       "ownerNavide": "Navide がインストール",
       "inferred": "推定",
       "inferredHint": "ソースコードの文字列から推定しました。CLI のマニフェストには記載されていません。",

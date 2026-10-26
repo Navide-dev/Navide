@@ -1474,6 +1474,8 @@
       "unsupported": "Navide 还读不到这家 CLI 存放 CLI 扩展的位置。",
       "invalid": "无法读取：{error}",
       "disabled": "已禁用",
+      "enabledUnknown": "状态未知",
+      "enabledUnknownReason": "无法判断是否已启用：{error}",
       "ownerNavide": "Navide 安装",
       "inferred": "推定",
       "inferredHint": "这些能力是从源代码文字推定的，CLI 的 manifest 没有声明。",

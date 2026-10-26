@@ -1474,6 +1474,8 @@
       "unsupported": "Navide가 아직 이 CLI의 CLI 확장 저장 위치를 읽을 수 없어요.",
       "invalid": "읽지 못했어요: {error}",
       "disabled": "사용 안 함",
+      "enabledUnknown": "상태 알 수 없음",
+      "enabledUnknownReason": "활성화 여부를 확인할 수 없습니다: {error}",
       "ownerNavide": "Navide가 설치함",
       "inferred": "추정",
       "inferredHint": "소스 텍스트에서 읽은 내용이에요. CLI의 매니페스트에는 명시되어 있지 않아요.",

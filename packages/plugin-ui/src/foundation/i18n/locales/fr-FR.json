@@ -1474,6 +1474,8 @@
       "unsupported": "Navide ne sait pas encore où cette CLI range ses extensions CLI.",
       "invalid": "Lecture impossible : {error}",
       "disabled": "Désactivée",
+      "enabledUnknown": "État inconnu",
+      "enabledUnknownReason": "Impossible de savoir si elle est activée : {error}",
       "ownerNavide": "Installée par Navide",
       "inferred": "déduit",
       "inferredHint": "Déduit du texte source ; le manifeste de la CLI ne l’indique pas.",

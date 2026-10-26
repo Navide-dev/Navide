@@ -1474,6 +1474,8 @@
       "unsupported": "Navide cannot read where this CLI keeps its CLI extensions yet.",
       "invalid": "Could not read: {error}",
       "disabled": "Disabled",
+      "enabledUnknown": "State unknown",
+      "enabledUnknownReason": "Could not tell whether this is enabled: {error}",
       "ownerNavide": "Installed by Navide",
       "inferred": "inferred",
       "inferredHint": "Read off the source text; the CLI's manifest does not state these.",

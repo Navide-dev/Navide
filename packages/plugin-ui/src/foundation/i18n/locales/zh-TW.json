@@ -1474,6 +1474,8 @@
       "unsupported": "Navide 還讀不到這家 CLI 存放 CLI 擴充的位置。",
       "invalid": "無法讀取：{error}",
       "disabled": "已停用",
+      "enabledUnknown": "狀態未知",
+      "enabledUnknownReason": "無法判斷是否已啟用：{error}",
       "ownerNavide": "Navide 安裝",
       "inferred": "推定",
       "inferredHint": "這些能力是從原始碼文字推定的，CLI 的 manifest 沒有宣告。",

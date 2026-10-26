@@ -91,6 +91,23 @@ describe('CliExtensionsPane', () => {
     expect(wrapper.get('[data-id="!broken"] .cli-ext-error').text()).toBe('Could not read: no plugins map')
   })
 
+  it('shows an unreadable on/off switch as an unknown state with its reason, not as enabled or disabled', async () => {
+    send.mockResolvedValue({ ok: true, error: null, payload: { ...payload, items: [
+      item({ id: 'a@mkt', name: 'a', enabled: true, enabled_error: 'cannot parse settings.json: Expecting value' }),
+      item({ id: 'b@mkt', name: 'b', enabled: true }),
+    ] } })
+    render()
+    await flushPromises()
+    const unknown = wrapper.get('[data-id="a@mkt"]')
+    expect(unknown.get('.cli-ext-unknown').text()).toBe('State unknown')
+    expect(unknown.find('.cli-ext-disabled').exists()).toBe(false)
+    expect(unknown.classes()).not.toContain('off')
+    expect(unknown.get('.cli-ext-warning').text()).toBe('Could not tell whether this is enabled: cannot parse settings.json: Expecting value')
+    const known = wrapper.get('[data-id="b@mkt"]')
+    expect(known.find('.cli-ext-unknown').exists()).toBe(false)
+    expect(known.find('.cli-ext-warning').exists()).toBe(false)
+  })
+
   it('has no button that changes anything: the only one rescans', async () => {
     render()
     await flushPromises()

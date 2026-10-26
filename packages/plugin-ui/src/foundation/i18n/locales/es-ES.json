@@ -1474,6 +1474,8 @@
       "unsupported": "Navide aún no puede leer dónde guarda esta CLI sus extensiones de CLI.",
       "invalid": "No se pudo leer: {error}",
       "disabled": "Desactivada",
+      "enabledUnknown": "Estado desconocido",
+      "enabledUnknownReason": "No se puede saber si está activada: {error}",
       "ownerNavide": "Instalada por Navide",
       "inferred": "deducido",
       "inferredHint": "Deducido del texto fuente; el manifiesto de la CLI no lo indica.",
