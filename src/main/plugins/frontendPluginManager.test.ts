@@ -9354,12 +9354,17 @@ describe('opaque view instance ownership', () => {
         expect(socket.sent).toHaveLength(0)
       }
       // The control: the same package and version reaches the backend.
-      const { socket } = await resumeAs({ id: 'acme.devmap' })
+      const { result, socket } = await resumeAs({ id: 'acme.devmap' })
       await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
-      expect(JSON.parse(socket.sent[0]!)).toMatchObject({
+      const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+      expect(request).toMatchObject({
         type: 'terminal.reattach',
         payload: { terminal_session_ids: ['detached'] },
       })
+      // Answer it: an unanswered request rejects on its 10s timeout after the
+      // test has ended, as an unhandled rejection in whichever test is running.
+      socket.receive({ id: request.id, type: request.type, ok: true, payload: { alive: ['detached'], dead: [] }, error: null, timestamp: '' })
+      await expect(result).resolves.toEqual({ sessionId: 'detached', profileId: 'claude' })
     })
 
     // Each third-party package version has its own terminal storage key, so a
@@ -9438,10 +9443,25 @@ describe('opaque view instance ownership', () => {
       // The control: a stored session the ledger does not record still resumes.
       const allowed = await resumeFromStorage(null)
       await vi.waitFor(() => expect(allowed.socket.sent).toHaveLength(1))
-      expect(JSON.parse(allowed.socket.sent[0]!)).toMatchObject({
+      const request = JSON.parse(allowed.socket.sent[0]!) as { id: string; type: string }
+      expect(request).toMatchObject({
         type: 'terminal.reattach',
         payload: { terminal_session_ids: ['old-pty'] },
       })
+      // Answer it, so the request does not reject unhandled after the test.
+      allowed.socket.receive({
+        id: request.id,
+        type: request.type,
+        ok: true,
+        payload: {
+          alive: ['old-pty'],
+          dead: [],
+          sessions: { 'old-pty': { agent_key: 'claude', workspace_path: '/workspace', origin: 'acme.devmap' } },
+        },
+        error: null,
+        timestamp: '',
+      })
+      await expect(allowed.result).resolves.toEqual({ sessionId: 'old-pty', profileId: 'claude' })
     })
 
     // Review L6 on #648: a session found again through storage is marked
