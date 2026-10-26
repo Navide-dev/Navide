@@ -1894,6 +1894,8 @@
         "disable": "사용 안 함",
         "enable_plugin": "사용",
         "changed": "허용한 뒤 네이티브 코드나 권한이 바뀌었어요.",
+        "allowedPreInstall": "묻지 않고 허용됨: Navide 0.2.31 이전에 설치되어 당시 버전이 설치 동의를 기록하지 않았어요.",
+        "declined": "시작하려고 할 때 허용하지 않아서 Navide가 이 버전에 대해 다시 묻지 않고 꺼진 상태로 둬요. 실행하려면 허용을 누르세요.",
         "writeAllowed": "{path}에서 파일을 변경할 수 있음",
         "revoke": "취소",
         "violation": "{kind} 한도를 초과해서 중지되었어요.",

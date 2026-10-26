@@ -14,8 +14,10 @@ const row = (pluginId: string, extra: Record<string, unknown> = {}) => ({
 
 let wrapper: VueWrapper | undefined
 
-async function mountPanel(): Promise<VueWrapper> {
-  const overview = { enabled: true, plugins: [row('acme.indexer'), row('nerdtechnic.devmap', { shell: 'allowlist' })] }
+async function mountPanel(
+  plugins = [row('acme.indexer'), row('nerdtechnic.devmap', { shell: 'allowlist' })],
+): Promise<VueWrapper> {
+  const overview = { enabled: true, plugins }
   ;(window as unknown as Record<string, unknown>).agentTeam = {
     plugins: {
       list: vi.fn(async () => []),
@@ -58,5 +60,23 @@ describe('NativeBackendPanel shell disclosure', () => {
       panel.unmount()
       wrapper = undefined
     }
+  })
+})
+
+describe('NativeBackendPanel pre-0.2.31 install disclosure', () => {
+  it('says on its row that a package installed before 0.2.31 was allowed without asking', async () => {
+    const panel = await mountPanel([row('acme.indexer'), row('nerdtechnic.devmap', { allowedBy: 'pre-0.2.31-install' })])
+    expect(panel.find('[data-native-backend-id="acme.indexer"] .native-backend-pre-install').exists()).toBe(false)
+    expect(panel.get('[data-native-backend-id="nerdtechnic.devmap"] .native-backend-pre-install').text())
+      .toBe('Allowed without asking: it was installed before Navide 0.2.31, which did not record install consent.')
+  })
+})
+
+describe('NativeBackendPanel saved decline', () => {
+  it('says a declined package stays off and offers Allow', async () => {
+    const panel = await mountPanel([row('acme.indexer', { status: 'needs-consent', declined: true })])
+    const item = panel.get('[data-native-backend-id="acme.indexer"]')
+    expect(item.get('.native-backend-declined').text()).toContain('Press Allow to run it.')
+    expect(item.findAll('button').some((button) => button.text() === 'Allow')).toBe(true)
   })
 })

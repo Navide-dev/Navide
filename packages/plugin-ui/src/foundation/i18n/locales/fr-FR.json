@@ -1894,6 +1894,8 @@
         "disable": "Désactiver",
         "enable_plugin": "Activer",
         "changed": "Son code natif ou ses autorisations ont changé depuis que vous l’avez autorisé.",
+        "allowedPreInstall": "Autorisé sans demande : il a été installé avant Navide 0.2.31, qui n’enregistrait pas le consentement à l’installation.",
+        "declined": "Vous l’avez refusé au moment de son démarrage : Navide ne redemande plus pour cette version et il reste désactivé. Appuyez sur Autoriser pour l’exécuter.",
         "writeAllowed": "Peut modifier des fichiers dans {path}",
         "revoke": "Révoquer",
         "violation": "Arrêté après avoir dépassé sa limite de {kind}.",

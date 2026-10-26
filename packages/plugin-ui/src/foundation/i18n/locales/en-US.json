@@ -1894,6 +1894,8 @@
         "disable": "Disable",
         "enable_plugin": "Enable",
         "changed": "Its native code or permissions changed since you allowed it.",
+        "allowedPreInstall": "Allowed without asking: it was installed before Navide 0.2.31, which did not record install consent.",
+        "declined": "You declined it when it was about to start, so Navide does not ask again for this version and it stays off. Press Allow to run it.",
         "writeAllowed": "May change files in {path}",
         "revoke": "Revoke",
         "violation": "Stopped after exceeding its {kind} limit.",
