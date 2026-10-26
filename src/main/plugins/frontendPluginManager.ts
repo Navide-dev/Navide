@@ -776,6 +776,8 @@ interface AiSessionLedgerEntry {
   storageIdentity?: AiTerminalStorageIdentity
   /** The reclaim of the latest detach; a newer detach replaces it. */
   reclaimTimer?: ReturnType<typeof setTimeout>
+  /** A view's aiCli.resumeSession is reattaching it right now. */
+  resuming?: boolean
   /** Set by the Host only: this session's id is in terminal storage (written
    *  when it started, or it was resumed from there), so a later view can
    *  resume it. A package's own persistView flag does not set it. */
@@ -8065,6 +8067,11 @@ export class FrontendPluginManager {
       pluginId: binding.pluginId,
       contributionKey,
       workspacePath: resolve(workspacePath),
+      // Third-party storage is per package version; the bundled Navide
+      // plugins keep the key they had, and resume across their own versions.
+      ...(SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(binding.pluginId)
+        ? {}
+        : { packageVersion: binding.packageVersion }),
     })
   }
 
@@ -8412,26 +8419,44 @@ export class FrontendPluginManager {
         const attached = [...this.aiSessions.values()].find((entry) =>
           entry.sessionId === ownerSessionId && entry.attachedInstanceId !== null)
         if (attached) return null
+        // A third-party view may not take over, or overwrite, a session the
+        // ledger records for another binding (another version, workspace or
+        // audience); the bundled Navide plugins keep resuming across their
+        // own versions.
+        const recorded = this.aiSessions.get(ownerSessionId)
+        if (
+          recorded &&
+          !SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(plugin.id) &&
+          !this.aiSessionMatchesPlugin(recorded, plugin)
+        ) return null
       }
       if (!candidate && !ownerSessionId) return null
       const sessionId = candidate?.sessionId ?? ownerSessionId!
-      const response = await client.send(
-        'terminal.reattach',
-        {
-          terminal_session_ids: [sessionId],
-          cols: Number(args.cols),
-          rows: Number(args.rows),
-          ...(persistView && storageIdentity
-            ? {
-                expected_workspace_path: resolve(workspacePath),
-                expected_origin: this.aiTerminalMetadataOrigin(plugin),
-                expected_profile_ids: [...(plugin.capabilityContext?.aiCliProfiles ?? [])],
-              }
-            : {}),
-        },
-        10_000,
-        { beforeDispatch },
-      )
+      // The reclaim must not end the candidate while the reattach is in flight;
+      // a timer that fires meanwhile waits again instead.
+      if (candidate) candidate.resuming = true
+      let response: Awaited<ReturnType<typeof client.send>>
+      try {
+        response = await client.send(
+          'terminal.reattach',
+          {
+            terminal_session_ids: [sessionId],
+            cols: Number(args.cols),
+            rows: Number(args.rows),
+            ...(persistView && storageIdentity
+              ? {
+                  expected_workspace_path: resolve(workspacePath),
+                  expected_origin: this.aiTerminalMetadataOrigin(plugin),
+                  expected_profile_ids: [...(plugin.capabilityContext?.aiCliProfiles ?? [])],
+                }
+              : {}),
+          },
+          10_000,
+          { beforeDispatch },
+        )
+      } finally {
+        if (candidate) candidate.resuming = false
+      }
       if (!response.ok) throw new Error(response.error?.message ?? 'AI CLI resume failed')
       const alive = toPayload(response.payload).alive
       if (!Array.isArray(alive) || !alive.includes(sessionId)) {
@@ -10465,6 +10490,12 @@ export class FrontendPluginManager {
       entry.reclaimTimer = undefined
       if (this.appQuitting()) return
       if (this.aiSessions.get(entry.sessionId) !== entry || entry.attachedInstanceId !== null) return
+      if (entry.resuming === true) {
+        // Its resume settles with it attached (nothing to end) or failed (it
+        // gets the full wait again).
+        this.scheduleAiSessionReclaim(entry)
+        return
+      }
       this.aiSessions.delete(entry.sessionId)
       this.terminalRoutes.delete(entry.sessionId)
       this.aiTerminalOutputDecoder.dropSession(entry.sessionId)
@@ -10490,7 +10521,30 @@ export class FrontendPluginManager {
       }).catch(() => {
         // Removal still forgets ownership when the backend is unavailable.
       })
+      this.forgetStoredAiSession(session)
     }
+  }
+
+  /** The kill above is not awaited, so a stored third-party session also
+   *  leaves terminal storage: nothing can resume it from there even if the
+   *  kill never reached the backend. Its key is this package version's own, so
+   *  no other version's session is touched. The bundled Navide plugins share
+   *  one key across versions and keep their storage as before. */
+  private forgetStoredAiSession(session: AiSessionLedgerEntry): void {
+    const handler = this.terminalStorageHandler
+    const identity = session.storageIdentity
+    if (
+      !handler ||
+      !identity ||
+      session.storedForResume !== true ||
+      SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(session.pluginId)
+    ) return
+    void handler(identity.origin, {
+      operation: 'session',
+      resumeKey: identity.resumeKey,
+      ptyId: null,
+    }, () => !this.appQuitting()).catch((error) => console.warn(
+      `[plugins] AI terminal storage could not forget ended session ${session.sessionId} for ${session.pluginId}`, error))
   }
 
   private revokePackageVersionInBackground(pluginId: string, packageVersion: string): void {

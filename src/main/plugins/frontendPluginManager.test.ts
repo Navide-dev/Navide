@@ -7,6 +7,7 @@ import { homedir, tmpdir } from 'node:os'
 import { isWindows, platformId, setPlatformId } from '../../shared/osplat'
 import { AI_CLI_PROFILES } from '../../shared/aiCliProfiles'
 import { backendEntryOnDisk } from './installedPlugins'
+import { aiTerminalStorageIdentity } from './aiTerminalStorage'
 
 // Many real fsyncs per test that no assertion can observe; see tests/support/noFsync.ts.
 vi.mock('node:fs', async (importOriginal) =>
@@ -8794,6 +8795,87 @@ describe('opaque view instance ownership', () => {
     }
   })
 
+  // Review L4 on #648: a route made before a context change keeps reaching
+  // its view when the new context still binds that session.
+  it('keeps delivering a route made before a context change that still binds its session', async () => {
+    vi.useFakeTimers()
+    try {
+      const mgr = new FrontendPluginManager()
+      const packageDesc = v2PackageDescriptor()
+      const oldContext = v2Context({ audience: 'same-audience', sessionId: 'old-session' })
+      mgr.registerDescriptor({ ...packageDesc, capabilityContext: oldContext })
+      const host = new FakeBrowserWindow()
+      const handle = await mgr.openView(packageDesc, packageDesc.views![0], {
+        hostWindow: asHost(host),
+        bounds: 'fill',
+      })
+      mgr.noteTerminalRoutes(handle.instanceId, 'terminal.create', {
+        terminal_session_id: 'old-session',
+      })
+
+      const newContext = v2Context({ audience: 'same-audience', sessionId: 'new-session' })
+      newContext.sessionBindings = new Map([
+        ['old-session', newContext.runtimeBinding!],
+        ['new-session', newContext.runtimeBinding!],
+      ])
+      mgr.setCapabilityContext(packageDesc.id, newContext)
+      dispatchEvent(mgr, 'terminal.output', output('old-session', 'made before the change'))
+      vi.advanceTimersByTime(12)
+
+      const view = host.children[0] as FakeViewLike
+      expect(eventsOf(view, 'terminal.output')).toHaveLength(0)
+      expect(eventsOf(view, 'aiCli.output')).toEqual([
+        { type: 'aiCli.output', data: { sessionId: 'old-session', data: 'made before the change' } },
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Review L1 on #648: the aiCli path returns before the raw-event guard for
+  // every package that declares aiCli, so this one does not: its own v2 route
+  // still never gets terminal.*, which carries the pane id and stream.
+  it('never sends raw terminal events to a v2 route of a package without aiCli', async () => {
+    vi.useFakeTimers()
+    try {
+      const mgr = new FrontendPluginManager()
+      const id = 'acme.no-aicli'
+      const context: HostCapabilityContext = {
+        ...v2Context({ pluginId: id, sessionId: 'raw-session' }),
+        userGrant: { packageVersion: '1.0.0', system: ['fs'] },
+      }
+      const packageDesc: PluginLaunchDescriptor = {
+        ...v2PackageDescriptor(id),
+        capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+        capabilityContext: context,
+      }
+      mgr.registerDescriptor(packageDesc)
+      const host = new FakeBrowserWindow()
+      const handle = await mgr.openView(packageDesc, packageDesc.views![0], {
+        hostWindow: asHost(host),
+        bounds: 'fill',
+      })
+      mgr.noteTerminalRoutes(handle.instanceId, 'terminal.create', {
+        terminal_session_id: 'raw-session',
+      })
+      const routes = (mgr as unknown as { terminalRoutes: Map<string, { instanceId: string | null; legacy?: boolean }> })
+        .terminalRoutes
+      expect(routes.get('raw-session')).toMatchObject({ instanceId: handle.instanceId })
+      expect(routes.get('raw-session')?.legacy).toBeFalsy()
+
+      dispatchEvent(mgr, 'terminal.output', output('raw-session', 'raw text'))
+      vi.advanceTimersByTime(12)
+      dispatchEvent(mgr, 'terminal.exit', { terminal_session_id: 'raw-session', pane_id: 'p', exit_code: 0 })
+
+      const view = host.children[0] as FakeViewLike
+      for (const type of ['terminal.output', 'terminal.exit', 'aiCli.output', 'aiCli.exited']) {
+        expect(eventsOf(view, type)).toHaveLength(0)
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('detaches routes when the tuple changes or the grant is revoked', async () => {
     vi.useFakeTimers()
     try {
@@ -9280,6 +9362,135 @@ describe('opaque view instance ownership', () => {
       })
     })
 
+    // Each third-party package version has its own terminal storage key, so a
+    // new version never reads or clears an older one's stored session. The
+    // bundled Navide plugins keep the key they had before versions were added.
+    it('keeps terminal storage per package version, except for the bundled plugins', async () => {
+      const identityOf = async (id: string, packageVersion: string) => {
+        const mgr = new FrontendPluginManager()
+        const opened = await openThirdParty(mgr, { id, packageVersion })
+        const internal = mgr as unknown as Internal & { terminalStorageIdentity(plugin: unknown): unknown }
+        return internal.terminalStorageIdentity(internal.running.get(opened.handle.instanceId)!) as
+          { origin: string; resumeKey: string }
+      }
+      const v1 = await identityOf('acme.devmap', '1.0.0')
+      expect(await identityOf('acme.devmap', '1.0.0')).toEqual(v1)
+      expect((await identityOf('acme.devmap', '2.0.0')).resumeKey).not.toBe(v1.resumeKey)
+      expect(v1).toEqual(aiTerminalStorageIdentity({
+        pluginId: 'acme.devmap',
+        contributionKey: 'acme.devmap.left',
+        workspacePath: resolve('/workspace'),
+        packageVersion: '1.0.0',
+      }))
+      for (const id of ['navide.git', 'navide.plans', 'navide.mini-ide']) {
+        const bundled = await identityOf(id, '1.0.0')
+        expect(await identityOf(id, '2.0.0')).toEqual(bundled)
+        expect(bundled).toEqual(aiTerminalStorageIdentity({
+          pluginId: id,
+          contributionKey: `${id}.left`,
+          workspacePath: resolve('/workspace'),
+        }))
+      }
+    })
+
+    // Security review on #648, (b): even if storage named it, a third-party
+    // view never takes over, or overwrites, a session the ledger records for
+    // another version.
+    it('does not resume from storage a session the ledger records for another version', async () => {
+      const resumeFromStorage = async (recordedVersion: string | null) => {
+        const mgr = new FrontendPluginManager()
+        const opened = await openThirdParty(mgr, { id: 'acme.devmap', packageVersion: '2.0.0' })
+        mgr.setTerminalStorageHandler(async () => ({ fontSize: 12, lastSize: null, ptyId: 'old-pty', snapshot: null }))
+        mgr.setBackendWsUrl(`ws://storage-resume-${recordedVersion}`)
+        const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+        socket.open()
+        const internal = mgr as unknown as Internal
+        const plugin = internal.running.get(opened.handle.instanceId)!
+        plugin.capabilityContext.aiCliProfiles = ['claude']
+        const runtime = plugin.capabilityContext.runtimeBinding!
+        const recorded = recordedVersion === null ? undefined : {
+          sessionId: 'old-pty',
+          profileId: 'claude',
+          pluginId: 'acme.devmap',
+          packageVersion: recordedVersion,
+          workspaceId: runtime.workspaceId,
+          audience: runtime.audience,
+          attachedInstanceId: null,
+          client: internal.wsClient,
+          createdAt: Date.now(),
+          persistView: true,
+        }
+        if (recorded) internal.aiSessions.set('old-pty', recorded)
+        const result = mgr.executePublicCapability({
+          kind: 'public',
+          address: 'aiCli.resumeSession',
+          scope: 'workspace',
+          runtime,
+          args: { cols: 80, rows: 24, persistView: true },
+        })
+        return { result, socket, internal, recorded }
+      }
+
+      const refused = await resumeFromStorage('1.0.0')
+      await expect(refused.result).resolves.toBeNull()
+      expect(refused.socket.sent).toHaveLength(0)
+      expect(refused.internal.aiSessions.get('old-pty')).toBe(refused.recorded)
+      // The control: a stored session the ledger does not record still resumes.
+      const allowed = await resumeFromStorage(null)
+      await vi.waitFor(() => expect(allowed.socket.sent).toHaveLength(1))
+      expect(JSON.parse(allowed.socket.sent[0]!)).toMatchObject({
+        type: 'terminal.reattach',
+        payload: { terminal_session_ids: ['old-pty'] },
+      })
+    })
+
+    // Review L6 on #648: a session found again through storage is marked
+    // stored, so closing the view that resumed it keeps it running.
+    it('keeps a session resumed from storage when that view closes too', async () => {
+      vi.useFakeTimers()
+      try {
+        const mgr = new FrontendPluginManager()
+        const opened = await openThirdParty(mgr, { id: 'acme.devmap' })
+        mgr.setTerminalStorageHandler(async () => ({ fontSize: 12, lastSize: null, ptyId: 'stored-pty', snapshot: null }))
+        mgr.setBackendWsUrl('ws://storage-resume-then-close')
+        const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+        socket.open()
+        const internal = mgr as unknown as Internal
+        const plugin = internal.running.get(opened.handle.instanceId)!
+        plugin.capabilityContext.aiCliProfiles = ['claude']
+        const resume = mgr.executePublicCapability({
+          kind: 'public',
+          address: 'aiCli.resumeSession',
+          scope: 'workspace',
+          runtime: plugin.capabilityContext.runtimeBinding!,
+          args: { cols: 80, rows: 24, persistView: true },
+        })
+        await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+        const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+        socket.receive({
+          id: request.id,
+          type: request.type,
+          ok: true,
+          payload: {
+            alive: ['stored-pty'],
+            dead: [],
+            sessions: { 'stored-pty': { agent_key: 'claude', workspace_path: '/workspace', origin: 'acme.devmap' } },
+          },
+          error: null,
+          timestamp: '',
+        })
+        await expect(resume).resolves.toEqual({ sessionId: 'stored-pty', profileId: 'claude' })
+        expect(internal.aiSessions.get('stored-pty')).toMatchObject({ storedForResume: true, attachedInstanceId: opened.handle.instanceId })
+        opened.view.webContents.close()
+        await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS * 2)
+        const kills = socket.sent.filter((raw) => JSON.parse(raw).type === 'terminal.kill')
+        expect(kills).toHaveLength(0)
+        expect(internal.aiSessions.get('stored-pty')?.attachedInstanceId).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     describe('a session left behind when its view closes', () => {
       async function withDetachedSession(id: string, persist: 'no' | 'asked' | 'stored' = 'no') {
         const mgr = new FrontendPluginManager()
@@ -9431,6 +9642,120 @@ describe('opaque view instance ownership', () => {
         } finally {
           vi.useRealTimers()
         }
+      })
+
+      // Review L3 on #648: the reclaim wait ending while a view is resuming the
+      // session does not end it under that view.
+      describe('when the wait ends during a resume', () => {
+        async function resumeNearTheEnd() {
+          const left = await withDetachedSession('acme.devmap')
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS - 1_000)
+          const next = await openThirdParty(left.mgr, { id: 'acme.devmap' })
+          const plugin = left.internal.running.get(next.handle.instanceId)!
+          plugin.capabilityContext.aiCliProfiles = ['claude']
+          const resume = left.mgr.executePublicCapability({
+            kind: 'public',
+            address: 'aiCli.resumeSession',
+            scope: 'workspace',
+            runtime: plugin.capabilityContext.runtimeBinding!,
+            args: { cols: 80, rows: 24 },
+          })
+          await vi.waitFor(() => expect(left.socket.sent).toHaveLength(1))
+          const request = JSON.parse(left.socket.sent[0]!) as { id: string; type: string }
+          expect(request.type).toBe('terminal.reattach')
+          await vi.advanceTimersByTimeAsync(2_000)
+          expect(left.kills()).toHaveLength(0)
+          return { ...left, next, resume, request }
+        }
+
+        it('keeps it once the resume attaches it', async () => {
+          vi.useFakeTimers()
+          try {
+            const { socket, internal, kills, next, resume, request } = await resumeNearTheEnd()
+            socket.receive({
+              id: request.id, type: request.type, ok: true,
+              payload: { alive: ['left-session'], dead: [] }, error: null, timestamp: '',
+            })
+            await expect(resume).resolves.toEqual({ sessionId: 'left-session', profileId: 'claude' })
+            expect(internal.aiSessions.get('left-session')?.attachedInstanceId).toBe(next.handle.instanceId)
+            await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS * 2)
+            expect(kills()).toHaveLength(0)
+          } finally {
+            vi.useRealTimers()
+          }
+        })
+
+        it('ends it once, a full wait later, when the resume fails', async () => {
+          vi.useFakeTimers()
+          try {
+            const { socket, internal, kills, resume, request } = await resumeNearTheEnd()
+            socket.receive({
+              id: request.id, type: request.type, ok: false,
+              payload: {}, error: { code: 'X', message: 'reattach failed' }, timestamp: '',
+            })
+            await expect(resume).rejects.toThrow(/reattach failed/)
+            expect(internal.aiSessions.get('left-session')?.attachedInstanceId).toBeNull()
+            expect(kills()).toHaveLength(0)
+            // The timer that fired during the resume started a new wait.
+            await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS)
+            expect(kills()).toHaveLength(1)
+            expect(internal.aiSessions.has('left-session')).toBe(false)
+            await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS * 2)
+            expect(kills()).toHaveLength(1)
+          } finally {
+            vi.useRealTimers()
+          }
+        })
+      })
+
+      // #648 version isolation: the kill is not awaited, so a stored session
+      // also leaves terminal storage when its version is revoked or its
+      // package removed; nothing can resume it from there afterwards.
+      describe('terminal storage when the package ends it', () => {
+        function recordStorage(mgr: FrontendPluginManager) {
+          const requests: Array<{ origin: string; request: Record<string, unknown>; canDispatch: boolean }> = []
+          mgr.setTerminalStorageHandler(async (origin, request, canDispatch) => {
+            requests.push({ origin, request: request as unknown as Record<string, unknown>, canDispatch: canDispatch() })
+            return null
+          })
+          return requests
+        }
+
+        it('clears the stored session when its version is revoked', async () => {
+          const { mgr, kills, runtime } = await withDetachedSession('acme.devmap', 'stored')
+          const requests = recordStorage(mgr)
+          await mgr.revokePackageVersion('acme.devmap', runtime.packageVersion)
+          expect(kills()).toHaveLength(1)
+          expect(requests).toEqual([{
+            origin: 'acme.devmap',
+            request: { operation: 'session', resumeKey: 'k', ptyId: null },
+            canDispatch: true,
+          }])
+        })
+
+        it('clears the stored session when the package is disabled or removed', async () => {
+          const { mgr, kills } = await withDetachedSession('acme.devmap', 'stored')
+          const requests = recordStorage(mgr)
+          mgr.preparePluginRemoval('acme.devmap')
+          await Promise.resolve()
+          expect(kills()).toHaveLength(1)
+          expect(requests.map(({ request }) => request)).toEqual([
+            { operation: 'session', resumeKey: 'k', ptyId: null },
+          ])
+        })
+
+        it.each([
+          ['a session storage never got', 'acme.devmap', 'asked'],
+          ['a session never meant to persist', 'acme.devmap', 'no'],
+          ['a bundled plugin, whose key spans its versions', 'navide.mini-ide', 'stored'],
+        ] as const)('leaves terminal storage alone for %s', async (_case, id, persist) => {
+          const { mgr, kills } = await withDetachedSession(id, persist)
+          const requests = recordStorage(mgr)
+          mgr.preparePluginRemoval(id)
+          await Promise.resolve()
+          expect(kills()).toHaveLength(1)
+          expect(requests).toEqual([])
+        })
       })
 
       it('is not reclaimed for the first-party packages, which end their own', async () => {
