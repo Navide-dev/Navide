@@ -1886,6 +1886,8 @@
         "title": "Backends natifs",
         "description": "Certains plugins Navide contiennent du code natif. Navide l’exécute dans un bac à sable sans accès réseau propre ; il ne peut lire que les espaces de travail que vous ouvrez avec lui, et ne modifier des fichiers que là où vous l’autorisez. Un plugin Navide qui exécute aussi des commandes git, gh et glab (signalé comme à haut risque ci-dessous) peut, par leur intermédiaire, contacter des hôtes réseau et envoyer des données de l’espace de travail, ainsi que lire et modifier des fichiers de l’espace de travail sans cette autorisation. Tant que le commutateur ci-dessous est activé, installer un plugin Navide doté de code natif autorise son exécution ; le désactiver les arrête tous.",
         "enable": "Autoriser les plugins Navide tiers à exécuter des backends natifs",
+        "offUnsaved": "Les backends natifs tiers sont désactivés pour l’instant, mais Navide n’a pas pu l’enregistrer. Ils seront de nouveau activés au redémarrage de Navide.",
+        "offUnsavedRetry": "Réessayer",
         "agentTools": {
           "enable": "Autoriser les agents à appeler les outils des plugins Navide tiers",
           "description": "Désactivé par défaut. Une fois activé, les agents de vos panes peuvent appeler les outils déclarés par un plugin Navide tiers, après que vous avez autorisé ce plugin Navide. Un outil qui modifie des fichiers vous le demande une fois par espace de travail. Désactivé, Navide se comporte comme si aucun plugin Navide n’avait d’outils.",
@@ -2168,7 +2170,8 @@
           "computing": "Calcul…",
           "loadedBy": "Chargé par",
           "notReviewed": "Non examiné par Navide, non signé, non analysé.",
-          "mayChange": "Son contenu peut changer à tout moment. L’empreinte ne fait qu’enregistrer le contenu du dossier au moment du chargement ; Navide ne s’en sert pas pour refuser un chargement."
+          "mayChange": "Son contenu peut changer à tout moment. L’empreinte ne fait qu’enregistrer le contenu du dossier au moment du chargement ; Navide ne s’en sert pas pour refuser un chargement.",
+          "consentScope": "Modifier les fichiers du dossier, y compris le programme du backend natif lui-même, ne vous redemande rien. Modifier les autorisations ou le backend déclarés, si. Il est alors déchargé jusqu’à ce que vous donniez à nouveau votre accord."
         },
         "selfHostedQuarantine": "{id} {version} provient d’un Registry auto-hébergé et n’est pas chargé. Activez le mode développeur, ou installez-le depuis la Navide Marketplace."
       },

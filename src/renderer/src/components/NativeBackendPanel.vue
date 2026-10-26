@@ -38,6 +38,16 @@ function api() {
   return window.agentTeam?.plugins?.nativeBackends
 }
 
+/** #642 review L2: a failed "off" save still holds "off" for this run, so
+ *  the page reloads the real state, which carries the unsaved notice. */
+async function setMasterSwitch(on: boolean): Promise<void> {
+  await run(() => api()!.setEnabled(on))
+  if (!error.value || on) return
+  const failure = error.value
+  await run(() => api()!.list())
+  error.value ||= failure
+}
+
 async function run(action: () => Promise<NativeBackendOverview>): Promise<void> {
   busy.value = true
   error.value = ''
@@ -98,10 +108,21 @@ watch(installed, refresh)
             :model-value="overview.enabled"
             :disabled="busy"
             :aria-label="$t('settings.extensions.nativeBackends.enable')"
-            @update:model-value="(on: boolean) => run(() => api()!.setEnabled(on))"
+            @update:model-value="setMasterSwitch"
           />
         </template>
       </SettingRow>
+      <div v-if="overview.offUnsaved" class="native-backends-unsaved" role="status">
+        <p>{{ $t('settings.extensions.nativeBackends.offUnsaved') }}</p>
+        <button
+          type="button"
+          class="native-backends-unsaved-retry nv-btn nv-btn--sm"
+          :disabled="busy"
+          @click="setMasterSwitch(false)"
+        >
+          {{ $t('settings.extensions.nativeBackends.offUnsavedRetry') }}
+        </button>
+      </div>
       <template v-if="overview.agentTools && api()?.setAgentTools">
         <SettingRow
           :title="$t('settings.extensions.nativeBackends.agentTools.enable')"
@@ -271,6 +292,17 @@ watch(installed, refresh)
   margin: var(--space-2) 0 0;
   color: var(--text-secondary);
   font-size: var(--font-xs);
+}
+.native-backends-unsaved {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+  color: var(--warning-fg);
+}
+.native-backends-unsaved p {
+  margin: 0;
+  flex: 1;
 }
 .ext-error {
   margin: var(--space-3) 0;

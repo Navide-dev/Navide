@@ -1886,6 +1886,8 @@
         "title": "原生後端",
         "description": "部分 Navide 外掛內含原生程式。Navide 會把它放在沙盒裡執行，它本身沒有網路：只能讀取你一起開啟的工作區，也只能在你允許的地方修改檔案。但同時會執行 git、gh、glab 指令的 Navide 外掛（下方標示為高風險）可以透過這些指令連到網路主機、送出工作區資料，也可以不經上述允許就讀取與修改工作區檔案。下方開關開啟時，安裝含原生程式碼的 Navide 外掛即代表允許它執行；關閉開關可停用全部。",
         "enable": "允許第三方 Navide 外掛執行原生後端",
+        "offUnsaved": "第三方原生後端目前已關閉，但 Navide 無法儲存這個設定，重新啟動 Navide 後會再變回開啟。",
+        "offUnsavedRetry": "再試一次",
         "agentTools": {
           "enable": "允許 agent 呼叫第三方 Navide 外掛的工具",
           "description": "預設關閉。開啟後，你允許過的第三方 Navide 外掛所宣告的工具，pane 裡的 agent 就能呼叫；會修改檔案的工具在每個工作區第一次使用時會先問你。關閉時，Navide 的行為就像沒有任何 Navide 外掛提供工具。",
@@ -2168,7 +2170,8 @@
           "computing": "計算中…",
           "loadedBy": "載入者",
           "notReviewed": "沒有經過 Navide 審核、沒有簽章、未掃描。",
-          "mayChange": "內容隨時可能變動；指紋只記錄載入當下的內容，Navide 不拿它擋載入。"
+          "mayChange": "內容隨時可能變動；指紋只記錄載入當下的內容，Navide 不拿它擋載入。",
+          "consentScope": "改資料夾裡的檔案（包括原生後端程式本身）不會再詢問你。改宣告的權限或後端才會：它會先卸載，等你重新同意。"
         },
         "selfHostedQuarantine": "{id} {version} 來自自架 Registry，目前沒有載入。請開啟開發者模式，或改從 Navide 市集安裝。"
       },

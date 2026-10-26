@@ -1886,6 +1886,8 @@
         "title": "Backend gốc",
         "description": "Một số plugin Navide có chứa mã gốc. Navide chạy mã đó trong sandbox không có quyền truy cập mạng riêng; nó chỉ đọc được các workspace bạn mở cùng nó và chỉ thay đổi tệp ở nơi bạn cho phép. Plugin Navide nào còn chạy lệnh git, gh và glab (được đánh dấu rủi ro cao bên dưới) thì qua các lệnh đó có thể liên lạc với máy chủ mạng và gửi dữ liệu workspace, cũng như đọc và thay đổi tệp workspace mà không cần quyền đó. Khi công tắc bên dưới đang bật, cài một plugin Navide có mã gốc nghĩa là cho phép nó chạy; tắt công tắc để dừng tất cả.",
         "enable": "Cho phép plugin Navide của bên thứ ba chạy backend gốc",
+        "offUnsaved": "Backend gốc của bên thứ ba hiện đang tắt, nhưng Navide không lưu được thiết lập này, nên chúng sẽ bật lại sau khi Navide khởi động lại.",
+        "offUnsavedRetry": "Thử lại",
         "agentTools": {
           "enable": "Cho phép agent gọi công cụ từ plugin Navide của bên thứ ba",
           "description": "Mặc định tắt. Khi bật, agent trong các pane của bạn có thể gọi công cụ mà một plugin Navide của bên thứ ba khai báo, sau khi bạn đã cho phép plugin Navide đó. Công cụ nào thay đổi tệp sẽ hỏi bạn một lần cho mỗi workspace. Khi tắt, Navide hoạt động như thể không plugin Navide nào có công cụ.",
@@ -2168,7 +2170,8 @@
           "computing": "Đang tính…",
           "loadedBy": "Người tải",
           "notReviewed": "Chưa được Navide duyệt, không được ký, không được quét.",
-          "mayChange": "Nội dung của nó có thể thay đổi bất cứ lúc nào. Dấu vân tay chỉ ghi lại những gì thư mục chứa lúc được tải; Navide không dùng nó để từ chối tải."
+          "mayChange": "Nội dung của nó có thể thay đổi bất cứ lúc nào. Dấu vân tay chỉ ghi lại những gì thư mục chứa lúc được tải; Navide không dùng nó để từ chối tải.",
+          "consentScope": "Thay đổi tệp trong thư mục, kể cả chính chương trình backend gốc, sẽ không hỏi lại bạn. Thay đổi quyền hoặc backend đã khai báo thì có: nó bị gỡ tải cho đến khi bạn đồng ý lại."
         },
         "selfHostedQuarantine": "{id} {version} đến từ Registry tự lưu trữ và chưa được tải. Hãy bật Chế độ nhà phát triển hoặc cài nó từ Navide Marketplace."
       },

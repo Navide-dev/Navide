@@ -195,6 +195,9 @@ export class NativeBackendStore {
   /** False when the file exists but could not be read: nothing is migrated
    * into it (a save would replace what could not be read). */
   private readable = true
+  /** #642 review L2: "off" applies in memory but could not be saved, so the
+   * file still reads as on (or is missing) and the next start would be on. */
+  private unsavedOff = false
 
   constructor(directory: string) {
     this.persistence = new OwnerOnlyJsonPersistence(directory, MAX_BYTES, MAX_BYTES)
@@ -256,7 +259,19 @@ export class NativeBackendStore {
   }
 
   setEnabled(enabled: boolean): void {
-    this.save({ ...this.state, enabled }, !enabled)
+    try {
+      this.save({ ...this.state, enabled }, !enabled)
+    } catch (error) {
+      if (!enabled) this.unsavedOff = true
+      throw error
+    }
+    this.unsavedOff = false
+  }
+
+  /** True while "off" holds only in memory: its save failed and none since
+   * succeeded. */
+  offUnsaved(): boolean {
+    return this.unsavedOff
   }
 
   agentToolSwitches(): AgentToolSwitches {

@@ -94,6 +94,9 @@ async function copyFingerprint(): Promise<void> {
     </dl>
     <p class="nv-folder-card-note">{{ $t('settings.extensions.developerMode.infoCard.notReviewed') }}</p>
     <p class="nv-folder-card-note">{{ $t('settings.extensions.developerMode.infoCard.mayChange') }}</p>
+    <!-- #642 review L1 (K4): a folder's consent is bound to its path and its
+         declared permissions and backend, never to its contents. -->
+    <p class="nv-folder-card-note nv-folder-card-consent">{{ $t('settings.extensions.developerMode.infoCard.consentScope') }}</p>
   </div>
 </template>
 

@@ -736,6 +736,9 @@ export interface ThirdPartyBackendControllerOptions {
   /** The user's real home, whose sensitive entries are hidden from stat. */
   homeDir?: string
   now?: () => number
+  /** #642 review L2: the waits before each retry of a failed "off" save
+   *  (default 250 ms, 1 s, 2 s). Tests pass short ones. */
+  offSaveRetryDelaysMs?: readonly number[]
   spawnImpl?: Parameters<typeof sandboxedSpawnProcess>[2]
 }
 
@@ -1586,11 +1589,30 @@ export class ThirdPartyBackendController {
     }
     // Fail closed: the store applies "off" in memory before saving, and the
     // children stop even when the save throws (the error still reaches the UI).
+    let failure: unknown
     try {
       this.store.setEnabled(false)
+      failure = undefined
+    } catch (error) {
+      failure = error
     } finally {
       await this.options.stopBackends?.(null)
     }
+    if (failure === undefined) return
+    // #642 review L2: an unsaved "off" reads as on again after a restart, so
+    // the save is retried a few times before the error reaches the UI (which
+    // then keeps saying so, through the store's offUnsaved()).
+    for (const delay of this.options.offSaveRetryDelaysMs ?? [250, 1000, 2000]) {
+      await new Promise((done) => setTimeout(done, delay))
+      if (this.store.isEnabled()) return
+      try {
+        this.store.setEnabled(false)
+        return
+      } catch (error) {
+        failure = error
+      }
+    }
+    throw failure
   }
 
   /** Per-plugin kill switch; fails closed like the global one. */

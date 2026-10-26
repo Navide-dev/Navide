@@ -1886,6 +1886,8 @@
         "title": "Native Backends",
         "description": "Manche Navide-Plug-ins enthalten nativen Code. Navide führt ihn in einer Sandbox ohne eigenen Netzwerkzugriff aus; er kann nur die Arbeitsbereiche lesen, die Sie damit öffnen, und Dateien nur dort ändern, wo Sie es erlauben. Ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (unten als hohes Risiko markiert), kann darüber Netzwerk-Hosts kontaktieren, Daten aus dem Arbeitsbereich senden sowie Dateien im Arbeitsbereich ohne diese Berechtigung lesen und ändern. Solange der Schalter unten eingeschaltet ist, erlauben Sie mit der Installation eines Navide-Plug-ins mit nativem Code dessen Ausführung; schalten Sie ihn aus, um alle zu stoppen.",
         "enable": "Navide-Plug-ins von Drittanbietern erlauben, native Backends auszuführen",
+        "offUnsaved": "Native Backends von Drittanbietern sind vorerst aus, aber Navide konnte das nicht speichern. Nach einem Neustart von Navide sind sie wieder an.",
+        "offUnsavedRetry": "Erneut versuchen",
         "agentTools": {
           "enable": "Agents erlauben, Tools aus Navide-Plug-ins von Drittanbietern aufzurufen",
           "description": "Standardmäßig aus. Ist die Option aktiv, können Agents in Ihren panes die Tools aufrufen, die ein Navide-Plug-in eines Drittanbieters deklariert, sobald Sie dieses Navide-Plug-in erlaubt haben. Ein Tool, das Dateien ändert, fragt Sie einmal pro Arbeitsbereich. Ist sie aus, verhält sich Navide so, als hätte kein Navide-Plug-in Tools.",
@@ -2168,7 +2170,8 @@
           "computing": "Wird berechnet …",
           "loadedBy": "Geladen von",
           "notReviewed": "Von Navide nicht geprüft, nicht signiert, nicht gescannt.",
-          "mayChange": "Sein Inhalt kann sich jederzeit ändern. Der Fingerabdruck hält nur fest, was der Ordner beim Laden enthielt; Navide verwendet ihn nicht, um ein Laden abzulehnen."
+          "mayChange": "Sein Inhalt kann sich jederzeit ändern. Der Fingerabdruck hält nur fest, was der Ordner beim Laden enthielt; Navide verwendet ihn nicht, um ein Laden abzulehnen.",
+          "consentScope": "Wenn sich Dateien im Ordner ändern, auch das native Backend-Programm selbst, wird nicht erneut gefragt. Wenn sich die angegebenen Berechtigungen oder das Backend ändern, schon: Das Navide-Plug-in wird entladen, bis Sie erneut zustimmen."
         },
         "selfHostedQuarantine": "{id} {version} stammt aus einer selbst gehosteten Registry und wird nicht geladen. Schalten Sie den Entwicklermodus ein oder installieren Sie es aus dem Navide Marketplace."
       },

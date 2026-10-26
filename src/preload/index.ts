@@ -407,6 +407,8 @@ export interface NativeBackendOverview {
   enabled: boolean
   plugins: NativeBackendStatusRow[]
   agentTools?: { enabled: boolean; externalCallers: boolean }
+  /** #642 review L2: off for this run, not saved; on again after a restart. */
+  offUnsaved?: true
 }
 
 export interface InstalledPackRecord {
