@@ -2198,6 +2198,7 @@
         "versionExists": "這個版本號已經安裝過了。請提高版本號後重新打包。",
         "installFailed": "無法安裝這個 Navide 外掛。",
         "chooseAgain": "請關閉這個對話框，重新選擇檔案再試一次。",
+        "approveAgain": "檔案仍然備妥，可以直接再核准一次。",
         "askAgentAgain": "請關閉這個對話框，再請 agent 重新送出申請。",
         "startAgain": "請關閉這個對話框，從頭再試一次。",
         "rollbackFailed": "無法回到這個版本。",

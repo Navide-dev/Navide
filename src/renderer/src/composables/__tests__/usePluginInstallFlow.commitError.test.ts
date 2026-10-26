@@ -143,6 +143,23 @@ describe('a failed approval of a file install', () => {
     expect(flow.error.value).not.toBe('')
   })
 
+  it.each([
+    ['still holds the copy', async () => ({ present: true }), undefined, 'approveAgain'],
+    ['no longer holds the copy', async () => ({ present: false }), true, 'chooseAgain'],
+    ['cannot be asked', async () => { throw new Error('offline') }, true, 'chooseAgain'],
+  ] as const)('keeps approving possible only when the main process %s (#643 L1)', async (_case, query, needsFileAgain, step) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const flow = setup(async () => { throw ipcError('plugin transaction already in progress for acme.todo') })
+    const preparedLocalInstall = vi.fn(query)
+    ;(window as unknown as { agentTeam: { plugins: Record<string, unknown> } }).agentTeam.plugins.preparedLocalInstall = preparedLocalInstall
+    await flow.installFromFile()
+    await flow.confirmRisk()
+    expect(preparedLocalInstall).toHaveBeenCalledWith('acme.todo', prepared.digest)
+    const pending = flow.pendingConfirm.value!
+    expect(pending.needsFileAgain).toBe(needsFileAgain)
+    expect(pending.commitNextStep).toBe(i18n.global.t(`settings.extensions.localInstall.${step}`))
+  })
+
   it('names the two cases apart', () => {
     const t = (key: string) => key
     expect(installFailureMessage('immutable candidate already exists for a.b@1.0.0', t)).toBe('settings.extensions.localInstall.versionExists')

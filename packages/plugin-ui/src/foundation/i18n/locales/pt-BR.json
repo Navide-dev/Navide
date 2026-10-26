@@ -2198,6 +2198,7 @@
         "versionExists": "Este número de versão já está instalado. Aumente a versão e empacote de novo.",
         "installFailed": "Não foi possível instalar o plug-in do Navide.",
         "chooseAgain": "Feche esta caixa de diálogo e escolha o arquivo de novo para tentar outra vez.",
+        "approveAgain": "O arquivo continua pronto, então você pode aprová-lo de novo.",
         "askAgentAgain": "Feche esta caixa de diálogo e peça ao agente para enviar a solicitação de novo.",
         "startAgain": "Feche esta caixa de diálogo e tente de novo desde o início.",
         "rollbackFailed": "Não foi possível voltar para esta versão.",

@@ -2198,6 +2198,7 @@
         "versionExists": "Ce numéro de version est déjà installé. Augmentez la version et refaites le paquet.",
         "installFailed": "Le plugin Navide n’a pas pu être installé.",
         "chooseAgain": "Fermez cette boîte de dialogue et choisissez à nouveau le fichier pour réessayer.",
+        "approveAgain": "Le fichier est toujours prêt, vous pouvez donc l’approuver à nouveau.",
         "askAgentAgain": "Fermez cette fenêtre et demandez à l’agent de renvoyer la demande.",
         "startAgain": "Fermez cette fenêtre et recommencez depuis le début.",
         "rollbackFailed": "Impossible de revenir à cette version.",

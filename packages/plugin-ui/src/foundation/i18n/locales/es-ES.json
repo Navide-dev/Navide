@@ -2198,6 +2198,7 @@
         "versionExists": "Este número de versión ya está instalado. Sube la versión y vuelve a empaquetarlo.",
         "installFailed": "No se pudo instalar el complemento de Navide.",
         "chooseAgain": "Cierra este cuadro de diálogo y vuelve a elegir el archivo para intentarlo de nuevo.",
+        "approveAgain": "El archivo sigue preparado, así que puedes volver a aprobarlo.",
         "askAgentAgain": "Cierra este diálogo y pide al agente que vuelva a enviar la solicitud.",
         "startAgain": "Cierra este diálogo e inténtalo de nuevo desde el principio.",
         "rollbackFailed": "No se pudo volver a esta versión.",

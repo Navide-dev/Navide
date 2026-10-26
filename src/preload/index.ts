@@ -1501,6 +1501,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
       approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
     ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
+    /** #643 review L1: whether the file copy with this digest is still held
+     *  after a failed approval, so approving again can work. */
+    preparedLocalInstall: (id: string, digest: string): Promise<{ present: boolean }> =>
+      ipcRenderer.invoke('plugins:preparedLocalInstall', { id, digest }),
     /** W1 (S2): the copy the Host staged for an agent's file request, named
      *  by its stagingId; never a path. Installs nothing. */
     prepareAgentFileInstall: (

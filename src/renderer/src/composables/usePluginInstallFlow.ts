@@ -82,16 +82,24 @@ export function usePluginInstallFlow() {
   /** A failed approval: the pane's error line as before, and the reason in
    *  the dialog, which stays open over that line. A failed rollback (L4)
    *  says so in its own words and never asks for a file. */
-  function failCommit(err: unknown, options: { rollback?: boolean } = {}): void {
+  async function failCommit(err: unknown, options: { rollback?: boolean } = {}): Promise<void> {
     fail(err)
     const pending = pendingConfirm.value
     if (!pending) return
-    const fileUsedUp = pending.prepared.source === 'local-unsigned' && options.rollback !== true
-    const nextStep = pending.agentRequest
-      ? 'settings.extensions.localInstall.askAgentAgain'
-      : fileUsedUp
-        ? 'settings.extensions.localInstall.chooseAgain'
-        : 'settings.extensions.localInstall.startAgain'
+    const local = pending.prepared.source === 'local-unsigned' && options.rollback !== true
+    // #643 review L1: a refusal before the copy was used leaves it with the
+    // main process, which says so; an older Host cannot, and the copy counts
+    // as used up, as before.
+    const kept = local ? await preparedCopyKept(pending.prepared) : false
+    if (pendingConfirm.value !== pending) return
+    const fileUsedUp = local && !kept
+    const nextStep = kept
+      ? 'settings.extensions.localInstall.approveAgain'
+      : pending.agentRequest
+        ? 'settings.extensions.localInstall.askAgentAgain'
+        : fileUsedUp
+          ? 'settings.extensions.localInstall.chooseAgain'
+          : 'settings.extensions.localInstall.startAgain'
     pendingConfirm.value = {
       ...pending,
       commitError: options.rollback === true
@@ -100,6 +108,16 @@ export function usePluginInstallFlow() {
       commitNextStep: t(nextStep),
       commitFailures: (pending.commitFailures ?? 0) + 1,
       ...(fileUsedUp ? { needsFileAgain: true } : {}),
+    }
+  }
+
+  async function preparedCopyKept(prepared: PreparedInstallSummary): Promise<boolean> {
+    const query = api()?.preparedLocalInstall
+    if (!query || !prepared.digest) return false
+    try {
+      return (await query(prepared.id, prepared.digest)).present === true
+    } catch {
+      return false
     }
   }
 
@@ -303,7 +321,7 @@ export function usePluginInstallFlow() {
     try {
       await commit(prepared.id, {})
     } catch (err) {
-      failCommit(err)
+      await failCommit(err)
     } finally {
       busy.value = false
     }
@@ -323,7 +341,7 @@ export function usePluginInstallFlow() {
     try {
       await commit(pendingConfirm.value.prepared.id, { publisherConfirmed: true })
     } catch (err) {
-      failCommit(err)
+      await failCommit(err)
     } finally {
       busy.value = false
     }
@@ -361,7 +379,7 @@ export function usePluginInstallFlow() {
         pendingStep.value = null
         await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
       } catch (err) {
-        failCommit(err, { rollback: true })
+        await failCommit(err, { rollback: true })
       } finally {
         busy.value = false
       }
@@ -374,7 +392,7 @@ export function usePluginInstallFlow() {
         riskConfirmed: true,
       })
     } catch (err) {
-      failCommit(err)
+      await failCommit(err)
     } finally {
       busy.value = false
     }
