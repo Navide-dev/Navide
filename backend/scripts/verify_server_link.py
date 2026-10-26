@@ -88,8 +88,7 @@ from agent_team_backend import (  # noqa: E402
     trust_store,
 )
 from agent_team_backend.credential_vault import CredentialVault  # noqa: E402
-from agent_team_backend.db import Database  # noqa: E402
-from agent_team_backend import device_crypto, server_link, sync_engine, sync_keyring, sync_scopes  # noqa: E402
+from agent_team_backend import device_crypto, server_link, sync_keyring  # noqa: E402
 from agent_team_backend.server_link import ServerLink, ServerLinkConfig  # noqa: E402
 
 # The other half of the isolation: the trust store's document lives in the
@@ -1368,7 +1367,6 @@ async def main() -> int:
 
     await check_server_outage()
     await check_account_flow()
-    await check_credentials_sync()
 
     print(f"\n== 結果：{_passed} 通過 / {_failed} 失敗 ==")
     return 1 if _failed else 0
@@ -1585,144 +1583,6 @@ async def check_account_flow() -> None:
             f"  （留下一個帳號 {email}：server 沒有刪除租戶的介面，"
             f"所以每跑一次就多一個測試租戶，不是腳本沒清乾淨）"
         )
-
-
-
-
-async def check_credentials_sync() -> None:
-    """Section 17: the credentials scope against a real server, two devices.
-
-    Everything the pytest suite proves runs against ``FakeServer``; this is the
-    one place the real ``sync.push`` / ``sync.pull`` handlers, the allowlist and
-    the account boundary meet the engine. Two links sign in as the same account
-    (one ring, as on two machines of one person); each drives its *own* engine
-    over its own SQLite store and its own adapter, because two devices sharing
-    one store would not be two devices. The adapter's vault seams are
-    synthetic: no portable credential of this machine is read or written.
-
-    Checked: the record travels and opens on the other side; the server holds
-    only ciphertext; neither store holds the value in the clear; a second round
-    is a no-op; removal here is not a tombstone there; a disabled import stays
-    off until pulled by name; the inventory names the slot, not the secret.
-    """
-    print("\n== 17. credentials scope 對真 server：兩台裝置 ==")
-    secret = f"sk-ant-oat01-VERIFY-{RUN}-{secrets.token_hex(8)}"
-    link_e, _rec_e = await open_link(DEVICE_E, "E")
-    link_f, _rec_f = await open_link(DEVICE_F, "F")
-    work = Path(tempfile.mkdtemp(prefix="navide-verify-cred-"))
-    try:
-        sync_scopes.set_scope_enabled("credentials", True)
-        check(await link_e.ensure_sync_key(), "E 取得帳號同步金鑰（首台：鑄造）")
-        check(sync_keyring.has_account_key(), "同一行程的第二條連線看見同一把 ring")
-
-        class Vault:
-            def __init__(self, values: dict) -> None:
-                self.values = dict(values)
-
-            def entries(self) -> list[tuple[str, str]]:
-                return sorted(self.values)
-
-            def read_secret(self, agent_key: str, slot_id: str) -> str | None:
-                return self.values.get((agent_key, slot_id))
-
-            def forget(self, agent_key: str, slot_id: str) -> None:
-                self.values.pop((agent_key, slot_id), None)
-
-        def device(link: ServerLink, name: str, values: dict):
-            db = Database(work / f"{name}.db")
-            store = sync_engine.SyncStore(db)
-            vault = Vault(values)
-            adapter = sync_scopes.CredentialsScope(
-                db,
-                entries=vault.entries,
-                read_secret=vault.read_secret,
-                forget_local=vault.forget,
-                accepts=lambda _agent, _value: True,
-            )
-            engine = sync_engine.SyncEngine(
-                store,
-                link._request,  # noqa: SLF001 - the raw request path, as section 4 uses it
-                device_id=lambda: link._device_id,  # noqa: SLF001
-                enabled=lambda _scope: True,
-                signing_key_for=lambda _device: "",
-            )
-            engine.register(adapter)
-            return engine, store, adapter, vault, work / f"{name}.db"
-
-        eng_e, store_e, ad_e, vault_e, db_e = device(link_e, "E", {("claude", "__default__"): secret})
-        eng_f, store_f, ad_f, _vault_f, db_f = device(link_f, "F", {})
-
-        first = await eng_e.sync("credentials")
-        check(first.get("pushed") == 1 and first.get("conflicts") == 0, "E 推上 1 筆", first)
-        second = await eng_f.sync("credentials")
-        check(second.get("pulled") == 1 and second.get("conflicts") == 0, "F 拉到 1 筆", second)
-        check(ad_f.imported_value("claude", "__default__") == secret, "F 解開的值與 E 貼入的一致")
-        item_id = next(iter(ad_e.snapshot()))
-
-        raw = await link_f._request("sync.pull", {"scope": "credentials", "since": 0, "limit": 200})  # noqa: SLF001
-        rows = ((raw or {}).get("payload") or {}).get("items") or []
-        row = next((r for r in rows if r.get("itemId") == item_id), None)
-        check(row is not None and secret not in json.dumps(row), "server 那一列只有密文", row and {k: row[k] for k in ("itemId", "rev", "deviceId")})
-        check(row is not None and row.get("deviceId") == link_e._device_id, "server 蓋的是 E 的 deviceId", row and row.get("deviceId"))  # noqa: SLF001
-
-        def disk(path: Path) -> bytes:
-            out = b""
-            for suffix in ("", "-journal", "-wal", "-shm"):
-                p = Path(str(path) + suffix)
-                if p.exists():
-                    out += p.read_bytes()
-            return out
-
-        check(secret.encode() not in disk(db_e) and secret.encode() not in disk(db_f), "兩台的 SQLite（含 journal/WAL）都沒有明文")
-
-        again_e = await eng_e.sync("credentials")
-        again_f = await eng_f.sync("credentials")
-        check(
-            again_e.get("pushed") == 0 and again_f.get("pushed") == 0 and again_f.get("pulled") == 0,
-            "第二輪兩邊都是 no-op",
-            {"E": again_e, "F": again_f},
-        )
-
-        inventory = await eng_f.inventory("credentials")
-        items = inventory.get("items") or []
-        entry = next((i for i in items if i.get("itemId") == item_id), None)
-        check(
-            entry is not None
-            and entry.get("state") == sync_engine.STATE_IN_SYNC
-            and (entry.get("remote") or {}).get("meta") == {"agentKey": "claude", "slotId": "__default__"}
-            and secret not in json.dumps(inventory),
-            "inventory：in-sync、meta 只有 agent/slot、無明文",
-            entry,
-        )
-
-        vault_e.values.clear()  # removed on E
-        removed = await eng_e.sync("credentials")
-        raw = await link_f._request("sync.pull", {"scope": "credentials", "since": 0, "limit": 200})  # noqa: SLF001
-        rows = ((raw or {}).get("payload") or {}).get("items") or []
-        row = next((r for r in rows if r.get("itemId") == item_id), None)
-        check(
-            removed.get("pushed") == 0 and row is not None and not row.get("deleted"),
-            "E 本機移除後 server 上沒有墓碑",
-            {"result": removed, "deleted": row and row.get("deleted")},
-        )
-
-        check(ad_f.disable("claude", "__default__") == 1, "F 停用匯入副本")
-        store_f.forget("credentials")  # as switching the section off and on would
-        await eng_f.sync("credentials")
-        check(ad_f.imported_value("claude", "__default__") is None, "重讀整個 scope 後停用的憑證沒有復活")
-        pulled = await eng_f.pull_items("credentials", [item_id])
-        check(
-            pulled and pulled[0].get("result") == "pulled" and ad_f.imported_value("claude", "__default__") == secret,
-            "指名 pull 才把它帶回來",
-            pulled,
-        )
-        _ = store_e  # kept for symmetry; E's bookkeeping is asserted through its rounds
-    finally:
-        with contextlib.suppress(Exception):
-            sync_scopes.set_scope_enabled("credentials", False)
-        await link_e.stop()
-        await link_f.stop()
-        shutil.rmtree(work, ignore_errors=True)
 
 
 if __name__ == "__main__":

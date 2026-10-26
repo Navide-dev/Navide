@@ -38,7 +38,7 @@ from . import launch_id
 from . import loop_watchdog
 from . import mem_probe
 from . import osplat
-from . import portable_credentials
+from . import portable_credentials_cleanup
 from . import push_delivery
 from . import resource_limits
 from . import subagent_tracker
@@ -1535,7 +1535,6 @@ def forget_pane_activity(pane_id: str) -> None:
         listener(pane_id, None)
     hook_drain.forget_pane(pane_id)
     push_delivery.forget_pane(pane_id)
-    portable_credentials.forget_launch(pane_id)
     forget_pane_live_sessions(pane_id)
 
 
@@ -2382,8 +2381,8 @@ def spawn_env_overridden_keys(
     """Requested keys that a later source in the spawn chain went on to win.
 
     Answerable only once the whole chain has run: vendor defaults, onboarding,
-    login profiles, CLI home management, MCP/plugin/push wiring and portable
-    credentials all write after the request, and ``env_remove`` — applied last
+    login profiles, CLI home management and MCP/plugin/push wiring all write
+    after the request, and ``env_remove`` — applied last
     of all, in ``terminals.spawn`` — can still delete a key that survived them.
     """
     removed = set(env_remove or ())
@@ -2479,6 +2478,11 @@ async def _start_log_watcher() -> None:
     asyncio.create_task(
         credential_vault.promote_profile_home_secrets(cli_profiles_store)
     )
+
+    # One-time: erase what the removed portable-credential feature left on a
+    # machine that used it. No vault call where it was never used.
+    # Background task — credential I/O must never block startup.
+    asyncio.create_task(_remove_portable_credential_leftovers())
 
     # Sweep leftover isolated login homes into their slots, independently of
     # the usage poller (which only harvests while usage polling is enabled).
@@ -3767,6 +3771,16 @@ def _login_spawn_command(agent_key: str, command: Any) -> Any:
     return replaced
 
 
+async def _remove_portable_credential_leftovers() -> None:
+    try:
+        await asyncio.to_thread(
+            lambda: portable_credentials_cleanup.run(
+                database, credential_vault, now=int(time.time()))
+        )
+    except Exception as err:  # noqa: BLE001 — retried on the next start
+        log.warning("portable-credential cleanup failed: %s", err)
+
+
 def _agent_signed_out(agent_key: str) -> bool:
     """True when this CLI is installed but its live credentials are absent.
 
@@ -3786,12 +3800,6 @@ def _agent_signed_out(agent_key: str) -> bool:
     if spec is None or spec.live_file is None:
         return False
     try:
-        # A selected portable credential that can be put in effect is what
-        # the pane will run on, whatever the live login says. One that is
-        # missing or shadowed does not count: the spawn refuses it with the
-        # reason, and the native answer below stays the honest one.
-        if portable_credentials.selection_usable(agent_key, home=Path.home()):
-            return False
         return not bool(credential_vault.identity(agent_key).get("signedIn"))
     except Exception:  # noqa: BLE001 — advisory only, never fails a spawn
         return False

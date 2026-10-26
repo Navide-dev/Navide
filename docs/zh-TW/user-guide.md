@@ -198,7 +198,7 @@ Settings 涵蓋 Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider�
 
 安裝區段管理已安裝的 Coding CLI：版本、安裝方式、重複安裝、該 CLI 上次自我更新的結果，以及在終端機執行該 CLI 官方更新與診斷指令的按鈕。開啟工作區時可設定恢復單一 CLI、第一個 Grid 頁面或目前分頁；即使上次不是 Grid layout，Grid 頁面仍會依 Grid preset 計算。Navide 只呈現並執行官方指令，不會自行更新 CLI。Exported Setting 會遮蔽 API Key 與 Token。啟用第三方 Server 前，請先檢查 MCP Command 與 Environment Variable。
 
-**帳號**分頁為每個 CLI 帳號放一張卡片。除了 CLI 自己的登入，卡片還能保存一份**可攜憑證**：各家官方為「在任何機器上使用」而設計的值（例如 Claude Code 的 `claude setup-token`）。貼入一次，該 CLI 的新 pane 會在環境變數裡拿到它，CLI 自己的登入檔不會被動到。每個 CLI 同時只有一份憑證在*使用中*；卡片會標示是哪一份，並在本機登入檔會蓋過它時提出警告。移除憑證只影響這台裝置。
+**帳號**分頁為每個 CLI 帳號放一張卡片，用的是 CLI 自己的登入。Navide 0.2.32 移除了卡片上的可攜憑證（貼入的值，例如 `claude setup-token` 印出的 token）：用過的裝置在更新時會清除存著的值，新的 Claude pane 改用 Claude 自己的登入，可能是另一個帳號，額度也各自計算。
 
 **為帳號命名。**每個帳號都能取一個你自己的名字，內建的 Default 也可以：在「帳號」分頁滑到卡片上按鉛筆，或在額度徽章的帳號清單那一列按鉛筆。這個名字會成為各處顯示帳號時的主要文字——pane 標題列、帳號清單、卡片、切換通知與 Turn Stats——登入身分則留在它旁邊；把欄位清空就回到自動產生的名稱（Account 1、Account 2…）。對於憑證不帶身分的 CLI，你取的名字是唯一能分辨兩個帳號的方式。名字屬於帳號槽，不屬於登入身分：這個槽位之後改登別的 email 時，名字不會跟著變。
 

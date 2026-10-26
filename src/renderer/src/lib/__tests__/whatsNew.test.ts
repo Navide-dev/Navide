@@ -165,8 +165,8 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[5].version).toBe('0.2.26')
-    expect(WHATS_NEW[6].version).toBe('0.2.25')
+    expect(WHATS_NEW[6].version).toBe('0.2.26')
+    expect(WHATS_NEW[7].version).toBe('0.2.25')
   })
 })
 
@@ -192,7 +192,7 @@ describe('0.2.27 — Navide Browser and blocked local installs', () => {
   it('shows once to someone updating from 0.2.26, and not to a build still running 0.2.26', () => {
     expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
-    expect(WHATS_NEW[4].version).toBe('0.2.27')
+    expect(WHATS_NEW[5].version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
   })
 })
@@ -241,7 +241,7 @@ describe('0.2.29 — six more languages', () => {
   it('shows once to someone updating from 0.2.28, and not to a build still running 0.2.28', () => {
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.29', '0.2.29')).toBeNull()
-    expect(WHATS_NEW[2].version).toBe('0.2.29')
+    expect(WHATS_NEW[3].version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
   })
 })
@@ -269,7 +269,7 @@ describe('0.2.30 — pipelines no longer stall silently', () => {
   it('shows once to someone updating from 0.2.29, and not to a build still running 0.2.29', () => {
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.30', '0.2.30')).toBeNull()
-    expect(WHATS_NEW[1].version).toBe('0.2.30')
+    expect(WHATS_NEW[2].version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
   })
 })
@@ -317,11 +317,37 @@ describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () 
     expect(all).not.toMatch(/\d+(\.\d+)?\s*\/\s*10\b/)
   })
 
-  it('shows once to someone updating from 0.2.30, as the newest entry, and not to a build still running 0.2.30', () => {
+  it('shows once to someone updating from 0.2.30, and not to a build still running 0.2.30', () => {
     expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.31', '0.2.31')).toBeNull()
-    expect(WHATS_NEW[0].version).toBe('0.2.31')
+    expect(WHATS_NEW[1].version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
+  })
+})
+
+// The 0.2.32 entry: the removal of Paste Credential and what it means for
+// the sign-in and quota new Claude panes use.
+describe('0.2.32 — Paste Credential removed', () => {
+  const entry = whatsNewFor('0.2.32')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('says new Claude panes use Claude’s own sign-in and quota, and that unused devices are untouched', () => {
+    const all = entry!.highlights.map((text) => text['en-US']).join('\n')
+    expect(all).toContain('Claude’s own sign-in')
+    expect(all).toContain('draws on that account’s quota')
+    expect(all).toContain('a device that never used it is not touched')
+    expect(all).toContain('until they are closed or restarted')
+  })
+
+  it('shows once to someone updating from 0.2.31, as the newest entry, and not to a build still running 0.2.31', () => {
+    expect(pickWhatsNew('0.2.32', '0.2.31')?.version).toBe('0.2.32')
+    expect(pickWhatsNew('0.2.32', '0.2.32')).toBeNull()
+    expect(WHATS_NEW[0].version).toBe('0.2.32')
+    expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
   })
 })
 

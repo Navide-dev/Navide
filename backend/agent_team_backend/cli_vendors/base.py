@@ -515,82 +515,6 @@ class PushChannel:
     max_chars: int = 0
 
 
-class SlotKind(str, Enum):
-    """What kind of secret a parked credential slot holds.
-
-    Decided per vendor by ``VendorSpec.classify_secret``; the shared
-    ``portable_credentials.classify_slot`` only adds the two answers no vendor
-    can give — ``EMPTY`` for a slot with nothing in it and ``UNKNOWN`` for one
-    the vendor cannot (or declined to) classify. ``UNKNOWN`` is the fail-closed
-    answer: a slot whose kind is not known is never offered for sync.
-    """
-
-    API_KEY = "api_key"
-    OAUTH = "oauth"
-    EMPTY = "empty"
-    UNKNOWN = "unknown"
-
-
-@dataclass(frozen=True)
-class PortableCredential:
-    """How a credential the user pasted reaches this CLI at spawn.
-
-    The vendor's own documented, multi-machine way in: the value goes into a
-    variable of the pane's environment and nowhere else — not into the CLI's
-    login file, its config home or the OS keychain — so it cannot collide with
-    a ``/login`` the user did on the same machine and leaves nothing on disk
-    for the credential watcher to mistake for an external sign-in.
-
-    Declarative like ``McpWiring``: storing, validating and injecting the
-    value is shared orchestration (``portable_credentials``), and a vendor
-    module must not import it.
-    """
-
-    # The variable the CLI reads the secret from, e.g. "CLAUDE_CODE_OAUTH_TOKEN".
-    env: str
-    # What the value is, in SlotKind vocabulary: "oauth" for a long-lived
-    # OAuth token the vendor mints for exactly this purpose, "api_key" for a
-    # console key. Metadata for the UI; never changes how it is handled.
-    kind: str = "api_key"
-    # Fixed companions the CLI needs beside the secret to use it at all, e.g.
-    # a base URL that points the CLI at the endpoint the key belongs to.
-    env_extra: tuple[tuple[str, str], ...] = ()
-    # Variables the CLI ranks ABOVE ``env``: if one is inherited, the injected
-    # value is silently ignored, so they are removed from the pane's
-    # environment (the pane's only; the user's shell keeps them).
-    env_remove: tuple[str, ...] = ()
-    # Files under the real home the CLI ranks above ``env`` (an interactive
-    # session token). Their presence is REPORTED so the UI can say why the
-    # pasted credential is not in effect; Navide never deletes them.
-    shadowing_files: tuple[tuple[str, ...], ...] = ()
-    # Settings the CLI ranks above ``env`` — a key helper, a provider route,
-    # an environment block inside its own config — as (root, file path parts,
-    # key path into the JSON document). ``root`` is "home" for the real home,
-    # "cwd" for the pane's working directory, or "managed" for the
-    # organisation policy directory below. A key that resolves to a non-empty
-    # value counts as present. Reported like a file, never edited: rewriting
-    # the user's provider configuration — let alone an administrator's — is
-    # not Navide's call.
-    shadowing_settings: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = ()
-    # The "managed" root per platform id ("darwin" / "linux" / "win32"), as
-    # the vendor documents it. Absolute paths, resolved by the shared side
-    # from the running platform — a vendor names the directory, never a user.
-    # A platform with no entry has no managed root and nothing to check.
-    managed_roots: tuple[tuple[str, str], ...] = ()
-    # Regex the pasted value must fully match, "" = any single non-empty line.
-    # A shape check only — it is not proof the value works.
-    value_pattern: str = ""
-    # How the user obtains the value: the vendor's own command, and the docs
-    # that say so. Shown verbatim; Navide never runs the command.
-    obtain_command: str = ""
-    docs_url: str = ""
-    # Whether it is established — from the vendor's docs or a live test — that
-    # a request made with this value draws on the user's subscription. False
-    # is what the UI shows as "unverified", and it is the honest default: a
-    # value that works but bills a different wallet is portable and useless.
-    quota_verified: bool = False
-
-
 @dataclass(frozen=True)
 class ShutdownSpec:
     """How a kill should treat this CLI on its way out.
@@ -1020,21 +944,6 @@ class VendorSpec:
     #   ""   -> signing in IS the bare binary (grok's TUI prompts on launch),
     #           so the flags are still stripped but nothing is appended.
     login_command_args: str | None = None
-
-    # (secret text) -> SlotKind.API_KEY or SlotKind.OAUTH for a parked slot's
-    # secret, read from the slot file this spec declares. None = this vendor
-    # cannot tell its credential kinds apart, and every slot classifies as
-    # UNKNOWN. A classifier that raises, or answers anything outside those two
-    # members, is likewise read as UNKNOWN by ``portable_credentials`` — the
-    # shared side never guesses on a vendor's behalf.
-    classify_secret: Callable[[str], SlotKind] | None = None
-
-    # The vendor's documented way to hand a credential to its CLI through the
-    # spawn environment. None = no such interface is known or verified for
-    # this vendor, and the UI offers nothing to paste into. Never fill this
-    # from a guess: a wrong variable name is injected silently and the CLI
-    # simply asks the user to log in.
-    portable_credential: PortableCredential | None = None
 
     # How the credential vault switches this vendor's account and what the
     # switch transaction must do afterwards. None = no adapter: the vendor is
