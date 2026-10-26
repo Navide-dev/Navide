@@ -1510,7 +1510,7 @@ describe('native backend consent text', () => {
     expect(detail).toContain('Settings → Navide Plugins')
     expect(detail).not.toContain('Settings → Extensions')
     expect(title).toBe('Native code')
-    expect(buttons).toEqual(['Not now', 'Allow'])
+    expect(buttons).toEqual(['Don\'t allow', 'Allow'])
   })
 
   it('says "no network access" only for a package without shell', () => {

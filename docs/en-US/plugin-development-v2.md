@@ -374,9 +374,9 @@ all of these hold, and they are checked again before every restart:
   waits when the decision file cannot be read. A version no install dialog
   showed (an agent's update, a rollback) and a package whose consent was
   revoked or dropped to fail closed are still asked before they start. A
-  Developer Mode folder keeps its folder-bound consent. Since 0.2.32 a "not
-  now" answer to the dialog shown before a backend starts (closing it or
-  pressing Esc counts the same) is saved for that exact content and
+  Developer Mode folder keeps its folder-bound consent. Since 0.2.32 a "Don't
+  allow" answer to the dialog shown before a backend starts (closing it or
+  pressing Esc counts the same; the button was "Not now" before 0.2.32) is saved for that exact content and
   permission set: later starts of the same content are refused without
   asking, Settings → Navide Plugins says on the row that it was declined and
   stays off, and its Allow action runs it and clears the decline. New content
