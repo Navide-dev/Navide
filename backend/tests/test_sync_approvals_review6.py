@@ -205,6 +205,41 @@ def test_the_review_cache_is_capped_across_holds(tmp_path, monkeypatch, blobs, a
     assert _held(waiting[0]["itemId"])[0]["displayable"] is True
 
 
+def test_a_round_during_a_finishing_review_does_not_mark_it_waiting_for_space(
+    tmp_path, monkeypatch, blobs, account_key
+):
+    # A kicked round lists the hold as still due between the review's sealed
+    # files and its summary landing; its own files must not count against it.
+    import threading
+
+    monkeypatch.setattr(sync_scopes, "MAX_REVIEW_CACHE_BYTES", 500 * 1024)
+    server = FakeServer()
+    a = Device(tmp_path, "a", server, blobs)
+    b = Device(tmp_path, "b", server, blobs)
+    _make_big(a.store, "big")
+    real = sync_approvals.update_summary
+    raced = []
+
+    def update_then_round(scope, item_id, payload_digest, summary):
+        written = real(scope, item_id, payload_digest, summary)
+        if scope == b.adapter.scope and "unavailable" not in summary and not raced:
+            raced.append(item_id)
+            payload = sync_approvals.held_payload(scope, item_id)
+            done = threading.Event()
+            b.adapter._loop.call_soon_threadsafe(
+                lambda: (b.adapter._start_review(item_id, payload), done.set())
+            )
+            assert done.wait(10)
+        return written
+
+    monkeypatch.setattr(sync_approvals, "update_summary", update_then_round)
+    _run(a.settle(monkeypatch)); _run(b.settle(monkeypatch))
+    _use(b, monkeypatch)
+    assert raced
+    (row,) = _held("big")
+    assert row["displayable"] is True
+
+
 def test_the_review_cache_size_skips_a_file_that_vanishes_mid_count(monkeypatch):
     # A review download on the loop renames and removes its temps while an
     # apply on a worker thread sizes the cache; that must not refuse the apply.

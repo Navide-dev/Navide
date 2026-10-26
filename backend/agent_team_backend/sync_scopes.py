@@ -1664,6 +1664,11 @@ class SkillFilesScope:
         """Start downloading a held record's files for review. Loop only."""
         if self._layout is None or self._request is None:
             return
+        running = self._tasks.get(f"review:{item_id}")
+        if running is not None and not running.done():
+            # Its files are on disk and its summary is landing: the space
+            # check would count them against it and mark it waiting.
+            return
         layout, request = self._layout, self._request
         payload_digest = sync_engine.digest(payload)
         try:
