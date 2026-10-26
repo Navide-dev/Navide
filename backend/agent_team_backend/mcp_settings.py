@@ -267,16 +267,29 @@ def _is_bundle_secret_name(name: str) -> bool:
 
 
 def _same_endpoint(incoming: dict[str, Any], existing: dict[str, Any]) -> bool:
-    """Whether both records run or call the same thing: the same command and
-    args for stdio, the same url for http/sse."""
+    """Whether *incoming* is this machine's server as it is: the same command
+    and args for stdio, the same url for http/sse, and the same env/header
+    names with every value the bundle carries (the redacted ones aside) equal
+    to this machine's -- an added ``HTTPS_PROXY`` or ``NODE_OPTIONS`` could
+    otherwise carry a restored token somewhere else."""
     if incoming.get("transport", "stdio") != existing.get("transport", "stdio"):
         return False
     if incoming.get("transport", "stdio") == "stdio":
-        return (
+        if not (
             incoming.get("command") == existing.get("command")
             and list(incoming.get("args") or []) == list(existing.get("args") or [])
-        )
-    return bool(incoming.get("url")) and incoming.get("url") == existing.get("url")
+        ):
+            return False
+    elif not incoming.get("url") or incoming.get("url") != existing.get("url"):
+        return False
+    for field_name in ("env", "headers"):
+        theirs = incoming.get(field_name) if isinstance(incoming.get(field_name), dict) else {}
+        mine = existing.get(field_name) if isinstance(existing.get(field_name), dict) else {}
+        if set(theirs) != set(mine):
+            return False
+        if any(value != REDACTED_SECRET and value != mine[key] for key, value in theirs.items()):
+            return False
+    return True
 
 
 def redact_mcp_server_secrets(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -80,7 +80,10 @@ pytestmark = pytest.mark.asyncio
 #: and where a hook turn end's text comes from. No other tool changed (the
 #: core-tools snapshot, tests/data/mcp_core_tools_main.json, differs from
 #: main in those three descriptions only).
-MAIN_TOOLS_LIST_SHA256 = "11c38bd53bce39512b72d3895dd1caac29822c1dca9f600eb6ea07bccb241b5d"
+#: Re-pinned for #659 (previous pin 11c38bd5…): the mcp_list description
+#: documents `tools_error` and masking by value. No other tool changed (the
+#: core-tools snapshot differs from main in that description only).
+MAIN_TOOLS_LIST_SHA256 = "e89ec327d5fa55e99e31944497f6eff4a4e06ef7e650fb3e899b8af2724c1285"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

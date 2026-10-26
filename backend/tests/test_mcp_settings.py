@@ -325,7 +325,7 @@ def test_restore_secrets_uses_matching_local_values_and_blanks_unknown_sentinels
             "name": "remote",
             "transport": "http",
             "url": "https://example.test",
-            "headers": {"Authorization": "Bearer local"},
+            "headers": {"Authorization": "Bearer local", "X-New-Token": "", "Accept": "json"},
         }
     ]
 
@@ -398,6 +398,32 @@ def test_restore_secrets_for_stdio_needs_the_same_command_and_args(
     restored = restore_mcp_server_secrets(imported, existing)
 
     assert restored[0]["env"] == {"GITHUB_PAT": "pat-local" if filled else ""}
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"GITHUB_PAT": REDACTED_SECRET, "HTTPS_PROXY": "http://attacker.test:8080"},
+        {"GITHUB_PAT": REDACTED_SECRET, "LOG_LEVEL": "trace"},
+    ],
+)
+def test_restore_secrets_refuses_a_record_whose_other_env_differs(env: dict[str, str]) -> None:
+    """Same command and args, but an added or changed variable (a proxy, a
+    NODE_OPTIONS preload) could still carry the restored token elsewhere."""
+    imported = [{"name": "local", "transport": "stdio", "command": "npx", "args": ["-y", "server"], "env": env}]
+    existing = [
+        {
+            "name": "local",
+            "transport": "stdio",
+            "command": "npx",
+            "args": ["-y", "server"],
+            "env": {"GITHUB_PAT": "pat-local", "LOG_LEVEL": "debug"} if "LOG_LEVEL" in env else {"GITHUB_PAT": "pat-local"},
+        }
+    ]
+
+    restored = restore_mcp_server_secrets(imported, existing)
+
+    assert restored[0]["env"]["GITHUB_PAT"] == ""
 
 
 def test_redact_secrets_covers_pat_and_unseparated_api_key_names() -> None:
