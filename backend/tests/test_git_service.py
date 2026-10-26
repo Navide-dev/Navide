@@ -3493,3 +3493,60 @@ async def test_anthropic_request_carries_no_temperature(
         )
         assert result == {"ok": True, "message": "fix: tidy the widget"}
     assert len(sent) == 2 and all("temperature" not in p for p in sent)
+
+
+# The fakes above pin what generate_commit_message does; this one pins what the
+# installed SDK accepts. It drives the call through the real anthropic package
+# (client construction, async with, messages.create's signature, the Message
+# and TextBlock models) and only replaces the network round trip, so an SDK
+# upgrade that renames a parameter, drops one we send, or reshapes the
+# response turns this red instead of failing for users at runtime.
+
+
+@pytest.mark.asyncio
+async def test_anthropic_call_matches_the_installed_sdk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import inspect
+
+    import anthropic
+    from anthropic.types import Message
+
+    probe = anthropic.AsyncAnthropic(api_key=ANTHROPIC_SETTINGS["anthropic_api_key"])
+    messages_cls = type(probe.messages)
+    await probe.close()
+    real_create = messages_cls.create
+    sent: list[dict[str, Any]] = []
+
+    async def offline_create(self: Any, **params: Any) -> Any:
+        # Raises TypeError, like the real call would, on any kwarg the SDK
+        # does not accept or any required one we stop sending.
+        inspect.signature(real_create).bind(self, **params)
+        sent.append(params)
+        return Message.model_validate(
+            {
+                "id": "msg_offline",
+                "type": "message",
+                "role": "assistant",
+                "model": params["model"],
+                "content": [
+                    {"type": "thinking", "thinking": "considering", "signature": "sig"},
+                    {"type": "text", "text": "fix: tidy the widget"},
+                ],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            }
+        )
+
+    monkeypatch.setattr(messages_cls, "create", offline_create)
+    _dirty_repo(tmp_path)
+
+    result = await git_service.generate_commit_message(
+        str(tmp_path), "http://unused", settings=ANTHROPIC_SETTINGS
+    )
+
+    assert result == {"ok": True, "message": "fix: tidy the widget"}, result
+    assert len(sent) == 1
+    assert set(sent[0]) == {"model", "max_tokens", "system", "messages", "timeout"}
+    assert sent[0]["model"] == ANTHROPIC_SETTINGS["anthropic_model"]
