@@ -8861,6 +8861,10 @@ async def _terminal_create_impl(
             env,
             str(payload.get("cwd") or ""),
         )
+        # The builtin skills transformer cannot return lines; it keeps them.
+        from .plugins.builtin.navide_skills import skills_wiring
+
+        wiring_warnings.extend(skills_wiring.take_spawn_warnings(str(payload.get("pane_id") or "")))
     # Give the pane whatever its push channel needs (a port to serve on, a file
     # to watch) so a message can later reach it without being typed in. Last,
     # so the flags it adds cannot be displaced by MCP or skills wiring; a CLI

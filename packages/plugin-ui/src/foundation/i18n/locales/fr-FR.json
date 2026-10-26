@@ -9678,7 +9678,21 @@
     "installing": "Installation…",
     "failed": "Échec de l’installation.",
     "dismiss": "Fermer",
-    "expired": "Cette demande a expiré avant d’être approuvée. Demandez à l’agent de préparer de nouveau le skill."
+    "expired": "Cette demande a expiré avant d’être approuvée. Demandez à l’agent de préparer de nouveau le skill.",
+    "delivery-kicker": "Demande de distribution de compétence",
+    "delivery-title": "Distribuer la compétence « {name} » à d’autres CLI ?",
+    "delivery-desc": "Un agent a demandé de modifier les CLI qui reçoivent cette compétence. Rien ne change tant que vous n’approuvez pas ici ; l’agent ne peut pas approuver à votre place.",
+    "delivery-shared": "Bibliothèque de compétences partagée",
+    "delivery-current": "Distribution actuelle",
+    "delivery-next": "Après la modification",
+    "delivery-none": "Aucune autre CLI",
+    "delivery-state": "État",
+    "delivery-turns-on": "Active la compétence (désactivée pour l’instant)",
+    "delivery-note": "Approuver permet aux CLI ci-dessus de charger cette compétence dans les nouvelles sessions. Les fichiers de la compétence ne sont pas modifiés. Retirer une CLI plus tard ne demande jamais d’approbation.",
+    "delivery-approve": "Approuver la modification",
+    "delivery-applying": "Application…",
+    "delivery-failed": "Impossible d’appliquer la modification de distribution",
+    "delivery-expired": "Cette demande a expiré avant d’être approuvée. Demandez à l’agent de réexaminer la compétence et de réessayer."
   },
   "cli-manage": {
     "title": "Installation et mises à jour",

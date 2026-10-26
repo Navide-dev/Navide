@@ -9678,7 +9678,21 @@
     "installing": "Installing…",
     "failed": "Installation failed",
     "dismiss": "Close",
-    "expired": "This request expired before it was approved. Ask the agent to prepare the skill again."
+    "expired": "This request expired before it was approved. Ask the agent to prepare the skill again.",
+    "delivery-kicker": "Skill delivery request",
+    "delivery-title": "Deliver skill “{name}” to more CLIs?",
+    "delivery-desc": "An agent asked to change where this skill is delivered. Nothing changes until you approve it here; the agent cannot approve on your behalf.",
+    "delivery-shared": "Shared skills library",
+    "delivery-current": "Delivered now",
+    "delivery-next": "After the change",
+    "delivery-none": "No other CLI",
+    "delivery-state": "State",
+    "delivery-turns-on": "Turns the skill on (it is off now)",
+    "delivery-note": "Approving lets the CLIs above load this skill in new sessions. The skill's files are not changed. Removing a CLI later never needs approval.",
+    "delivery-approve": "Approve Change",
+    "delivery-applying": "Applying…",
+    "delivery-failed": "The delivery change could not be applied",
+    "delivery-expired": "This request expired before it was approved. Ask the agent to inspect the skill and try again."
   },
   "cli-manage": {
     "title": "Installation and updates",
