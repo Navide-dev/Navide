@@ -176,8 +176,8 @@ onMounted(() => { void load() })
               <span v-else-if="!item.enabled" v-truncate class="cli-ext-disabled">{{ t('settings.cliExtensions.disabled') }}</span>
             </div>
             <p v-if="!item.valid" class="cli-ext-error">{{ t('settings.cliExtensions.invalid', { error: item.error }) }}</p>
-            <p v-if="item.valid && item.enabled_error" class="cli-ext-warning">{{ t('settings.cliExtensions.enabledUnknownReason', { error: item.enabled_error }) }}</p>
             <template v-else>
+              <p v-if="item.enabled_error" class="cli-ext-warning">{{ t('settings.cliExtensions.enabledUnknownReason', { error: item.enabled_error }) }}</p>
               <div v-if="item.capabilities.length" class="cli-ext-caps">
                 <span v-for="cap in item.capabilities" :key="cap" v-truncate class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
                 <span v-if="item.evidence === 'inferred'" v-truncate class="cli-ext-inferred" :title="t('settings.cliExtensions.inferredHint')">{{ t('settings.cliExtensions.inferred') }}</span>

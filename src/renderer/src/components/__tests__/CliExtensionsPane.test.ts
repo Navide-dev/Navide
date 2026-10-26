@@ -93,8 +93,10 @@ describe('CliExtensionsPane', () => {
 
   it('shows an unreadable on/off switch as an unknown state with its reason, not as enabled or disabled', async () => {
     send.mockResolvedValue({ ok: true, error: null, payload: { ...payload, items: [
-      item({ id: 'a@mkt', name: 'a', enabled: true, enabled_error: 'cannot parse settings.json: Expecting value' }),
+      item({ id: 'a@mkt', name: 'a', enabled: true, enabled_error: 'cannot parse settings.json: Expecting value',
+        capabilities: ['exec'], path: '/home/u/a' }),
       item({ id: 'b@mkt', name: 'b', enabled: true }),
+      item({ id: '!broken', name: 'installed_plugins.json', valid: false, error: 'no plugins map', capabilities: ['exec'] }),
     ] } })
     render()
     await flushPromises()
@@ -103,6 +105,13 @@ describe('CliExtensionsPane', () => {
     expect(unknown.find('.cli-ext-disabled').exists()).toBe(false)
     expect(unknown.classes()).not.toContain('off')
     expect(unknown.get('.cli-ext-warning').text()).toBe('Could not tell whether this is enabled: cannot parse settings.json: Expecting value')
+    // The rest of a readable row is still shown; a broken row still shows only its error.
+    expect(unknown.find('.cli-ext-caps').exists()).toBe(true)
+    expect(unknown.find('.cli-ext-consent').exists()).toBe(true)
+    expect(unknown.get('.cli-ext-path').text()).toBe('/home/u/a')
+    const broken = wrapper.get('[data-id="!broken"]')
+    expect(broken.find('.cli-ext-caps').exists()).toBe(false)
+    expect(broken.find('.cli-ext-consent').exists()).toBe(false)
     const known = wrapper.get('[data-id="b@mkt"]')
     expect(known.find('.cli-ext-unknown').exists()).toBe(false)
     expect(known.find('.cli-ext-warning').exists()).toBe(false)
