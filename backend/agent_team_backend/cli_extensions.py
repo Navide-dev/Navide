@@ -5,7 +5,8 @@ that belongs to one AI CLI: Claude plugins and mods, Codex plugins and hooks,
 opencode plugins, Pi extensions and the rest. Navide's own plugins are not
 listed here; they have their own page.
 
-Where each CLI keeps them is declared on its vendor spec (``ExtensionsSpec``);
+Where each CLI keeps them is declared on its vendor spec (``ExtensionsSpec``),
+or in ``_UNMANAGED_CLIS`` for a CLI Navide does not run in a pane (Gemini CLI);
 this module holds the per-format readers. Like ``native_skills`` and
 ``native_mcp`` it has no write path at all, by construction, and every call is
 a fresh scan. Four rules it keeps:
@@ -38,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from .cli_vendors.base import ExtensionsSource, ExtensionsSpec
 from .native_mcp import REDACTED_SECRET, _home, _mask_args, _strip_jsonc
 from .osplat import paths as platform_paths
 
@@ -58,8 +60,8 @@ _CODE_SUFFIXES = (".ts", ".tsx", ".js", ".mjs", ".cjs", ".mts", ".cts", ".jsx")
 _NAVIDE_HOOK_RE = re.compile(r"agent-team-hook|X-Agent-Team-Event|Agent-Team[/\\]backend-port|/hooks/copilot|navide-guard\.cmd")
 
 #: Hook events whose handler sees, and may veto or rewrite, a tool call.
-_TOOL_EVENT_RE = re.compile(r"pre_?tool|beforeshell|beforemcp|permission|tool\.check", re.I)
-_PROMPT_EVENT_RE = re.compile(r"prompt", re.I)
+_TOOL_EVENT_RE = re.compile(r"pre_?tool|beforetool|beforeshell|beforemcp|permission|tool\.check", re.I)
+_PROMPT_EVENT_RE = re.compile(r"prompt|beforemodel", re.I)
 
 #: Credential shapes a shell command line carries that ``_mask_args`` (built
 #: for MCP argv) does not see once the line is split on spaces: a quoted
@@ -199,16 +201,32 @@ class Inventory:
         }
 
 
+#: CLIs Navide does not run in a pane (no vendor spec) whose extensions are
+#: still listed: key -> (label, where they live). Gemini CLI, verified
+#: 2026-10-26 against @google/gemini-cli 0.49.0: it loads only
+#: ``~/.gemini/extensions/<dir>`` (no per-workspace extensions), reads the
+#: same ``gemini-extension.json`` / ``extension-enablement.json`` pair Qwen
+#: Code forked from it, and ``~/.gemini/settings.json`` ``hooks`` in the
+#: ``{event: [{hooks: [{command}]}]}`` shape.
+_UNMANAGED_CLIS: dict[str, tuple[str, ExtensionsSpec]] = {
+    "gemini": ("Gemini CLI (Google)", ExtensionsSpec(sources=(
+        ExtensionsSource("qwen-extensions", (".gemini", "extensions"), "Gemini extension"),
+        ExtensionsSource("hooks", (".gemini", "settings.json"), "Gemini hook", section=("hooks",)),
+    ))),
+}
+
+
 def scan(home: Path | None = None, runner: Runner | None = None) -> Inventory:
-    """Every CLI extension on this machine, CLI by CLI in registry order."""
+    """Every CLI extension on this machine, CLI by CLI in key order."""
     from .cli_vendors.registry import VENDORS
 
     base = home or _home()
     run = runner or _run_readonly
     inventory = Inventory()
-    for key in sorted(VENDORS):
-        spec = VENDORS[key]
-        ext = spec.extensions
+    clis = {key: (spec.label, spec.extensions) for key, spec in VENDORS.items()}
+    clis.update({key: entry for key, entry in _UNMANAGED_CLIS.items() if key not in VENDORS})
+    for key in sorted(clis):
+        label, ext = clis[key]
         if ext is None:
             continue
         found: list[CliExtension] = []
@@ -217,7 +235,7 @@ def scan(home: Path | None = None, runner: Runner | None = None) -> Inventory:
                 found.extend(_read_source(key, source, base, run))
         inventory.vendors.append({
             "cli": key,
-            "label": spec.label,
+            "label": label,
             "supported": ext.supported,
             "note": ext.note,
             "count": sum(1 for item in found if item.valid),
