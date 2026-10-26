@@ -103,6 +103,7 @@ import {
 } from './pluginNativeBackendData'
 import { packOnlyMembers, PluginPackStore, type InstalledPackRecord } from './pluginPackStore'
 import type {
+  BackgroundAiSession,
   FrontendPluginManager,
   PluginLaunchDescriptor,
   PluginPackageRestartTransaction,
@@ -1348,6 +1349,23 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:backendCallConcurrency', (event): BackendCallConcurrency[] => {
     assertAuthorized(event)
     return options.backendCallConcurrency?.() ?? []
+  })
+
+  // A third-party package's AI CLI sessions that keep running after their view
+  // closed, and ending one of them. Disclosure, not a limit: nothing is ended
+  // unless the user asks.
+  ipcMain.handle('plugins:backgroundAiSessions', (event, args: { id?: unknown } | null): BackgroundAiSession[] => {
+    assertAuthorized(event)
+    return typeof args?.id === 'string' ? manager.backgroundAiSessions(args.id) : []
+  })
+
+  ipcMain.handle('plugins:endBackgroundAiSession', (
+    event,
+    args: { id?: unknown; sessionId?: unknown } | null,
+  ): { ok: boolean } => {
+    assertAuthorized(event)
+    if (typeof args?.id !== 'string' || typeof args.sessionId !== 'string') return { ok: false }
+    return { ok: manager.endBackgroundAiSession(args.id, args.sessionId) }
   })
 
   // Plan B D-f: one installed plugin's activity report. The Host fills

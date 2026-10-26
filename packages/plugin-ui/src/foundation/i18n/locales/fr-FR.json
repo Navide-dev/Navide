@@ -1982,6 +1982,14 @@
       "installed": "Installés",
       "sensitive": "sensible",
       "empty": "Aucun plugin Navide installé.",
+      "backgroundAi": {
+        "title": "CLI d’IA en arrière-plan ({count})",
+        "note": "Ces sessions de CLI d’IA ont continué après la fermeture de sa fenêtre. Elles tournent jusqu’à ce que vous les arrêtiez ici, le désactiviez ou le supprimiez, ou quittiez Navide.",
+        "item": "{profile} · version {version} · depuis {time}",
+        "end": "Arrêter",
+        "gone": "Cette session ne tourne plus en arrière-plan.",
+        "endFailed": "Impossible d’arrêter la session : {error}"
+      },
       "permissionDetails": "Autorisations et accords",
       "permissionDetailsWithActivity": "Autorisations, accords et activité",
       "plansRiskNote": "Ce plugin Navide possède son propre programme backend, qui s’exécute avec vos autorisations d’utilisateur et sans bac à sable. Il travaille sur les documents de plan du projet actuel, à partir de la racine du dépôt Git trouvée au-dessus (y compris les dépôts imbriqués) : les dossiers de plans et de rapports sous .agent-team, .claude, .cursor et docs à n’importe quelle profondeur, .plans à la racine, et leur .history (lecture seule). Son backend les lit et les écrit directement ; les suppressions et renommages passent toujours par Navide.",

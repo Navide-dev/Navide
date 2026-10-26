@@ -298,6 +298,14 @@ export interface BackendCallConcurrency {
   droppedNotifications: number
 }
 
+/** A third-party AI CLI session that keeps running after its view closed. */
+export interface BackgroundAiSession {
+  sessionId: string
+  profileId: string
+  packageVersion: string
+  since: number
+}
+
 export interface MarketplaceExtension {
   namespace: string
   name: string
@@ -1362,6 +1370,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listFactoryPackages'),
     backendCallConcurrency: (): Promise<BackendCallConcurrency[]> =>
       ipcRenderer.invoke('plugins:backendCallConcurrency'),
+    /** One package's AI CLI sessions that keep running with no view. */
+    backgroundAiSessions: (id: string): Promise<BackgroundAiSession[]> =>
+      ipcRenderer.invoke('plugins:backgroundAiSessions', { id }),
+    /** Ends one session backgroundAiSessions listed; ok is false once it is no longer listed. */
+    endBackgroundAiSession: (id: string, sessionId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('plugins:endBackgroundAiSession', { id, sessionId }),
     /** D-f: one installed plugin's activity report (read only). */
     activityReport: (id: string): Promise<
       { ok: true; report: PluginActivityReport } | { ok: false; error: string }

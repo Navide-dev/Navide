@@ -1982,6 +1982,14 @@
       "installed": "已安装",
       "sensitive": "敏感权限",
       "empty": "尚未安装任何 Navide 插件。",
+      "backgroundAi": {
+        "title": "在后台运行的 AI CLI（{count}）",
+        "note": "这些 AI CLI 会话在它的窗口关闭后仍继续运行，直到你在这里结束、禁用或移除它，或退出 Navide。",
+        "item": "{profile} · 版本 {version} · 自 {time}",
+        "end": "结束",
+        "gone": "这个会话已不在后台运行。",
+        "endFailed": "无法结束会话：{error}"
+      },
       "permissionDetails": "权限与授予",
       "permissionDetailsWithActivity": "权限、授予与活动",
       "plansRiskNote": "此 Navide 插件有自己的后端程序，以你的用户权限运行，没有沙盒。它处理目前项目的计划文档：从往上找到的 Git 仓库根目录起（含其下的嵌套仓库），任何深度的 .agent-team、.claude、.cursor 与 docs 底下的 plans／reports 类文件夹、根目录的 .plans，以及这些文件夹的 .history（只读）。读取与写入计划文档都由此 Navide 插件的后端直接进行；删除与改名仍经由 Navide 进行。",

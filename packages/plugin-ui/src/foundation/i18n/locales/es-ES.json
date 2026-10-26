@@ -1982,6 +1982,14 @@
       "installed": "Instalados",
       "sensitive": "sensible",
       "empty": "No hay complementos de Navide instalados.",
+      "backgroundAi": {
+        "title": "AI CLI en segundo plano ({count})",
+        "note": "Estas sesiones de AI CLI siguieron ejecutándose después de cerrar su ventana. Se ejecutan hasta que las termines aquí, lo desactives o lo elimines, o cierres Navide.",
+        "item": "{profile} · versión {version} · desde {time}",
+        "end": "Terminar",
+        "gone": "Esa sesión ya no se ejecuta en segundo plano.",
+        "endFailed": "No se pudo terminar la sesión: {error}"
+      },
       "permissionDetails": "Permisos y concesiones",
       "permissionDetailsWithActivity": "Permisos, concesiones y actividad",
       "plansRiskNote": "Este complemento de Navide tiene su propio programa backend, que se ejecuta con tus permisos de usuario y sin entorno aislado. Trabaja con los documentos de plan del proyecto actual, empezando por la raíz del repositorio Git que encuentra por encima (incluidos los repositorios anidados): las carpetas de planes e informes de .agent-team, .claude, .cursor y docs a cualquier profundidad, .plans en la raíz y su .history (solo lectura). Su backend las lee y escribe directamente; las eliminaciones y los cambios de nombre siguen pasando por Navide.",

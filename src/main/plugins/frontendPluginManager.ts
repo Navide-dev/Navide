@@ -903,6 +903,16 @@ const SELF_ENDING_AI_SESSION_PLUGIN_IDS: ReadonlySet<string> = new Set(['navide.
  *  (a reload, a workspace re-prepare) to resume it before it is ended. */
 export const AI_SESSION_RECLAIM_MS = 60_000
 
+/** A third-party AI CLI session that keeps running with no view, as listed on
+ *  the package's Settings entry. `since` is when this Navide started or last
+ *  resumed it. */
+export interface BackgroundAiSession {
+  sessionId: string
+  profileId: string
+  packageVersion: string
+  since: number
+}
+
 /** First-party compatibility actions used while the existing Git surface is
  *  moved behind the Manifest v2 package boundary. These are deliberately
  *  narrower than a generic Host RPC: package identity, sender identity, and
@@ -9920,6 +9930,13 @@ export class FrontendPluginManager {
       this.deliverTerminalEvent(event, sessionId, payload)
       this.terminalRoutes.delete(sessionId)
       this.pendingTerminalOwners.delete(sessionId)
+      // A third-party session that exits with no view leaves the ledger too,
+      // so Settings stops listing it as running in the background.
+      const detached = this.aiSessions.get(sessionId)
+      if (
+        detached?.attachedInstanceId === null &&
+        !SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(detached.pluginId)
+      ) this.aiSessions.delete(sessionId)
       return
     }
     for (const plugin of this.running.values()) {
@@ -10435,6 +10452,36 @@ export class FrontendPluginManager {
       this.pendingTerminalOwners.delete(sessionId)
       this.terminalRoutes.delete(sessionId)
     }
+  }
+
+  /** This third-party package's AI CLI sessions that keep running with no
+   *  view: the ones the reclaim leaves because the Host stored them for resume
+   *  (D1 on #648). Settings lists them so the user can see and end them. */
+  backgroundAiSessions(pluginId: string): BackgroundAiSession[] {
+    return [...this.aiSessions.values()]
+      .filter((entry) =>
+        entry.pluginId === pluginId &&
+        entry.attachedInstanceId === null &&
+        entry.storedForResume === true &&
+        entry.storageIdentity !== undefined &&
+        !SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(entry.pluginId))
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((entry) => ({
+        sessionId: entry.sessionId,
+        profileId: entry.profileId,
+        packageVersion: entry.packageVersion,
+        since: entry.createdAt,
+      }))
+  }
+
+  /** End one session backgroundAiSessions lists, the way disabling the package
+   *  ends it. False when it is no longer listed: a view resumed it, or it has
+   *  ended already. */
+  endBackgroundAiSession(pluginId: string, sessionId: string): boolean {
+    if (!this.backgroundAiSessions(pluginId).some((session) => session.sessionId === sessionId)) return false
+    this.terminalRoutes.delete(sessionId)
+    this.stopAiSessions((session) => session.sessionId === sessionId && session.pluginId === pluginId)
+    return true
   }
 
   private stopAiSessionsForPlugin(pluginId: string): void {

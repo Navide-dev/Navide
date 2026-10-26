@@ -401,6 +401,10 @@ declare global {
         listFactoryPackages: () => Promise<FactoryPluginSummary[]>
         /** Current and peak in-flight backend calls per plugin (never capped) and dropped Host event notifications. */
         backendCallConcurrency?: () => Promise<Array<{ pluginId: string; current: number; peak: number; droppedNotifications: number }>>
+        /** One package's AI CLI sessions that keep running with no view. */
+        backgroundAiSessions?: (id: string) => Promise<Array<{ sessionId: string; profileId: string; packageVersion: string; since: number }>>
+        /** Ends one session backgroundAiSessions listed; ok is false once it is no longer listed. */
+        endBackgroundAiSession?: (id: string, sessionId: string) => Promise<{ ok: boolean }>
         /** D-f: one installed plugin's activity report (read only). */
         activityReport?: (id: string) => Promise<{ ok: true; report: PluginActivityReport } | { ok: false; error: string }>
         /** D-f: installed Registry packages' disclosures and install-time scans. */

@@ -67,6 +67,28 @@ describe('ExtensionsPane list and detail', () => {
     expect(wrapper.get('[data-select-id="acme.tracker"]').attributes('aria-current')).toBeUndefined()
   })
 
+  // Background AI CLI sessions: only a plugin that declares aiCli has the
+  // list, and it is read only while that plugin's card is shown.
+  it('reads background AI CLI sessions only for a shown plugin that declares aiCli', async () => {
+    const api = mockPlugins([
+      { id: 'acme.devmap', requires: [], sensitive: [], packageVersion: '2.0.0', manifestPermissions: { system: ['aiCli'] } },
+    ]) as ReturnType<typeof mockPlugins> & { backgroundAiSessions: ReturnType<typeof vi.fn> }
+    api.backgroundAiSessions = vi.fn().mockResolvedValue([
+      { sessionId: 's1', profileId: 'codex', packageVersion: '2.0.0', since: 0 },
+    ])
+    wrapper = mount(ExtensionsPane, { global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(api.backgroundAiSessions).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-select-id="acme.devmap"]').trigger('click')
+    await flushPromises()
+    expect(api.backgroundAiSessions).toHaveBeenCalledWith('acme.devmap')
+    expect(wrapper.get('[data-id="acme.devmap"] .ext-background-ai-desc').text()).toContain('Codex · version 2.0.0')
+    expect(wrapper.find('[data-id="acme.tracker"] .ext-background-ai').exists()).toBe(false)
+    expect(wrapper.find('[data-id="kaito.lint"] .ext-background-ai').exists()).toBe(false)
+    expect(api.backgroundAiSessions.mock.calls.every(([id]) => id === 'acme.devmap')).toBe(true)
+  })
+
   it('shows a Registry package risk level in its row and its card, and links to its overview entry', async () => {
     mockPlugins()
     wrapper = mount(ExtensionsPane, { global: { plugins: [i18n] } })

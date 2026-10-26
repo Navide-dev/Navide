@@ -726,6 +726,32 @@ describe('plugins:remove boundary validation', () => {
     }
   })
 
+  it('lists and ends background AI CLI sessions for an authorized renderer only', () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-background-ai-'))
+    const manager = new FrontendPluginManager()
+    const listed = [{ sessionId: 's1', profileId: 'claude', packageVersion: '1.0.0', since: 1 }]
+    const list = vi.spyOn(manager, 'backgroundAiSessions').mockReturnValue(listed)
+    const end = vi.spyOn(manager, 'endBackgroundAiSession').mockReturnValue(true)
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG)
+      expect(handlers.get('plugins:backgroundAiSessions')?.(null, { id: 'acme.devmap' })).toEqual(listed)
+      expect(list).toHaveBeenCalledWith('acme.devmap')
+      expect(handlers.get('plugins:backgroundAiSessions')?.(null, { id: 7 })).toEqual([])
+      expect(handlers.get('plugins:endBackgroundAiSession')?.(null, { id: 'acme.devmap', sessionId: 's1' }))
+        .toEqual({ ok: true })
+      expect(end).toHaveBeenCalledWith('acme.devmap', 's1')
+      expect(handlers.get('plugins:endBackgroundAiSession')?.(null, { id: 'acme.devmap' })).toEqual({ ok: false })
+      expect(end).toHaveBeenCalledTimes(1)
+
+      registerPluginIpc(manager, root, () => false, TRUST_CONFIG)
+      expect(() => handlers.get('plugins:backgroundAiSessions')?.(null, { id: 'acme.devmap' })).toThrow()
+      expect(() => handlers.get('plugins:endBackgroundAiSession')?.(null, { id: 'acme.devmap', sessionId: 's1' })).toThrow()
+      expect(end).toHaveBeenCalledTimes(1)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('discloses backend resource usage to an authorized renderer only', () => {
     const root = mkdtempSync(join(tmpdir(), 'navide-backend-usage-'))
     const manager = new FrontendPluginManager()

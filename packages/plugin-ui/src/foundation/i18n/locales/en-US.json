@@ -1982,6 +1982,14 @@
       "installed": "Installed",
       "sensitive": "sensitive",
       "empty": "No Navide plugins installed.",
+      "backgroundAi": {
+        "title": "AI CLI running in the background ({count})",
+        "note": "These AI CLI sessions kept running after its window closed. They run until you end them here, disable or remove it, or quit Navide.",
+        "item": "{profile} · version {version} · since {time}",
+        "end": "End",
+        "gone": "That session is no longer running in the background.",
+        "endFailed": "Could not end the session: {error}"
+      },
       "permissionDetails": "Permissions and grants",
       "permissionDetailsWithActivity": "Permissions, grants and activity",
       "plansRiskNote": "This Navide plugin has its own backend program, which runs with your user permissions and has no sandbox. It works on plan documents in the current project, starting from the Git repository root found above it (including repositories nested inside): the plan and report folders under .agent-team, .claude, .cursor and docs at any depth, .plans at the root, and their .history (read only). Its backend reads and writes them directly; deletes and renames still go through Navide.",

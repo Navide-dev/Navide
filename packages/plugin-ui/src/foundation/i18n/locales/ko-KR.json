@@ -1982,6 +1982,14 @@
       "installed": "설치됨",
       "sensitive": "민감",
       "empty": "설치된 Navide 플러그인이 없어요.",
+      "backgroundAi": {
+        "title": "백그라운드에서 실행 중인 AI CLI ({count})",
+        "note": "이 AI CLI 세션들은 창이 닫힌 뒤에도 계속 실행되고 있어요. 여기서 종료하거나, 사용 중지·제거하거나, Navide를 끝낼 때까지 실행돼요.",
+        "item": "{profile} · 버전 {version} · {time}부터",
+        "end": "종료",
+        "gone": "이 세션은 더 이상 백그라운드에서 실행되지 않아요.",
+        "endFailed": "세션을 종료할 수 없어요: {error}"
+      },
       "permissionDetails": "권한 및 부여 내역",
       "permissionDetailsWithActivity": "권한, 부여 내역 및 활동",
       "plansRiskNote": "이 Navide 플러그인에는 자체 백엔드 프로그램이 있으며, 사용자 권한으로 샌드박스 없이 실행돼요. 현재 프로젝트의 계획 문서를 다루며, 그 위에서 찾은 Git 저장소 루트(안에 중첩된 저장소 포함)부터 시작해요. 대상은 모든 깊이의 .agent-team, .claude, .cursor, docs 아래 계획 및 보고서 폴더, 루트의 .plans, 그리고 그 .history(읽기 전용)예요. 백엔드가 직접 읽고 쓰며, 삭제와 이름 변경은 여전히 Navide를 거쳐요.",

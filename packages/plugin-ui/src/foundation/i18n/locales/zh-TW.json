@@ -1982,6 +1982,14 @@
       "installed": "已安裝",
       "sensitive": "敏感權限",
       "empty": "尚未安裝任何 Navide 外掛。",
+      "backgroundAi": {
+        "title": "在背景執行的 AI CLI（{count}）",
+        "note": "這些 AI CLI 工作階段在它的視窗關閉後仍持續執行，直到你在這裡結束、停用或移除它，或結束 Navide。",
+        "item": "{profile} · 版本 {version} · 自 {time}",
+        "end": "結束",
+        "gone": "這個工作階段已不在背景執行。",
+        "endFailed": "無法結束工作階段：{error}"
+      },
       "permissionDetails": "權限與授予",
       "permissionDetailsWithActivity": "權限、授予與活動",
       "plansRiskNote": "此 Navide 外掛有自己的後端程式，以您的使用者權限執行，沒有沙盒。它處理目前專案的計畫文件：從往上找到的 Git 儲存庫根目錄起（含其下的巢狀儲存庫），任何深度的 .agent-team、.claude、.cursor 與 docs 底下的 plans／reports 類資料夾、根目錄的 .plans，以及這些資料夾的 .history（只讀）。讀取與寫入計畫文件都由此 Navide 外掛的後端直接進行；刪除與改名仍經由 Navide 進行。",

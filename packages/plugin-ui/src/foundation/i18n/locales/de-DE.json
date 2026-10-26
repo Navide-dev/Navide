@@ -1982,6 +1982,14 @@
       "installed": "Installiert",
       "sensitive": "sensibel",
       "empty": "Keine Navide-Plug-ins installiert.",
+      "backgroundAi": {
+        "title": "Im Hintergrund laufende AI CLI ({count})",
+        "note": "Diese AI-CLI-Sitzungen laufen weiter, nachdem sein Fenster geschlossen wurde. Sie laufen, bis du sie hier beendest, es deaktivierst oder entfernst oder Navide beendest.",
+        "item": "{profile} · Version {version} · seit {time}",
+        "end": "Beenden",
+        "gone": "Diese Sitzung läuft nicht mehr im Hintergrund.",
+        "endFailed": "Die Sitzung konnte nicht beendet werden: {error}"
+      },
       "permissionDetails": "Berechtigungen und Gewährungen",
       "permissionDetailsWithActivity": "Berechtigungen, Gewährungen und Aktivität",
       "plansRiskNote": "Dieses Navide-Plug-in hat ein eigenes Backend-Programm, das mit Ihren Benutzerrechten und ohne Sandbox läuft. Es arbeitet mit Plan-Dokumenten im aktuellen Projekt, ausgehend vom darüber gefundenen Stammverzeichnis des Git-Repositorys (einschließlich darin verschachtelter Repositorys): die Plan- und Berichtsordner unter .agent-team, .claude, .cursor und docs in beliebiger Tiefe, .plans im Stammverzeichnis sowie deren .history (nur lesend). Sein Backend liest und schreibt sie direkt; Löschen und Umbenennen laufen weiterhin über Navide.",
