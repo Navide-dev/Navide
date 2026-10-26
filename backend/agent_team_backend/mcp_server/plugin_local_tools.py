@@ -184,7 +184,8 @@ async def plugins_validate_package(ctx: Context, path: str) -> dict[str, Any]:
     install applies: archive and manifest, the reserved `navide.` namespace,
     Navide's takedown and blocked-file lists, and the `<file>.sig` signature
     (signature: none, verified = a vetted publisher's active key, revoked, or
-    unverifiable). Nothing is written.
+    unverifiable). Nothing is written. To learn how to write a plugin, install
+    the skill skills_prepare_install(source="navide:plugin-authoring").
 
     Returns {ok, path, packageKind, valid, errors, id, version, target,
     digest, signature, risk, disclosure, scan, reviewedByNavide: false}; id,

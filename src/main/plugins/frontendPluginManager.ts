@@ -1089,7 +1089,7 @@ function webViewCapabilityError(reqId: string, error: WebViewError): CapabilityR
  *  a disabled built-in plugin. */
 export function builtinPluginDisabledMessage(pluginId: string): string {
   const name = BUILTIN_PLUGIN_NAMES.get(pluginId) ?? pluginId
-  return `Navide plugin ${name} is disabled. Enable it in Settings → Extensions.`
+  return `Navide plugin ${name} is disabled. Enable it in Settings → Navide Plugins.`
 }
 
 /** A Host refusal of an agent call into a disabled built-in plugin. The code

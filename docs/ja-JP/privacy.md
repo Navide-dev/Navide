@@ -96,7 +96,7 @@ Agent CLI の Credential は各 CLI の Configuration に残ります。Cloud AI
 
 **Portable Credential** はユーザーが自ら選ぶ例外です。各ベンダーが「別の Machine へ持ち運ぶ」ために公式に用意した値（例：`claude setup-token` が出力する Token）を、Settings → Accounts に貼り付けます。Navide はこの Device 上で暗号化して保存し、その CLI の新しい Pane を起動するときに環境変数としてのみ渡します。CLI 自身の Login File には書き込みません。ある Device から削除しても、その Device からだけ削除されます。
 
-貼り付けた Credential がアップロードされることはありません。アカウントの Credential と Key はご自身の Machine から出ることはありません。Settings → Sync に Credentials セクションはなく、古いビルドでオンのまま残った Credentials スイッチはオフとして扱われ、Navide Cloud はどのバージョンから送られた Credential の Record も受け付けません。MCP 設定は、同期を有効にした場合、どの Server をインストールしたか（名前、Transport、Command、引数、URL、オン/オフ、環境変数と Header の名前）だけを同期します。環境変数と Header の値はご自身の Machine から出ることはなく、各 Machine で入力します。同期される内容は Machine 上で暗号化してからアップロードされ、サーバーは復号キーを持ちません。
+貼り付けた Credential がアップロードされることはありません。アカウントの Credential と Key はご自身の Machine から出ることはありません。Settings → Sync に 「認証情報とキー」セクションはなく、古いビルドでオンのまま残った「認証情報とキー」のスイッチはオフとして扱われ、Navide Cloud はどのバージョンから送られた Credential の Record も受け付けません。MCP 設定は、同期を有効にした場合、どの Server をインストールしたか（名前、Transport、Command、引数、URL、オン/オフ、環境変数と Header の名前）だけを同期します。環境変数と Header の値はご自身の Machine から出ることはなく、各 Machine で入力します。同期される内容は Machine 上で暗号化してからアップロードされ、サーバーは復号キーを持ちません。
 
 Local File Permission は、同じ Machine 上の他 User による偶発的 Access を減らしますが、Malware、Compromised User Account、Unrestricted Agent、Backup、同等権限の Process からは保護しません。
 

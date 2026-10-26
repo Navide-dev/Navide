@@ -8160,7 +8160,7 @@ async def cli_extensions_list(ctx: Context) -> dict[str, Any]:
     hooks, Copilot and Droid plugins, opencode and Kilo plugins, Pi
     extensions, Qwen and Gemini CLI extensions, and every CLI's hooks. Gemini
     CLI is listed though Navide does not run it in a pane. The same inventory
-    Settings → CLI Extensions shows. Read it before telling the user a CLI
+    Settings → Extensions shows. Read it before telling the user a CLI
     has, or lacks, an add-on. Read-only: installing, enabling or removing a
     CLI extension is the user's decision and there is no tool here for it.
 
@@ -8186,7 +8186,7 @@ async def cli_extensions_list(ctx: Context) -> dict[str, Any]:
     Items of kind `navide-change` are what Navide itself wrote into a CLI's
     world for a convenience feature (name = the feature id, enabled = the
     feature is allowed); their id ends with a hash of the file Navide changed
-    — the file itself is named on Settings → CLI Extensions, where the user
+    — the file itself is named on Settings → Extensions, where the user
     can see exactly what was touched.
 
     Names and metadata only: no paths and no hook command lines, which can
@@ -8217,7 +8217,7 @@ async def _credentials_scan_result() -> dict[str, Any]:
 async def credentials_list(ctx: Context) -> dict[str, Any]:
     """List this machine's credentials and keys by name and metadata only.
 
-    What the user sees in Settings → Credentials & keys: git credential
+    What the user sees in Settings → Credentials & Keys: git credential
     helpers, gh / glab accounts, SSH private keys, OS keyring item metadata,
     remotes whose URL carries userinfo, token-looking environment variable
     names, and plaintext credential files. Read it to tell the user which

@@ -253,7 +253,7 @@ class Prepared:
 #: ``ShareRefused.code`` while the user has the built-in Navide plugin Plans
 #: disabled: no plan document is published or re-published.
 PLANS_DISABLED_CODE = "plugin-disabled"
-PLANS_DISABLED_MESSAGE = "Navide plugin Plans is disabled. Enable it in Settings → Extensions."
+PLANS_DISABLED_MESSAGE = "Navide plugin Plans is disabled. Enable it in Settings → Navide Plugins."
 
 
 def _is_plans_document(real: Path, kind: str) -> bool:

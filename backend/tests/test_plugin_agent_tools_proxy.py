@@ -88,7 +88,11 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for #659 on top of both (main pin ba95cc9a…): the mcp_list
 #: description documents `tools_error` and masking by value. No other tool
 #: changed.
-MAIN_TOOLS_LIST_SHA256 = "2dc3e75156ce9045c943244e85204a0c3a9ba8f6f6ceeea85b8a63ad325d8679"
+#: Re-pinned for 0.2.32 page names (previous pin 2dc3e751…): the
+#: cli_extensions_list and credentials_list descriptions name their Settings
+#: pages as the sidebar does (Extensions, Credentials & Keys). No other tool
+#: changed.
+MAIN_TOOLS_LIST_SHA256 = "e59a10993d1a9bd482ae50f4afc30c83fc97ffb46912f37499d27202bf35c2eb"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -119,7 +123,10 @@ DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", 
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server). Re-pinned in 0.2.32 when
 #: skills_set_delivery's description gained the approval for widening.
-MAIN_PLAN_SKILLS_TOOLS_SHA256 = "4c9bc609cad55f1e17c5a93f5d5f9a568c625fffa459307d13c6232849e05db9"
+#: Re-pinned in 0.2.32 (previous pin 4c9bc609…) when skills_prepare_install's
+#: description gained the navide:<name> source for skills shipped with Navide.
+#: No other plan_* or skills_* tool changed.
+MAIN_PLAN_SKILLS_TOOLS_SHA256 = "2db42581d9594d109e5d31d6458a050cf6d1005e2efe6f098e16c526d794b4d7"
 
 PERMISSIONS = {
     "system": ["fs", "ui"],
