@@ -1372,7 +1372,7 @@ describe('native backend consent text', () => {
     expect(update.detail).not.toMatch(/no network/i)
   })
 
-  it('lists each agent tool with its method, declared claim, timeout and whole input schema, plus count and size', () => {
+  it('lists each agent tool with its method, declared claim and timeout, plus count and size', () => {
     const agentTools = [
       { name: 'indexer_find', method: 'files.search', risk: 'read', title: 'Find', description: 'Find files.',
         inputSchema: { type: 'object', properties: { q: { type: 'string' } } }, timeoutMs: 30000 },
@@ -1384,17 +1384,18 @@ describe('native backend consent text', () => {
       `Agents will be able to call these 2 tools of Indexer (their text and input schemas total ${
         Buffer.byteLength(JSON.stringify(agentTools))} bytes):`,
     )
-    expect(detail).toContain('• indexer_find → files.search (declared read-only, times out after 30 s): Find files.')
-    expect(detail).toContain('  Input schema: {"type":"object","properties":{"q":{"type":"string"}}}')
-    expect(detail).toContain('• indexer_tag → files.tag (declared as changing data, times out after 5 s): Tag a file.')
+    expect(detail).toContain('• indexer_find → files.search (declared read-only, times out after 30 s)')
+    expect(detail).toContain('• indexer_tag → files.tag (declared as changing data, times out after 5 s)')
+    expect(detail).toContain("Each tool's full description and input schema are shown in Settings → Navide Plugins.")
+    expect(detail).not.toContain('"properties"')
     expect(detail.indexOf('Agents will be able')).toBeLessThan(detail.indexOf('You can disable it at any time'))
     expect(nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [] }).detail).not.toContain('Agents will')
   })
 
   // D-g with #346: the agent-tool section is in the dialog's language too.
   it.each([
-    ['zh-TW', 'agent 將可以呼叫 Indexer 的這 1 個工具', '• indexer_find → files.search（外掛宣告為唯讀，30 秒後逾時）：Find files.', '  輸入結構描述：{"type":"object"}'],
-    ['ja-JP', 'agent は Indexer のこれら 1 個のツールを呼び出せるようになります', '• indexer_find → files.search（プラグインの宣言：読み取り専用、30 秒でタイムアウト）：Find files.', '  入力スキーマ：{"type":"object"}'],
+    ['zh-TW', 'agent 將可以呼叫 Indexer 的這 1 個工具', '• indexer_find → files.search（外掛宣告為唯讀，30 秒後逾時）', '「設定 → Navide 外掛」'],
+    ['ja-JP', 'agent は Indexer のこれら 1 個のツールを呼び出せるようになります', '• indexer_find → files.search（プラグインの宣言：読み取り専用、30 秒でタイムアウト）', '「設定 → Navide プラグイン」'],
   ] as const)('words the agent tools in the dialog language (%s)', (locale, intro, line, schema) => {
     const tool = {
       name: 'indexer_find', method: 'files.search', risk: 'read' as const, title: 'Find', description: 'Find files.',
@@ -1407,14 +1408,43 @@ describe('native backend consent text', () => {
     expect(detail).not.toMatch(/Agents will|Input schema|declared read-only|What these tools return/)
   })
 
-  it('spells out invisible characters in a tool schema instead of showing them raw', () => {
+  it('keeps invisible characters in a tool schema out of the dialog (the schema is on the Settings page)', () => {
     const tool = {
       name: 'indexer_find', method: 'files.search', risk: 'read' as const, title: 'Find', description: 'Find files.',
       inputSchema: { type: 'object', properties: { 'k\u202ex': { enum: ['a\u200bb', 'v\ufe0f'] } } }, timeoutMs: 30000,
     }
     const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [tool] })
-    expect(detail).toContain('  Input schema: {"type":"object","properties":{"k\\u{202e}x":{"enum":["a\\u{200b}b","v\\u{fe0f}"]}}}')
     expect(detail).not.toMatch(/[\u200b\u202e\ufe0f]/)
+    expect(detail).not.toContain('enum')
+  })
+
+  // A native message box does not scroll: 15 tools with ~10 KB of schemas
+  // (devmap 0.0.4) ran past the screen and hid the Allow button.
+  it('stays bounded for many tools with large schemas and still names every tool and the risks', () => {
+    const agentTools = Array.from({ length: 15 }, (_, index) => ({
+      name: `devmap_tool_${index}`, method: `devmap.method${index}`, risk: index % 2 ? 'write' as const : 'read' as const,
+      title: `Tool ${index}`, description: 'Reads or changes the development map. '.repeat(8),
+      inputSchema: {
+        type: 'object',
+        properties: Object.fromEntries(Array.from({ length: 8 }, (_, key) => [
+          `field${key}`, { type: 'string', description: 'A long field description for the schema. '.repeat(1) },
+        ])),
+      },
+      timeoutMs: 30000,
+    }))
+    expect(Buffer.byteLength(JSON.stringify(agentTools))).toBeGreaterThan(10_000)
+    const methods = agentTools.map((tool) => tool.method)
+    const { message, detail } = nativeBackendConsentText({ ...base, system: ['fs'], shell: 'allowlist', methods, agentTools })
+    expect(message.length + detail.length).toBeLessThan(3_500)
+    expect(detail.split('\n').length).toBeLessThan(30)
+    expect(detail).toContain('High risk:')
+    expect(detail).toContain('Navide runs it in a sandbox')
+    expect(detail).toContain(`Methods it serves: ${[...methods].sort().join(', ')}.`)
+    for (const tool of agentTools) expect(detail).toContain(tool.name)
+    expect(detail).toContain('• devmap_tool_0 → devmap.method0 (declared read-only, times out after 30 s)')
+    expect(detail).toContain('• and 7 more (3 declared as changing data): devmap_tool_8, devmap_tool_9, devmap_tool_10')
+    expect(detail).not.toContain('devmap_tool_8 →')
+    expect(detail).toContain('Settings → Navide Plugins')
   })
 })
 
