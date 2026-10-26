@@ -28,6 +28,12 @@ export interface PendingInstall {
   /** A file's prepared copy is used up by a failed approval: approving again
    *  would only fail, so the dialog asks for the file to be chosen again. */
   needsFileAgain?: boolean
+  /** #643 review L1/L2: what to do next, under the reason: choose the file
+   *  again, ask the agent to send its request again, or start over. */
+  commitNextStep?: string
+  /** #643 review L3: failed approvals so far, so that a second failure in the
+   *  same words is announced again instead of updating a silent alert. */
+  commitFailures?: number
 }
 
 /** What the dialog says about a failed approval: a version installed already
@@ -74,15 +80,26 @@ export function usePluginInstallFlow() {
   }
 
   /** A failed approval: the pane's error line as before, and the reason in
-   *  the dialog, which stays open over that line. */
-  function failCommit(err: unknown): void {
+   *  the dialog, which stays open over that line. A failed rollback (L4)
+   *  says so in its own words and never asks for a file. */
+  function failCommit(err: unknown, options: { rollback?: boolean } = {}): void {
     fail(err)
     const pending = pendingConfirm.value
     if (!pending) return
+    const fileUsedUp = pending.prepared.source === 'local-unsigned' && options.rollback !== true
+    const nextStep = pending.agentRequest
+      ? 'settings.extensions.localInstall.askAgentAgain'
+      : fileUsedUp
+        ? 'settings.extensions.localInstall.chooseAgain'
+        : 'settings.extensions.localInstall.startAgain'
     pendingConfirm.value = {
       ...pending,
-      commitError: installFailureMessage(ipcErrorMessage(err), t),
-      ...(pending.prepared.source === 'local-unsigned' ? { needsFileAgain: true } : {}),
+      commitError: options.rollback === true
+        ? t('settings.extensions.localInstall.rollbackFailed')
+        : installFailureMessage(ipcErrorMessage(err), t),
+      commitNextStep: t(nextStep),
+      commitFailures: (pending.commitFailures ?? 0) + 1,
+      ...(fileUsedUp ? { needsFileAgain: true } : {}),
     }
   }
 
@@ -344,7 +361,7 @@ export function usePluginInstallFlow() {
         pendingStep.value = null
         await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
       } catch (err) {
-        fail(err)
+        failCommit(err, { rollback: true })
       } finally {
         busy.value = false
       }

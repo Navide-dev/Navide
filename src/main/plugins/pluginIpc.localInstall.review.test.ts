@@ -12,7 +12,8 @@ import { makeZip } from './zipFixture'
 import { sha256Hex } from './pluginVerify'
 import { canonicalTrustJson, type RegistryPackageEnvelope, type RegistryTrustMetadata } from './pluginRegistryTrust'
 import type { InstallerTrustConfig } from './pluginInstaller'
-import { PluginActivationSelector } from './pluginActivationSelector'
+import { PluginActivationSelector, immutablePluginPackageDir } from './pluginActivationSelector'
+import { currentPluginHostTarget } from './pluginTarget'
 import { NativeBackendStore } from './pluginNativeBackendStore'
 import { localSourceConsentLine, nativeBackendConsentDialog } from './pluginLocalInstall'
 import { pluginStorageDirName } from './pluginStorage'
@@ -344,6 +345,31 @@ describe('HIGH-2: view storage when the source changes', () => {
     // A bumped version prepares as before.
     writeFileSync(picked, vsix('acme.todo', '1.0.1'))
     await expect(call('plugins:installFromFile')).resolves.toMatchObject({ id: 'acme.todo', version: '1.0.1' })
+  })
+
+  // #643 M1: the check at prepare only says earlier what staging would refuse
+  // at commit; it must never refuse what main installs.
+  it('installs over a leftover directory of the version that nothing references, as on main', async () => {
+    // An interrupted earlier install: the directory is there, no lifecycle
+    // record points at it. Staging sets it aside and installs.
+    const leftover = immutablePluginPackageDir(pluginsRoot, 'acme.todo', '1.0.0', 'universal')
+    mkdirSync(leftover, { recursive: true })
+    writeFileSync(join(leftover, 'manifest.json'), '{}')
+    writeFileSync(picked, vsix('acme.todo', '1.0.0'))
+    await expect(call('plugins:installFromFile')).resolves.toMatchObject({ id: 'acme.todo', version: '1.0.0' })
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', source: 'local-unsigned' }])
+  })
+
+  it('prepares the installed version for another target, even with a leftover there', async () => {
+    // 1.0.0 is installed for one target only; the same version for the
+    // host's own target (a package with a backend) is another directory.
+    await fileInstall('acme.todo', '1.0.0')
+    const otherTarget = currentPluginHostTarget()
+    expect(otherTarget).not.toBe('universal')
+    mkdirSync(immutablePluginPackageDir(pluginsRoot, 'acme.todo', '1.0.0', otherTarget), { recursive: true })
+    writeFileSync(picked, vsix('acme.todo', '1.0.0', true))
+    await expect(call('plugins:installFromFile')).resolves.toMatchObject({ id: 'acme.todo', version: '1.0.0' })
   })
 
   it('keeps the storage of an update within the Marketplace exactly as on main', async () => {
