@@ -160,6 +160,12 @@ class PosixProcessTree:
         except OSError:
             pass
 
+    def start_own_group(self, pid: int) -> None:
+        return None
+
+    def release_contained(self, pid: int, job: int) -> None:
+        return None
+
     def contain(self, pid: int) -> None:
         # Started with start_new_session: its session is the tree.
         return None

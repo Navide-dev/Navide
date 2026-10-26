@@ -146,6 +146,7 @@ class WindowsResourceProbe:
 # ---------------------------------------------------------------------------
 
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+CREATE_SUSPENDED = 0x00000004
 JobObjectExtendedLimitInformation = 9
 PROCESS_TERMINATE = 0x0001
 PROCESS_SET_QUOTA = 0x0100
@@ -485,10 +486,56 @@ class WindowsProcessTree:
         self.kill_tree(gid, force=force)
 
     def own_group_spawn_kwargs(self) -> dict[str, int]:
-        return {}
+        # Suspended until `start_own_group` has put it in its job: a child
+        # that ran first could start a process (cmd\git.exe starts the real
+        # git.exe at once) before the assignment, and that one and everything
+        # it starts would be outside the job.
+        return {"creationflags": CREATE_SUSPENDED}
 
     def end_own_group(self, pid: int) -> None:
         return None
+
+    def start_own_group(self, pid: int) -> int | None:
+        job: int | None = None
+        try:
+            job = self.contain(pid)
+        except OSError as exc:
+            # Degraded, not fatal: the run works, and a timeout falls back to
+            # killing the snapshot of its tree.
+            log.warning("job object unavailable for pid %s: %s", pid, exc)
+        try:
+            # NtResumeProcess: Popen has already closed the thread handle.
+            psutil.Process(pid).resume()
+        except psutil.Error as exc:
+            if job is not None:
+                self.end_contained(pid, job)
+            else:
+                try:
+                    self.kill(pid, force=True)
+                except OSError:
+                    pass
+            raise _translate(exc) from None
+        return job
+
+    def release_contained(self, pid: int, job: int) -> None:
+        with _jobs_lock:
+            entry = _jobs.get(pid)
+            if entry is not None and entry[0] == job:
+                del _jobs[pid]
+        k = _kernel32()
+        # Zeroed limits: no KILL_ON_JOB_CLOSE, so the close below ends nothing.
+        info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        if k.SetInformationJobObject(
+            job, JobObjectExtendedLimitInformation, ctypes.byref(info), ctypes.sizeof(info)
+        ):
+            k.CloseHandle(job)
+            return
+        # Closing it now would end what the run left running: keep the handle.
+        log.warning(
+            "could not clear kill-on-close for pid %s (error %s); keeping its job open",
+            pid,
+            ctypes.get_last_error(),  # type: ignore[attr-defined]
+        )
 
     def contain(self, pid: int) -> int | None:
         job = _create_kill_on_close_job()

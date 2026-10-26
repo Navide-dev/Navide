@@ -481,7 +481,25 @@ class ProcessTree(Protocol):
 
         POSIX: a new process group (not a new session: the controlling
         terminal stays), so `end_own_group` also reaches a grandchild forked
-        after any snapshot. Windows has no process groups: none."""
+        after any snapshot. Windows has no process groups: the child starts
+        suspended instead, and `start_own_group` must follow the spawn."""
+        ...
+
+    def start_own_group(self, pid: int) -> int | None:
+        """Finish a spawn made with `own_group_spawn_kwargs`.
+
+        Windows: put the suspended child in a kill-on-close job (`contain`),
+        then let it run, so nothing it starts can be outside the job. The job
+        handle is returned for `end_contained` (a timed-out run) or
+        `release_contained` (any other end); None when the job could not be
+        made, and the child runs uncontained. Raises OSError, with the child
+        killed, only when it cannot be resumed. POSIX: None, nothing done."""
+        ...
+
+    def release_contained(self, pid: int, job: int) -> None:
+        """Let go of a job from `start_own_group` without ending what is left
+        in it: whatever the child left running keeps running, as it would
+        without the job. Never raises. A no-op on POSIX."""
         ...
 
     def end_own_group(self, pid: int) -> None:
