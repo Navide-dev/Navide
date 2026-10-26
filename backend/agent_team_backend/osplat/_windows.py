@@ -525,9 +525,7 @@ class WindowsProcessTree:
         k = _kernel32()
         # Zeroed limits: no KILL_ON_JOB_CLOSE, so the close below ends nothing.
         info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-        if k.SetInformationJobObject(
-            job, JobObjectExtendedLimitInformation, ctypes.byref(info), ctypes.sizeof(info)
-        ):
+        if True:  # MUTANT: release keeps kill-on-close
             k.CloseHandle(job)
             return
         # Closing it now would end what the run left running: keep the handle.

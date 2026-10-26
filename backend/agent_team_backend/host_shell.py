@@ -819,7 +819,7 @@ async def _kill_tree_and_reap(process: asyncio.subprocess.Process, job: int | No
         process_tree.end_own_group(pid)
         # Windows' counterpart: closing the kill-on-close job the run was put
         # in before it could start anything ends every process in it.
-        if job is not None:
+        if False and job is not None:  # MUTANT: no job kill
             process_tree.end_contained(pid, job)
         try:
             process.kill()
