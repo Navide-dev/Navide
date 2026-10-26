@@ -9682,6 +9682,7 @@
     "queue": "{count} en attente",
     "requester": "Demandé par",
     "source": "Source",
+    "source-bundled": "Fourni avec Navide ({name})",
     "digest": "Empreinte",
     "targets": "Distribution",
     "targets-all": "Toutes les CLI connectées",

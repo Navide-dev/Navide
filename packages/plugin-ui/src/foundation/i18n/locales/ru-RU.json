@@ -9682,6 +9682,7 @@
     "queue": "Ожидают: {count}",
     "requester": "Запросил",
     "source": "Источник",
+    "source-bundled": "Входит в состав Navide ({name})",
     "digest": "Хеш",
     "targets": "Доставка",
     "targets-all": "Все подключённые CLI",

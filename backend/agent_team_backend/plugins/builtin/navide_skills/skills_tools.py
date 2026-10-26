@@ -184,8 +184,9 @@ async def skills_prepare_install(
 ) -> dict[str, Any]:
     """Preview a local skill folder or public GitHub repository before installing.
 
-    Accepts owner/repo, a public https://github.com/owner/repo URL, or an
-    absolute local folder. GitHub ref and subdir are separate; subdir='.'
+    Accepts owner/repo, a public https://github.com/owner/repo URL, an
+    absolute local folder, or navide:<name> for a skill that ships with Navide
+    (navide:plugin-authoring teaches writing Navide plugins). GitHub ref and subdir are separate; subdir='.'
     selects the repository root. Multiple candidates return selection_required
     and candidates without an installable preview_id; select a path and retry.
     A selected preview contains immutable instructions, a file inventory,

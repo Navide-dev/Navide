@@ -9682,6 +9682,7 @@
     "queue": "保留中 {count} 件",
     "requester": "要求元",
     "source": "ソース",
+    "source-bundled": "Navide に同梱（{name}）",
     "digest": "ダイジェスト",
     "targets": "配信先",
     "targets-all": "接続済みのすべての CLI",

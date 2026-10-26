@@ -13,6 +13,7 @@ import type { useBackend } from '../composables/useBackend'
 
 interface SkillSource {
   kind?: string
+  name?: string
   path?: string
   repository?: string
   commit?: string
@@ -92,6 +93,7 @@ const sourceLabel = computed(() => {
   const source = install.value?.source
   if (!source) return ''
   if (source.kind === 'local') return source.path ?? ''
+  if (source.kind === 'bundled') return t('skill-approval.source-bundled', { name: `navide:${source.name ?? ''}` })
   const commit = source.commit ? `@${source.commit.slice(0, 12)}` : ''
   const subdir = source.subdir && source.subdir !== '.' ? `/${source.subdir}` : ''
   return `${source.repository ?? ''}${commit}${subdir}`
