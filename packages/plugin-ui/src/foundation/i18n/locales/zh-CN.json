@@ -1893,7 +1893,9 @@
           "externalCallersDisclosure": "外部程序只共用一组 token，审核记录分不出是哪个程序，只能记成“外部客户端”。Host 凭据也比照处理。"
         },
         "empty": "目前没有安装任何含原生后端的 Navide 插件。",
-        "windowWithout": "{name} 已打开，但没有原生后端：{reason}。需要后端的功能将无法使用。要允许后端，请到“设置 → Navide 插件 → {page}”。",
+        "windowWithout": "{name} 已打开，但没有原生后端：{reason}。需要后端的功能将无法使用。{next}",
+        "windowWithoutAllow": "要允许后端，请到“设置 → Navide 插件 → {page}”，然后重新打开窗口。",
+        "windowWithoutDetails": "原因可在“设置 → Navide 插件 → {page}”中查看。",
         "allow": "允许",
         "disable": "禁用",
         "enable_plugin": "激活",

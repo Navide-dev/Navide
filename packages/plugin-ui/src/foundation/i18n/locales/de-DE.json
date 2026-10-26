@@ -1893,7 +1893,9 @@
           "externalCallersDisclosure": "Externe Programme teilen sich ein einziges Token, daher kann der Eintrag eines Aufrufs nur „ein externer Client“ angeben, nicht welches Programm es war. Die Host-Anmeldeinformation wird genauso behandelt."
         },
         "empty": "Kein installiertes Navide-Plug-in hat ein natives Backend.",
-        "windowWithout": "{name} wurde ohne sein natives Backend geöffnet: {reason}. Funktionen, die das Backend brauchen, funktionieren nicht. Um das Backend zuzulassen, öffnen Sie „Einstellungen → Navide-Plug-ins → {page}“.",
+        "windowWithout": "{name} wurde ohne sein natives Backend geöffnet: {reason}. Funktionen, die das Backend brauchen, funktionieren nicht. {next}",
+        "windowWithoutAllow": "Um das Backend zuzulassen, öffnen Sie „Einstellungen → Navide-Plug-ins → {page}“ und öffnen Sie das Fenster danach erneut.",
+        "windowWithoutDetails": "Warum, steht unter „Einstellungen → Navide-Plug-ins → {page}“.",
         "allow": "Erlauben",
         "disable": "Deaktivieren",
         "enable_plugin": "Aktivieren",

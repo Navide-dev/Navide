@@ -461,7 +461,7 @@ import type { ExecutionPolicySnapshot } from './executionPolicy'
 import type { JsonValue } from '../../../packages/plugin-contracts/src/index'
 import type { FilePickerInvocation } from '../filePicker'
 import { NativeBackendStore } from './pluginNativeBackendStore'
-import { ThirdPartyBackendController, thirdPartyBackendLaunchSpec } from './pluginThirdPartyBackends'
+import { NativeBackendRefusal, ThirdPartyBackendController, thirdPartyBackendLaunchSpec } from './pluginThirdPartyBackends'
 import { readInstalledManifestV2, type ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 import { PluginAgentToolsHost } from './pluginAgentToolsHost'
 import { pluginWebViewRegistry } from './pluginWebViewHost'
@@ -18791,12 +18791,16 @@ describe('a third-party window view opens without its native backend', () => {
     [...(mgr as unknown as { running: Map<string, { backendWorkspaceId: string | null; backendUnavailable?: string }> }).running.values()]
 
   it.each([
-    ['the global switch is off', new BackendPluginError('BACKEND_UNAVAILABLE', 'third-party native backends are turned off'), 'third-party native backends are turned off'],
-    ['the user declined consent', new BackendPluginError('BACKEND_UNAVAILABLE', 'the user did not allow the native backend'), 'the user did not allow the native backend'],
-    ['consent was declined earlier', new BackendPluginError('BACKEND_UNAVAILABLE', 'the native backend has not been allowed'), 'the native backend has not been allowed'],
+    ['the global switch is off', new NativeBackendRefusal('third-party native backends are turned off', 'disabled-globally'), 'third-party native backends are turned off', 'disabled-globally'],
+    ['the user declined consent', new NativeBackendRefusal('the user did not allow the native backend', 'needs-consent'), 'the user did not allow the native backend', 'needs-consent'],
+    ['consent was declined earlier', new NativeBackendRefusal('the native backend has not been allowed', 'needs-consent'), 'the native backend has not been allowed', 'needs-consent'],
+    ['the sandbox is unavailable', new NativeBackendRefusal('macOS sandbox-exec is unavailable', 'sandbox-unavailable'), 'macOS sandbox-exec is unavailable', 'sandbox-unavailable'],
     // Any other failure may carry paths or a stack: only a generic reason leaves.
-    ['the bind failed', new Error('spawn EACCES ' + '/Users/someone/private/acme-map'), 'the native backend could not start'],
-  ])('opens and stays unbound when %s', async (_case, refusal, reason) => {
+    ['the bind failed', new Error('spawn EACCES ' + '/Users/someone/private/acme-map'), 'the native backend could not start', 'unavailable'],
+    // #641 L3: BACKEND_UNAVAILABLE alone is not a pass: only the admission
+    // gates' own refusals are known to carry fixed text.
+    ['a BACKEND_UNAVAILABLE from elsewhere', new BackendPluginError('BACKEND_UNAVAILABLE', 'cannot open ' + '/Users/someone/private/acme-map'), 'the native backend could not start', 'unavailable'],
+  ])('opens and stays unbound when %s', async (_case, refusal, reason, status) => {
     const { mgr, workspace, root } = setup()
     const bind = vi.spyOn(PluginBackendHost.prototype, 'bindView').mockRejectedValue(refusal)
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -18805,7 +18809,7 @@ describe('a third-party window view opens without its native backend', () => {
         workspacePath: workspace,
         query: '',
       })
-      expect(result).toEqual({ ok: true, backendUnavailable: reason })
+      expect(result).toEqual({ ok: true, backendUnavailable: reason, backendUnavailableStatus: status })
       // The view is there, and its backend is not: no second bind tried
       // another way, and no workspace was bound, so its calls fail closed.
       const views = running(mgr)

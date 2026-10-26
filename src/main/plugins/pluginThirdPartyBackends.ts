@@ -831,8 +831,20 @@ function canonicalSandboxPaths(spec: ThirdPartyLaunchSpec, dataDir: string) {
   return { packageDir, dataDir, entryFile }
 }
 
-function unavailable(message: string): BackendPluginError {
-  return new BackendPluginError('BACKEND_UNAVAILABLE', message)
+/** A refusal by the admission gates below. Its message is always one of their
+ * fixed strings (never a path or raw error text), so it may be shown to the
+ * user as is; `status` names the gate, as the Settings rows do. */
+export class NativeBackendRefusal extends BackendPluginError {
+  readonly status: NativeBackendStatus
+
+  constructor(message: string, status: NativeBackendStatus) {
+    super('BACKEND_UNAVAILABLE', message)
+    this.status = status
+  }
+}
+
+function unavailable(message: string, status: NativeBackendStatus = 'unavailable'): BackendPluginError {
+  return new NativeBackendRefusal(message, status)
 }
 
 export class ThirdPartyBackendController {
@@ -892,9 +904,9 @@ export class ThirdPartyBackendController {
   /** The gates that can change at any moment: switches, breaker, sandbox. */
   private assertAdmissible(spec: ThirdPartyLaunchSpec): void {
     // The global switch first: while it is off, that is the answer.
-    if (!this.store.isEnabled()) throw unavailable('third-party native backends are turned off')
+    if (!this.store.isEnabled()) throw unavailable('third-party native backends are turned off', 'disabled-globally')
     const refusal = this.staticRefusal(spec)
-    if (refusal) throw unavailable(refusal.reason)
+    if (refusal) throw unavailable(refusal.reason, refusal.status)
   }
 
   /** 0.2.32: the user declined this exact content and permission set. */
@@ -997,20 +1009,20 @@ export class ThirdPartyBackendController {
     this.assertAdmissible(spec)
     const digest = await this.digestBackend(spec)
     if (!this.consentMatches(spec, digest)) {
-      if (options.prompt === false) throw unavailable('the native backend has not been allowed')
+      if (options.prompt === false) throw unavailable('the native backend has not been allowed', 'needs-consent')
       await this.requestConsent(spec, digest)
     }
     // Hashing and the consent dialog both wait; check the switches again.
     this.assertAdmissible(spec)
     const sandbox = this.sandboxFor(spec)
-    if (!sandbox.available) throw unavailable(sandbox.reason)
+    if (!sandbox.available) throw unavailable(sandbox.reason, 'sandbox-unavailable')
 
     const dataDir = this.dataDirFor(spec.pluginId)
     mkdirSync(join(dataDir, 'tmp'), { recursive: true, mode: 0o700 })
     const canonicalDataDir = realpathSync(dataDir)
     const paths = { ...canonicalSandboxPaths(spec, canonicalDataDir), homeDir: this.options.homeDir ?? homedir() }
     const resolved = resolveBackendSandbox(paths, this.probe)
-    if (!resolved.available) throw unavailable(resolved.reason)
+    if (!resolved.available) throw unavailable(resolved.reason, 'sandbox-unavailable')
     const spawnSandboxed = sandboxedSpawnProcess(resolved, paths, this.options.spawnImpl)
     const identity = sandboxIdentity(paths.packageDir, canonicalDataDir)
     const killSandbox = this.options.killSandbox ?? ((rootPid, id) => {
@@ -1070,7 +1082,7 @@ export class ThirdPartyBackendController {
         // The switches may have changed while the package was being hashed.
         this.assertAdmissible(spec)
         if (!this.consentMatches(spec, digest)) {
-          throw unavailable('the native backend changed since it was allowed')
+          throw unavailable('the native backend changed since it was allowed', 'needs-consent')
         }
       },
       noteFailure: () => this.noteFailure(spec.pluginId),
@@ -1092,7 +1104,7 @@ export class ThirdPartyBackendController {
     // 0.2.32: a saved "not now" for this content is not asked again and is
     // never overridden by an install consent; the Settings page's Allow (or a
     // new install dialog) is the way back.
-    if (this.declineMatches(spec, digest)) throw unavailable('the user did not allow the native backend')
+    if (this.declineMatches(spec, digest)) throw unavailable('the user did not allow the native backend', 'needs-consent')
     const record = this.store.record(spec.pluginId)
     if (
       record.consent === undefined &&
@@ -1104,7 +1116,7 @@ export class ThirdPartyBackendController {
     }
     const identity = `${spec.pluginId}\n${digest}\n${backendPermissionsKey(spec)}`
     if (this.declinedConsent.has(identity) || !this.options.promptConsent) {
-      throw unavailable('the native backend has not been allowed')
+      throw unavailable('the native backend has not been allowed', 'needs-consent')
     }
     // One prompt per identity at a time: concurrent binds share the answer.
     let pending = this.pendingPrompts.get(identity)
@@ -1129,13 +1141,13 @@ export class ThirdPartyBackendController {
     }
     if (!(await pending)) {
       this.declinedConsent.add(identity)
-      throw unavailable('the user did not allow the native backend')
+      throw unavailable('the user did not allow the native backend', 'needs-consent')
     }
     this.recordConsent(spec, digest)
   }
 
   private recordConsent(spec: ThirdPartyLaunchSpec, digest: string, grantedBy?: typeof PRE_INSTALL_CONSENT): void {
-    if (!this.store.isEnabled()) throw unavailable('third-party native backends are turned off')
+    if (!this.store.isEnabled()) throw unavailable('third-party native backends are turned off', 'disabled-globally')
     if (!this.consentMatches(spec, digest)) {
       this.store.grantConsent(spec.pluginId, {
         binarySha256: digest,

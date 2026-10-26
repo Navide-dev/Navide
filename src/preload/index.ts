@@ -1429,7 +1429,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
     openContributionWindow: (args: {
       contributionKey: string
       workspace_path: string
-    }): Promise<{ ok: boolean; error?: string; backendUnavailable?: string }> =>
+    }): Promise<{
+      ok: boolean
+      error?: string
+      backendUnavailable?: string
+      backendUnavailableStatus?: NativeBackendStatusRow['status']
+    }> =>
       ipcRenderer.invoke('plugins:openContributionWindow', args),
     closeContribution: (args: { contributionKey: string }): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('plugins:closeContribution', args),

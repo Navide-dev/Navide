@@ -1893,7 +1893,9 @@
           "externalCallersDisclosure": "Les programmes externes partagent un seul token ; l’enregistrement d’un appel peut donc seulement indiquer « un client externe », pas quel programme. L’identifiant de l’hôte est traité de la même façon."
         },
         "empty": "Aucun plugin Navide installé n’a de backend natif.",
-        "windowWithout": "{name} s’est ouvert sans son backend natif : {reason}. Les fonctions qui en ont besoin ne marcheront pas. Pour autoriser le backend, allez dans Paramètres → Plugins Navide → {page}.",
+        "windowWithout": "{name} s’est ouvert sans son backend natif : {reason}. Les fonctions qui en ont besoin ne marcheront pas. {next}",
+        "windowWithoutAllow": "Pour autoriser le backend, allez dans Paramètres → Plugins Navide → {page}, puis rouvrez la fenêtre.",
+        "windowWithoutDetails": "Paramètres → Plugins Navide → {page} en indique la raison.",
         "allow": "Autoriser",
         "disable": "Désactiver",
         "enable_plugin": "Activer",
