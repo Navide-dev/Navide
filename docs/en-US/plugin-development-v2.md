@@ -286,7 +286,7 @@ protocol.
 | Stage | Python backend | Host-visible contract |
 |---|---|---|
 | Source development | Authors may use `.py` files, a virtual environment, and any Python build/test layout. | None. Source layout is not an installed interface. |
-| Local testing | Turn on Developer Mode (Settings → Navide Plugins) and **Load from folder…**: the view opens with its declared grant and the backend runs in the same sandbox, after the same native backend consent, as an installed one. `navide-plugin dev-backend <directory>` still runs the executable alone, with every Host bridge request answered `CAPABILITY_DENIED`. | A developer folder's consent is bound to the folder and its manifest `permissions` and `backend`; editing files never asks again, changing either declaration does. A loaded folder also reloads by itself when a file in it changes (on by default, per folder in Settings → Navide Plugins; `.git/` is ignored): the same checks as **Reload** run, a folder that cannot be read mid-edit keeps the running version, and a changed `permissions` or `backend` unloads it and waits for the user's consent — an automatic reload never applies a changed declaration. The whole folder is checked before the running version is unloaded, and manual and automatic reloads of a folder run one at a time; a reload while a build or save is still writing files can still load an incomplete mix of old and new files (not prevented, disclosed on the card). When the new version fails to load after the old one was unloaded, the card says that no version is running. Settings → Navide Plugins also says who had each folder loaded (you, or an agent's request you approved in the main window) and when it last loaded; that record (`.navide-plugin-developer-folders-meta.json`) only discloses. Who loaded a folder is signed with the Developer Mode settings key (secure storage): a loader another program rewrote, or one recorded without a signature, reads as unknown and says the record may have been changed, and so does every loader while the signature file is missing; one signed under an earlier key says the key was replaced. An earlier signed record of the same plugin and folder copied back over a newer one still verifies (there is no counter, as for the Developer Mode settings). The folder loads either way. Without secure storage there is no key: the record reads as written and says it is not signed. Its source badge reads "Local folder" in the plugin list and the view's title strip; it opens an info card (Host chrome) with the folder path, the time and trigger of the last load, who loaded it, and a content fingerprint (SHA-256 over each file's relative path, size and SHA-256, `.git/` left out, symbolic links recorded by target and not followed) taken after each load. The fingerprint is disclosed only: Navide never compares it or refuses a load over it, and it has no file count or size bound. |
+| Local testing | Turn on Developer Mode (Settings → Navide Plugins) and **Load from folder…**: the view opens with its declared grant and the backend runs in the same sandbox, after the same native backend consent, as an installed one. `navide-plugin dev-backend <directory>` still runs the executable alone, with every Host bridge request answered `CAPABILITY_DENIED`. | A developer folder's consent is bound to the folder and its manifest `permissions` and `backend`; editing files, the backend executable included, never asks again (unlike an installed package, whose consent binds to its exact content); changing either declaration does. A loaded folder also reloads by itself when a file in it changes (on by default, per folder in Settings → Navide Plugins; `.git/` is ignored): the same checks as **Reload** run, a folder that cannot be read mid-edit keeps the running version, and a changed `permissions` or `backend` unloads it and waits for the user's consent — an automatic reload never applies a changed declaration. The whole folder is checked before the running version is unloaded, and so are its views: each view of the new version is opened hidden, with no capability access, and must call `ready()` within 10 seconds, the same check an install or update makes. A folder or view that fails keeps the running version and says why on the card; the backend is not started for this check, so two versions of one backend never run at once (it stops and starts with the switch). Manual and automatic reloads of a folder run one at a time. A save or build that is still writing files can load an incomplete mix of old and new files; a build avoids that by writing the file `.navide-build-complete` into the folder last: once the folder has that file, a change reloads it only when a newer copy of that file is written, and a folder without it reloads on any change. When the new version fails to load after the old one was unloaded, the card says that no version is running. Settings → Navide Plugins also says who had each folder loaded (you, or an agent's request you approved in the main window) and when it last loaded; that record (`.navide-plugin-developer-folders-meta.json`) only discloses. Who loaded a folder is signed with the Developer Mode settings key (secure storage): a loader another program rewrote, or one recorded without a signature, reads as unknown and says the record may have been changed, and so does every loader while the signature file is missing; one signed under an earlier key says the key was replaced. An earlier signed record of the same plugin and folder copied back over a newer one still verifies (there is no counter, as for the Developer Mode settings). The folder loads either way. Without secure storage there is no key: the record reads as written and says it is not signed. Its source badge reads "Local folder" in the plugin list and the view's title strip; it opens an info card (Host chrome) with the folder path, the time and trigger of the last load, who loaded it, and a content fingerprint (SHA-256 over each file's relative path, size and SHA-256, `.git/` left out, symbolic links recorded by target and not followed) taken after each load. The fingerprint is disclosed only: Navide never compares it or refuses a load over it, and it has no file count or size bound. |
 | `navide-plugin package` | Python, its required modules, and the plugin code are bundled into a target-specific executable by an author-selected tool such as PyInstaller or Nuitka. | `backend.entry` names the resulting executable inside the archive. |
 | Install and runtime target | No Python installation, `pip`, virtual environment, source checkout, or author build tool may be required on the user's machine. | The Electron main process supervises the executable over Backend Wire v1 without a shell. The first-party Plans backend runs directly; a third-party backend runs only under the conditions in [Third-party backends](#third-party-backends-sandbox-consent-and-publishing). |
 
@@ -357,10 +357,32 @@ all of these hold, and they are checked again before every restart:
   any package file and turn it into code at run time. Installing is that
   consent: every install path discloses the native backend and its shell
   allowlist before it commits and records the version it installed, so that
-  version's first start records the consent without another dialog. A
-  package installed before 0.2.31, a version no install dialog showed (an
-  agent's update, a rollback) and a package whose consent was revoked or
-  dropped to fail closed are asked before they start. Any new version that changes any
+  version's first start records the consent without another dialog. Since
+  0.2.32 a package installed before 0.2.31 is treated the same way: the
+  first start of 0.2.32 (or later) on a profile looks once at the installed
+  third-party backends (the active version of each; Developer Mode folders
+  are left out), and each one with no consent, no install consent, no
+  revocation and no saved decline gets an install consent for its installed version, marked as
+  given by this migration. Its first start then records the consent without a
+  dialog, the consent keeps that mark, and Settings → Navide Plugins says on
+  its row that it was allowed without asking because it was installed before
+  0.2.31. Nothing on disk tells an install of 0.2.30 or earlier from a 0.2.31
+  install that recorded no install consent, so the migration counts both. It
+  runs once per profile and never again: a package installed later without an
+  install consent is asked, as before. It grants nothing while the global
+  switch is off (the user is then asked per package after turning it on), and
+  waits when the decision file cannot be read. A version no install dialog
+  showed (an agent's update, a rollback) and a package whose consent was
+  revoked or dropped to fail closed are still asked before they start. A
+  Developer Mode folder keeps its folder-bound consent. Since 0.2.32 a "Don't
+  allow" answer to the dialog shown before a backend starts (closing it or
+  pressing Esc counts the same; the button was "Not now" before 0.2.32) is saved for that exact content and
+  permission set: later starts of the same content are refused without
+  asking, Settings → Navide Plugins says on the row that it was declined and
+  stays off, and its Allow action runs it and clears the decline. New content
+  or a changed permission set asks again, and so does a new install dialog
+  for the version. A dialog that fails to open saves nothing. Re-enabling a
+  disabled plugin does not clear a saved decline. Any new version that changes any
   file - frontend files included - is staged but not started until the user
   allows it again, in the dialog shown before it starts.
 - The platform sandbox is available. There is no unsandboxed fallback.
@@ -510,11 +532,15 @@ A package with any invalid tool is refused at install and at publish, exactly
 like a schema error. `agentTools` needs a native backend, so frontend-only
 packages cannot declare it.
 
-What the user sees and consents to: the install confirmation and the native
-backend consent dialog list every declared tool with its name, the method it
-calls, its full description, its declared read-only or changes-data claim (the
-package's own claim), its timeout and its whole input schema, plus the number
-of tools and their total size. There is no limit on the number of tools. The tools are part of
+What the user sees and consents to: the install confirmation lists every
+declared tool with its name, the method it calls, its full description, its
+declared read-only or changes-data claim (the package's own claim), its timeout
+and its whole input schema, plus the number of tools and their total size, and
+Settings → Navide Plugins shows the same. The native backend consent dialog is a
+message box that cannot scroll, so it shows the number of tools and their total
+size, the first eight tools with their method, claim and timeout, the names of
+the rest on one line with how many of them are declared as changing data, and points to Settings → Navide Plugins for the full
+descriptions and input schemas. There is no limit on the number of tools. The tools are part of
 the consent: any change to any tool (name, method, risk, text, schema, timeout)
 asks again. A package that declares no tools keeps exactly the consent it had
 before this field existed.
@@ -1388,6 +1414,36 @@ unchanged:
 
 The receiver, detail and close methods exist only on the client.
 
+A view loses what it holds in memory whenever it reloads: a Developer Mode
+reload, an update, or **Restart Plugin**. `createPluginViewState(key,
+fallback)` keeps view state across those reloads in Host-managed storage
+(see [Host-managed storage partitions](#host-managed-storage-partitions)),
+under the key `view-state:<key>`, so it needs no permission:
+
+```ts
+import { createPluginViewState, viewReady } from '@navide/plugin-sdk'
+
+type Filters = { query: string; open: boolean }
+declare function mountApp(): void // your view's own render code
+declare function applyFilters(filters: Filters): void
+declare function onFiltersChange(listener: (filters: Filters) => void): void
+
+const filters = createPluginViewState<Filters>('filters', { query: '', open: true })
+
+mountApp()
+viewReady() // do not wait for restore()
+applyFilters(await filters.restore())
+onFiltersChange((next) => filters.save(next))
+```
+
+`restore()` never rejects: it returns the fallback when nothing was saved or
+storage cannot be read, which is the case while the Host checks a new version
+in a hidden view. `save(value)` writes in the background, one write at a time,
+and only the newest value waiting is written; `flush()` resolves when they are
+done. The default `scope` is `plugin`; pass `{ scope: 'workspace' }` for state
+per workspace. Storage is per package version, so a new `version` starts from
+the fallback.
+
 Every view must call `ready()` once it has mounted. The Host waits 10 seconds
 after the entry document finishes loading. During install and update preflight
 a view that has not reported ready fails the package; in a running view the
@@ -2136,11 +2192,19 @@ own surfaces), unless the view started it with `persistView: true` and the
 Host stored it in terminal storage: such a session keeps running until a view
 resumes it, the package is disabled or removed, or Navide quits. Asking for
 `persistView` when the storage write fails does not keep it. A stored session
-is found again through terminal storage, which is keyed by package,
-contribution and workspace but not by package version, so a later version of
-the same package can resume it there; another package never can. Updating a
-package ends the sessions of the version it replaces. Disabling or
-removing the package ends its sessions at once.
+is found again through terminal storage, which is keyed by package, package
+version, contribution and workspace, so only the same version of the same
+package can resume it there (the bundled Navide plugins keep one key across
+their versions). Storage written by Navide 0.2.31 or earlier has no version in
+its key and is not read; the session it names ended when that Navide quit.
+Updating a package ends the sessions of the version it replaces and clears
+them from terminal storage. Disabling or removing the package ends its
+sessions at once, and clears them from terminal storage too.
+
+The plugin's entry in Settings → Navide Plugins lists each session kept
+running this way (its CLI, package version and since when), with an End button
+that ends it as disabling the package would. A session that exits by itself
+leaves the list. Nothing is ended unless the user asks.
 
 Declaring `aiCli` lets a package start the AI CLI agents set up in Navide, send
 them input and read everything they print, and keep an AI CLI running in the
@@ -2341,7 +2405,7 @@ not restart. In-window views come back on the new version in place. Every
 switch is recorded in the main window's announcements with a one-click way
 back to the version it replaced; a failed switch keeps the previous version
 running and leaves the update staged. For an update the user approved, the
-Extensions page shows the reason at once, its row keeps Restart and Discard,
+Navide Plugins page shows the reason at once, its row keeps Restart and Discard,
 and the main window lists it with **Apply now** on the next launch; for an
 agent's automatic update the main window shows the reason with **Apply now**
 at once. A first install or update that is still staged when Navide starts
@@ -2644,6 +2708,13 @@ Issue 06 supports the following external frontend workflow:
 Scaffolding, per-target backend packaging, signing, sign-in and publishing
 to the Navide Marketplace are covered step by step in
 [Publishing to the Navide Marketplace](marketplace-publishing.md).
+
+An agent learns this workflow from the skill that ships with Navide: it calls
+`skills_prepare_install` with the source `navide:plugin-authoring`, and the
+user approves the install in the main window like any other skill. The skill
+lives at `backend/agent_team_backend/bundled_skills/plugin-authoring/SKILL.md`
+and summarises this document; change it in the same pull request as any change
+here that it describes.
 
 There is no `navide-plugin dev` command and no in-app hot-reload loop. Test a
 backend with `navide-plugin dev-backend`, whose Host bridge refuses every

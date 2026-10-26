@@ -26,6 +26,7 @@ import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
 import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
+import { pluginWindowWithoutBackendText } from './lib/pluginWindowWithoutBackend'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
 import { chromeSourceMark, pluginDisclosureTitle, pluginIconFallback } from './lib/pluginSourceMark'
@@ -307,6 +308,7 @@ const SlotHistory = defineAsyncComponent(() => import('./components/HistoryPanel
 const SlotTasker = defineAsyncComponent(() => import('./components/TaskerPanel.vue'))
 const SlotMessages = defineAsyncComponent(() => import('./components/AgentMessagesPanel.vue'))
 import { pickWhatsNew, pickWhatsNewOnDemand, type WhatsNewEntry } from './lib/whatsNew'
+import { showPortableRemovalNotice } from './lib/portableRemovalNotice'
 import type { TourPrepare } from './lib/tours'
 import { useReleaseTour } from './composables/useReleaseTour'
 import { useWelcomeTour, welcomeActionTimes } from './composables/useWelcomeTour'
@@ -724,6 +726,7 @@ async function checkOnboarding(): Promise<void> {
       resp = await backend.send<OnboardStatus>('onboarding.status', {}, ONBOARDING_STATUS_TIMEOUT_MS)
     }
     cliHealthGuide.value = cliHealthGuideForLaunch(resp.payload)
+    void showPortableRemovalNotice(backend, notifyRestore.toast, (key) => i18n.global.t(key))
   } catch (e) {
     console.warn('[onboarding] status check failed; failing open and retrying:', e)
     // If the check fails, don't lock the user out — fail open.
@@ -1254,7 +1257,9 @@ async function openPluginContributionWindow(contribution: PluginRegionContributi
     console.warn(`[renderer] plugin window '${contribution.contributionKey}' could not be opened: ${result?.error ?? 'unknown error'}`)
     return
   }
-  if (result.backendUnavailable) notePluginWindowWithoutBackend(contribution, result.backendUnavailable)
+  if (result.backendUnavailable) {
+    notePluginWindowWithoutBackend(contribution, result.backendUnavailable, result.backendUnavailableStatus)
+  }
 }
 
 /** Window views whose missing native backend was already explained this
@@ -1262,16 +1267,20 @@ async function openPluginContributionWindow(contribution: PluginRegionContributi
 const pluginWindowsWithoutBackend = new Set<string>()
 
 /** A window view opens even when its native backend was refused or failed;
- *  say so once, with where the backend is allowed. Nothing here changes it. */
-function notePluginWindowWithoutBackend(contribution: PluginRegionContribution, reason: string): void {
+ *  say so once, with where to look (or allow it). Nothing here changes it. */
+function notePluginWindowWithoutBackend(
+  contribution: PluginRegionContribution,
+  reason: string,
+  status: string | undefined,
+): void {
   const key = `${contribution.contributionKey}\n${reason}`
   if (pluginWindowsWithoutBackend.has(key)) return
   pluginWindowsWithoutBackend.add(key)
   notifyRestore.toast(
-    i18n.global.t('settings.extensions.nativeBackends.windowWithout', {
+    pluginWindowWithoutBackendText(i18n.global.t, {
       name: revealInvisibleText(contribution.title),
       reason,
-      page: i18n.global.t('settings.extensions.developerNative'),
+      ...(status ? { status } : {}),
     }),
     { type: 'info' },
   )
@@ -5224,6 +5233,7 @@ async function togglePaneLoop(paneId: string, skillId?: string): Promise<void> {
   if (loopGen.get(paneId) !== gen) return
   if (!ok) {
     console.warn(`[loop] pane ${paneId}: loop-start injection failed — loop disarmed`)
+    notifyRestore.toast(i18n.global.t('pane.terminal.loop-start-failed', { name: skill.name }), { type: 'error' })
     pane.loopActive = false
     pane.loopSkillId = null
     pane.loopEstimateResetAt = null
@@ -9146,9 +9156,21 @@ async function unpinAllAccountPanes(): Promise<void> {
   await moveFollowPanes(ids, '', sessions)
 }
 
+/** The badge's list on a fixed pane: reopen only that pane in `profileId`'s
+ *  own dir, like fixing it (the rebuild asks before stopping a pane that is
+ *  working). It stays fixed; the live login and other panes are not
+ *  touched. */
+async function moveFixedAccountPane(paneId: string, profileId: string): Promise<void> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
+  if (!pane || pane.isLogin || !paneAccountFixed(pane) || !followDirSignedIn(profileId)) return
+  await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
+}
+
 provide(accountPinKey, {
   fixedCount: () => panes.value.filter((p) => paneAccountFixed(p)).length,
   unpinAll: unpinAllAccountPanes,
+  movePane: moveFixedAccountPane,
 })
 
 async function rebuildPanesViaResume(

@@ -139,7 +139,7 @@ async def test_a_cached_plan_call_is_refused_and_never_served_locally(
         )
     assert refused.value.code == "PLUGIN_TOOL_UNAVAILABLE"
     assert "plugin-disabled" in str(refused.value)
-    assert "Settings → Extensions" in str(refused.value)
+    assert "Settings → Navide Plugins" in str(refused.value)
     assert not (tmp_path / ".agent-team").exists()
 
 
@@ -154,7 +154,7 @@ async def test_the_hosts_disabled_refusal_is_not_a_fallback_verdict(
             "reqId": "r", "ok": False, "reason": "plugin-disabled",
             "error": {
                 "code": "PLUGIN_TOOL_UNAVAILABLE",
-                "message": "Navide plugin Plans is disabled. Enable it in Settings → Extensions.",
+                "message": "Navide plugin Plans is disabled. Enable it in Settings → Navide Plugins.",
             },
         }
 

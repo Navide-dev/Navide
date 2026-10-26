@@ -38,6 +38,36 @@ describe('AI terminal storage identity', () => {
     expect(differentWorkspace.origin).toBe('host')
   })
 
+  it('keeps the key it had before versions for a binding without a package version', () => {
+    // The bundled Navide plugins pass no version, so their stored sessions,
+    // snapshots and sizes are found exactly where they were.
+    expect(aiTerminalStorageIdentity({
+      pluginId: 'navide.git',
+      contributionKey: 'navide.git.window',
+      workspacePath: '/workspace',
+    })).toEqual({
+      origin: 'host',
+      resumeKey: 'plugin-f10f5a7fe936c0617b6b529c711f03a16e49d0c3661cdaacb836415fea876e9d-ai-terminal',
+    })
+  })
+
+  it('gives each package version its own identity', () => {
+    const base = {
+      pluginId: 'acme.devmap',
+      contributionKey: 'acme.devmap.window',
+      workspacePath: '/workspace/project',
+    }
+    const v1 = aiTerminalStorageIdentity({ ...base, packageVersion: '1.0.0' })
+    expect(aiTerminalStorageIdentity({ ...base, packageVersion: '1.0.0' })).toEqual(v1)
+    expect(new Set([
+      v1.resumeKey,
+      aiTerminalStorageIdentity({ ...base, packageVersion: '1.0.1' }).resumeKey,
+      aiTerminalStorageIdentity(base).resumeKey,
+    ])).toHaveLength(3)
+    expect(v1.origin).toBe('host')
+    expect(v1.resumeKey).toMatch(/^plugin-[0-9a-f]{64}-ai-terminal$/)
+  })
+
   it('retains the exact legacy FNV workspace key for the migrated Mini-IDE window', () => {
     expect(aiTerminalStorageIdentity({
       pluginId: 'navide.mini-ide',

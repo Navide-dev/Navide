@@ -81,6 +81,18 @@ describe('PluginDisclosureDiff file scopes (0.2.31)', () => {
     expect(tags(diff, 'added')).toEqual(['New Can read: src/**'])
   })
 
+  it('says plainly that Navide does not enforce a declared scope, only where one is tagged (#647 L1)', () => {
+    const note = (diff: ReturnType<typeof diffDisclosure>) =>
+      mount(PluginDisclosureDiff, { props: { diff }, global: { plugins: [i18n] } }).find('.nv-diff-scope-note')
+    expect(note(diffDisclosure(unscoped, docs)).text()).toBe(i18n.global.t('pluginDisclosure.diff.declaredScopeNote'))
+    expect(note(diffDisclosure(unscoped, docs)).text()).toContain('does not enforce')
+    const more = disclosure('1.2.0', { system: ['fs'], scopes: { fs: { root: 'repository', read: ['docs/*', 'src/**'], write: ['docs/*'] } } })
+    expect(note(diffDisclosure(docs, more)).exists()).toBe(false)
+    for (const locale of i18n.global.availableLocales) {
+      expect(i18n.global.te('pluginDisclosure.diff.declaredScopeNote', locale), locale).toBe(true)
+    }
+  })
+
   it('never tags anything but a scope item', () => {
     const withShell = disclosure('1.2.0', { system: ['fs'], shell: 'allowlist', scopes: { fs: { root: 'repository', read: ['docs/*'], write: ['docs/*'] } } })
     const added = tags(diffDisclosure(unscoped, withShell), 'added')

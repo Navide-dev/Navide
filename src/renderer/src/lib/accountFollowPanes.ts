@@ -200,6 +200,8 @@ export interface AccountPinActions {
   fixedCount: () => number
   /** "Make all follow": reopen the fixed panes on the live login. */
   unpinAll: () => Promise<void>
+  /** Reopen one fixed pane in `profileId`'s own dir; nothing else changes. */
+  movePane: (paneId: string, profileId: string) => Promise<void>
 }
 
 export const accountPinKey: InjectionKey<AccountPinActions> = Symbol('account-pin')

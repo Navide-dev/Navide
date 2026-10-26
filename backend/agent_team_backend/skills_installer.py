@@ -44,6 +44,12 @@ PREVIEW_TTL = 15 * 60
 EXCLUDED_FILES = {".gitignore", ".gitkeep", ".DS_Store"}
 EXCLUDED_DIRS = {".git", ".github"}
 
+#: Skills that ship with Navide itself, offered as ``navide:<folder>`` through
+#: the same preview, approval and install path as any other source.
+BUNDLED_PREFIX = "navide:"
+BUNDLED_ROOT = Path(__file__).resolve().parent / "bundled_skills"
+_BUNDLED_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
 
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -66,6 +72,15 @@ def _download(url: str, limit: int) -> bytes:
     if len(data) > limit:
         raise SkillValidationError("download exceeds size limit")
     return data
+
+
+def _bundled_root(source: str) -> Path:
+    """The shipped folder a ``navide:<folder>`` source names; nothing else resolves."""
+    name = source[len(BUNDLED_PREFIX):]
+    root = BUNDLED_ROOT / name
+    if not _BUNDLED_NAME_RE.fullmatch(name) or root.is_symlink() or not (root / "SKILL.md").is_file():
+        raise SkillValidationError(f"unknown Navide-bundled skill: {source}")
+    return root
 
 
 def _check_path(relative: str) -> str:
@@ -154,7 +169,12 @@ class SkillInstaller:
         # pinning a thread of the shared to_thread pool meanwhile.
         if re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", source):
             source = "https://github.com/" + source
-        if source.startswith("https://"):
+        if source.startswith(BUNDLED_PREFIX):
+            if ref or subdir:
+                raise SkillValidationError("a Navide-bundled skill takes no ref or subdir")
+            files, excluded = self._local(_bundled_root(source))
+            origin = {"kind": "bundled", "name": source[len(BUNDLED_PREFIX):]}
+        elif source.startswith("https://"):
             files, origin = self._github(source, ref, subdir)
             if files is None:
                 return origin

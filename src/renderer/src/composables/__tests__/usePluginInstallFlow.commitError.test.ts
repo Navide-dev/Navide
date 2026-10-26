@@ -81,6 +81,85 @@ describe('a failed approval of a file install', () => {
     expect(flow.error.value).toBe(i18n.global.t('settings.extensions.localInstall.versionExists'))
   })
 
+  it('asks for the file again, and counts each failure (#643 L3)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const flow = setup(async () => { throw ipcError('anything') })
+    await flow.installFromFile()
+    await flow.confirmRisk()
+    expect(flow.pendingConfirm.value!.commitNextStep).toBe(i18n.global.t('settings.extensions.localInstall.chooseAgain'))
+    expect(flow.pendingConfirm.value!.commitFailures).toBe(1)
+    await flow.confirmRisk()
+    expect(flow.pendingConfirm.value!.commitFailures).toBe(2)
+  })
+
+  it("asks the agent, not the user, to send a request again (#643 L1)", async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const flow = setup(async () => { throw ipcError('anything') })
+    ;(window as unknown as { agentTeam: { plugins: Record<string, unknown> } }).agentTeam.plugins.prepareAgentFileInstall =
+      vi.fn(async () => prepared)
+    await flow.prepareAgentFile('staging-1', prepared.digest, 'pane-1')
+    await flow.confirmRisk()
+    const pending = flow.pendingConfirm.value!
+    expect(pending.commitNextStep).toBe(i18n.global.t('settings.extensions.localInstall.askAgentAgain'))
+    expect(pending.needsFileAgain).toBe(true)
+  })
+
+  it('tells a failed Marketplace install to start again, and keeps approving possible (#643 L2)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const marketplace = { ...prepared, source: 'marketplace', requiresPublisherTrust: false }
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        prepareInstall: vi.fn(async () => marketplace),
+        commitInstall: vi.fn(async () => { throw new Error("Error invoking remote method 'plugins:commitInstall': Error: x") }),
+      },
+    }
+    let flow!: ReturnType<typeof usePluginInstallFlow>
+    mount(defineComponent({ setup() { flow = usePluginInstallFlow(); return () => null } }), { global: { plugins: [i18n] } })
+    await flow.install('acme', 'todo')
+    await flow.confirmRisk()
+    const pending = flow.pendingConfirm.value!
+    expect(pending.commitError).toBe(i18n.global.t('settings.extensions.localInstall.installFailed'))
+    expect(pending.commitNextStep).toBe(i18n.global.t('settings.extensions.localInstall.startAgain'))
+    expect(pending.needsFileAgain).toBeUndefined()
+  })
+
+  it('says a failed rollback in the dialog, without asking for a file (#643 L4)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        prepareLocalRollback: vi.fn(async () => ({ ...prepared, rollbackFrom: '1.0.1' })),
+        rollback: vi.fn(async () => { throw new Error("Error invoking remote method 'plugins:rollback': Error: " + '/Users/someone/x') }),
+      },
+    }
+    let flow!: ReturnType<typeof usePluginInstallFlow>
+    mount(defineComponent({ setup() { flow = usePluginInstallFlow(); return () => null } }), { global: { plugins: [i18n] } })
+    await flow.rollbackWithConsent('acme.todo')
+    await flow.confirmRisk()
+    const pending = flow.pendingConfirm.value!
+    expect(pending.commitError).toBe(i18n.global.t('settings.extensions.localInstall.rollbackFailed'))
+    expect(pending.commitNextStep).toBe(i18n.global.t('settings.extensions.localInstall.startAgain'))
+    expect(pending.needsFileAgain).toBeUndefined()
+    // The pane's error line is written as before.
+    expect(flow.error.value).not.toBe('')
+  })
+
+  it.each([
+    ['still holds the copy', async () => ({ present: true }), undefined, 'approveAgain'],
+    ['no longer holds the copy', async () => ({ present: false }), true, 'chooseAgain'],
+    ['cannot be asked', async () => { throw new Error('offline') }, true, 'chooseAgain'],
+  ] as const)('keeps approving possible only when the main process %s (#643 L1)', async (_case, query, needsFileAgain, step) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const flow = setup(async () => { throw ipcError('plugin transaction already in progress for acme.todo') })
+    const preparedLocalInstall = vi.fn(query)
+    ;(window as unknown as { agentTeam: { plugins: Record<string, unknown> } }).agentTeam.plugins.preparedLocalInstall = preparedLocalInstall
+    await flow.installFromFile()
+    await flow.confirmRisk()
+    expect(preparedLocalInstall).toHaveBeenCalledWith('acme.todo', prepared.digest)
+    const pending = flow.pendingConfirm.value!
+    expect(pending.needsFileAgain).toBe(needsFileAgain)
+    expect(pending.commitNextStep).toBe(i18n.global.t(`settings.extensions.localInstall.${step}`))
+  })
+
   it('names the two cases apart', () => {
     const t = (key: string) => key
     expect(installFailureMessage('immutable candidate already exists for a.b@1.0.0', t)).toBe('settings.extensions.localInstall.versionExists')

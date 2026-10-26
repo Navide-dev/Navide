@@ -24,13 +24,13 @@ def memory_unretired(monkeypatch):
 
 
 def _held(item_id):
-    return [h for h in sync_approvals.listing() if h["itemId"] == item_id]
+    return [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
 
 
 def _decide(dev, item_id, approve):
     dev.use()
     (row,) = _held(item_id)
-    return sync_approvals.decide(dev.adapter, item_id, approve, row["digest"])
+    return sync_approvals.decide(dev.adapter, row["itemId"], approve, row["digest"])
 
 
 # ── memory ───────────────────────────────────────────────────────────────────

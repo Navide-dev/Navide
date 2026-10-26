@@ -20,6 +20,7 @@ import { askUninstall, ipcErrorMessage, removeWithAnswer, usePluginInstallFlow }
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import PluginTrustDialog from './PluginTrustDialog.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
+import PluginBackgroundAiSessions from './PluginBackgroundAiSessions.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
 import SettingsCard from './settings/SettingsCard.vue'
@@ -1237,6 +1238,13 @@ watch(installed, () => {
               <p v-if="p.engineCompatible === false" class="ext-incompatible-reason">
                 {{ $t('settings.extensions.incompatibleReason', { version: p.minNavideVersion ?? '' }) }}
               </p>
+              <!-- AI CLI sessions it keeps running after its window closed,
+                   each with an End button; only for a plugin that declares aiCli. -->
+              <PluginBackgroundAiSessions
+                v-if="p.manifestPermissions?.system.includes('aiCli')"
+                :plugin-id="p.id"
+                :paused="selectedId !== p.id"
+              />
               <details
                 v-if="p.manifestPermissions || p.packageVersion"
                 class="ext-permission-details"

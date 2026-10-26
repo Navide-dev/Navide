@@ -298,6 +298,14 @@ export interface BackendCallConcurrency {
   droppedNotifications: number
 }
 
+/** A third-party AI CLI session that keeps running after its view closed. */
+export interface BackgroundAiSession {
+  sessionId: string
+  profileId: string
+  packageVersion: string
+  since: number
+}
+
 export interface MarketplaceExtension {
   namespace: string
   name: string
@@ -399,6 +407,8 @@ export interface NativeBackendOverview {
   enabled: boolean
   plugins: NativeBackendStatusRow[]
   agentTools?: { enabled: boolean; externalCallers: boolean }
+  /** #642 review L2: off for this run, not saved; on again after a restart. */
+  offUnsaved?: true
 }
 
 export interface InstalledPackRecord {
@@ -967,6 +977,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('dialog:pickFiles', args),
   openExternal: (url: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:openExternal', url),
+  /** Move an instruction file the Memory page created to the Trash; main
+   *  accepts only a path the backend recorded creating (memoryUndoCreate.ts). */
+  trashCreatedMemoryFile: (
+    path: string,
+    acceptChanged = false,
+  ): Promise<{ ok: boolean; code?: string; error?: string; created?: string; current?: string }> =>
+    ipcRenderer.invoke('memory:trashCreated', path, acceptChanged),
   /** The legal pages on navide.dev, by route; the same table main's Help menu uses. */
   legalLinks: { ...LEGAL_LINKS } as Readonly<Record<LegalRoute, string>>,
   /**
@@ -1355,6 +1372,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listFactoryPackages'),
     backendCallConcurrency: (): Promise<BackendCallConcurrency[]> =>
       ipcRenderer.invoke('plugins:backendCallConcurrency'),
+    /** One package's AI CLI sessions that keep running with no view. */
+    backgroundAiSessions: (id: string): Promise<BackgroundAiSession[]> =>
+      ipcRenderer.invoke('plugins:backgroundAiSessions', { id }),
+    /** Ends one session backgroundAiSessions listed; ok is false once it is no longer listed. */
+    endBackgroundAiSession: (id: string, sessionId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('plugins:endBackgroundAiSession', { id, sessionId }),
     /** D-f: one installed plugin's activity report (read only). */
     activityReport: (id: string): Promise<
       { ok: true; report: PluginActivityReport } | { ok: false; error: string }
@@ -1408,7 +1431,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
     openContributionWindow: (args: {
       contributionKey: string
       workspace_path: string
-    }): Promise<{ ok: boolean; error?: string; backendUnavailable?: string }> =>
+    }): Promise<{
+      ok: boolean
+      error?: string
+      backendUnavailable?: string
+      backendUnavailableStatus?: NativeBackendStatusRow['status']
+    }> =>
       ipcRenderer.invoke('plugins:openContributionWindow', args),
     closeContribution: (args: { contributionKey: string }): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('plugins:closeContribution', args),
@@ -1473,6 +1501,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
       approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
     ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
+    /** #643 review L1: whether the file copy with this digest is still held
+     *  after a failed approval, so approving again can work. */
+    preparedLocalInstall: (id: string, digest: string): Promise<{ present: boolean }> =>
+      ipcRenderer.invoke('plugins:preparedLocalInstall', { id, digest }),
     /** W1 (S2): the copy the Host staged for an agent's file request, named
      *  by its stagingId; never a path. Installs nothing. */
     prepareAgentFileInstall: (
@@ -1489,6 +1521,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     /** Card K4: the Developer Mode switch and the developer folders. The main
      *  process owns the switch; it opens its own folder dialog. */
     developerMode: (): Promise<DeveloperModeState> => ipcRenderer.invoke('plugins:developerMode'),
+    /** The launch reminder was closed in some window during this launch. */
+    developerModeReminderDismissed: (): Promise<boolean> => ipcRenderer.invoke('plugins:developerModeReminderDismissed'),
+    dismissDeveloperModeReminder: (): Promise<void> => ipcRenderer.invoke('plugins:dismissDeveloperModeReminder'),
+    onDeveloperModeReminderDismissed: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('plugins:developerModeReminderDismissed', listener)
+      return () => ipcRenderer.removeListener('plugins:developerModeReminderDismissed', listener)
+    },
     setDeveloperMode: (enabled: boolean): Promise<DeveloperModeState> =>
       ipcRenderer.invoke('plugins:setDeveloperMode', { enabled }),
     loadFromFolder: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:loadFromFolder'),

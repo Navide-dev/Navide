@@ -497,3 +497,45 @@ def test_mask_server_row_masks_an_http_row_without_touching_the_original() -> No
     assert masked["enabled"] is False
     assert json.dumps(row, sort_keys=True) == before
     assert masked["headers"] is not row["headers"]
+
+
+def test_mask_server_row_masks_credentials_by_value_whatever_the_name() -> None:
+    """A harmless-looking name can still hold a credential: URL userinfo under
+    DATABASE_URL, a token-shaped value or bare argument."""
+    github_token = "ghp" + "_" + "a" * 36
+    openai_key = "sk" + "-" + "b" * 32
+    row = {
+        "name": "db",
+        "enabled": True,
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["server", github_token, "--db=postgres://u:p@h/db", "--verbose"],
+        "env": {
+            "DATABASE_URL": "postgres://user:pw@host:5432/db",
+            "UPSTREAM": openai_key,
+            "MODE": "fast",
+        },
+    }
+
+    masked = native_mcp.mask_server_row(row)
+
+    assert masked["args"] == ["server", native_mcp.REDACTED_SECRET, "--db=postgres://***@h/db", "--verbose"]
+    assert masked["env"] == {
+        "DATABASE_URL": "postgres://***@host:5432/db",
+        "UPSTREAM": native_mcp.REDACTED_SECRET,
+        "MODE": "fast",
+    }
+
+
+def test_a_bearer_header_value_is_masked_under_any_name() -> None:
+    row = {
+        "name": "h",
+        "enabled": True,
+        "transport": "http",
+        "url": "https://h/mcp",
+        "headers": {"X-Forward": "Bearer " + "z" * 20, "Accept": "json"},
+    }
+
+    masked = native_mcp.mask_server_row(row)
+
+    assert masked["headers"] == {"X-Forward": native_mcp.REDACTED_SECRET, "Accept": "json"}

@@ -443,6 +443,7 @@ async def test_run_timeout_kills_and_reaps(monkeypatch):
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(asyncio, "wait_for", fast_wait_for)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
     # The broker resolves `gh` through the seam before exec; without this a
     # host with no gh (or the seam swapped) reports 127 before the fake runs.
     monkeypatch.setattr(osplat.paths, "resolve_program", lambda name, *, path=None: name)

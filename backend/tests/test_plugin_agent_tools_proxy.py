@@ -80,7 +80,19 @@ pytestmark = pytest.mark.asyncio
 #: and where a hook turn end's text comes from. No other tool changed (the
 #: core-tools snapshot, tests/data/mcp_core_tools_main.json, differs from
 #: main in those three descriptions only).
-MAIN_TOOLS_LIST_SHA256 = "11c38bd53bce39512b72d3895dd1caac29822c1dca9f600eb6ea07bccb241b5d"
+#: Re-pinned for 0.2.32 C8 (previous pin 11c38bd5…): the cli_extensions_list
+#: description documents `enabled_error` and the `unreadable` list. No other
+#: tool changed.
+#: Re-pinned for 0.2.32 Gemini CLI extensions (previous pin f4395697…): the
+#: cli_extensions_list description names Gemini CLI. No other tool changed.
+#: Re-pinned for #659 on top of both (main pin ba95cc9a…): the mcp_list
+#: description documents `tools_error` and masking by value. No other tool
+#: changed.
+#: Re-pinned for 0.2.32 page names (previous pin 2dc3e751…): the
+#: cli_extensions_list and credentials_list descriptions name their Settings
+#: pages as the sidebar does (Extensions, Credentials & Keys). No other tool
+#: changed.
+MAIN_TOOLS_LIST_SHA256 = "e59a10993d1a9bd482ae50f4afc30c83fc97ffb46912f37499d27202bf35c2eb"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -109,8 +121,12 @@ W1_CORE_TOOLS = frozenset({
 #: Core tools added after that digest by DESIGN-C S3 (mcp_server/window_tools.py).
 DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", "workspace_close", "window_move_pane"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
-#: packages install (computed on a probe server).
-MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"
+#: packages install (computed on a probe server). Re-pinned in 0.2.32 when
+#: skills_set_delivery's description gained the approval for widening.
+#: Re-pinned in 0.2.32 (previous pin 4c9bc609…) when skills_prepare_install's
+#: description gained the navide:<name> source for skills shipped with Navide.
+#: No other plan_* or skills_* tool changed.
+MAIN_PLAN_SKILLS_TOOLS_SHA256 = "2db42581d9594d109e5d31d6458a050cf6d1005e2efe6f098e16c526d794b4d7"
 
 PERMISSIONS = {
     "system": ["fs", "ui"],

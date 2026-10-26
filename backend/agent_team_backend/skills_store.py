@@ -432,17 +432,16 @@ class SkillsStore:
             value = [real_path, self._read_native_targets().get(real_path, [])]
         return hashlib.sha256(json.dumps(value, sort_keys=True).encode("utf-8")).hexdigest()
 
-    @_serialized
-    def set_delivery(
+    def _check_delivery(
         self,
         *,
-        name: str = "",
-        real_path: str = "",
+        name: str,
+        real_path: str,
         targets: list[str] | None,
         expected_revision: str,
-        enabled: bool | None = None,
-    ) -> dict[str, Any]:
-        """Apply one routing decision atomically, preserving other skills' decisions."""
+        enabled: bool | None,
+    ) -> list[str] | None:
+        """Validate a routing decision without writing; returns the clean targets."""
         before = self.get_delivery_revision(name=name, real_path=real_path)
         if not isinstance(expected_revision, str) or not expected_revision:
             raise SkillValidationError("expected_revision is required")
@@ -457,6 +456,51 @@ class SkillsStore:
         for target in clean or []:
             if target not in capabilities or capabilities[target]["state"] != "wired":
                 raise SkillValidationError(f"skill delivery is unsupported for agent: {target}")
+        return clean
+
+    @_serialized
+    def delivery_widens(
+        self,
+        *,
+        name: str = "",
+        real_path: str = "",
+        targets: list[str] | None,
+        expected_revision: str,
+        enabled: bool | None = None,
+    ) -> bool:
+        """Whether a valid routing decision reaches a CLI the skill does not reach now.
+
+        Raises like ``set_delivery`` for a stale revision or invalid targets, and
+        writes nothing. Turning a disabled shared skill on also widens it.
+        """
+        clean = self._check_delivery(
+            name=name, real_path=real_path, targets=targets,
+            expected_revision=expected_revision, enabled=enabled,
+        )
+        if real_path:
+            return not set(clean or []) <= set(self._read_native_targets().get(real_path, []))
+        if enabled is True and not self._read_state().get(name, True):
+            return True
+        wired = {row["key"] for row in agent_targets() if row["state"] == "wired"}
+        current = self._read_targets().get(name)
+        before = wired if current is None else set(current)
+        return not (wired if clean is None else set(clean)) <= before
+
+    @_serialized
+    def set_delivery(
+        self,
+        *,
+        name: str = "",
+        real_path: str = "",
+        targets: list[str] | None,
+        expected_revision: str,
+        enabled: bool | None = None,
+    ) -> dict[str, Any]:
+        """Apply one routing decision atomically, preserving other skills' decisions."""
+        clean = self._check_delivery(
+            name=name, real_path=real_path, targets=targets,
+            expected_revision=expected_revision, enabled=enabled,
+        )
         state = self._read_state()
         shared = self._read_targets()
         native = self._read_native_targets()
@@ -1447,6 +1491,12 @@ def _valid_installation_receipt(receipt: Any) -> bool:
         return False
     if source.get("kind") == "local":
         return set(source) == {"kind", "path"} and isinstance(source["path"], str) and os.path.isabs(source["path"])
+    if source.get("kind") == "bundled":
+        return (
+            set(source) == {"kind", "name"}
+            and isinstance(source["name"], str)
+            and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", source["name"]) is not None
+        )
     if source.get("kind") == "github":
         return (
             {"kind", "repository", "commit", "subdir"} <= set(source)

@@ -225,6 +225,52 @@ def test_qwen_extensions_follow_the_enablement_file(tmp_path: Path) -> None:
     assert "mcp" in items["docs"].components
 
 
+# ── gemini (no vendor spec: Navide does not run it in a pane) ────────────────
+
+
+def test_gemini_cli_is_listed_though_it_is_not_a_navide_vendor(tmp_path: Path) -> None:
+    assert "gemini" not in VENDORS
+    inventory = cli_extensions.scan(tmp_path, runner=_no_cli)
+    keys = [vendor["cli"] for vendor in inventory.vendors]
+    assert keys == sorted(keys), "one list in key order, vendors and the rest alike"
+    gemini = next(v for v in inventory.vendors if v["cli"] == "gemini")
+    assert gemini == {"cli": "gemini", "label": "Gemini CLI (Google)", "supported": True, "note": "", "count": 0, "unreadable": 0}
+
+
+def test_gemini_extensions_follow_their_manifest_and_the_enablement_file(tmp_path: Path) -> None:
+    ext = tmp_path / ".gemini" / "extensions"
+    _json(ext / "docs" / "gemini-extension.json", {"name": "docs", "version": "1.2.0", "mcpServers": {"d": {}}, "contextFileName": "GEMINI.md"})
+    _json(ext / "guard" / "gemini-extension.json", {"name": "guard", "version": "0.1.0"})
+    _json(ext / "guard" / "hooks" / "hooks.json", {"hooks": {"BeforeTool": [{"hooks": [{"type": "command", "command": "x"}]}]}})
+    _json(ext / "extension-enablement.json", {"docs": {"overrides": ["!/*"]}, "guard": {"overrides": ["/work/*"]}})
+    items = _by(cli_extensions.scan(tmp_path, runner=_no_cli).items, "gemini")
+    docs, guard = items["docs"], items["guard"]
+    assert (docs.type_label, docs.version, docs.enabled) == ("Gemini extension", "1.2.0", False)
+    assert {"mcp", "context"} <= set(docs.components)
+    assert guard.enabled is True and guard.enabled_error == ""
+    assert guard.exec_tier == "L2" and "intercept-tools" in guard.capabilities
+
+
+def test_gemini_settings_hooks_are_listed_with_what_their_events_can_do(tmp_path: Path) -> None:
+    _json(tmp_path / ".gemini" / "settings.json", {"hooks": {
+        "BeforeTool": [{"matcher": "run_shell_command", "hooks": [{"type": "command", "command": USER_HOOK}]}],
+        "BeforeModel": [{"hooks": [{"type": "command", "command": "x"}]}],
+    }})
+    hooks = {item.name: item for item in cli_extensions.scan(tmp_path, runner=_no_cli).items if item.cli == "gemini"}
+    assert {item.type_label for item in hooks.values()} == {"Gemini hook"}
+    assert "intercept-tools" in hooks["BeforeTool"].capabilities
+    assert "rewrite-prompt" in hooks["BeforeModel"].capabilities
+
+
+def test_a_broken_gemini_enablement_file_leaves_the_state_unknown(tmp_path: Path) -> None:
+    ext = tmp_path / ".gemini" / "extensions"
+    _json(ext / "docs" / "gemini-extension.json", {"name": "docs"})
+    _write(ext / "extension-enablement.json", "{not json")
+    items = _by(cli_extensions.scan(tmp_path, runner=_no_cli).items, "gemini")
+    assert items["docs"].valid
+    assert items["docs"].enabled_error.startswith("cannot parse extension-enablement.json")
+
+
 # ── failure and safety ───────────────────────────────────────────────────────
 
 
@@ -232,6 +278,54 @@ def test_a_broken_file_is_reported_not_raised(tmp_path: Path) -> None:
     _write(tmp_path / ".claude" / "plugins" / "installed_plugins.json", "{not json")
     items = [i for i in cli_extensions.scan(tmp_path, runner=_no_cli).items if i.cli == "claude"]
     assert any(not item.valid and item.error for item in items)
+
+
+def test_unreadable_settings_leave_the_enabled_state_unknown_not_on(claude_home: Path) -> None:
+    """C8: a settings file that will not parse must not turn every plugin
+    "enabled" — the row says its state is unknown and why."""
+    _write(claude_home / ".claude" / "settings.json", "{not json")
+    items = _by(cli_extensions.scan(claude_home, runner=_no_cli).items, "claude")
+    for plugin_id in ("helper@mkt", "nextstep@mkt"):
+        assert items[plugin_id].enabled_error.startswith("cannot parse settings.json")
+        assert str(claude_home) not in items[plugin_id].enabled_error
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_settings_that_cannot_be_opened_leave_the_enabled_state_unknown(claude_home: Path) -> None:
+    settings = claude_home / ".claude" / "settings.json"
+    settings.chmod(0)
+    try:
+        items = _by(cli_extensions.scan(claude_home, runner=_no_cli).items, "claude")
+    finally:
+        settings.chmod(0o600)
+    assert items["nextstep@mkt"].enabled_error == "cannot read settings.json: Permission denied"
+
+
+def test_readable_settings_leave_no_enabled_error(claude_home: Path) -> None:
+    items = _by(cli_extensions.scan(claude_home, runner=_no_cli).items, "claude")
+    assert items["helper@mkt"].enabled_error == "" and items["nextstep@mkt"].enabled_error == ""
+
+
+def test_a_broken_qwen_enablement_file_keeps_its_extensions_listed(tmp_path: Path) -> None:
+    ext = tmp_path / ".qwen" / "extensions"
+    _json(ext / "docs" / "qwen-extension.json", {"name": "docs", "version": "0.1.0"})
+    _write(ext / "extension-enablement.json", "{not json")
+    items = _by(cli_extensions.scan(tmp_path, runner=_no_cli).items, "qwen")
+    assert items["docs"].valid
+    assert items["docs"].enabled_error.startswith("cannot parse extension-enablement.json")
+
+
+def test_agents_are_told_what_could_not_be_read(tmp_path: Path) -> None:
+    """C8: an unreadable file is named with its reason, not dropped, so an
+    agent cannot report "not installed" for "could not read"."""
+    _write(tmp_path / ".claude" / "plugins" / "installed_plugins.json", "{not json")
+    public = cli_extensions.scan(tmp_path, runner=_no_cli).public_dict()
+    broken = [row for row in public["unreadable"] if row["cli"] == "claude"]
+    assert broken and broken[0]["name"] == "installed_plugins.json" and broken[0]["error"]
+    assert set(broken[0]) == {"cli", "id", "name", "kind", "type_label", "error"}
+    assert str(tmp_path) not in json.dumps(public)
+    claude = next(vendor for vendor in public["vendors"] if vendor["cli"] == "claude")
+    assert (claude["count"], claude["unreadable"]) == (0, 1)
 
 
 def _tree(root: Path) -> dict[str, tuple[int, int]]:
@@ -257,7 +351,7 @@ def test_agents_get_names_and_metadata_only(claude_home: Path) -> None:
     row = next(item for item in public["items"] if item["id"] == "nextstep@mkt")
     assert set(row) == {
         "cli", "id", "name", "version", "kind", "type_label", "scope", "enabled",
-        "exec_tier", "capabilities", "native_consent", "owner", "evidence",
+        "exec_tier", "capabilities", "native_consent", "owner", "evidence", "enabled_error",
     }
 
 
@@ -303,7 +397,7 @@ async def test_cli_extensions_list_tool_answers_with_metadata_only(
 async def test_cli_extensions_list_tool_also_names_what_navide_changed(
     _isolated_convenience_gate, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """C6: the agent reads the same inventory as Settings → CLI Extensions,
+    """C6: the agent reads the same inventory as Settings → Extensions,
     so it must see Navide's own changes too, or it cannot tell the user."""
     from agent_team_backend import app
 

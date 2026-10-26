@@ -798,8 +798,10 @@ def _end_descendants(descendants: list[tuple[int, str]]) -> None:
             pass
 
 
-async def _kill_tree_and_reap(process: asyncio.subprocess.Process) -> None:
-    """Kill *process* and every descendant, then wait for it -- but not forever."""
+async def _kill_tree_and_reap(process: asyncio.subprocess.Process, job: int | None = None) -> None:
+    """Kill *process* and every descendant, then wait for it -- but not forever.
+
+    *job* is what `start_own_group` returned for it; it is ended here."""
     # Snapshot first: once the root dies its children are no longer findable.
     # Off the loop: the snapshot is a process-table read (`ps` on POSIX).
     pid = process.pid
@@ -811,6 +813,14 @@ async def _kill_tree_and_reap(process: asyncio.subprocess.Process) -> None:
     finally:
         # Also when the caller is cancelled mid-snapshot: the hung root must not
         # be left running because the read in front of its kill never finished.
+        # Each run leads its own group (POSIX): this also ends a grandchild
+        # forked after the snapshot, which it cannot see and which is init's
+        # child, out of any later snapshot's reach, once the root dies.
+        process_tree.end_own_group(pid)
+        # Windows' counterpart: closing the kill-on-close job the run was put
+        # in before it could start anything ends every process in it.
+        if job is not None:
+            process_tree.end_contained(pid, job)
         try:
             process.kill()
         except ProcessLookupError:
@@ -860,6 +870,7 @@ async def run_allowlisted(
     if launch is None:
         return 127, b"", f"{argv[0]} not found".encode()
     process: asyncio.subprocess.Process | None = None
+    job: int | None = None
     try:
         process = await asyncio.create_subprocess_exec(
             *launch,
@@ -873,20 +884,28 @@ async def run_allowlisted(
             stdin=asyncio.subprocess.PIPE if input_bytes is not None else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **process_tree.own_group_spawn_kwargs(),
         )
+        job = process_tree.start_own_group(process.pid)
         communication = process.communicate() if input_bytes is None else process.communicate(input_bytes)
         stdout, stderr = await asyncio.wait_for(communication, timeout=timeout)
         return process.returncode or 0, stdout, stderr
     except asyncio.TimeoutError:
         if process is not None and process.returncode is None:
-            await _kill_tree_and_reap(process)
+            ended, job = job, None
+            await _kill_tree_and_reap(process, ended)
         return 128, b"", f"{argv[0]} timed out".encode()
     except FileNotFoundError:
         return 127, b"", f"{argv[0]} not found".encode()
     except Exception as exc:  # noqa: BLE001 - preserve service-level error envelope
         if process is not None and process.returncode is None:
-            await _kill_tree_and_reap(process)
+            ended, job = job, None
+            await _kill_tree_and_reap(process, ended)
         return 128, b"", str(exc).encode()
+    finally:
+        # Any other end: what the run left running keeps running, as before.
+        if process is not None and job is not None:
+            process_tree.release_contained(process.pid, job)
 
 
 async def _read_stdout_capped(
@@ -954,6 +973,7 @@ async def run_allowlisted_capped(
     if launch is None:
         return 127, b"", f"{argv[0]} not found".encode(), False
     process: asyncio.subprocess.Process | None = None
+    job: int | None = None
     try:
         process = await asyncio.create_subprocess_exec(
             *launch,
@@ -962,20 +982,28 @@ async def run_allowlisted_capped(
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **process_tree.own_group_spawn_kwargs(),
         )
+        job = process_tree.start_own_group(process.pid)
         return await asyncio.wait_for(
             _read_stdout_capped(process, max_stdout_bytes), timeout=timeout
         )
     except asyncio.TimeoutError:
         if process is not None and process.returncode is None:
-            await _kill_tree_and_reap(process)
+            ended, job = job, None
+            await _kill_tree_and_reap(process, ended)
         return 128, b"", f"{argv[0]} timed out".encode(), False
     except FileNotFoundError:
         return 127, b"", f"{argv[0]} not found".encode(), False
     except Exception as exc:  # noqa: BLE001 - preserve service-level error envelope
         if process is not None and process.returncode is None:
-            await _kill_tree_and_reap(process)
+            ended, job = job, None
+            await _kill_tree_and_reap(process, ended)
         return 128, b"", str(exc).encode(), False
+    finally:
+        # Any other end: what the run left running keeps running, as before.
+        if process is not None and job is not None:
+            process_tree.release_contained(process.pid, job)
 
 
 async def run_allowlisted_text(

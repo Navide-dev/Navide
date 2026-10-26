@@ -103,6 +103,7 @@ import {
 } from './pluginNativeBackendData'
 import { packOnlyMembers, PluginPackStore, type InstalledPackRecord } from './pluginPackStore'
 import type {
+  BackgroundAiSession,
   FrontendPluginManager,
   PluginLaunchDescriptor,
   PluginPackageRestartTransaction,
@@ -1348,6 +1349,23 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:backendCallConcurrency', (event): BackendCallConcurrency[] => {
     assertAuthorized(event)
     return options.backendCallConcurrency?.() ?? []
+  })
+
+  // A third-party package's AI CLI sessions that keep running after their view
+  // closed, and ending one of them. Disclosure, not a limit: nothing is ended
+  // unless the user asks.
+  ipcMain.handle('plugins:backgroundAiSessions', (event, args: { id?: unknown } | null): BackgroundAiSession[] => {
+    assertAuthorized(event)
+    return typeof args?.id === 'string' ? manager.backgroundAiSessions(args.id) : []
+  })
+
+  ipcMain.handle('plugins:endBackgroundAiSession', (
+    event,
+    args: { id?: unknown; sessionId?: unknown } | null,
+  ): { ok: boolean } => {
+    assertAuthorized(event)
+    if (typeof args?.id !== 'string' || typeof args.sessionId !== 'string') return { ok: false }
+    return { ok: manager.endBackgroundAiSession(args.id, args.sessionId) }
   })
 
   // Plan B D-f: one installed plugin's activity report. The Host fills
@@ -2803,6 +2821,15 @@ export function registerPluginIpc(
     }
   }
 
+  // #643 review L1: after a failed approval of a file install, whether the
+  // copy the dialog showed (its digest) is still held here, refused before it
+  // was used, so the dialog asks for the file again only once it is gone.
+  ipcMain.handle('plugins:preparedLocalInstall', (event, args: { id?: unknown; digest?: unknown } | null) => {
+    assertAuthorized(event)
+    const pkg = typeof args?.id === 'string' ? preparedLocal.get(args.id) : undefined
+    return { present: pkg !== undefined && typeof args?.digest === 'string' && pkg.digest === args.digest }
+  })
+
   ipcMain.handle('plugins:installFromFile', async (event) => {
     assertAuthorized(event)
     const pickFile = options.pickLocalPackageFile
@@ -3123,6 +3150,12 @@ export function registerPluginIpc(
       }
       return
     }
+    try {
+      await preflightDeveloperFolder(consent.path)
+    } catch (error) {
+      failed(error)
+      return
+    }
     autoReloading.add(pluginId)
     let loaded = false
     try {
@@ -3168,6 +3201,18 @@ export function registerPluginIpc(
     }).catch((error: unknown) => {
       console.warn(`[plugins] automatic reload of ${pluginId} failed: ${errorText(error)}`)
     })
+  }
+
+  /** Plan 4a05af P1: before the running version is unloaded, the folder's
+   * views are opened hidden and must report ready(), the check an install or
+   * update preflight makes; one that does not keeps the running version. The
+   * backend is not started here, so two versions of it never run at once: it
+   * still stops and starts with the switch. */
+  const preflightDeveloperFolder = async (dir: string): Promise<void> => {
+    const descriptor = loadPluginDir(dir).descriptor
+    if (descriptor?.views?.length && options.preflightCandidateFrontend) {
+      await options.preflightCandidateFrontend(descriptor)
+    }
   }
 
   const unloadDeveloperFolder = async (pluginId: string): Promise<void> => {
@@ -3268,6 +3313,22 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:developerMode', (event) => {
     assertAuthorized(event)
     return developerModeState()
+  })
+
+  // Card K4: the launch reminder closes for this launch in every window, since
+  // each workspace window mounts its own copy. Memory only, so the next launch
+  // reminds again.
+  let developerModeReminderDismissed = false
+  ipcMain.handle('plugins:developerModeReminderDismissed', (event) => {
+    assertAuthorized(event)
+    return developerModeReminderDismissed
+  })
+  ipcMain.handle('plugins:dismissDeveloperModeReminder', (event) => {
+    assertAuthorized(event)
+    developerModeReminderDismissed = true
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('plugins:developerModeReminderDismissed')
+    }
   })
 
   ipcMain.handle('plugins:setDeveloperMode', async (event, args: { enabled?: unknown } | null) => {
@@ -3444,6 +3505,7 @@ export function registerPluginIpc(
         preparedFolders.set(described.pluginId, { dir: consent.path, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
         return { reloaded: false as const, requiresConsent: true as const, prepared: described.summary }
       }
+      await preflightDeveloperFolder(consent.path)
       await unloadDeveloperFolder(id)
       if (activateDeveloperFolder(id, 'manual-reload')) {
         reloadErrors.delete(id)

@@ -484,6 +484,38 @@ class ProcessTree(Protocol):
         """Kill `pid` and every descendant, including ones that left its group."""
         ...
 
+    def own_group_spawn_kwargs(self) -> dict[str, int]:
+        """Spawn keyword arguments that make the child lead a group of its own.
+
+        POSIX: a new process group (not a new session: the controlling
+        terminal stays), so `end_own_group` also reaches a grandchild forked
+        after any snapshot. Windows has no process groups: the child starts
+        suspended instead, and `start_own_group` must follow the spawn."""
+        ...
+
+    def start_own_group(self, pid: int) -> int | None:
+        """Finish a spawn made with `own_group_spawn_kwargs`.
+
+        Windows: put the suspended child in a kill-on-close job (`contain`),
+        then let it run, so nothing it starts can be outside the job. The job
+        handle is returned for `end_contained` (a timed-out run) or
+        `release_contained` (any other end); None when the job could not be
+        made, and the child runs uncontained. Raises OSError, with the child
+        killed, only when it cannot be resumed. POSIX: None, nothing done."""
+        ...
+
+    def release_contained(self, pid: int, job: int) -> None:
+        """Let go of a job from `start_own_group` without ending what is left
+        in it: whatever the child left running keeps running, as it would
+        without the job. Never raises. A no-op on POSIX."""
+        ...
+
+    def end_own_group(self, pid: int) -> None:
+        """SIGKILL the group a child spawned with `own_group_spawn_kwargs` leads,
+        only while `pid` still leads it and never the caller's own group.
+        Never raises. A no-op on Windows."""
+        ...
+
     def contain(self, pid: int) -> int | None:
         """Make a child the root of a tree `end_contained` can end whole.
 

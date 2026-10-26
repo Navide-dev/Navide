@@ -8108,14 +8108,17 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
 
     Returns {servers, native, agents}. Each managed server is {name, enabled,
     transport, command, args, env} or {name, enabled, transport, url, headers},
-    plus `status` (disabled / connected / error / unknown) and `tool_count`.
+    plus `status` (disabled / connected / error / unknown) and `tool_count`;
+    `tools_error`, when present, says the tool list could not be read, so a
+    `tool_count` of 0 there is unknown rather than zero.
     Each native entry is {name, agent, transport, path, command, args, url,
     env, headers, enabled, valid, error}. `agents` is every vendor with what
     Navide can do with its MCP (wired / planned / unsupported) and whether its
     own config is reflected here.
 
     Every credential-shaped value — env and header values, `--api-key=` style
-    arguments, URL userinfo and secret query parameters — is already masked
+    arguments, URL userinfo and secret query parameters, and any value or
+    argument shaped like a known token whatever it is named — is already masked
     as `***` in both halves; names and hosts are kept so an entry stays
     recognisable. This is a global inventory: it does not vary by workspace.
     """
@@ -8138,10 +8141,11 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
             status = info.get("status", "unknown")
         # The tool list itself stays out: this is a summary, and a server with
         # dozens of tools would swamp the answer.
-        detail = {key: info[key] for key in ("starting_seconds", "error") if key in info}
-        if "error" in detail:
-            # Masked like the URL above: a library may quote the URL it failed on.
-            detail["error"] = native_mcp.mask_urls_in_text(str(detail["error"]))
+        detail = {key: info[key] for key in ("starting_seconds", "error", "tools_error") if key in info}
+        for key in ("error", "tools_error"):
+            if key in detail:
+                # Masked like the URL above: a library may quote the URL it failed on.
+                detail[key] = native_mcp.mask_urls_in_text(str(detail[key]))
         servers.append({**row, "status": status, "tool_count": info.get("tool_count", 0), **detail})
     reflected = await asyncio.to_thread(_native_mcp_inventory)
     return {"servers": servers, **reflected}
@@ -8154,25 +8158,35 @@ async def cli_extensions_list(ctx: Context) -> dict[str, Any]:
     These are the CLIs' own add-ons, not Navide plugins (see
     docs/en-US/glossary.md): Claude plugins and mods, Codex plugins and
     hooks, Copilot and Droid plugins, opencode and Kilo plugins, Pi
-    extensions, Qwen extensions, and every CLI's hooks. The same inventory
-    Settings → CLI Extensions shows. Read it before telling the user a CLI
+    extensions, Qwen and Gemini CLI extensions, and every CLI's hooks. Gemini
+    CLI is listed though Navide does not run it in a pane. The same inventory
+    Settings → Extensions shows. Read it before telling the user a CLI
     has, or lacks, an add-on. Read-only: installing, enabling or removing a
     CLI extension is the user's decision and there is no tool here for it.
 
-    Returns {vendors, items}. `vendors` is every CLI with an extension system
-    ({cli, label, supported, note, count}); `supported: false` means Navide
-    cannot read where that CLI keeps them yet. Each item is {cli, id, name,
-    version, kind (plugin / mod / extension / hook / package), type_label
-    (the vendor's own name), scope, enabled, exec_tier (L1 text assets, L2
-    subprocess such as hooks and MCP, L3 code inside the CLI's own process),
-    capabilities, native_consent (what the CLI itself asks before running
-    it), owner (navide when Navide installed it), evidence (inferred when
-    capabilities were read off source text)}.
+    Returns {vendors, items, unreadable}. `vendors` is every CLI with an
+    extension system ({cli, label, supported, note, count, unreadable});
+    `supported: false` means Navide cannot read where that CLI keeps them yet.
+    Each item is {cli, id, name, version, kind (plugin / mod / extension /
+    hook / package), type_label (the vendor's own name), scope, enabled,
+    exec_tier (L1 text assets, L2 subprocess such as hooks and MCP, L3 code
+    inside the CLI's own process), capabilities, native_consent (what the
+    CLI itself asks before running it), owner (navide when Navide installed
+    it), evidence (inferred when capabilities were read off source text),
+    enabled_error}. A non-empty `enabled_error` says the file holding the
+    on/off switch could not be read: `enabled` is then a default, not the
+    extension's real state — say it is unknown.
+
+    `unreadable` lists what could not be read at all ({cli, id, name, kind,
+    type_label, error}); `vendors[].unreadable` counts them per CLI. A CLI
+    with unreadable entries may have extensions that are not in `items`, so
+    do not report "not installed" for it — report that it could not be read
+    and why.
 
     Items of kind `navide-change` are what Navide itself wrote into a CLI's
     world for a convenience feature (name = the feature id, enabled = the
     feature is allowed); their id ends with a hash of the file Navide changed
-    — the file itself is named on Settings → CLI Extensions, where the user
+    — the file itself is named on Settings → Extensions, where the user
     can see exactly what was touched.
 
     Names and metadata only: no paths and no hook command lines, which can
@@ -8203,7 +8217,7 @@ async def _credentials_scan_result() -> dict[str, Any]:
 async def credentials_list(ctx: Context) -> dict[str, Any]:
     """List this machine's credentials and keys by name and metadata only.
 
-    What the user sees in Settings → Credentials & keys: git credential
+    What the user sees in Settings → Credentials & Keys: git credential
     helpers, gh / glab accounts, SSH private keys, OS keyring item metadata,
     remotes whose URL carries userinfo, token-looking environment variable
     names, and plaintext credential files. Read it to tell the user which

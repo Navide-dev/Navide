@@ -27,12 +27,12 @@ def _own_app_data(tmp_path, monkeypatch):
 def _decide(dev, item_id, approve):
     """Decide the way the window does: on the row as it was listed."""
     dev.use()
-    (row,) = [h for h in sync_approvals.listing() if h["itemId"] == item_id]
-    return sync_approvals.decide(dev.adapter, item_id, approve, row["digest"])
+    (row,) = [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
+    return sync_approvals.decide(dev.adapter, row["itemId"], approve, row["digest"])
 
 
 def _held(item_id):
-    return [h for h in sync_approvals.listing() if h["itemId"] == item_id]
+    return [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
 
 
 # ── D1-1 (H): env values that change what runs are held ─────────────────────
@@ -55,37 +55,42 @@ async def test_an_env_value_that_can_change_what_runs_is_held(tmp_path, account_
     a.use(); a_store.replace_servers([base])
     await a.sync(); await b.sync()
     _decide(b, "api", True)
+    b.use(); b_store.replace_servers([{**_server(b_store, "api"), "env": {name: before}}])
     a.use(); a_store.replace_servers([{**base, "env": {name: after}}])
     await a.sync(); await b.sync()
     b.use()
+    # Install-only sync (0.2.32): an env value never travels, so the one that
+    # would change what runs here never arrives at all — nothing to hold.
     assert _server(b_store, "api")["env"] == {name: before}
-    assert _held("api") and _held("api")[0]["kind"] == "changed"
+    assert _held("api") == []
 
 
 # Round 5 (N4) narrowed rotation to exact secret endings; see review5.
 @pytest.mark.parametrize("name", ["GITHUB_TOKEN", "OPENAI_API_KEY", "CLIENT_SECRET", "DB_PASSWORD"])
-async def test_a_rotated_secret_value_still_lands_without_asking(tmp_path, account_key, monkeypatch, name):
+async def test_a_rotated_secret_value_stays_on_its_machine(tmp_path, account_key, monkeypatch, name):
     server, a, b, a_store, b_store = _mcp_pair(tmp_path, monkeypatch)
     base = {**_mcp("api"), "env": {name: "v1"}}
     a.use(); a_store.replace_servers([base])
     await a.sync(); await b.sync()
     _decide(b, "api", True)
+    b.use(); b_store.replace_servers([{**_server(b_store, "api"), "env": {name: "b1"}}])
     a.use(); a_store.replace_servers([{**base, "env": {name: "v2"}}])
     await a.sync(); await b.sync()
     b.use()
-    assert _server(b_store, "api")["env"] == {name: "v2"} and _held("api") == []
+    assert _server(b_store, "api")["env"] == {name: "b1"} and _held("api") == []
 
 
 # ── D1-2: the approval shows what non-secret env values are ─────────────────
-async def test_the_approval_shows_non_secret_env_values_and_masks_secret_ones(tmp_path, account_key, monkeypatch):
+async def test_the_approval_lists_env_names_and_no_remote_value(tmp_path, account_key, monkeypatch):
     server, a, b, a_store, b_store = _mcp_pair(tmp_path, monkeypatch)
     a.use(); a_store.replace_servers([{**_mcp("api"), "env": {"NODE_OPTIONS": "--require /tmp/x.js",
                                                                 "GITHUB_TOKEN": TOKEN}}])
     await a.sync(); await b.sync()
     b.use()
     (held,) = _held("api")
-    assert held["summary"]["env"] == {"GITHUB_TOKEN": sync_scopes.MASKED_VALUE, "NODE_OPTIONS": "--require /tmp/x.js"}
-    assert TOKEN not in repr(held)
+    # Install-only sync: the names arrive, to be filled in here; no value does.
+    assert held["summary"]["env"] == {"GITHUB_TOKEN": sync_scopes.MASKED_VALUE, "NODE_OPTIONS": ""}
+    assert TOKEN not in repr(held) and "/tmp/x.js" not in repr(held)
 
 
 # ── D1-3: approval is of the version shown ──────────────────────────────────
@@ -99,7 +104,7 @@ async def test_approving_a_version_that_changed_since_it_was_shown_is_refused(tm
     await a.sync(); await b.sync()
     b.use()
     with pytest.raises(sync_engine.SyncError, match="changed since"):
-        sync_approvals.decide(b.adapter, "x", True, shown["digest"])
+        sync_approvals.decide(b.adapter, shown["itemId"], True, shown["digest"])
     assert "x" not in _names(b_store)
     (now,) = _held("x")
     assert now["summary"]["args"] == ["-y", "evil-mcp"] and now["digest"] != shown["digest"]
@@ -229,7 +234,9 @@ async def test_a_new_header_name_is_held_but_a_header_value_change_is_not(tmp_pa
     a.use(); a_store.replace_servers([{**http, "headers": {"X-Key": "2"}}])
     await a.sync(); await b.sync()
     b.use()
-    assert _server(b_store, "web")["headers"] == {"X-Key": "2"} and _held("web") == []
+    # Header values stay on each machine (install-only sync): B's is still
+    # the empty one the server arrived with, waiting to be filled in.
+    assert _server(b_store, "web")["headers"] == {"X-Key": ""} and _held("web") == []
     a.use(); a_store.replace_servers([{**http, "headers": {"X-Key": "2", "X-Forwarded-Host": "evil"}}])
     await a.sync(); await b.sync()
     b.use()
@@ -255,14 +262,14 @@ async def test_a_server_switched_off_here_is_not_switched_on_remotely_without_as
 
 # ── D1-11: the stored summary carries no secret ─────────────────────────────
 async def test_a_secret_in_args_is_shown_whole_but_never_stored_in_the_clear(tmp_path, account_key, monkeypatch):
-    # Round 5 (N3): masked by name only, so args show whole to the user;
-    # the index seals the summary, so the file still holds no secret.
+    # Round 5 (N3): the index seals the summary, so the file holds no secret.
+    # From 0.2.32 the token never arrives at all: sync empties it in place.
     server, a, b, a_store, b_store = _mcp_pair(tmp_path, monkeypatch)
     a.use(); a_store.replace_servers([{**_mcp("gh"), "args": ["--token", TOKEN, "--verbose"]}])
     await a.sync(); await b.sync()
     b.use()
     (held,) = _held("gh")
-    assert held["summary"]["args"] == ["--token", TOKEN, "--verbose"]
+    assert held["summary"]["args"] == ["--token", "", "--verbose"]
     assert TOKEN not in sync_approvals._index_path().read_text()
 
 

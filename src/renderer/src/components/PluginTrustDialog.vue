@@ -260,10 +260,12 @@ function capabilityHint(cap: string): string {
         </p>
       </div>
       <!-- The approval failed: said here, since this dialog covers the pane's
-           own error line. A used-up file is not offered again. -->
-      <div v-if="pending.commitError" class="ext-trust-error" role="alert">
+           own error line. A used-up file is not offered again. Keyed by the
+           failure count, so a repeated failure is announced again. -->
+      <div v-if="pending.commitError" :key="pending.commitFailures" class="ext-trust-error" role="alert">
         <p>{{ pending.commitError }}</p>
-        <p v-if="pending.needsFileAgain">{{ $t('settings.extensions.localInstall.chooseAgain') }}</p>
+        <p v-if="pending.commitNextStep">{{ pending.commitNextStep }}</p>
+        <p v-else-if="pending.needsFileAgain">{{ $t('settings.extensions.localInstall.chooseAgain') }}</p>
       </div>
       <div class="ext-trust-actions nv-dialog-actions">
         <button ref="cancelButton" class="ext-cancel nv-btn" @click="$emit('cancel')">

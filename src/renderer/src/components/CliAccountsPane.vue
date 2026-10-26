@@ -8,7 +8,6 @@ import {
   type useCliProfiles,
   type CliProfile,
 } from '../composables/useCliProfiles'
-import PortableCredentialBlock from './PortableCredentialBlock.vue'
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import {
   accountUsageFor,
@@ -572,53 +571,6 @@ onUnmounted(() => {
 
 // Fresh numbers when the pane opens (same nudge UsageBadge sends on switch).
 onMounted(() => refreshUsage())
-
-// ── Portable credentials (pasted, not logged in) ─────────────────────────────
-// The block itself lives in PortableCredentialBlock; this pane only decides
-// where it goes: under every account card of an agent with a portable
-// interface, and as a card of its own for each credential pulled from the
-// cloud that was pasted into a named account on another device (no local
-// profile stands for those, so they would otherwise be invisible here).
-function portableAgent(agentKey: string): boolean {
-  return props.api.portableSupportedFor(agentKey)
-}
-
-function portableMeta(agentKey: string, slotId: string) {
-  return props.api.portableFor(agentKey, slotId === '__default__' ? null : slotId)
-}
-
-function importedSlots(agentKey: string) {
-  return props.api.importedSlotsFor(agentKey)
-}
-
-// An empty slot shows no block, only a compact "Paste credential" button in
-// its action row (a pasted credential works locally, with or without sync).
-// Pressing it opens the block with its form until the paste is saved or
-// cancelled; a stored credential or a cloud copy keeps the block up.
-const portablePasting = ref(new Set<string>())
-
-function portableShown(agentKey: string, slotId: string): boolean {
-  return (
-    Boolean(portableMeta(agentKey, slotId)?.configured) ||
-    portablePasting.value.has(`${agentKey}/${slotId}`) ||
-    props.api.cloudFor(agentKey, slotId === '__default__' ? null : slotId).length > 0
-  )
-}
-
-function canStartPortable(agentKey: string, slotId: string): boolean {
-  return portableAgent(agentKey) && !portableShown(agentKey, slotId)
-}
-
-function setPortablePasting(agentKey: string, slotId: string, on: boolean): void {
-  const next = new Set(portablePasting.value)
-  if (on) next.add(`${agentKey}/${slotId}`)
-  else next.delete(`${agentKey}/${slotId}`)
-  portablePasting.value = next
-}
-
-// Cloud state is read when the pane opens; the metadata itself rides on the
-// profile list and its `.changed` broadcasts.
-onMounted(() => void props.api.refreshCloud())
 </script>
 
 <template>
@@ -758,16 +710,6 @@ onMounted(() => void props.api.refreshCloud())
             </div>
           </template>
 
-          <PortableCredentialBlock
-            v-if="portableAgent(spec.agentKey) && portableShown(spec.agentKey, p?.id ?? '__default__')"
-            :api="api"
-            :agent-key="spec.agentKey"
-            :slot-id="p?.id ?? '__default__'"
-            :meta="portableMeta(spec.agentKey, p?.id ?? '__default__')"
-            :start-open="portablePasting.has(`${spec.agentKey}/${p?.id ?? '__default__'}`)"
-            @close="setPortablePasting(spec.agentKey, p?.id ?? '__default__', false)"
-          />
-
           <!-- Quota area (single-element v-for = local display-model alias). -->
           <template
             v-for="u in [cardUsage(spec.agentKey, p?.id ?? null)]"
@@ -906,13 +848,6 @@ onMounted(() => void props.api.refreshCloud())
                 {{ $t('settings.accounts.cli.dir-sign-in') }}
               </button>
               <button
-                v-if="canStartPortable(spec.agentKey, p?.id ?? '__default__')"
-                class="cli-btn ghost sm"
-                @click="setPortablePasting(spec.agentKey, p?.id ?? '__default__', true)"
-              >
-                {{ $t('settings.accounts.cli.portable-paste') }}
-              </button>
-              <button
                 v-if="p || rowIdentity(spec.agentKey, null)?.signedIn"
                 class="cli-btn ghost sm"
                 @click="confirmRemoveId = (p?.id ?? '__default__')"
@@ -923,29 +858,6 @@ onMounted(() => void props.api.refreshCloud())
           </div>
         </div>
 
-        <!-- Credentials pulled from the cloud that were pasted into a named
-             account elsewhere. No profile here stands for them, so each is
-             its own card; selecting one hands it to new panes like any
-             other, and removing it is local. -->
-        <div
-          v-for="m in importedSlots(spec.agentKey)"
-          :key="'imported:' + m.slotId"
-          class="cli-card cli-card-imported"
-          :class="{ active: m.enabled }"
-        >
-          <div class="cli-card-head">
-            <span class="cli-card-av imported">☁</span>
-            <span class="cli-card-id" v-truncate>{{ $t('settings.accounts.cli.imported-account') }}</span>
-          </div>
-          <span class="cli-card-meta">{{ $t('settings.accounts.cli.imported-account-hint') }}</span>
-          <PortableCredentialBlock
-            :api="api"
-            :agent-key="spec.agentKey"
-            :slot-id="m.slotId"
-            :meta="m"
-            :cloud-only="true"
-          />
-        </div>
       </div>
     </section>
 
@@ -1171,8 +1083,6 @@ onMounted(() => void props.api.refreshCloud())
   border-radius: 999px;
   padding: 1px 8px;
 }
-
-.cli-card-av.imported { background: var(--bg-muted); color: var(--text-secondary); font-size: 12px; }
 
 .cli-btn {
   border-radius: 5px;

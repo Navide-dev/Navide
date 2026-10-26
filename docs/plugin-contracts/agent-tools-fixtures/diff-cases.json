@@ -1226,6 +1226,75 @@
         ],
         "widened": true
       }
+    },
+    {
+      "name": "gaining network access through a shell allowlist beside an unchanged scope is widened",
+      "from": "scope-fs-docs-read",
+      "to": "scope-fs-docs-read-shell",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.scoped",
+          "version": "1.2.0",
+          "risk": "medium"
+        },
+        "to": {
+          "id": "acme.scoped",
+          "version": "1.7.0",
+          "risk": "high"
+        },
+        "added": [
+          {
+            "kind": "network",
+            "key": "via-shell",
+            "detail": null
+          },
+          {
+            "kind": "shell",
+            "key": "allowlist",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "gh",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "git",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "glab",
+            "detail": null
+          }
+        ],
+        "removed": [],
+        "unchanged": [
+          {
+            "kind": "fsScopeRead",
+            "key": "docs/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "workspace",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
     }
   ]
 }

@@ -131,7 +131,12 @@ import {
   type PlansFilesystemPort,
   type PlansFilesystemServiceOperation,
 } from './plansBridge'
-import type { PackageAgentsPort, PackageShellPort } from './pluginThirdPartyBackends'
+import {
+  NativeBackendRefusal,
+  type NativeBackendStatus,
+  type PackageAgentsPort,
+  type PackageShellPort,
+} from './pluginThirdPartyBackends'
 import {
   BackendPluginError,
   type BackendPluginLaunchSpec,
@@ -624,6 +629,9 @@ interface RunningPlugin {
   /** Why a third-party view's backend bind was refused or failed, once it
    *  has been; the view runs on with every backend call failing closed. */
   backendUnavailable?: string
+  /** Which admission gate refused it, as the Settings rows name it;
+   *  'unavailable' for any other failure. */
+  backendUnavailableStatus?: NativeBackendStatus
   /** Query string the entry was last loaded with (drives reload-on-change). */
   query: string
   /** webContents.id captured at creation (not readable after destroy). */
@@ -776,6 +784,8 @@ interface AiSessionLedgerEntry {
   storageIdentity?: AiTerminalStorageIdentity
   /** The reclaim of the latest detach; a newer detach replaces it. */
   reclaimTimer?: ReturnType<typeof setTimeout>
+  /** A view's aiCli.resumeSession is reattaching it right now. */
+  resuming?: boolean
   /** Set by the Host only: this session's id is in terminal storage (written
    *  when it started, or it was resumed from there), so a later view can
    *  resume it. A package's own persistView flag does not set it. */
@@ -902,6 +912,16 @@ const SELF_ENDING_AI_SESSION_PLUGIN_IDS: ReadonlySet<string> = new Set(['navide.
 /** How long a detached session waits for a new view of the same contribution
  *  (a reload, a workspace re-prepare) to resume it before it is ended. */
 export const AI_SESSION_RECLAIM_MS = 60_000
+
+/** A third-party AI CLI session that keeps running with no view, as listed on
+ *  the package's Settings entry. `since` is when this Navide started or last
+ *  resumed it. */
+export interface BackgroundAiSession {
+  sessionId: string
+  profileId: string
+  packageVersion: string
+  since: number
+}
 
 /** First-party compatibility actions used while the existing Git surface is
  *  moved behind the Manifest v2 package boundary. These are deliberately
@@ -1089,7 +1109,7 @@ function webViewCapabilityError(reqId: string, error: WebViewError): CapabilityR
  *  a disabled built-in plugin. */
 export function builtinPluginDisabledMessage(pluginId: string): string {
   const name = BUILTIN_PLUGIN_NAMES.get(pluginId) ?? pluginId
-  return `Navide plugin ${name} is disabled. Enable it in Settings → Extensions.`
+  return `Navide plugin ${name} is disabled. Enable it in Settings → Navide Plugins.`
 }
 
 /** A Host refusal of an agent call into a disabled built-in plugin. The code
@@ -8065,6 +8085,11 @@ export class FrontendPluginManager {
       pluginId: binding.pluginId,
       contributionKey,
       workspacePath: resolve(workspacePath),
+      // Third-party storage is per package version; the bundled Navide
+      // plugins keep the key they had, and resume across their own versions.
+      ...(SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(binding.pluginId)
+        ? {}
+        : { packageVersion: binding.packageVersion }),
     })
   }
 
@@ -8412,26 +8437,44 @@ export class FrontendPluginManager {
         const attached = [...this.aiSessions.values()].find((entry) =>
           entry.sessionId === ownerSessionId && entry.attachedInstanceId !== null)
         if (attached) return null
+        // A third-party view may not take over, or overwrite, a session the
+        // ledger records for another binding (another version, workspace or
+        // audience); the bundled Navide plugins keep resuming across their
+        // own versions.
+        const recorded = this.aiSessions.get(ownerSessionId)
+        if (
+          recorded &&
+          !SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(plugin.id) &&
+          !this.aiSessionMatchesPlugin(recorded, plugin)
+        ) return null
       }
       if (!candidate && !ownerSessionId) return null
       const sessionId = candidate?.sessionId ?? ownerSessionId!
-      const response = await client.send(
-        'terminal.reattach',
-        {
-          terminal_session_ids: [sessionId],
-          cols: Number(args.cols),
-          rows: Number(args.rows),
-          ...(persistView && storageIdentity
-            ? {
-                expected_workspace_path: resolve(workspacePath),
-                expected_origin: this.aiTerminalMetadataOrigin(plugin),
-                expected_profile_ids: [...(plugin.capabilityContext?.aiCliProfiles ?? [])],
-              }
-            : {}),
-        },
-        10_000,
-        { beforeDispatch },
-      )
+      // The reclaim must not end the candidate while the reattach is in flight;
+      // a timer that fires meanwhile waits again instead.
+      if (candidate) candidate.resuming = true
+      let response: Awaited<ReturnType<typeof client.send>>
+      try {
+        response = await client.send(
+          'terminal.reattach',
+          {
+            terminal_session_ids: [sessionId],
+            cols: Number(args.cols),
+            rows: Number(args.rows),
+            ...(persistView && storageIdentity
+              ? {
+                  expected_workspace_path: resolve(workspacePath),
+                  expected_origin: this.aiTerminalMetadataOrigin(plugin),
+                  expected_profile_ids: [...(plugin.capabilityContext?.aiCliProfiles ?? [])],
+                }
+              : {}),
+          },
+          10_000,
+          { beforeDispatch },
+        )
+      } finally {
+        if (candidate) candidate.resuming = false
+      }
       if (!response.ok) throw new Error(response.error?.message ?? 'AI CLI resume failed')
       const alive = toPayload(response.payload).alive
       if (!Array.isArray(alive) || !alive.includes(sessionId)) {
@@ -9920,6 +9963,13 @@ export class FrontendPluginManager {
       this.deliverTerminalEvent(event, sessionId, payload)
       this.terminalRoutes.delete(sessionId)
       this.pendingTerminalOwners.delete(sessionId)
+      // A third-party session that exits with no view leaves the ledger too,
+      // so Settings stops listing it as running in the background.
+      const detached = this.aiSessions.get(sessionId)
+      if (
+        detached?.attachedInstanceId === null &&
+        !SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(detached.pluginId)
+      ) this.aiSessions.delete(sessionId)
       return
     }
     for (const plugin of this.running.values()) {
@@ -10437,6 +10487,36 @@ export class FrontendPluginManager {
     }
   }
 
+  /** This third-party package's AI CLI sessions that keep running with no
+   *  view: the ones the reclaim leaves because the Host stored them for resume
+   *  (D1 on #648). Settings lists them so the user can see and end them. */
+  backgroundAiSessions(pluginId: string): BackgroundAiSession[] {
+    return [...this.aiSessions.values()]
+      .filter((entry) =>
+        entry.pluginId === pluginId &&
+        entry.attachedInstanceId === null &&
+        entry.storedForResume === true &&
+        entry.storageIdentity !== undefined &&
+        !SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(entry.pluginId))
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((entry) => ({
+        sessionId: entry.sessionId,
+        profileId: entry.profileId,
+        packageVersion: entry.packageVersion,
+        since: entry.createdAt,
+      }))
+  }
+
+  /** End one session backgroundAiSessions lists, the way disabling the package
+   *  ends it. False when it is no longer listed: a view resumed it, or it has
+   *  ended already. */
+  endBackgroundAiSession(pluginId: string, sessionId: string): boolean {
+    if (!this.backgroundAiSessions(pluginId).some((session) => session.sessionId === sessionId)) return false
+    this.terminalRoutes.delete(sessionId)
+    this.stopAiSessions((session) => session.sessionId === sessionId && session.pluginId === pluginId)
+    return true
+  }
+
   private stopAiSessionsForPlugin(pluginId: string): void {
     this.stopAiSessions((session) => session.pluginId === pluginId)
   }
@@ -10465,6 +10545,12 @@ export class FrontendPluginManager {
       entry.reclaimTimer = undefined
       if (this.appQuitting()) return
       if (this.aiSessions.get(entry.sessionId) !== entry || entry.attachedInstanceId !== null) return
+      if (entry.resuming === true) {
+        // Its resume settles with it attached (nothing to end) or failed (it
+        // gets the full wait again).
+        this.scheduleAiSessionReclaim(entry)
+        return
+      }
       this.aiSessions.delete(entry.sessionId)
       this.terminalRoutes.delete(entry.sessionId)
       this.aiTerminalOutputDecoder.dropSession(entry.sessionId)
@@ -10490,7 +10576,30 @@ export class FrontendPluginManager {
       }).catch(() => {
         // Removal still forgets ownership when the backend is unavailable.
       })
+      this.forgetStoredAiSession(session)
     }
+  }
+
+  /** The kill above is not awaited, so a stored third-party session also
+   *  leaves terminal storage: nothing can resume it from there even if the
+   *  kill never reached the backend. Its key is this package version's own, so
+   *  no other version's session is touched. The bundled Navide plugins share
+   *  one key across versions and keep their storage as before. */
+  private forgetStoredAiSession(session: AiSessionLedgerEntry): void {
+    const handler = this.terminalStorageHandler
+    const identity = session.storageIdentity
+    if (
+      !handler ||
+      !identity ||
+      session.storedForResume !== true ||
+      SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(session.pluginId)
+    ) return
+    void handler(identity.origin, {
+      operation: 'session',
+      resumeKey: identity.resumeKey,
+      ptyId: null,
+    }, () => !this.appQuitting()).catch((error) => console.warn(
+      `[plugins] AI terminal storage could not forget ended session ${session.sessionId} for ${session.pluginId}`, error))
   }
 
   private revokePackageVersionInBackground(pluginId: string, packageVersion: string): void {
@@ -11006,12 +11115,13 @@ export class FrontendPluginManager {
             }`,
           )
           // Not fatal: the view (a window too) opens and stays unbound. Only an
-          // admission refusal's own message is passed on; anything else is
-          // reported generically, since it may carry paths or stack text.
-          record.backendUnavailable =
-            error instanceof BackendPluginError && error.code === 'BACKEND_UNAVAILABLE'
-              ? error.message
-              : 'the native backend could not start'
+          // admission gate's own refusal, whose message is a fixed string, is
+          // passed on; anything else, BACKEND_UNAVAILABLE from elsewhere
+          // included, is reported generically, since it may carry paths or
+          // stack text.
+          const refusal = error instanceof NativeBackendRefusal ? error : null
+          record.backendUnavailable = refusal ? refusal.message : 'the native backend could not start'
+          record.backendUnavailableStatus = refusal ? refusal.status : 'unavailable'
         })
         void record.backendBindingTask.catch(() => undefined)
       }
@@ -12856,7 +12966,7 @@ export class FrontendPluginManager {
     hostWindow: BrowserWindow,
     contributionKey: string,
     options: Omit<PluginViewOpenOptions, 'hostWindow' | 'bounds'>,
-  ): Promise<{ ok: boolean; error?: string; backendUnavailable?: string }> {
+  ): Promise<{ ok: boolean; error?: string; backendUnavailable?: string; backendUnavailableStatus?: NativeBackendStatus }> {
     const canDispatch = options.canDispatch ?? (() => true)
     if (!canDispatch()) return { ok: false, error: 'request is no longer active' }
     const descriptor = this.enabledDescriptors().find((candidate) =>
@@ -12930,8 +13040,11 @@ export class FrontendPluginManager {
         capabilityContext,
       })
       this.contributionInstances.set(key, handle)
-      const backendUnavailable = this.running.get(handle.instanceId)?.backendUnavailable
-      return backendUnavailable ? { ok: true, backendUnavailable } : { ok: true }
+      const running = this.running.get(handle.instanceId)
+      const backendUnavailable = running?.backendUnavailable
+      return backendUnavailable
+        ? { ok: true, backendUnavailable, backendUnavailableStatus: running.backendUnavailableStatus ?? 'unavailable' }
+        : { ok: true }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
