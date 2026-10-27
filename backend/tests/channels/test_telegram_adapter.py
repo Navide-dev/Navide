@@ -675,9 +675,10 @@ async def test_an_unreadable_language_still_writes_the_default_wording(api: Fake
 
 async def test_every_language_describes_every_command() -> None:
     from agent_team_backend.channels.telegram import BOT_COMMANDS, bot_commands
+    from agent_team_backend.prompt_skills import LANGUAGES
 
     names = [c["command"] for c in BOT_COMMANDS]
-    for lang in ("zh-TW", "en-US", "ja-JP"):
+    for lang in LANGUAGES:
         commands = bot_commands(lang)
         assert [c["command"] for c in commands] == names
         assert all(0 < len(c["description"]) <= 256 for c in commands)
