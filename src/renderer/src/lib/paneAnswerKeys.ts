@@ -250,14 +250,20 @@ function multiSelectKeys(screen: string, picked: number[], text: string | undefi
   return steps(keys)
 }
 
-/** The last ≤ 12 non-empty screen lines, capped at 800 characters. */
+// Claude Code's "will automatically deny this request in 1:19" under an
+// unattended prompt: the time left changes every second, the prompt does not.
+// Matched across a line break, since a narrow pane wraps it anywhere.
+const AUTO_ANSWER_COUNTDOWN = /(\bautomatically\s+\w+\s+this\s+request\s+in\s+)\d+(?::\d+)*s?/gi
+
+/** The last ≤ 12 non-empty screen lines, capped at 800 characters, with the
+ *  auto-answer countdown's time left out so the same prompt reads the same. */
 export function awaitingPromptText(screen: string): string {
   const lines = screen
     .split('\n')
     .map((l) => l.trimEnd())
     .filter((l) => l.trim())
     .slice(-12)
-  const text = lines.join('\n')
+  const text = lines.join('\n').replace(AUTO_ANSWER_COUNTDOWN, '$1')
   return text.length > 800 ? text.slice(-800) : text
 }
 
