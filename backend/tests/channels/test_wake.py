@@ -805,8 +805,9 @@ async def test_every_platform_wakes_through_the_one_wake_path(env: Env, platform
         assert adapter.buttons[offer] == WAKE_BUTTONS
         wake_it = {"text": "", "callback": WAKE_CALLBACK}
     else:
-        assert "/wake" in offer
-        wake_it = {"text": "/wake"}
+        word = "wake" if platform == "mattermost" else "/wake"
+        assert f"{word} {_zh('button').split(' ', 1)[-1]}" in offer
+        wake_it = {"text": word}
 
     fw.result = {"ok": False, "code": "window-refused", "started": True}
     await env.inbound(**wake_it, **at)
@@ -818,3 +819,83 @@ async def test_every_platform_wakes_through_the_one_wake_path(env: Env, platform
     assert fw.calls == [("pane-2", "/ws", "sess-2")] * 2
     assert env.fake.delivered[-1][:2] == ("pane-2b", "hello")
     assert "pane-2b" in [b.pane_id for b in env.store.bindings()]
+
+
+# --- the Navide language, and Mattermost's bare word --------------------------------
+
+
+@pytest.mark.parametrize("lang", ["zh-TW", "en-US", "ja-JP"])
+async def test_every_wake_text_follows_the_navide_language(env: Env, lang: str) -> None:
+    fw = _wakeable(env)
+    env.fake.settings = {"agent-team:language": lang}
+    await env.inbound("hello")
+    offer = env.tg.texts()[-1]
+    assert offer == wake.text(lang, "offline_wake", max=wake.STASH_MAX, minutes=int(wake.STASH_TTL_S // 60))
+    assert env.tg.buttons[offer] == [(wake.text(lang, "button"), WAKE_CALLBACK)]
+    fw.result = {"ok": False, "code": "window-refused", "started": True}
+    await _press_wake(env)
+    texts = env.tg.texts()
+    assert wake.text(lang, "waking") in texts
+    assert texts[-1] == wake.text(lang, "failed", reason=wake.text(lang, "reason_refused"))
+    env.m._wake_limits = wake.WakeLimits()
+    fw.result = {"ok": True, "pane_id": "pane-1b"}
+    await _press_wake(env)
+    assert env.tg.texts()[-1] == wake.text(lang, "woke_sent", count=1)
+
+
+@pytest.mark.parametrize("lang", ["zh-TW", "en-US", "ja-JP"])
+async def test_the_typed_wake_hint_follows_the_navide_language(env: Env, lang: str) -> None:
+    _wakeable(env)
+    _no_buttons(env)
+    env.fake.settings = {"agent-team:language": lang}
+    await env.inbound("hello")
+    label = wake.text(lang, "button").split(" ", 1)[-1]
+    hint = wake.text(lang, "typed_hint", commands=f"/wake {label}")
+    assert env.tg.texts()[-1].endswith("\n" + hint)
+    assert all(text not in env.tg.texts()[-1] for text in ("可直接輸入", "Type:", "次のように")
+               if text not in hint)
+
+
+@pytest.mark.parametrize("saved, lang", [("ko-KR", "en-US"), ("de-DE", "en-US"), ("xx-XX", "zh-TW"), (None, "zh-TW")])
+async def test_wake_texts_fall_back_like_every_channel_text(env: Env, saved, lang: str) -> None:
+    # A UI language the channel texts do not translate reads English; an unknown or unset one
+    # reads the renderer's fallback locale, as prompt_skills.language decides for every channel.
+    _wakeable(env)
+    env.fake.settings = {} if saved is None else {"agent-team:language": saved}
+    await env.inbound("hello")
+    offer = env.tg.texts()[-1]
+    assert env.tg.buttons[offer] == [(wake.text(lang, "button"), WAKE_CALLBACK)]
+    assert offer == wake.text(lang, "offline_wake", max=wake.STASH_MAX, minutes=int(wake.STASH_TTL_S // 60))
+
+
+async def test_mattermost_wakes_with_the_bare_word_and_still_with_the_command(env: Env) -> None:
+    # Mattermost's client keeps a leading "/" for its own slash commands (not verified against
+    # a real server). The bare word wakes there, and so does /wake where it gets through.
+    assert (await env.m.configure("mattermost", {}, {"token": "tok-mm"}))["ok"]
+    env.store.add_allow("mattermost", "7", "alice", 1)
+    env.store.bind("pane-2", Location("mattermost", "default", "c1", "", "ops"), verbosity="full")
+    fw = FakeWake(env).install()
+    env.store.set_wake_target("pane-2", "/ws", "sess-2")
+    env.fake.gone.add("pane-2")
+    at = {"platform": "mattermost", "chat": "c1", "thread": ""}
+    env.adapters["mattermost"].capabilities = _real_capabilities("mattermost")
+    await env.inbound("hello", **at)
+    assert "wake 喚醒" in env.adapters["mattermost"].texts()[-1]
+    assert "/wake" not in env.adapters["mattermost"].texts()[-1]
+    fw.result = {"ok": False, "code": "window-refused", "started": True}
+    await env.inbound("Wake", **at)
+    env.m._wake_limits = wake.WakeLimits()
+    fw.result = {"ok": True, "pane_id": "pane-2b"}
+    await env.inbound("/wake", **at)
+    assert fw.calls == [("pane-2", "/ws", "sess-2")] * 2
+    assert env.fake.delivered[-1][:2] == ("pane-2b", "hello")
+
+
+async def test_the_bare_word_is_only_a_wake_on_mattermost(env: Env) -> None:
+    # Elsewhere "wake" is an ordinary message: kept for the pane, not a wake.
+    fw = _wakeable(env)
+    await env.inbound("wake")
+    assert fw.calls == []
+    fw.result = {"ok": True, "pane_id": "pane-1b"}
+    await _press_wake(env)
+    assert env.fake.delivered[-1][:2] == ("pane-1b", "wake")
