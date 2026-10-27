@@ -12,6 +12,7 @@ import pytest
 
 import agent_team_backend.channels as channels_pkg
 from agent_team_backend.channels import manager as mgr_mod
+from agent_team_backend.channels import registry
 from agent_team_backend.channels import store as store_mod
 from agent_team_backend.channels import wake
 from agent_team_backend.channels.base import Capabilities, Location
@@ -768,3 +769,52 @@ async def test_seam_passes_on_the_window_finding_the_session_open_elsewhere(seam
     seam.placeholder = {"ok": False, "reason": "session-open-elsewhere"}
     assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
         "ok": False, "code": "session-open-elsewhere", "started": True}
+
+
+# --- every platform ---------------------------------------------------------------
+
+
+def _real_capabilities(platform: str) -> Capabilities:
+    module = registry.load_module(platform)
+    assert module is not None, platform
+    found = [v.capabilities for v in vars(module).values()
+             if isinstance(v, type) and isinstance(getattr(v, "capabilities", None), Capabilities)]
+    assert len(found) == 1, platform
+    return found[0]
+
+
+@pytest.mark.parametrize("platform", registry.PLATFORMS)
+async def test_every_platform_wakes_through_the_one_wake_path(env: Env, platform: str) -> None:
+    # No adapter has wake code of its own: each offers the wake (a button where it has
+    # buttons, the typed /wake where it has none), routes it to the same wake seam, says why
+    # a wake failed, and moves the binding onto the woken pane with what was kept.
+    if platform != "telegram":
+        assert (await env.m.configure(platform, {}, {"token": f"tok-{platform}"}))["ok"]
+        env.store.add_allow(platform, "7", "alice", 1)
+    adapter = env.adapters[platform]
+    adapter.capabilities = _real_capabilities(platform)
+    env.store.bind("pane-2", Location(platform, "default", "c1", "", "ops"), verbosity="full")
+    fw = FakeWake(env).install()
+    env.store.set_wake_target("pane-2", "/ws", "sess-2")
+    env.fake.gone.add("pane-2")
+    at = {"platform": platform, "chat": "c1", "thread": ""}
+
+    await env.inbound("hello", **at)
+    offer = adapter.texts()[-1]
+    if adapter.capabilities.buttons:
+        assert adapter.buttons[offer] == WAKE_BUTTONS
+        wake_it = {"text": "", "callback": WAKE_CALLBACK}
+    else:
+        assert "/wake" in offer
+        wake_it = {"text": "/wake"}
+
+    fw.result = {"ok": False, "code": "window-refused", "started": True}
+    await env.inbound(**wake_it, **at)
+    assert adapter.texts()[-1] == _zh("failed", reason=_zh("reason_refused"))
+
+    env.m._wake_limits = wake.WakeLimits()  # past the cooldown the failed wake started
+    fw.result = {"ok": True, "pane_id": "pane-2b"}
+    await env.inbound(**wake_it, **at)
+    assert fw.calls == [("pane-2", "/ws", "sess-2")] * 2
+    assert env.fake.delivered[-1][:2] == ("pane-2b", "hello")
+    assert "pane-2b" in [b.pane_id for b in env.store.bindings()]
