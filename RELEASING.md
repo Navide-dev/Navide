@@ -67,6 +67,27 @@ stall (#102). Walk this list before `./release.sh`; nothing here is automated.
 6. **Signing status** — macOS signs and notarizes in CI; Windows is unsigned
    and shows SmartScreen's "Unknown publisher" prompt. Do not describe a Windows
    build as signed anywhere until that changes.
+7. **Is the production Marketplace Registry caught up with `main`?** — the
+   Registry is deployed separately from the app, and a stale one refuses the
+   new first-party plugin versions (in 0.2.31 it rejected `navide.plans` with a
+   400 because its manifest checks were 46 commits behind). Check two things
+   before tagging:
+   - **First-party plugin versions**: for each of `git`, `mini-ide` and
+     `plans`, `curl -s https://server.navide.dev/registry/api/extensions/navide/<name>`
+     and read `latest_version` and `latest_targets`. They are published at the
+     root `package.json` version (see `scripts/publish-first-party-plugins.sh`),
+     so `latest_version` must be the version on `main` (or the one about to
+     ship once they are published), and `navide.plans` must list every target
+     in the script's `KNOWN_TARGETS` (`darwin-arm64`, `linux-x64`,
+     `linux-arm64`, `win32-x64`, `win32-arm64`) while `git` and `mini-ide`
+     list `universal`.
+   - **Registry schema version**: on the Registry host, `SELECT max(version)
+     FROM schema_migrations` in `$REGISTRY_DATA_DIR/registry.db` must equal the
+     last entry of `MIGRATIONS` in `marketplace/registry/registry/migrations.py`
+     on `main`. The API does not report it, so this needs host access.
+
+   If either is behind, deploy the Registry first (a production change: it
+   needs the user's explicit go-ahead), then publish the plugins, then tag.
 
 ### After the tag push
 
