@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { canonicalJson } from '../../../shared/canonicalJson'
-import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { disabledReasonKey } from '../lib/linkStatus'
 import type { LegalRoute } from '../../../shared/legalLinks'
@@ -111,6 +111,7 @@ import { useGitAccounts } from '../composables/useGitAccounts'
 import GitAccountsPane from './GitAccountsPane.vue'
 import CliAccountsPane from './CliAccountsPane.vue'
 import CliManagementPanel from './CliManagementPanel.vue'
+import OllamaSetup from './OllamaSetup.vue'
 import CliRiskRangesPane from './CliRiskRangesPane.vue'
 import CliExtensionsPane from './CliExtensionsPane.vue'
 import type { useCliProfiles } from '../composables/useCliProfiles'
@@ -425,6 +426,24 @@ const { order: cliOrder, disabled: cliDisabled } = useCliAgentPrefs()
 // useOnboarding() would be a second `onboarding.status` round trip — which
 // shells out once per dep — rather than a second reader of this one.
 const onboarding = useOnboarding(props.backend)
+
+const CliInstallDialog = defineAsyncComponent(() => import('./CliInstallDialog.vue'))
+
+/** npx/node MCP servers (context7 by default) cannot start without Node.js.
+ *  Only a confirmed miss counts: 'unknown' is the quick pass not knowing yet. */
+const mcpNodeMissing = computed(() => onboarding.deps.value.find((d) => d.id === 'node')?.status === 'missing')
+const mcpNodeInstallOpen = ref(false)
+
+function closeMcpNodeInstall(): void {
+  mcpNodeInstallOpen.value = false
+  void onboarding.refresh({ fresh: true })
+  void mLoad(true)
+}
+
+/** A guided install opened from the Analyzer or MCP tab; Esc must not close
+ *  Settings under it, since that would kill the command it is running. */
+const ollamaInstallOpen = ref(false)
+const settingsInstallOpen = computed(() => mcpNodeInstallOpen.value || ollamaInstallOpen.value)
 
 /** vue-i18n's `t` is overloaded, and neither overload alone accepts the
  *  "params or nothing" shape the chip builder is written against. */
@@ -2154,6 +2173,7 @@ function onKeyDown(e: KeyboardEvent) {
   }
   if (e.key !== 'Escape') return
   if (e.defaultPrevented) return
+  if (settingsInstallOpen.value) return
   requestCloseSettings()
 }
 // Pending Registry plugin updates (pushed by the main process's periodic
@@ -2168,7 +2188,7 @@ onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
   stopPluginUpdates = pluginUpdates.subscribe()
   refreshLaunchOverrides()
-  if (activeTab.value === 'cliAgents') void onboarding.refresh()
+  if (['cliAgents', 'analyzer', 'mcp'].includes(activeTab.value)) void onboarding.refresh()
   void loadSettingsPaths()
   void loadDetectedEditors()
   void perms.refresh()
@@ -2618,6 +2638,8 @@ watch(activeTab, (tab) => {
   if (tab === 'mcp') { void eaLoad(); void cdpLoad() }
   if (tab === 'appearance') void loadAutoRestore()
   if (tab === 'accounts') void accountsApi.refresh()
+  // Analyzer shows Ollama's install state, MCP whether Node.js is there.
+  if (tab === 'analyzer' || tab === 'mcp') void onboarding.refresh()
   if (tab === 'cliAgents') {
     refreshLaunchOverrides()
     void onboarding.refresh()
@@ -2868,10 +2890,22 @@ watch(activeTab, (tab) => {
               :agents="mAgents"
               :loading="mLoading"
               :select-name="mSelectName"
+              :node-missing="mcpNodeMissing"
               @save="mReplaceServer"
               @remove="mRemoveByName"
               @refresh="mLoad(true)"
               @select-consumed="mSelectName = ''"
+              @install-node="mcpNodeInstallOpen = true"
+            />
+            <!-- The same guided install the spawn dropdown uses for a CLI's
+                 Node prerequisite (Homebrew first where it is missing). -->
+            <CliInstallDialog
+              v-if="mcpNodeInstallOpen"
+              :backend="props.backend"
+              dep-id="node"
+              origin="settings"
+              fallback-label="Node.js"
+              @close="closeMcpNodeInstall"
             />
 
             <!-- ── EXTERNAL ACCESS ──────────────────────────────────────── -->
@@ -3166,6 +3200,12 @@ watch(activeTab, (tab) => {
                     {{ $t('settings.analyzer.not-connected') }} <code class="az-code">ollama serve</code>
                   </span>
                 </div>
+                <OllamaSetup
+                  :backend="props.backend"
+                  :onboarding="onboarding"
+                  @changed="azRecheck"
+                  @install-open-change="ollamaInstallOpen = $event"
+                />
               </div>
             </template>
           </div>

@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
-import { useOnboarding, type OnboardDep } from '../composables/useOnboarding'
+import { useOnboarding, type InstallFailure, type OnboardDep } from '../composables/useOnboarding'
 import { missingProviders, orderInstalls, providerFor } from '../lib/installPlan'
 import { usePermissions, PERMISSION_KEYS } from '../composables/usePermissions'
 import OnboardingStepCard from './OnboardingStepCard.vue'
@@ -65,11 +65,26 @@ function manualBlockers(dep: OnboardDep): string[] {
     .map((r) => r.name)
 }
 
+/**
+ * The failure to show on `dep`'s card: its own, or a prerequisite's. Homebrew
+ * and Node have no card of their own in the wizard, so a link of the chain
+ * that failed has to be reported on the card whose Install ran it.
+ */
+function failureFor(dep: OnboardDep): { dep: OnboardDep; failure: InstallFailure } | null {
+  const own = ob.installErrors.value[dep.id]
+  if (own) return { dep, failure: own }
+  for (const link of orderInstalls([dep], ob.deps.value)) {
+    const failure = ob.installErrors.value[link.id]
+    if (failure) return { dep: link, failure }
+  }
+  return null
+}
+
 /** What the card must say before the user clicks, or after a click failed. */
-function cardError(dep: OnboardDep): string {
-  // Only while the service is still down: once it is up, the failure is moot.
-  if (ollamaStartFailed.value && ollamaStopped(dep)) return t('onboard.ollama-start-failed')
-  const failure = ob.installErrors.value[dep.id]
+function cardError(card: OnboardDep): string {
+  const failed = failureFor(card)
+  const dep = failed?.dep ?? card
+  const failure = failed?.failure
   if (failure?.ranButUndetected) {
     // "Not detected" would be wrong when something WAS found and it is just too
     // old: `brew install python3` succeeds while /usr/bin/python3 (3.9) still
@@ -88,29 +103,20 @@ function cardError(dep: OnboardDep): string {
     return failure.command ? `${head}\n\n${t('onboard.run-by-hand', { cmd: failure.command })}` : head
   }
   // No click yet: name the blocker up front rather than after a dead-looking
-  // button press.
-  const names = [...blockers(dep).map((p) => p.label), ...manualBlockers(dep)]
-  return names.length ? t('onboard.blocked-by', { names: names.join('、') }) : ''
+  // button press. A prerequisite this app can install joins the chain the
+  // Install button runs, so it is announced rather than reported as a block;
+  // one it cannot (Node on Linux has no install command) still blocks.
+  const providers = blockers(card)
+  const manual = [...providers.filter((p) => !p.can_install).map((p) => p.label), ...manualBlockers(card)]
+  const names = providers.map((p) => p.label)
+  if (manual.length) return t('onboard.blocked-by', { names: [...new Set([...names, ...manual])].join('、') })
+  return names.length ? t('onboard.installs-first', { names: names.join('、') }) : ''
 }
 
 /** Jump the accordion to the prerequisite's own card so it can be installed. */
 function goToBlocker(dep: OnboardDep): void {
   const first = blockers(dep)[0]
   if (first) picked.value = first.id
-}
-
-/** ollama installed but its daemon is down — pulling a model cannot work. */
-function ollamaStopped(dep: OnboardDep): boolean {
-  return dep.id === 'ollama' && dep.status === 'ok' && !ob.ollamaServiceUp.value
-}
-
-/** The last "Start Ollama" press failed; the detail is in the log. */
-const ollamaStartFailed = ref(false)
-
-async function startOllama(): Promise<void> {
-  ollamaStartFailed.value = false
-  const result = await ob.startOllamaService()
-  ollamaStartFailed.value = !result?.ok
 }
 
 // An install's output lands in one burst; without this the pane stays pinned
@@ -125,13 +131,16 @@ watch(
 )
 
 // ── Steps ─────────────────────────────────────────────────────────────────────
-type StepId = 'environment' | 'agents' | 'permissions' | 'ready'
+// No environment step: the packaged app never runs Homebrew, Node, pnpm,
+// Python or uv itself, and a CLI that needs one installs it as a prerequisite
+// (installMissing below). CLI management still detects and installs them.
+type StepId = 'agents' | 'permissions' | 'ready'
 
 // The permission step only exists where the OS has permissions to grant.
 const steps = computed<StepId[]>(() =>
   perms.supported.value
-    ? ['environment', 'agents', 'permissions', 'ready']
-    : ['environment', 'agents', 'ready'],
+    ? ['agents', 'permissions', 'ready']
+    : ['agents', 'ready'],
 )
 const stepIndex = ref(0)
 const current = computed<StepId>(() => steps.value[Math.min(stepIndex.value, steps.value.length - 1)])
@@ -139,8 +148,7 @@ const isLast = computed(() => stepIndex.value >= steps.value.length - 1)
 const progress = computed(() => (stepIndex.value / Math.max(1, steps.value.length - 1)) * 100)
 
 function stepDone(id: StepId): boolean {
-  if (id === 'environment') return ob.foundationReady.value
-  // Analyzer is optional (see compute_gate) — a CLI alone completes this step.
+  // Analyzer lives in Settings now (see compute_gate) — a CLI completes this step.
   if (id === 'agents') return ob.hasAnyCli.value
   if (id === 'permissions') return perms.allGranted.value
   return ob.allRequiredReady.value
@@ -153,15 +161,8 @@ interface Card {
 }
 
 const cards = computed<Card[]>(() => {
-  if (current.value === 'environment') {
-    return ob.foundationDeps.value.map((d) => ({ key: d.id, done: d.status === 'ok' }))
-  }
   if (current.value === 'agents') {
-    return [
-      ...ob.cliDeps.value.map((d) => ({ key: d.id, done: d.status === 'ok' })),
-      ...ob.analyzerDeps.value.map((d) => ({ key: d.id, done: d.status === 'ok' })),
-      { key: 'model', done: ob.models.value.length > 0 },
-    ]
+    return ob.cliDeps.value.map((d) => ({ key: d.id, done: d.status === 'ok' }))
   }
   if (current.value === 'permissions') {
     return PERMISSION_KEYS.map((k) => ({ key: k, done: perms.isSettled(k) }))
@@ -193,31 +194,6 @@ function toggleInfo(key: string): void {
 function togglePick(key: string): void {
   picked.value = picked.value === key ? '' : key
 }
-
-// ── Model picker ──────────────────────────────────────────────────────────────
-const selectedModel = ref('')
-const customModel = ref('')
-const pullTarget = computed(() => customModel.value.trim() || selectedModel.value)
-
-function isInstalled(name: string): boolean {
-  return ob.models.value.includes(name)
-}
-
-function pickModel(name: string): void {
-  selectedModel.value = name
-  customModel.value = ''
-}
-
-// Default selection follows the recommended catalog entry once it arrives.
-watch(
-  ob.modelCatalog,
-  (cat) => {
-    if (!selectedModel.value && !customModel.value && cat.length) {
-      selectedModel.value = (cat.find((m) => m.recommended) ?? cat[0]).name
-    }
-  },
-  { immediate: true },
-)
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 // Full Disk Access cannot be requested in-app; the user flips it in System
@@ -321,63 +297,10 @@ async function saveComplete(): Promise<boolean> {
       <main class="ob-main">
         <h1 class="ob-head">{{ $t(`onboard.head.${current}`) }}</h1>
 
-        <!-- Environment -->
-        <template v-if="current === 'environment'">
-          <OnboardingStepCard
-            v-for="d in ob.foundationDeps.value"
-            :key="d.id"
-            :title="d.label"
-            :description="d.description"
-            :meta="d.version"
-            :done="d.status === 'ok'"
-            :expanded="activeKey === d.id"
-            :warning="d.status === 'outdated' ? $t('onboard.outdated', { min: d.min_version }) : ''"
-            :error="cardError(d)"
-            @toggle="togglePick(d.id)"
-          >
-            <template #actions>
-              <!-- A finished card opens only to re-check; offering to install
-                   what was just detected reads as "still missing". -->
-              <button
-                v-if="d.can_install && d.status !== 'ok'"
-                class="ob-btn primary"
-                :disabled="busy"
-                @click="ob.install(d)"
-              >
-                {{ installLabel(d) }}
-              </button>
-              <a v-else-if="d.docs_url && d.status !== 'ok'" class="ob-btn primary" :href="d.docs_url" target="_blank" rel="noreferrer">
-                {{ $t('onboard.install-guide') }}
-              </a>
-              <!-- The prerequisite has its own card; take the user to it rather
-                   than leaving them to work out what "brew is required" means. -->
-              <button
-                v-if="blockers(d).length"
-                class="ob-btn ghost"
-                @click="goToBlocker(d)"
-              >
-                {{ $t('onboard.go-install', { name: blockers(d)[0].label }) }}
-              </button>
-              <button class="ob-btn ghost" :disabled="detectBusy" @click="ob.refresh()">
-                {{ ob.loading.value ? $t('label.detecting') : $t('action.re-detect') }}
-              </button>
-            </template>
-          </OnboardingStepCard>
-
-          <button
-            v-if="ob.foundationDeps.value.some((d) => d.status !== 'ok' && d.can_install)"
-            class="ob-linkbtn"
-            :disabled="busy"
-            @click="installMissing(ob.foundationDeps.value)"
-          >
-            {{ $t('action.install-missing') }}
-          </button>
-        </template>
-
         <!-- Agents -->
-        <template v-else-if="current === 'agents'">
+        <template v-if="current === 'agents'">
           <OnboardingStepCard
-            v-for="d in [...ob.cliDeps.value, ...ob.analyzerDeps.value]"
+            v-for="d in ob.cliDeps.value"
             :key="d.id"
             :title="d.label"
             :description="d.description"
@@ -385,110 +308,29 @@ async function saveComplete(): Promise<boolean> {
             :optional="d.optional"
             :done="d.status === 'ok'"
             :expanded="activeKey === d.id"
-            :warning="ollamaStopped(d) ? $t('onboard.ollama-stopped') : ''"
             :error="cardError(d)"
             @toggle="togglePick(d.id)"
           >
             <template #actions>
+              <!-- Prerequisites (Homebrew, Node) have no card of their own any
+                   more: Install runs them first, in order. -->
               <button
-                v-if="ollamaStopped(d)"
+                v-if="d.can_install && d.status !== 'ok'"
                 class="ob-btn primary"
                 :disabled="busy"
-                @click="startOllama"
-              >
-                {{ $t('action.start-ollama') }}
-              </button>
-              <button
-                v-else-if="d.can_install && d.status !== 'ok'"
-                class="ob-btn primary"
-                :disabled="busy"
-                @click="ob.install(d)"
+                @click="installMissing([d])"
               >
                 {{ installLabel(d) }}
               </button>
               <a v-else-if="d.docs_url && d.status !== 'ok'" class="ob-btn primary" :href="d.docs_url" target="_blank" rel="noreferrer">
                 {{ $t('onboard.install-guide') }}
               </a>
-              <button
-                v-if="blockers(d).length"
-                class="ob-btn ghost"
-                @click="goToBlocker(d)"
-              >
-                {{ $t('onboard.go-install', { name: blockers(d)[0].label }) }}
-              </button>
               <button class="ob-btn ghost" :disabled="detectBusy" @click="ob.refresh()">
                 {{ ob.loading.value ? $t('label.detecting') : $t('action.re-detect') }}
               </button>
             </template>
           </OnboardingStepCard>
 
-          <!-- Analysis model -->
-          <OnboardingStepCard
-            :title="$t('label.analysis-model')"
-            :description="$t('hint.download-model')"
-            optional
-            :done="ob.models.value.length > 0"
-            :expanded="activeKey === 'model'"
-            @toggle="togglePick('model')"
-          >
-            <template #actions>
-              <div class="ob-models">
-                <div class="ob-installed">
-                  <template v-if="ob.models.value.length">
-                    <span v-for="m in ob.models.value" :key="m" class="ob-chip ok">✓ {{ m }}</span>
-                  </template>
-                  <span v-else class="ob-chip empty">{{ $t('label.no-models-installed') }}</span>
-                </div>
-
-                <div class="ob-model-grid">
-                  <button
-                    v-for="m in ob.modelCatalog.value"
-                    :key="m.name"
-                    type="button"
-                    class="ob-model-card"
-                    :class="{ selected: selectedModel === m.name }"
-                    @click="pickModel(m.name)"
-                  >
-                    <span class="ob-model-radio" />
-                    <span class="ob-model-info">
-                      <span class="ob-model-name">
-                        {{ m.name }}
-                        <span v-if="m.recommended" class="ob-tag rec">{{ $t('label.recommended') }}</span>
-                        <span v-if="isInstalled(m.name)" class="ob-tag inst">{{ $t('label.installed') }}</span>
-                      </span>
-                      <span class="ob-model-desc">{{ m.desc }}</span>
-                    </span>
-                    <span class="ob-model-size">{{ m.size }}</span>
-                  </button>
-                </div>
-
-                <label class="ob-model-custom">
-                  <span class="ob-model-custom-label">{{ $t('label.other-model') }}</span>
-                  <input
-                    v-model="customModel"
-                    class="ob-input"
-                    :placeholder="t('onboard.custom-model-placeholder')"
-                    spellcheck="false"
-                  />
-                </label>
-              </div>
-
-              <button
-                class="ob-btn primary"
-                :disabled="!pullTarget || !!ob.pulling.value || busy"
-                @click="ob.pullModel(pullTarget)"
-              >
-                {{
-                  ob.pulling.value
-                    ? $t('onboard.downloading', { name: ob.pulling.value })
-                    : $t('action.download-model', { name: pullTarget || $t('label.model') })
-                }}
-              </button>
-              <button class="ob-btn ghost" :disabled="detectBusy" @click="ob.refresh()">
-                {{ ob.loading.value ? $t('label.detecting') : $t('action.re-detect') }}
-              </button>
-            </template>
-          </OnboardingStepCard>
         </template>
 
         <!-- Permissions -->
@@ -538,15 +380,8 @@ async function saveComplete(): Promise<boolean> {
         <template v-else>
           <p class="ob-hint">{{ $t('hint.ready-check') }}</p>
           <ul class="ob-gate">
-            <li :class="{ ok: ob.foundationReady.value }">
-              <span>{{ ob.foundationReady.value ? '✓' : '○' }}</span> {{ $t('label.foundation-ready') }}
-            </li>
             <li :class="{ ok: ob.hasAnyCli.value }">
               <span>{{ ob.hasAnyCli.value ? '✓' : '○' }}</span> {{ $t('label.at-least-one-cli') }}
-            </li>
-            <li :class="{ ok: ob.analyzerReady.value }">
-              <span>{{ ob.analyzerReady.value ? '✓' : '○' }}</span> {{ $t('label.ollama-model-ready') }} ·
-              {{ $t('label.optional') }}
             </li>
             <li v-if="perms.supported.value" :class="{ ok: perms.allGranted.value }">
               <span>{{ perms.allGranted.value ? '✓' : '○' }}</span> {{ $t('onboard.perm-gate') }} ·
@@ -794,151 +629,6 @@ async function saveComplete(): Promise<boolean> {
 .ob-linkbtn:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-/* ── Model picker ───────────────────────────────────────────────────────────── */
-.ob-models {
-  flex-basis: 100%;
-  margin-bottom: 4px;
-}
-.ob-installed {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-.ob-chip {
-  font: 11px/1 ui-monospace, Menlo, monospace;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border-muted);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-}
-.ob-chip.ok {
-  color: var(--success-fg);
-  border-color: color-mix(in srgb, var(--success-fg) 35%, transparent);
-}
-.ob-chip.empty {
-  color: var(--text-muted);
-  font-family: inherit;
-}
-.ob-model-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.ob-model-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  padding: 9px 12px;
-  border: 1px solid var(--border-muted);
-  border-radius: 8px;
-  background: var(--bg-base);
-  cursor: pointer;
-  transition:
-    border-color 0.12s,
-    background 0.12s;
-}
-.ob-model-card:hover {
-  border-color: var(--border-default);
-  background: var(--bg-muted);
-}
-.ob-model-card.selected {
-  border-color: var(--accent-emphasis);
-  background: color-mix(in srgb, var(--accent-emphasis) 8%, var(--bg-base));
-}
-.ob-model-radio {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 2px solid var(--border-default);
-  position: relative;
-}
-.ob-model-card.selected .ob-model-radio {
-  border-color: var(--accent-emphasis);
-}
-.ob-model-card.selected .ob-model-radio::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  background: var(--accent-emphasis);
-}
-.ob-model-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.ob-model-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font: 12px/1.3 ui-monospace, Menlo, monospace;
-  color: var(--text-bright);
-}
-.ob-model-desc {
-  font-size: var(--font-2xs);
-  color: var(--text-muted);
-}
-.ob-model-size {
-  flex: none;
-  font: 11px/1 ui-monospace, Menlo, monospace;
-  color: var(--text-secondary);
-  padding: 3px 7px;
-  border-radius: 5px;
-  background: var(--bg-muted);
-}
-.ob-tag {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 1px 6px;
-  border-radius: 999px;
-  line-height: var(--lh-base);
-}
-.ob-tag.rec {
-  color: var(--accent-fg);
-  background: color-mix(in srgb, var(--accent-fg) 14%, transparent);
-}
-.ob-tag.inst {
-  color: var(--success-fg);
-  background: color-mix(in srgb, var(--success-fg) 14%, transparent);
-}
-.ob-model-custom {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-}
-.ob-model-custom-label {
-  flex: none;
-  font-size: var(--font-2xs);
-  color: var(--text-secondary);
-}
-.ob-input {
-  flex: 1;
-  min-width: 0;
-  font: 11px/1 ui-monospace, Menlo, monospace;
-  padding: 7px 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  background: var(--bg-base);
-  color: var(--text-bright);
-}
-.ob-input:focus {
-  outline: none;
-  border-color: var(--accent-emphasis);
-}
-.ob-input::placeholder {
-  color: var(--text-muted);
 }
 
 /* ── Ready gate ─────────────────────────────────────────────────────────────── */
