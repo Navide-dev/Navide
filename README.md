@@ -96,8 +96,6 @@ This is first-party dogfooding evidence, not independent customer validation. Th
 
 ### Navide's own development, by the numbers
 
-Every commit and every release below was produced by one engineer directing agent sessions inside Navide - including the release that shipped this README.
-
 | Since 2026-05-28 | |
 |---|---|
 | Commits | **4,182** |
