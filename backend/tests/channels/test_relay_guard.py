@@ -136,3 +136,22 @@ async def test_guard_error_fails_closed_for_relay(env: Env, monkeypatch) -> None
     rid = await _request(env, NORMAL)
     await env.inbound(f"yes {rid}")
     assert env.fake.answers == [] and env.tg.texts()[-1] == mgr_mod.MSG_RELAY_NEEDS_LOCAL
+
+
+@pytest.mark.parametrize("prompt", [CRITICAL, HIGH, ""])
+async def test_prompt_guard_would_veto_offers_only_deny(env: Env, guard_store, prompt) -> None:
+    """An 允許 button the guard is bound to refuse looks like a dead button: the
+    prompt offers only 拒絕 and says allowing needs the computer. Screening it
+    for the buttons is not an approval attempt, so nothing is audited."""
+    rid = await _request(env, prompt)
+    (text,) = [t for t in env.tg.texts() if rid in t]
+    assert env.tg.buttons[text] == [("拒絕", f"nv1:{rid}:n")]
+    assert f"yes {rid}" not in text and f"回覆 no {rid}（這個動作需要在電腦前允許）" in text
+    assert guard_store.audit_list() == []
+
+
+async def test_prompt_guard_allows_keeps_both_buttons(env: Env) -> None:
+    rid = await _request(env, NORMAL)
+    (text,) = [t for t in env.tg.texts() if rid in t]
+    assert env.tg.buttons[text] == [("允許", f"nv1:{rid}:y"), ("拒絕", f"nv1:{rid}:n")]
+    assert f"回覆 yes {rid} / no {rid}" in text

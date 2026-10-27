@@ -2136,16 +2136,17 @@ class ChannelManager:
         self._spawn(self._follow_up(request.pane_id, request.loc, route.child if route else ""))
         await self._reply(msg, MSG_RELAY_PROMPT_CHANGED)
 
-    def _guard_vetoes(self, request: relay.RelayRequest) -> bool:
+    def _guard_vetoes(self, request: relay.RelayRequest, *, record: bool = True) -> bool:
         """Navide Guard on a remote approval: high/critical (or unscreenable)
-        prompts need someone at the computer. Deterministic, never an LLM."""
+        prompts need someone at the computer. Deterministic, never an LLM.
+        ``record=False`` only previews it, for the buttons a prompt offers."""
         if not request.prompt.strip():
             return True  # nothing to screen: a chat approval fails closed
         try:
             workspace = self._seams.pane_workspace(request.pane_id)
         except Exception:  # noqa: BLE001
             workspace = ""
-        return relay.screen_approval(request.pane_id, request.prompt, workspace).action != "allow"
+        return relay.screen_approval(request.pane_id, request.prompt, workspace, record=record).action != "allow"
 
     async def _link_chat(self, msg: InboundMessage, code: str) -> None:
         # The invite is already spent, so every way out must reach the waiting UI.
@@ -3119,6 +3120,9 @@ class ChannelManager:
         request = self.relay.create(pane_id, kind, options, loc, prompt=prompt,
                                     agent_key=str(info.get("agent") or ""),
                                     multi=any(relay.is_multi_select(o) for o in options))
+        if kind == "permission":
+            # An 允許 the guard is bound to refuse would only look like a dead button.
+            request.local_only = self._guard_vetoes(request, record=False)
         text = who + relay.prompt_text(request, prompt)
         buttons = _relay_buttons(adapter, request)
         try:
