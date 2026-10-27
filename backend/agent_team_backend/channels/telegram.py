@@ -74,7 +74,7 @@ CONFLICT_MIN_ATTEMPT = 4
 # is handled by the channel manager.
 BOT_COMMANDS = [
     {"command": "pending", "description": "列出等待確認的 pane"},
-    {"command": "prompts", "description": "Prompt 清單"},
+    {"command": "prompts", "description": "Prompt 技能清單"},
     {"command": "skills", "description": "技能清單"},
     {"command": "mcp", "description": "MCP server 清單"},
     {"command": "status", "description": "pane 狀態"},
@@ -107,7 +107,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
     },
     "zh-CN": {
         "pending": "列出等待确认的 pane",
-        "prompts": "Prompt 列表",
+        "prompts": "Prompt 技能列表",
         "skills": "技能列表",
         "mcp": "MCP server 列表",
         "status": "pane 状态",
@@ -187,7 +187,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
     },
 }
 # Descriptions earlier builds registered: a command still carrying one is ours to update.
-_OLD_COMMAND_DESCRIPTIONS = {"menu": {"快速選單", "Prompt 與技能選單", "Prompts and skills menu", "プロンプトとスキルのメニュー"}}
+_OLD_COMMAND_DESCRIPTIONS = {"menu": {"快速選單", "Prompt 與技能選單", "Prompts and skills menu", "プロンプトとスキルのメニュー"},
+                             "prompts": {"Prompt 清單", "Prompt 列表"}}
 # Commands earlier builds registered and this one no longer offers: one still carrying a
 # description of ours is removed; worded otherwise it is the user's and stays.
 _RETIRED_COMMANDS = {"menu"}
