@@ -148,9 +148,10 @@ server = NavideMCP(
         "is queued until that pane is idle, "
         "so cli_send returns before the other agent has read anything. It "
         "returns a msg_key — pass it to cli_check_message to find out whether "
-        "the message was delivered, refused (with a reason) or still queued. "
+        "the message was delivered, failed (with a reason) or still queued; "
+        "a send refused outright returns ok: false and no msg_key at all. "
         "That table is backend memory, not a log: only the last hour and the "
-        "last few hundred sends, gone on restart, so an unknown key means "
+        "last 500 sends, gone on restart, so an unknown key means "
         "\"no longer tracked\", not \"never sent\".\n"
         "\n"
         "Other machines: when this machine is linked to a Navide-Server, the "
@@ -3141,8 +3142,11 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
     the same reason the Messages panel shows — and `held_for_s` is how long it
     has been that way. `hold.key` is "typing" (someone is typing in that pane),
     "mid-turn" (its agent is working), "behind" (`n` messages ahead of it),
-    "starting", "settling", "not-ready", "gone", "paused" or "remote-ack". Both
-    keys are absent once the message settles, and while no window has reported
+    "starting", "settling", "not-ready", "gone", "paused", "remote-ack",
+    "composer" (text from an earlier push may still sit in that pane's input
+    box, so nothing is typed until the pane shows activity) or "pty-blocked"
+    (it is being typed in, but the pane's terminal has stopped reading
+    input). Both keys are absent once the message settles, and while no window has reported
     a hold at all — a message queued with no hold is simply on its way in.
 
     A message to another device that has gone a minute without an answer is
@@ -3160,7 +3164,7 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
     and decide whether to wait, address someone else, or tell the user.
 
     Bounds: this is in-memory backend state, not a log. It is lost on backend
-    restart, keeps only the last hour, and only the most recent few hundred
+    restart, keeps only the last hour, and only the most recent 500
     sends — an unknown `msg_key` means "not tracked any more", not "never
     sent". Returns {ok: false, error} for an unknown key.
     """
@@ -3215,7 +3219,7 @@ async def cli_inbox_summary(ctx: Context) -> dict[str, Any]:
     stale?, reason?, hold?, held_for_s?, excerpt}], tracked, tracking_since_s},
     newest send last. `excerpt` is the first 60 characters of what you sent, so
     a message is recognizable without keeping every msg_key. The same in-memory
-    bounds as cli_check_message apply: the last hour, the last few hundred
+    bounds as cli_check_message apply: the last hour, the last 500
     sends, gone on backend restart. An empty list means nothing of yours is
     stuck — it never means nothing was sent.
 
