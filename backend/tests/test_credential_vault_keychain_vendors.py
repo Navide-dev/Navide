@@ -79,8 +79,11 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def _agy_blob(refresh: str) -> str:
-    payload = json.dumps({"token": {"refresh_token": refresh, "access_token": "stale"}})
+def _agy_blob(refresh: str, email: str | None = None) -> str:
+    doc: dict = {"token": {"refresh_token": refresh, "access_token": "stale"}}
+    if email is not None:
+        doc["id_token_email"] = email
+    payload = json.dumps(doc)
     return "go-keyring-base64:" + base64.b64encode(payload.encode()).decode()
 
 
@@ -116,6 +119,15 @@ def test_antigravity_identity_reads_the_refresh_token_presence(tmp_path: Path) -
     assert vault.identity("antigravity") == {"email": None, "signedIn": True}
     vault.write_slot("antigravity", "x", LiveCredentials(secret='{"keychain": {"gemini|antigravity": "garbage"}}'))
     assert vault.identity("antigravity", "x") == {"email": None, "signedIn": False}
+
+
+def test_antigravity_identity_names_the_signed_in_google_account(tmp_path: Path) -> None:
+    vault, sec = _mac_vault(tmp_path)
+    sec.items[("gemini", "antigravity")] = _agy_blob("A", email="a@example.com")
+    assert vault.identity("antigravity") == {"email": "a@example.com", "signedIn": True}
+    vault.write_slot("antigravity", "b", LiveCredentials(
+        secret=json.dumps({"keychain": {"gemini|antigravity": _agy_blob("B", email="b@example.com")}})))
+    assert vault.identity("antigravity", "b") == {"email": "b@example.com", "signedIn": True}
 
 
 def test_antigravity_empty_slot_deletes_the_item(tmp_path: Path) -> None:

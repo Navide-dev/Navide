@@ -565,12 +565,10 @@ ANTIGRAVITY_NEEDS_OAUTH_CONFIG = (
 )
 
 
-def _antigravity_refresh_token(raw: str) -> str | None:
-    """Extract ``token.refresh_token`` from a stored Antigravity credential
-    blob. Accepts both the Keychain form (``go-keyring-base64:`` + base64(JSON))
-    and the bare JSON token file. The stored access_token is deliberately
-    ignored — it is almost always expired and a fresh one is minted in memory
-    from the refresh token."""
+def _antigravity_blob(raw: str) -> dict | None:
+    """The JSON document of a stored Antigravity credential. Accepts both the
+    Keychain form (``go-keyring-base64:`` + base64(JSON)) and the bare JSON
+    token file; None for anything else."""
     raw = raw.strip()
     if raw.startswith(ANTIGRAVITY_KEYRING_PREFIX):
         try:
@@ -582,12 +580,28 @@ def _antigravity_refresh_token(raw: str) -> str | None:
         data = json.loads(raw)
     except ValueError:
         return None
-    token = data.get("token") if isinstance(data, dict) else None
+    return data if isinstance(data, dict) else None
+
+
+def _antigravity_refresh_token(raw: str) -> str | None:
+    """Extract ``token.refresh_token`` from a stored Antigravity credential
+    blob (see ``_antigravity_blob``). The stored access_token is deliberately
+    ignored — it is almost always expired and a fresh one is minted in memory
+    from the refresh token."""
+    data = _antigravity_blob(raw)
+    token = data.get("token") if data else None
     if isinstance(token, dict):
         rt = token.get("refresh_token")
         if isinstance(rt, str) and rt:
             return rt
     return None
+
+
+def _antigravity_email(raw: str) -> str | None:
+    """``id_token_email``: the Google account `agy` recorded at sign-in."""
+    data = _antigravity_blob(raw)
+    email = data.get("id_token_email") if data else None
+    return email if isinstance(email, str) and email else None
 
 
 def read_antigravity_credentials_file(home: Path) -> str | None:
@@ -604,11 +618,11 @@ def read_antigravity_credentials_file(home: Path) -> str | None:
 def identity_from_secret(secret):
     """A parked slot holds the vault's keychain payload (macOS) or the bare
     token file (elsewhere). Signed in when a refresh token can be read out
-    of it; the blob names no account, so ``email`` stays None."""
+    of it; the account is the ``id_token_email`` `agy` stores beside it."""
     items = keychain_payload_items(secret)
     raw = next(iter(items.values()), None) if items else secret
     signed_in = raw is not None and _antigravity_refresh_token(raw) is not None
-    return {"email": None, "signedIn": signed_in}
+    return {"email": _antigravity_email(raw) if signed_in else None, "signedIn": signed_in}
 
 
 _agy_keychain_failed_at: float | None = None
