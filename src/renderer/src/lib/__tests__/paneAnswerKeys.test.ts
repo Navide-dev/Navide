@@ -175,6 +175,24 @@ describe('resolveAnswerKeys with the prompt the caller checked', () => {
     expect(result).toMatchObject({ errorCode: 'prompt-changed' })
   })
 
+  // Claude Code counts down under an unattended prompt, a new number every second.
+  const counting = (screen: string, left: string) =>
+    `${screen}\n⚠ Claude Code will automatically deny this request in ${left}, to avoid blocking progress on an unattended session`
+
+  it('reads a prompt the same while only its auto-deny countdown ticks', () => {
+    expect(awaitingPromptText(counting(RISKY, '1:19'))).toBe(awaitingPromptText(counting(RISKY, '1:18')))
+    const wrapped = (left: string) => `${RISKY}\n⚠ Claude Code will automatically deny this request in\n${left}, to avoid blocking progress`
+    expect(awaitingPromptText(wrapped('0:59'))).toBe(awaitingPromptText(wrapped('0:58')))
+  })
+
+  it('presses the keys checked against an earlier tick of the countdown', () => {
+    expect(press(counting(SAFE, '0:58'), checked(counting(SAFE, '1:19')))).toEqual({ ok: true, keys: '1' })
+  })
+
+  it('still refuses a different prompt under the countdown', () => {
+    expect(press(counting(RISKY, '0:58'), checked(counting(SAFE, '1:19')))).toMatchObject({ ok: false, errorCode: 'prompt-changed' })
+  })
+
   it('refuses when only the menu changed', () => {
     const other = ['Bash command', '  npm test', 'Do you want to proceed?', '❯ 1. Yes', '  2. Yes, always', '  3. No (esc)'].join('\n')
     expect(press(other, checked(SAFE))).toMatchObject({ ok: false, errorCode: 'prompt-changed' })
