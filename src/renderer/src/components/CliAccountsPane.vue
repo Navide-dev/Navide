@@ -861,7 +861,7 @@ onMounted(() => refreshUsage())
       </div>
     </section>
 
-    <!-- Agents that cannot isolate multiple accounts (e.g. antigravity). -->
+    <!-- Agents that declare no credential slot layout (no multi-account). -->
     <section v-if="CLI_AGENT_SPECS.some((s) => !supported(s.agentKey))" class="cli-agent cli-unsupported-group">
       <p class="cli-unsupported">{{ $t('settings.accounts.cli.unsupported') }}</p>
       <ul class="cli-unsupported-list">

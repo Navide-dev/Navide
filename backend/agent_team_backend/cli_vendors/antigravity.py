@@ -856,8 +856,12 @@ SPEC = VendorSpec(
     # Multi-account: the refresh token is one fixed-name macOS Keychain item
     # (service "gemini", account "antigravity" — go-keyring, base64 JSON),
     # with the token file below as the stale copy the reader falls back to.
-    # There is no config-dir variable, so a login pane cannot be isolated:
-    # `agy` signs in against the real Keychain and the result is captured.
+    # There is no config-dir variable, but the Keychain `agy` uses follows
+    # $HOME (verified 2026-10-28 against 1.4.8: under a HOME whose
+    # com.apple.security.plist names a private default keychain, `agy` reads
+    # the item there and is signed out without it). A login pane therefore
+    # signs in on a HOME shim with its own keychain and the result is
+    # harvested into the slot; running panes keep the live account.
     # Only macOS is declared — which of the two locations is authoritative
     # elsewhere has not been established from source. The CLI mints its
     # access token at startup from the refresh token: restart, then
@@ -865,6 +869,7 @@ SPEC = VendorSpec(
     live_file=ANTIGRAVITY_TOKEN_FILE_REL,
     slot_file="credential.json",
     identity_from_secret=identity_from_secret,
+    login_home_keychain=True,
     account_switch=AccountSwitchSpec(
         auth_scope="antigravity",
         method="restart",

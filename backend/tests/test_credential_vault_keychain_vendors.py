@@ -147,6 +147,132 @@ def test_antigravity_capture_is_strict_about_keychain_failures(tmp_path: Path) -
     assert not (vault.slot_dir("antigravity", DEFAULT_SLOT_ID) / "credential.json").exists()
 
 
+# ── antigravity: isolated login on a HOME shim with a private keychain ───
+
+
+class FakeHomeSecurity:
+    """`security` run under another $HOME: one fake keychain per shim, made
+    by create-keychain and addressed by its path. Never the real `security`."""
+
+    def __init__(self) -> None:
+        self.keychains: dict[str, dict[tuple[str, str | None], str]] = {}
+        self.calls: list[tuple[Path, list[str]]] = []
+
+    def __call__(self, home: Path, args: list[str]) -> tuple[int, str]:
+        self.calls.append((home, list(args)))
+        cmd = args[0]
+        if cmd == "create-keychain":
+            Path(args[-1]).write_bytes(b"kc")
+            self.keychains[args[-1]] = {}
+            return 0, ""
+        if cmd in ("set-keychain-settings", "unlock-keychain", "list-keychains", "default-keychain"):
+            return (0, "") if args[-1] in self.keychains else (50, "security: no such keychain")
+        if cmd == "find-generic-password":
+            items = self.keychains.get(args[-1])
+            if items is None:
+                return 50, "security: no such keychain"
+            value = items.get((args[args.index("-s") + 1], args[args.index("-a") + 1]))
+            return (0, security_g_output(value)) if value is not None else (44, "")
+        if cmd == "delete-keychain":
+            self.keychains.pop(args[-1], None)
+            return 0, ""
+        return 1, ""
+
+
+def _agy_login_vault(tmp_path: Path) -> tuple[CredentialVault, FakeSecurity, FakeHomeSecurity]:
+    sec, home_sec = FakeSecurity(), FakeHomeSecurity()
+    real = tmp_path / "home"
+    _write(real / ".gemini" / "antigravity-cli" / "antigravity-oauth-token", "LIVE-A")
+    _write(real / ".gemini" / "antigravity-cli" / "conversations" / "c.db", "")
+    _write(real / ".gemini" / "settings.json", "{}")
+    _write(real / "Library" / "Keychains" / "login.keychain-db", "")
+    _write(real / "Library" / "Preferences" / "com.apple.security.plist", "")
+    _write(real / "Library" / "Caches" / "x", "")
+    _write(real / ".zshrc", "")
+    vault = CredentialVault(
+        root=tmp_path / "root", real_home=real,
+        security_runner=sec, home_security_runner=home_sec, platform="darwin",
+    )
+    return vault, sec, home_sec
+
+
+def test_antigravity_login_is_isolated_on_macos_only(tmp_path: Path) -> None:
+    vault, _sec, _home_sec = _agy_login_vault(tmp_path)
+    assert vault._login_isolated("antigravity") is True
+    assert _linux_vault(tmp_path)._login_isolated("antigravity") is False
+
+
+def test_antigravity_login_runs_on_a_shim_with_its_own_keychain(tmp_path: Path) -> None:
+    vault, sec, home_sec = _agy_login_vault(tmp_path)
+    sec.items[("gemini", "antigravity")] = _agy_blob("A")
+    env_set, env_remove = vault.login_spawn_env("antigravity", "b")
+    assert env_remove == []
+    shim = Path(env_set["HOME"])
+    real = tmp_path / "home"
+    assert shim.parent == vault.login_home_path("antigravity", "b")
+    # The user's own files are linked; the credential locations are not.
+    assert (shim / ".zshrc").resolve() == (real / ".zshrc").resolve()
+    assert (shim / "Library" / "Caches").resolve() == (real / "Library" / "Caches").resolve()
+    assert (shim / ".gemini" / "settings.json").resolve() == (real / ".gemini" / "settings.json").resolve()
+    assert (shim / ".gemini" / "antigravity-cli" / "conversations").resolve() == (
+        real / ".gemini" / "antigravity-cli" / "conversations").resolve()
+    for private in (
+        shim / "Library" / "Keychains",
+        shim / "Library" / "Preferences",
+        shim / ".gemini",
+        shim / ".gemini" / "antigravity-cli",
+    ):
+        assert private.is_dir() and not private.is_symlink()
+    assert not (shim / ".gemini" / "antigravity-cli" / "antigravity-oauth-token").exists()
+    keychain = str(shim / "Library" / "Keychains" / "navide-login.keychain-db")
+    # Every shim `security` call ran under the shim HOME and named the shim keychain.
+    assert home_sec.calls and all(home == shim and args[-1] == keychain for home, args in home_sec.calls)
+    assert [args[0] for _h, args in home_sec.calls][-2:] == ["list-keychains", "default-keychain"]
+    # Nothing touched the live item.
+    assert sec.items[("gemini", "antigravity")] == _agy_blob("A")
+    assert vault.login_pending("antigravity", "b") is True
+    assert vault.login_secret_present("antigravity", "b") is False
+    assert vault.harvest_login_home("antigravity", "b") is False   # nothing signed in yet
+
+    # `agy` signs in as B inside the shim.
+    home_sec.keychains[keychain][("gemini", "antigravity")] = _agy_blob("B")
+    assert vault.login_secret_present("antigravity", "b") is True
+    assert vault.harvest_login_home("antigravity", "b") is True
+    assert vault.login_pending("antigravity", "b") is False
+    assert not vault.login_home_path("antigravity", "b").exists()
+    assert keychain not in home_sec.keychains                       # released from securityd
+    assert json.loads(vault.read_slot("antigravity", "b").secret) == {
+        "keychain": {"gemini|antigravity": _agy_blob("B")}}
+    # A stayed live the whole time, and the real stale copy is untouched.
+    assert sec.items[("gemini", "antigravity")] == _agy_blob("A")
+    assert (real / ".gemini" / "antigravity-cli" / "antigravity-oauth-token").read_text() == "LIVE-A"
+
+    vault.switch("antigravity", DEFAULT_SLOT_ID, "b")
+    assert sec.items[("gemini", "antigravity")] == _agy_blob("B")
+
+
+def test_antigravity_login_respawn_makes_the_shim_keychain_anew(tmp_path: Path) -> None:
+    """An earlier, abandoned login pane's keychain may be locked by now; it is
+    replaced, never unlocked."""
+    vault, _sec, home_sec = _agy_login_vault(tmp_path)
+    vault.login_spawn_env("antigravity", "b")
+    vault.login_spawn_env("antigravity", "b")
+    cmds = [args[0] for _h, args in home_sec.calls]
+    assert cmds.count("create-keychain") == 2
+    assert cmds.count("delete-keychain") == 1
+    assert "unlock-keychain" not in cmds
+    assert len(home_sec.keychains) == 1
+
+
+def test_antigravity_login_refuses_when_the_shim_keychain_cannot_be_made(tmp_path: Path) -> None:
+    vault = CredentialVault(
+        root=tmp_path / "root", real_home=tmp_path / "home",
+        security_runner=FakeSecurity(), platform="darwin",
+    )
+    with pytest.raises(CredentialVaultError):
+        vault.login_spawn_env("antigravity", "b")
+
+
 # ── cursor: an access + refresh item pair ────────────────────────────────
 
 
@@ -330,8 +456,6 @@ def test_droid_key_file_mode_is_refused_not_swapped(tmp_path: Path, monkeypatch)
 
 
 @pytest.mark.parametrize("agent_key,seed,written", [
-    ("antigravity", lambda sec: sec.items.__setitem__(("gemini", "antigravity"), _agy_blob("A")),
-     lambda sec: sec.items.__setitem__(("gemini", "antigravity"), _agy_blob("B"))),
     ("cursor", lambda sec: sec.items.update({("cursor-access-token", "cursor-user"): _jwt("auth0|A"), ("cursor-refresh-token", "cursor-user"): "rA"}),
      lambda sec: sec.items.update({("cursor-access-token", "cursor-user"): _jwt("auth0|B"), ("cursor-refresh-token", "cursor-user"): "rB"})),
 ])

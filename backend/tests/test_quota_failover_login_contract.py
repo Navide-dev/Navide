@@ -269,7 +269,6 @@ def same(stored: str | None, expected: str) -> bool:
 # Vendors whose login pane gets no isolated home (``login_spawn_env`` answers
 # ``({}, [])``): the sign-in runs against the real credential store.
 NO_ISOLATION = [
-    "antigravity",
     "copilot",
     # kilo shipped this way before the adapter round: same class, kept as the
     # regression row for the behaviour that already existed.

@@ -333,6 +333,36 @@ def _default_security_runner(args: list[str], input_text: str | None = None) -> 
     return proc.returncode, out
 
 
+#: Shape of the injectable runner for `security` under another ``$HOME``:
+#: ``(home, argv)`` -> (returncode, stdout). The Security framework resolves
+#: the user's keychain search list and default keychain from
+#: ``$HOME/Library/Preferences/com.apple.security.plist``, so the same argv
+#: run under a login shim reaches the shim's private keychain and never the
+#: user's login keychain.
+HomeSecurityRunner = Callable[[Path, list[str]], tuple[int, str]]
+
+
+def _default_home_security_runner(home: Path, args: list[str]) -> tuple[int, str]:
+    proc = subprocess.run(
+        ["/usr/bin/security", *args],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        env={**os.environ, "HOME": os.fspath(home)},
+    )
+    out = proc.stdout
+    if proc.stderr:
+        out = (out + "\n" if out else "") + proc.stderr.strip()
+    return proc.returncode, out
+
+
+# The private keychain inside a keychain login shim (``login_home_keychain``
+# vendors), relative to the shim HOME. Password-less and never locked: it
+# lives in the 0700 login home and only holds the sign-in until the harvest
+# moves it into the slot and deletes the home.
+_LOGIN_KEYCHAIN_REL = ("Library", "Keychains", "navide-login.keychain-db")
+
+
 def _kc_quote(value: str) -> str:
     """Quote a value for the `security -i` interactive command parser."""
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -428,12 +458,18 @@ class CredentialVault:
         root: Path | None = None,
         real_home: Path | None = None,
         security_runner: SecurityRunner | None = None,
+        home_security_runner: HomeSecurityRunner | None = None,
         platform: str | None = None,
         stores=None,
     ) -> None:
         self._root = Path(canonical_path_str(root or default_profiles_root()))
         self._real_home = Path(real_home or Path.home())
         self._security = security_runner or _default_security_runner
+        if home_security_runner is None and security_runner is not None:
+            # A faked Keychain must not leave the real `security` reachable
+            # through the other door: the shim calls fail instead.
+            home_security_runner = lambda home, args: (1, "security: no home runner injected")  # noqa: E731
+        self._home_security = home_security_runner or _default_home_security_runner
         self._platform = platform or sys.platform
         self._switch_locks: dict[str, asyncio.Lock] = {}
         self.stores = stores
@@ -1330,12 +1366,171 @@ class CredentialVault:
                 log.warning("grok shim symlink %s -> %s failed: %s", dst, src, err)
         return shim
 
+    def _login_keychain_shim(self, agent_key: str) -> bool:
+        """Does this CLI's login pane get a HOME shim with a private keychain
+        (``login_home_keychain``)? macOS only, and only for a vendor whose
+        live secret is declared Keychain items."""
+        spec = _cli_vendor_spec(agent_key)
+        return (
+            spec is not None
+            and spec.login_home_keychain
+            and self._is_vendor_keychain(agent_key)
+        )
+
     def _login_isolated(self, agent_key: str) -> bool:
         """Does a login pane of this CLI get its own credential store?"""
         if agent_key in ("claude", "grok"):
             return True
         spec = _cli_vendor_spec(agent_key)
-        return spec is not None and spec.login_home_env is not None
+        if spec is not None and spec.login_home_env is not None:
+            return True
+        return self._login_keychain_shim(agent_key)
+
+    def _login_keychain_path(self, agent_key: str, slot_id: str) -> Path:
+        return self.login_home_path(agent_key, slot_id).joinpath("home", *_LOGIN_KEYCHAIN_REL)
+
+    def _mirror_shim_dir(self, dst: Path, src: Path, private: frozenset[str]) -> None:
+        """Make ``dst`` a real dir mirroring ``src`` by symlink, except the
+        entries named in ``private``, which are left for the caller. Dangling
+        links are dropped and new real entries picked up on every refresh.
+        Never raises: a failed link only logs."""
+        dst.mkdir(parents=True, exist_ok=True)
+        try:
+            for entry in dst.iterdir():
+                if entry.is_symlink() and not entry.exists():
+                    entry.unlink(missing_ok=True)
+        except OSError as err:
+            log.warning("login shim cleanup in %s failed: %s", dst, err)
+        try:
+            real_entries = list(src.iterdir())
+        except OSError:
+            real_entries = []
+        for real in real_entries:
+            if real.name in private:
+                continue
+            link = dst / real.name
+            if link.exists() or link.is_symlink():
+                continue
+            try:
+                link.symlink_to(real, target_is_directory=real.is_dir())
+            except OSError as err:
+                log.warning("login shim symlink %s -> %s failed: %s", link, real, err)
+
+    def _prepare_keychain_login_shim(self, agent_key: str, slot_id: str) -> Path:
+        """Build/refresh the HOME shim of a ``login_home_keychain`` login pane
+        (``<login_home>/home``) and return it.
+
+        Everything is the user's real home by symlink except three things:
+        ``Library/Preferences`` (it holds only the shim's own
+        ``com.apple.security.plist``), ``Library/Keychains`` (the private
+        keychain) and the vendor's ``live_file`` stale token copy, which the
+        CLI may also write on sign-in. The private keychain is made the shim
+        HOME's only search-list entry and default, so the sign-in is written
+        there; the user's login keychain is never on that list."""
+        spec = _cli_vendor_spec(agent_key)
+        shim = self.login_home_path(agent_key, slot_id) / "home"
+        live_rel = tuple(spec.live_file or ()) if spec is not None else ()
+        real = self._real_home
+        top_private = {"Library"}
+        if live_rel:
+            top_private.add(live_rel[0])
+        self._mirror_shim_dir(shim, real, frozenset(top_private))
+        # Walk down the stale-copy path: each level a real dir, its siblings
+        # linked, and the file itself left out.
+        dst, src = shim, real
+        for depth, part in enumerate(live_rel[:-1]):
+            dst, src = dst / part, src / part
+            self._mirror_shim_dir(dst, src, frozenset({live_rel[depth + 1]}))
+        library = shim / "Library"
+        self._mirror_shim_dir(library, real / "Library", frozenset({"Keychains", "Preferences"}))
+        (library / "Keychains").mkdir(exist_ok=True)
+        (library / "Preferences").mkdir(exist_ok=True)
+        keychain = os.fspath(shim.joinpath(*_LOGIN_KEYCHAIN_REL))
+        if Path(keychain).exists():
+            # A keychain left by an earlier login pane of this profile holds
+            # no completed sign-in (that one would have been harvested and the
+            # home removed), and it may have locked since. It is made anew
+            # rather than unlocked: `unlock-keychain` of a password-less
+            # keychain is refused on macOS 26 ("passphrase not correct").
+            self._home_security(shim, ["delete-keychain", keychain])
+            Path(keychain).unlink(missing_ok=True)
+        steps = [
+            # Created unlocked, and kept so: no auto-lock and no lock on
+            # sleep, since the sign-in may outlast the default 300 s and a
+            # locked keychain would turn it into a password prompt.
+            ["create-keychain", "-p", "", keychain],
+            ["set-keychain-settings", keychain],
+            ["list-keychains", "-d", "user", "-s", keychain],
+            ["default-keychain", "-d", "user", "-s", keychain],
+        ]
+        for args in steps:
+            rc, out = self._home_security(shim, args)
+            if rc != 0:
+                lines = out.strip().splitlines()
+                raise CredentialVaultError(
+                    f"{agent_key} login keychain setup failed ({args[0]}, rc {rc})"
+                    + (f": {lines[-1][:200]}" if lines else "")
+                )
+        return shim
+
+    def _read_login_keychain(
+        self, agent_key: str, slot_id: str, *, strict: bool = False
+    ) -> str | None:
+        """The declared Keychain items as written into the login shim's
+        private keychain, in the slot payload shape of
+        ``_read_vendor_keychain``; None while the sign-in has written none.
+        Read with the keychain named explicitly, so even a broken shim
+        preference file can never make this read the user's login keychain."""
+        keychain = self._login_keychain_path(agent_key, slot_id)
+        if not keychain.is_file():
+            return None
+        shim = keychain.parents[2]
+        switch = self._switch_spec(agent_key)
+        found: dict[str, str] = {}
+        for service, account in switch.keychain_items:
+            args = ["find-generic-password", "-s", service]
+            if account:
+                args += ["-a", account]
+            try:
+                rc, out = self._home_security(shim, args + ["-g", os.fspath(keychain)])
+            except Exception as err:  # noqa: BLE001
+                if strict:
+                    raise CredentialVaultError(
+                        f"{agent_key} login keychain read failed ({type(err).__name__})"
+                    ) from None
+                return None
+            if rc != 0:
+                if rc == 44 or "could not be found" in out:
+                    continue
+                if strict:
+                    raise CredentialVaultError(
+                        f"{agent_key} login keychain read failed (rc {rc})"
+                    )
+                return None
+            try:
+                value = _parse_security_password(out)
+            except ValueError:
+                if strict:
+                    raise CredentialVaultError(
+                        f"{agent_key} login keychain read failed: unparsable output"
+                    ) from None
+                return None
+            if value:
+                found[f"{service}|{account}"] = value
+        if not found:
+            return None
+        return json.dumps({"keychain": found}, separators=(",", ":"))
+
+    def _drop_login_keychain(self, agent_key: str, slot_id: str) -> None:
+        """Release the shim keychain from securityd before its home is
+        removed. Best effort: removing the home deletes the file anyway."""
+        keychain = self._login_keychain_path(agent_key, slot_id)
+        if not keychain.is_file():
+            return
+        try:
+            self._home_security(keychain.parents[2], ["delete-keychain", os.fspath(keychain)])
+        except Exception as err:  # noqa: BLE001
+            log.warning("%s login keychain release failed: %s", agent_key, err)
 
     def _pre_login_snapshot_path(self, agent_key: str, slot_id: str) -> Path:
         return self.slot_dir(agent_key, slot_id) / _PRE_LOGIN_SNAPSHOT_FILE
@@ -1397,8 +1592,8 @@ class CredentialVault:
         if not self._login_isolated(agent_key):
             # No isolation lever exists for this CLI (kilo: only the
             # general-purpose XDG_DATA_HOME, which would relocate every
-            # XDG-aware program in the pane; copilot/cursor/antigravity keep
-            # one machine-wide store). The sign-in runs against the real home
+            # XDG-aware program in the pane; copilot/cursor keep one
+            # machine-wide store). The sign-in runs against the real home
             # and REPLACES the live credential, so the active account's copy
             # is snapshotted first, into a login home that exists for that
             # snapshot alone (and so the switch handler and the poller treat
@@ -1420,6 +1615,9 @@ class CredentialVault:
             return {"CLAUDE_CONFIG_DIR": home_str}, list(CLAUDE_ENV_OVERRIDES)
         if spec is not None and spec.login_home_env is not None:
             return {spec.login_home_env: home_str}, []
+        if self._login_keychain_shim(agent_key):
+            shim = self._prepare_keychain_login_shim(agent_key, slot_id)
+            return {"HOME": canonical_path_str(shim)}, []
         # grok: HOME shim; its .grok dir lives one level in.
         shim = self._refresh_grok_login_shim(Path(home_str))
         return {"HOME": canonical_path_str(shim)}, []
@@ -1442,6 +1640,8 @@ class CredentialVault:
             except CredentialVaultError:
                 return False
             return live is not None and live != before
+        if self._login_keychain_shim(agent_key):
+            return self._read_login_keychain(agent_key, slot_id) is not None
         segments = _LOGIN_HOME_SECRET_FILES.get(agent_key)
         if segments is None:
             return False
@@ -1478,6 +1678,10 @@ class CredentialVault:
             if agent_key == "claude":
                 home_mtime = home.stat().st_mtime
                 slot_mtime = (slot / _OAUTH_ACCOUNT_SLOT_FILE).stat().st_mtime
+            elif self._login_keychain_shim(agent_key):
+                # The sign-in rewrites the private keychain file itself.
+                home_mtime = self._login_keychain_path(agent_key, slot_id).stat().st_mtime
+                slot_mtime = (slot / _SLOT_FILES[agent_key]).stat().st_mtime
             else:
                 home_mtime = home.joinpath(
                     *_LOGIN_HOME_SECRET_FILES[agent_key]
@@ -1525,6 +1729,7 @@ class CredentialVault:
             log.info("discarding stale %s login home for slot %s", agent_key, slot_id)
             if agent_key == "claude" and self._is_macos:
                 self._keychain_delete(legacy_claude_keychain_service(home))
+            self._drop_login_keychain(agent_key, slot_id)
             shutil.rmtree(home, ignore_errors=True)
             return False
         if agent_key == "claude":
@@ -1561,6 +1766,14 @@ class CredentialVault:
                         home_file.unlink(missing_ok=True)
                     except OSError as err:
                         log.warning("stale profile-home credential cleanup failed: %s", err)
+        elif self._login_keychain_shim(agent_key):
+            # strict: a transient read failure must leave the home for the
+            # next poll, never count as "nothing signed in yet" and lose it.
+            secret = self._read_login_keychain(agent_key, slot_id, strict=True)
+            if secret is None:
+                return False
+            self.write_slot(agent_key, slot_id, LiveCredentials(secret=secret))
+            self._drop_login_keychain(agent_key, slot_id)
         else:
             scope = self._require_scope(agent_key, scope)
             secret = _read_text(home.joinpath(*_LOGIN_HOME_SECRET_FILES[agent_key]))
