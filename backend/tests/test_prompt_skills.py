@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from agent_team_backend import prompt_skills as ps
@@ -34,19 +35,19 @@ def test_builtin_takes_the_legacy_loop_prompt_and_unknown_language_falls_back() 
 def test_language_resolution() -> None:
     assert ps.language({"agent-team:language": "ja-JP"}) == "ja-JP"
     assert ps.language({"agent-team:language": "zh-TW"}) == "zh-TW"
-    # A UI locale with no backend strings yet gets English, not Chinese.
+    # Every UI locale has its own backend strings.
     for code in ("zh-CN", "ko-KR", "es-ES", "fr-FR", "de-DE", "pt-BR", "ru-RU", "vi-VN"):
-        assert ps.language({"agent-team:language": code}) == "en-US"
+        assert ps.language({"agent-team:language": code}) == code
     # Unset or garbage keeps the historical default.
     assert ps.language({}) == ps.DEFAULT_LANGUAGE == "zh-TW"
     assert ps.language({"agent-team:language": "fr"}) == "zh-TW"
     assert ps.language({"agent-team:language": 3}) == "zh-TW"
 
 
-def test_untranslated_languages_mirror_the_renderer_list() -> None:
+def test_languages_mirror_the_renderer_list() -> None:
     source = (REPO / "packages" / "plugin-ui" / "src" / "foundation" / "i18n" / "uiLocales.ts").read_text("utf-8")
-    for code in (*ps.LANGUAGES, *ps.UNTRANSLATED_UI_LANGUAGES):
-        assert f"'{code}'" in source
+    block = source.split("export const UI_LOCALES = [", 1)[1].split("]", 1)[0]
+    assert set(re.findall(r"'([a-z]{2}-[A-Z]{2})'", block)) == set(ps.LANGUAGES)
 
 
 def test_saved_list_is_normalized_like_the_renderer() -> None:

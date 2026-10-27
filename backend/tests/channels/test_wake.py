@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 import agent_team_backend.channels as channels_pkg
+from agent_team_backend import prompt_skills as ps
 from agent_team_backend.channels import manager as mgr_mod
 from agent_team_backend.channels import registry
 from agent_team_backend.channels import store as store_mod
@@ -389,7 +390,7 @@ async def test_a_turn_end_refreshes_the_wake_target(env: Env) -> None:
 
 def test_wake_texts_exist_in_every_language() -> None:
     keys = set(wake.STRINGS["zh-TW"])
-    for lang in ("en-US", "ja-JP"):
+    for lang in ps.LANGUAGES:
         assert set(wake.STRINGS[lang]) == keys
 
 
@@ -856,10 +857,10 @@ async def test_the_typed_wake_hint_follows_the_navide_language(env: Env, lang: s
                if text not in hint)
 
 
-@pytest.mark.parametrize("saved, lang", [("ko-KR", "en-US"), ("de-DE", "en-US"), ("xx-XX", "zh-TW"), (None, "zh-TW")])
+@pytest.mark.parametrize("saved, lang", [("ko-KR", "ko-KR"), ("de-DE", "de-DE"), ("xx-XX", "zh-TW"), (None, "zh-TW")])
 async def test_wake_texts_fall_back_like_every_channel_text(env: Env, saved, lang: str) -> None:
-    # A UI language the channel texts do not translate reads English; an unknown or unset one
-    # reads the renderer's fallback locale, as prompt_skills.language decides for every channel.
+    # Every UI language reads its own text; an unknown or unset one reads the renderer's
+    # fallback locale, as prompt_skills.language decides for every channel.
     _wakeable(env)
     env.fake.settings = {} if saved is None else {"agent-team:language": saved}
     await env.inbound("hello")
