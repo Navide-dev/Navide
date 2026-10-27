@@ -27,6 +27,9 @@ shows as its title. The name you see is the address.
 - Clearing a pane's title returns the handle to the auto-derived title, or to
   the vendor label when there is none.
 - Handles survive a restart.
+- Matching is exact and case-sensitive: `Reviewer` does not reach `reviewer`.
+  Only the broadcast addresses (`all`, `*`) ignore case. There is no `parent`
+  alias — a spawned pane is given its parent's real address and must use it.
 - Plain terminal panes (login shells, agent key `terminal`) have a handle too,
   but they only receive — a shell has no MCP tools and nothing scans its
   output for message blocks. See [Plain terminal panes](#plain-terminal-panes).
@@ -93,6 +96,12 @@ Rules the parser applies:
 - A missing `---MSG-END---` is tolerated: the block closes at the next
   `---MSG-START---` or at the end of the turn.
 - A block with an empty target or empty body is dropped.
+- A fence left open runs to the end of the turn. Opened inside a block's body,
+  it keeps that block open: its `---MSG-END---` and every later marker become
+  body text (broken with zero-width spaces), so that one block is sent at the
+  end of the turn and the blocks after it are never sent on their own. Left open
+  before any block, it hides every later block, and no format notice is sent
+  for them.
 - One turn may contain several blocks; all of them are sent.
 - Any `---MARKER---` token inside the body is broken with zero-width spaces
   before delivery, so forwarded text can never re-trigger a parser.
@@ -208,12 +217,28 @@ When two open workspaces share a folder name, use the full path
 (`/Users/me/Agent-Team/reviewer`). A target containing no `/` is always
 resolved inside the sending window.
 
+The converse holds only for `cli_send`. A message block looks for a local pane
+of that exact name first, so a pane literally named `fix/bug` is still reached
+from its own window; `cli_send` reads any target containing `/` as a qualified
+address, so such a pane can only be reached there by its `pane_id`. A
+three-part `<device>/<workspace>/<pane>` goes to another machine only when its
+first segment names a device (another machine's id, or a device in the roster)
+and nothing local matches the whole address first; otherwise `a/b/c` is read as
+pane `c` in workspace `a/b`. `cli_read_log` has no remote branch: given another
+device's address it answers `unknown-target`, which reads like a typo and is
+not one.
+
 ### Replies
 
 A delivered message carries a correlation id. Echoing it back in the `re:`
 field links the reply to the message it answers, which is what the Messages
 panel uses to thread the two rows together. A reply written without `re:` is
 still delivered — it just arrives unlinked.
+
+`reply_to` does not travel to another device. A message relayed through
+Navide-Server arrives without it, so the sender's row is never linked to the
+far side's reply; the far side still threads its own reply to the message it
+received.
 
 ---
 
@@ -633,6 +658,9 @@ answer. Past that the hook stops waiting and the pane stops normally; the
 reserved message is put back at the head of its queue and goes out the ordinary
 typed way. Nothing is lost and nothing is delivered twice — a late answer is
 told the hook had already given up.
+The window's own answer back to the backend is capped at **5s**; a call that
+fails or gets no answer in that time puts the message back at the head of its
+queue the same way.
 
 An answer of "nothing queued" is an **empty response**, not a JSON one: Claude
 Code reads a hook's stdout as its decision, and a JSON object it does not
@@ -643,7 +671,8 @@ A turn that was blocked is still written to the CLI's conversation log, and its
 reader reports it as a turn end a moment later. Navide flags that record as
 superseded: everything read out of it (the MSG blocks the pane addressed to
 others, its sentinels, its auto-name) still counts, but it no longer means the
-pane is free — because it isn't.
+pane is free — because it isn't. The flag lasts **15s** after the hook blocked the pane,
+or until the next Stop hook that is let through clears it.
 
 ### What it does not cover
 
@@ -806,7 +835,7 @@ opened after the switch has the new file from the outset.
 
 | Guard | Limit |
 |---|---|
-| Rate limit per sender→target pair | 5 messages per 60s (a chat channel sender: 30, see Channels) |
+| Rate limit per sender→target pair | 5 messages per 60s, messages relayed in from another device included (a chat channel sender: 30, see Channels) |
 | Pending messages per target pane | 10 |
 | Delivery log | last 500 rows |
 | Global pause | Messages panel header |
@@ -878,6 +907,8 @@ it would be told about a failure.
 | `busy` / `not-ready` | Target pane is not in a state that accepts input |
 | `starting` | Target pane is still starting up |
 | `typing` | Someone is typing in the target pane |
+| `composer` | Text from an earlier push may still sit in the target's input box (its submit failed and the clear was not confirmed); nothing is typed until the pane shows activity newer than that push |
+| `pty-blocked` | Being typed in, but the target's terminal has stopped reading input; held for as long as that lasts |
 | `mid-turn` | Target agent is working (never reported for a vendor that queues input mid-turn) |
 | `settling` | Target just went quiet; waiting for it to settle (same exemption) |
 | `paused` | Delivery is paused for the window |
@@ -914,7 +945,6 @@ still never persisted.
 | `rate-limit` / `queue-full` | A guard rail above |
 | `pane-closed` | The target closed before delivery |
 | `inject-failed` / `inject-error` | Typing it into the pane did not take |
-| `delivery-unconfirmed` | Not a failure: typed and submitted into a just-resumed CLI that has not shown it received it. The row reads delivered with this caveat; check the pane before resending. Cleared when the transcript shows the message |
 | `window-reloaded` | The window reloaded while it was in flight |
 | `no-report` | The other window never reported an outcome |
 | `receiver-error` | Another device received it but failed while handling it; its backend log has the traceback. Retrying may succeed |
@@ -922,6 +952,18 @@ still never persisted.
 | `unknown-target-in-workspace` / `ambiguous-target` | The workspace resolved, but the pane name did not — or matched twice |
 | `unknown-pane-id` | A `pane_id` that names no pane on this machine — read a fresh one from `cli_list_targets` |
 | `no-group` | `cli_send` was asked to broadcast to a group by a caller that has no pane, and therefore no group |
+
+`delivery-unconfirmed` is not in this table because it is not a failure: the
+message was typed and submitted into a just-resumed CLI that has not shown it
+received it. The panel row reads `delivered` with that caveat, and
+`cli_check_message` reports status `unconfirmed`; both become a plain
+`delivered` once the transcript shows the message. Check the pane before
+resending — it may already be running.
+
+Nor is "refused" a status. A send turned away before it was queued (for
+example an unknown address or a refused command) returns `ok: false` and no
+`msg_key`; one turned away after it was queued ends `failed` with a reason
+from this table, or `rejected` when another device's pane policy refused it.
 
 ---
 

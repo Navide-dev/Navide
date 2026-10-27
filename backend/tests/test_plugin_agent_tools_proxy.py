@@ -92,7 +92,10 @@ pytestmark = pytest.mark.asyncio
 #: cli_extensions_list and credentials_list descriptions name their Settings
 #: pages as the sidebar does (Extensions, Credentials & Keys). No other tool
 #: changed.
-MAIN_TOOLS_LIST_SHA256 = "e59a10993d1a9bd482ae50f4afc30c83fc97ffb46912f37499d27202bf35c2eb"
+#: Re-pinned for the 0.2.33 messaging doc fixes (previous pin e59a1099…): the
+#: cli_check_message description lists the `composer` and `pty-blocked` holds,
+#: and it and cli_inbox_summary state the 500-send bound. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "cb0297f49dc552b3cc9cbe4833be9d4339a3b21fbe73bb6ce242cff402af1d6d"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

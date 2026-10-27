@@ -307,8 +307,8 @@ export function parseSpawns(turnText: string): ParsedSpawnRequest[] {
  * Kickoff prompt for a SPAWN-created pane: the task followed by a report-back
  * instruction pointing at the parent's messaging name. The instruction stays
  * on a single line so it can never parse as a bare marker, and it spells out
- * that `to:` shares the marker's line — writing it on the next line is the one
- * mistake that makes the whole block vanish without a trace.
+ * that `to:` shares the marker's line. The parser also accepts `to:` on the
+ * line below a bare marker; the instruction asks for the stricter form anyway.
  */
 export function renderSpawnKickoff(task: string, parentName: string): string {
   return (
@@ -381,9 +381,9 @@ function neutralizeExternalBoundary(content: string): string {
 /**
  * Wrap a message for injection into the target pane. The reply hint stays on
  * a single line so it can never parse as a bare marker, and it states outright
- * that `to:` belongs on the marker's own line: START_RE only matches the two
- * together, so a reply that breaks them apart is dropped silently — no queue
- * entry, no failure notice, nothing for either side to see.
+ * that `to:` belongs on the marker's own line. The parser also accepts `to:` on
+ * the line below a bare marker (START_BARE_RE + TO_LINE_RE); the hint asks for
+ * the stricter form anyway.
  *
  * The hint also says when NOT to reply. Without that, agents read it as "every
  * message must be answered" and ack each other's acks, each ack costing the
