@@ -82,6 +82,8 @@ const props = defineProps<{
   loading?: boolean
   /** Server to open the drawer on, e.g. one just added from the catalog. */
   selectName?: string
+  /** Node.js was not found on this machine, so npx/node servers cannot start. */
+  nodeMissing?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -91,9 +93,22 @@ const emit = defineEmits<{
   refresh: []
   /** `selectName` has been acted on; the parent may clear it. */
   'select-consumed': []
+  /** The user asked to install Node.js for a server that needs it. */
+  'install-node': []
 }>()
 
 const { t } = useI18n()
+
+/** Launchers that come with Node.js — context7, the default server, uses npx. */
+const NODE_LAUNCHERS = new Set(['npx', 'npm', 'node'])
+
+/** A stdio server that cannot start because Node.js is missing. Said up front:
+ *  otherwise the launch just fails with a spawn error the user has to decode. */
+function needsNode(server: McpServer | null | undefined): boolean {
+  if (!props.nodeMissing || !server || server.transport !== 'stdio' || !server.command) return false
+  const base = (server.command.split(/[\\/]/).pop() ?? '').toLowerCase().replace(/\.(cmd|exe)$/, '')
+  return NODE_LAUNCHERS.has(base)
+}
 
 const query = ref('')
 const view = ref<'browse' | 'compare'>('browse')
@@ -534,6 +549,11 @@ function entries(map: Record<string, string>): [string, string][] {
                   ></span>
                   <strong v-truncate>{{ row.name }}</strong>
                   <span class="mcp-tag">{{ rowTransport(row) }}</span>
+                  <span
+                    v-if="needsNode(row.navide)"
+                    class="mcp-tag mcp-tag-warn"
+                    data-testid="mcp-needs-node"
+                  >{{ t('settings.mcp.needs-node') }}</span>
                 </span>
                 <span class="mcp-card-detail" v-truncate>
                   {{ row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—' }}
@@ -658,6 +678,13 @@ function entries(map: Record<string, string>): [string, string][] {
               :aria-label="draft.enabled ? t('settings.mcp.state-off') : t('settings.mcp.state-on')"
               @update:model-value="toggleEnabled"
             />
+          </div>
+
+          <div v-if="needsNode(selectedRow.navide)" class="mcp-needs-node" role="status" data-testid="mcp-needs-node-notice">
+            <span>{{ t('settings.mcp.needs-node-hint', { command: selectedRow.navide?.command ?? '' }) }}</span>
+            <button type="button" class="nv-btn nv-btn--primary" @click="emit('install-node')">
+              {{ t('settings.mcp.install-node') }}
+            </button>
           </div>
 
           <details v-if="selectedRow.navide?.stderr_tail" class="mcp-stderr" data-testid="mcp-stderr-tail">
@@ -960,6 +987,19 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-status-dot.starting { background: var(--warning-fg); }
 .mcp-status-note { display: block; color: var(--warning-fg); }
 .mcp-status-error { display: block; color: var(--danger-fg); }
+.mcp-tag.mcp-tag-warn { color: var(--warning-fg); border-color: var(--warning-fg); text-transform: none; }
+.mcp-needs-node {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--warning-fg);
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+}
 .mcp-stderr pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
 .mcp-status-dot.disabled { background: var(--border-default); }
 .mcp-card-detail {

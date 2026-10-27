@@ -413,4 +413,35 @@ describe('McpPane', () => {
       )
     })
   })
+
+  describe('a server that needs Node.js', () => {
+    it('says so on the card and offers the install in the drawer', async () => {
+      wrapper = mountPane({ nodeMissing: true })
+
+      const card = wrapper.findAll('.mcp-card').find((c) => c.find('strong').text() === 'context7')!
+      expect(card.get('[data-testid="mcp-needs-node"]').text()).toBe(i18n.global.t('settings.mcp.needs-node'))
+
+      await openCard(wrapper, 'context7')
+      const notice = wrapper.get('[data-testid="mcp-needs-node-notice"]')
+      expect(notice.text()).toContain(i18n.global.t('settings.mcp.needs-node-hint', { command: 'npx' }))
+      await notice.get('button').trigger('click')
+      expect(wrapper.emitted('install-node')).toEqual([[]])
+    })
+
+    it('stays quiet while Node.js is there, and for servers that do not use it', async () => {
+      wrapper = mountPane()
+      expect(wrapper.find('[data-testid="mcp-needs-node"]').exists()).toBe(false)
+      wrapper.unmount()
+
+      const servers = navideServers().map((s) => ({ ...s, command: '/usr/local/bin/uvx' }))
+      wrapper = mountPane({ nodeMissing: true, servers })
+      expect(wrapper.find('[data-testid="mcp-needs-node"]').exists()).toBe(false)
+    })
+
+    it('recognises a Windows npx.cmd by its full path', async () => {
+      const servers = navideServers().map((s) => ({ ...s, command: 'C:\\Program Files\\nodejs\\npx.cmd' }))
+      wrapper = mountPane({ nodeMissing: true, servers })
+      expect(wrapper.find('[data-testid="mcp-needs-node"]').exists()).toBe(true)
+    })
+  })
 })

@@ -50,7 +50,7 @@ function dep(over: Partial<OnboardDep> & { id: string; group: OnboardDep['group'
   } as OnboardDep
 }
 
-/** Two missing foundation deps — enough to see whether the loop stops. */
+/** A missing CLI next to the foundation and analyzer deps the wizard no longer shows. */
 function status(over: Partial<OnboardStatus> = {}): OnboardStatus {
   return {
     deps: [
@@ -207,97 +207,72 @@ describe('OnboardingWizard', () => {
       )
       await select.setValue('ja-JP')
       expect(i18n.global.locale.value).toBe('ja-JP')
-      expect(wrapper.text()).toContain(i18n.global.t('onboard.step.environment'))
+      expect(wrapper.text()).toContain(i18n.global.t('onboard.step.agents'))
     } finally { useSettings().setLanguage(previous, { broadcast: false }) }
   })
 
-  it('stops installing the rest once one install exits non-zero', async () => {
-    // Homebrew failed, so `brew install node` right after it would fail with
-    // exit 127 on a fresh Mac.
+  // ── No environment step ─────────────────────────────────────────────────────
+  // The packaged app never runs Homebrew, Node, pnpm, Python or uv itself; a CLI
+  // that needs one brings it in through its own Install.
+
+  it('opens on the Agents step and has no environment step', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('onboarding.status', status())
-    withRunsExiting(mock, { exitCode: () => 1 })
     wrapper = await open(mock)
 
-    await wrapper.find('.ob-linkbtn').trigger('click')
-    await flushPromises()
-
-    expect(installRuns(mock).map((s) => s.payload.dep_id)).toEqual(['homebrew'])
-    // The failure is on the card, with the exit code, not only in the log.
-    const card = wrapper.findAll('.oc-card.expanded')[0]
-    expect(card.find('.oc-error').text()).toContain('Exited with code 1')
-    expect(wrapper.get('[data-testid="install-terminal-status"]').text()).toBe(
-      i18n.global.t('install-terminal.exited-fail', { code: 1 })
-    )
+    const steps = wrapper.findAll('.ob-steps button').map((b) => b.text())
+    expect(steps[0]).toBe(i18n.global.t('onboard.step.agents'))
+    expect(steps).not.toContain(i18n.global.t('onboard.step.environment'))
+    expect(wrapper.get('.ob-head').text()).toBe(i18n.global.t('onboard.head.agents'))
   })
 
-  it('stops when an install is blocked by a missing bootstrap binary', async () => {
+  it('lists the agent CLIs only: no foundation, Ollama or model card', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('onboarding.status', status())
-    mock.setResponse('onboarding.run', {
-      ok: false, error: 'brew is required', missing_requirements: ['brew'],
-    })
     wrapper = await open(mock)
 
-    await wrapper.find('.ob-linkbtn').trigger('click')
-    await flushPromises()
-
-    expect(installCount(mock)).toBe(1)
+    expect(wrapper.findAll('.oc-card')).toHaveLength(1)
+    expect(wrapper.text()).toContain('claude')
+    expect(wrapper.text()).not.toContain('ollama')
+    expect(wrapper.text()).not.toContain(i18n.global.t('label.analysis-model'))
   })
 
-  it('still installs every missing dep when nothing blocks', async () => {
-    // Guards the stop conditions above from becoming an unconditional break.
-    const initial = (installed: Set<string>) => status({
-      deps: [
-        dep({ id: 'node', group: 'foundation', status: installed.has('node') ? 'ok' : 'missing' }),
-        dep({ id: 'pnpm', group: 'foundation', status: installed.has('pnpm') ? 'ok' : 'missing' }),
-      ],
-    })
+  it('opens the app with a CLI in, whatever the foundation tools say', async () => {
+    const s = status()
+    // What the backend reports now: one CLI is the whole gate.
+    s.gate = { ...s.gate, foundation_ready: false, has_any_cli: true, all_required_ready: true }
     const mock = createMockBackend('connected')
-    mock.setResponse('onboarding.status', initial(new Set()))
-    withRunsExiting(mock, { statusFor: initial })
+    mock.setResponse('onboarding.status', s)
+    mock.setResponse('onboarding.complete', { ok: true })
     wrapper = await open(mock)
+    const steps = wrapper.findAll('.ob-steps button')
+    await steps[steps.length - 1].trigger('click')
 
-    await wrapper.find('.ob-linkbtn').trigger('click')
+    const gate = wrapper.get('.ob-gate').text()
+    expect(gate).not.toContain(i18n.global.t('label.foundation-ready'))
+    expect(gate).not.toContain(i18n.global.t('label.ollama-model-ready'))
+    const openApp = wrapper.findAll('.ob-footer button').find(
+      (button) => button.text() === i18n.global.t('action.open-app'))!
+    expect(openApp.attributes('disabled')).toBeUndefined()
+    await openApp.trigger('click')
     await flushPromises()
-
-    expect(installRuns(mock).map((s) => s.payload.dep_id)).toEqual(['node', 'pnpm'])
-    // Each exit was followed by a fresh re-detect before the next install.
-    expect(mock.sent.filter((s) => s.type === 'onboarding.status' && s.payload.fresh)).toHaveLength(2)
+    expect(wrapper.emitted('complete')).toEqual([[]])
   })
 
-  it('surfaces a failed install in the log with the backend text', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('onboarding.status', status())
-    mock.setResponse('onboarding.run', { ok: false, error: 'Error: no bottle available' })
-    wrapper = await open(mock)
+  // ── A CLI's Install runs its prerequisites first ────────────────────────────
 
-    await wrapper.find('.ob-linkbtn').trigger('click')
-    await flushPromises()
-
-    const log = wrapper.find('.ob-log').text()
-    expect(log).toContain('no bottle available')
-    expect(log).not.toContain('unknown')
-  })
-
-  // ── A single card's Install button ──────────────────────────────────────────
-  // The reported symptom was "I click Python and nothing happens". Every case
-  // below ends with the backend failing in well under a second, which used to
-  // reach the user only through the log pane at the bottom of the column.
-
-  /** Python as the backend actually reports it on a Mac without Homebrew. */
-  function pythonStatus(brewOk: boolean): OnboardStatus {
+  /** Claude Code on a bare Mac: it needs npm, Node needs brew, brew needs curl. */
+  function bareMac(installed: Set<string> = new Set()): OnboardStatus {
+    const has = (id: string) => installed.has(id)
     return status({
       deps: [
-        dep({
-          id: 'homebrew', label: 'Homebrew', group: 'foundation',
-          needs_terminal: true, status: brewOk ? 'ok' : 'missing',
-        }),
-        dep({
-          id: 'python', label: 'Python', group: 'foundation',
-          install_cmd: 'brew install python3',
-          requirements: [{ name: 'brew', ok: brewOk }],
-        }),
+        dep({ id: 'homebrew', label: 'Homebrew', group: 'foundation', needs_terminal: true,
+          status: has('homebrew') ? 'ok' : 'missing' }),
+        dep({ id: 'node', label: 'Node.js', group: 'foundation', install_cmd: 'brew install node',
+          status: has('node') ? 'ok' : 'missing', requirements: [{ name: 'brew', ok: has('homebrew') }] }),
+        dep({ id: 'claude', label: 'Claude Code', group: 'agent_cli', optional: true, needs_terminal: true,
+          install_cmd: 'npm install -g @anthropic-ai/claude-code',
+          status: has('claude') ? 'ok' : 'missing', requirements: [{ name: 'npm', ok: has('node') }] }),
       ],
     })
   }
@@ -307,91 +282,152 @@ describe('OnboardingWizard', () => {
     return w.findAll('.oc-card.expanded .ob-btn.primary')[0]
   }
 
-  it('sends the install request when a single card Install is clicked', async () => {
-    // Nothing covered this at all: the existing cases all went through the
-    // batch "install missing" link, not a card's own button.
+  it('installs Homebrew, then Node, then the CLI from the CLI card', async () => {
     const mock = createMockBackend('connected')
-    mock.setResponse('onboarding.status', pythonStatus(true))
-    mock.setResponse('onboarding.run', { ok: true, run_id: 'run-1', command: 'brew install python3' })
+    mock.setResponse('onboarding.status', bareMac())
+    withRunsExiting(mock, { statusFor: bareMac })
     wrapper = await open(mock)
 
-    // Homebrew is ok, so Python is the first unfinished card and is expanded.
     await installButton(wrapper).trigger('click')
     await flushPromises()
 
+    expect(installRuns(mock).map((s) => s.payload.dep_id)).toEqual(['homebrew', 'node', 'claude'])
+    // Each exit was followed by a fresh re-detect before the next install.
+    expect(mock.sent.filter((s) => s.type === 'onboarding.status' && s.payload.fresh)).toHaveLength(3)
+  })
+
+  it('stops the chain once a prerequisite exits non-zero, and says so on the CLI card', async () => {
+    // Homebrew failed, so `brew install node` right after it would fail with
+    // exit 127 on a fresh Mac.
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', bareMac())
+    withRunsExiting(mock, { exitCode: () => 1 })
+    wrapper = await open(mock)
+
+    await installButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(installRuns(mock).map((s) => s.payload.dep_id)).toEqual(['homebrew'])
+    // Homebrew has no card here: its failure lands on the card that ran it.
+    const card = wrapper.findAll('.oc-card.expanded')[0]
+    expect(card.find('.oc-error').text()).toContain('Exited with code 1')
+    expect(card.find('.oc-error').text()).toContain('install homebrew')
+    expect(wrapper.get('[data-testid="install-terminal-status"]').text()).toBe(
+      i18n.global.t('install-terminal.exited-fail', { code: 1 })
+    )
+  })
+
+  it('waits for a running prerequisite before the next link', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', bareMac())
+    mock.setResponse('onboarding.run', { ok: true, run_id: 'run-1', command: 'install-brew.sh' })
+    wrapper = await open(mock)
+
+    await installButton(wrapper).trigger('click')
+    await flushPromises()
+
+    // Homebrew is still running: Node and the CLI wait for it.
     expect(installRuns(mock)).toEqual([
-      expect.objectContaining({ payload: { kind: 'install', dep_id: 'python', cols: 100, rows: 24 } }),
+      expect.objectContaining({ payload: expect.objectContaining({ kind: 'install', dep_id: 'homebrew' }) }),
     ])
     await exitRun(mock, { exit_code: 0 })
   })
 
-  it('shows a blocked install on the card, not only in the log', async () => {
+  it('stops when an install is blocked by a missing bootstrap binary', async () => {
     const mock = createMockBackend('connected')
-    mock.setResponse('onboarding.status', pythonStatus(true))
+    mock.setResponse('onboarding.status', bareMac())
     mock.setResponse('onboarding.run', {
-      ok: false,
-      error: 'brew is required to install Python. Install brew first, then retry.',
-      missing_requirements: ['brew'],
+      ok: false, error: 'curl is required', missing_requirements: ['curl'],
     })
     wrapper = await open(mock)
 
     await installButton(wrapper).trigger('click')
     await flushPromises()
 
-    const card = wrapper.findAll('.oc-card.expanded')[0]
-    expect(card.find('.oc-error').exists()).toBe(true)
-    const text = card.find('.oc-error').text()
-    expect(text).toContain('brew is required')
-    // A failing in-app install must still leave a way forward by hand.
-    expect(text).toContain('brew install python3')
+    expect(installCount(mock)).toBe(1)
+    expect(wrapper.get('.oc-card.expanded .oc-error').text()).toContain('curl is required')
   })
 
-  it('names the missing prerequisite before the user clicks Install', async () => {
-    // The backend already reports each dep's prerequisites and their state;
-    // the wizard used to drop that and let the click fail instead.
+  it('announces the prerequisites it will install before the user clicks', async () => {
     const mock = createMockBackend('connected')
-    mock.setResponse('onboarding.status', pythonStatus(false))
+    mock.setResponse('onboarding.status', bareMac())
     wrapper = await open(mock)
 
-    // Homebrew is the first unfinished card; open Python's.
-    await wrapper.findAll('.oc-head')[1].trigger('click')
-    await flushPromises()
-
-    const card = wrapper.findAll('.oc-card.expanded')[0]
-    expect(card.find('.oc-error').text()).toContain('Homebrew')
-    // No install has been attempted — this is a pre-click warning.
+    expect(wrapper.get('.oc-card.expanded .oc-error').text()).toBe(
+      i18n.global.t('onboard.installs-first', { names: 'Node.js' })
+    )
+    // No install has been attempted, and there is no card to jump to.
     expect(installCount(mock)).toBe(0)
+    expect(wrapper.findAll('.oc-card.expanded .ob-btn.ghost').map((b) => b.text())).toEqual([
+      i18n.global.t('action.re-detect'),
+    ])
   })
 
-  it('jumps to the prerequisite card from the blocked dep', async () => {
+  it('reports a prerequisite with no install command as a block, not as part of the chain', async () => {
+    // Linux: the registry has no install command for Node.
+    const s = bareMac()
+    s.deps = s.deps.map((d) => (d.id === 'node' ? { ...d, can_install: false } : d))
     const mock = createMockBackend('connected')
-    mock.setResponse('onboarding.status', pythonStatus(false))
+    mock.setResponse('onboarding.status', s)
     wrapper = await open(mock)
 
-    await wrapper.findAll('.oc-head')[1].trigger('click')
-    await flushPromises()
-    const goTo = wrapper
-      .findAll('.oc-card.expanded .ob-btn.ghost')
-      .find((b) => b.text().includes('Homebrew'))
-    expect(goTo).toBeDefined()
-
-    await goTo!.trigger('click')
-    await flushPromises()
-
-    // Homebrew's card is now the expanded one.
-    const cards = wrapper.findAll('.oc-card')
-    expect(cards[0].classes()).toContain('expanded')
-    expect(cards[1].classes()).not.toContain('expanded')
+    expect(wrapper.get('.oc-card.expanded .oc-error').text()).toBe(
+      i18n.global.t('onboard.blocked-by', { names: 'Node.js' })
+    )
   })
 
-  it('shows the install terminal and locks Skip, Back and Next while a command runs', async () => {
+  it('still names a prerequisite this app cannot install', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', status({
+      deps: [dep({ id: 'aider', label: 'Aider', group: 'agent_cli', requirements: [{ name: 'curl', ok: false }] })],
+    }))
+    wrapper = await open(mock)
+
+    expect(wrapper.get('.oc-card.expanded .oc-error').text()).toBe(
+      i18n.global.t('onboard.blocked-by', { names: 'curl' })
+    )
+  })
+
+  it('sends the install request when a single card Install is clicked', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('onboarding.status', status())
     mock.setResponse('onboarding.run', { ok: true, run_id: 'run-1', command: 'npm install -g claude' })
     wrapper = await open(mock)
-    // The agents step: it has Back as well as Skip and Next.
-    await wrapper.findAll('.ob-steps button')[1].trigger('click')
+
+    await installButton(wrapper).trigger('click')
     await flushPromises()
+
+    expect(installRuns(mock)).toEqual([
+      expect.objectContaining({ payload: { kind: 'install', dep_id: 'claude', cols: 100, rows: 24 } }),
+    ])
+    await exitRun(mock, { exit_code: 0 })
+  })
+
+  it('surfaces a failed install in the log and on the card with the backend text', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', status({
+      deps: [dep({ id: 'claude', group: 'agent_cli', install_cmd: 'npm install -g @anthropic-ai/claude-code' })],
+    }))
+    mock.setResponse('onboarding.run', { ok: false, error: 'Error: npm ERR! EACCES' })
+    wrapper = await open(mock)
+
+    await installButton(wrapper).trigger('click')
+    await flushPromises()
+
+    const log = wrapper.find('.ob-log').text()
+    expect(log).toContain('EACCES')
+    expect(log).not.toContain('unknown')
+    const text = wrapper.get('.oc-card.expanded .oc-error').text()
+    expect(text).toContain('EACCES')
+    // A failing in-app install must still leave a way forward by hand.
+    expect(text).toContain('npm install -g @anthropic-ai/claude-code')
+  })
+
+  it('shows the install terminal and locks Skip and Next while a command runs', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', status())
+    mock.setResponse('onboarding.run', { ok: true, run_id: 'run-1', command: 'npm install -g claude' })
+    wrapper = await open(mock)
 
     await installButton(wrapper).trigger('click')
     await flushPromises()
@@ -402,7 +438,7 @@ describe('OnboardingWizard', () => {
       i18n.global.t('install-terminal.running')
     )
     const footer = (label: string) => wrapper!.findAll('.ob-footer button').find((b) => b.text() === label)!
-    for (const label of ['action.skip-for-now', 'action.back', 'action.next']) {
+    for (const label of ['action.skip-for-now', 'action.next']) {
       expect(footer(i18n.global.t(label)).attributes('disabled'), label).toBeDefined()
     }
     expect(installButton(wrapper).attributes('disabled')).toBeDefined()
@@ -418,21 +454,19 @@ describe('OnboardingWizard', () => {
     expect(wrapper.get('[data-testid="install-terminal-status"]').text()).toBe(
       i18n.global.t('install-terminal.cancelled')
     )
-    for (const label of ['action.skip-for-now', 'action.back', 'action.next']) {
+    for (const label of ['action.skip-for-now', 'action.next']) {
       expect(footer(i18n.global.t(label)).attributes('disabled'), label).toBeUndefined()
     }
   })
 
-  it('distinguishes "still the old version" from "not detected at all"', async () => {
-    // `brew install python3` exits 0 while /usr/bin/python3 (3.9) keeps winning
-    // the PATH. Saying "not detected" there is simply untrue.
+  it('says "still the old version" rather than "not detected" for an outdated CLI', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('onboarding.status', status({
       deps: [
         dep({
-          id: 'python', label: 'Python', group: 'foundation',
-          status: 'outdated', version: '3.9.6', min_version: '3.12.0',
-          install_cmd: 'brew install python3',
+          id: 'codex', label: 'Codex CLI', group: 'agent_cli',
+          status: 'outdated', version: '0.1.0', min_version: '0.2.0',
+          install_cmd: 'npm install -g @openai/codex',
         }),
       ],
     }))
@@ -443,166 +477,41 @@ describe('OnboardingWizard', () => {
     await flushPromises()
 
     const text = wrapper.find('.oc-error').text()
-    expect(text).toContain('3.9.6')
-    expect(text).not.toContain(i18n.global.t('onboard.installed-not-detected', { label: 'Python' }))
-    // Both fixes spelled out literally — `@` and `$(` are message-syntax
-    // characters, so a wrong escape would garble exactly these commands.
-    expect(text).toContain('brew link --overwrite python@3.x')
-    expect(text).toContain('eval "$(/opt/homebrew/bin/brew shellenv)"')
-  })
-
-  it('keeps the Python-only repairs off any other outdated dep', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('onboarding.status', status({
-      deps: [
-        dep({
-          id: 'node', label: 'Node.js', group: 'foundation',
-          status: 'outdated', version: '20.11.0', min_version: '22.0.0',
-          install_cmd: 'brew install node',
-        }),
-      ],
-    }))
-    withRunsExiting(mock)
-    wrapper = await open(mock)
-
-    await installButton(wrapper).trigger('click')
-    await flushPromises()
-
-    const text = wrapper.find('.oc-error').text()
-    expect(text).toBe(i18n.global.t('onboard.installed-still-outdated', { label: 'Node.js', version: '20.11.0' }))
+    expect(text).toBe(i18n.global.t('onboard.installed-still-outdated', { label: 'Codex CLI', version: '0.1.0' }))
     expect(text).not.toContain('brew link')
   })
 
-  it('installs a prerequisite before whatever needs it', async () => {
-    // In list order this ran `brew install python3` first, which exits 127 on
-    // a Mac with no Homebrew.
-    const mock = createMockBackend('connected')
-    mock.setResponse('onboarding.status', status({
-      deps: [
-        dep({ id: 'python', group: 'foundation', requirements: [{ name: 'brew', ok: false }] }),
-        dep({ id: 'homebrew', group: 'foundation', needs_terminal: true }),
-      ],
-    }))
-    mock.setResponse('onboarding.run', { ok: true, run_id: 'run-1', command: 'install-brew.sh' })
-    wrapper = await open(mock)
-
-    await wrapper.find('.ob-linkbtn').trigger('click')
-    await flushPromises()
-
-    // Homebrew is still running: Python waits for it.
-    expect(installRuns(mock)).toEqual([
-      expect.objectContaining({ payload: expect.objectContaining({ kind: 'install', dep_id: 'homebrew' }) }),
-    ])
-    await exitRun(mock, { exit_code: 0 })
-  })
-
-  describe('starting the Ollama service fails', () => {
-    async function clickStart(mock: ReturnType<typeof createMockBackend>): Promise<VueWrapper> {
-      const s = status()
-      s.deps = s.deps.map((d) => (d.id === 'ollama' ? { ...d, status: 'ok' as const } : d))
-      s.gate = { ...s.gate, ollama_ok: true, ollama_service_up: false }
-      mock.setResponse('onboarding.status', s)
-      const w = await open(mock)
-      await w.findAll('.ob-steps button')[1].trigger('click')
-      await flushPromises()
-      await w.findAll('.oc-head')[1].trigger('click')
-      await flushPromises()
-      await w.findAll('button').find((b) => b.text() === i18n.global.t('action.start-ollama'))!.trigger('click')
-      await flushPromises()
-      return w
-    }
-
-    it('shows a refusal on the Ollama card', async () => {
-      const mock = createMockBackend('connected')
-      mock.setResponse('onboarding.run', { ok: false, error: 'ollama is not installed' })
-      wrapper = await clickStart(mock)
-
-      expect(mock.sent.find((s) => s.type === 'onboarding.run')?.payload).toEqual(
-        { kind: 'start_ollama', cols: 100, rows: 24 }
-      )
-      expect(wrapper.get('.oc-error').text()).toBe(i18n.global.t('onboard.ollama-start-failed'))
-    })
-
-    it('shows a transport failure on the Ollama card', async () => {
-      const mock = createMockBackend('connected')
-      mock.setRejection('onboarding.run', 'ws not open')
-      wrapper = await clickStart(mock)
-
-      expect(wrapper.get('.oc-error').text()).toBe(i18n.global.t('onboard.ollama-start-failed'))
-    })
-  })
-
-  it('offers to start the Ollama service when it is installed but down', async () => {
-    const s = status()
-    s.deps = s.deps.map((d) => (d.id === 'ollama' ? { ...d, status: 'ok' as const } : d))
-    s.gate = { ...s.gate, ollama_ok: true, ollama_service_up: false }
-    const mock = createMockBackend('connected')
-    mock.setResponse('onboarding.status', s)
-    wrapper = await open(mock)
-
-    // Step 2 holds the agent CLIs and the analyzer.
-    await wrapper.findAll('.ob-steps button')[1].trigger('click')
-    await flushPromises()
-    // ollama detects as ok, so its card is collapsed — expanding a finished
-    // card is exactly what used to be a dead click.
-    await wrapper.findAll('.oc-head')[1].trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain(i18n.global.t('action.start-ollama'))
-    expect(wrapper.text()).toContain(i18n.global.t('onboard.ollama-stopped'))
-  })
-
-  describe('environment step with everything detected', () => {
-    function allFoundationOk(): OnboardStatus {
+  describe('agents step with every CLI detected', () => {
+    function allCliOk(): OnboardStatus {
       const s = status()
       s.deps = [
-        dep({ id: 'homebrew', group: 'foundation', status: 'ok', version: '5.0.14' }),
-        dep({ id: 'python', group: 'foundation', status: 'ok', version: '3.13.11', min_version: '3.12.0' }),
-        dep({ id: 'uv', group: 'foundation', status: 'ok', version: '0.6.6', docs_url: 'https://docs.astral.sh/uv' }),
+        dep({ id: 'claude', group: 'agent_cli', status: 'ok', version: '2.1.0' }),
+        dep({ id: 'codex', group: 'agent_cli', status: 'ok', version: '0.155.0' }),
       ]
-      s.gate = { ...s.gate, foundation_ready: true }
+      s.gate = { ...s.gate, has_any_cli: true, all_required_ready: true }
       return s
     }
 
-    it('leaves every card collapsed and drops "Install Missing"', async () => {
+    it('leaves every card collapsed', async () => {
       const mock = createMockBackend('connected')
-      mock.setResponse('onboarding.status', allFoundationOk())
+      mock.setResponse('onboarding.status', allCliOk())
       wrapper = await open(mock)
 
-      // Used to fall back to the last card (uv), expanded with an Install button.
       expect(wrapper.findAll('.oc-card.expanded')).toHaveLength(0)
-      expect(wrapper.findAll('.oc-card.done')).toHaveLength(3)
-      expect(wrapper.find('.ob-linkbtn').exists()).toBe(false)
+      expect(wrapper.findAll('.oc-card.done')).toHaveLength(2)
     })
 
     it('opens a finished card to re-detect only, without an install action', async () => {
       const mock = createMockBackend('connected')
-      mock.setResponse('onboarding.status', allFoundationOk())
+      mock.setResponse('onboarding.status', allCliOk())
       wrapper = await open(mock)
 
-      await wrapper.findAll('.oc-head')[2].trigger('click')
+      await wrapper.findAll('.oc-head')[1].trigger('click')
       await flushPromises()
 
       const card = wrapper.get('.oc-card.expanded')
       expect(card.findAll('.ob-btn.primary')).toHaveLength(0)
       expect(card.text()).toContain(i18n.global.t('action.re-detect'))
-    })
-
-    it('still flags an outdated dep instead of a checkmark, and offers its install', async () => {
-      const s = allFoundationOk()
-      s.deps = s.deps.map((d) => (d.id === 'python'
-        ? { ...d, status: 'outdated' as const, version: '3.9.6' }
-        : d))
-      s.gate = { ...s.gate, foundation_ready: false }
-      const mock = createMockBackend('connected')
-      mock.setResponse('onboarding.status', s)
-      wrapper = await open(mock)
-
-      const card = wrapper.get('.oc-card.expanded')
-      expect(card.classes()).not.toContain('done')
-      expect(card.get('.oc-warn').text()).toBe(i18n.global.t('onboard.outdated', { min: '3.12.0' }))
-      expect(card.get('.ob-btn.primary').text()).toBe(i18n.global.t('onboard.install'))
-      expect(wrapper.find('.ob-linkbtn').exists()).toBe(true)
     })
   })
 })
