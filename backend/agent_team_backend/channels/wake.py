@@ -41,6 +41,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason_window": "Navide 視窗沒有回應",
         "reason_mismatch": "接回的不是原本那段對話",
         "reason_not_restored": "Navide 視窗沒有把這個 pane 帶回來",
+        "reason_refused": "Navide 視窗拒絕重新開啟這個 pane",
         "reason_ask": "Navide 的接續設定為每次詢問，請到電腦上開啟",
     },
     "en-US": {
@@ -70,6 +71,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason_window": "the Navide window did not answer",
         "reason_mismatch": "the pane came back on a different conversation",
         "reason_not_restored": "the Navide window did not bring this pane back",
+        "reason_refused": "the Navide window refused to reopen this pane",
         "reason_ask": "Navide is set to ask every time; open it on the computer",
     },
     "ja-JP": {
@@ -99,6 +101,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason_window": "Navide のウィンドウが応答しませんでした",
         "reason_mismatch": "別の会話で戻ってきました",
         "reason_not_restored": "Navide のウィンドウがこの pane を戻しませんでした",
+        "reason_refused": "Navide のウィンドウがこの pane の再オープンを拒否しました",
         "reason_ask": "Navide の設定が毎回確認になっています。パソコンで開いてください",
     },
 }
@@ -118,7 +121,8 @@ UNRESUMABLE_REASONS = {
     "ask-refused": "reason_ask",
 }
 # A wake that failed for another known reason -> the reason shown.
-FAILURE_REASONS = {"pane-not-restored": "reason_not_restored"}
+FAILURE_REASONS = {"pane-not-restored": "reason_not_restored", "window-refused": "reason_refused",
+                   "window-timeout": "reason_window"}
 
 
 def text(lang: str, key: str, **kw: Any) -> str:
