@@ -1237,12 +1237,15 @@ describe('CliAccountsPane', () => {
   })
 
   it('stamps a current reading with when it was taken', () => {
-    usage.accountUsageFor.mockReturnValue(usageSnapshot({ fetchedAt: '2026-07-26T04:00:00Z' }))
+    // The stamp is shown in local time, so build the reading from a local
+    // wall-clock time; a fixed UTC instant lands on 7/25 west of UTC-4.
+    const fetchedAt = new Date(2026, 6, 26, 4, 0).toISOString()
+    usage.accountUsageFor.mockReturnValue(usageSnapshot({ fetchedAt }))
     const w = mountPane(
       makeApi({ identities: { claude: { __default__: { email: 'me@x.com', signedIn: true } } } }),
     )
     const updated = section(w, 0).findAll('.cli-card')[0].get('.cli-card-updated').text()
-    expect(updated).toMatch(/^updated 7\/26 \d\d:\d\d$/)
+    expect(updated).toBe('updated 7/26 04:00')
   })
 
   it('stops promising a read once the backend is gone', () => {
