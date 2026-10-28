@@ -1949,14 +1949,22 @@ time.sleep(3600)
 async def test_a_helper_that_never_works_is_unavailable_and_results_main_handled_still_arrive(
     monkeypatch, behaviour: str
 ) -> None:
+    import asyncio
     import time
 
     from agent_team_backend import agent_tool_result_worker as worker
     from agent_team_backend import error_ledger
+    from agent_team_backend import osplat
 
     recorded: list[tuple[str, ...]] = []
     monkeypatch.setattr(error_ledger, "record", lambda *args: recorded.append(args))
     monkeypatch.setattr(worker, "READY_S", 0.5)
+    # The failed helper's tree is killed when the grace runs out: inside this
+    # test, not during a later one that may have replaced the kill.
+    monkeypatch.setattr(worker, "STOP_GRACE_S", 0.2)
+    helpers: list[int] = []
+    contain = osplat.process_tree.contain
+    monkeypatch.setattr(osplat.process_tree, "contain", lambda pid: (helpers.append(pid), contain(pid))[1])
     states: list[str] = []
     monkeypatch.setattr(proxy._result_worker, "on_state", lambda state: states.append(state["state"]))  # noqa: SLF001
     entry = _devmap_tool(monkeypatch)
@@ -1976,6 +1984,13 @@ async def test_a_helper_that_never_works_is_unavailable_and_results_main_handled
     assert "about a minute" in body["error"]
     assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
     assert len(recorded) == 1
+    # The one helper started was ended, whichever way it failed.
+    assert len(helpers) == 1
+    for _ in range(50):
+        if not osplat.process_tree.is_alive(helpers[0]):
+            break
+        await asyncio.sleep(0.1)
+    assert not osplat.process_tree.is_alive(helpers[0])
 
 
 async def test_a_result_that_breaks_a_ready_helper_fails_alone_and_the_next_large_result_arrives(monkeypatch, tmp_path) -> None:
