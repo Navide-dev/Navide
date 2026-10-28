@@ -2638,7 +2638,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     const id = sessionId.value
     try {
       const resp = await terminalPort.reattach([id], 0, 0)
-      if (!resp.ok || !resp.payload || !resp.payload.alive.includes(id)) {
+      // Only an explicit answer that leaves this session out means the PTY is
+      // gone. An error reply says nothing about the PTY — it may well be alive
+      // — so it is treated like the probe throwing: leave the pane alone and
+      // let the next reconnect ask again.
+      if (!resp.ok || !resp.payload) return
+      if (!resp.payload.alive.includes(id)) {
         // PTY died while disconnected — mark exited so the user sees it
         status.value = 'exited'
         term.writeln('\r\n\x1b[33m[session ended while disconnected]\x1b[0m')

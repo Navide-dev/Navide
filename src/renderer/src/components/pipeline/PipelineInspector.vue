@@ -20,7 +20,7 @@ import {
   type RoleProperty,
   type StageMetaPatch,
 } from '../../lib/pipelineGraph'
-import { elapsedOf, formatElapsed, formatTokens, nodeTitle, type RunSnapshot } from './pipelineEditorModel'
+import { elapsedOf, formatElapsed, formatTokens, nodeTitle, runStatusKey, type RunSnapshot } from './pipelineEditorModel'
 
 type ParamValue = string | number | boolean
 
@@ -229,7 +229,7 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
         <span class="pi-kind">
           {{ kindLabel }}
           <span v-if="runState" class="pi-status" :class="`is-${runState.status}`">
-            <span class="pi-status-dot" aria-hidden="true"></span>{{ t(`pipelineEditor.status.${runState.status}`) }}
+            <span class="pi-status-dot" aria-hidden="true"></span>{{ t(`pipelineEditor.status.${runStatusKey(runState)}`) }}
           </span>
         </span>
         <h2 class="pi-title">{{ title }}</h2>
@@ -317,7 +317,7 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
               <span class="pi-input-glyph" aria-hidden="true">{{ glyphOf(u) }}</span>
               <span class="pi-input-name">{{ nodeTitle(u) }}</span>
               <span class="pi-input-state" :class="`is-${run.nodes[u.id]?.status ?? 'idle'}`">
-                {{ run.nodes[u.id] ? t(`pipelineEditor.status.${run.nodes[u.id].status}`) : t('pipelineEditor.inspector.not-run') }}
+                {{ run.nodes[u.id] ? t(`pipelineEditor.status.${runStatusKey(run.nodes[u.id])}`) : t('pipelineEditor.inspector.not-run') }}
               </span>
               <p v-if="run.nodes[u.id]?.summary" class="pi-input-summary">{{ run.nodes[u.id].summary }}</p>
             </li>
@@ -431,7 +431,7 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
       <!-- ── Slot: output ───────────────────────────────────────────────── -->
       <template v-else-if="n?.kind === 'slot' && tab === 'output'">
         <dl v-if="runState" class="pi-stats">
-          <div><dt>{{ t('pipelineEditor.inspector.status') }}</dt><dd>{{ t(`pipelineEditor.status.${runState.status}`) }}</dd></div>
+          <div><dt>{{ t('pipelineEditor.inspector.status') }}</dt><dd>{{ t(`pipelineEditor.status.${runStatusKey(runState)}`) }}</dd></div>
           <div v-if="elapsed"><dt>{{ t('pipelineEditor.inspector.elapsed') }}</dt><dd>{{ elapsed }}</dd></div>
           <div v-if="tokens"><dt>{{ t('pipelineEditor.inspector.tokens') }}</dt><dd>{{ tokens }}</dd></div>
           <div v-if="(runState.attempts ?? 0) > 1"><dt>{{ t('pipelineEditor.inspector.attempts') }}</dt><dd>{{ runState.attempts }}</dd></div>

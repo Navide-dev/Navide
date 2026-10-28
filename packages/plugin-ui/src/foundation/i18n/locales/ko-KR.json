@@ -1957,7 +1957,7 @@
       "restore": "복원",
       "candidateReady": "업데이트 {version} 준비됨",
       "activationFailed": "{plugin}은(는) 설치되었지만 활성화하지 못했어요: {reason}. 아래 목록에서 다시 시작하거나 삭제하세요.",
-      "switchNow": "승인하면 {id}이(가) 바로 {version}(으)로 전환돼요. 열려 있는 보기는 다시 로드되고, 저장하지 않은 내용은 사라져요. 전환 내역은 공지에 기록되며, 거기서 한 번에 되돌릴 수 있어요.",
+      "switchNow": "승인하면 {id}이(가) 바로 {version}(으)로 전환돼요. 열려 있는 보기는 다시 로드돼요. Navide SDK로 상태를 저장하는 보기는 원래 상태로 돌아오고, 그 밖에 저장하지 않은 내용은 사라져요. 전환 내역은 공지에 기록되며, 거기서 한 번에 되돌릴 수 있어요.",
       "restartPlugin": "Navide 플러그인 다시 시작",
       "disable": "사용 안 함",
       "enable": "사용",
@@ -2484,7 +2484,7 @@
         "unknown": "아직 테스트하지 않았어요.",
         "not-applicable": "이 플랫폼에서는 사용할 수 없어요."
       },
-      "auto-resume-reconnect-hint": "백엔드가 중단되면 모든 CLI 프로세스도 함께 종료돼요. 이 옵션을 켜면 백엔드가 돌아왔을 때 각 pane을 직접 다시 빌드하지 않아도 표시된 pane의 대화가 자동으로 재개돼요.",
+      "auto-resume-reconnect-hint": "백엔드가 충돌하거나 다시 시작되면 모든 CLI 프로세스도 함께 종료돼요. 켜 두면 백엔드가 돌아왔을 때 화면에 있는 pane과 화면 밖에서 작업 중이던 pane 최대 여섯 개의 대화를 자동으로 다시 연결해서, 하나씩 직접 다시 빌드하지 않아도 돼요. 다시 연결된 pane은 스스로 이어가지 않고, 그 pane을 연 pane에 알림이 가며, 공지에 경과가 표시돼요. 곧바로 다시 충돌하면 더는 자동으로 다시 연결하지 않아요.",
       "resume-interrupted-on-launch-hint": "Navide가 다시 시작되면 턴을 실행 중이거나 권한 확인·질문을 기다리던 pane과, 그 보고를 기다리던 상위 pane이 자동으로 재개돼요(최대 6개, 나머지는 \"다시 시작할 때 작업 중\"으로 표시). 저절로 계속되지는 않아요: 계속을 누르거나 상위 pane이 지시하게 하세요. 상위 pane에는 어떤 pane이 중단되었는지 알려 줘요.",
       "confirm-close-pane": "pane을 닫기 전에 확인",
       "confirm-close-pane-hint": "pane 닫기 단축키로 CLI pane을 닫기 전에 물어봐요. 턴이 진행 중인 pane은 이 설정과 관계없이 항상 물어봐요.",
@@ -2849,7 +2849,7 @@
               "fallback": "CLI 하나"
             },
             "resumeAfterRestart": {
-              "desc": "백엔드가 중단되면 모든 CLI 프로세스도 함께 종료돼요. 이 옵션을 켜면 백엔드가 돌아왔을 때 화면의 pane이 자동으로 재개돼요.",
+              "desc": "백엔드가 충돌하거나 다시 시작되면 모든 CLI 프로세스도 종료돼요. 켜 두면 돌아왔을 때 화면에 있는 pane과 화면 밖에서 작업 중인 pane 최대 여섯 개가 자동으로 다시 연결돼요. 공지에 어떤 턴이 중단됐는지 표시돼요.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "드래그해서 로그 패널 크기 조절",
     "filter-by-type": "유형별 필터",
     "all-stages-finished": "Stage {count}개가 모두 성공적으로 끝났어요",
+    "region-switching": "{title}을(를) {version}(으)로 전환하는 중…",
     "region-unavailable": "{title}을(를) 사용할 수 없어요"
   },
   "layout": {
@@ -9153,6 +9154,21 @@
     "load-more": "더 불러오기({count}개 남음)",
     "mcp-tools-changed": "MCP 도구가 변경되었을 수 있어요",
     "mcp-tools-changed-note": "CLI agent는 시작할 때 Navide의 MCP 도구 목록을 한 번만 읽어요. 이전 버전({from})에서 계속 연결되어 있는 CLI pane이나 외부 MCP 클라이언트는 그때 본 도구를 그대로 사용해요. 새 도구를 쓰려면 pane을 다시 열거나 클라이언트를 다시 연결하세요.",
+    "backend-restart": {
+      "title": "{time}에 백엔드가 다시 시작됐어요",
+      "note": "다시 연결된 pane은 프롬프트에서 멈추고 스스로 이어가지 않아요. 종료된 pane은 다시 빌드할 때까지 그대로예요.",
+      "crash-loop": "백엔드가 다시 시작된 직후 또 충돌해서, 이번에는 pane을 자동으로 다시 연결하지 않았어요. 필요한 것은 직접 다시 빌드하세요.",
+      "resumed": "다시 연결됨: {names}",
+      "interrupted": "턴이 중단됨: {names}",
+      "rebuild": "{name} 다시 빌드",
+      "not-resumed": {
+        "crash-loop": "{name}: 백엔드가 짧은 시간에 반복해서 충돌해서 다시 연결하지 않았어요",
+        "over-limit": "{name}: 화면 밖에서 작업 중인 pane이 여섯 개를 넘어서 다시 연결하지 않았어요",
+        "idle-off-screen": "{name}: 화면 밖에서 유휴 상태여서 다시 연결하지 않았어요",
+        "no-session": "{name}: 이어갈 대화가 없어서 다시 연결하지 않았어요",
+        "failed": "{name}: 다시 연결하지 못했어요"
+      }
+    },
     "scheduler-disabled": "예약 작업 \"{name}\"이(가) 사용 중지되었어요: 대상 pane이 없어요",
     "scheduler-disabled-note": "대상 pane을 {n}회 연속 찾지 못해 작업을 사용 중지했어요. 일정 패널에서 \"다시 연결\"로 실행 중인 pane을 지정한 뒤 다시 사용 설정하세요.",
     "quota": {
@@ -11132,6 +11148,8 @@
     },
     "canvas": {
       "insert-on-edge": "여기에 단계 삽입",
+      "branch-label": "{when}일 때",
+      "error-label": "실패 시",
       "loop-label": "↺ 최대 {max}",
       "minimap": "전체 pipeline 개요",
       "pass": "승인되면 계속",
@@ -11191,6 +11209,8 @@
       "tidy": "정리",
       "unlink": "연결 제거",
       "unpin": "출력 고정 해제",
+      "link-kind": "연결 유형 변경",
+      "link-when": "분기 값 변경",
       "loop-budget": "재시도 한도 변경"
     },
     "inspector": {
@@ -11275,6 +11295,7 @@
       "awaiting": "승인 필요",
       "rejected": "되돌려 보냄",
       "failed": "실패",
+      "untaken": "건너뜀(선택된 경로 아님)",
       "skipped": "고정된 출력 재사용",
       "aborted": "중단됨",
       "pinned": "출력 고정됨"
@@ -11302,6 +11323,17 @@
       "open-in-canvas": "pipeline 캔버스에서 열기",
       "gate-toast": "pipeline이 {name}에서 승인을 기다리고 있어요",
       "next-gated": "다음 단계로 넘어가기 전에 이 게이트를 승인하거나 되돌려 보내세요."
+    },
+    "link": {
+      "title": "연결",
+      "desc": "{from} → {to}",
+      "kind": "연결 유형",
+      "kind-main": "항상",
+      "kind-branch": "분기(조건)",
+      "kind-error": "실패 시",
+      "when": "분기 값",
+      "when-placeholder": "단계가 보고하는 값 또는 default",
+      "remove": "연결 제거"
     },
     "edge": {
       "title": "반려 루프",

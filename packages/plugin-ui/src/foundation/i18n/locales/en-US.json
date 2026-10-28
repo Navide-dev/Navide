@@ -1957,7 +1957,7 @@
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
       "activationFailed": "{plugin} was installed but could not be activated: {reason}. Restart or discard it in the list below.",
-      "switchNow": "Approving switches {id} to {version} right away. Its open views reload, and anything not saved in them is lost. The switch is recorded in the announcements, where you can go back in one click.",
+      "switchNow": "Approving switches {id} to {version} right away. Its open views reload: a view that saves its state through the Navide SDK comes back where it was, and anything else not saved in them is lost. The switch is recorded in the announcements, where you can go back in one click.",
       "restartPlugin": "Restart Navide Plugin",
       "disable": "Disable",
       "enable": "Enable",
@@ -2484,7 +2484,7 @@
         "unknown": "Not tested yet.",
         "not-applicable": "Not available on this platform."
       },
-      "auto-resume-reconnect-hint": "When the backend crashes it takes every CLI process with it. Turn this on to resume the visible panes' conversations automatically once it comes back, instead of rebuilding each one by hand.",
+      "auto-resume-reconnect-hint": "When the backend crashes or restarts it takes every CLI process with it. Turn this on to resume, once it is back, the conversations of the panes on screen and of up to six panes off screen that were working, instead of rebuilding each one by hand. Resumed panes do not continue on their own, the panes that spawned them are told, and the announcements list what happened. If the backend crashes again soon after, nothing is resumed again.",
       "resume-interrupted-on-launch-hint": "When Navide restarts, panes that were running a turn or waiting on a permission prompt or a question, plus the parent panes waiting on their reports, resume automatically (up to 6; the rest are marked \"Working at restart\"). Nothing continues on its own: press Continue, or let the parent tell it to. The parent is told which of its panes were interrupted.",
       "confirm-close-pane": "Confirm before closing a pane",
       "confirm-close-pane-hint": "Ask before the close-pane shortcut closes a CLI pane. A pane with a turn in progress always asks, regardless of this setting.",
@@ -2849,7 +2849,7 @@
               "fallback": "One CLI"
             },
             "resumeAfterRestart": {
-              "desc": "A backend crash takes every CLI process with it; with this on, the panes on screen resume automatically once it is back.",
+              "desc": "A backend crash or restart takes every CLI process with it; with this on, the panes on screen, and up to six working panes off screen, resume automatically once it is back. The announcements list which turns were interrupted.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "Drag to resize log panel",
     "filter-by-type": "Filter by type",
     "all-stages-finished": "All {count} stages finished successfully",
+    "region-switching": "Switching {title} to {version}…",
     "region-unavailable": "{title} unavailable"
   },
   "layout": {
@@ -9153,6 +9154,21 @@
     "load-more": "Load More ({count} Left)",
     "mcp-tools-changed": "MCP tools may have changed",
     "mcp-tools-changed-note": "A CLI agent reads Navide's MCP tool list once, when it starts. Anything still connected from the previous version ({from}) — a CLI pane, or an external MCP client — keeps the tools it saw then; reopen the pane or reconnect the client to pick up new ones.",
+    "backend-restart": {
+      "title": "Backend restarted at {time}",
+      "note": "Resumed panes stop at the prompt and do not continue on their own; ended panes stay as they are until you rebuild them.",
+      "crash-loop": "The backend crashed again soon after restarting, so no pane was resumed automatically this time. Rebuild the ones you need.",
+      "resumed": "Resumed: {names}",
+      "interrupted": "Turn interrupted: {names}",
+      "rebuild": "Rebuild {name}",
+      "not-resumed": {
+        "crash-loop": "{name}: not resumed, because the backend crashed repeatedly in a short time",
+        "over-limit": "{name}: not resumed, because more than six panes off screen were working",
+        "idle-off-screen": "{name}: not resumed, because it was idle and off screen",
+        "no-session": "{name}: not resumed, because it has no saved conversation to resume",
+        "failed": "{name}: could not be resumed"
+      }
+    },
     "scheduler-disabled": "Scheduled job \"{name}\" was disabled: its target pane is gone",
     "scheduler-disabled-note": "Its target pane could not be found {n} runs in a row, so the job was disabled. In the Schedule panel, use \"Rebind\" to point it at a live pane, then enable it again.",
     "quota": {
@@ -11132,6 +11148,8 @@
     },
     "canvas": {
       "insert-on-edge": "Insert a Step Here",
+      "branch-label": "if {when}",
+      "error-label": "on error",
       "loop-label": "↺ max {max}",
       "minimap": "Overview of the whole pipeline",
       "pass": "Continue when approved",
@@ -11191,6 +11209,8 @@
       "tidy": "Tidy Up",
       "unlink": "Remove Link",
       "unpin": "Unfreeze Output",
+      "link-kind": "Change Link Type",
+      "link-when": "Change Branch Value",
       "loop-budget": "Change Retry Limit"
     },
     "inspector": {
@@ -11275,6 +11295,7 @@
       "awaiting": "Needs approval",
       "rejected": "Sent back",
       "failed": "Failed",
+      "untaken": "Skipped (not on the taken path)",
       "skipped": "Reused frozen output",
       "aborted": "Aborted",
       "pinned": "Output frozen"
@@ -11302,6 +11323,17 @@
       "open-in-canvas": "Open in the Pipeline Canvas",
       "gate-toast": "The pipeline is waiting for your approval at {name}",
       "next-gated": "Approve or send back this gate before moving on to the next stage."
+    },
+    "link": {
+      "title": "Link",
+      "desc": "{from} → {to}",
+      "kind": "Link type",
+      "kind-main": "Always",
+      "kind-branch": "Branch (if…)",
+      "kind-error": "On error",
+      "when": "Branch value",
+      "when-placeholder": "Value the step reports, or default",
+      "remove": "Remove Link"
     },
     "edge": {
       "title": "Reject loop",

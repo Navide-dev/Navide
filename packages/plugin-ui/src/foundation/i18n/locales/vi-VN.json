@@ -1957,7 +1957,7 @@
       "restore": "Khôi phục",
       "candidateReady": "Bản cập nhật {version} đã sẵn sàng",
       "activationFailed": "{plugin} đã được cài nhưng không kích hoạt được: {reason}. Hãy khởi động lại hoặc loại bỏ nó trong danh sách bên dưới.",
-      "switchNow": "Khi phê duyệt, {id} sẽ chuyển sang {version} ngay lập tức. Các khung xem đang mở của nó sẽ tải lại và mọi thứ chưa lưu trong đó sẽ bị mất. Việc chuyển được ghi trong thông báo, nơi bạn có thể quay lại chỉ với một cú nhấp.",
+      "switchNow": "Khi phê duyệt, {id} sẽ chuyển sang {version} ngay lập tức. Các khung xem đang mở của nó sẽ tải lại: khung xem lưu trạng thái qua Navide SDK sẽ trở lại đúng chỗ cũ, còn mọi thứ khác chưa lưu trong đó sẽ bị mất. Việc chuyển được ghi trong thông báo, nơi bạn có thể quay lại chỉ với một cú nhấp.",
       "restartPlugin": "Khởi động lại plugin Navide",
       "disable": "Tắt",
       "enable": "Bật",
@@ -2484,7 +2484,7 @@
         "unknown": "Chưa thử.",
         "not-applicable": "Không có trên nền tảng này."
       },
-      "auto-resume-reconnect-hint": "Khi backend gặp sự cố, mọi tiến trình CLI cũng dừng theo. Bật mục này để tự động tiếp tục cuộc hội thoại của các pane đang hiển thị khi backend hoạt động trở lại, thay vì dựng lại từng pane thủ công.",
+      "auto-resume-reconnect-hint": "Khi backend gặp sự cố hoặc khởi động lại, mọi tiến trình CLI cũng kết thúc theo. Bật mục này để khi backend trở lại, tự động nối lại cuộc trò chuyện của các pane trên màn hình và của tối đa sáu pane ngoài màn hình đang làm việc, thay vì dựng lại từng pane bằng tay. Pane được nối lại không tự tiếp tục, pane đã mở nó sẽ được báo, và thông báo sẽ ghi lại những gì đã xảy ra. Nếu backend lại gặp sự cố ngay sau đó, sẽ không tự nối lại nữa.",
       "resume-interrupted-on-launch-hint": "Khi Navide khởi động lại, các pane đang chạy một lượt hoặc đang chờ lời nhắc cấp quyền hay câu hỏi, cùng các pane cha đang chờ báo cáo của chúng, sẽ tự động tiếp tục (tối đa 6; số còn lại được đánh dấu “Đang làm việc lúc khởi động lại”). Không có gì tự chạy tiếp: hãy nhấn Tiếp tục hoặc để pane cha bảo nó tiếp tục. Pane cha được cho biết pane nào của nó bị gián đoạn.",
       "confirm-close-pane": "Xác nhận trước khi đóng pane",
       "confirm-close-pane-hint": "Hỏi trước khi phím tắt đóng pane đóng một pane CLI. Pane đang có lượt chạy dở luôn hỏi, bất kể cài đặt này.",
@@ -2849,7 +2849,7 @@
               "fallback": "Một CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Backend gặp sự cố sẽ kéo theo mọi tiến trình CLI; khi bật tùy chọn này, các pane trên màn hình sẽ tự tiếp tục ngay khi backend chạy lại.",
+              "desc": "Khi backend gặp sự cố hoặc khởi động lại, mọi tiến trình CLI đều kết thúc; khi bật mục này, các pane trên màn hình và tối đa sáu pane đang làm việc ngoài màn hình sẽ tự động được nối lại khi backend trở lại. Thông báo cho biết lượt nào bị gián đoạn.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "Kéo để đổi kích thước bảng nhật ký",
     "filter-by-type": "Lọc theo loại",
     "all-stages-finished": "Đã hoàn tất thành công cả {count} giai đoạn",
+    "region-switching": "Đang chuyển {title} sang {version}…",
     "region-unavailable": "{title} không khả dụng"
   },
   "layout": {
@@ -9153,6 +9154,21 @@
     "load-more": "Tải thêm (còn {count})",
     "mcp-tools-changed": "Công cụ MCP có thể đã thay đổi",
     "mcp-tools-changed-note": "CLI agent đọc danh sách công cụ MCP của Navide một lần, lúc khởi động. Những gì vẫn còn kết nối từ phiên bản trước ({from}) — một pane CLI, hoặc một client MCP bên ngoài — vẫn giữ các công cụ đã thấy lúc đó; hãy mở lại pane hoặc kết nối lại client để nhận công cụ mới.",
+    "backend-restart": {
+      "title": "Backend đã khởi động lại lúc {time}",
+      "note": "Các pane được nối lại dừng ở dấu nhắc và không tự tiếp tục; các pane đã kết thúc giữ nguyên cho đến khi bạn dựng lại.",
+      "crash-loop": "Backend lại gặp sự cố ngay sau khi khởi động lại, nên lần này không pane nào được tự động nối lại. Hãy dựng lại những pane bạn cần.",
+      "resumed": "Đã nối lại: {names}",
+      "interrupted": "Lượt bị gián đoạn: {names}",
+      "rebuild": "Dựng lại {name}",
+      "not-resumed": {
+        "crash-loop": "{name}: không nối lại, vì backend gặp sự cố liên tục trong thời gian ngắn",
+        "over-limit": "{name}: không nối lại, vì có hơn sáu pane ngoài màn hình đang làm việc",
+        "idle-off-screen": "{name}: không nối lại, vì nó ở ngoài màn hình và đang rảnh",
+        "no-session": "{name}: không nối lại, vì không có cuộc trò chuyện đã lưu để tiếp tục",
+        "failed": "{name}: không nối lại được"
+      }
+    },
     "scheduler-disabled": "Tác vụ theo lịch “{name}” đã bị tắt: pane đích không còn",
     "scheduler-disabled-note": "Không tìm thấy pane đích {n} lần chạy liên tiếp, nên tác vụ đã bị tắt. Trong bảng Lịch chạy, hãy dùng “Gắn lại” để trỏ nó tới một pane đang chạy, rồi bật lại.",
     "quota": {
@@ -11132,6 +11148,8 @@
     },
     "canvas": {
       "insert-on-edge": "Chèn một bước vào đây",
+      "branch-label": "nếu {when}",
+      "error-label": "khi lỗi",
       "loop-label": "↺ tối đa {max}",
       "minimap": "Tổng quan toàn bộ pipeline",
       "pass": "Tiếp tục khi được phê duyệt",
@@ -11191,6 +11209,8 @@
       "tidy": "Sắp gọn",
       "unlink": "Gỡ liên kết",
       "unpin": "Bỏ cố định đầu ra",
+      "link-kind": "Đổi loại liên kết",
+      "link-when": "Đổi giá trị nhánh",
       "loop-budget": "Đổi giới hạn thử lại"
     },
     "inspector": {
@@ -11275,6 +11295,7 @@
       "awaiting": "Cần phê duyệt",
       "rejected": "Đã trả về",
       "failed": "Thất bại",
+      "untaken": "Đã bỏ qua (không nằm trên nhánh đã chọn)",
       "skipped": "Dùng lại đầu ra đã cố định",
       "aborted": "Đã hủy",
       "pinned": "Đầu ra đã cố định"
@@ -11302,6 +11323,17 @@
       "open-in-canvas": "Mở trong canvas pipeline",
       "gate-toast": "Pipeline đang chờ bạn phê duyệt tại {name}",
       "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo."
+    },
+    "link": {
+      "title": "Liên kết",
+      "desc": "{from} → {to}",
+      "kind": "Loại liên kết",
+      "kind-main": "Luôn luôn",
+      "kind-branch": "Rẽ nhánh (nếu…)",
+      "kind-error": "Khi lỗi",
+      "when": "Giá trị nhánh",
+      "when-placeholder": "Giá trị bước báo về, hoặc default",
+      "remove": "Gỡ liên kết"
     },
     "edge": {
       "title": "Vòng trả về",

@@ -1957,7 +1957,7 @@
       "restore": "Restaurar",
       "candidateReady": "La actualización {version} está lista",
       "activationFailed": "{plugin} se instaló, pero no se pudo activar: {reason}. Reinícialo o descártalo en la lista de abajo.",
-      "switchNow": "Al aprobar, {id} cambia a {version} de inmediato. Sus vistas abiertas se recargan y se pierde todo lo que no esté guardado en ellas. El cambio queda registrado en los avisos, donde puedes volver atrás con un clic.",
+      "switchNow": "Al aprobar, {id} cambia a {version} de inmediato. Sus vistas abiertas se recargan: una vista que guarda su estado con el SDK de Navide vuelve a donde estaba, y se pierde todo lo demás que no esté guardado en ellas. El cambio queda registrado en los avisos, donde puedes volver atrás con un clic.",
       "restartPlugin": "Reiniciar complemento de Navide",
       "disable": "Desactivar",
       "enable": "Activar",
@@ -2484,7 +2484,7 @@
         "unknown": "Aún no se ha probado.",
         "not-applicable": "No disponible en esta plataforma."
       },
-      "auto-resume-reconnect-hint": "Cuando el backend falla, se lleva consigo todos los procesos de CLI. Activa esto para reanudar automáticamente las conversaciones de los panes visibles cuando vuelva, en lugar de reconstruir cada uno a mano.",
+      "auto-resume-reconnect-hint": "Cuando el backend falla o se reinicia, arrastra consigo todos los procesos de CLI. Activa esta opción para reanudar automáticamente, cuando vuelva, las conversaciones de los paneles en pantalla y de hasta seis paneles fuera de pantalla que estaban trabajando, en lugar de reconstruir cada uno a mano. Los paneles reanudados no siguen por su cuenta, se avisa a los paneles que los abrieron y los avisos muestran lo que pasó. Si el backend vuelve a fallar poco después, no se reanuda nada más.",
       "resume-interrupted-on-launch-hint": "Cuando Navide se reinicia, los panes que estaban ejecutando un turno o esperando una solicitud de permiso o una pregunta, además de los panes padre que esperan sus informes, se reanudan automáticamente (hasta 6; el resto se marca como «Trabajando al reiniciar»). Nada continúa por sí solo: pulsa «Continuar» o deja que el padre se lo indique. Al padre se le informa de cuáles de sus panes se interrumpieron.",
       "confirm-close-pane": "Confirmar antes de cerrar un pane",
       "confirm-close-pane-hint": "Pregunta antes de que el atajo de cerrar pane cierre un pane de CLI. Un pane con un turno en curso siempre pregunta, independientemente de este ajuste.",
@@ -2849,7 +2849,7 @@
               "fallback": "Una CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Un fallo del backend se lleva por delante todos los procesos de CLI; con esto activado, los panes que hay en pantalla se reanudan automáticamente en cuanto vuelve.",
+              "desc": "Un fallo o reinicio del backend arrastra todos los procesos de CLI; con esto activado, los paneles en pantalla, y hasta seis paneles trabajando fuera de pantalla, se reanudan automáticamente cuando vuelve. Los avisos muestran qué turnos se interrumpieron.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "Arrastra para cambiar el tamaño del panel de registro",
     "filter-by-type": "Filtrar por tipo",
     "all-stages-finished": "Las {count} etapas terminaron correctamente",
+    "region-switching": "Cambiando {title} a {version}…",
     "region-unavailable": "{title} no disponible"
   },
   "layout": {
@@ -9153,6 +9154,21 @@
     "load-more": "Cargar más (quedan {count})",
     "mcp-tools-changed": "Puede que las herramientas MCP hayan cambiado",
     "mcp-tools-changed-note": "Un agent de CLI lee la lista de herramientas MCP de Navide una sola vez, al arrancar. Todo lo que siga conectado desde la versión anterior ({from}) —un pane de CLI o un cliente MCP externo— conserva las herramientas que vio entonces; vuelve a abrir el pane o a conectar el cliente para obtener las nuevas.",
+    "backend-restart": {
+      "title": "El backend se reinició a las {time}",
+      "note": "Los paneles reanudados se detienen en el indicador y no siguen por su cuenta; los paneles terminados quedan como están hasta que los reconstruyas.",
+      "crash-loop": "El backend volvió a fallar poco después de reiniciarse, así que esta vez no se reanudó ningún panel automáticamente. Reconstruye los que necesites.",
+      "resumed": "Reanudados: {names}",
+      "interrupted": "Turno interrumpido: {names}",
+      "rebuild": "Reconstruir {name}",
+      "not-resumed": {
+        "crash-loop": "{name}: no se reanudó porque el backend falló repetidamente en poco tiempo",
+        "over-limit": "{name}: no se reanudó porque había más de seis paneles fuera de pantalla trabajando",
+        "idle-off-screen": "{name}: no se reanudó porque estaba inactivo y fuera de pantalla",
+        "no-session": "{name}: no se reanudó porque no tiene una conversación guardada que reanudar",
+        "failed": "{name}: no se pudo reanudar"
+      }
+    },
     "scheduler-disabled": "Se ha desactivado la tarea programada «{name}»: su pane de destino ya no existe",
     "scheduler-disabled-note": "No se encontró su pane de destino en {n} ejecuciones seguidas, así que la tarea se ha desactivado. En el panel Programación, usa «Volver a vincular» para apuntarla a un pane activo y vuelve a activarla.",
     "quota": {
@@ -11132,6 +11148,8 @@
     },
     "canvas": {
       "insert-on-edge": "Insertar un paso aquí",
+      "branch-label": "si {when}",
+      "error-label": "en caso de error",
       "loop-label": "↺ máx. {max}",
       "minimap": "Vista general de toda la pipeline",
       "pass": "Continuar cuando se apruebe",
@@ -11191,6 +11209,8 @@
       "tidy": "Ordenar",
       "unlink": "Quitar enlace",
       "unpin": "Descongelar la salida",
+      "link-kind": "Cambiar tipo de enlace",
+      "link-when": "Cambiar valor de rama",
       "loop-budget": "Cambiar el límite de reintentos"
     },
     "inspector": {
@@ -11275,6 +11295,7 @@
       "awaiting": "Necesita aprobación",
       "rejected": "Devuelto",
       "failed": "Fallido",
+      "untaken": "Omitido (fuera de la ruta tomada)",
       "skipped": "Salida congelada reutilizada",
       "aborted": "Cancelado",
       "pinned": "Salida congelada"
@@ -11302,6 +11323,17 @@
       "open-in-canvas": "Abrir en el lienzo de pipelines",
       "gate-toast": "La pipeline está esperando tu aprobación en {name}",
       "next-gated": "Aprueba o devuelve esta puerta antes de pasar a la siguiente etapa."
+    },
+    "link": {
+      "title": "Enlace",
+      "desc": "{from} → {to}",
+      "kind": "Tipo de enlace",
+      "kind-main": "Siempre",
+      "kind-branch": "Rama (si…)",
+      "kind-error": "En caso de error",
+      "when": "Valor de rama",
+      "when-placeholder": "Valor que informa el paso, o default",
+      "remove": "Quitar enlace"
     },
     "edge": {
       "title": "Bucle de rechazo",
