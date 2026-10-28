@@ -2516,6 +2516,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "機械翻訳です。ネイティブによるレビューはまだ行われていません。",
       "language-hint": "言語はユーザー単位の設定で、すべてのワークスペースに適用されます。",
+      "language-display": "表示言語",
       "ui-scale": "表示倍率",
       "ui-scale-hint": "すべてのウィンドウで、文字、アイコン、余白を含むインターフェース全体の倍率を変更します。ターミナルとエディターのフォントサイズは個別の設定で、従来どおり ⌘= / ⌘- のショートカットで調整できます。",
       "restore-windows": "ウィンドウの復元",
@@ -7489,7 +7490,6 @@
       "notifications": "通知",
       "settings-management": "設定の管理",
       "theme": "テーマ",
-      "language": "言語",
       "other": "その他",
       "updates": "更新"
     },

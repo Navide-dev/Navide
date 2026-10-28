@@ -2516,6 +2516,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "Dịch bằng máy. Đang chờ người bản ngữ duyệt.",
       "language-hint": "Ngôn ngữ là tùy chọn cấp người dùng, áp dụng cho mọi workspace.",
+      "language-display": "Ngôn ngữ hiển thị",
       "ui-scale": "Tỷ lệ giao diện",
       "ui-scale-hint": "Thu phóng toàn bộ giao diện — chữ, biểu tượng và khoảng cách — trong mọi cửa sổ. Tách biệt với cỡ chữ của terminal và trình soạn thảo, vốn có phím tắt ⌘= / ⌘- riêng.",
       "restore-windows": "Khôi phục cửa sổ",
@@ -7489,7 +7490,6 @@
       "notifications": "Thông báo",
       "settings-management": "Quản lý cài đặt",
       "theme": "Chủ đề",
-      "language": "Ngôn ngữ",
       "other": "Khác",
       "updates": "Cập nhật"
     },

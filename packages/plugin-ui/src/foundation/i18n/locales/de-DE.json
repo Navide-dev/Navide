@@ -2516,6 +2516,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "Maschinell übersetzt. Prüfung durch Muttersprachler steht noch aus.",
       "language-hint": "Die Sprache ist eine Benutzereinstellung, die für alle Arbeitsbereiche gilt.",
+      "language-display": "Anzeigesprache",
       "ui-scale": "Oberflächenskalierung",
       "ui-scale-hint": "Die gesamte Oberfläche – Text, Symbole und Abstände – in jedem Fenster skalieren. Unabhängig von den Schriftgrößen in Terminal und Editor, die ihre eigenen Tastenkombinationen ⌘= / ⌘- behalten.",
       "restore-windows": "Fenster wiederherstellen",
@@ -7489,7 +7490,6 @@
       "notifications": "Benachrichtigungen",
       "settings-management": "Einstellungsverwaltung",
       "theme": "Design",
-      "language": "Sprache",
       "other": "Sonstiges",
       "updates": "Aktualisierungen"
     },

@@ -2516,6 +2516,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "Machine-translated. Native-speaker review pending.",
       "language-hint": "Language is a user-level preference applied across all workspaces.",
+      "language-display": "Display language",
       "ui-scale": "Interface Scale",
       "ui-scale-hint": "Scale the whole interface — text, icons, and spacing — in every window. Separate from the terminal and editor font sizes, which keep their own ⌘= / ⌘- shortcuts.",
       "restore-windows": "Restore Windows",
@@ -7489,7 +7490,6 @@
       "notifications": "Notifications",
       "settings-management": "Settings management",
       "theme": "Theme",
-      "language": "Language",
       "other": "Other",
       "updates": "Updates"
     },

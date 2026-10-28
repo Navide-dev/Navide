@@ -25,12 +25,16 @@ defineProps<{
 .setting-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: var(--space-row-x);
+  gap: 12px var(--space-row-x);
   padding: var(--space-row-y) var(--space-row-x);
 }
+/* The text keeps a readable basis; a control too wide to sit beside it wraps
+   onto its own line instead of squeezing the text to one word per line. */
 .setting-row-text {
   display: flex;
+  flex: 1 1 220px;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
@@ -49,5 +53,6 @@ defineProps<{
   align-items: center;
   justify-content: flex-end;
   flex-shrink: 0;
+  max-width: 100%;
 }
 </style>

@@ -2516,6 +2516,7 @@
       "language-beta": "베타",
       "language-beta-hint": "기계 번역이에요. 원어민 검토를 기다리고 있어요.",
       "language-hint": "언어는 모든 작업 영역에 적용되는 사용자 수준 환경설정이에요.",
+      "language-display": "표시 언어",
       "ui-scale": "인터페이스 크기",
       "ui-scale-hint": "모든 창에서 텍스트, 아이콘, 간격 등 인터페이스 전체의 크기를 조정해요. 터미널과 편집기 글꼴 크기와는 별개이며, 그쪽은 자체 ⌘= / ⌘- 단축키를 써요.",
       "restore-windows": "창 복원",
@@ -7489,7 +7490,6 @@
       "notifications": "알림",
       "settings-management": "설정 관리",
       "theme": "테마",
-      "language": "언어",
       "other": "기타",
       "updates": "업데이트"
     },
