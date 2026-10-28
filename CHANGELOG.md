@@ -24,6 +24,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Pipelines (0.2.34): a Codex slot in a stage that allows questions now shows its own question in the asking dialog, with its options (#733). Codex echoes the whole kickoff in its pane, so the dialog showed the protocol's QUESTION examples, or, when a screen redraw had damaged an example's end marker, a stretch of the kickoff with no options. Claude and Codex questions are now read from the turn text in the CLI's own log, like their stage sentinels; for other CLIs the screen scan skips the protocol's examples and pairs each end marker with the nearest start marker before it.
+
 - Channels (0.2.33): waking an offline pane from chat now opens it onto its conversation (#710). The wake only waited 30 seconds for a window to restore the pane, so when the workspace was open but held no placeholder of it, the wake always ended "喚醒失敗". Now a placeholder is reopened in place, a window that holds the workspace opens a pane onto the same conversation (the resume id is checked on disk first), and a workspace that is not open is opened first. The older records of that conversation are retired, so a later restore cannot bring it back twice. This is one shared path for all eight chat platforms. Two new failure reasons, for a window that refused or did not answer in time.
 
 - Channels (0.2.33): the wake button and the typed-command hint follow Navide's language instead of always reading 喚醒 (#711). On Mattermost, whose client may take a leading "/" for its own commands, a message that is just `wake` also wakes the pane, and the hint names it; `/wake` still works there. Not verified on a real Mattermost server.
