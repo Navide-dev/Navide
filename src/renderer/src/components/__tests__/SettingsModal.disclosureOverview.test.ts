@@ -7,6 +7,7 @@ import SettingsModal from '../SettingsModal.vue'
 import ExtensionsPane from '../ExtensionsPane.vue'
 import PluginDisclosureOverview from '../PluginDisclosureOverview.vue'
 import SettingsNavSubItem from '../settings/SettingsNavSubItem.vue'
+import SettingsNavItem from '../settings/SettingsNavItem.vue'
 import ExecutionPolicyPane from '../ExecutionPolicyPane.vue'
 
 function api(): never {
@@ -231,7 +232,7 @@ describe('SettingsModal Navide Plugins pages', () => {
   const tabMarker = (label: string) => body('extensions').findAll('.ext-pages-tab').find((tab) => tab.text().startsWith(label))!.find('.ext-pages-marker')
 
   it('marks Execution Policy with ⚠ and the reasons while the page warns', async () => {
-    await mountModal('general')
+    await mountModal('extensions')
     expect(marker('Execution Policy')).toBeNull()
     expect(tabMarker('Execution Policy').exists()).toBe(false)
 
@@ -252,7 +253,7 @@ describe('SettingsModal Navide Plugins pages', () => {
   })
 
   it('marks Developer and native code "On" with the switches that are on', async () => {
-    await mountModal('general')
+    await mountModal('extensions')
     expect(marker('Developer and native code')).toBeNull()
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode', 'Allow native backends'])
@@ -264,5 +265,52 @@ describe('SettingsModal Navide Plugins pages', () => {
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', [])
     await flushPromises()
     expect(marker('Developer and native code')).toBeNull()
+  })
+  // Only the open entry unfolds its pages: with another entry open, the Navide
+  // Plugins pages fold away and the row itself carries their state.
+  const subLabels = () => wrapper!.findAllComponents(SettingsNavSubItem).map((n) => n.props('label'))
+  const pluginsRow = () => wrapper!.findAllComponents(SettingsNavItem).find((n) => n.props('label') === 'Navide Plugins')!
+
+  it('unfolds the Navide Plugins pages only while that entry is open', async () => {
+    await mountModal('marketplace')
+    expect(subLabels()).toEqual([])
+
+    vm().setTab('extensions')
+    await flushPromises()
+    expect(subLabels()).toHaveLength(4)
+
+    await openPage('Disclosure overview')
+    vm().setTab('marketplace')
+    await flushPromises()
+    expect(subLabels()).toEqual([])
+  })
+
+  it('unfolds onto the page a search hit or old link opens', async () => {
+    await mountModal('general')
+    await vm().setSection('extensions', 'execution-policy')
+    await flushPromises()
+    expect(wrapper!.findAllComponents(SettingsNavSubItem).filter((n) => n.props('active')).map((n) => n.props('label'))).toEqual(['Execution Policy'])
+
+    await mountModal('disclosureOverview')
+    expect(wrapper!.findAllComponents(SettingsNavSubItem).filter((n) => n.props('active')).map((n) => n.props('label'))).toEqual(['Disclosure overview'])
+  })
+
+  it('puts the folded pages\' marker on the Navide Plugins row, a warning before "On"', async () => {
+    await mountModal('general')
+    expect(pluginsRow().props('marker')).toBeNull()
+
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toMatchObject({ text: 'On', tone: 'on' })
+
+    wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', ['Effective policy: Stale'])
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toEqual({ text: '⚠', tone: 'risk', label: 'Effective policy: Stale' })
+
+    // Unfolded, the marker is back on its page's row, not on both.
+    vm().setTab('extensions')
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toBeNull()
+    expect(marker('Execution Policy')).toMatchObject({ text: '⚠' })
   })
 })

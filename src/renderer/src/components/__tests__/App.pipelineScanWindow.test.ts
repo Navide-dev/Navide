@@ -314,3 +314,41 @@ describe('a cross-agent handoff does not swallow a sibling sentinel', () => {
     expect(completed).toContain('!TURN_TEXT_VENDORS.has(sVendor)')
   })
 })
+
+describe('turn-text vendors take their questions from the turn, not the buffer (#733)', () => {
+  // Codex echoes the kickoff verbatim, so its buffer holds the protocol's own
+  // QUESTION examples past scanFrom. claude/codex have validated turn text, so
+  // judgeTurnText surfaces their questions and the buffer scan skips them.
+  const judge = fnBody('function judgeTurnText(')
+  const watcher = body('function startStageWatcher(', '\nfunction handleAnalyzerResult(')
+
+  it('judgeTurnText enqueues the turn questions for a turn-text vendor', () => {
+    expect(judge).toContain("TURN_TEXT_VENDORS.has(paneMeta?.agentKey ?? '')")
+    expect(judge).toContain('enqueueQuestion({')
+    expect(judge).toContain('watcher.waitingForAnswer = true')
+  })
+
+  it('never asks the same turn twice, nor while an answer is pending', () => {
+    expect(judge).toContain('!watcher.waitingForAnswer')
+    expect(judge).toContain('watcher.turnQuestionKey !== turnKey')
+    expect(judge).toContain('watcher.turnQuestionKey = turnKey')
+    // The freshness guard still runs before any question is surfaced.
+    expect(judge.indexOf('TURN_TEXT_REPLAY_TOLERANCE_MS')).toBeLessThan(judge.indexOf('enqueueQuestion({'))
+  })
+
+  it('a question in the turn still wins over the sentinel', () => {
+    expect(judge.indexOf('if (realBlocks.length > 0)')).toBeLessThan(judge.indexOf('turnEndsWithSentinel('))
+  })
+
+  it('skips both buffer question scans and the pending-question stall check for turn-text vendors', () => {
+    expect(watcher).toContain('const turnTextVendor = TURN_TEXT_VENDORS.has(')
+    const scans = watcher.match(/stage\.allowQuestions && !turnTextVendor/g) ?? []
+    expect(scans.length).toBe(2)
+    expect(watcher).toMatch(/stage\.allowQuestions &&\s*!turnTextVendor &&\s*buf\.indexOf\('---QUESTION-START---'/)
+  })
+
+  it('the buffer scans that remain skip the protocol examples', () => {
+    const calls = watcher.match(/findConsecutiveQuestionBlocks\(buf, watcher\.scanFrom, undefined, PROTOCOL_EXAMPLE_PROMPTS\)/g) ?? []
+    expect(calls.length).toBe(2)
+  })
+})
