@@ -35,6 +35,7 @@ export interface MenuStrings {
   copy: string
   settings: string
   checkUpdates: string
+  lockNow: string
   newWindow: string
   openWorkspace: string
   openRecent: string
@@ -66,6 +67,7 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     copy: 'Copy',
     settings: 'Settings…',
     checkUpdates: 'Check for Updates…',
+    lockNow: 'Lock Now',
     newWindow: 'New Window',
     openWorkspace: 'Open Workspace…',
     openRecent: 'Open Recent',
@@ -97,6 +99,7 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     copy: 'コピー',
     settings: '設定…',
     checkUpdates: 'アップデートを確認…',
+    lockNow: '今すぐロック',
     newWindow: '新しいウィンドウ',
     openWorkspace: 'ワークスペースを開く…',
     openRecent: '最近使用した項目を開く',
@@ -133,6 +136,7 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     copy: '複製',
     settings: '設定…',
     checkUpdates: '檢查更新…',
+    lockNow: '立即鎖定',
     newWindow: '開新視窗',
     openWorkspace: '開啟工作區…',
     openRecent: '開啟最近使用',

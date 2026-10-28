@@ -157,6 +157,22 @@ describe('installApplicationMenu', () => {
     expect(hooks.calls).toEqual(['settings', 'check-updates'])
   })
 
+  it.each([
+    ['darwin', 'Agent-Team'],
+    ['linux', 'File'],
+    ['win32', 'File'],
+  ] as const)('on %s the %s menu has Lock Now with ⌘⌥L, enabled only while App Lock can lock', (platform, top) => {
+    setPlatformId(platform)
+    installApplicationMenu({ ...hooks, onLockNow: () => hooks.calls.push('lock-now'), lockNowEnabled: () => false }, [], 'en-US')
+    expect(itemIn(submenuOf(top), 'Lock Now').enabled).toBe(false)
+    installApplicationMenu({ ...hooks, onLockNow: () => hooks.calls.push('lock-now'), lockNowEnabled: () => true }, [], 'en-US')
+    const lock = itemIn(submenuOf(top), 'Lock Now')
+    expect(lock.accelerator).toBe('CmdOrCtrl+Alt+L')
+    expect(lock.enabled).toBe(true)
+    fire(lock)
+    expect(hooks.calls).toEqual(['lock-now'])
+  })
+
   it('File has Open Workspace… with ⌘O that invokes its hook', () => {
     const open = itemIn(submenuOf('File'), 'Open Workspace…')
     expect(open.accelerator).toBe('CmdOrCtrl+O')
