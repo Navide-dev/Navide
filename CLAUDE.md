@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Agent-Team: Electron (Vue 3 + TypeScript, Bun) frontend + Python (uv) backend.
+Agent-Team: Electron (Vue 3 + TypeScript, pnpm) frontend + Python (uv) backend.
 This file is a router — read the referenced file BEFORE doing the matching work.
 
 ## Route table
@@ -28,19 +28,14 @@ in-repo docs above.
 
 ## Always-on rules (the expensive-to-violate subset)
 
-1. **Tests**: `bun run test:run`. **Never bare `bun test`** — that runs Bun's
-   own test runner, not Vitest, and ignores `vitest.config.ts` (projects,
-   aliases, global setup), so its results mean nothing — and never
-   `bun run test` (Vitest watch mode hangs). Backend:
+1. **Tests**: `pnpm test:run`, never `pnpm test` (watch mode hangs). Backend:
    `uv --project backend run pytest backend/tests` (the path argument is
    required — without it pytest misses backend's ini config). Run verification
    commands bare — no pipe to tail/head (it eats the exit code). While
-   iterating, `bun run vitest run --changed origin/main` and
+   iterating, `pnpm vitest run --changed origin/main` and
    `node scripts/changed-backend-tests.mjs` run only the affected tests (the
    latter isolated like the release gate, see `CONTRIBUTING.md`); the full
-   suites stay the CI and release default. `pluginExternalWorkspace.test.ts`
-   plays an external plugin author and needs a real `pnpm` on PATH; without it
-   that one test fails with `Executable not found in $PATH: "pnpm"`. Do not mix `bun install` and `pnpm install` in one `node_modules`.
+   suites stay the CI and release default.
 2. **Never clear terminal scrollback** — no `term.clear()` in any
    resize/redraw path.
 3. **No self-initiated commits** — the user decides when to commit, unless

@@ -114,7 +114,8 @@ jobs:
           test "${host}" = "${{ matrix.target }}"
 
       - name: Build navide.plans
-        # The same build commands scripts/publish-first-party-plugins.sh runs.
+        # The same package scripts scripts/publish-first-party-plugins.sh runs,
+        # run through Bun here (the publish script still uses pnpm).
         # The input reaches the build through env, never the script text; empty
         # keeps the ref's package.json version (the vite configs' default).
         env:
