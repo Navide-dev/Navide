@@ -539,6 +539,24 @@ describe('CliAccountsPane', () => {
     expect(w.emitted('login')).toEqual([['claude', 'p1']])
   })
 
+  it('with an empty Default, signIn on another non-active profile asks nothing and switches nothing', async () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2'), profile('p2', 'claude', 'Account 3')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { p1: { email: 'me@example.com', signedIn: true } } },
+    })
+    const w = mountPane(api)
+
+    // Row 0 is the collapsed empty Default, row 1 the active p1, row 2 p2.
+    const row = section(w, 0).findAll('.cli-card')[2]
+    await row.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
+    await flushPromises()
+
+    expect(notify.confirm).not.toHaveBeenCalled()
+    expect(api.setDefault).not.toHaveBeenCalled()
+    expect(w.emitted('login')).toEqual([['claude', 'p2']])
+  })
+
   it('signIn on the ACTIVE profile stays a live login (no profile id)', async () => {
     const api = makeApi({
       profiles: [profile('p1', 'claude', 'Account 2')],
