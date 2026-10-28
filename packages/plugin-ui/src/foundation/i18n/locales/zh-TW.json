@@ -6844,7 +6844,7 @@
       "no-headers": "沒有標頭",
       "show": "顯示",
       "hide": "隱藏",
-      "conflict": "此檔案已在 Agent-Team 外部變更，請重新載入後再儲存。",
+      "conflict": "此檔案已在 Navide 外部變更，請重新載入後再儲存。",
       "reload": "從磁碟重新載入",
       "custom-title": "新增自訂 MCP server",
       "custom-hint": "先選擇傳輸方式，建立後再到已安裝清單填寫連線資訊。",
@@ -7448,15 +7448,14 @@
       "error-save": "無法儲存這個檔案，草稿仍留在編輯器中。"
     },
     "prompts": {
-      "title": "Prompt 技能",
       "intro": "CLI pane 的 ∞ 按鈕可施放的整段指令。一個技能就是一整段 prompt —— 選技能是「換一段」，不會跟別的技能疊加。只有預設技能會以 loop 執行，其他技能都只送出一次。",
-      "new": "新增技能",
-      "new-name": "新技能",
+      "new": "新增 Prompt",
+      "new-name": "新 Prompt",
       "copy-name": "{name} 副本",
       "filter-label": "依分類篩選",
       "all": "全部",
-      "search": "搜尋技能…",
-      "empty": "沒有符合這個篩選的技能。",
+      "search": "搜尋 Prompt…",
+      "empty": "沒有符合這個篩選的 Prompt。",
       "default-badge": "★ 預設",
       "turns": "×{n}",
       "turns-unlimited": "無輪次上限",
@@ -7490,8 +7489,7 @@
       "notifications": "通知",
       "settings-management": "設定管理",
       "theme": "主題",
-      "other": "其他",
-      "updates": "更新"
+      "other": "其他"
     },
     "p2p": {
       "title": "連線",
@@ -9058,7 +9056,7 @@
   },
   "updater": {
     "section-title": "更新",
-    "section-hint": "讓 Agent-Team 保持在最新版本。更新會套用到所有工作區。",
+    "section-hint": "讓 Navide 保持在最新版本。更新會套用到所有工作區。",
     "current-version": "目前版本",
     "check": "檢查更新",
     "checking": "正在檢查更新…",

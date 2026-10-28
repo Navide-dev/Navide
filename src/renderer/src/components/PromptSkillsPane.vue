@@ -200,7 +200,6 @@ function applyCustomIcon(): void {
     <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
     <div class="prompts-toolbar">
       <div>
-        <h2>{{ t('settings.prompts.title') }}</h2>
         <p>{{ t('settings.prompts.intro') }}</p>
       </div>
       <button type="button" class="primary" @click="createSkill">
@@ -480,13 +479,8 @@ textarea:focus {
   justify-content: space-between;
   gap: 10px;
 }
-.prompts-toolbar h2 {
-  margin: 0;
-  font-size: 15px;
-  color: var(--text-bright);
-}
 .prompts-toolbar p {
-  margin: 3px 0 0;
+  margin: 0;
   max-width: 62ch;
   color: var(--text-secondary);
   font-size: var(--font-2xs);

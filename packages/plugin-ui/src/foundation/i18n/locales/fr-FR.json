@@ -6844,7 +6844,7 @@
       "no-headers": "Aucun en-tête",
       "show": "Afficher",
       "hide": "Masquer",
-      "conflict": "Ce fichier a été modifié en dehors d’Agent-Team. Rechargez-le avant d’enregistrer de nouveau.",
+      "conflict": "Ce fichier a été modifié en dehors de Navide. Rechargez-le avant d’enregistrer de nouveau.",
       "reload": "Recharger depuis le disque",
       "custom-title": "Ajouter un serveur MCP personnalisé",
       "custom-hint": "Choisissez maintenant un transport, puis renseignez ses détails de connexion dans la liste des serveurs installés.",
@@ -7448,15 +7448,14 @@
       "error-save": "Impossible d’enregistrer ce fichier. Votre brouillon reste dans l’éditeur."
     },
     "prompts": {
-      "title": "Prompts",
       "intro": "Des instructions complètes réutilisables qu’un pane CLI peut lancer depuis son bouton ∞. Un skill correspond à un prompt complet – choisir un skill remplace le prompt, il ne s’ajoute jamais à un autre. Seul le skill par défaut s’exécute en boucle ; tous les autres sont envoyés une seule fois.",
-      "new": "Nouveau skill",
-      "new-name": "Nouveau skill",
+      "new": "Nouveau prompt",
+      "new-name": "Nouveau prompt",
       "copy-name": "{name} (copie)",
       "filter-label": "Filtrer par catégorie",
       "all": "Tous",
-      "search": "Rechercher des skills…",
-      "empty": "Aucun skill ne correspond à ce filtre.",
+      "search": "Rechercher des prompts…",
+      "empty": "Aucun prompt ne correspond à ce filtre.",
       "default-badge": "★ Par défaut",
       "turns": "×{n}",
       "turns-unlimited": "Pas de limite de tours",
@@ -7490,8 +7489,7 @@
       "notifications": "Notifications",
       "settings-management": "Gestion des paramètres",
       "theme": "Thème",
-      "other": "Autres",
-      "updates": "Mises à jour"
+      "other": "Autres"
     },
     "p2p": {
       "title": "Connexion",
@@ -9058,7 +9056,7 @@
   },
   "updater": {
     "section-title": "Mises à jour",
-    "section-hint": "Gardez Agent-Team à jour. Les mises à jour s’appliquent à tous les espaces de travail.",
+    "section-hint": "Gardez Navide à jour. Les mises à jour s’appliquent à tous les espaces de travail.",
     "current-version": "Version actuelle",
     "check": "Rechercher des mises à jour",
     "checking": "Recherche de mises à jour…",

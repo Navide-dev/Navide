@@ -6844,7 +6844,7 @@
       "no-headers": "Sem cabeçalhos",
       "show": "Mostrar",
       "hide": "Ocultar",
-      "conflict": "Este arquivo foi alterado fora do Agent-Team. Recarregue antes de salvar de novo.",
+      "conflict": "Este arquivo foi alterado fora do Navide. Recarregue antes de salvar de novo.",
       "reload": "Recarregar do disco",
       "custom-title": "Adicionar servidor MCP personalizado",
       "custom-hint": "Escolha um transporte agora e depois preencha os dados de conexão na lista de servidores instalados.",
@@ -7448,15 +7448,14 @@
       "error-save": "Não foi possível salvar este arquivo. Seu rascunho continua no editor."
     },
     "prompts": {
-      "title": "Prompts",
       "intro": "Instruções completas e reutilizáveis que um pane de CLI pode lançar pelo botão ∞. Uma skill é um prompt completo: escolher uma skill substitui o prompt, nunca se soma a outro. Só a skill padrão é executada em loop; todas as outras são enviadas uma vez.",
-      "new": "Nova skill",
-      "new-name": "Nova skill",
+      "new": "Novo prompt",
+      "new-name": "Novo prompt",
       "copy-name": "Cópia de {name}",
       "filter-label": "Filtrar por categoria",
       "all": "Todas",
-      "search": "Pesquisar skills…",
-      "empty": "Nenhuma skill corresponde a este filtro.",
+      "search": "Pesquisar prompts…",
+      "empty": "Nenhum prompt corresponde a este filtro.",
       "default-badge": "★ Padrão",
       "turns": "×{n}",
       "turns-unlimited": "Sem limite de turnos",
@@ -7490,8 +7489,7 @@
       "notifications": "Notificações",
       "settings-management": "Gerenciamento de configurações",
       "theme": "Tema",
-      "other": "Outros",
-      "updates": "Atualizações"
+      "other": "Outros"
     },
     "p2p": {
       "title": "Conexão",
@@ -9058,7 +9056,7 @@
   },
   "updater": {
     "section-title": "Atualizações",
-    "section-hint": "Mantenha o Agent-Team atualizado. As atualizações valem para todos os workspaces.",
+    "section-hint": "Mantenha o Navide atualizado. As atualizações valem para todos os workspaces.",
     "current-version": "Versão atual",
     "check": "Verificar atualizações",
     "checking": "Verificando atualizações…",

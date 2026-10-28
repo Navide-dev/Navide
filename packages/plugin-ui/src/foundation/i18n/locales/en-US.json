@@ -6844,7 +6844,7 @@
       "no-headers": "No headers",
       "show": "Show",
       "hide": "Hide",
-      "conflict": "This file changed outside Agent-Team. Reload before saving again.",
+      "conflict": "This file changed outside Navide. Reload before saving again.",
       "reload": "Reload from Disk",
       "custom-title": "Add custom MCP server",
       "custom-hint": "Choose a transport now, then fill in its connection details from the installed-server list.",
@@ -7448,15 +7448,14 @@
       "error-save": "Could not save this file. Your draft remains in the editor."
     },
     "prompts": {
-      "title": "Prompts",
       "intro": "Reusable whole instructions a CLI pane can cast from its ∞ button. One skill is one complete prompt — picking a skill replaces the prompt, it never appends to another. Only the default skill runs as a loop; every other skill is sent once.",
-      "new": "New Skill",
-      "new-name": "New skill",
+      "new": "New Prompt",
+      "new-name": "New prompt",
       "copy-name": "{name} copy",
       "filter-label": "Filter by category",
       "all": "All",
-      "search": "Search skills…",
-      "empty": "No skill matches this filter.",
+      "search": "Search prompts…",
+      "empty": "No prompt matches this filter.",
       "default-badge": "★ Default",
       "turns": "×{n}",
       "turns-unlimited": "No turn cap",
@@ -7490,8 +7489,7 @@
       "notifications": "Notifications",
       "settings-management": "Settings management",
       "theme": "Theme",
-      "other": "Other",
-      "updates": "Updates"
+      "other": "Other"
     },
     "p2p": {
       "title": "Connection",
@@ -9058,7 +9056,7 @@
   },
   "updater": {
     "section-title": "Updates",
-    "section-hint": "Keep Agent-Team up to date. Updates apply to all workspaces.",
+    "section-hint": "Keep Navide up to date. Updates apply to all workspaces.",
     "current-version": "Current version",
     "check": "Check for Updates",
     "checking": "Checking for updates…",

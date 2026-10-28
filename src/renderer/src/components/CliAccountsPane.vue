@@ -916,12 +916,13 @@ onMounted(() => refreshUsage())
 .cli-pane { display: flex; flex-direction: column; }
 .cli-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   margin-bottom: 14px;
 }
-.cli-head-text { min-width: 0; }
+.cli-head-text { flex: 1 1 16em; min-width: 0; }
 .cli-refresh { flex: none; }
 /* Edge cases fold away under the one-sentence summary. */
 .cli-more { margin: 4px 0 0; font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; }
@@ -946,9 +947,10 @@ onMounted(() => refreshUsage())
 .cli-agent { margin-bottom: 18px; }
 .cli-agent-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   margin-bottom: 8px;
 }
 .cli-agent-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
@@ -1141,6 +1143,7 @@ onMounted(() => refreshUsage())
 }
 
 .cli-btn {
+  white-space: nowrap;
   border-radius: 5px;
   font-size: var(--font-xs);
   padding: 5px 10px;

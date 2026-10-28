@@ -343,6 +343,15 @@ watch(activeTab, (tab, previous) => {
   if (tab === 'extensions' && previous !== 'extensions' && previous !== 'disclosureOverview') pluginsPage.value = 'plugins'
 }, { immediate: true, flush: 'sync' })
 watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.value = true })
+// Keep the active sidebar row visible when the tab changes (or Settings opens
+// on a tab near the bottom of the list). Only the sidebar scrolls.
+const navRef = ref<HTMLElement | null>(null)
+watch(activeTab, () => {
+  const nav = navRef.value
+  const row = nav?.querySelector<HTMLElement>('.settings-nav-subitem.active')
+    ?? nav?.querySelector<HTMLElement>('.settings-nav-item.active')
+  row?.scrollIntoView?.({ block: 'nearest' })
+}, { immediate: true, flush: 'post' })
 // D-f: the disclosure overview reads every plugin's activity, so it mounts the
 // first time its page is shown (opening Settings, or another page, reads
 // nothing), and it polls only while that page is shown.
@@ -2697,7 +2706,7 @@ watch(activeTab, (tab) => {
             </div>
           </div>
 
-          <nav class="s-nav" :aria-label="$t('settings.nav.sections-label')">
+          <nav class="s-nav" ref="navRef" :aria-label="$t('settings.nav.sections-label')">
             <div class="s-nav-group">
               <div class="s-nav-group-title">{{ $t('settings.nav.group.general') }}</div>
               <SettingsNavItem :label="$t('settings.nav.general')" :active="activeTab === 'general'" @select="activeTab = 'general'">
@@ -4283,71 +4292,69 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'updates'" class="s-body updates-body">
           <h1 class="s-page-title">{{ $t('settings.nav.updates') }}</h1>
 
-          <SettingsSection :label="$t('settings.section.updates')">
-            <SettingsCard data-settings-section="updates">
-              <SettingRow :title="$t('updater.section-title')" :description="$t('updater.section-hint')">
-                <template #control>
-                  <button class="ap-reset" :disabled="updIsBusy || updateState.status === 'unsupported'" @click="checkForUpdates">{{ $t('updater.check') }}</button>
-                </template>
-              </SettingRow>
-              <div class="s-fullrow">
-                <div class="settings-meta-row inline">
-                  <span class="scope-badge">{{ $t('updater.current-version') }}</span>
-                  <span class="settings-path" v-truncate>v{{ updateState.currentVersion }}</span>
-                </div>
+          <SettingsCard data-settings-section="updates">
+            <SettingRow :title="$t('updater.section-title')" :description="$t('updater.section-hint')">
+              <template #control>
+                <button class="ap-reset" :disabled="updIsBusy || updateState.status === 'unsupported'" @click="checkForUpdates">{{ $t('updater.check') }}</button>
+              </template>
+            </SettingRow>
+            <div class="s-fullrow">
+              <div class="settings-meta-row inline">
+                <span class="scope-badge">{{ $t('updater.current-version') }}</span>
+                <span class="settings-path" v-truncate>v{{ updateState.currentVersion }}</span>
+              </div>
 
-                <!-- Where the update actually is. Each stage below owns the
-                     settings group of the same name. -->
-                <ol v-if="updStages.length" class="upd-rail">
-                  <li
-                    v-for="(stage, stageIndex) in updStages"
-                    :key="stage.id"
-                    :class="['upd-stage', stage.state]"
-                  >
-                    <span class="upd-stage-mark" aria-hidden="true">
-                      {{ stage.state === 'done' ? '✓' : stage.state === 'failed' ? '!' : stageIndex + 1 }}
-                    </span>
-                    <span class="upd-stage-label">{{ $t(`updater.stage.${stage.id}`) }}</span>
-                    <span v-if="stage.percent !== undefined" class="upd-stage-pct">{{ stage.percent }}%</span>
-                  </li>
-                </ol>
+              <!-- Where the update actually is. Each stage below owns the
+                   settings group of the same name. -->
+              <ol v-if="updStages.length" class="upd-rail">
+                <li
+                  v-for="(stage, stageIndex) in updStages"
+                  :key="stage.id"
+                  :class="['upd-stage', stage.state]"
+                >
+                  <span class="upd-stage-mark" aria-hidden="true">
+                    {{ stage.state === 'done' ? '✓' : stage.state === 'failed' ? '!' : stageIndex + 1 }}
+                  </span>
+                  <span class="upd-stage-label">{{ $t(`updater.stage.${stage.id}`) }}</span>
+                  <span v-if="stage.percent !== undefined" class="upd-stage-pct">{{ stage.percent }}%</span>
+                </li>
+              </ol>
 
-                <p v-if="updateState.status === 'checking'" class="ap-hint">{{ $t('updater.checking') }}</p>
-                <p v-else-if="updateState.status === 'not-available'" class="summary-ok">{{ $t('updater.up-to-date') }}</p>
-                <p v-else-if="updateState.status === 'error'" class="err-msg">{{ $t('updater.error', { message: updateState.message }) }}</p>
-                <p v-else-if="updateState.status === 'unsupported'" class="ap-hint">{{ $t('updater.unsupported') }}</p>
+              <p v-if="updateState.status === 'checking'" class="ap-hint">{{ $t('updater.checking') }}</p>
+              <p v-else-if="updateState.status === 'not-available'" class="summary-ok">{{ $t('updater.up-to-date') }}</p>
+              <p v-else-if="updateState.status === 'error'" class="err-msg">{{ $t('updater.error', { message: updateState.message }) }}</p>
+              <p v-else-if="updateState.status === 'unsupported'" class="ap-hint">{{ $t('updater.unsupported') }}</p>
 
-                <!-- Diagnostics: a run of failed background checks always shows
-                     here. notifyOnCheckFailure only gates the status bar. -->
-                <p v-if="updateState.lastCheckFailure" class="err-msg">
-                  {{ $t('updater.check-failure', {
-                    count: updateState.lastCheckFailure.count,
-                    message: updateState.lastCheckFailure.message,
-                  }) }}
-                  {{ updateState.checkedAt
-                    ? $t('updater.last-successful-check', { at: updLastSuccessfulCheck })
-                    : $t('updater.last-successful-check-never') }}
+              <!-- Diagnostics: a run of failed background checks always shows
+                   here. notifyOnCheckFailure only gates the status bar. -->
+              <p v-if="updateState.lastCheckFailure" class="err-msg">
+                {{ $t('updater.check-failure', {
+                  count: updateState.lastCheckFailure.count,
+                  message: updateState.lastCheckFailure.message,
+                }) }}
+                {{ updateState.checkedAt
+                  ? $t('updater.last-successful-check', { at: updLastSuccessfulCheck })
+                  : $t('updater.last-successful-check-never') }}
+              </p>
+
+              <div v-if="['available', 'downloading', 'downloaded', 'installing'].includes(updateState.status)" class="upd-available">
+                <p class="summary-ok">{{ $t('updater.available', { version: updateState.availableVersion }) }}</p>
+                <p v-if="updateState.status === 'downloading'" class="ap-hint">{{ $t('updater.downloading', { percent: updateState.percent ?? 0 }) }}</p>
+                <p v-else-if="updateState.status === 'downloaded'" class="ap-hint">
+                  {{ updateState.quitInstallArmed ? $t('updater.downloaded-on-quit') : $t('updater.downloaded') }}
                 </p>
-
-                <div v-if="['available', 'downloading', 'downloaded', 'installing'].includes(updateState.status)" class="upd-available">
-                  <p class="summary-ok">{{ $t('updater.available', { version: updateState.availableVersion }) }}</p>
-                  <p v-if="updateState.status === 'downloading'" class="ap-hint">{{ $t('updater.downloading', { percent: updateState.percent ?? 0 }) }}</p>
-                  <p v-else-if="updateState.status === 'downloaded'" class="ap-hint">
-                    {{ updateState.quitInstallArmed ? $t('updater.downloaded-on-quit') : $t('updater.downloaded') }}
-                  </p>
-                  <p v-else-if="updateState.status === 'installing'" class="ap-hint">{{ $t('updater.restarting') }}</p>
-                  <div v-if="updateState.releaseNotes" class="upd-notes">
-                    <div class="ap-hint">{{ $t('updater.release-notes') }}</div>
-                    <pre class="upd-notes-body">{{ updateState.releaseNotes }}</pre>
-                  </div>
-                  <div class="row-g gap">
-                    <button v-if="updateState.status === 'available'" class="ap-reset" @click="startDownload">{{ $t('updater.download') }}</button>
-                    <button v-else-if="updateState.status === 'downloaded'" class="ap-reset" @click="installUpdate">{{ $t('updater.install') }}</button>
-                  </div>
+                <p v-else-if="updateState.status === 'installing'" class="ap-hint">{{ $t('updater.restarting') }}</p>
+                <div v-if="updateState.releaseNotes" class="upd-notes">
+                  <div class="ap-hint">{{ $t('updater.release-notes') }}</div>
+                  <pre class="upd-notes-body">{{ updateState.releaseNotes }}</pre>
+                </div>
+                <div class="row-g gap">
+                  <button v-if="updateState.status === 'available'" class="ap-reset" @click="startDownload">{{ $t('updater.download') }}</button>
+                  <button v-else-if="updateState.status === 'downloaded'" class="ap-reset" @click="installUpdate">{{ $t('updater.install') }}</button>
                 </div>
               </div>
-            </SettingsCard>
-          </SettingsSection>
+            </div>
+          </SettingsCard>
 
           <!-- One group per stage of the rail above: every setting sits under
                the step of the update it actually governs, instead of nine
@@ -5737,8 +5744,9 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   padding: 12px 22px; border-bottom: 1px solid var(--border-muted);
   flex-shrink: 0; background: var(--bg-inset);
 }
-.mcp-page-title { font-size: var(--font-sm); font-weight: 700; color: var(--text-bright); flex: 1; min-width: 0; }
-.mcp-topbar-actions { display: flex; gap: 8px; }
+/* The title keeps a readable width; the actions drop below it instead of squeezing it. */
+.mcp-page-title { font-size: var(--font-sm); font-weight: 700; color: var(--text-bright); flex: 1; min-width: 12em; }
+.mcp-topbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .mcp-action-btn {
   font-size: var(--font-2xs); padding: 5px 11px; border-radius: var(--radius-sm);
   background: var(--bg-muted); border: 1px solid var(--border-default); color: var(--text-bright); cursor: pointer;

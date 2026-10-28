@@ -449,7 +449,6 @@ defineExpose({ reload, confirmDiscard })
   <section class="memory-pane" :aria-label="t('settings.memory.title')">
     <header class="memory-pane-head">
       <div>
-        <h2>{{ t('settings.memory.title') }}</h2>
         <p>{{ t('settings.memory.intro') }}</p>
       </div>
       <button type="button" :disabled="loading || busy" @click="reload">{{ t('action.refresh') }}</button>
@@ -665,8 +664,7 @@ defineExpose({ reload, confirmDiscard })
   color: var(--text-primary);
 }
 .memory-pane-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.memory-pane-head h2 { margin: 0; font-size: 15px; color: var(--text-bright); }
-.memory-pane-head p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); }
+.memory-pane-head p { margin: 0; color: var(--text-secondary); font-size: var(--font-2xs); }
 button, textarea { font: inherit; }
 button {
   border: 1px solid var(--border-default);

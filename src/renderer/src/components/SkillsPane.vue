@@ -1328,6 +1328,10 @@ watch(
   justify-content: space-between;
   gap: 10px;
 }
+/* Narrow widths: the actions wrap below the heading instead of squeezing it. */
+.skills-toolbar,
+.skills-toolbar-actions { flex-wrap: wrap; }
+.skills-toolbar > div:first-child { flex: 1 1 16em; min-width: 0; }
 .skills-toolbar h2,
 .skill-editor-head h3 { margin: 0; color: var(--text-bright); }
 .skills-toolbar h2 { font-size: 15px; }

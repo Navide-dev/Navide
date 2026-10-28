@@ -6844,7 +6844,7 @@
       "no-headers": "Không có header",
       "show": "Hiện",
       "hide": "Ẩn",
-      "conflict": "Tệp này đã thay đổi bên ngoài Agent-Team. Hãy tải lại trước khi lưu lần nữa.",
+      "conflict": "Tệp này đã thay đổi bên ngoài Navide. Hãy tải lại trước khi lưu lần nữa.",
       "reload": "Tải lại từ đĩa",
       "custom-title": "Thêm máy chủ MCP tùy chỉnh",
       "custom-hint": "Chọn giao thức truyền ngay bây giờ, rồi điền thông tin kết nối trong danh sách máy chủ đã cài.",
@@ -7448,15 +7448,14 @@
       "error-save": "Không lưu được tệp này. Bản nháp của bạn vẫn còn trong trình soạn thảo."
     },
     "prompts": {
-      "title": "Prompt",
       "intro": "Các chỉ thị hoàn chỉnh dùng lại được mà pane CLI có thể dùng từ nút ∞ của nó. Một skill là một prompt hoàn chỉnh — chọn skill sẽ thay thế prompt, không bao giờ nối thêm vào prompt khác. Chỉ skill mặc định chạy dạng loop; mọi skill khác chỉ được gửi một lần.",
-      "new": "Skill mới",
-      "new-name": "Skill mới",
+      "new": "Prompt mới",
+      "new-name": "Prompt mới",
       "copy-name": "Bản sao của {name}",
       "filter-label": "Lọc theo danh mục",
       "all": "Tất cả",
-      "search": "Tìm skill…",
-      "empty": "Không có skill nào khớp với bộ lọc này.",
+      "search": "Tìm prompt…",
+      "empty": "Không có prompt nào khớp với bộ lọc này.",
       "default-badge": "★ Mặc định",
       "turns": "×{n}",
       "turns-unlimited": "Không giới hạn lượt",
@@ -7490,8 +7489,7 @@
       "notifications": "Thông báo",
       "settings-management": "Quản lý cài đặt",
       "theme": "Chủ đề",
-      "other": "Khác",
-      "updates": "Cập nhật"
+      "other": "Khác"
     },
     "p2p": {
       "title": "Kết nối",
@@ -9058,7 +9056,7 @@
   },
   "updater": {
     "section-title": "Cập nhật",
-    "section-hint": "Giữ Agent-Team luôn mới nhất. Bản cập nhật áp dụng cho mọi workspace.",
+    "section-hint": "Giữ Navide luôn mới nhất. Bản cập nhật áp dụng cho mọi workspace.",
     "current-version": "Phiên bản hiện tại",
     "check": "Kiểm tra cập nhật",
     "checking": "Đang kiểm tra cập nhật…",

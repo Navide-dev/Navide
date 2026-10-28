@@ -6844,7 +6844,7 @@
       "no-headers": "헤더 없음",
       "show": "표시",
       "hide": "숨기기",
-      "conflict": "이 파일이 Agent-Team 밖에서 변경됐어요. 다시 저장하기 전에 다시 불러오세요.",
+      "conflict": "이 파일이 Navide 밖에서 변경됐어요. 다시 저장하기 전에 다시 불러오세요.",
       "reload": "디스크에서 다시 불러오기",
       "custom-title": "사용자 지정 MCP 서버 추가",
       "custom-hint": "지금 전송 방식을 고른 다음, 설치된 서버 목록에서 연결 정보를 입력하세요.",
@@ -7448,15 +7448,14 @@
       "error-save": "이 파일을 저장하지 못했어요. 초안은 편집기에 남아 있어요."
     },
     "prompts": {
-      "title": "프롬프트",
       "intro": "CLI pane이 ∞ 버튼으로 보낼 수 있는 재사용 가능한 완전한 지시예요. 스킬 하나가 완전한 프롬프트 하나이며, 스킬을 고르면 프롬프트가 바뀔 뿐 다른 프롬프트에 덧붙지 않아요. 기본 스킬만 루프로 실행되고 다른 스킬은 한 번만 전송돼요.",
-      "new": "새 스킬",
-      "new-name": "새 스킬",
+      "new": "새 프롬프트",
+      "new-name": "새 프롬프트",
       "copy-name": "{name} 사본",
       "filter-label": "범주로 필터",
       "all": "전체",
-      "search": "스킬 검색…",
-      "empty": "이 필터와 일치하는 스킬이 없어요.",
+      "search": "프롬프트 검색…",
+      "empty": "이 필터와 일치하는 프롬프트가 없어요.",
       "default-badge": "★ 기본값",
       "turns": "×{n}",
       "turns-unlimited": "턴 제한 없음",
@@ -7490,8 +7489,7 @@
       "notifications": "알림",
       "settings-management": "설정 관리",
       "theme": "테마",
-      "other": "기타",
-      "updates": "업데이트"
+      "other": "기타"
     },
     "p2p": {
       "title": "연결",
@@ -9058,7 +9056,7 @@
   },
   "updater": {
     "section-title": "업데이트",
-    "section-hint": "Agent-Team을 최신 상태로 유지하세요. 업데이트는 모든 작업 영역에 적용돼요.",
+    "section-hint": "Navide를 최신 상태로 유지하세요. 업데이트는 모든 작업 영역에 적용돼요.",
     "current-version": "현재 버전",
     "check": "업데이트 확인",
     "checking": "업데이트 확인하는 중…",

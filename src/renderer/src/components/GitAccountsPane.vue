@@ -197,11 +197,13 @@ async function remove(id: string): Promise<void> {
 .ga-section { margin-bottom: 0; }
 .ga-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   margin-bottom: 14px;
 }
+.ga-head > div { flex: 1 1 16em; min-width: 0; }
 .ga-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
 .ga-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 60ch; line-height: 1.4; text-wrap: pretty; word-break: auto-phrase; }
 
@@ -268,6 +270,7 @@ async function remove(id: string): Promise<void> {
 .ga-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
 
 .ga-btn {
+  white-space: nowrap;
   border-radius: 5px;
   font-size: var(--font-xs);
   padding: 5px 10px;

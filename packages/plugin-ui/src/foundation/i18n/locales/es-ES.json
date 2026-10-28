@@ -6844,7 +6844,7 @@
       "no-headers": "Sin cabeceras",
       "show": "Mostrar",
       "hide": "Ocultar",
-      "conflict": "Este archivo ha cambiado fuera de Agent-Team. Vuelve a cargarlo antes de guardar de nuevo.",
+      "conflict": "Este archivo ha cambiado fuera de Navide. Vuelve a cargarlo antes de guardar de nuevo.",
       "reload": "Recargar desde el disco",
       "custom-title": "Añadir servidor MCP personalizado",
       "custom-hint": "Elige ahora un transporte y luego rellena sus datos de conexión desde la lista de servidores instalados.",
@@ -7448,15 +7448,14 @@
       "error-save": "No se pudo guardar este archivo. Tu borrador sigue en el editor."
     },
     "prompts": {
-      "title": "Prompts",
       "intro": "Instrucciones completas reutilizables que un pane de CLI puede lanzar desde su botón ∞. Una skill es un prompt completo: elegir una skill sustituye el prompt, nunca se añade a otro. Solo la skill predeterminada se ejecuta como loop; todas las demás se envían una vez.",
-      "new": "Nueva skill",
-      "new-name": "Nueva skill",
+      "new": "Nuevo prompt",
+      "new-name": "Nuevo prompt",
       "copy-name": "Copia de {name}",
       "filter-label": "Filtrar por categoría",
       "all": "Todas",
-      "search": "Buscar skills…",
-      "empty": "Ninguna skill coincide con este filtro.",
+      "search": "Buscar prompts…",
+      "empty": "Ningún prompt coincide con este filtro.",
       "default-badge": "★ Predeterminada",
       "turns": "×{n}",
       "turns-unlimited": "Sin límite de turnos",
@@ -7490,8 +7489,7 @@
       "notifications": "Notificaciones",
       "settings-management": "Gestión de ajustes",
       "theme": "Tema",
-      "other": "Otros",
-      "updates": "Actualizaciones"
+      "other": "Otros"
     },
     "p2p": {
       "title": "Conexión",
@@ -9058,7 +9056,7 @@
   },
   "updater": {
     "section-title": "Actualizaciones",
-    "section-hint": "Mantén Agent-Team actualizado. Las actualizaciones se aplican a todas las áreas de trabajo.",
+    "section-hint": "Mantén Navide actualizado. Las actualizaciones se aplican a todas las áreas de trabajo.",
     "current-version": "Versión actual",
     "check": "Buscar actualizaciones",
     "checking": "Buscando actualizaciones…",

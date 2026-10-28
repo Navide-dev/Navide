@@ -6844,7 +6844,7 @@
       "no-headers": "Keine Header",
       "show": "Anzeigen",
       "hide": "Ausblenden",
-      "conflict": "Diese Datei wurde außerhalb von Agent-Team geändert. Laden Sie sie neu, bevor Sie erneut speichern.",
+      "conflict": "Diese Datei wurde außerhalb von Navide geändert. Laden Sie sie neu, bevor Sie erneut speichern.",
       "reload": "Vom Datenträger neu laden",
       "custom-title": "Eigenen MCP-Server hinzufügen",
       "custom-hint": "Wählen Sie jetzt eine Transportart und tragen Sie dann die Verbindungsdetails in der Liste der installierten Server ein.",
@@ -7448,15 +7448,14 @@
       "error-save": "Diese Datei konnte nicht gespeichert werden. Ihr Entwurf bleibt im Editor."
     },
     "prompts": {
-      "title": "Prompts",
       "intro": "Wiederverwendbare vollständige Anweisungen, die ein CLI-pane über seine ∞-Schaltfläche auslösen kann. Ein Skill ist ein vollständiger Prompt – die Wahl eines Skills ersetzt den Prompt und hängt nie an einen anderen an. Nur der Standard-Skill läuft als Loop; jeder andere Skill wird einmal gesendet.",
-      "new": "Neuer Skill",
-      "new-name": "Neuer Skill",
+      "new": "Neuer Prompt",
+      "new-name": "Neuer Prompt",
       "copy-name": "{name} – Kopie",
       "filter-label": "Nach Kategorie filtern",
       "all": "Alle",
-      "search": "Skills suchen …",
-      "empty": "Kein Skill entspricht diesem Filter.",
+      "search": "Prompts suchen …",
+      "empty": "Kein Prompt entspricht diesem Filter.",
       "default-badge": "★ Standard",
       "turns": "×{n}",
       "turns-unlimited": "Kein Turn-Limit",
@@ -7490,8 +7489,7 @@
       "notifications": "Benachrichtigungen",
       "settings-management": "Einstellungsverwaltung",
       "theme": "Design",
-      "other": "Sonstiges",
-      "updates": "Aktualisierungen"
+      "other": "Sonstiges"
     },
     "p2p": {
       "title": "Verbindung",
@@ -9058,7 +9056,7 @@
   },
   "updater": {
     "section-title": "Updates",
-    "section-hint": "Halten Sie Agent-Team aktuell. Updates gelten für alle Arbeitsbereiche.",
+    "section-hint": "Halten Sie Navide aktuell. Updates gelten für alle Arbeitsbereiche.",
     "current-version": "Aktuelle Version",
     "check": "Nach Updates suchen",
     "checking": "Es wird nach Updates gesucht …",

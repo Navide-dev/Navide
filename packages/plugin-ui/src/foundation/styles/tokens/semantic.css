@@ -154,6 +154,12 @@
   --font-ui: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
 }
 
+/* Japanese has no spaces, so wrap at phrase boundaries instead of mid-word. */
+:lang(ja) {
+  word-break: auto-phrase;
+  line-break: strict;
+}
+
 /* Zero out motion tokens when the OS asks for reduced motion; covers
  * every consumer of --motion-* in one place. */
 @media (prefers-reduced-motion: reduce) {
