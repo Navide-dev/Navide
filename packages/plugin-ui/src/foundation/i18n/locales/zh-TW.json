@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI 以結束代碼 {code} 結束，可能是當掉了；這個代碼也記錄在錯誤帳本裡。",
       "stuck-badge": "⏳ 超過 {minutes} 分鐘沒有動靜",
       "stuck-tooltip": "這個回合已超過 {minutes} 分鐘沒有任何紀錄或輸出，CLI 可能卡住了；Navide 沒有中斷它。",
+      "stale-config-badge": "設定已更新",
+      "stale-config-tooltip-mcp": "這個 pane 開啟後，此 CLI 的 MCP server 有變動。重建前它會沿用舊清單。點一下重建（接續對話）。",
+      "stale-config-tooltip-skills": "這個 pane 開啟後，送給此 CLI 的 skills 有變動。重建前它可能沿用舊的。點一下重建（接續對話）。",
+      "stale-config-tooltip-both": "這個 pane 開啟後，此 CLI 的 MCP server 與 skills 都有變動。重建前它會沿用舊的。點一下重建（接續對話）。",
       "usage-limit-badge": "⛔ {time} 恢復",
       "usage-limit-badge-unknown": "⛔ 額度用完",
       "usage-limit-tooltip": "此 CLI 的額度已用完 — 預計 {time} 恢復。點擊可清除",
@@ -1506,6 +1510,19 @@
         "hot-reload": "熱重載前，每個 session 會詢問一次"
       }
     },
+    "applies": {
+      "new-panes-only": "新開的 pane 才生效",
+      "new-panes-only-tooltip": "CLI 啟動時才讀這項設定。已開著的 pane 會沿用舊值，重建後才套用。"
+    },
+    "stale-config": {
+      "title": "在這次變更前就開著的 pane：{count} 個",
+      "body-mcp": "CLI 啟動時才讀自己的 MCP server，所以這些 pane 仍在用舊清單。重建會接續對話，但會中斷進行中的回合並重印對話。",
+      "body-skills": "CLI 啟動時才讀 skills，所以這些 pane 可能仍在用舊的。重建會接續對話，但會中斷進行中的回合並重印對話。",
+      "rebuild-all-idle": "重建所有閒置的（{count}）",
+      "busy": "執行中——「重建所有閒置的」會跳過",
+      "cannot-rebuild": "沒有可接續的對話",
+      "rebuild": "重建"
+    },
     "limits": {
       "hint": "選用的限制，避免 Navide 與它啟動的 agent 把這台電腦壓垮。每一項在你調整之前都是關閉，或維持 Navide 原本的行為。",
       "test-workers": "限制新 pane 的測試 worker 數",
@@ -1940,7 +1957,7 @@
       "restore": "還原",
       "candidateReady": "更新 {version} 已就緒",
       "activationFailed": "{plugin} 已安裝，但無法啟用：{reason}。請在下方清單重新啟動或捨棄它。",
-      "switchNow": "核准後，{id} 會立即切換到 {version}。開著的畫面會重新載入，畫面裡沒存的內容會遺失。這次切換會記錄在公告中心，可以一鍵退回。",
+      "switchNow": "核准後，{id} 會立即切換到 {version}。開著的畫面會重新載入：用 Navide SDK 保存狀態的畫面會回到原來的位置，其他沒存的內容會遺失。這次切換會記錄在公告中心，可以一鍵退回。",
       "restartPlugin": "重新啟動 Navide 外掛",
       "disable": "停用",
       "enable": "啟用",
@@ -8176,11 +8193,14 @@
         "agent-switch-confirm-to": "切換後帳號",
         "agent-switch-confirm-caller": "提出要求的 pane",
         "agent-switch-confirm-workspace": "pane 所在的 workspace",
+        "agent-switch-confirm-pane": "要移動的 pane",
+        "agent-switch-confirm-pane-body": "你同意之前什麼都不會切換。只有這個 pane 會移動：它會在另一個帳號自己的資料夾裡接著原本的對話重新開啟。CLI 目前登入的帳號和其他 pane 都維持不變。如果這個 pane 正在工作，停止它之前會再問你一次。沒有回答的話，這個要求會自動關閉。",
         "agent-switch-confirm-reason": "理由（由 agent 提供）",
         "agent-switch-confirm-reason-truncated": "agent 的理由超過 300 字，只顯示前 300 字。",
         "agent-switch-confirm-cancel": "取消",
         "agent-switch-confirm-ok": "切換帳號",
         "agent-switch-done": "{agent} 把 {vendor} 從 {from} 切換到 {to}。agent 給的理由：{reason}",
+        "agent-switch-pane-done": "{agent} 把一個 pane 從 {from} 移到 {to}。目前登入的帳號和其他 pane 都沒有改變。agent 給的理由：{reason}",
         "login-complete": "已登入 {email}，帳號已儲存。",
         "login-complete-no-email": "登入完成，帳號已儲存。",
         "login-step2": "第 1 步完成：{email} 已儲存。還要再授權一次，讓這個帳號登入到自己的資料夾，請在新開的登入 pane 裡完成瀏覽器授權。",
@@ -8909,6 +8929,7 @@
     "drag-resize-log": "拖曳以調整記錄面板高度",
     "filter-by-type": "依類型篩選",
     "all-stages-finished": "{count} 個階段全部順利完成",
+    "region-switching": "正在把 {title} 切換到 {version}…",
     "region-unavailable": "{title} 無法使用"
   },
   "layout": {
@@ -11419,6 +11440,14 @@
       "not-reclaimed": "（未回收）",
       "fix": "修正",
       "proposal": "提案",
+      "proposal-reason": "理由：{reason}",
+      "effect-title": "成效與頻率",
+      "adoption": "採用 {adopted} / {resolved}",
+      "adoption-none": "尚無已有結果的提案",
+      "lowered": "{date} 起自動降為每週：連續 {n} 份提案都沒被採用",
+      "landed-title": "已落地的提案",
+      "landed-none": "尚無已落地的提案",
+      "effect-counts": "{before} → {after}（落地前／後 7 天）",
       "history": "歷史（最近 30 次）",
       "unsaved": "有未儲存的變更",
       "save": "儲存",
@@ -11456,6 +11485,11 @@
       "scope-propose": "只提案（不改程式）",
       "scope-fix-no-git": "這個 workspace 不是 git repo，沒有 worktree 與主分支可用，只能「只提案」。",
       "scope-always-propose": "新功能、設計取捨、刪資料／migration、push、發版一律寫提案（內建規則）。",
+      "retro": "回顧",
+      "retro-tools": "重複手動的事",
+      "retro-tools-hint": "每次最多 {tokens} token。讀這個 workspace 近 7 天的訊息紀錄與排程執行紀錄，只取次數；同一件事做了 3 次以上，就提案做成 pipeline、skill、Prompt 等。",
+      "retro-corrections": "你的糾正",
+      "retro-corrections-hint": "每次最多 {tokens} token。讀你在這個 workspace 的 plan 上留的 review note 與提案退回理由，近 7 天、只取次數；同一個糾正出現 2 次以上，就提案改規則。",
       "rules": "規則範本",
       "rules-builtin": "內建 v{version}",
       "rules-view": "檢視全文",
@@ -11480,6 +11514,29 @@
       "error": "失敗",
       "timeout": "逾時",
       "skipped": "未執行"
+    },
+    "source": {
+      "failures": "錯誤分診",
+      "tools": "重複手動的事",
+      "corrections": "你的糾正"
+    },
+    "freq": {
+      "daily": "每天",
+      "weekly": "每週"
+    },
+    "effect": {
+      "effective": "見效",
+      "not-effective": "未見效",
+      "insufficient": "樣本不足",
+      "pending": "待判定"
+    },
+    "proposal-status": {
+      "proposed": "提案中",
+      "approved": "已核准",
+      "rejected": "已退回",
+      "in-progress": "進行中",
+      "landed": "已落地",
+      "abandoned": "已放棄"
     },
     "history": {
       "date": "日期",

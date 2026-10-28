@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "Die CLI wurde mit dem Exit-Code {code} beendet. Sie ist möglicherweise abgestürzt; der Code ist auch im Fehlerprotokoll vermerkt.",
       "stuck-badge": "⏳ Keine Aktivität seit {minutes}+ Min.",
       "stuck-tooltip": "Dieser Turn zeigt seit über {minutes} Minuten weder Protokollaktivität noch Ausgabe. Die CLI hängt möglicherweise; es wurde nichts unterbrochen.",
+      "stale-config-badge": "Einstellungen geändert",
+      "stale-config-tooltip-mcp": "Die MCP-Server dieser CLI haben sich nach dem Start des Panes geändert. Bis zum Neuaufbau nutzt sie die alte Liste. Klicken zum Neuaufbau (Unterhaltung fortsetzen).",
+      "stale-config-tooltip-skills": "Die an diese CLI gelieferten Skills haben sich nach dem Start des Panes geändert. Bis zum Neuaufbau nutzt sie womöglich die alten. Klicken zum Neuaufbau (Unterhaltung fortsetzen).",
+      "stale-config-tooltip-both": "MCP-Server und Skills dieser CLI haben sich nach dem Start des Panes geändert. Bis zum Neuaufbau nutzt sie die alten. Klicken zum Neuaufbau (Unterhaltung fortsetzen).",
       "usage-limit-badge": "⛔ wieder um {time}",
       "usage-limit-badge-unknown": "⛔ Kontingent aufgebraucht",
       "usage-limit-tooltip": "Das Kontingent dieser CLI ist aufgebraucht – voraussichtlich wieder verfügbar um {time}. Zum Ausblenden klicken",
@@ -1506,6 +1510,19 @@
         "hot-reload": "Einmal pro Session vor dem Hot Reload gefragt"
       }
     },
+    "applies": {
+      "new-panes-only": "Nur neue Panes",
+      "new-panes-only-tooltip": "Eine CLI liest das beim Start. Bereits offene Panes behalten den alten Wert, bis Sie sie neu aufbauen."
+    },
+    "stale-config": {
+      "title": "Offene Panes, die vor dieser Änderung gestartet wurden: {count}",
+      "body-mcp": "Eine CLI liest ihre MCP-Server beim Start, daher nutzen diese Panes noch die alte Liste. Ein Neuaufbau setzt die Unterhaltung fort, unterbricht aber einen laufenden Turn und gibt die Unterhaltung neu aus.",
+      "body-skills": "Eine CLI liest ihre Skills beim Start, daher nutzen diese Panes womöglich noch die alten. Ein Neuaufbau setzt die Unterhaltung fort, unterbricht aber einen laufenden Turn und gibt die Unterhaltung neu aus.",
+      "rebuild-all-idle": "Alle inaktiven neu aufbauen ({count})",
+      "busy": "Läuft – wird von „Alle inaktiven neu aufbauen“ übersprungen",
+      "cannot-rebuild": "Keine gespeicherte Unterhaltung zum Fortsetzen",
+      "rebuild": "Neu aufbauen"
+    },
     "limits": {
       "hint": "Optionale Grenzen, die verhindern, dass Navide und die von Navide gestarteten Agents diesen Rechner überlasten. Jede ist ausgeschaltet bzw. entspricht dem bisherigen Verhalten von Navide, bis Sie sie ändern.",
       "test-workers": "Test-Worker in neuen panes begrenzen",
@@ -1940,7 +1957,7 @@
       "restore": "Wiederherstellen",
       "candidateReady": "Update {version} ist bereit",
       "activationFailed": "{plugin} wurde installiert, konnte aber nicht aktiviert werden: {reason}. Starten Sie es in der Liste unten neu oder verwerfen Sie es.",
-      "switchNow": "Mit der Genehmigung wird {id} sofort auf {version} umgestellt. Seine geöffneten Ansichten werden neu geladen, und alles, was darin nicht gespeichert ist, geht verloren. Der Wechsel wird in den Ankündigungen festgehalten, wo Sie ihn mit einem Klick rückgängig machen können.",
+      "switchNow": "Mit der Genehmigung wird {id} sofort auf {version} umgestellt. Seine geöffneten Ansichten werden neu geladen: Eine Ansicht, die ihren Zustand über das Navide SDK speichert, kehrt dorthin zurück, wo sie war; alles andere, was darin nicht gespeichert ist, geht verloren. Der Wechsel wird in den Ankündigungen festgehalten, wo Sie ihn mit einem Klick rückgängig machen können.",
       "restartPlugin": "Navide-Plug-in neu starten",
       "disable": "Deaktivieren",
       "enable": "Aktivieren",
@@ -8176,11 +8193,14 @@
         "agent-switch-confirm-to": "Zu Konto",
         "agent-switch-confirm-caller": "Angefragt von pane",
         "agent-switch-confirm-workspace": "Arbeitsbereich des panes",
+        "agent-switch-confirm-pane": "Zu verschiebender Pane",
+        "agent-switch-confirm-pane-body": "Es wird nichts gewechselt, bevor du zustimmst. Nur dieser Pane wechselt: Er öffnet seine Unterhaltung im eigenen Ordner des anderen Kontos neu. Die Live-Anmeldung der CLI und alle anderen Panes bleiben unverändert. Arbeitet der Pane gerade, fragt Navide dich erneut, bevor er gestoppt wird. Ohne Antwort schließt sich die Anfrage von selbst.",
         "agent-switch-confirm-reason": "Begründung, vom Agent verfasst",
         "agent-switch-confirm-reason-truncated": "Die Begründung des Agents war länger als 300 Zeichen; nur die ersten 300 werden angezeigt.",
         "agent-switch-confirm-cancel": "Abbrechen",
         "agent-switch-confirm-ok": "Konto wechseln",
         "agent-switch-done": "{agent} hat {vendor} von {from} zu {to} gewechselt. Begründung des Agents: {reason}",
+        "agent-switch-pane-done": "{agent} hat einen Pane von {from} zu {to} verschoben. Die Live-Anmeldung und die anderen Panes sind unverändert. Begründung des Agents: {reason}",
         "login-complete": "Angemeldet als {email}. Konto gespeichert.",
         "login-complete-no-email": "Anmeldung abgeschlossen. Konto gespeichert.",
         "login-step2": "Schritt 1 erledigt: {email} ist gespeichert. Eine weitere Autorisierung meldet dieses Konto in seinem eigenen Ordner an. Schließen Sie sie im Browser über das gerade geöffnete Anmelde-pane ab.",
@@ -8909,6 +8929,7 @@
     "drag-resize-log": "Ziehen, um die Größe des Protokollbereichs zu ändern",
     "filter-by-type": "Nach Typ filtern",
     "all-stages-finished": "Alle {count} Stufen erfolgreich abgeschlossen",
+    "region-switching": "{title} wird auf {version} umgestellt …",
     "region-unavailable": "{title} nicht verfügbar"
   },
   "layout": {
@@ -11419,6 +11440,14 @@
       "not-reclaimed": "(nicht freigegeben)",
       "fix": "Korrektur",
       "proposal": "Vorschlag",
+      "proposal-reason": "Grund: {reason}",
+      "effect-title": "Wirkung und Häufigkeit",
+      "adoption": "Übernommen {adopted} / {resolved}",
+      "adoption-none": "Noch keine entschiedenen Vorschläge",
+      "lowered": "Seit {date} automatisch auf wöchentlich gesenkt: die letzten {n} Vorschläge in Folge wurden nicht übernommen",
+      "landed-title": "Umgesetzte Vorschläge",
+      "landed-none": "Noch keine umgesetzten Vorschläge",
+      "effect-counts": "{before} → {after} (7 Tage davor / danach)",
       "history": "Verlauf (letzte 30)",
       "unsaved": "Nicht gespeicherte Änderungen",
       "save": "Speichern",
@@ -11456,6 +11485,11 @@
       "scope-propose": "Nur vorschlagen (keine Codeänderungen)",
       "scope-fix-no-git": "Dieser Arbeitsbereich ist kein Git-Repository: Es gibt keinen Worktree und keinen Haupt-Branch, mit dem gearbeitet werden kann, daher kann er nur vorschlagen.",
       "scope-always-propose": "Neue Funktionen, Designabwägungen, Datenlöschung / Migrationen, Push und Release sind immer Vorschläge (integrierte Regel).",
+      "retro": "Rückblicke",
+      "retro-tools": "Wiederholte Handarbeit",
+      "retro-tools-hint": "Bis zu {tokens} Tokens pro Lauf. Liest Nachrichtenprotokoll und Läufe geplanter Aufgaben dieses Workspace der letzten 7 Tage, nur als Anzahlen; eine Aufgabe, die 3-mal oder öfter erledigt wurde, wird als Pipeline, Skill, Prompt o. Ä. vorgeschlagen.",
+      "retro-corrections": "Deine Korrekturen",
+      "retro-corrections-hint": "Bis zu {tokens} Tokens pro Lauf. Liest deine Review Notes in den Plans dieses Workspace und die Gründe abgelehnter Vorschläge der letzten 7 Tage, nur als Anzahlen; eine Korrektur, die 2-mal oder öfter vorkommt, wird als Regeländerung vorgeschlagen.",
       "rules": "Regeln",
       "rules-builtin": "Integriert v{version}",
       "rules-view": "Volltext anzeigen",
@@ -11480,6 +11514,29 @@
       "error": "Fehlgeschlagen",
       "timeout": "Zeitüberschreitung",
       "skipped": "Übersprungen"
+    },
+    "source": {
+      "failures": "Fehler-Triage",
+      "tools": "Wiederholte Handarbeit",
+      "corrections": "Deine Korrekturen"
+    },
+    "freq": {
+      "daily": "Täglich",
+      "weekly": "Wöchentlich"
+    },
+    "effect": {
+      "effective": "Wirksam",
+      "not-effective": "Nicht wirksam",
+      "insufficient": "Zu wenig für ein Urteil",
+      "pending": "Noch nicht beurteilt"
+    },
+    "proposal-status": {
+      "proposed": "Vorgeschlagen",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "in-progress": "In Arbeit",
+      "landed": "Umgesetzt",
+      "abandoned": "Verworfen"
     },
     "history": {
       "date": "Datum",

@@ -81,4 +81,19 @@ describe('AgentAccountSwitchConfirmDialog', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
     expect(dialog.emitted('answer')).toEqual([[false]])
   })
+
+  // Plan mcp-pane-cli-usage_213031 P4: a switch of one pane (cli_account_switch
+  // pane_id) names that pane and says the live login and other panes stay.
+  it('names the pane and drops the CLI-wide wording for a single-pane switch', () => {
+    const text = (render({ paneName: 'worker\u200b' } as Partial<AgentAccountSwitchConfirmRequest>)).text()
+    expect(text).toContain(i18n.global.t('settings.accounts.cli.agent-switch-confirm-pane-body'))
+    expect(text).toContain('worker\\u{200b}')
+    expect(text).not.toContain(i18n.global.t('settings.accounts.cli.agent-switch-confirm-late'))
+  })
+
+  it('shows no pane row for a CLI-wide switch', () => {
+    const dialog = render()
+    expect(dialog.find('[data-testid="switch-confirm-pane"]').exists()).toBe(false)
+    expect(dialog.find('[data-testid="switch-confirm-pane-body"]').exists()).toBe(false)
+  })
 })
