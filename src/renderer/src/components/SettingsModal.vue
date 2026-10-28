@@ -317,6 +317,9 @@ function pluginsPageMarker(page: PluginsPage): { text: string; tone: 'risk' | 'o
   }
   return null
 }
+// The pages fold away while another entry is open, so the Navide Plugins row
+// carries their state instead: a warning first, otherwise "On".
+const pluginsFoldedMarker = computed(() => activeTab.value === 'extensions' ? null : pluginsPageMarker('policy') ?? pluginsPageMarker('developer'))
 /** The page each section of the former single Navide Plugins page lives on. */
 const PLUGINS_SECTION_PAGE: Readonly<Record<string, PluginsPage>> = {
   'extensions-bundled': 'plugins',
@@ -2809,19 +2812,23 @@ watch(activeTab, (tab) => {
                   <NavideCloudMark variant="solid" class="nvc-nav-mark" />
                 </template>
               </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :badge="pluginUpdates.count.value" @select="activeTab = 'extensions'">
+              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :badge="pluginUpdates.count.value" :marker="pluginsFoldedMarker" @select="activeTab = 'extensions'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
                 </template>
               </SettingsNavItem>
-              <SettingsNavSubItem
-                v-for="page in pluginsPages"
-                :key="page.id"
-                :label="$t(page.label)"
-                :active="activeTab === 'extensions' && pluginsPage === page.id"
-                :marker="pluginsPageMarker(page.id)"
-                @select="openPluginsPage(page.id)"
-              />
+              <!-- The pages unfold only while Navide Plugins is the open entry;
+                   a search hit on one of them opens it, which unfolds them. -->
+              <template v-if="activeTab === 'extensions'">
+                <SettingsNavSubItem
+                  v-for="page in pluginsPages"
+                  :key="page.id"
+                  :label="$t(page.label)"
+                  :active="pluginsPage === page.id"
+                  :marker="pluginsPageMarker(page.id)"
+                  @select="openPluginsPage(page.id)"
+                />
+              </template>
               <SettingsNavItem :label="$t('settings.nav.marketplace')" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.4h10.8l-.8 7.1a1.2 1.2 0 0 1-1.2 1.1H4.6a1.2 1.2 0 0 1-1.2-1.1L2.6 5.4Z"/><path d="M5.8 7.2V4.6a2.2 2.2 0 0 1 4.4 0v2.6"/></svg>

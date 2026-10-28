@@ -9,6 +9,8 @@ defineProps<{
   active?: boolean
   /** Numeric badge after the label (e.g. pending updates); hidden at 0. */
   badge?: number
+  /** State of pages folded under this row (a warning, or "On"), named by `label`. */
+  marker?: { text: string; tone: 'risk' | 'on'; label: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -30,6 +32,14 @@ const emit = defineEmits<{
     </span>
     <span class="settings-nav-item-label" v-truncate>{{ label }}</span>
     <span v-if="badge" class="settings-nav-item-badge">{{ badge }}</span>
+    <span
+      v-if="marker"
+      class="settings-nav-item-marker"
+      :class="`settings-nav-item-marker--${marker.tone}`"
+      role="img"
+      :aria-label="marker.label"
+      :title="marker.label"
+    >{{ marker.text }}</span>
   </button>
 </template>
 
@@ -88,6 +98,26 @@ const emit = defineEmits<{
   line-height: 18px;
   text-align: center;
 }
+.settings-nav-item-marker {
+  margin-left: auto;
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  line-height: 18px;
+}
+.settings-nav-item-badge + .settings-nav-item-marker {
+  margin-left: 4px;
+}
+.settings-nav-item-marker--risk {
+  background: var(--risk-subtle);
+  color: var(--risk-fg);
+}
+.settings-nav-item-marker--on {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
 .settings-nav-item-icon {
   display: inline-flex;
   align-items: center;
@@ -123,6 +153,9 @@ const emit = defineEmits<{
     clip-path: inset(50%);
     overflow: hidden;
     white-space: nowrap;
+  }
+  .settings-nav-item-marker {
+    display: none;
   }
 }
 </style>
