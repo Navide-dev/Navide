@@ -10,6 +10,7 @@ import {
   namedReclaimBlockedBy,
   reclaimBlockedBy,
 } from '../../lib/idleReclaim'
+import { retroBeforeReclaim } from '../../composables/useEvolve'
 import { linearPipelineDag } from './pipelineDagTestStub'
 
 // A finished stage used to keep its CLIs alive until the whole run ended or the
@@ -208,6 +209,8 @@ async function load(opts: Options = {}) {
     'pipelineDag',
     'isLocalWorkspace',
     'backend',
+    // The real helper: with no evolve badge (the switch off) it sends nothing.
+    'retroBeforeReclaim',
     code,
   )
   const api = factory(
@@ -266,6 +269,7 @@ async function load(opts: Options = {}) {
         backendSends.push({ type, payload })
       }),
     },
+    retroBeforeReclaim,
   )
   const paneById = (id: string): TestPane | undefined => panes.value.find((p) => p.id === id)
   const histFor = (id: string): HistEntry | undefined =>

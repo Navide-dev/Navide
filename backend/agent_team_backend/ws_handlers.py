@@ -12922,6 +12922,25 @@ async def evolve_get(session: "Session", msg_id: str, msg_type: str, payload: di
     )
 
 
+@handler("evolve.retro_request")
+async def evolve_retro_request(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    # S5b: before an automatic or agent-requested reclaim. Waits at most
+    # evolve_service.RETRO_WAIT_S; handlers run as their own tasks, so this
+    # holds up nothing else.
+    from . import evolve_service
+
+    workspace = _evolve_workspace(payload)
+    pane_id = str(payload.get("pane_id") or "")
+    if workspace is None or not pane_id:
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "evolve.retro_request needs a workspace and a pane_id")
+        )
+        return
+    await session.send_json(
+        make_response(msg_id, msg_type, await evolve_service.get_service().retro_request(workspace, pane_id))
+    )
+
+
 @handler("evolve.set")
 async def evolve_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import evolve_service, scheduler
