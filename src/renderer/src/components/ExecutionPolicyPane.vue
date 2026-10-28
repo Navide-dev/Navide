@@ -759,7 +759,8 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-accept-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .ep-section-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: 2px; }
 /* The section's state sits right beside its title. */
-.ep-section h2 { margin: 0; font-size: var(--font-row-title); font-weight: 600; color: var(--text-bright); }
+/* Section headings share SettingsSection's small uppercase label. */
+.ep-section h2 { margin: 0; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .ep-section h3 { margin: 0 0 2px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
 .ep-hint, .ep-summary, .ep-recommendation-state, .ep-empty {
   margin: 2px 0 var(--space-3);
@@ -879,7 +880,9 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   opacity: 0;
   cursor: inherit;
 }
-.ep-source-option span { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+/* The recommendation's state sits beside the source name, so every segment
+   (here and in the mode strip) keeps one height. */
+.ep-source-option span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; }
 .ep-source-option strong { font-weight: inherit; }
 .ep-source-option small { color: var(--text-secondary); font-size: var(--font-2xs); font-weight: 400; }
 .ep-full-warning, .ep-warning:has(label) {

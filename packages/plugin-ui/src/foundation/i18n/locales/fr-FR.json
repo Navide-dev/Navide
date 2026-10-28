@@ -1834,7 +1834,7 @@
       "save": "Enregistrer la politique",
       "resetUser": "Réinitialiser la politique utilisateur",
       "sourceTitle": "Source de politique de l’espace de travail",
-      "sourceHint": "Une recommandation du dépôt n’est pas fiable tant que vous ne l’avez pas examinée et explicitement acceptée. Les changements de source exigent une empreinte actuelle exacte.",
+      "sourceHint": "Une recommandation du dépôt n’est pas fiable tant que vous ne l’avez pas examinée et explicitement acceptée. Un changement de source ne s’applique qu’à la politique telle que vous l’avez vue en dernier. Si elle a changé depuis, examinez-la à nouveau.",
       "source": {
         "default": "Valeur par défaut de l’hôte",
         "user": "Politique utilisateur",
@@ -1937,9 +1937,10 @@
         "loadFailed": "Impossible de lire les réglages des backends natifs."
       },
       "bundled": "Fournis",
-      "listTitle": "Plugins Navide",
+      "listTitle": "Installés",
       "developerNative": "Développeur et code natif",
       "pageOn": "Activé",
+      "developerOnMarker": "Dév. activé",
       "bundledGit": "Git fourni",
       "state": {
         "active": "Actif",
@@ -8239,6 +8240,7 @@
         "default-sign-in-body": "Se connecter ici fait d’abord passer {agent} à la connexion d’origine. Elle ne contient aucune connexion, donc la connexion active ({current}) est effacée : ce compte reste enregistré sur sa propre carte et vous pouvez y revenir. Les nouveaux panes {agent} ne sont pas connectés tant que cette connexion n’est pas terminée.",
         "default-sign-in-confirm": "Changer et se connecter",
         "is-default": "Actif",
+        "is-default-signed-out": "Sélectionné",
         "set-default": "Passer à ce compte",
         "switching": "Changement…",
         "not-signed-in": "Non connecté",
@@ -10856,7 +10858,7 @@
     "unavailable": "Navide Guard n’est pas encore disponible avec ce backend. Redémarrez Navide après la mise à jour.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Évaluer chaque action d’une CLI selon sa dangerosité et l’origine de la demande ; arrêter les actions dangereuses ou demander avant. Les règles sont du code fixe, jamais une IA. L’approbation d’une action à haut risque depuis un canal de chat reste refusée même si cette option est désactivée. La protection des commandes du terminal et la vérification d’un agent qui répond à une demande via MCP ne dépendent pas non plus de cet interrupteur."
+      "desc": "Arrête les actions dangereuses d’une CLI ou demande avant, selon des règles fixes (jamais une IA) qui jugent leur risque et l’origine de la demande. Même désactivé, les approbations à haut risque depuis un canal de chat restent refusées, et la protection des commandes du terminal ainsi que la vérification des réponses aux demandes via MCP continuent de fonctionner."
     },
     "counts": {
       "critical": "Critique {n}",
@@ -11515,9 +11517,8 @@
     "no-match": "Aucun espace de travail ne correspond à « {query} ».",
     "trimmed": "{count} entrées plus anciennes ont été supprimées par la limite de l’historique. Vous pouvez la modifier dans Paramètres → Général.",
     "limit-title": "Limite des espaces de travail récents",
+    "limit-count": "Nombre maximal d’entrées",
     "limit-hint": "La liste des récents conserve chaque espace de travail que vous ouvrez jusqu’à ce que vous le retiriez. Il s’agit seulement d’une limite de sécurité pour le stockage : une fois atteinte, les entrées les plus anciennes partent en premier, et les espaces de travail ouverts ou épinglés ne sont jamais retirés.",
-    "limit-off": "Aucune limite",
-    "limit-on": "Conserver jusqu’à",
     "state-completed": "terminé",
     "state-running": "en cours",
     "state-aborted": "interrompu",

@@ -65,10 +65,12 @@ const emit = defineEmits<{
   text-align: left;
   color: var(--text-primary);
   font-size: var(--font-row-title);
-  transition: background-color 120ms ease, color 120ms ease;
 }
+/* Only the hover eases in. A row that loses the selection (or the pointer)
+   clears at once, so it never shows a fading fill next to the new active row. */
 .settings-nav-item:hover {
   background: var(--bg-hover);
+  transition: background-color 120ms ease, color 120ms ease;
 }
 .settings-nav-item:focus-visible {
   outline: 2px solid var(--accent-focus);
@@ -146,6 +148,7 @@ const emit = defineEmits<{
   .settings-nav-item.active.expanded {
     background: transparent;
     color: var(--text-primary);
+    font-weight: 400;
   }
   .settings-nav-item.active.expanded:hover {
     background: var(--bg-hover);

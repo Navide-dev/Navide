@@ -1834,7 +1834,7 @@
       "save": "儲存政策",
       "resetUser": "重設使用者政策",
       "sourceTitle": "工作區政策來源",
-      "sourceHint": "Repository 建議在你檢視並明確接受前都不受信任。切換來源需要精確符合目前指紋。",
+      "sourceHint": "Repository 建議在你檢視並明確接受前都不受信任。切換來源只對你最後看到的那一版政策生效；若之後有變動，請重新檢視。",
       "source": {
         "default": "Host 預設值",
         "user": "使用者政策",
@@ -1937,9 +1937,10 @@
         "loadFailed": "無法讀取原生後端設定。"
       },
       "bundled": "內建",
-      "listTitle": "Navide 外掛",
+      "listTitle": "已安裝",
       "developerNative": "開發者與原生程式碼",
       "pageOn": "已開啟",
+      "developerOnMarker": "開發者已開啟",
       "bundledGit": "內建 Git",
       "state": {
         "active": "啟用中",
@@ -8239,6 +8240,7 @@
         "default-sign-in-body": "在這裡登入會先把 {agent} 切換到原始登入。原始登入沒有儲存任何登入，所以目前的線上登入（{current}）會被清除；那個帳號仍保存在它自己的卡片上，之後可以再切換回去。這次登入完成前，新開的 {agent} pane 都不會是登入狀態。",
         "default-sign-in-confirm": "切換並登入",
         "is-default": "使用中",
+        "is-default-signed-out": "已選取",
         "set-default": "切換到此帳號",
         "switching": "切換中…",
         "not-signed-in": "尚未登入",
@@ -8948,7 +8950,7 @@
       "down": "下方橫列",
       "main": "主要區域"
     },
-    "settings-intro": "主視窗的每一個區域。每個 view 全程只有一份，搬移就是把它從現在的位置移走。主要區域固定放 CLI 舞台，不可更動。",
+    "settings-intro": "主視窗的每一個區域。每個 view 只能放在一個位置，移到別處就會從原來的位置移走。主要區域固定放 CLI 舞台，不可更動。",
     "width": "寬度",
     "height": "高度",
     "collapsed": "收合",
@@ -10856,7 +10858,7 @@
     "unavailable": "目前的後端還沒有 Navide Guard，更新後請重新啟動 Navide。",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "依動作的危險程度與要求來源判斷每個 CLI 動作，危險的先擋下或要求確認。判斷是固定規則的程式碼，不經過 AI。即使關閉，從聊天頻道核准高風險動作仍會被拒絕。終端機指令防護，以及 agent 透過 MCP 回答提示時的檢查，也不受這個開關影響。"
+      "desc": "依危險程度與要求來源，用固定規則（不經過 AI）擋下危險的 CLI 動作或先要求確認。即使關閉，從聊天頻道核准高風險動作仍會被拒絕，終端機指令防護與透過 MCP 回答提示時的檢查也照常運作。"
     },
     "counts": {
       "critical": "嚴重 {n}",
@@ -11515,9 +11517,8 @@
     "no-match": "沒有符合「{query}」的工作區。",
     "trimmed": "有 {count} 筆較舊的紀錄因歷史上限被移除，可在「設定 → 一般」調整。",
     "limit-title": "最近工作區保留上限",
+    "limit-count": "最多保留筆數",
     "limit-hint": "「最近」會保留每個開過的工作區，直到你手動移除。這只是儲存安全上限：達到上限時先移除最舊的紀錄，已開啟與已釘選的工作區永遠不會被移除。",
-    "limit-off": "不設上限",
-    "limit-on": "最多保留",
     "state-completed": "已完成",
     "state-running": "執行中",
     "state-aborted": "已中止",

@@ -214,10 +214,12 @@ async function runTest(): Promise<void> {
       <SettingsCard class="gd-vendors">
         <div v-for="v in vendors" :key="v.key" class="gd-item" data-testid="guard-vendor-row" :data-vendor="v.key">
           <span class="gd-item-name" v-truncate>{{ v.label }}</span>
+          <!-- Amber is kept for "Ask" (a decision); a CLI Guard cannot block
+               is a limitation, so it reads neutral with a small mark. -->
           <span
             class="gd-pill"
-            :class="v.support === 'block' ? 'ok' : v.support === 'none' ? 'warn' : 'muted'"
-          >{{ t(`guard.vendors.${v.support ?? 'unknown'}`) }}</span>
+            :class="v.support === 'block' ? 'ok' : v.support === 'none' ? 'limited' : 'muted'"
+          ><svg v-if="v.support === 'none'" class="gd-pill-icon" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="4.6"/><path d="M2.8 9.2l6.4-6.4"/></svg>{{ t(`guard.vendors.${v.support ?? 'unknown'}`) }}</span>
         </div>
       </SettingsCard>
     </SettingsSection>
@@ -366,7 +368,7 @@ async function runTest(): Promise<void> {
 /* Status pill: same shape as the Channels page's. */
 .gd-pill {
   flex-shrink: 0;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   border-radius: 999px;
   padding: 1px 8px;
@@ -378,6 +380,8 @@ async function runTest(): Promise<void> {
 .gd-pill.ok { color: var(--success-on-subtle); background: var(--success-subtle); border-color: var(--success-muted); }
 .gd-pill.warn { color: var(--attention-on-subtle); background: var(--attention-subtle); border-color: var(--attention-muted); }
 .gd-pill.bad { color: var(--danger-fg); background: var(--danger-subtle); border-color: var(--danger-muted); }
+.gd-pill.limited { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); background: transparent; border-color: var(--border-default); }
+.gd-pill-icon { flex: none; }
 
 .gd-table-scroll { overflow-x: auto; container: gd-table / inline-size; }
 .gd-table { width: 100%; border-collapse: collapse; font-size: var(--font-2xs); }

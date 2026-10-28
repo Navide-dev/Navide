@@ -1526,12 +1526,16 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   overflow: hidden;
 }
 .skill-card-delivery { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 2px; }
-.skill-card-delivery-chips { display: contents; }
+/* The receivers read as one line of text that wraps between items: each item
+   but the last ends in "·" plus a breakable space, so a wrapped line never
+   starts with a separator. */
+.skill-card-delivery-chips { display: inline; min-width: 0; }
 /* On a card the delivery state repeats on every row, so it reads as neutral
    text; colour stays on the drawer's toggles, where it marks what you change. */
 .skill-card-delivery-chips .dchip,
 .skill-card-delivery-chips .dchip.on,
 .skill-card-delivery-chips .dchip.auto {
+  display: inline;
   padding: 0;
   border: none;
   background: transparent;
@@ -1539,9 +1543,9 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   font-size: var(--font-xs);
   font-weight: 500;
 }
-.skill-card-delivery-chips .dchip + .dchip::before {
-  content: '·';
-  margin: 0 6px 0 2px;
+.skill-card-delivery-chips .dchip:not(:last-child)::after {
+  content: '\00a0\00b7\0020\0020';
+  white-space: pre-wrap;
   color: var(--text-muted);
 }
 

@@ -205,7 +205,8 @@ async function remove(id: string): Promise<void> {
   margin-bottom: 14px;
 }
 .ga-head > div { flex: 1 1 16em; min-width: 0; }
-.ga-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
+/* Section headings share SettingsSection's small uppercase label. */
+.ga-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .ga-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 60ch; line-height: 1.4; text-wrap: pretty; word-break: auto-phrase; }
 
 .ga-banner {

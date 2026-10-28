@@ -93,12 +93,12 @@ describe('SettingsModal Navide Plugins pages', () => {
   it('lists the four pages under Navide Plugins and switches between them', async () => {
     await mountModal('extensions')
     expect(wrapper!.findAllComponents(SettingsNavSubItem).map((n) => n.props('label'))).toEqual([
-      'Navide plugins',
+      'Installed',
       'Execution Policy',
       'Developer and native code',
       'Disclosure overview',
     ])
-    expect(body('extensions').get('h1').text()).toBe('Navide plugins')
+    expect(body('extensions').get('h1').text()).toBe('Installed')
     expect(wrapper!.findComponent(ExtensionsPane).props('page')).toBe('plugins')
     expect(partShown('execution-policy')).toBe(false)
 
@@ -134,7 +134,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     await vi.advanceTimersByTimeAsync(5_000)
     expect(plugins.backendResourceUsage).toHaveBeenCalledTimes(2)
 
-    await openPage('Navide plugins')
+    await openPage('Installed')
     await vi.advanceTimersByTimeAsync(15_000)
     expect(plugins.backendResourceUsage).toHaveBeenCalledTimes(2)
 
@@ -213,7 +213,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     await flushPromises()
     vm().setTab('extensions')
     await flushPromises()
-    expect(body('extensions').get('h1').text()).toBe('Navide plugins')
+    expect(body('extensions').get('h1').text()).toBe('Installed')
     expect(wrapper!.findComponent(ExtensionsPane).props('page')).toBe('plugins')
   })
 
@@ -244,7 +244,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(tab.attributes('role')).toBe('img')
     expect(tab.attributes('aria-label')).toBe('Repository recommendation: Untrusted\nEffective policy: Stale')
     // Only that page carries it.
-    expect(marker('Navide plugins')).toBeNull()
+    expect(marker('Installed')).toBeNull()
     expect(marker('Developer and native code')).toBeNull()
 
     wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', [])
@@ -295,13 +295,13 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(wrapper!.findAllComponents(SettingsNavSubItem).filter((n) => n.props('active')).map((n) => n.props('label'))).toEqual(['Disclosure overview'])
   })
 
-  it('puts the folded pages\' marker on the Navide Plugins row, a warning before "On"', async () => {
+  it('puts the folded pages\' marker on the Navide Plugins row, a warning before "Developer on"', async () => {
     await mountModal('general')
     expect(pluginsRow().props('marker')).toBeNull()
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
     await flushPromises()
-    expect(pluginsRow().props('marker')).toMatchObject({ text: 'On', tone: 'on' })
+    expect(pluginsRow().props('marker')).toEqual({ text: 'Developer on', tone: 'on', label: 'Developer and native code: Turn on Developer Mode' })
 
     wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', ['Effective policy: Stale'])
     await flushPromises()

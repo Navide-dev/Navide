@@ -53,7 +53,6 @@ const emit = defineEmits<{
   font-size: var(--font-sm);
   text-align: left;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
 }
 /* A guide line ties the pages to the entry they belong to. */
 .settings-nav-subitem::before {
@@ -69,9 +68,11 @@ const emit = defineEmits<{
   width: 2px;
   background: var(--accent-emphasis);
 }
+/* Only the hover eases in; losing the selection clears at once. */
 .settings-nav-subitem:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+  transition: background-color 120ms ease, color 120ms ease;
 }
 .settings-nav-subitem:focus-visible {
   outline: 2px solid var(--accent-focus);
@@ -99,12 +100,14 @@ const emit = defineEmits<{
   background: var(--bg-muted);
   color: var(--text-primary);
 }
+/* A long page name wraps under its own first letter, never cut off
+   (de-DE "Entwickler und nativer Code"). */
 .settings-nav-subitem-label {
   min-width: 0;
   margin-right: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.3;
 }
 @media (max-width: 720px) {
   .settings-nav-subitem {

@@ -1834,7 +1834,7 @@
       "save": "Save Policy",
       "resetUser": "Reset User Policy",
       "sourceTitle": "Workspace policy source",
-      "sourceHint": "A repository recommendation is untrusted until you inspect it and explicitly accept it. Source changes require an exact current fingerprint.",
+      "sourceHint": "A repository recommendation is untrusted until you inspect it and explicitly accept it. A source switch only applies to the policy as you last saw it; if it has changed since, review it again.",
       "source": {
         "default": "Host default",
         "user": "User policy",
@@ -1937,9 +1937,10 @@
         "loadFailed": "Could not read the native backend settings."
       },
       "bundled": "Bundled",
-      "listTitle": "Navide plugins",
+      "listTitle": "Installed",
       "developerNative": "Developer and native code",
       "pageOn": "On",
+      "developerOnMarker": "Developer on",
       "bundledGit": "Bundled Git",
       "state": {
         "active": "Active",
@@ -8239,6 +8240,7 @@
         "default-sign-in-body": "Signing in here first switches {agent} to the original login. It holds no sign-in, so the live login ({current}) is cleared: that account stays saved on its own card, and you can switch back to it. New {agent} panes are not signed in until this sign-in finishes.",
         "default-sign-in-confirm": "Switch and Sign In",
         "is-default": "Active",
+        "is-default-signed-out": "Selected",
         "set-default": "Switch to This Account",
         "switching": "Switching…",
         "not-signed-in": "Not signed in",
@@ -8948,7 +8950,7 @@
       "down": "Bottom strip",
       "main": "Main area"
     },
-    "settings-intro": "Every region of the main window. Views are singletons — moving one takes it out of where it is now. The main area always holds the CLI stage and cannot be changed.",
+    "settings-intro": "Every region of the main window. Each view can be in only one place, so moving it takes it out of where it is now. The main area always holds the CLI stage and cannot be changed.",
     "width": "Width",
     "height": "Height",
     "collapsed": "Collapsed",
@@ -10856,7 +10858,7 @@
     "unavailable": "Navide Guard is not available from this backend yet. Restart Navide after updating.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off. Terminal command protection, and the check on an agent answering a prompt through MCP, are not affected by this switch either."
+      "desc": "Stops or asks before dangerous CLI actions, judged by fixed rules (never an AI) on how risky each one is and who asked for it. Even when this is off, high-risk approvals from a chat channel stay refused, and terminal command protection and the check on prompts answered through MCP keep working."
     },
     "counts": {
       "critical": "Critical {n}",
@@ -11515,9 +11517,8 @@
     "no-match": "No workspace matches “{query}”.",
     "trimmed": "{count} older entries were removed by the history limit. You can change it in Settings → General.",
     "limit-title": "Recent workspaces limit",
+    "limit-count": "Maximum entries",
     "limit-hint": "Recent keeps every workspace you open until you remove it. This is only a storage safety bound: when it is reached the oldest entries go first, and open or pinned workspaces are never removed.",
-    "limit-off": "No limit",
-    "limit-on": "Keep up to",
     "state-completed": "completed",
     "state-running": "running",
     "state-aborted": "aborted",

@@ -318,8 +318,19 @@ function pluginsPageMarker(page: PluginsPage): { text: string; tone: 'risk' | 'o
   return null
 }
 // The pages fold away while another entry is open, so the Navide Plugins row
-// carries their state instead: a warning first, otherwise "On".
-const pluginsFoldedMarker = computed(() => activeTab.value === 'extensions' ? null : pluginsPageMarker('policy') ?? pluginsPageMarker('developer'))
+// carries their state instead: a warning first, otherwise "Developer on" (a
+// bare "On" next to the entry's name would read as the plugins being on).
+const pluginsFoldedMarker = computed(() => {
+  if (activeTab.value === 'extensions') return null
+  const warning = pluginsPageMarker('policy')
+  if (warning) return warning
+  if (!developerSwitchesOn.value.length) return null
+  return {
+    text: t('settings.extensions.developerOnMarker'),
+    tone: 'on' as const,
+    label: t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.developerNative'), value: developerSwitchesOn.value.join(', ') }),
+  }
+})
 /** The page each section of the former single Navide Plugins page lives on. */
 const PLUGINS_SECTION_PAGE: Readonly<Record<string, PluginsPage>> = {
   'extensions-bundled': 'plugins',
@@ -1775,6 +1786,12 @@ function pathForStorage(storage: SettingsStorage): string {
   return settingsPaths.value[storage] ?? ''
 }
 
+/** True when the storage is described in words ("Stored encrypted on this
+ *  computer") rather than by a file path, so it is set in the body font. */
+function storageIsProse(storage: SettingsStorage): boolean {
+  return storage === 'localStorage' || storage === 'mainProcess' || storage === 'safeStorage' || storage === 'cliFiles'
+}
+
 function pathForTab(tab: SettingsTab): string {
   return pathForStorage(settingsScopeNotes[tab].storage)
 }
@@ -2897,7 +2914,7 @@ watch(activeTab, (tab) => {
             <div class="settings-meta-row" data-settings-section="mcp-installed">
               <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
               <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
-              <span class="settings-path" v-truncate>{{ pathForTab('mcp') }}</span>
+              <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.mcp.storage) }" v-truncate>{{ pathForTab('mcp') }}</span>
               <button class="settings-path-btn" :disabled="!settingsPaths.mcp" @click="openSettingsPath(settingsPaths.mcp)">{{ $t('action.open') }}</button>
             </div>
             <p v-if="mError" class="err-msg" style="margin:6px 22px 0">{{ mError }}</p>
@@ -3070,7 +3087,7 @@ watch(activeTab, (tab) => {
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
-            <span class="settings-path" v-truncate>{{ pathForTab('skills') }}</span>
+            <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.skills.storage) }" v-truncate>{{ pathForTab('skills') }}</span>
             <button class="settings-path-btn" :disabled="!settingsPaths.skills" @click="openSettingsPath(settingsPaths.skills)">{{ $t('action.open') }}</button>
           </div>
           <SkillsPane :backend="props.backend" />
@@ -3416,10 +3433,14 @@ watch(activeTab, (tab) => {
             <p class="ap-hint">{{ $t('settings.cliAgents.hint') }}</p>
             <div class="cli-agent-toolbar">
               <input v-model="cliFilterQuery" type="search" class="cli-agent-filter-search" :placeholder="$t('settings.cliAgents.search')" :aria-label="$t('settings.cliAgents.search')" />
-              <div class="cli-agent-filters" :aria-label="$t('settings.cliAgents.filter-label')">
-                <button v-for="filter in (['all', 'enabled', 'attention'] as const)" :key="filter" type="button" :data-cli-filter="filter" :aria-pressed="cliFilter === filter" @click="cliFilter = filter">{{ $t(`settings.cliAgents.filter-${filter}`) }}</button>
+              <!-- Filters and Redetect wrap as one group, right-aligned, so the
+                   action never lands alone on a line of its own. -->
+              <div class="cli-agent-toolbar-controls">
+                <div class="cli-agent-filters" :aria-label="$t('settings.cliAgents.filter-label')">
+                  <button v-for="filter in (['all', 'enabled', 'attention'] as const)" :key="filter" type="button" :data-cli-filter="filter" :aria-pressed="cliFilter === filter" @click="cliFilter = filter">{{ $t(`settings.cliAgents.filter-${filter}`) }}</button>
+                </div>
+                <button type="button" :disabled="onboarding.loading.value" @click="onboarding.refresh({ fresh: true })">{{ $t('cli-manage.redetect') }}</button>
               </div>
-              <button type="button" :disabled="onboarding.loading.value" @click="onboarding.refresh({ fresh: true })">{{ $t('cli-manage.redetect') }}</button>
             </div>
             <p class="ap-hint cli-agent-count">{{ $t('settings.cliAgents.count', { visible: filteredCliRows.length, total: cliAgentRows.length, enabled: cliEnabledCount }) }} · {{ $t(cliCanReorder ? 'settings.cliAgents.drag-hint' : 'settings.cliAgents.reorder-filtered') }}</p>
             <ul class="cli-agent-grid">
@@ -4102,7 +4123,7 @@ watch(activeTab, (tab) => {
                 <div class="settings-meta-row inline">
                   <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
                   <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.general.scope) }}</span>
-                  <span class="settings-path" v-truncate>{{ pathForTab('general') }}</span>
+                  <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.general.storage) }" v-truncate>{{ pathForTab('general') }}</span>
                 </div>
                 <p v-if="settingsBundleSummary.length" class="summary-ok">{{ settingsBundleSummary.map(bundleMessageText).join(' ') }}</p>
                 <p v-if="settingsBundleError" class="err-msg">{{ bundleMessageText(settingsBundleError) }}</p>
@@ -4557,10 +4578,12 @@ watch(activeTab, (tab) => {
               </div>
               <p class="ap-hint">{{ $t('settings.appearance.tweaks-hint') }}</p>
               <div class="ap-color-list">
+                <!-- The human name is the label; the CSS token stays on hover. -->
                 <label
                   v-for="tok in CUSTOMIZABLE_TOKENS"
                   :key="tok.id"
                   class="ap-color-row"
+                  :title="tok.id"
                 >
                   <input
                     type="color"
@@ -4569,7 +4592,6 @@ watch(activeTab, (tab) => {
                     @input="onPickColor(tok.id, ($event.target as HTMLInputElement).value)"
                   />
                   <span class="ap-color-name">{{ $t('settings.color.' + tok.id.slice(2)) }}</span>
-                  <span class="ap-color-token">{{ tok.id }}</span>
                   <button
                     v-if="customOverrides[tok.id]"
                     class="ap-color-clear"
@@ -4650,7 +4672,7 @@ watch(activeTab, (tab) => {
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.accounts.scope) }}</span>
-            <span class="settings-path" v-truncate>{{ pathForTab('accounts') }}</span>
+            <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.accounts.storage) }" v-truncate>{{ pathForTab('accounts') }}</span>
           </div>
           <GitAccountsPane :api="accountsApi" />
           <div data-settings-section="cli-accounts" style="margin: 4px 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
@@ -4718,7 +4740,7 @@ watch(activeTab, (tab) => {
               <div class="settings-meta-row inline">
                 <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
                 <span class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
-                <span class="settings-path" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
+                <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(executionPolicyScopeNote.storage) }" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" @attention="(reasons) => (policyAttention = reasons)" />
             </section>
@@ -5081,7 +5103,8 @@ watch(activeTab, (tab) => {
 .appearance-body { overflow-y: auto; padding: 18px 22px; }
 .ap-section { margin-bottom: 26px; }
 .ap-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ap-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
+/* Section headings share SettingsSection's small uppercase label. */
+.ap-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .ap-hint { margin: 0 0 14px; font-size: 11.5px; color: var(--text-secondary); text-wrap: pretty; }
 .ap-hint-warn { color: var(--danger-fg); }
 
@@ -5109,6 +5132,7 @@ watch(activeTab, (tab) => {
 .cli-agent-roster { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 18px 22px; }
 .cli-agent-toolbar, .cli-agent-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .cli-agent-toolbar input { flex: 1; min-width: 130px; }
+.cli-agent-toolbar-controls { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto; }
 .cli-agent-toolbar button, .cli-agent-manage {
   border: 1px solid var(--border-default); border-radius: var(--radius-sm);
   background: var(--bg-elevated); color: var(--text-primary); padding: 5px 9px; font: inherit; font-size: var(--font-xs); cursor: pointer;
@@ -5313,8 +5337,7 @@ watch(activeTab, (tab) => {
   cursor: pointer;
   flex-shrink: 0;
 }
-.ap-color-name { font-size: var(--font-xs); color: var(--text-primary); min-width: 92px; }
-.ap-color-token { font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); flex: 1; }
+.ap-color-name { font-size: var(--font-xs); color: var(--text-primary); min-width: 92px; flex: 1; }
 .ap-color-clear {
   width: 20px;
   height: 20px;
@@ -5486,6 +5509,7 @@ watch(activeTab, (tab) => {
   white-space: nowrap;
   font-family: var(--font-mono);
 }
+.settings-path--prose { font-family: var(--font-ui); }
 .settings-path-divider { color: var(--text-muted); }
 .settings-path-btn {
   flex-shrink: 0;
@@ -5882,7 +5906,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   border-bottom: 1px solid var(--border-muted);
   flex-shrink: 0;
 }
-.az-section-title { font-size: var(--font-2xs); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+.az-section-title { font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 10px; }
 .az-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .az-section-header .az-section-title { margin-bottom: 0; }
 .az-section-note { font-size: var(--font-3xs); color: var(--text-muted); }
@@ -5920,13 +5944,19 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 .az-browse-btn:hover { background: var(--border-default); color: var(--text-bright); }
 
-.az-backend-toggle { display: flex; gap: 0; border: 1px solid var(--border-default); border-radius: var(--radius-sm); overflow: hidden; width: fit-content; }
+/* The same segmented control as Execution Policy's mode and source: one
+   bordered strip, a segment per choice, the chosen one tinted. */
+.az-backend-toggle { display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 0; border: 1px solid var(--border-default); border-radius: var(--radius-control); background: var(--bg-base); overflow: hidden; width: fit-content; }
 .az-backend-btn {
-  background: var(--bg-subtle); border: none; color: var(--text-secondary); font-size: var(--font-xs);
-  padding: 6px 16px; cursor: pointer; transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+  display: flex; align-items: center; min-height: var(--control-h-lg);
+  background: transparent; border: none; border-left: 1px solid var(--border-default); border-radius: 0;
+  color: var(--text-primary); font-size: var(--font-sm);
+  padding: 4px 14px; cursor: pointer; transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
 }
-.az-backend-btn:hover { background: var(--bg-muted); color: var(--text-bright); }
-.az-backend-btn.active { background: var(--accent-emphasis); color: var(--text-on-emphasis); font-weight: 600; }
+.az-backend-btn:first-child { border-left: 0; }
+.az-backend-btn:hover { background: var(--bg-hover); }
+.az-backend-btn.active { background: var(--accent-subtle); color: var(--accent-fg); font-weight: 600; }
+.az-backend-btn:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: -2px; }
 
 .az-label { display: block; font-size: var(--font-2xs); color: var(--text-secondary); margin-bottom: 5px; }
 .az-hint-inline { color: var(--text-muted); font-style: italic; }
@@ -6176,4 +6206,18 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .ap-theme-card.active,
 .ap-lang-btn.active { background: var(--accent-subtle); }
 .settings-meta-row { color: var(--text-secondary); }
+
+/* One disabled look for every button on a settings page, the panes mounted
+   inside it included: no fill, a quiet frame, secondary text that stays
+   readable, and no hover or press feedback. Switches keep their own track. */
+.s-body :deep(button:disabled:not([role='switch'])),
+.s-body :deep(button[aria-disabled='true']:not([role='switch'])) {
+  opacity: 1;
+  background: transparent;
+  border-color: var(--border-muted);
+  color: var(--text-secondary);
+  box-shadow: none;
+  transform: none;
+  cursor: default;
+}
 </style>

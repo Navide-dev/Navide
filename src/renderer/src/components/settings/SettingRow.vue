@@ -46,6 +46,8 @@ defineProps<{
   color: var(--text-bright);
 }
 .setting-row-desc {
+  /* A readable measure: wide windows otherwise run a hint to 130+ characters. */
+  max-width: 75ch;
   font-size: var(--font-row-desc);
   color: var(--text-secondary);
 }

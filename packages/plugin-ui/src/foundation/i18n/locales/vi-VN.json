@@ -1834,7 +1834,7 @@
       "save": "Lưu chính sách",
       "resetUser": "Đặt lại chính sách người dùng",
       "sourceTitle": "Nguồn chính sách của workspace",
-      "sourceHint": "Đề xuất của kho chưa được tin cậy cho đến khi bạn xem và chấp nhận rõ ràng. Việc đổi nguồn cần đúng dấu vân tay hiện tại.",
+      "sourceHint": "Đề xuất của kho chưa được tin cậy cho đến khi bạn xem và chấp nhận rõ ràng. Việc đổi nguồn chỉ áp dụng cho chính sách đúng như lần cuối bạn xem; nếu nó đã thay đổi kể từ đó, hãy xem lại.",
       "source": {
         "default": "Mặc định của Host",
         "user": "Chính sách người dùng",
@@ -1937,9 +1937,10 @@
         "loadFailed": "Không thể đọc cài đặt backend gốc."
       },
       "bundled": "Đi kèm",
-      "listTitle": "Plugin Navide",
+      "listTitle": "Đã cài",
       "developerNative": "Nhà phát triển và mã gốc",
       "pageOn": "Bật",
+      "developerOnMarker": "Dev: bật",
       "bundledGit": "Git đi kèm",
       "state": {
         "active": "Đang hoạt động",
@@ -8239,6 +8240,7 @@
         "default-sign-in-body": "Đăng nhập tại đây sẽ chuyển {agent} sang đăng nhập ban đầu trước. Đăng nhập ban đầu không lưu thông tin đăng nhập nào, nên đăng nhập đang dùng ({current}) sẽ bị xóa: tài khoản đó vẫn được lưu trên thẻ của nó và bạn có thể chuyển lại. Các pane {agent} mới sẽ chưa đăng nhập cho đến khi lần đăng nhập này hoàn tất.",
         "default-sign-in-confirm": "Chuyển và đăng nhập",
         "is-default": "Đang dùng",
+        "is-default-signed-out": "Đã chọn",
         "set-default": "Chuyển sang tài khoản này",
         "switching": "Đang chuyển…",
         "not-signed-in": "Chưa đăng nhập",
@@ -10856,7 +10858,7 @@
     "unavailable": "Backend này chưa có Navide Guard. Hãy khởi động lại Navide sau khi cập nhật.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Đánh giá mỗi hành động của CLI theo mức nguy hiểm và theo ai đã yêu cầu; dừng lại hoặc hỏi trước các hành động nguy hiểm. Quy tắc là mã cố định, không bao giờ là AI. Việc phê duyệt một hành động rủi ro cao từ kênh trò chuyện vẫn bị từ chối kể cả khi mục này tắt. Bảo vệ lệnh terminal, và việc kiểm tra agent trả lời lời nhắc qua MCP, cũng không bị công tắc này ảnh hưởng."
+      "desc": "Dừng hoặc hỏi trước các hành động nguy hiểm của CLI, theo quy tắc cố định (không bao giờ là AI) dựa trên mức rủi ro và ai đã yêu cầu. Kể cả khi mục này tắt, việc phê duyệt hành động rủi ro cao từ kênh trò chuyện vẫn bị từ chối, còn bảo vệ lệnh terminal và việc kiểm tra câu trả lời lời nhắc qua MCP vẫn hoạt động."
     },
     "counts": {
       "critical": "Nghiêm trọng {n}",
@@ -11515,9 +11517,8 @@
     "no-match": "Không có workspace nào khớp “{query}”.",
     "trimmed": "{count} mục cũ hơn đã bị gỡ do giới hạn lịch sử. Bạn có thể đổi giới hạn trong Cài đặt → Chung.",
     "limit-title": "Giới hạn workspace gần đây",
+    "limit-count": "Số mục tối đa",
     "limit-hint": "Mục Gần đây giữ mọi workspace bạn mở cho đến khi bạn gỡ nó. Đây chỉ là giới hạn an toàn về lưu trữ: khi chạm giới hạn, các mục cũ nhất bị gỡ trước, và workspace đang mở hoặc đã ghim không bao giờ bị gỡ.",
-    "limit-off": "Không giới hạn",
-    "limit-on": "Giữ tối đa",
     "state-completed": "đã hoàn tất",
     "state-running": "đang chạy",
     "state-aborted": "đã hủy",

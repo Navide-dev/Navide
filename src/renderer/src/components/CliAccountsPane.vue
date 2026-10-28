@@ -712,7 +712,11 @@ onMounted(() => refreshUsage())
               v-if="api.defaultProfileId(spec.agentKey) === (p?.id ?? null)"
               class="cli-badge"
             >
-              {{ $t('settings.accounts.cli.is-default') }}
+              <!-- "Active" beside "Not signed in" reads as a contradiction: a
+                   signed-out card in use is only the selected one. -->
+              {{ rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn
+                ? $t('settings.accounts.cli.is-default')
+                : $t('settings.accounts.cli.is-default-signed-out') }}
             </span>
           </div>
           <!-- With an alias on top, the signed-in identity moves here. -->
@@ -928,7 +932,8 @@ onMounted(() => refreshUsage())
 .cli-more { margin: 4px 0 0; font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; }
 .cli-more summary { width: fit-content; cursor: pointer; color: var(--accent-fg); }
 .cli-more p { margin: 4px 0 0; max-width: 72ch; text-wrap: pretty; word-break: auto-phrase; }
-.cli-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
+/* Section headings share SettingsSection's small uppercase label. */
+.cli-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .cli-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 72ch; line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
 
 .cli-banner {
@@ -1153,7 +1158,9 @@ onMounted(() => refreshUsage())
   background: transparent;
   color: var(--text-primary);
 }
-.cli-btn.sm { font-size: var(--font-2xs); padding: 3px 8px; }
+/* Small in type, not in reach: Refresh Quota, Sign In and the rest keep a
+   28px target. */
+.cli-btn.sm { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-h-md); font-size: var(--font-2xs); padding: 3px 8px; }
 .cli-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .cli-btn.primary {
   background: var(--accent-emphasis);

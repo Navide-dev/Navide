@@ -583,7 +583,7 @@ onBeforeUnmount(() => offResult?.())
     <p v-else-if="!hasKey" class="sync-note">{{ t('settings.sync.no-key') }}</p>
 
     <div class="sync-actions">
-      <button type="button" :disabled="busy === 'all' || !connected" @click="syncNow">
+      <button class="nv-btn nv-btn--sm" type="button" :disabled="busy === 'all' || !connected" @click="syncNow">
         {{ t('settings.sync.now') }}
       </button>
     </div>
@@ -606,16 +606,16 @@ onBeforeUnmount(() => offResult?.())
     <div v-if="connected" class="sync-key">
       <p v-if="legacyRingPending && !hasKey" class="sync-note sync-key-legacy">
         {{ t('settings.sync.legacy-key') }}
-        <button type="button" :disabled="busy === 'key'" @click="adoptLegacyKey">
+        <button class="nv-btn nv-btn--sm" type="button" :disabled="busy === 'key'" @click="adoptLegacyKey">
           {{ t('settings.sync.legacy-key-adopt') }}
         </button>
       </p>
       <p v-if="hasKey" class="sync-note sync-key-row">
         <span>{{ t('settings.sync.key-id', { id: keyId.slice(0, 8) || '—' }) }}</span>
-        <button type="button" :disabled="busy === 'key'" @click="rotateKey">
+        <button class="nv-btn nv-btn--sm" type="button" :disabled="busy === 'key'" @click="rotateKey">
           {{ rotateArmed ? t('settings.sync.rotate-confirm') : t('settings.sync.rotate') }}
         </button>
-        <button v-if="rotateArmed" type="button" @click="rotateArmed = false">
+        <button class="nv-btn nv-btn--sm" v-if="rotateArmed" type="button" @click="rotateArmed = false">
           {{ t('settings.sync.rotate-cancel') }}
         </button>
       </p>
@@ -755,11 +755,6 @@ onBeforeUnmount(() => offResult?.())
 }
 .sync-actions {
   margin-top: 10px;
-}
-/* A disabled Sync Now keeps readable text instead of the faint native grey. */
-.sync-actions button:disabled {
-  color: var(--text-secondary);
-  cursor: not-allowed;
 }
 .sync-results {
   list-style: none;

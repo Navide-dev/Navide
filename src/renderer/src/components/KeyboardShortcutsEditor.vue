@@ -358,18 +358,22 @@ const visibleReference = computed(() => {
           @click="filterMode = mode"
         >{{ $t('settings.keybindings.filter.' + mode) }}</button>
       </div>
-      <button
-        type="button"
-        class="kse-reset-all"
-        :disabled="!customizedCount"
-        @click="onResetAll()"
-      >{{ $t('settings.keybindings.reset-all') }}</button>
-      <button type="button" class="kse-filter" :disabled="ioBusy" @click="onExport()">
-        {{ $t('settings.keybindings.export') }}
-      </button>
-      <button type="button" class="kse-filter" :disabled="ioBusy" @click="onImport()">
-        {{ $t('settings.keybindings.import') }}
-      </button>
+      <!-- The actions wrap as one group, right-aligned: the usual ones first,
+           the often-disabled Reset All last. -->
+      <div class="kse-actions">
+        <button type="button" class="kse-filter" :disabled="ioBusy" @click="onExport()">
+          {{ $t('settings.keybindings.export') }}
+        </button>
+        <button type="button" class="kse-filter" :disabled="ioBusy" @click="onImport()">
+          {{ $t('settings.keybindings.import') }}
+        </button>
+        <button
+          type="button"
+          class="kse-reset-all"
+          :disabled="!customizedCount"
+          @click="onResetAll()"
+        >{{ $t('settings.keybindings.reset-all') }}</button>
+      </div>
     </div>
 
     <!-- The row icons carry their meaning only in a tooltip; this legend puts it
@@ -646,6 +650,11 @@ const visibleReference = computed(() => {
   display: flex;
   gap: 4px;
 }
+.kse-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
 .kse-filter,
 .kse-reset-all {
   padding: 5px 10px;
@@ -905,11 +914,15 @@ const visibleReference = computed(() => {
   border: 1px dashed var(--border-default);
   border-radius: 6px;
 }
+/* 28px targets: the remove "✕" and add "+" are the main actions on a row. */
 .kse-chip-remove,
 .kse-add,
 .kse-mini {
-  min-width: 24px;
-  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-h-md);
+  min-height: var(--control-h-md);
 }
 .kse-chip-remove:hover,
 .kse-add:hover,

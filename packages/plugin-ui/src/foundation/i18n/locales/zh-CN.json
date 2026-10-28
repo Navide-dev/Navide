@@ -1834,7 +1834,7 @@
       "save": "保存政策",
       "resetUser": "重设用户政策",
       "sourceTitle": "工作区政策来源",
-      "sourceHint": "Repository 建议在你查看并明确接受前都不受信任。切换来源需要精确符合目前指纹。",
+      "sourceHint": "Repository 建议在你查看并明确接受前都不受信任。切换来源只对你最后看到的那一版政策生效；若之后有变动，请重新查看。",
       "source": {
         "default": "Host 默认值",
         "user": "用户政策",
@@ -1937,9 +1937,10 @@
         "loadFailed": "无法读取原生后端设置。"
       },
       "bundled": "内置",
-      "listTitle": "Navide 插件",
+      "listTitle": "已安装",
       "developerNative": "开发者与原生代码",
       "pageOn": "已开启",
+      "developerOnMarker": "开发者已开启",
       "bundledGit": "内置 Git",
       "state": {
         "active": "激活中",
@@ -8239,6 +8240,7 @@
         "default-sign-in-body": "在这里登录会先把 {agent} 切换到原始登录。原始登录没有保存任何登录，所以当前的在线登录（{current}）会被清除；那个账号仍保存在它自己的卡片上，之后可以再切换回去。这次登录完成前，新开的 {agent} pane 都不会处于登录状态。",
         "default-sign-in-confirm": "切换并登录",
         "is-default": "使用中",
+        "is-default-signed-out": "已选择",
         "set-default": "切换到此账号",
         "switching": "切换中…",
         "not-signed-in": "尚未登录",
@@ -8948,7 +8950,7 @@
       "down": "下方横行",
       "main": "主要区域"
     },
-    "settings-intro": "主窗口的每一个区域。每个 view 全程只有一份，搬移就是把它从现在的位置移走。主要区域固定放 CLI 舞台，不可更动。",
+    "settings-intro": "主窗口的每一个区域。每个 view 只能放在一个位置，移到别处就会从原来的位置移走。主要区域固定放 CLI 舞台，不可更动。",
     "width": "宽度",
     "height": "高度",
     "collapsed": "收合",
@@ -10856,7 +10858,7 @@
     "unavailable": "目前的后端还没有 Navide Guard，更新后请重新启动 Navide。",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "依动作的危险程度与要求来源判断每个 CLI 动作，危险的先挡下或要求确认。判断是固定规则的代码，不经过 AI。即使关闭，从聊天频道核准高风险动作仍会被拒绝。终端指令防护，以及 agent 通过 MCP 回答提示时的检查，也不受这个开关影响。"
+      "desc": "依危险程度与要求来源，用固定规则（不经过 AI）挡下危险的 CLI 动作或先要求确认。即使关闭，从聊天频道核准高风险动作仍会被拒绝，终端指令防护与通过 MCP 回答提示时的检查也照常运作。"
     },
     "counts": {
       "critical": "严重 {n}",
@@ -11515,9 +11517,8 @@
     "no-match": "没有符合“{query}”的工作区。",
     "trimmed": "有 {count} 笔较旧的记录因历史上限被移除，可在“设置 → 一般”调整。",
     "limit-title": "最近工作区保留上限",
+    "limit-count": "最多保留条数",
     "limit-hint": "“最近”会保留每个开过的工作区，直到你手动移除。这只是保存安全上限：达到上限时先移除最旧的记录，已打开与已钉选的工作区永远不会被移除。",
-    "limit-off": "不设上限",
-    "limit-on": "最多保留",
     "state-completed": "已完成",
     "state-running": "运行中",
     "state-aborted": "已中止",

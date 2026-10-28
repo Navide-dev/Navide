@@ -1449,10 +1449,6 @@ watch(installed, () => {
 /* In the list the group names are labels, a tier below the page blocks. */
 .ext-md-list .ext-section-title {
   margin: 0 var(--space-2) var(--space-1);
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  letter-spacing: 0;
 }
 .ext-md-rows {
   display: grid;
@@ -1705,10 +1701,12 @@ watch(installed, () => {
   align-items: center;
   gap: var(--space-2);
   margin: 0 0 var(--space-3);
-  color: var(--text-bright);
-  font-size: var(--font-lg);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  /* Section headings share SettingsSection's small uppercase label. */
+  color: var(--text-secondary);
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 /* Row actions get the regular control height: they are the main targets here. */
 .extensions-pane .nv-btn {

@@ -60,7 +60,7 @@ function onSize(id: SlotId, raw: string): void {
         <h2 class="ls-slot-name">{{ $t('layout.presets') }}</h2>
       </header>
       <div class="ls-presets">
-        <button v-for="p in LAYOUT_PRESETS" :key="p.id" class="ls-preset" @click="applyPreset(p.id)">
+        <button v-for="p in LAYOUT_PRESETS" :key="p.id" class="nv-btn nv-btn--sm ls-preset" @click="applyPreset(p.id)">
           {{ $t(p.labelKey) }}
         </button>
       </div>
@@ -73,7 +73,7 @@ function onSize(id: SlotId, raw: string): void {
           {{ $t(id === 'up' || id === 'down' ? 'layout.height' : 'layout.width') }}
           <input
             type="number"
-            class="ls-size-input"
+            class="nv-input ls-size-input"
             :min="SLOT_LIMITS[id].min"
             :max="SLOT_LIMITS[id].max"
             :value="layout.slots[id].size"
@@ -106,7 +106,7 @@ function onSize(id: SlotId, raw: string): void {
             {{ $t(v.titleKey) }}
           </button>
           <select
-            class="ls-move"
+            class="nv-select ls-move"
             :disabled="!targets(v.id).length"
             :value="''"
             @change="moveView(v.id, ($event.target as HTMLSelectElement).value as SlotId)"
@@ -119,7 +119,7 @@ function onSize(id: SlotId, raw: string): void {
           <!-- A view pinned to one slot can still be removed from the layout;
                what it cannot do is move. `isMovable` is the removal gate
                because only a view with somewhere to belong can be restored. -->
-          <button class="ls-hide" :disabled="!isMovable(v.id)" @click="hideView(v.id)">
+          <button class="nv-btn nv-btn--sm ls-hide" :disabled="!isMovable(v.id)" @click="hideView(v.id)">
             {{ $t('layout.remove') }}
           </button>
         </li>
@@ -150,7 +150,7 @@ function onSize(id: SlotId, raw: string): void {
           <span class="ls-view-name is-static">
             <span class="ls-view-icon">{{ v.icon }}</span>{{ $t(v.titleKey) }}
           </span>
-          <button class="ls-restore" @click="showView(v.id)">{{ $t('layout.restore') }}</button>
+          <button class="nv-btn nv-btn--sm ls-restore" @click="showView(v.id)">{{ $t('layout.restore') }}</button>
         </li>
       </ul>
     </section>
@@ -181,7 +181,7 @@ function onSize(id: SlotId, raw: string): void {
     </section>
 
     <div class="ls-actions">
-      <button class="ls-reset" @click="resetLayout">{{ $t('layout.reset') }}</button>
+      <button class="nv-btn nv-btn--sm ls-reset" @click="resetLayout">{{ $t('layout.reset') }}</button>
       <span class="ls-reset-note">{{ $t('layout.reset-note') }}</span>
     </div>
   </div>
@@ -205,22 +205,16 @@ function onSize(id: SlotId, raw: string): void {
   flex-wrap: wrap;
   margin-bottom: 10px;
 }
-.ls-slot-name { margin: 0; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
+/* Section headings share SettingsSection's small uppercase label. */
+.ls-slot-name { margin: 0; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .ls-fixed-note { font-size: var(--font-2xs); color: var(--text-secondary); }
 
 .ls-size { display: flex; align-items: center; gap: 6px; font-size: var(--font-2xs); color: var(--text-secondary); }
-.ls-size-input {
-  width: 68px;
-  height: 24px;
-  padding: 0 6px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: 5px;
-  color: var(--text-primary);
-  font-size: var(--font-2xs);
-}
-/* Disabled keeps its frame so an empty slot's size still reads as a field. */
-.ls-size-input:disabled { opacity: 1; background: transparent; border-color: var(--border-default); color: var(--text-secondary); }
+.ls-size-input { width: 76px; height: var(--control-h-md); box-sizing: border-box; }
+/* Disabled keeps its frame and readable text, so an empty slot's size and a
+   pinned view's "Pinned" still read as fields rather than fading out. */
+.ls-size-input:disabled,
+.ls-move:disabled { opacity: 1; background: transparent; color: var(--text-secondary); cursor: default; }
 
 .ls-toggle.is-fixed { opacity: 0.7; cursor: default; }
 .ls-toggle {
@@ -238,19 +232,19 @@ function onSize(id: SlotId, raw: string): void {
 .ls-toggle .ls-fixed-note { flex-basis: 100%; padding-left: 19px; }
 
 .ls-views { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.ls-view { display: flex; align-items: center; gap: 8px; }
+.ls-view { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 
 .ls-view-name {
-  flex: 1;
+  flex: 1 1 180px;
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   height: 28px;
   padding: 0 10px;
-  background: var(--bg-inset);
+  background: var(--bg-base);
   border: 1px solid var(--border-muted);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--font-xs);
   text-align: left;
@@ -271,33 +265,17 @@ function onSize(id: SlotId, raw: string): void {
 .ls-move,
 .ls-hide,
 .ls-restore,
-.ls-reset {
-  height: 28px;
-  padding: 0 10px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: var(--font-2xs);
-  cursor: pointer;
+.ls-reset,
+.ls-preset {
+  height: var(--control-h-md);
+  box-sizing: border-box;
 }
-/* One width for the picker so the Remove buttons line up down the list. */
-.ls-move { width: 136px; }
-.ls-move:disabled,
-.ls-hide:disabled { opacity: 1; background: transparent; border-color: var(--border-muted); color: var(--text-secondary); cursor: default; }
+/* One minimum for the picker so the Remove buttons mostly line up, but it
+   grows to its longest option ("Verschieben nach …") rather than cutting it;
+   a row too narrow for both wraps the controls under the view name. */
+.ls-move { min-width: 136px; max-width: 100%; }
 
 .ls-presets { display: flex; gap: 8px; flex-wrap: wrap; }
-.ls-preset {
-  height: 28px;
-  padding: 0 12px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: var(--font-2xs);
-  cursor: pointer;
-}
-.ls-preset:hover { border-color: var(--accent-fg); color: var(--text-bright); }
 
 .ls-actions { display: flex; align-items: center; gap: 10px; }
 .ls-reset-note { font-size: var(--font-2xs); color: var(--text-secondary); }

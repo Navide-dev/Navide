@@ -1037,7 +1037,8 @@ function formatTime(ts: number | null | undefined): string {
   color: var(--text-primary);
   white-space: nowrap;
 }
-.ch-btn.sm { font-size: var(--font-2xs); padding: 3px 8px; }
+/* Small in type, not in reach: Connect and the row actions keep a 28px target. */
+.ch-btn.sm { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-h-md); font-size: var(--font-2xs); padding: 3px 8px; }
 .ch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ch-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
 .ch-btn.primary:hover:not(:disabled) { background: var(--accent-fg); border-color: var(--accent-fg); }

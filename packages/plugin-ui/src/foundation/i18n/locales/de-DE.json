@@ -1016,7 +1016,7 @@
         "label": "Prompt-Skills",
         "hint": "Zeigen Sie auf einen Skill, um genau zu sehen, was er senden wird.",
         "max-turns": "Stoppt nach {n} Turns",
-        "unlimited": "Kein Turn-Limit",
+        "unlimited": "Unbegrenzte Turns",
         "is-default": "★ Standard-Skill",
         "send-once": "Wird einmal gesendet"
       }
@@ -1465,7 +1465,7 @@
     "cliExtensions": {
       "tabInstalled": "Installierte CLI-Erweiterungen",
       "tabConvenience": "Was Navide ändert",
-      "intro": "Was jede AI-CLI für sich selbst installiert hat – Claude plugins und mods, Codex hooks, Pi extensions und mehr – und worauf jede davon zugreifen kann. Nur lesend: Hier wird nichts installiert, aktiviert oder geändert. Navide-Plug-ins haben eine eigene Seite.",
+      "intro": "Was jede AI-CLI für sich selbst installiert hat – Claude-Plugins und -Mods, Codex-Hooks, Pi-Extensions und mehr – und worauf jede davon zugreifen kann. Nur lesend: Hier wird nichts installiert, aktiviert oder geändert. Navide-Plug-ins haben eine eigene Seite.",
       "summary": "{total} CLI-Erweiterungen · {l3} führen Code innerhalb ihrer CLI aus",
       "machineWide": "Ein Satz pro CLI für den gesamten Rechner: Jedes Navide-Pane und jedes Konto dieser CLI lädt dieselben.",
       "rescan": "Erneut scannen",
@@ -1834,7 +1834,7 @@
       "save": "Richtlinie speichern",
       "resetUser": "Benutzerrichtlinie zurücksetzen",
       "sourceTitle": "Richtlinienquelle des Arbeitsbereichs",
-      "sourceHint": "Eine Repository-Empfehlung gilt als nicht vertrauenswürdig, bis Sie sie prüfen und ausdrücklich annehmen. Quellenänderungen erfordern einen exakten aktuellen Fingerabdruck.",
+      "sourceHint": "Eine Repository-Empfehlung gilt als nicht vertrauenswürdig, bis Sie sie prüfen und ausdrücklich annehmen. Ein Quellenwechsel gilt nur für die Richtlinie, wie Sie sie zuletzt gesehen haben; hat sie sich seitdem geändert, prüfen Sie sie erneut.",
       "source": {
         "default": "Host-Standard",
         "user": "Benutzerrichtlinie",
@@ -1937,9 +1937,10 @@
         "loadFailed": "Die Einstellungen der nativen Backends konnten nicht gelesen werden."
       },
       "bundled": "Mitgeliefert",
-      "listTitle": "Navide-Plug-ins",
+      "listTitle": "Installiert",
       "developerNative": "Entwickler und nativer Code",
       "pageOn": "An",
+      "developerOnMarker": "Entwickler an",
       "bundledGit": "Mitgeliefertes Git",
       "state": {
         "active": "Aktiv",
@@ -7476,7 +7477,7 @@
       "empty": "Kein Prompt entspricht diesem Filter.",
       "default-badge": "★ Standard",
       "turns": "×{n}",
-      "turns-unlimited": "Kein Turn-Limit",
+      "turns-unlimited": "Unbegrenzte Turns",
       "disabled": "Deaktiviert",
       "name": "Name",
       "icon": "Symbol",
@@ -8239,6 +8240,7 @@
         "default-sign-in-body": "Wenn Sie sich hier anmelden, wechselt {agent} zuerst zur ursprünglichen Anmeldung. Sie enthält keine Anmeldung, daher wird die aktive Anmeldung ({current}) entfernt: Dieses Konto bleibt auf seiner eigenen Karte gespeichert, und Sie können zurückwechseln. Neue Panes von {agent} sind erst angemeldet, wenn diese Anmeldung abgeschlossen ist.",
         "default-sign-in-confirm": "Wechseln und anmelden",
         "is-default": "Aktiv",
+        "is-default-signed-out": "Ausgewählt",
         "set-default": "Zu diesem Konto wechseln",
         "switching": "Wird gewechselt …",
         "not-signed-in": "Nicht angemeldet",
@@ -10856,7 +10858,7 @@
     "unavailable": "Navide Guard ist über dieses Backend noch nicht verfügbar. Starten Sie Navide nach dem Update neu.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Jede CLI-Aktion danach beurteilen, wie gefährlich sie ist und wer sie angefordert hat; gefährliche Aktionen stoppen oder vorher nachfragen. Die Regeln sind fester Code, nie eine AI. Das Genehmigen einer Aktion mit hohem Risiko aus einem Chat-Kanal bleibt abgelehnt, auch wenn dies aus ist. Der Schutz vor Terminalbefehlen und die Prüfung, wenn ein Agent eine Abfrage über MCP beantwortet, sind von diesem Schalter ebenfalls nicht betroffen."
+      "desc": "Stoppt gefährliche CLI-Aktionen oder fragt vorher nach – nach festen Regeln (nie einer AI), die beurteilen, wie riskant eine Aktion ist und wer sie angefordert hat. Auch wenn dies aus ist, bleiben Genehmigungen mit hohem Risiko aus einem Chat-Kanal abgelehnt, und der Schutz vor Terminalbefehlen sowie die Prüfung von Antworten auf Abfragen über MCP arbeiten weiter."
     },
     "counts": {
       "critical": "Kritisch {n}",
@@ -11515,9 +11517,8 @@
     "no-match": "Kein Arbeitsbereich passt zu „{query}“.",
     "trimmed": "{count} ältere Einträge wurden durch das Verlaufslimit entfernt. Sie können es unter „Einstellungen → Allgemein“ ändern.",
     "limit-title": "Limit für zuletzt verwendete Arbeitsbereiche",
+    "limit-count": "Höchstzahl an Einträgen",
     "limit-hint": "„Zuletzt verwendet“ behält jeden geöffneten Arbeitsbereich, bis Sie ihn entfernen. Dies ist nur eine Sicherheitsgrenze für den Speicher: Ist sie erreicht, werden zuerst die ältesten Einträge entfernt; geöffnete oder angeheftete Arbeitsbereiche werden nie entfernt.",
-    "limit-off": "Kein Limit",
-    "limit-on": "Behalten bis zu",
     "state-completed": "abgeschlossen",
     "state-running": "läuft",
     "state-aborted": "abgebrochen",

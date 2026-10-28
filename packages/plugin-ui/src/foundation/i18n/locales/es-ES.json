@@ -1834,7 +1834,7 @@
       "save": "Guardar política",
       "resetUser": "Restablecer política de usuario",
       "sourceTitle": "Fuente de política del área de trabajo",
-      "sourceHint": "Una recomendación del repositorio no es de confianza hasta que la inspecciones y la aceptes explícitamente. Los cambios de fuente requieren la huella digital actual exacta.",
+      "sourceHint": "Una recomendación del repositorio no es de confianza hasta que la inspecciones y la aceptes explícitamente. Un cambio de fuente solo se aplica a la política tal como la viste por última vez; si ha cambiado desde entonces, revísala de nuevo.",
       "source": {
         "default": "Predeterminada del host",
         "user": "Política de usuario",
@@ -1937,9 +1937,10 @@
         "loadFailed": "No se pudo leer la configuración de los backends nativos."
       },
       "bundled": "Integrados",
-      "listTitle": "Complementos de Navide",
+      "listTitle": "Instalados",
       "developerNative": "Desarrollador y código nativo",
       "pageOn": "Activado",
+      "developerOnMarker": "Desarrollo activo",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Activo",
@@ -8239,6 +8240,7 @@
         "default-sign-in-body": "Al iniciar sesión aquí, {agent} cambia primero al inicio de sesión original. No contiene ninguna sesión, así que se borra el inicio de sesión activo ({current}): esa cuenta sigue guardada en su propia tarjeta y puedes volver a ella. Los nuevos panes de {agent} no tendrán sesión iniciada hasta que termine este inicio de sesión.",
         "default-sign-in-confirm": "Cambiar e iniciar sesión",
         "is-default": "Activa",
+        "is-default-signed-out": "Seleccionada",
         "set-default": "Cambiar a esta cuenta",
         "switching": "Cambiando…",
         "not-signed-in": "Sin sesión iniciada",
@@ -10856,7 +10858,7 @@
     "unavailable": "Navide Guard aún no está disponible en este backend. Reinicia Navide después de actualizar.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Evaluar cada acción de la CLI según lo peligrosa que sea y quién la pidió; detener o preguntar antes de las peligrosas. Las reglas son código fijo, nunca una AI. Aprobar una acción de riesgo alto desde un canal de chat sigue rechazándose aunque esto esté desactivado. La protección de comandos del terminal y la comprobación de un agent que responde a una solicitud mediante MCP tampoco dependen de este interruptor."
+      "desc": "Detiene o pregunta antes de las acciones peligrosas de la CLI, con reglas fijas (nunca una AI) que miran lo arriesgada que es cada una y quién la pidió. Aunque esto esté desactivado, las aprobaciones de riesgo alto desde un canal de chat siguen rechazándose, y la protección de comandos del terminal y la comprobación de respuestas a solicitudes mediante MCP siguen activas."
     },
     "counts": {
       "critical": "Críticas {n}",
@@ -11515,9 +11517,8 @@
     "no-match": "Ningún área de trabajo coincide con «{query}».",
     "trimmed": "El límite del historial ha quitado {count} entradas antiguas. Puedes cambiarlo en Ajustes → General.",
     "limit-title": "Límite de áreas de trabajo recientes",
+    "limit-count": "Máximo de entradas",
     "limit-hint": "Recientes conserva todas las áreas de trabajo que abres hasta que las quitas. Es solo un límite de seguridad del almacenamiento: al alcanzarlo se van primero las entradas más antiguas, y nunca se quitan las áreas de trabajo abiertas o fijadas.",
-    "limit-off": "Sin límite",
-    "limit-on": "Conservar hasta",
     "state-completed": "completada",
     "state-running": "en ejecución",
     "state-aborted": "cancelada",

@@ -1834,7 +1834,7 @@
       "save": "Salvar política",
       "resetUser": "Redefinir política de usuário",
       "sourceTitle": "Fonte de política do workspace",
-      "sourceHint": "Uma recomendação do repositório não é confiável até que você a inspecione e a aceite explicitamente. Trocas de fonte exigem a impressão digital atual exata.",
+      "sourceHint": "Uma recomendação do repositório não é confiável até que você a inspecione e a aceite explicitamente. Uma troca de fonte só vale para a política como você a viu por último; se ela mudou desde então, revise-a de novo.",
       "source": {
         "default": "Padrão do host",
         "user": "Política de usuário",
@@ -1937,9 +1937,10 @@
         "loadFailed": "Não foi possível ler as configurações dos back-ends nativos."
       },
       "bundled": "Integrado",
-      "listTitle": "Plug-ins do Navide",
+      "listTitle": "Instalados",
       "developerNative": "Desenvolvedor e código nativo",
       "pageOn": "Ativado",
+      "developerOnMarker": "Dev. ativado",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Ativo",
@@ -8239,6 +8240,7 @@
         "default-sign-in-body": "Entrar aqui primeiro troca o {agent} para o login original. Ele não tem nenhum login salvo, então o login ativo ({current}) é apagado: essa conta continua salva no próprio cartão e você pode voltar para ela. Novos panes do {agent} ficam sem login até este login terminar.",
         "default-sign-in-confirm": "Trocar e entrar",
         "is-default": "Ativa",
+        "is-default-signed-out": "Selecionada",
         "set-default": "Trocar para esta conta",
         "switching": "Trocando…",
         "not-signed-in": "Sem login",
@@ -10856,7 +10858,7 @@
     "unavailable": "O Navide Guard ainda não está disponível neste back-end. Reinicie o Navide depois de atualizar.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Avaliar cada ação de uma CLI pelo grau de perigo e por quem a pediu; impedir ou perguntar antes das perigosas. As regras são código fixo, nunca uma AI. Aprovar uma ação de alto risco a partir de um canal de chat continua sendo recusado mesmo com esta opção desativada. A proteção de comandos do terminal e a verificação de um agent que responde a um pedido via MCP também não são afetadas por este botão."
+      "desc": "Impede ou pergunta antes das ações perigosas de uma CLI, com regras fixas (nunca uma AI) que avaliam o risco de cada uma e quem a pediu. Mesmo com esta opção desativada, aprovações de alto risco a partir de um canal de chat continuam recusadas, e a proteção de comandos do terminal e a verificação de respostas a pedidos via MCP continuam ativas."
     },
     "counts": {
       "critical": "Crítico {n}",
@@ -11515,9 +11517,8 @@
     "no-match": "Nenhum workspace corresponde a “{query}”.",
     "trimmed": "{count} entradas mais antigas foram removidas pelo limite do histórico. Você pode alterá-lo em Configurações → Geral.",
     "limit-title": "Limite de workspaces recentes",
+    "limit-count": "Máximo de entradas",
     "limit-hint": "Recentes guarda todos os workspaces que você abre até que você os remova. Este é apenas um limite de segurança de armazenamento: quando ele é atingido, as entradas mais antigas saem primeiro, e workspaces abertos ou fixados nunca são removidos.",
-    "limit-off": "Sem limite",
-    "limit-on": "Manter até",
     "state-completed": "concluído",
     "state-running": "em execução",
     "state-aborted": "cancelado",
