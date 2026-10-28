@@ -18,7 +18,10 @@ running run is *interrupted* only when nobody claims it AND either
   reconnect.
 
 A window holding the workspace that has not synced yet keeps the run active,
-as before. An interrupted run is still resumable: its record is untouched, so
+as before. Nothing is judged before any window has claimed at all in this
+backend's lifetime (every Navide window claims as it connects, so this only
+holds a backend no window ever reached, such as a test process): a run is then
+active exactly as it always was. An interrupted run is still resumable: its record is untouched, so
 opening the workspace offers resume exactly as it always did.
 """
 
@@ -33,6 +36,8 @@ from typing import Any
 CLAIM_GRACE_S = 30.0
 
 _started_at = time.monotonic()
+#: Set by the first claim any window sends to this backend.
+_claims_seen = False
 
 
 def _norm(path: str) -> str:
@@ -46,6 +51,8 @@ def _holds(paths: Any, workspace_path: str) -> bool:
 
 def record_claim(session: Any, workspaces: list[str]) -> None:
     """A window's full claim: the runs it drives now (replaces earlier ones)."""
+    global _claims_seen
+    _claims_seen = True
     session.pipeline_claimed = True
     session.pipeline_runs = {_norm(p) for p in workspaces if isinstance(p, str) and p}
 
@@ -61,7 +68,7 @@ def claim_run(session: Any, workspace_path: str) -> None:
 
 def is_interrupted(project: Any) -> bool:
     """True for a stored running run no window drives any more."""
-    if project is None or getattr(project, "state", "") != "running":
+    if project is None or getattr(project, "state", "") != "running" or not _claims_seen:
         return False
     from . import app
 

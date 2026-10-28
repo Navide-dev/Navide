@@ -65,8 +65,9 @@ def wired(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(
         app_module, "_project_payload", lambda p: {"project": {"state": p.state}, "state": p.state}, raising=False
     )
-    # A backend that just started: inside the reconnect grace.
+    # A backend that just started: inside the reconnect grace, no claim yet.
     monkeypatch.setattr(pipeline_liveness, "_started_at", time.monotonic())
+    monkeypatch.setattr(pipeline_liveness, "_claims_seen", False)
     return SimpleNamespace(store=store, sessions=sessions, monkeypatch=monkeypatch)
 
 
@@ -77,6 +78,15 @@ def _restart_backend(w: SimpleNamespace, *, grace_over: bool = False) -> None:
     w.sessions.clear()
     started = time.monotonic() - (pipeline_liveness.CLAIM_GRACE_S + 1 if grace_over else 0)
     w.monkeypatch.setattr(pipeline_liveness, "_started_at", started)
+    w.monkeypatch.setattr(pipeline_liveness, "_claims_seen", False)
+
+
+async def _some_window_synced(w: SimpleNamespace, held: tuple[str, ...] = ("/somewhere/else",)) -> _Session:
+    """A window that holds other workspaces connects and claims nothing."""
+    other = _Session(held=held, window_id="win-other")
+    w.sessions.append(other)
+    await ws_handlers.pipeline_claim(other, "9", "pipeline.claim", {"workspaces": []})
+    return other
 
 
 async def _start_run(w: SimpleNamespace, ws: str, session: _Session) -> None:
@@ -150,6 +160,7 @@ async def test_with_no_window_holding_the_workspace_the_grace_decides(wired, ws)
     # Another window syncing says nothing about this workspace's window.
     assert _status(ws)["active"] is True
     _restart_backend(wired, grace_over=True)
+    await _some_window_synced(wired)
     assert _status(ws)["state"] == "interrupted"
 
 
@@ -167,6 +178,7 @@ async def test_two_windows_holding_the_workspace_both_have_to_sync(wired, ws) ->
 async def test_stage_spawn_claims_the_run_for_its_window(wired, ws) -> None:
     await _start_run(wired, ws, _Session(held=(ws,)))
     _restart_backend(wired, grace_over=True)
+    await _some_window_synced(wired)
     assert _status(ws)["state"] == "interrupted"
     window = _Session(held=(ws,))
     wired.sessions.append(window)
@@ -185,6 +197,15 @@ async def test_a_dead_session_claims_nothing(wired, ws) -> None:
     wired.sessions.append(survivor)
     await ws_handlers.pipeline_claim(survivor, "2", "pipeline.claim", {"workspaces": []})
     assert _status(ws)["state"] == "interrupted"
+
+
+async def test_a_backend_no_window_ever_claimed_judges_nothing(wired, ws) -> None:
+    # A test process, or a backend no Navide window reached: a running run
+    # stays active however long it has been up, as before p2-crash-state.
+    await _start_run(wired, ws, _Session(held=(ws,)))
+    _restart_backend(wired, grace_over=True)
+    assert _status(ws)["active"] is True
+    assert ws_handlers._stage_edit_hits_running_pipeline(ws, "") is True
 
 
 async def test_idle_completed_and_aborted_runs_are_never_interrupted(wired, ws) -> None:
