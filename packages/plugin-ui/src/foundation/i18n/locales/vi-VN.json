@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI đã kết thúc với mã thoát {code}. Có thể nó đã gặp sự cố; mã này cũng được ghi vào sổ lỗi.",
       "stuck-badge": "⏳ Không hoạt động {minutes}+ phút",
       "stuck-tooltip": "Lượt này không có hoạt động nhật ký và không có đầu ra trong hơn {minutes} phút. CLI có thể đã bị treo; không có gì bị ngắt.",
+      "stale-config-badge": "Cài đặt đã đổi",
+      "stale-config-tooltip-mcp": "Các máy chủ MCP của CLI này đã đổi sau khi pane khởi động. Nó vẫn dùng danh sách cũ cho đến khi được dựng lại. Bấm để dựng lại (tiếp tục cuộc trò chuyện).",
+      "stale-config-tooltip-skills": "Các skills gửi cho CLI này đã đổi sau khi pane khởi động. Nó có thể vẫn dùng bản cũ cho đến khi được dựng lại. Bấm để dựng lại (tiếp tục cuộc trò chuyện).",
+      "stale-config-tooltip-both": "Các máy chủ MCP và skills của CLI này đã đổi sau khi pane khởi động. Nó vẫn dùng bản cũ cho đến khi được dựng lại. Bấm để dựng lại (tiếp tục cuộc trò chuyện).",
       "usage-limit-badge": "⛔ trở lại lúc {time}",
       "usage-limit-badge-unknown": "⛔ hết hạn mức",
       "usage-limit-tooltip": "CLI này đã hết hạn mức — dự kiến dùng lại được lúc {time}. Nhấp để bỏ qua",
@@ -1505,6 +1509,19 @@
         "capability-approve": "CLI yêu cầu bạn phê duyệt khả năng của nó trước",
         "hot-reload": "Hỏi một lần mỗi session trước khi tải lại nóng"
       }
+    },
+    "applies": {
+      "new-panes-only": "Chỉ pane mới",
+      "new-panes-only-tooltip": "CLI đọc mục này khi khởi động. Các pane đang mở giữ giá trị cũ cho đến khi bạn dựng lại."
+    },
+    "stale-config": {
+      "title": "Pane đang mở đã khởi động trước thay đổi này: {count}",
+      "body-mcp": "CLI đọc máy chủ MCP của chính nó khi khởi động, nên các pane này vẫn dùng danh sách cũ. Dựng lại sẽ tiếp tục cuộc trò chuyện, nhưng làm gián đoạn lượt đang chạy và in lại cuộc trò chuyện.",
+      "body-skills": "CLI đọc skills khi khởi động, nên các pane này có thể vẫn dùng bản cũ. Dựng lại sẽ tiếp tục cuộc trò chuyện, nhưng làm gián đoạn lượt đang chạy và in lại cuộc trò chuyện.",
+      "rebuild-all-idle": "Dựng lại mọi pane rảnh ({count})",
+      "busy": "Đang chạy — “Dựng lại mọi pane rảnh” sẽ bỏ qua",
+      "cannot-rebuild": "Không có cuộc trò chuyện đã lưu để tiếp tục",
+      "rebuild": "Dựng lại"
     },
     "limits": {
       "hint": "Các giới hạn tùy chọn giúp Navide và các agent nó chạy không làm quá tải máy này. Mỗi giới hạn đều tắt hoặc giữ hành vi trước đây của Navide, cho đến khi bạn thay đổi.",
@@ -11419,6 +11436,11 @@
       "scope-propose": "Chỉ đề xuất (không sửa mã)",
       "scope-fix-no-git": "Workspace này không phải kho git: không có worktree hay nhánh chính để làm việc, nên chỉ đề xuất được.",
       "scope-always-propose": "Tính năng mới, đánh đổi thiết kế, xóa dữ liệu / migration, push và phát hành luôn chỉ là đề xuất (quy tắc tích hợp sẵn).",
+      "retro": "Nhìn lại",
+      "retro-tools": "Việc thủ công lặp lại",
+      "retro-tools-hint": "Tối đa {tokens} token mỗi lần chạy. Đọc nhật ký tin nhắn và các lần chạy tác vụ đã lên lịch của workspace này trong 7 ngày gần nhất, chỉ lấy số lần; việc làm từ 3 lần trở lên sẽ được đề xuất làm thành pipeline, skill, Prompt, v.v.",
+      "retro-corrections": "Các góp ý của bạn",
+      "retro-corrections-hint": "Tối đa {tokens} token mỗi lần chạy. Đọc các review note bạn để trên plan của workspace này và lý do các đề xuất bị từ chối trong 7 ngày gần nhất, chỉ lấy số lần; góp ý lặp lại từ 2 lần trở lên sẽ thành đề xuất đổi quy tắc.",
       "rules": "Quy tắc",
       "rules-builtin": "Tích hợp sẵn v{version}",
       "rules-view": "Xem toàn văn",

@@ -35,6 +35,10 @@ export interface EvolveSettings {
   scope: 'fix' | 'propose'
   extra: string
   ledger_plan: string
+  /** S2 retro passes: repeated manual work (on by default) and the user's
+   *  corrections (off by default), each with its own token sub-budget. */
+  retro_tools: boolean
+  retro_corrections: boolean
   /** Read-only (v1.1): a missed run is waiting for the workspace to open. */
   pending_catch_up?: boolean
 }
@@ -115,6 +119,8 @@ export const EVOLVE_BOUNDS = {
   max_fixes: [0, 10],
   max_minutes: [10, 600],
   extra: 4000,
+  /** Tokens each retro pass may spend of a run's budget (evolve_rules.RETRO_SUB_BUDGET). */
+  retro_sub_budget: 50_000,
 } as const
 
 const RPC_TIMEOUT_MS = 15_000

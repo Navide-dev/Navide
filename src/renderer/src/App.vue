@@ -426,6 +426,7 @@ import {
   restoreSpawnPin,
   type AccountDirsGate,
 } from './lib/accountFollowPanes'
+import { idleRebuildable, staleConfigKey, staleEntriesFromStatus, staleParts, type StaleConfigEntry, type StaleConfigPane, type StaleConfigPart, type StaleConfigRow } from './lib/staleConfigPanes'
 import {
   chainsDirLogin,
   dirLoginLanded,
@@ -2852,6 +2853,32 @@ async function refreshTerminalPrompts(): Promise<void> {
   }
 }
 
+/** Panes whose CLI started before an MCP or skills change (hot reload H0):
+ *  pane id -> the terminal the answer was about and what changed. Disclosure
+ *  only — rebuilding stays the user's click. */
+const staleConfigByPane = ref<Record<string, StaleConfigEntry>>({})
+
+async function refreshStaleConfigPanes(): Promise<void> {
+  const bySession = new Map<string, string>()
+  for (const p of panes.value) {
+    const sid = p.agentKey !== TERMINAL_AGENT_KEY ? paneRefs[p.id]?.sessionId : undefined
+    if (sid) bySession.set(sid as string, p.id)
+  }
+  if (bySession.size === 0) { staleConfigByPane.value = {}; return }
+  try {
+    const resp = await backend.send<{ stale?: StaleConfigRow[] }>(
+      'terminal.config_status', { terminal_session_ids: [...bySession.keys()] })
+    staleConfigByPane.value = staleEntriesFromStatus(bySession, resp.payload?.stale)
+  } catch {
+    // An older backend has no such request; keep showing nothing rather than guessing.
+  }
+}
+
+/** What a pane's title bar shows: empty once it runs a different terminal (rebuilt). */
+function paneStaleConfig(p: ActivePane): StaleConfigPart[] {
+  return staleParts(staleConfigByPane.value[p.id], paneRefs[p.id]?.sessionId as string | undefined)
+}
+
 /** idleHoldKey() dep: why a message cannot be injected into this pane right
  *  now, as an i18n key suffix under `msg.hold-*`, or null when it can be.
  *  Gate: PTY alive and past startup, nobody typing into it, not mid role/kickoff
@@ -4109,6 +4136,8 @@ watch(
 
 let _msgPumpTimer = 0
 let _remoteTargetsTimer = 0
+let _staleConfigTimer = 0
+const onStaleConfigFocus = (): void => { void refreshStaleConfigPanes() }
 onMounted(() => {
   messaging.configureMessaging({
     now: () => Date.now(),
@@ -4164,6 +4193,11 @@ onMounted(() => {
   }, 1000)
   void refreshRemoteMessagingTargets()
   _remoteTargetsTimer = window.setInterval(() => void refreshRemoteMessagingTargets(), 10_000)
+  // A CLI's own MCP file can change outside Navide (`claude mcp add` in any
+  // shell), so poll slowly as well as on the change events below.
+  void refreshStaleConfigPanes()
+  _staleConfigTimer = window.setInterval(() => void refreshStaleConfigPanes(), 30_000)
+  window.addEventListener('focus', onStaleConfigFocus)
   window.addEventListener('beforeunload', msgLog.flushOnExit)
   // A hard teardown (⌘R's `role: 'reload'`, app quit) never runs a pane's
   // onScopeDispose, so this is the last chance to catch the ≤60s of scrollback
@@ -4179,6 +4213,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.clearInterval(_msgPumpTimer)
   window.clearInterval(_remoteTargetsTimer)
+  window.clearInterval(_staleConfigTimer)
+  window.removeEventListener('focus', onStaleConfigFocus)
   window.removeEventListener('beforeunload', msgLog.flushOnExit)
   window.removeEventListener('beforeunload', saveAllScrollSnapshots)
   window.removeEventListener('beforeunload', flushSettingsOnExit)
@@ -9186,6 +9222,49 @@ provide(accountPinKey, {
   fixedCount: () => panes.value.filter((p) => paneAccountFixed(p)).length,
   unpinAll: unpinAllAccountPanes,
   movePane: moveFixedAccountPane,
+})
+
+function staleConfigPanes(): StaleConfigPane[] {
+  return panes.value
+    .filter((p) => p.realized && paneStaleConfig(p).length)
+    .map((p) => {
+      const paneRef = paneRefs[p.id]
+      return {
+        id: p.id,
+        name: p.messagingName || p.customName || p.autoName || p.agentLabel,
+        parts: paneStaleConfig(p),
+        busy: !!paneBusyForRebuild(
+          paneRef?.displayStatus as string | undefined,
+          paneRef?.status as string | undefined,
+          paneRef?.startingAgeMs as number | null | undefined,
+        ),
+        canRebuild: paneCanRebuild(p),
+      }
+    })
+}
+
+/** "Rebuild all idle" on the MCP / Skills pages: only stale panes that are not
+ *  mid-turn, grouped per workspace because the batch rebuild works on one
+ *  workspace's panes at a time. Running panes are listed, never touched. */
+async function rebuildStaleIdlePanes(): Promise<void> {
+  const groups = new Map<string, { workspacePath: string; ids: string[] }>()
+  for (const row of idleRebuildable(staleConfigPanes())) {
+    const pane = panes.value.find((p) => p.id === row.id)
+    if (!pane) continue
+    const key = normWs(pane.workspacePath)
+    const group = groups.get(key) ?? { workspacePath: pane.workspacePath, ids: [] }
+    group.ids.push(pane.id)
+    groups.set(key, group)
+  }
+  for (const { workspacePath, ids } of groups.values()) {
+    await rebuildPanesViaResume('all', workspacePath, ids)
+  }
+}
+
+provide(staleConfigKey, {
+  panes: staleConfigPanes,
+  rebuild: (paneId: string) => { void rebuildPaneViaResume(paneId) },
+  rebuildAllIdle: () => { void rebuildStaleIdlePanes() },
 })
 
 async function rebuildPanesViaResume(
@@ -15796,6 +15875,10 @@ backend.on('backfill.changed', (raw) => {
   backfill.active = !!ev?.active
   backfill.count = ev?.count ?? 0
 })
+
+// An MCP or skills change may leave running CLIs on the old set (hot reload H0).
+backend.on('skills.changed', () => { void refreshStaleConfigPanes() })
+backend.on('mcp.servers_changed', () => { void refreshStaleConfigPanes() })
 
 // STOP badge broadcast from the backend (another window issued/cleared a stop,
 // or this window's own persist echoed back). Reflect stored truth into the
@@ -23371,6 +23454,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :login-expired="p.loginExpired"
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"
+          :stale-config="paneStaleConfig(p)"
           :muted="isPaneMuted(p.id)"
           :readback-available="readbackOffered"
           :readback="isPaneReadback(p.id)"

@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI 以結束代碼 {code} 結束，可能是當掉了；這個代碼也記錄在錯誤帳本裡。",
       "stuck-badge": "⏳ 超過 {minutes} 分鐘沒有動靜",
       "stuck-tooltip": "這個回合已超過 {minutes} 分鐘沒有任何紀錄或輸出，CLI 可能卡住了；Navide 沒有中斷它。",
+      "stale-config-badge": "設定已更新",
+      "stale-config-tooltip-mcp": "這個 pane 開啟後，此 CLI 的 MCP server 有變動。重建前它會沿用舊清單。點一下重建（接續對話）。",
+      "stale-config-tooltip-skills": "這個 pane 開啟後，送給此 CLI 的 skills 有變動。重建前它可能沿用舊的。點一下重建（接續對話）。",
+      "stale-config-tooltip-both": "這個 pane 開啟後，此 CLI 的 MCP server 與 skills 都有變動。重建前它會沿用舊的。點一下重建（接續對話）。",
       "usage-limit-badge": "⛔ {time} 恢復",
       "usage-limit-badge-unknown": "⛔ 額度用完",
       "usage-limit-tooltip": "此 CLI 的額度已用完 — 預計 {time} 恢復。點擊可清除",
@@ -1505,6 +1509,19 @@
         "capability-approve": "CLI 會先要求你核准它的能力",
         "hot-reload": "熱重載前，每個 session 會詢問一次"
       }
+    },
+    "applies": {
+      "new-panes-only": "新開的 pane 才生效",
+      "new-panes-only-tooltip": "CLI 啟動時才讀這項設定。已開著的 pane 會沿用舊值，重建後才套用。"
+    },
+    "stale-config": {
+      "title": "在這次變更前就開著的 pane：{count} 個",
+      "body-mcp": "CLI 啟動時才讀自己的 MCP server，所以這些 pane 仍在用舊清單。重建會接續對話，但會中斷進行中的回合並重印對話。",
+      "body-skills": "CLI 啟動時才讀 skills，所以這些 pane 可能仍在用舊的。重建會接續對話，但會中斷進行中的回合並重印對話。",
+      "rebuild-all-idle": "重建所有閒置的（{count}）",
+      "busy": "執行中——「重建所有閒置的」會跳過",
+      "cannot-rebuild": "沒有可接續的對話",
+      "rebuild": "重建"
     },
     "limits": {
       "hint": "選用的限制，避免 Navide 與它啟動的 agent 把這台電腦壓垮。每一項在你調整之前都是關閉，或維持 Navide 原本的行為。",
@@ -11419,6 +11436,11 @@
       "scope-propose": "只提案（不改程式）",
       "scope-fix-no-git": "這個 workspace 不是 git repo，沒有 worktree 與主分支可用，只能「只提案」。",
       "scope-always-propose": "新功能、設計取捨、刪資料／migration、push、發版一律寫提案（內建規則）。",
+      "retro": "回顧",
+      "retro-tools": "重複手動的事",
+      "retro-tools-hint": "每次最多 {tokens} token。讀這個 workspace 近 7 天的訊息紀錄與排程執行紀錄，只取次數；同一件事做了 3 次以上，就提案做成 pipeline、skill、Prompt 等。",
+      "retro-corrections": "你的糾正",
+      "retro-corrections-hint": "每次最多 {tokens} token。讀你在這個 workspace 的 plan 上留的 review note 與提案退回理由，近 7 天、只取次數；同一個糾正出現 2 次以上，就提案改規則。",
       "rules": "規則範本",
       "rules-builtin": "內建 v{version}",
       "rules-view": "檢視全文",

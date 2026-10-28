@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "The CLI ended with exit code {code}. It may have crashed; the code is also recorded in the error ledger.",
       "stuck-badge": "⏳ No activity {minutes}+ min",
       "stuck-tooltip": "This turn has shown no log activity and no output for over {minutes} minutes. The CLI may be stuck; nothing was interrupted.",
+      "stale-config-badge": "Settings changed",
+      "stale-config-tooltip-mcp": "This CLI's MCP servers changed after the pane started. It keeps the old list until rebuilt. Click to rebuild (resume the conversation).",
+      "stale-config-tooltip-skills": "The skills delivered to this CLI changed after the pane started. It may keep the old set until rebuilt. Click to rebuild (resume the conversation).",
+      "stale-config-tooltip-both": "This CLI's MCP servers and skills changed after the pane started. It keeps the old set until rebuilt. Click to rebuild (resume the conversation).",
       "usage-limit-badge": "⛔ back {time}",
       "usage-limit-badge-unknown": "⛔ out of quota",
       "usage-limit-tooltip": "This CLI is out of quota — expected back at {time}. Click to dismiss",
@@ -1505,6 +1509,19 @@
         "capability-approve": "The CLI asks you to approve its capabilities first",
         "hot-reload": "Asked once per session before hot reload"
       }
+    },
+    "applies": {
+      "new-panes-only": "New panes only",
+      "new-panes-only-tooltip": "A CLI reads this when it starts. Panes already open keep the old value until you rebuild them."
+    },
+    "stale-config": {
+      "title": "Open panes that started before this change: {count}",
+      "body-mcp": "A CLI reads its own MCP servers when it starts, so these panes still use the old list. Rebuilding resumes the conversation; it interrupts a turn in progress and reprints the conversation.",
+      "body-skills": "A CLI reads its skills when it starts, so these panes may still use the old set. Rebuilding resumes the conversation; it interrupts a turn in progress and reprints the conversation.",
+      "rebuild-all-idle": "Rebuild all idle ({count})",
+      "busy": "Running — Rebuild all idle skips it",
+      "cannot-rebuild": "No saved conversation to resume",
+      "rebuild": "Rebuild"
     },
     "limits": {
       "hint": "Optional limits that keep Navide and the agents it runs from overloading this machine. Each one is off, or at Navide's previous behavior, until you change it.",
@@ -11419,6 +11436,11 @@
       "scope-propose": "Propose only (no code changes)",
       "scope-fix-no-git": "This workspace is not a git repo: there is no worktree or main branch to work with, so it can only propose.",
       "scope-always-propose": "New features, design trade-offs, data deletion / migrations, push and release are always proposals (built-in rule).",
+      "retro": "Retrospectives",
+      "retro-tools": "Repeated manual work",
+      "retro-tools-hint": "Up to {tokens} tokens per run. Reads this workspace's message log and scheduled-job runs of the last 7 days, as counts only; proposes turning a chore done 3 or more times into a pipeline, skill, prompt and the like.",
+      "retro-corrections": "Your corrections",
+      "retro-corrections-hint": "Up to {tokens} tokens per run. Reads your review notes on this workspace's plans and the reasons for rejected proposals, last 7 days, as counts only; a correction made 2 or more times becomes a proposed rule change.",
       "rules": "Rules",
       "rules-builtin": "Built-in v{version}",
       "rules-view": "View full text",

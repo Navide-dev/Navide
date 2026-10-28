@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "La CLI terminó con el código de salida {code}. Puede que se haya bloqueado; el código también se registra en el registro de errores.",
       "stuck-badge": "⏳ Sin actividad desde hace {minutes}+ min",
       "stuck-tooltip": "Este turno no ha mostrado actividad en el registro ni salida durante más de {minutes} minutos. Puede que la CLI esté atascada; no se ha interrumpido nada.",
+      "stale-config-badge": "Ajustes cambiados",
+      "stale-config-tooltip-mcp": "Los servidores MCP de esta CLI cambiaron después de abrir el panel. Sigue con la lista anterior hasta que lo reconstruyas. Haz clic para reconstruir (reanudar la conversación).",
+      "stale-config-tooltip-skills": "Las skills que recibe esta CLI cambiaron después de abrir el panel. Puede seguir con las anteriores hasta que lo reconstruyas. Haz clic para reconstruir (reanudar la conversación).",
+      "stale-config-tooltip-both": "Los servidores MCP y las skills de esta CLI cambiaron después de abrir el panel. Sigue con los anteriores hasta que lo reconstruyas. Haz clic para reconstruir (reanudar la conversación).",
       "usage-limit-badge": "⛔ vuelve {time}",
       "usage-limit-badge-unknown": "⛔ sin cuota",
       "usage-limit-tooltip": "Esta CLI se ha quedado sin cuota: se espera que vuelva a las {time}. Haz clic para descartar",
@@ -1505,6 +1509,19 @@
         "capability-approve": "La CLI te pide primero que apruebes sus capacidades",
         "hot-reload": "Se pregunta una vez por session antes de la recarga en caliente"
       }
+    },
+    "applies": {
+      "new-panes-only": "Solo paneles nuevos",
+      "new-panes-only-tooltip": "Una CLI lee esto al iniciarse. Los paneles ya abiertos conservan el valor anterior hasta que los reconstruyas."
+    },
+    "stale-config": {
+      "title": "Paneles abiertos que se iniciaron antes de este cambio: {count}",
+      "body-mcp": "Una CLI lee sus propios servidores MCP al iniciarse, así que estos paneles siguen con la lista anterior. Reconstruir reanuda la conversación, pero interrumpe un turno en curso y vuelve a mostrar la conversación.",
+      "body-skills": "Una CLI lee sus skills al iniciarse, así que estos paneles pueden seguir con las anteriores. Reconstruir reanuda la conversación, pero interrumpe un turno en curso y vuelve a mostrar la conversación.",
+      "rebuild-all-idle": "Reconstruir todos los inactivos ({count})",
+      "busy": "En ejecución: «Reconstruir todos los inactivos» lo omite",
+      "cannot-rebuild": "No hay conversación guardada que reanudar",
+      "rebuild": "Reconstruir"
     },
     "limits": {
       "hint": "Límites opcionales que evitan que Navide y los agents que ejecuta sobrecarguen este equipo. Cada uno está desactivado, o con el comportamiento anterior de Navide, hasta que lo cambies.",
@@ -11419,6 +11436,11 @@
       "scope-propose": "Solo proponer (sin cambios de código)",
       "scope-fix-no-git": "Esta área de trabajo no es un repo de git: no hay worktree ni rama principal con los que trabajar, así que solo puede proponer.",
       "scope-always-propose": "Las funciones nuevas, las decisiones de diseño, la eliminación o migración de datos, el push y la publicación son siempre propuestas (regla integrada).",
+      "retro": "Retrospectivas",
+      "retro-tools": "Trabajo manual repetido",
+      "retro-tools-hint": "Hasta {tokens} tokens por ejecución. Lee el registro de mensajes y las ejecuciones de tareas programadas de este workspace de los últimos 7 días, solo como recuentos; una tarea hecha 3 o más veces se propone como pipeline, skill, Prompt o similar.",
+      "retro-corrections": "Tus correcciones",
+      "retro-corrections-hint": "Hasta {tokens} tokens por ejecución. Lee tus review notes en los plans de este workspace y los motivos de las propuestas rechazadas de los últimos 7 días, solo como recuentos; una corrección repetida 2 o más veces se propone como cambio de regla.",
       "rules": "Reglas",
       "rules-builtin": "Integradas v{version}",
       "rules-view": "Ver texto completo",

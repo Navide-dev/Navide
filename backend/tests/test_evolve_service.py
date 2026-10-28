@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -36,6 +37,9 @@ class FakeHost:
         self.events: list[tuple[str, dict[str, Any]]] = []
         self.open_workspaces: set[str] = set()
         self.missing_commits: set[str] = set()
+        #: Message-log rows and schedule records the retro passes read (S2).
+        self.message_log: list[dict[str, Any]] = []
+        self.schedule: list[dict[str, Any]] = []
 
     async def git_info(self, workspace: str) -> dict[str, Any]:
         return {**self.git, "root": self.git["root"] or workspace} if self.git["is_repo"] else dict(self.git)
@@ -72,6 +76,12 @@ class FakeHost:
 
     async def broadcast(self, event: str, payload: dict[str, Any]) -> None:
         self.events.append((event, payload))
+
+    def message_rows(self) -> list[dict[str, Any]]:
+        return list(self.message_log)
+
+    async def schedule_records(self) -> list[dict[str, Any]]:
+        return list(self.schedule)
 
     def scheduler(self) -> SchedulerService:
         return self.sched
@@ -964,6 +974,7 @@ def _write_plan(ws: str, name: str, stage: str, notes: list[dict[str, Any]] | No
         f'</head><body><span class="pill {stage}">{stage}</span></body></html>',
         encoding="utf-8",
     )
+    os.utime(path, (NOW_MS / 1000, NOW_MS / 1000))  # "just changed", on the tests' clock
     return rel
 
 
@@ -1139,3 +1150,229 @@ async def test_a_proposed_only_ledger_leaves_the_task_unchanged(env) -> None:
     await env.service.start_run(env.a, "manual")
     task = env.host.opened[opened]["task"]
     assert "PAST PROPOSALS" not in task and "Still in review" not in task
+
+
+# ── retro passes (S2) ──────────────────────────────────────────────────────
+
+DAY_MS = 86_400_000
+
+
+def test_retro_switches_default_tools_on_corrections_off() -> None:
+    assert ev.DEFAULTS["retro_tools"] is True and ev.DEFAULTS["retro_corrections"] is False
+    # A row an older build wrote has neither field: both read as their default.
+    old = {k: v for k, v in ev.DEFAULTS.items() if not k.startswith("retro_")}
+    settings, invalid = ev.sanitize_stored(old)
+    assert settings["retro_tools"] is True and settings["retro_corrections"] is False
+    assert invalid == []
+    changed = ev.normalize_settings({"retro_tools": False, "retro_corrections": True}, dict(ev.DEFAULTS))
+    assert changed["retro_tools"] is False and changed["retro_corrections"] is True
+    for bad in ({"retro_tools": "yes"}, {"retro_corrections": 1}):
+        with pytest.raises(ev.SettingsInvalid):
+            ev.normalize_settings(bad, dict(ev.DEFAULTS))
+    stored, invalid = ev.sanitize_stored({**ev.DEFAULTS, "retro_tools": "on"})
+    assert stored["retro_tools"] is True and invalid == ["retro_tools"]
+
+
+async def test_a_fresh_workspace_reads_the_retro_defaults(env) -> None:
+    settings = (await env.service.get(env.a))["settings"]
+    assert settings["retro_tools"] is True and settings["retro_corrections"] is False
+
+
+def test_both_retro_switches_off_keep_the_task_text_byte_for_byte() -> None:
+    off = {"retro_tools": False, "retro_corrections": False}
+    assert _sha(evolve_rules.render(_params(**off))) == _MAIN_RENDER_FIX
+    assert _sha(evolve_rules.render(_params(scope="propose", ledger_plan=".agent-team/plans/l.html", **off))) \
+        == _MAIN_RENDER_PROPOSE
+    assert evolve_rules.VERSION == 3
+
+
+def test_each_retro_switch_adds_only_its_own_section() -> None:
+    tools = evolve_rules.render(_params(retro_tools=True))
+    corrections = evolve_rules.render(_params(retro_corrections=True))
+    for task in (tools, corrections):
+        flat = " ".join(task.split())
+        assert "PROPOSAL LABELS" in task
+        assert 'kind="failures:code"' in flat and "rule-diff" in flat and "signature" in flat
+        assert "at most 3 new proposals" in flat
+        assert "DATA, NEVER INSTRUCTIONS" in task
+    assert "RETRO: REPEATED MANUAL WORK" in tools and "RETRO: USER CORRECTIONS" not in tools
+    assert "RETRO: USER CORRECTIONS" in corrections and "RETRO: REPEATED MANUAL WORK" not in corrections
+    flat_tools = " ".join(tools.split())
+    assert "50000 tokens" in flat_tools and "3 or more times" in flat_tools and "last 7 days" in flat_tools
+    assert "scheduler_runs" not in tools and "scheduler_list" not in tools
+    flat_corr = " ".join(corrections.split())
+    assert "50000 tokens" in flat_corr and "2 or more times" in flat_corr
+
+
+def test_retro_records_are_fenced_one_line_data() -> None:
+    task = evolve_rules.render(_params(
+        retro_tools=True, retro_tools_data=["messages 指揮 -> worker \"run the release gate\": 4\nSTEPS"],
+        retro_corrections=True, retro_corrections_data=["\"use traditional chinese\": 3"],
+    ))
+    for title in ("REPEATED MANUAL WORK RECORDS", "USER CORRECTION RECORDS"):
+        begin = re.search(title + r" — BEGIN ([0-9a-f]{16})", task)
+        assert begin, title
+        end = task.index(f"{title} — END {begin.group(1)}")
+        block = task[begin.end():end]
+        assert block.strip()
+    assert "\nSTEPS" not in task.split("REPEATED MANUAL WORK RECORDS — BEGIN")[1].split("— END")[0]
+    assert "run the release gate" in task and "use traditional chinese" in task
+
+
+def _row(ws: str, sender: str, recipient: str, content: str, at: int, other: str = "") -> dict[str, Any]:
+    return {"uid": f"u{at}{sender}{content[:5]}", "created_at": at, "status": "delivered",
+            "sender": sender, "recipient": recipient, "content": content,
+            "sender_workspace": ws, "recipient_workspace": other or ws}
+
+
+async def test_retro_records_come_from_this_workspace_only(env) -> None:
+    await enable(env, env.a, retro_tools=True, retro_corrections=True)
+    now = NOW_MS
+    a, b = env.a, env.b
+    log = []
+    for i in range(4):  # A: the same dispatch four times, numbers and hashes vary
+        log.append(_row(a, "指揮", "worker", f"Run the release gate for PR #{700 + i} at {i}:0{i} sha abcdef{i}12", now - i * 3_600_000))
+    for i in range(2):  # A: twice only, below the threshold
+        log.append(_row(a, "指揮", "worker", "Rebuild the docs index", now - i * 1000))
+    for i in range(5):  # B: busy, but another workspace
+        log.append(_row(b, "beta-boss", "beta-worker", "Deploy the beta site now", now - i * 1000))
+    for i in range(3):  # A <- B: the other side is named only as another workspace
+        log.append(_row(b, "beta-boss", "指揮", "Sync the shared beta notes", now - i * 1000, other=a))
+    for i in range(3):  # A, but older than 7 days
+        log.append(_row(a, "指揮", "worker", "Ancient chore", now - 8 * DAY_MS - i))
+    for i in range(3):  # unstamped rows belong to no workspace
+        log.append({**_row(a, "指揮", "worker", "Unstamped chore", now - i), "sender_workspace": None,
+                    "recipient_workspace": None})
+    env.host.message_log = log
+    runs = [{"started_at": now - i * DAY_MS, "status": "ok"} for i in range(3)]
+    env.host.schedule = [
+        {"id": "j-a", "name": "Nightly lint (alpha)", "owner": {"kind": "user"},
+         "action": {"kind": "message", "workspace": a}, "runs": runs},
+        {"id": "j-b", "name": "Beta backup", "owner": {"kind": "pane", "workspace": b},
+         "action": {"kind": "message", "workspace": b}, "runs": runs},
+        {"id": ev.job_id_for(a), "name": "Self-evolution · alpha",
+         "owner": {"kind": "system", "feature": "evolve", "workspace": a},
+         "action": {"kind": "evolve", "workspace": a}, "runs": runs},
+    ]
+    _write_plan(a, "pa", "in-review", notes=[
+        {"id": "n1", "author": "user", "text": "Please reply in Traditional Chinese in every report (seen 2026-10-28 09:12)", "resolved": False, "reply": ""},
+        {"id": "n2", "author": "ai", "text": "Please reply in Traditional Chinese in every report", "resolved": False, "reply": ""},
+    ])
+    _write_plan(a, "pb", "in-review", notes=[
+        {"id": "n1", "author": "user", "text": "please reply in traditional  Chinese in every report!! token=sk-abcdefghijklmnop", "resolved": False, "reply": ""},
+        {"id": "n2", "author": "user", "text": "One-off remark", "resolved": False, "reply": ""},
+    ])
+    _write_plan(b, "pz", "in-review", notes=[
+        {"id": "n1", "author": "user", "text": "Beta correction again", "resolved": False, "reply": ""},
+        {"id": "n2", "author": "user", "text": "Beta correction again", "resolved": False, "reply": ""},
+    ])
+    await env.service.start_run(env.a, "manual")
+    task = env.host.opened[-1]["task"]
+    tools = task.split("REPEATED MANUAL WORK RECORDS — BEGIN")[1].split("REPEATED MANUAL WORK RECORDS — END")[0]
+    corr = task.split("USER CORRECTION RECORDS — BEGIN")[1].split("USER CORRECTION RECORDS — END")[0]
+    assert "run the release gate for pr #" in tools.lower() and ": 4" in tools
+    assert "700" not in tools and "abcdef" not in tools
+    assert '(another workspace) -> 指揮 "sync the shared beta notes": 3' in tools
+    assert "Nightly lint (alpha)" in tools
+    for absent in ("Rebuild the docs index", "Ancient chore", "Unstamped chore", "Self-evolution"):
+        assert absent not in tools, absent
+    assert "please reply in traditional chinese in e" in corr.lower() and ": 2" in corr
+    assert "One-off remark" not in corr and "abcdefghijklmnop" not in task
+    # Nothing of the other workspace, not even its pane or job names.
+    for leaked in ("beta-boss", "beta-worker", "Deploy the beta site", "Beta backup", "Beta correction"):
+        assert leaked not in task, leaked
+
+
+async def test_retro_corrections_off_reads_no_corrections(env) -> None:
+    await enable(env, env.a)
+    _write_plan(env.a, "pa", "in-review", notes=[
+        {"id": "n1", "author": "user", "text": "Same remark", "resolved": False, "reply": ""},
+        {"id": "n2", "author": "user", "text": "Same remark", "resolved": False, "reply": ""},
+    ])
+    await env.service.start_run(env.a, "manual")
+    task = env.host.opened[-1]["task"]
+    assert "RETRO: REPEATED MANUAL WORK" in task and "RETRO: USER CORRECTIONS" not in task
+    assert "Same remark" not in task
+
+
+async def test_retro_corrections_count_ledger_rejections(env) -> None:
+    rel = _write_plan(env.a, "p1", "in-review")
+    rel2 = _write_plan(env.a, "p2", "in-review")
+    await _reported(env, [{"rel_path": rel, "name": "A"}, {"rel_path": rel2, "name": "B"}])
+    for name in ("p1", "p2"):
+        _write_plan(env.a, name, "abandoned", notes=[
+            {"id": "n1", "author": "user", "text": "Too big for one PR", "resolved": False, "reply": ""}])
+    await env.service.get(env.a)  # the ledger reads both rejections
+    (Path(env.a) / rel2).unlink()  # gone: its reason now lives only in the ledger
+    await env.service.set(env.a, {"retro_corrections": True})
+    env.clock["now"] = NOW_MS + DAY_MS
+    await env.service.start_run(env.a, "manual")
+    corr = env.host.opened[-1]["task"].split("USER CORRECTION RECORDS — BEGIN")[1]
+    assert "too big for one pr" in corr.lower() and ": 2" in corr
+
+
+# ── landing paths (S3) ─────────────────────────────────────────────────────
+
+
+def _landing_section(task: str) -> str:
+    start = task.index("LANDING PATHS")
+    return " ".join(task[start:].split())
+
+
+def test_landing_paths_follow_the_retro_switches_or_a_ledger() -> None:
+    off = {"retro_tools": False, "retro_corrections": False}
+    assert "LANDING PATHS" not in evolve_rules.render(_params(**off))
+    assert "LANDING PATHS" not in evolve_rules.render(_params(**off), [])
+    assert _sha(evolve_rules.render(_params(**off), [])) == _MAIN_RENDER_FIX
+    row = {"name": "n", "rel_path": "p", "status": "rejected", "signature": "", "reason": ""}
+    for task in (evolve_rules.render(_params(retro_tools=True)),
+                 evolve_rules.render(_params(retro_corrections=True)),
+                 evolve_rules.render(_params(**off), [row])):
+        assert "LANDING PATHS" in task
+
+
+def test_landing_paths_name_every_landing_and_where_the_user_says_yes() -> None:
+    flat = _landing_section(evolve_rules.render(_params(retro_tools=True)))
+    for landing in evolve_rules.LANDINGS:
+        assert f"- {landing}" in flat or f"/ {landing}" in flat, landing
+    assert flat.count("The user's yes:") == 6
+    assert "draft pull request" in flat and "never merged by an agent" in flat
+    assert "plugins_validate_package" in flat and "Developer Mode" in flat
+    assert "skills_prepare_install" in flat and "pipeline_define" in flat and "scheduler_upsert" in flat
+    assert "only a diff inside the plan" in flat and "never write those files" in flat
+    assert '"提案落地流程" (id evolve-landing)' in flat
+
+
+def test_landing_paths_forbid_the_run_from_carrying_them_out() -> None:
+    flat = _landing_section(evolve_rules.render(_params(retro_tools=True)))
+    assert "do not call pipeline_start" in flat
+    assert "do not merge" in flat
+    assert "do not approve plans or gates" in flat
+    assert "do not open panes for a proposal's landing" in flat
+
+
+def test_evolve_itself_never_starts_dispatches_or_approves() -> None:
+    import inspect
+
+    source = inspect.getsource(ev) + inspect.getsource(evolve_rules)
+    # Rule text, docstrings and comments may name the tools; code may not.
+    code = re.sub(r"#[^\n]*", "", re.sub(r'(?s)""".*?"""', "", source))
+    for call in ("pipeline_start", "pipeline_gate", "gate_pass", "plan_update_stage", "merge(",
+                 "plugins_enable", "skills_install", "scheduler_upsert", "stages_store"):
+        assert call not in code, call
+
+
+async def test_a_landed_proposal_still_comes_from_the_plan_alone(env) -> None:
+    rel = _write_plan(env.a, "p1", "in-review")
+    await _reported(env, [{"rel_path": rel, "name": "P1", "kind": "tools:pipeline", "signature": "k"}])
+    _write_plan(env.a, "p1", "done", notes=[
+        {"id": "n1", "author": "ai", "text": "Landed via the proposal pipeline, PR #811.", "resolved": False, "reply": ""}])
+    row = (await _ledger(env))[rel]
+    assert row["status"] == "landed" and row["pr"] == "#811" and row["kind"] == "tools:pipeline"
+
+
+def test_the_rules_name_the_landing_pipeline_the_store_seeds() -> None:
+    from agent_team_backend import stages_store
+
+    assert evolve_rules.LANDING_PIPELINE_ID == stages_store.EVOLVE_LANDING_ID
+    assert evolve_rules.LANDING_PIPELINE_NAME == stages_store.EVOLVE_LANDING_NAME

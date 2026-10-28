@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI 以结束代码 {code} 结束，可能是当掉了；这个代码也记录在错误帐本里。",
       "stuck-badge": "⏳ 超过 {minutes} 分钟没有动静",
       "stuck-tooltip": "这个回合已超过 {minutes} 分钟没有任何记录或输出，CLI 可能卡住了；Navide 没有中断它。",
+      "stale-config-badge": "设置已更新",
+      "stale-config-tooltip-mcp": "这个 pane 打开后，此 CLI 的 MCP server 有变动。重建前它会沿用旧列表。点一下重建（接续对话）。",
+      "stale-config-tooltip-skills": "这个 pane 打开后，发给此 CLI 的 skills 有变动。重建前它可能沿用旧的。点一下重建（接续对话）。",
+      "stale-config-tooltip-both": "这个 pane 打开后，此 CLI 的 MCP server 和 skills 都有变动。重建前它会沿用旧的。点一下重建（接续对话）。",
       "usage-limit-badge": "⛔ {time} 恢复",
       "usage-limit-badge-unknown": "⛔ 额度用完",
       "usage-limit-tooltip": "此 CLI 的额度已用完 — 预计 {time} 恢复。点击可清除",
@@ -1505,6 +1509,19 @@
         "capability-approve": "CLI 会先要求你核准它的能力",
         "hot-reload": "热重载前，每个 session 会询问一次"
       }
+    },
+    "applies": {
+      "new-panes-only": "仅对新开的 pane 生效",
+      "new-panes-only-tooltip": "CLI 启动时才读取这项设置。已打开的 pane 会沿用旧值，重建后才应用。"
+    },
+    "stale-config": {
+      "title": "在这次变更前就已打开的 pane：{count} 个",
+      "body-mcp": "CLI 启动时才读取自己的 MCP server，所以这些 pane 仍在用旧列表。重建会接续对话，但会中断进行中的回合并重新输出对话。",
+      "body-skills": "CLI 启动时才读取 skills，所以这些 pane 可能仍在用旧的。重建会接续对话，但会中断进行中的回合并重新输出对话。",
+      "rebuild-all-idle": "重建所有空闲的（{count}）",
+      "busy": "运行中——“重建所有空闲的”会跳过",
+      "cannot-rebuild": "没有可接续的对话",
+      "rebuild": "重建"
     },
     "limits": {
       "hint": "选用的限制，避免 Navide 与它启动的 agent 把这台电脑压垮。每一项在你调整之前都是关闭，或维持 Navide 原本的行为。",
@@ -11419,6 +11436,11 @@
       "scope-propose": "只提案（不改程序）",
       "scope-fix-no-git": "这个 workspace 不是 git repo，没有 worktree 与主分支可用，只能“只提案”。",
       "scope-always-propose": "新功能、设计取舍、删数据／migration、push、发版一律写提案（内置规则）。",
+      "retro": "回顾",
+      "retro-tools": "重复手动的事",
+      "retro-tools-hint": "每次最多 {tokens} token。读取这个 workspace 近 7 天的消息记录与计划任务执行记录，只取次数；同一件事做了 3 次以上，就提议做成 pipeline、skill、Prompt 等。",
+      "retro-corrections": "你的纠正",
+      "retro-corrections-hint": "每次最多 {tokens} token。读取你在这个 workspace 的 plan 上留下的 review note 与提案退回理由，近 7 天、只取次数；同一个纠正出现 2 次以上，就提议修改规则。",
       "rules": "规则模板",
       "rules-builtin": "内置 v{version}",
       "rules-view": "查看全文",

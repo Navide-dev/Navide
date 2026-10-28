@@ -141,6 +141,7 @@ function onEvolveReclaimValue(event: Event): void {
         data-settings-section="limits-test-workers"
         :title="t('settings.limits.test-workers')"
         :description="t('settings.limits.test-workers-hint')"
+        new-panes-only
       >
         <template #control>
           <ToggleSwitch
@@ -244,6 +245,7 @@ function onEvolveReclaimValue(event: Event): void {
         data-settings-section="limits-detached"
         :title="t('settings.limits.detached')"
         :description="t('settings.limits.detached-hint')"
+        new-panes-only
       >
         <template #control>
           <ToggleSwitch

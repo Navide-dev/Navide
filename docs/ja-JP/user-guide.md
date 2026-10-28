@@ -77,6 +77,8 @@ These observations help you inspect local activity; they do not prove exfiltrati
 - **出力を固定（Pin）。** Inspector で固定したステップは、以降の実行でスキップされ、前回の出力が再利用されます。
 - **ここから再実行（Restart from）。** ステップの Inspector で、その Pipeline に停止済みの実行があるとき、そのステップから新しい実行を始め、それ以前のステップの出力を保持します — すべてをやり直す**最初からやり直す**より安く済みます。
 
+3 つ目の組み込み **提案落地流程**（id `evolve-landing`）は、承認された自己最適化の提案を、あなたか指揮役の pane が作業として割り当てた後にたどる経路です。実装 → 読み取り専用のレビュー → CI チェック（workflow run の各 job の結果を報告するだけで、rerun もマージもしない）→ あなただけが通せる承認 gate の順に進みます。これはテンプレートで、自動では開始されず、使用中の pipeline にもならず、マージ、公開、プラグインの読み込み、skill の配信、スケジュール作成の手順はありません。Navide は既存の pipeline 一覧にこれを一度だけ追加し、削除した場合は再追加しません。**Reset** で手順と gate を元に戻せます。他の組み込みと同じく、名前はシードに固定されており翻訳されません。
+
 一つの Stage で複数 Slot を並行実行できます。Navide は設定された Completion Signal と Agent State に基づいて進行します。Generated Change と Test Result は必ず確認してください。Automatic Completion は Workflow Progress を示すもので、Correctness を保証しません。
 
 ## Manager と Worker の協調
