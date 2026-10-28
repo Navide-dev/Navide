@@ -52,6 +52,7 @@ from starlette.types import Receive, Scope, Send
 from agent_team_backend import login_panes
 from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
+from agent_team_backend import pipeline_liveness
 from agent_team_backend.fs_service import FsError
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
 # Workspace normalisation, not a plan dependency: preview_* resolves a
@@ -7669,6 +7670,12 @@ def _pipeline_status_of(workspace_path: str) -> dict[str, Any]:
     status: dict[str, Any] = {"workspace_path": workspace_path}
     status["active"] = stored.get("state") == "running"
     status.update(_pick(stored, _PROJECT_FIELDS))
+    if pipeline_liveness.is_interrupted(project):
+        # Left at running by a crashed app: no window drives it. Its record
+        # is untouched, so opening the workspace still offers resume.
+        status["active"] = False
+        status["state"] = "interrupted"
+        status["resumable"] = True
     status["stages"] = [
         _pick(stage, _STAGE_RECORD_FIELDS) for stage in stored.get("stages") or []
     ]
@@ -7703,7 +7710,7 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     not an error.
 
     When a project exists it also carries: state (idle / running / completed /
-    aborted), task_description (what the run was started for), pipeline_id
+    aborted / interrupted), task_description (what the run was started for), pipeline_id
     (which template from pipeline_list), current_stage_index and total_stages,
     run_count, log_file_name, updated_at, plus `stages` — {stage_id, title,
     agent, role, pane_id, status, started_at, ended_at} each — and `panes`,
@@ -7711,6 +7718,12 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     slot_label, spawn_status, kickoff_status}. Panes the user or an agent
     opened by hand are not pipeline slots and are left out; cli_list_targets is
     where every pane is listed.
+
+    state "interrupted" (with active false and resumable true) is a run whose
+    record was left at running by a closed or crashed app: no Navide window
+    drives it any more. It no longer blocks definition edits, and its record
+    is kept, so opening the workspace offers to resume it (or pipeline_resume
+    does, once a window holds the workspace).
 
     Per graph node it also carries `nodes` — {node_id: {status, startedAt,
     endedAt, tokens, paneId, attempts, pinned, error}}, status one of pending /
@@ -8672,6 +8685,17 @@ async def pipeline_start(
     """
     caller = _resolve_caller(ctx)
     workspace_path = await _run_workspace(caller, workspace_path)
+    return await _start_pipeline_run(
+        caller, workspace_path, task, pipeline_id, taint_detail=_inherited_taint(caller, "pipeline started")
+    )
+
+
+async def _start_pipeline_run(
+    caller: _Caller, workspace_path: str, task: str, pipeline_id: str, *, taint_detail: str = ""
+) -> dict[str, Any]:
+    """pipeline_start's path, shared with the scheduler's pipeline_start jobs:
+    ui.pipeline.start in the window holding the workspace, with the caller's
+    Guard taint carried into the run."""
     args: dict[str, Any] = {"task": str(task or "")}
     pipeline_id = str(pipeline_id or "").strip()
     if pipeline_id:
@@ -8680,7 +8704,7 @@ async def pipeline_start(
     # the caller's taint travels with the run (guard.taint arm/adopt).
     from agent_team_backend.guard import taint as guard_taint
 
-    detail = _inherited_taint(caller, "pipeline started")
+    detail = taint_detail
     if detail:
         guard_taint.arm_pipeline_run(workspace_path, detail)
     result: dict[str, Any] = {}
@@ -8794,7 +8818,7 @@ def _run_is_active(workspace_path: str) -> bool:
     if not workspace_path:
         return False
     project = _app.project_store.peek(workspace_path)
-    return bool(project is not None and project.state == "running")
+    return pipeline_liveness.run_is_live(project)
 
 
 def _stage_edit_blocked(workspace_path: str, pipeline_id: str) -> bool:
@@ -9337,6 +9361,10 @@ async def pipeline_graph(
         {op:"set_gate", id, prompt?}
         {op:"set_pin", id, pinned}   (a pinned slot is skipped on later runs and
            its last output reused)
+        {op:"set_retry", id, retry:{maxTries, waitMs?} | null}  (a slot's failed
+           try — its kickoff never landed, or it reported ---NODE-FAILED--- —
+           runs again on the same pane, maxTries 1..5 tries in all, waitMs
+           0..300000 apart, before its error edge or the run fails; null clears)
         {op:"set_stage_meta", stageId, title?, shortTitle?, question?,
            description?, sentinel?, allowQuestions?, docQuery?,
            recommendedRoles?}  (metadata of the stage a layer derives to)
@@ -9754,6 +9782,16 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
         A pane rebuilt by resuming the same session keeps its jobs: they move
         to the new pane id. Three "target_gone" runs in a row disable the job
         (state.disabled_reason "target_gone") and tell its creator once.
+      action — or {kind: "pipeline_start", workspace, pipeline_id | pipeline_name,
+        task}: start a pipeline run there, exactly as pipeline_start would —
+        THIS OPENS CLI PANES AND SPENDS THEIR QUOTA on every run. Exactly one of
+        pipeline_id / pipeline_name (as pipeline_list reports them; a name must
+        match one pipeline exactly), resolved each time the job runs. It never
+        opens a window: when no window holds the workspace the run is an ERROR
+        with reason "no_window" (not a skip), as are an unknown or ambiguous
+        pipeline ("pipeline_not_found") and a start the window refuses (a run
+        already going, …), each with the reason in last_error. A pane caller's
+        default workspace is its own.
       policy — optional {catch_up: "once" | "skip", max_runs_per_day, timeout_s};
         defaults {"once", 24, 1800}.
       state — owned by Navide (next_run_at, running_at, last_status, last_error,
@@ -9774,7 +9812,7 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
         action = dict(action)
         if not action.get("workspace"):
             action["workspace"] = _caller_workspace(caller)
-        if not action.get("pane_id") and not action.get("pane_name"):
+        if action.get("kind") != "pipeline_start" and not action.get("pane_id") and not action.get("pane_name"):
             me = agent_messaging.get(caller.pane_id)
             action["pane_id"] = caller.pane_id
             if me is not None:

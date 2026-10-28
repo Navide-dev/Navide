@@ -2497,8 +2497,8 @@
         "unknown": "Chưa thử.",
         "not-applicable": "Không có trên nền tảng này."
       },
-      "auto-resume-reconnect-hint": "Tự động tiếp tục hội thoại của các pane đang hiển thị khi dịch vụ nền của Navide hoạt động lại sau sự cố.",
-      "resume-interrupted-on-launch-hint": "Sau khi khởi động lại, mở lại tối đa 6 pane đang chạy dở lượt hoặc đang chờ câu hỏi, nhưng không chạy tiếp cho đến khi bạn bấm Tiếp tục hoặc pane cha yêu cầu.",
+      "auto-resume-reconnect-hint": "Khi backend gặp sự cố hoặc khởi động lại, mọi tiến trình CLI cũng kết thúc theo. Bật mục này để khi backend trở lại, tự động nối lại cuộc trò chuyện của các pane trên màn hình và của tối đa sáu pane ngoài màn hình đang làm việc, thay vì dựng lại từng pane bằng tay. Pane được nối lại không tự tiếp tục, pane đã mở nó sẽ được báo, và thông báo sẽ ghi lại những gì đã xảy ra. Nếu backend lại gặp sự cố ngay sau đó, sẽ không tự nối lại nữa.",
+      "resume-interrupted-on-launch-hint": "Khi Navide khởi động lại, các pane đang chạy một lượt hoặc đang chờ lời nhắc cấp quyền hay câu hỏi, cùng các pane cha đang chờ báo cáo của chúng, sẽ tự động tiếp tục (tối đa 6; số còn lại được đánh dấu “Đang làm việc lúc khởi động lại”). Không có gì tự chạy tiếp: hãy nhấn Tiếp tục hoặc để pane cha bảo nó tiếp tục. Pane cha được cho biết pane nào của nó bị gián đoạn.",
       "confirm-close-pane": "Xác nhận trước khi đóng pane",
       "confirm-close-pane-hint": "Hỏi trước khi phím tắt đóng pane đóng một pane CLI. Pane đang có lượt chạy dở luôn hỏi, bất kể cài đặt này.",
       "confirm-close-workspace": "Xác nhận trước khi đóng workspace",
@@ -2869,7 +2869,7 @@
               "fallback": "Một CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Backend gặp sự cố sẽ kéo theo mọi tiến trình CLI; khi bật tùy chọn này, các pane trên màn hình sẽ tự tiếp tục ngay khi backend chạy lại.",
+              "desc": "Khi backend gặp sự cố hoặc khởi động lại, mọi tiến trình CLI đều kết thúc; khi bật mục này, các pane trên màn hình và tối đa sáu pane đang làm việc ngoài màn hình sẽ tự động được nối lại khi backend trở lại. Thông báo cho biết lượt nào bị gián đoạn.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -9005,6 +9005,7 @@
     "statusbar-note": "các cửa sổ bật lên của nó cũng ẩn theo"
   },
   "error": {
+    "pipeline-node-failed": "Giai đoạn {stage}: bước {slot} báo lỗi ({reason}) và đã hết lượt thử. Lượt chạy đã dừng; hãy tiếp tục để thử lại.",
     "pipeline-start-refused": "Pipeline không khởi động: {reason}",
     "pipeline-kickoff-failed": "Pipeline không khởi động được: giai đoạn {stage}, vị trí {slot} — {reason}. Các pane của nó vẫn đang mở.",
     "pipeline-kickoff-held": "Pipeline không khởi động được: giai đoạn {stage}, vị trí {slot} — lời khởi động của nó đang chờ trong ô nhập. Cứ để đó thì khi tiếp tục sẽ gửi đi, hoặc xóa nó. Các pane của nó vẫn đang mở.",
@@ -9189,6 +9190,21 @@
     "load-more": "Tải thêm (còn {count})",
     "mcp-tools-changed": "Công cụ MCP có thể đã thay đổi",
     "mcp-tools-changed-note": "CLI agent đọc danh sách công cụ MCP của Navide một lần, lúc khởi động. Những gì vẫn còn kết nối từ phiên bản trước ({from}) — một pane CLI, hoặc một client MCP bên ngoài — vẫn giữ các công cụ đã thấy lúc đó; hãy mở lại pane hoặc kết nối lại client để nhận công cụ mới.",
+    "backend-restart": {
+      "title": "Backend đã khởi động lại lúc {time}",
+      "note": "Các pane được nối lại dừng ở dấu nhắc và không tự tiếp tục; các pane đã kết thúc giữ nguyên cho đến khi bạn dựng lại.",
+      "crash-loop": "Backend lại gặp sự cố ngay sau khi khởi động lại, nên lần này không pane nào được tự động nối lại. Hãy dựng lại những pane bạn cần.",
+      "resumed": "Đã nối lại: {names}",
+      "interrupted": "Lượt bị gián đoạn: {names}",
+      "rebuild": "Dựng lại {name}",
+      "not-resumed": {
+        "crash-loop": "{name}: không nối lại, vì backend gặp sự cố liên tục trong thời gian ngắn",
+        "over-limit": "{name}: không nối lại, vì có hơn sáu pane ngoài màn hình đang làm việc",
+        "idle-off-screen": "{name}: không nối lại, vì nó ở ngoài màn hình và đang rảnh",
+        "no-session": "{name}: không nối lại, vì không có cuộc trò chuyện đã lưu để tiếp tục",
+        "failed": "{name}: không nối lại được"
+      }
+    },
     "scheduler-disabled": "Tác vụ theo lịch “{name}” đã bị tắt: pane đích không còn",
     "scheduler-disabled-note": "Không tìm thấy pane đích {n} lần chạy liên tiếp, nên tác vụ đã bị tắt. Trong bảng Lịch chạy, hãy dùng “Gắn lại” để trỏ nó tới một pane đang chạy, rồi bật lại.",
     "quota": {
@@ -10150,6 +10166,9 @@
     "weekday-6": "Thứ bảy"
   },
   "scheduler": {
+    "pipeline-title": "Mỗi lần chạy công việc này sẽ khởi động một lượt pipeline, mở các pane CLI và tiêu tốn hạn mức của chúng",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "khởi động pipeline {name}",
     "system": {
       "tag": "Hệ thống",
       "manage": "Quản lý trong workspace →",
@@ -10191,6 +10210,16 @@
       "unknown": "Đã bỏ qua"
     },
     "editor": {
+      "err-task": "Hãy nhập tác vụ",
+      "err-pipeline": "Hãy chọn pipeline",
+      "task-placeholder": "Mỗi lượt pipeline dùng để làm gì…",
+      "task": "Tác vụ",
+      "pipeline-cost": "Mỗi lần chạy sẽ mở các pane CLI của pipeline này và tiêu tốn hạn mức. Không bao giờ tự mở cửa sổ: nếu workspace chưa mở, lần chạy sẽ thất bại và nêu lý do.",
+      "pick-pipeline": "Chọn pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Khởi động pipeline",
+      "action-message": "Gửi chỉ dẫn tới một pane",
+      "action": "Hành động",
       "title-new": "Tác vụ theo lịch mới",
       "title-edit": "Sửa tác vụ theo lịch",
       "name": "Tên",
@@ -10230,6 +10259,7 @@
       "save": "Lưu"
     },
     "owner": {
+      "user": "do bạn tạo",
       "agent": "agent · {name}",
       "external": "agent bên ngoài",
       "agent-title": "Do agent “{name}” tạo; chỉ nó và bạn mới thay đổi được",
@@ -11208,6 +11238,7 @@
       "reject": "Trả về"
     },
     "history": {
+      "retry": "Đổi số lần thử lại",
       "add": "Thêm {name}",
       "edit-cli": "Đổi CLI",
       "edit-field": "Sửa {field}",
@@ -11232,6 +11263,15 @@
       "loop-budget": "Đổi giới hạn thử lại"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Chỉ có thể thử lại bước bị lỗi",
+      "retry-blocked-no-run": "Không dùng được: pipeline này chưa có lượt chạy",
+      "retry-blocked-running": "Không dùng được khi đang có lượt chạy",
+      "retry-node-help": "Chạy lại bước bị lỗi này: lượt chạy tiếp tục từ bước này, hoặc khởi động lại từ bước này nếu các bước sau đã chạy",
+      "retry-node": "Thử lại bước này",
+      "retry-wait": "Chờ trước mỗi lần thử lại (giây)",
+      "retry-help": "Một lần thử lỗi (tác vụ không tới được agent, hoặc agent báo lỗi) sẽ chạy lại ở cùng bước, tối đa {max} lần thử.",
+      "retry-tries": "Tổng số lần thử",
+      "retry-title": "Thử lại khi lỗi",
       "aria": "Cài đặt cho {name}",
       "attempts": "Số lần thử",
       "elapsed": "Thời gian",
@@ -11498,6 +11538,12 @@
       "retro-tools-hint": "Tối đa {tokens} token mỗi lần chạy. Đọc nhật ký tin nhắn và các lần chạy tác vụ đã lên lịch của workspace này trong 7 ngày gần nhất, chỉ lấy số lần; việc làm từ 3 lần trở lên sẽ được đề xuất làm thành pipeline, skill, Prompt, v.v.",
       "retro-corrections": "Các góp ý của bạn",
       "retro-corrections-hint": "Tối đa {tokens} token mỗi lần chạy. Đọc các review note bạn để trên plan của workspace này và lý do các đề xuất bị từ chối trong 7 ngày gần nhất, chỉ lấy số lần; góp ý lặp lại từ 2 lần trở lên sẽ thành đề xuất đổi quy tắc.",
+      "burst": "Chạy sớm",
+      "burst-on": "Chạy sớm một lần khi cùng một lỗi xuất hiện dồn dập",
+      "burst-count": "lần",
+      "burst-minutes": "phút",
+      "burst-per-day": "lần chạy sớm mỗi ngày tối đa",
+      "burst-hint": "Chỉ đọc nhật ký lỗi của workspace này. Mặc định tắt; vẫn theo giới hạn số lần chạy mỗi ngày và chỉ chạy một lần một lúc, cùng một lỗi chỉ kích hoạt chạy sớm tối đa một lần trong 24 giờ.",
       "rules": "Quy tắc",
       "rules-builtin": "Tích hợp sẵn v{version}",
       "rules-view": "Xem toàn văn",

@@ -2497,8 +2497,8 @@
         "unknown": "まだテストしていません。",
         "not-applicable": "このプラットフォームでは利用できません。"
       },
-      "auto-resume-reconnect-hint": "Navide のバックグラウンドサービスがクラッシュから復旧したとき、表示中のペインの会話を自動で再開します。",
-      "resume-interrupted-on-launch-hint": "再起動後、ターン実行中や確認待ちだったペインを最大 6 個開き直します。「続行」を押すか親ペインが指示するまで続行はしません。",
+      "auto-resume-reconnect-hint": "バックエンドがクラッシュまたは再起動すると、すべての CLI プロセスも終了します。オンにすると、バックエンドが戻ったときに、画面上の pane と、画面外で作業中だった最大 6 個の pane の会話を自動で再開し、1 つずつ再構築する必要がなくなります。再開した pane は自動では続行せず、それを起動した pane に通知され、お知らせに経緯が表示されます。すぐに再びクラッシュした場合は、もう自動で再開しません。",
+      "resume-interrupted-on-launch-hint": "Navide の再起動時に、ターン実行中・権限の確認待ち・質問の回答待ちだったペインと、その報告を待っている親ペインを自動で再開します（最大 6 個。残りには「再起動時に作業中」と表示）。自動では続行しません。「続行」を押すか、親ペインが指示したときに続行します。親ペインには中断された子ペインが通知されます。",
       "confirm-close-pane": "ペインを閉じる前に確認",
       "confirm-close-pane-hint": "ペインを閉じるショートカットで CLI ペインを閉じる前に確認します。処理中のペインでは、この設定にかかわらず常に確認します。",
       "confirm-close-workspace": "ワークスペースを閉じる前に確認",
@@ -2869,7 +2869,7 @@
               "fallback": "1 つの CLI"
             },
             "resumeAfterRestart": {
-              "desc": "バックエンドがクラッシュすると、すべての CLI プロセスも終了します。この設定をオンにすると、復旧後に画面上のペインを自動で再開します。",
+              "desc": "バックエンドがクラッシュまたは再起動するとすべての CLI プロセスも終了します。オンにすると、戻ったときに画面上の pane と、画面外で作業中の最大 6 個の pane が自動で再開します。お知らせに中断されたターンが表示されます。",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -9005,6 +9005,7 @@
     "statusbar-note": "関連するポップオーバーも一緒に非表示になります"
   },
   "error": {
+    "pipeline-node-failed": "ステージ {stage}: ステップ {slot} が失敗を報告しました（{reason}）。試行回数を使い切ったため、実行は停止しました。resume で再試行できます。",
     "pipeline-start-refused": "パイプラインは開始されませんでした：{reason}",
     "pipeline-kickoff-failed": "パイプラインが失敗しました：ステージ {stage}、スロット {slot} — {reason}。ペインは開いたままです。",
     "pipeline-kickoff-held": "パイプラインが失敗しました：ステージ {stage}、スロット {slot} — キックオフが入力欄に残っています。そのままにすれば resume が送信します。不要なら消去してください。ペインは開いたままです。",
@@ -9189,6 +9190,21 @@
     "load-more": "さらに読み込む（残り {count} 件）",
     "mcp-tools-changed": "MCP ツールが変更された可能性があります",
     "mcp-tools-changed-note": "CLI エージェントは起動時に一度だけ Navide の MCP ツール一覧を読み込みます。以前のバージョン（{from}）から接続したままの CLI ペインや外部 MCP クライアントは、当時のツールを保持しています。新しいツールを読み込むには、ペインを開き直すか、クライアントを再接続してください。",
+    "backend-restart": {
+      "title": "{time} にバックエンドが再起動しました",
+      "note": "再開した pane はプロンプトで止まり、自動では続行しません。終了した pane は再構築するまでそのままです。",
+      "crash-loop": "再起動後すぐにバックエンドが再びクラッシュしたため、今回は pane を自動で再開しませんでした。必要なものは再構築してください。",
+      "resumed": "再開：{names}",
+      "interrupted": "ターンが中断：{names}",
+      "rebuild": "{name} を再構築",
+      "not-resumed": {
+        "crash-loop": "{name}：短時間にバックエンドが繰り返しクラッシュしたため再開していません",
+        "over-limit": "{name}：画面外で作業中の pane が 6 個を超えたため再開していません",
+        "idle-off-screen": "{name}：画面外でアイドルだったため再開していません",
+        "no-session": "{name}：再開できる会話がないため再開していません",
+        "failed": "{name}：再開できませんでした"
+      }
+    },
     "scheduler-disabled": "スケジュール「{name}」を停止しました：対象ペインが存在しません",
     "scheduler-disabled-note": "対象ペインが {n} 回続けて見つからなかったため、自動的に停止しました。スケジュールパネルの「再バインド」で既存のペインを指定してから、再度有効にしてください。",
     "quota": {
@@ -10150,6 +10166,9 @@
     "weekday-6": "土曜日"
   },
   "scheduler": {
+    "pipeline-title": "このジョブは実行のたびに Pipeline を開始し、CLI Pane を開いてクォータを消費します",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "Pipeline {name} を開始",
     "system": {
       "tag": "システム",
       "manage": "workspace で管理 →",
@@ -10191,6 +10210,16 @@
       "unknown": "スキップ"
     },
     "editor": {
+      "err-task": "タスクを入力してください",
+      "err-pipeline": "Pipeline を選択してください",
+      "task-placeholder": "各 Pipeline 実行の目的…",
+      "task": "タスク",
+      "pipeline-cost": "実行のたびにこの Pipeline の CLI Pane が開き、クォータを消費します。ウィンドウは開きません: workspace が開いていなければ、その回は理由付きで失敗します。",
+      "pick-pipeline": "Pipeline を選択",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Pipeline を開始",
+      "action-message": "Pane に指示を送る",
+      "action": "アクション",
       "title-new": "スケジュールジョブを追加",
       "title-edit": "スケジュールジョブを編集",
       "name": "名前",
@@ -10230,6 +10259,7 @@
       "save": "保存"
     },
     "owner": {
+      "user": "あなたが作成",
       "agent": "agent · {name}",
       "external": "外部 agent",
       "agent-title": "agent「{name}」が作成；変更できるのはその agent とあなただけです",
@@ -11208,6 +11238,7 @@
       "reject": "差し戻す"
     },
     "history": {
+      "retry": "リトライを変更",
       "add": "{name} を追加",
       "edit-cli": "CLI を変更",
       "edit-field": "{field} を編集",
@@ -11232,6 +11263,15 @@
       "loop-budget": "再試行上限を変更"
     },
     "inspector": {
+      "retry-blocked-not-failed": "リトライできるのは失敗したステップだけです",
+      "retry-blocked-no-run": "使用できません: この Pipeline の実行がありません",
+      "retry-blocked-running": "実行中は使用できません",
+      "retry-node-help": "失敗したステップをもう一度実行します: ここから resume し、後続のステップが実行済みならここから再スタートします",
+      "retry-node": "このステップをリトライ",
+      "retry-wait": "リトライ前の待機（秒）",
+      "retry-help": "失敗した試行（タスクが Agent に届かなかった、または Agent が失敗を報告した）は同じステップで再実行され、合計で最大 {max} 回まで試します。",
+      "retry-tries": "試行回数（合計）",
+      "retry-title": "失敗時にリトライ",
       "aria": "{name} の設定",
       "attempts": "試行回数",
       "elapsed": "所要時間",
@@ -11498,6 +11538,12 @@
       "retro-tools-hint": "1 回あたり最大 {tokens} トークン。この workspace の直近 7 日間のメッセージ履歴とスケジュール実行履歴を回数だけ読みます。3 回以上繰り返した作業は pipeline、skill、Prompt などにする提案になります。",
       "retro-corrections": "あなたの指摘",
       "retro-corrections-hint": "1 回あたり最大 {tokens} トークン。この workspace の plan に残した review note と却下された提案の理由を、直近 7 日間・回数だけ読みます。2 回以上出た指摘はルール変更の提案になります。",
+      "burst": "早めの実行",
+      "burst-on": "同じエラーが短時間に集中したら早めに 1 回実行する",
+      "burst-count": "回",
+      "burst-minutes": "分以内",
+      "burst-per-day": "回／日まで",
+      "burst-hint": "この workspace のエラー台帳だけを読みます。既定はオフ。1 日の実行回数の上限と同時 1 回の制限は変わらず、同じエラーで早めの実行が起きるのは 24 時間に 1 回までです。",
       "rules": "ルールテンプレート",
       "rules-builtin": "組み込み v{version}",
       "rules-view": "全文を表示",

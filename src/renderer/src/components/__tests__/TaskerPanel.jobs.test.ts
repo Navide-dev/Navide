@@ -55,6 +55,7 @@ function fakeBackend(): ReturnType<typeof useBackend> {
       if (override !== undefined) body = override
       else if (type === 'scheduler.list') body = { ok: true, jobs: wire.jobs, now: Date.now() }
       else if (type === 'agent_msg.list') body = { panes: wire.roster }
+      else if (type === 'pipelines.list') body = { pipelines: [{ id: 'pl-1', name: 'Nightly' }], active_pipeline_id: 'pl-1', path: '' }
       else if (type === 'scheduler.upsert')
         body = { ok: true, job: { ...(payload.job as object), id: 'new-id', state: {} } }
       else if (type === 'scheduler.run_now') body = { ok: true, enqueued: true }
@@ -404,6 +405,45 @@ describe('TaskerPanel — Navide jobs', () => {
       tz: 'Asia/Taipei',
     })
     expect(editorOf(wrapper).get('[data-test="editor-error"]').text()).toBe('schedule.at must be HH:MM')
+  })
+
+  it('creates a job that starts a pipeline: pipeline and task instead of pane and text', async () => {
+    wire.roster = [{ pane_id: PANE_A, name: '週報', workspace_path: WS, workspace_label: 'proj', agent_key: 'claude' }]
+    wrapper = await mountSection()
+    await wrapper.get('[data-test="add-job"]').trigger('click')
+    await flushPromises()
+    await editorOf(wrapper).get('[data-field="action-kind"]').setValue('pipeline_start')
+    expect(editorOf(wrapper).find('[data-field="target"]').exists()).toBe(false)
+    expect(editorOf(wrapper).get('[data-test="pipeline-cost"]').text()).toBe(t('scheduler.editor.pipeline-cost'))
+    await editorOf(wrapper).get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('scheduler.upsert')).toHaveLength(0)
+    expect(editorOf(wrapper).get('[data-error="target"]').text()).toBe(t('scheduler.editor.err-pipeline'))
+    expect(editorOf(wrapper).get('[data-error="text"]').text()).toBe(t('scheduler.editor.err-task'))
+    await editorOf(wrapper).get('[data-field="name"]').setValue('nightly')
+    await editorOf(wrapper).get('[data-field="pipeline"]').setValue('pl-1')
+    await editorOf(wrapper).get('[data-field="text"]').setValue('refresh the report')
+    await editorOf(wrapper).get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect((callsOf('scheduler.upsert')[0].payload.job as { action: unknown }).action).toEqual({
+      kind: 'pipeline_start', workspace: WS, pipeline_id: 'pl-1', task: 'refresh the report',
+    })
+  })
+
+  it('marks a pipeline job and who created it, the user included', async () => {
+    wire.jobs = [
+      job('p1', { action: { kind: 'pipeline_start', workspace: WS, pipeline_name: 'Nightly', task: 't' }, owner: { kind: 'user' } }),
+      job('p2', { action: { kind: 'pipeline_start', workspace: WS, pipeline_id: 'pl-1', task: 't' }, owner: { kind: 'pane', pane_id: PANE_B, pane_name: 'worker' } }),
+      job('m1'),
+    ]
+    wrapper = await mountSection()
+    expect(row(wrapper, 'p1').get('[data-test="pipeline-tag"]').text()).toBe(t('scheduler.pipeline-tag'))
+    expect(row(wrapper, 'p1').get('[data-test="owner"]').text()).toBe(t('scheduler.owner.user'))
+    expect(row(wrapper, 'p1').get('[data-test="target"]').text()).toBe(t('scheduler.pipeline-target', { name: 'Nightly' }))
+    expect(row(wrapper, 'p2').get('[data-test="owner"]').text()).toBe(t('scheduler.owner.agent', { name: 'worker' }))
+    expect(row(wrapper, 'm1').find('[data-test="pipeline-tag"]').exists()).toBe(false)
+    // A user's own message job still shows no owner, as before.
+    expect(row(wrapper, 'm1').find('[data-test="owner"]').exists()).toBe(false)
   })
 
   it('describes a once job, and a spent one as done', async () => {

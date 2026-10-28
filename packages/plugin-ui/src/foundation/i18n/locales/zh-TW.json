@@ -2497,8 +2497,8 @@
         "unknown": "尚未測試。",
         "not-applicable": "此平台不提供。"
       },
-      "auto-resume-reconnect-hint": "Navide 背景服務當掉恢復後，自動接續可見 pane 的對話。",
-      "resume-interrupted-on-launch-hint": "重開後重新開啟最多 6 個正在跑回合或等待詢問的 pane；按「繼續」或由母 pane 下令前不會續跑。",
+      "auto-resume-reconnect-hint": "後端崩潰或重新啟動時，會一併帶走所有 CLI 行程。開啟後，後端恢復時會自動接回畫面上的 pane，以及畫面外最多六個正在工作的 pane 的對話，不必逐一手動重建。接回的 pane 不會自己繼續，派出它的 pane 會收到通知，公告中心會列出經過。如果後端很快又崩潰，就不會再自動接回。",
+      "resume-interrupted-on-launch-hint": "重開 Navide 時，正在跑回合、停在權限詢問或快選等待的 pane，以及等它們回報的母 pane，會自動接回（最多 6 個，其餘標記「重開時工作中」）。接回後不會自動續跑，按「繼續」或由母 pane 下令才會繼續；母 pane 會收到哪些子 pane 被中斷的通知。",
       "confirm-close-pane": "關閉 pane 前確認",
       "confirm-close-pane-hint": "用關閉 pane 快捷鍵關閉 CLI pane 前先跳出確認。執行中的 pane 一律會確認，不受此設定影響。",
       "confirm-close-workspace": "關閉工作區前確認",
@@ -2869,7 +2869,7 @@
               "fallback": "單一 CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Backend 掛掉會帶走所有 CLI 行程；開著的話它回來後自動接續畫面上的面板。",
+              "desc": "後端崩潰或重新啟動時會帶走所有 CLI 行程；開啟後，後端恢復時會自動接回畫面上的 pane，以及畫面外最多六個正在工作的 pane。公告中心會列出哪些回合被中斷。",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -9005,6 +9005,7 @@
     "statusbar-note": "狀態列上的資訊窗會一起消失"
   },
   "error": {
+    "pipeline-node-failed": "階段 {stage}：步驟 {slot} 回報失敗（{reason}），重試次數已用完。這一輪已停止，可以 resume 再試一次。",
     "pipeline-start-refused": "流程沒有啟動：{reason}",
     "pipeline-kickoff-failed": "流程失敗：階段 {stage}、slot {slot} — {reason}。它的 pane 仍保持開啟。",
     "pipeline-kickoff-held": "流程失敗：階段 {stage}、slot {slot} — 它的 kickoff 停在輸入框。保持不動，resume 會幫你送出；或者把它清掉。它的 pane 仍保持開啟。",
@@ -9189,6 +9190,21 @@
     "load-more": "載入更多（還有 {count} 則）",
     "mcp-tools-changed": "MCP 工具可能已變更",
     "mcp-tools-changed-note": "CLI agent 只在啟動時讀一次 Navide 的 MCP 工具清單。從上一個版本（{from}）就連著的對象 — CLI pane 或外部 MCP client — 拿到的還是當時那份清單；重開 pane 或重新連線才會拿到新的工具。",
+    "backend-restart": {
+      "title": "後端在 {time} 重新啟動",
+      "note": "接回的 pane 會停在提示字元，不會自己繼續；已結束的 pane 維持原狀，要你按「重建」才會重開。",
+      "crash-loop": "後端重啟後很快又崩潰，所以這次不再自動接回任何 pane。需要的請自己重建。",
+      "resumed": "已接回：{names}",
+      "interrupted": "回合被中斷：{names}",
+      "rebuild": "重建 {name}",
+      "not-resumed": {
+        "crash-loop": "{name}：未接回，因為後端短時間內反覆崩潰",
+        "over-limit": "{name}：未接回，因為畫面外正在工作的 pane 超過六個",
+        "idle-off-screen": "{name}：未接回，因為它在畫面外而且是閒置的",
+        "no-session": "{name}：未接回，因為沒有可接續的對話",
+        "failed": "{name}：接回失敗"
+      }
+    },
     "scheduler-disabled": "排程「{name}」已停用：目標 pane 不存在",
     "scheduler-disabled-note": "連續 {n} 次到點都找不到目標 pane，所以自動停用。到排程面板按「重新綁定」指向現有的 pane，再重新啟用。",
     "quota": {
@@ -10150,6 +10166,9 @@
     "weekday-6": "週六"
   },
   "scheduler": {
+    "pipeline-title": "這個排程每次執行都會啟動一輪 Pipeline，會開啟 CLI Pane 並消耗額度",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "啟動 Pipeline {name}",
     "system": {
       "tag": "系統",
       "manage": "到 workspace 管理 →",
@@ -10191,6 +10210,16 @@
       "unknown": "略過"
     },
     "editor": {
+      "err-task": "請輸入任務",
+      "err-pipeline": "請選擇 Pipeline",
+      "task-placeholder": "每一輪 Pipeline 要做什麼…",
+      "task": "任務",
+      "pipeline-cost": "每次執行都會開啟這個 Pipeline 的 CLI Pane 並消耗額度。排程不會自動開視窗：如果這個 workspace 沒有開著，這一輪會失敗並說明原因。",
+      "pick-pipeline": "選擇 Pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "啟動 Pipeline",
+      "action-message": "傳送指令給 Pane",
+      "action": "動作",
       "title-new": "新增排程工作",
       "title-edit": "編輯排程工作",
       "name": "名稱",
@@ -10230,6 +10259,7 @@
       "save": "儲存"
     },
     "owner": {
+      "user": "由你建立",
       "agent": "agent · {name}",
       "external": "外部 agent",
       "agent-title": "由 agent「{name}」建立；只有它和你可以修改",
@@ -11208,6 +11238,7 @@
       "reject": "退回修改"
     },
     "history": {
+      "retry": "變更重試",
       "add": "新增 {name}",
       "edit-cli": "更換 CLI",
       "edit-field": "修改 {field}",
@@ -11232,6 +11263,15 @@
       "loop-budget": "修改重試上限"
     },
     "inspector": {
+      "retry-blocked-not-failed": "只有失敗的步驟可以重試",
+      "retry-blocked-no-run": "無法使用：這個 Pipeline 沒有執行紀錄",
+      "retry-blocked-running": "執行進行中，無法使用",
+      "retry-node-help": "重跑這個失敗的步驟：從它這裡 resume，後面的步驟已經跑過時則從它重新開始",
+      "retry-node": "重試此步驟",
+      "retry-wait": "每次重試前等待（秒）",
+      "retry-help": "失敗的一次（任務沒送到 agent，或 agent 回報失敗）會在同一個步驟再跑一次，總共最多 {max} 次。",
+      "retry-tries": "總共嘗試次數",
+      "retry-title": "失敗時重試",
       "aria": "{name} 的設定",
       "attempts": "嘗試次數",
       "elapsed": "耗時",
@@ -11498,6 +11538,12 @@
       "retro-tools-hint": "每次最多 {tokens} token。讀這個 workspace 近 7 天的訊息紀錄與排程執行紀錄，只取次數；同一件事做了 3 次以上，就提案做成 pipeline、skill、Prompt 等。",
       "retro-corrections": "你的糾正",
       "retro-corrections-hint": "每次最多 {tokens} token。讀你在這個 workspace 的 plan 上留的 review note 與提案退回理由，近 7 天、只取次數；同一個糾正出現 2 次以上，就提案改規則。",
+      "burst": "提早執行",
+      "burst-on": "同一個錯誤短時間內大量出現時，提早跑一輪",
+      "burst-count": "次",
+      "burst-minutes": "分鐘內",
+      "burst-per-day": "次／天上限",
+      "burst-hint": "只讀這個 workspace 的錯誤帳本。預設關閉；仍受每天次數上限與同時只跑一輪限制，同一個錯誤 24 小時內最多觸發一次。",
       "rules": "規則範本",
       "rules-builtin": "內建 v{version}",
       "rules-view": "檢視全文",

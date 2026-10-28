@@ -40,6 +40,7 @@ from . import (
     osplat,
     pane_config_fingerprint,
     pane_policy,
+    pipeline_liveness,
     quota_failover,
     remote_roster,
     server_link,
@@ -6818,7 +6819,7 @@ async def pipelines_delete(session: "Session", msg_id: str, msg_type: str, paylo
     ws_path = payload.get("workspace_path", "") or ""
     if ws_path:
         proj = app.project_store.peek(ws_path)
-        if proj and proj.state == "running":
+        if pipeline_liveness.run_is_live(proj):
             await session.send_json(
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot delete pipeline while a project is running")
             )
@@ -6842,7 +6843,7 @@ async def pipelines_set_active(session: "Session", msg_id: str, msg_type: str, p
     ws_path = payload.get("workspace_path", "") or ""
     if ws_path:
         proj = app.project_store.peek(ws_path)
-        if proj and proj.state == "running":
+        if pipeline_liveness.run_is_live(proj):
             await session.send_json(
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot switch pipeline while a project is running")
             )
@@ -6908,7 +6909,7 @@ def _stage_edit_hits_running_pipeline(ws_path: str, pipeline_id: str | None) -> 
     if not ws_path:
         return False
     proj = app.project_store.peek(ws_path)
-    if not proj or proj.state != "running":
+    if not pipeline_liveness.run_is_live(proj):
         return False
     if not pipeline_id:
         # No id means "the active pipeline", which is what the run uses.
@@ -10936,11 +10937,24 @@ def _mirror_pipeline_state(project: "Project") -> None:
     )
 
 
+@handler("pipeline.claim")
+async def pipeline_claim(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """A window's claim of the pipeline runs it drives, sent on every
+    (re)connect — an empty list when it drives none. See pipeline_liveness."""
+    workspaces = payload.get("workspaces")
+    if not isinstance(workspaces, list):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "workspaces must be a list"))
+        return
+    pipeline_liveness.record_claim(session, [w for w in workspaces if isinstance(w, str)])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
 @handler("pipeline.resume")
 async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
     project, resume_index = app.project_store.resume_pipeline(payload["workspace_path"])
+    pipeline_liveness.claim_run(session, project.workspace_path)
     _mirror_pipeline_state(project)
     resp = app._project_payload(project)
     resp["resume_index"] = resume_index
@@ -10963,6 +10977,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
     from .guard.taint import pipeline_run_started
 
     pipeline_run_started(payload["workspace_path"])
+    pipeline_liveness.claim_run(session, project.workspace_path)
     app._register_workspace_and_backfill(project.workspace_path)
     _mirror_pipeline_state(project)
     # Start a fresh token-stats run for this workspace.
@@ -10997,6 +11012,7 @@ async def pipeline_stage_spawn(session: "Session", msg_id: str, msg_type: str, p
     from .guard.taint import pipeline_pane_spawned
 
     pipeline_pane_spawned(payload["workspace_path"], str(payload["pane_id"]))
+    pipeline_liveness.claim_run(session, project.workspace_path)
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )

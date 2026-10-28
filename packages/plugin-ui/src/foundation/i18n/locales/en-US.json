@@ -2497,8 +2497,8 @@
         "unknown": "Not tested yet.",
         "not-applicable": "Not available on this platform."
       },
-      "auto-resume-reconnect-hint": "Resumes the visible panes’ conversations automatically when Navide's background service comes back after a crash.",
-      "resume-interrupted-on-launch-hint": "After a restart, reopens up to 6 panes that were mid-turn or waiting on a prompt, without continuing them until you press Continue or their parent asks.",
+      "auto-resume-reconnect-hint": "When the backend crashes or restarts it takes every CLI process with it. Turn this on to resume, once it is back, the conversations of the panes on screen and of up to six panes off screen that were working, instead of rebuilding each one by hand. Resumed panes do not continue on their own, the panes that spawned them are told, and the announcements list what happened. If the backend crashes again soon after, nothing is resumed again.",
+      "resume-interrupted-on-launch-hint": "When Navide restarts, panes that were running a turn or waiting on a permission prompt or a question, plus the parent panes waiting on their reports, resume automatically (up to 6; the rest are marked \"Working at restart\"). Nothing continues on its own: press Continue, or let the parent tell it to. The parent is told which of its panes were interrupted.",
       "confirm-close-pane": "Confirm before closing a pane",
       "confirm-close-pane-hint": "Ask before the close-pane shortcut closes a CLI pane. A pane with a turn in progress always asks, regardless of this setting.",
       "confirm-close-workspace": "Confirm before closing a workspace",
@@ -2869,7 +2869,7 @@
               "fallback": "One CLI"
             },
             "resumeAfterRestart": {
-              "desc": "A backend crash takes every CLI process with it; with this on, the panes on screen resume automatically once it is back.",
+              "desc": "A backend crash or restart takes every CLI process with it; with this on, the panes on screen, and up to six working panes off screen, resume automatically once it is back. The announcements list which turns were interrupted.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -9005,6 +9005,7 @@
     "statusbar-note": "its popovers go with it"
   },
   "error": {
+    "pipeline-node-failed": "Stage {stage}: step {slot} reported a failure ({reason}) and has no tries left. The run stopped; resume it to try again.",
     "pipeline-start-refused": "The pipeline did not start: {reason}",
     "pipeline-kickoff-failed": "Pipeline failed: stage {stage}, slot {slot} — {reason}. Its panes are still open.",
     "pipeline-kickoff-held": "Pipeline failed: stage {stage}, slot {slot} — its kickoff is waiting in the input box. Leave it there and resume will submit it, or clear it. Its panes are still open.",
@@ -9189,6 +9190,21 @@
     "load-more": "Load More ({count} Left)",
     "mcp-tools-changed": "MCP tools may have changed",
     "mcp-tools-changed-note": "A CLI agent reads Navide's MCP tool list once, when it starts. Anything still connected from the previous version ({from}) — a CLI pane, or an external MCP client — keeps the tools it saw then; reopen the pane or reconnect the client to pick up new ones.",
+    "backend-restart": {
+      "title": "Backend restarted at {time}",
+      "note": "Resumed panes stop at the prompt and do not continue on their own; ended panes stay as they are until you rebuild them.",
+      "crash-loop": "The backend crashed again soon after restarting, so no pane was resumed automatically this time. Rebuild the ones you need.",
+      "resumed": "Resumed: {names}",
+      "interrupted": "Turn interrupted: {names}",
+      "rebuild": "Rebuild {name}",
+      "not-resumed": {
+        "crash-loop": "{name}: not resumed, because the backend crashed repeatedly in a short time",
+        "over-limit": "{name}: not resumed, because more than six panes off screen were working",
+        "idle-off-screen": "{name}: not resumed, because it was idle and off screen",
+        "no-session": "{name}: not resumed, because it has no saved conversation to resume",
+        "failed": "{name}: could not be resumed"
+      }
+    },
     "scheduler-disabled": "Scheduled job \"{name}\" was disabled: its target pane is gone",
     "scheduler-disabled-note": "Its target pane could not be found {n} runs in a row, so the job was disabled. In the Schedule panel, use \"Rebind\" to point it at a live pane, then enable it again.",
     "quota": {
@@ -10150,6 +10166,9 @@
     "weekday-6": "Saturday"
   },
   "scheduler": {
+    "pipeline-title": "Every run of this job starts a pipeline run, which opens CLI panes and spends their quota",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "starts pipeline {name}",
     "system": {
       "tag": "System",
       "manage": "Manage in Workspace →",
@@ -10191,6 +10210,16 @@
       "unknown": "Skipped"
     },
     "editor": {
+      "err-task": "Enter a task",
+      "err-pipeline": "Choose a pipeline",
+      "task-placeholder": "What each pipeline run is for…",
+      "task": "Task",
+      "pipeline-cost": "Every run opens this pipeline's CLI panes and spends their quota. It never opens a window: if the workspace is not open, the run fails and says so.",
+      "pick-pipeline": "Choose a pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Start a pipeline",
+      "action-message": "Send an instruction to a pane",
+      "action": "Action",
       "title-new": "New Scheduled Job",
       "title-edit": "Edit Scheduled Job",
       "name": "Name",
@@ -10230,6 +10259,7 @@
       "save": "Save"
     },
     "owner": {
+      "user": "by you",
       "agent": "agent · {name}",
       "external": "external agent",
       "agent-title": "Created by the agent \"{name}\"; only it and you can change it",
@@ -11208,6 +11238,7 @@
       "reject": "Send Back"
     },
     "history": {
+      "retry": "Change Retries",
       "add": "Add {name}",
       "edit-cli": "Change CLI",
       "edit-field": "Edit {field}",
@@ -11232,6 +11263,15 @@
       "loop-budget": "Change Retry Limit"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Only a failed step can be retried",
+      "retry-blocked-no-run": "Not available: no run of this pipeline",
+      "retry-blocked-running": "Not available while a run is in progress",
+      "retry-node-help": "Run this failed step again: the run resumes at it, or restarts from it when later steps already ran",
+      "retry-node": "Retry This Step",
+      "retry-wait": "Wait before each retry (seconds)",
+      "retry-help": "A failed try (its task never reached the agent, or the agent reported a failure) runs again on the same step, up to {max} tries in all.",
+      "retry-tries": "Tries in all",
+      "retry-title": "Retry on failure",
       "aria": "Settings for {name}",
       "attempts": "Attempts",
       "elapsed": "Time",
@@ -11498,6 +11538,12 @@
       "retro-tools-hint": "Up to {tokens} tokens per run. Reads this workspace's message log and scheduled-job runs of the last 7 days, as counts only; proposes turning a chore done 3 or more times into a pipeline, skill, prompt and the like.",
       "retro-corrections": "Your corrections",
       "retro-corrections-hint": "Up to {tokens} tokens per run. Reads your review notes on this workspace's plans and the reasons for rejected proposals, last 7 days, as counts only; a correction made 2 or more times becomes a proposed rule change.",
+      "burst": "Early run",
+      "burst-on": "Start a run early when one error repeats in a burst",
+      "burst-count": "times",
+      "burst-minutes": "minutes",
+      "burst-per-day": "early runs a day at most",
+      "burst-hint": "Reads only this workspace's error ledger. Off by default; still limited by the daily run count, one run at a time, and the same error starts at most one early run in 24 hours.",
       "rules": "Rules",
       "rules-builtin": "Built-in v{version}",
       "rules-view": "View full text",

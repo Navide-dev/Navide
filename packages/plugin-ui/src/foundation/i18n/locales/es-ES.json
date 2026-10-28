@@ -2497,8 +2497,8 @@
         "unknown": "Aún no se ha probado.",
         "not-applicable": "No disponible en esta plataforma."
       },
-      "auto-resume-reconnect-hint": "Reanuda automáticamente las conversaciones de los panes visibles cuando el servicio en segundo plano de Navide vuelve tras un fallo.",
-      "resume-interrupted-on-launch-hint": "Tras un reinicio, vuelve a abrir hasta 6 panes que estaban en mitad de un turno o esperando una pregunta, sin continuarlos hasta que pulses Continuar o su pane principal lo pida.",
+      "auto-resume-reconnect-hint": "Cuando el backend falla o se reinicia, arrastra consigo todos los procesos de CLI. Activa esta opción para reanudar automáticamente, cuando vuelva, las conversaciones de los paneles en pantalla y de hasta seis paneles fuera de pantalla que estaban trabajando, en lugar de reconstruir cada uno a mano. Los paneles reanudados no siguen por su cuenta, se avisa a los paneles que los abrieron y los avisos muestran lo que pasó. Si el backend vuelve a fallar poco después, no se reanuda nada más.",
+      "resume-interrupted-on-launch-hint": "Cuando Navide se reinicia, los panes que estaban ejecutando un turno o esperando una solicitud de permiso o una pregunta, además de los panes padre que esperan sus informes, se reanudan automáticamente (hasta 6; el resto se marca como «Trabajando al reiniciar»). Nada continúa por sí solo: pulsa «Continuar» o deja que el padre se lo indique. Al padre se le informa de cuáles de sus panes se interrumpieron.",
       "confirm-close-pane": "Confirmar antes de cerrar un pane",
       "confirm-close-pane-hint": "Pregunta antes de que el atajo de cerrar pane cierre un pane de CLI. Un pane con un turno en curso siempre pregunta, independientemente de este ajuste.",
       "confirm-close-workspace": "Confirmar antes de cerrar un área de trabajo",
@@ -2869,7 +2869,7 @@
               "fallback": "Una CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Un fallo del backend se lleva por delante todos los procesos de CLI; con esto activado, los panes que hay en pantalla se reanudan automáticamente en cuanto vuelve.",
+              "desc": "Un fallo o reinicio del backend arrastra todos los procesos de CLI; con esto activado, los paneles en pantalla, y hasta seis paneles trabajando fuera de pantalla, se reanudan automáticamente cuando vuelve. Los avisos muestran qué turnos se interrumpieron.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -9005,6 +9005,7 @@
     "statusbar-note": "sus ventanas emergentes van con ella"
   },
   "error": {
+    "pipeline-node-failed": "Etapa {stage}: el paso {slot} informó de un fallo ({reason}) y no le quedan intentos. La ejecución se detuvo; reanúdala para volver a intentarlo.",
     "pipeline-start-refused": "La pipeline no se ha iniciado: {reason}",
     "pipeline-kickoff-failed": "Falló la pipeline: etapa {stage}, hueco {slot}: {reason}. Sus panes siguen abiertos.",
     "pipeline-kickoff-held": "Falló la pipeline: etapa {stage}, hueco {slot}: su tarea inicial está esperando en el cuadro de entrada. Déjala ahí y al reanudar se enviará, o bórrala. Sus panes siguen abiertos.",
@@ -9189,6 +9190,21 @@
     "load-more": "Cargar más (quedan {count})",
     "mcp-tools-changed": "Puede que las herramientas MCP hayan cambiado",
     "mcp-tools-changed-note": "Un agent de CLI lee la lista de herramientas MCP de Navide una sola vez, al arrancar. Todo lo que siga conectado desde la versión anterior ({from}) —un pane de CLI o un cliente MCP externo— conserva las herramientas que vio entonces; vuelve a abrir el pane o a conectar el cliente para obtener las nuevas.",
+    "backend-restart": {
+      "title": "El backend se reinició a las {time}",
+      "note": "Los paneles reanudados se detienen en el indicador y no siguen por su cuenta; los paneles terminados quedan como están hasta que los reconstruyas.",
+      "crash-loop": "El backend volvió a fallar poco después de reiniciarse, así que esta vez no se reanudó ningún panel automáticamente. Reconstruye los que necesites.",
+      "resumed": "Reanudados: {names}",
+      "interrupted": "Turno interrumpido: {names}",
+      "rebuild": "Reconstruir {name}",
+      "not-resumed": {
+        "crash-loop": "{name}: no se reanudó porque el backend falló repetidamente en poco tiempo",
+        "over-limit": "{name}: no se reanudó porque había más de seis paneles fuera de pantalla trabajando",
+        "idle-off-screen": "{name}: no se reanudó porque estaba inactivo y fuera de pantalla",
+        "no-session": "{name}: no se reanudó porque no tiene una conversación guardada que reanudar",
+        "failed": "{name}: no se pudo reanudar"
+      }
+    },
     "scheduler-disabled": "Se ha desactivado la tarea programada «{name}»: su pane de destino ya no existe",
     "scheduler-disabled-note": "No se encontró su pane de destino en {n} ejecuciones seguidas, así que la tarea se ha desactivado. En el panel Programación, usa «Volver a vincular» para apuntarla a un pane activo y vuelve a activarla.",
     "quota": {
@@ -10150,6 +10166,9 @@
     "weekday-6": "sábado"
   },
   "scheduler": {
+    "pipeline-title": "Cada ejecución de esta tarea inicia una ejecución de pipeline, que abre paneles de CLI y consume su cuota",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "inicia la pipeline {name}",
     "system": {
       "tag": "Sistema",
       "manage": "Gestionar en el área de trabajo →",
@@ -10191,6 +10210,16 @@
       "unknown": "Omitida"
     },
     "editor": {
+      "err-task": "Escribe una tarea",
+      "err-pipeline": "Elige una pipeline",
+      "task-placeholder": "Para qué sirve cada ejecución de la pipeline…",
+      "task": "Tarea",
+      "pipeline-cost": "Cada ejecución abre los paneles de CLI de esta pipeline y consume su cuota. Nunca abre una ventana: si el workspace no está abierto, la ejecución falla y explica por qué.",
+      "pick-pipeline": "Elige una pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Iniciar una pipeline",
+      "action-message": "Enviar una instrucción a un panel",
+      "action": "Acción",
       "title-new": "Nueva tarea programada",
       "title-edit": "Editar tarea programada",
       "name": "Nombre",
@@ -10230,6 +10259,7 @@
       "save": "Guardar"
     },
     "owner": {
+      "user": "creada por ti",
       "agent": "agent · {name}",
       "external": "agent externo",
       "agent-title": "Creada por el agent «{name}»; aparte de ti, solo ese agent puede cambiarla",
@@ -11208,6 +11238,7 @@
       "reject": "Devolver"
     },
     "history": {
+      "retry": "Cambiar reintentos",
       "add": "Añadir {name}",
       "edit-cli": "Cambiar CLI",
       "edit-field": "Editar {field}",
@@ -11232,6 +11263,15 @@
       "loop-budget": "Cambiar el límite de reintentos"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Solo se puede reintentar un paso fallido",
+      "retry-blocked-no-run": "No disponible: no hay ninguna ejecución de esta pipeline",
+      "retry-blocked-running": "No disponible mientras hay una ejecución en curso",
+      "retry-node-help": "Volver a ejecutar este paso fallido: la ejecución se reanuda en él, o se reinicia desde él si los pasos posteriores ya se ejecutaron",
+      "retry-node": "Reintentar este paso",
+      "retry-wait": "Espera antes de cada reintento (segundos)",
+      "retry-help": "Un intento fallido (la tarea no llegó al agente o el agente informó de un fallo) se vuelve a ejecutar en el mismo paso, hasta {max} intentos en total.",
+      "retry-tries": "Intentos en total",
+      "retry-title": "Reintentar si falla",
       "aria": "Ajustes de {name}",
       "attempts": "Intentos",
       "elapsed": "Tiempo",
@@ -11498,6 +11538,12 @@
       "retro-tools-hint": "Hasta {tokens} tokens por ejecución. Lee el registro de mensajes y las ejecuciones de tareas programadas de este workspace de los últimos 7 días, solo como recuentos; una tarea hecha 3 o más veces se propone como pipeline, skill, Prompt o similar.",
       "retro-corrections": "Tus correcciones",
       "retro-corrections-hint": "Hasta {tokens} tokens por ejecución. Lee tus review notes en los plans de este workspace y los motivos de las propuestas rechazadas de los últimos 7 días, solo como recuentos; una corrección repetida 2 o más veces se propone como cambio de regla.",
+      "burst": "Ejecución anticipada",
+      "burst-on": "Adelantar una ejecución cuando un error se repite en ráfaga",
+      "burst-count": "veces",
+      "burst-minutes": "minutos",
+      "burst-per-day": "ejecuciones anticipadas al día como máximo",
+      "burst-hint": "Solo lee el registro de errores de este workspace. Desactivado por defecto; siguen valiendo el límite diario de ejecuciones y una a la vez, y el mismo error adelanta como máximo una ejecución cada 24 horas.",
       "rules": "Reglas",
       "rules-builtin": "Integradas v{version}",
       "rules-view": "Ver texto completo",

@@ -292,6 +292,7 @@ import {
   type RestoreSessionTrigger,
   type WorkspaceRestoreSession,
 } from './lib/resumeBehavior'
+import { isRepeatCrash, planBackendRestartResume, type LostPane } from './lib/backendRestartResume'
 import { WakeClaims, joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere, type SessionHolder } from './lib/paneOpenAnswer'
 import { flushSettingsOnExit, initSettingsBackend, onSettingsChanged, settingsGet, settingsRemove, settingsSet } from '@navide/plugin-ui/shared'
 import { cliPermissionKey, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
@@ -380,6 +381,7 @@ import { PLUGIN_APPROVAL_RECOVER_EVENT, revealInvisibleText } from '../../shared
 import type {
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
+  PaneRebuildAnnouncementAction,
   PluginAgentAnnouncementAction,
 } from './composables/useAnnouncements'
 import { useEvolve } from './composables/useEvolve'
@@ -8394,6 +8396,36 @@ const rebuildableByWorkspace = computed<Record<string, number>>(() => {
 const PTY_LOST_BATCH_MS = 1200
 const pendingPtyLostPanes = new Set<string>()
 let ptyLostFlushTimer: number | null = null
+/** H3: panes that lost their PTY while off screen. Only the ones that were
+ *  working are resumed, capped (planBackendRestartResume); the rest stay ended. */
+const pendingOffScreenPtyLostPanes = new Set<string>()
+/** H3: the panes whose turn was running or waiting on an answer when the
+ *  backend went away. Taken on the edge out of 'connected': by the time a
+ *  reattach answers, the idle decay may already have relabelled them. */
+const interruptedAtBackendLoss = new Set<string>()
+/** H3: the auto-restart attempt behind this outage, captured before the
+ *  connect clears backend.autoRestart. null = a manual restart or a blip. */
+let backendLossAutoRestartAttempt: number | null = null
+/** H3: the auto-restart attempt the last resumed wave came back on (null after
+ *  a manual restart). A later attempt of the same budget is a repeat crash. */
+let lastReconnectedAutoRestartAttempt: number | null = null
+watch(() => backend.status.value, (status, prev) => {
+  if (status === 'connected' || prev !== 'connected') return
+  backendLossAutoRestartAttempt = backend.autoRestart.value?.attempt ?? null
+  interruptedAtBackendLoss.clear()
+  for (const p of panes.value) {
+    const shown = paneRefs[p.id]?.displayStatus as string | undefined
+    if (shown === 'running' || shown === 'awaiting') interruptedAtBackendLoss.add(p.id)
+  }
+})
+watch(() => backend.autoRestart.value, (auto) => {
+  if (auto) backendLossAutoRestartAttempt = auto.attempt
+})
+
+/** The name a pane goes by in the backend-restart announcement. */
+function backendRestartPaneName(p: ActivePane): string {
+  return p.messagingName || p.customName || p.autoName || p.agentLabel
+}
 
 /**
  * A pane's PTY did not survive a backend outage (TerminalPane `pty-lost`).
@@ -8411,8 +8443,9 @@ function onPanePtyLost(paneId: string): void {
   // sidebar/spotlight layouts onScreenPaneIds is only the focused pane — read
   // 1.2 s later it would resume whichever pane they had landed on instead of
   // the ones that actually lost their PTY.
-  if (!onScreenPaneIds.value.has(paneId)) return
-  pendingPtyLostPanes.add(paneId)
+  // Off screen (H3): collected too, but only resumed when it was working.
+  if (!onScreenPaneIds.value.has(paneId)) pendingOffScreenPtyLostPanes.add(paneId)
+  else pendingPtyLostPanes.add(paneId)
   if (ptyLostFlushTimer !== null) window.clearTimeout(ptyLostFlushTimer)
   ptyLostFlushTimer = window.setTimeout(() => { void flushPtyLostResumes() }, PTY_LOST_BATCH_MS)
 }
@@ -8427,27 +8460,85 @@ function onPanePtyLost(paneId: string): void {
  * already offers. `forceWhenRunning` is safe here precisely because the PTY is
  * already gone — there is no in-flight turn left to interrupt, and no user
  * standing by to answer a confirm.
+ *
+ * H3: off-screen panes that were working when the backend went away are
+ * resumed too, capped (planBackendRestartResume); a repeat crash inside one
+ * auto-restart budget resumes nothing. What the wave did is listed in the
+ * announcements centre, and parents of interrupted children are told.
  */
 async function flushPtyLostResumes(): Promise<void> {
   ptyLostFlushTimer = null
   // Visibility was already decided when each pane reported in (see
   // onPanePtyLost); panes closed or rebuilt since then fall out in
   // rebuildPaneViaResume's own 'missing-pane' check.
-  const ids = [...pendingPtyLostPanes]
+  const onScreenIds = [...pendingPtyLostPanes]
+  const offScreenIds = [...pendingOffScreenPtyLostPanes].filter((id) => !pendingPtyLostPanes.has(id))
   pendingPtyLostPanes.clear()
-  if (!ids.length) return
+  pendingOffScreenPtyLostPanes.clear()
+  if (!onScreenIds.length && !offScreenIds.length) return
+  // A repeat inside one auto-restart budget resumes nothing (H3): resuming into
+  // a backend that keeps crashing only spends quota on another lost turn.
+  const crashLoop = isRepeatCrash(backendLossAutoRestartAttempt, lastReconnectedAutoRestartAttempt)
+  lastReconnectedAutoRestartAttempt = backendLossAutoRestartAttempt
+  backendLossAutoRestartAttempt = null
+  const lost: LostPane[] = [
+    ...onScreenIds.map((id) => ({ id, onScreen: true })),
+    ...offScreenIds.map((id) => ({ id, onScreen: false })),
+  ].map(({ id, onScreen }) => {
+    const pane = panes.value.find((p) => p.id === id)
+    return {
+      id,
+      onScreen,
+      working: interruptedAtBackendLoss.has(id),
+      canResume: !!pane && paneCanRebuild(pane),
+      spawnedBy: pane?.spawnedBy,
+    }
+  })
+  const plan = planBackendRestartResume(lost, { crashLoop })
+  // Read before the wave: a rebuild retires the old pane id.
+  const names = new Map<string, string>()
+  const debts = new Map<string, { parentName: string; cross: boolean }>()
+  for (const { id } of lost) {
+    const pane = panes.value.find((p) => p.id === id)
+    if (!pane) continue
+    names.set(id, backendRestartPaneName(pane))
+    if (pane.spawnReportPending && pane.spawnedByName) {
+      debts.set(id, { parentName: pane.spawnedByName, cross: !!pane.spawnedCrossWorkspace })
+    }
+  }
+  const kids = backendRestartInterruptedChildren(lost.map((p) => p.id))
+  const replacedIds = new Map<string, string>()
+  const resumedIds = new Set<string>()
+  const failedIds: string[] = []
   let resumed = 0
   let failed = 0
-  await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, async (paneId) => {
+  await runWithConcurrency(plan.resume, ALL_SCOPE_RESTORE_CONCURRENCY, async (paneId) => {
     const failure = await rebuildPaneViaResume(paneId, {
       suppressBusyToast: true,
       forceWhenRunning: true,
       // Nobody asked for this rebuild — the backend went away mid-work. The CLI
       // returns with its transcript but no instruction to carry on.
       offerContinue: true,
+      onReplaced: (newId) => replacedIds.set(paneId, newId),
     })
-    if (failure) failed++
-    else resumed++
+    if (failure) {
+      failed++
+      failedIds.push(paneId)
+    } else {
+      resumed++
+      resumedIds.add(paneId)
+      // The turn that owed the parent a report was cut off by the restart; the
+      // resumed conversation still owes it (same as a relaunch's resume). Only
+      // this path: an ordinary rebuild carries no report debt over.
+      const debt = debts.get(paneId)
+      const revived = panes.value.find((p) => p.id === replacedIds.get(paneId))
+      if (debt && revived) {
+        revived.spawnedByName = debt.parentName
+        revived.spawnReportPending = true
+        if (debt.cross) revived.spawnedCrossWorkspace = true
+        persistPaneReportDebt(revived)
+      }
+    }
   })
   if (resumed > 0) {
     notifyRestore.toast(
@@ -8461,6 +8552,25 @@ async function flushPtyLostResumes(): Promise<void> {
       { type: 'error', duration: 8000 }
     )
   }
+  if (kids.length > 0) notifyInterruptedParents(kids, 'backend-restart', resumedIds)
+  const nameOf = (id: string): string => names.get(id) ?? id
+  announcements.noteBackendRestart({
+    crashLoop,
+    resumed: [...resumedIds].map(nameOf),
+    interrupted: lost.filter((p) => p.working).map((p) => nameOf(p.id)),
+    // A row offers a Rebuild, so only for a pane that is still there.
+    notResumed: [
+      ...plan.notResumed.map(({ id, reason }) => ({ paneId: id, name: nameOf(id), reason })),
+      ...failedIds.map((id) => ({ paneId: id, name: nameOf(id), reason: 'failed' as const })),
+    ].filter((row) => panes.value.some((p) => p.id === row.paneId)),
+  })
+}
+
+/** H3: a backend-restart row's Rebuild — the same resume as ⌘R, on the
+ *  user's click only. */
+async function onBackendRestartPaneAction(action: PaneRebuildAnnouncementAction): Promise<void> {
+  await rebuildPaneViaResume(action.paneId)
+  announcements.dropBackendRestartPane(action.paneId)
 }
 
 /** Failure outcomes of `rebuildPaneViaResume` — success resolves undefined.
@@ -9591,6 +9701,21 @@ const pipeline = reactive<PipelineRun>({
  *  tracking one, so it stays the run's own identity across every switch.
  */
 let pipelineRunWorkspace = ''
+
+// On every (re)connect the backend learns which pipeline run this window is
+// driving: a stored 'running' run that no window claims is one a crash left
+// behind, and pipeline_status reports it as interrupted (resumable). Sent even
+// when empty, so the backend can tell "synced, nothing here" from "not synced
+// yet" — the gap right after a backend auto-restart.
+watch(
+  () => backend.status.value,
+  (s) => {
+    if (s !== 'connected') return
+    const workspaces = pipeline.state === 'running' && pipelineRunWorkspace ? [pipelineRunWorkspace] : []
+    backend.send('pipeline.claim', { workspaces }).catch(() => { /* re-sent on the next reconnect */ })
+  },
+  { immediate: true },
+)
 
 const showCompletionModal = ref(false)
 const showSettings = ref(false)
@@ -13399,21 +13524,44 @@ function interruptedChildren(workspacePath: string): InterruptedChild[] {
   return out
 }
 
+/** H3: the panes a backend restart interrupted (running or waiting when it
+ *  went away) that have a parent to tell, captured BEFORE the wave — a rebuild
+ *  gives each pane a new id, while the messaging names carry across. */
+function backendRestartInterruptedChildren(ids: readonly string[]): InterruptedChild[] {
+  const out: InterruptedChild[] = []
+  for (const id of ids) {
+    if (!interruptedAtBackendLoss.has(id)) continue
+    const pane = panes.value.find((p) => p.id === id)
+    if (!pane?.messagingName) continue
+    const parentName = panes.value.find((p) => p.id === pane.spawnedBy)?.messagingName ?? pane.spawnedByName ?? ''
+    if (parentName) out.push({ placeholderId: pane.id, name: pane.messagingName, parentName })
+  }
+  return out
+}
+
 /** Tell each parent which of its children the relaunch interrupted and which
  *  came back. One notice per parent; a parent that is still a placeholder gets
  *  it when it is opened, like any other message. A resumed child is one whose
  *  placeholder is gone — a failed or over-the-cap one is still there. */
-function notifyInterruptedParents(kids: readonly InterruptedChild[]): void {
+function notifyInterruptedParents(
+  kids: readonly InterruptedChild[],
+  cause: 'relaunch' | 'backend-restart' = 'relaunch',
+  /** Backend restart: the panes the wave rebuilt (a failed rebuild of a live
+   *  pane leaves no placeholder to look for). */
+  resumedIds?: ReadonlySet<string>,
+): void {
   const byParent = new Map<string, { name: string; resumed: boolean }[]>()
   for (const kid of kids) {
     if (!panes.value.some((p) => p.messagingName === kid.parentName)) continue
-    const resumed = !panes.value.some((p) => p.id === kid.placeholderId && !p.realized)
+    const resumed = resumedIds
+      ? resumedIds.has(kid.placeholderId)
+      : !panes.value.some((p) => p.id === kid.placeholderId && !p.realized)
     const list = byParent.get(kid.parentName) ?? []
     list.push({ name: kid.name, resumed })
     byParent.set(kid.parentName, list)
   }
   for (const [parentName, children] of byParent) {
-    const text = renderInterruptedChildrenNotice(children)
+    const text = renderInterruptedChildrenNotice(children, cause)
     if (text) messaging.sendMessage(NOTICE_SENDER, parentName, text, { kind: 'notice' })
   }
 }
@@ -14282,8 +14430,14 @@ function buildStageContext(index: number, forManager: boolean): string {
 
 /** Inject kickoffs into pre-spawned panes for one stage, then arm watchers.
  *  Builds cross-stage context from prior stages (which now have real output).
- *  Safe to call on a freshly-spawned stage too (same as old spawnPipelineStage). */
-async function activateStage(index: number): Promise<void> {
+ *  Safe to call on a freshly-spawned stage too (same as old spawnPipelineStage).
+ *
+ *  `only` re-runs one slot of the stage that is already running (a retry,
+ *  see scheduleSlotRetry): its kickoff goes in again with `note` in front,
+ *  and nothing else about the stage — its slot count, router, look-ahead
+ *  pre-spawn, pinned and untaken slots — is touched. */
+async function activateStage(index: number, opts: { only?: string; note?: string } = {}): Promise<void> {
+  const only = opts.only
   const stage = stagesApi.stages.value[index]
   if (!stage) {
     // Out of range. The two in-run callers cannot reach this (start uses 0
@@ -14329,7 +14483,7 @@ async function activateStage(index: number): Promise<void> {
   // the local restored record; the normal per-slot fallback below then creates
   // one fresh pane and updates the backend through pipeline.stage_spawn.
   const unrealizedPaneIds = panes.value
-    .filter((pane) => !pane.realized && pane.stageId === stage.id && pane.origin === 'pipeline')
+    .filter((pane) => !pane.realized && pane.stageId === stage.id && pane.origin === 'pipeline' && (!only || pane.slotLabel === only))
     .map((pane) => pane.id)
   if (unrealizedPaneIds.length > 0) {
     // The slot record these placeholders sit on is reused by the fresh pane
@@ -14341,7 +14495,7 @@ async function activateStage(index: number): Promise<void> {
   }
 
   // Reset completion tracker in case it was partially consumed
-  registerStage(stageCompletions, index, stage.slots.length)
+  if (!only) registerStage(stageCompletions, index, stage.slots.length)
 
   // DAG: pinned slots reuse their frozen output (counted done at the end);
   // a reject loop's note and outputs of nodes this run skipped go in front.
@@ -14349,9 +14503,9 @@ async function activateStage(index: number): Promise<void> {
   // DAG: slots none of whose inputs was taken (unchosen branch, error edge of
   // a node that did not fail) are skipped and counted done at the end too.
   const untaken = pipelineDag.untakenLabels(index)
-  const dagPrefix = pipelineDag.takeNote(index) + pipelineDag.frozenContext(index)
+  const dagPrefix = (only ? (opts.note ? `${opts.note}\n\n` : '') : pipelineDag.takeNote(index)) + pipelineDag.frozenContext(index)
 
-  await Promise.all(stage.slots.map(async (slot) => {
+  await Promise.all(stage.slots.filter((slot) => !only || slot.label === only).map(async (slot) => {
     if (pinned.has(slot.label)) {
       pipelineLog(`Stage ${stage.id}/${slot.label} 📌 pinned — reusing its frozen output`)
       return
@@ -14628,6 +14782,8 @@ async function activateStage(index: number): Promise<void> {
   // A run failed by one of this stage's kickoffs is over: no router poll, and
   // no CLIs spawned for a next stage it will never reach.
   if (pipeline.state !== 'running' || pipeline.stageIndex !== index) return
+  // A retried slot rejoins a stage whose router, pre-spawn and counts stand.
+  if (only) return
 
   if (managerSlot) {
     startRouterPoll(index)
@@ -15049,15 +15205,35 @@ function heldKickoffCopy(paneId: string, text: string): { holds: () => boolean; 
   }
 }
 
+/** Re-run one failed slot of the running stage after its retry wait. Nothing
+ *  happens if the run stopped or moved on meanwhile. */
+function scheduleSlotRetry(stageIndex: number, slotLabel: string, retry: { attempt: number; maxTries: number; waitMs: number; note: string }): void {
+  const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
+  pipelineLog(`Stage ${stageLabel}/${slotLabel} ↻ retry ${retry.attempt}/${retry.maxTries}` + (retry.waitMs ? ` in ${retry.waitMs} ms` : ''))
+  void (async () => {
+    if (retry.waitMs > 0) await sleep(retry.waitMs)
+    if (pipeline.state !== 'running' || pipeline.stageIndex !== stageIndex) return
+    await activateStage(stageIndex, { only: slotLabel, note: retry.note })
+  })()
+}
+
 /** A slot's kickoff never reached its agent: fail its node with the reason and
  *  end the run as failed, instead of leaving it `running` around a pane that
  *  never got its task (#448). Like an abort, the panes stay alive for a
  *  resume. The first failing slot ends the run; later ones only fail their
  *  own node. */
-async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false): Promise<void> {
+async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false, reported = false): Promise<void> {
   // A kickoff that finishes late, after the user stopped this run and another
   // one moved to a different stage, must not fail that one.
   if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
+  // A slot with a retry policy tries again first.
+  if (pipeline.state === 'running') {
+    const retry = pipelineDag.retryAfterFailure(stageIndex, slotLabel, reason)
+    if (retry) {
+      scheduleSlotRetry(stageIndex, slotLabel, retry)
+      return
+    }
+  }
   // A slot with an error edge fails down that edge: its node is failed, the
   // slot counts as finished and the run goes on.
   if (pipeline.state === 'running' && pipelineDag.routeFailure(stageIndex, slotLabel, reason)) {
@@ -15082,7 +15258,9 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   notifyRestore.toast(
     held
       ? i18n.global.t('error.pipeline-kickoff-held', { stage: stageLabel, slot: slotLabel })
-      : i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
+      : reported
+        ? i18n.global.t('error.pipeline-node-failed', { stage: stageLabel, slot: slotLabel, reason })
+        : i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
     { type: 'error' },
   )
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
@@ -17934,6 +18112,26 @@ function onStageSlotCompleted(
   if (!tracker) { void onPipelineNext(); return }
   // 'duplicate' covers both a double-fire and a slot already released — a
   // released slot is out of `expected`, so counting it would over-shoot N/N.
+  // A slot that reported ---NODE-FAILED--- (read only where an error edge or
+  // a retry policy asks for it) retries first; out of tries, it goes down its
+  // error edge (counted below) or, with none, fails the run.
+  const failedPane = reason === 'pinned' || reason === 'skipped' || reason === 'error-edge'
+    ? undefined
+    : panes.value.find((p) => p.id === paneId)
+  const reported = failedPane
+    ? pipelineDag.reportedFailure(stageIndex, failedPane.slotLabel, slotSummarySource(paneId, stageIndex))
+    : ''
+  if (failedPane && reported) {
+    const retry = pipelineDag.retryAfterFailure(stageIndex, failedPane.slotLabel, reported)
+    if (retry) {
+      scheduleSlotRetry(stageIndex, failedPane.slotLabel, retry)
+      return
+    }
+    if (!pipelineDag.routesFailure(stageIndex, failedPane.slotLabel)) {
+      void failRunOnKickoff(stageIndex, failedPane.slotLabel, reported, false, true)
+      return
+    }
+  }
   const counted = completeSlot(stageCompletions, stageIndex, paneId)
   if (counted.kind !== 'counted') return
   const remaining = counted.remaining
@@ -24321,6 +24519,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @evolve-action="onEvolveAction"
       @convenience-action="(action) => void onConvenienceAction(action)"
       @plugin-agent-action="(action) => void onPluginAgentUndo(action)"
+      @pane-action="(action) => void onBackendRestartPaneAction(action)"
     />
 
     <!-- Workspace self-evolution panel (opened from the sidebar heading and

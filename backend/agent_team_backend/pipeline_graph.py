@@ -19,6 +19,9 @@ from typing import Any
 GRAPH_VERSION = 1
 DEFAULT_MAX_LOOPS = 2
 MAX_LOOPS_CEILING = 10
+# Bounds of a slot node's retry policy (maxTries counts the first try).
+MAX_TRIES_CEILING = 5
+MAX_RETRY_WAIT_MS = 300_000
 TRIGGER_NODE_ID = "trigger"
 NODE_KINDS = ("trigger", "slot", "gate")
 EDGE_KINDS = ("main", "reject", "branch", "error")
@@ -61,6 +64,28 @@ def _is_forward(e: dict[str, Any]) -> bool:
 def has_branching_edges(graph: dict[str, Any]) -> bool:
     """True for a graph with any branch or error edge (see the TS twin)."""
     return any(e.get("kind") in ("branch", "error") for e in graph.get("edges", []))
+
+
+def _retry_errors(nid: str, kind: Any, retry: Any) -> list[str]:
+    """A slot node's retry policy {maxTries, waitMs?} (see the TS twin)."""
+    if kind != "slot":
+        return [f"node {nid}: only slot nodes carry retry"]
+    if not isinstance(retry, dict):
+        return [f"node {nid}: retry must be {{maxTries, waitMs?}}"]
+    errors: list[str] = []
+    if set(retry) - {"maxTries", "waitMs"}:
+        errors.append(f"node {nid}: retry takes only maxTries and waitMs")
+
+    def is_int(v: Any) -> bool:
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    tries = retry.get("maxTries")
+    if not is_int(tries) or tries < 1 or tries > MAX_TRIES_CEILING:
+        errors.append(f"node {nid}: retry.maxTries must be an integer 1..{MAX_TRIES_CEILING}")
+    wait = retry.get("waitMs")
+    if "waitMs" in retry and (not is_int(wait) or wait < 0 or wait > MAX_RETRY_WAIT_MS):
+        errors.append(f"node {nid}: retry.waitMs must be an integer 0..{MAX_RETRY_WAIT_MS}")
+    return errors
 
 
 def _branch_when_errors(e: dict[str, Any]) -> list[str]:
@@ -282,6 +307,8 @@ def validate_graph(graph: Any) -> list[str]:
         pos = n.get("position")
         if not isinstance(pos, dict) or not _finite(pos.get("x")) or not _finite(pos.get("y")):
             errors.append(f"node {nid} needs a numeric position")
+        if n.get("retry") is not None:
+            errors.extend(_retry_errors(nid, k, n["retry"]))
     edge_ids: set[str] = set()
     pairs: set[tuple[str, str, str]] = set()
     succ: dict[str, list[str]] = {nid: [] for nid in nodes}
@@ -487,6 +514,14 @@ def apply_graph_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[st
                 n["pinned"] = True
             else:
                 n.pop("pinned", None)
+        elif kind == "set_retry":
+            n = node(op.get("id"))
+            if n.get("kind") != "slot":
+                raise GraphError([f"only slot nodes can retry: {n['id']}"])
+            if op.get("retry"):
+                n["retry"] = copy.deepcopy(op["retry"])
+            else:
+                n.pop("retry", None)
         elif kind == "set_stage_meta":
             # Stage metadata is not part of the graph; StagesStore applies it.
             pass
