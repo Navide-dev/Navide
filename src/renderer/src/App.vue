@@ -382,7 +382,7 @@ import type {
   EvolveAnnouncementAction,
   PluginAgentAnnouncementAction,
 } from './composables/useAnnouncements'
-import { useEvolve } from './composables/useEvolve'
+import { retroBeforeReclaim, useEvolve, type ReclaimRetroSource } from './composables/useEvolve'
 import { useShareNotices } from './composables/useShareNotices'
 import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
@@ -10662,7 +10662,7 @@ registerCommand('ui.pane.reclaim', async (args) => {
   const ids = reclaimRequestPaneIds(args)
   if (!ids.length) throw new Error(`ui.pane.reclaim requires ${PANE_ID_HINT} (or an array of them)`)
   const outcome: ReclaimOutcome = { reclaimed: [], refused: [] }
-  await reclaimPanesNow(ids, false, outcome)
+  await reclaimPanesNow(ids, false, outcome, 'agent')
   return {
     reclaimed: outcome.reclaimed,
     refused: outcome.refused.map((r) => ({
@@ -18914,6 +18914,17 @@ async function reclaimCompletedStagePanes(stageIndex: number): Promise<void> {
       pipelineLog(`Stage ${stage.id} ♻ kept ${label} — ${blocked}`)
       continue
     }
+    // A long-running dispatched pane may write three lines first (S5b; off by
+    // default, and nothing is sent then). Its turn made it busy: judge it again.
+    if (await retroBeforeReclaim(backend, pane.workspacePath, paneId, 'pipeline')) {
+      const after = panes.value.find((p) => p.id === paneId)
+      const again = after ? reclaimBlockedBy(reclaimCandidate(after), RECLAIM_NOW_THRESHOLD_MS, Date.now()) : null
+      if (!after) continue
+      if (again) {
+        pipelineLog(`Stage ${stage.id} ♻ kept ${label} — ${again}`)
+        continue
+      }
+    }
     if (await reclaimIdlePane(paneId)) {
       pipelineLog(`Stage ${stage.id} ♻ reclaimed ${label} — CLI stopped, conversation kept`)
     }
@@ -18937,6 +18948,12 @@ async function sweepIdlePanes(): Promise<void> {
     // user can focus or type into the next one while it runs.
     const pane = panes.value.find((p) => p.id === paneId)
     if (!pane || !paneReclaimable(pane, Date.now())) continue
+    // S5b, as in reclaimCompletedStagePanes. Judged again on the "reclaim now"
+    // terms: the retrospective turn has just reset this pane's idle clock.
+    if (await retroBeforeReclaim(backend, pane.workspacePath, paneId, 'idle-sweep')) {
+      const after = panes.value.find((p) => p.id === paneId)
+      if (!after || reclaimBlockedBy(reclaimCandidate(after), RECLAIM_NOW_THRESHOLD_MS, Date.now()) !== null) continue
+    }
     if (await reclaimIdlePane(paneId)) reclaimed++
   }
   if (reclaimed === 0) return
@@ -18975,8 +18992,11 @@ interface ReclaimOutcome {
  *
  *  `named` marks panes the user picked out one by one, which may include the
  *  focused one (see namedReclaimBlockedBy). `outcome`, when given, is filled
- *  with what happened to each pane; it changes nothing about the decision. */
-async function reclaimPanesNow(paneIds?: string[], named = false, outcome?: ReclaimOutcome): Promise<number> {
+ *  with what happened to each pane; it changes nothing about the decision.
+ *  `source`, set only by an agent's request (ui.pane.reclaim), lets a
+ *  long-running dispatched pane write three lines first (S5b); a reclaim the
+ *  user clicked passes none and never waits. */
+async function reclaimPanesNow(paneIds?: string[], named = false, outcome?: ReclaimOutcome, source?: ReclaimRetroSource): Promise<number> {
   const targets = paneIds ?? reclaimableNowIds.value
   let reclaimed = 0
   for (const paneId of targets) {
@@ -18994,6 +19014,22 @@ async function reclaimPanesNow(paneIds?: string[], named = false, outcome?: Recl
     if (blocked !== null) {
       outcome?.refused.push({ paneId, reason: blocked })
       continue
+    }
+    if (await retroBeforeReclaim(backend, pane.workspacePath, paneId, source)) {
+      // Its retrospective turn made it busy for a while: judge it again. Still
+      // busy after the wait is refused as not-idle, as before; nothing is forced.
+      const after = panes.value.find((p) => p.id === paneId)
+      if (!after) {
+        outcome?.refused.push({ paneId, reason: 'not-found' })
+        continue
+      }
+      const again = named
+        ? namedReclaimBlockedBy(reclaimCandidate(after), Date.now())
+        : reclaimBlockedBy(reclaimCandidate(after), RECLAIM_NOW_THRESHOLD_MS, Date.now())
+      if (again !== null) {
+        outcome?.refused.push({ paneId, reason: again })
+        continue
+      }
     }
     // A caller collecting per-pane results keeps the ones already gathered
     // when a later kill throws; every other caller sees the throw as before.

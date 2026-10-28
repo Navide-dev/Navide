@@ -44,6 +44,8 @@ class FakeHost:
         self.error_log: list[dict[str, Any]] = []
         self.error_oldest_ms: int | None = None
         self.flaky: list[dict[str, Any]] = []
+        #: pane id → its restore record's origin and spawned_at (S5b).
+        self.records: dict[str, dict[str, Any]] = {}
 
     async def git_info(self, workspace: str) -> dict[str, Any]:
         return {**self.git, "root": self.git["root"] or workspace} if self.git["is_repo"] else dict(self.git)
@@ -93,6 +95,9 @@ class FakeHost:
 
     def flaky_tests(self, root: str) -> list[dict[str, Any]]:
         return list(self.flaky)
+
+    def pane_record(self, workspace: str, pane_id: str) -> dict[str, Any] | None:
+        return self.records.get(pane_id)
 
     def scheduler(self) -> SchedulerService:
         return self.sched
@@ -204,7 +209,8 @@ async def test_enabling_one_workspace_leaves_the_other_alone(env) -> None:
     badges = (await env.service.badges([env.a, env.b]))["badges"]
     assert badges[env.a]["enabled"] is True and badges[env.a]["next_run_at"] is not None
     assert badges[env.b] == {"enabled": False, "running": False, "running_since": None,
-                             "next_run_at": None, "last_status": None, "pane_ids": []}
+                             "next_run_at": None, "last_status": None, "pane_ids": [],
+                             "reclaim_retro": False}
 
 
 async def test_turning_off_disables_the_clock(env) -> None:
@@ -660,7 +666,7 @@ async def test_runs_live_in_the_workspace_database_under_a_versioned_component(e
     await enable(env, env.a)
     await env.service.start_run(env.a, "manual")
     db = env.databases.peek(env.a)
-    assert db.schema_version("evolve") == 4
+    assert db.schema_version("evolve") == 5
     assert db.kv_get("evolve_settings")["enabled"] is True
     assert env.databases.peek(env.b) is None
 
@@ -751,7 +757,8 @@ def test_agents_get_no_tool_that_changes_evolve_settings() -> None:
     from agent_team_backend.mcp_server import server as plan_mcp
 
     names = {tool.name for tool in plan_mcp.server._tool_manager.list_tools()}  # noqa: SLF001
-    assert {n for n in names if n.startswith("evolve")} == {"evolve_report"}
+    # evolve_retro (S5b) only stores a pane's three lines; it changes no setting.
+    assert {n for n in names if n.startswith("evolve")} == {"evolve_report", "evolve_retro"}
 
 
 def test_a_v1_runs_table_upgrades_in_place(tmp_path: Path) -> None:
@@ -765,7 +772,7 @@ def test_a_v1_runs_table_upgrades_in_place(tmp_path: Path) -> None:
             cur.execute("INSERT INTO evolve_runs (id, trigger, status, started_at) VALUES ('r0', 'manual', 'ok', 1)")
         store = ev._Store(databases)  # noqa: SLF001
         assert [r["id"] for r in store.runs(str(ws))] == ["r0"]
-        assert db.schema_version("evolve") == 4
+        assert db.schema_version("evolve") == 5
         assert store.token_matches(str(ws), "r0", "anything") is False  # an old run has no token
     finally:
         databases.close_all()
@@ -1018,7 +1025,7 @@ async def test_each_reported_proposal_gets_a_ledger_row(env) -> None:
     assert ledger[rel2]["kind"] == "" and ledger[rel2]["signature"] == ""
     assert ledger[rel2]["commits"] == [] and ledger[rel2]["status"] == "proposed"
     db = env.databases.peek(env.a)
-    assert db.schema_version("evolve") == 4
+    assert db.schema_version("evolve") == 5
 
 
 @pytest.mark.parametrize("stage,status", [
@@ -1718,3 +1725,145 @@ async def test_a_busy_or_spent_workspace_records_no_burst_run(env) -> None:
 def test_a_normal_task_has_no_burst_section() -> None:
     assert "SIGNATURE BURST" not in evolve_rules.render(_params())
     assert _sha(evolve_rules.render(_params(retro_tools=False, retro_corrections=False, burst_data=[]), [])) == _MAIN_RENDER_FIX
+
+
+# ── a retrospective when a dispatched pane is reclaimed (S5b) ──────────────
+
+
+def _old_iso(minutes: int) -> str:
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(NOW_MS / 1000 - minutes * 60, timezone.utc).isoformat()
+
+
+def _worker(env, pane_id: str = "w1", *, origin: str = "mcp", minutes: int = 45, ws: str | None = None) -> None:
+    env.host.panes[pane_id] = SimpleNamespace(pane_id=pane_id, name=f"worker-{pane_id}", workspace_path=ws or env.a,
+                                              spawned_by="p-parent", busy=False)
+    env.host.records[pane_id] = {"origin": origin, "spawned_at": _old_iso(minutes)}
+
+
+def _retro_token(env, pane_id: str = "w1") -> str:
+    texts = [t for p, t in env.host.sent if p == pane_id]
+    assert texts, "the pane was never asked"
+    match = re.search(r'token="([0-9a-f]{32})"', texts[-1])
+    assert match, texts[-1]
+    return match.group(1)
+
+
+@pytest.fixture
+def quick_retro(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ev, "RETRO_WAIT_S", 0.3)
+    monkeypatch.setattr(ev, "RETRO_POLL_S", 0.01)
+
+
+def test_reclaim_retro_settings_default_off() -> None:
+    assert ev.DEFAULTS["reclaim_retro"] is False and ev.DEFAULTS["reclaim_retro_max_per_day"] == 3
+    old = {k: v for k, v in ev.DEFAULTS.items() if not k.startswith("reclaim_")}
+    assert ev.sanitize_stored(old)[0]["reclaim_retro"] is False
+    with pytest.raises(ev.SettingsInvalid):
+        ev.normalize_settings({"reclaim_retro_max_per_day": 0}, dict(ev.DEFAULTS))
+
+
+async def test_the_badge_says_whether_the_renderer_should_ask(env) -> None:
+    assert (await env.service.badge(env.a))["reclaim_retro"] is False
+    await enable(env, env.a, reclaim_retro=True)
+    assert (await env.service.badge(env.a))["reclaim_retro"] is True
+    await env.service.set(env.a, {"enabled": False})
+    assert (await env.service.badge(env.a))["reclaim_retro"] is False
+
+
+async def test_switched_off_nothing_is_asked(env, quick_retro) -> None:
+    await enable(env, env.a)
+    _worker(env)
+    answer = await env.service.retro_request(env.a, "w1")
+    assert answer == {"ok": True, "asked": False, "reason": "off"} and env.host.sent == []
+
+
+async def test_a_long_dispatched_pane_writes_three_masked_lines(env, quick_retro) -> None:
+    await enable(env, env.a, reclaim_retro=True)
+    _worker(env)
+    task = asyncio.create_task(env.service.retro_request(env.a, "w1"))
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        if env.host.sent:
+            break
+    token = _retro_token(env)
+    assert "evolve_retro" in env.host.sent[-1][1] and "three lines" in env.host.sent[-1][1]
+    refused = await env.service.retro_submit("w1", "0" * 32, ["x"])
+    assert refused["ok"] is False
+    stranger = await env.service.retro_submit("p-run", token, ["x"])
+    assert stranger["ok"] is False
+    ok = await env.service.retro_submit("w1", token, [
+        "Did: moved the sync tests to the new fixture", "Stuck: token sk-abcdefghijklmnop expired", "Repeated: " + "x" * 400,
+        "a fourth line is dropped"])
+    assert ok == {"ok": True, "lines": 3}
+    answer = await task
+    assert answer["asked"] is True and answer["collected"] is True
+    assert (await env.service.retro_submit("w1", token, ["again"]))["ok"] is False  # one use
+    # It reaches the next run's repeated-work records, masked.
+    await env.service.start_run(env.a, "manual")
+    records = env.host.opened[-1]["task"].split("REPEATED MANUAL WORK RECORDS — BEGIN")[1].split("— END")[0]
+    assert 'retro from pane "worker-w1" at reclaim' in records and "moved the sync tests" in records
+    assert "abcdefghijklmnop" not in records and "fourth line" not in records and "x" * 201 not in records
+
+
+@pytest.mark.parametrize("origin,minutes", [("manual", 45), ("pipeline", 45), ("mcp", 20)])
+async def test_only_a_long_dispatched_pane_is_asked(env, quick_retro, origin, minutes) -> None:
+    await enable(env, env.a, reclaim_retro=True)
+    _worker(env, origin=origin, minutes=minutes)
+    answer = await env.service.retro_request(env.a, "w1")
+    assert answer["asked"] is False and env.host.sent == []
+
+
+async def test_an_evolve_run_pane_or_another_workspaces_pane_is_not_asked(env, quick_retro) -> None:
+    await enable(env, env.a, reclaim_retro=True)
+    await env.service.start_run(env.a, "manual")
+    env.host.records["p-run"] = {"origin": "mcp", "spawned_at": _old_iso(60)}
+    assert (await env.service.retro_request(env.a, "p-run"))["asked"] is False
+    _worker(env, "wb", ws=env.b)
+    assert (await env.service.retro_request(env.a, "wb"))["asked"] is False
+    assert [p for p, _t in env.host.sent] == []
+
+
+async def test_no_answer_times_out_and_the_daily_limit_holds(env, quick_retro) -> None:
+    await enable(env, env.a, reclaim_retro=True, reclaim_retro_max_per_day=2)
+    for pid in ("w1", "w2", "w3"):
+        _worker(env, pid)
+    started = asyncio.get_running_loop().time()
+    first = await env.service.retro_request(env.a, "w1")
+    assert first["asked"] is True and first["collected"] is False
+    assert asyncio.get_running_loop().time() - started < 2
+    assert (await env.service.retro_request(env.a, "w1"))["asked"] is False  # once per pane a day
+    assert (await env.service.retro_request(env.a, "w2"))["asked"] is True
+    assert (await env.service.retro_request(env.a, "w3"))["asked"] is False  # 2 a day
+    env.clock["now"] = NOW_MS + DAY_MS
+    assert (await env.service.retro_request(env.a, "w3"))["asked"] is True
+
+
+async def test_a_busy_pane_is_waited_for_until_idle_or_the_limit(env, quick_retro) -> None:
+    await enable(env, env.a, reclaim_retro=True)
+    _worker(env)
+    env.host.panes["w1"].busy = True
+    task = asyncio.create_task(env.service.retro_request(env.a, "w1"))
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        if env.host.sent:
+            break
+    await env.service.retro_submit("w1", _retro_token(env), ["a", "b", "c"])
+    await asyncio.sleep(0.05)
+    assert not task.done()  # written, but the turn has not ended
+    env.host.panes["w1"].busy = False
+    answer = await asyncio.wait_for(task, 1)
+    assert answer["collected"] is True and answer["idle"] is True
+
+
+def test_the_retro_tool_changes_no_setting_and_says_so() -> None:
+    from agent_team_backend.mcp_server import server as plan_mcp
+
+    tools = {t.name: t for t in plan_mcp.server._tool_manager.list_tools()}  # noqa: SLF001
+    assert {n for n in tools if n.startswith("evolve")} == {"evolve_report", "evolve_retro"}
+    retro = tools["evolve_retro"]
+    assert set(retro.parameters["properties"]) == {"token", "lines"}
+    doc = " ".join(retro.description.split())
+    assert "token" in doc and "three lines" in doc and "never leaves this machine" in doc
+    assert "changes no setting" in doc

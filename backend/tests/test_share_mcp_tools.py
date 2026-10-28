@@ -56,6 +56,9 @@ LOCAL_PACKAGE_TOOLS = [
 #: Core tools registered after those: DESIGN-C S3's window tools
 #: (mcp_server/window_tools.py, imported after plugin_local_tools).
 WINDOW_TOOLS = ["window_list", "window_focus", "window_close", "workspace_close", "window_move_pane"]
+#: Core tools registered after those: self-evolution S5b's reclaim retrospective
+#: (mcp_server/evolve_retro_tool.py, imported after window_tools).
+EVOLVE_RETRO_TOOLS = ["evolve_retro"]
 #: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills).
 PLUGIN_PREFIXES = ("plan_", "skills_")
 BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"
@@ -75,7 +78,7 @@ def test_the_existing_tools_are_exactly_mains_and_the_share_tools_come_after() -
     # onto the same server; those are left out by their known prefixes, and
     # anything else that is not main's must make this fail.
     tools = [t for t in _tools() if t["name"] in core or not t["name"].startswith(PLUGIN_PREFIXES)]
-    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS + ACCOUNT_TOOLS + FORM_TOOLS + TESTPLACE_TOOLS + LOCAL_PACKAGE_TOOLS + WINDOW_TOOLS
+    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS + ACCOUNT_TOOLS + FORM_TOOLS + TESTPLACE_TOOLS + LOCAL_PACKAGE_TOOLS + WINDOW_TOOLS + EVOLVE_RETRO_TOOLS
     existing = [t for t in tools if t["name"] not in added]
     assert json.loads(json.dumps(existing, sort_keys=True)) == baseline
     assert [t["name"] for t in tools[-len(added):]] == added

@@ -44,6 +44,8 @@ const settings = (over: Partial<EvolveSettings> = {}): EvolveSettings => ({
   burst_minutes: 30,
   burst_count: 10,
   burst_max_per_day: 1,
+  reclaim_retro: false,
+  reclaim_retro_max_per_day: 3,
   ...over,
 })
 
@@ -398,6 +400,24 @@ describe('EvolvePanel', () => {
     await flushPromises()
     expect(callsOf('evolve.set')).toHaveLength(0)
     expect(wrapper.find('[data-error="burst_count"]').text()).not.toBe('')
+  })
+
+  it('S5b: the reclaim retrospective is off by default and discloses its cost and wait', async () => {
+    wrapper = await mountPanel(A)
+    const row = wrapper.get('[data-test="reclaim-retro"]')
+    const box = row.get('[data-field="reclaim_retro"]')
+    expect((box.element as HTMLInputElement).checked).toBe(false)
+    expect(row.text()).toContain('90')
+    expect(row.text()).toContain('三行')
+    await box.setValue(true)
+    await flushPromises()
+    await row.get('[data-field="reclaim_retro_max_per_day"]').setValue(2)
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set').at(-1)?.payload).toEqual({
+      workspace: A,
+      settings: { reclaim_retro: true, reclaim_retro_max_per_day: 2 },
+    })
   })
 
   it('S1: an older backend without a ledger still shows the proposals', async () => {

@@ -53,7 +53,7 @@ CORE_TOOL_NAMES = (
     "cli_get_status", "cli_inbox_summary", "cli_interrupt", "cli_list_sessions", "cli_list_targets",
     "cli_message_log", "cli_open_agent", "cli_pending_incoming", "cli_permission_settings", "cli_place_pane",
     "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_send", "cli_send_and_wait", "cli_token_stats",
-    "cli_usage", "cli_wait_idle", "cli_whoami", "credentials_findings", "credentials_list", "evolve_report",
+    "cli_usage", "cli_wait_idle", "cli_whoami", "credentials_findings", "credentials_list", "evolve_report", "evolve_retro",
     "marketplace_detail",
     "marketplace_developer_application_fill", "marketplace_developer_application_open",
     "marketplace_developer_status", "marketplace_open", "marketplace_publish_fill", "marketplace_publish_open",
