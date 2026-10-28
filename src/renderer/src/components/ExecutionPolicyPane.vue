@@ -516,8 +516,17 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
         <h2>{{ $t('settings.executionPolicy.sourceTitle') }}</h2>
       </div>
       <p class="ep-hint">{{ $t('settings.executionPolicy.sourceHint') }}</p>
-      <div class="ep-source-list settings-segmented">
-        <label v-for="source in (['default', 'user', 'repository'] as ExecutionPolicySource[])" :key="source" class="ep-source-option">
+      <!-- A choice per workspace: without one there is nothing to choose, so
+           only the hint below shows. With no explicit choice yet, the source
+           in effect carries the selected fill and an "Automatic" note; its
+           radio stays unchecked so picking it records an explicit choice. -->
+      <div v-if="workspaceSnapshot" class="ep-source-list settings-segmented">
+        <label
+          v-for="source in (['default', 'user', 'repository'] as ExecutionPolicySource[])"
+          :key="source"
+          class="ep-source-option"
+          :class="{ 'ep-source-implicit': selectedSource === null && workspaceSnapshot.activeSource === source }"
+        >
           <input
             type="radio"
             name="execution-policy-source"
@@ -529,6 +538,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
           <span>
             <strong>{{ sourceLabel(source) }}</strong>
             <small v-if="source === 'repository' && recommendation">{{ recommendationStateLabel(recommendation.state) }}</small>
+            <small v-if="selectedSource === null && workspaceSnapshot.activeSource === source">{{ $t('settings.executionPolicy.sourceImplicit') }}</small>
           </span>
         </label>
       </div>
@@ -872,6 +882,11 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-source-option span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; }
 .ep-source-option strong { font-weight: inherit; }
 .ep-source-option small { color: var(--text-secondary); font-size: var(--font-2xs); font-weight: 400; }
+.ep-source-option.ep-source-implicit {
+  background: var(--bg-selected);
+  color: var(--accent-bright);
+  font-weight: 600;
+}
 .ep-full-warning, .ep-warning:has(label) {
   margin: 0 0 var(--space-3);
   padding: var(--space-3) var(--space-4);

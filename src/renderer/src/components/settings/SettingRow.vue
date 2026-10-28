@@ -25,7 +25,7 @@ const folded = computed(() => (props.foldDescription && props.description ? lead
   <div class="setting-row">
     <div class="setting-row-text">
       <div v-if="title" class="setting-row-title">{{ title }}</div>
-      <div v-if="description" class="setting-row-desc">{{ folded ? folded.lead : description }}</div>
+      <div v-if="description" class="setting-row-desc"><slot name="description">{{ folded ? folded.lead : description }}</slot></div>
       <details v-if="folded?.rest" class="settings-more">
         <summary>{{ t('action.learn-more') }}</summary>
         <p>{{ folded.rest }}</p>

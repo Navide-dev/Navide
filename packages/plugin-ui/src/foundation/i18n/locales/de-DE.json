@@ -1196,7 +1196,7 @@
     "go-to-commit": "Zum Commit",
     "install-missing": "Fehlende installieren",
     "fix": "Beheben",
-    "add-mcp": "MCP hinzufügen +",
+    "add-mcp": "+ MCP hinzufügen",
     "open-mcp-config": "MCP-Konfiguration öffnen",
     "accept-ours": "Unsere übernehmen",
     "accept-theirs": "Deren übernehmen",
@@ -1842,6 +1842,7 @@
         "repository": "Repository-Richtlinie"
       },
       "sourceNeedsWorkspace": "Die Quellenauswahl für den Arbeitsbereich ist verfügbar, sobald ein Arbeitsbereich geöffnet ist.",
+      "sourceImplicit": "Automatisch",
       "recommendationTitle": "Repository-Empfehlung",
       "untrusted": "Nicht vertrauenswürdig",
       "recommendationHint": "Diese Richtlinie stammt aus dem Repository des Arbeitsbereichs und überschreibt die aktive Quelle nie ohne ausdrückliche Annahme.",
@@ -1944,6 +1945,7 @@
       "developerNative": "Entwickler und nativer Code",
       "pageOn": "An",
       "developerOnMarker": "Entw.",
+      "nativeOnMarker": "Nativ",
       "browseMarketplace": "Navide Marketplace durchsuchen",
       "bundledGit": "Mitgeliefertes Git",
       "state": {
@@ -2496,7 +2498,7 @@
       "idle-reclaim-never": "Nie",
       "idle-reclaim-now": "Jetzt freigeben",
       "idle-reclaim-now-hint": "Jetzt beenden, statt zu warten: {count} Pane kommt infrage und belegt etwa {size}. | Jetzt beenden, statt zu warten: {count} Panes kommen infrage und belegen etwa {size}.",
-      "idle-reclaim-now-empty": "Derzeit kommt kein Pane infrage – das fokussierte Pane, eines, das auf Ihre Antwort wartet, eines mit nicht gesendetem Text und eines, das sich nicht fortsetzen lässt, werden nie freigegeben.",
+      "idle-reclaim-now-empty": "Derzeit kommt kein Pane infrage. Das fokussierte Pane, eines, das auf Ihre Antwort wartet, eines mit nicht gesendetem Text und eines, das sich nicht fortsetzen lässt, werden nie freigegeben.",
       "idle-reclaim-now-action": "{count} jetzt freigeben",
       "idle-reclaim-now-action-empty": "Nichts freizugeben",
       "default-editor": "Standardeditor",
@@ -2549,7 +2551,7 @@
       "resume-behavior-never": "Immer neu starten",
       "resume-behavior-ask": "Jedes Mal fragen",
       "restore-scope": "Umfang der Fortsetzung",
-      "restore-scope-hint": "Welche CLIs bei „Immer fortsetzen“ wieder geöffnet werden: eine CLI, die aktuelle Grid-Seite, der aktive Tab, alle CLIs oder „Automatisch“ (die beim letzten Schließen liefen).",
+      "restore-scope-hint": "Welche CLIs bei „Immer fortsetzen“ wieder geöffnet werden. Zur Wahl stehen eine CLI, die aktuelle Grid-Seite, der aktive Tab, alle CLIs oder „Automatisch“ (die beim letzten Schließen liefen).",
       "restore-scope-single": "Eine CLI",
       "restore-scope-page": "Aktuelle Grid-Seite",
       "restore-scope-tab": "Aktiver Tab",
@@ -6975,7 +6977,7 @@
       },
       "reminder": {
         "title": "Erinnerung",
-        "active": "Aktiv",
+        "active": "Zu prüfen",
         "snoozed": "Zurückgestellt",
         "dismissed": "Verworfen",
         "until": "bis {date}",
@@ -7865,7 +7867,7 @@
       "filter": {
         "all": "Alle",
         "customized": "Angepasst",
-        "conflicts": "Konflikte"
+        "conflicts": "Gemeinsame Tasten"
       },
       "export": "Exportieren",
       "import": "Importieren",
@@ -11673,7 +11675,7 @@
     "overview": {
       "title": "Offenlegungsübersicht",
       "intro": "Alle aus dem Navide Marketplace installierten Navide-Plug-ins: was sie deklarieren, ihre Risikostufe, die letzte Aktivität und Ungewöhnliches – auf einer Seite. Nur Einträge; nichts hier ändert, was ein Navide-Plug-in darf.",
-      "empty": "Es ist kein Navide-Plug-in aus dem Navide Marketplace installiert.",
+      "empty": "Aus dem Navide Marketplace ist noch nichts installiert.",
       "installedScan": "Bei der Installation verifizierter Scan",
       "noScanRecord": "Bei der Installation wurde kein Scan erfasst.",
       "activity": "Letzte Aktivität",

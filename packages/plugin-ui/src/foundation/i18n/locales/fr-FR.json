@@ -1196,7 +1196,7 @@
     "go-to-commit": "Aller au commit",
     "install-missing": "Installer les éléments manquants",
     "fix": "Corriger",
-    "add-mcp": "Ajouter un MCP +",
+    "add-mcp": "+ Ajouter un MCP",
     "open-mcp-config": "Ouvrir la configuration MCP",
     "accept-ours": "Accepter la nôtre",
     "accept-theirs": "Accepter la leur",
@@ -1842,6 +1842,7 @@
         "repository": "Politique du dépôt"
       },
       "sourceNeedsWorkspace": "La sélection de la source de l’espace de travail est disponible une fois un espace de travail ouvert.",
+      "sourceImplicit": "Automatique",
       "recommendationTitle": "Recommandation du dépôt",
       "untrusted": "Non fiable",
       "recommendationHint": "Cette politique provient du dépôt de l’espace de travail et ne remplace jamais la source active sans acceptation explicite.",
@@ -1944,6 +1945,7 @@
       "developerNative": "Développeur et code natif",
       "pageOn": "Activé",
       "developerOnMarker": "Dév.",
+      "nativeOnMarker": "Natif",
       "browseMarketplace": "Parcourir Navide Marketplace",
       "bundledGit": "Git fourni",
       "state": {
@@ -2496,7 +2498,7 @@
       "idle-reclaim-never": "Jamais",
       "idle-reclaim-now": "Libérer maintenant",
       "idle-reclaim-now-hint": "L’arrêter maintenant sans attendre : {count} pane est concerné et occupe environ {size}. | Les arrêter maintenant sans attendre : {count} panes sont concernés et occupent environ {size}.",
-      "idle-reclaim-now-empty": "Aucun pane n’est concerné pour l’instant – le pane actif, un pane qui attend votre réponse, un pane contenant du texte non envoyé et un pane qui ne peut pas être repris ne sont jamais libérés.",
+      "idle-reclaim-now-empty": "Aucun pane n’est concerné pour l’instant. Le pane actif, un pane qui attend votre réponse, un pane contenant du texte non envoyé et un pane qui ne peut pas être repris ne sont jamais libérés.",
       "idle-reclaim-now-action": "Libérer {count} maintenant",
       "idle-reclaim-now-action-empty": "Rien à libérer",
       "default-editor": "Éditeur par défaut",
@@ -2549,7 +2551,7 @@
       "resume-behavior-never": "Toujours démarrer à neuf",
       "resume-behavior-ask": "Demander à chaque fois",
       "restore-scope": "Portée de la reprise",
-      "restore-scope-hint": "Les CLI rouvertes quand Navide reprend toujours : une CLI, la page de grille actuelle, l’onglet actif, toutes les CLI ou Auto (celles qui tournaient à la dernière fermeture).",
+      "restore-scope-hint": "Les CLI rouvertes quand Navide reprend toujours. Choisissez une CLI, la page de grille actuelle, l’onglet actif, toutes les CLI ou Auto (celles qui tournaient à la dernière fermeture).",
       "restore-scope-single": "Une CLI",
       "restore-scope-page": "Page de grille actuelle",
       "restore-scope-tab": "Onglet actif",
@@ -6975,7 +6977,7 @@
       },
       "reminder": {
         "title": "Rappel",
-        "active": "Actif",
+        "active": "À examiner",
         "snoozed": "Reporté",
         "dismissed": "Ignoré",
         "until": "jusqu’au {date}",
@@ -7865,7 +7867,7 @@
       "filter": {
         "all": "Tous",
         "customized": "Personnalisés",
-        "conflicts": "Conflits"
+        "conflicts": "Touches partagées"
       },
       "export": "Exporter",
       "import": "Importer",
@@ -11673,7 +11675,7 @@
     "overview": {
       "title": "Vue d’ensemble des déclarations",
       "intro": "Tous les plugins Navide installés depuis la Navide Marketplace : ce qu’ils déclarent, leur niveau de risque, leur activité récente et ce qui est inhabituel, sur une seule page. Il s’agit uniquement d’enregistrements : rien ici ne change ce qu’un plugin Navide a le droit de faire.",
-      "empty": "Aucun plugin Navide de la Navide Marketplace n’est installé.",
+      "empty": "Rien de la Navide Marketplace n’est encore installé.",
       "installedScan": "Analyse vérifiée à l’installation",
       "noScanRecord": "Aucune analyse n’a été enregistrée à l’installation.",
       "activity": "Activité récente",

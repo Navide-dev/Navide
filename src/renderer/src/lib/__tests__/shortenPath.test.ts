@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shortenPath } from '../shortenPath'
+import { shortenMiddle, shortenPath } from '../shortenPath'
 
 describe('shortenPath', () => {
   it('leaves a path that fits alone', () => {
@@ -22,5 +22,17 @@ describe('shortenPath', () => {
     expect(shortenPath('C:\\Users\\me\\AppData\\Roaming\\Navide\\settings\\analyzer.json', 36)).toBe(
       'C:\\…\\Navide\\settings\\analyzer.json'
     )
+  })
+})
+
+describe('shortenMiddle', () => {
+  it('leaves a token that fits alone', () => {
+    expect(shortenMiddle('context7', 20)).toBe('context7')
+  })
+
+  it('cuts the middle and keeps both ends within the limit', () => {
+    const short = shortenMiddle('https://mcp.higgsfield.ai/mcp/v1/stream', 21)
+    expect(short).toBe('https://mc…/v1/stream')
+    expect(short.length).toBe(21)
   })
 })

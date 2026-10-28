@@ -14,12 +14,12 @@
 
 <style scoped>
 .settings-card {
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--settings-card-border, var(--border-default));
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
   overflow: hidden;
 }
 .settings-card :deep(> * + *) {
-  border-top: 1px solid var(--border-muted);
+  border-top: 1px solid var(--settings-card-divider, var(--border-muted));
 }
 </style>

@@ -1196,7 +1196,7 @@
     "go-to-commit": "Go to Commit",
     "install-missing": "Install Missing",
     "fix": "Fix",
-    "add-mcp": "Add MCP +",
+    "add-mcp": "+ Add MCP",
     "open-mcp-config": "Open MCP Config",
     "accept-ours": "Accept Ours",
     "accept-theirs": "Accept Theirs",
@@ -1842,6 +1842,7 @@
         "repository": "Repository policy"
       },
       "sourceNeedsWorkspace": "Workspace source selection is available after a workspace is open.",
+      "sourceImplicit": "Automatic",
       "recommendationTitle": "Repository recommendation",
       "untrusted": "Untrusted",
       "recommendationHint": "This policy comes from the workspace repository and never overrides the active source without explicit acceptance.",
@@ -1944,6 +1945,7 @@
       "developerNative": "Developer and native code",
       "pageOn": "On",
       "developerOnMarker": "Dev",
+      "nativeOnMarker": "Native",
       "browseMarketplace": "Browse Navide Marketplace",
       "bundledGit": "Bundled Git",
       "state": {
@@ -2496,7 +2498,7 @@
       "idle-reclaim-never": "Never",
       "idle-reclaim-now": "Reclaim now",
       "idle-reclaim-now-hint": "End it now instead of waiting: {count} pane qualifies, holding roughly {size}. | End them now instead of waiting: {count} panes qualify, holding roughly {size}.",
-      "idle-reclaim-now-empty": "No pane qualifies right now — the focused pane, one awaiting your answer, one with unsent text and one that cannot be resumed are never reclaimed.",
+      "idle-reclaim-now-empty": "No pane qualifies right now. The focused pane, one awaiting your answer, one with unsent text and one that cannot be resumed are never reclaimed.",
       "idle-reclaim-now-action": "Reclaim {count} Now",
       "idle-reclaim-now-action-empty": "Nothing to Reclaim",
       "default-editor": "Default editor",
@@ -2549,7 +2551,7 @@
       "resume-behavior-never": "Always start fresh",
       "resume-behavior-ask": "Ask each time",
       "restore-scope": "Resume scope",
-      "restore-scope-hint": "Which CLIs reopen when Navide always resumes: one CLI, the current Grid page, the active tab, all CLIs, or Auto (the ones running at last close).",
+      "restore-scope-hint": "Which CLIs reopen when Navide always resumes. Choose one CLI, the current Grid page, the active tab, all CLIs, or Auto (the ones running at last close).",
       "restore-scope-single": "One CLI",
       "restore-scope-page": "Current Grid page",
       "restore-scope-tab": "Active tab",
@@ -6975,7 +6977,7 @@
       },
       "reminder": {
         "title": "Reminder",
-        "active": "Active",
+        "active": "Needs review",
         "snoozed": "Snoozed",
         "dismissed": "Dismissed",
         "until": "until {date}",
@@ -7865,7 +7867,7 @@
       "filter": {
         "all": "All",
         "customized": "Customized",
-        "conflicts": "Conflicts"
+        "conflicts": "Shared keys"
       },
       "export": "Export",
       "import": "Import",
@@ -11673,7 +11675,7 @@
     "overview": {
       "title": "Disclosure overview",
       "intro": "Every Navide plugin installed from the Navide Marketplace: what it declares, its risk level, recent activity and anything unusual, on one page. Records only; nothing here changes what a Navide plugin may do.",
-      "empty": "No Navide plugin from the Navide Marketplace is installed.",
+      "empty": "Nothing from the Navide Marketplace is installed yet.",
       "installedScan": "Scan verified at install",
       "noScanRecord": "No scan was recorded at install.",
       "activity": "Recent activity",

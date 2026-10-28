@@ -271,7 +271,11 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
 .cli-ext-type, .cli-ext-tier, .cli-ext-owner, .cli-ext-disabled, .cli-ext-unknown, .cli-ext-cap, .cli-ext-inferred { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; font-size: var(--font-2xs); line-height: 16px; border-radius: var(--radius-pill); padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
 .cli-ext-type { color: var(--text-primary); background: var(--bg-muted); }
 .cli-ext-tier.tier-L3 { color: var(--danger-fg); border-color: var(--danger-muted); background: var(--danger-subtle); }
-.cli-ext-tier.tier-L2 { color: var(--attention-on-subtle, var(--text-primary)); border-color: var(--attention-muted); background: var(--attention-subtle); }
+/* Most hooks and servers run a separate program, so an amber pill on every
+   row would be noise: a neutral chip with a small "program" mark keeps the
+   information, and colour stays for the in-process tier. */
+.cli-ext-tier.tier-L2 { color: var(--text-primary); border-color: var(--border-default); background: var(--bg-muted); }
+.cli-ext-tier.tier-L2::before { content: '▸'; margin-right: 4px; color: var(--text-secondary); }
 .cli-ext-owner { color: var(--accent-fg, var(--text-primary)); border-color: var(--accent-muted); background: var(--accent-subtle); }
 .cli-ext-disabled { border-style: dashed; }
 .cli-ext-unknown { border-style: dashed; color: var(--warning-fg, var(--text-primary)); border-color: var(--attention-muted); }

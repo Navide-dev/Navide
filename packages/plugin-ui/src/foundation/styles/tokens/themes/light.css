@@ -34,6 +34,12 @@
   --border-default: #d1d9e0;
   --border-muted: #eaeef2;
   --border-strong: #afb8c1;
+  /* Settings window only: card frames at ~3:1 against the white page, row
+     dividers that show on the card fill, and an inset one step below the
+     card. Other themes fall back to their border/inset tokens. */
+  --settings-card-border: #8c959f;
+  --settings-card-divider: #d1d9e0;
+  --settings-inset: #eef1f4;
 
   /* Accent (blue) — link blue meets AA on white */
   --accent-fg: #0969da;      /* ~5.4:1 */

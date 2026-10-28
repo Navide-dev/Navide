@@ -22,3 +22,17 @@ export function shortenPath(path: string, max = 64): string {
   if (tail.length >= parts.length - headCount) return path
   return `${head}${sep}…${sep}${tail.join(sep)}`
 }
+
+/**
+ * Shorten a single token that has no path segments to drop (a URL, a server
+ * name, an id) by cutting its middle: `https://mcp.ex…com/mcp`. Both ends stay,
+ * because the scheme or host and the last part are what people recognise. A
+ * token that already fits is returned unchanged; the caller keeps the full
+ * text in a tooltip.
+ */
+export function shortenMiddle(text: string, max = 40): string {
+  if (text.length <= max) return text
+  const keep = max - 1
+  const head = Math.ceil(keep / 2)
+  return `${text.slice(0, head)}…${text.slice(text.length - (keep - head))}`
+}

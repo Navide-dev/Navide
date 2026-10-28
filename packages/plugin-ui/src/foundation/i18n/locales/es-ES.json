@@ -1196,7 +1196,7 @@
     "go-to-commit": "Ir al commit",
     "install-missing": "Instalar lo que falta",
     "fix": "Corregir",
-    "add-mcp": "Añadir MCP +",
+    "add-mcp": "+ Añadir MCP",
     "open-mcp-config": "Abrir configuración de MCP",
     "accept-ours": "Aceptar la nuestra",
     "accept-theirs": "Aceptar la suya",
@@ -1842,6 +1842,7 @@
         "repository": "Política del repositorio"
       },
       "sourceNeedsWorkspace": "La selección de fuente del área de trabajo está disponible cuando hay un área de trabajo abierta.",
+      "sourceImplicit": "Automático",
       "recommendationTitle": "Recomendación del repositorio",
       "untrusted": "No es de confianza",
       "recommendationHint": "Esta política procede del repositorio del área de trabajo y nunca sustituye a la fuente activa sin una aceptación explícita.",
@@ -1944,6 +1945,7 @@
       "developerNative": "Desarrollador y código nativo",
       "pageOn": "Activado",
       "developerOnMarker": "Desarr.",
+      "nativeOnMarker": "Nativo",
       "browseMarketplace": "Explorar Navide Marketplace",
       "bundledGit": "Git integrado",
       "state": {
@@ -2496,7 +2498,7 @@
       "idle-reclaim-never": "Nunca",
       "idle-reclaim-now": "Liberar ahora",
       "idle-reclaim-now-hint": "Termínalo ahora en lugar de esperar: {count} pane cumple los requisitos y ocupa unos {size}. | Termínalos ahora en lugar de esperar: {count} panes cumplen los requisitos y ocupan unos {size}.",
-      "idle-reclaim-now-empty": "Ahora mismo ningún pane cumple los requisitos: nunca se liberan el pane enfocado, uno que espera tu respuesta, uno con texto sin enviar ni uno que no se pueda reanudar.",
+      "idle-reclaim-now-empty": "Ahora mismo ningún pane cumple los requisitos. Nunca se liberan el pane enfocado, uno que espera tu respuesta, uno con texto sin enviar ni uno que no se pueda reanudar.",
       "idle-reclaim-now-action": "Liberar {count} ahora",
       "idle-reclaim-now-action-empty": "Nada que liberar",
       "default-editor": "Editor predeterminado",
@@ -2549,7 +2551,7 @@
       "resume-behavior-never": "Empezar siempre desde cero",
       "resume-behavior-ask": "Preguntar cada vez",
       "restore-scope": "Alcance de la reanudación",
-      "restore-scope-hint": "Qué CLI se vuelven a abrir cuando Navide siempre reanuda: una CLI, la página actual de la cuadrícula, la pestaña activa, todas las CLI o Automático (las que se ejecutaban al cerrar).",
+      "restore-scope-hint": "Qué CLI se vuelven a abrir cuando Navide siempre reanuda. Elige una CLI, la página actual de la cuadrícula, la pestaña activa, todas las CLI o Automático (las que se ejecutaban al cerrar).",
       "restore-scope-single": "Una CLI",
       "restore-scope-page": "Página de cuadrícula actual",
       "restore-scope-tab": "Pestaña activa",
@@ -6975,7 +6977,7 @@
       },
       "reminder": {
         "title": "Recordatorio",
-        "active": "Activo",
+        "active": "Por revisar",
         "snoozed": "Pospuesto",
         "dismissed": "Descartado",
         "until": "hasta {date}",
@@ -7865,7 +7867,7 @@
       "filter": {
         "all": "Todos",
         "customized": "Personalizados",
-        "conflicts": "Conflictos"
+        "conflicts": "Teclas compartidas"
       },
       "export": "Exportar",
       "import": "Importar",
@@ -11673,7 +11675,7 @@
     "overview": {
       "title": "Vista general de declaraciones",
       "intro": "Todos los complementos de Navide instalados desde el Navide Marketplace: lo que declaran, su nivel de riesgo, la actividad reciente y cualquier cosa inusual, en una sola página. Solo registros; nada de aquí cambia lo que puede hacer un complemento de Navide.",
-      "empty": "No hay ningún complemento de Navide del Navide Marketplace instalado.",
+      "empty": "Todavía no hay nada instalado del Navide Marketplace.",
       "installedScan": "Análisis verificado al instalar",
       "noScanRecord": "No se registró ningún análisis al instalar.",
       "activity": "Actividad reciente",

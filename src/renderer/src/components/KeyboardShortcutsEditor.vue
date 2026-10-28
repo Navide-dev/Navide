@@ -663,6 +663,13 @@ const visibleReference = computed(() => {
   gap: 4px;
   margin-left: auto;
 }
+/* Narrow page: the search takes a full row; under it the filter chips start
+   at the content edge and the actions sit at the right of the same row while
+   they fit, dropping below the chips as one group otherwise. */
+.kse-toolbar { container: kse-toolbar / inline-size; }
+@container kse-toolbar (max-width: 720px) {
+  .kse-search { flex-basis: 100%; }
+}
 .kse-filter,
 .kse-reset-all {
   padding: 5px 10px;
@@ -924,6 +931,8 @@ const visibleReference = computed(() => {
 .kse-add {
   border: 1px dashed var(--border-default);
   border-radius: 6px;
+  /* The add placeholder: a readable "+" inside its 28px target. */
+  font-size: var(--font-sm);
 }
 /* 28px targets: the remove "✕" and add "+" are the main actions on a row. */
 .kse-chip-remove,

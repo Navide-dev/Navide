@@ -110,7 +110,7 @@ const emit = defineEmits<{
 .settings-nav-item-marker {
   margin-left: auto;
   flex: none;
-  padding: 0 6px;
+  padding: 0 5px;
   border-radius: var(--radius-pill);
   font-size: var(--font-xs);
   font-weight: 600;
@@ -136,6 +136,19 @@ const emit = defineEmits<{
   align-items: center;
   flex-shrink: 0;
 }
+/* A badge or marker takes only its own width at the right edge: the row's
+   right padding shrinks to make room for it and the gap before it halves,
+   so the label keeps the rest of the width ("Плагины Navide", "Navide
+   プラグイン" stay on one line beside their marker at 1280). */
+@media (min-width: 721px) {
+  .settings-nav-item:has(.settings-nav-item-badge, .settings-nav-item-marker) {
+    padding-right: 6px;
+    gap: 4px;
+  }
+  .settings-nav-item:has(.settings-nav-item-badge, .settings-nav-item-marker) .settings-nav-item-label {
+    margin-left: 4px;
+  }
+}
 /* Up to two lines per row: a label too long for the sidebar (ja-JP "Navide
    マーケットプレイス", es-ES "Complementos de Navide") wraps under its own
    first letter (not under the icon), and only a third line ends in an
@@ -154,12 +167,13 @@ const emit = defineEmits<{
 }
 
 /* Expanded parent: a heading for the page rows under it, not a second
-   selection. Plain label weight and colour (icon included), no fill, no
-   indicator bar: only the page row under it carries the selection. */
+   selection. It marks that it contains the selection with accent text and
+   icon only: normal weight, no fill, no indicator bar. The page row under it
+   carries the only fill. */
 @media (min-width: 721px) {
   .settings-nav-item.active.expanded {
     background: transparent;
-    color: var(--text-primary);
+    color: var(--accent-fg);
     font-weight: 400;
   }
   .settings-nav-item.active.expanded:hover {

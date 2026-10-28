@@ -227,7 +227,7 @@ describe('SettingsModal Navide Plugins pages', () => {
   })
 
   // The pages split one scrolling page, so each page's state shows on its row and
-  // in the narrow tab strip: ⚠ while Execution Policy warns, "On" for Developer.
+  // in the narrow tab strip: ⚠ while Execution Policy warns, "Dev" or "Native" for Developer.
   const marker = (label: string) => wrapper!.findAllComponents(SettingsNavSubItem).find((n) => n.props('label') === label)!.props('marker')
   const tabMarker = (label: string) => body('extensions').findAll('.ext-pages-tab').find((tab) => tab.text().startsWith(label))!.find('.ext-pages-marker')
 
@@ -252,15 +252,20 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(marker('Execution Policy')).toBeNull()
   })
 
-  it('marks Developer and native code "On" with the switches that are on', async () => {
+  it('marks Developer and native code with the switch that is on', async () => {
     await mountModal('extensions')
     expect(marker('Developer and native code')).toBeNull()
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode', 'Allow native backends'])
     await flushPromises()
-    expect(marker('Developer and native code')).toEqual({ text: 'On', tone: 'on', label: 'On: Turn on Developer Mode, Allow native backends' })
+    expect(marker('Developer and native code')).toEqual({ text: 'Dev', tone: 'on', label: 'On: Turn on Developer Mode, Allow native backends' })
     expect(tabMarker('Developer and native code').attributes('aria-label')).toBe('On: Turn on Developer Mode, Allow native backends')
     expect(marker('Execution Policy')).toBeNull()
+
+    // Developer Mode off, a native-code switch on: the marker names that switch.
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Allow native backends'])
+    await flushPromises()
+    expect(marker('Developer and native code')).toMatchObject({ text: 'Native' })
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', [])
     await flushPromises()

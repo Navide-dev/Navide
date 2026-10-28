@@ -142,7 +142,11 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
           :style="swatchStyle(color)"
           :title="$t(`statusBadges.color.${color}`)"
           @click="setStatusBadgePref(status, { color })"
-        />
+        >
+          <!-- The pick carries a check in the swatch's own text colour, not
+               only the ring around it. -->
+          <svg v-if="colorOf(status) === color" class="sb-swatch-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>
+        </button>
       </div>
 
       <button
@@ -371,6 +375,11 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
 .sb-swatch.is-on {
   box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent-focus);
 }
+.sb-swatch {
+  display: inline-grid;
+  place-items: center;
+}
+.sb-swatch-check { display: block; }
 .sb-swatch:focus-visible {
   outline: 2px solid var(--accent-focus);
   outline-offset: 2px;

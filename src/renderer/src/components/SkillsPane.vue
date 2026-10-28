@@ -576,7 +576,7 @@ const matrixRows = computed<MatrixRow[]>(() => {
 })
 
 /** Rows grouped by source, for the matrix's group rows and the browse view's sections. */
-const groupedRows = computed<Array<{ source: string; label: string; rows: MatrixRow[] }>>(() => {
+const groupedRows = computed<Array<{ source: string; label: string; keypath: string; param: string; value: string; rows: MatrixRow[] }>>(() => {
   const groups = new Map<string, MatrixRow[]>()
   for (const row of matrixRows.value) {
     const source = row.kind === 'shared' ? 'shared' : row.skill.source
@@ -589,6 +589,11 @@ const groupedRows = computed<Array<{ source: string; label: string; rows: Matrix
     label: source === 'shared'
       ? t('settings.skills.group-shared', { root: '~/.agents/skills' })
       : t('settings.skills.group-native', { agent: source }),
+    // The heading renders the path or agent id in its own element, so the
+    // label's uppercase never reaches it ("~/.AGENTS/SKILLS").
+    keypath: source === 'shared' ? 'settings.skills.group-shared' : 'settings.skills.group-native',
+    param: source === 'shared' ? 'root' : 'agent',
+    value: source === 'shared' ? '~/.agents/skills' : source,
     rows,
   }))
 })
@@ -979,7 +984,7 @@ watch(
         <template v-else-if="view === 'browse'">
           <section v-for="group in groupedRows" :key="group.source" class="skills-group">
             <h3 class="skills-group-title">
-              {{ group.label }}<span class="count">{{ group.rows.length }}</span>
+              <i18n-t :keypath="group.keypath" tag="span" scope="global"><template #[group.param]><span class="skills-group-id">{{ group.value }}</span></template></i18n-t><span class="count">{{ group.rows.length }}</span>
             </h3>
             <div class="skills-cards">
               <button
@@ -1051,7 +1056,7 @@ watch(
               </thead>
               <tbody v-for="group in groupedRows" :key="group.source">
                 <tr class="group">
-                  <th scope="rowgroup" :colspan="agents.length + 2">{{ group.label }}</th>
+                  <th scope="rowgroup" :colspan="agents.length + 2"><i18n-t :keypath="group.keypath" tag="span" scope="global"><template #[group.param]><span class="skills-group-id">{{ group.value }}</span></template></i18n-t></th>
                 </tr>
                 <tr
                   v-for="row in group.rows"
@@ -1738,6 +1743,8 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
   color: var(--text-secondary);
 }
 .skill-migrate { padding: 3px 8px; font-size: var(--font-2xs); white-space: nowrap; }
+/* Paths and ids keep their own case in every locale. */
+.skills-group-id { text-transform: none; letter-spacing: normal; }
 .skill-source-tag,
 .skills-matrix .matrix-source {
   display: inline-block;

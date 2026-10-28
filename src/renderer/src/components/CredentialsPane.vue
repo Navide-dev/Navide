@@ -595,7 +595,9 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-card:hover:not(:disabled) { background: var(--bg-muted); border-color: var(--border-default); }
 .cred-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
 /* Snoozed or dismissed: set back, but still readable. */
-.cred-card.quiet { border-style: dashed; background: transparent; }
+/* A snoozed or dismissed finding: no fill, its words quieter. Dashed frames
+   are kept for drop zones and add placeholders. */
+.cred-card.quiet { background: transparent; color: var(--text-secondary); }
 .cred-card.quiet .cred-card-head strong { color: var(--text-primary); }
 .cred-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; min-width: 0; }
 /* Titles are full sentences in en/ja: two lines before they clip. */

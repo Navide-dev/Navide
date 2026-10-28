@@ -1196,7 +1196,7 @@
     "go-to-commit": "커밋으로 이동",
     "install-missing": "누락된 항목 설치",
     "fix": "수정",
-    "add-mcp": "MCP 추가 +",
+    "add-mcp": "+ MCP 추가",
     "open-mcp-config": "MCP 설정 열기",
     "accept-ours": "현재 쪽 적용",
     "accept-theirs": "상대 쪽 적용",
@@ -1842,6 +1842,7 @@
         "repository": "저장소 정책"
       },
       "sourceNeedsWorkspace": "작업 영역 소스는 작업 영역을 연 뒤에 선택할 수 있어요.",
+      "sourceImplicit": "자동",
       "recommendationTitle": "저장소 권장 사항",
       "untrusted": "신뢰하지 않음",
       "recommendationHint": "이 정책은 작업 영역 저장소에서 가져오며, 명시적으로 수락하지 않으면 사용 중인 소스를 절대 대체하지 않아요.",
@@ -1944,6 +1945,7 @@
       "developerNative": "개발자 및 네이티브 코드",
       "pageOn": "켜짐",
       "developerOnMarker": "개발",
+      "nativeOnMarker": "네이티브",
       "browseMarketplace": "Navide 마켓플레이스 둘러보기",
       "bundledGit": "기본 포함 Git",
       "state": {
@@ -2496,7 +2498,7 @@
       "idle-reclaim-never": "안 함",
       "idle-reclaim-now": "지금 회수",
       "idle-reclaim-now-hint": "기다리지 않고 지금 종료해요: 대상 pane {count}개가 약 {size}를 쓰고 있어요.",
-      "idle-reclaim-now-empty": "지금은 대상 pane이 없어요 — 포커스된 pane, 답변을 기다리는 pane, 보내지 않은 텍스트가 있는 pane, 재개할 수 없는 pane은 회수하지 않아요.",
+      "idle-reclaim-now-empty": "지금은 대상 pane이 없어요. 포커스된 pane, 답변을 기다리는 pane, 보내지 않은 텍스트가 있는 pane, 재개할 수 없는 pane은 회수하지 않아요.",
       "idle-reclaim-now-action": "지금 {count}개 회수",
       "idle-reclaim-now-action-empty": "회수할 항목 없음",
       "default-editor": "기본 편집기",
@@ -2549,7 +2551,7 @@
       "resume-behavior-never": "항상 새로 시작",
       "resume-behavior-ask": "매번 묻기",
       "restore-scope": "재개 범위",
-      "restore-scope-hint": "항상 재개할 때 다시 열 CLI예요: CLI 하나, 현재 그리드 페이지, 활성 탭, 모든 CLI 또는 자동(마지막으로 닫을 때 실행 중이던 CLI).",
+      "restore-scope-hint": "항상 재개할 때 다시 열 CLI예요. CLI 하나, 현재 그리드 페이지, 활성 탭, 모든 CLI 또는 자동(마지막으로 닫을 때 실행 중이던 CLI) 중에서 고르세요.",
       "restore-scope-single": "CLI 하나",
       "restore-scope-page": "현재 Grid 페이지",
       "restore-scope-tab": "활성 탭",
@@ -6975,7 +6977,7 @@
       },
       "reminder": {
         "title": "알림",
-        "active": "활성",
+        "active": "확인 필요",
         "snoozed": "다시 알림 예약됨",
         "dismissed": "닫음",
         "until": "{date}까지",
@@ -7865,7 +7867,7 @@
       "filter": {
         "all": "전체",
         "customized": "사용자 지정됨",
-        "conflicts": "충돌"
+        "conflicts": "공유 키"
       },
       "export": "내보내기",
       "import": "가져오기",
@@ -11673,7 +11675,7 @@
     "overview": {
       "title": "공개 정보 개요",
       "intro": "Navide 마켓플레이스에서 설치한 모든 Navide 플러그인의 선언 내용, 위험 수준, 최근 활동, 특이 사항을 한 페이지에서 보여 줘요. 기록일 뿐이며, 여기서 Navide 플러그인이 할 수 있는 일을 바꾸지는 않아요.",
-      "empty": "Navide 마켓플레이스에서 설치한 Navide 플러그인이 없어요.",
+      "empty": "Navide 마켓플레이스에서 아직 아무것도 설치하지 않았어요.",
       "installedScan": "설치 시 검증된 검사",
       "noScanRecord": "설치 시 기록된 검사가 없어요.",
       "activity": "최근 활동",

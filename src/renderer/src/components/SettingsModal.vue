@@ -319,10 +319,18 @@ function pluginsPageMarker(page: PluginsPage): { text: string; tone: 'risk' | 'o
   }
   if (page === 'developer' && developerSwitchesOn.value.length) {
     const on = t('settings.extensions.pageOn')
-    return { text: on, tone: 'on', label: t('settings.extensionsPolicy.labeledValue', { label: on, value: developerSwitchesOn.value.join(', ') }) }
+    return { text: developerMarkerText.value, tone: 'on', label: t('settings.extensionsPolicy.labeledValue', { label: on, value: developerSwitchesOn.value.join(', ') }) }
   }
   return null
 }
+// One marker text on the page row and the folded parent row, naming the switch
+// that is on: "Dev" while Developer Mode is on, "Native" while only a
+// native-code switch is.
+const developerMarkerText = computed(() =>
+  developerSwitchesOn.value.includes(t('settings.extensions.developerMode.switch'))
+    ? t('settings.extensions.developerOnMarker')
+    : t('settings.extensions.nativeOnMarker'),
+)
 // The pages fold away while another entry is open, so the Navide Plugins row
 // carries their state instead: a warning first, otherwise "Developer on" (a
 // bare "On" next to the entry's name would read as the plugins being on).
@@ -332,7 +340,7 @@ const pluginsFoldedMarker = computed(() => {
   if (warning) return warning
   if (!developerSwitchesOn.value.length) return null
   return {
-    text: t('settings.extensions.developerOnMarker'),
+    text: developerMarkerText.value,
     tone: 'on' as const,
     label: t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.developerNative'), value: developerSwitchesOn.value.join(', ') }),
   }
@@ -628,9 +636,11 @@ const cliAgentRows = computed(() => {
         label: spec.label,
         hint: spec.hint ?? '',
         version: dep?.version ?? '',
-        // A CLI that is not installed has nothing to fix yet: no warning glyph.
+        // A CLI that is not installed has nothing to fix yet: no warning glyph,
+        // and it is not counted under "Needs attention" (an empty machine would
+        // otherwise show every agent there). Only real problems count.
         installed: dep?.status !== 'missing',
-        needsAttention: dep?.status === 'missing' || dep?.status === 'outdated'
+        needsAttention: dep?.status === 'outdated'
           || identity?.signedIn === false
           || !!onboarding.cliHealth.value?.findings.some((finding) => finding.agent_key === spec.agentKey),
         chips: cliAgentRowChips(
@@ -3862,6 +3872,7 @@ watch(activeTab, (tab) => {
                 :description="reclaimNowCount > 0
                   ? $t('settings.general.idle-reclaim-now-hint', { count: reclaimNowCount, size: reclaimNowSize })
                   : $t('settings.general.idle-reclaim-now-empty')"
+                fold-description
               >
                 <template #control>
                   <button
@@ -3895,6 +3906,7 @@ watch(activeTab, (tab) => {
                 data-settings-section="general-restore-scope"
                 :title="$t('settings.appearance.restore-scope')"
                 :description="$t('settings.appearance.restore-scope-hint')"
+                fold-description
               >
                 <template #control>
                   <select :value="restoreScopeModel" @change="onRestoreScopeChange(($event.target as HTMLSelectElement).value)">
@@ -4767,6 +4779,11 @@ watch(activeTab, (tab) => {
               @click="helpTopic = topic"
             >{{ $t(`settings.help.topic.${topic}`) }}</button>
           </div>
+          <!-- Narrow page: the same chapters as one dropdown instead of tabs
+               wrapping into three or four rows. CSS shows one or the other. -->
+          <select v-model="helpTopic" class="help-topic-select" :aria-label="$t('settings.nav.help')">
+            <option v-for="topic in helpTopicOrder" :key="topic" :value="topic">{{ $t(`settings.help.topic.${topic}`) }}</option>
+          </select>
           <component :is="helpTopicComponents[helpTopic]" v-if="activeTab === 'help'" />
         </div>
 
@@ -4923,6 +4940,7 @@ watch(activeTab, (tab) => {
                 data-settings-section="general-notify-permission"
                 :title="$t('settings.general.notify-permission')"
                 :description="$t(`settings.general.notify-permission-status.${notifyPermissionStatus}`) + ' ' + $t('settings.general.notify-permission-hint')"
+                fold-description
               >
                 <template #control>
                   <button
@@ -4985,7 +5003,7 @@ watch(activeTab, (tab) => {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  background: var(--bg-inset);
+  background: var(--settings-inset, var(--bg-inset));
   border-right: 1px solid var(--border-default);
   /* No top padding: the sticky head carries it, so nothing scrolls into a
      gap above the head. scroll-padding-top keeps a row revealed by
@@ -5009,7 +5027,7 @@ watch(activeTab, (tab) => {
   gap: var(--space-2, 8px);
   margin: 0 calc(-1 * var(--space-2, 8px));
   padding: var(--space-3, 12px) var(--space-2, 8px) var(--space-2, 8px);
-  background: var(--bg-inset);
+  background: var(--settings-inset, var(--bg-inset));
   border-bottom: 1px solid var(--border-muted);
 }
 .s-ws-header {
@@ -5222,8 +5240,16 @@ watch(activeTab, (tab) => {
 /* CLI Agents cards and the selected agent's contained drawer. */
 .cli-agent-roster { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 18px 22px; }
 .cli-agent-toolbar, .cli-agent-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.cli-agent-toolbar { container: cli-agent-toolbar / inline-size; }
 .cli-agent-toolbar input { flex: 1; min-width: 130px; }
 .cli-agent-toolbar-controls { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto; }
+/* Narrow page: the search takes a full row; under it the chips start at the
+   content edge and Redetect sits at the right of the same row while it fits
+   (it drops below them as a whole otherwise). */
+@container cli-agent-toolbar (max-width: 720px) {
+  .cli-agent-toolbar input { flex: 1 1 100%; }
+  .cli-agent-toolbar-controls { flex: 1 1 100%; justify-content: space-between; margin-left: 0; }
+}
 .cli-agent-toolbar button, .cli-agent-manage {
   border: 1px solid var(--border-default); border-radius: var(--radius-sm);
   background: var(--bg-elevated); color: var(--text-primary); padding: 5px 9px; font: inherit; font-size: var(--font-xs); cursor: pointer;
@@ -5233,11 +5259,10 @@ watch(activeTab, (tab) => {
 /* List filters are the shared .settings-filter-chip (Skills, Prompts,
    Shortcuts use it too). */
 .cli-agent-filters { gap: 4px; }
-.cli-agent-toolbar button:disabled { opacity: .6; cursor: default; }
 .cli-agent-count { margin: 10px 0 14px; }
 .cli-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 12px; list-style: none; padding: 0; margin: 0; max-width: 100%; }
 /* border-box: a card's padding and border stay inside its grid column. */
-.cli-agent-card { box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer; }
+.cli-agent-card { box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--settings-card-border, var(--border-default)); border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer; }
 .cli-agent-card:hover { border-color: var(--border-strong); }
 .cli-agent-card.drag-over { box-shadow: inset 0 0 0 2px var(--accent-focus); }
 .cli-agent-card.is-disabled { background: var(--bg-muted); }
@@ -5382,13 +5407,27 @@ watch(activeTab, (tab) => {
   text-align: left;
 }
 .ap-theme-card:hover { border-color: var(--border-strong); background: var(--bg-muted); }
-/* Selected: a ring in the text colour, set off by a gap, plus the check mark,
-   so it never reads as the blue focus ring (that stays :focus-visible only). */
-.ap-theme-card.active { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--text-primary); }
+/* Selected: one cue, a 2px accent ring (the 1px border plus a 1px inset
+   shadow, no gap and no second ring) with a small check badge in its corner.
+   The focus ring stays :focus-visible only, offset outside the card. */
+.ap-theme-card.active { border-color: var(--accent-emphasis); box-shadow: inset 0 0 0 1px var(--accent-emphasis); }
 .ap-swatches { display: flex; gap: 4px; }
 .ap-swatch { width: 24px; height: 24px; border-radius: var(--radius-sm); border: 1px solid var(--border-muted); }
 .ap-theme-label { font-size: var(--font-xs); font-weight: 500; color: var(--text-primary); }
 .ap-check { position: absolute; top: 10px; right: 11px; font-size: var(--font-xs); color: var(--accent-fg); }
+.ap-theme-card .ap-check {
+  top: 8px;
+  right: 8px;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-emphasis);
+  color: var(--text-on-emphasis);
+  font-size: var(--font-2xs);
+  line-height: 1;
+}
 /* Asks for the full viewport so the row wraps it under the text, then fills
    the row width with aligned columns. */
 .ap-lang-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 10px; width: 100vw; max-width: 100%; }
@@ -5669,7 +5708,8 @@ watch(activeTab, (tab) => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.settings-path-btn--icon {
+/* 24px square hit target with its frame visible, enabled or not. */
+.settings-path-btn.settings-path-btn--icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5693,8 +5733,7 @@ watch(activeTab, (tab) => {
   color: var(--text-bright);
   background: var(--bg-muted);
 }
-/* Disabled drops the fill instead of fading, so the label stays readable. */
-.settings-path-btn:disabled { opacity: 1; background: transparent; border-color: var(--border-muted); color: var(--text-secondary); cursor: not-allowed; }
+/* Disabled follows the modal's one disabled rule (solid frame, 0.45). */
 
 button.tiny {
   min-height: var(--control-h-md);
@@ -5904,7 +5943,12 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 
 /* ── Appearance tab ─────────────────────────────────────────────────────────── */
 .appearance-body { overflow-y: auto; }
-.help-body { overflow-y: auto; padding: 18px 22px; }
+.help-body { overflow-y: auto; padding: 18px 22px; container: help-body / inline-size; }
+.help-topic-select { display: none; }
+@container help-body (max-width: 700px) {
+  .help-topics { display: none; }
+  .help-topic-select { display: block; width: 100%; max-width: 360px; margin-bottom: 18px; }
+}
 /* Help topics are page tabs, so they use the one underline tab style of the
    Navide Plugins pages and Marketplace views. At narrow widths the topics
    wrap onto a second row instead of scrolling sideways with the last ones
@@ -6329,7 +6373,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   background: var(--bg-base);
 }
 .s-sidebar {
-  background: var(--bg-inset);
+  background: var(--settings-inset, var(--bg-inset));
 }
 .s-nav-group-title { color: var(--text-secondary); }
 .s-search-input:hover:not(:disabled) { border-color: var(--border-strong); }
@@ -6391,21 +6435,21 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 .ap-theme-card:focus-visible,
 .ap-lang-btn:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: 2px; }
-.ap-theme-card.active,
 .ap-lang-btn.active { background: var(--accent-subtle); }
 .settings-meta-row { color: var(--text-secondary); }
 
 /* One disabled look for every button on a settings page, the panes mounted
-   inside it included: no fill, a dashed quiet frame (a plain outline is what
-   an enabled secondary button looks like), secondary text that stays
-   readable, and no hover or press feedback. Switches keep their own track. */
+   inside it included: no fill, the button's own solid frame, primary text
+   and the whole button at 0.45 opacity (text stays above 3:1), and no hover
+   or press feedback. Dashed frames are reserved for drop zones and add
+   placeholders, never for a disabled or secondary button. Switches keep
+   their own track. */
 .s-body :deep(button:disabled:not([role='switch'])),
 .s-body :deep(button[aria-disabled='true']:not([role='switch'])) {
-  opacity: 1;
+  opacity: 0.45;
   background: transparent;
-  border-color: var(--border-default);
-  border-style: dashed;
-  color: var(--text-secondary);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
   box-shadow: none;
   transform: none;
   cursor: default;
@@ -6414,10 +6458,34 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 /* Chinese, Japanese and Korean have no letter case: an uppercase eyebrow
    only shouts the Latin words inside it ("GUARD の動作", "ANTIGRAVITY CLI
    (GOOGLE)") and the tracking pulls the characters apart. In those locales
-   section labels and other eyebrows keep their size, weight and colour but
-   drop the transform and the letter-spacing. !important because each pane
-   sets its own eyebrow rule at a higher specificity. */
-.s-modal:is(:lang(ja), :lang(zh), :lang(ko)) :deep(*) {
+   the section labels and eyebrows (and only those) drop the transform and
+   the letter-spacing, and take one size and weight step up so they still
+   read as labels without the caps. !important because each pane sets its
+   own eyebrow rule at a higher specificity. */
+.s-modal:is(:lang(ja), :lang(zh), :lang(ko)) :deep(:is(
+  .settings-section-label, .ap-title,
+  .policy-section-label, .policy-rule-head, .cli-title, .ga-title,
+  .ep-section h2, .ext-section-title, .native-backends-title,
+  .mcp-group-title, .skills-group-title, .memory-group-title,
+  .cred-group-title, .kse-group-title, .su-group-head, .sb-head,
+  .mkt-section-label
+)) {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-size: var(--font-md) !important;
+  font-weight: 600 !important;
+  color: var(--text-secondary);
+}
+/* Smaller eyebrows (table heads, drawer sub-headings, field labels, badges)
+   only drop the caps and tracking. */
+.s-modal:is(:lang(ja), :lang(zh), :lang(ko)) :deep(:is(
+  .s-nav-group-title, .lbl,
+  .skills-matrix tbody tr.group th, .skill-drawer-section h4, .cred-drawer h4,
+  .drawer-section h4, .drawer-section label > span, .drawer-field > span,
+  .skills-create label > span, .skill-advanced-grid label > span,
+  .skills-toolbar h2, .kse-table th, .mkt-versions th, .mkt-side-card h4,
+  .sb-preview, .sb-rowonly, .skill-badge, .prompt-badge, .cred-sev
+)) {
   text-transform: none !important;
   letter-spacing: normal !important;
 }

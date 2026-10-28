@@ -1196,7 +1196,7 @@
     "go-to-commit": "前往提交",
     "install-missing": "安装缺少的项目",
     "fix": "修复",
-    "add-mcp": "添加 MCP +",
+    "add-mcp": "+ 添加 MCP",
     "open-mcp-config": "打开 MCP 设置",
     "accept-ours": "采用我们的版本",
     "accept-theirs": "采用他们的版本",
@@ -1842,6 +1842,7 @@
         "repository": "Repository 政策"
       },
       "sourceNeedsWorkspace": "打开工作区后才能选择工作区政策来源。",
+      "sourceImplicit": "自动",
       "recommendationTitle": "Repository 建议",
       "untrusted": "不受信任",
       "recommendationHint": "这项政策来自工作区 repository；除非明确接受，否则不会取代目前生效的来源。",
@@ -1944,6 +1945,7 @@
       "developerNative": "开发者与原生代码",
       "pageOn": "已开启",
       "developerOnMarker": "开发",
+      "nativeOnMarker": "原生",
       "browseMarketplace": "浏览 Navide 市场",
       "bundledGit": "内置 Git",
       "state": {
@@ -2496,7 +2498,7 @@
       "idle-reclaim-never": "永不回收",
       "idle-reclaim-now": "立即回收",
       "idle-reclaim-now-hint": "现在就结束，不必等待：有 {count} 个 pane 符合条件，约占用 {size}。",
-      "idle-reclaim-now-empty": "目前没有符合条件的 pane — 聚焦中、正在等你回答、有未送出文字、以及无法接回对话的 pane 一律不会被回收。",
+      "idle-reclaim-now-empty": "目前没有符合条件的 pane。聚焦中、正在等你回答、有未送出文字、以及无法接回对话的 pane 一律不会被回收。",
       "idle-reclaim-now-action": "立即回收 {count} 个",
       "idle-reclaim-now-action-empty": "没有可回收的",
       "default-editor": "默认编辑器",
@@ -2549,7 +2551,7 @@
       "resume-behavior-never": "一律开新对话",
       "resume-behavior-ask": "每次询问",
       "restore-scope": "恢复范围",
-      "restore-scope-hint": "始终接续时要重新打开哪些 CLI：一个 CLI、当前 Grid 页、当前分页、所有 CLI，或自动（上次关闭时正在运行的 CLI）。",
+      "restore-scope-hint": "始终接续时要重新打开哪些 CLI。可选一个 CLI、当前 Grid 页、当前分页、所有 CLI，或自动（上次关闭时正在运行的 CLI）。",
       "restore-scope-single": "单一 CLI",
       "restore-scope-page": "目前 Grid 页面",
       "restore-scope-tab": "目前标签页",
@@ -7865,7 +7867,7 @@
       "filter": {
         "all": "全部",
         "customized": "已自订",
-        "conflicts": "冲突"
+        "conflicts": "共用按键"
       },
       "export": "导出",
       "import": "导入",
@@ -11673,7 +11675,7 @@
     "overview": {
       "title": "揭露总览",
       "intro": "所有从 Navide 市场安装的 Navide 插件：声明了什么、风险等级、最近活动和异常，集中在这一页。只是记录，这里的内容不会改变 Navide 插件能做的事。",
-      "empty": "没有安装任何来自 Navide 市场的 Navide 插件。",
+      "empty": "尚未安装任何来自 Navide 市场的内容。",
       "installedScan": "安装时验证过的扫描",
       "noScanRecord": "安装时没有记录扫描。",
       "activity": "最近活动",

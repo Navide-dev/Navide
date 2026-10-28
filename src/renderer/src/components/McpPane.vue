@@ -22,6 +22,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import { shortenMiddle } from '../lib/shortenPath'
 import {
   isSecretSettingKey,
   nextRecordKey,
@@ -478,6 +479,10 @@ async function openConfig(path: string): Promise<void> {
 function entries(map: Record<string, string>): [string, string][] {
   return Object.entries(map)
 }
+// The card's one detail line: the URL or command, a native's error, or a dash.
+function cardDetail(row: McpRow): string {
+  return row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—'
+}
 </script>
 
 <template>
@@ -559,13 +564,14 @@ function entries(map: Record<string, string>): [string, string][] {
                     :class="row.navide.status ?? 'unknown'"
                     aria-hidden="true"
                   ></span>
-                  <strong v-truncate>{{ row.name }}</strong>
+                  <!-- One line, cut in the middle when long; the full name is in
+                       the tooltip. The status word wraps under it when the two
+                       do not fit side by side. -->
+                  <strong v-truncate="row.name">{{ shortenMiddle(row.name, 28) }}</strong>
                   <!-- Red alone is not a label: a failed server says so in words. -->
                   <span v-if="row.navide?.status === 'error'" class="mcp-status-text mcp-status-text--error">{{ t('settings.mcp.status-failed') }}</span>
                 </span>
-                <span class="mcp-card-detail" v-truncate>
-                  {{ row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—' }}
-                </span>
+                <span class="mcp-card-detail" v-truncate="cardDetail(row)">{{ shortenMiddle(cardDetail(row), 34) }}</span>
                 <!-- The transport and Node badges lead the meta line, so the name keeps the full width. -->
                 <span class="mcp-card-places">
                   <span class="mcp-tag" :title="rowTransport(row)">{{ transportLabel(rowTransport(row)) }}</span>
@@ -907,6 +913,7 @@ function entries(map: Record<string, string>): [string, string][] {
   gap: 12px;
   min-height: 0;
   color: var(--text-primary);
+  container: mcp-pane / inline-size;
 }
 .mcp-pane-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
 .mcp-pane-head p { flex: 1 1 24em; margin: 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.5; max-width: 72ch; }
@@ -975,16 +982,16 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   gap: 5px;
   padding: 9px 11px;
   text-align: left;
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
   min-width: 0;
 }
 .mcp-card:hover:not(:disabled) { background: var(--bg-muted); border-color: var(--border-default); }
 .mcp-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
-.mcp-card.native { border-style: dashed; }
-.mcp-card-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.mcp-card-head strong { flex: 1; min-width: 0; font-size: var(--font-xs); color: var(--text-bright); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.mcp-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
+/* Names never break inside a word: one line, shortened in the middle. */
+.mcp-card-head strong { flex: 1 1 auto; min-width: 0; font-size: var(--font-xs); color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mcp-status-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
 .mcp-status-dot.connected { background: var(--success-fg); }
 .mcp-status-dot.error { background: var(--danger-fg); }
@@ -1012,11 +1019,10 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   font-size: var(--font-xs);
   color: var(--text-secondary);
   font-family: Menlo, Monaco, monospace;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  /* A URL or command never breaks mid-token: one line, cut in the middle. */
+  white-space: nowrap;
   overflow: hidden;
-  word-break: break-all;
+  text-overflow: ellipsis;
 }
 .mcp-card-places { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 2px; }
 .mcp-card-places-chips { display: contents; }
@@ -1194,5 +1200,14 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 
 @media (max-width: 900px) {
   .mcp-pane-body, .mcp-pane-body.drawer-open { grid-template-columns: 1fr; }
+}
+/* Narrow page: the intro takes its own row and the actions start at the
+   content edge as one group under it; the search takes a full row of its
+   own, then the chips at the content edge with the view switch at the right
+   of the same row while it fits. */
+@container mcp-pane (max-width: 720px) {
+  .mcp-pane-head p { flex-basis: 100%; }
+  .mcp-pane-actions { flex: 1 1 100%; justify-content: flex-start; }
+  .mcp-pane-search { order: -1; flex: 1 1 100%; max-width: none; }
 }
 </style>

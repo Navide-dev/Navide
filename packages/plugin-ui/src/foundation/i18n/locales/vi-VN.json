@@ -1196,7 +1196,7 @@
     "go-to-commit": "Đến commit",
     "install-missing": "Cài phần còn thiếu",
     "fix": "Sửa",
-    "add-mcp": "Thêm MCP +",
+    "add-mcp": "+ Thêm MCP",
     "open-mcp-config": "Mở cấu hình MCP",
     "accept-ours": "Chấp nhận của mình",
     "accept-theirs": "Chấp nhận của họ",
@@ -1842,6 +1842,7 @@
         "repository": "Chính sách của kho"
       },
       "sourceNeedsWorkspace": "Có thể chọn nguồn cho workspace sau khi mở một workspace.",
+      "sourceImplicit": "Tự động",
       "recommendationTitle": "Đề xuất của kho",
       "untrusted": "Chưa tin cậy",
       "recommendationHint": "Chính sách này đến từ kho của workspace và không bao giờ ghi đè nguồn đang hoạt động khi chưa được chấp nhận rõ ràng.",
@@ -1944,6 +1945,7 @@
       "developerNative": "Nhà phát triển và mã gốc",
       "pageOn": "Bật",
       "developerOnMarker": "Dev.",
+      "nativeOnMarker": "Gốc",
       "browseMarketplace": "Duyệt Navide Marketplace",
       "bundledGit": "Git đi kèm",
       "state": {
@@ -2496,7 +2498,7 @@
       "idle-reclaim-never": "Không bao giờ",
       "idle-reclaim-now": "Thu hồi ngay",
       "idle-reclaim-now-hint": "Kết thúc ngay thay vì chờ: {count} pane đủ điều kiện, chiếm khoảng {size}.",
-      "idle-reclaim-now-empty": "Hiện không có pane nào đủ điều kiện — pane đang được chọn, pane đang chờ bạn trả lời, pane còn văn bản chưa gửi và pane không thể tiếp tục không bao giờ bị thu hồi.",
+      "idle-reclaim-now-empty": "Hiện không có pane nào đủ điều kiện. Pane đang được chọn, pane đang chờ bạn trả lời, pane còn văn bản chưa gửi và pane không thể tiếp tục không bao giờ bị thu hồi.",
       "idle-reclaim-now-action": "Thu hồi {count} ngay",
       "idle-reclaim-now-action-empty": "Không có gì để thu hồi",
       "default-editor": "Trình soạn thảo mặc định",
@@ -2549,7 +2551,7 @@
       "resume-behavior-never": "Luôn bắt đầu mới",
       "resume-behavior-ask": "Hỏi mỗi lần",
       "restore-scope": "Phạm vi tiếp tục",
-      "restore-scope-hint": "Những CLI được mở lại khi Navide luôn tiếp tục: một CLI, trang Grid hiện tại, tab đang mở, mọi CLI, hoặc Tự động (các CLI đang chạy lúc đóng lần trước).",
+      "restore-scope-hint": "Những CLI được mở lại khi Navide luôn tiếp tục. Chọn một CLI, trang Grid hiện tại, tab đang mở, mọi CLI, hoặc Tự động (các CLI đang chạy lúc đóng lần trước).",
       "restore-scope-single": "Một CLI",
       "restore-scope-page": "Trang Lưới hiện tại",
       "restore-scope-tab": "Tab đang mở",
@@ -6975,7 +6977,7 @@
       },
       "reminder": {
         "title": "Lời nhắc",
-        "active": "Đang bật",
+        "active": "Cần xem xét",
         "snoozed": "Tạm hoãn",
         "dismissed": "Đã bỏ qua",
         "until": "đến {date}",
@@ -7865,7 +7867,7 @@
       "filter": {
         "all": "Tất cả",
         "customized": "Đã tùy chỉnh",
-        "conflicts": "Xung đột"
+        "conflicts": "Phím dùng chung"
       },
       "export": "Xuất",
       "import": "Nhập",
@@ -11673,7 +11675,7 @@
     "overview": {
       "title": "Tổng quan công khai thông tin",
       "intro": "Mọi plugin Navide cài từ Navide Marketplace: những gì nó khai báo, mức rủi ro, hoạt động gần đây và mọi điều bất thường, trên một trang. Chỉ là bản ghi; không có gì ở đây thay đổi những gì một plugin Navide được làm.",
-      "empty": "Chưa cài plugin Navide nào từ Navide Marketplace.",
+      "empty": "Chưa cài gì từ Navide Marketplace.",
       "installedScan": "Lần quét đã xác minh lúc cài",
       "noScanRecord": "Không có lần quét nào được ghi nhận lúc cài.",
       "activity": "Hoạt động gần đây",

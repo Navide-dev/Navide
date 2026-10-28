@@ -1196,7 +1196,7 @@
     "go-to-commit": "前往提交",
     "install-missing": "安裝缺少的項目",
     "fix": "修復",
-    "add-mcp": "新增 MCP +",
+    "add-mcp": "+ 新增 MCP",
     "open-mcp-config": "開啟 MCP 設定",
     "accept-ours": "採用我們的版本",
     "accept-theirs": "採用他們的版本",
@@ -1842,6 +1842,7 @@
         "repository": "Repository 政策"
       },
       "sourceNeedsWorkspace": "開啟工作區後才能選擇工作區政策來源。",
+      "sourceImplicit": "自動",
       "recommendationTitle": "Repository 建議",
       "untrusted": "不受信任",
       "recommendationHint": "這項政策來自工作區 repository；除非明確接受，否則不會取代目前生效的來源。",
@@ -1944,6 +1945,7 @@
       "developerNative": "開發者與原生程式碼",
       "pageOn": "已開啟",
       "developerOnMarker": "開發",
+      "nativeOnMarker": "原生",
       "browseMarketplace": "瀏覽 Navide 市集",
       "bundledGit": "內建 Git",
       "state": {
@@ -2496,7 +2498,7 @@
       "idle-reclaim-never": "永不回收",
       "idle-reclaim-now": "立即回收",
       "idle-reclaim-now-hint": "現在就結束，不必等待：有 {count} 個 pane 符合條件，約佔用 {size}。",
-      "idle-reclaim-now-empty": "目前沒有符合條件的 pane — 聚焦中、正在等你回答、有未送出文字、以及無法接回對話的 pane 一律不會被回收。",
+      "idle-reclaim-now-empty": "目前沒有符合條件的 pane。聚焦中、正在等你回答、有未送出文字、以及無法接回對話的 pane 一律不會被回收。",
       "idle-reclaim-now-action": "立即回收 {count} 個",
       "idle-reclaim-now-action-empty": "沒有可回收的",
       "default-editor": "預設編輯器",
@@ -2549,7 +2551,7 @@
       "resume-behavior-never": "一律開新對話",
       "resume-behavior-ask": "每次詢問",
       "restore-scope": "恢復範圍",
-      "restore-scope-hint": "一律接續時要重新開啟哪些 CLI：一個 CLI、目前的 Grid 頁、目前的分頁、所有 CLI，或自動（上次關閉時正在執行的 CLI）。",
+      "restore-scope-hint": "一律接續時要重新開啟哪些 CLI。可選一個 CLI、目前的 Grid 頁、目前的分頁、所有 CLI，或自動（上次關閉時正在執行的 CLI）。",
       "restore-scope-single": "單一 CLI",
       "restore-scope-page": "目前 Grid 頁面",
       "restore-scope-tab": "目前分頁",
@@ -7865,7 +7867,7 @@
       "filter": {
         "all": "全部",
         "customized": "已自訂",
-        "conflicts": "衝突"
+        "conflicts": "共用按鍵"
       },
       "export": "匯出",
       "import": "匯入",
@@ -11673,7 +11675,7 @@
     "overview": {
       "title": "揭露總覽",
       "intro": "所有從 Navide 市集安裝的 Navide 外掛：宣告了什麼、風險等級、最近活動和異常，集中在這一頁。只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。",
-      "empty": "沒有安裝任何來自 Navide 市集的 Navide 外掛。",
+      "empty": "尚未安裝任何來自 Navide 市集的內容。",
       "installedScan": "安裝時驗證過的掃描",
       "noScanRecord": "安裝時沒有記錄掃描。",
       "activity": "最近活動",
