@@ -2484,7 +2484,7 @@
         "unknown": "Pas encore testé.",
         "not-applicable": "Non disponible sur cette plateforme."
       },
-      "auto-resume-reconnect-hint": "Quand le backend plante, il entraîne tous les processus CLI avec lui. Activez cette option pour reprendre automatiquement les conversations des panes visibles dès son retour, au lieu de reconstruire chacun à la main.",
+      "auto-resume-reconnect-hint": "Quand le backend plante ou redémarre, il emporte tous les processus de CLI. Activez cette option pour reprendre automatiquement, à son retour, les conversations des panneaux à l’écran et de jusqu’à six panneaux hors écran qui étaient au travail, au lieu de reconstruire chacun à la main. Les panneaux repris ne continuent pas seuls, les panneaux qui les ont ouverts sont prévenus et les annonces indiquent ce qui s’est passé. Si le backend replante peu après, plus rien n’est repris.",
       "resume-interrupted-on-launch-hint": "Au redémarrage de Navide, les panes qui exécutaient un tour ou attendaient une demande d’autorisation ou une question, ainsi que les panes parents qui attendent leurs rapports, reprennent automatiquement (6 au maximum ; les autres sont marqués « Actif au redémarrage »). Rien ne continue tout seul : cliquez sur « Continuer », ou laissez le parent lui en donner l’ordre. Le parent est informé de ceux de ses panes qui ont été interrompus.",
       "confirm-close-pane": "Confirmer avant de fermer un pane",
       "confirm-close-pane-hint": "Demander confirmation avant que le raccourci de fermeture ne ferme un pane CLI. Un pane dont un tour est en cours demande toujours, quel que soit ce paramètre.",
@@ -2849,7 +2849,7 @@
               "fallback": "Une CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Un plantage du backend emporte tous les processus CLI ; si cette option est activée, les panes affichés reprennent automatiquement dès qu’il est revenu.",
+              "desc": "Un plantage ou un redémarrage du backend emporte tous les processus de CLI ; avec cette option, les panneaux à l’écran, et jusqu’à six panneaux au travail hors écran, reprennent automatiquement à son retour. Les annonces indiquent quels tours ont été interrompus.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -9154,6 +9154,21 @@
     "load-more": "Charger plus ({count} restantes)",
     "mcp-tools-changed": "Les outils MCP ont peut-être changé",
     "mcp-tools-changed-note": "Un agent CLI lit la liste des outils MCP de Navide une seule fois, au démarrage. Tout ce qui est encore connecté depuis la version précédente ({from}), un pane CLI ou un client MCP externe, conserve les outils qu’il voyait alors ; rouvrez le pane ou reconnectez le client pour obtenir les nouveaux.",
+    "backend-restart": {
+      "title": "Backend redémarré à {time}",
+      "note": "Les panneaux repris s’arrêtent à l’invite et ne continuent pas seuls ; les panneaux terminés restent tels quels jusqu’à leur reconstruction.",
+      "crash-loop": "Le backend a de nouveau planté peu après son redémarrage, aucun panneau n’a donc été repris automatiquement cette fois. Reconstruisez ceux dont vous avez besoin.",
+      "resumed": "Repris : {names}",
+      "interrupted": "Tour interrompu : {names}",
+      "rebuild": "Reconstruire {name}",
+      "not-resumed": {
+        "crash-loop": "{name} : non repris, car le backend a planté plusieurs fois en peu de temps",
+        "over-limit": "{name} : non repris, car plus de six panneaux hors écran étaient au travail",
+        "idle-off-screen": "{name} : non repris, car il était inactif et hors écran",
+        "no-session": "{name} : non repris, car il n’a aucune conversation enregistrée à reprendre",
+        "failed": "{name} : n’a pas pu être repris"
+      }
+    },
     "scheduler-disabled": "La tâche planifiée « {name} » a été désactivée : son pane cible n’existe plus",
     "scheduler-disabled-note": "Son pane cible est resté introuvable {n} exécutions de suite, la tâche a donc été désactivée. Dans le panneau Planification, utilisez « Relier » pour la diriger vers un pane actif, puis réactivez-la.",
     "quota": {

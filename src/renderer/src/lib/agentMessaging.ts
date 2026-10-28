@@ -560,18 +560,23 @@ export function renderFallbackReport(turnText: string): string {
 /** Notice for a parent whose spawned panes a relaunch interrupted. Resuming
  *  only brings the conversation back — none of them was told to carry on, so
  *  whether to continue or re-dispatch is the parent's decision. Returns '' for
- *  no children. */
+ *  no children. `cause` 'backend-restart' (H3) is the same notice after
+ *  Navide's backend restarted under a running window. */
 export function renderInterruptedChildrenNotice(
   children: readonly { name: string; resumed: boolean }[],
+  cause: 'relaunch' | 'backend-restart' = 'relaunch',
 ): string {
   if (children.length === 0) return ''
   const lines = children.map((c) =>
     c.resumed
       ? `- ${c.name}：已接回（對話已恢復，停在提示字元）`
-      : `- ${c.name}：未接回（仍是還原佔位，超過自動接回上限或接回失敗）`,
+      : cause === 'backend-restart'
+        ? `- ${c.name}：未接回（已結束，超過自動接回上限、後端短時間內反覆崩潰或接回失敗）`
+        : `- ${c.name}：未接回（仍是還原佔位，超過自動接回上限或接回失敗）`,
   )
+  const when = cause === 'backend-restart' ? 'Navide 的後端重新啟動時' : 'Navide 重新啟動時'
   return (
-    `${MSG_INTERRUPTED_PREFIX} — Navide 重新啟動時，你派出的以下 pane 正在工作中，回合被中斷：\n` +
+    `${MSG_INTERRUPTED_PREFIX} — ${when}，你派出的以下 pane 正在工作中，回合被中斷：\n` +
     `${lines.join('\n')}\n\n` +
     `已接回的 pane 沒有自動續跑。要它繼續，用 cli_send 叫它繼續；也可以改派或重派。` +
     `它被叫繼續之後，回合結束時仍會回報給你。`

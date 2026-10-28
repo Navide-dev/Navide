@@ -2484,7 +2484,7 @@
         "unknown": "Noch nicht getestet.",
         "not-applicable": "Auf dieser Plattform nicht verfügbar."
       },
-      "auto-resume-reconnect-hint": "Wenn das Backend abstürzt, reißt es alle CLI-Prozesse mit. Schalten Sie dies ein, um die Unterhaltungen der sichtbaren panes automatisch fortzusetzen, sobald es wieder läuft, statt jedes einzeln von Hand neu aufzubauen.",
+      "auto-resume-reconnect-hint": "Wenn das Backend abstürzt oder neu startet, beendet es alle CLI-Prozesse mit. Schalten Sie dies ein, damit nach seiner Rückkehr die Unterhaltungen der Panes auf dem Bildschirm und von bis zu sechs arbeitenden Panes außerhalb des Bildschirms automatisch wiederaufgenommen werden, statt jedes einzeln neu aufzubauen. Wiederaufgenommene Panes machen nicht von selbst weiter, die Panes, die sie geöffnet haben, werden benachrichtigt, und die Ankündigungen listen auf, was passiert ist. Stürzt das Backend kurz darauf erneut ab, wird nichts mehr wiederaufgenommen.",
       "resume-interrupted-on-launch-hint": "Beim Neustart von Navide werden panes, die gerade einen Turn ausgeführt oder auf eine Berechtigungsabfrage oder eine Frage gewartet haben, sowie die übergeordneten panes, die auf deren Berichte warten, automatisch fortgesetzt (bis zu 6; die übrigen werden als „Beim Neustart aktiv“ markiert). Nichts läuft von selbst weiter: Klicken Sie auf „Fortfahren“ oder lassen Sie das übergeordnete pane die Anweisung geben. Das übergeordnete pane erfährt, welche seiner panes unterbrochen wurden.",
       "confirm-close-pane": "Vor dem Schließen eines panes bestätigen",
       "confirm-close-pane-hint": "Nachfragen, bevor die Tastenkombination zum Schließen ein CLI-pane schließt. Ein pane mit laufendem Turn fragt unabhängig von dieser Einstellung immer nach.",
@@ -2849,7 +2849,7 @@
               "fallback": "Eine CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Ein Absturz des Backends reißt alle CLI-Prozesse mit; ist dies aktiviert, werden die panes auf dem Bildschirm automatisch fortgesetzt, sobald es wieder läuft.",
+              "desc": "Ein Absturz oder Neustart des Backends beendet alle CLI-Prozesse; ist dies eingeschaltet, werden die Panes auf dem Bildschirm und bis zu sechs arbeitende Panes außerhalb automatisch wiederaufgenommen, sobald es zurück ist. Die Ankündigungen listen auf, welche Turns unterbrochen wurden.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -9154,6 +9154,21 @@
     "load-more": "Mehr laden ({count} übrig)",
     "mcp-tools-changed": "MCP-Tools haben sich möglicherweise geändert",
     "mcp-tools-changed-note": "Ein CLI-Agent liest die MCP-Tool-Liste von Navide einmal beim Start. Alles, was noch aus der vorherigen Version ({from}) verbunden ist – ein CLI-pane oder ein externer MCP-Client –, behält die damals gesehenen Tools; öffnen Sie das pane erneut oder verbinden Sie den Client neu, um die neuen zu erhalten.",
+    "backend-restart": {
+      "title": "Backend um {time} neu gestartet",
+      "note": "Wiederaufgenommene Panes halten an der Eingabeaufforderung und machen nicht von selbst weiter; beendete Panes bleiben, wie sie sind, bis Sie sie neu aufbauen.",
+      "crash-loop": "Das Backend ist kurz nach dem Neustart erneut abgestürzt, daher wurde diesmal kein Pane automatisch wiederaufgenommen. Bauen Sie die benötigten neu auf.",
+      "resumed": "Wiederaufgenommen: {names}",
+      "interrupted": "Turn unterbrochen: {names}",
+      "rebuild": "{name} neu aufbauen",
+      "not-resumed": {
+        "crash-loop": "{name}: nicht wiederaufgenommen, weil das Backend in kurzer Zeit wiederholt abgestürzt ist",
+        "over-limit": "{name}: nicht wiederaufgenommen, weil mehr als sechs Panes außerhalb des Bildschirms arbeiteten",
+        "idle-off-screen": "{name}: nicht wiederaufgenommen, weil es außerhalb des Bildschirms und untätig war",
+        "no-session": "{name}: nicht wiederaufgenommen, weil es keine gespeicherte Unterhaltung zum Fortsetzen gibt",
+        "failed": "{name}: konnte nicht wiederaufgenommen werden"
+      }
+    },
     "scheduler-disabled": "Geplanter Auftrag „{name}“ wurde deaktiviert: Sein Ziel-pane existiert nicht mehr",
     "scheduler-disabled-note": "Sein Ziel-pane wurde {n}-mal hintereinander nicht gefunden, daher wurde der Auftrag deaktiviert. Verwenden Sie im Zeitplan-Panel „Neu binden“, um ihn auf ein aktives pane zu richten, und aktivieren Sie ihn dann wieder.",
     "quota": {
