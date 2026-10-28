@@ -54,7 +54,21 @@ const { t, te } = useI18n()
  * A command added without an i18n entry then shows a readable English name
  * rather than a blank cell.
  */
+/**
+ * A command bound under several conditions is named per condition where the
+ * locale has a name for it (Close Dialog: any dialog, outside a terminal, the
+ * Plan window), so the list does not repeat one title three times.
+ */
+function whenVariant(when: string | undefined): string {
+  if (!when) return ''
+  if (/\bplanWindow\b/.test(when)) return 'planWindow'
+  if (/!\s*terminalFocus\b/.test(when)) return 'notTerminal'
+  return ''
+}
 function labelFor(row: BindingRow): string {
+  const variant = whenVariant(row.when)
+  const variantKey = `settings.keybindings.cmdWhen.${row.command.replace(/\./g, '_')}.${variant}`
+  if (variant && te(variantKey)) return t(variantKey)
   const key = commandI18nKey(row.command)
   return te(key) ? t(key) : row.label
 }
@@ -383,8 +397,8 @@ const visibleReference = computed(() => {
 
     <div v-for="group in groupedRows" :key="group.category" class="kse-group">
       <h3 class="kse-group-title">{{ categoryLabel(group.rows[0]) }}</h3>
-      <div class="kse-table-scroll">
-        <table class="kse-table">
+      <div class="kse-table-scroll kse-bindings-scroll">
+        <table class="kse-table kse-bindings">
           <thead>
             <tr>
               <th class="kse-th-command">{{ $t('settings.keybindings.col.command') }}</th>
@@ -401,7 +415,7 @@ const visibleReference = computed(() => {
                 <span class="kse-id" v-truncate>{{ row.command }}</span>
               </td>
 
-              <td class="kse-td-keys">
+              <td class="kse-td-keys" :data-label="$t('settings.keybindings.col.keys')">
                 <div class="kse-chips">
                   <!-- The cap being re-recorded is replaced by the recorder,
                        which is rendered once per row at the end of the chips. -->
@@ -489,12 +503,12 @@ const visibleReference = computed(() => {
                 </div>
               </td>
 
-              <td class="kse-td-when">
+              <td class="kse-td-when" :data-label="$t('settings.keybindings.col.when')">
                 <code v-if="row.when">{{ row.when }}</code>
                 <span v-else class="kse-when-any">{{ $t('settings.keybindings.when-any') }}</span>
               </td>
 
-              <td class="kse-td-source">
+              <td class="kse-td-source" :data-label="$t('settings.keybindings.col.source')">
                 <span class="kse-source" :class="classifyRow(row)">
                   {{ $t('settings.keybindings.source.' + classifyRow(row)) }}
                 </span>
@@ -744,6 +758,44 @@ const visibleReference = computed(() => {
 .kse-th-source  { width: 10%; }
 .kse-th-actions { width: 6%; }
 
+/* Narrow card: the five-column ruler stops fitting, so each binding becomes a
+   block — command title and reset button on top, then one labelled line each
+   for keys, condition and source. */
+.kse-bindings-scroll { container: kse-bindings / inline-size; }
+@container kse-bindings (max-width: 600px) {
+  .kse-bindings, .kse-bindings tbody { display: block; }
+  .kse-bindings thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .kse-bindings tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'command actions' 'keys keys' 'when when' 'source source';
+    row-gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-muted);
+  }
+  .kse-bindings tr:last-child { border-bottom: none; }
+  .kse-bindings td { display: block; padding: 0; border-bottom: none; }
+  .kse-bindings .kse-td-command { grid-area: command; }
+  .kse-bindings .kse-td-actions { grid-area: actions; }
+  .kse-bindings .kse-td-keys { grid-area: keys; }
+  .kse-bindings .kse-td-when { grid-area: when; }
+  .kse-bindings .kse-td-source { grid-area: source; }
+  .kse-bindings td[data-label] {
+    display: grid;
+    grid-template-columns: minmax(6em, 30%) minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+  }
+  .kse-bindings td[data-label]::before {
+    content: attr(data-label);
+    font-size: var(--font-xs);
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+    padding-top: 2px;
+  }
+  .kse-bindings .kse-source { justify-self: start; }
+}
+
 /* ── source badge ── */
 .kse-source {
   display: inline-block;
@@ -780,13 +832,11 @@ const visibleReference = computed(() => {
   display: block;
   margin-top: 1px;
   font-family: monospace;
-  font-size: 10.5px;
+  font-size: var(--font-xs);
   color: var(--text-muted);
-  /* Fixed table layout will not widen for a long id; clip instead of forcing a
-     wrap that would double every row's height. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* The id is what people search for and paste into keybindings.json, so it
+     wraps rather than losing its tail to an ellipsis. */
+  overflow-wrap: anywhere;
 }
 
 .kse-td-when code {
@@ -855,6 +905,7 @@ const visibleReference = computed(() => {
   border: 1px dashed var(--border-default);
   border-radius: 6px;
 }
+.kse-chip-remove,
 .kse-add,
 .kse-mini {
   min-width: 24px;

@@ -349,7 +349,10 @@ watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.va
 // Keep the active sidebar row visible when the tab changes (or Settings opens
 // on a tab near the bottom of the list). Only the sidebar scrolls.
 const navRef = ref<HTMLElement | null>(null)
-watch(activeTab, () => {
+// The Navide Plugins page counts too: picking one of its rows (or a search hit
+// opening one) can land on a row below the fold. `navRef` is inside
+// `.s-sidebar`, the element that actually scrolls.
+watch([activeTab, pluginsPage], () => {
   const nav = navRef.value
   const row = nav?.querySelector<HTMLElement>('.settings-nav-subitem.active')
     ?? nav?.querySelector<HTMLElement>('.settings-nav-item.active')
@@ -2834,7 +2837,7 @@ watch(activeTab, (tab) => {
                   <NavideCloudMark variant="solid" class="nvc-nav-mark" />
                 </template>
               </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :badge="pluginUpdates.count.value" :marker="pluginsFoldedMarker" @select="activeTab = 'extensions'">
+              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :expanded="activeTab === 'extensions'" :badge="pluginUpdates.count.value" :marker="pluginsFoldedMarker" @select="activeTab = 'extensions'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
                 </template>
@@ -2889,16 +2892,9 @@ watch(activeTab, (tab) => {
 
           <!-- ── LIST VIEW ──────────────────────────────────────────────── -->
           <template v-if="mView === 'list'">
-            <!-- The page title and the list's own heading already name this view,
-                 and the list carries the one Refresh. -->
-            <div class="mcp-topbar" data-settings-section="mcp-installed">
-              <div class="mcp-topbar-actions">
-                <button class="mcp-action-btn" @click="mView = 'catalog'">{{ $t('action.add-mcp') }}</button>
-                <button class="mcp-action-btn" @click="mView = 'custom'">{{ $t('settings.mcp.add-custom') }}</button>
-                <button class="mcp-action-btn" @click="mOpenConfig" :disabled="!mConfigPath">{{ $t('action.open-mcp-config') }}</button>
-              </div>
-            </div>
-            <div class="settings-meta-row">
+            <!-- Page title, the scope strip, then one toolbar row: the list's
+                 own header carries these actions next to its one Refresh. -->
+            <div class="settings-meta-row" data-settings-section="mcp-installed">
               <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
               <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
               <span class="settings-path" v-truncate>{{ pathForTab('mcp') }}</span>
@@ -2925,7 +2921,13 @@ watch(activeTab, (tab) => {
               @refresh="mLoad(true)"
               @select-consumed="mSelectName = ''"
               @install-node="mcpNodeInstallOpen = true"
-            />
+            >
+              <template #actions>
+                <button class="mcp-action-btn" @click="mView = 'catalog'">{{ $t('action.add-mcp') }}</button>
+                <button class="mcp-action-btn" @click="mView = 'custom'">{{ $t('settings.mcp.add-custom') }}</button>
+                <button class="mcp-action-btn" @click="mOpenConfig" :disabled="!mConfigPath">{{ $t('action.open-mcp-config') }}</button>
+              </template>
+            </McpPane>
             <!-- The same guided install the spawn dropdown uses for a CLI's
                  Node prerequisite (Homebrew first where it is missing). -->
             <CliInstallDialog
@@ -5171,12 +5173,13 @@ watch(activeTab, (tab) => {
   background: var(--bg-elevated);
 }
 .cli-agent-grip { color: var(--text-secondary); cursor: grab; user-select: none; font-size: var(--font-md); }
-.cli-agent-toggle { display: flex; align-items: center; gap: 8px; flex: 1; cursor: pointer; margin: 0; }
+/* The whole label is the hit area: at least 24px tall around the box. */
+.cli-agent-toggle { display: flex; align-items: center; gap: 8px; flex: 1; min-height: 24px; cursor: pointer; margin: 0; }
 .cli-agent-label { font-size: var(--font-sm); font-weight: 600; }
-.cli-agent-hint { font-size: var(--font-2xs); color: var(--text-secondary); }
+.cli-agent-hint { font-size: var(--font-xs); color: var(--text-secondary); }
 .cli-agent-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .cli-chip {
-  font-size: var(--font-2xs); font-weight: 600; line-height: 1.6;
+  font-size: var(--font-xs); font-weight: 600; line-height: 1.6;
   padding: 0 8px; border-radius: 99px; white-space: nowrap;
   border: 1px solid var(--border-default); background: var(--bg-muted); color: var(--text-secondary);
 }
@@ -5355,6 +5358,7 @@ watch(activeTab, (tab) => {
 /* A stack of region cards needs the gutter and its own scroll, which the bare
    .s-body (overflow:hidden, no padding) does not give. */
 .layout-body { overflow-y: auto; padding: 18px 22px; }
+.layout-body > * { max-width: var(--settings-page-max); }
 .notifications-body { overflow-y: auto; padding: 18px 22px; }
 .voice-body { overflow-y: auto; padding: 18px 22px; }
 .channels-body { overflow-y: auto; padding: 18px 22px; }
@@ -5397,11 +5401,6 @@ watch(activeTab, (tab) => {
 .marketplace-view-tab--active {
   color: var(--text-bright);
   border-bottom-color: var(--accent-fg);
-}
-/* With one of its pages selected under it, the Navide Plugins row is the
-   group's heading: the selected page carries the fill, not both rows. */
-.s-nav-group :deep(.settings-nav-item.active:has(+ .settings-nav-subitem)) {
-  background: transparent;
 }
 /* The Navide Plugins pages as a tab row, only where the sidebar is the
    icon-only rail and has no rows for them. */
@@ -5448,25 +5447,28 @@ watch(activeTab, (tab) => {
   outline-offset: -2px;
 }
 .extensions-scroll { padding-top: var(--space-2); }
-.ext-policy-block > .settings-meta-row.inline { margin: 0 22px 14px; background: var(--bg-subtle); }
+/* The "Applies to" strip: one inset strip inside the page gutter on every page
+   that has one — never a full-bleed band. Inside a card (General) the card
+   already supplies the gutter, so `.inline` only drops the side margins. */
 .settings-meta-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 8px 22px;
-  border-bottom: 1px solid var(--border-muted);
-  background: var(--bg-inset);
+  gap: 6px 8px;
+  margin: 10px 22px 14px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
   color: var(--text-secondary);
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   min-width: 0;
   flex-shrink: 0;
 }
 .settings-meta-row.inline {
-  padding: 7px 9px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  margin-top: 10px;
+  margin: 10px 0 0;
 }
+.ext-policy-block > .settings-meta-row.inline { margin: 0 22px 14px; }
 .settings-meta-label { flex-shrink: 0; color: var(--text-secondary); }
 .scope-badge {
   flex-shrink: 0;
@@ -5492,7 +5494,8 @@ watch(activeTab, (tab) => {
   color: var(--text-primary);
   border-radius: var(--radius-sm);
   padding: 3px 7px;
-  font-size: 10.5px;
+  min-height: 24px;
+  font-size: var(--font-xs);
   cursor: pointer;
 }
 .settings-path-btn:hover:not(:disabled) {
@@ -5557,7 +5560,7 @@ button.tiny {
 
 .upd-notes-body {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   max-height: 160px;
   overflow: auto;
   margin: 4px 0 10px;
@@ -5654,7 +5657,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 /* Same shape as the account window's footer: one muted row, no underline until
    hover. Two stacked lines with an underlined link read as a web page. */
 /* The transport's own words, quieter than the sentence explaining them. */
-.link-detail { display: block; margin-top: 2px; color: var(--text-secondary); word-break: break-word; }
+.link-detail { display: block; margin-top: 2px; color: var(--text-secondary); overflow-wrap: anywhere; }
 /* Its own container class, with the same box the other tab bodies have. It
    borrowed the appearance tab's, which is a name that says nothing about this
    page and a rule anybody editing that tab would reasonably assume they
@@ -5765,10 +5768,11 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .mcp-body { overflow-y: auto; display: flex; flex-direction: column; }
 
 /* Top bar */
+/* Catalog / custom views: a toolbar row inside the page gutter, not a band. */
 .mcp-topbar {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 12px 22px; border-bottom: 1px solid var(--border-muted);
-  flex-shrink: 0; background: var(--bg-inset);
+  padding: 12px 22px 0;
+  flex-shrink: 0;
 }
 /* The title keeps a readable width; the actions drop below it instead of squeezing it. */
 .mcp-page-title { font-size: var(--font-sm); font-weight: 700; color: var(--text-bright); flex: 1; min-width: 12em; }
@@ -5954,9 +5958,10 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 .az-model-info { display: flex; flex-direction: column; gap: 2px; }
 .az-model-name { font-size: var(--font-xs); color: var(--text-bright); font-family: var(--font-mono); }
-.az-model-meta { font-size: var(--font-3xs); color: var(--text-secondary); }
+.az-model-meta { font-size: var(--font-xs); color: var(--text-secondary); }
 .az-del-btn {
   background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: var(--font-xs);
+  min-width: 24px; min-height: 24px;
   padding: 2px 6px; border-radius: var(--radius-xs); transition: color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
 .az-del-btn:hover { color: var(--danger-fg); background: var(--bg-muted); }

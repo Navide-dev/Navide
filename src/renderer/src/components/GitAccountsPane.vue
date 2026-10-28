@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import type { useGitAccounts, GitAccountPublic } from '../composables/useGitAccounts'
 
 const props = defineProps<{
@@ -143,7 +144,7 @@ async function remove(id: string): Promise<void> {
           </div>
         </div>
       </div>
-      <p v-else class="ga-empty nv-empty nv-empty--inline">{{ $t('settings.accounts.empty') }}</p>
+      <SettingsEmptyState v-else class="ga-empty" :message="$t('settings.accounts.empty')" />
 
       <!-- Add / edit form -->
       <div v-if="formOpen" class="ga-form">
@@ -242,7 +243,7 @@ async function remove(id: string): Promise<void> {
 .ga-row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .ga-confirm-text { font-size: var(--font-2xs); color: var(--text-secondary); }
 
-.ga-empty { font-size: 11.5px; color: var(--text-muted); margin: 0; }
+.ga-empty { margin: 0; }
 
 .ga-form {
   margin-top: 14px;

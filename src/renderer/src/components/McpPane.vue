@@ -474,14 +474,17 @@ function entries(map: Record<string, string>): [string, string][] {
 
 <template>
   <section class="mcp-pane" :aria-label="t('settings.mcp.agent-title')">
+    <!-- The page's one toolbar row: what the list is, then the parent's
+         actions (slot) and Refresh. The page title already names the page,
+         so the section keeps its name as an aria-label only. -->
     <header class="mcp-pane-head">
-      <div>
-        <h2>{{ t('settings.mcp.agent-title') }}</h2>
-        <p>{{ t('settings.mcp.agent-intro') }}</p>
+      <p>{{ t('settings.mcp.agent-intro') }}</p>
+      <div class="mcp-pane-actions">
+        <slot name="actions" />
+        <button type="button" :disabled="loading" @click="emit('refresh')">
+          {{ t('action.refresh') }}
+        </button>
       </div>
-      <button type="button" :disabled="loading" @click="emit('refresh')">
-        {{ t('action.refresh') }}
-      </button>
     </header>
 
     <div class="mcp-filterbar">
@@ -894,9 +897,9 @@ function entries(map: Record<string, string>): [string, string][] {
   min-height: 0;
   color: var(--text-primary);
 }
-.mcp-pane-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.mcp-pane-head h2 { margin: 0; font-size: 15px; color: var(--text-bright); }
-.mcp-pane-head p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); }
+.mcp-pane-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+.mcp-pane-head p { flex: 1 1 24em; margin: 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.5; max-width: 72ch; }
+.mcp-pane-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 button, input, select { font: inherit; }
 button {
   border: 1px solid var(--border-default);
@@ -928,12 +931,13 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  min-height: 24px;
   padding: 3px 9px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
 }
 .mcp-chip.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
-.mcp-chip .count { font-size: var(--font-3xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
+.mcp-chip .count { font-size: var(--font-xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
 .mcp-pane-search { flex: 1; min-width: 140px; max-width: 260px; }
 .mcp-view-switch {
   margin-left: auto;
@@ -1006,7 +1010,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-stderr pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
 .mcp-status-dot.disabled { background: var(--border-default); }
 .mcp-card-detail {
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   font-family: Menlo, Monaco, monospace;
   display: -webkit-box;
@@ -1021,7 +1025,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   display: inline-block;
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   border: 1px solid color-mix(in srgb, var(--success-fg) 40%, transparent);
   color: var(--success-fg);
@@ -1036,7 +1040,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-muted);
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   white-space: nowrap;
   flex: none;

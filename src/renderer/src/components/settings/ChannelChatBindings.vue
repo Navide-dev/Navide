@@ -317,5 +317,5 @@ function pressUnbind(paneId: string): void {
 .ch-btn.danger-ghost { color: var(--danger-fg); border-color: var(--danger-muted); }
 .ch-btn.danger-ghost:hover:not(:disabled) { border-color: var(--danger-fg); }
 .ch-btn.danger { color: var(--text-on-emphasis); background: var(--danger-emphasis, var(--danger-fg)); border-color: var(--danger-emphasis, var(--danger-fg)); }
-.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); word-break: break-word; }
+.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 </style>

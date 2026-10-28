@@ -85,6 +85,7 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
 </script>
 
 <template>
+  <div class="sb-wrap">
   <div class="sb" :style="{ '--sb-label-cols': LABEL_COLUMNS.length }">
     <p class="sb-intro">{{ $t('statusBadges.intro') }}</p>
 
@@ -165,12 +166,21 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
       </button>
     </div>
   </div>
+  </div>
 </template>
 
 <style scoped>
+/* The wrapper is the query container: the grid below switches to stacked cards
+ * from the width it actually gets, not from the window width. */
+.sb-wrap {
+  container: sb / inline-size;
+}
+/* The description and label columns may shrink below their text so the grid's
+ * minimum stays inside the content gutter at the modal's widest; under that
+ * minimum the container query below stacks the rows instead. */
 .sb {
   display: grid;
-  grid-template-columns: max-content minmax(120px, 2fr) repeat(var(--sb-label-cols, 3), minmax(108px, 1fr)) max-content max-content;
+  grid-template-columns: max-content minmax(0, 2fr) repeat(var(--sb-label-cols, 3), minmax(72px, 1fr)) max-content max-content;
   column-gap: 12px;
   row-gap: 2px;
 }
@@ -399,9 +409,10 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   line-height: 1.6;
 }
 
-/* Below the three-input width the grid stops being a table and becomes stacked
- * cards, which is the only way nine rows of six columns stay usable. */
-@media (max-width: 920px) {
+/* Below the width the table needs the grid becomes stacked cards. With one
+ * label column per UI locale (eleven) the table needs about 1340px, more than
+ * the modal's content area ever gets, so in practice the rows always stack. */
+@container sb (max-width: 1360px) {
   .sb {
     display: flex;
     flex-direction: column;
@@ -414,11 +425,18 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
     grid-template-columns: auto 1fr;
     column-gap: 10px;
   }
+  /* The language inputs flow into as many columns as fit; the status, the
+   * swatches and the reset button each take a full line. */
   .sb-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px 12px;
     border-color: var(--border-muted);
     margin-bottom: 8px;
+  }
+  .sb-row > .sb-status,
+  .sb-row > .sb-colors,
+  .sb-row > .sb-reset {
+    grid-column: 1 / -1;
   }
   .sb-reset {
     justify-self: start;

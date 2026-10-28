@@ -622,7 +622,8 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
                 :data-system="namespace"
                 @change="toggleSystem(namespace)"
               />
-              <code>{{ namespace }}</code>
+              <!-- The name, not the manifest id; the id stays on hover. -->
+              <span :title="namespace">{{ $t(`settings.executionPolicy.namespace.${namespace}`) }}</span>
             </label>
           </div>
         </div>
@@ -820,7 +821,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   line-height: var(--lh-base);
 }
 .ep-rebuild-confirm p, .ep-source-reset-confirm p { margin-top: 0; }
-.ep-rebuild-confirm label, .ep-source-reset-confirm label { display: flex; align-items: center; gap: var(--space-2); }
+.ep-rebuild-confirm label, .ep-source-reset-confirm label { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-h-sm); cursor: pointer; }
 .ep-conflict {
   display: flex;
   align-items: center;
@@ -892,7 +893,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   line-height: var(--lh-base);
 }
 .ep-warning:has(label) p { margin: 0; }
-.ep-confirm-label, .ep-warning:has(label) label { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); font-weight: 600; }
+.ep-confirm-label, .ep-warning:has(label) label { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-h-sm); margin-top: var(--space-2); font-weight: 600; cursor: pointer; }
 /* The allowlist and shell parts are sub-rows of the user policy card. */
 .ep-editor-block {
   margin: 0 calc(-1 * var(--space-row-x)) var(--space-3);

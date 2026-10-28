@@ -159,7 +159,9 @@
   --font-ui: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
 }
 
-/* Japanese has no spaces, so wrap at phrase boundaries instead of mid-word. */
+/* Japanese has no spaces, so wrap at phrase boundaries instead of mid-word.
+   word-break is inherited from here, so components break long tokens with
+   overflow-wrap rather than `word-break: break-word`, which would reset it. */
 :lang(ja) {
   word-break: auto-phrase;
   line-break: strict;
@@ -335,6 +337,10 @@
   --modal-w-compact: 440px;   /* confirmations, single-field prompts */
   --modal-w-standard: 620px;  /* forms, guided flows */
   --modal-w-wide: 1100px;     /* data tables, multi-pane settings */
+  /* One measure for prose-like Settings pages (Help, Layout, Prompts intro,
+     Developer), set on the page container at body text size. Grids and
+     tables on other pages stay full width. */
+  --settings-page-max: 78ch;
   --modal-backdrop: var(--shadow-overlay);
   --modal-backdrop-blur: 4px;
 

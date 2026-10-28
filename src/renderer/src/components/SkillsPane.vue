@@ -1458,12 +1458,13 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  min-height: 24px;
   padding: 3px 9px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
 }
 .skills-chip.on { background: var(--bg-elevated); color: var(--text-bright); border-color: var(--border-emphasis, var(--border-default)); font-weight: 600; }
-.skills-chip .count { font-size: var(--font-3xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
+.skills-chip .count { font-size: var(--font-xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
 .skills-filterbar .skills-search { flex: 1; min-width: 140px; max-width: 260px; }
 .skills-filterbar .skills-view-switch { margin-left: auto; }
 
@@ -1526,6 +1527,23 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
 }
 .skill-card-delivery { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 2px; }
 .skill-card-delivery-chips { display: contents; }
+/* On a card the delivery state repeats on every row, so it reads as neutral
+   text; colour stays on the drawer's toggles, where it marks what you change. */
+.skill-card-delivery-chips .dchip,
+.skill-card-delivery-chips .dchip.on,
+.skill-card-delivery-chips .dchip.auto {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 500;
+}
+.skill-card-delivery-chips .dchip + .dchip::before {
+  content: '·';
+  margin: 0 6px 0 2px;
+  color: var(--text-muted);
+}
 
 /* delivery chips — cards (read-only) and drawer (interactive) share the look */
 .dchip {
@@ -1587,7 +1605,7 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 .skill-drawer-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .skill-drawer-hint { margin: 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; }
 .skill-drawer-path { display: block; font-size: 10.5px; padding: 5px 8px; border-radius: var(--radius-control); background: var(--bg-muted); word-break: break-all; }
-.skill-drawer-prose { margin: 0; font-size: 11.5px; line-height: var(--lh-base); color: var(--text-primary); white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto; }
+.skill-drawer-prose { margin: 0; font-size: 11.5px; line-height: var(--lh-base); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; }
 .skill-drawer-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .skill-drawer-actions.secondary { justify-content: flex-start; margin-top: 0; }
 .skill-badge { border-radius: var(--radius-pill); padding: 2px 7px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }

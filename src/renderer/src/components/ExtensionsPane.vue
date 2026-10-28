@@ -36,6 +36,7 @@ import { disclosureClauses } from '../lib/disclosureText'
 import { leadSentence } from '../lib/leadSentence'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { DisclosureRiskLevel } from '../../../shared/pluginDisclosure'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 
 const { t, locale } = useI18n()
 
@@ -909,7 +910,7 @@ watch(installed, () => {
               </button>
             </li>
           </ul>
-          <p v-if="!nonFactoryInstalled.length" class="ext-empty nv-empty">{{ $t('settings.extensions.empty') }}</p>
+          <SettingsEmptyState v-if="!nonFactoryInstalled.length" class="ext-empty" :message="$t('settings.extensions.empty')" />
         </section>
       </div>
       <div class="ext-md-detail">
@@ -1369,7 +1370,7 @@ watch(installed, () => {
       </ul>
     </section>
 
-    <div v-show="props.page === 'developer'">
+    <div v-show="props.page === 'developer'" class="ext-devmode-native">
       <NativeBackendPanel @on="(switches) => (nativeSwitchesOn = switches)" />
     </div>
 
@@ -1603,9 +1604,6 @@ watch(installed, () => {
 }
 .ext-md-list .ext-empty {
   margin: 0 var(--space-2);
-  padding: var(--space-3);
-  font-size: var(--font-xs);
-  text-align: center;
 }
 .ext-md-detail {
   align-self: stretch;
@@ -1694,7 +1692,7 @@ watch(installed, () => {
   color: var(--danger-bright);
   font-size: var(--font-xs);
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .ext-section {
   margin-bottom: var(--space-6);
@@ -1734,6 +1732,11 @@ watch(installed, () => {
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: var(--risk-subtle);
   color: var(--risk-fg);
+}
+/* The Developer page is prose and switches: it takes the shared measure. */
+.ext-devmode,
+.ext-devmode-native {
+  max-width: var(--settings-page-max);
 }
 .ext-devmode .ext-load-folder {
   margin-top: var(--space-3);
@@ -2267,11 +2270,6 @@ watch(installed, () => {
   color: var(--text-secondary);
   font-size: var(--font-xs);
   cursor: pointer;
-}
-.ext-empty {
-  color: var(--text-secondary);
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
 }
 /* The first inventory read is out or failed: one line, and Retry under it. */
 .ext-inventory-state {

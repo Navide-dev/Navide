@@ -15,6 +15,7 @@ import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginSourceBadge from './PluginSourceBadge.vue'
 import { cardRiskLevel, declaredVsScanned } from '../../../shared/pluginDisclosureScan'
 import PluginActivityPanel from './PluginActivityPanel.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import { createQueueTrend, pluginBackendUsage } from '../lib/backendQueueTrend'
 
 interface Entry {
@@ -115,7 +116,7 @@ onBeforeUnmount(stopPolling)
   <div class="nv-overview">
     <p class="nv-overview-intro">{{ $t('pluginActivity.overview.intro') }}</p>
     <p v-if="loading" class="nv-overview-muted">{{ $t('pluginActivity.loading') }}</p>
-    <p v-else-if="entries.length === 0" class="nv-overview-muted">{{ $t('pluginActivity.overview.empty') }}</p>
+    <SettingsEmptyState v-else-if="entries.length === 0" :message="$t('pluginActivity.overview.empty')" />
     <article v-for="entry in entries" :key="entry.id" class="nv-overview-entry" :data-id="entry.id">
       <!-- Always visible: who it is, how risky, and any warning. The full
            record opens below it; nothing in it is shortened. -->
@@ -396,7 +397,7 @@ onBeforeUnmount(stopPolling)
 .nv-overview-muted {
   color: var(--text-secondary);
 }
-/* Empty and loading states sit in a dashed well, like the empty installed list. */
+/* The loading state sits in the same dashed well as the shared empty state. */
 .nv-overview > .nv-overview-muted {
   padding: var(--space-4);
   border: 1px dashed var(--border-default);

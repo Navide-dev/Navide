@@ -176,7 +176,7 @@ function ruleLabel(rule: string): string {
   color: var(--text-primary); background: var(--attention-subtle); border-left: 3px solid var(--attention-fg);
   border-radius: var(--radius-sm); text-wrap: pretty; word-break: auto-phrase;
 }
-.tp-error { margin: 8px 0 0; font-size: var(--font-2xs); color: var(--danger-fg); word-break: break-word; }
+.tp-error { margin: 8px 0 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 .tp-inset { margin: 0; padding: 0 var(--space-row-x) 8px; }
 /* Indented under its section with a thin rule, so the sub-blocks read as part of it. */
 .tp-group { margin: 4px 0 8px; padding-left: 12px; border-left: 2px solid var(--border-muted); }
@@ -190,7 +190,7 @@ function ruleLabel(rule: string): string {
 .tp-item + .tp-item { border-top: 1px solid var(--border-muted); }
 .tp-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .tp-item-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
-.tp-item-meta { font-size: var(--font-2xs); color: var(--text-secondary); word-break: break-word; }
+.tp-item-meta { font-size: var(--font-2xs); color: var(--text-secondary); overflow-wrap: anywhere; }
 .tp-code { font-family: var(--font-mono, monospace); font-size: var(--font-2xs); color: var(--text-bright); word-break: break-all; }
 .tp-code.grow { flex: 1; min-width: 0; }
 .tp-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px var(--space-row-x); }

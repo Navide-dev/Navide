@@ -11,6 +11,12 @@ defineProps<{
   badge?: number
   /** State of pages folded under this row (a warning, or "On"), named by `label`. */
   marker?: { text: string; tone: 'risk' | 'on'; label: string } | null
+  /**
+   * Its pages are unfolded under it: the selected page row carries the
+   * selection, so this row shows only an expanded state (except in the
+   * icon-only rail, where the pages are hidden and it is the selection again).
+   */
+  expanded?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,9 +28,10 @@ const emit = defineEmits<{
   <button
     type="button"
     class="settings-nav-item"
-    :class="{ active }"
+    :class="{ active, expanded }"
     :title="label"
-    :aria-current="active ? 'page' : undefined"
+    :aria-current="active && !expanded ? 'page' : undefined"
+    :aria-expanded="expanded || undefined"
     @click="emit('select')"
   >
     <span class="settings-nav-item-icon">
@@ -131,6 +138,21 @@ const emit = defineEmits<{
   white-space: normal;
   overflow-wrap: break-word;
   line-height: 1.3;
+}
+
+/* Expanded parent: a heading for the page rows under it, not a second
+   selection. Plain label weight and colour, no fill, no indicator bar. */
+@media (min-width: 721px) {
+  .settings-nav-item.active.expanded {
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .settings-nav-item.active.expanded:hover {
+    background: var(--bg-hover);
+  }
+  .settings-nav-item.active.expanded::before {
+    display: none;
+  }
 }
 
 /* Narrow modal: collapse to an icon-only rail. The label stays in the

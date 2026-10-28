@@ -481,7 +481,7 @@ describe('ExecutionPolicyPane', () => {
 
     const editorBlocks = wrapper.findAll('.ep-editor-block')
     expect(editorBlocks[0].get('h3').text()).toBe('System namespaces to allow')
-    expect(editorBlocks[0].text()).toContain('available to the agent')
+    expect(editorBlocks[0].text()).toContain('agents can use')
     expect(editorBlocks[1].get('h3').text()).toBe('Shell executables to allow')
 
     await wrapper.get('[data-mode="denylist"] input').setValue(true)

@@ -158,6 +158,23 @@ function currentList(): Array<Finding | Item> {
   return view.value === 'findings' ? scan.value?.findings ?? [] : scan.value?.items ?? []
 }
 
+// The scan's keyring reason is a code (dump-keychain-failed, gdbus-not-found, …):
+// shown as a sentence, with the code kept in the status's title for bug reports.
+// Free text from an older backend is shown as it is.
+const KEYRING_REASON: Record<string, string> = {
+  'security-tool-not-found': 'tool-missing',
+  'cmdkey-not-found': 'tool-missing',
+  'gdbus-not-found': 'tool-missing',
+  'dump-keychain-failed': 'read-failed',
+  'cmdkey-failed': 'read-failed',
+  'secret-service-unavailable': 'no-service',
+}
+function keyringReasonText(reason: string): string {
+  if (!reason) return t('settings.credentials.keyring-reason-unknown')
+  const key = KEYRING_REASON[reason]
+  if (key) return t(`settings.credentials.keyring-reason.${key}`)
+  return /^[a-z0-9-]+$/.test(reason) ? t('settings.credentials.keyring-reason.read-failed') : reason
+}
 function kindLabel(kind: string): string {
   return KNOWN_KINDS.has(kind) ? t(`settings.credentials.kind.${kind}`) : kind
 }
@@ -331,12 +348,17 @@ async function saveRoots(): Promise<void> {
         <p>{{ t('settings.credentials.intro') }}</p>
         <p class="cred-meta">
           <span>{{ t('settings.credentials.meta') }}</span>
-          <span v-if="scan" class="cred-keyring" :class="scan.keyring.available ? 'ok' : 'bad'">
+          <span
+            v-if="scan"
+            class="cred-keyring"
+            :class="scan.keyring.available ? 'ok' : 'bad'"
+            :title="!scan.keyring.available && scan.keyring.reason ? scan.keyring.reason : undefined"
+          >
             <template v-if="scan.keyring.available">
               {{ scan.keyring.backend ? t('settings.credentials.keyring-ok', { backend: scan.keyring.backend }) : t('settings.credentials.keyring-ok-plain') }}
             </template>
             <template v-else>
-              {{ t('settings.credentials.keyring-bad') }} · {{ scan.keyring.reason || t('settings.credentials.keyring-reason-unknown') }}
+              {{ t('settings.credentials.keyring-bad') }} · {{ keyringReasonText(scan.keyring.reason) }}
             </template>
           </span>
         </p>

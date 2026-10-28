@@ -186,7 +186,7 @@ async function runTest(): Promise<void> {
     <SettingsSection :label="t('guard.policy.title')">
       <p class="gd-hint">{{ t('guard.policy.hint') }}</p>
       <SettingsCard>
-        <!-- In a narrow window the table scrolls inside its card instead of clipping a column. -->
+        <!-- Below the container breakpoint each row stacks into a titled block with one labelled line per level. -->
         <div class="gd-table-scroll">
         <table class="gd-table" data-testid="guard-policy">
           <thead>
@@ -198,7 +198,7 @@ async function runTest(): Promise<void> {
           <tbody>
             <tr v-for="row in POLICY_ROWS" :key="row">
               <th scope="row">{{ t(`guard.policy.row.${row}`) }}</th>
-              <td v-for="level in LEVELS" :key="level">
+              <td v-for="level in LEVELS" :key="level" :data-label="t(`guard.level.${level}`)">
                 <span class="gd-pill" :class="actionTone(POLICY[row][level])">{{ t(`guard.action.${POLICY[row][level]}`) }}</span>
               </td>
             </tr>
@@ -359,7 +359,7 @@ async function runTest(): Promise<void> {
 <style scoped>
 .security-pane { display: flex; flex-direction: column; }
 .gd-hint { margin: 0 0 8px; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
-.gd-error { margin: 8px 0 0; font-size: var(--font-2xs); color: var(--danger-fg); word-break: break-word; }
+.gd-error { margin: 8px 0 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 .gd-inset { margin: 0; padding: 0 var(--space-row-x) 8px; }
 .gd-counts { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px var(--space-row-x); }
 
@@ -379,18 +379,32 @@ async function runTest(): Promise<void> {
 .gd-pill.warn { color: var(--attention-on-subtle); background: var(--attention-subtle); border-color: var(--attention-muted); }
 .gd-pill.bad { color: var(--danger-fg); background: var(--danger-subtle); border-color: var(--danger-muted); }
 
-.gd-table-scroll { overflow-x: auto; }
+.gd-table-scroll { overflow-x: auto; container: gd-table / inline-size; }
 .gd-table { width: 100%; border-collapse: collapse; font-size: var(--font-2xs); }
 .gd-table th, .gd-table td { padding: 6px var(--space-row-x); text-align: left; }
 .gd-table thead th { color: var(--text-secondary); font-weight: 600; border-bottom: 1px solid var(--border-muted); }
 .gd-table tbody th { color: var(--text-primary); font-weight: 600; }
 .gd-table tbody tr + tr th, .gd-table tbody tr + tr td { border-top: 1px solid var(--border-muted); }
+/* Narrow card: one block per request source — the source name as a wrapping
+   title, then one "level  action" line per column. The header row is kept for
+   assistive tech but hidden; each cell carries its column name instead. */
+@container gd-table (max-width: 600px) {
+  .gd-table, .gd-table tbody, .gd-table tr, .gd-table tbody th { display: block; }
+  .gd-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .gd-table tbody tr { padding: 8px var(--space-row-x); }
+  .gd-table tbody tr + tr { border-top: 1px solid var(--border-muted); }
+  .gd-table tbody tr + tr th, .gd-table tbody tr + tr td { border-top: none; }
+  .gd-table tbody th { padding: 0 0 4px; white-space: normal; overflow-wrap: anywhere; }
+  .gd-table td { display: grid; grid-template-columns: minmax(6em, 40%) minmax(0, 1fr); align-items: center; gap: 8px; padding: 2px 0; }
+  .gd-table td::before { content: attr(data-label); color: var(--text-secondary); overflow-wrap: anywhere; }
+  .gd-table td .gd-pill { justify-self: start; }
+}
 
 .gd-item { display: flex; align-items: center; gap: 10px; padding: 8px var(--space-row-x); }
 .gd-empty { font-size: var(--font-2xs); color: var(--text-secondary); }
 .gd-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .gd-item-name { flex: 1; min-width: 0; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gd-item-meta { font-size: var(--font-2xs); color: var(--text-secondary); word-break: break-word; }
+.gd-item-meta { font-size: var(--font-2xs); color: var(--text-secondary); overflow-wrap: anywhere; }
 .gd-code { font-family: var(--font-mono, monospace); font-size: var(--font-2xs); color: var(--text-bright); word-break: break-all; }
 
 .gd-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px var(--space-row-x); }

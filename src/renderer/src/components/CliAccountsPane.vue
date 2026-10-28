@@ -980,9 +980,10 @@ onMounted(() => refreshUsage())
   border-radius: 8px;
   background: var(--bg-subtle);
 }
+/* The account in use is marked by its neutral "Default" pill, not a blue
+   ring: blue is reserved for selection, focus and the primary action. */
 .cli-card.active {
-  border-color: var(--accent-emphasis);
-  box-shadow: 0 0 0 1px var(--accent-emphasis);
+  border-color: var(--border-strong);
 }
 /* The empty, inactive built-in Default: one line across the grid. */
 .cli-card.cli-card-collapsed {
@@ -1056,7 +1057,7 @@ onMounted(() => refreshUsage())
   font-size: var(--font-xs);
   font-family: inherit;
 }
-.cli-card-meta { font-size: 10.5px; color: var(--text-secondary); }
+.cli-card-meta { font-size: var(--font-xs); color: var(--text-secondary); }
 .cli-card-dup {
   display: flex;
   align-items: baseline;
@@ -1133,11 +1134,11 @@ onMounted(() => refreshUsage())
 .cli-confirm-text { font-size: var(--font-2xs); color: var(--text-secondary); }
 .cli-badge {
   flex-shrink: 0;
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 600;
-  color: var(--accent-fg);
-  background: var(--accent-subtle, var(--bg-muted));
-  border: 1px solid var(--accent-muted, var(--border-default));
+  color: var(--text-primary);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
   padding: 1px 8px;
 }

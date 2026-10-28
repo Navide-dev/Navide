@@ -199,7 +199,7 @@ function applyCustomIcon(): void {
   <div class="prompts-pane" data-settings-section="prompts">
     <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
     <div class="prompts-toolbar">
-      <div>
+      <div class="prompts-intro">
         <p>{{ t('settings.prompts.intro') }}</p>
       </div>
       <button type="button" class="primary" @click="createSkill">
@@ -485,11 +485,16 @@ textarea:focus {
 .prompts-toolbar > button {
   white-space: nowrap;
 }
+/* The intro takes the shared prose measure, set at body size so it ends where
+   the other prose pages do. */
+.prompts-intro {
+  flex: 1 1 24em;
+  max-width: var(--settings-page-max);
+}
 .prompts-toolbar p {
   margin: 0;
-  max-width: 62ch;
   color: var(--text-secondary);
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
 }
 
 /* ── Filter bar ───────────────────────────────────────────────────────── */

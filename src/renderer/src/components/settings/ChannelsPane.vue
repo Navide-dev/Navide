@@ -865,7 +865,7 @@ function formatTime(ts: number | null | undefined): string {
 <style scoped>
 .channels-pane { display: flex; flex-direction: column; }
 .ch-list-error { margin-top: 8px; }
-.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); word-break: break-word; }
+.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 
 /* Platform rows: same inset and type scale as SettingRow. */
 .ch-row { padding: var(--space-row-y) var(--space-row-x); }
@@ -951,7 +951,7 @@ function formatTime(ts: number | null | undefined): string {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .ch-row-error.warn { color: var(--attention-fg); }
 .ch-row-error.bad { color: var(--danger-fg); }
@@ -1052,7 +1052,7 @@ function formatTime(ts: number | null | undefined): string {
 .ch-link-title { font-size: var(--font-row-desc); font-weight: 600; color: var(--text-bright); }
 .ch-link-desc { margin: 0; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: 1.4; }
 .ch-link-summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--font-row-desc); color: var(--text-secondary); }
-.ch-link-error { color: var(--danger-fg); word-break: break-word; }
+.ch-link-error { color: var(--danger-fg); overflow-wrap: anywhere; }
 
 /* Pairing / allowlist rows. */
 .ch-section-hint { margin: 0 0 8px; font-size: var(--font-row-desc); color: var(--text-secondary); }
