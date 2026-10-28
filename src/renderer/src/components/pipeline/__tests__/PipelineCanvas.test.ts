@@ -102,6 +102,24 @@ describe('PipelineCanvas', () => {
     w.unmount()
   })
 
+  it('draws a subpipeline node as a card with an input and an output', async () => {
+    const called: PipelineGraph = {
+      ...graph,
+      nodes: [...graph.nodes, { id: 'call', kind: 'subpipeline', label: 'Call', position: { x: 560, y: 200 }, subpipeline: { pipelineId: 'p2', wait: true } }],
+      edges: [...graph.edges, { id: 'e-a-call', from: 'a', to: 'call', kind: 'main' }],
+    }
+    const w = mount(PipelineCanvas, {
+      props: { graph: called, roleLabels: {}, agentLabels: {}, runNodes: {}, now: 0, selectedId: null, locked: false, flowId: `t-${Math.random()}` },
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const handles = w.find('.vue-flow__node[data-id="call"]').findAll('.vue-flow__handle').map((h) => h.attributes('data-handleid'))
+    expect(handles).toEqual(expect.arrayContaining(['in', 'out']))
+    expect(w.find('[data-node-id="call"]').text()).toContain('p2')
+    w.unmount()
+  })
+
   it('offers zoom controls with the current zoom level', async () => {
     const w = mountCanvas()
     await flushPromises()

@@ -6913,7 +6913,10 @@ def _stage_edit_hits_running_pipeline(ws_path: str, pipeline_id: str | None) -> 
     if not pipeline_id:
         # No id means "the active pipeline", which is what the run uses.
         return True
-    return pipeline_id == (proj.pipeline_id or app.stages_store.get_active_pipeline_id())
+    # A parent suspended at a sub-pipeline resumes on its own definition, so
+    # it is as much in use as the child's.
+    parents = {str((f.get("run") or {}).get("pipeline_id") or "") for f in getattr(proj, "run_stack", None) or []}
+    return pipeline_id == (proj.pipeline_id or app.stages_store.get_active_pipeline_id()) or pipeline_id in parents
 
 
 async def _broadcast_pipeline_summaries(reason: str) -> None:
@@ -10894,6 +10897,82 @@ def _mirror_pipeline_state(project: "Project") -> None:
     )
 
 
+@handler("pipeline.suspend")
+async def pipeline_suspend(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The run reached a subpipeline node: suspend it (run_stack) so the
+    window can start the child run in this workspace."""
+    from . import app
+    from .guard.taint import pipeline_run_taint
+
+    ws = payload["workspace_path"]
+    try:
+        project, frame = app.project_store.suspend_for_child(
+            ws,
+            node_id=str(payload.get("node_id") or ""),
+            next_index=int(payload.get("next_index", 0) or 0),
+            pipeline_name=str(payload.get("pipeline_name") or ""),
+            child_pipeline_id=str(payload.get("child_pipeline_id") or ""),
+            taint=pipeline_run_taint(ws),
+        )
+    except ValueError as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    app.tokens_store.suspend_run(ws)
+    _mirror_pipeline_state(project)
+    resp = app._project_payload(project)
+    resp["frame_id"] = frame["id"]
+    await session.send_json(make_response(msg_id, msg_type, resp))
+
+
+@handler("pipeline.child_finished")
+async def pipeline_child_finished(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The child run ended: restore its parent (run_stack pop) with the
+    subpipeline node done or failed. {popped: false} when no parent waits."""
+    from . import app
+    from .guard.taint import restore_pipeline_run_taint
+
+    ws = payload["workspace_path"]
+    child = app.project_store.peek(ws)
+    child_run_id = _token_run_id(child.log_file_name, child.id) if child is not None else ""
+    outcome = "completed" if payload.get("outcome") == "completed" else "failed"
+    popped = app.project_store.finish_child(
+        ws, outcome=outcome, summary=str(payload.get("summary") or ""),
+        output=payload.get("output"), error=str(payload.get("error") or ""),
+    )
+    if popped is None:
+        await session.send_json(make_response(msg_id, msg_type, {"popped": False}))
+        return
+    project, frame = popped
+    app.tokens_store.resume_suspended_run(ws, child_run_id=child_run_id)
+    restore_pipeline_run_taint(ws, str(frame.get("taint") or ""))
+    _mirror_pipeline_state(project)
+    resp = app._project_payload(project)
+    resp.update({"popped": True, "node_id": frame["node_id"], "next_index": frame["next_index"]})
+    await session.send_json(make_response(msg_id, msg_type, resp))
+
+
+@handler("pipeline.stack")
+async def pipeline_stack(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The parent runs suspended in a workspace, outermost first, without
+    their saved run fields."""
+    from . import app
+
+    project = app.project_store.peek(payload.get("workspace_path") or "")
+    frames = [run_frame_view(f) for f in (project.run_stack if project is not None else [])]
+    await session.send_json(make_response(msg_id, msg_type, {"frames": frames, "state": project.state if project else ""}))
+
+
+def run_frame_view(frame: dict) -> dict:
+    """A run_stack frame as status surfaces show it."""
+    run = frame.get("run") or {}
+    return {
+        "id": frame.get("id", ""), "node_id": frame.get("node_id", ""),
+        "pipeline_id": run.get("pipeline_id", ""), "pipeline_name": frame.get("pipeline_name", ""),
+        "child_pipeline_id": frame.get("child_pipeline_id", ""), "next_index": frame.get("next_index", 0),
+        "task_description": run.get("task_description", ""), "suspended_at": frame.get("suspended_at", ""),
+    }
+
+
 @handler("pipeline.claim")
 async def pipeline_claim(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """A window's claim of the pipeline runs it drives, sent on every
@@ -10918,21 +10997,45 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     await session.send_json(make_response(msg_id, msg_type, resp))
 
 
+def _token_run_id(log_file_name: str, project_id: str) -> str:
+    """The tokens_store run id pipeline.start gives a run: its run directory."""
+    log_name = log_file_name or ""
+    return (log_name.rsplit("/", 1)[0] if "/" in log_name else "") or project_id
+
+
 @handler("pipeline.start")
 async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .projects import ParentRunSuspended
 
-    project = app.project_store.start_pipeline(
-        payload["workspace_path"],
-        task_description=payload.get("task_description", ""),
-        total_stages=int(payload.get("total_stages", 4)),
-        stage_blueprint=payload.get("stage_blueprint", []),
-        backend_version=app.__version__,
-        pipeline_id=payload.get("pipeline_id", "") or app.stages_store.get_active_pipeline_id(),
-        start_index=int(payload.get("start_index", 0) or 0),
-    )
-    from .guard.taint import pipeline_run_started
+    child_of = str(payload.get("child_of") or "")
+    frame = None
+    if child_of:
+        before = app.project_store.peek(payload["workspace_path"])
+        stack = getattr(before, "run_stack", None) or []
+        frame = stack[-1] if stack else None
+    try:
+        project = app.project_store.start_pipeline(
+            payload["workspace_path"],
+            task_description=payload.get("task_description", ""),
+            total_stages=int(payload.get("total_stages", 4)),
+            stage_blueprint=payload.get("stage_blueprint", []),
+            backend_version=app.__version__,
+            pipeline_id=payload.get("pipeline_id", "") or app.stages_store.get_active_pipeline_id(),
+            start_index=int(payload.get("start_index", 0) or 0),
+            child_of=child_of,
+        )
+    except ParentRunSuspended as err:
+        await session.send_json(make_error(msg_id, msg_type, "PIPELINE_SUSPENDED", str(err)))
+        return
+    except ValueError as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    from .guard.taint import arm_pipeline_run, pipeline_run_started
 
+    if child_of and frame is not None and frame.get("taint"):
+        # A child run carries its parent's taint, task text included.
+        arm_pipeline_run(payload["workspace_path"], str(frame["taint"]))
     pipeline_run_started(payload["workspace_path"])
     pipeline_liveness.claim_run(session, project.workspace_path)
     app._register_workspace_and_backfill(project.workspace_path)
@@ -10946,6 +11049,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
         task=project.task_description,
         run_dir=run_dir,
         pipeline_id=getattr(project, "pipeline_id", ""),
+        parent_run_id=_token_run_id(frame["run"].get("log_file_name", ""), project.id) if child_of and frame else "",
     )
     asyncio.create_task(
         app.broadcast(make_event("tokens.changed", app.tokens_store.snapshot(project.workspace_path)))

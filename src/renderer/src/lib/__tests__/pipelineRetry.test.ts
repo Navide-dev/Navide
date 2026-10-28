@@ -40,12 +40,12 @@ describe('retry policy: validation (mirrors the backend)', () => {
   it('only slot nodes carry retry, and set_retry with null removes it', () => {
     const g = withRetry({ maxTries: 3 })
     g.nodes[0].retry = { maxTries: 2 }
-    expect(validateGraph(g)).toContain('node trigger: only slot nodes carry retry')
+    expect(validateGraph(g)).toContain('node trigger: only slot and subpipeline nodes carry retry')
     const set = applyGraphOps(deriveGraphFromStages(STAGES), [{ op: 'set_retry', id: 'n-01-0', retry: { maxTries: 3, waitMs: 10 } }])
     expect(set.nodes.find((n) => n.id === 'n-01-0')!.retry).toEqual({ maxTries: 3, waitMs: 10 })
     const cleared = applyGraphOps(set, [{ op: 'set_retry', id: 'n-01-0', retry: null }])
     expect(cleared.nodes.find((n) => n.id === 'n-01-0')!.retry).toBeUndefined()
-    expect(() => applyGraphOps(cleared, [{ op: 'set_retry', id: 'trigger', retry: { maxTries: 2 } }])).toThrow('only slot nodes can retry')
+    expect(() => applyGraphOps(cleared, [{ op: 'set_retry', id: 'trigger', retry: { maxTries: 2 } }])).toThrow('only slot and subpipeline nodes can retry')
   })
 })
 

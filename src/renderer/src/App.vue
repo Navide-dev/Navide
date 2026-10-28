@@ -11886,7 +11886,11 @@ const pipelineView = computed<PipelineStatusView>(() => ({
   backendLogFile: pipeline.backendLogFile,
   awaitingGate: pipelineDag.awaitingGate.value
     ? { gateId: pipelineDag.awaitingGate.value.gateId, label: pipelineDag.awaitingGate.value.label }
-    : null
+    : null,
+  // A sub-pipeline's child run: the parents waiting on it, outermost first.
+  ...(pipelineDag.runStack.value.length
+    ? { parents: pipelineDag.runStack.value.map((f) => ({ name: f.pipeline_name || f.run?.pipeline_id || '?', pipelineId: f.run?.pipeline_id || '' })) }
+    : {}),
 }))
 
 interface ProjectSlot {
@@ -11982,6 +11986,15 @@ function backfillOrigin(origin: string | undefined): SpawnHistoryEntry['origin']
   return HISTORY_ORIGINS.find((known) => known === origin) ?? 'manual'
 }
 
+interface ProjectRunFrame {
+  id: string
+  node_id: string
+  next_index: number
+  pipeline_name: string
+  child_pipeline_id: string
+  run?: { pipeline_id?: string; task_description?: string }
+}
+
 interface ProjectPayload {
   project: {
     id: string
@@ -12016,6 +12029,9 @@ interface ProjectPayload {
     node_states?: Record<string, NodeRunState>  // DAG engine's last reported per-node state
     node_gate?: { gateId?: string; nextIndex?: number }  // gate the run is paused on; {} = none
     node_outputs?: Record<string, unknown>
+    /** Parent runs suspended at a subpipeline node, outermost first (see
+     *  projects.py run_stack). Absent or [] for a run without calls. */
+    run_stack?: ProjectRunFrame[]
   } | null
   paths: { dir: string; project_file: string; pipeline_log: string; backend_log: string } | null
   resume_index?: number
@@ -12329,6 +12345,8 @@ function buildExistingProjectInfo(payload: ProjectPayload | null): ExistingProje
     runCount: (proj.run_count as number | undefined) ?? 0,
     nodeGate: proj.node_gate ?? null,
     nodeStates: proj.node_states ?? {},
+    nodeOutputs: proj.node_outputs ?? {},
+    ...(proj.run_stack?.length ? { runStack: proj.run_stack } : {}),
   }
 }
 
@@ -13652,6 +13670,9 @@ async function runPipelineResume(): Promise<void> {
   // it. Otherwise gates before the resume stage count as passed and one after
   // it still holds.
   const resumePipelineId = info.pipelineId || pipelinesApi.activePipelineId.value
+  // Recorded outputs of sub-pipeline calls an earlier run made, so they are
+  // reused rather than called again (only subpipeline nodes read them).
+  pipelineDag.adoptCallOutputs(info.nodeOutputs)
   const gateNext = info.nodeGate?.gateId
     ? await pipelineDag.beginAtGate(resumePipelineId, stagesApi.stages.value, info.nodeGate, info.nodeStates ?? {})
     : null
@@ -13710,6 +13731,7 @@ async function runPipelineResume(): Promise<void> {
     return
   }
   applyProjectPaths(resp)
+  pipelineDag.setRunStack(resp.project?.run_stack)
   // Refresh the peek so the banner disappears now that we're running.
   existingProject.value = null
   // Cold restore keeps pipeline panes as placeholders; an explicit pipeline
@@ -13722,6 +13744,11 @@ async function runPipelineResume(): Promise<void> {
   if (gateNext !== null) {
     // Back to the hand-off the abort interrupted: wait on the gate.
     pipelineDag.holdBeforeStage(gateNext)
+  } else if (pipelineDag.nextCall(info.nextStageIndex)) {
+    // A sub-pipeline before the resume stage is called first (or again,
+    // after its child failed and it has a try left).
+    await takeCall(pipelineDag.nextCall(info.nextStageIndex)!, info.nextStageIndex)
+    return
   } else {
     // activateStage builds context from prior stages and injects kickoffs.
     await activateStage(info.nextStageIndex)
@@ -14603,7 +14630,7 @@ async function spawnPipelineStage(index: number): Promise<void> {
 
 /** Returns why the run was refused, or '' when it was not (ui.pipeline.start
  *  reports the reason). */
-async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string }): Promise<string> {
+async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string; childOf?: string }): Promise<string> {
   const pid = payload.pipelineId || pipelinesApi.activePipelineId.value
   // pipelineLog alone left a refusal nowhere durable: it persists only once
   // pipeline.workspacePath is set, which happens below, so after a reset or a
@@ -14613,6 +14640,11 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
     void sendQuiet('pipeline.start_refused', { workspace_path: payload.workspacePath, pipeline_id: pid, reason })
     return reason
   }
+  // A parent run suspended here waits for its own child: nothing else starts
+  // (the backend refuses it too). Known from this window's own run, or from
+  // the project the workspace opened with.
+  const waiting = payload.childOf ? undefined : (pipelineDag.runStack.value.at(-1) ?? existingProject.value?.runStack?.at(-1))
+  if (waiting) return refuse(i18n.global.t('error.pipeline-parent-suspended', { name: waiting.pipeline_name || '?' }))
   // If a specific pipeline was requested and it's not currently active, switch first.
   if (payload.pipelineId && payload.pipelineId !== pipelinesApi.activePipelineId.value) {
     // Both calls fail SOFTLY — setActivePipeline returns false and refresh only
@@ -14679,8 +14711,11 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
     // Only a restart-from-node run carries it, so a normal start's request
     // is unchanged; the backend records the skipped stages as completed.
     ...(startIndex > 0 ? { start_index: startIndex } : {}),
+    // A sub-pipeline's child run names the frame its parent waits on.
+    ...(payload.childOf ? { child_of: payload.childOf } : {}),
   })
   applyProjectPaths(resp ?? undefined)
+  pipelineDag.setRunStack(resp?.project?.run_stack)
   pipelineDag.adoptOutputs(resp?.project?.node_outputs)
   if (resp?.paths) {
     pipelineLog(`${resp.paths.project_file.split(/[\\/]/).pop()} → ${resp.paths.project_file}`)
@@ -14695,6 +14730,12 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   if (pipelineDag.holdBeforeStage(startIndex)) {
     pipeline.stageIndex = startIndex - 1
     if (pipeline.globalManager) startGlobalManagerRouter()
+    return ''
+  }
+  // Likewise a sub-pipeline before the first stage: it is called first.
+  const firstCall = pipelineDag.nextCall(startIndex)
+  if (firstCall) {
+    await takeCall(firstCall, startIndex)
     return ''
   }
   // Pre-spawn stage 01 only (role prompt, no kickoff). Every later stage is
@@ -14813,6 +14854,12 @@ async function onPipelineNext(): Promise<void> {
   // A DAG gate between this stage and the next pauses the hand-off here; the
   // run resumes through onPipelineGateApprove / onPipelineGateReject.
   if (pipelineDag.holdBeforeStage(nextIndex)) return
+  // A sub-pipeline between this stage and the next suspends the run here.
+  const call = pipelineDag.nextCall(nextIndex)
+  if (call) {
+    await takeCall(call, nextIndex)
+    return
+  }
   if (nextIndex >= stagesApi.stages.value.length) {
     // Final stage finished. Wait for every pane in this stage to be raw-PTY
     // quiet before firing 🎉 so we don't claim "done" while a worker is
@@ -14820,6 +14867,18 @@ async function onPipelineNext(): Promise<void> {
     await waitForStagePanesSettled(currentIndex)
     if (pipeline.state !== 'running') return // abort fired during settle
     stopGlobalManagerRouter()
+    if (pipelineDag.isChildRun()) {
+      // A sub-pipeline's child run: hand its result back to the parent,
+      // which resumes, instead of celebrating.
+      pipeline.state = 'completed'
+      pipelineLog('◇ Sub-pipeline run completed all stages')
+      const result = pipelineDag.childResult()
+      await pipelineDag.end('completed')
+      applyProjectPaths((await sendQuiet<ProjectPayload>('pipeline.complete', { workspace_path: pipeline.workspacePath })) ?? undefined)
+      if (await returnToParent('completed', result)) return
+      currentMode.value = 'completed'
+      return
+    }
     pipeline.state = 'completed'
     currentMode.value = 'completed'
     pipelineLog('🎉 Pipeline completed all stages')
@@ -14975,6 +15034,7 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
         : i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
     { type: 'error' },
   )
+  if (pipelineDag.isChildRun() && await returnToParent('failed', { summary: '', output: null }, `${slotLabel}: ${reason}`)) return
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
 }
 
@@ -15017,7 +15077,85 @@ async function onPipelineGateReject(gateId: string, comment = ''): Promise<boole
     reason: 'failed'
   })
   applyProjectPaths(resp ?? undefined)
+  if (pipelineDag.isChildRun() && await returnToParent('failed', { summary: '', output: null }, `gate "${gateId}" rejected`)) return true
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
+  return true
+}
+
+/** The run cannot continue past subpipeline node `nodeId` (its child failed
+ *  and it has neither a try left nor an error edge, or it could not be
+ *  called): end it as failed, as a failed kickoff does. */
+async function failRunOnCall(nodeId: string, label: string, reason: string): Promise<void> {
+  if (pipeline.state !== 'running') return
+  pipelineLog(`◇ Sub-pipeline "${label}" ✕ ${reason} — pipeline failed`)
+  tearDownPipelineOrchestration()
+  await pipelineDag.end('failed', `run stopped: sub-pipeline "${label}" failed (${reason})`)
+  const resp = await sendQuiet<ProjectPayload>('pipeline.abort', { workspace_path: pipeline.workspacePath, reason: 'failed' })
+  applyProjectPaths(resp ?? undefined)
+  notifyRestore.toast(i18n.global.t('error.pipeline-call-failed', { node: label || nodeId, reason }), { type: 'error' })
+  if (pipelineDag.isChildRun() && await returnToParent('failed', { summary: '', output: null }, `${label}: ${reason}`)) return
+  if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
+}
+
+/** Take over the hand-off to stage `nextIndex` for a sub-pipeline
+ *  (pipelineDag.nextCall): call it, or fail the run on it. */
+async function takeCall(call: NonNullable<ReturnType<typeof pipelineDag.nextCall>>, nextIndex: number): Promise<void> {
+  if (call.kind === 'fail') await failRunOnCall(call.nodeId, call.label, call.reason)
+  else await startChildRun(call, nextIndex)
+}
+
+/** Suspend this run at subpipeline node `call.nodeId` and start its child
+ *  pipeline in the same workspace. This run's panes stay open; it resumes
+ *  at stage `nextIndex` once the child ends (returnToParent). */
+async function startChildRun(
+  call: { nodeId: string; label: string; pipelineId: string; task: string; note: string },
+  nextIndex: number,
+): Promise<void> {
+  const ws = pipeline.workspacePath
+  const parentId = pipelinesApi.activePipelineId.value
+  const parentName = pipelinesApi.pipelines.value.find((p) => p.id === parentId)?.name || parentId
+  const task = (call.note ? `${call.note}\n\n` : '') + call.task.split('{{task}}').join(pipeline.task)
+  pipelineDag.callStarted(call.nodeId)
+  pipelineLog(`◇ Sub-pipeline "${call.label}" → ${call.pipelineId}: suspending this run`)
+  const resp = await sendQuiet<ProjectPayload & { frame_id?: string }>('pipeline.suspend', {
+    workspace_path: ws,
+    node_id: call.nodeId,
+    next_index: nextIndex,
+    pipeline_name: parentName,
+    child_pipeline_id: call.pipelineId,
+  })
+  if (!resp?.frame_id) {
+    await failRunOnCall(call.nodeId, call.label, 'the run could not be suspended for its sub-pipeline — see the line above')
+    return
+  }
+  pipelineDag.setRunStack(resp.project?.run_stack)
+  // Stop this run's orchestration (watchers, routers); its panes stay.
+  tearDownPipelineOrchestration()
+  pipeline.state = 'idle'
+  const refusal = await onPipelineStart({ task, workspacePath: ws, pipelineId: call.pipelineId, childOf: resp.frame_id })
+  if (refusal) await returnToParent('failed', { summary: '', output: null }, `the sub-pipeline did not start: ${refusal}`)
+}
+
+/** This run is a sub-pipeline's child and it ended: hand its result to the
+ *  parent (the backend pops run_stack) and resume the parent. false when no
+ *  parent waits — the caller then finishes the run as usual. */
+async function returnToParent(outcome: 'completed' | 'failed', result: { summary: string; output: unknown }, error = ''): Promise<boolean> {
+  if (!pipelineDag.isChildRun()) return false
+  const ws = pipeline.workspacePath || pipelineRunWorkspace
+  const resp = await sendQuiet<ProjectPayload & { popped?: boolean; node_id?: string }>('pipeline.child_finished', {
+    workspace_path: ws, outcome, summary: result.summary, output: result.output, error,
+  })
+  if (!resp?.popped || !resp.node_id) return false
+  pipelineDag.setRunStack(resp.project?.run_stack)
+  const recorded = resp.project?.node_states?.[resp.node_id]
+  pipelineDag.expectCallResult(
+    resp.node_id,
+    recorded ?? (outcome === 'completed' ? { status: 'done', summary: result.summary } : { status: 'failed', error }),
+  )
+  pipelineLog(`◇ Sub-pipeline ${outcome === 'completed' ? 'finished' : 'failed'} — back to the calling run`)
+  applyProjectPaths(resp)
+  existingProject.value = buildExistingProjectInfo(resp)
+  await runPipelineResume()
   return true
 }
 

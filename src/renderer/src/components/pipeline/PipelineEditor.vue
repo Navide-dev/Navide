@@ -155,6 +155,8 @@ function explain(err: EditorError): string {
   if (err.code === 'PIPELINE_RUNNING') return t('pipelineEditor.error.pipeline-running')
   if (err.code === 'GRAPH_INVALID') {
     const first = err.details?.[0] ?? err.message
+    if (/subpipeline cycle/.test(first)) return t('pipelineEditor.error.subpipeline-cycle', { detail: first })
+    if (/needs subpipeline\.pipelineId/.test(first)) return t('pipelineEditor.error.subpipeline-none')
     if (/cycle/.test(first)) return t('pipelineEditor.error.cycle')
     if (/upstream node/.test(first)) return t('pipelineEditor.error.reject-upstream')
     if (/duplicate edge/.test(first)) return t('pipelineEditor.error.duplicate-edge')
@@ -174,8 +176,27 @@ watch(() => editor.externalEdits.value, () => {
 
 // ── Building nodes ───────────────────────────────────────────────────────────
 let lastAgent = 'claude'
+/** Pipelines a new subpipeline node may call (every one but this), so it is
+ *  placed already pointing at one; the Inspector changes it. */
+const callable = ref<string[]>([])
+watch(() => props.pipelineId, async (self) => {
+  try {
+    const resp = await props.backend.send<{ pipelines?: Array<{ id: string }> }>('pipelines.list', {})
+    callable.value = (resp.payload?.pipelines ?? []).map((p) => p.id).filter((id) => id !== self)
+  } catch {
+    callable.value = []
+  }
+}, { immediate: true })
 function nodeFor(item: PaletteItem): GraphNode {
   const g = graph.value!
+  if (item.kind === 'subpipeline') {
+    // Placed calling the first other pipeline; the Inspector picks another.
+    // With no other pipeline the add is refused (error.subpipeline-none).
+    return {
+      id: freshNodeId(g, 'call'), kind: 'subpipeline', label: uniqueLabel(g, t('pipelineEditor.palette.subpipeline')),
+      position: { x: 0, y: 0 }, subpipeline: { pipelineId: callable.value[0] ?? '', task: '{{task}}', wait: true },
+    }
+  }
   if (item.kind === 'gate') {
     return { id: freshNodeId(g, 'gate'), kind: 'gate', label: uniqueLabel(g, t('pipelineEditor.palette.gate')), position: { x: 0, y: 0 }, gate: {} }
   }

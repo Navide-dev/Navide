@@ -8948,6 +8948,8 @@
     "statusbar-note": "ses fenêtres contextuelles disparaissent avec elle"
   },
   "error": {
+    "pipeline-call-failed": "Le sous-pipeline {node} a échoué ({reason}) ; l’exécution s’est arrêtée.",
+    "pipeline-parent-suspended": "Une exécution parente suspendue ({name}) attend ici. Reprenez-la ou réinitialisez-la d’abord.",
     "pipeline-node-failed": "Étape {stage} : l’étape {slot} a signalé un échec ({reason}) et n’a plus de tentatives. L’exécution s’est arrêtée ; reprenez-la pour réessayer.",
     "pipeline-start-refused": "Le pipeline n’a pas démarré : {reason}",
     "pipeline-kickoff-failed": "Échec du pipeline : étape {stage}, emplacement {slot} : {reason}. Ses panes sont toujours ouverts.",
@@ -11108,6 +11110,8 @@
   },
   "pipelineEditor": {
     "error": {
+      "subpipeline-none": "Un sous-pipeline a besoin d’un autre pipeline à exécuter ; créez-en un d’abord.",
+      "subpipeline-cycle": "Des sous-pipelines s’appelleraient en boucle : {detail}",
       "pipeline-running": "Ce pipeline est en cours d’exécution, il ne peut donc pas être modifié pour l’instant. Interrompez ou terminez d’abord l’exécution.",
       "pipeline-not-found": "Ce pipeline n’existe plus. Il a peut-être été supprimé ailleurs ; choisissez un autre pipeline.",
       "export-failed": "Échec de l’export : {message}",
@@ -11169,6 +11173,7 @@
       "reject": "Renvoyer"
     },
     "history": {
+      "subpipeline": "Modifier le sous-pipeline",
       "retry": "Modifier les nouvelles tentatives",
       "add": "Ajouter {name}",
       "edit-cli": "Changer de CLI",
@@ -11194,6 +11199,11 @@
       "loop-budget": "Changer la limite de tentatives"
     },
     "inspector": {
+      "subpipeline-task-help": "Vide : la tâche de cette exécution. Le résumé de l’étape précédente et les sorties d’autres étapes s’utilisent comme dans un kickoff.",
+      "subpipeline-task": "Tâche de cette exécution",
+      "subpipeline-help": "Cette exécution s’interrompt ici, exécute ce pipeline dans le même workspace, puis continue avec son résultat. Ses panneaux restent ouverts pendant ce temps.",
+      "subpipeline-pick": "Choisir un pipeline",
+      "subpipeline-pipeline": "Pipeline à exécuter",
       "retry-blocked-not-failed": "Seule une étape en échec peut être réessayée",
       "retry-blocked-no-run": "Indisponible : aucune exécution de ce pipeline",
       "retry-blocked-running": "Indisponible pendant une exécution",
@@ -11251,6 +11261,7 @@
       "more": "{n} couche de plus | {n} couches de plus"
     },
     "node": {
+      "subpipeline-sub": "Exécute le pipeline {pipeline}",
       "commander": "Gestionnaire du pipeline",
       "gate-sub": "Attend une approbation",
       "pinned": "Sortie figée",
@@ -11262,6 +11273,8 @@
       "reorder-on-canvas": "Ce pipeline comporte une validation, une boucle ou un lien personnalisé : son ordre découle donc des liens. Modifiez-le sur le canevas."
     },
     "palette": {
+      "subpipeline-desc": "Exécuter un autre pipeline et attendre son résultat",
+      "subpipeline": "Sous-pipeline",
       "agents": "Agents",
       "branch-tip": "Pour créer une bifurcation, tracez deux liens depuis une même étape sur le canevas ; pour les rejoindre, tracez deux liens vers une même étape.",
       "flow": "Contrôle du flux",
@@ -11309,6 +11322,8 @@
       "task": "Tâche pour cette exécution"
     },
     "controlPane": {
+      "open-parent": "Ouvrir le pipeline appelant",
+      "parents": "Appelé depuis",
       "open-in-canvas": "Ouvrir dans le canevas du pipeline",
       "gate-toast": "Le pipeline attend votre approbation à {name}",
       "next-gated": "Approuvez ou renvoyez cette validation avant de passer à l’étape suivante."

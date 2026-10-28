@@ -53,6 +53,9 @@ export interface DagPlan {
   /** Slot nodes that may turn out untaken (downstream of a branch or error
    *  edge, or of a slot with an error edge): not pre-spawned ahead of time. */
   conditionalIds: Set<string>
+  /** Subpipeline nodes, in layer order: the run suspends at each one and
+   *  runs its child pipeline before the next stage. */
+  callIds: string[]
 }
 
 export type GateStatus = 'pending' | 'awaiting' | 'approved' | 'rejected'
@@ -107,13 +110,18 @@ function planFor(graph: PipelineGraph, stages: readonly Stage[]): DagPlan | null
     if (labels.length !== want.length || labels.some((l, i) => l !== want[i])) return null
   }
   const gateIds = graph.nodes.filter((n) => n.kind === 'gate' && n.id in nodeLayer).map((n) => n.id)
+  const callIds = graph.nodes
+    .filter((n) => n.kind === 'subpipeline' && n.id in nodeLayer)
+    .map((n) => n.id)
+    .sort((a, b) => nodeLayer[a] - nodeLayer[b])
   const hasBranching = hasBranchingEdges(graph)
   const hasControlFlow =
     gateIds.length > 0 ||
+    callIds.length > 0 ||
     graph.edges.some((e) => e.kind === 'reject') ||
     graph.nodes.some((n) => n.kind === 'slot' && n.pinned) ||
     hasBranching
-  return { graph, stageNodeIds, stageLayer, nodeLayer, gateIds, hasControlFlow, hasBranching, conditionalIds: conditionalNodes(graph) }
+  return { graph, stageNodeIds, stageLayer, nodeLayer, gateIds, hasControlFlow, hasBranching, conditionalIds: conditionalNodes(graph), callIds }
 }
 
 function conditionalNodes(graph: PipelineGraph): Set<string> {
@@ -152,6 +160,9 @@ export function createRunState(
       nodes[id] = s < startIndex || pinned ? { status: 'skipped', ...(pinned ? { pinned } : {}) } : { status: 'pending' }
     }
   })
+  // A call before the start was made by an earlier run: its output is reused
+  // (usePipelineDag.begin calls it again when no output was recorded).
+  for (const c of plan.callIds) nodes[c] = { status: plan.nodeLayer[c] < startLayer ? 'skipped' : 'pending' }
   const gates: Record<string, GateStatus> = {}
   for (const g of plan.gateIds) {
     const before = plan.nodeLayer[g] < startLayer
@@ -212,6 +223,12 @@ export function rejectGate(
       if (g !== gateId) state.nodes[g] = { status: 'pending' }
     }
   }
+  for (const c of plan.callIds) {
+    if (plan.nodeLayer[c] >= targetLayer) {
+      state.nodes[c] = { status: 'pending', attempts: state.nodes[c]?.attempts }
+      delete state.retries[c]
+    }
+  }
   plan.stageNodeIds.forEach((ids) => {
     for (const id of ids) {
       if (plan.nodeLayer[id] >= targetLayer && !node(plan, id)?.pinned) {
@@ -260,7 +277,8 @@ export function upstreamSlotNodes(plan: DagPlan, nodeId: string): string[] {
       if (!isForwardEdge(e) || e.to !== id || seen.has(e.from)) continue
       seen.add(e.from)
       const n = node(plan, e.from)
-      if (n?.kind === 'slot') out.push(n.id)
+      // A subpipeline node hands on its child run's output, as a slot does.
+      if (n?.kind === 'slot' || n?.kind === 'subpipeline') out.push(n.id)
       else visit(e.from)
     }
   }
@@ -556,4 +574,41 @@ export function routeFailure(
   if (!hasErrorEdge(plan, nodeId)) return false
   state.nodes[nodeId] = { ...state.nodes[nodeId], status: 'failed', endedAt: at, error, errorRouted: true }
   return true
+}
+
+// ── Sub-pipelines ────────────────────────────────────────────────────────────
+
+/** The first subpipeline node the run must call before stage `nextIndex`
+ *  (nextIndex === stage count: before the run completes), or null. Only a
+ *  pending call counts: done, reused, untaken and error-routed ones are past. */
+export function callBefore(plan: DagPlan, state: DagRunState, nextIndex: number): string | null {
+  const limit = nextIndex < plan.stageLayer.length ? plan.stageLayer[nextIndex] : Infinity
+  return plan.callIds.find((c) => plan.nodeLayer[c] < limit && state.nodes[c]?.status === 'pending') ?? null
+}
+
+/** What a finished child run hands its parent's subpipeline node: the
+ *  summaries of its last steps (slot nodes no forward edge leaves that ran),
+ *  and their structured output — one step's as is, several as {label: output}. */
+export function childResultOf(
+  plan: DagPlan,
+  state: DagRunState,
+  summaryOf: (id: string) => string,
+  outputOf: (id: string) => unknown,
+): { summary: string; output: unknown } {
+  const sinks = plan.stageNodeIds.flat().filter((id) => {
+    const st = state.nodes[id]
+    if (!st || isUntaken(st) || (st.status !== 'done' && st.status !== 'skipped')) return false
+    return !plan.graph.edges.some((e) => isForwardEdge(e) && e.from === id)
+  })
+  const label = (id: string): string => node(plan, id)?.label || id
+  const summary = sinks.length === 1
+    ? summaryOf(sinks[0])
+    : sinks.map((id) => `[${label(id)}]\n${summaryOf(id)}`).join('\n\n')
+  const withOutput = sinks.filter((id) => outputOf(id) !== undefined)
+  const output = withOutput.length === 0
+    ? null
+    : withOutput.length === 1 && sinks.length === 1
+      ? outputOf(withOutput[0])
+      : Object.fromEntries(withOutput.map((id) => [label(id), outputOf(id)]))
+  return { summary, output }
 }

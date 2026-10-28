@@ -174,8 +174,8 @@ class TestBranchAndErrorEdges:
         g["edges"].append({"id": "b-trigger-fix", "from": "trigger", "to": "fix", "kind": "branch", "when": "x"})
         g["edges"].append({"id": "x-trigger-alert", "from": "trigger", "to": "alert", "kind": "error"})
         errs = pg.validate_graph(g)
-        assert "branch edge b-trigger-fix must start at a slot node" in errs
-        assert "error edge x-trigger-alert must start at a slot node" in errs
+        assert "branch edge b-trigger-fix must start at a slot or subpipeline node" in errs
+        assert "error edge x-trigger-alert must start at a slot or subpipeline node" in errs
 
     def test_a_cycle_through_branch_or_error_edges_is_rejected(self):
         g = branching_graph()
@@ -226,7 +226,7 @@ class TestRetryPolicy:
     def test_only_slots_and_set_retry_round_trip(self):
         g = self.graph({"maxTries": 3})
         g["nodes"][0]["retry"] = {"maxTries": 2}
-        assert "node trigger: only slot nodes carry retry" in pg.validate_graph(g)
+        assert "node trigger: only slot and subpipeline nodes carry retry" in pg.validate_graph(g)
         base = pg.derive_graph_from_stages([stage("01", ["a"])])
         g1 = pg.apply_graph_ops(base, [{"op": "set_retry", "id": "n-01-0", "retry": {"maxTries": 3, "waitMs": 10}}])
         assert next(n for n in g1["nodes"] if n["id"] == "n-01-0")["retry"] == {"maxTries": 3, "waitMs": 10}
@@ -234,6 +234,83 @@ class TestRetryPolicy:
         assert "retry" not in next(n for n in g2["nodes"] if n["id"] == "n-01-0")
         with pytest.raises(pg.GraphError):
             pg.apply_graph_ops(g2, [{"op": "set_retry", "id": "trigger", "retry": {"maxTries": 2}}])
+
+
+def calling_graph(config=None) -> dict:
+    """trigger → a → call → b (the TS twin is calling() in pipelineSubpipelineSchema.test.ts)."""
+    return {
+        "version": 1,
+        "nodes": [
+            {"id": "trigger", "kind": "trigger", "position": {"x": 0, "y": 0}},
+            slot_node("a"),
+            {"id": "call", "kind": "subpipeline", "position": {"x": 0, "y": 0},
+             "subpipeline": {"pipelineId": "B", "task": "do {{task}}", "wait": True} if config is None else config},
+            slot_node("b"),
+        ],
+        "edges": [
+            {"id": "e-trigger-a", "from": "trigger", "to": "a", "kind": "main"},
+            {"id": "e-a-call", "from": "a", "to": "call", "kind": "main"},
+            {"id": "e-call-b", "from": "call", "to": "b", "kind": "main"},
+        ],
+    }
+
+
+class TestSubpipelineSchema:
+    def test_calling_graph_is_valid_and_the_call_makes_no_stage(self):
+        g = calling_graph()
+        assert pg.validate_graph(g) == []
+        assert pg.layer_graph(g)[0] == [["a"], ["call"], ["b"]]
+        assert [s["slots"][0]["label"] for s in pg.derive_stages_from_graph(g)] == ["a", "b"]
+        assert pg.validate_graph(calling_graph({"pipelineId": "B"})) == []
+
+    @pytest.mark.parametrize("config, msg", [
+        ("x", "subpipeline node call needs subpipeline.pipelineId"),
+        ({"pipelineId": ""}, "subpipeline node call needs subpipeline.pipelineId"),
+        ({"pipelineId": "B", "task": 3}, "subpipeline node call: task must be a string"),
+        ({"pipelineId": "B", "wait": False}, "subpipeline node call: wait must be true (the parent always waits)"),
+        ({"pipelineId": "B", "mode": "each"}, "subpipeline node call: subpipeline takes only pipelineId, task and wait"),
+    ])
+    def test_refuses(self, config, msg):
+        assert msg in pg.validate_graph(calling_graph(config))
+
+    def test_config_retry_error_edges_and_update(self):
+        g = calling_graph()
+        g["nodes"][1]["subpipeline"] = {"pipelineId": "B"}
+        assert "node a: only subpipeline nodes carry subpipeline config" in pg.validate_graph(g)
+        ok = pg.apply_graph_ops(calling_graph(), [
+            {"op": "set_retry", "id": "call", "retry": {"maxTries": 2}},
+            {"op": "add_node", "node": slot_node("alert")},
+            {"op": "add_edge", "edge": {"id": "x-call-alert", "from": "call", "to": "alert", "kind": "error"}},
+            {"op": "update_node", "id": "call", "subpipeline": {"task": "other"}},
+        ])
+        assert pg.validate_graph(ok) == []
+        assert next(n for n in ok["nodes"] if n["id"] == "call")["subpipeline"] == {"pipelineId": "B", "task": "other", "wait": True}
+        with pytest.raises(pg.GraphError):
+            pg.apply_graph_ops(calling_graph(), [{"op": "update_node", "id": "a", "subpipeline": {"task": "x"}}])
+
+    def test_cycles_across_pipelines(self):
+        empty = {"nodes": [], "edges": []}
+        graphs = {"A": calling_graph({"pipelineId": "B"}), "B": calling_graph({"pipelineId": "A"}),
+                  "C": calling_graph({"pipelineId": "C"}), "D": empty}
+        assert pg.subpipeline_cycle_errors(graphs) == ["subpipeline cycle: A → B → A", "subpipeline cycle: C → C"]
+        assert pg.subpipeline_cycle_errors({"A": calling_graph({"pipelineId": "B"}), "B": calling_graph({"pipelineId": "C"}), "C": empty}) == []
+        assert pg.subpipeline_cycle_errors({"A": calling_graph({"pipelineId": "gone"})}) == [
+            "subpipeline node call in A names unknown pipeline gone"
+        ]
+
+    def test_the_store_refuses_a_write_that_closes_a_loop(self, tmp_path):
+        s = StagesStore(tmp_path / PIPELINES_FILE)
+        a = s.create_pipeline("A")["id"]
+        b = s.create_pipeline("B")["id"]
+        s.set_graph(a, calling_graph({"pipelineId": b}))
+        before = s.export_document()
+        with pytest.raises(pg.GraphError) as err:
+            s.set_graph(b, calling_graph({"pipelineId": a}))
+        assert any("subpipeline cycle" in e for e in err.value.errors)
+        assert s.export_document() == before
+        with pytest.raises(pg.GraphError) as err:
+            s.set_graph(b, calling_graph({"pipelineId": "missing"}))
+        assert any("names unknown pipeline missing" in e for e in err.value.errors)
 
 
 class TestLegacyCompatibility:

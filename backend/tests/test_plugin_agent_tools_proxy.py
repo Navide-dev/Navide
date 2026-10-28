@@ -111,7 +111,11 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.34 p2-triggers (previous pin b1e653a5…): scheduler_upsert
 #: documents the pipeline_start action, pipeline_status the interrupted state
 #: and pipeline_graph the set_retry op. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "656637e7b3680f57b8b75851d35b2836220db0ebfef291c466ddd9240f12373d"
+#: Re-pinned for 0.2.34 sub-pipelines (previous pin 656637e7…): pipeline_graph
+#: documents subpipeline nodes, pipeline_status the run_stack / parent / depth
+#: of a child run, and pipeline_start the refusal while a parent run waits.
+#: No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "f366f466c57cd3bd80f92bb7693edad5fa425bf91ee7f621e9f95bbcd595f205"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

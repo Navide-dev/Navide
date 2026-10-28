@@ -365,7 +365,7 @@ Action —— `ui.pane.create`、`ui.preview.show`、`ui.window.openGit` —— 
 | `ui.workspace.open` | `{path}` | 將 `path` 開啟為 Workspace（路由到任一 Live 視窗 —— 見上文） |
 | `ui.workspace.switch` | `{path}` | 把這個視窗切換到它已持有的 Workspace；Pane 保留。視窗未持有的路徑會被拒絕（請用 `ui.workspace.open`） |
 | `ui.layout.setMode` | `{mode}` | 變更 Pane Layout 模式 |
-| `ui.pipeline.start` | `{task?, pipelineId?}` | 在該視窗已開啟的 Workspace 啟動一次 Pipeline 執行。以下情況會報錯：沒有開啟的 Workspace、已經有一輪在跑（要先 Abort）、沒給 `pipelineId` 而這個 Workspace 也沒有選定的 Pipeline、或這一輪最後沒有真的進入 `running`。回傳 `{pipelineId, stages, workspacePath, state}` |
+| `ui.pipeline.start` | `{task?, pipelineId?}` | 在該視窗已開啟的 Workspace 啟動一次 Pipeline 執行。以下情況會報錯：沒有開啟的 Workspace、已經有一輪在跑（要先 Abort）、有一條掛起中的父 run 正在等子 Pipeline（要先 resume 或 reset）、沒給 `pipelineId` 而這個 Workspace 也沒有選定的 Pipeline、或這一輪最後沒有真的進入 `running`。回傳 `{pipelineId, stages, workspacePath, state}` |
 | `ui.pipeline.abort` | — | 中止進行中的那一輪；沒有東西在跑時會報錯，而不是對一個空操作回 ok。回傳 `{workspacePath, state}` |
 | `ui.pipeline.next` | — | 讓進行中的 Pipeline 立刻推進到下一個 Stage。以下情況會報錯：沒有一輪在 `running`、目前已經是最後一個 Stage（沒有下一個可推進，視窗會拒絕，而不是替一個說「往前走」的呼叫端把整輪標成完成）、或 Stage 索引其實沒有前進。回傳 `{workspacePath, state, stageIndex, stages}` |
 | `ui.pipeline.resume` | — | 從最後一個完成的 Stage 之後，接續這個 Workspace 記錄下來的那一輪。以下情況會報錯：沒有開啟的 Workspace、已經有一輪在跑（要先 Abort）、沒有記錄中的執行或它已經沒有剩下的 Stage、或恢復後始終沒有進入 `running`。回傳 `{workspacePath, state, stageIndex, stages}` |
@@ -594,7 +594,7 @@ Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`�
 | `role_define` | `upsert`／`rename` | `properties`（選填） | 這個 Role 的 Slot 要顯示的設定表單：一個 `{name, type, label?, description?, default?, options?, required?, displayOptions?}` 清單，`type` 是 `string`、`text`、`template`、`number`、`boolean`、`options` 之一（`options` 需要一個 `{value, label?}` 的 `options` 清單）。`displayOptions` 是 `{show?, hide?}`，把另一個屬性的名稱對應到會顯示或隱藏這一個的值。省略時保留該 Role 既有的 properties；`[]` 會清空。Slot 的值存在 `params` |
 | `role_define` | `reset` | — | 有破壞性：丟掉每一個 Role（自訂的也一樣），放回內建那一組。指著種子組沒有的 Role 的那些 Slot 會被清空，而不是留著懸空的指向，所以 Pipeline 活得下來，但那些 Slot 失去了 Role、必須重新選角。沒有復原 |
 | `pipeline_graph` | `get` | — | 回傳 `{graph, derived, stages}` |
-| `pipeline_graph` | `apply` | `ops` | 一串全有或全無套用的編輯：`add_node`（`node` 為 `{id, kind: slot／gate／trigger, label?, position, slot?, gate?: {prompt?}}`，可用 `after`／`before` 的節點 id 接上 `main` 邊 —— 既有的 `after`→`before` 邊會被取代，也就是把節點插到那條邊上）、`remove_node`（`id`，`reconnect?` 會把上游接到下游）、`update_node`、`move_node`、`add_edge`（`edge` 為 `{id?, from, to, kind?: main／reject／branch／error, maxLoops?, when?}`）、`remove_edge`、`set_gate`（`id`、`prompt?`）、`set_pin`（`id`、`pinned` —— 被釘選的 Slot 之後的執行會跳過並沿用它最後的產出）、`set_retry`（`id`、`retry` 為 `{maxTries, waitMs?}` 或 `null` —— Slot 失敗的一次（Kickoff 沒送到，或 Agent 回報 `---NODE-FAILED---`）會在同一個 Pane 再跑，`maxTries` 總共 1–5 次、`waitMs` 間隔 0–300000，用完才走 error 邊或讓這一輪失敗）與 `set_stage_meta`（`stageId` 加上該層推導出的 Stage 的中繼資料） |
+| `pipeline_graph` | `apply` | `ops` | 一串全有或全無套用的編輯：`add_node`（`node` 為 `{id, kind: slot／gate／trigger／subpipeline, label?, position, slot?, gate?: {prompt?}}`，可用 `after`／`before` 的節點 id 接上 `main` 邊 —— 既有的 `after`→`before` 邊會被取代，也就是把節點插到那條邊上）、`remove_node`（`id`，`reconnect?` 會把上游接到下游）、`update_node`、`move_node`、`add_edge`（`edge` 為 `{id?, from, to, kind?: main／reject／branch／error, maxLoops?, when?}`）、`remove_edge`、`set_gate`（`id`、`prompt?`）、`set_pin`（`id`、`pinned` —— 被釘選的 Slot 之後的執行會跳過並沿用它最後的產出）、`set_retry`（`id`、`retry` 為 `{maxTries, waitMs?}` 或 `null` —— Slot 失敗的一次（Kickoff 沒送到，或 Agent 回報 `---NODE-FAILED---`）會在同一個 Pane 再跑，`maxTries` 總共 1–5 次、`waitMs` 間隔 0–300000，用完才走 error 邊或讓這一輪失敗）與 `set_stage_meta`（`stageId` 加上該層推導出的 Stage 的中繼資料） |
 | `pipeline_graph` | `set` | `graph` | `{version: 1, nodes, edges}`；整張取代 |
 
 **圖的規則。** 寫入的圖必須讓 `main`、`branch`、`error` 邊不成環；唯一允許的迴圈是 `reject` 邊，它必須
@@ -603,6 +603,8 @@ Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`�
 無法用 Stage 清單表達，所以 `stage_define` 的 `upsert`、`delete`、`reorder` 對它會以
 `error_code: "graph_nonlinear"` 拒絕 —— 請改用 `pipeline_graph` 編輯。圖仍是線性的
 Pipeline 則照常可用，圖也會跟著更新。
+
+**子 Pipeline。** `subpipeline` 節點（`subpipeline: {pipelineId, task?, wait?: true}`）會執行另一條 Pipeline 並等它完成。這一輪會在節點這裡掛起，它的 Pane 保留不關。子 Pipeline 在同一個 workspace 以一般的一輪執行。子 Pipeline 完成後，它最後幾個步驟的摘要和結構化產出就是這個節點的產出，父 run 接著從下一個 Stage 繼續。`task` 是子 run 的任務，留空時用父 run 的任務，可以使用 `{{task}}`、`{{prev.summary}}`、`{{node.<id>.output}}`。子 run 會繼承父 run 的 Guard taint。子 run 失敗時這個節點就失敗，接著和 Slot 一樣走重試（`set_retry`）或 error 邊。父 run 等待期間，這個 workspace 不能啟動其他一輪：啟動會被拒絕並寫明父 run 的名稱，直到它被 resume 或 reset。中止時，子 run 和父 run 會一起暫停；resume 時先接續子 run，再接續父 run。reset 會把兩者都清掉。跨 Pipeline 的呼叫不能成環：A → B → A 在儲存時就會被拒絕，被指定的 Pipeline 也必須存在。巢狀最多 3 層。子 run 執行期間，`pipeline_status` 會帶 `run_stack`（等待中的父 run）、`parent` 和 `depth`。開著的 Pane 數是各層加總，最多是 3 輪的份量。沒有 subpipeline 節點的圖，行為和以前完全相同。
 
 **branch 邊與 error 邊。** 兩者都從 Slot 出發。`branch` 邊帶 `when`：是字串時，與該 Slot 的
 Agent 獨立一行回報的 `---BRANCH: <value>---` 比對（不分大小寫；`"default"` 在該 Slot 其他

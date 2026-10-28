@@ -140,6 +140,20 @@ def pipeline_pane_spawned(workspace: str, pane_id: str) -> None:
         safe_mark_tainted(pane_id, "agent", detail)
 
 
+def pipeline_run_taint(workspace: str) -> str:
+    """The taint detail of the workspace's run ('' when it is clean)."""
+    return _TAINTED_RUNS.get(_ws_key(workspace), "")
+
+
+def restore_pipeline_run_taint(workspace: str, detail: str) -> None:
+    """Put back a parent run's taint when it resumes after its sub-pipeline."""
+    key = _ws_key(workspace)
+    if detail:
+        _TAINTED_RUNS[key] = detail
+    else:
+        _TAINTED_RUNS.pop(key, None)
+
+
 def _reset_pipeline_runs_for_test() -> None:
     _ARMED_RUNS.clear()
     _TAINTED_RUNS.clear()

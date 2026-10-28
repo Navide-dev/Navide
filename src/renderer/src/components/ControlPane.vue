@@ -313,6 +313,9 @@ export interface PipelineStatusView {
   /** The gate the run is paused on, or null; the sidebar's Next stays
    *  disabled until it is passed or sent back. */
   awaitingGate?: { gateId: string; label: string } | null
+  /** A sub-pipeline's child run: the parent runs waiting on it, outermost
+   *  first. Absent for a run that is no one's child. */
+  parents?: Array<{ name: string; pipelineId: string }>
 }
 
 export interface ExistingProjectInfo {
@@ -335,6 +338,11 @@ export interface ExistingProjectInfo {
   nodeGate?: { gateId?: string; nextIndex?: number } | null
   /** Last reported per-node run states (project node_states). */
   nodeStates?: Record<string, import('../lib/pipelineGraph').NodeRunState>
+  /** Recorded per-node outputs (project node_outputs). */
+  nodeOutputs?: Record<string, unknown>
+  /** Parent runs suspended at a sub-pipeline, outermost first (project
+   *  run_stack); absent when there are none. */
+  runStack?: Array<{ id: string; pipeline_name: string; node_id: string; run?: { pipeline_id?: string } }>
 }
 
 export interface AnalyzerModelOption {
@@ -3506,6 +3514,15 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <div class="prn-title">
             ▶ {{ pipelines?.find(p => p.id === activePipelineId)?.name ?? $t('label.pipelines') }}
           </div>
+          <!-- A sub-pipeline's child run: where it was called from, and a way
+               back to the parent's runs. -->
+          <div v-if="pipeline.parents?.length" class="prn-crumbs" data-test="run-parents" :aria-label="$t('pipelineEditor.controlPane.parents')">
+            <template v-for="(p, i) in pipeline.parents" :key="i">
+              <button class="ghost prn-crumb" :title="$t('pipelineEditor.controlPane.open-parent')" @click="openPipelineManager(p.pipelineId || undefined)">{{ p.name }}</button>
+              <span class="prn-crumb-sep" aria-hidden="true">›</span>
+            </template>
+            <span class="prn-crumb-here">{{ pipelines?.find(p => p.id === activePipelineId)?.name ?? '' }}</span>
+          </div>
           <div v-if="pipeline.task" class="prn-task" v-truncate>{{ pipeline.task }}</div>
           <div class="prn-meta">
             <span v-if="autoAnswerEnabled" class="prn-auto">{{ $t('label.full-auto') }} · {{ analyzerModelLocal }}</span>
@@ -5643,6 +5660,21 @@ button.icon-btn.muted:hover {
   color: var(--success-fg);
   letter-spacing: 0.02em;
 }
+.prn-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+}
+.prn-crumb {
+  padding: 0 2px;
+  font-size: var(--font-2xs);
+  color: var(--accent-fg);
+}
+.prn-crumb-sep { color: var(--text-secondary); }
+.prn-crumb-here { color: var(--text-bright); font-weight: 600; }
 .prn-task {
   font-size: var(--font-2xs);
   color: var(--text-bright);

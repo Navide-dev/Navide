@@ -8948,6 +8948,8 @@
     "statusbar-note": "các cửa sổ bật lên của nó cũng ẩn theo"
   },
   "error": {
+    "pipeline-call-failed": "Pipeline con {node} thất bại ({reason}); lượt chạy đã dừng.",
+    "pipeline-parent-suspended": "Một lượt chạy cha đang tạm dừng ({name}) đang chờ ở đây. Hãy tiếp tục hoặc đặt lại nó trước.",
     "pipeline-node-failed": "Giai đoạn {stage}: bước {slot} báo lỗi ({reason}) và đã hết lượt thử. Lượt chạy đã dừng; hãy tiếp tục để thử lại.",
     "pipeline-start-refused": "Pipeline không khởi động: {reason}",
     "pipeline-kickoff-failed": "Pipeline không khởi động được: giai đoạn {stage}, vị trí {slot} — {reason}. Các pane của nó vẫn đang mở.",
@@ -11108,6 +11110,8 @@
   },
   "pipelineEditor": {
     "error": {
+      "subpipeline-none": "Pipeline con cần một pipeline khác để chạy; hãy tạo một cái trước.",
+      "subpipeline-cycle": "Các pipeline con sẽ gọi nhau thành vòng lặp: {detail}",
       "pipeline-running": "Pipeline này đang chạy, nên hiện không thay đổi được. Hãy hủy hoặc chờ lần chạy kết thúc trước.",
       "pipeline-not-found": "Pipeline này không còn tồn tại. Có thể nó đã bị xóa ở nơi khác; hãy chọn pipeline khác.",
       "export-failed": "Không xuất được: {message}",
@@ -11169,6 +11173,7 @@
       "reject": "Trả về"
     },
     "history": {
+      "subpipeline": "Sửa pipeline con",
       "retry": "Đổi số lần thử lại",
       "add": "Thêm {name}",
       "edit-cli": "Đổi CLI",
@@ -11194,6 +11199,11 @@
       "loop-budget": "Đổi giới hạn thử lại"
     },
     "inspector": {
+      "subpipeline-task-help": "Để trống: dùng tác vụ của lượt chạy này. Có thể dùng tóm tắt của bước trước và đầu ra của các bước khác, như trong kickoff.",
+      "subpipeline-task": "Tác vụ cho lượt chạy đó",
+      "subpipeline-help": "Lượt chạy này dừng tại đây, chạy pipeline đó trong cùng workspace rồi tiếp tục với kết quả của nó. Trong lúc đó các pane của lượt chạy này vẫn mở.",
+      "subpipeline-pick": "Chọn pipeline",
+      "subpipeline-pipeline": "Pipeline cần chạy",
       "retry-blocked-not-failed": "Chỉ có thể thử lại bước bị lỗi",
       "retry-blocked-no-run": "Không dùng được: pipeline này chưa có lượt chạy",
       "retry-blocked-running": "Không dùng được khi đang có lượt chạy",
@@ -11251,6 +11261,7 @@
       "more": "thêm {n} tầng"
     },
     "node": {
+      "subpipeline-sub": "Chạy pipeline {pipeline}",
       "commander": "Người quản lý pipeline",
       "gate-sub": "Chờ phê duyệt",
       "pinned": "Đầu ra đã cố định",
@@ -11262,6 +11273,8 @@
       "reorder-on-canvas": "Pipeline này có điểm phê duyệt, vòng lặp hoặc liên kết tùy chỉnh, nên thứ tự của nó do các liên kết quyết định. Hãy thay đổi trên canvas."
     },
     "palette": {
+      "subpipeline-desc": "Chạy một pipeline khác và chờ kết quả",
+      "subpipeline": "Pipeline con",
       "agents": "Agent",
       "branch-tip": "Để rẽ nhánh, hãy vẽ hai liên kết đi ra từ một bước trên canvas; để hợp nhất, vẽ hai liên kết đi vào một bước.",
       "flow": "Điều khiển luồng",
@@ -11309,6 +11322,8 @@
       "task": "Nhiệm vụ cho lần chạy này"
     },
     "controlPane": {
+      "open-parent": "Mở pipeline gọi nó",
+      "parents": "Được gọi từ",
       "open-in-canvas": "Mở trong canvas pipeline",
       "gate-toast": "Pipeline đang chờ bạn phê duyệt tại {name}",
       "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo."

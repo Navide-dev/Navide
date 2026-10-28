@@ -8948,6 +8948,8 @@
     "statusbar-note": "狀態列上的資訊窗會一起消失"
   },
   "error": {
+    "pipeline-call-failed": "子 Pipeline {node} 失敗（{reason}），這一輪已停止。",
+    "pipeline-parent-suspended": "有一條掛起中的父 run（{name}），請先 resume 或 reset。",
     "pipeline-node-failed": "階段 {stage}：步驟 {slot} 回報失敗（{reason}），重試次數已用完。這一輪已停止，可以 resume 再試一次。",
     "pipeline-start-refused": "流程沒有啟動：{reason}",
     "pipeline-kickoff-failed": "流程失敗：階段 {stage}、slot {slot} — {reason}。它的 pane 仍保持開啟。",
@@ -11108,6 +11110,8 @@
   },
   "pipelineEditor": {
     "error": {
+      "subpipeline-none": "子 Pipeline 需要另一條 Pipeline 可以執行，請先建立一條。",
+      "subpipeline-cycle": "子 Pipeline 會互相呼叫成迴圈：{detail}",
       "pipeline-running": "這條 pipeline 正在執行，目前無法修改。請先中止或等執行結束。",
       "pipeline-not-found": "找不到這條 pipeline，可能已在別處被刪除。請改選其他 pipeline。",
       "export-failed": "匯出失敗：{message}",
@@ -11169,6 +11173,7 @@
       "reject": "退回修改"
     },
     "history": {
+      "subpipeline": "編輯子 Pipeline",
       "retry": "變更重試",
       "add": "新增 {name}",
       "edit-cli": "更換 CLI",
@@ -11194,6 +11199,11 @@
       "loop-budget": "修改重試上限"
     },
     "inspector": {
+      "subpipeline-task-help": "留空時用這一輪的任務。可以使用上一步的摘要和其他步驟的產出，用法和 Kickoff 一樣。",
+      "subpipeline-task": "那一輪的任務",
+      "subpipeline-help": "這一輪會在這裡暫停，在同一個 workspace 執行那條 Pipeline，再帶著它的結果繼續。這段期間，這一輪的 Pane 會保留。",
+      "subpipeline-pick": "選擇 Pipeline",
+      "subpipeline-pipeline": "要執行的 Pipeline",
       "retry-blocked-not-failed": "只有失敗的步驟可以重試",
       "retry-blocked-no-run": "無法使用：這個 Pipeline 沒有執行紀錄",
       "retry-blocked-running": "執行進行中，無法使用",
@@ -11251,6 +11261,7 @@
       "more": "還有 {n} 層"
     },
     "node": {
+      "subpipeline-sub": "執行 Pipeline {pipeline}",
       "commander": "pipeline 總指揮",
       "gate-sub": "等待核准",
       "pinned": "產出已凍結",
@@ -11262,6 +11273,8 @@
       "reorder-on-canvas": "這條 pipeline 有閘門、迴圈或自訂連線，順序由連線決定，請到畫布上調整。"
     },
     "palette": {
+      "subpipeline-desc": "執行另一條 Pipeline，等它的結果",
+      "subpipeline": "子 Pipeline",
       "agents": "Agent",
       "branch-tip": "要分支，就在畫布上從一個步驟拉出兩條線；要匯合，就把兩條線拉進同一個步驟。",
       "flow": "流程控制",
@@ -11309,6 +11322,8 @@
       "task": "這次要執行的任務"
     },
     "controlPane": {
+      "open-parent": "開啟呼叫它的 Pipeline",
+      "parents": "呼叫自",
       "open-in-canvas": "在 pipeline 畫布中開啟",
       "gate-toast": "pipeline 已暫停，等待你在「{name}」核准",
       "next-gated": "先核准或退回這個閘門，才能進入下一階段。"
