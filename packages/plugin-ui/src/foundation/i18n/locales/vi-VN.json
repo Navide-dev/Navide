@@ -11378,6 +11378,7 @@
       "not-reclaimed": "(chưa thu hồi)",
       "fix": "Bản sửa",
       "proposal": "Đề xuất",
+      "proposal-reason": "Lý do: {reason}",
       "history": "Lịch sử (30 lần gần nhất)",
       "unsaved": "Có thay đổi chưa lưu",
       "save": "Lưu",
@@ -11439,6 +11440,14 @@
       "error": "Thất bại",
       "timeout": "Hết thời gian",
       "skipped": "Đã bỏ qua"
+    },
+    "proposal-status": {
+      "proposed": "Đã đề xuất",
+      "approved": "Đã duyệt",
+      "rejected": "Bị từ chối",
+      "in-progress": "Đang làm",
+      "landed": "Đã áp dụng",
+      "abandoned": "Đã bỏ"
     },
     "history": {
       "date": "Ngày",

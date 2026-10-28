@@ -11378,6 +11378,7 @@
       "not-reclaimed": "(회수 안 됨)",
       "fix": "수정",
       "proposal": "제안",
+      "proposal-reason": "사유: {reason}",
       "history": "기록(최근 30개)",
       "unsaved": "저장하지 않은 변경 사항",
       "save": "저장",
@@ -11439,6 +11440,14 @@
       "error": "실패",
       "timeout": "시간 초과",
       "skipped": "건너뜀"
+    },
+    "proposal-status": {
+      "proposed": "제안됨",
+      "approved": "승인됨",
+      "rejected": "반려됨",
+      "in-progress": "진행 중",
+      "landed": "반영됨",
+      "abandoned": "폐기됨"
     },
     "history": {
       "date": "날짜",

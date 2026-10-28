@@ -63,6 +63,23 @@ export interface EvolveRun {
   detail?: string
 }
 
+/** One row of the proposal ledger (S1). Its status is derived by the backend
+ *  from the proposal plan's stage; the panel only shows it. */
+export interface EvolveProposal {
+  id: string
+  run_id: string
+  rel_path: string
+  name: string
+  kind: string
+  signature: string
+  status: 'proposed' | 'approved' | 'rejected' | 'in-progress' | 'landed' | 'abandoned'
+  reason: string
+  pr: string
+  commits: string[]
+  created_at: number
+  updated_at: number
+}
+
 export interface EvolveBadge {
   enabled: boolean
   running: boolean
@@ -81,6 +98,8 @@ export interface EvolveState {
   job: { id: string; enabled: boolean; next_run_at: number | null } | null
   running: EvolveRun | null
   runs: EvolveRun[]
+  /** S1: ledger rows of the runs above. Optional so an older backend reads. */
+  proposals?: EvolveProposal[]
   legacy: { id: string; name: string; enabled: boolean }[]
   template: { version: string | number; text: string }
   /** evolve.set only: legacy jobs this call disabled. */

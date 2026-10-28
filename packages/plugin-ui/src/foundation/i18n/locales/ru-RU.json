@@ -11378,6 +11378,7 @@
       "not-reclaimed": "(не освобождён)",
       "fix": "Исправление",
       "proposal": "Предложение",
+      "proposal-reason": "Причина: {reason}",
       "history": "История (последние 30)",
       "unsaved": "Несохранённые изменения",
       "save": "Сохранить",
@@ -11439,6 +11440,14 @@
       "error": "Сбой",
       "timeout": "Время истекло",
       "skipped": "Пропущено"
+    },
+    "proposal-status": {
+      "proposed": "Предложено",
+      "approved": "Одобрено",
+      "rejected": "Отклонено",
+      "in-progress": "В работе",
+      "landed": "Внедрено",
+      "abandoned": "Отменено"
     },
     "history": {
       "date": "Дата",

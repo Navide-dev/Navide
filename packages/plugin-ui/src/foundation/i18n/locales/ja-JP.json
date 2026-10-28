@@ -11378,6 +11378,7 @@
       "not-reclaimed": "（未回収）",
       "fix": "修正",
       "proposal": "提案",
+      "proposal-reason": "理由：{reason}",
       "history": "履歴（直近 30 回）",
       "unsaved": "未保存の変更があります",
       "save": "保存",
@@ -11439,6 +11440,14 @@
       "error": "失敗",
       "timeout": "タイムアウト",
       "skipped": "未実行"
+    },
+    "proposal-status": {
+      "proposed": "提案中",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "in-progress": "進行中",
+      "landed": "反映済み",
+      "abandoned": "破棄"
     },
     "history": {
       "date": "日付",
