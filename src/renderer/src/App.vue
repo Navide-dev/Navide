@@ -129,6 +129,7 @@ import {
   renderSlotKickoff,
   MANAGER_READY_SENTINEL,
   MANAGER_STAGE_DONE_SENTINEL,
+  PROTOCOL_EXAMPLE_PROMPTS,
   ASK_START,
   ASK_END,
   REPORT_START,
@@ -15226,6 +15227,9 @@ interface StageWatcher {
    *  drops the buffer's front without telling anyone — comparing this pair
    *  with the current one says how far the whole coordinate system moved. */
   bufferAnchor: BufferObservation
+  /** Timestamp + text of the turn whose questions judgeTurnText last surfaced,
+   *  so a re-delivered turn_complete for the same turn never asks twice. */
+  turnQuestionKey: string
 }
 
 // Keyed by paneId so multiple parallel agents in the same stage each get
@@ -15660,20 +15664,45 @@ function judgeTurnText(paneId: string, text: string, timestamp: string): void {
   // none. Judging would fall back to stale content, so never proceed.
   if (!text) return
   const stage = stagesApi.stages.value[watcher.stageIndex]
-  if (!stage || !stage.sentinel) return
+  if (!stage) return
   // Freshness: a replayed historical turn_complete (backend restart re-parses
   // the whole log) carries its original, older CLI timestamp. Reject it so a
   // prior turn's sentinel can't complete a freshly armed stage at kickoff.
   const armedAt = paneArmedAt.get(paneId) ?? watcher.armedAt
   const eventMs = timestamp ? Date.parse(timestamp) : NaN
   if (!Number.isNaN(eventMs) && eventMs < armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS) return
-  // Question wins: if this turn also asked a real question, defer to the buffer
-  // question path instead of completing the stage.
+  // Question wins: if this turn also asked a real question, never complete the
+  // stage on it. For a turn-text vendor this is also where the question is
+  // surfaced: its buffer can hold the echoed kickoff with the protocol's own
+  // QUESTION examples (#733), so the buffer question scan skips it.
   if (stage.allowQuestions) {
-    const blocks = findConsecutiveQuestionBlocks(text, 0)
-    if (blocks.some((b) => !QUESTION_PLACEHOLDER_RE.test(b.prompt.trim()))) return
+    const realBlocks = findConsecutiveQuestionBlocks(text, 0).filter(
+      (b) => !QUESTION_PLACEHOLDER_RE.test(b.prompt.trim())
+    )
+    if (realBlocks.length > 0) {
+      const paneMeta = panes.value.find((p) => p.id === paneId)
+      const turnKey = `${timestamp}\n${text}`
+      if (
+        TURN_TEXT_VENDORS.has(paneMeta?.agentKey ?? '') &&
+        !watcher.waitingForAnswer &&
+        watcher.turnQuestionKey !== turnKey
+      ) {
+        watcher.turnQuestionKey = turnKey
+        watcher.waitingForAnswer = true
+        enqueueQuestion({
+          paneId,
+          stageIndex: watcher.stageIndex,
+          questions: realBlocks.map((b) => ({ prompt: b.prompt, type: b.type, options: b.options })),
+          agentLabel: paneMeta?.agentLabel ?? 'Agent',
+          stageTitle: stage.title,
+          slotLabel: paneMeta?.slotLabel ?? ''
+        })
+        pipelineLog(`Stage ${stage.id} ❓ agent asked ${realBlocks.length} question(s) (turn text)`)
+      }
+      return
+    }
   }
-  if (turnEndsWithSentinel(text, stage.sentinel)) {
+  if (stage.sentinel && turnEndsWithSentinel(text, stage.sentinel)) {
     cancelWatcher(paneId)
     pipelineLog(`Stage ${stage.id} ✓ sentinel detected (turn text)`)
     onStageSlotCompleted(watcher.stageIndex, paneId, 'sentinel')
@@ -17956,7 +17985,8 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
     bufferAnchor: {
       len: ((pane.cleanBuffer as unknown as string) ?? '').length,
       bytesSeen: paneCleanBytes(paneId)
-    }
+    },
+    turnQuestionKey: ''
   }
   watchers.set(paneId, watcher)
   paneArmedAt.set(paneId, watcher.armedAt)
@@ -18036,8 +18066,11 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
     // turn, the question is surfaced instead of silently advancing the stage.
     // Only applies to allowQuestions stages (currently Stage 01); other stages
     // have no question detection and the sentinel remains fully unconditional.
-    if (stage.allowQuestions && !watcher.waitingForAnswer && buf.length > watcher.scanFrom && !agentGenerating) {
-      const preBlocks = findConsecutiveQuestionBlocks(buf, watcher.scanFrom)
+    // Turn-text vendors (claude/codex) get their questions from judgeTurnText
+    // instead: the buffer can hold the echoed kickoff's QUESTION examples (#733).
+    const turnTextVendor = TURN_TEXT_VENDORS.has(panes.value.find((p) => p.id === paneId)?.agentKey ?? '')
+    if (stage.allowQuestions && !turnTextVendor && !watcher.waitingForAnswer && buf.length > watcher.scanFrom && !agentGenerating) {
+      const preBlocks = findConsecutiveQuestionBlocks(buf, watcher.scanFrom, undefined, PROTOCOL_EXAMPLE_PROMPTS)
       const realPreBlocks = preBlocks.filter((b) => !QUESTION_PLACEHOLDER_RE.test(b.prompt.trim()))
       if (realPreBlocks.length > 0) {
         watcher.waitingForAnswer = true
@@ -18106,6 +18139,7 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
           // on the next stable tick instead of erroneously nudging.
           const hasPendingQuestion =
             stage.allowQuestions &&
+            !turnTextVendor &&
             buf.indexOf('---QUESTION-START---', watcher.scanFrom) >= 0 &&
             buf.indexOf('---QUESTION-END---', watcher.scanFrom) >= 0
           if (hasPendingQuestion) {
@@ -18125,8 +18159,8 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
       //    (stage.allowQuestions === true, currently only Stage 01).
       //    Later stages run autonomously and must not pause for user input.
       //    Skipped when agentGenerating so we never parse a partial block.
-      if (stage.allowQuestions && buf.length > watcher.scanFrom && !agentGenerating) {
-        const blocks = findConsecutiveQuestionBlocks(buf, watcher.scanFrom)
+      if (stage.allowQuestions && !turnTextVendor && buf.length > watcher.scanFrom && !agentGenerating) {
+        const blocks = findConsecutiveQuestionBlocks(buf, watcher.scanFrom, undefined, PROTOCOL_EXAMPLE_PROMPTS)
         // Drop any block whose prompt is still a template placeholder (e.g.
         // "<你的問題>", "<your question>"). The agent copied the INTERACTION_PROTOCOL
         // example verbatim instead of filling in real content.
