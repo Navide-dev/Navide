@@ -2516,6 +2516,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "机器翻译，尚待母语者审阅。",
       "language-hint": "语言是用户层级的偏好设置，对所有工作区生效。",
+      "language-display": "界面语言",
       "ui-scale": "界面缩放",
       "ui-scale-hint": "整体放大或缩小界面——文字、图标与间距——并应用到所有窗口。与终端、编辑器的字级无关，那两者仍各自使用 ⌘= / ⌘- 快捷键。",
       "restore-windows": "还原窗口",
@@ -7489,7 +7490,6 @@
       "notifications": "通知",
       "settings-management": "设置管理",
       "theme": "主题",
-      "language": "语言",
       "other": "其他",
       "updates": "更新"
     },

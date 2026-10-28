@@ -4587,34 +4587,32 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'language'" class="s-body appearance-body">
           <h1 class="s-page-title">{{ $t('settings.nav.language') }}</h1>
 
-          <SettingsSection :label="$t('settings.section.language')">
-            <SettingsCard>
-              <SettingRow
-                data-settings-section="appearance-language"
-                :title="$t('settings.appearance.language')"
-                :description="$t('settings.appearance.language-hint')"
-              >
-                <template #control>
-                  <div class="ap-lang-row">
-                    <button
-                      v-for="lang in SUPPORTED_LANGUAGES"
-                      :key="lang.value"
-                      :class="['ap-lang-btn', { active: currentLanguage === lang.value }]"
-                      @click="setLanguage(lang.value)"
-                    >
-                      {{ $t(lang.labelKey) }}
-                      <span
-                        v-if="lang.beta"
-                        class="scope-badge"
-                        :title="$t('settings.appearance.language-beta-hint')"
-                      >{{ $t('settings.appearance.language-beta') }}</span>
-                      <span v-if="currentLanguage === lang.value" class="ap-check">✓</span>
-                    </button>
-                  </div>
-                </template>
-              </SettingRow>
-            </SettingsCard>
-          </SettingsSection>
+          <SettingsCard>
+            <SettingRow
+              data-settings-section="appearance-language"
+              :title="$t('settings.appearance.language-display')"
+              :description="$t('settings.appearance.language-hint')"
+            >
+              <template #control>
+                <div class="ap-lang-row">
+                  <button
+                    v-for="lang in SUPPORTED_LANGUAGES"
+                    :key="lang.value"
+                    :class="['ap-lang-btn', { active: currentLanguage === lang.value }]"
+                    @click="setLanguage(lang.value)"
+                  >
+                    {{ $t(lang.labelKey) }}
+                    <span
+                      v-if="lang.beta"
+                      class="scope-badge"
+                      :title="$t('settings.appearance.language-beta-hint')"
+                    >{{ $t('settings.appearance.language-beta') }}</span>
+                    <span v-if="currentLanguage === lang.value" class="ap-check">✓</span>
+                  </button>
+                </div>
+              </template>
+            </SettingRow>
+          </SettingsCard>
         </div>
 
         <div v-show="activeTab === 'accounts'" class="s-body s-body--bleed accounts-body" data-settings-section="accounts">
@@ -5229,7 +5227,9 @@ watch(activeTab, (tab) => {
 .ap-swatch { width: 24px; height: 24px; border-radius: var(--radius-sm); border: 1px solid var(--border-muted); }
 .ap-theme-label { font-size: var(--font-xs); font-weight: 500; color: var(--text-primary); }
 .ap-check { position: absolute; top: 10px; right: 11px; font-size: var(--font-xs); color: var(--accent-fg); }
-.ap-lang-row { display: flex; gap: 10px; flex-wrap: wrap; }
+/* Asks for the full viewport so the row wraps it under the text, then fills
+   the row width with aligned columns. */
+.ap-lang-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 10px; width: 100vw; max-width: 100%; }
 .ap-toggle-row { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: var(--font-sm); }
 .ap-toggle-row input { cursor: pointer; }
 .ap-lang-btn {
@@ -5243,6 +5243,8 @@ watch(activeTab, (tab) => {
   cursor: pointer;
   transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
+.ap-lang-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.ap-lang-btn .ap-check { position: static; }
 .ap-lang-btn:hover { border-color: var(--border-strong); background: var(--bg-muted); }
 .ap-lang-btn.active { border-color: var(--accent-emphasis); box-shadow: 0 0 0 1px var(--accent-emphasis); }
 .ap-timeout-field { max-width: 140px; }

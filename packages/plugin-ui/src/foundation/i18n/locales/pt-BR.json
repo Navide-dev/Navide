@@ -2516,6 +2516,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "Tradução automática. Revisão por falantes nativos pendente.",
       "language-hint": "O idioma é uma preferência do usuário aplicada a todos os workspaces.",
+      "language-display": "Idioma da interface",
       "ui-scale": "Escala da interface",
       "ui-scale-hint": "Ajusta a escala de toda a interface — texto, ícones e espaçamento — em todas as janelas. É independente dos tamanhos de fonte do terminal e do editor, que mantêm os próprios atalhos ⌘= / ⌘-.",
       "restore-windows": "Restaurar janelas",
@@ -7489,7 +7490,6 @@
       "notifications": "Notificações",
       "settings-management": "Gerenciamento de configurações",
       "theme": "Tema",
-      "language": "Idioma",
       "other": "Outros",
       "updates": "Atualizações"
     },
