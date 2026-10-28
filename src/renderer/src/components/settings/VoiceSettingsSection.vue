@@ -383,6 +383,7 @@ function previewReadback(): void {
         data-settings-section="voice-input"
         :title="t('settings.voice.enabled')"
         :description="t('settings.voice.enabled-hint')"
+        fold-description
       >
         <template #control>
           <ToggleSwitch
@@ -498,6 +499,7 @@ function previewReadback(): void {
         data-settings-section="voice-readback"
         :title="t('settings.voice.readback')"
         :description="t('settings.voice.readback-hint')"
+        fold-description
       >
         <!-- The 🔊 glyph gets its own box and margin so it never runs into the
              words around it. -->

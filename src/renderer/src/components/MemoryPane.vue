@@ -710,7 +710,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   color: var(--text-secondary);
 }
 .memory-group-title .count { font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
-.memory-group-note { margin: 0; color: var(--text-secondary); font-size: var(--font-2xs); }
+.memory-group-note { margin: 0; color: var(--text-secondary); font-size: var(--font-xs); }
 .memory-auto { display: flex; flex-direction: column; gap: 6px; }
 .memory-auto .memory-group-title { margin-bottom: 0; }
 .memory-auto-dir {
@@ -724,7 +724,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
   padding: 4px 9px 4px 4px;
@@ -760,12 +760,12 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
-.memory-create { flex: none; font-size: var(--font-2xs); }
+.memory-create { flex: none; font-size: var(--font-xs); }
 .rchip {
   display: inline-block;
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   border: 1px solid var(--border-muted);
   color: var(--text-secondary);
@@ -777,7 +777,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-muted);
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   white-space: nowrap;
   flex: none;

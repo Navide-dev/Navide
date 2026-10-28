@@ -1586,7 +1586,7 @@
         },
         "analyzer-backend": {
           "title": "Backend suy luận",
-          "summary": "Chuyển giữa Ollama REST và llama.cpp, đặt URL gốc, đường dẫn llama-cli và đường dẫn model GGUF."
+          "summary": "Chuyển giữa Ollama và llama.cpp, đặt URL gốc, đường dẫn llama-cli và đường dẫn model GGUF."
         },
         "analyzer-models": {
           "title": "Model và đánh giá hiệu năng",
@@ -1756,7 +1756,7 @@
         "recommendation-unavailable": "Đề xuất chính sách của kho không khả dụng.",
         "recommendation-invalid": "Đề xuất chính sách của kho không hợp lệ.",
         "recommendation-stale": "Đề xuất chính sách của kho đã thay đổi. Hãy xem lại trước khi chấp nhận.",
-        "user-policy-unavailable": "Không có chính sách người dùng chung nào dùng được. Hãy tạo một chính sách hoặc chọn mặc định của Host.",
+        "user-policy-unavailable": "Không có chính sách người dùng chung nào dùng được. Hãy tạo một chính sách hoặc chọn mặc định của Navide.",
         "global-policy-corrupt": "Chính sách thực thi chung bị hỏng. Hãy dựng lại trước khi chuyển sang nguồn này.",
         "recovery-blocked-by-global-policy": "Không khôi phục nguồn được khi chính sách thực thi chung đang có vấn đề.",
         "commit-uncertain": "Không xác nhận được thay đổi chính sách. Chính sách vẫn ở trạng thái chặn mặc định; hãy xem lại.",
@@ -1764,12 +1764,12 @@
       },
       "loading": "Đang tải chính sách thực thi…",
       "saved": "Đã lưu chính sách thực thi.",
-      "rebuilt": "Đã dựng lại chính sách thực thi từ mặc định của Host.",
+      "rebuilt": "Đã dựng lại chính sách thực thi từ mặc định của Navide.",
       "notice": {
         "save": "Đã lưu chính sách thực thi.",
-        "resetUser": "Đã đặt lại chính sách người dùng về mặc định của Host.",
+        "resetUser": "Đã đặt lại chính sách người dùng về mặc định của Navide.",
         "source": "Đã thay đổi nguồn chính sách.",
-        "rebuild": "Đã dựng lại chính sách thực thi từ mặc định của Host.",
+        "rebuild": "Đã dựng lại chính sách thực thi từ mặc định của Navide.",
         "resetSources": "Đã đặt lại mọi lựa chọn nguồn chính sách."
       },
       "externalUpdate": "Chính sách đã thay đổi ở nơi khác. Bản nháp của bạn được giữ cho đến khi bạn tải lại phiên bản mới nhất.",
@@ -1790,7 +1790,7 @@
         "unavailable": "Nguồn chính sách đã chọn không khả dụng. Navide chặn mặc định cho đến khi bạn chọn một nguồn khả dụng.",
         "corrupt": "Chính sách đã chọn bị hỏng. Navide chặn mặc định cho đến khi chính sách được sửa."
       },
-      "hostDefaultTitle": "Mặc định của Host",
+      "hostDefaultTitle": "Mặc định của Navide",
       "readOnly": "Chỉ đọc",
       "hostDefaultHint": "Mức cơ sở đặc quyền tối thiểu có sẵn. Mức này vẫn khả dụng ngay cả khi thiếu bộ lưu chính sách người dùng.",
       "userTitle": "Chính sách người dùng",
@@ -1798,7 +1798,7 @@
       "userHint": "Sửa chính sách chung được dùng khi workspace chọn nguồn Người dùng. Khi lưu sẽ thay thế chính sách người dùng hiện tại.",
       "mode": {
         "full": "Toàn quyền",
-        "allowlist": "Danh sách cho phép",
+        "allowlist": "Chỉ các lệnh được cho phép",
         "denylist": "Danh sách chặn"
       },
       "fullWarning": "Chế độ Toàn quyền cho phép mọi tệp thực thi, kể cả công cụ rủi ro cao và các khả năng hệ thống. Hãy xem kỹ lựa chọn rủi ro cao này trước khi lưu.",
@@ -1837,7 +1837,7 @@
       "sourceTitle": "Nguồn chính sách của workspace",
       "sourceHint": "Đề xuất của kho chưa được tin cậy cho đến khi bạn xem và chấp nhận rõ ràng. Việc đổi nguồn chỉ áp dụng cho chính sách đúng như lần cuối bạn xem; nếu nó đã thay đổi kể từ đó, hãy xem lại.",
       "source": {
-        "default": "Mặc định của Host",
+        "default": "Mặc định của Navide",
         "user": "Chính sách người dùng",
         "repository": "Chính sách của kho"
       },
@@ -1870,10 +1870,10 @@
         "directory-unsafe": "Thư mục không an toàn",
         "directory-unavailable": "Thư mục không khả dụng"
       },
-      "corruptHint": "Chính sách người dùng đã lưu bị hỏng. Dựng lại sẽ ghi trạng thái mặc định của Host mới và giữ nguyên các lựa chọn nguồn của workspace.",
+      "corruptHint": "Chính sách người dùng đã lưu bị hỏng. Dựng lại sẽ ghi trạng thái mặc định của Navide mới và giữ nguyên các lựa chọn nguồn của workspace.",
       "manualRecoveryHint": "Bộ lưu chính sách không an toàn hoặc không khả dụng. Hãy sửa quyền hoặc đường dẫn của thư mục execution-policy, rồi mở lại Cài đặt; tính năng tự dựng lại đã bị tắt.",
       "rebuild": "Dựng lại chính sách chung",
-      "rebuildConfirmBody": "Chỉ dựng lại tệp chính sách chung và tệp phiên bản từ mặc định của Host. Các lựa chọn nguồn hiện có của workspace và tệp chính sách của kho được giữ nguyên.",
+      "rebuildConfirmBody": "Chỉ dựng lại tệp chính sách chung và tệp phiên bản từ mặc định của Navide. Các lựa chọn nguồn hiện có của workspace và tệp chính sách của kho được giữ nguyên.",
       "rebuildConfirmCheck": "Tôi hiểu rằng chính sách chung bị hỏng sẽ được thay thế.",
       "rebuildConfirm": "Xác nhận dựng lại",
       "cancel": "Hủy"
@@ -3065,7 +3065,7 @@
           "h3": "Analyzer",
           "p5": "Thứ bạn cấu hình ở đây là một <strong>model cục bộ nhỏ</strong> mà Navide dùng để hiểu ý định cho pipeline; nó không liên quan gì đến các CLI agent bạn dùng trong pane. Gồm ba phần:",
           "analyzer": {
-            "backend": "<strong>Backend suy luận</strong> — trước tiên chọn một trong hai backend, <em>Ollama REST</em> hoặc <em>llama.cpp</em>. llama.cpp cần đường dẫn <code>llama-cli</code> (có nút tự phát hiện và trình chọn tệp) và đường dẫn model GGUF (tùy chọn); Ollama cần URL suy luận (mặc định <code>http://localhost:11434</code>). Bên cạnh cả hai đều có chỉ báo tình trạng.",
+            "backend": "<strong>Backend suy luận</strong> — trước tiên chọn một trong hai backend, <em>Ollama</em> hoặc <em>llama.cpp</em>. llama.cpp cần đường dẫn <code>llama-cli</code> (có nút tự phát hiện và trình chọn tệp) và đường dẫn model GGUF (tùy chọn); Ollama cần URL suy luận (mặc định <code>http://localhost:11434</code>). Bên cạnh cả hai đều có chỉ báo tình trạng.",
             "models": "<strong>Trình quản lý model</strong> (chế độ Ollama) — nhập tên model rồi nhấp <em>⬇ Tải về</em>, kèm thanh tiến trình; bên dưới liệt kê các model đã cài (tên, số tham số, dung lượng) và có thể xóa từng cái.",
             "benchmark": "<strong>Đánh giá hiệu năng model</strong> — chạy bốn tác vụ trên mỗi model cục bộ: nhận diện bộ công nghệ (đầu ra JSON), tóm tắt workspace trong một câu, chọn mục liên quan nhất từ danh sách tài liệu và tách đầu ra của CLI thành câu hỏi kèm các lựa chọn. Bảng kết quả đánh dấu từng mục kèm thời gian, và phải đạt <strong>ít nhất ba trên bốn (≥75%)</strong>; model không đạt sẽ bị ẩn khỏi danh sách chọn model."
           },
@@ -3079,7 +3079,7 @@
           "mirror": "<strong>Máy chủ tải xuống dự phòng</strong>: tệp của mỗi bản phát hành được công bố hai lần, trên GitHub Release và trên <code>dl.navide.dev</code> — giống nhau từng byte, kèm tổng sha256 để đối chiếu. <strong>Máy chủ dự phòng là nguồn cập nhật mặc định</strong>: khi khởi động, ứng dụng trỏ nguồn cập nhật tới <code>dl.navide.dev</code>, còn GitHub là phương án thay thế. Ứng dụng chỉ chuyển sang GitHub khi gặp <strong>lỗi kiểu mạng</strong> (không kết nối được máy chủ, hết thời gian chờ, 5xx/429), và một khi đã chuyển thì <strong>ở lại GitHub cho đến hết session</strong> — chỉ khởi động lại mới quay về máy chủ dự phòng. <strong>Lỗi 404 hoặc lỗi chữ ký/tổng kiểm tra không bao giờ kích hoạt việc chuyển</strong> — cả hai máy chủ có cùng tệp, nên kết quả sẽ lỗi y như vậy, và báo đúng lỗi như nó vốn có thì hữu ích hơn là che giấu.",
           "policyIntro": "<strong>Chính sách thực thi</strong> quyết định backend của plugin Navide được phép chạy những gì. Nó <strong>không phải một tab riêng</strong>: đó là khối ở đầu trang Plugin Navide, có huy hiệu phạm vi riêng (theo người dùng và theo workspace) và đường dẫn tệp chính sách. Phần đầu hiển thị <em>Chính sách đang áp dụng</em> — nguồn, chế độ và tình trạng: <em>đang hoạt động</em>, <em>đã cũ</em>, <em>không khả dụng</em> hoặc <em>bị hỏng</em>.",
           "policy": {
-            "hostDefault": "<strong>Mặc định của Host</strong> — nền tảng tối thiểu quyền dựng sẵn, được đánh dấu <strong>chỉ đọc</strong>. Nó vẫn dùng được ngay cả khi kho chính sách người dùng biến mất hoàn toàn, nên lúc nào cũng có đường lui.",
+            "hostDefault": "<strong>Mặc định của Navide</strong> — nền tảng tối thiểu quyền dựng sẵn, được đánh dấu <strong>chỉ đọc</strong>. Nó vẫn dùng được ngay cả khi kho chính sách người dùng biến mất hoàn toàn, nên lúc nào cũng có đường lui.",
             "user": "<strong>Chính sách người dùng</strong> — chính sách chung, dùng ở bất kỳ workspace nào chọn nguồn Người dùng; nó hiển thị “chưa tạo” cho đến khi bạn tạo. Có ba chế độ: <em>Toàn quyền</em>, <em>Danh sách cho phép</em>, <em>Danh sách chặn</em>. Bạn có thể đặt các không gian tên hệ thống và các tệp thực thi shell, trong đó tệp thực thi chỉ nhận <strong>tên tệp thực thi cấp cao nhất</strong> — không đường dẫn, không biểu thức shell.",
             "highRisk": "<strong>Full và denylist đều cần đánh dấu một ô rõ ràng trước khi lưu</strong>, và màn hình giải thích lý do: chế độ full cho phép chạy tệp thực thi tùy ý (kể cả công cụ rủi ro cao) và các khả năng hệ thống, còn chế độ denylist <strong>mặc định là cho phép</strong> — liệt kê tên không làm hẹp những gì nó thực sự cấp, vì vậy Navide cũng coi đây là lựa chọn rủi ro cao.",
             "source": "<strong>Nguồn chính sách của workspace</strong> — mỗi workspace chọn Mặc định của host, Chính sách người dùng hoặc Chính sách của kho. <strong>Đề xuất từ kho được gắn nhãn “chưa tin cậy” cho đến khi bạn đọc và nhấp “Chấp nhận chính sách của kho”</strong>, và việc đổi nguồn đòi hỏi dấu vân tay khớp chính xác; nếu chính sách thay đổi sau khi bạn đã xem xét, nó sẽ chuyển thành “đã thay đổi kể từ lần xem xét” và phải kiểm tra lại. Khi không mở workspace nào, khối này không dùng được.",

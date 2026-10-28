@@ -77,6 +77,20 @@ function cardSubtitle(agentKey: string, profile: CliProfile | null): string {
   return cardAlias(agentKey, profile) ? rowName(agentKey, profile) : ''
 }
 
+// A signed-out card (the same test that disables Refresh Quota) says so once
+// ("Not signed in") and offers Sign In: no quota placeholder, no "can't
+// refresh" line and no Refresh Quota beside it.
+function cardSignedOut(agentKey: string, profile: CliProfile | null): boolean {
+  const profileId = profile?.id ?? null
+  return rowIdentity(agentKey, profileId)?.signedIn === false || cardUsage(agentKey, profileId)?.cantRefresh === true
+}
+
+// The title, subtitle or Default's meta line already reads "Not signed in".
+function cardSaysSignedOut(agentKey: string, profile: CliProfile | null): boolean {
+  if (!profile) return rowIdentity(agentKey, null)?.signedIn !== true
+  return rowName(agentKey, profile) === t('settings.accounts.cli.not-signed-in')
+}
+
 // ── Renaming a card ──────────────────────────────────────────────────────────
 // One row at a time, keyed by agent + slot because slot ids are unique but the
 // built-in Default's "__default__" repeats across vendors. The field holds the
@@ -796,7 +810,7 @@ onMounted(() => refreshUsage())
               <div v-if="u.pending" class="cli-card-refresh pending">
                 {{ $t('usage.reading-now') }}
               </div>
-              <div v-else-if="u.cached" class="cli-card-refresh">
+              <div v-else-if="u.cached && !u.cantRefresh" class="cli-card-refresh">
                 {{ u.refreshLine }}
               </div>
               <div v-else-if="u.updated" class="cli-card-refresh cli-card-updated">
@@ -810,7 +824,13 @@ onMounted(() => refreshUsage())
               </div>
             </template>
             <div
-              v-else-if="u || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn"
+              v-else-if="cardSignedOut(spec.agentKey, p) && !cardSaysSignedOut(spec.agentKey, p)"
+              class="cli-card-none"
+            >
+              <span class="cli-card-foot">{{ $t('settings.accounts.cli.not-signed-in') }}</span>
+            </div>
+            <div
+              v-else-if="(u || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn) && !cardSignedOut(spec.agentKey, p)"
               class="cli-card-none"
             >
               <span class="cli-card-foot">{{ $t('usage.no-data') }}</span>
@@ -855,7 +875,7 @@ onMounted(() => refreshUsage())
             </template>
             <template v-else>
               <button
-                v-if="canRefreshCard(spec.agentKey, p?.id ?? null)"
+                v-if="canRefreshCard(spec.agentKey, p?.id ?? null) && !cardSignedOut(spec.agentKey, p)"
                 class="cli-btn ghost sm cli-card-refresh-btn"
                 :disabled="refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null)) || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn === false || cardUsage(spec.agentKey, p?.id ?? null)?.cantRefresh === true"
                 :title="$t('settings.accounts.cli.refresh-quota-card-hint')"

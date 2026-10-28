@@ -1123,7 +1123,7 @@ describe('SkillsPane merged browse/route layout', () => {
     expect(titles).toEqual([
       ['Shared library · ~/.agents/skills', '1'],
       ["copilot's own", '2'],
-      ["claude's own", '1'],
+      ["Claude Code's own", '1'],
     ])
     // exactly one source tag per card, never a second badge or a per-row button
     for (const card of wrapper!.findAll('.skill-card')) {

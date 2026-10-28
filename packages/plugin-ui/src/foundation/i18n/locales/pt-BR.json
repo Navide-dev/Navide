@@ -1586,7 +1586,7 @@
         },
         "analyzer-backend": {
           "title": "Back-end de inferência",
-          "summary": "Alterne entre Ollama REST e llama.cpp e defina a URL base, o caminho do llama-cli e o caminho do modelo GGUF."
+          "summary": "Alterne entre Ollama e llama.cpp e defina a URL base, o caminho do llama-cli e o caminho do modelo GGUF."
         },
         "analyzer-models": {
           "title": "Modelos e benchmark",
@@ -1756,7 +1756,7 @@
         "recommendation-unavailable": "A recomendação de política do repositório não está disponível.",
         "recommendation-invalid": "A recomendação de política do repositório é inválida.",
         "recommendation-stale": "A recomendação de política do repositório mudou. Inspecione-a novamente antes de aceitá-la.",
-        "user-policy-unavailable": "Não existe nenhuma política global de usuário utilizável. Crie uma ou escolha o padrão do host.",
+        "user-policy-unavailable": "Não existe nenhuma política global de usuário utilizável. Crie uma ou escolha o padrão do Navide.",
         "global-policy-corrupt": "A política de execução global está corrompida. Reconstrua-a antes de mudar para esta fonte.",
         "recovery-blocked-by-global-policy": "A recuperação de fontes está bloqueada enquanto a política de execução global não estiver íntegra.",
         "commit-uncertain": "Não foi possível confirmar a alteração da política. A política continua bloqueando tudo; inspecione-a novamente.",
@@ -1764,12 +1764,12 @@
       },
       "loading": "Carregando a política de execução…",
       "saved": "Política de execução salva.",
-      "rebuilt": "Política de execução reconstruída a partir do padrão do host.",
+      "rebuilt": "Política de execução reconstruída a partir do padrão do Navide.",
       "notice": {
         "save": "Política de execução salva.",
-        "resetUser": "Política de usuário redefinida para o padrão do host.",
+        "resetUser": "Política de usuário redefinida para o padrão do Navide.",
         "source": "Fonte de política alterada.",
-        "rebuild": "Política de execução reconstruída a partir do padrão do host.",
+        "rebuild": "Política de execução reconstruída a partir do padrão do Navide.",
         "resetSources": "Todas as seleções de fonte de política foram redefinidas."
       },
       "externalUpdate": "A política mudou em outro lugar. Seu rascunho é preservado até você recarregar a versão mais recente.",
@@ -1790,7 +1790,7 @@
         "unavailable": "A fonte de política selecionada não está disponível. O Navide bloqueia tudo até você escolher uma fonte disponível.",
         "corrupt": "A política selecionada está corrompida. O Navide bloqueia tudo até que ela seja reparada."
       },
-      "hostDefaultTitle": "Padrão do host",
+      "hostDefaultTitle": "Padrão do Navide",
       "readOnly": "Somente leitura",
       "hostDefaultHint": "A base integrada de privilégio mínimo. Continua disponível mesmo quando falta o armazenamento da política de usuário.",
       "userTitle": "Política de usuário",
@@ -1798,7 +1798,7 @@
       "userHint": "Edite a política global usada quando um workspace seleciona a fonte “Usuário”. Salvar substitui a política de usuário atual.",
       "mode": {
         "full": "Completo",
-        "allowlist": "Lista de permissões",
+        "allowlist": "Somente comandos permitidos",
         "denylist": "Lista de bloqueios"
       },
       "fullWarning": "O modo completo permite executáveis arbitrários, incluindo ferramentas de alto risco, e recursos do sistema. Revise esta escolha de alto risco antes de salvar.",
@@ -1837,7 +1837,7 @@
       "sourceTitle": "Fonte de política do workspace",
       "sourceHint": "Uma recomendação do repositório não é confiável até que você a inspecione e a aceite explicitamente. Uma troca de fonte só vale para a política como você a viu por último; se ela mudou desde então, revise-a de novo.",
       "source": {
-        "default": "Padrão do host",
+        "default": "Padrão do Navide",
         "user": "Política de usuário",
         "repository": "Política do repositório"
       },
@@ -1870,10 +1870,10 @@
         "directory-unsafe": "Diretório não seguro",
         "directory-unavailable": "Diretório indisponível"
       },
-      "corruptHint": "A política de usuário armazenada está corrompida. A reconstrução grava um novo estado com o padrão do host e preserva as seleções de fonte dos workspaces.",
+      "corruptHint": "A política de usuário armazenada está corrompida. A reconstrução grava um novo estado com o padrão do Navide e preserva as seleções de fonte dos workspaces.",
       "manualRecoveryHint": "O armazenamento de políticas não é seguro ou não está disponível. Corrija as permissões ou o caminho do diretório da política de execução e reabra as configurações; a reconstrução automática está desativada.",
       "rebuild": "Reconstruir política global",
-      "rebuildConfirmBody": "Reconstrua apenas os arquivos da política global e de revisão a partir do padrão do host. As seleções de fonte dos workspaces e os arquivos de política dos repositórios são preservados.",
+      "rebuildConfirmBody": "Reconstrua apenas os arquivos da política global e de revisão a partir do padrão do Navide. As seleções de fonte dos workspaces e os arquivos de política dos repositórios são preservados.",
       "rebuildConfirmCheck": "Entendo que a política global corrompida será substituída.",
       "rebuildConfirm": "Confirmar reconstrução",
       "cancel": "Cancelar"
@@ -3065,7 +3065,7 @@
           "h3": "Analisador",
           "p5": "O que você configura aqui é um <strong>pequeno modelo local</strong> que o Navide usa para interpretar a intenção nos pipelines; ele não tem nada a ver com os agents de CLI que você usa nos panes. Três partes:",
           "analyzer": {
-            "backend": "<strong>Back-end de inferência</strong>: primeiro escolha um de dois back-ends, <em>Ollama REST</em> ou <em>llama.cpp</em>. O llama.cpp precisa do caminho do <code>llama-cli</code> (com um botão de detecção automática e um seletor de arquivo) e, opcionalmente, do caminho de um modelo GGUF; o Ollama precisa da URL de inferência (<code>http://localhost:11434</code> por padrão). Os dois têm um indicador de status ao lado.",
+            "backend": "<strong>Back-end de inferência</strong>: primeiro escolha um de dois back-ends, <em>Ollama</em> ou <em>llama.cpp</em>. O llama.cpp precisa do caminho do <code>llama-cli</code> (com um botão de detecção automática e um seletor de arquivo) e, opcionalmente, do caminho de um modelo GGUF; o Ollama precisa da URL de inferência (<code>http://localhost:11434</code> por padrão). Os dois têm um indicador de status ao lado.",
             "models": "<strong>Gerenciador de modelos</strong> (modo Ollama): digite o nome de um modelo e clique em <em>⬇ Baixar</em>, com uma barra de progresso; abaixo, os modelos instalados aparecem listados (nome, número de parâmetros, tamanho) e podem ser excluídos um a um.",
             "benchmark": "<strong>Benchmark de modelos</strong>: executa quatro tarefas em cada modelo local: detecção da stack de tecnologia (saída JSON), resumo do workspace em uma frase, escolha da entrada mais relevante em uma lista de documentos e divisão da saída de uma CLI em uma pergunta e suas opções. A tabela de resultados marca cada item com sua duração, e é preciso passar em <strong>pelo menos três das quatro (≥75%)</strong>; os modelos reprovados ficam ocultos na lista suspensa de modelos."
           },
@@ -3079,10 +3079,10 @@
           "mirror": "<strong>O espelho de download</strong>: os arquivos de cada versão são publicados duas vezes, no GitHub Release e em <code>dl.navide.dev</code>, com os mesmos bytes e somas sha256 para conferência. <strong>O espelho é a origem padrão de atualizações</strong>: ao iniciar, o aplicativo aponta seu feed para <code>dl.navide.dev</code>, e o GitHub é a alternativa. Ele só recorre à alternativa em uma <strong>falha de rede</strong> (host inacessível, tempo esgotado, 5xx/429) e, depois de fazer isso, <strong>fica no GitHub pelo resto da session</strong>: só uma reinicialização volta ao espelho. <strong>Um 404 ou um erro de assinatura/soma de verificação nunca aciona a alternativa</strong>: os dois hosts têm os mesmos arquivos, então falharia do mesmo jeito, e informar a falha como ela é ajuda mais do que escondê-la.",
           "policyIntro": "A <strong>política de execução</strong> decide o que o back-end de um plug-in do Navide pode executar. <strong>Ela não é uma guia própria</strong>: é o bloco no topo da página Plug-ins do Navide, com seu próprio selo de escopo (por usuário e por workspace) e o caminho do arquivo de política. O topo mostra a <em>política em vigor</em>: sua origem, seu modo e seu status: <em>ativa</em>, <em>desatualizada</em>, <em>indisponível</em> ou <em>corrompida</em>.",
           "policy": {
-            "hostDefault": "<strong>Padrão do host</strong>: a base integrada de privilégio mínimo, marcada como <strong>somente leitura</strong>. Ela continua utilizável mesmo que o armazenamento de políticas do usuário tenha sumido por completo, então sempre há um caminho de volta.",
+            "hostDefault": "<strong>Padrão do Navide</strong>: a base integrada de privilégio mínimo, marcada como <strong>somente leitura</strong>. Ela continua utilizável mesmo que o armazenamento de políticas do usuário tenha sumido por completo, então sempre há um caminho de volta.",
             "user": "<strong>Política de usuário</strong>: a global, usada em qualquer workspace que escolha a origem Usuário; mostra “não criada” até você criá-la. Três modos: <em>full</em>, <em>allowlist</em>, <em>denylist</em>. Você pode definir os namespaces do sistema e os executáveis do shell, e estes últimos aceitam <strong>apenas nomes de executáveis de nível superior</strong>: nada de caminhos nem expressões de shell.",
             "highRisk": "<strong>Full e denylist exigem uma caixa de seleção explícita antes de salvar</strong>, e a tela explica o motivo: o modo full permite executáveis arbitrários (inclusive ferramentas de alto risco) e capacidades do sistema, enquanto o modo denylist <strong>permite por padrão</strong>: listar nomes não restringe o que ele de fato concede, e é por isso que o Navide também o trata como uma escolha de alto risco.",
-            "source": "<strong>Fonte de política do workspace</strong>: cada workspace escolhe Padrão do host, Política do usuário ou Política do repositório. <strong>Uma recomendação do repositório aparece como “não confiável” até você lê-la e clicar em “Aceitar política do repositório”</strong>, e trocar de origem exige que a impressão digital corresponda exatamente; se ela mudar depois da sua revisão, passa a “alterada desde a revisão” e precisa ser verificada de novo. Sem nenhum workspace aberto, este bloco não pode ser usado.",
+            "source": "<strong>Fonte de política do workspace</strong>: cada workspace escolhe Padrão do Navide, Política do usuário ou Política do repositório. <strong>Uma recomendação do repositório aparece como “não confiável” até você lê-la e clicar em “Aceitar política do repositório”</strong>, e trocar de origem exige que a impressão digital corresponda exatamente; se ela mudar depois da sua revisão, passa a “alterada desde a revisão” e precisa ser verificada de novo. Sem nenhum workspace aberto, este bloco não pode ser usado.",
             "recovery": "<strong>Armazenamento global de políticas</strong>: seu estado pode ser íntegro, ausente, corrompido, entrada insegura ou pasta insegura/indisponível. Um armazenamento corrompido pode ser <strong>reconstruído</strong> depois de marcar uma caixa de confirmação; a reconstrução substitui apenas a política global e os arquivos de revisão, e mantém a seleção de origem de cada workspace e todos os arquivos de política do repositório. Quando o armazenamento é considerado <strong>inseguro</strong>, a reconstrução automática é desativada e a tela pede que você mesmo corrija os caminhos pertencentes ao host que ela lista.",
             "failClosed": "Todo estado com problema é <strong>fail-closed</strong>: nada é permitido até você escolher uma origem utilizável ou reparar a que está com problema. Isso inclui um salvamento incerto: a mensagem diz “não foi possível confirmar o resultado da alteração da política; a política continua fail-closed, verifique novamente”."
           },

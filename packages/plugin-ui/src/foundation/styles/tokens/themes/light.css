@@ -34,10 +34,12 @@
   --border-default: #d1d9e0;
   --border-muted: #eaeef2;
   --border-strong: #afb8c1;
-  /* Settings window only: card frames at ~3:1 against the white page, row
-     dividers that show on the card fill, and an inset one step below the
-     card. Other themes fall back to their border/inset tokens. */
-  --settings-card-border: #8c959f;
+  /* Settings window only: one light frame for every settings card (rows,
+     skill, prompt, memory and credential cards alike), still visibly
+     separated from the white page; row dividers that show on the card fill,
+     and an inset one step below the card. Other themes fall back to their
+     border/inset tokens. */
+  --settings-card-border: #c8d1da;
   --settings-card-divider: #d1d9e0;
   --settings-inset: #eef1f4;
 

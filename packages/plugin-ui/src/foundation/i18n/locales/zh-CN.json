@@ -1586,7 +1586,7 @@
         },
         "analyzer-backend": {
           "title": "推论后端",
-          "summary": "切换 Ollama REST 或 llama.cpp，并设置推论网址、llama-cli 路径与 GGUF 模型路径。"
+          "summary": "切换 Ollama 或 llama.cpp，并设置推论网址、llama-cli 路径与 GGUF 模型路径。"
         },
         "analyzer-models": {
           "title": "模型与基准测试",
@@ -1756,7 +1756,7 @@
         "recommendation-unavailable": "Repository 政策建议无法使用。",
         "recommendation-invalid": "Repository 政策建议无效。",
         "recommendation-stale": "Repository 政策建议已变更。请重新检查后再接受。",
-        "user-policy-unavailable": "没有可用的全域用户政策。请创建政策或选择 Host 默认值。",
+        "user-policy-unavailable": "没有可用的全域用户政策。请创建政策或选择 Navide 默认值。",
         "global-policy-corrupt": "全域执行策略已损坏。请先重建后再切换到这个来源。",
         "recovery-blocked-by-global-policy": "全域执行策略不健康时，无法恢复来源。",
         "commit-uncertain": "无法确认政策变更结果。政策仍维持失败关闭，请重新检查。",
@@ -1764,12 +1764,12 @@
       },
       "loading": "正在加载执行策略…",
       "saved": "执行策略已保存。",
-      "rebuilt": "已从 Host 默认值重建执行策略。",
+      "rebuilt": "已从 Navide 默认值重建执行策略。",
       "notice": {
         "save": "执行策略已保存。",
-        "resetUser": "用户政策已重设为 Host 默认值。",
+        "resetUser": "用户政策已重设为 Navide 默认值。",
         "source": "政策来源已变更。",
-        "rebuild": "已从 Host 默认值重建执行策略。",
+        "rebuild": "已从 Navide 默认值重建执行策略。",
         "resetSources": "所有政策来源选择已重设。"
       },
       "externalUpdate": "政策已在其他地方变更。你的草稿会保留，直到重新加载最新版本。",
@@ -1790,7 +1790,7 @@
         "unavailable": "选用的政策来源无法使用。Navide 会在你选择可用来源前维持失败关闭。",
         "corrupt": "选用的政策已损坏。修复前 Navide 会维持失败关闭。"
       },
-      "hostDefaultTitle": "Host 默认值",
+      "hostDefaultTitle": "Navide 默认值",
       "readOnly": "唯读",
       "hostDefaultHint": "内置的最小权限基准。即使用户政策保存区遗失，仍然可以使用。",
       "userTitle": "用户政策",
@@ -1798,7 +1798,7 @@
       "userHint": "编辑工作区选用 User 来源时使用的全域政策。保存会取代目前的用户政策。",
       "mode": {
         "full": "完整",
-        "allowlist": "允许清单",
+        "allowlist": "仅允许的命令",
         "denylist": "拒绝清单"
       },
       "fullWarning": "完整模式允许任意可可执行文件（包括高风险工具）与系统能力。保存前请再次确认这项高风险选择。",
@@ -1837,7 +1837,7 @@
       "sourceTitle": "工作区政策来源",
       "sourceHint": "Repository 建议在你查看并明确接受前都不受信任。切换来源只对你最后看到的那一版政策生效；若之后有变动，请重新查看。",
       "source": {
-        "default": "Host 默认值",
+        "default": "Navide 默认值",
         "user": "用户政策",
         "repository": "Repository 政策"
       },
@@ -1857,7 +1857,7 @@
       "sourceCorruptHint": "政策来源状态已损坏。重设所有政策来源选择即可清除 Host-owned pin，不会修改 repository 政策文件。",
       "sourceManualRecoveryHint": "政策来源状态不安全或无法使用。请人工修正列出的 Host-owned 路径；Navide 不会自动删除它。",
       "resetSourceSelections": "重设所有政策来源选择",
-      "resetSourceSelectionsBody": "这会清除所有 repository 来源 pin，不会修改或删除 repository 政策文件。所有工作区之后会再次依照全域 Host 默认值或用户政策解析。",
+      "resetSourceSelectionsBody": "这会清除所有 repository 来源 pin，不会修改或删除 repository 政策文件。所有工作区之后会再次依照全域 Navide 默认值或用户政策解析。",
       "resetSourceSelectionsCheck": "我了解所有 repository 来源 pin 都会被清除。",
       "resetSourceSelectionsConfirm": "确认重设",
       "recheck": "再次检查",
@@ -1873,7 +1873,7 @@
       "corruptHint": "保存的用户政策已损坏。重建会写入全新的 Host 默认状态，并保留工作区来源选择。",
       "manualRecoveryHint": "政策保存区不安全或无法使用。请修正 execution-policy 文件夹的权限或路径，再重新打开设置；目前禁用自动重建。",
       "rebuild": "重建全域政策",
-      "rebuildConfirmBody": "只会依 Host 默认值重建全域政策与 revision 文件。现有工作区来源选择与 repository 政策文件都会保留。",
+      "rebuildConfirmBody": "只会依 Navide 默认值重建全域政策与 revision 文件。现有工作区来源选择与 repository 政策文件都会保留。",
       "rebuildConfirmCheck": "我了解损坏的全域政策会被取代。",
       "rebuildConfirm": "确认重建",
       "cancel": "取消"
@@ -3065,7 +3065,7 @@
           "h3": "分析器",
           "p5": "这里设置的是<strong>本机小模型</strong>，Navide 拿它做 pipeline 的意图判读，跟你在面板里用的 CLI agent 无关。三段：",
           "analyzer": {
-            "backend": "<strong>Inference backend</strong> — 先选 <em>Ollama REST</em> 或 <em>llama.cpp</em> 两种后端。选 llama.cpp 要填 <code>llama-cli</code> 路径（有自动侦测钮与文件浏览器）与选用的 GGUF 模型路径；选 Ollama 则填推论网址（默认 <code>http://localhost:11434</code>）。两者旁边都有健康指示灯。",
+            "backend": "<strong>Inference backend</strong> — 先选 <em>Ollama</em> 或 <em>llama.cpp</em> 两种后端。选 llama.cpp 要填 <code>llama-cli</code> 路径（有自动侦测钮与文件浏览器）与选用的 GGUF 模型路径；选 Ollama 则填推论网址（默认 <code>http://localhost:11434</code>）。两者旁边都有健康指示灯。",
             "models": "<strong>Model manager</strong>（Ollama 模式） — 输入模型名称按 <em>⬇ 下载</em> 下载，有进度条；下方列出已安装的模型（名称、参数量、大小），可逐一删除。",
             "benchmark": "<strong>Model benchmark</strong> — 对所有本机模型跑四项任务：技术栈侦测（输出 JSON）、工作区一句话摘要、从文档清单挑最相关的一笔、解析 CLI 输出并抽出问题与选项。结果表逐项打勾并附耗时，<strong>四题至少过三题（≥75%）</strong>才算通过；没过的模型会从模型下拉菜单里藏起来。"
           },
@@ -3079,14 +3079,14 @@
           "mirror": "<strong>下载镜像</strong>：每个版本的文件同时放在 GitHub Release 与 <code>dl.navide.dev</code>（同样的比特，附 sha256 可比对）。<strong>更新来源默认就是镜像</strong>——app 一启动就把 feed 指到 <code>dl.navide.dev</code>，GitHub 是备援。只有遇到<strong>网络层失败</strong>（连不上、超时、5xx／429）才会退回 GitHub，退过之后<strong>这个 session 就一直用 GitHub</strong>，重开 app 才会回到镜像。<strong>404 与签章／checksum 错误不会退回</strong>——两边放的是同一份档，换过去只会同样失败，照原样回报才有用。",
           "policyIntro": "<strong>执行策略</strong>决定 Navide 插件的后端可以运行什么。它<strong>不是独立标签页</strong>，而是 Navide 插件标签页最上面那一块，带自己的层级徽章（用户＋工作区）与政策档路径。最上面先显示<em>目前生效的政策</em>：来源、模式，以及状态 <em>生效中</em>／<em>已过期</em>／<em>无法使用</em>／<em>损坏</em>。",
           "policy": {
-            "hostDefault": "<strong>Host 默认值</strong> — 内置的最小权限基准，标着<strong>唯读</strong>。即使用户政策的保存区整个不见了它仍然可用，所以永远有一条退路。",
+            "hostDefault": "<strong>Navide 默认值</strong> — 内置的最小权限基准，标着<strong>唯读</strong>。即使用户政策的保存区整个不见了它仍然可用，所以永远有一条退路。",
             "user": "<strong>用户政策</strong> — 全域那一份，工作区选 User 来源时用的就是它，没建过会写“尚未创建”。三种模式：<em>完整</em>、<em>允许清单</em>、<em>拒绝清单</em>；可设“系统命名空间”与“Shell 可可执行文件”，后者<strong>只收最上层可可执行文件名称</strong>，不接受路径或 shell 表达式。",
             "highRisk": "<strong>完整与拒绝清单都要勾一个确认框才能存</strong>，而且画面把理由写出来：完整模式允许任意可可执行文件（包含高风险工具）与系统能力；拒绝清单模式是<strong>默认放行</strong>——列出名称并不会缩小它实际授予的范围，所以 Navide 一律把它当高风险选择。",
-            "source": "<strong>工作区政策来源</strong> — 每个工作区各自选 Host 默认值／用户政策／Repository 政策。<strong>Repository 建议在你亲自查看并按下“接受 Repository 政策”之前都标成“不受信任”</strong>，切换来源还要指纹精确相符；你看过之后它又被改动就变成“查看后已变更”，得再按一次“再次检查”。没开工作区时这一块不能选。",
+            "source": "<strong>工作区政策来源</strong> — 每个工作区各自选 Navide 默认值／用户政策／Repository 政策。<strong>Repository 建议在你亲自查看并按下“接受 Repository 政策”之前都标成“不受信任”</strong>，切换来源还要指纹精确相符；你看过之后它又被改动就变成“查看后已变更”，得再按一次“再次检查”。没开工作区时这一块不能选。",
             "recovery": "<strong>全域政策保存区</strong> — 状态有正常／遗失／损坏／不安全的项目／不安全或无法使用的文件夹。损坏时可以<strong>重建全域政策</strong>，但要勾确认；重建只换全域政策与 revision 档，工作区的来源选择与 repository 政策文件都保留。保存区被判定为<strong>不安全</strong>时自动重建会禁用，画面要你自己去修它列出来的那几个 Host-owned 路径。",
             "failClosed": "任何一种不健康状态都是<strong>失败关闭</strong>：在你明确选一个可用来源或修好它之前，什么都不会被放行。连“存不确定”也一样——消息是“无法确认政策变更结果。政策仍维持失败关闭，请重新检查”。"
           },
-          "policyNote": "要一次清掉所有 repository 来源 pin，用“重设所有政策来源选择”，同样要勾确认。它<strong>不会</strong>修改或删除任何 repository 政策文件，只是让每个工作区之后重新依全域 Host 默认值或用户政策解析。",
+          "policyNote": "要一次清掉所有 repository 来源 pin，用“重设所有政策来源选择”，同样要勾确认。它<strong>不会</strong>修改或删除任何 repository 政策文件，只是让每个工作区之后重新依全域 Navide 默认值或用户政策解析。",
           "extNote": "Navide 插件后端出状况时的分界：<strong>只有协定讯框（request／response／cancel）满了才会终止那个后端</strong>；Host 通知满了只是丢弃并计数，不会把整个 Navide 插件拖垮。干净结束的后端会把原因记下来，不再无声消失。"
         },
         "s5": {

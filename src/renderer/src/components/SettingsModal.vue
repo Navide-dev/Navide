@@ -637,12 +637,16 @@ const cliAgentRows = computed(() => {
         hint: spec.hint ?? '',
         version: dep?.version ?? '',
         // A CLI that is not installed has nothing to fix yet: no warning glyph,
-        // and it is not counted under "Needs attention" (an empty machine would
-        // otherwise show every agent there). Only real problems count.
+        // and it is not counted under "Needs attention" at all, signed-out
+        // state and health findings included (an empty machine would
+        // otherwise show every agent there). Only problems the user can act
+        // on for an installed CLI count.
         installed: dep?.status !== 'missing',
-        needsAttention: dep?.status === 'outdated'
+        needsAttention: dep?.status !== 'missing' && (
+          dep?.status === 'outdated'
           || identity?.signedIn === false
-          || !!onboarding.cliHealth.value?.findings.some((finding) => finding.agent_key === spec.agentKey),
+          || !!onboarding.cliHealth.value?.findings.some((finding) => finding.agent_key === spec.agentKey)
+        ),
         chips: cliAgentRowChips(
           {
             install: dep ? { status: dep.status, version: dep.version } : null,
@@ -1791,6 +1795,13 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
 
 // Two letters per CLI card: the first letter and the first consonant after
 // it, so names that share a prefix (Kimi, Kilo) still read apart.
+/** "Kimi Code CLI (Moonshot AI)" → name and vendor, so a card shows the
+ *  vendor as its own muted line instead of wrapping "AI)" onto one. */
+function cardNameParts(label: string): { name: string; vendor: string } {
+  const match = /^(.*\S)\s*\(([^()]+)\)$/.exec(label)
+  return match ? { name: match[1], vendor: match[2] } : { name: label, vendor: '' }
+}
+
 function cardInitials(label: string): string {
   const second = label.slice(1).match(/[b-df-hj-np-tv-z]/i)?.[0] ?? label.slice(1, 2)
   return (label.slice(0, 1) + second).toUpperCase()
@@ -2894,7 +2905,7 @@ watch(activeTab, (tab) => {
                   <NavideCloudMark variant="solid" class="nvc-nav-mark" />
                 </template>
               </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :expanded="activeTab === 'extensions'" :badge="pluginUpdates.count.value" :marker="pluginsFoldedMarker" @select="activeTab = 'extensions'">
+              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :expanded="activeTab === 'extensions'" foldable :badge="pluginUpdates.count.value" :marker="pluginsFoldedMarker" @select="activeTab = 'extensions'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
                 </template>
@@ -2986,9 +2997,13 @@ watch(activeTab, (tab) => {
               @install-node="mcpNodeInstallOpen = true"
             >
               <template #actions>
-                <button class="mcp-action-btn" @click="mView = 'catalog'">{{ $t('action.add-mcp') }}</button>
                 <button class="mcp-action-btn" @click="mView = 'custom'">{{ $t('settings.mcp.add-custom') }}</button>
                 <button class="mcp-action-btn" @click="mOpenConfig" :disabled="!mConfigPath">{{ $t('action.open-mcp-config') }}</button>
+              </template>
+              <!-- The page's one filled primary action, at the right of the
+                   toolbar like Skills' and Prompts' create buttons. -->
+              <template #primary>
+                <button class="mcp-action-btn mcp-action-btn--primary" @click="mView = 'catalog'">{{ $t('action.add-mcp') }}</button>
               </template>
             </McpPane>
             <!-- The same guided install the spawn dropdown uses for a CLI's
@@ -3193,7 +3208,7 @@ watch(activeTab, (tab) => {
             </span>
             <span class="settings-meta-paths">
               <span class="settings-meta-path">
-                <PathText class="settings-path" :path="settingsPaths.analyzer" :max="56" />
+                <PathText class="settings-path" :path="settingsPaths.analyzer" />
                 <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.analyzer" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.analyzer)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
               </span>
               <span class="settings-meta-path">
@@ -3212,7 +3227,7 @@ watch(activeTab, (tab) => {
               <button
                 :class="['az-backend-btn', { active: props.analyzerApi.analyzerSettings.value.backend === 'ollama' }]"
                 @click="props.analyzerApi.saveSettings({ backend: 'ollama' })"
-              >Ollama REST</button>
+              >Ollama</button>
               <button
                 :class="['az-backend-btn', { active: props.analyzerApi.analyzerSettings.value.backend === 'llama_cpp' }]"
                 @click="props.analyzerApi.saveSettings({ backend: 'llama_cpp' })"
@@ -3284,7 +3299,7 @@ watch(activeTab, (tab) => {
               </div>
             </template>
 
-            <!-- Ollama REST-specific settings -->
+            <!-- Ollama-specific settings -->
             <template v-if="props.analyzerApi.analyzerSettings.value.backend === 'ollama'">
               <div class="az-subsection az-row">
                 <label class="az-label">{{ $t('settings.analyzer.inference-url') }}</label>
@@ -3533,7 +3548,10 @@ watch(activeTab, (tab) => {
                 <div class="cli-card-heading">
                   <span class="cli-agent-grip" :title="$t('settings.cliAgents.drag-hint')" aria-hidden="true">⠿</span>
                   <span class="cli-card-icon" aria-hidden="true">{{ cardInitials(row.label) }}</span>
-                  <span class="cli-agent-label">{{ row.label }}</span>
+                  <span class="cli-agent-label" :title="row.label">
+                    <span class="cli-agent-name">{{ cardNameParts(row.label).name }}</span>
+                    <span v-if="cardNameParts(row.label).vendor" class="cli-agent-vendor">{{ cardNameParts(row.label).vendor }}</span>
+                  </span>
                   <!-- An installed CLI needs attention when it is outdated: the mark names
                        what (the install chip's "Update available …"), not just that. -->
                   <span v-if="row.needsAttention && row.installed" class="cli-card-attention" role="img" :title="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')" :aria-label="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')">!</span>
@@ -4214,6 +4232,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'cross-device'" class="s-body cross-device-body">
           <!-- A plain title like every other page; the mark stays on its sidebar row. -->
           <h1 class="s-page-title">{{ $t('settings.nav.crossDevice') }}</h1>
+          <p v-show="cloudSubtab === 'sync'" class="s-page-intro">{{ $t('settings.sync.hint') }}</p>
           <CloudSubtabs v-model="cloudSubtab" :enabled="cloudSubtabsShown" :tabs="cloudTabs">
           <template #sync>
           <SyncSettings v-show="cloudSubtab === 'sync'" :backend="props.backend" />
@@ -4407,20 +4426,17 @@ watch(activeTab, (tab) => {
         <!-- ══ UPDATES TAB ══ -->
         <div v-show="activeTab === 'updates'" class="s-body updates-body">
           <h1 class="s-page-title">{{ $t('settings.nav.updates') }}</h1>
+          <p class="s-page-intro">{{ $t('updater.section-hint') }}</p>
 
           <SettingsCard data-settings-section="updates">
-            <!-- No row title: the page title already says Updates. -->
-            <SettingRow :description="$t('updater.section-hint')">
+            <!-- No row title: the page title already says Updates, and the
+                 intro above it says what the page is for. -->
+            <SettingRow :description="$t('settings.extensionsPolicy.labeledValue', { label: $t('updater.current-version'), value: 'v' + updateState.currentVersion })">
               <template #control>
                 <button class="ap-reset" :disabled="updIsBusy || updateState.status === 'unsupported'" @click="checkForUpdates">{{ $t('updater.check') }}</button>
               </template>
             </SettingRow>
             <div class="s-fullrow">
-              <div class="settings-meta-row inline">
-                <span class="scope-badge">{{ $t('updater.current-version') }}</span>
-                <span class="settings-path" v-truncate>v{{ updateState.currentVersion }}</span>
-              </div>
-
               <!-- Where the update actually is. Each stage below owns the
                    settings group of the same name. -->
               <ol v-if="updStages.length" class="upd-rail">
@@ -4501,6 +4517,7 @@ watch(activeTab, (tab) => {
               <SettingRow
                 :title="$t('updater.notify-check-failure')"
                 :description="$t('updater.notify-check-failure-hint')"
+                fold-description
               >
                 <template #control>
                   <ToggleSwitch
@@ -4576,6 +4593,7 @@ watch(activeTab, (tab) => {
               <SettingRow
                 :title="$t('updater.auto-install')"
                 :description="$t('updater.auto-install-hint')"
+                fold-description
               >
                 <template #control>
                   <ToggleSwitch
@@ -4711,6 +4729,7 @@ watch(activeTab, (tab) => {
         <!-- ══ LANGUAGE TAB ══ -->
         <div v-show="activeTab === 'language'" class="s-body appearance-body">
           <h1 class="s-page-title">{{ $t('settings.nav.language') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.appearance.language-hint') }}</p>
 
           <!-- The one heading style: a section label over the card, not a
                bold row title standing in for a heading. -->
@@ -4718,7 +4737,6 @@ watch(activeTab, (tab) => {
           <SettingsCard>
             <SettingRow
               data-settings-section="appearance-language"
-              :description="$t('settings.appearance.language-hint')"
             >
               <template #control>
                 <div class="ap-lang-row">
@@ -5211,6 +5229,9 @@ watch(activeTab, (tab) => {
 /* ── Appearance tab ─────────────────────────────────────────────────────────── */
 .appearance-body { overflow-y: auto; padding: 18px 22px; }
 .ap-section { margin-bottom: 26px; }
+/* The section after the last block brings its own top spacing; the block's
+   bottom margin on top of it left a gap twice the size above "Other". */
+.ap-section:last-child { margin-bottom: 0; }
 .ap-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 /* Section headings share SettingsSection's small uppercase label. */
 .ap-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
@@ -5227,6 +5248,26 @@ watch(activeTab, (tab) => {
 /* The title already reserves --space-group below it; the section's own top
    margin would double the gap on the tabs that open with a SettingsSection. */
 .s-page-title + .settings-section { margin-top: 0; }
+/* One page intro: directly under the title, outside any card, one measure. */
+.s-page-title:has(+ .s-page-intro) { margin-bottom: var(--space-2, 8px); }
+.s-page-intro {
+  margin: 0 0 var(--space-group);
+  max-width: 70ch;
+  font-size: var(--font-row-desc);
+  line-height: var(--lh-base);
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+.s-page-intro + .settings-section { margin-top: 0; }
+/* The panes that write their own intro under the title take the same
+   measure. */
+.s-body :deep(:is(
+  .sb-intro, .kse-intro, .cli-ext-intro, .prompts-intro p, .nv-overview-intro,
+  .skills-toolbar > div:first-child > p, .memory-pane-head > div > p,
+  .cred-toolbar > div > p:first-child
+)) {
+  max-width: 70ch;
+}
 .s-fullrow {
   padding: var(--space-row-y) var(--space-row-x);
 }
@@ -5270,7 +5311,8 @@ watch(activeTab, (tab) => {
 /* Two lines tall either way, so a wrapped name does not push its card's
    status rows below the neighbours'. */
 .cli-card-heading { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 38px; }
-.cli-card-heading .cli-agent-label { overflow-wrap: anywhere; }
+.cli-card-heading .cli-agent-label { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.cli-card-heading .cli-agent-vendor { font-size: var(--font-xs); font-weight: 400; color: var(--text-secondary); }
 .cli-card-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px; background: var(--bg-muted); color: var(--text-secondary); font-size: var(--font-xs); font-weight: 700; }
 .cli-card-attention { margin-left: auto; color: var(--warning-fg, #c77400); font-weight: 700; }
 .cli-card-status { display: flex; align-items: flex-start; flex-direction: column; gap: 4px; min-height: 42px; }
@@ -5331,12 +5373,12 @@ watch(activeTab, (tab) => {
 .cli-chip--ok { color: var(--success-on-subtle, #2b8a3e); background: var(--success-subtle); border-color: var(--success-muted); }
 .cli-chip--warn { color: var(--attention-on-subtle, #c77400); background: var(--attention-subtle); border-color: var(--attention-muted); }
 .cli-chip--bad { color: var(--danger-fg, #c0392b); background: var(--danger-subtle); border-color: var(--danger-muted); }
-/* Neutral and informational chips ("Signed out", "Not installed", a model)
-   read in the primary text colour: secondary grey on the muted fill sits too
-   close to 4.5:1 in dark themes, and accent is kept for selection and focus. */
-.cli-chip--neutral,
-.cli-chip--info { color: var(--text-primary); }
-.cli-chip--info { border-color: transparent; }
+/* Neutral chips ("Signed out", "Not installed") read in the primary text
+   colour: secondary grey on the muted fill sits too close to 4.5:1 in dark
+   themes. Informational ones (a chosen model, "Push on") take the accent's
+   subtle tint, so green stays "installed" alone. */
+.cli-chip--neutral { color: var(--text-primary); }
+.cli-chip--info { color: var(--accent-fg); background: var(--accent-subtle); border-color: transparent; }
 /* Launch overrides for the selected agent. */
 .launch-row { flex-direction: column; align-items: stretch; padding: 0; }
 .launch-row.launch-open { border-color: var(--accent-focus); }
@@ -5370,7 +5412,7 @@ watch(activeTab, (tab) => {
   border: 1px solid var(--border-default); background: var(--bg-elevated);
   color: var(--text-secondary); cursor: pointer; white-space: nowrap;
 }
-.env-add:disabled { opacity: 0.45; cursor: default; }
+.env-add:disabled { opacity: 0.6; cursor: default; }
 /* Push channels: what switching every one of them off actually costs. */
 .push-all-off {
   margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-md);
@@ -5467,7 +5509,7 @@ watch(activeTab, (tab) => {
 .ap-color-list {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--settings-card-border, var(--border-default));
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
   overflow: hidden;
@@ -5733,7 +5775,7 @@ watch(activeTab, (tab) => {
   color: var(--text-bright);
   background: var(--bg-muted);
 }
-/* Disabled follows the modal's one disabled rule (solid frame, 0.45). */
+/* Disabled follows the modal's one disabled rule (solid frame, 0.6). */
 
 button.tiny {
   min-height: var(--control-h-md);
@@ -5944,11 +5986,6 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 /* ── Appearance tab ─────────────────────────────────────────────────────────── */
 .appearance-body { overflow-y: auto; }
 .help-body { overflow-y: auto; padding: 18px 22px; container: help-body / inline-size; }
-.help-topic-select { display: none; }
-@container help-body (max-width: 700px) {
-  .help-topics { display: none; }
-  .help-topic-select { display: block; width: 100%; max-width: 360px; margin-bottom: 18px; }
-}
 /* Help topics are page tabs, so they use the one underline tab style of the
    Navide Plugins pages and Marketplace views. At narrow widths the topics
    wrap onto a second row instead of scrolling sideways with the last ones
@@ -5961,6 +5998,13 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   flex-shrink: 0;
   margin-bottom: 18px;
   border-bottom: 1px solid var(--border-muted);
+}
+/* Exactly one chapter control at a time: tabs on a wide page, the dropdown
+   below 700px. It sits after the .help-topics rule so the query wins. */
+.help-topic-select { display: none; }
+@container help-body (max-width: 700px) {
+  .help-topics { display: none; }
+  .help-topic-select { display: block; width: 100%; max-width: 360px; margin-bottom: 18px; }
 }
 .help-topic {
   flex: none;
@@ -6006,6 +6050,8 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   background: var(--bg-muted); border: 1px solid var(--border-default); color: var(--text-bright); cursor: pointer;
 }
 .mcp-action-btn:hover:not(:disabled) { background: var(--border-default); }
+.mcp-action-btn--primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
+.mcp-action-btn--primary:hover:not(:disabled) { background: var(--accent-emphasis); filter: brightness(1.08); }
 .mcp-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .mcp-back-btn {
   font-size: var(--font-xs); padding: 4px 10px; border-radius: var(--radius-sm);
@@ -6078,7 +6124,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   background: var(--accent-emphasis); border: 1px solid var(--accent-focus); color: var(--text-on-emphasis); font-weight: 600; cursor: pointer;
 }
 .mcp-add-btn:hover:not(:disabled) { background: var(--accent-focus); }
-.mcp-add-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.mcp-add-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .mcp-installed-badge {
   font-size: var(--font-2xs); padding: 6px 14px; border-radius: var(--radius-sm); white-space: nowrap; flex-shrink: 0;
   background: var(--bg-muted); border: 1px solid var(--border-default); color: var(--text-muted); cursor: not-allowed;
@@ -6204,7 +6250,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   transition: background var(--motion-fast) var(--ease-out);
 }
 .az-run-btn:hover:not(:disabled) { background: var(--accent-focus); }
-.az-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.az-run-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .az-progress-wrap {
   padding: 10px 0 0;
@@ -6440,13 +6486,14 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 
 /* One disabled look for every button on a settings page, the panes mounted
    inside it included: no fill, the button's own solid frame, primary text
-   and the whole button at 0.45 opacity (text stays above 3:1), and no hover
+   and the whole button at 0.6 opacity (text stays at or above 3:1 on the
+   page and card fills in light and dark themes), and no hover
    or press feedback. Dashed frames are reserved for drop zones and add
    placeholders, never for a disabled or secondary button. Switches keep
    their own track. */
 .s-body :deep(button:disabled:not([role='switch'])),
 .s-body :deep(button[aria-disabled='true']:not([role='switch'])) {
-  opacity: 0.45;
+  opacity: 0.6;
   background: transparent;
   border-color: var(--border-strong);
   color: var(--text-primary);

@@ -76,7 +76,7 @@ describe('Settings — remaining hard-coded strings', () => {
 
   it('leaves product names, units, ids and example values untranslated', () => {
     for (const literal of [
-      '>Ollama REST</button>',
+      '>Ollama</button>',
       '>llama.cpp</button>',
       'placeholder="http://localhost:11434"',
       "v-for=\"t in ['T1','T2','T3','T4']\"",

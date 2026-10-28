@@ -318,4 +318,24 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(pluginsRow().props('marker')).toBeNull()
     expect(marker('Execution Policy')).toMatchObject({ text: '⚠' })
   })
+
+  it('shows the "Dev" marker in exactly one place: the folded parent, or the page row once unfolded', async () => {
+    await mountModal('general')
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toMatchObject({ text: 'Dev' })
+    expect(pluginsRow().props('foldable')).toBe(true)
+    expect(pluginsRow().props('expanded')).toBe(false)
+
+    vm().setTab('extensions')
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toBeNull()
+    expect(pluginsRow().props('expanded')).toBe(true)
+    expect(marker('Developer and native code')).toMatchObject({ text: 'Dev' })
+
+    // Moving between the unfolded pages keeps the marker on its own row.
+    await openPage('Developer and native code')
+    expect(pluginsRow().props('marker')).toBeNull()
+    expect(marker('Developer and native code')).toMatchObject({ text: 'Dev' })
+  })
 })

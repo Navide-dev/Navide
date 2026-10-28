@@ -194,6 +194,16 @@ describe('Settings CLI agent cards and drawer', { timeout: 15000 }, () => {
     expect(wrapper!.get('[data-cli-filter="attention"] .count').text()).toBe('0')
     expect(wrapper!.findAll('.cli-agent-card').map((card) => card.attributes('data-agent-key'))).toEqual([])
 
+    // Signed out counts only for an installed CLI: codex stays out of it.
+    await wrapper!.setProps({
+      cliProfilesApi: { identityFor: () => ({ signedIn: false }), profilesForAgent: () => [] } as unknown as ModalProps['cliProfilesApi'],
+    })
+    expect(wrapper!.get('[data-cli-filter="attention"] .count').text()).toBe(String(CLI_AGENT_SPECS.length - 1))
+    expect(wrapper!.find('.cli-agent-card[data-agent-key="codex"]').exists()).toBe(false)
+    await wrapper!.setProps({
+      cliProfilesApi: { identityFor: () => null, profilesForAgent: () => [] } as unknown as ModalProps['cliProfilesApi'],
+    })
+
     await wrapper!.get('[data-cli-filter="all"]').trigger('click')
     await wrapper!.get('.cli-agent-filter-search').setValue('Claude')
     expect(wrapper!.findAll('.cli-agent-card').map((card) => card.attributes('data-agent-key'))).toEqual(['claude'])

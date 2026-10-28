@@ -66,9 +66,12 @@ const POLICY: Record<PolicyRow, Record<GuardLevel, GuardAction | 'allow-audit'>>
 }
 const POLICY_ROWS = Object.keys(POLICY) as PolicyRow[]
 
+// One status palette across Settings: green = allowed (and "Can be
+// blocked"), amber = ask, red = deny.
 function actionTone(action: string): string {
   if (action === 'deny') return 'bad'
   if (action === 'ask') return 'warn'
+  if (action === 'allow' || action === 'allow-audit') return 'ok'
   return 'muted'
 }
 
@@ -374,7 +377,7 @@ async function runTest(): Promise<void> {
 /* Status pill: same shape as the Channels page's. */
 .gd-pill {
   flex-shrink: 0;
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   border-radius: 999px;
   padding: 1px 8px;
@@ -390,7 +393,7 @@ async function runTest(): Promise<void> {
 .gd-pill-icon { flex: none; }
 
 .gd-table-scroll { overflow-x: auto; container: gd-table / inline-size; }
-.gd-table { width: 100%; border-collapse: collapse; font-size: var(--font-2xs); }
+.gd-table { width: 100%; border-collapse: collapse; font-size: var(--font-xs); }
 .gd-table th, .gd-table td { padding: 6px var(--space-row-x); text-align: left; }
 .gd-table thead th { color: var(--text-secondary); font-weight: 600; border-bottom: 1px solid var(--border-muted); }
 .gd-table tbody th { color: var(--text-primary); font-weight: 600; }
@@ -411,11 +414,11 @@ async function runTest(): Promise<void> {
 }
 
 .gd-item { display: flex; align-items: center; gap: 10px; padding: 8px var(--space-row-x); }
-.gd-empty { font-size: var(--font-2xs); color: var(--text-secondary); }
+.gd-empty { font-size: var(--font-xs); color: var(--text-secondary); }
 .gd-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .gd-item-name { flex: 1; min-width: 0; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gd-item-meta { font-size: var(--font-2xs); color: var(--text-secondary); overflow-wrap: anywhere; }
-.gd-code { font-family: var(--font-mono, monospace); font-size: var(--font-2xs); color: var(--text-bright); word-break: break-all; }
+.gd-item-meta { font-size: var(--font-xs); color: var(--text-secondary); overflow-wrap: anywhere; }
+.gd-code { font-family: var(--font-mono, monospace); font-size: var(--font-xs); color: var(--text-bright); word-break: break-all; }
 
 .gd-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px var(--space-row-x); }
 .gd-input {
@@ -430,7 +433,7 @@ async function runTest(): Promise<void> {
 .gd-input.mono { font-family: var(--font-mono, monospace); }
 .gd-input:hover { border-color: var(--border-strong); }
 .gd-input:focus { outline: none; border-color: var(--accent-focus); }
-.gd-check { display: inline-flex; align-items: center; gap: 4px; font-size: var(--font-2xs); color: var(--text-secondary); }
+.gd-check { display: inline-flex; align-items: center; gap: 4px; font-size: var(--font-xs); color: var(--text-secondary); }
 .gd-test-result { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 var(--space-row-x) 10px; }
 .gd-test-matched .gd-item { padding-top: 4px; padding-bottom: 4px; }
 .gd-subhead { margin: 16px 0 6px; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }

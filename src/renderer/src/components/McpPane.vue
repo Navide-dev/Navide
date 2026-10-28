@@ -22,6 +22,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import SettingsOverflowActions from './settings/SettingsOverflowActions.vue'
 import { shortenMiddle } from '../lib/shortenPath'
 import {
   isSecretSettingKey,
@@ -488,15 +489,20 @@ function cardDetail(row: McpRow): string {
 <template>
   <section class="mcp-pane" :aria-label="t('settings.mcp.agent-title')">
     <!-- The page's one toolbar row: what the list is, then the parent's
-         actions (slot) and Refresh. The page title already names the page,
-         so the section keeps its name as an aria-label only. -->
+         secondary actions (slot) and Refresh, then its one primary action at
+         the right. The page title already names the page, so the section
+         keeps its name as an aria-label only. On a narrow page the secondary
+         actions fold into one "⋯" menu; the primary stays visible. -->
     <header class="mcp-pane-head">
       <p>{{ t('settings.mcp.agent-intro') }}</p>
       <div class="mcp-pane-actions">
-        <slot name="actions" />
-        <button type="button" :disabled="loading" @click="emit('refresh')">
-          {{ t('action.refresh') }}
-        </button>
+        <SettingsOverflowActions align="start">
+          <slot name="actions" />
+          <button type="button" :disabled="loading" @click="emit('refresh')">
+            {{ t('action.refresh') }}
+          </button>
+        </SettingsOverflowActions>
+        <slot name="primary" />
       </div>
     </header>
 

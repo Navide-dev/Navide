@@ -255,7 +255,7 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
 .cli-ext-empty { margin-left: auto; min-width: 0; font-size: var(--font-2xs); color: var(--text-muted); text-align: right; }
 
 .cli-ext-list { list-style: none; margin: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.cli-ext-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 9px 12px; border: 1px solid var(--border-muted); border-radius: var(--radius-sm); background: var(--bg-elevated); }
+.cli-ext-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 9px 12px; border: 1px solid var(--settings-card-border, var(--border-muted)); border-radius: var(--radius-sm); background: var(--bg-elevated); }
 .cli-ext-card.off { opacity: 0.7; }
 .cli-ext-card.broken { border-color: var(--danger-muted); }
 .cli-ext-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }

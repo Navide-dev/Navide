@@ -1586,7 +1586,7 @@
         },
         "analyzer-backend": {
           "title": "추론 백엔드",
-          "summary": "Ollama REST나 llama.cpp로 전환하고, 기본 URL, llama-cli 경로, GGUF 모델 경로를 설정해요."
+          "summary": "Ollama나 llama.cpp로 전환하고, 기본 URL, llama-cli 경로, GGUF 모델 경로를 설정해요."
         },
         "analyzer-models": {
           "title": "모델 및 벤치마크",
@@ -1756,7 +1756,7 @@
         "recommendation-unavailable": "저장소 정책 권장 사항을 사용할 수 없어요.",
         "recommendation-invalid": "저장소 정책 권장 사항이 올바르지 않아요.",
         "recommendation-stale": "저장소 정책 권장 사항이 바뀌었어요. 수락하기 전에 다시 확인하세요.",
-        "user-policy-unavailable": "사용할 수 있는 전역 사용자 정책이 없어요. 새로 만들거나 Host 기본값을 선택하세요.",
+        "user-policy-unavailable": "사용할 수 있는 전역 사용자 정책이 없어요. 새로 만들거나 Navide 기본값을 선택하세요.",
         "global-policy-corrupt": "전역 실행 정책이 손상되었어요. 이 소스로 바꾸기 전에 다시 만드세요.",
         "recovery-blocked-by-global-policy": "전역 실행 정책이 정상이 아닐 때는 소스를 복구할 수 없어요.",
         "commit-uncertain": "정책 변경을 확인하지 못했어요. 정책은 계속 차단 상태로 유지돼요. 다시 확인하세요.",
@@ -1764,12 +1764,12 @@
       },
       "loading": "Execution Policy를 불러오는 중…",
       "saved": "Execution Policy를 저장했어요.",
-      "rebuilt": "Host 기본값으로 Execution Policy를 다시 만들었어요.",
+      "rebuilt": "Navide 기본값으로 Execution Policy를 다시 만들었어요.",
       "notice": {
         "save": "Execution Policy를 저장했어요.",
-        "resetUser": "사용자 정책을 Host 기본값으로 재설정했어요.",
+        "resetUser": "사용자 정책을 Navide 기본값으로 재설정했어요.",
         "source": "정책 소스를 변경했어요.",
-        "rebuild": "Host 기본값으로 Execution Policy를 다시 만들었어요.",
+        "rebuild": "Navide 기본값으로 Execution Policy를 다시 만들었어요.",
         "resetSources": "모든 정책 소스 선택을 재설정했어요."
       },
       "externalUpdate": "다른 곳에서 정책이 바뀌었어요. 최신 버전을 다시 불러오기 전까지 초안은 유지돼요.",
@@ -1790,7 +1790,7 @@
         "unavailable": "선택한 정책 소스를 사용할 수 없어요. 사용할 수 있는 소스를 선택할 때까지 Navide는 차단 상태를 유지해요.",
         "corrupt": "선택한 정책이 손상되었어요. 복구될 때까지 Navide는 차단 상태를 유지해요."
       },
-      "hostDefaultTitle": "Host 기본값",
+      "hostDefaultTitle": "Navide 기본값",
       "readOnly": "읽기 전용",
       "hostDefaultHint": "기본 제공되는 최소 권한 기준이에요. 사용자 정책 저장소가 없어도 계속 사용할 수 있어요.",
       "userTitle": "사용자 정책",
@@ -1798,7 +1798,7 @@
       "userHint": "작업 영역이 사용자 소스를 선택할 때 쓰는 전역 정책을 편집해요. 저장하면 현재 사용자 정책을 대체해요.",
       "mode": {
         "full": "Full",
-        "allowlist": "허용 목록",
+        "allowlist": "허용한 명령만",
         "denylist": "거부 목록"
       },
       "fullWarning": "Full 모드는 고위험 도구를 포함한 임의의 실행 파일과 시스템 기능을 허용해요. 저장하기 전에 이 고위험 선택을 검토하세요.",
@@ -1837,7 +1837,7 @@
       "sourceTitle": "작업 영역 정책 소스",
       "sourceHint": "저장소 권장 사항은 직접 확인하고 명시적으로 수락하기 전까지 신뢰하지 않아요. 소스 전환은 마지막으로 본 상태의 정책에만 적용돼요. 그 뒤에 바뀌었다면 다시 확인하세요.",
       "source": {
-        "default": "Host 기본값",
+        "default": "Navide 기본값",
         "user": "사용자 정책",
         "repository": "저장소 정책"
       },
@@ -1873,7 +1873,7 @@
       "corruptHint": "저장된 사용자 정책이 손상되었어요. 다시 만들면 새로운 Host 기본 상태를 기록하고 작업 영역 소스 선택은 유지해요.",
       "manualRecoveryHint": "정책 저장소가 안전하지 않거나 사용할 수 없어요. 실행 정책 디렉터리의 권한이나 경로를 고친 뒤 설정을 다시 여세요. 자동 다시 만들기는 꺼져 있어요.",
       "rebuild": "전역 정책 다시 만들기",
-      "rebuildConfirmBody": "Host 기본값으로 전역 정책과 리비전 파일만 다시 만들어요. 기존 작업 영역 소스 선택과 저장소 정책 파일은 유지돼요.",
+      "rebuildConfirmBody": "Navide 기본값으로 전역 정책과 리비전 파일만 다시 만들어요. 기존 작업 영역 소스 선택과 저장소 정책 파일은 유지돼요.",
       "rebuildConfirmCheck": "손상된 전역 정책이 대체된다는 것을 이해해요.",
       "rebuildConfirm": "다시 만들기 확인",
       "cancel": "취소"
@@ -3065,7 +3065,7 @@
           "h3": "분석기",
           "p5": "여기서 설정하는 것은 Navide가 pipeline의 의도를 읽는 데 쓰는 <strong>작은 로컬 모델</strong>이며, pane에서 쓰는 CLI agent와는 관계가 없어요. 세 부분으로 되어 있어요:",
           "analyzer": {
-            "backend": "<strong>추론 백엔드</strong> — 먼저 <em>Ollama REST</em>와 <em>llama.cpp</em> 중 하나를 골라요. llama.cpp에는 <code>llama-cli</code> 경로(자동 감지 버튼과 파일 찾아보기 포함)와 선택 사항인 GGUF 모델 경로가 필요하고, Ollama에는 추론 URL(기본값 <code>http://localhost:11434</code>)이 필요해요. 둘 다 옆에 상태 표시기가 있어요.",
+            "backend": "<strong>추론 백엔드</strong> — 먼저 <em>Ollama</em>와 <em>llama.cpp</em> 중 하나를 골라요. llama.cpp에는 <code>llama-cli</code> 경로(자동 감지 버튼과 파일 찾아보기 포함)와 선택 사항인 GGUF 모델 경로가 필요하고, Ollama에는 추론 URL(기본값 <code>http://localhost:11434</code>)이 필요해요. 둘 다 옆에 상태 표시기가 있어요.",
             "models": "<strong>모델 관리자</strong>(Ollama 모드) — 모델 이름을 입력하고 <em>⬇ 다운로드</em>를 누르면 진행 표시줄이 나타나요. 그 아래에 설치된 모델(이름, 매개변수 수, 크기)이 나열되며 하나씩 삭제할 수 있어요.",
             "benchmark": "<strong>모델 벤치마크</strong> — 모든 로컬 모델에 네 가지 작업을 실행해요: 기술 스택 감지(JSON 출력), 작업 영역 한 문장 요약, 문서 목록에서 가장 관련 있는 항목 고르기, CLI 출력을 질문과 선택지로 해석하기. 결과 표에 항목마다 소요 시간과 함께 통과 여부가 표시되며, <strong>네 개 중 최소 세 개(≥75%)</strong>를 통과해야 해요. 통과하지 못한 모델은 모델 드롭다운에서 숨겨져요."
           },
@@ -3079,14 +3079,14 @@
           "mirror": "<strong>다운로드 미러</strong>: 모든 릴리스 파일은 GitHub Release와 <code>dl.navide.dev</code> 두 곳에 게시돼요 — 같은 바이트이며 확인용 sha256 합계가 있어요. <strong>미러가 기본 업데이트 소스예요</strong>: 앱은 시작할 때 피드를 <code>dl.navide.dev</code>로 지정하고 GitHub는 대체 경로예요. <strong>네트워크성 실패</strong>(호스트 연결 불가, 시간 초과, 5xx/429)에서만 대체 경로로 넘어가며, 한번 넘어가면 <strong>그 session 동안 계속 GitHub를 사용해요</strong> — 다시 시작해야 미러로 돌아와요. <strong>404나 서명/체크섬 오류는 절대 대체 경로로 넘어가지 않아요</strong> — 두 호스트의 파일이 같아서 똑같이 실패할 것이고, 실패를 숨기기보다 그대로 알리는 편이 더 도움이 되기 때문이에요.",
           "policyIntro": "<strong>실행 정책</strong>은 Navide 플러그인의 백엔드가 무엇을 실행할 수 있는지 정해요. <strong>별도의 탭이 아니라</strong> Navide 플러그인 페이지 맨 위의 블록이며, 자체 범위 배지(사용자별·작업 영역별)와 정책 파일 경로가 있어요. 맨 위에는 <em>적용 중인 정책</em>의 소스, 모드, 상태(<em>사용 중</em>, <em>오래됨</em>, <em>사용할 수 없음</em>, <em>손상됨</em>)가 표시돼요.",
           "policy": {
-            "hostDefault": "<strong>Host 기본값</strong> — 기본 제공되는 최소 권한 기준이며 <strong>읽기 전용</strong>으로 표시돼요. 사용자 정책 저장소가 완전히 사라져도 계속 쓸 수 있어서 언제든 돌아갈 길이 있어요.",
+            "hostDefault": "<strong>Navide 기본값</strong> — 기본 제공되는 최소 권한 기준이며 <strong>읽기 전용</strong>으로 표시돼요. 사용자 정책 저장소가 완전히 사라져도 계속 쓸 수 있어서 언제든 돌아갈 길이 있어요.",
             "user": "<strong>사용자 정책</strong> — 작업 영역이 사용자 소스를 선택할 때 쓰는 전역 정책이며, 만들기 전까지는 \"만들지 않음\"으로 표시돼요. 모드는 <em>full</em>, <em>허용 목록</em>, <em>거부 목록</em> 세 가지예요. 시스템 네임스페이스와 셸 실행 파일을 설정할 수 있으며, 셸 실행 파일에는 <strong>최상위 실행 파일 이름만</strong> 넣을 수 있어요 — 경로나 셸 표현식은 안 돼요.",
             "highRisk": "<strong>full과 거부 목록은 저장하기 전에 명시적인 확인란이 필요하며</strong>, 화면에서 그 이유를 알려 줘요: full 모드는 임의의 실행 파일(고위험 도구 포함)과 시스템 기능을 허용하고, 거부 목록 모드는 <strong>기본 허용</strong>이라 이름을 나열해도 실제 허용 범위가 좁혀지지 않아요. 그래서 Navide는 이것도 고위험 선택으로 취급해요.",
-            "source": "<strong>작업 영역 정책 소스</strong> — 작업 영역마다 Host 기본값, 사용자 정책, 저장소 정책 중 하나를 골라요. <strong>저장소 권장 사항은 읽고 \"저장소 정책 수락\"을 누르기 전까지 \"신뢰하지 않음\"으로 표시되며</strong>, 소스를 바꾸려면 지문이 정확히 일치해야 해요. 검토한 뒤 바뀌면 \"확인 후 바뀜\"이 되어 다시 확인해야 해요. 열린 작업 영역이 없으면 이 블록은 사용할 수 없어요.",
+            "source": "<strong>작업 영역 정책 소스</strong> — 작업 영역마다 Navide 기본값, 사용자 정책, 저장소 정책 중 하나를 골라요. <strong>저장소 권장 사항은 읽고 \"저장소 정책 수락\"을 누르기 전까지 \"신뢰하지 않음\"으로 표시되며</strong>, 소스를 바꾸려면 지문이 정확히 일치해야 해요. 검토한 뒤 바뀌면 \"확인 후 바뀜\"이 되어 다시 확인해야 해요. 열린 작업 영역이 없으면 이 블록은 사용할 수 없어요.",
             "recovery": "<strong>전역 정책 저장소</strong> — 상태는 정상, 없음, 손상됨, 안전하지 않은 항목, 안전하지 않거나 사용할 수 없는 디렉터리 중 하나예요. 손상된 저장소는 확인란을 거쳐 <strong>다시 만들</strong> 수 있으며, 다시 만들면 전역 정책과 리비전 파일만 대체하고 모든 작업 영역 소스 선택과 저장소 정책 파일은 유지돼요. 저장소가 <strong>안전하지 않다고</strong> 판단되면 자동 다시 만들기가 꺼지고, 화면에 나열된 호스트 소유 경로를 직접 고치라고 안내해요.",
             "failClosed": "정상이 아닌 모든 상태는 <strong>차단 상태로 유지돼요</strong>: 사용할 수 있는 소스를 고르거나 손상된 소스를 복구하기 전까지 아무것도 허용하지 않아요. 저장 결과가 불확실한 경우도 마찬가지이며, 이때 메시지는 \"정책 변경 결과를 확인하지 못했어요. 정책은 계속 차단 상태로 유지돼요. 다시 확인하세요\"예요."
           },
-          "policyNote": "모든 저장소 소스 고정을 한 번에 지우려면 \"모든 정책 소스 선택 재설정\"을 사용하세요. 이것도 확인란을 거쳐요. 저장소 정책 파일은 <strong>수정하거나 삭제하지 않으며</strong>, 각 작업 영역이 다시 전역 Host 기본값이나 사용자 정책을 따르게 할 뿐이에요.",
+          "policyNote": "모든 저장소 소스 고정을 한 번에 지우려면 \"모든 정책 소스 선택 재설정\"을 사용하세요. 이것도 확인란을 거쳐요. 저장소 정책 파일은 <strong>수정하거나 삭제하지 않으며</strong>, 각 작업 영역이 다시 전역 Navide 기본값이나 사용자 정책을 따르게 할 뿐이에요.",
           "extNote": "오작동하는 Navide 플러그인 백엔드가 멈추는 경우: <strong>프로토콜 프레임(요청 / 응답 / 취소)의 넘침만 그 백엔드에 치명적이에요</strong>. 호스트 알림의 넘침은 버리고 개수만 세므로, 시끄러운 백엔드 하나 때문에 Navide 플러그인 전체가 내려가지 않아요. 정상 종료한 백엔드는 조용히 사라지지 않고 이유를 기록해요."
         },
         "s5": {

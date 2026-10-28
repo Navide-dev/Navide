@@ -1586,7 +1586,7 @@
         },
         "analyzer-backend": {
           "title": "Backend d’inférence",
-          "summary": "Basculer entre Ollama REST et llama.cpp, définir l’URL de base, le chemin de llama-cli et le chemin du modèle GGUF."
+          "summary": "Basculer entre Ollama et llama.cpp, définir l’URL de base, le chemin de llama-cli et le chemin du modèle GGUF."
         },
         "analyzer-models": {
           "title": "Modèles et benchmark",
@@ -1756,7 +1756,7 @@
         "recommendation-unavailable": "La recommandation de politique du dépôt n’est pas disponible.",
         "recommendation-invalid": "La recommandation de politique du dépôt n’est pas valide.",
         "recommendation-stale": "La recommandation de politique du dépôt a changé. Examinez-la de nouveau avant de l’accepter.",
-        "user-policy-unavailable": "Aucune politique utilisateur globale utilisable n’existe. Créez-en une ou choisissez la valeur par défaut de l’hôte.",
+        "user-policy-unavailable": "Aucune politique utilisateur globale utilisable n’existe. Créez-en une ou choisissez la valeur par défaut de Navide.",
         "global-policy-corrupt": "La politique d’exécution globale est corrompue. Reconstruisez-la avant de passer à cette source.",
         "recovery-blocked-by-global-policy": "La récupération de la source est bloquée tant que la politique d’exécution globale est défaillante.",
         "commit-uncertain": "La modification de la politique n’a pas pu être confirmée. La politique reste fermée par défaut ; examinez-la de nouveau.",
@@ -1764,12 +1764,12 @@
       },
       "loading": "Chargement de la politique d’exécution…",
       "saved": "Politique d’exécution enregistrée.",
-      "rebuilt": "Politique d’exécution reconstruite à partir de la valeur par défaut de l’hôte.",
+      "rebuilt": "Politique d’exécution reconstruite à partir de la valeur par défaut de Navide.",
       "notice": {
         "save": "Politique d’exécution enregistrée.",
-        "resetUser": "Politique utilisateur réinitialisée à la valeur par défaut de l’hôte.",
+        "resetUser": "Politique utilisateur réinitialisée à la valeur par défaut de Navide.",
         "source": "Source de politique modifiée.",
-        "rebuild": "Politique d’exécution reconstruite à partir de la valeur par défaut de l’hôte.",
+        "rebuild": "Politique d’exécution reconstruite à partir de la valeur par défaut de Navide.",
         "resetSources": "Toutes les sélections de source de politique ont été réinitialisées."
       },
       "externalUpdate": "La politique a été modifiée ailleurs. Votre brouillon est conservé jusqu’à ce que vous rechargiez la dernière version.",
@@ -1790,7 +1790,7 @@
         "unavailable": "La source de politique sélectionnée n’est pas disponible. Navide bloque tout tant que vous ne choisissez pas une source disponible.",
         "corrupt": "La politique sélectionnée est corrompue. Navide bloque tout tant qu’elle n’est pas réparée."
       },
-      "hostDefaultTitle": "Valeur par défaut de l’hôte",
+      "hostDefaultTitle": "Valeur par défaut de Navide",
       "readOnly": "Lecture seule",
       "hostDefaultHint": "La base intégrée à privilèges minimaux. Elle reste disponible même si le stockage de la politique utilisateur est absent.",
       "userTitle": "Politique utilisateur",
@@ -1798,7 +1798,7 @@
       "userHint": "Modifier la politique globale utilisée quand un espace de travail sélectionne la source « Utilisateur ». L’enregistrement remplace la politique utilisateur actuelle.",
       "mode": {
         "full": "Complet",
-        "allowlist": "Liste d’autorisation",
+        "allowlist": "Commandes autorisées uniquement",
         "denylist": "Liste de refus"
       },
       "fullWarning": "Le mode complet autorise des exécutables arbitraires, y compris des outils à haut risque, ainsi que les capacités système. Examinez ce choix à haut risque avant d’enregistrer.",
@@ -1837,7 +1837,7 @@
       "sourceTitle": "Source de politique de l’espace de travail",
       "sourceHint": "Une recommandation du dépôt n’est pas fiable tant que vous ne l’avez pas examinée et explicitement acceptée. Un changement de source ne s’applique qu’à la politique telle que vous l’avez vue en dernier. Si elle a changé depuis, examinez-la à nouveau.",
       "source": {
-        "default": "Valeur par défaut de l’hôte",
+        "default": "Valeur par défaut de Navide",
         "user": "Politique utilisateur",
         "repository": "Politique du dépôt"
       },
@@ -1873,7 +1873,7 @@
       "corruptHint": "La politique utilisateur stockée est corrompue. La reconstruction écrit un nouvel état par défaut de l’hôte et conserve les sélections de source des espaces de travail.",
       "manualRecoveryHint": "Le stockage de la politique est non sûr ou indisponible. Corrigez les autorisations ou le chemin du dossier de la politique d’exécution, puis rouvrez les paramètres ; la reconstruction automatique est désactivée.",
       "rebuild": "Reconstruire la politique globale",
-      "rebuildConfirmBody": "Reconstruire uniquement la politique globale et les fichiers de révision à partir de la valeur par défaut de l’hôte. Les sélections de source des espaces de travail et les fichiers de politique des dépôts sont conservés.",
+      "rebuildConfirmBody": "Reconstruire uniquement la politique globale et les fichiers de révision à partir de la valeur par défaut de Navide. Les sélections de source des espaces de travail et les fichiers de politique des dépôts sont conservés.",
       "rebuildConfirmCheck": "Je comprends que la politique globale corrompue sera remplacée.",
       "rebuildConfirm": "Confirmer la reconstruction",
       "cancel": "Annuler"
@@ -3065,7 +3065,7 @@
           "h3": "Analyzer",
           "p5": "Ce que vous configurez ici est un <strong>petit modèle local</strong> que Navide utilise pour interpréter l’intention dans les pipelines ; il n’a rien à voir avec les agents CLI que vous utilisez dans les panes. Trois parties :",
           "analyzer": {
-            "backend": "<strong>Backend d’inférence</strong> : choisissez d’abord l’un des deux backends, <em>Ollama REST</em> ou <em>llama.cpp</em>. llama.cpp nécessite le chemin de <code>llama-cli</code> (avec un bouton de détection automatique et un sélecteur de fichier) et, en option, le chemin d’un modèle GGUF ; Ollama nécessite l’URL d’inférence (<code>http://localhost:11434</code> par défaut). Un indicateur d’état figure à côté de chacun.",
+            "backend": "<strong>Backend d’inférence</strong> : choisissez d’abord l’un des deux backends, <em>Ollama</em> ou <em>llama.cpp</em>. llama.cpp nécessite le chemin de <code>llama-cli</code> (avec un bouton de détection automatique et un sélecteur de fichier) et, en option, le chemin d’un modèle GGUF ; Ollama nécessite l’URL d’inférence (<code>http://localhost:11434</code> par défaut). Un indicateur d’état figure à côté de chacun.",
             "models": "<strong>Gestionnaire de modèles</strong> (mode Ollama) : saisissez un nom de modèle et cliquez sur <em>⬇ Télécharger</em>, avec une barre de progression ; en dessous, les modèles installés sont listés (nom, nombre de paramètres, taille) et peuvent être supprimés un par un.",
             "benchmark": "<strong>Benchmark des modèles</strong> : exécute quatre tâches sur chaque modèle local : détection de la pile technique (sortie JSON), résumé de l’espace de travail en une phrase, choix de l’entrée la plus pertinente dans une liste de documents, et découpage d’une sortie de CLI en une question et ses options. Le tableau des résultats coche chaque élément avec sa durée, et il faut en réussir <strong>au moins trois sur quatre (≥75 %)</strong> ; les modèles qui échouent sont masqués dans la liste déroulante des modèles."
           },
@@ -3079,10 +3079,10 @@
           "mirror": "<strong>Le miroir de téléchargement</strong> : les fichiers de chaque version sont publiés deux fois, sur la GitHub Release et sur <code>dl.navide.dev</code>, avec les mêmes octets et des sommes sha256 pour les vérifier. <strong>Le miroir est la source de mise à jour par défaut</strong> : au démarrage, l’application fait pointer son flux vers <code>dl.navide.dev</code>, GitHub servant de solution de repli. Elle ne bascule qu’en cas d’<strong>échec de type réseau</strong> (hôte injoignable, délai dépassé, 5xx/429), et une fois basculée, elle <strong>reste sur GitHub pour le reste de la session</strong> : seul un redémarrage la ramène au miroir. <strong>Un 404 ou une erreur de signature ou de somme de contrôle ne déclenche jamais le repli</strong> : les deux hôtes ont les mêmes fichiers, l’échec serait donc le même, et signaler l’échec tel quel est plus utile que de le masquer.",
           "policyIntro": "La <strong>politique d’exécution</strong> détermine ce que le backend d’un plugin Navide peut exécuter. <strong>Ce n’est pas un onglet à part</strong> : c’est le bloc en haut de la page Plugins Navide, avec son propre badge de portée (par utilisateur et par espace de travail) et le chemin du fichier de politique. Le haut du bloc affiche la <em>politique effective</em> : sa source, son mode et son état : <em>active</em>, <em>obsolète</em>, <em>indisponible</em> ou <em>corrompue</em>.",
           "policy": {
-            "hostDefault": "<strong>Valeur par défaut de l’hôte</strong> : la base intégrée de moindre privilège, marquée <strong>en lecture seule</strong>. Elle reste utilisable même si le magasin des politiques utilisateur a entièrement disparu, il y a donc toujours un moyen de revenir en arrière.",
+            "hostDefault": "<strong>Valeur par défaut de Navide</strong> : la base intégrée de moindre privilège, marquée <strong>en lecture seule</strong>. Elle reste utilisable même si le magasin des politiques utilisateur a entièrement disparu, il y a donc toujours un moyen de revenir en arrière.",
             "user": "<strong>Politique utilisateur</strong> : la politique globale, utilisée partout où un espace de travail choisit la source Utilisateur ; elle affiche « non créée » tant que vous ne l’avez pas créée. Trois modes : <em>Complet</em>, <em>Liste d’autorisation</em>, <em>Liste de refus</em>. Vous pouvez définir les espaces de noms système et les exécutables du shell, ces derniers n’acceptant que des <strong>noms d’exécutables de premier niveau</strong> : ni chemins, ni expressions du shell.",
             "highRisk": "<strong>Full et denylist exigent tous deux une case à cocher explicite avant l’enregistrement</strong>, et l’écran explique pourquoi : le mode full autorise des exécutables arbitraires (outils à haut risque compris) et des capacités système, tandis que le mode denylist <strong>autorise par défaut</strong> : lister des noms ne restreint pas ce qu’il accorde réellement, c’est pourquoi Navide le traite lui aussi comme un choix à haut risque.",
-            "source": "<strong>Source de politique de l’espace de travail</strong> : chaque espace de travail choisit Valeur par défaut de l’hôte, Politique utilisateur ou Politique du dépôt. <strong>Une recommandation du dépôt est marquée « non approuvée » tant que vous ne l’avez pas lue et que vous n’avez pas cliqué sur « Accepter la politique du dépôt »</strong>, et changer de source exige une correspondance exacte de l’empreinte ; si elle change après votre examen, elle passe à « modifiée depuis l’examen » et doit être revérifiée. Sans espace de travail ouvert, ce bloc est inutilisable.",
+            "source": "<strong>Source de politique de l’espace de travail</strong> : chaque espace de travail choisit Valeur par défaut de Navide, Politique utilisateur ou Politique du dépôt. <strong>Une recommandation du dépôt est marquée « non approuvée » tant que vous ne l’avez pas lue et que vous n’avez pas cliqué sur « Accepter la politique du dépôt »</strong>, et changer de source exige une correspondance exacte de l’empreinte ; si elle change après votre examen, elle passe à « modifiée depuis l’examen » et doit être revérifiée. Sans espace de travail ouvert, ce bloc est inutilisable.",
             "recovery": "<strong>Magasin global des politiques</strong> : son état peut être sain, absent, corrompu, entrée non sûre, ou dossier non sûr ou indisponible. Un magasin corrompu peut être <strong>reconstruit</strong> après avoir coché une case de confirmation ; la reconstruction ne remplace que la politique globale et les fichiers de révision, et conserve la sélection de source de chaque espace de travail ainsi que tous les fichiers de politique du dépôt. Lorsque le magasin est jugé <strong>non sûr</strong>, la reconstruction automatique est désactivée et l’écran vous demande de corriger vous-même les chemins appartenant à l’hôte qu’il énumère.",
             "failClosed": "Tout état défaillant est en <strong>mode fermé par défaut</strong> : rien n’est autorisé tant que vous n’avez pas choisi une source utilisable ou réparé celle qui est défaillante. Cela inclut un enregistrement incertain : le message indique « Impossible de confirmer le résultat de la modification de la politique ; la politique reste fermée par défaut, veuillez vérifier à nouveau »."
           },

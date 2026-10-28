@@ -1586,7 +1586,7 @@
         },
         "analyzer-backend": {
           "title": "Inference backend",
-          "summary": "Switch Ollama REST or llama.cpp, set base URL, llama-cli path, and GGUF model path."
+          "summary": "Switch Ollama or llama.cpp, set base URL, llama-cli path, and GGUF model path."
         },
         "analyzer-models": {
           "title": "Models & benchmark",
@@ -1756,7 +1756,7 @@
         "recommendation-unavailable": "The repository policy recommendation is unavailable.",
         "recommendation-invalid": "The repository policy recommendation is invalid.",
         "recommendation-stale": "The repository policy recommendation changed. Inspect it again before accepting it.",
-        "user-policy-unavailable": "No usable global user policy exists. Create one or choose the Host default.",
+        "user-policy-unavailable": "No usable global user policy exists. Create one or choose the Navide default.",
         "global-policy-corrupt": "The global execution policy is corrupt. Rebuild it before changing to this source.",
         "recovery-blocked-by-global-policy": "Source recovery is blocked while the global execution policy is unhealthy.",
         "commit-uncertain": "The policy change could not be confirmed. The policy remains fail-closed; inspect it again.",
@@ -1764,12 +1764,12 @@
       },
       "loading": "Loading Execution Policy…",
       "saved": "Execution Policy saved.",
-      "rebuilt": "Execution Policy rebuilt from the Host default.",
+      "rebuilt": "Execution Policy rebuilt from the Navide default.",
       "notice": {
         "save": "Execution Policy saved.",
-        "resetUser": "User policy reset to the Host default.",
+        "resetUser": "User policy reset to the Navide default.",
         "source": "Policy source changed.",
-        "rebuild": "Execution Policy rebuilt from the Host default.",
+        "rebuild": "Execution Policy rebuilt from the Navide default.",
         "resetSources": "All Policy Source selections were reset."
       },
       "externalUpdate": "The policy changed elsewhere. Your draft is preserved until you reload the latest version.",
@@ -1790,7 +1790,7 @@
         "unavailable": "The selected policy source is unavailable. Navide fails closed until you choose an available source.",
         "corrupt": "The selected policy is corrupt. Navide fails closed until it is repaired."
       },
-      "hostDefaultTitle": "Host default",
+      "hostDefaultTitle": "Navide default",
       "readOnly": "Read-only",
       "hostDefaultHint": "The built-in least-privilege baseline. It remains available even when user policy storage is missing.",
       "userTitle": "User policy",
@@ -1798,7 +1798,7 @@
       "userHint": "Edit the global policy used when a workspace selects the User source. Saving replaces the current user policy.",
       "mode": {
         "full": "Full",
-        "allowlist": "Allowlist",
+        "allowlist": "Only allowed commands",
         "denylist": "Denylist"
       },
       "fullWarning": "Full mode allows arbitrary executables, including high-risk tools, and system capabilities. Review this high-risk choice before saving.",
@@ -1837,7 +1837,7 @@
       "sourceTitle": "Workspace policy source",
       "sourceHint": "A repository recommendation is untrusted until you inspect it and explicitly accept it. A source switch only applies to the policy as you last saw it; if it has changed since, review it again.",
       "source": {
-        "default": "Host default",
+        "default": "Navide default",
         "user": "User policy",
         "repository": "Repository policy"
       },
@@ -1873,7 +1873,7 @@
       "corruptHint": "The stored user policy is corrupt. Rebuild writes a fresh Host-default state and preserves workspace source selections.",
       "manualRecoveryHint": "Policy storage is unsafe or unavailable. Fix the execution-policy directory permissions or path, then reopen Settings; automatic rebuild is disabled.",
       "rebuild": "Rebuild Global Policy",
-      "rebuildConfirmBody": "Rebuild only the global policy and revision files from the Host default. Existing workspace source selections and repository policy files are preserved.",
+      "rebuildConfirmBody": "Rebuild only the global policy and revision files from the Navide default. Existing workspace source selections and repository policy files are preserved.",
       "rebuildConfirmCheck": "I understand that the corrupt global policy will be replaced.",
       "rebuildConfirm": "Confirm Rebuild",
       "cancel": "Cancel"
@@ -3065,7 +3065,7 @@
           "h3": "Analyzer",
           "p5": "What you configure here is a <strong>small local model</strong> that Navide uses to read intent for pipelines; it has nothing to do with the CLI agents you use in panes. Three parts:",
           "analyzer": {
-            "backend": "<strong>Inference backend</strong> — first pick one of two backends, <em>Ollama REST</em> or <em>llama.cpp</em>. llama.cpp needs the <code>llama-cli</code> path (with an auto-detect button and a file browser) and an optional GGUF model path; Ollama needs the inference URL (<code>http://localhost:11434</code> by default). Both have a health indicator next to them.",
+            "backend": "<strong>Inference backend</strong> — first pick one of two backends, <em>Ollama</em> or <em>llama.cpp</em>. llama.cpp needs the <code>llama-cli</code> path (with an auto-detect button and a file browser) and an optional GGUF model path; Ollama needs the inference URL (<code>http://localhost:11434</code> by default). Both have a health indicator next to them.",
             "models": "<strong>Model manager</strong> (Ollama mode) — type a model name and press <em>⬇ Download</em>, with a progress bar; below it the installed models are listed (name, parameter count, size) and can be deleted one by one.",
             "benchmark": "<strong>Model benchmark</strong> — runs four tasks against every local model: tech-stack detection (JSON output), a one-sentence workspace summary, picking the most relevant entry from a document list, and parsing CLI output into a question and its options. The results table ticks each item off with its duration, and <strong>at least three of the four (≥75%)</strong> must pass; models that do not pass are hidden from the model dropdown."
           },
@@ -3079,14 +3079,14 @@
           "mirror": "<strong>The download mirror</strong>: every release's files are published twice, on the GitHub Release and on <code>dl.navide.dev</code> — the same bytes, with sha256 sums to check them against. <strong>The mirror is the default update source</strong>: the app points its feed at <code>dl.navide.dev</code> on startup, and GitHub is the fallback. It falls back only on a <strong>network-shaped failure</strong> (unreachable host, timeout, 5xx/429), and once it has, it <strong>stays on GitHub for the rest of the session</strong> — only a restart goes back to the mirror. <strong>A 404 or a signature/checksum error never triggers the fallback</strong> — both hosts carry the same files, so it would fail the same way, and reporting the failure as it is helps more than hiding it.",
           "policyIntro": "The <strong>execution policy</strong> decides what a Navide plugin's backend may execute. It is <strong>not a tab of its own</strong>: it is the block at the top of the Navide Plugins page, with its own scope badge (per user and per workspace) and policy file path. The top of it shows the <em>effective policy</em> — its source, its mode, and its status: <em>active</em>, <em>stale</em>, <em>unavailable</em> or <em>corrupt</em>.",
           "policy": {
-            "hostDefault": "<strong>Host default</strong> — the built-in least-privilege baseline, marked <strong>read-only</strong>. It stays usable even if the user policy store is gone entirely, so there is always a way back.",
+            "hostDefault": "<strong>Navide default</strong> — the built-in least-privilege baseline, marked <strong>read-only</strong>. It stays usable even if the user policy store is gone entirely, so there is always a way back.",
             "user": "<strong>User policy</strong> — the global one, used wherever a workspace selects the User source; it reads \"not created\" until you make it. Three modes: <em>full</em>, <em>allowlist</em>, <em>denylist</em>. You can set the system namespaces and the shell executables, and the latter takes <strong>top-level executable names only</strong> — no paths, no shell expressions.",
             "highRisk": "<strong>Full and denylist both need an explicit checkbox before they save</strong>, and the screen says why: full mode allows arbitrary executables (high-risk tools included) and system capabilities, while denylist mode is <strong>allow-by-default</strong> — listing names does not narrow what it actually grants, which is why Navide treats it as a high-risk choice too.",
-            "source": "<strong>Workspace policy source</strong> — each workspace picks Host default, User policy or Repository policy. <strong>A repository recommendation is labelled \"untrusted\" until you have read it and pressed \"Accept Repository Policy\"</strong>, and switching sources requires an exact fingerprint match; if it changes after you reviewed it, it becomes \"changed since review\" and has to be re-checked. With no workspace open, this block cannot be used.",
+            "source": "<strong>Workspace policy source</strong> — each workspace picks Navide default, User policy or Repository policy. <strong>A repository recommendation is labelled \"untrusted\" until you have read it and pressed \"Accept Repository Policy\"</strong>, and switching sources requires an exact fingerprint match; if it changes after you reviewed it, it becomes \"changed since review\" and has to be re-checked. With no workspace open, this block cannot be used.",
             "recovery": "<strong>Global policy store</strong> — its state is healthy, missing, corrupt, unsafe entry, or an unsafe/unavailable directory. A corrupt store can be <strong>rebuilt</strong> behind a confirmation checkbox; a rebuild replaces only the global policy and revision files and keeps every workspace source selection and repository policy file. When the store is judged <strong>unsafe</strong>, automatic rebuilding is disabled and the screen asks you to fix the host-owned paths it lists yourself.",
             "failClosed": "Every unhealthy state is <strong>fail-closed</strong>: nothing is permitted until you pick a usable source or repair the broken one. That includes an uncertain save — the message reads \"the result of the policy change could not be confirmed; the policy stays fail-closed, please re-check\"."
           },
-          "policyNote": "To clear every repository source pin at once, use \"Reset all policy source selections\", also behind a confirmation checkbox. It <strong>does not</strong> modify or delete any repository policy file; it only makes each workspace resolve against the global host default or user policy again.",
+          "policyNote": "To clear every repository source pin at once, use \"Reset all policy source selections\", also behind a confirmation checkbox. It <strong>does not</strong> modify or delete any repository policy file; it only makes each workspace resolve against the global Navide default or user policy again.",
           "extNote": "Where a misbehaving Navide plugin backend stops: <strong>only an overflow of protocol frames (request / response / cancel) is fatal to that backend</strong>. An overflow of host notifications is dropped and counted instead, so one noisy backend no longer takes the whole Navide plugin down, and a backend that exits cleanly records why rather than vanishing silently."
         },
         "s5": {

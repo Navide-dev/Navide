@@ -548,7 +548,7 @@ textarea:focus {
   gap: 5px;
   padding: 9px 11px;
   text-align: left;
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
   min-width: 0;
@@ -591,7 +591,7 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 .prompt-card-desc {
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   line-height: 1.35;
   display: -webkit-box;
@@ -610,7 +610,7 @@ textarea:focus {
   display: inline-block;
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   border: 1px solid var(--border-muted);
   color: var(--text-secondary);
@@ -622,7 +622,7 @@ textarea:focus {
 .prompt-badge {
   border-radius: var(--radius-pill);
   padding: 2px 7px;
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;

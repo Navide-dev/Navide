@@ -575,8 +575,7 @@ onBeforeUnmount(() => offResult?.())
       </SettingRow>
     </SettingsCard>
 
-    <p class="sync-hint">{{ t('settings.sync.hint') }}</p>
-
+    <!-- The page intro (settings.sync.hint) sits under the page title. -->
     <!-- The three states kept apart: off is the absence of a toggle, so only
          the other two need saying out loud. -->
     <p v-if="!connected" class="sync-note">{{ t('settings.sync.not-connected') }}</p>

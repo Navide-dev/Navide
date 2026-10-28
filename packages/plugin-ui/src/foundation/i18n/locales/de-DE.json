@@ -1586,7 +1586,7 @@
         },
         "analyzer-backend": {
           "title": "Inferenz-Backend",
-          "summary": "Zwischen Ollama REST und llama.cpp wechseln, Basis-URL, llama-cli-Pfad und GGUF-Modellpfad festlegen."
+          "summary": "Zwischen Ollama und llama.cpp wechseln, Basis-URL, llama-cli-Pfad und GGUF-Modellpfad festlegen."
         },
         "analyzer-models": {
           "title": "Modelle und Benchmark",
@@ -1756,7 +1756,7 @@
         "recommendation-unavailable": "Die Richtlinienempfehlung des Repositorys ist nicht verfügbar.",
         "recommendation-invalid": "Die Richtlinienempfehlung des Repositorys ist ungültig.",
         "recommendation-stale": "Die Richtlinienempfehlung des Repositorys hat sich geändert. Prüfen Sie sie erneut, bevor Sie sie annehmen.",
-        "user-policy-unavailable": "Es gibt keine verwendbare globale Benutzerrichtlinie. Erstellen Sie eine oder wählen Sie den Host-Standard.",
+        "user-policy-unavailable": "Es gibt keine verwendbare globale Benutzerrichtlinie. Erstellen Sie eine oder wählen Sie den Navide-Standard.",
         "global-policy-corrupt": "Die globale Ausführungsrichtlinie ist beschädigt. Bauen Sie sie neu auf, bevor Sie zu dieser Quelle wechseln.",
         "recovery-blocked-by-global-policy": "Die Wiederherstellung der Quelle ist blockiert, solange die globale Ausführungsrichtlinie fehlerhaft ist.",
         "commit-uncertain": "Die Richtlinienänderung konnte nicht bestätigt werden. Die Richtlinie bleibt geschlossen (fail-closed); prüfen Sie sie erneut.",
@@ -1764,12 +1764,12 @@
       },
       "loading": "Ausführungsrichtlinie wird geladen …",
       "saved": "Ausführungsrichtlinie gespeichert.",
-      "rebuilt": "Ausführungsrichtlinie aus dem Host-Standard neu aufgebaut.",
+      "rebuilt": "Ausführungsrichtlinie aus dem Navide-Standard neu aufgebaut.",
       "notice": {
         "save": "Ausführungsrichtlinie gespeichert.",
-        "resetUser": "Benutzerrichtlinie auf den Host-Standard zurückgesetzt.",
+        "resetUser": "Benutzerrichtlinie auf den Navide-Standard zurückgesetzt.",
         "source": "Richtlinienquelle geändert.",
-        "rebuild": "Ausführungsrichtlinie aus dem Host-Standard neu aufgebaut.",
+        "rebuild": "Ausführungsrichtlinie aus dem Navide-Standard neu aufgebaut.",
         "resetSources": "Alle Auswahlen der Richtlinienquelle wurden zurückgesetzt."
       },
       "externalUpdate": "Die Richtlinie wurde an anderer Stelle geändert. Ihr Entwurf bleibt erhalten, bis Sie die neueste Version laden.",
@@ -1790,7 +1790,7 @@
         "unavailable": "Die ausgewählte Richtlinienquelle ist nicht verfügbar. Navide blockiert alles (fail-closed), bis Sie eine verfügbare Quelle wählen.",
         "corrupt": "Die ausgewählte Richtlinie ist beschädigt. Navide blockiert alles (fail-closed), bis sie repariert ist."
       },
-      "hostDefaultTitle": "Host-Standard",
+      "hostDefaultTitle": "Navide-Standard",
       "readOnly": "Schreibgeschützt",
       "hostDefaultHint": "Die integrierte Grundlage mit minimalen Rechten. Sie bleibt verfügbar, auch wenn der Speicher der Benutzerrichtlinie fehlt.",
       "userTitle": "Benutzerrichtlinie",
@@ -1798,7 +1798,7 @@
       "userHint": "Die globale Richtlinie bearbeiten, die gilt, wenn ein Arbeitsbereich die Quelle „Benutzer“ wählt. Speichern ersetzt die aktuelle Benutzerrichtlinie.",
       "mode": {
         "full": "Voll",
-        "allowlist": "Positivliste",
+        "allowlist": "Nur erlaubte Befehle",
         "denylist": "Sperrliste"
       },
       "fullWarning": "Der Vollmodus erlaubt beliebige ausführbare Dateien, einschließlich risikoreicher Tools, sowie Systemfähigkeiten. Prüfen Sie diese risikoreiche Wahl vor dem Speichern.",
@@ -1837,7 +1837,7 @@
       "sourceTitle": "Richtlinienquelle des Arbeitsbereichs",
       "sourceHint": "Eine Repository-Empfehlung gilt als nicht vertrauenswürdig, bis Sie sie prüfen und ausdrücklich annehmen. Ein Quellenwechsel gilt nur für die Richtlinie, wie Sie sie zuletzt gesehen haben; hat sie sich seitdem geändert, prüfen Sie sie erneut.",
       "source": {
-        "default": "Host-Standard",
+        "default": "Navide-Standard",
         "user": "Benutzerrichtlinie",
         "repository": "Repository-Richtlinie"
       },
@@ -1870,10 +1870,10 @@
         "directory-unsafe": "Unsicheres Verzeichnis",
         "directory-unavailable": "Verzeichnis nicht verfügbar"
       },
-      "corruptHint": "Die gespeicherte Benutzerrichtlinie ist beschädigt. Der Neuaufbau schreibt einen frischen Host-Standardzustand und behält die Quellenauswahlen der Arbeitsbereiche bei.",
+      "corruptHint": "Die gespeicherte Benutzerrichtlinie ist beschädigt. Der Neuaufbau schreibt einen frischen Navide-Standardzustand und behält die Quellenauswahlen der Arbeitsbereiche bei.",
       "manualRecoveryHint": "Der Richtlinienspeicher ist unsicher oder nicht verfügbar. Korrigieren Sie die Berechtigungen oder den Pfad des Verzeichnisses der Ausführungsrichtlinie und öffnen Sie dann die Einstellungen erneut; der automatische Neuaufbau ist deaktiviert.",
       "rebuild": "Globale Richtlinie neu aufbauen",
-      "rebuildConfirmBody": "Nur die globale Richtlinie und die Revisionsdateien aus dem Host-Standard neu aufbauen. Bestehende Quellenauswahlen der Arbeitsbereiche und Richtliniendateien im Repository bleiben erhalten.",
+      "rebuildConfirmBody": "Nur die globale Richtlinie und die Revisionsdateien aus dem Navide-Standard neu aufbauen. Bestehende Quellenauswahlen der Arbeitsbereiche und Richtliniendateien im Repository bleiben erhalten.",
       "rebuildConfirmCheck": "Mir ist bewusst, dass die beschädigte globale Richtlinie ersetzt wird.",
       "rebuildConfirm": "Neuaufbau bestätigen",
       "cancel": "Abbrechen"
@@ -3065,7 +3065,7 @@
           "h3": "Analysator",
           "p5": "Hier konfigurieren Sie ein <strong>kleines lokales Modell</strong>, mit dem Navide die Absicht für Pipelines ermittelt; mit den CLI-Agents in Ihren Panes hat es nichts zu tun. Drei Teile:",
           "analyzer": {
-            "backend": "<strong>Inferenz-Backend</strong> – wählen Sie zuerst eines von zwei Backends, <em>Ollama REST</em> oder <em>llama.cpp</em>. llama.cpp braucht den Pfad zu <code>llama-cli</code> (mit Schaltfläche zur automatischen Erkennung und Dateiauswahl) und optional einen GGUF-Modellpfad; Ollama braucht die Inferenz-URL (standardmäßig <code>http://localhost:11434</code>). Neben beiden steht eine Statusanzeige.",
+            "backend": "<strong>Inferenz-Backend</strong> – wählen Sie zuerst eines von zwei Backends, <em>Ollama</em> oder <em>llama.cpp</em>. llama.cpp braucht den Pfad zu <code>llama-cli</code> (mit Schaltfläche zur automatischen Erkennung und Dateiauswahl) und optional einen GGUF-Modellpfad; Ollama braucht die Inferenz-URL (standardmäßig <code>http://localhost:11434</code>). Neben beiden steht eine Statusanzeige.",
             "models": "<strong>Modellverwaltung</strong> (Ollama-Modus) – geben Sie einen Modellnamen ein und klicken Sie auf <em>⬇ Herunterladen</em>, mit Fortschrittsbalken; darunter werden die installierten Modelle aufgeführt (Name, Parameterzahl, Größe) und lassen sich einzeln löschen.",
             "benchmark": "<strong>Modell-Benchmark</strong> – führt vier Aufgaben mit jedem lokalen Modell aus: Erkennung des Tech-Stacks (JSON-Ausgabe), eine Zusammenfassung des Arbeitsbereichs in einem Satz, die Auswahl des relevantesten Eintrags aus einer Dokumentliste und das Zerlegen von CLI-Ausgabe in eine Frage und ihre Optionen. Die Ergebnistabelle hakt jeden Punkt mit seiner Dauer ab, und <strong>mindestens drei von vier (≥75 %)</strong> müssen bestanden werden; Modelle, die nicht bestehen, werden im Modell-Dropdown ausgeblendet."
           },
@@ -3079,14 +3079,14 @@
           "mirror": "<strong>Der Download-Mirror</strong>: Die Dateien jedes Releases werden doppelt veröffentlicht, im GitHub-Release und auf <code>dl.navide.dev</code> – dieselben Bytes, mit sha256-Prüfsummen zum Abgleich. <strong>Der Mirror ist die Standardquelle für Updates</strong>: Die App richtet ihren Feed beim Start auf <code>dl.navide.dev</code> aus, und GitHub ist der Ausweich. Ausgewichen wird nur bei einem <strong>netzwerkbedingten Fehler</strong> (Host nicht erreichbar, Zeitüberschreitung, 5xx/429), und danach <strong>bleibt die App für den Rest der Session bei GitHub</strong> – erst ein Neustart kehrt zum Mirror zurück. <strong>Ein 404 oder ein Signatur-/Prüfsummenfehler löst nie das Ausweichen aus</strong> – beide Hosts haben dieselben Dateien, es würde also auf dieselbe Weise scheitern, und den Fehler so zu melden, wie er ist, hilft mehr, als ihn zu verbergen.",
           "policyIntro": "Die <strong>Ausführungsrichtlinie</strong> legt fest, was das Backend eines Navide-Plug-ins ausführen darf. Sie ist <strong>kein eigener Tab</strong>, sondern der Block oben auf der Seite „Navide-Plug-ins“, mit eigenem Bereichs-Badge (pro Benutzer und pro Arbeitsbereich) und Pfad der Richtliniendatei. Oben steht die <em>wirksame Richtlinie</em> – ihre Quelle, ihr Modus und ihr Status: <em>aktiv</em>, <em>veraltet</em>, <em>nicht verfügbar</em> oder <em>beschädigt</em>.",
           "policy": {
-            "hostDefault": "<strong>Host-Standard</strong> – die integrierte Grundlinie mit minimalen Rechten, als <strong>schreibgeschützt</strong> markiert. Sie bleibt nutzbar, selbst wenn der Speicher der Benutzerrichtlinie vollständig fehlt, es gibt also immer einen Weg zurück.",
+            "hostDefault": "<strong>Navide-Standard</strong> – die integrierte Grundlinie mit minimalen Rechten, als <strong>schreibgeschützt</strong> markiert. Sie bleibt nutzbar, selbst wenn der Speicher der Benutzerrichtlinie vollständig fehlt, es gibt also immer einen Weg zurück.",
             "user": "<strong>Benutzerrichtlinie</strong> – die globale Richtlinie, verwendet überall dort, wo ein Arbeitsbereich die Quelle „Benutzer“ wählt; bis Sie sie anlegen, steht dort „nicht erstellt“. Drei Modi: <em>full</em>, <em>allowlist</em>, <em>denylist</em>. Sie können die System-Namespaces und die Shell-Programme festlegen, und Letztere akzeptieren <strong>nur Programmnamen der obersten Ebene</strong> – keine Pfade, keine Shell-Ausdrücke.",
             "highRisk": "<strong>Full und denylist erfordern vor dem Speichern beide ein ausdrückliches Kontrollkästchen</strong>, und der Bildschirm erklärt, warum: Der Modus full erlaubt beliebige Programme (einschließlich risikoreicher Werkzeuge) und Systemfähigkeiten, während der Modus denylist <strong>standardmäßig erlaubt</strong> – das Auflisten von Namen schränkt nicht ein, was er tatsächlich gewährt, weshalb Navide ihn ebenfalls als risikoreiche Wahl behandelt.",
-            "source": "<strong>Richtlinienquelle des Arbeitsbereichs</strong> – jeder Arbeitsbereich wählt Host-Standard, Benutzerrichtlinie oder Repository-Richtlinie. <strong>Eine Empfehlung aus dem Repository ist als „nicht vertrauenswürdig“ gekennzeichnet, bis Sie sie gelesen und auf „Repository-Richtlinie annehmen“ geklickt haben</strong>, und ein Quellenwechsel erfordert eine exakte Übereinstimmung des Fingerabdrucks; ändert sie sich nach Ihrer Prüfung, wird sie zu „seit der Prüfung geändert“ und muss erneut geprüft werden. Ohne geöffneten Arbeitsbereich ist dieser Block nicht nutzbar.",
+            "source": "<strong>Richtlinienquelle des Arbeitsbereichs</strong> – jeder Arbeitsbereich wählt Navide-Standard, Benutzerrichtlinie oder Repository-Richtlinie. <strong>Eine Empfehlung aus dem Repository ist als „nicht vertrauenswürdig“ gekennzeichnet, bis Sie sie gelesen und auf „Repository-Richtlinie annehmen“ geklickt haben</strong>, und ein Quellenwechsel erfordert eine exakte Übereinstimmung des Fingerabdrucks; ändert sie sich nach Ihrer Prüfung, wird sie zu „seit der Prüfung geändert“ und muss erneut geprüft werden. Ohne geöffneten Arbeitsbereich ist dieser Block nicht nutzbar.",
             "recovery": "<strong>Globaler Richtlinienspeicher</strong> – sein Zustand ist intakt, fehlend, beschädigt, unsicherer Eintrag oder ein unsicheres/nicht verfügbares Verzeichnis. Ein beschädigter Speicher lässt sich hinter einem Bestätigungskästchen <strong>neu aufbauen</strong>; ein Neuaufbau ersetzt nur die globale Richtlinie und die Revisionsdateien und behält jede Quellenauswahl der Arbeitsbereiche sowie jede Repository-Richtliniendatei. Wird der Speicher als <strong>unsicher</strong> eingestuft, ist der automatische Neuaufbau deaktiviert, und der Bildschirm bittet Sie, die aufgeführten Pfade im Besitz des Hosts selbst zu reparieren.",
             "failClosed": "Jeder fehlerhafte Zustand ist <strong>fail-closed</strong>: Nichts ist erlaubt, bis Sie eine nutzbare Quelle wählen oder die defekte reparieren. Das gilt auch für ein unsicheres Speichern – die Meldung lautet „Das Ergebnis der Richtlinienänderung konnte nicht bestätigt werden; die Richtlinie bleibt fail-closed, bitte prüfen Sie erneut“."
           },
-          "policyNote": "Um alle festgelegten Repository-Quellen auf einmal zu entfernen, verwenden Sie „Alle Auswahlen der Richtlinienquelle zurücksetzen“, ebenfalls hinter einem Bestätigungskästchen. Das <strong>ändert oder löscht keine</strong> Repository-Richtliniendatei; es lässt jeden Arbeitsbereich nur wieder gegen den globalen Host-Standard oder die Benutzerrichtlinie auflösen.",
+          "policyNote": "Um alle festgelegten Repository-Quellen auf einmal zu entfernen, verwenden Sie „Alle Auswahlen der Richtlinienquelle zurücksetzen“, ebenfalls hinter einem Bestätigungskästchen. Das <strong>ändert oder löscht keine</strong> Repository-Richtliniendatei; es lässt jeden Arbeitsbereich nur wieder gegen den globalen Navide-Standard oder die Benutzerrichtlinie auflösen.",
           "extNote": "Wo ein fehlerhaftes Backend eines Navide-Plug-ins gestoppt wird: <strong>Nur ein Überlauf von Protokoll-Frames (Anfrage / Antwort / Abbruch) ist für dieses Backend fatal</strong>. Ein Überlauf von Host-Benachrichtigungen wird stattdessen verworfen und gezählt, sodass ein lautes Backend nicht mehr das ganze Navide-Plug-in mitreißt, und ein Backend, das sich sauber beendet, hält den Grund fest, statt still zu verschwinden."
         },
         "s5": {

@@ -457,8 +457,8 @@ async function saveRoots(): Promise<void> {
             <div class="cred-cards">
               <button v-for="f in g.rows" :key="f.id" type="button" class="cred-card" :class="{ active: selectedId === f.id, quiet: f.reminder.state !== 'active' }" @click="select(f.id)">
                 <span class="cred-card-head">
+                  <!-- The group heading already names the level: no chip per card. -->
                   <strong v-truncate>{{ findingTitle(f) }}</strong>
-                  <span class="cred-sev" :class="f.severity">{{ t(`settings.credentials.severity.${f.severity}`) }}</span>
                 </span>
                 <span class="cred-card-loc" v-truncate>{{ f.location }}</span>
                 <span class="cred-card-foot">
@@ -549,7 +549,7 @@ async function saveRoots(): Promise<void> {
 .cred-toolbar > div:first-child { flex: 1; min-width: 0; }
 .cred-toolbar-actions { flex-shrink: 0; }
 .cred-toolbar-actions button { white-space: nowrap; }
-.cred-toolbar p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
+.cred-toolbar p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
 .cred-toolbar p:first-child { margin-top: 0; color: var(--text-primary); font-size: var(--font-xs); }
 .cred-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .cred-keyring.ok { color: var(--success-fg); }
@@ -563,7 +563,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-emph
 input { min-width: 0; border: 1px solid var(--border-default); border-radius: var(--radius-control); background: var(--bg-base); color: var(--text-primary); padding: 7px 8px; }
 .cred-error { margin: 0; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--danger-fg) 45%, var(--border-default)); border-radius: var(--radius-control); color: var(--danger-fg); background: color-mix(in srgb, var(--danger-fg) 8%, var(--bg-subtle)); font-size: var(--font-2xs); }
 .cred-banner strong { color: var(--danger-fg); }
-.cred-scanned, .cred-muted { margin: 0; color: var(--text-secondary); font-size: var(--font-2xs); }
+.cred-scanned, .cred-muted { margin: 0; color: var(--text-secondary); font-size: var(--font-xs); }
 .cred-roots { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border-default); border-radius: var(--radius-card); background: var(--bg-subtle); }
 .cred-roots h3, .cred-roots h4 { margin: 0; font-size: var(--font-xs); color: var(--text-bright); }
 .cred-roots p { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); }
@@ -574,10 +574,10 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-viewbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cred-filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cred-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.cred-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-pill); font-size: var(--font-2xs); }
+.cred-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-pill); font-size: var(--font-xs); }
 
 .cred-chip.on { background: var(--accent-subtle, var(--bg-elevated)); border-color: var(--accent-muted, var(--accent-fg)); color: var(--accent-fg); font-weight: 600; }
-.cred-chip .count { font-size: var(--font-2xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
+.cred-chip .count { font-size: var(--font-xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
 .cred-search { flex: 1; min-width: 220px; }
 /* Findings / Inventory is one control with two states: the modal's shared
    .settings-segmented. */
@@ -589,9 +589,9 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 
 .cred-group { margin-bottom: 16px; }
 .cred-group-title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: var(--font-row-desc); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
-.cred-group-title .count { font-size: var(--font-2xs); font-weight: 500; opacity: 0.6; }
+.cred-group-title .count { font-size: var(--font-xs); font-weight: 500; opacity: 0.6; }
 .cred-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-.cred-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px 11px; text-align: left; border: 1px solid var(--border-muted); border-radius: var(--radius-card); background: var(--bg-subtle); min-width: 0; }
+.cred-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px 11px; text-align: left; border: 1px solid var(--settings-card-border, var(--border-muted)); border-radius: var(--radius-card); background: var(--bg-subtle); min-width: 0; }
 .cred-card:hover:not(:disabled) { background: var(--bg-muted); border-color: var(--border-default); }
 .cred-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
 /* Snoozed or dismissed: set back, but still readable. */
@@ -602,17 +602,17 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; min-width: 0; }
 /* Titles are full sentences in en/ja: two lines before they clip. */
 .cred-card-head strong { font-size: var(--font-xs); line-height: 1.35; color: var(--text-bright); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: auto-phrase; }
-.cred-card-loc { font-family: Menlo, Monaco, monospace; font-size: var(--font-2xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cred-card-loc { font-family: Menlo, Monaco, monospace; font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cred-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.cred-kv { display: flex; gap: 6px; font-size: var(--font-2xs); color: var(--text-secondary); min-width: 0; }
+.cred-kv { display: flex; gap: 6px; font-size: var(--font-xs); color: var(--text-secondary); min-width: 0; }
 .cred-kv > span:first-child { flex: none; opacity: 0.7; }
 .cred-kv > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cred-tag { display: inline-block; padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid var(--border-muted); font-size: var(--font-2xs); color: var(--text-secondary); white-space: nowrap; flex: none; }
-.cred-sev { display: inline-block; align-self: flex-start; border-radius: var(--radius-pill); padding: 2px 7px; font-size: var(--font-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; flex: none; }
+.cred-tag { display: inline-block; padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid var(--border-muted); font-size: var(--font-xs); color: var(--text-secondary); white-space: nowrap; flex: none; }
+.cred-sev { display: inline-block; align-self: flex-start; border-radius: var(--radius-pill); padding: 2px 7px; font-size: var(--font-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; flex: none; }
 .cred-sev.high { color: var(--danger-fg); background: color-mix(in srgb, var(--danger-fg) 12%, transparent); }
 .cred-sev.medium { color: var(--attention-fg); background: color-mix(in srgb, var(--attention-fg) 12%, transparent); }
 .cred-sev.low { color: var(--text-secondary); background: color-mix(in srgb, var(--text-secondary) 12%, transparent); }
-.cred-reminder { font-size: var(--font-2xs); color: var(--text-secondary); }
+.cred-reminder { font-size: var(--font-xs); color: var(--text-secondary); }
 .cred-reminder.active { color: var(--text-primary); }
 .cred-drawer { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; padding: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-card); background: var(--bg-subtle); font-size: var(--font-2xs); }
 .cred-drawer-head { justify-content: space-between; }

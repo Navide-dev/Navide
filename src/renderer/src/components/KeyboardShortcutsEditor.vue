@@ -9,6 +9,7 @@
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import SettingsOverflowActions from './settings/SettingsOverflowActions.vue'
 import {
   buildRows,
   classifyRow,
@@ -360,20 +361,23 @@ const visibleReference = computed(() => {
         >{{ $t('settings.keybindings.filter.' + mode) }}<span class="count">{{ mode === 'all' ? rows.length : mode === 'customized' ? rows.filter((row) => row.customized).length : conflicts.size }}</span></button>
       </div>
       <!-- The actions wrap as one group, right-aligned: the usual ones first,
-           the often-disabled Reset All last. -->
+           the often-disabled Reset All last. All three are secondary, so on a
+           narrow page they fold into one "⋯" menu beside the filters. -->
       <div class="kse-actions">
-        <button type="button" class="kse-filter" :disabled="ioBusy" @click="onExport()">
-          {{ $t('settings.keybindings.export') }}
-        </button>
-        <button type="button" class="kse-filter" :disabled="ioBusy" @click="onImport()">
-          {{ $t('settings.keybindings.import') }}
-        </button>
-        <button
-          type="button"
-          class="kse-reset-all"
-          :disabled="!customizedCount"
-          @click="onResetAll()"
-        >{{ $t('settings.keybindings.reset-all') }}</button>
+        <SettingsOverflowActions>
+          <button type="button" class="kse-filter" :disabled="ioBusy" @click="onExport()">
+            {{ $t('settings.keybindings.export') }}
+          </button>
+          <button type="button" class="kse-filter" :disabled="ioBusy" @click="onImport()">
+            {{ $t('settings.keybindings.import') }}
+          </button>
+          <button
+            type="button"
+            class="kse-reset-all"
+            :disabled="!customizedCount"
+            @click="onResetAll()"
+          >{{ $t('settings.keybindings.reset-all') }}</button>
+        </SettingsOverflowActions>
       </div>
     </div>
 
@@ -820,7 +824,7 @@ const visibleReference = computed(() => {
 /* ── source badge ── */
 .kse-source {
   display: inline-block;
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   padding: 1px 7px;
   border-radius: 999px;
@@ -861,7 +865,7 @@ const visibleReference = computed(() => {
 
 .kse-when-details summary {
   cursor: pointer;
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
 }
 .kse-when-details[open] summary { margin-bottom: 4px; }
@@ -870,13 +874,13 @@ const visibleReference = computed(() => {
   display: inline-block;
   max-width: 100%;
   font-family: monospace;
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   line-height: 1.45;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 .kse-when-any {
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-muted);
 }
 
@@ -1021,14 +1025,14 @@ const visibleReference = computed(() => {
 }
 
 .kse-unbound {
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-muted);
   font-style: italic;
   order: -1;
 }
 
 .kse-conflict {
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 999px;

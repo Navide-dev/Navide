@@ -1,24 +1,29 @@
 <script setup lang="ts">
-// A path shown as a value: shortened in the middle when it is long (the full
-// path stays in the tooltip), and allowed to wrap only after a separator, so a
-// folder name is never split across lines.
+// A path shown as a value, always on one line: shortened in the middle to fit
+// about 48 characters so the file name and its parent stay visible (the full
+// path stays in the tooltip). If even that is wider than the space it has, the
+// line ends in an ellipsis rather than wrapping inside a segment.
 import { computed } from 'vue'
 import { shortenPath } from '../../lib/shortenPath'
 
-const props = withDefaults(defineProps<{ path: string; max?: number }>(), { max: 64 })
+const props = withDefaults(defineProps<{ path: string; max?: number }>(), { max: 48 })
 
-const parts = computed(() => shortenPath(props.path, props.max).split(/(?<=[/\\])/))
+const shown = computed(() => shortenPath(props.path, props.max))
 </script>
 
 <template>
-  <span class="path-text" :title="path"><template v-for="(part, i) in parts" :key="i">{{ part }}<wbr v-if="i < parts.length - 1" /></template></span>
+  <span class="path-text" :title="path">{{ shown }}</span>
 </template>
 
 <style scoped>
 .path-text {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
   font-family: var(--font-mono);
-  word-break: normal;
-  /* A single segment longer than the line is the only thing that may break. */
-  overflow-wrap: break-word;
 }
 </style>

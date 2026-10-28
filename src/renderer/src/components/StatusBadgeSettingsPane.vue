@@ -43,6 +43,12 @@ function defaultLabel(status: PaneStatusValue, locale: string): string {
   return t(paneStatusLabelKey(status), {}, { locale })
 }
 
+/** The internal key is worth showing only when it reads differently from
+ *  the localized name ("starting" beside "Starting" just repeats it). */
+function showsKey(status: PaneStatusValue): boolean {
+  return status.toLowerCase() !== defaultLabel(status, locale.value).trim().toLowerCase()
+}
+
 function colorOf(status: PaneStatusValue): StatusColorKey {
   return prefs.value[status]?.color ?? DEFAULT_STATUS_COLORS[status]
 }
@@ -107,9 +113,9 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
         </span>
         <span class="sb-key">
           <!-- The localized status name titles the card; the internal key
-               stays beside it as muted secondary text. -->
+               stays beside it as muted secondary text when it differs. -->
           <span class="sb-key-name" v-truncate>{{ defaultLabel(status, locale) }}</span>
-          <code class="sb-key-id">{{ status }}</code>
+          <code v-if="showsKey(status)" class="sb-key-id">{{ status }}</code>
           <em v-if="ROW_ONLY.includes(status)" class="sb-rowonly">
             {{ $t('statusBadges.row-only') }}
           </em>
@@ -363,6 +369,9 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   height: 24px;
   border-radius: 50%;
   border: 1px solid var(--border-muted);
+  /* A 1px muted outline outside the swatch's own border, so a white or pale
+   * swatch stays visible on a white page. */
+  box-shadow: 0 0 0 1px var(--border-muted);
   padding: 0;
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease;

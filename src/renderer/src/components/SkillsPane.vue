@@ -576,6 +576,11 @@ const matrixRows = computed<MatrixRow[]>(() => {
 })
 
 /** Rows grouped by source, for the matrix's group rows and the browse view's sections. */
+/** A CLI's name as the backend labels it ("Claude Code"), its id otherwise. */
+function agentDisplayName(key: string): string {
+  return agents.value.find((agent) => agent.key === key)?.label || key
+}
+
 const groupedRows = computed<Array<{ source: string; label: string; keypath: string; param: string; value: string; rows: MatrixRow[] }>>(() => {
   const groups = new Map<string, MatrixRow[]>()
   for (const row of matrixRows.value) {
@@ -588,12 +593,12 @@ const groupedRows = computed<Array<{ source: string; label: string; keypath: str
     source,
     label: source === 'shared'
       ? t('settings.skills.group-shared', { root: '~/.agents/skills' })
-      : t('settings.skills.group-native', { agent: source }),
+      : t('settings.skills.group-native', { agent: agentDisplayName(source) }),
     // The heading renders the path or agent id in its own element, so the
     // label's uppercase never reaches it ("~/.AGENTS/SKILLS").
     keypath: source === 'shared' ? 'settings.skills.group-shared' : 'settings.skills.group-native',
     param: source === 'shared' ? 'root' : 'agent',
-    value: source === 'shared' ? '~/.agents/skills' : source,
+    value: source === 'shared' ? '~/.agents/skills' : agentDisplayName(source),
     rows,
   }))
 })
@@ -841,7 +846,7 @@ function rowSourceLabel(row: MatrixRow): string {
       ? t('settings.skills.source-shared')
       : t('settings.skills.source-shared-user')
   }
-  return t('settings.skills.source-native', { agent: row.skill.source })
+  return t('settings.skills.source-native', { agent: agentDisplayName(row.skill.source) })
 }
 
 /**
@@ -1512,7 +1517,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   gap: 5px;
   padding: 9px 11px;
   text-align: left;
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
   min-width: 0;
@@ -1734,12 +1739,13 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 .skills-matrix-legend .swatch.unsupported { background: var(--bg-muted); }
 /* ── Two sources ─────────────────────────────────────────────────────── */
 .skills-group-title {
-  /* SettingsSection's label, on the page's left content line. */
+  /* SettingsSection's label, on the page's left content line. Sentence case,
+     not caps: each heading names a CLI or a path ("Claude Code's own",
+     "~/.agents/skills"), and caps around a name that keeps its own case
+     read as "claude'S OWN". */
   margin: 10px 0 8px;
   font-size: var(--font-row-desc);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--text-secondary);
 }
 .skill-migrate { padding: 3px 8px; font-size: var(--font-2xs); white-space: nowrap; }
@@ -1761,10 +1767,8 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
   z-index: 1;
   background: var(--bg-muted);
   text-align: left;
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--text-secondary);
   padding: 5px 9px 4px 7px;
 }

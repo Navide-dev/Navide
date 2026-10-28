@@ -17,6 +17,11 @@ defineProps<{
    * icon-only rail, where the pages are hidden and it is the selection again).
    */
   expanded?: boolean
+  /**
+   * It has pages that fold under it: a chevron at the right edge shows
+   * whether they are unfolded (▾) or folded (▸).
+   */
+  foldable?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,7 +36,7 @@ const emit = defineEmits<{
     :class="{ active, expanded }"
     :title="label"
     :aria-current="active && !expanded ? 'page' : undefined"
-    :aria-expanded="expanded || undefined"
+    :aria-expanded="foldable ? !!expanded : (expanded || undefined)"
     @click="emit('select')"
   >
     <span class="settings-nav-item-icon">
@@ -47,6 +52,9 @@ const emit = defineEmits<{
       :aria-label="marker.label"
       :title="marker.label"
     >{{ marker.text }}</span>
+    <span v-if="foldable" class="settings-nav-item-chevron" :class="{ open: expanded }" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>
+    </span>
   </button>
 </template>
 
@@ -131,6 +139,23 @@ const emit = defineEmits<{
   font-size: var(--font-2xs);
   white-space: nowrap;
 }
+.settings-nav-item-chevron {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+  color: var(--text-secondary);
+  transition: transform 120ms ease;
+}
+.settings-nav-item-badge ~ .settings-nav-item-chevron,
+.settings-nav-item-marker ~ .settings-nav-item-chevron {
+  margin-left: 4px;
+}
+.settings-nav-item-chevron.open {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-nav-item-chevron { transition: none; }
+}
 .settings-nav-item-icon {
   display: inline-flex;
   align-items: center;
@@ -141,11 +166,11 @@ const emit = defineEmits<{
    so the label keeps the rest of the width ("Плагины Navide", "Navide
    プラグイン" stay on one line beside their marker at 1280). */
 @media (min-width: 721px) {
-  .settings-nav-item:has(.settings-nav-item-badge, .settings-nav-item-marker) {
+  .settings-nav-item:has(.settings-nav-item-badge, .settings-nav-item-marker, .settings-nav-item-chevron) {
     padding-right: 6px;
     gap: 4px;
   }
-  .settings-nav-item:has(.settings-nav-item-badge, .settings-nav-item-marker) .settings-nav-item-label {
+  .settings-nav-item:has(.settings-nav-item-badge, .settings-nav-item-marker, .settings-nav-item-chevron) .settings-nav-item-label {
     margin-left: 4px;
   }
 }
@@ -167,13 +192,13 @@ const emit = defineEmits<{
 }
 
 /* Expanded parent: a heading for the page rows under it, not a second
-   selection. It marks that it contains the selection with accent text and
-   icon only: normal weight, no fill, no indicator bar. The page row under it
-   carries the only fill. */
+   selection. Normal text and icon colour, normal weight, no fill, no
+   indicator bar; only its open chevron says the pages under it are shown.
+   The page row under it carries the only selection styling. */
 @media (min-width: 721px) {
   .settings-nav-item.active.expanded {
     background: transparent;
-    color: var(--accent-fg);
+    color: var(--text-primary);
     font-weight: 400;
   }
   .settings-nav-item.active.expanded:hover {
@@ -205,7 +230,8 @@ const emit = defineEmits<{
     overflow: hidden;
     white-space: nowrap;
   }
-  .settings-nav-item-marker {
+  .settings-nav-item-marker,
+  .settings-nav-item-chevron {
     display: none;
   }
 }

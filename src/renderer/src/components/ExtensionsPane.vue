@@ -1791,7 +1791,7 @@ watch(installed, () => {
 }
 .ext-installed {
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
   transition: border-color var(--motion-fast) var(--ease-out);

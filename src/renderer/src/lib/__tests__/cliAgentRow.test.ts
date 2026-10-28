@@ -116,7 +116,7 @@ describe('cliAgentRowChips', () => {
 
   it('separates having no channel from having one switched off', () => {
     expect(chip('push')).toMatchObject({
-      tone: 'ok',
+      tone: 'info',
       label: 'settings.cliAgents.chip.push:rewake',
     })
     expect(chip('push', { pushEnabled: false })).toMatchObject({ tone: 'bad' })

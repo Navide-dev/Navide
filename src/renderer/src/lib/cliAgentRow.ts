@@ -11,8 +11,9 @@
 
 import type { CliModelDefault, CliPermissionMode } from '@navide/plugin-shell'
 
-/** Green = normal / on, amber = a deviation worth noticing, red = unusable or
- *  switched off, blue = a chosen value, grey = a neutral fact. */
+/** Green = installed / allowed, amber = a deviation worth noticing, red =
+ *  unusable or switched off, blue = a chosen value or a channel that is on,
+ *  grey = a neutral fact. */
 export type CliRowChipTone = 'ok' | 'warn' | 'bad' | 'info' | 'neutral'
 
 export interface CliRowChip {
@@ -103,7 +104,9 @@ export function cliAgentRowChips(facts: CliAgentRowFacts, t: Translate): CliRowC
   if (!facts.pushKind) {
     chip('push', 'neutral', t('settings.cliAgents.chip.no-push'))
   } else if (facts.pushEnabled) {
-    chip('push', 'ok', t('settings.cliAgents.chip.push', { kind: facts.pushKind }))
+    // On is a configured state, not health: info (blue), so green stays
+    // "installed" alone on the card.
+    chip('push', 'info', t('settings.cliAgents.chip.push', { kind: facts.pushKind }))
   } else {
     chip('push', 'bad', t('settings.cliAgents.chip.push-off'))
   }
