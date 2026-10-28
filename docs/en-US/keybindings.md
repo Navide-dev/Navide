@@ -7,7 +7,7 @@ and when-clause conditions.
 
 > **macOS symbols:** `⌘` Cmd · `⌥` Option/Alt · `⌃` Ctrl · `⇧` Shift · `↩` Enter
 >
-> On Windows and Linux, `⌥` reads as **Alt**. Menu items with accelerators (copy, paste, Settings, New Window, Open Workspace, close window) follow the platform and answer **Ctrl** there. The rules in the table below are written for macOS: their `⌘` resolves to the **Win/Super** key off macOS, not Ctrl, so Windows and Linux users should re-record the ones they need in **Settings → Shortcuts** — the recorder writes a plain `ctrl+…` rule.
+> On Windows and Linux, `⌥` reads as **Alt**. Menu items with accelerators (copy, paste, Settings, New Window, Open Workspace, Lock Now, close window) follow the platform and answer **Ctrl** there. The rules in the table below are written for macOS: their `⌘` resolves to the **Win/Super** key off macOS, not Ctrl, so Windows and Linux users should re-record the ones they need in **Settings → Shortcuts** — the recorder writes a plain `ctrl+…` rule.
 >
 > Two exceptions are bound for Windows and Linux out of the box. The main window's sidebar tabs answer **Ctrl+Alt+1–5** (Ctrl+1–9 already picks the CLI type for the next pane), and Settings answers **Ctrl+,**. Ctrl+Alt is AltGr on Windows: on a layout where AltGr+digit types a character (German `²` `³`, for example), that digit types the character and does not switch tabs.
 
