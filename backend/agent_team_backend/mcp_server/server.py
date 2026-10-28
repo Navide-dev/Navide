@@ -7312,6 +7312,12 @@ async def cli_usage(ctx: Context, agent: str = "") -> dict[str, Any]:
     vendor with quota left. A snapshot with status "unverified" is not an
     error: no standard pane has verified that vendor's credential store yet,
     so nothing is read until the user opens one; its quota is unknown.
+
+    This call only reads what Navide already holds and never contacts a
+    vendor: each snapshot is what the background poll last read (about every
+    `intervalSec` seconds), and its `fetchedAt` says when. A connection error
+    from the call itself (such as EADDRNOTAVAIL) is the link to Navide's
+    backend failing, not the quota being unreadable — call it again.
     """
     try:
         _resolve_caller(ctx)
