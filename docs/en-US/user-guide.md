@@ -74,7 +74,12 @@ These observations help you inspect local activity; they do not prove exfiltrati
 
 ## Pipelines
 
-The included pipeline covers requirements, planning, design, implementation, security review, and testing. Stages, slots, roles, kickoff prompts, questions, and completion sentinels are configurable in Settings.
+The included pipeline covers requirements, planning, design, implementation, security review, and testing. Stages, slots, roles, kickoff prompts, questions, and completion sentinels are edited in the **Pipeline Manager** (Window ▸ Pipeline Manager, or the ⚙ **Manage Pipelines** button in the sidebar's Pipeline tab). Its **Swimlane** and **Canvas** views edit the same pipeline as a graph of steps; **Executions** shows the runs and their controls. A new run still starts from the sidebar: type the task and choose Run.
+
+- **Approval gate.** Add one from the palette to pause the run between two steps; its **What to check** text tells the reviewer what to look at. While the run waits, the editor shows a banner with **Review**, and the gate offers **Approve and Continue** or **Send Back**, with an optional note for the agents. The sidebar's Next does not move past a gate.
+- **Reject loop.** In the Canvas view, drag from a step's bottom handle to a step upstream. **Send Back** then re-runs the work from that step, with your note in front of its kickoff. A loop runs at most the number shown on its **↺ max** pill (2 by default, up to 10); after that, sending back again ends the run as failed.
+- **Freeze Output (pin).** In the Inspector, a frozen step is skipped on later runs and its last output is reused.
+- **Rerun from Here (restart from).** In the Inspector of a step, once the pipeline has a run that is not running, this starts a new run at that step and keeps the output of the steps before it — cheaper than **Start Over**, which re-runs everything.
 
 A stage can run multiple slots in parallel. Navide advances based on configured completion signals and agent state. Always review generated changes and test results; automated completion indicates workflow progress, not correctness.
 

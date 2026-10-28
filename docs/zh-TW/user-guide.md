@@ -74,7 +74,12 @@ These observations help you inspect local activity; they do not prove exfiltrati
 
 ## Pipeline
 
-內建 Pipeline 涵蓋 Requirements、Planning、Design、Implementation、Security Review 與 Testing。Stage、slot、Role、Kickoff Prompt、Question 與 Completion Sentinel 都能在 Settings 中設定。
+內建 Pipeline 涵蓋 Requirements、Planning、Design、Implementation、Security Review 與 Testing。Stage、slot、Role、Kickoff Prompt、Question 與 Completion Sentinel 都在**流程管理**中編輯（Window ▸ 流程管理，或側欄 Pipeline 分頁的 ⚙ **管理 pipeline** 按鈕）。它的**泳道**與**畫布**檢視以步驟圖的形式編輯同一個 Pipeline；**執行紀錄**列出每一輪執行與其控制按鈕。新的一輪仍從側欄啟動：輸入任務後按 Run。
+
+- **核准閘門（Gate）。** 從元件面板加入，讓執行在兩個步驟之間暫停；它的**要檢查什麼**說明審核者該看什麼。執行等待時，編輯器上方會出現帶**前往核准**的橫幅，閘門提供**核准並繼續**或**退回修改**，可附上給 agent 的意見。側欄的 Next 不會越過閘門。
+- **退回迴圈（Loop）。** 在畫布檢視中，從步驟底部的把手拖到上游步驟。之後按**退回修改**，就會從那個步驟起重跑，並把你的意見放在它的 Kickoff 前面。迴圈最多重跑它 **↺ 最多** 標籤上的次數（預設 2，上限 10）；用完之後再退回，這一輪就以失敗結束。
+- **凍結產出（Pin）。** 在 Inspector 中凍結的步驟，之後的執行會跳過它並沿用它上次的產出。
+- **從這裡重跑（Restart from）。** 在步驟的 Inspector 中，當這個 Pipeline 有一輪已停止的執行時，可從該步驟開始新的一輪，並保留前面步驟的產出 —— 比全部重跑的**重新開始**便宜。
 
 一個 Stage 可以平行執行多個 slot。Navide 會根據設定的 Completion Signal 與 Agent State 推進。務必檢查生成變更與測試結果；自動完成只代表工作流進度，不代表成果正確。
 
