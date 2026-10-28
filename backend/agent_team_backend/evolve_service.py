@@ -111,6 +111,21 @@ _AT_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 _PANE_ID_RE = re.compile(r"^[A-Za-z0-9._:\-]{1,128}$")
 _LEDGER_RE = re.compile(r"^\.agent-team/plans/[A-Za-z0-9._\-]+\.(?:html|plan\.md)$")
 _COMMIT_RE = re.compile(r"^[0-9a-fA-F]{4,64}$")
+#: Commit-shaped words in a plan's notes; commit_exists decides which are real.
+_NOTE_COMMIT_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+_NOTE_PR_RE = re.compile(r"(?i)(?:\bPR\s*#?|/pull/)(\d{1,7})\b")
+#: Commit candidates checked per plan, so a note full of hex stays cheap.
+_MAX_COMMIT_CANDIDATES = 10
+#: How far back the next run's task looks in the proposal ledger.
+LEDGER_DAYS = 30
+#: Ledger statuses the next run's task carries.
+_LEDGER_IN_TASK = ("rejected", "in-progress", "approved")
+#: Ledger statuses a sync no longer changes.
+_LEDGER_FINAL = ("landed", "abandoned")
+_STAGE_STATUS = {
+    "draft": "proposed", "in-review": "proposed", "approved": "approved",
+    "in-progress": "in-progress",
+}
 _MAX_EXTRA = 4000
 
 #: Same families the rules ask the agent to mask; applied again on the way in.
@@ -312,6 +327,38 @@ def _add_token_hash(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE evolve_runs ADD COLUMN token_hash TEXT")
 
 
+def _create_proposals(cur: sqlite3.Cursor) -> None:
+    # The proposal ledger (S1): one row per proposal a run reported. Its status
+    # is derived from the plan's stage, never set by hand.
+    cur.execute(
+        "CREATE TABLE evolve_proposals ("
+        " id TEXT PRIMARY KEY,"
+        " run_id TEXT NOT NULL,"
+        " rel_path TEXT NOT NULL,"
+        " name TEXT,"
+        " kind TEXT,"
+        " signature TEXT,"
+        " status TEXT NOT NULL,"
+        " reason TEXT,"
+        " pr TEXT,"
+        " commits TEXT,"
+        " created_at INTEGER NOT NULL,"
+        " updated_at INTEGER NOT NULL)"
+    )
+    cur.execute("CREATE INDEX evolve_proposals_created ON evolve_proposals (created_at)")
+
+
+def _proposal_row(row: sqlite3.Row) -> dict[str, Any]:
+    proposal = dict(row)
+    try:
+        proposal["commits"] = json.loads(proposal["commits"]) if proposal["commits"] else []
+    except json.JSONDecodeError:
+        proposal["commits"] = []
+    for key in ("name", "kind", "signature", "reason", "pr"):
+        proposal[key] = proposal[key] or ""
+    return proposal
+
+
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -348,6 +395,7 @@ class _Store:
         if key not in self._ready:
             db.migrate(_COMPONENT, 1, _create_schema)
             db.migrate(_COMPONENT, 2, _add_token_hash)
+            db.migrate(_COMPONENT, 3, _create_proposals)
             self._ready.add(key)
         return db
 
@@ -448,6 +496,45 @@ class _Store:
                 "DELETE FROM evolve_runs WHERE id NOT IN"
                 " (SELECT id FROM evolve_runs ORDER BY started_at DESC LIMIT ?)",
                 (RUNS_KEPT,),
+            )
+
+    def add_proposals(self, workspace: str, run_id: str, items: list[dict[str, str]], now: int) -> None:
+        db = self.db(workspace, create=False)
+        if db is None or not items:
+            return
+        with db.transaction() as cur:
+            for item in items:
+                cur.execute(
+                    "INSERT INTO evolve_proposals (id, run_id, rel_path, name, kind, signature, status,"
+                    " reason, pr, commits, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, 'proposed', '', '', '[]', ?, ?)",
+                    (uuid.uuid4().hex[:12], run_id, item["rel_path"], item["name"], item["kind"],
+                     item["signature"], now, now),
+                )
+
+    def proposals(self, workspace: str, since_ms: int = 0) -> list[dict[str, Any]]:
+        db = self.db(workspace, create=False)
+        if db is None:
+            return []
+        with db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT * FROM evolve_proposals WHERE created_at >= ? ORDER BY created_at DESC, rowid",
+                (since_ms,),
+            ).fetchall()
+        return [_proposal_row(r) for r in rows]
+
+    def update_proposal(self, workspace: str, proposal_id: str, fields: dict[str, Any]) -> None:
+        db = self.db(workspace, create=False)
+        if db is None or not fields:
+            return
+        values = dict(fields)
+        if "commits" in values:
+            values["commits"] = json.dumps(values["commits"] or [], ensure_ascii=False)
+        assignments = ", ".join(f"{key} = ?" for key in values)
+        with db.transaction() as cur:
+            cur.execute(
+                f"UPDATE evolve_proposals SET {assignments} WHERE id = ?",
+                [*values.values(), proposal_id],
             )
 
     def update(self, workspace: str, run_id: str, fields: dict[str, Any]) -> None:
@@ -718,7 +805,11 @@ class EvolveService:
         checked = await asyncio.to_thread(self.store.settings_checked, workspace)
         git = await self.host.git_info(workspace)
         job = await self._job(workspace)
+        await self._sync_proposals(workspace, git)
         runs = await asyncio.to_thread(self.store.runs, workspace)
+        run_ids = {r["id"] for r in runs}
+        proposals = [p for p in await asyncio.to_thread(self.store.proposals, workspace)
+                     if p["run_id"] in run_ids]
         legacy = await self.legacy_jobs(workspace)
         return {
             "ok": True,
@@ -731,6 +822,8 @@ class EvolveService:
             },
             "running": next((r for r in runs if r["status"] == "running"), None),
             "runs": runs,
+            # The proposal ledger rows of the runs above, each with its status.
+            "proposals": proposals,
             "legacy": [{"id": j["id"], "name": j["name"], "enabled": j["enabled"]} for j in legacy],
             "template": {"version": evolve_rules.VERSION, "text": evolve_rules.preview()},
             # Stored fields that failed validation and were reset to defaults.
@@ -901,6 +994,10 @@ class EvolveService:
         self, workspace: str, settings: dict[str, Any], run: dict[str, Any], token: str
     ) -> dict[str, Any]:
         git = await self.host.git_info(workspace)
+        await self._sync_proposals(workspace, git)
+        ledger = [p for p in await asyncio.to_thread(
+            self.store.proposals, workspace, self.now_ms() - LEDGER_DAYS * 86_400_000
+        ) if p["status"] in _LEDGER_IN_TASK]
         scope = settings["scope"] if git["is_repo"] else "propose"
         if not git["is_repo"] and settings["scope"] == "fix":
             await self._notice(workspace, "not_git", run)
@@ -916,7 +1013,7 @@ class EvolveService:
         if checked and checked[1]:
             fields["detail"] = "stored settings reset to defaults: " + ", ".join(checked[1])
         try:
-            task = evolve_rules.render(render)
+            task = evolve_rules.render(render, ledger)
         except evolve_rules.UnsafeValue as err:
             return await self._fail(workspace, run, fields, "error", "unsafe_value", str(err))
         mode = settings["mode"]
@@ -1011,6 +1108,9 @@ class EvolveService:
                 fields["detail"] = (str(run.get("detail") or "") + " reported commits not found: "
                                     + ", ".join(m or "(no hash)" for m in missing)).strip()
         await asyncio.to_thread(self.store.update, workspace, run_id, fields)
+        await asyncio.to_thread(
+            self.store.add_proposals, workspace, run_id, _ledger_items(payload.get("proposals")), self.now_ms()
+        )
         finished = {**run, **fields}
         await self._notice(workspace, "finished", finished)
         await self._changed(workspace)
@@ -1165,6 +1265,51 @@ class EvolveService:
         self._idle[key] = (now, sent + 1)
         await self._notice(workspace, "nudged", {**run, "nudges": sent + 1, "delivered": bool(answer.get("ok"))})
 
+    # ── the proposal ledger ──────────────────────────────────────────────
+
+    async def _sync_proposals(self, workspace: str, git: dict[str, Any]) -> None:
+        """Bring each open ledger row up to date with its plan's stage. Never
+        raises: a ledger that cannot be read must not stop a run or the panel."""
+        try:
+            rows = await asyncio.to_thread(self.store.proposals, workspace)
+            root = git.get("root") or workspace
+            for row in rows:
+                if row["status"] in _LEDGER_FINAL:
+                    continue
+                fields = await self._derive(workspace, root, row)
+                changed = {k: v for k, v in fields.items() if row.get(k) != v}
+                if changed:
+                    changed["updated_at"] = self.now_ms()
+                    await asyncio.to_thread(self.store.update_proposal, workspace, row["id"], changed)
+        except Exception as err:  # noqa: BLE001
+            log.warning("evolve: syncing the proposal ledger failed: %s", err)
+
+    async def _derive(self, workspace: str, root: str, row: dict[str, Any]) -> dict[str, Any]:
+        meta = await asyncio.to_thread(_read_plan_meta, workspace, row["rel_path"])
+        if meta is None:
+            return {"status": "abandoned"}
+        if meta is False:  # there, but not readable as a plan: leave it as it is
+            return {}
+        stage = meta.get("stage")
+        notes = [n for n in meta.get("reviewNotes") or [] if isinstance(n, dict)]
+        if stage == "abandoned":
+            user = [n for n in notes if n.get("author") == "user" and isinstance(n.get("text"), str)]
+            return {"status": "rejected", "reason": mask(user[-1]["text"])[:500] if user else ""}
+        if stage == "done":
+            text = "\n".join(
+                str(n.get(k) or "") for n in notes for k in ("text", "reply")
+            ) + "\n" + json.dumps({k: v for k, v in meta.items() if k in ("commit", "commits", "pr")})
+            commits: list[str] = []
+            for candidate in list(dict.fromkeys(_NOTE_COMMIT_RE.findall(text)))[:_MAX_COMMIT_CANDIDATES]:
+                if await self.host.commit_exists(root, candidate):
+                    commits.append(candidate)
+            pr = _NOTE_PR_RE.search(text)
+            if commits or pr:
+                return {"status": "landed", "commits": commits, "pr": f"#{pr.group(1)}" if pr else ""}
+            return {"status": "in-progress"}
+        status = _STAGE_STATUS.get(str(stage))
+        return {"status": status} if status else {}
+
     # ── events ───────────────────────────────────────────────────────────
 
     async def _changed(self, workspace: str) -> None:
@@ -1186,6 +1331,37 @@ def _clean_list(value: Any, keys: tuple[str, str]) -> list[dict[str, str]]:
         if isinstance(item, dict):
             out.append({key: mask(str(item.get(key) or ""))[:300] for key in keys})
     return out[:20]
+
+
+def _ledger_items(value: Any) -> list[dict[str, str]]:
+    """The reported proposals as ledger rows: the same items run.proposals
+    keeps, plus the optional kind and signature."""
+    return [{
+        "rel_path": mask(str(item.get("rel_path") or ""))[:300],
+        "name": mask(str(item.get("name") or ""))[:300],
+        "kind": mask(str(item.get("kind") or ""))[:80],
+        "signature": mask(str(item.get("signature") or ""))[:300],
+    } for item in (value if isinstance(value, list) else []) if isinstance(item, dict)][:20]
+
+
+def _read_plan_meta(workspace: str, rel_path: str) -> dict[str, Any] | bool | None:
+    """A ledger row's plan meta: None when the plan is gone (or lies outside
+    this workspace, which is never read), False when it is there but has no
+    readable plan-meta."""
+    from .plugins.builtin.navide_plans.plan_meta import parse_plan_meta
+
+    if not rel_path:
+        return None
+    base = os.path.realpath(workspace)
+    path = os.path.realpath(os.path.join(base, rel_path))
+    if not path.startswith(base + os.sep) or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            meta = parse_plan_meta(handle.read())
+    except OSError:
+        return None
+    return meta if meta is not None else False
 
 
 _service: EvolveService | None = None
