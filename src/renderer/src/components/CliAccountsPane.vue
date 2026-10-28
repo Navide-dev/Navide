@@ -402,6 +402,9 @@ interface CardUsage {
   /** The whole refresh line: a status label after "Refresh:", or a sentence
    *  of its own when the status alone would read as jargon. */
   refreshLine: string
+  /** The refresh line says the account is not signed in, so a refresh
+   *  cannot read anything: the card's Refresh Quota is shown disabled. */
+  cantRefresh: boolean
   refreshError: string
   notMeasuredHint: boolean
 }
@@ -417,10 +420,10 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
   const currentSnap = { ...snap, windows }
   const head = headlineWindow(currentSnap)
   const refreshStatus = refreshStatusLabel(snap.refreshStatus ?? snap.status)
-  const refreshLine =
-    (snap.refreshStatus ?? snap.status) === 'no-credentials'
-      ? t('usage.refresh-not-signed-in')
-      : t('usage.refresh-status', { status: refreshStatus })
+  const cantRefresh = (snap.refreshStatus ?? snap.status) === 'no-credentials'
+  const refreshLine = cantRefresh
+    ? t('usage.refresh-not-signed-in')
+    : t('usage.refresh-status', { status: refreshStatus })
   const base = {
     expired: snap.status === 'expired' || snap.refreshStatus === 'expired',
     cached,
@@ -434,6 +437,7 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
     updated: !cached && snap.status === 'ok' ? formatResetAbsolute(snap.fetchedAt) : '',
     refreshStatus,
     refreshLine,
+    cantRefresh,
     notMeasuredHint:
       (snap.refreshStatus ?? snap.status) === 'not-measured' && canSignInDir(agentKey, profileId),
     // The backend's sentence for why the last read failed. `refreshStatus`
@@ -611,7 +615,7 @@ onMounted(() => refreshUsage())
       <div class="cli-head-text">
         <h3 class="cli-title">{{ $t('settings.accounts.cli.title') }}</h3>
         <p class="cli-hint">{{ $t('settings.accounts.cli.hint') }}</p>
-        <details class="cli-more">
+        <details class="cli-more settings-more">
           <summary>{{ $t('settings.accounts.cli.hint-more') }}</summary>
           <p>{{ $t('settings.accounts.cli.hint-detail') }}</p>
         </details>
@@ -853,7 +857,7 @@ onMounted(() => refreshUsage())
               <button
                 v-if="canRefreshCard(spec.agentKey, p?.id ?? null)"
                 class="cli-btn ghost sm cli-card-refresh-btn"
-                :disabled="refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null)) || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn === false"
+                :disabled="refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null)) || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn === false || cardUsage(spec.agentKey, p?.id ?? null)?.cantRefresh === true"
                 :title="$t('settings.accounts.cli.refresh-quota-card-hint')"
                 @click="refreshCardQuota(spec.agentKey, p?.id ?? null)"
               >

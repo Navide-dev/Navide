@@ -501,7 +501,7 @@ function entries(map: Record<string, string>): [string, string][] {
           v-for="chip in sourceChips"
           :key="chip.key"
           type="button"
-          class="mcp-chip"
+          class="mcp-chip settings-filter-chip"
           :class="{ on: sourceFilter === chip.key }"
           :aria-pressed="sourceFilter === chip.key"
           @click="sourceFilter = chip.key"
@@ -557,11 +557,11 @@ function entries(map: Record<string, string>): [string, string][] {
                     v-if="row.navide"
                     class="mcp-status-dot"
                     :class="row.navide.status ?? 'unknown'"
-                    :role="row.navide.status === 'error' ? 'img' : undefined"
-                    :title="row.navide.status === 'error' ? t('settings.mcp.status-failed') : undefined"
-                    :aria-label="row.navide.status === 'error' ? t('settings.mcp.status-failed') : undefined"
+                    aria-hidden="true"
                   ></span>
                   <strong v-truncate>{{ row.name }}</strong>
+                  <!-- Red alone is not a label: a failed server says so in words. -->
+                  <span v-if="row.navide?.status === 'error'" class="mcp-status-text mcp-status-text--error">{{ t('settings.mcp.status-failed') }}</span>
                 </span>
                 <span class="mcp-card-detail" v-truncate>
                   {{ row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—' }}
@@ -910,7 +910,9 @@ function entries(map: Record<string, string>): [string, string][] {
 }
 .mcp-pane-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
 .mcp-pane-head p { flex: 1 1 24em; margin: 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.5; max-width: 72ch; }
-.mcp-pane-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mcp-pane-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Refresh is the same size as the page's actions beside it (.mcp-action-btn). */
+.mcp-pane-actions > button { min-height: var(--control-h-md); padding: 0 11px; font-size: var(--font-xs); }
 button, input, select { font: inherit; }
 button {
   border: 1px solid var(--border-default);
@@ -938,17 +940,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 /* ── Filter bar: one bar, both views ───────────────────────────────────── */
 .mcp-filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mcp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.mcp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: var(--control-h-md);
-  padding: 3px 9px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-xs);
-}
-.mcp-chip.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
-.mcp-chip .count { font-size: var(--font-xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
+/* The chips are the Settings window's shared .settings-filter-chip. */
 .mcp-pane-search { flex: 1; min-width: 140px; max-width: 260px; }
 /* The modal's shared .settings-segmented control. */
 .mcp-view-switch { margin-left: auto; }
@@ -996,6 +988,8 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-status-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
 .mcp-status-dot.connected { background: var(--success-fg); }
 .mcp-status-dot.error { background: var(--danger-fg); }
+.mcp-status-text { flex: none; font-size: var(--font-2xs); font-weight: 600; white-space: nowrap; }
+.mcp-status-text--error { color: var(--danger-fg); }
 .mcp-status-dot.starting { background: var(--warning-fg); }
 .mcp-status-note { display: block; color: var(--warning-fg); }
 .mcp-status-error { display: block; color: var(--danger-fg); }

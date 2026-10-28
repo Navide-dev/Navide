@@ -49,7 +49,7 @@ defineProps<{
 .settings-empty-message {
   margin: 0;
   max-width: min(48ch, 100%);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   text-wrap: pretty;
 }
 .settings-empty-actions {

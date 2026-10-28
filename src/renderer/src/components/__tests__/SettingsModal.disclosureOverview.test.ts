@@ -98,7 +98,7 @@ describe('SettingsModal Navide Plugins pages', () => {
       'Developer and native code',
       'Disclosure overview',
     ])
-    expect(body('extensions').get('h1').text()).toBe('Installed')
+    expect(body('extensions').get('h1').text()).toBe('Installed Navide plugins')
     expect(wrapper!.findComponent(ExtensionsPane).props('page')).toBe('plugins')
     expect(partShown('execution-policy')).toBe(false)
 
@@ -213,7 +213,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     await flushPromises()
     vm().setTab('extensions')
     await flushPromises()
-    expect(body('extensions').get('h1').text()).toBe('Installed')
+    expect(body('extensions').get('h1').text()).toBe('Installed Navide plugins')
     expect(wrapper!.findComponent(ExtensionsPane).props('page')).toBe('plugins')
   })
 

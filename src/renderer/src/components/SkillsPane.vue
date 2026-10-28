@@ -936,7 +936,7 @@ watch(
           v-for="chip in sourceChips"
           :key="chip.key"
           type="button"
-          class="skills-chip"
+          class="skills-chip settings-filter-chip"
           :class="{ on: sourceFilter === chip.key }"
           :aria-pressed="sourceFilter === chip.key"
           @click="sourceFilter = chip.key"
@@ -1350,6 +1350,8 @@ watch(
 .skill-editor-head h3 { font-size: var(--font-md); }
 .skills-toolbar p,
 .skill-editor-head p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); }
+/* The page intro uses the same size as every other page's intro. */
+.skills-toolbar > div:first-child > p { font-size: var(--font-row-desc); line-height: 1.5; }
 button,
 input,
 textarea {
@@ -1463,18 +1465,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   flex-wrap: wrap;
 }
 .skills-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.skills-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: var(--control-h-md);
-  padding: 3px 9px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-xs);
-}
-/* Same chip as the MCP source filter. */
-.skills-chip.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
-.skills-chip .count { font-size: var(--font-xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
+/* The chips are the Settings window's shared .settings-filter-chip. */
 .skills-filterbar .skills-search { flex: 1; min-width: 140px; max-width: 260px; }
 .skills-filterbar .skills-view-switch { margin-left: auto; }
 

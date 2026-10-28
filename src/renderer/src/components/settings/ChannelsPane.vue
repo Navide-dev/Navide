@@ -991,7 +991,7 @@ function formatTime(ts: number | null | undefined): string {
   white-space: nowrap;
 }
 .ch-pill.ok { color: var(--success-fg); background: var(--success-subtle); border-color: var(--success-muted); }
-.ch-pill.warn { color: var(--attention-fg); background: var(--attention-subtle); border-color: var(--attention-muted); }
+.ch-pill.warn { color: var(--attention-on-subtle); background: var(--attention-subtle); border-color: var(--attention-muted); }
 .ch-pill.bad { color: var(--danger-fg); background: var(--danger-subtle); border-color: var(--danger-muted); }
 .ch-pill.pending { color: var(--accent-fg); background: var(--accent-subtle); border-color: var(--accent-muted); }
 

@@ -1260,6 +1260,7 @@
     "toggle-replace": "Alternar reemplazar (⌘H)",
     "delete-pipeline": "Eliminar esta pipeline",
     "open": "Abrir",
+    "learn-more": "Más información",
     "view-as-list": "Ver como lista",
     "view-as-tree": "Ver como árbol",
     "show-ignored-files": "Mostrar archivos ignorados",
@@ -1466,7 +1467,7 @@
       "tabInstalled": "Extensiones de CLI instaladas",
       "tabConvenience": "Qué cambia Navide",
       "intro": "Lo que cada CLI de AI ha instalado por su cuenta —Claude plugins y Claude mods, Codex hooks, Pi extensions y más— y a qué puede acceder cada cosa. Solo lectura: nada de aquí instala, activa ni cambia nada. Los complementos de Navide tienen su propia página.",
-      "summary": "{total} extensiones de CLI · {l3} ejecutan código dentro de su CLI",
+      "summary": "{total} extensiones de CLI · {l3} se ejecutan dentro de su CLI · {l2} ejecutan programas aparte",
       "machineWide": "Un conjunto por CLI para todo el equipo: todos los panes de Navide y todas las cuentas de esa CLI cargan las mismas.",
       "rescan": "Volver a analizar",
       "loading": "Analizando…",
@@ -1482,12 +1483,12 @@
       "inferredHint": "Deducido del texto fuente; el manifiesto de la CLI no lo indica.",
       "tier": {
         "L1": "Solo texto",
-        "L2": "Ejecuta comandos de shell",
+        "L2": "Ejecuta programas aparte",
         "L3": "Se ejecuta dentro de la CLI"
       },
       "tierHint": {
         "L1": "Solo instrucciones y otro texto; nada se ejecuta por sí solo.",
-        "L2": "Ejecuta comandos como subproceso (hooks, MCP, LSP) con los permisos de tu usuario.",
+        "L2": "Inicia un programa aparte (un comando de hook o un servidor MCP o LSP) con los permisos de tu usuario.",
         "L3": "Se ejecuta dentro del propio proceso de la CLI, con los permisos de la CLI y sin solicitud de permiso."
       },
       "capability": {
@@ -1892,6 +1893,7 @@
       },
       "nativeBackends": {
         "title": "Programas en complementos de Navide",
+        "summary": "El código nativo se ejecuta en un entorno aislado, pero un complemento de Navide que también ejecuta git, gh y glab (marcado abajo como de alto riesgo) puede usarlos para contactar con hosts de red, enviar datos del espacio de trabajo y cambiar sus archivos.",
         "description": "Algunos complementos de Navide incluyen código nativo. Navide lo ejecuta en un entorno aislado sin acceso propio a la red; solo puede leer las áreas de trabajo que abras con él y modificar archivos solo donde lo permitas. Un complemento de Navide que además ejecuta comandos git, gh y glab (marcado abajo como de alto riesgo) puede, a través de ellos, contactar con servidores de la red y enviar datos del área de trabajo, y leer y modificar archivos del área de trabajo sin ese permiso. Mientras el interruptor de abajo esté activado, instalar un complemento de Navide con código nativo permite que se ejecute; al desactivarlo se detienen todos.",
         "enable": "Permitir que los complementos de Navide de terceros ejecuten sus propios programas",
         "offUnsaved": "Los backends nativos de terceros están desactivados por ahora, pero Navide no pudo guardarlo, así que volverán a estar activados al reiniciar Navide.",
@@ -1938,6 +1940,7 @@
       },
       "bundled": "Integrados",
       "listTitle": "Instalados",
+      "installedTitle": "Complementos de Navide instalados",
       "developerNative": "Desarrollador y código nativo",
       "pageOn": "Activado",
       "developerOnMarker": "Desarr.",
@@ -2460,7 +2463,7 @@
       "download-retry": "Reintentar descarga"
     },
     "general": {
-      "auto-resume-reconnect": "Reanudar las sessions tras reiniciarse el backend",
+      "auto-resume-reconnect": "Reanudar las sessions tras reiniciarse el servicio en segundo plano de Navide",
       "resume-interrupted-on-launch": "Reanudar los panes que estaban trabajando tras reiniciar Navide",
       "system-notify": "Notificaciones del sistema",
       "system-notify-hint": "Muestra una notificación de escritorio cuando una CLI termina su turno o necesita tu intervención mientras Navide está en segundo plano. La insignia del Dock sigue contando en cualquier caso.",
@@ -2475,7 +2478,7 @@
         "unknown": "Aún no se ha probado.",
         "not-applicable": "No disponible en esta plataforma."
       },
-      "auto-resume-reconnect-hint": "Reanuda automáticamente las conversaciones de los panes visibles cuando el backend vuelve tras un fallo.",
+      "auto-resume-reconnect-hint": "Reanuda automáticamente las conversaciones de los panes visibles cuando el servicio en segundo plano de Navide vuelve tras un fallo.",
       "resume-interrupted-on-launch-hint": "Tras un reinicio, vuelve a abrir hasta 6 panes que estaban en mitad de un turno o esperando una pregunta, sin continuarlos hasta que pulses Continuar o su pane principal lo pida.",
       "confirm-close-pane": "Confirmar antes de cerrar un pane",
       "confirm-close-pane-hint": "Pregunta antes de que el atajo de cerrar pane cierre un pane de CLI. Un pane con un turno en curso siempre pregunta, independientemente de este ajuste.",
@@ -3321,7 +3324,7 @@
           "h3": "Procesos huérfanos y el backend",
           "orphans": {
             "leftover": "<strong>Procesos de CLI sobrantes</strong>: cuando aparece <code>⚠ N restantes</code> en la barra de estado, al hacer clic se pregunta «Se han encontrado N procesos de CLI restantes de una ejecución anterior; pueden agotar la memoria. ¿Limpiarlos?», con <em>Limpiar</em> para eliminarlos y <em>Descartar</em> para omitirlo. Son procesos que la ejecución anterior no limpió.",
-            "backend": "<strong>Backend</strong>: al hacer clic en la píldora Backend de la barra de estado se muestran la dirección y el PID, además de dos botones: <em>Reiniciar</em> (<em>Iniciar</em> sin conexión) y <em>Detener</em> (solo con conexión). <strong>Reiniciar el backend se lleva por delante todos los procesos de CLI</strong>; para que las conversaciones se reanuden automáticamente cuando vuelva, activa <em>Reanudar las sessions tras reiniciarse el backend</em> en la pestaña General.",
+            "backend": "<strong>Backend</strong>: al hacer clic en la píldora Backend de la barra de estado se muestran la dirección y el PID, además de dos botones: <em>Reiniciar</em> (<em>Iniciar</em> sin conexión) y <em>Detener</em> (solo con conexión). <strong>Reiniciar el backend se lleva por delante todos los procesos de CLI</strong>; para que las conversaciones se reanuden automáticamente cuando vuelva, activa <em>Reanudar las sessions tras reiniciarse el servicio en segundo plano de Navide</em> en la pestaña General.",
             "timeout": "Si el backend da error porque tarda demasiado en arrancar, sube <em>Tiempo de espera de inicio del backend</em> (15–120 segundos) en la pestaña Apariencia."
           },
           "h4": "Mantenimiento de un vistazo",
@@ -7202,7 +7205,7 @@
       },
       "share": {
         "title": "Enlaces para compartir",
-        "hint": "Enlaces de solo lectura a un plan o informe, cifrados en este equipo. La clave solo viaja dentro del enlace; el servidor guarda un texto cifrado que no puede abrir.",
+        "hint": "Enlaces de solo lectura a un plan o informe, cifrados en este equipo. La clave solo viaja dentro del enlace, así que el servidor no puede leer lo que guarda.",
         "col-item": "Elemento",
         "col-creator": "Creado por",
         "col-created": "Creado",
@@ -7235,7 +7238,7 @@
     },
     "sync": {
       "title": "Sincronización",
-      "hint": "Activa una sección para mantenerla igual en todos los dispositivos con sesión iniciada en esta cuenta. Los registros se cifran en este equipo; el servidor guarda un texto cifrado para el que no tiene clave.",
+      "hint": "Activa una sección para mantenerla igual en todos los dispositivos con sesión iniciada en esta cuenta. Los registros se cifran en este equipo, así que el servidor no puede leerlos.",
       "not-yet": "Aún no se puede sincronizar.",
       "retired-memory": "La memoria ya no se sincroniza. Desactívala; tus archivos de instrucciones de aquí y las copias de la nube se quedan como están.",
       "not-connected": "No conectado: las secciones sincronizadas se ponen al día cuando vuelva la conexión.",

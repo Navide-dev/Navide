@@ -61,7 +61,8 @@ function isNavideChange(item: CliExtension): boolean {
   return item.kind === 'navide-change'
 }
 
-// The L2 tier chip already says "Runs shell commands"; an `exec` chip beside
+// Every L2 row has `exec` (it starts a hook command or an MCP/LSP server), and
+// its tier chip already says "Runs separate programs"; an `exec` chip beside
 // it would say the same thing twice.
 function shownCapabilities(item: CliExtension): string[] {
   return item.exec_tier === 'L2' ? item.capabilities.filter((cap) => cap !== 'exec') : item.capabilities
@@ -96,6 +97,7 @@ async function load(): Promise<void> {
 
 const valid = computed(() => items.value.filter((item) => item.valid))
 const inProcess = computed(() => valid.value.filter((item) => item.exec_tier === 'L3').length)
+const separatePrograms = computed(() => valid.value.filter((item) => item.exec_tier === 'L2').length)
 
 // L3 first inside each CLI: code running in the CLI's own process is what a
 // reader should see before hooks and text assets.
@@ -128,7 +130,7 @@ onMounted(() => { void load() })
     <header class="cli-ext-header">
       <p class="cli-ext-intro">{{ t('settings.cliExtensions.intro') }}</p>
       <div class="cli-ext-summary">
-        <span class="cli-ext-counts">{{ t('settings.cliExtensions.summary', { total: valid.length, l3: inProcess }) }}</span>
+        <span class="cli-ext-counts">{{ t('settings.cliExtensions.summary', { total: valid.length, l3: inProcess, l2: separatePrograms }) }}</span>
         <button type="button" class="cli-ext-rescan" :disabled="loading" @click="load">
           {{ loading ? t('settings.cliExtensions.loading') : t('settings.cliExtensions.rescan') }}
         </button>
@@ -205,9 +207,11 @@ onMounted(() => { void load() })
 <style scoped>
 /* The two tabs and the overview sit outside the scrolling list, so they
    carry the same page gutter; the overview scrolls on its own. */
-.cli-ext-tabs { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: 4px; margin: 12px 22px 0; border-bottom: 1px solid var(--border-muted); }
-.cli-ext-tab { font: inherit; font-size: var(--font-xs); color: var(--text-secondary); background: none; border: none; border-bottom: 2px solid transparent; padding: 4px 8px; cursor: pointer; }
-.cli-ext-tab[aria-selected='true'] { color: var(--text-bright); border-bottom-color: var(--accent-fg, var(--text-bright)); }
+/* The Settings page tab: the same underline tab as Navide Plugins, Marketplace and Help. */
+.cli-ext-tabs { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: 2px; margin: 12px 22px 0; border-bottom: 1px solid var(--border-muted); }
+.cli-ext-tab { font: inherit; font-size: var(--font-sm); min-height: var(--control-h-lg); margin-bottom: -1px; color: var(--text-secondary); background: none; border: none; border-bottom: 2px solid transparent; padding: 0 12px; cursor: pointer; }
+.cli-ext-tab:hover { color: var(--text-primary); }
+.cli-ext-tab[aria-selected='true'] { color: var(--text-bright); font-weight: 600; border-bottom-color: var(--accent-emphasis, var(--text-bright)); }
 .cli-ext-convenience { flex: 1; min-height: 0; padding: 12px 22px 18px; overflow-y: auto; overflow-x: hidden; }
 /* The Settings tab body is full-bleed and overflow:hidden (see .s-body--bleed
    in SettingsModal), so like the other bleed panes this one carries the page
@@ -267,7 +271,7 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
 .cli-ext-type, .cli-ext-tier, .cli-ext-owner, .cli-ext-disabled, .cli-ext-unknown, .cli-ext-cap, .cli-ext-inferred { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; font-size: var(--font-2xs); line-height: 16px; border-radius: var(--radius-pill); padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
 .cli-ext-type { color: var(--text-primary); background: var(--bg-muted); }
 .cli-ext-tier.tier-L3 { color: var(--danger-fg); border-color: var(--danger-muted); background: var(--danger-subtle); }
-.cli-ext-tier.tier-L2 { color: var(--warning-fg, var(--text-primary)); border-color: var(--attention-muted); background: var(--attention-subtle); }
+.cli-ext-tier.tier-L2 { color: var(--attention-on-subtle, var(--text-primary)); border-color: var(--attention-muted); background: var(--attention-subtle); }
 .cli-ext-owner { color: var(--accent-fg, var(--text-primary)); border-color: var(--accent-muted); background: var(--accent-subtle); }
 .cli-ext-disabled { border-style: dashed; }
 .cli-ext-unknown { border-style: dashed; color: var(--warning-fg, var(--text-primary)); border-color: var(--attention-muted); }

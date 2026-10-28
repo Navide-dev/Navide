@@ -53,7 +53,7 @@ describe('CliExtensionsPane', () => {
   it('counts valid CLI extensions and in-process code', async () => {
     render()
     await flushPromises()
-    expect(wrapper.get('.cli-ext-counts').text()).toBe('3 CLI extensions · 1 run code inside their CLI')
+    expect(wrapper.get('.cli-ext-counts').text()).toBe('3 CLI extensions · 1 run inside their CLI · 2 run separate programs')
   })
 
   it('puts in-process code first and shows the vendor type label untranslated', async () => {
@@ -70,11 +70,11 @@ describe('CliExtensionsPane', () => {
     expect(mod.findAll('.cli-ext-cap').map((cap) => cap.text())).toEqual(['執行 shell 指令', '連網'])
   })
 
-  it('says "runs shell commands" once on an L2 row, not as a tier and a capability', async () => {
+  it('says "runs separate programs" once on an L2 row, not as a tier and an exec capability', async () => {
     render()
     await flushPromises()
     const helper = wrapper.get('[data-id="helper@mkt"]')
-    expect(helper.get('.cli-ext-tier').text()).toBe('Runs shell commands')
+    expect(helper.get('.cli-ext-tier').text()).toBe('Runs separate programs')
     expect(helper.findAll('.cli-ext-cap').map((cap) => cap.text())).toEqual(['Intercepts tool calls'])
   })
 

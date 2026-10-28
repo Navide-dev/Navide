@@ -1260,6 +1260,7 @@
     "toggle-replace": "Toggle Replace (⌘H)",
     "delete-pipeline": "Delete This Pipeline",
     "open": "Open",
+    "learn-more": "Learn more",
     "view-as-list": "View as List",
     "view-as-tree": "View as Tree",
     "show-ignored-files": "Show Ignored Files",
@@ -1466,7 +1467,7 @@
       "tabInstalled": "Installed CLI Extensions",
       "tabConvenience": "What Navide Changes",
       "intro": "What each AI CLI installed for itself — Claude plugins and mods, Codex hooks, Pi extensions and more — and what each one can reach. Read-only: nothing here installs, enables or changes anything. Navide plugins have their own page.",
-      "summary": "{total} CLI extensions · {l3} run code inside their CLI",
+      "summary": "{total} CLI extensions · {l3} run inside their CLI · {l2} run separate programs",
       "machineWide": "One set per CLI for the whole machine: every Navide pane and account of that CLI loads the same ones.",
       "rescan": "Rescan",
       "loading": "Scanning…",
@@ -1482,12 +1483,12 @@
       "inferredHint": "Read off the source text; the CLI's manifest does not state these.",
       "tier": {
         "L1": "Text only",
-        "L2": "Runs shell commands",
+        "L2": "Runs separate programs",
         "L3": "Runs inside the CLI"
       },
       "tierHint": {
         "L1": "Instructions and other text only; nothing runs on its own.",
-        "L2": "Runs commands as a subprocess (hooks, MCP, LSP) with your user's permissions.",
+        "L2": "Starts a separate program (a hook command, or an MCP or LSP server) with your user's permissions.",
         "L3": "Runs inside the CLI's own process with the CLI's permissions, and no permission prompt."
       },
       "capability": {
@@ -1892,6 +1893,7 @@
       },
       "nativeBackends": {
         "title": "Programs in Navide plugins",
+        "summary": "Native code runs in a sandbox, but a Navide plugin that also runs git, gh and glab (marked high risk below) can use them to contact network hosts, send workspace data and change workspace files.",
         "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. While the switch below is on, installing a Navide plugin that has native code allows it to run; turning the switch off stops all of them.",
         "enable": "Let third-party Navide plugins run their own programs",
         "offUnsaved": "Third-party native backends are off for now, but Navide could not save that, so they will be on again after Navide restarts.",
@@ -1938,6 +1940,7 @@
       },
       "bundled": "Bundled",
       "listTitle": "Installed",
+      "installedTitle": "Installed Navide plugins",
       "developerNative": "Developer and native code",
       "pageOn": "On",
       "developerOnMarker": "Dev",
@@ -2123,7 +2126,7 @@
         },
         "title": "Developer Mode",
         "switch": "Turn on Developer Mode",
-        "hint": "Lets you load a Navide plugin from a folder to develop and test it, and install Navide plugins from your own server instead of the Navide Marketplace; turning it off unloads those Navide plugins.",
+        "hint": "Load a Navide plugin from a folder to develop and test it, and install Navide plugins from your own server instead of the Navide Marketplace. Turning it off unloads them.",
         "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
         "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
         "reminderClose": "Got It",
@@ -2460,7 +2463,7 @@
       "download-retry": "Retry Download"
     },
     "general": {
-      "auto-resume-reconnect": "Resume sessions after a backend restart",
+      "auto-resume-reconnect": "Resume sessions after Navide's background service restarts",
       "resume-interrupted-on-launch": "Resume working panes after restarting Navide",
       "system-notify": "System notifications",
       "system-notify-hint": "Show a desktop notification when a CLI finishes its turn or needs your input while Navide is in the background. The Dock badge keeps counting either way.",
@@ -2475,7 +2478,7 @@
         "unknown": "Not tested yet.",
         "not-applicable": "Not available on this platform."
       },
-      "auto-resume-reconnect-hint": "Resumes the visible panes’ conversations automatically when the backend comes back after a crash.",
+      "auto-resume-reconnect-hint": "Resumes the visible panes’ conversations automatically when Navide's background service comes back after a crash.",
       "resume-interrupted-on-launch-hint": "After a restart, reopens up to 6 panes that were mid-turn or waiting on a prompt, without continuing them until you press Continue or their parent asks.",
       "confirm-close-pane": "Confirm before closing a pane",
       "confirm-close-pane-hint": "Ask before the close-pane shortcut closes a CLI pane. A pane with a turn in progress always asks, regardless of this setting.",
@@ -3321,7 +3324,7 @@
           "h3": "Orphaned processes and the backend",
           "orphans": {
             "leftover": "<strong>Leftover CLI processes</strong> — when <code>⚠ N leftover</code> appears in the status bar, clicking it asks \"Found N leftover CLI process(es) from a previous run — they can exhaust memory. Clean them up?\", with <em>Clean Up</em> to clear them and <em>Dismiss</em> to skip. These are processes the previous run did not clean up.",
-            "backend": "<strong>Backend</strong> — clicking the Backend pill in the status bar shows the address and PID plus two buttons: <em>Restart</em> (<em>Start</em> while disconnected) and <em>Stop</em> (only while connected). <strong>Restarting the backend takes every CLI process with it</strong>; to have conversations resume automatically once it is back, turn on <em>Resume sessions after a backend restart</em> on the General tab.",
+            "backend": "<strong>Backend</strong> — clicking the Backend pill in the status bar shows the address and PID plus two buttons: <em>Restart</em> (<em>Start</em> while disconnected) and <em>Stop</em> (only while connected). <strong>Restarting the backend takes every CLI process with it</strong>; to have conversations resume automatically once it is back, turn on <em>Resume sessions after Navide's background service restarts</em> on the General tab.",
             "timeout": "When the backend errors out because it starts too slowly, raise <em>Backend Startup Timeout</em> (15–120 seconds) on the Appearance tab."
           },
           "h4": "Upkeep at a glance",
@@ -7202,7 +7205,7 @@
       },
       "share": {
         "title": "Share links",
-        "hint": "Read-only links to a plan or report, encrypted on this machine. The key travels only inside the link; the server stores ciphertext it cannot open.",
+        "hint": "Read-only links to a plan or report, encrypted on this machine. The key travels only inside the link, so the server cannot read what it stores.",
         "col-item": "Item",
         "col-creator": "Created by",
         "col-created": "Created",
@@ -7235,7 +7238,7 @@
     },
     "sync": {
       "title": "Sync",
-      "hint": "Turn on a section to keep it the same on every device signed in to this account. Records are encrypted on this machine; the server stores ciphertext it has no key for.",
+      "hint": "Turn on a section to keep it the same on every device signed in to this account. Records are encrypted on this machine, so the server cannot read them.",
       "not-yet": "Not syncable yet.",
       "retired-memory": "Memory is not synced any more. Switch it off; your instruction files here and the copies in the cloud are left as they are.",
       "not-connected": "Not connected — synced sections catch up when the link is back.",

@@ -101,14 +101,20 @@ const emit = defineEmits<{
   background: var(--bg-muted);
   color: var(--text-primary);
 }
-/* One line per row: a long page name (de-DE "Entwickler und nativer Code")
-   ends in an ellipsis; the title attribute carries the full name. */
+/* Up to two lines per row: a long page name ("Developer and native code",
+   de-DE "Entwickler und nativer Code") wraps under its own first letter;
+   only a third line ends in an ellipsis, with the full name in the tooltip.
+   The marker after it keeps its own width at the row's right edge. */
 .settings-nav-subitem-label {
+  flex: 1 1 auto;
   min-width: 0;
   margin-right: 6px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: break-word;
   line-height: 1.3;
 }
 @media (max-width: 720px) {

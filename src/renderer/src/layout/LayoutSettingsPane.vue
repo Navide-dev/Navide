@@ -281,6 +281,9 @@ function onSize(id: SlotId, raw: string): void {
 /* Every picker is one width, so the Remove buttons line up; a row too narrow
    for both wraps the controls under the view name. */
 .ls-move { flex: 0 0 168px; width: 168px; max-width: 100%; text-overflow: ellipsis; }
+/* "Pinned here" is the view's real place, not a placeholder: shown in the
+   secondary text colour at full strength while the picker is disabled. */
+.ls-move:disabled { opacity: 1; color: var(--text-secondary); cursor: default; }
 /* Remove is a small icon button, named by its aria-label and tooltip. */
 .ls-hide {
   display: inline-flex;

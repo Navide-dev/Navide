@@ -1,20 +1,35 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { leadSentence } from '../../lib/leadSentence'
 /**
  * A single settings row: title (+ optional description) on the left, a
  * right-aligned `control` slot on the right.
  */
-defineProps<{
+const props = defineProps<{
   /** Left out when the page title already names the row. */
   title?: string
   description?: string
+  /**
+   * Show only the description's first sentence; the rest folds into the
+   * shared "Learn more" disclosure under it (for descriptions that would run
+   * past two lines).
+   */
+  foldDescription?: boolean
 }>()
+const { t } = useI18n()
+const folded = computed(() => (props.foldDescription && props.description ? leadSentence(props.description) : null))
 </script>
 
 <template>
   <div class="setting-row">
     <div class="setting-row-text">
       <div v-if="title" class="setting-row-title">{{ title }}</div>
-      <div v-if="description" class="setting-row-desc">{{ description }}</div>
+      <div v-if="description" class="setting-row-desc">{{ folded ? folded.lead : description }}</div>
+      <details v-if="folded?.rest" class="settings-more">
+        <summary>{{ t('action.learn-more') }}</summary>
+        <p>{{ folded.rest }}</p>
+      </details>
     </div>
     <div class="setting-row-control">
       <slot name="control"></slot>
@@ -51,6 +66,7 @@ defineProps<{
   font-size: var(--font-row-desc);
   color: var(--text-secondary);
 }
+.settings-more { margin-top: 2px; }
 .setting-row-control {
   display: flex;
   flex-wrap: wrap;

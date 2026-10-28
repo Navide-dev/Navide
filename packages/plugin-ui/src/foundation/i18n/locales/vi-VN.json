@@ -1260,6 +1260,7 @@
     "toggle-replace": "Bật/tắt thay thế (⌘H)",
     "delete-pipeline": "Xóa pipeline này",
     "open": "Mở",
+    "learn-more": "Tìm hiểu thêm",
     "view-as-list": "Xem dạng danh sách",
     "view-as-tree": "Xem dạng cây",
     "show-ignored-files": "Hiện tệp bị bỏ qua",
@@ -1466,7 +1467,7 @@
       "tabInstalled": "Tiện ích mở rộng CLI đã cài",
       "tabConvenience": "Những gì Navide thay đổi",
       "intro": "Những gì mỗi CLI AI tự cài cho mình — Claude plugins và mods, Codex hooks, Pi extensions và nhiều thứ khác — cùng những gì mỗi thứ có thể truy cập. Chỉ đọc: không có gì ở đây cài đặt, bật hay thay đổi bất cứ thứ gì. Plugin Navide có trang riêng.",
-      "summary": "{total} tiện ích mở rộng CLI · {l3} chạy mã bên trong CLI của chúng",
+      "summary": "{total} tiện ích mở rộng CLI · {l3} chạy bên trong CLI · {l2} chạy chương trình riêng",
       "machineWide": "Mỗi CLI có một bộ dùng chung cho cả máy: mọi pane và tài khoản Navide của CLI đó đều tải cùng một bộ.",
       "rescan": "Quét lại",
       "loading": "Đang quét…",
@@ -1482,12 +1483,12 @@
       "inferredHint": "Đọc từ mã nguồn; manifest của CLI không nêu những điều này.",
       "tier": {
         "L1": "Chỉ văn bản",
-        "L2": "Chạy lệnh shell",
+        "L2": "Chạy chương trình riêng",
         "L3": "Chạy bên trong CLI"
       },
       "tierHint": {
         "L1": "Chỉ có hướng dẫn và văn bản khác; không có gì tự chạy.",
-        "L2": "Chạy lệnh dưới dạng tiến trình con (hook, MCP, LSP) với quyền của người dùng của bạn.",
+        "L2": "Khởi chạy một chương trình riêng (lệnh hook, hoặc máy chủ MCP hay LSP) với quyền của người dùng của bạn.",
         "L3": "Chạy bên trong tiến trình của chính CLI với quyền của CLI và không có lời nhắc cấp quyền."
       },
       "capability": {
@@ -1892,6 +1893,7 @@
       },
       "nativeBackends": {
         "title": "Chương trình trong plugin Navide",
+        "summary": "Mã gốc chạy trong sandbox, nhưng plugin Navide cũng chạy git, gh và glab (được đánh dấu rủi ro cao bên dưới) có thể dùng chúng để kết nối máy chủ mạng, gửi dữ liệu workspace và thay đổi tệp trong workspace.",
         "description": "Một số plugin Navide có chứa mã gốc. Navide chạy mã đó trong sandbox không có quyền truy cập mạng riêng; nó chỉ đọc được các workspace bạn mở cùng nó và chỉ thay đổi tệp ở nơi bạn cho phép. Plugin Navide nào còn chạy lệnh git, gh và glab (được đánh dấu rủi ro cao bên dưới) thì qua các lệnh đó có thể liên lạc với máy chủ mạng và gửi dữ liệu workspace, cũng như đọc và thay đổi tệp workspace mà không cần quyền đó. Khi công tắc bên dưới đang bật, cài một plugin Navide có mã gốc nghĩa là cho phép nó chạy; tắt công tắc để dừng tất cả.",
         "enable": "Cho phép plugin Navide của bên thứ ba chạy chương trình riêng",
         "offUnsaved": "Backend gốc của bên thứ ba hiện đang tắt, nhưng Navide không lưu được thiết lập này, nên chúng sẽ bật lại sau khi Navide khởi động lại.",
@@ -1938,6 +1940,7 @@
       },
       "bundled": "Đi kèm",
       "listTitle": "Đã cài",
+      "installedTitle": "Plugin Navide đã cài",
       "developerNative": "Nhà phát triển và mã gốc",
       "pageOn": "Bật",
       "developerOnMarker": "Dev.",
@@ -2460,7 +2463,7 @@
       "download-retry": "Thử tải lại"
     },
     "general": {
-      "auto-resume-reconnect": "Tiếp tục session sau khi backend khởi động lại",
+      "auto-resume-reconnect": "Tiếp tục session sau khi dịch vụ nền của Navide khởi động lại",
       "resume-interrupted-on-launch": "Tiếp tục các pane đang làm việc sau khi khởi động lại Navide",
       "system-notify": "Thông báo hệ thống",
       "system-notify-hint": "Hiện thông báo trên màn hình khi một CLI kết thúc lượt hoặc cần bạn nhập trong lúc Navide chạy nền. Huy hiệu trên Dock vẫn tiếp tục đếm trong mọi trường hợp.",
@@ -2475,7 +2478,7 @@
         "unknown": "Chưa thử.",
         "not-applicable": "Không có trên nền tảng này."
       },
-      "auto-resume-reconnect-hint": "Tự động tiếp tục hội thoại của các pane đang hiển thị khi backend hoạt động lại sau sự cố.",
+      "auto-resume-reconnect-hint": "Tự động tiếp tục hội thoại của các pane đang hiển thị khi dịch vụ nền của Navide hoạt động lại sau sự cố.",
       "resume-interrupted-on-launch-hint": "Sau khi khởi động lại, mở lại tối đa 6 pane đang chạy dở lượt hoặc đang chờ câu hỏi, nhưng không chạy tiếp cho đến khi bạn bấm Tiếp tục hoặc pane cha yêu cầu.",
       "confirm-close-pane": "Xác nhận trước khi đóng pane",
       "confirm-close-pane-hint": "Hỏi trước khi phím tắt đóng pane đóng một pane CLI. Pane đang có lượt chạy dở luôn hỏi, bất kể cài đặt này.",
@@ -3321,7 +3324,7 @@
           "h3": "Tiến trình mồ côi và backend",
           "orphans": {
             "leftover": "<strong>Tiến trình CLI còn sót</strong> — khi <code>⚠ N còn sót</code> xuất hiện trên thanh trạng thái, nhấp vào sẽ hỏi “Tìm thấy N tiến trình CLI còn sót từ lần chạy trước — chúng có thể làm cạn bộ nhớ. Dọn dẹp?”, với <em>Dọn dẹp</em> để xóa và <em>Bỏ qua</em> để bỏ qua. Đây là các tiến trình mà lần chạy trước chưa dọn.",
-            "backend": "<strong>Backend</strong> — nhấp vào nhãn Backend trên thanh trạng thái sẽ hiện địa chỉ và PID cùng hai nút: <em>Khởi động lại</em> (<em>Khởi động</em> khi mất kết nối) và <em>Dừng</em> (chỉ khi đang kết nối). <strong>Khởi động lại backend sẽ kéo theo mọi tiến trình CLI</strong>; để cuộc hội thoại tự tiếp tục khi backend chạy lại, hãy bật <em>Tiếp tục session sau khi backend khởi động lại</em> ở tab Chung.",
+            "backend": "<strong>Backend</strong> — nhấp vào nhãn Backend trên thanh trạng thái sẽ hiện địa chỉ và PID cùng hai nút: <em>Khởi động lại</em> (<em>Khởi động</em> khi mất kết nối) và <em>Dừng</em> (chỉ khi đang kết nối). <strong>Khởi động lại backend sẽ kéo theo mọi tiến trình CLI</strong>; để cuộc hội thoại tự tiếp tục khi backend chạy lại, hãy bật <em>Tiếp tục session sau khi dịch vụ nền của Navide khởi động lại</em> ở tab Chung.",
             "timeout": "Khi backend báo lỗi vì khởi động quá chậm, hãy tăng <em>Thời gian chờ khởi động backend</em> (15–120 giây) ở tab Giao diện."
           },
           "h4": "Bảo trì tóm tắt",
@@ -7202,7 +7205,7 @@
       },
       "share": {
         "title": "Liên kết chia sẻ",
-        "hint": "Liên kết chỉ đọc tới một Plan hoặc báo cáo, được mã hóa trên máy này. Khóa chỉ nằm trong liên kết; máy chủ lưu bản mã mà nó không mở được.",
+        "hint": "Liên kết chỉ đọc tới một Plan hoặc báo cáo, được mã hóa trên máy này. Khóa chỉ nằm trong liên kết, nên máy chủ không đọc được nội dung nó lưu.",
         "col-item": "Mục",
         "col-creator": "Người tạo",
         "col-created": "Ngày tạo",
@@ -7235,7 +7238,7 @@
     },
     "sync": {
       "title": "Đồng bộ",
-      "hint": "Bật một phần để giữ nó giống nhau trên mọi thiết bị đăng nhập tài khoản này. Bản ghi được mã hóa trên máy này; máy chủ lưu bản mã mà nó không có khóa.",
+      "hint": "Bật một phần để giữ nó giống nhau trên mọi thiết bị đăng nhập tài khoản này. Bản ghi được mã hóa trên máy này, nên máy chủ không đọc được.",
       "not-yet": "Chưa đồng bộ được.",
       "retired-memory": "Bộ nhớ không còn được đồng bộ. Hãy tắt nó; các tệp hướng dẫn ở đây và bản sao trên đám mây được giữ nguyên.",
       "not-connected": "Chưa kết nối — các phần được đồng bộ sẽ bắt kịp khi có kết nối trở lại.",

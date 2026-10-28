@@ -665,7 +665,8 @@ defineExpose({ reload, confirmDiscard })
   color: var(--text-primary);
 }
 .memory-pane-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.memory-pane-head p { margin: 0; color: var(--text-secondary); font-size: var(--font-2xs); }
+/* The page intro uses the same size as every other page's intro. */
+.memory-pane-head p { margin: 0; color: var(--text-secondary); font-size: var(--font-row-desc); line-height: 1.5; }
 button, textarea { font: inherit; }
 button {
   border: 1px solid var(--border-default);

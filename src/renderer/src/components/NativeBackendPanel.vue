@@ -115,7 +115,12 @@ watch(installed, refresh)
          it depends on. -->
     <SettingsCard class="native-backends-card">
       <SettingsNotice class="native-backends-callout" tone="warning">
-        <p class="native-backends-description"><strong class="native-backends-lead">{{ nativeWarning.lead }}</strong>{{ nativeWarning.separator }}{{ nativeWarning.rest }}</p>
+        <!-- The risk in one sentence; the whole account folds under Learn more. -->
+        <p class="native-backends-description"><strong class="native-backends-lead">{{ $t('settings.extensions.nativeBackends.summary') }}</strong></p>
+        <details class="native-backends-more settings-more">
+          <summary>{{ $t('action.learn-more') }}</summary>
+          <p>{{ nativeWarning.lead }}{{ nativeWarning.separator }}{{ nativeWarning.rest }}</p>
+        </details>
       </SettingsNotice>
       <SettingRow :title="$t('settings.extensions.nativeBackends.enable')">
         <template #control>
@@ -282,6 +287,7 @@ watch(installed, refresh)
   font-size: var(--font-xs);
   line-height: var(--lh-base);
 }
+.native-backends-more { margin-top: 4px; }
 /* External callers only apply once agent tools are on: indented under that switch. */
 .native-backends-dependent {
   padding-left: calc(var(--space-row-x) + 24px);

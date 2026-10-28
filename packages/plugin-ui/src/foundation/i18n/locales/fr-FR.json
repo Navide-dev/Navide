@@ -1260,6 +1260,7 @@
     "toggle-replace": "Afficher ou masquer le remplacement (⌘H)",
     "delete-pipeline": "Supprimer ce pipeline",
     "open": "Ouvrir",
+    "learn-more": "En savoir plus",
     "view-as-list": "Afficher sous forme de liste",
     "view-as-tree": "Afficher sous forme d’arborescence",
     "show-ignored-files": "Afficher les fichiers ignorés",
@@ -1466,7 +1467,7 @@
       "tabInstalled": "Extensions CLI installées",
       "tabConvenience": "Ce que Navide modifie",
       "intro": "Ce que chaque CLI d’IA a installé pour elle-même – Claude plugins et mods, Codex hooks, extensions Pi, etc. – et ce à quoi chacun peut accéder. Lecture seule : rien ici n’installe, n’active ni ne modifie quoi que ce soit. Les plugins Navide ont leur propre page.",
-      "summary": "{total} extensions CLI · {l3} exécutent du code dans leur CLI",
+      "summary": "{total} extensions CLI · {l3} s’exécutent dans leur CLI · {l2} lancent des programmes séparés",
       "machineWide": "Un seul ensemble par CLI pour toute la machine : chaque pane Navide et chaque compte de cette CLI chargent les mêmes.",
       "rescan": "Réanalyser",
       "loading": "Analyse…",
@@ -1482,12 +1483,12 @@
       "inferredHint": "Déduit du texte source ; le manifeste de la CLI ne l’indique pas.",
       "tier": {
         "L1": "Texte uniquement",
-        "L2": "Exécute des commandes shell",
+        "L2": "Lance des programmes séparés",
         "L3": "S’exécute dans la CLI"
       },
       "tierHint": {
         "L1": "Instructions et autres textes uniquement ; rien ne s’exécute tout seul.",
-        "L2": "Exécute des commandes dans un sous-processus (hooks, MCP, LSP) avec les autorisations de votre compte utilisateur.",
+        "L2": "Lance un programme séparé (une commande de hook, ou un serveur MCP ou LSP) avec les autorisations de votre compte utilisateur.",
         "L3": "S’exécute dans le processus même de la CLI, avec ses autorisations et sans demande d’autorisation."
       },
       "capability": {
@@ -1892,6 +1893,7 @@
       },
       "nativeBackends": {
         "title": "Programmes des plugins Navide",
+        "summary": "Le code natif s’exécute dans un bac à sable, mais un plugin Navide qui exécute aussi git, gh et glab (signalé à haut risque ci-dessous) peut s’en servir pour contacter des hôtes réseau, envoyer des données de l’espace de travail et en modifier les fichiers.",
         "description": "Certains plugins Navide contiennent du code natif. Navide l’exécute dans un bac à sable sans accès réseau propre ; il ne peut lire que les espaces de travail que vous ouvrez avec lui, et ne modifier des fichiers que là où vous l’autorisez. Un plugin Navide qui exécute aussi des commandes git, gh et glab (signalé comme à haut risque ci-dessous) peut, par leur intermédiaire, contacter des hôtes réseau et envoyer des données de l’espace de travail, ainsi que lire et modifier des fichiers de l’espace de travail sans cette autorisation. Tant que le commutateur ci-dessous est activé, installer un plugin Navide doté de code natif autorise son exécution ; le désactiver les arrête tous.",
         "enable": "Autoriser les plugins Navide tiers à exécuter leurs propres programmes",
         "offUnsaved": "Les backends natifs tiers sont désactivés pour l’instant, mais Navide n’a pas pu l’enregistrer. Ils seront de nouveau activés au redémarrage de Navide.",
@@ -1938,6 +1940,7 @@
       },
       "bundled": "Fournis",
       "listTitle": "Installés",
+      "installedTitle": "Plugins Navide installés",
       "developerNative": "Développeur et code natif",
       "pageOn": "Activé",
       "developerOnMarker": "Dév.",
@@ -2460,7 +2463,7 @@
       "download-retry": "Relancer le téléchargement"
     },
     "general": {
-      "auto-resume-reconnect": "Reprendre les sessions après un redémarrage du backend",
+      "auto-resume-reconnect": "Reprendre les sessions après un redémarrage du service d’arrière-plan de Navide",
       "resume-interrupted-on-launch": "Reprendre les panes actifs après le redémarrage de Navide",
       "system-notify": "Notifications système",
       "system-notify-hint": "Afficher une notification de bureau quand une CLI termine son tour ou attend votre saisie pendant que Navide est en arrière-plan. Le badge du Dock continue de compter dans tous les cas.",
@@ -2475,7 +2478,7 @@
         "unknown": "Pas encore testé.",
         "not-applicable": "Non disponible sur cette plateforme."
       },
-      "auto-resume-reconnect-hint": "Reprend automatiquement les conversations des panes visibles quand le backend revient après un plantage.",
+      "auto-resume-reconnect-hint": "Reprend automatiquement les conversations des panes visibles quand le service d’arrière-plan de Navide revient après un plantage.",
       "resume-interrupted-on-launch-hint": "Après un redémarrage, rouvre jusqu’à 6 panes qui étaient en plein tour ou attendaient une question, sans les relancer avant que vous cliquiez sur Continuer ou que leur pane parent le demande.",
       "confirm-close-pane": "Confirmer avant de fermer un pane",
       "confirm-close-pane-hint": "Demander confirmation avant que le raccourci de fermeture ne ferme un pane CLI. Un pane dont un tour est en cours demande toujours, quel que soit ce paramètre.",
@@ -3321,7 +3324,7 @@
           "h3": "Processus orphelins et backend",
           "orphans": {
             "leftover": "<strong>Processus CLI restants</strong> : lorsque <code>⚠ N résiduels</code> apparaît dans la barre d’état, un clic dessus demande « N processus CLI résiduels d’une exécution précédente ont été trouvés ; ils peuvent épuiser la mémoire. Les nettoyer ? », avec <em>Nettoyer</em> pour les supprimer et <em>Ignorer</em> pour passer. Ce sont des processus que l’exécution précédente n’a pas nettoyés.",
-            "backend": "<strong>Backend</strong> : cliquer sur la pastille Backend de la barre d’état affiche l’adresse et le PID, ainsi que deux boutons : <em>Redémarrer</em> (<em>Démarrer</em> en l’absence de liaison) et <em>Arrêter</em> (uniquement lorsque la liaison est établie). <strong>Redémarrer le backend emporte tous les processus CLI</strong> ; pour que les conversations reprennent automatiquement à son retour, activez <em>Reprendre les sessions après un redémarrage du backend</em> dans l’onglet Général.",
+            "backend": "<strong>Backend</strong> : cliquer sur la pastille Backend de la barre d’état affiche l’adresse et le PID, ainsi que deux boutons : <em>Redémarrer</em> (<em>Démarrer</em> en l’absence de liaison) et <em>Arrêter</em> (uniquement lorsque la liaison est établie). <strong>Redémarrer le backend emporte tous les processus CLI</strong> ; pour que les conversations reprennent automatiquement à son retour, activez <em>Reprendre les sessions après un redémarrage du service d’arrière-plan de Navide</em> dans l’onglet Général.",
             "timeout": "Si le backend signale une erreur parce qu’il démarre trop lentement, augmentez <em>Délai de démarrage du backend</em> (15–120 secondes) dans l’onglet Apparence."
           },
           "h4": "L’entretien en un coup d’œil",
@@ -7202,7 +7205,7 @@
       },
       "share": {
         "title": "Liens de partage",
-        "hint": "Liens en lecture seule vers un plan ou un rapport, chiffrés sur cette machine. La clé ne voyage que dans le lien ; le serveur stocke un texte chiffré qu’il ne peut pas ouvrir.",
+        "hint": "Liens en lecture seule vers un plan ou un rapport, chiffrés sur cette machine. La clé ne voyage que dans le lien : le serveur ne peut donc pas lire ce qu’il stocke.",
         "col-item": "Élément",
         "col-creator": "Créé par",
         "col-created": "Créé",
@@ -7235,7 +7238,7 @@
     },
     "sync": {
       "title": "Synchronisation",
-      "hint": "Activez une section pour la garder identique sur chaque appareil connecté à ce compte. Les enregistrements sont chiffrés sur cette machine ; le serveur stocke un texte chiffré dont il n’a pas la clé.",
+      "hint": "Activez une section pour la garder identique sur chaque appareil connecté à ce compte. Les enregistrements sont chiffrés sur cette machine : le serveur ne peut donc pas les lire.",
       "not-yet": "Pas encore synchronisable.",
       "retired-memory": "La mémoire n’est plus synchronisée. Désactivez-la ; vos fichiers d’instructions d’ici et les copies dans le cloud restent en l’état.",
       "not-connected": "Non connecté – les sections synchronisées rattraperont leur retard au retour de la connexion.",

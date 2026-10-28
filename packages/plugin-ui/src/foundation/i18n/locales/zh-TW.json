@@ -1260,6 +1260,7 @@
     "toggle-replace": "切換取代（⌘H）",
     "delete-pipeline": "刪除此管線",
     "open": "開啟",
+    "learn-more": "了解更多",
     "view-as-list": "檢視為清單",
     "view-as-tree": "檢視為樹狀",
     "show-ignored-files": "顯示忽略的檔案",
@@ -1466,7 +1467,7 @@
       "tabInstalled": "已安裝的 CLI 擴充",
       "tabConvenience": "Navide 做的修改",
       "intro": "每個 AI CLI 為自己安裝的 CLI 擴充（Claude plugin 與 mod、Codex hook、Pi extension 等），以及各自能碰到什麼。這裡只讀取，不會安裝、啟用或修改任何東西。Navide 外掛另有專頁。",
-      "summary": "{total} 個 CLI 擴充 · 其中 {l3} 個在 CLI 程序內執行程式碼",
+      "summary": "{total} 個 CLI 擴充 · 其中 {l3} 個在 CLI 內執行，{l2} 個執行獨立程式",
       "machineWide": "每家 CLI 整台機器只有一份：Navide 裡這家 CLI 的每個 pane、每個帳號，都會載入同一套。",
       "rescan": "重新掃描",
       "loading": "掃描中…",
@@ -1482,12 +1483,12 @@
       "inferredHint": "這些能力是從原始碼文字推定的，CLI 的 manifest 沒有宣告。",
       "tier": {
         "L1": "僅文字",
-        "L2": "執行 shell 指令",
+        "L2": "執行獨立程式",
         "L3": "在 CLI 內執行"
       },
       "tierHint": {
         "L1": "只有指令、說明之類的文字，不會自己執行。",
-        "L2": "會以子程序執行命令（hook、MCP、LSP），權限跟你的使用者帳號一樣。",
+        "L2": "會啟動一個獨立程式（hook 命令，或 MCP、LSP 伺服器），權限跟你的使用者帳號一樣。",
         "L3": "在 CLI 自己的程序裡執行，權限跟 CLI 一樣，而且不會跳出權限提示。"
       },
       "capability": {
@@ -1892,6 +1893,7 @@
       },
       "nativeBackends": {
         "title": "Navide 外掛內含的程式",
+        "summary": "原生程式碼在沙箱中執行，但同時會執行 git、gh、glab 的 Navide 外掛（下方標為高風險）能透過它們連線到網路主機、送出工作區資料並修改工作區檔案。",
         "description": "部分 Navide 外掛內含原生程式。Navide 會把它放在沙盒裡執行，它本身沒有網路：只能讀取你一起開啟的工作區，也只能在你允許的地方修改檔案。但同時會執行 git、gh、glab 指令的 Navide 外掛（下方標示為高風險）可以透過這些指令連到網路主機、送出工作區資料，也可以不經上述允許就讀取與修改工作區檔案。下方開關開啟時，安裝含原生程式碼的 Navide 外掛即代表允許它執行；關閉開關可停用全部。",
         "enable": "允許第三方 Navide 外掛執行自帶的程式",
         "offUnsaved": "第三方原生後端目前已關閉，但 Navide 無法儲存這個設定，重新啟動 Navide 後會再變回開啟。",
@@ -1938,6 +1940,7 @@
       },
       "bundled": "內建",
       "listTitle": "已安裝",
+      "installedTitle": "已安裝的 Navide 外掛",
       "developerNative": "開發者與原生程式碼",
       "pageOn": "已開啟",
       "developerOnMarker": "開發",
@@ -2460,7 +2463,7 @@
       "download-retry": "重新下載"
     },
     "general": {
-      "auto-resume-reconnect": "後端重啟後自動接回工作階段",
+      "auto-resume-reconnect": "Navide 背景服務重啟後自動接回工作階段",
       "resume-interrupted-on-launch": "重開 Navide 後自動接回工作中的 pane",
       "system-notify": "系統通知",
       "system-notify-hint": "Navide 在背景時，CLI 完成回合或需要你輸入會送出桌面通知。Dock 徽章的計數不受此開關影響。",
@@ -2475,7 +2478,7 @@
         "unknown": "尚未測試。",
         "not-applicable": "此平台不提供。"
       },
-      "auto-resume-reconnect-hint": "後端當掉恢復後，自動接續可見 pane 的對話。",
+      "auto-resume-reconnect-hint": "Navide 背景服務當掉恢復後，自動接續可見 pane 的對話。",
       "resume-interrupted-on-launch-hint": "重開後重新開啟最多 6 個正在跑回合或等待詢問的 pane；按「繼續」或由母 pane 下令前不會續跑。",
       "confirm-close-pane": "關閉 pane 前確認",
       "confirm-close-pane-hint": "用關閉 pane 快捷鍵關閉 CLI pane 前先跳出確認。執行中的 pane 一律會確認，不受此設定影響。",
@@ -3321,7 +3324,7 @@
           "h3": "孤兒行程與 Backend",
           "orphans": {
             "leftover": "<strong>殘留的 CLI 行程</strong> — 狀態列出現 <code>⚠ N 殘留</code> 時點開，會問「偵測到 N 個先前殘留的 CLI 程序 — 可能耗盡記憶體。要清理嗎？」，按 <em>清理</em> 清掉、<em>關閉</em> 略過。這些是上一輪執行沒收乾淨的行程。",
-            "backend": "<strong>Backend</strong> — 狀態列的 Backend 藥丸點開有位址、PID，以及兩顆鈕：<em>Restart</em>（沒連上時顯示 <em>Start</em>）與 <em>Stop</em>（只有連上時能按）。<strong>重啟 Backend 會一併帶走所有 CLI 行程</strong>；想讓它回來之後自動接續對話，就把一般分頁的 <em>後端重啟後自動接回工作階段</em> 開啟。",
+            "backend": "<strong>Backend</strong> — 狀態列的 Backend 藥丸點開有位址、PID，以及兩顆鈕：<em>Restart</em>（沒連上時顯示 <em>Start</em>）與 <em>Stop</em>（只有連上時能按）。<strong>重啟 Backend 會一併帶走所有 CLI 行程</strong>；想讓它回來之後自動接續對話，就把一般分頁的 <em>Navide 背景服務重啟後自動接回工作階段</em> 開啟。",
             "timeout": "Backend 起太慢而報錯時，調一般分頁的 <em>後端啟動逾時</em>（15–120 秒）。"
           },
           "h4": "維護動作速查",
@@ -7202,7 +7205,7 @@
       },
       "share": {
         "title": "分享連結",
-        "hint": "在這台機器上加密的 plan 或報告唯讀連結。鑰匙只存在連結裡，伺服器只儲存它打不開的密文。",
+        "hint": "在這台機器上加密的 plan 或報告唯讀連結。鑰匙只存在連結裡，所以伺服器讀不到它儲存的內容。",
         "col-item": "項目",
         "col-creator": "建立者",
         "col-created": "建立時間",
@@ -7235,7 +7238,7 @@
     },
     "sync": {
       "title": "同步",
-      "hint": "開啟一個區塊，它就會在登入同一個帳號的每台裝置上保持一致。內容在本機加密，伺服器只存它沒有金鑰的密文。",
+      "hint": "開啟一個區塊，它就會在登入同一個帳號的每台裝置上保持一致。內容在本機加密，所以伺服器讀不到。",
       "not-yet": "尚未支援同步。",
       "retired-memory": "記憶已不再同步。請關閉這個開關；這台的指示檔和雲端上的副本都會維持原樣，不會被改動或刪除。",
       "not-connected": "未連線——已開啟的區塊會在連線恢復後自動補上。",

@@ -1607,7 +1607,7 @@ watch(installed, () => {
 }
 .ext-badge.ext-md-risk--medium {
   background: var(--attention-subtle);
-  color: var(--attention-fg);
+  color: var(--attention-on-subtle);
 }
 .ext-badge.ext-md-risk--high {
   background: var(--warning-fg);

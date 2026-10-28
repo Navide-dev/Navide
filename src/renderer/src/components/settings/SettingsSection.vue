@@ -19,6 +19,12 @@ defineProps<{
 .settings-section {
   margin-top: var(--space-group);
 }
+/* A section right under the page title starts at the title's own spacing.
+   The page's rule for this misses a section that is the root of a
+   multi-root pane (Voice Input), so the section carries it too. */
+.s-page-title + .settings-section {
+  margin-top: 0;
+}
 .settings-section-label {
   font-size: var(--font-row-desc);
   font-weight: 600;

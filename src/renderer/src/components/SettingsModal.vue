@@ -295,14 +295,19 @@ const visitedCliExtensions = ref(activeTab.value === 'cliExtensions')
 // Navide Plugins is four pages under its sidebar entry: the plugins, the
 // execution policy, developer and native settings, and the disclosure records.
 type PluginsPage = 'plugins' | 'policy' | 'developer' | 'disclosure'
+// `title` is the page heading where the sidebar label alone ("Installed")
+// would lose its parent.
 const pluginsPages = [
-  { id: 'plugins', label: 'settings.extensions.listTitle' },
+  { id: 'plugins', label: 'settings.extensions.listTitle', title: 'settings.extensions.installedTitle' },
   { id: 'policy', label: 'settings.nav.executionPolicy' },
   { id: 'developer', label: 'settings.extensions.developerNative' },
   { id: 'disclosure', label: 'settings.nav.disclosureOverview' },
-] as const satisfies ReadonlyArray<{ id: PluginsPage; label: string }>
+] as const satisfies ReadonlyArray<{ id: PluginsPage; label: string; title?: string }>
 const pluginsPage = ref<PluginsPage>('plugins')
-const pluginsPageLabel = computed(() => pluginsPages.find((page) => page.id === pluginsPage.value)!.label)
+const pluginsPageTitle = computed(() => {
+  const page: { label: string; title?: string } = pluginsPages.find((entry) => entry.id === pluginsPage.value)!
+  return page.title ?? page.label
+})
 // The pages split what used to be one scrolling page, so each page's state shows
 // on its row before it is opened: ⚠ on Execution Policy while that page shows a
 // warning, "On" on Developer while Developer Mode or a native-backend switch is on.
@@ -364,12 +369,33 @@ const navRef = ref<HTMLElement | null>(null)
 // The Navide Plugins page counts too: picking one of its rows (or a search hit
 // opening one) can land on a row below the fold. `navRef` is inside
 // `.s-sidebar`, the element that actually scrolls.
-watch([activeTab, pluginsPage], () => {
+// The sticky title and search sit over the top of that scroller: their
+// height feeds its scroll-padding-top, so a revealed row lands below them.
+const sidebarHeadRef = ref<HTMLElement | null>(null)
+let sidebarHeadObserver: ResizeObserver | null = null
+function measureSidebarHead(): void {
+  const head = sidebarHeadRef.value
+  if (!head) return
+  head.parentElement?.style.setProperty('--s-sidebar-head-h', `${head.offsetHeight}px`)
+}
+function revealActiveNavRow(): void {
   const nav = navRef.value
   const row = nav?.querySelector<HTMLElement>('.settings-nav-subitem.active')
     ?? nav?.querySelector<HTMLElement>('.settings-nav-item.active')
   row?.scrollIntoView?.({ block: 'nearest' })
-}, { immediate: true, flush: 'post' })
+}
+watch([activeTab, pluginsPage], revealActiveNavRow, { flush: 'post' })
+// Opening Settings (on any page) reveals its row too: an immediate watcher
+// would run before the sidebar exists.
+onMounted(() => {
+  measureSidebarHead()
+  if (typeof ResizeObserver !== 'undefined' && sidebarHeadRef.value) {
+    sidebarHeadObserver = new ResizeObserver(measureSidebarHead)
+    sidebarHeadObserver.observe(sidebarHeadRef.value)
+  }
+  void nextTick(revealActiveNavRow)
+})
+onBeforeUnmount(() => { sidebarHeadObserver?.disconnect() })
 // D-f: the disclosure overview reads every plugin's activity, so it mounts the
 // first time its page is shown (opening Settings, or another page, reads
 // nothing), and it polls only while that page is shown.
@@ -2707,7 +2733,7 @@ watch(activeTab, (tab) => {
         <!-- ── Sidebar (title + search + grouped nav) ────────────────────── -->
         <aside class="s-sidebar" :inert="!!selectedCliKey">
           <!-- Title and search stay put; only the list below them scrolls. -->
-          <div class="s-sidebar-head">
+          <div ref="sidebarHeadRef" class="s-sidebar-head">
           <div class="s-ws-header">
             <div class="s-ws-avatar" aria-hidden="true">
               <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7 3.4 3.4"/></svg>
@@ -2915,11 +2941,17 @@ watch(activeTab, (tab) => {
           <template v-if="mView === 'list'">
             <!-- Page title, the scope strip, then one toolbar row: the list's
                  own header carries these actions next to its one Refresh. -->
-            <div class="settings-meta-row" data-settings-section="mcp-installed">
-              <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-              <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
-              <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.mcp.storage) }" v-truncate>{{ pathForTab('mcp') }}</span>
-              <button class="settings-path-btn" :disabled="!settingsPaths.mcp" @click="openSettingsPath(settingsPaths.mcp)">{{ $t('action.open') }}</button>
+            <div class="settings-meta-row settings-meta-row--paths" data-settings-section="mcp-installed">
+              <span class="settings-meta-scope">
+                <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
+                <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
+              </span>
+              <span class="settings-meta-paths">
+                <span class="settings-meta-path">
+                  <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.mcp.storage) }" v-truncate>{{ pathForTab('mcp') }}</span>
+                  <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.mcp" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.mcp)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+                </span>
+              </span>
             </div>
             <p v-if="mError" class="err-msg" style="margin:6px 22px 0">{{ mError }}</p>
             <div v-if="mConflict" class="mcp-conflict">
@@ -3088,11 +3120,17 @@ watch(activeTab, (tab) => {
         <!-- ── SKILLS TAB ───────────────────────────────────────────────── -->
         <div v-show="activeTab === 'skills'" class="s-body s-body--bleed s-body--wide" data-settings-section="skills">
           <h1 class="s-page-title">{{ $t('settings.nav.skills') }}</h1>
-          <div class="settings-meta-row">
-            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
-            <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.skills.storage) }" v-truncate>{{ pathForTab('skills') }}</span>
-            <button class="settings-path-btn" :disabled="!settingsPaths.skills" @click="openSettingsPath(settingsPaths.skills)">{{ $t('action.open') }}</button>
+          <div class="settings-meta-row settings-meta-row--paths">
+            <span class="settings-meta-scope">
+              <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
+              <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
+            </span>
+            <span class="settings-meta-paths">
+              <span class="settings-meta-path">
+                <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.skills.storage) }" v-truncate>{{ pathForTab('skills') }}</span>
+                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.skills" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.skills)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+              </span>
+            </span>
           </div>
           <SkillsPane :backend="props.backend" />
         </div>
@@ -3136,15 +3174,24 @@ watch(activeTab, (tab) => {
         <!-- ── ANALYZER TAB ─────────────────────────────────────────────── -->
         <div v-show="activeTab === 'analyzer'" class="s-body s-body--bleed analyzer-body">
           <h1 class="s-page-title">{{ $t('settings.nav.analyzer') }}</h1>
-          <div class="settings-meta-row">
-            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
-            <PathText class="settings-path settings-path--wrap" :path="settingsPaths.analyzer" />
-            <button class="settings-path-btn" :disabled="!settingsPaths.analyzer" @click="openSettingsPath(settingsPaths.analyzer)">{{ $t('action.open') }}</button>
-            <span class="settings-path-divider">·</span>
-            <span class="settings-meta-label">{{ $t('settings.analyzer.ai-keys-label') }}</span>
-            <PathText class="settings-path settings-path--wrap" :path="settingsPaths.ai_chat" />
-            <button class="settings-path-btn" :disabled="!settingsPaths.ai_chat" @click="openSettingsPath(settingsPaths.ai_chat)">{{ $t('action.open') }}</button>
+          <!-- Scope on the left; each file on a line of its own, shortened in
+               the middle, with its open button at the end. -->
+          <div class="settings-meta-row settings-meta-row--paths">
+            <span class="settings-meta-scope">
+              <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
+              <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
+            </span>
+            <span class="settings-meta-paths">
+              <span class="settings-meta-path">
+                <PathText class="settings-path" :path="settingsPaths.analyzer" :max="56" />
+                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.analyzer" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.analyzer)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+              </span>
+              <span class="settings-meta-path">
+                <span class="settings-meta-label">{{ $t('settings.analyzer.ai-keys-label') }}</span>
+                <PathText class="settings-path" :path="settingsPaths.ai_chat" :max="48" />
+                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.ai_chat" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.ai_chat)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+              </span>
+            </span>
           </div>
 
           <!-- ① Inference backend -->
@@ -3451,7 +3498,7 @@ watch(activeTab, (tab) => {
                    action never lands alone on a line of its own. -->
               <div class="cli-agent-toolbar-controls">
                 <div class="cli-agent-filters" :aria-label="$t('settings.cliAgents.filter-label')">
-                  <button v-for="filter in (['all', 'enabled', 'attention'] as const)" :key="filter" type="button" class="cli-filter-chip" :data-cli-filter="filter" :aria-pressed="cliFilter === filter" @click="cliFilter = filter">{{ $t(`settings.cliAgents.filter-${filter}`) }}</button>
+                  <button v-for="filter in (['all', 'enabled', 'attention'] as const)" :key="filter" type="button" class="cli-filter-chip settings-filter-chip" :data-cli-filter="filter" :aria-pressed="cliFilter === filter" @click="cliFilter = filter">{{ $t(`settings.cliAgents.filter-${filter}`) }}<span class="count">{{ filter === 'all' ? cliAgentRows.length : filter === 'enabled' ? cliEnabledCount : cliAgentRows.filter((row) => row.needsAttention).length }}</span></button>
                 </div>
                 <button type="button" :disabled="onboarding.loading.value" @click="onboarding.refresh({ fresh: true })">{{ $t('cli-manage.redetect') }}</button>
               </div>
@@ -3477,7 +3524,9 @@ watch(activeTab, (tab) => {
                   <span class="cli-agent-grip" :title="$t('settings.cliAgents.drag-hint')" aria-hidden="true">⠿</span>
                   <span class="cli-card-icon" aria-hidden="true">{{ cardInitials(row.label) }}</span>
                   <span class="cli-agent-label">{{ row.label }}</span>
-                  <span v-if="row.needsAttention && row.installed" class="cli-card-attention" :title="$t('settings.cliAgents.filter-attention')" :aria-label="$t('settings.cliAgents.filter-attention')">!</span>
+                  <!-- An installed CLI needs attention when it is outdated: the mark names
+                       what (the install chip's "Update available …"), not just that. -->
+                  <span v-if="row.needsAttention && row.installed" class="cli-card-attention" role="img" :title="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')" :aria-label="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')">!</span>
                 </div>
                 <div class="cli-card-status">
                   <span v-for="chip in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id" v-truncate class="cli-chip" :class="`cli-chip--${chip.tone}`">{{ chip.label }}</span>
@@ -4151,10 +4200,8 @@ watch(activeTab, (tab) => {
              of the longest page in this window, which is where somebody
              told "open the rules" went looking and did not find them. -->
         <div v-show="activeTab === 'cross-device'" class="s-body cross-device-body">
-          <h1 class="s-page-title nvc-page-title">
-            <span class="nvc-page-mark" aria-hidden="true"><NavideCloudMark /></span>
-            {{ $t('settings.nav.crossDevice') }}
-          </h1>
+          <!-- A plain title like every other page; the mark stays on its sidebar row. -->
+          <h1 class="s-page-title">{{ $t('settings.nav.crossDevice') }}</h1>
           <CloudSubtabs v-model="cloudSubtab" :enabled="cloudSubtabsShown" :tabs="cloudTabs">
           <template #sync>
           <SyncSettings v-show="cloudSubtab === 'sync'" :backend="props.backend" />
@@ -4729,7 +4776,7 @@ watch(activeTab, (tab) => {
              the disclosure records. The scope badge sits on the policy page,
              because the policy is the part that is per user and per workspace. -->
         <div v-show="activeTab === 'extensions'" class="s-body s-body--bleed extensions-body" data-settings-section="extensions">
-          <h1 class="s-page-title">{{ $t(pluginsPageLabel) }}</h1>
+          <h1 class="s-page-title">{{ $t(pluginsPageTitle) }}</h1>
           <!-- In the icon-only sidebar the pages have no rows of their own there. -->
           <div class="ext-pages" role="tablist" :aria-label="$t('settings.nav.extensions')">
             <button
@@ -4940,11 +4987,19 @@ watch(activeTab, (tab) => {
   overflow-y: auto;
   background: var(--bg-inset);
   border-right: 1px solid var(--border-default);
-  padding: var(--space-3, 12px) var(--space-2, 8px);
+  /* No top padding: the sticky head carries it, so nothing scrolls into a
+     gap above the head. scroll-padding-top keeps a row revealed by
+     scrollIntoView below the head (its height is measured into the
+     variable). */
+  padding: 0 var(--space-2, 8px) var(--space-3, 12px);
   gap: var(--space-2, 8px);
+  scroll-padding-top: calc(var(--s-sidebar-head-h, 96px) + var(--space-1, 4px));
+  scroll-padding-bottom: var(--space-2, 8px);
 }
-/* The title and search stick to the top of the scrolling sidebar on its own
-   background, so only the nav list scrolls under them. */
+/* The title and search stick to the top of the scrolling sidebar on an
+   opaque copy of its background, across its full width (the sidebar's side
+   padding included), with a hairline under it, so only the nav list scrolls
+   and no row shows above, beside or through it. */
 .s-sidebar-head {
   position: sticky;
   top: 0;
@@ -4952,9 +5007,10 @@ watch(activeTab, (tab) => {
   display: flex;
   flex-direction: column;
   gap: var(--space-2, 8px);
-  margin: calc(-1 * var(--space-3, 12px)) calc(-1 * var(--space-2, 8px)) 0;
-  padding: var(--space-3, 12px) var(--space-2, 8px) var(--space-1, 4px);
+  margin: 0 calc(-1 * var(--space-2, 8px));
+  padding: var(--space-3, 12px) var(--space-2, 8px) var(--space-2, 8px);
   background: var(--bg-inset);
+  border-bottom: 1px solid var(--border-muted);
 }
 .s-ws-header {
   display: flex;
@@ -5037,10 +5093,10 @@ watch(activeTab, (tab) => {
     grid-template-columns: 56px minmax(0, 1fr);
   }
   .s-sidebar {
-    padding: var(--space-2, 8px) 4px;
+    padding: 0 4px var(--space-2, 8px);
   }
   .s-sidebar-head {
-    margin: calc(-1 * var(--space-2, 8px)) -4px 0;
+    margin: 0 -4px;
     padding: var(--space-2, 8px) 4px var(--space-1, 4px);
   }
   .s-ws-header {
@@ -5174,15 +5230,9 @@ watch(activeTab, (tab) => {
   /* The toolbar wraps; a label never breaks across two lines. */
   white-space: nowrap;
 }
-/* List filters share one chip look with MCP and Skills: a pill, the pressed
-   one raised and bold rather than tinted with the accent. */
+/* List filters are the shared .settings-filter-chip (Skills, Prompts,
+   Shortcuts use it too). */
 .cli-agent-filters { gap: 4px; }
-.cli-agent-toolbar .cli-filter-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  min-height: var(--control-h-md); padding: 3px 9px;
-  border-radius: var(--radius-pill); background: var(--bg-muted);
-}
-.cli-agent-toolbar .cli-filter-chip[aria-pressed='true'] { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
 .cli-agent-toolbar button:disabled { opacity: .6; cursor: default; }
 .cli-agent-count { margin: 10px 0 14px; }
 .cli-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 12px; list-style: none; padding: 0; margin: 0; max-width: 100%; }
@@ -5226,9 +5276,10 @@ watch(activeTab, (tab) => {
 .cli-agent-drawer .env-name { display: table-cell; overflow-wrap: anywhere; }
 .cli-drawer-enter-active .cli-agent-drawer, .cli-drawer-leave-active .cli-agent-drawer { transition: transform .18s ease; }
 .cli-drawer-enter-from .cli-agent-drawer, .cli-drawer-leave-to .cli-agent-drawer { transform: translateX(100%); }
+/* The roster keeps the shared 18px/22px page gutter at every width, so its
+   title lines up with every other page's. */
 @media (max-width: 960px) {
   .cli-agent-drawer { width: 100%; border-left: 0; }
-  .cli-agent-roster { padding: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cli-drawer-enter-active .cli-agent-drawer, .cli-drawer-leave-active .cli-agent-drawer { transition: none; }
@@ -5250,9 +5301,11 @@ watch(activeTab, (tab) => {
   padding: 0 8px; border-radius: 99px; white-space: nowrap;
   border: 1px solid var(--border-default); background: var(--bg-muted); color: var(--text-secondary);
 }
-.cli-chip--ok { color: var(--success-fg, #2b8a3e); border-color: transparent; }
-.cli-chip--warn { color: var(--attention-fg, #c77400); border-color: transparent; }
-.cli-chip--bad { color: var(--danger-fg, #c0392b); border-color: transparent; }
+/* Status chips are tinted pills like their neutral siblings, never bare
+   coloured text; text on a subtle tint uses the tone's on-subtle colour. */
+.cli-chip--ok { color: var(--success-on-subtle, #2b8a3e); background: var(--success-subtle); border-color: var(--success-muted); }
+.cli-chip--warn { color: var(--attention-on-subtle, #c77400); background: var(--attention-subtle); border-color: var(--attention-muted); }
+.cli-chip--bad { color: var(--danger-fg, #c0392b); background: var(--danger-subtle); border-color: var(--danger-muted); }
 /* Neutral and informational chips ("Signed out", "Not installed", a model)
    read in the primary text colour: secondary grey on the muted fill sits too
    close to 4.5:1 in dark themes, and accent is kept for selection and focus. */
@@ -5329,7 +5382,9 @@ watch(activeTab, (tab) => {
   text-align: left;
 }
 .ap-theme-card:hover { border-color: var(--border-strong); background: var(--bg-muted); }
-.ap-theme-card.active { border-color: var(--accent-emphasis); box-shadow: 0 0 0 1px var(--accent-emphasis); }
+/* Selected: a ring in the text colour, set off by a gap, plus the check mark,
+   so it never reads as the blue focus ring (that stays :focus-visible only). */
+.ap-theme-card.active { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--text-primary); }
 .ap-swatches { display: flex; gap: 4px; }
 .ap-swatch { width: 24px; height: 24px; border-radius: var(--radius-sm); border: 1px solid var(--border-muted); }
 .ap-theme-label { font-size: var(--font-xs); font-weight: 500; color: var(--text-primary); }
@@ -5475,21 +5530,27 @@ watch(activeTab, (tab) => {
 }
 .marketplace-view-switch {
   display: flex;
-  gap: var(--space-2);
-  padding: 0 var(--space-5) var(--space-2);
+  gap: 2px;
+  margin: 0 var(--space-5) var(--space-2);
+  border-bottom: 1px solid var(--border-muted);
 }
+/* The same underline tab as the Navide Plugins pages and Help topics. */
 .marketplace-view-tab {
+  min-height: var(--control-h-lg);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  padding: var(--space-1, 4px) var(--space-2);
+  padding: 0 12px;
   color: var(--text-secondary);
-  font-size: var(--font-xs);
+  margin-bottom: -1px;
+  font-size: var(--font-sm);
   cursor: pointer;
 }
+.marketplace-view-tab:hover { color: var(--text-primary); }
 .marketplace-view-tab--active {
   color: var(--text-bright);
-  border-bottom-color: var(--accent-fg);
+  border-bottom-color: var(--accent-emphasis);
+  font-weight: 600;
 }
 /* The Navide Plugins pages as a tab row, only where the sidebar is the
    icon-only rail and has no rows for them. */
@@ -5577,9 +5638,46 @@ watch(activeTab, (tab) => {
   font-family: var(--font-mono);
 }
 .settings-path--prose { font-family: var(--font-ui); }
-/* A shortened path that may wrap, but only after a separator (PathText). */
-.settings-path--wrap { white-space: normal; overflow: visible; }
-.settings-path-divider { color: var(--text-muted); }
+/* With paths: the scope (label + chip) on the left, then one line per file —
+   an optional "label:", the path shortened in the middle (ellipsis as the
+   last resort), and an icon button to open it at the end. No separator ever
+   starts a line, and a narrow page stacks the paths under the scope. */
+.settings-meta-row--paths { align-items: flex-start; }
+.settings-meta-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-height: var(--control-h-sm, 24px);
+}
+.settings-meta-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.settings-meta-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.settings-meta-path > .settings-path {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-path-btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h-sm, 24px);
+  min-height: var(--control-h-sm, 24px);
+  height: var(--control-h-sm, 24px);
+  padding: 0;
+}
 .settings-path-btn {
   flex-shrink: 0;
   border: 1px solid var(--border-default);
@@ -5757,25 +5855,6 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
    page and a rule anybody editing that tab would reasonably assume they
    owned. */
 .cross-device-body { overflow-y: auto; padding: 18px 22px; }
-/* Navide Cloud is the one settings page that names a product rather than a
-   group of controls, so it is the one page title that carries the mark. */
-.nvc-page-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.nvc-page-mark {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--accent-muted);
-  background: var(--accent-subtle);
-  color: var(--accent-fg);
-  --nv-cloud-node-fill: var(--accent-subtle);
-}
-.nvc-page-mark :deep(.nv-cloud-mark) { width: 21px; height: 16px; }
 .nvc-nav-mark { width: 17px; height: 13px; }
 .legal-row {
   display: flex; align-items: center; gap: 6px;
@@ -5826,40 +5905,38 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 /* ── Appearance tab ─────────────────────────────────────────────────────────── */
 .appearance-body { overflow-y: auto; }
 .help-body { overflow-y: auto; padding: 18px 22px; }
-/* One row of tabs at any width: long German labels scroll sideways instead
-   of stacking the tab bar four rows high. */
-/* At narrow widths the topics wrap onto a second row instead of scrolling
-   sideways with the last ones hidden past the edge. */
+/* Help topics are page tabs, so they use the one underline tab style of the
+   Navide Plugins pages and Marketplace views. At narrow widths the topics
+   wrap onto a second row instead of scrolling sideways with the last ones
+   hidden past the edge. */
 .help-topics {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px;
   max-width: 100%;
   flex-shrink: 0;
   margin-bottom: 18px;
-  padding: 3px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-md);
-  background: var(--bg-inset);
-  align-self: flex-start;
+  border-bottom: 1px solid var(--border-muted);
 }
 .help-topic {
   flex: none;
   white-space: nowrap;
+  min-height: var(--control-h-lg);
+  margin-bottom: -1px;
+  padding: 0 12px;
   border: none;
-  background: transparent;
+  border-bottom: 2px solid transparent;
+  background: none;
   color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  font-weight: 400;
   cursor: pointer;
 }
 .help-topic:hover { color: var(--text-primary); }
 .help-topic.active {
-  background: var(--bg-base);
+  border-bottom-color: var(--accent-emphasis);
   color: var(--text-bright);
-  box-shadow: 0 1px 2px var(--shadow-overlay);
+  font-weight: 600;
 }
 
 /* ── MCP tab ──────────────────────────────────────────────────────────────── */
@@ -5880,7 +5957,8 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .mcp-page-title { font-size: var(--font-sm); font-weight: 700; color: var(--text-bright); flex: 1; min-width: 12em; }
 .mcp-topbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .mcp-action-btn {
-  font-size: var(--font-2xs); padding: 5px 11px; border-radius: var(--radius-sm);
+  display: inline-flex; align-items: center; min-height: var(--control-h-md);
+  font-size: var(--font-xs); padding: 0 11px; border-radius: var(--radius-control);
   background: var(--bg-muted); border: 1px solid var(--border-default); color: var(--text-bright); cursor: pointer;
 }
 .mcp-action-btn:hover:not(:disabled) { background: var(--border-default); }
@@ -6188,7 +6266,6 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-gguf-hint,
 .az-section-note,
 .cli-agent-hint,
-.help-topic,
 .hint-msg,
 .mcp-catalog-desc,
 .mcp-catalog-hint,
@@ -6319,18 +6396,88 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .settings-meta-row { color: var(--text-secondary); }
 
 /* One disabled look for every button on a settings page, the panes mounted
-   inside it included: no fill, a quiet frame, secondary text that stays
+   inside it included: no fill, a dashed quiet frame (a plain outline is what
+   an enabled secondary button looks like), secondary text that stays
    readable, and no hover or press feedback. Switches keep their own track. */
 .s-body :deep(button:disabled:not([role='switch'])),
 .s-body :deep(button[aria-disabled='true']:not([role='switch'])) {
   opacity: 1;
   background: transparent;
-  border-color: var(--border-muted);
+  border-color: var(--border-default);
+  border-style: dashed;
   color: var(--text-secondary);
   box-shadow: none;
   transform: none;
   cursor: default;
 }
+
+/* Chinese, Japanese and Korean have no letter case: an uppercase eyebrow
+   only shouts the Latin words inside it ("GUARD の動作", "ANTIGRAVITY CLI
+   (GOOGLE)") and the tracking pulls the characters apart. In those locales
+   section labels and other eyebrows keep their size, weight and colour but
+   drop the transform and the letter-spacing. !important because each pane
+   sets its own eyebrow rule at a higher specificity. */
+.s-modal:is(:lang(ja), :lang(zh), :lang(ko)) :deep(*) {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+/* The one "Learn more" disclosure under a description that would otherwise
+   run past two lines: a quiet accent summary, the folded text in the
+   description's own size and colour. Each place keeps its own margins. */
+.s-body :deep(.settings-more) {
+  font-size: var(--font-row-desc);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.s-body :deep(.settings-more > summary) {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--accent-fg);
+}
+.s-body :deep(.settings-more > p) {
+  margin: 4px 0 0;
+  max-width: 72ch;
+  text-wrap: pretty;
+}
+
+/* The one list filter chip (CLI Agents, Skills, Prompts, Shortcuts): a pill
+   with its count, the chosen one filled with the selection tint. Page tabs
+   are underline tabs and view switches are .settings-segmented. */
+.s-body :deep(.settings-filter-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-h-md);
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-xs);
+  font-weight: 400;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.s-body :deep(.settings-filter-chip:hover:not(:disabled)) { background: var(--bg-hover); }
+.s-body :deep(.settings-filter-chip .count) {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  opacity: 1;
+}
+.s-body :deep(.settings-filter-chip[aria-pressed='true']),
+.s-body :deep(.settings-filter-chip.on),
+.s-body :deep(.settings-filter-chip.active) {
+  border-color: var(--accent-muted);
+  background: var(--bg-selected);
+  color: var(--accent-bright);
+  font-weight: 600;
+}
+.s-body :deep(.settings-filter-chip[aria-pressed='true'] .count),
+.s-body :deep(.settings-filter-chip.on .count),
+.s-body :deep(.settings-filter-chip.active .count) { color: inherit; }
 
 /* The one segmented control for every in-page view switch and mode picker
    (Execution Policy, Analyzer, MCP, Skills, Credentials): one outlined strip
@@ -6376,8 +6523,9 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .s-body :deep(.settings-segmented > button[aria-pressed='true']),
 .s-body :deep(.settings-segmented > button[aria-selected='true']),
 .s-body :deep(.settings-segmented > label:has(input:checked)) {
-  background: var(--accent-subtle);
-  color: var(--accent-fg);
+  /* A filled tint (the sidebar's selection fill), not just a coloured label. */
+  background: var(--bg-selected);
+  color: var(--accent-bright);
   font-weight: 600;
 }
 .s-body :deep(.settings-segmented > button:focus-visible),

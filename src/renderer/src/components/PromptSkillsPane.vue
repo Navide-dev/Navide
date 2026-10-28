@@ -213,7 +213,7 @@ function applyCustomIcon(): void {
       <div class="prompts-chips" role="group" :aria-label="t('settings.prompts.filter-label')">
         <button
           type="button"
-          class="prompts-chip"
+          class="prompts-chip settings-filter-chip"
           :class="{ on: categoryFilter === 'all' }"
           :aria-pressed="categoryFilter === 'all'"
           @click="categoryFilter = 'all'"
@@ -222,7 +222,7 @@ function applyCustomIcon(): void {
           v-for="c in categories"
           :key="c.key"
           type="button"
-          class="prompts-chip"
+          class="prompts-chip settings-filter-chip"
           :class="{ on: categoryFilter === c.key }"
           :aria-pressed="categoryFilter === c.key"
           @click="categoryFilter = c.key"
@@ -493,7 +493,8 @@ textarea:focus {
 .prompts-toolbar p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: var(--font-xs);
+  font-size: var(--font-row-desc);
+  line-height: 1.5;
 }
 
 /* ── Filter bar ───────────────────────────────────────────────────────── */
@@ -508,24 +509,7 @@ textarea:focus {
   flex-wrap: wrap;
   gap: 4px;
 }
-.prompts-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-2xs);
-}
-.prompts-chip.on {
-  background: var(--bg-elevated);
-  color: var(--text-bright);
-  font-weight: 600;
-}
-.prompts-chip .count {
-  font-size: var(--font-2xs);
-  opacity: 0.6;
-  font-variant-numeric: tabular-nums;
-}
+/* The chips are the Settings window's shared .settings-filter-chip. */
 .prompts-search {
   flex: 1;
   min-width: 140px;

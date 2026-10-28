@@ -89,7 +89,7 @@ function ruleLabel(rule: string): string {
 <template>
   <SettingsSection :label="t('guard.terminal.title')" data-testid="terminal-protection">
     <p class="tp-hint">{{ t('guard.terminal.hint') }}</p>
-    <details class="tp-more">
+    <details class="tp-more settings-more">
       <summary>{{ t('guard.terminal.more') }}</summary>
       <p>{{ t('guard.terminal.hint-detail') }}</p>
     </details>

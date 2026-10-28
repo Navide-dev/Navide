@@ -1260,6 +1260,7 @@
     "toggle-replace": "바꾸기 전환 (⌘H)",
     "delete-pipeline": "이 pipeline 삭제",
     "open": "열기",
+    "learn-more": "자세히 보기",
     "view-as-list": "목록으로 보기",
     "view-as-tree": "트리로 보기",
     "show-ignored-files": "무시된 파일 표시",
@@ -1466,7 +1467,7 @@
       "tabInstalled": "설치된 CLI 확장",
       "tabConvenience": "Navide가 변경하는 내용",
       "intro": "각 AI CLI가 스스로 설치한 항목(Claude plugin과 mod, Codex hook, Pi extension 등)과 각 항목이 접근할 수 있는 범위예요. 읽기 전용이라 여기서는 아무것도 설치·사용·변경하지 않아요. Navide 플러그인은 별도 페이지가 있어요.",
-      "summary": "CLI 확장 {total}개 · {l3}개는 CLI 안에서 코드를 실행해요",
+      "summary": "CLI 확장 {total}개 · {l3}개는 CLI 안에서 실행 · {l2}개는 별도 프로그램 실행",
       "machineWide": "CLI마다 컴퓨터 전체에 한 세트예요. 그 CLI의 모든 Navide pane과 계정이 같은 항목을 불러와요.",
       "rescan": "다시 검색",
       "loading": "검색하는 중…",
@@ -1482,12 +1483,12 @@
       "inferredHint": "소스 텍스트에서 읽은 내용이에요. CLI의 매니페스트에는 명시되어 있지 않아요.",
       "tier": {
         "L1": "텍스트만",
-        "L2": "셸 명령 실행",
+        "L2": "별도 프로그램 실행",
         "L3": "CLI 안에서 실행"
       },
       "tierHint": {
         "L1": "지시문과 기타 텍스트만 있어요. 스스로 실행되는 것은 없어요.",
-        "L2": "사용자 권한으로 하위 프로세스(hook, MCP, LSP)에서 명령을 실행해요.",
+        "L2": "사용자 권한으로 별도 프로그램(hook 명령, MCP 또는 LSP 서버)을 시작해요.",
         "L3": "CLI 자체 프로세스 안에서 CLI의 권한으로, 권한 확인 없이 실행돼요."
       },
       "capability": {
@@ -1892,6 +1893,7 @@
       },
       "nativeBackends": {
         "title": "Navide 플러그인에 포함된 프로그램",
+        "summary": "네이티브 코드는 샌드박스에서 실행되지만, git, gh, glab도 실행하는 Navide 플러그인(아래에 고위험으로 표시)은 이를 통해 네트워크 호스트에 연결하고 워크스페이스 데이터를 보내며 워크스페이스 파일을 바꿀 수 있어요.",
         "description": "일부 Navide 플러그인에는 네이티브 코드가 들어 있어요. Navide는 이 코드를 자체 네트워크 접근이 없는 샌드박스에서 실행해요. 함께 연 작업 영역만 읽을 수 있고, 허용한 곳에서만 파일을 변경할 수 있어요. git, gh, glab 명령도 실행하는 Navide 플러그인(아래에 고위험으로 표시)은 이 명령을 통해 네트워크 호스트에 접속해 작업 영역 데이터를 보내고, 그 권한 없이도 작업 영역 파일을 읽고 변경할 수 있어요. 아래 스위치가 켜져 있으면 네이티브 코드가 있는 Navide 플러그인을 설치하는 것이 실행 허용이 돼요. 스위치를 끄면 모두 멈춰요.",
         "enable": "타사 Navide 플러그인이 자체 프로그램을 실행하도록 허용",
         "offUnsaved": "서드파티 네이티브 백엔드는 지금은 꺼져 있지만 Navide가 이 설정을 저장하지 못해서, Navide를 다시 시작하면 다시 켜져요.",
@@ -1938,6 +1940,7 @@
       },
       "bundled": "기본 포함",
       "listTitle": "설치됨",
+      "installedTitle": "설치된 Navide 플러그인",
       "developerNative": "개발자 및 네이티브 코드",
       "pageOn": "켜짐",
       "developerOnMarker": "개발",
@@ -2460,7 +2463,7 @@
       "download-retry": "다운로드 다시 시도"
     },
     "general": {
-      "auto-resume-reconnect": "백엔드가 다시 시작된 뒤 session 재개",
+      "auto-resume-reconnect": "Navide 백그라운드 서비스가 다시 시작된 뒤 session 재개",
       "resume-interrupted-on-launch": "Navide를 다시 시작한 뒤 작업 중이던 pane 재개",
       "system-notify": "시스템 알림",
       "system-notify-hint": "Navide가 백그라운드에 있을 때 CLI가 턴을 마치거나 입력이 필요하면 데스크톱 알림을 표시해요. Dock 배지는 어느 경우든 계속 개수를 세요.",
@@ -2475,7 +2478,7 @@
         "unknown": "아직 테스트하지 않았어요.",
         "not-applicable": "이 플랫폼에서는 사용할 수 없어요."
       },
-      "auto-resume-reconnect-hint": "백엔드가 충돌 후 다시 돌아오면 보이는 pane의 대화를 자동으로 재개해요.",
+      "auto-resume-reconnect-hint": "Navide 백그라운드 서비스가 충돌 후 다시 돌아오면 보이는 pane의 대화를 자동으로 재개해요.",
       "resume-interrupted-on-launch-hint": "재시작 후 턴 실행 중이거나 질문을 기다리던 pane을 최대 6개 다시 열며, 계속을 누르거나 부모 pane이 지시할 때까지는 이어서 실행하지 않아요.",
       "confirm-close-pane": "pane을 닫기 전에 확인",
       "confirm-close-pane-hint": "pane 닫기 단축키로 CLI pane을 닫기 전에 물어봐요. 턴이 진행 중인 pane은 이 설정과 관계없이 항상 물어봐요.",
@@ -7202,7 +7205,7 @@
       },
       "share": {
         "title": "공유 링크",
-        "hint": "이 컴퓨터에서 암호화한 계획이나 보고서의 읽기 전용 링크예요. 키는 링크 안에만 담겨 전달되고, 서버는 열 수 없는 암호문만 저장해요.",
+        "hint": "이 컴퓨터에서 암호화한 계획이나 보고서의 읽기 전용 링크예요. 키는 링크 안에만 담겨 전달되므로 서버는 저장한 내용을 읽을 수 없어요.",
         "col-item": "항목",
         "col-creator": "만든 사람",
         "col-created": "만든 날짜",
@@ -7235,7 +7238,7 @@
     },
     "sync": {
       "title": "동기화",
-      "hint": "섹션을 켜면 이 계정에 로그인한 모든 기기에서 같은 상태로 유지돼요. 레코드는 이 컴퓨터에서 암호화되며, 서버는 키 없이 암호문만 저장해요.",
+      "hint": "섹션을 켜면 이 계정에 로그인한 모든 기기에서 같은 상태로 유지돼요. 레코드는 이 컴퓨터에서 암호화되므로 서버는 읽을 수 없어요.",
       "not-yet": "아직 동기화할 수 없어요.",
       "retired-memory": "메모리는 더 이상 동기화되지 않아요. 꺼 주세요. 여기의 지침 파일과 클라우드의 사본은 그대로 남아요.",
       "not-connected": "연결되지 않음 — 연결이 돌아오면 동기화 섹션이 따라잡아요.",

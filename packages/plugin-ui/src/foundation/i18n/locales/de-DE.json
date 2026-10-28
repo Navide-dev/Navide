@@ -1260,6 +1260,7 @@
     "toggle-replace": "Ersetzen umschalten (⌘H)",
     "delete-pipeline": "Diese Pipeline löschen",
     "open": "Öffnen",
+    "learn-more": "Mehr erfahren",
     "view-as-list": "Als Liste anzeigen",
     "view-as-tree": "Als Baum anzeigen",
     "show-ignored-files": "Ignorierte Dateien anzeigen",
@@ -1466,7 +1467,7 @@
       "tabInstalled": "Installierte CLI-Erweiterungen",
       "tabConvenience": "Was Navide ändert",
       "intro": "Was jede AI-CLI für sich selbst installiert hat – Claude-Plugins und -Mods, Codex-Hooks, Pi-Extensions und mehr – und worauf jede davon zugreifen kann. Nur lesend: Hier wird nichts installiert, aktiviert oder geändert. Navide-Plug-ins haben eine eigene Seite.",
-      "summary": "{total} CLI-Erweiterungen · {l3} führen Code innerhalb ihrer CLI aus",
+      "summary": "{total} CLI-Erweiterungen · {l3} laufen im CLI-Prozess · {l2} starten eigene Programme",
       "machineWide": "Ein Satz pro CLI für den gesamten Rechner: Jedes Navide-Pane und jedes Konto dieser CLI lädt dieselben.",
       "rescan": "Erneut scannen",
       "loading": "Wird gescannt …",
@@ -1482,12 +1483,12 @@
       "inferredHint": "Aus dem Quelltext abgelesen; das Manifest der CLI gibt dies nicht an.",
       "tier": {
         "L1": "Nur Text",
-        "L2": "Führt Shell-Befehle aus",
+        "L2": "Startet eigene Programme",
         "L3": "Läuft im CLI-Prozess"
       },
       "tierHint": {
         "L1": "Nur Anweisungen und anderer Text; nichts wird von selbst ausgeführt.",
-        "L2": "Führt Befehle als Unterprozess aus (Hooks, MCP, LSP) – mit den Berechtigungen Ihres Benutzerkontos.",
+        "L2": "Startet ein eigenes Programm (einen Hook-Befehl oder einen MCP- bzw. LSP-Server) mit den Berechtigungen Ihres Benutzerkontos.",
         "L3": "Läuft im eigenen Prozess der CLI mit deren Berechtigungen und ohne Berechtigungsabfrage."
       },
       "capability": {
@@ -1892,6 +1893,7 @@
       },
       "nativeBackends": {
         "title": "Programme in Navide-Plug-ins",
+        "summary": "Nativer Code läuft in einer Sandbox, aber ein Navide-Plug-in, das auch git, gh und glab ausführt (unten als hohes Risiko markiert), kann darüber Netzwerk-Hosts kontaktieren, Workspace-Daten senden und Workspace-Dateien ändern.",
         "description": "Manche Navide-Plug-ins enthalten nativen Code. Navide führt ihn in einer Sandbox ohne eigenen Netzwerkzugriff aus; er kann nur die Arbeitsbereiche lesen, die Sie damit öffnen, und Dateien nur dort ändern, wo Sie es erlauben. Ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (unten als hohes Risiko markiert), kann darüber Netzwerk-Hosts kontaktieren, Daten aus dem Arbeitsbereich senden sowie Dateien im Arbeitsbereich ohne diese Berechtigung lesen und ändern. Solange der Schalter unten eingeschaltet ist, erlauben Sie mit der Installation eines Navide-Plug-ins mit nativem Code dessen Ausführung; schalten Sie ihn aus, um alle zu stoppen.",
         "enable": "Navide-Plug-ins von Drittanbietern erlauben, eigene Programme auszuführen",
         "offUnsaved": "Native Backends von Drittanbietern sind vorerst aus, aber Navide konnte das nicht speichern. Nach einem Neustart von Navide sind sie wieder an.",
@@ -1938,6 +1940,7 @@
       },
       "bundled": "Mitgeliefert",
       "listTitle": "Installiert",
+      "installedTitle": "Installierte Navide-Plug-ins",
       "developerNative": "Entwickler und nativer Code",
       "pageOn": "An",
       "developerOnMarker": "Entw.",
@@ -2460,7 +2463,7 @@
       "download-retry": "Download wiederholen"
     },
     "general": {
-      "auto-resume-reconnect": "Sessions nach einem Backend-Neustart fortsetzen",
+      "auto-resume-reconnect": "Sessions nach einem Neustart des Navide-Hintergrunddienstes fortsetzen",
       "resume-interrupted-on-launch": "Arbeitende Panes nach dem Neustart von Navide fortsetzen",
       "system-notify": "Systembenachrichtigungen",
       "system-notify-hint": "Eine Desktop-Benachrichtigung anzeigen, wenn eine CLI ihren Turn beendet oder Ihre Eingabe benötigt, während Navide im Hintergrund ist. Das Dock-Badge zählt in jedem Fall weiter.",
@@ -2475,7 +2478,7 @@
         "unknown": "Noch nicht getestet.",
         "not-applicable": "Auf dieser Plattform nicht verfügbar."
       },
-      "auto-resume-reconnect-hint": "Setzt die Unterhaltungen der sichtbaren Panes automatisch fort, sobald das Backend nach einem Absturz wieder läuft.",
+      "auto-resume-reconnect-hint": "Setzt die Unterhaltungen der sichtbaren Panes automatisch fort, sobald der Navide-Hintergrunddienst nach einem Absturz wieder läuft.",
       "resume-interrupted-on-launch-hint": "Öffnet nach einem Neustart bis zu 6 Panes wieder, die mitten in einem Turn waren oder auf eine Abfrage warteten, ohne sie fortzuführen, bis Sie auf „Fortfahren“ klicken oder ihr übergeordnetes Pane es anweist.",
       "confirm-close-pane": "Vor dem Schließen eines Panes bestätigen",
       "confirm-close-pane-hint": "Nachfragen, bevor die Tastenkombination zum Schließen ein CLI-Pane schließt. Ein Pane mit laufendem Turn fragt unabhängig von dieser Einstellung immer nach.",
@@ -3321,7 +3324,7 @@
           "h3": "Verwaiste Prozesse und das Backend",
           "orphans": {
             "leftover": "<strong>Übrig gebliebene CLI-Prozesse</strong> – erscheint <code>⚠ N übrig geblieben</code> in der Statusleiste, fragt ein Klick darauf „N übrig gebliebene CLI-Prozesse aus einem früheren Lauf gefunden – sie können den Arbeitsspeicher erschöpfen. Bereinigen?“, mit <em>Bereinigen</em> zum Entfernen und <em>Verwerfen</em> zum Überspringen. Das sind Prozesse, die der vorherige Lauf nicht aufgeräumt hat.",
-            "backend": "<strong>Backend</strong> – ein Klick auf die Backend-Pille in der Statusleiste zeigt Adresse und PID sowie zwei Schaltflächen: <em>Neu starten</em> (<em>Starten</em>, solange keine Verbindung besteht) und <em>Stoppen</em> (nur bei bestehender Verbindung). <strong>Ein Neustart des Backends reißt alle CLI-Prozesse mit</strong>; damit Gespräche automatisch fortgesetzt werden, sobald es wieder läuft, aktivieren Sie <em>Sessions nach einem Backend-Neustart fortsetzen</em> im Tab „Allgemein“.",
+            "backend": "<strong>Backend</strong> – ein Klick auf die Backend-Pille in der Statusleiste zeigt Adresse und PID sowie zwei Schaltflächen: <em>Neu starten</em> (<em>Starten</em>, solange keine Verbindung besteht) und <em>Stoppen</em> (nur bei bestehender Verbindung). <strong>Ein Neustart des Backends reißt alle CLI-Prozesse mit</strong>; damit Gespräche automatisch fortgesetzt werden, sobald es wieder läuft, aktivieren Sie <em>Sessions nach einem Neustart des Navide-Hintergrunddienstes fortsetzen</em> im Tab „Allgemein“.",
             "timeout": "Meldet das Backend einen Fehler, weil es zu langsam startet, erhöhen Sie <em>Zeitlimit für den Backend-Start</em> (15–120 Sekunden) im Tab „Darstellung“."
           },
           "h4": "Pflege auf einen Blick",
@@ -7202,7 +7205,7 @@
       },
       "share": {
         "title": "Freigabelinks",
-        "hint": "Schreibgeschützte Links zu einem Plan oder Bericht, auf diesem Rechner verschlüsselt. Der Schlüssel reist nur im Link mit; der Server speichert Chiffretext, den er nicht öffnen kann.",
+        "hint": "Schreibgeschützte Links zu einem Plan oder Bericht, auf diesem Rechner verschlüsselt. Der Schlüssel reist nur im Link mit, daher kann der Server nicht lesen, was er speichert.",
         "col-item": "Element",
         "col-creator": "Erstellt von",
         "col-created": "Erstellt",
@@ -7235,7 +7238,7 @@
     },
     "sync": {
       "title": "Synchronisierung",
-      "hint": "Schalten Sie einen Bereich ein, um ihn auf jedem bei diesem Konto angemeldeten Gerät gleich zu halten. Einträge werden auf diesem Rechner verschlüsselt; der Server speichert Chiffretext, für den er keinen Schlüssel hat.",
+      "hint": "Schalten Sie einen Bereich ein, um ihn auf jedem bei diesem Konto angemeldeten Gerät gleich zu halten. Einträge werden auf diesem Rechner verschlüsselt, daher kann der Server sie nicht lesen.",
       "not-yet": "Noch nicht synchronisierbar.",
       "retired-memory": "Gedächtnis wird nicht mehr synchronisiert. Schalten Sie es aus; Ihre Anweisungsdateien hier und die Kopien in der Cloud bleiben unverändert.",
       "not-connected": "Nicht verbunden – synchronisierte Bereiche holen auf, sobald die Verbindung wieder besteht.",

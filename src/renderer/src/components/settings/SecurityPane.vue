@@ -20,6 +20,7 @@ import SettingsCard from './SettingsCard.vue'
 import SettingRow from './SettingRow.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 import TerminalProtectionSection from './TerminalProtectionSection.vue'
+import { leadSentence } from '../../lib/leadSentence'
 
 /**
  * Settings → Security: Navide Guard. The on/off switch, what Guard does per
@@ -162,7 +163,7 @@ async function runTest(): Promise<void> {
     <p v-if="!store.available.value" class="gd-hint" data-testid="guard-unavailable">{{ t('guard.unavailable') }}</p>
 
     <SettingsCard>
-      <SettingRow :title="t('guard.enabled.title')" :description="t('guard.enabled.desc')">
+      <SettingRow :title="t('guard.enabled.title')" :description="t('guard.enabled.desc')" fold-description>
         <template #control>
           <ToggleSwitch
             data-testid="guard-enabled-toggle"
@@ -225,7 +226,12 @@ async function runTest(): Promise<void> {
     </SettingsSection>
 
     <SettingsSection :label="t('guard.builtin.title')" data-testid="guard-builtin">
-      <p class="gd-hint">{{ t('guard.builtin.hint') }}</p>
+      <!-- What the table is up front; how levels move folds under Learn more. -->
+      <p class="gd-hint">{{ leadSentence(t('guard.builtin.hint')).lead }}</p>
+      <details v-if="leadSentence(t('guard.builtin.hint')).rest" class="gd-more settings-more">
+        <summary>{{ t('action.learn-more') }}</summary>
+        <p>{{ leadSentence(t('guard.builtin.hint')).rest }}</p>
+      </details>
       <template v-for="g in builtinGroups" :key="g.group">
         <h4 class="gd-subhead">{{ t(`guard.builtin.group.${g.group}`) }}</h4>
         <SettingsCard>
@@ -267,7 +273,7 @@ async function runTest(): Promise<void> {
 
     <SettingsSection :label="t('guard.rules.title')">
       <p class="gd-hint">{{ t('guard.rules.hint') }}</p>
-      <details class="gd-more">
+      <details class="gd-more settings-more">
         <summary>{{ t('guard.terminal.more') }}</summary>
         <p>{{ t('guard.rules.hint-detail') }}</p>
       </details>

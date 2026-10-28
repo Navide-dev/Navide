@@ -84,7 +84,7 @@ describe('ExecutionPolicyPane', () => {
     })
     await flushPromises()
 
-    expect(wrapper.get('[data-section="host-default"]').text()).toContain('fs, ui, aiCli')
+    expect(wrapper.get('[data-section="host-default"]').text()).toContain('Workspace files, Own views, AI CLI sessions')
     expect(wrapper.get('[data-section="repository-recommendation"]').text()).toContain('Untrusted')
     expect(wrapper.get('.ep-recommendation-policy').text()).toContain('Denylist')
     expect(api.selectSource).not.toHaveBeenCalled()
@@ -683,7 +683,7 @@ describe('ExecutionPolicyPane page', () => {
   it('leads with what is in effect for the workspace, then the user policy, the default and storage', async () => {
     await mountPane(quietSnapshot())
     expect(order(wrapper!)).toEqual(['effective-policy', 'policy-source', 'repository-recommendation', 'user-policy', 'host-default', 'recovery'])
-    expect(wrapper!.findAll('.ep-effective-policy .ep-v').map((value) => value.text())).toEqual(['fs, ui, aiCli', 'git, gh, glab'])
+    expect(wrapper!.findAll('.ep-effective-policy .ep-v').map((value) => value.text())).toEqual(['Workspace files, Own views, AI CLI sessions', 'git, gh, glab'])
     // The editor is the page: nothing to open first.
     expect(wrapper!.find('#ep-editor').exists()).toBe(false)
     expect(wrapper!.find('[data-mode="allowlist"] input').exists()).toBe(true)

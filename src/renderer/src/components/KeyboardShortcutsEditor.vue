@@ -353,10 +353,11 @@ const visibleReference = computed(() => {
           v-for="mode in (['all', 'customized', 'conflicts'] as FilterMode[])"
           :key="mode"
           type="button"
-          class="kse-filter"
+          class="kse-filter settings-filter-chip"
           :class="{ active: filterMode === mode }"
+          :aria-pressed="filterMode === mode"
           @click="filterMode = mode"
-        >{{ $t('settings.keybindings.filter.' + mode) }}</button>
+        >{{ $t('settings.keybindings.filter.' + mode) }}<span class="count">{{ mode === 'all' ? rows.length : mode === 'customized' ? rows.filter((row) => row.customized).length : conflicts.size }}</span></button>
       </div>
       <!-- The actions wrap as one group, right-aligned: the usual ones first,
            the often-disabled Reset All last. -->
@@ -672,11 +673,8 @@ const visibleReference = computed(() => {
   border-radius: 6px;
   cursor: pointer;
 }
-.kse-filter.active {
-  color: var(--accent-fg);
-  border-color: var(--accent-muted);
-  background: var(--accent-subtle);
-}
+/* The filter modes are the Settings window's shared .settings-filter-chip;
+   .kse-filter stays the skin of the Export / Import buttons. */
 .kse-reset-all:disabled {
   opacity: 0.45;
   cursor: default;

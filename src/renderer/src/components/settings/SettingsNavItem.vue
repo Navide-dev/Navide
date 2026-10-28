@@ -124,8 +124,7 @@ const emit = defineEmits<{
   color: var(--risk-fg);
 }
 /* An "on" state is a short labelled pill after the label ("Dev"), with the
-   full meaning in its tooltip and accessible label. The label beside it
-   truncates, so the row never grows a second line. */
+   full meaning in its tooltip and accessible label. */
 .settings-nav-item-marker--on {
   background: var(--bg-muted);
   color: var(--text-secondary);
@@ -137,20 +136,26 @@ const emit = defineEmits<{
   align-items: center;
   flex-shrink: 0;
 }
-/* One line per row: a label too long for the sidebar (ja-JP "Navide
-   マーケットプレイス", es-ES "Complementos de Navide") ends in an ellipsis and
-   the row's title attribute carries the full name. */
+/* Up to two lines per row: a label too long for the sidebar (ja-JP "Navide
+   マーケットプレイス", es-ES "Complementos de Navide") wraps under its own
+   first letter (not under the icon), and only a third line ends in an
+   ellipsis, with the full name in the tooltip. A badge or marker after it
+   keeps its own width at the row's right edge. */
 .settings-nav-item-label {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: break-word;
   line-height: 1.3;
 }
 
 /* Expanded parent: a heading for the page rows under it, not a second
-   selection. Plain label weight and colour, no fill, no indicator bar. */
+   selection. Plain label weight and colour (icon included), no fill, no
+   indicator bar: only the page row under it carries the selection. */
 @media (min-width: 721px) {
   .settings-nav-item.active.expanded {
     background: transparent;
@@ -162,11 +167,6 @@ const emit = defineEmits<{
   }
   .settings-nav-item.active.expanded::before {
     display: none;
-  }
-  /* It contains the selection: its icon takes the accent colour, the page
-     row under it keeps the only fill. */
-  .settings-nav-item.active.expanded .settings-nav-item-icon {
-    color: var(--accent-fg);
   }
 }
 

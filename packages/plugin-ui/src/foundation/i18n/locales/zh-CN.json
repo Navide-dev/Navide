@@ -1260,6 +1260,7 @@
     "toggle-replace": "切换取代（⌘H）",
     "delete-pipeline": "删除此管线",
     "open": "打开",
+    "learn-more": "了解更多",
     "view-as-list": "查看为清单",
     "view-as-tree": "查看为树状",
     "show-ignored-files": "显示忽略的文件",
@@ -1466,7 +1467,7 @@
       "tabInstalled": "已安装的 CLI 扩展",
       "tabConvenience": "Navide 做的修改",
       "intro": "每个 AI CLI 为自己安装的 CLI 扩展（Claude plugin 与 mod、Codex hook、Pi extension 等），以及各自能碰到什么。这里只读取，不会安装、激活或修改任何东西。Navide 插件另有专页。",
-      "summary": "{total} 个 CLI 扩展 · 其中 {l3} 个在 CLI 进程内运行代码",
+      "summary": "{total} 个 CLI 扩展 · 其中 {l3} 个在 CLI 内运行，{l2} 个运行独立程序",
       "machineWide": "每家 CLI 整台机器只有一份：Navide 里这家 CLI 的每个 pane、每个账号，都会加载同一套。",
       "rescan": "重新扫描",
       "loading": "扫描中…",
@@ -1482,12 +1483,12 @@
       "inferredHint": "这些能力是从源代码文字推定的，CLI 的 manifest 没有声明。",
       "tier": {
         "L1": "仅文本",
-        "L2": "执行 shell 指令",
+        "L2": "运行独立程序",
         "L3": "在 CLI 内运行"
       },
       "tierHint": {
         "L1": "只有指令、说明之类的文字，不会自己运行。",
-        "L2": "会以子进程运行命令（hook、MCP、LSP），权限跟你的用户账号一样。",
+        "L2": "会启动一个独立程序（hook 命令，或 MCP、LSP 服务器），权限跟你的用户账号一样。",
         "L3": "在 CLI 自己的进程里运行，权限跟 CLI 一样，而且不会跳出权限提示。"
       },
       "capability": {
@@ -1892,6 +1893,7 @@
       },
       "nativeBackends": {
         "title": "Navide 插件内含的程序",
+        "summary": "原生代码在沙箱中运行，但同时会执行 git、gh、glab 的 Navide 插件（下方标为高风险）能借由它们连接网络主机、发送工作区数据并修改工作区文件。",
         "description": "部分 Navide 插件内含原生程序。Navide 会把它放在沙盒里运行，它本身没有网络：只能读取你一起打开的工作区，也只能在你允许的地方修改文件。但同时会运行 git、gh、glab 指令的 Navide 插件（下方标示为高风险）可以通过这些指令连到网络主机、送出工作区数据，也可以不经上述允许就读取与修改工作区文件。下方开关打开时，安装含原生代码的 Navide 插件即表示允许它运行；关闭开关可停用全部。",
         "enable": "允许第三方 Navide 插件运行自带的程序",
         "offUnsaved": "第三方原生后端目前已关闭，但 Navide 无法保存这个设置，重新启动 Navide 后会再变回开启。",
@@ -1938,6 +1940,7 @@
       },
       "bundled": "内置",
       "listTitle": "已安装",
+      "installedTitle": "已安装的 Navide 插件",
       "developerNative": "开发者与原生代码",
       "pageOn": "已开启",
       "developerOnMarker": "开发",
@@ -2460,7 +2463,7 @@
       "download-retry": "重新下载"
     },
     "general": {
-      "auto-resume-reconnect": "后端重启后自动接回工作阶段",
+      "auto-resume-reconnect": "Navide 后台服务重启后自动接回工作阶段",
       "resume-interrupted-on-launch": "重开 Navide 后自动接回工作中的 pane",
       "system-notify": "系统通知",
       "system-notify-hint": "Navide 在背景时，CLI 完成回合或需要你输入会送出桌面通知。Dock 徽章的计数不受此开关影响。",
@@ -2475,7 +2478,7 @@
         "unknown": "尚未测试。",
         "not-applicable": "此平台不提供。"
       },
-      "auto-resume-reconnect-hint": "后端崩溃恢复后，自动接续可见 pane 的对话。",
+      "auto-resume-reconnect-hint": "Navide 后台服务崩溃恢复后，自动接续可见 pane 的对话。",
       "resume-interrupted-on-launch-hint": "重启后重新打开最多 6 个正在跑回合或等待询问的 pane；按“继续”或由母 pane 下令前不会续跑。",
       "confirm-close-pane": "关闭 pane 前确认",
       "confirm-close-pane-hint": "用关闭 pane 快捷键关闭 CLI pane 前先跳出确认。运行中的 pane 一律会确认，不受此设置影响。",
@@ -3321,7 +3324,7 @@
           "h3": "孤儿进程与 Backend",
           "orphans": {
             "leftover": "<strong>残留的 CLI 进程</strong> — 状态栏出现 <code>⚠ N 残留</code> 时点开，会问“侦测到 N 个先前残留的 CLI 进程 — 可能耗尽内存。要清理吗？”，按 <em>清理</em> 清掉、<em>关闭</em> 略过。这些是上一轮运行没收干净的进程。",
-            "backend": "<strong>Backend</strong> — 状态栏的 Backend 药丸点开有地址、PID，以及两颗钮：<em>Restart</em>（没连上时显示 <em>Start</em>）与 <em>Stop</em>（只有连上时能按）。<strong>重启 Backend 会一并带走所有 CLI 进程</strong>；想让它回来之后自动接续对话，就把一般标签页的 <em>后端重启后自动接回工作阶段</em> 打开。",
+            "backend": "<strong>Backend</strong> — 状态栏的 Backend 药丸点开有地址、PID，以及两颗钮：<em>Restart</em>（没连上时显示 <em>Start</em>）与 <em>Stop</em>（只有连上时能按）。<strong>重启 Backend 会一并带走所有 CLI 进程</strong>；想让它回来之后自动接续对话，就把一般标签页的 <em>Navide 后台服务重启后自动接回工作阶段</em> 打开。",
             "timeout": "Backend 起太慢而报错时，调一般标签页的 <em>后端启动超时</em>（15–120 秒）。"
           },
           "h4": "维护动作速查",
@@ -7202,7 +7205,7 @@
       },
       "share": {
         "title": "分享链接",
-        "hint": "在这台机器上加密的 plan 或报告唯读链接。钥匙只存在链接里，服务器只保存它打不开的密文。",
+        "hint": "在这台机器上加密的 plan 或报告唯读链接。钥匙只存在链接里，所以服务器读不到它保存的内容。",
         "col-item": "项目",
         "col-creator": "创建者",
         "col-created": "创建时间",
@@ -7235,7 +7238,7 @@
     },
     "sync": {
       "title": "同步",
-      "hint": "打开一个区块，它就会在登录同一个账号的每台设备上保持一致。内容在本机加密，服务器只存它没有密钥的密文。",
+      "hint": "打开一个区块，它就会在登录同一个账号的每台设备上保持一致。内容在本机加密，所以服务器读不到。",
       "not-yet": "尚未支持同步。",
       "retired-memory": "记忆已不再同步。请关闭这个开关；这台的指示档和云端上的副本都会维持原样，不会被改动或删除。",
       "not-connected": "未连接——已打开的区块会在连接恢复后自动补上。",

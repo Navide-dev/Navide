@@ -223,6 +223,14 @@ function listOrNone(values: readonly string[]): string {
   return values.length > 0 ? values.join(', ') : t('settings.executionPolicy.none')
 }
 
+/** A system list by name (as the checkboxes show it), not by manifest id. */
+function systemListOrNone(values: readonly string[]): string {
+  return listOrNone(values.map((id) => {
+    const key = `settings.executionPolicy.namespace.${id}`
+    return te(key) ? t(key) : id
+  }))
+}
+
 /** `full` and `denylist` are both high risk but for opposite reasons — one says
  * "everything", the other grants by default — so they must not share one
  * sentence. The acknowledgement text especially: it is what the user attests
@@ -494,7 +502,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
           · {{ $t('settings.executionPolicy.modeLabel') }}: <strong>{{ modeLabel(workspaceSnapshot.policy.mode) }}</strong>
         </p>
         <div class="ep-policy-card ep-effective-policy">
-          <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(workspaceSnapshot.policy.system) }}</span></div>
+          <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ systemListOrNone(workspaceSnapshot.policy.system) }}</span></div>
           <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(workspaceSnapshot.policy.shell) }}</span></div>
         </div>
         <p v-if="workspaceSnapshot.status !== 'active'" class="ep-warning" role="alert">
@@ -563,7 +571,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <p class="ep-recommendation-state">{{ recommendationStateLabel(recommendation.state) }}</p>
       <div v-if="recommendation.policy" class="ep-policy-card ep-recommendation-policy">
         <div><span class="ep-k">{{ $t('settings.executionPolicy.modeLabel') }}</span><span class="ep-v">{{ modeLabel(recommendation.policy.mode) }}</span></div>
-        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(recommendation.policy.system) }}</span></div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ systemListOrNone(recommendation.policy.system) }}</span></div>
         <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(recommendation.policy.shell) }}</span></div>
       </div>
       <div v-if="recommendation.state === 'valid' && recommendationIsHighRisk" class="ep-warning" role="alert">
@@ -669,7 +677,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <p class="ep-hint">{{ $t('settings.executionPolicy.hostDefaultHint') }}</p>
       <div v-if="snapshot" class="ep-policy-card">
         <div><span class="ep-k">{{ $t('settings.executionPolicy.modeLabel') }}</span><span class="ep-v">{{ modeLabel(snapshot.defaultPolicy.mode) }}</span></div>
-        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(snapshot.defaultPolicy.system) }}</span></div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ systemListOrNone(snapshot.defaultPolicy.system) }}</span></div>
         <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(snapshot.defaultPolicy.shell) }}</span></div>
       </div>
     </section>
@@ -796,7 +804,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   font-weight: 600;
 }
 /* Untrusted is "not yet checked", a caution; risk and danger tones stay for real risk. */
-.ep-untrusted { background: var(--attention-subtle); color: var(--attention-fg); }
+.ep-untrusted { background: var(--attention-subtle); color: var(--attention-on-subtle); }
 /* Every button on the page has a 32px target. */
 .execution-policy-pane .nv-btn { min-height: var(--control-h-lg); }
 /* An offset ring that also shows on the filled Save button (the house ring is inset). */
