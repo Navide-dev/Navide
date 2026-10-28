@@ -8176,11 +8176,14 @@
         "agent-switch-confirm-to": "To account",
         "agent-switch-confirm-caller": "Asked by pane",
         "agent-switch-confirm-workspace": "Pane's workspace",
+        "agent-switch-confirm-pane": "Pane to move",
+        "agent-switch-confirm-pane-body": "Nothing switches unless you agree. Only this pane moves: it reopens on its conversation inside the other account's own folder. The CLI's live login and every other pane stay as they are. If the pane is working, Navide asks you again before stopping it. If you do not answer, the request closes by itself.",
         "agent-switch-confirm-reason": "Reason, written by the agent",
         "agent-switch-confirm-reason-truncated": "The agent's reason was longer than 300 characters; only the first 300 are shown.",
         "agent-switch-confirm-cancel": "Cancel",
         "agent-switch-confirm-ok": "Switch Account",
         "agent-switch-done": "{agent} switched {vendor} from {from} to {to}. The agent's reason: {reason}",
+        "agent-switch-pane-done": "{agent} moved one pane from {from} to {to}. The live login and the other panes did not change. The agent's reason: {reason}",
         "login-complete": "Signed in as {email}. Account saved.",
         "login-complete-no-email": "Sign-in complete. Account saved.",
         "login-step2": "Step 1 done: {email} is saved. One more authorization signs this account in to its own folder. Finish it in the browser from the sign-in pane that just opened.",
@@ -11378,6 +11381,7 @@
       "not-reclaimed": "(not reclaimed)",
       "fix": "Fix",
       "proposal": "Proposal",
+      "proposal-reason": "Reason: {reason}",
       "history": "History (last 30)",
       "unsaved": "Unsaved changes",
       "save": "Save",
@@ -11439,6 +11443,14 @@
       "error": "Failed",
       "timeout": "Timed out",
       "skipped": "Skipped"
+    },
+    "proposal-status": {
+      "proposed": "Proposed",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "in-progress": "In progress",
+      "landed": "Landed",
+      "abandoned": "Abandoned"
     },
     "history": {
       "date": "Date",

@@ -8176,11 +8176,14 @@
         "agent-switch-confirm-to": "Vers le compte",
         "agent-switch-confirm-caller": "Demandé par le pane",
         "agent-switch-confirm-workspace": "Espace de travail du pane",
+        "agent-switch-confirm-pane": "Pane déplacé",
+        "agent-switch-confirm-pane-body": "Rien ne change sans votre accord. Seul ce pane est déplacé, il se rouvre sur sa conversation dans le dossier propre de l’autre compte. La connexion active de la CLI et tous les autres panes restent tels quels. Si le pane travaille, Navide vous redemande avant de l’arrêter. Sans réponse, la demande se ferme d’elle-même.",
         "agent-switch-confirm-reason": "Motif, rédigé par l’agent",
         "agent-switch-confirm-reason-truncated": "Le motif de l’agent dépassait 300 caractères ; seuls les 300 premiers sont affichés.",
         "agent-switch-confirm-cancel": "Annuler",
         "agent-switch-confirm-ok": "Changer de compte",
         "agent-switch-done": "{agent} a fait passer {vendor} de {from} à {to}. Motif de l’agent : {reason}",
+        "agent-switch-pane-done": "{agent} a déplacé un pane de {from} à {to}. La connexion active et les autres panes n’ont pas changé. Motif de l’agent : {reason}",
         "login-complete": "Connecté en tant que {email}. Compte enregistré.",
         "login-complete-no-email": "Connexion terminée. Compte enregistré.",
         "login-step2": "Étape 1 terminée : {email} est enregistré. Une autorisation supplémentaire connecte ce compte dans son propre dossier. Terminez-la dans le navigateur depuis le pane de connexion qui vient de s’ouvrir.",
@@ -11378,6 +11381,7 @@
       "not-reclaimed": "(non libéré)",
       "fix": "Correctif",
       "proposal": "Proposition",
+      "proposal-reason": "Motif : {reason}",
       "history": "Historique (30 dernières)",
       "unsaved": "Modifications non enregistrées",
       "save": "Enregistrer",
@@ -11439,6 +11443,14 @@
       "error": "Échouée",
       "timeout": "Délai dépassé",
       "skipped": "Ignorée"
+    },
+    "proposal-status": {
+      "proposed": "Proposée",
+      "approved": "Approuvée",
+      "rejected": "Refusée",
+      "in-progress": "En cours",
+      "landed": "Intégrée",
+      "abandoned": "Abandonnée"
     },
     "history": {
       "date": "Date",

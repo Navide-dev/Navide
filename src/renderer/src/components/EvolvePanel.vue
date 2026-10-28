@@ -19,6 +19,7 @@ import {
   evolveSet,
   formatEvolveNext,
   useEvolveBadges,
+  type EvolveProposal,
   type EvolveRun,
   type EvolveSettings,
   type EvolveState,
@@ -93,6 +94,11 @@ const missingPane = computed(() => {
 
 const lastRun = computed<EvolveRun | null>(() => state.value?.running ?? state.value?.runs[0] ?? null)
 const history = computed(() => (state.value?.runs ?? []).slice(0, 30))
+
+/** The ledger row of one of a run's proposals, matched by run and plan path. */
+function ledgerRow(run: EvolveRun, relPath: string): EvolveProposal | undefined {
+  return state.value?.proposals?.find((p) => p.run_id === run.id && p.rel_path === relPath)
+}
 
 const runsToday = computed(() => {
   const today = new Date()
@@ -581,9 +587,17 @@ async function openProposal(rel: string): Promise<void> {
               <div v-for="c in lastRun.commits" :key="c.hash" class="ev-mono">
                 {{ t('evolve.panel.fix') }} {{ c.hash.slice(0, 7) }} {{ c.title }}
               </div>
-              <div v-for="p in lastRun.proposals" :key="p.rel_path">
+              <div v-for="p in lastRun.proposals" :key="p.rel_path" data-test="proposal">
                 {{ t('evolve.panel.proposal') }}
                 <button class="ev-link" @click="openProposal(p.rel_path)">{{ p.name || p.rel_path }}</button>
+                <template v-if="ledgerRow(lastRun, p.rel_path)">
+                  <span class="ev-pstatus" :class="ledgerRow(lastRun, p.rel_path)!.status" data-test="proposal-status">{{
+                    t(`evolve.proposal-status.${ledgerRow(lastRun, p.rel_path)!.status}`)
+                  }}</span>
+                  <span v-if="ledgerRow(lastRun, p.rel_path)!.reason" class="ev-muted">{{
+                    t('evolve.panel.proposal-reason', { reason: ledgerRow(lastRun, p.rel_path)!.reason })
+                  }}</span>
+                </template>
               </div>
             </template>
           </div>
@@ -891,6 +905,24 @@ async function openProposal(rel: string): Promise<void> {
 .ev-dot.error,
 .ev-dot.timeout {
   background: var(--danger-fg);
+}
+.ev-pstatus {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-base);
+  font-size: var(--font-3xs);
+  color: var(--text-secondary);
+}
+.ev-pstatus.approved,
+.ev-pstatus.in-progress {
+  color: var(--accent-fg);
+}
+.ev-pstatus.landed {
+  color: var(--success-fg);
+}
+.ev-pstatus.rejected {
+  color: var(--danger-fg);
 }
 .ev-table {
   width: 100%;

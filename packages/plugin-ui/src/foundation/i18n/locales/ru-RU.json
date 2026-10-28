@@ -8176,11 +8176,14 @@
         "agent-switch-confirm-to": "На аккаунт",
         "agent-switch-confirm-caller": "Запросил pane",
         "agent-switch-confirm-workspace": "Рабочая область pane",
+        "agent-switch-confirm-pane": "Перемещаемый pane",
+        "agent-switch-confirm-pane-body": "Ничего не переключится без вашего согласия. Перемещается только этот pane: он заново открывается со своим разговором в собственной папке другой учётной записи. Активный вход CLI и все остальные pane остаются как есть. Если pane сейчас работает, Navide спросит ещё раз, прежде чем остановить его. Без ответа запрос закроется сам.",
         "agent-switch-confirm-reason": "Причина, указанная agent",
         "agent-switch-confirm-reason-truncated": "Причина, указанная agent, длиннее 300 символов; показаны только первые 300.",
         "agent-switch-confirm-cancel": "Отмена",
         "agent-switch-confirm-ok": "Сменить аккаунт",
         "agent-switch-done": "{agent} переключил {vendor} с {from} на {to}. Причина, указанная agent: {reason}",
+        "agent-switch-pane-done": "{agent} переместил один pane с {from} на {to}. Активный вход и остальные pane не изменились. Причина, указанная agent: {reason}",
         "login-complete": "Выполнен вход как {email}. Аккаунт сохранён.",
         "login-complete-no-email": "Вход выполнен. Аккаунт сохранён.",
         "login-step2": "Шаг 1 выполнен: {email} сохранён. Ещё одно подтверждение выполнит вход этого аккаунта в его собственной папке. Завершите его в браузере из только что открывшегося pane входа.",
@@ -11378,6 +11381,7 @@
       "not-reclaimed": "(не освобождён)",
       "fix": "Исправление",
       "proposal": "Предложение",
+      "proposal-reason": "Причина: {reason}",
       "history": "История (последние 30)",
       "unsaved": "Несохранённые изменения",
       "save": "Сохранить",
@@ -11439,6 +11443,14 @@
       "error": "Сбой",
       "timeout": "Время истекло",
       "skipped": "Пропущено"
+    },
+    "proposal-status": {
+      "proposed": "Предложено",
+      "approved": "Одобрено",
+      "rejected": "Отклонено",
+      "in-progress": "В работе",
+      "landed": "Внедрено",
+      "abandoned": "Отменено"
     },
     "history": {
       "date": "Дата",

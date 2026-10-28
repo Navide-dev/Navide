@@ -8176,11 +8176,14 @@
         "agent-switch-confirm-to": "切り替え後",
         "agent-switch-confirm-caller": "要求した Pane",
         "agent-switch-confirm-workspace": "Pane のワークスペース",
+        "agent-switch-confirm-pane": "移動する Pane",
+        "agent-switch-confirm-pane-body": "同意するまで何も切り替わりません。移動するのはこの Pane だけで、もう一方のアカウント専用フォルダで会話を続けたまま開き直します。CLI のライブのログインと他の Pane はそのままです。Pane が作業中なら、止める前にもう一度確認します。回答がなければ、この要求は自動的に閉じます。",
         "agent-switch-confirm-reason": "理由（エージェントが記入）",
         "agent-switch-confirm-reason-truncated": "エージェントの理由が 300 文字を超えたため、最初の 300 文字だけを表示しています。",
         "agent-switch-confirm-cancel": "キャンセル",
         "agent-switch-confirm-ok": "アカウントを切り替える",
         "agent-switch-done": "{agent} が {vendor} を {from} から {to} に切り替えました。エージェントが示した理由：{reason}",
+        "agent-switch-pane-done": "{agent} が Pane を 1 つ {from} から {to} に移しました。ライブのログインと他の Pane は変わっていません。エージェントが示した理由：{reason}",
         "login-complete": "{email} としてログインしました。アカウントを保存しました。",
         "login-complete-no-email": "ログインが完了しました。アカウントを保存しました。",
         "login-step2": "ステップ 1 完了：{email} を保存しました。このアカウントを専用フォルダーにサインインするため、もう一度承認が必要です。開いたサインイン用ペインからブラウザーで承認してください。",
@@ -11378,6 +11381,7 @@
       "not-reclaimed": "（未回収）",
       "fix": "修正",
       "proposal": "提案",
+      "proposal-reason": "理由：{reason}",
       "history": "履歴（直近 30 回）",
       "unsaved": "未保存の変更があります",
       "save": "保存",
@@ -11439,6 +11443,14 @@
       "error": "失敗",
       "timeout": "タイムアウト",
       "skipped": "未実行"
+    },
+    "proposal-status": {
+      "proposed": "提案中",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "in-progress": "進行中",
+      "landed": "反映済み",
+      "abandoned": "破棄"
     },
     "history": {
       "date": "日付",
