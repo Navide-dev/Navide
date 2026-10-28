@@ -8948,6 +8948,7 @@
     "statusbar-note": "ihre Pop-ups verschwinden mit ihr"
   },
   "error": {
+    "pipeline-node-failed": "Stufe {stage}: Schritt {slot} hat einen Fehler gemeldet ({reason}) und hat keine Versuche mehr. Der Lauf wurde angehalten; setze ihn fort, um es erneut zu versuchen.",
     "pipeline-start-refused": "Die Pipeline wurde nicht gestartet: {reason}",
     "pipeline-kickoff-failed": "Pipeline fehlgeschlagen: Stufe {stage}, Slot {slot} – {reason}. Ihre panes sind noch geöffnet.",
     "pipeline-kickoff-held": "Pipeline fehlgeschlagen: Stufe {stage}, Slot {slot} – der Startauftrag wartet im Eingabefeld. Lassen Sie ihn dort, dann sendet „Fortsetzen“ ihn ab, oder leeren Sie das Feld. Ihre panes sind noch geöffnet.",
@@ -10096,6 +10097,9 @@
     "weekday-6": "Samstag"
   },
   "scheduler": {
+    "pipeline-title": "Jeder Lauf dieses Jobs startet einen Pipeline-Lauf, der CLI-Panes öffnet und deren Kontingent verbraucht",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "startet Pipeline {name}",
     "system": {
       "tag": "System",
       "manage": "Im Arbeitsbereich verwalten →",
@@ -10137,6 +10141,16 @@
       "unknown": "Übersprungen"
     },
     "editor": {
+      "err-task": "Gib eine Aufgabe ein",
+      "err-pipeline": "Wähle eine Pipeline",
+      "task-placeholder": "Wofür jeder Pipeline-Lauf da ist …",
+      "task": "Aufgabe",
+      "pipeline-cost": "Jeder Lauf öffnet die CLI-Panes dieser Pipeline und verbraucht deren Kontingent. Es wird nie ein Fenster geöffnet: Ist der Workspace nicht offen, schlägt der Lauf mit Begründung fehl.",
+      "pick-pipeline": "Pipeline wählen",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Eine Pipeline starten",
+      "action-message": "Eine Anweisung an ein Pane senden",
+      "action": "Aktion",
       "title-new": "Neuer geplanter Auftrag",
       "title-edit": "Geplanten Auftrag bearbeiten",
       "name": "Name",
@@ -10176,6 +10190,7 @@
       "save": "Speichern"
     },
     "owner": {
+      "user": "von dir",
       "agent": "Agent · {name}",
       "external": "externer Agent",
       "agent-title": "Vom Agent „{name}“ erstellt; nur er und Sie können ihn ändern",
@@ -11154,6 +11169,7 @@
       "reject": "Zurückschicken"
     },
     "history": {
+      "retry": "Wiederholungen ändern",
       "add": "{name} hinzufügen",
       "edit-cli": "CLI ändern",
       "edit-field": "{field} bearbeiten",
@@ -11178,6 +11194,15 @@
       "loop-budget": "Wiederholungslimit ändern"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Nur ein fehlgeschlagener Schritt kann wiederholt werden",
+      "retry-blocked-no-run": "Nicht verfügbar: kein Lauf dieser Pipeline",
+      "retry-blocked-running": "Nicht verfügbar, solange ein Lauf aktiv ist",
+      "retry-node-help": "Diesen fehlgeschlagenen Schritt erneut ausführen: der Lauf wird hier fortgesetzt oder ab hier neu gestartet, wenn spätere Schritte schon liefen",
+      "retry-node": "Diesen Schritt wiederholen",
+      "retry-wait": "Wartezeit vor jeder Wiederholung (Sekunden)",
+      "retry-help": "Ein fehlgeschlagener Versuch (die Aufgabe hat den Agenten nicht erreicht oder der Agent hat einen Fehler gemeldet) läuft im selben Schritt erneut, insgesamt bis zu {max} Versuche.",
+      "retry-tries": "Versuche insgesamt",
+      "retry-title": "Bei Fehler wiederholen",
       "aria": "Einstellungen für {name}",
       "attempts": "Versuche",
       "elapsed": "Dauer",

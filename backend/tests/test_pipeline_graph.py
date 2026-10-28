@@ -198,6 +198,44 @@ class TestBranchAndErrorEdges:
         assert g["edges"][-1]["id"] == "x-alert-report"
 
 
+class TestRetryPolicy:
+    """Mirrors lib/__tests__/pipelineRetry.test.ts."""
+
+    def graph(self, retry) -> dict:
+        g = pg.derive_graph_from_stages([stage("01", ["a"]), stage("02", ["b"])])
+        next(n for n in g["nodes"] if n["id"] == "n-01-0")["retry"] = retry
+        return g
+
+    def test_accepts_bounds_on_a_slot(self):
+        assert pg.validate_graph(self.graph({"maxTries": 5, "waitMs": 300000})) == []
+        assert pg.validate_graph(self.graph({"maxTries": 1})) == []
+
+    @pytest.mark.parametrize("retry, msg", [
+        ({"maxTries": 0}, "node n-01-0: retry.maxTries must be an integer 1..5"),
+        ({"maxTries": 6}, "node n-01-0: retry.maxTries must be an integer 1..5"),
+        ({"maxTries": 2.5}, "node n-01-0: retry.maxTries must be an integer 1..5"),
+        ({"maxTries": True}, "node n-01-0: retry.maxTries must be an integer 1..5"),
+        ({"maxTries": 2, "waitMs": -1}, "node n-01-0: retry.waitMs must be an integer 0..300000"),
+        ({"maxTries": 2, "waitMs": 300001}, "node n-01-0: retry.waitMs must be an integer 0..300000"),
+        ({"maxTries": 2, "backoff": 2}, "node n-01-0: retry takes only maxTries and waitMs"),
+        ([2], "node n-01-0: retry must be {maxTries, waitMs?}"),
+    ])
+    def test_refuses(self, retry, msg):
+        assert msg in pg.validate_graph(self.graph(retry))
+
+    def test_only_slots_and_set_retry_round_trip(self):
+        g = self.graph({"maxTries": 3})
+        g["nodes"][0]["retry"] = {"maxTries": 2}
+        assert "node trigger: only slot nodes carry retry" in pg.validate_graph(g)
+        base = pg.derive_graph_from_stages([stage("01", ["a"])])
+        g1 = pg.apply_graph_ops(base, [{"op": "set_retry", "id": "n-01-0", "retry": {"maxTries": 3, "waitMs": 10}}])
+        assert next(n for n in g1["nodes"] if n["id"] == "n-01-0")["retry"] == {"maxTries": 3, "waitMs": 10}
+        g2 = pg.apply_graph_ops(g1, [{"op": "set_retry", "id": "n-01-0", "retry": None}])
+        assert "retry" not in next(n for n in g2["nodes"] if n["id"] == "n-01-0")
+        with pytest.raises(pg.GraphError):
+            pg.apply_graph_ops(g2, [{"op": "set_retry", "id": "trigger", "retry": {"maxTries": 2}}])
+
+
 class TestLegacyCompatibility:
     """R8: definitions without branch/error edges load, validate, layer and
     save back exactly as before this schema extension."""

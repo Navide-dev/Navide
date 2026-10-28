@@ -33,7 +33,7 @@ function block(startMarker: string, endMarker: string): string {
 const sources = [
   block('const stagePrewarms = new Map<number, Promise<void>>()', '\n/** Spawn all slots for one stage WITHOUT injecting kickoffs.'),
   block('async function preSpawnStage(index: number): Promise<void> {', '\n/** Build cross-stage context'),
-  block('async function activateStage(index: number): Promise<void> {', '\nasync function spawnPipelineStage('),
+  block('async function activateStage(index: number, opts: { only?: string; note?: string } = {}): Promise<void> {', '\nasync function spawnPipelineStage('),
   block(
     'async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string',
     '\n/** Before firing 🎉',

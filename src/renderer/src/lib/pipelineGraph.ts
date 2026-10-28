@@ -46,6 +46,9 @@ export const GRAPH_VERSION = 1
 /** Default and ceiling for a reject edge's loop budget. */
 export const DEFAULT_MAX_LOOPS = 2
 export const MAX_LOOPS_CEILING = 10
+/** Bounds of a slot node's retry policy (maxTries counts the first try). */
+export const MAX_TRIES_CEILING = 5
+export const MAX_RETRY_WAIT_MS = 300_000
 
 export interface GraphPosition {
   x: number
@@ -76,6 +79,17 @@ export interface GraphNode {
   stageId?: string
   /** Frozen output: reruns skip this node and reuse its last result. */
   pinned?: boolean
+  /** Slot nodes only: a failed try (kickoff never landed, or the agent
+   *  reported ---NODE-FAILED---) is retried on the same node, up to maxTries
+   *  tries in all, waitMs apart, before its error edge or the run fails. */
+  retry?: RetryPolicy
+}
+
+export interface RetryPolicy {
+  /** Tries in all, the first one included: 1..MAX_TRIES_CEILING. */
+  maxTries: number
+  /** Wait before each retry: 0..MAX_RETRY_WAIT_MS (default 0). */
+  waitMs?: number
 }
 
 export type GraphEdgeKind = 'main' | 'reject' | 'branch' | 'error'
@@ -123,6 +137,7 @@ export type GraphOp =
   | { op: 'remove_edge'; id: string }
   | { op: 'set_gate'; id: string; prompt?: string }
   | { op: 'set_pin'; id: string; pinned: boolean }
+  | { op: 'set_retry'; id: string; retry: RetryPolicy | null }
   | ({ op: 'set_stage_meta'; stageId: string } & StageMetaPatch)
 
 /** Layer (stage) metadata editable through set_stage_meta. The graph does not
@@ -244,6 +259,23 @@ export function isForwardEdge(e: GraphEdge): boolean {
  *  readiness/skip rules change anything for. */
 export function hasBranchingEdges(graph: PipelineGraph): boolean {
   return graph.edges.some((e) => e.kind === 'branch' || e.kind === 'error')
+}
+
+function retryErrors(n: GraphNode): string[] {
+  if (n.kind !== 'slot') return [`node ${n.id}: only slot nodes carry retry`]
+  const r = n.retry as unknown
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return [`node ${n.id}: retry must be {maxTries, waitMs?}`]
+  const o = r as Record<string, unknown>
+  const errors: string[] = []
+  if (Object.keys(o).some((k) => k !== 'maxTries' && k !== 'waitMs')) errors.push(`node ${n.id}: retry takes only maxTries and waitMs`)
+  const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v)
+  if (!isInt(o.maxTries) || o.maxTries < 1 || o.maxTries > MAX_TRIES_CEILING) {
+    errors.push(`node ${n.id}: retry.maxTries must be an integer 1..${MAX_TRIES_CEILING}`)
+  }
+  if (o.waitMs !== undefined && (!isInt(o.waitMs) || o.waitMs < 0 || o.waitMs > MAX_RETRY_WAIT_MS)) {
+    errors.push(`node ${n.id}: retry.waitMs must be an integer 0..${MAX_RETRY_WAIT_MS}`)
+  }
+  return errors
 }
 
 function branchWhenErrors(e: GraphEdge): string[] {
@@ -425,6 +457,7 @@ export function validateGraph(graph: PipelineGraph): string[] {
     if (!n.position || !Number.isFinite(n.position.x) || !Number.isFinite(n.position.y)) {
       errors.push(`node ${n.id} needs a numeric position`)
     }
+    if (n.retry != null) errors.push(...retryErrors(n))
   }
   const edgeIds = new Set<string>()
   const pairs = new Set<string>()
@@ -589,6 +622,13 @@ export function applyGraphOps(graph: PipelineGraph, ops: readonly GraphOp[]): Pi
         if (n.kind !== 'slot') throw new Error(`only slot nodes can be pinned: ${op.id}`)
         if (op.pinned) n.pinned = true
         else delete n.pinned
+        break
+      }
+      case 'set_retry': {
+        const n = node(op.id)
+        if (n.kind !== 'slot') throw new Error(`only slot nodes can retry: ${op.id}`)
+        if (op.retry) n.retry = { ...op.retry }
+        else delete n.retry
         break
       }
       case 'set_stage_meta':

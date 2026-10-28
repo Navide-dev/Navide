@@ -285,6 +285,30 @@ describe('PipelineEditor', () => {
     expect(calls).toEqual([{ nodeId: 'gate' }])
   })
 
+  it('retries a failed step by resuming when it is the first unfinished one, else by restarting from it', async () => {
+    const resumed: unknown[] = []
+    const restarted: unknown[] = []
+    registerCommand('ui.pipeline.resume', (args) => { resumed.push(args) })
+    registerCommand('ui.pipeline.restart_from', (args) => { restarted.push(args) })
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: { plan: { status: 'done' }, fe: { status: 'failed' }, be: { status: 'done' } } }
+    const { w } = await mountEditor({ run })
+    await w.find('.lane-card[data-node-id="fe"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-test="retry-node"]').trigger('click')
+    await flushPromises()
+    expect(resumed).toHaveLength(1)
+    expect(restarted).toEqual([])
+    // review failed while an earlier layer is still unfinished (fe): a resume
+    // would start there, so the retry restarts from review instead.
+    await w.setProps({ run: { ...run, nodes: { plan: { status: 'done' }, fe: { status: 'failed' }, be: { status: 'done' }, review: { status: 'failed' } } } })
+    await w.find('.lane-card[data-node-id="review"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-test="retry-node"]').trigger('click')
+    await flushPromises()
+    expect(restarted).toEqual([{ nodeId: 'review' }])
+    expect(resumed).toHaveLength(1)
+  })
+
   it('starts a run from the toolbar through ui.pipeline.start, with this pipeline and the task', async () => {
     const calls: unknown[] = []
     registerCommand('ui.pipeline.start', (args) => { calls.push(args) })
@@ -415,6 +439,41 @@ describe('PipelineInspector', () => {
       global: { plugins: [i18n] },
     }))!
   }
+
+  it('edits the retry policy as one op, and one try clears it', async () => {
+    const w = mountInspector(slot('fe', 'Frontend'))
+    expect(w.find('[data-field="retry-wait"]').exists()).toBe(false)
+    await w.find('[data-field="retry-tries"]').setValue('3')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'fe', retry: { maxTries: 3, waitMs: 0 } }])
+    await w.setProps({ node: { ...slot('fe', 'Frontend'), retry: { maxTries: 3, waitMs: 0 } } })
+    await w.find('[data-field="retry-wait"]').setValue('2.5')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'fe', retry: { maxTries: 3, waitMs: 2500 } }])
+    await w.find('[data-field="retry-tries"]').setValue('9')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'fe', retry: { maxTries: 5, waitMs: 0 } }])
+    await w.find('[data-field="retry-tries"]').setValue('1')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'fe', retry: null }])
+  })
+
+  it('keeps Retry This Step visible, and says why it is disabled', async () => {
+    const failed: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: { fe: { status: 'failed' } } }
+    const cases: Array<[RunSnapshot, string]> = [
+      [{ ...failed, state: 'running' }, 'pipelineEditor.inspector.retry-blocked-running'],
+      [EMPTY_RUN, 'pipelineEditor.inspector.retry-blocked-no-run'],
+      [{ ...failed, nodes: { fe: { status: 'done' } } }, 'pipelineEditor.inspector.retry-blocked-not-failed'],
+    ]
+    for (const [run, key] of cases) {
+      const w = mountInspector(slot('fe', 'Frontend'), { run })
+      const btn = w.get('[data-test="retry-node"]')
+      expect(btn.attributes('disabled')).toBeDefined()
+      expect(w.get('[data-test="retry-blocked"]').text()).toBe(i18n.global.t(key))
+      w.unmount()
+    }
+    const w = mountInspector(slot('fe', 'Frontend'), { run: failed })
+    expect(w.get('[data-test="retry-node"]').attributes('disabled')).toBeUndefined()
+    expect(w.find('[data-test="retry-blocked"]').exists()).toBe(false)
+    await w.get('[data-test="retry-node"]').trigger('click')
+    expect(w.emitted('retry-node')).toEqual([['fe']])
+  })
 
   it('builds the role\'s fields and hides the ones displayOptions rules out', () => {
     const w = mountInspector(slot('fe', 'Frontend'))

@@ -13,6 +13,8 @@ import type { Role } from '../../composables/useRoles'
 import type { Stage, StageSlot } from '../../data/stages'
 import {
   isPropertyVisible,
+  MAX_RETRY_WAIT_MS,
+  MAX_TRIES_CEILING,
   upstreamOf,
   type GraphNode,
   type GraphOp,
@@ -45,6 +47,7 @@ const emit = defineEmits<{
   (e: 'close'): void
   (e: 'open-pane', paneId: string): void
   (e: 'restart-from', nodeId: string): void
+  (e: 'retry-node', nodeId: string): void
   (e: 'gate', nodeId: string, decision: 'approve' | 'reject', comment: string): void
 }>()
 const { t } = useI18n()
@@ -96,6 +99,26 @@ function editParam(name: string, value: ParamValue): void {
     { op: 'update_node', id: node.id, slot: { params: { ...params.value, [name]: value } } },
   ])
 }
+/** maxTries 1 (or less) clears the policy: one try is the default. */
+function editRetry(field: 'maxTries' | 'waitS', value: number): void {
+  const node = n.value
+  if (!node || node.kind !== 'slot' || props.locked || !Number.isFinite(value)) return
+  const tries = Math.round(field === 'maxTries' ? value : (node.retry?.maxTries ?? 1))
+  const waitMs = Math.round(field === 'waitS' ? value * 1000 : (node.retry?.waitMs ?? 0))
+  const maxTries = Math.min(MAX_TRIES_CEILING, Math.max(1, tries))
+  const retry = maxTries > 1 ? { maxTries, waitMs: Math.min(MAX_RETRY_WAIT_MS, Math.max(0, waitMs)) } : null
+  if (JSON.stringify(retry) === JSON.stringify(node.retry ?? null)) return
+  emit('edit', t('pipelineEditor.history.retry'), [{ op: 'set_retry', id: node.id, retry }])
+}
+
+/** Why "Retry This Step" cannot run now ('' when it can). */
+const retryBlocked = computed(() => {
+  if (props.run.state === 'running') return t('pipelineEditor.inspector.retry-blocked-running')
+  if (!props.run.pipelineId) return t('pipelineEditor.inspector.retry-blocked-no-run')
+  if (runState.value?.status !== 'failed') return t('pipelineEditor.inspector.retry-blocked-not-failed')
+  return ''
+})
+
 function editGate(prompt: string): void {
   const node = n.value
   if (!node || node.kind !== 'gate' || props.locked) return
@@ -412,6 +435,24 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
           </template>
         </section>
         <p v-else-if="n.slot.roleKey" class="pi-help pi-help--block">{{ t('pipelineEditor.inspector.no-role-fields') }}</p>
+        <section class="pi-props" data-test="retry-policy">
+          <h3 class="pi-section">{{ t('pipelineEditor.inspector.retry-title') }}</h3>
+          <label class="pi-field">
+            <span class="pi-label">{{ t('pipelineEditor.inspector.retry-tries') }}</span>
+            <input
+              type="number" min="1" :max="MAX_TRIES_CEILING" step="1" data-field="retry-tries"
+              :value="n.retry?.maxTries ?? 1" :disabled="locked" @change="editRetry('maxTries', Number(valueOf($event)))"
+            />
+            <span class="pi-help">{{ t('pipelineEditor.inspector.retry-help', { max: MAX_TRIES_CEILING }) }}</span>
+          </label>
+          <label v-if="(n.retry?.maxTries ?? 1) > 1" class="pi-field">
+            <span class="pi-label">{{ t('pipelineEditor.inspector.retry-wait') }}</span>
+            <input
+              type="number" min="0" :max="MAX_RETRY_WAIT_MS / 1000" step="1" data-field="retry-wait"
+              :value="(n.retry?.waitMs ?? 0) / 1000" :disabled="locked" @change="editRetry('waitS', Number(valueOf($event)))"
+            />
+          </label>
+        </section>
       </template>
 
       <!-- ── Slot: live view ────────────────────────────────────────────── -->
@@ -450,6 +491,11 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
         v-if="n.kind === 'slot' && run.state !== 'running' && run.pipelineId" type="button" class="pi-btn"
         :title="t('pipelineEditor.inspector.restart-help')" @click="emit('restart-from', n.id)"
       >{{ t('pipelineEditor.inspector.restart-from') }}</button>
+      <button
+        v-if="n.kind === 'slot'" type="button" class="pi-btn" data-test="retry-node" :disabled="!!retryBlocked"
+        :title="retryBlocked || t('pipelineEditor.inspector.retry-node-help')" @click="emit('retry-node', n.id)"
+      >{{ t('pipelineEditor.inspector.retry-node') }}</button>
+      <span v-if="n.kind === 'slot' && retryBlocked" class="pi-help" data-test="retry-blocked">{{ retryBlocked }}</span>
       <span class="pi-spacer"></span>
       <button type="button" class="pi-btn pi-btn--danger" :disabled="locked" @click="emit('remove', n.id)">{{ t('action.delete') }}</button>
     </footer>

@@ -8948,6 +8948,7 @@
     "statusbar-note": "ses fenêtres contextuelles disparaissent avec elle"
   },
   "error": {
+    "pipeline-node-failed": "Étape {stage} : l’étape {slot} a signalé un échec ({reason}) et n’a plus de tentatives. L’exécution s’est arrêtée ; reprenez-la pour réessayer.",
     "pipeline-start-refused": "Le pipeline n’a pas démarré : {reason}",
     "pipeline-kickoff-failed": "Échec du pipeline : étape {stage}, emplacement {slot} : {reason}. Ses panes sont toujours ouverts.",
     "pipeline-kickoff-held": "Échec du pipeline : étape {stage}, emplacement {slot} : son lancement attend dans la zone de saisie. Laissez-le, et la reprise l’enverra, ou effacez-le. Ses panes sont toujours ouverts.",
@@ -10096,6 +10097,9 @@
     "weekday-6": "samedi"
   },
   "scheduler": {
+    "pipeline-title": "Chaque exécution de cette tâche lance un pipeline, qui ouvre des panneaux CLI et consomme leur quota",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "lance le pipeline {name}",
     "system": {
       "tag": "Système",
       "manage": "Gérer dans l’espace de travail →",
@@ -10137,6 +10141,16 @@
       "unknown": "Ignorée"
     },
     "editor": {
+      "err-task": "Saisissez une tâche",
+      "err-pipeline": "Choisissez un pipeline",
+      "task-placeholder": "À quoi sert chaque exécution du pipeline…",
+      "task": "Tâche",
+      "pipeline-cost": "Chaque exécution ouvre les panneaux CLI de ce pipeline et consomme leur quota. Aucune fenêtre n’est ouverte : si le workspace n’est pas ouvert, l’exécution échoue en indiquant pourquoi.",
+      "pick-pipeline": "Choisir un pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Lancer un pipeline",
+      "action-message": "Envoyer une instruction à un panneau",
+      "action": "Type d’action",
       "title-new": "Nouvelle tâche planifiée",
       "title-edit": "Modifier la tâche planifiée",
       "name": "Nom",
@@ -10176,6 +10190,7 @@
       "save": "Enregistrer"
     },
     "owner": {
+      "user": "créée par vous",
       "agent": "agent · {name}",
       "external": "agent externe",
       "agent-title": "Créée par l’agent « {name} » ; seuls lui et vous pouvez la modifier",
@@ -11154,6 +11169,7 @@
       "reject": "Renvoyer"
     },
     "history": {
+      "retry": "Modifier les nouvelles tentatives",
       "add": "Ajouter {name}",
       "edit-cli": "Changer de CLI",
       "edit-field": "Modifier {field}",
@@ -11178,6 +11194,15 @@
       "loop-budget": "Changer la limite de tentatives"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Seule une étape en échec peut être réessayée",
+      "retry-blocked-no-run": "Indisponible : aucune exécution de ce pipeline",
+      "retry-blocked-running": "Indisponible pendant une exécution",
+      "retry-node-help": "Relancer cette étape en échec : l’exécution reprend à cette étape, ou redémarre depuis elle si des étapes suivantes ont déjà tourné",
+      "retry-node": "Réessayer cette étape",
+      "retry-wait": "Attente avant chaque nouvelle tentative (secondes)",
+      "retry-help": "Une tentative échouée (la tâche n’a pas atteint l’agent, ou l’agent a signalé un échec) est relancée sur la même étape, jusqu’à {max} tentatives au total.",
+      "retry-tries": "Tentatives au total",
+      "retry-title": "Réessayer en cas d’échec",
       "aria": "Paramètres de {name}",
       "attempts": "Tentatives",
       "elapsed": "Durée",

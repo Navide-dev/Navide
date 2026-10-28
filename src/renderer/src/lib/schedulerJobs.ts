@@ -15,13 +15,18 @@ export type JobSchedule =
 /** Wake a CLI pane and send it `text`. At least one of pane_id / pane_name is
  *  present; with pane_id the backend delivers to that exact pane and never
  *  falls back to a same-named one. A system job of the workspace
- *  self-evolution feature carries `kind: 'evolve'` and only `workspace`. */
+ *  self-evolution feature carries `kind: 'evolve'` and only `workspace`.
+ *  `kind: 'pipeline_start'` starts a pipeline run in `workspace` instead: one
+ *  of pipeline_id / pipeline_name, and the run's `task` (no pane, no text). */
 export interface JobAction {
-  kind: 'message' | 'evolve'
+  kind: 'message' | 'evolve' | 'pipeline_start'
   workspace: string
   pane_id?: string
   pane_name?: string
-  text: string
+  text?: string
+  pipeline_id?: string
+  pipeline_name?: string
+  task?: string
 }
 
 export interface JobPolicy {

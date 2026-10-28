@@ -8948,6 +8948,7 @@
     "statusbar-note": "狀態列上的資訊窗會一起消失"
   },
   "error": {
+    "pipeline-node-failed": "階段 {stage}：步驟 {slot} 回報失敗（{reason}），重試次數已用完。這一輪已停止，可以 resume 再試一次。",
     "pipeline-start-refused": "流程沒有啟動：{reason}",
     "pipeline-kickoff-failed": "流程失敗：階段 {stage}、slot {slot} — {reason}。它的 pane 仍保持開啟。",
     "pipeline-kickoff-held": "流程失敗：階段 {stage}、slot {slot} — 它的 kickoff 停在輸入框。保持不動，resume 會幫你送出；或者把它清掉。它的 pane 仍保持開啟。",
@@ -10096,6 +10097,9 @@
     "weekday-6": "週六"
   },
   "scheduler": {
+    "pipeline-title": "這個排程每次執行都會啟動一輪 Pipeline，會開啟 CLI Pane 並消耗額度",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "啟動 Pipeline {name}",
     "system": {
       "tag": "系統",
       "manage": "到 workspace 管理 →",
@@ -10137,6 +10141,16 @@
       "unknown": "略過"
     },
     "editor": {
+      "err-task": "請輸入任務",
+      "err-pipeline": "請選擇 Pipeline",
+      "task-placeholder": "每一輪 Pipeline 要做什麼…",
+      "task": "任務",
+      "pipeline-cost": "每次執行都會開啟這個 Pipeline 的 CLI Pane 並消耗額度。排程不會自動開視窗：如果這個 workspace 沒有開著，這一輪會失敗並說明原因。",
+      "pick-pipeline": "選擇 Pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "啟動 Pipeline",
+      "action-message": "傳送指令給 Pane",
+      "action": "動作",
       "title-new": "新增排程工作",
       "title-edit": "編輯排程工作",
       "name": "名稱",
@@ -10176,6 +10190,7 @@
       "save": "儲存"
     },
     "owner": {
+      "user": "由你建立",
       "agent": "agent · {name}",
       "external": "外部 agent",
       "agent-title": "由 agent「{name}」建立；只有它和你可以修改",
@@ -11154,6 +11169,7 @@
       "reject": "退回修改"
     },
     "history": {
+      "retry": "變更重試",
       "add": "新增 {name}",
       "edit-cli": "更換 CLI",
       "edit-field": "修改 {field}",
@@ -11178,6 +11194,15 @@
       "loop-budget": "修改重試上限"
     },
     "inspector": {
+      "retry-blocked-not-failed": "只有失敗的步驟可以重試",
+      "retry-blocked-no-run": "無法使用：這個 Pipeline 沒有執行紀錄",
+      "retry-blocked-running": "執行進行中，無法使用",
+      "retry-node-help": "重跑這個失敗的步驟：從它這裡 resume，後面的步驟已經跑過時則從它重新開始",
+      "retry-node": "重試此步驟",
+      "retry-wait": "每次重試前等待（秒）",
+      "retry-help": "失敗的一次（任務沒送到 agent，或 agent 回報失敗）會在同一個步驟再跑一次，總共最多 {max} 次。",
+      "retry-tries": "總共嘗試次數",
+      "retry-title": "失敗時重試",
       "aria": "{name} 的設定",
       "attempts": "嘗試次數",
       "elapsed": "耗時",

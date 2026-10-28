@@ -108,7 +108,10 @@ pytestmark = pytest.mark.asyncio
 #: pipeline_graph description documents branch and error edges, `when`, the
 #: ---BRANCH--- / ---NODE-FAILED--- / ---OUTPUT--- signals, untaken skips and
 #: {{node.<id>.output}}. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "b1e653a5b7b19951453e451e22b9828f2b8f9852d584e440646b87a750ca54b5"
+#: Re-pinned for 0.2.34 p2-triggers (previous pin b1e653a5…): scheduler_upsert
+#: documents the pipeline_start action, pipeline_status the interrupted state
+#: and pipeline_graph the set_retry op. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "656637e7b3680f57b8b75851d35b2836220db0ebfef291c466ddd9240f12373d"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
