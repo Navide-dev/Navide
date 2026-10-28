@@ -1957,7 +1957,7 @@
       "restore": "還原",
       "candidateReady": "更新 {version} 已就緒",
       "activationFailed": "{plugin} 已安裝，但無法啟用：{reason}。請在下方清單重新啟動或捨棄它。",
-      "switchNow": "核准後，{id} 會立即切換到 {version}。開著的畫面會重新載入，畫面裡沒存的內容會遺失。這次切換會記錄在公告中心，可以一鍵退回。",
+      "switchNow": "核准後，{id} 會立即切換到 {version}。開著的畫面會重新載入：用 Navide SDK 保存狀態的畫面會回到原來的位置，其他沒存的內容會遺失。這次切換會記錄在公告中心，可以一鍵退回。",
       "restartPlugin": "重新啟動 Navide 外掛",
       "disable": "停用",
       "enable": "啟用",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "拖曳以調整記錄面板高度",
     "filter-by-type": "依類型篩選",
     "all-stages-finished": "{count} 個階段全部順利完成",
+    "region-switching": "正在把 {title} 切換到 {version}…",
     "region-unavailable": "{title} 無法使用"
   },
   "layout": {

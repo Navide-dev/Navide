@@ -1957,7 +1957,7 @@
       "restore": "Restaurer",
       "candidateReady": "La mise à jour {version} est prête",
       "activationFailed": "{plugin} a été installé mais n’a pas pu être activé : {reason}. Redémarrez-le ou abandonnez-le dans la liste ci-dessous.",
-      "switchNow": "L’approbation fait passer immédiatement {id} à la version {version}. Ses vues ouvertes se rechargent et tout ce qui n’y est pas enregistré est perdu. Le changement est consigné dans les annonces, où vous pouvez revenir en arrière en un clic.",
+      "switchNow": "L’approbation fait passer immédiatement {id} à la version {version}. Ses vues ouvertes se rechargent : une vue qui enregistre son état avec le SDK Navide revient là où elle était, et tout le reste qui n’y est pas enregistré est perdu. Le changement est consigné dans les annonces, où vous pouvez revenir en arrière en un clic.",
       "restartPlugin": "Redémarrer le plugin Navide",
       "disable": "Désactiver",
       "enable": "Activer",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "Faire glisser pour redimensionner le panneau du journal",
     "filter-by-type": "Filtrer par type",
     "all-stages-finished": "Les {count} étapes se sont terminées avec succès",
+    "region-switching": "Passage de {title} à la version {version}…",
     "region-unavailable": "{title} indisponible"
   },
   "layout": {

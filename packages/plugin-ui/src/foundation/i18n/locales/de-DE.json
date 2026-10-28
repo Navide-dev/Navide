@@ -1957,7 +1957,7 @@
       "restore": "Wiederherstellen",
       "candidateReady": "Update {version} ist bereit",
       "activationFailed": "{plugin} wurde installiert, konnte aber nicht aktiviert werden: {reason}. Starten Sie es in der Liste unten neu oder verwerfen Sie es.",
-      "switchNow": "Mit der Genehmigung wird {id} sofort auf {version} umgestellt. Seine geöffneten Ansichten werden neu geladen, und alles, was darin nicht gespeichert ist, geht verloren. Der Wechsel wird in den Ankündigungen festgehalten, wo Sie ihn mit einem Klick rückgängig machen können.",
+      "switchNow": "Mit der Genehmigung wird {id} sofort auf {version} umgestellt. Seine geöffneten Ansichten werden neu geladen: Eine Ansicht, die ihren Zustand über das Navide SDK speichert, kehrt dorthin zurück, wo sie war; alles andere, was darin nicht gespeichert ist, geht verloren. Der Wechsel wird in den Ankündigungen festgehalten, wo Sie ihn mit einem Klick rückgängig machen können.",
       "restartPlugin": "Navide-Plug-in neu starten",
       "disable": "Deaktivieren",
       "enable": "Aktivieren",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "Ziehen, um die Größe des Protokollbereichs zu ändern",
     "filter-by-type": "Nach Typ filtern",
     "all-stages-finished": "Alle {count} Stufen erfolgreich abgeschlossen",
+    "region-switching": "{title} wird auf {version} umgestellt …",
     "region-unavailable": "{title} nicht verfügbar"
   },
   "layout": {

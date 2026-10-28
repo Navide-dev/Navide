@@ -50,6 +50,21 @@ const props = defineProps<{
 
 const src = ref<string | null>(null)
 const error = ref<string | null>(null)
+// H1: the Host is switching this plugin to another version. Between its drain
+// and the new guest's first paint the region would otherwise sit blank (or on
+// a dead guest), so it says what is happening instead.
+const switchingTo = ref<string | null>(null)
+/** The version the last switch went to, until a guest of it has been prepared. */
+const switchedTo = ref<string | null>(null)
+const showSwitching = computed(() =>
+  switchingTo.value !== null ||
+  (switchedTo.value !== null &&
+    switchedTo.value === props.contribution.packageVersion &&
+    !src.value &&
+    !error.value)
+)
+const switchingVersion = computed(() => switchingTo.value ?? switchedTo.value ?? '')
+let stopSwitching: (() => void) | undefined
 const sourceMark = computed(() => chromeSourceMark(props.contribution.source))
 
 // A2-3: a developer folder's badge opens its "Local folder" info card, read
@@ -131,6 +146,8 @@ async function prepare(): Promise<void> {
   } catch (cause) {
     if (mine !== generation) return
     error.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    if (mine === generation && switchedTo.value === props.contribution.packageVersion) switchedTo.value = null
   }
 }
 
@@ -150,6 +167,18 @@ function pushTheme(): void {
 }
 
 onMounted(() => {
+  stopSwitching = window.agentTeam?.onPluginSwitching?.((notice) => {
+    if (notice.pluginId !== props.contribution.pluginId) return
+    if (notice.phase === 'start') {
+      switchingTo.value = notice.toVersion
+      return
+    }
+    // Settled, either way. A guest of the new version may still be preparing;
+    // `switchedTo` keeps the notice up until it is (or until it fails).
+    const ready = src.value !== null && props.contribution.packageVersion === switchingTo.value
+    switchedTo.value = ready ? null : switchingTo.value
+    switchingTo.value = null
+  })
   // Follow the theme instead of sampling it: the guest is its own document and
   // cannot inherit our CSS variables, so every switch has to be forwarded.
   themeObserver = new MutationObserver(() => pushTheme())
@@ -186,6 +215,8 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  stopSwitching?.()
+  stopSwitching = undefined
   themeObserver?.disconnect()
   themeObserver = null
   // Drop the generation so an in-flight prepare cannot resurrect this instance
@@ -222,11 +253,22 @@ onBeforeUnmount(() => {
       :folder="folderInfo"
       @close="folderInfo = null"
     />
+    <div
+      v-if="showSwitching && !error"
+      class="plugin-region-host__error"
+      role="status"
+      data-testid="plugin-region-switching"
+    >
+      {{ $t('label.region-switching', { title: contribution.title, version: switchingVersion }) }}
+    </div>
     <div v-if="error" class="plugin-region-host__error" role="status">
       {{ $t('label.region-unavailable', { title: contribution.title }) }}
     </div>
+    <!-- Hidden, never removed, while switching: removing a <webview> destroys
+         its guest, which the Host reads as the plugin dying (see prepare()). -->
     <webview
       v-else-if="src"
+      v-show="!showSwitching"
       class="plugin-region-host__view"
       :src="src"
       @dom-ready="pushTheme"

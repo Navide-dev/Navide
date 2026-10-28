@@ -1957,7 +1957,7 @@
       "restore": "Restaurar",
       "candidateReady": "La actualización {version} está lista",
       "activationFailed": "{plugin} se instaló, pero no se pudo activar: {reason}. Reinícialo o descártalo en la lista de abajo.",
-      "switchNow": "Al aprobar, {id} cambia a {version} de inmediato. Sus vistas abiertas se recargan y se pierde todo lo que no esté guardado en ellas. El cambio queda registrado en los avisos, donde puedes volver atrás con un clic.",
+      "switchNow": "Al aprobar, {id} cambia a {version} de inmediato. Sus vistas abiertas se recargan: una vista que guarda su estado con el SDK de Navide vuelve a donde estaba, y se pierde todo lo demás que no esté guardado en ellas. El cambio queda registrado en los avisos, donde puedes volver atrás con un clic.",
       "restartPlugin": "Reiniciar complemento de Navide",
       "disable": "Desactivar",
       "enable": "Activar",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "Arrastra para cambiar el tamaño del panel de registro",
     "filter-by-type": "Filtrar por tipo",
     "all-stages-finished": "Las {count} etapas terminaron correctamente",
+    "region-switching": "Cambiando {title} a {version}…",
     "region-unavailable": "{title} no disponible"
   },
   "layout": {

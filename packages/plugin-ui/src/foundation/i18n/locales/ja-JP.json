@@ -1957,7 +1957,7 @@
       "restore": "復元",
       "candidateReady": "アップデート {version} の準備ができました",
       "activationFailed": "{plugin} はインストールされましたが、有効化できませんでした：{reason}。下の一覧で再起動するか破棄してください。",
-      "switchNow": "承認すると {id} はすぐに {version} に切り替わります。開いている画面は再読み込みされ、保存していない内容は失われます。切り替えはお知らせに記録され、ワンクリックで戻せます。",
+      "switchNow": "承認すると {id} はすぐに {version} に切り替わります。開いている画面は再読み込みされます。Navide SDK で状態を保存している画面は元の状態に戻り、それ以外の保存していない内容は失われます。切り替えはお知らせに記録され、ワンクリックで戻せます。",
       "restartPlugin": "Navide プラグインを再起動",
       "disable": "無効化",
       "enable": "有効化",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "ドラッグしてログパネルのサイズを変更",
     "filter-by-type": "種類で絞り込み",
     "all-stages-finished": "全 {count} ステージが正常に完了しました",
+    "region-switching": "{title} を {version} に切り替えています…",
     "region-unavailable": "{title} は利用できません"
   },
   "layout": {

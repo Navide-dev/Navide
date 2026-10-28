@@ -1957,7 +1957,7 @@
       "restore": "복원",
       "candidateReady": "업데이트 {version} 준비됨",
       "activationFailed": "{plugin}은(는) 설치되었지만 활성화하지 못했어요: {reason}. 아래 목록에서 다시 시작하거나 삭제하세요.",
-      "switchNow": "승인하면 {id}이(가) 바로 {version}(으)로 전환돼요. 열려 있는 보기는 다시 로드되고, 저장하지 않은 내용은 사라져요. 전환 내역은 공지에 기록되며, 거기서 한 번에 되돌릴 수 있어요.",
+      "switchNow": "승인하면 {id}이(가) 바로 {version}(으)로 전환돼요. 열려 있는 보기는 다시 로드돼요. Navide SDK로 상태를 저장하는 보기는 원래 상태로 돌아오고, 그 밖에 저장하지 않은 내용은 사라져요. 전환 내역은 공지에 기록되며, 거기서 한 번에 되돌릴 수 있어요.",
       "restartPlugin": "Navide 플러그인 다시 시작",
       "disable": "사용 안 함",
       "enable": "사용",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "드래그해서 로그 패널 크기 조절",
     "filter-by-type": "유형별 필터",
     "all-stages-finished": "Stage {count}개가 모두 성공적으로 끝났어요",
+    "region-switching": "{title}을(를) {version}(으)로 전환하는 중…",
     "region-unavailable": "{title}을(를) 사용할 수 없어요"
   },
   "layout": {

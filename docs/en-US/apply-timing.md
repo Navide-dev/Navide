@@ -14,7 +14,7 @@ what applying it costs, and what never reloads in place.
 | Skills delivered to a CLI (Settings → Skills) | When that CLI next starts, or when the CLI rereads its skills on its own | Open panes may keep the old set; they show **Settings changed** until rebuilt |
 | Navide's own MCP servers (Settings → MCP, servers Navide connects to) | At once: Navide reconnects to them | Nothing; CLI panes never read this list |
 | The account a pane runs on | When the pane is reopened | Open panes keep their account until reopened |
-| A Navide plugin update, **Restart Plugin**, going **Back to** a version | At once | The plugin's open views reload and lose what they had not saved |
+| A Navide plugin update, **Restart Plugin**, going **Back to** a version | At once, after the version about to run reports ready; if it does not, the running one stays | The plugin's open views reload; between two Navide Marketplace versions a view that stores its state through the SDK gets it back, anything else not saved is lost |
 | A Developer Mode folder's files | At once, after the new version reports ready; a failed version leaves the running one in place | The plugin's open views reload; a view that stores its state through the SDK gets it back |
 | A Developer Mode folder's declared permissions or backend | After you consent again | The folder stays unloaded until you do |
 | The Python backend (crash restart, or **Restart backend** in Settings) | At once | Every CLI pane's process and any turn in progress |
