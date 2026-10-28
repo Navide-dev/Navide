@@ -6,7 +6,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { GraphNode, NodeRunState } from '../../lib/pipelineGraph'
 import type { LaneBadge } from '../../lib/pipelineGraphEdits'
-import { elapsedOf, formatElapsed, formatTokens, nodeTitle } from './pipelineEditorModel'
+import { elapsedOf, formatElapsed, formatTokens, nodeTitle, runStatusKey } from './pipelineEditorModel'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{
@@ -24,7 +24,7 @@ const emit = defineEmits<{ (e: 'badge', badge: LaneBadge): void }>()
 const { t } = useI18n()
 
 const title = computed(() => nodeTitle(props.node))
-const status = computed(() => props.run?.status ?? (props.node.pinned ? 'pinned' : 'idle'))
+const status = computed(() => (props.run ? runStatusKey(props.run) : props.node.pinned ? 'pinned' : 'idle'))
 const elapsed = computed(() => formatElapsed(elapsedOf(props.run, props.now ?? Date.now())))
 const tokens = computed(() => formatTokens(props.run?.tokens))
 const subtitle = computed(() => {
@@ -150,6 +150,7 @@ function badgeText(b: LaneBadge): string {
 .pnc.is-awaiting { --pnc-tone: var(--attention-emphasis); }
 .pnc.is-failed, .pnc.is-rejected, .pnc.is-aborted { --pnc-tone: var(--danger-emphasis); }
 .pnc.is-skipped, .pnc.is-pinned { --pnc-tone: var(--done-emphasis); }
+.pnc.is-untaken { opacity: 0.55; }
 .pnc.is-pending { --pnc-tone: var(--border-muted); }
 
 .pnc-glyph {

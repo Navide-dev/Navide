@@ -107,7 +107,15 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.34 P3 (previous pin c9430be9…): cli_open_agent's new
 #: `account` parameter and its description (default: the caller's account).
 #: No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "8e8801c0091e65692f4164b060aa70eb65aa4b12f0d8fec800db7ed190b84792"
+#: Re-pinned for 0.2.34 p2-schema (previous pin c9430be9…): the
+#: pipeline_graph description documents branch and error edges, `when`, the
+#: ---BRANCH--- / ---NODE-FAILED--- / ---OUTPUT--- signals, untaken skips and
+#: {{node.<id>.output}}. No other tool changed.
+#: Re-pinned for 0.2.34 p2-triggers (previous pin b1e653a5…): scheduler_upsert
+#: documents the pipeline_start action, pipeline_status the interrupted state
+#: and pipeline_graph the set_retry op. No other tool changed.
+#: Merged p3 and p2-schema/p2-triggers: digest recomputed over both.
+MAIN_TOOLS_LIST_SHA256 = "879e4cb62105b609de3894f260937dd053487f00f4709509d26462bea916aa8e"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

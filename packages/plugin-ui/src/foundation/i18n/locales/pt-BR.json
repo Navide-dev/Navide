@@ -8951,6 +8951,7 @@
     "statusbar-note": "os pop-ups dela vão junto"
   },
   "error": {
+    "pipeline-node-failed": "Etapa {stage}: o passo {slot} relatou uma falha ({reason}) e não tem mais tentativas. A execução parou; retome-a para tentar de novo.",
     "pipeline-start-refused": "O pipeline não foi iniciado: {reason}",
     "pipeline-kickoff-failed": "Falha no pipeline: etapa {stage}, posição {slot} – {reason}. Os panes dele continuam abertos.",
     "pipeline-kickoff-held": "Falha no pipeline: etapa {stage}, posição {slot} – a tarefa inicial está aguardando na caixa de entrada. Deixe-a lá e a retomada vai enviá-la, ou limpe-a. Os panes dele continuam abertos.",
@@ -10099,6 +10100,9 @@
     "weekday-6": "sábado"
   },
   "scheduler": {
+    "pipeline-title": "Cada execução desta tarefa inicia um pipeline, que abre painéis de CLI e consome a cota deles",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "inicia o pipeline {name}",
     "system": {
       "tag": "Sistema",
       "manage": "Gerenciar no workspace →",
@@ -10140,6 +10144,16 @@
       "unknown": "Ignorada"
     },
     "editor": {
+      "err-task": "Digite uma tarefa",
+      "err-pipeline": "Escolha um pipeline",
+      "task-placeholder": "Para que serve cada execução do pipeline…",
+      "task": "Tarefa",
+      "pipeline-cost": "Cada execução abre os painéis de CLI deste pipeline e consome a cota deles. Nunca abre uma janela: se o workspace não estiver aberto, a execução falha e diz por quê.",
+      "pick-pipeline": "Escolha um pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Iniciar um pipeline",
+      "action-message": "Enviar uma instrução a um painel",
+      "action": "Ação",
       "title-new": "Nova tarefa agendada",
       "title-edit": "Editar tarefa agendada",
       "name": "Nome",
@@ -10179,6 +10193,7 @@
       "save": "Salvar"
     },
     "owner": {
+      "user": "criada por você",
       "agent": "agent · {name}",
       "external": "agent externo",
       "agent-title": "Criada pelo agent “{name}”; somente ele e você podem alterá-la",
@@ -11115,6 +11130,8 @@
     },
     "canvas": {
       "insert-on-edge": "Inserir um passo aqui",
+      "branch-label": "se {when}",
+      "error-label": "em caso de erro",
       "loop-label": "↺ máx. {max}",
       "minimap": "Visão geral de todo o pipeline",
       "pass": "Continuar quando aprovado",
@@ -11155,6 +11172,7 @@
       "reject": "Devolver"
     },
     "history": {
+      "retry": "Alterar novas tentativas",
       "add": "Adicionar {name}",
       "edit-cli": "Mudar a CLI",
       "edit-field": "Editar {field}",
@@ -11174,9 +11192,20 @@
       "tidy": "Organizar",
       "unlink": "Remover vínculo",
       "unpin": "Descongelar a saída",
+      "link-kind": "Alterar tipo de vínculo",
+      "link-when": "Alterar valor do ramo",
       "loop-budget": "Mudar o limite de novas tentativas"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Só um passo com falha pode ser tentado de novo",
+      "retry-blocked-no-run": "Indisponível: nenhuma execução deste pipeline",
+      "retry-blocked-running": "Indisponível enquanto uma execução está em andamento",
+      "retry-node-help": "Executar este passo com falha de novo: a execução é retomada nele, ou reiniciada a partir dele se passos seguintes já rodaram",
+      "retry-node": "Tentar este passo de novo",
+      "retry-wait": "Espera antes de cada nova tentativa (segundos)",
+      "retry-help": "Uma tentativa com falha (a tarefa não chegou ao agente ou o agente relatou uma falha) roda de novo no mesmo passo, até {max} tentativas no total.",
+      "retry-tries": "Tentativas no total",
+      "retry-title": "Tentar de novo em caso de falha",
       "aria": "Configurações de {name}",
       "attempts": "Tentativas",
       "elapsed": "Tempo",
@@ -11258,6 +11287,7 @@
       "awaiting": "Precisa de aprovação",
       "rejected": "Devolvido",
       "failed": "Falhou",
+      "untaken": "Ignorado (fora do caminho seguido)",
       "skipped": "Saída congelada reutilizada",
       "aborted": "Cancelado",
       "pinned": "Saída congelada"
@@ -11285,6 +11315,17 @@
       "open-in-canvas": "Abrir na tela do pipeline",
       "gate-toast": "O pipeline está aguardando sua aprovação em {name}",
       "next-gated": "Aprove ou devolva este ponto de aprovação antes de seguir para a próxima etapa."
+    },
+    "link": {
+      "title": "Vínculo",
+      "desc": "{from} → {to}",
+      "kind": "Tipo de vínculo",
+      "kind-main": "Sempre",
+      "kind-branch": "Ramo (se…)",
+      "kind-error": "Em caso de erro",
+      "when": "Valor do ramo",
+      "when-placeholder": "Valor informado pelo passo, ou default",
+      "remove": "Remover vínculo"
     },
     "edge": {
       "title": "Loop de rejeição",

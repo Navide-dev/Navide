@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// Create / edit one Navide scheduled job. The only action a job has is "wake a
-// CLI pane and send it this text", so the form is: when, which pane, what.
+// Create / edit one Navide scheduled job. A job either wakes a CLI pane and
+// sends it a text, or starts a pipeline run in a workspace, so the form is:
+// when, then which pane and what, or which pipeline and its task.
 //
 // The target list is the messaging roster (`agent_msg.list`, the same list the
 // @-mention menu reads), grouped by workspace. Each option carries the pane's
@@ -75,6 +76,11 @@ const workspace = ref('')
  *  by name only (MCP) and has no pane id to show. */
 const target = ref('')
 const text = ref('')
+const actionKind = ref<'message' | 'pipeline_start'>('message')
+/** Select value: a pipeline id, or `NAME_PREFIX + name` for a job that names
+ *  its pipeline (MCP pipeline_name). */
+const pipelineSel = ref('')
+const pipelines = ref<Array<{ id: string; name: string }>>([])
 const catchUp = ref<'once' | 'skip'>('once')
 const maxRuns = ref(24)
 
@@ -112,10 +118,34 @@ function reset(job: SchedulerJob | null): void {
     : job?.action.pane_name
       ? NAME_PREFIX + job.action.pane_name
       : ''
-  text.value = job?.action.text ?? ''
+  actionKind.value = job?.action.kind === 'pipeline_start' ? 'pipeline_start' : 'message'
+  pipelineSel.value = job?.action.pipeline_id
+    ? job.action.pipeline_id
+    : job?.action.pipeline_name
+      ? NAME_PREFIX + job.action.pipeline_name
+      : ''
+  text.value = (actionKind.value === 'pipeline_start' ? job?.action.task : job?.action.text) ?? ''
   catchUp.value = job?.policy?.catch_up ?? 'once'
   maxRuns.value = job?.policy?.max_runs_per_day ?? 24
 }
+
+async function loadPipelines(): Promise<void> {
+  if (props.backend.status.value !== 'connected') return
+  try {
+    const resp = await props.backend.send<{ pipelines?: Array<{ id: string; name: string }> }>('pipelines.list', {})
+    if (resp.ok && resp.payload?.pipelines) pipelines.value = resp.payload.pipelines
+  } catch {
+    // Keep the last list.
+  }
+}
+
+/** The stored pipeline when it is not in the list (renamed, removed, or named). */
+const missingPipeline = computed(() => {
+  const v = pipelineSel.value
+  if (!v || pipelines.value.some((p) => p.id === v)) return null
+  const label = v.startsWith(NAME_PREFIX) ? t('scheduler.editor.pane-by-name', { name: v.slice(NAME_PREFIX.length) }) : v
+  return { value: v, label }
+})
 
 async function loadRoster(): Promise<void> {
   if (props.backend.status.value !== 'connected') return
@@ -141,6 +171,7 @@ watch(
     if (!open) return
     reset(props.job)
     void loadRoster()
+    void loadPipelines()
     // Keeps the "next run" preview honest while the modal sits open.
     clock = setInterval(() => (now.value = Date.now()), 30_000)
   },
@@ -245,8 +276,13 @@ const errors = computed<Record<string, string>>(() => {
       e.schedule = t('scheduler.editor.err-days')
   }
   if (!workspace.value) e.workspace = t('scheduler.editor.err-workspace')
-  if (!target.value) e.target = t('scheduler.editor.err-target')
-  if (!text.value.trim()) e.text = t('scheduler.editor.err-text')
+  if (actionKind.value === 'pipeline_start') {
+    if (!pipelineSel.value) e.target = t('scheduler.editor.err-pipeline')
+    if (!text.value.trim()) e.text = t('scheduler.editor.err-task')
+  } else {
+    if (!target.value) e.target = t('scheduler.editor.err-target')
+    if (!text.value.trim()) e.text = t('scheduler.editor.err-text')
+  }
   const r = Number(maxRuns.value)
   if (!Number.isInteger(r) || r < 1 || r > RUNS_MAX)
     e.maxRuns = t('scheduler.editor.err-max-runs', { max: RUNS_MAX })
@@ -264,7 +300,13 @@ const preview = computed(() => {
   })
 })
 
-function buildDraft(): JobDraft {
+function buildAction(): JobDraft['action'] {
+  if (actionKind.value === 'pipeline_start') {
+    const p = pipelineSel.value
+    return p.startsWith(NAME_PREFIX)
+      ? { kind: 'pipeline_start', workspace: workspace.value, pipeline_name: p.slice(NAME_PREFIX.length), task: text.value.trim() }
+      : { kind: 'pipeline_start', workspace: workspace.value, pipeline_id: p, task: text.value.trim() }
+  }
   const v = target.value
   const byName = v.startsWith(NAME_PREFIX)
   const pane = byName ? undefined : roster.value.find((p) => p.pane_id === v)
@@ -274,11 +316,15 @@ function buildDraft(): JobDraft {
   const action: JobDraft['action'] = { kind: 'message', workspace: workspace.value, text: text.value.trim() }
   if (!byName) action.pane_id = v
   if (paneName) action.pane_name = paneName
+  return action
+}
+
+function buildDraft(): JobDraft {
   const draft: JobDraft = {
     name: name.value.trim(),
     enabled: props.job?.enabled ?? true,
     schedule: schedule.value,
-    action,
+    action: buildAction(),
     policy: {
       ...(props.job?.policy ?? {}),
       catch_up: catchUp.value,
@@ -421,6 +467,25 @@ async function remove(): Promise<void> {
           </label>
 
           <label class="je-field">
+            <span class="je-k">{{ t('scheduler.editor.action') }}</span>
+            <select v-model="actionKind" class="nv-select" data-field="action-kind">
+              <option value="message">{{ t('scheduler.editor.action-message') }}</option>
+              <option value="pipeline_start">{{ t('scheduler.editor.action-pipeline') }}</option>
+            </select>
+          </label>
+
+          <label v-if="actionKind === 'pipeline_start'" class="je-field">
+            <span class="je-k">{{ t('scheduler.editor.pipeline') }}</span>
+            <select v-model="pipelineSel" class="nv-select" data-field="pipeline">
+              <option value="" disabled>{{ t('scheduler.editor.pick-pipeline') }}</option>
+              <option v-if="missingPipeline" :value="missingPipeline.value" data-missing="true">{{ missingPipeline.label }}</option>
+              <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+            <span v-if="shownErrors.target" class="je-err" data-error="target">{{ shownErrors.target }}</span>
+            <span class="je-preview" data-test="pipeline-cost">{{ t('scheduler.editor.pipeline-cost') }}</span>
+          </label>
+
+          <label v-else class="je-field">
             <span class="je-k">{{ t('scheduler.editor.target') }}</span>
             <select v-model="target" class="nv-select" data-field="target" :disabled="!workspace">
               <option value="" disabled>{{ t('scheduler.editor.pick-pane') }}</option>
@@ -435,13 +500,13 @@ async function remove(): Promise<void> {
           </label>
 
           <label class="je-field">
-            <span class="je-k">{{ t('scheduler.editor.text') }}</span>
+            <span class="je-k">{{ t(actionKind === 'pipeline_start' ? 'scheduler.editor.task' : 'scheduler.editor.text') }}</span>
             <textarea
               v-model="text"
               class="nv-input je-text"
               data-field="text"
               rows="3"
-              :placeholder="t('scheduler.editor.text-placeholder')"
+              :placeholder="t(actionKind === 'pipeline_start' ? 'scheduler.editor.task-placeholder' : 'scheduler.editor.text-placeholder')"
             />
             <span v-if="shownErrors.text" class="je-err" data-error="text">{{ shownErrors.text }}</span>
           </label>

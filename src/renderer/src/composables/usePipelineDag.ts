@@ -4,17 +4,32 @@ import type { NodeRunState, PipelineGraph } from '../lib/pipelineGraph'
 import {
   approveGate,
   buildDagPlan,
+  conditionalLabels as planConditionalLabels,
   createRunState,
+  expandNodeOutputs,
   expandPrevSummary,
   gatesBefore,
+  hasBranchEdge,
+  hasErrorEdge,
+  hasOutputContract,
+  isUntaken,
+  kickoffHints,
+  parseNodeSignals,
   pinnedLabels as planPinnedLabels,
+  readsFailure,
   rejectGate,
   restartPointFor,
+  routeFailure as planRouteFailure,
+  settleUntaken,
   slotNodeIdAt,
+  takeRetry,
+  untakenLabels as planUntakenLabels,
   upstreamSlotNodes,
   type DagPlan,
   type DagRunState,
+  type NodeResult,
   type RejectResult,
+  type RetryTurn,
 } from '../lib/pipelineDagRun'
 
 /** Characters of a finished slot's terminal tail kept as its summary. */
@@ -42,6 +57,9 @@ export interface AwaitingGate {
 export interface NodeOutput {
   summary: string
   at: string
+  /** Only for a node with branch edges / an output contract (see NodeResult). */
+  branch?: string
+  output?: unknown
 }
 
 /**
@@ -170,8 +188,9 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     run = createRunState(built, nextIndex, built.nodeLayer[gateId])
     for (const [id, st] of Object.entries(restored)) {
       // Only finished work carries over; anything that was in flight is
-      // what the gate is about to decide on, or runs again after it.
-      if (id in run.nodes && st && (st.status === 'done' || (st.status === 'skipped' && st.pinned))) {
+      // what the gate is about to decide on, or runs again after it. A
+      // failure taken down an error edge is finished work too.
+      if (id in run.nodes && st && (st.status === 'done' || (st.status === 'skipped' && st.pinned) || (st.status === 'failed' && st.errorRouted))) {
         run.nodes[id] = { ...st }
       }
     }
@@ -187,6 +206,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
   function holdBeforeStage(nextIndex: number): boolean {
     const p = plan.value
     if (!p || !run || !p.hasControlFlow) return false
+    settleUntaken(p, run, resultOf)
     const pending = gatesBefore(p, run, nextIndex)
     if (!pending.length) return false
     const gateId = pending[0]
@@ -204,6 +224,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
   function approve(gateId: string): boolean {
     if (!run || awaitingGate.value?.gateId !== gateId) return false
     approveGate(run, gateId, now())
+    if (plan.value) settleUntaken(plan.value, run, resultOf)
     awaitingGate.value = null
     deps.log(`◆ Gate "${gateId}" ✓ approved`)
     void report()
@@ -222,6 +243,65 @@ export function usePipelineDag(deps: PipelineDagDeps) {
   function pinnedLabels(index: number): Set<string> {
     const p = plan.value
     return p && p.hasControlFlow ? planPinnedLabels(p, index) : new Set()
+  }
+
+  /** Slot labels of stage `index` none of whose inputs was taken: skipped,
+   *  with no pane and no kickoff. Empty without branch/error edges. */
+  function untakenLabels(index: number): Set<string> {
+    const p = plan.value
+    if (!p || !run || !p.hasBranching) return new Set()
+    settleUntaken(p, run, resultOf)
+    void report()
+    return planUntakenLabels(p, run, index)
+  }
+
+  /** Slot labels of stage `index` the look-ahead pre-spawn must leave alone:
+   *  whether they run is only known once their inputs finish. */
+  function conditionalLabels(index: number): Set<string> {
+    const p = plan.value
+    return p && p.hasBranching ? planConditionalLabels(p, index) : new Set()
+  }
+
+  /** The failure a running slot reported with ---NODE-FAILED---, or '' —
+   *  always '' for a node with neither an error edge nor a retry policy,
+   *  which does not read the signal. */
+  function reportedFailure(index: number, label: string, tail: string): string {
+    const p = plan.value
+    const id = nodeId(index, label)
+    if (!p || !run || !id || run.nodes[id]?.status !== 'running' || !readsFailure(p, id)) return ''
+    return parseNodeSignals(tail).failed ?? ''
+  }
+
+  /** One more try of a failed slot, if its retry policy has one left: the
+   *  node goes back to pending and the caller re-runs it after waitMs. */
+  function retryAfterFailure(index: number, label: string, reason: string): RetryTurn | null {
+    const p = plan.value
+    const id = nodeId(index, label)
+    if (!p || !run || !id) return null
+    const turn = takeRetry(p, run, id, reason)
+    if (!turn) return null
+    deps.log(`DAG ↻ "${label}" failed (${reason}) — retrying, try ${turn.attempt}/${turn.maxTries}` + (turn.waitMs ? ` in ${turn.waitMs} ms` : ''))
+    void report()
+    return turn
+  }
+
+  /** True when this slot's failures go down an error edge. */
+  function routesFailure(index: number, label: string): boolean {
+    const p = plan.value
+    const id = nodeId(index, label)
+    return !!p && !!id && hasErrorEdge(p, id)
+  }
+
+  /** A failed slot with an error edge: fail its node down that edge and let
+   *  the run go on. false when it has none (the run fails as before). */
+  function routeFailure(index: number, label: string, error: string): boolean {
+    const p = plan.value
+    const id = nodeId(index, label)
+    if (!p || !run || !id || !planRouteFailure(p, run, id, error, now())) return false
+    deps.log(`DAG ↯ "${label}" failed — taking its error edge (${error})`)
+    settleUntaken(p, run, resultOf)
+    void report()
+    return true
   }
 
   /** The re-run note for this stage, consumed by its activation. */
@@ -253,14 +333,35 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     const id = nodeId(index, label)
     if (!run || !id) return
     const prev = run.nodes[id]
-    if (prev?.status === 'skipped') return
+    // Skipped, or already failed down its error edge (its kickoff never
+    // landed): a late completion signal changes nothing.
+    if (prev?.status === 'skipped' || (prev?.status === 'failed' && prev.errorRouted)) return
     const trimmed = tail.trim()
     const summary = trimmed.length > SUMMARY_CHARS ? `…${trimmed.slice(-SUMMARY_CHARS)}` : trimmed
-    run.nodes[id] = { ...prev, status: 'done', endedAt: now(), summary }
-    if (summary) {
-      outputs[id] = { summary, at: now() }
+    const p = plan.value!
+    // Signals are read only for a node whose edges or readers ask for them,
+    // so a legacy node's recorded state is exactly what it always was.
+    const wantBranch = hasBranchEdge(p, id)
+    const wantOutput = hasOutputContract(p, id)
+    const wantFailure = hasErrorEdge(p, id)
+    const signals = wantBranch || wantOutput || wantFailure ? parseNodeSignals(tail) : {}
+    const result: NodeResult = {}
+    if (wantBranch && signals.branch !== undefined) result.branch = signals.branch
+    if (wantOutput && signals.output) {
+      result.output = signals.output.value
+      if (signals.output.parseError) deps.log(`DAG ⚠ "${label}" output is not valid JSON (${signals.output.parseError}) — stored as null`)
+    }
+    if (wantFailure && signals.failed !== undefined) {
+      run.nodes[id] = { ...prev, status: 'failed', endedAt: now(), summary, error: signals.failed, errorRouted: true }
+      deps.log(`DAG ↯ "${label}" reported a failure — taking its error edge (${signals.failed})`)
+    } else {
+      run.nodes[id] = { ...prev, status: 'done', endedAt: now(), summary, ...result }
+    }
+    if (summary || 'branch' in result || 'output' in result) {
+      outputs[id] = { summary, at: now(), ...result }
       pendingOutputs[id] = outputs[id]
     }
+    settleUntaken(p, run, resultOf)
     void report()
   }
 
@@ -277,16 +378,35 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     return run?.nodes[id]?.summary || outputs[id]?.summary || ''
   }
 
-  /** Expand {{prev.summary}} for a slot's kickoff. */
+  /** Branch value and structured output of a finished (or reused) node. */
+  function resultOf(id: string): NodeResult {
+    const st = run?.nodes[id]
+    // A node that ran this run answers for itself; a reused one (pin,
+    // restart point, resume) falls back to what it recorded last time.
+    const live = st?.status === 'done' || st?.status === 'failed'
+    const result: NodeResult = {}
+    const branch = live ? st?.branch : outputs[id]?.branch
+    if (branch !== undefined) result.branch = branch
+    const output = live ? st?.output : outputs[id]?.output
+    if (output !== undefined) result.output = output
+    return result
+  }
+
+  /** Expand {{prev.summary}} and {{node.<id>.output}} for a slot's kickoff,
+   *  and append the signal instructions its edges need (none for a legacy
+   *  node, whose kickoff is then unchanged). */
   function expandKickoff(text: string, index: number, label: string): string {
     const p = plan.value
     const id = nodeId(index, label)
     if (!p || !id) return expandPrevSummary(text, [])
-    const upstream = upstreamSlotNodes(p, id).map((up) => ({
-      label: p.graph.nodes.find((n) => n.id === up)?.label || up,
-      summary: summaryOf(up) || '(no output recorded)',
-    }))
-    return expandPrevSummary(text, upstream)
+    const upstream = upstreamSlotNodes(p, id)
+      .filter((up) => !isUntaken(run?.nodes[up]))
+      .map((up) => ({
+        label: p.graph.nodes.find((n) => n.id === up)?.label || up,
+        summary: summaryOf(up) || '(no output recorded)',
+      }))
+    const expanded = expandNodeOutputs(expandPrevSummary(text, upstream), p.graph, (up) => resultOf(up).output)
+    return expanded + kickoffHints(p, id)
   }
 
   /** Context lines for earlier nodes this run did not execute (pinned or
@@ -298,7 +418,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     const lines: string[] = []
     for (let s = 0; s < index; s++) {
       for (const id of p.stageNodeIds[s] ?? []) {
-        if (run.nodes[id]?.status !== 'skipped') continue
+        if (run.nodes[id]?.status !== 'skipped' || isUntaken(run.nodes[id])) continue
         const label = p.graph.nodes.find((n) => n.id === id)?.label || id
         lines.push(`- [📌 ${label}] ${summaryOf(id) || '(no output recorded)'}`)
       }
@@ -337,6 +457,12 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     approve,
     reject,
     pinnedLabels,
+    untakenLabels,
+    conditionalLabels,
+    routeFailure,
+    reportedFailure,
+    retryAfterFailure,
+    routesFailure,
     takeNote,
     looped,
     slotStarted,

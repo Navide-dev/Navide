@@ -178,10 +178,12 @@ The current manual-spawn and maintenance flows are early implementations of this
 
 ```text
 Task description
-  → load the pipeline graph and derive its stages (one per longest-path layer)
+  → load the pipeline graph and derive its stages (one per longest-path layer over main, branch and error edges)
   → pre-spawn the first stage's panes; activating a stage warms the next one
   → hold at a gate until it is passed or rejected (a reject loops back)
+  → skip the stage's slots none of whose inputs was taken (an unchosen branch, the error edge of a slot that did not fail)
   → activate current stage with prior-stage context
+  → retry a slot whose try failed, on the same pane, as its retry policy allows
   → run slots in parallel
   → collect questions, analyzer signals, and completion sentinels
   → manager routes work when configured
@@ -310,6 +312,6 @@ Long-term architecture work must turn the current control plane and engineering 
 1. A declarative agent-adapter contract
 2. A durable orchestration event and artifact model
 3. Policy-controlled tool execution and workspace isolation
-4. Dependency-graph scheduling beyond layer-synchronized stages (pipelines already run as a graph with gates, reject loops, pinned nodes and restart-from; the remaining gap is conditional branching and joins that do not wait for a whole layer)
+4. Dependency-graph scheduling beyond layer-synchronized stages (pipelines already run as a graph with gates, reject loops, pinned nodes, restart-from, and branch and error edges whose untaken paths are skipped; the remaining gap is starting a node as soon as its inputs settle instead of with its whole layer)
 5. Connectors that turn external work items into reviewable delivery runs
 6. Integrated navigation, editing, execution, debugging, testing, review, versioning, and delivery

@@ -9513,6 +9513,21 @@ const pipeline = reactive<PipelineRun>({
  */
 let pipelineRunWorkspace = ''
 
+// On every (re)connect the backend learns which pipeline run this window is
+// driving: a stored 'running' run that no window claims is one a crash left
+// behind, and pipeline_status reports it as interrupted (resumable). Sent even
+// when empty, so the backend can tell "synced, nothing here" from "not synced
+// yet" — the gap right after a backend auto-restart.
+watch(
+  () => backend.status.value,
+  (s) => {
+    if (s !== 'connected') return
+    const workspaces = pipeline.state === 'running' && pipelineRunWorkspace ? [pipelineRunWorkspace] : []
+    backend.send('pipeline.claim', { workspaces }).catch(() => { /* re-sent on the next reconnect */ })
+  },
+  { immediate: true },
+)
+
 const showCompletionModal = ref(false)
 const showSettings = ref(false)
 
@@ -14108,8 +14123,11 @@ async function preSpawnStage(index: number): Promise<void> {
   registerStage(stageCompletions, index, stage.slots.length)
   pipelineLog(`Stage ${stage.id} ⚡ pre-spawn ${stage.slots.length} slot(s) (role only)`)
   const pinned = pipelineDag.pinnedLabels(index)
+  // Slots behind a branch or error edge may never run; activateStage spawns
+  // them once their inputs have decided.
+  const conditional = pipelineDag.conditionalLabels(index)
   await Promise.all(stage.slots.map(async (slot) => {
-    if (pinned.has(slot.label)) return
+    if (pinned.has(slot.label) || conditional.has(slot.label)) return
     // A reject loop re-enters stages whose panes may still be alive; reuse
     // them (activateStage injects the kickoff) instead of spawning twins.
     if (pipelineDag.looped() && panes.value.some(
@@ -14200,8 +14218,14 @@ function buildStageContext(index: number, forManager: boolean): string {
 
 /** Inject kickoffs into pre-spawned panes for one stage, then arm watchers.
  *  Builds cross-stage context from prior stages (which now have real output).
- *  Safe to call on a freshly-spawned stage too (same as old spawnPipelineStage). */
-async function activateStage(index: number): Promise<void> {
+ *  Safe to call on a freshly-spawned stage too (same as old spawnPipelineStage).
+ *
+ *  `only` re-runs one slot of the stage that is already running (a retry,
+ *  see scheduleSlotRetry): its kickoff goes in again with `note` in front,
+ *  and nothing else about the stage — its slot count, router, look-ahead
+ *  pre-spawn, pinned and untaken slots — is touched. */
+async function activateStage(index: number, opts: { only?: string; note?: string } = {}): Promise<void> {
+  const only = opts.only
   const stage = stagesApi.stages.value[index]
   if (!stage) {
     // Out of range. The two in-run callers cannot reach this (start uses 0
@@ -14247,7 +14271,7 @@ async function activateStage(index: number): Promise<void> {
   // the local restored record; the normal per-slot fallback below then creates
   // one fresh pane and updates the backend through pipeline.stage_spawn.
   const unrealizedPaneIds = panes.value
-    .filter((pane) => !pane.realized && pane.stageId === stage.id && pane.origin === 'pipeline')
+    .filter((pane) => !pane.realized && pane.stageId === stage.id && pane.origin === 'pipeline' && (!only || pane.slotLabel === only))
     .map((pane) => pane.id)
   if (unrealizedPaneIds.length > 0) {
     // The slot record these placeholders sit on is reused by the fresh pane
@@ -14259,16 +14283,23 @@ async function activateStage(index: number): Promise<void> {
   }
 
   // Reset completion tracker in case it was partially consumed
-  registerStage(stageCompletions, index, stage.slots.length)
+  if (!only) registerStage(stageCompletions, index, stage.slots.length)
 
   // DAG: pinned slots reuse their frozen output (counted done at the end);
   // a reject loop's note and outputs of nodes this run skipped go in front.
   const pinned = pipelineDag.pinnedLabels(index)
-  const dagPrefix = pipelineDag.takeNote(index) + pipelineDag.frozenContext(index)
+  // DAG: slots none of whose inputs was taken (unchosen branch, error edge of
+  // a node that did not fail) are skipped and counted done at the end too.
+  const untaken = pipelineDag.untakenLabels(index)
+  const dagPrefix = (only ? (opts.note ? `${opts.note}\n\n` : '') : pipelineDag.takeNote(index)) + pipelineDag.frozenContext(index)
 
-  await Promise.all(stage.slots.map(async (slot) => {
+  await Promise.all(stage.slots.filter((slot) => !only || slot.label === only).map(async (slot) => {
     if (pinned.has(slot.label)) {
       pipelineLog(`Stage ${stage.id}/${slot.label} 📌 pinned — reusing its frozen output`)
+      return
+    }
+    if (untaken.has(slot.label)) {
+      pipelineLog(`Stage ${stage.id}/${slot.label} ⤼ skipped — none of its inputs was taken`)
       return
     }
     // Per-slot cross-stage context: workers get summaries + paths, the Manager
@@ -14539,6 +14570,8 @@ async function activateStage(index: number): Promise<void> {
   // A run failed by one of this stage's kickoffs is over: no router poll, and
   // no CLIs spawned for a next stage it will never reach.
   if (pipeline.state !== 'running' || pipeline.stageIndex !== index) return
+  // A retried slot rejoins a stage whose router, pre-spawn and counts stand.
+  if (only) return
 
   if (managerSlot) {
     startRouterPoll(index)
@@ -14552,6 +14585,7 @@ async function activateStage(index: number): Promise<void> {
   // Last, so a stage made only of pinned slots hands off after everything
   // above (the hand-off re-enters activateStage for the next stage).
   for (const label of pinned) onStageSlotCompleted(index, `pinned:${label}`, 'pinned')
+  for (const label of untaken) onStageSlotCompleted(index, `skipped:${label}`, 'skipped')
 }
 
 async function spawnPipelineStage(index: number): Promise<void> {
@@ -14959,15 +14993,43 @@ function heldKickoffCopy(paneId: string, text: string): { holds: () => boolean; 
   }
 }
 
+/** Re-run one failed slot of the running stage after its retry wait. Nothing
+ *  happens if the run stopped or moved on meanwhile. */
+function scheduleSlotRetry(stageIndex: number, slotLabel: string, retry: { attempt: number; maxTries: number; waitMs: number; note: string }): void {
+  const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
+  pipelineLog(`Stage ${stageLabel}/${slotLabel} ↻ retry ${retry.attempt}/${retry.maxTries}` + (retry.waitMs ? ` in ${retry.waitMs} ms` : ''))
+  void (async () => {
+    if (retry.waitMs > 0) await sleep(retry.waitMs)
+    if (pipeline.state !== 'running' || pipeline.stageIndex !== stageIndex) return
+    await activateStage(stageIndex, { only: slotLabel, note: retry.note })
+  })()
+}
+
 /** A slot's kickoff never reached its agent: fail its node with the reason and
  *  end the run as failed, instead of leaving it `running` around a pane that
  *  never got its task (#448). Like an abort, the panes stay alive for a
  *  resume. The first failing slot ends the run; later ones only fail their
  *  own node. */
-async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false): Promise<void> {
+async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false, reported = false): Promise<void> {
   // A kickoff that finishes late, after the user stopped this run and another
   // one moved to a different stage, must not fail that one.
   if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
+  // A slot with a retry policy tries again first.
+  if (pipeline.state === 'running') {
+    const retry = pipelineDag.retryAfterFailure(stageIndex, slotLabel, reason)
+    if (retry) {
+      scheduleSlotRetry(stageIndex, slotLabel, retry)
+      return
+    }
+  }
+  // A slot with an error edge fails down that edge: its node is failed, the
+  // slot counts as finished and the run goes on.
+  if (pipeline.state === 'running' && pipelineDag.routeFailure(stageIndex, slotLabel, reason)) {
+    const stageId = stagesApi.stages.value[stageIndex]?.id
+    const pane = panes.value.find((p) => p.stageId === stageId && p.slotLabel === slotLabel && p.origin === 'pipeline')
+    onStageSlotCompleted(stageIndex, pane?.id ?? `failed:${slotLabel}`, 'error-edge')
+    return
+  }
   pipelineDag.slotFailed(stageIndex, slotLabel, reason)
   if (pipeline.state !== 'running') return
   const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
@@ -14984,7 +15046,9 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   notifyRestore.toast(
     held
       ? i18n.global.t('error.pipeline-kickoff-held', { stage: stageLabel, slot: slotLabel })
-      : i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
+      : reported
+        ? i18n.global.t('error.pipeline-node-failed', { stage: stageLabel, slot: slotLabel, reason })
+        : i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
     { type: 'error' },
   )
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
@@ -16703,7 +16767,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
 // How a slot was judged finished — recorded for history.jsonl auditing so a
 // stage_advance can be traced to N/N reliable signals (vs a forced advance).
-type SlotFinishReason = 'sentinel' | 'turn_complete' | 'analyzer' | 'cap-auto' | 'force' | 'pinned'
+type SlotFinishReason = 'sentinel' | 'turn_complete' | 'analyzer' | 'cap-auto' | 'force' | 'pinned' | 'skipped' | 'error-edge'
 
 // Build a SlotSignal per pipeline slot of a stage, for allSlotsFinished(). A
 // slot already counted as done is finished by definition; otherwise we read its
@@ -17832,6 +17896,26 @@ function onStageSlotCompleted(
   if (!tracker) { void onPipelineNext(); return }
   // 'duplicate' covers both a double-fire and a slot already released — a
   // released slot is out of `expected`, so counting it would over-shoot N/N.
+  // A slot that reported ---NODE-FAILED--- (read only where an error edge or
+  // a retry policy asks for it) retries first; out of tries, it goes down its
+  // error edge (counted below) or, with none, fails the run.
+  const failedPane = reason === 'pinned' || reason === 'skipped' || reason === 'error-edge'
+    ? undefined
+    : panes.value.find((p) => p.id === paneId)
+  const reported = failedPane
+    ? pipelineDag.reportedFailure(stageIndex, failedPane.slotLabel, slotSummarySource(paneId, stageIndex))
+    : ''
+  if (failedPane && reported) {
+    const retry = pipelineDag.retryAfterFailure(stageIndex, failedPane.slotLabel, reported)
+    if (retry) {
+      scheduleSlotRetry(stageIndex, failedPane.slotLabel, retry)
+      return
+    }
+    if (!pipelineDag.routesFailure(stageIndex, failedPane.slotLabel)) {
+      void failRunOnKickoff(stageIndex, failedPane.slotLabel, reported, false, true)
+      return
+    }
+  }
   const counted = completeSlot(stageCompletions, stageIndex, paneId)
   if (counted.kind !== 'counted') return
   const remaining = counted.remaining
