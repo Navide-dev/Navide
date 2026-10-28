@@ -307,12 +307,16 @@ describe('a plugin window opened without its native backend', () => {
 
   it('says why once, through the toast, after a successful open', () => {
     const open = at('async function openPluginContributionWindow(')
-    expect(open).toContain('if (result.backendUnavailable) notePluginWindowWithoutBackend(contribution, result.backendUnavailable)')
-    // A failed open returns before it: there is no window to explain.
-    expect(open.indexOf('return')).toBeLessThan(open.indexOf('result.backendUnavailable'))
+    expect(open).toContain(
+      'notePluginWindowWithoutBackend(contribution, result.backendUnavailable, result.backendUnavailableStatus)',
+    )
+    // A failed open returns right after its warning, before the notice: there
+    // is no window to explain (#641 L1: the return that matters, not any
+    // earlier one).
+    expect(open).toMatch(/if \(!result\?\.ok\) \{\n\s+console\.warn\([^\n]*\)\n\s+return\n\s+\}\n\s+if \(result\.backendUnavailable\)/)
     const note = at('function notePluginWindowWithoutBackend(')
     expect(note).toContain('if (pluginWindowsWithoutBackend.has(key)) return')
-    expect(note).toContain("'settings.extensions.nativeBackends.windowWithout'")
+    expect(note).toContain('pluginWindowWithoutBackendText(i18n.global.t, {')
     expect(note).toContain('name: revealInvisibleText(contribution.title)')
   })
 })

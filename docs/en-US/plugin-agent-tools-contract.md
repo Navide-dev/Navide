@@ -954,7 +954,7 @@ ok: false, error, error_code}` with `BAD_REQUEST` | `NOT_INSTALLED` |
 Marketplace packages qualify: the bundled Navide plugins (the reserved
 `navide.*` namespace) are refused with `BUILTIN_PLUGIN` by the backend before
 it asks, and by the Host again. The Host switches the package exactly as the
-user's Extensions switch does (enable keeps the consent the user already
+user's switch on the Navide Plugins page does (enable keeps the consent the user already
 gave). When that changed the package (`changed: true`) it tells the user which
 caller did it (pane name, or "external MCP client" / "Navide Host") with a
 one-click undo; a package already in that state is left alone, nobody is told
@@ -966,7 +966,7 @@ Who disabled a package decides whether an agent may enable it (B2-c option B).
 The Host keeps, beside the Disabled list (whose file format older Navide
 versions read and which stays as it is), who disabled each Marketplace package
 in `.navide-disabled-source.json`: `{by: "user" | "agent", at (Unix ms), agent:
-{callerKind, paneId, paneName} | null}`. The user's Extensions switch, and the
+{callerKind, paneId, paneName} | null}`. The user's Navide Plugins switch, and the
 undo on an agent notice, record `user`; `plugins_disable` records `agent` with
 the caller. Enabling removes the entry. A disabled package with no entry
 (disabled before this was recorded, or an unreadable file) reads as the user.

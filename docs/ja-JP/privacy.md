@@ -94,9 +94,9 @@ Building the expected-address snapshot performs forward DNS lookups for declared
 
 Agent CLI の Credential は各 CLI の Configuration に残ります。Cloud AI Key を Navide に入力すると、AI 機能（Inline 編集、Code Review）で利用できるようローカル保存されます。Settings Export では API Key と Token を Redact します。
 
-**Portable Credential** はユーザーが自ら選ぶ例外です。各ベンダーが「別の Machine へ持ち運ぶ」ために公式に用意した値（例：`claude setup-token` が出力する Token）を、Settings → Accounts に貼り付けます。Navide はこの Device 上で暗号化して保存し、その CLI の新しい Pane を起動するときに環境変数としてのみ渡します。CLI 自身の Login File には書き込みません。ある Device から削除しても、その Device からだけ削除されます。
+**Portable Credential**（`claude setup-token` が出力する Token などを貼り付けるもの）は Navide 0.2.32 で廃止されました。使っていた Device では、0.2.32 の初回起動時に暗号化して保存していた値、その暗号化に使った Key、旧バージョンがクラウド同期から取得したコピーを消去します。使っていない Device には何もしません。
 
-貼り付けた Credential がアップロードされることはありません。アカウントの Credential と Key はご自身の Machine から出ることはありません。Settings → Sync に Credentials セクションはなく、古いビルドでオンのまま残った Credentials スイッチはオフとして扱われ、Navide Cloud はどのバージョンから送られた Credential の Record も受け付けません。MCP 設定は、同期を有効にした場合、Machine 上で暗号化してからアップロードされ、サーバーは復号キーを持ちません。
+アカウントの Credential と Key はご自身の Machine から出ることはありません。Settings → Sync に 「認証情報とキー」セクションはなく、古いビルドでオンのまま残った「認証情報とキー」のスイッチはオフとして扱われ、Navide Cloud はどのバージョンから送られた Credential の Record も受け付けません。MCP 設定は、同期を有効にした場合、どの Server をインストールしたか（名前、Transport、Command、引数、URL、オン/オフ、環境変数と Header の名前）だけを同期します。環境変数と Header の値、および URL や引数に含まれる Credential（`user:password@` の部分、`api_key=` のクエリ値、`ghp_…` などの Token、`--token` の次の値）はご自身の Machine から出ることはなく、空のまま送られ、各 Machine で入力します。同期される内容は Machine 上で暗号化してからアップロードされ、サーバーは復号キーを持ちません。
 
 Local File Permission は、同じ Machine 上の他 User による偶発的 Access を減らしますが、Malware、Compromised User Account、Unrestricted Agent、Backup、同等権限の Process からは保護しません。
 

@@ -229,65 +229,6 @@ export type CliProfileAccountDirs = Record<string, Record<string, CliAccountDir>
 export type CliProfilePaneDefaults = Record<string, string>
 
 const DEFAULT_SLOT_ID = '__default__'
-// Backend setting keys whose change invalidates the cloud view (mirrors
-// sync_scopes.SCOPES_SETTING and server_link.ACCOUNT_EMAIL_SETTING).
-const SYNC_SCOPES_SETTING = 'sync-scopes'
-const ACCOUNT_EMAIL_SETTING = 'agentTeam.p2p.accountEmail'
-
-// ── Portable credentials ────────────────────────────────────────────────────
-// A credential the user pasted (`claude setup-token` and its siblings) rather
-// than one a CLI wrote by logging in. The backend keeps the value; the
-// renderer only ever sees this metadata (`describe` has no value field by
-// construction), and only ever sends the value once, on save.
-export interface PortableCredentialMeta {
-  agentKey: string
-  slotId: string
-  configured: boolean
-  /** True for the one slot per agent whose credential new panes are handed. */
-  enabled: boolean
-  /** Where the value lives: pasted here, pulled from the cloud, or nowhere. */
-  source?: 'local' | 'imported' | 'none'
-  /** Whether the value can actually be served right now (an import sealed
-   *  under a key this device lacks is listed but not available). */
-  available?: boolean
-  kind?: 'oauth' | 'api_key'
-  updatedAt?: string | null
-  env?: string
-  keyStorage?: 'keychain' | 'dpapi' | 'file'
-  quotaVerified?: boolean
-  obtainCommand?: string
-  docsUrl?: string
-  /** Files on this machine the CLI ranks above the variable; the paste is
-   *  stored but not in effect while any is present. */
-  shadowedBy?: string[]
-}
-
-// "<agentKey>/<slotId>" -> metadata, exactly as `cli_profiles.list` and the
-// `.changed` event carry it (the built-in Default is slot "__default__").
-export type CliPortableCredentials = Record<string, PortableCredentialMeta>
-
-// One credential's two halves as the cloud inventory reports them. The item
-// is named by its opaque id — a random name the payload travels under, so
-// the server's rows say nothing about which CLIs an account uses.
-export type CloudCredentialState = 'in-sync' | 'local-only' | 'remote-only' | 'diverged' | 'conflict'
-
-export interface CloudCredential {
-  itemId: string
-  state: CloudCredentialState
-  localPresent: boolean
-  remotePresent: boolean
-  /** When the cloud copy last changed and from which device; empty for local-only. */
-  updatedAt: string
-  deviceId: string
-  /** False when the cloud copy is sealed under a key this device does not hold. */
-  readable: boolean
-}
-
-export type CloudCredentialStatus = 'off' | 'ok' | 'no-key' | 'not-connected' | 'error'
-
-// agentKey -> slotId -> credentials. Several per slot is possible (two devices
-// that each pasted before syncing); the pane lists them all.
-export type CliCloudCredentials = Record<string, Record<string, CloudCredential[]>>
 
 /**
  * Per-window cache of CLI account profiles. Loads from the backend on mount and
@@ -306,21 +247,10 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
   const loaded = ref<boolean>(false)
   const loading = ref<boolean>(false)
   const error = ref<string>('')
-  const portable = ref<CliPortableCredentials>({})
-  const portableSupported = ref<string[]>([])
   const accountCapabilities = ref<Record<string, CliAccountCapability>>({})
-  const cloud = ref<CliCloudCredentials>({})
-  const cloudStatus = ref<CloudCredentialStatus>('off')
-  const cloudError = ref<string>('')
 
   let unsubChanged: (() => void) | null = null
-  let unsubSettings: (() => void) | null = null
   let unsubBackend: (() => void) | null = null
-  // Generation of the cloud view. Every refresh captures it and writes back
-  // only if it is still current; anything that changes what the answer would
-  // be — a removal here, an account or section switch — bumps it, so a reply
-  // that was in flight cannot land on top of newer state.
-  let cloudGeneration = 0
 
   async function refresh(): Promise<void> {
     loading.value = true
@@ -335,8 +265,6 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
         accountDirs?: CliProfileAccountDirs
         paneDefaults?: CliProfilePaneDefaults
         supported_agents: string[]
-        portable_credentials?: CliPortableCredentials
-        portable_supported?: string[]
         account_capabilities?: Record<string, CliAccountCapability>
       }>('cli_profiles.list', {})
       if (!resp.ok || !resp.payload) {
@@ -351,8 +279,6 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
       accountDirs.value = resp.payload.accountDirs ?? {}
       paneDefaults.value = resp.payload.paneDefaults ?? {}
       supportedAgents.value = resp.payload.supported_agents
-      portable.value = resp.payload.portable_credentials ?? {}
-      portableSupported.value = resp.payload.portable_supported ?? []
       accountCapabilities.value = resp.payload.account_capabilities ?? {}
       loaded.value = true
     } catch (err) {
@@ -663,184 +589,6 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
     return duplicates.value[agentKey]?.[profileId ?? DEFAULT_SLOT_ID] ?? null
   }
 
-  // ── Portable credentials (local) ──────────────────────────────────────────
-  function portableKey(agentKey: string, profileId: string | null): string {
-    return `${agentKey}/${profileId ?? DEFAULT_SLOT_ID}`
-  }
-
-  function setPortable(agentKey: string, slotId: string, meta: PortableCredentialMeta): void {
-    portable.value = { ...portable.value, [`${agentKey}/${slotId}`]: meta }
-  }
-
-  /** Whether an agent has a portable-credential interface at all. */
-  function portableSupportedFor(agentKey: string): boolean {
-    return portableSupported.value.includes(agentKey)
-  }
-
-  function portableFor(agentKey: string, profileId: string | null): PortableCredentialMeta | null {
-    return portable.value[portableKey(agentKey, profileId)] ?? null
-  }
-
-  /** The vendor's descriptor for a slot that has nothing stored yet — which
-   *  variable, which command produces the value, where the docs are. The
-   *  list only carries configured slots, so an empty one asks for itself. */
-  async function portableDescribe(
-    agentKey: string,
-    profileId: string | null,
-  ): Promise<PortableCredentialMeta | null> {
-    const slotId = profileId ?? DEFAULT_SLOT_ID
-    const resp = await backend.send<{ portable?: PortableCredentialMeta }>('cli_profiles.portable_get', {
-      agent_key: agentKey,
-      profile_id: slotId,
-    })
-    if (!resp.ok || !resp.payload?.portable) return null
-    setPortable(agentKey, slotId, resp.payload.portable)
-    return resp.payload.portable
-  }
-
-  /** Slots of an agent that no local card stands for: credentials pasted
-   *  into a named account on another device. Two sources, joined: what the
-   *  backend lists as imported here, and what the cloud inventory shows for
-   *  a slot id this install has no profile for. The second matters after a
-   *  local removal — the import is gone from the listing, but the cloud copy
-   *  is still there and the card is the only place it can be taken back. */
-  function importedSlotsFor(agentKey: string): PortableCredentialMeta[] {
-    const foreign = (slotId: string) =>
-      slotId !== DEFAULT_SLOT_ID && !profiles.value.some((p) => p.id === slotId)
-    const out = new Map<string, PortableCredentialMeta>()
-    for (const m of Object.values(portable.value)) {
-      if (m.agentKey === agentKey && m.source === 'imported' && foreign(m.slotId)) out.set(m.slotId, m)
-    }
-    for (const slotId of Object.keys(cloud.value[agentKey] ?? {})) {
-      if (foreign(slotId) && !out.has(slotId)) {
-        out.set(slotId, { agentKey, slotId, configured: false, enabled: false, source: 'none' })
-      }
-    }
-    return [...out.values()]
-  }
-
-  /** Select (or deselect) the slot whose credential new panes of this agent
-   *  are handed. One per agent; independent of the native default account. */
-  async function portableEnable(
-    agentKey: string,
-    slotId: string,
-    enabled: boolean,
-  ): Promise<{ ok: true } | { ok: false; message?: string }> {
-    const resp = await backend.send<{ portable?: PortableCredentialMeta }>(
-      'cli_profiles.portable_enable',
-      { agent_key: agentKey, profile_id: slotId, enabled },
-    )
-    if (!resp.ok) return { ok: false, message: resp.error?.message }
-    if (resp.payload?.portable) setPortable(agentKey, slotId, resp.payload.portable)
-    return { ok: true }
-  }
-
-  /** Store a pasted value. The value goes out once and is never kept here;
-   *  what comes back is metadata. A save is also what makes the cloud copy
-   *  move, when the credentials section is switched on (the backend
-   *  schedules that itself). */
-  async function portableSet(
-    agentKey: string,
-    profileId: string | null,
-    secret: string,
-  ): Promise<{ ok: true } | { ok: false; code?: string; message?: string }> {
-    const slotId = profileId ?? DEFAULT_SLOT_ID
-    const resp = await backend.send<{ portable?: PortableCredentialMeta }>(
-      'cli_profiles.portable_set',
-      { agent_key: agentKey, profile_id: slotId, secret },
-    )
-    if (!resp.ok) return { ok: false, code: resp.error?.code, message: resp.error?.message }
-    if (resp.payload?.portable) setPortable(agentKey, slotId, resp.payload.portable)
-    invalidateCloud()
-    void refreshCloud()
-    return { ok: true }
-  }
-
-  /** Remove the pasted value from this device. The cloud copy, if any, stays:
-   *  removal never propagates. */
-  async function portableClear(agentKey: string, profileId: string | null): Promise<boolean> {
-    const slotId = profileId ?? DEFAULT_SLOT_ID
-    const resp = await backend.send<{ portable?: PortableCredentialMeta }>(
-      'cli_profiles.portable_clear',
-      { agent_key: agentKey, profile_id: slotId },
-    )
-    if (!resp.ok) return false
-    if (resp.payload?.portable) setPortable(agentKey, slotId, resp.payload.portable)
-    else {
-      const next = { ...portable.value }
-      delete next[portableKey(agentKey, profileId)]
-      portable.value = next
-    }
-    invalidateCloud()
-    void refreshCloud()
-    return true
-  }
-
-  // ── Portable credentials (cloud) ──────────────────────────────────────────
-  function cloudFor(agentKey: string, profileId: string | null): CloudCredential[] {
-    return cloud.value[agentKey]?.[profileId ?? DEFAULT_SLOT_ID] ?? []
-  }
-
-  /** Drop the cloud view now and make every refresh already in flight a
-   *  no-op. What is on screen was true a moment ago and may no longer be. */
-  function invalidateCloud(): void {
-    cloudGeneration += 1
-    cloud.value = {}
-  }
-
-  /** What the account holds for the credentials section, lined up against
-   *  this device. Reads only: it never moves anything. */
-  async function refreshCloud(): Promise<void> {
-    const generation = cloudGeneration
-    const current = () => generation === cloudGeneration
-    cloudError.value = ''
-    try {
-      const status = await backend.send<{ scopes?: Record<string, boolean>; link?: { state?: string } }>(
-        'sync.status',
-        {},
-      )
-      if (!current()) return
-      if (!status.ok || !status.payload?.scopes?.credentials) {
-        cloudStatus.value = 'off'
-        cloud.value = {}
-        return
-      }
-      const resp = await backend.send<{
-        scopes?: Record<string, { status: string; items?: unknown[]; error?: string }>
-      }>('sync.inventory', { scope: 'credentials' }, 30_000)
-      if (!current()) return
-      const section = resp.ok ? resp.payload?.scopes?.credentials : undefined
-      if (!section) {
-        cloudStatus.value = 'error'
-        cloudError.value = resp.error?.message ?? 'failed to read the cloud inventory'
-        cloud.value = {}
-        return
-      }
-      cloudStatus.value = toCloudStatus(section.status)
-      cloudError.value = section.error ?? ''
-      cloud.value = groupCloudItems(section.items ?? [])
-    } catch (err) {
-      if (!current()) return
-      cloudStatus.value = 'error'
-      cloudError.value = String((err as Error).message ?? err)
-    }
-  }
-
-  /** Take one cloud credential into use on this device — the one explicit
-   *  action that (re)enables a credential here. */
-  async function useFromCloud(itemId: string): Promise<{ ok: true } | { ok: false; message?: string }> {
-    const resp = await backend.send<{ results?: Array<{ itemId: string; result: string }> }>(
-      'sync.pull_items',
-      { scope: 'credentials', itemIds: [itemId] },
-      30_000,
-    )
-    if (!resp.ok) return { ok: false, message: resp.error?.message }
-    const result = resp.payload?.results?.find((r) => r.itemId === itemId)?.result
-    invalidateCloud()
-    await refreshCloud()
-    return result === 'pulled' ? { ok: true } : { ok: false, message: result }
-  }
-
   // Keep every window's cache in sync: any mutation broadcasts `cli_profiles.changed`.
   unsubChanged = backend.on('cli_profiles.changed', (raw) => {
     const payload = raw as {
@@ -851,7 +599,6 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
       duplicates?: CliProfileDuplicates
       accountDirs?: CliProfileAccountDirs
       paneDefaults?: CliProfilePaneDefaults
-      portable_credentials?: CliPortableCredentials
     }
     if (payload?.profiles) profiles.value = payload.profiles
     if (payload?.defaults) defaults.value = payload.defaults
@@ -859,11 +606,6 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
     // an empty map, and skipping it would keep the removed name on screen.
     if (payload?.defaultNames !== undefined) defaultNames.value = payload.defaultNames
     if (payload?.identities) identities.value = payload.identities
-    if (payload?.portable_credentials !== undefined) {
-      portable.value = payload.portable_credentials
-      invalidateCloud()
-      void refreshCloud()
-    }
     // Assigned unconditionally: the last duplicate clearing (a row deleted)
     // broadcasts an empty map, and skipping falsy payloads would keep the
     // stale warning on screen.
@@ -871,20 +613,6 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
     if (payload?.accountDirs !== undefined) accountDirs.value = payload.accountDirs
     // Presence, not truthiness: clearing the last choice broadcasts {}.
     if (payload?.paneDefaults !== undefined) paneDefaults.value = payload.paneDefaults
-  })
-
-  // The cloud view depends on two settings besides the rows themselves: which
-  // sections sync, and which account this install is signed in to. Either
-  // changing makes the view stale at once — an old inventory must not outlive
-  // the account it belonged to.
-  unsubSettings = backend.on('ui.settings_changed', (raw) => {
-    const settings = (raw as { settings?: Record<string, unknown> } | null)?.settings
-    if (!settings) return
-    if (SYNC_SCOPES_SETTING in settings || ACCOUNT_EMAIL_SETTING in settings) {
-      invalidateCloud()
-      cloudStatus.value = 'off'
-      void refreshCloud()
-    }
   })
 
   // The first load, shared: a pane restore can ask for the list while the
@@ -923,7 +651,6 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
 
   onScopeDispose(() => {
     unsubChanged?.()
-    unsubSettings?.()
     unsubBackend?.()
   })
 
@@ -960,67 +687,7 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
     newPaneProfileId,
     setPaneDefault,
     reportAccountDirExpired,
-    portable,
-    portableSupported,
-    portableSupportedFor,
-    portableFor,
-    portableDescribe,
-    portableSet,
-    portableClear,
-    portableEnable,
-    importedSlotsFor,
-    cloud,
-    cloudStatus,
-    cloudError,
-    cloudFor,
-    refreshCloud,
-    invalidateCloud,
-    useFromCloud,
   }
-}
-
-function toCloudStatus(status: string): CloudCredentialStatus {
-  return status === 'ok' || status === 'no-key' || status === 'not-connected' ? status : 'error'
-}
-
-/** Inventory rows into agentKey -> slotId -> credentials. A row is placed by
- *  the metadata the backend attached to whichever half it could read; a row
- *  it could read neither half of has no home and is left out. */
-function groupCloudItems(items: unknown[]): CliCloudCredentials {
-  const out: CliCloudCredentials = {}
-  for (const raw of items) {
-    if (typeof raw !== 'object' || raw === null) continue
-    const item = raw as {
-      itemId?: unknown
-      state?: unknown
-      local?: { present?: boolean; meta?: { agentKey?: unknown; slotId?: unknown } } | null
-      remote?: {
-        present?: boolean
-        updatedAt?: unknown
-        deviceId?: unknown
-        readable?: unknown
-        meta?: { agentKey?: unknown; slotId?: unknown }
-      } | null
-    }
-    const meta = item.local?.meta ?? item.remote?.meta
-    if (typeof item.itemId !== 'string' || typeof meta?.agentKey !== 'string' || typeof meta?.slotId !== 'string') {
-      continue
-    }
-    const state = String(item.state ?? '')
-    if (!['in-sync', 'local-only', 'remote-only', 'diverged', 'conflict'].includes(state)) continue
-    const entry: CloudCredential = {
-      itemId: item.itemId,
-      state: state as CloudCredentialState,
-      localPresent: Boolean(item.local?.present),
-      remotePresent: Boolean(item.remote?.present),
-      updatedAt: typeof item.remote?.updatedAt === 'string' ? item.remote.updatedAt : '',
-      deviceId: typeof item.remote?.deviceId === 'string' ? item.remote.deviceId : '',
-      readable: item.remote ? item.remote.readable !== false : true,
-    }
-    const slots = (out[meta.agentKey] ??= {})
-    ;(slots[meta.slotId] ??= []).push(entry)
-  }
-  return out
 }
 
 // ── Quiescence-aware account switch ─────────────────────────────────────────

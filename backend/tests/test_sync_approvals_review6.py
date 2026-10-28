@@ -22,13 +22,13 @@ def _own_app_data(tmp_path, monkeypatch):
 
 
 def _held(item_id):
-    return [h for h in sync_approvals.listing() if h["itemId"] == item_id]
+    return [h for h in sync_approvals.listing() if h["itemId"] in (item_id, "i:" + item_id)]
 
 
 def _decide(dev, item_id, approve):
     dev.use()
     (row,) = _held(item_id)
-    return sync_approvals.decide(dev.adapter, item_id, approve, row["digest"])
+    return sync_approvals.decide(dev.adapter, row["itemId"], approve, row["digest"])
 
 
 async def _approved_base(tmp_path, monkeypatch, base):
@@ -115,12 +115,12 @@ async def test_a_pending_new_hold_that_does_not_open_pushes_no_delete(tmp_path, 
     await a.sync(); await b.sync()
     b.use()
     assert _held("legit")
-    sync_approvals._stash_path("mcp", "legit").write_text("garbage")
+    sync_approvals._stash_path("mcp", "i:legit").write_text("garbage")
     r = await b.sync()
-    assert "legit" in r["held"]
+    assert "i:legit" in r["held"]
     await b.sync(); await a.sync()
     a.use()
-    assert "legit" in _names(a_store) and server.rows[("mcp", "legit")]["deleted"] == 0
+    assert "legit" in _names(a_store) and server.rows[("mcp", "i:legit")]["deleted"] == 0
 
 
 async def test_a_pending_change_whose_payload_is_lost_pushes_nothing(tmp_path, account_key, monkeypatch):
@@ -129,9 +129,9 @@ async def test_a_pending_change_whose_payload_is_lost_pushes_nothing(tmp_path, a
     a.use(); a_store.replace_servers([{**base, "command": "/opt/new-legit"}])
     await a.sync(); await b.sync()
     b.use()
-    sync_approvals._stash_path("mcp", "x").unlink()
+    sync_approvals._stash_path("mcp", "i:x").unlink()
     r = await b.sync()
-    assert "x" in r["held"]
+    assert "i:x" in r["held"]
     await a.sync()
     a.use()
     assert _server(a_store, "x")["command"] == "/opt/new-legit"
@@ -203,6 +203,41 @@ def test_the_review_cache_is_capped_across_holds(tmp_path, monkeypatch, blobs, a
     _run(b.settle(monkeypatch))
     _use(b, monkeypatch)
     assert _held(waiting[0]["itemId"])[0]["displayable"] is True
+
+
+def test_a_round_during_a_finishing_review_does_not_mark_it_waiting_for_space(
+    tmp_path, monkeypatch, blobs, account_key
+):
+    # A kicked round lists the hold as still due between the review's sealed
+    # files and its summary landing; its own files must not count against it.
+    import threading
+
+    monkeypatch.setattr(sync_scopes, "MAX_REVIEW_CACHE_BYTES", 500 * 1024)
+    server = FakeServer()
+    a = Device(tmp_path, "a", server, blobs)
+    b = Device(tmp_path, "b", server, blobs)
+    _make_big(a.store, "big")
+    real = sync_approvals.update_summary
+    raced = []
+
+    def update_then_round(scope, item_id, payload_digest, summary):
+        written = real(scope, item_id, payload_digest, summary)
+        if scope == b.adapter.scope and "unavailable" not in summary and not raced:
+            raced.append(item_id)
+            payload = sync_approvals.held_payload(scope, item_id)
+            done = threading.Event()
+            b.adapter._loop.call_soon_threadsafe(
+                lambda: (b.adapter._start_review(item_id, payload), done.set())
+            )
+            assert done.wait(10)
+        return written
+
+    monkeypatch.setattr(sync_approvals, "update_summary", update_then_round)
+    _run(a.settle(monkeypatch)); _run(b.settle(monkeypatch))
+    _use(b, monkeypatch)
+    assert raced
+    (row,) = _held("big")
+    assert row["displayable"] is True
 
 
 def test_the_review_cache_size_skips_a_file_that_vanishes_mid_count(monkeypatch):

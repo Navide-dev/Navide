@@ -233,6 +233,10 @@ declare global {
       stabilizeDroppedPaths: (paths: string[]) => Promise<{ ok: boolean; paths: string[] }>
       saveClipboardImage: (args: { bytes: Uint8Array; mediaType: string }) => Promise<{ ok: boolean; path?: string }>
       openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>
+      trashCreatedMemoryFile: (
+        path: string,
+        acceptChanged?: boolean,
+      ) => Promise<{ ok: boolean; code?: string; error?: string; created?: string; current?: string }>
       legalLinks: Readonly<Record<LegalRoute, string>>
       trustConfirm: (
         action: string,
@@ -397,6 +401,10 @@ declare global {
         listFactoryPackages: () => Promise<FactoryPluginSummary[]>
         /** Current and peak in-flight backend calls per plugin (never capped) and dropped Host event notifications. */
         backendCallConcurrency?: () => Promise<Array<{ pluginId: string; current: number; peak: number; droppedNotifications: number }>>
+        /** One package's AI CLI sessions that keep running with no view. */
+        backgroundAiSessions?: (id: string) => Promise<Array<{ sessionId: string; profileId: string; packageVersion: string; since: number }>>
+        /** Ends one session backgroundAiSessions listed; ok is false once it is no longer listed. */
+        endBackgroundAiSession?: (id: string, sessionId: string) => Promise<{ ok: boolean }>
         /** D-f: one installed plugin's activity report (read only). */
         activityReport?: (id: string) => Promise<{ ok: true; report: PluginActivityReport } | { ok: false; error: string }>
         /** D-f: installed Registry packages' disclosures and install-time scans. */
@@ -461,7 +469,12 @@ declare global {
         openContributionWindow: (args: {
           contributionKey: string
           workspace_path: string
-        }) => Promise<{ ok: boolean; error?: string; backendUnavailable?: string }>
+        }) => Promise<{
+          ok: boolean
+          error?: string
+          backendUnavailable?: string
+          backendUnavailableStatus?: NativeBackendStatusRow['status']
+        }>
         closeContribution: (args: { contributionKey: string }) => Promise<{ ok: boolean }>
         onContributionsChanged: (handler: () => void) => () => void
         marketplaceSearch: (
@@ -508,6 +521,8 @@ declare global {
           id: string,
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
         ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
+        /** #643 review L1: absent on an older Host. */
+        preparedLocalInstall?: (id: string, digest: string) => Promise<{ present: boolean }>
         prepareAgentFileInstall?: (
           stagingId: string,
           requester?: { callerKind: string; paneName?: string },
@@ -515,6 +530,9 @@ declare global {
         prepareLocalRollback?: (id: string) => Promise<PreparedInstallSummary & { rollbackFrom: string }>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
+        developerModeReminderDismissed?: () => Promise<boolean>
+        dismissDeveloperModeReminder?: () => Promise<void>
+        onDeveloperModeReminderDismissed?: (cb: () => void) => () => void
         setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
         loadFromFolder?: () => Promise<PreparedInstallSummary | null>
         commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean; expectedFolder?: string }) => Promise<DeveloperModeState>
@@ -743,6 +761,8 @@ declare global {
     workspaceWrite: string[]
     lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
     shell?: 'allowlist' | 'full'
+    allowedBy?: 'pre-0.2.31-install'
+    declined?: boolean
   }
 
   interface NativeBackendOverview {
@@ -750,6 +770,8 @@ declare global {
     plugins: NativeBackendStatusRow[]
     /** Plan B: agent-tool switches (DB8, DB4); absent on an older Host. */
     agentTools?: { enabled: boolean; externalCallers: boolean }
+    /** #642 review L2: off for this run, not saved; on again after a restart. */
+    offUnsaved?: true
   }
 
   interface InstalledPackRecord {

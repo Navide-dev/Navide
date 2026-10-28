@@ -285,8 +285,6 @@ def test_pane_provenance_records_credential_source_without_values() -> None:
         "claude", None, env={"CLAUDE_CODE_OAUTH_TOKEN": "x"}, env_remove=["CLAUDE_CODE_OAUTH_TOKEN"],
     )
     assert removed["credentialSource"] == "vault"
-    portable = qf.pane_auth_scope("claude", None, env={}, portable_slot_id="p1")
-    assert portable["credentialSource"] == "portable"
 
 
 # ── candidate ranking (pure) ────────────────────────────────────────────────

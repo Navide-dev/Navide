@@ -16,6 +16,8 @@ import {
   consentedAgentMethods,
   readInstalledManifestV2,
   nativeBackendConsentText,
+  preInstallConsentCandidates,
+  NativeBackendRefusal,
   ThirdPartyBackendController,
   thirdPartyBackendLaunchSpec,
   type NativeBackendConsentPrompt,
@@ -89,6 +91,7 @@ function controller(options: Partial<ConstructorParameters<typeof ThirdPartyBack
     watchResources: () => ({ dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
     killSandbox: vi.fn(),
     sweepEscapees: vi.fn(async () => []),
+    offSaveRetryDelaysMs: [0, 0, 0],
     ...options,
   })
   return { instance, spawnImpl }
@@ -230,9 +233,11 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     await refusal(instance.admit(changed))
     expect(deny).toHaveBeenCalledTimes(1)
     expect(store.record('acme.indexer').consent).toEqual(first)
+    // 0.2.32: the "not now" is saved, so clearing the session's answers
+    // (re-enabling the plugin) does not ask again; Allow does.
     instance.resetFailures('acme.indexer')
     await refusal(instance.admit(changed))
-    expect(deny).toHaveBeenCalledTimes(2)
+    expect(deny).toHaveBeenCalledTimes(1)
   })
 
   it('asks again, instead of counting the install, once a consent was taken away; uninstall resets that', async () => {
@@ -430,6 +435,27 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     expect((await instance.status(spec)).status).toBe('shell-not-allowed')
   })
 
+  it('names the refusing gate on the error, as the status row does (#641 L2/L3)', async () => {
+    // Only a NativeBackendRefusal's fixed message reaches the user; its
+    // status picks the localized wording and whether "allow" is offered.
+    const shell = writePackage({ shell: 'full' })
+    const { instance } = controller({ promptConsent: deny })
+    const full = await refusal(instance.admit(shell))
+    expect(full).toBeInstanceOf(NativeBackendRefusal)
+    expect((full as NativeBackendRefusal).status).toBe('shell-not-allowed')
+
+    const spec = writePackage({}, 'binary-v1')
+    await instance.admit(spec)
+    const declined = await refusal(instance.admit(writePackage({}, 'binary-v2')))
+    expect(declined.message).toBe('the user did not allow the native backend')
+    expect((declined as NativeBackendRefusal).status).toBe('needs-consent')
+
+    store.setEnabled(false)
+    const off = await refusal(instance.admit(spec))
+    expect((off as NativeBackendRefusal).status).toBe('disabled-globally')
+    expect((await instance.status(spec)).status).toBe('disabled-globally')
+  })
+
   it('admits a freshly installed backend with shell: allowlist without a prompt (the install disclosed it)', async () => {
     const spec = writePackage({ system: ['fs'], shell: 'allowlist' })
     const { instance, spawnImpl } = controller({ promptConsent: allow })
@@ -526,6 +552,39 @@ describe('kill switches when the decision cannot be saved', () => {
     } finally {
       write.mockRestore()
     }
+  })
+
+  it('retries a failed "off" save, and says nothing is unsaved once one lands (#642 L2)', async () => {
+    const { instance } = controller({ stopBackends: vi.fn(async () => undefined) })
+    let failures = 2
+    const real = OwnerOnlyJsonPersistence.prototype.write
+    const write = vi.spyOn(OwnerOnlyJsonPersistence.prototype, 'write').mockImplementation(function (this: OwnerOnlyJsonPersistence, ...args) {
+      if (failures-- > 0) throw new Error('ENOSPC: no space left on device')
+      return real.apply(this, args)
+    })
+    try {
+      await instance.setEnabled(false)
+      expect(write).toHaveBeenCalledTimes(3)
+      expect(store.offUnsaved()).toBe(false)
+      expect(new NativeBackendStore(join(root, 'store')).isEnabled()).toBe(false)
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  it('keeps saying "off" is unsaved after the bounded retries, until a save lands (#642 L2)', async () => {
+    const { instance } = controller({ stopBackends: vi.fn(async () => undefined) })
+    const write = failingSaves()
+    try {
+      await expect(instance.setEnabled(false)).rejects.toThrow('ENOSPC')
+      expect(write).toHaveBeenCalledTimes(4)
+      expect(store.isEnabled()).toBe(false)
+      expect(store.offUnsaved()).toBe(true)
+    } finally {
+      write.mockRestore()
+    }
+    await instance.setEnabled(false)
+    expect(store.offUnsaved()).toBe(false)
   })
 
   it('turning things on still takes effect only once saved', async () => {
@@ -1062,6 +1121,177 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('install-time preflight', () => {
   })
 })
 
+describe.skipIf(POSIX_SANDBOX_SKIPPED)('packages installed before 0.2.31 (0.2.32 migration)', () => {
+  const installed = [{ pluginId: 'acme.indexer', packageVersion: '1.0.0' }]
+  beforeEach(() => {
+    // Installed by 0.2.30: no install consent, no consent.
+    store.forget('acme.indexer')
+  })
+
+  it('allows it without a prompt, records the consent as the migration\'s and says so on its row', async () => {
+    expect(store.migratePreInstallConsent(installed)).toEqual(['acme.indexer'])
+    const { instance } = controller({ promptConsent: deny })
+    const spec = writePackage()
+    expect(await instance.status(spec)).toMatchObject({ status: 'needs-consent', allowedBy: 'pre-0.2.31-install' })
+    await instance.admit(spec)
+    expect(deny).not.toHaveBeenCalled()
+    expect(store.record('acme.indexer').consent).toMatchObject({ packageVersion: '1.0.0', grantedBy: 'pre-0.2.31-install' })
+    expect(await instance.status(spec)).toMatchObject({ status: 'ready', allowedBy: 'pre-0.2.31-install' })
+    // Kept across a restart.
+    const reloaded = new NativeBackendStore(join(root, 'store'))
+    expect(reloaded.record('acme.indexer').consent?.grantedBy).toBe('pre-0.2.31-install')
+    expect(reloaded.snapshot().preInstallConsentMigratedAt).toEqual(expect.any(String))
+  })
+
+  it('runs once per profile: a package installed later without an install consent is asked', async () => {
+    expect(store.migratePreInstallConsent([])).toEqual([])
+    expect(new NativeBackendStore(join(root, 'store')).migratePreInstallConsent(installed)).toEqual([])
+    store = new NativeBackendStore(join(root, 'store'))
+    const { instance } = controller({ promptConsent: deny })
+    await refusal(instance.admit(writePackage()))
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('never grants a package whose consent the user revoked', async () => {
+    store.grantConsent('acme.indexer', { binarySha256: 'b'.repeat(64), permissionsKey: '{}', packageVersion: '1.0.0' })
+    store.revokeConsent('acme.indexer')
+    expect(store.migratePreInstallConsent(installed)).toEqual([])
+    expect(store.record('acme.indexer')).not.toHaveProperty('installConsent')
+    const { instance } = controller({ promptConsent: deny })
+    expect((await refusal(instance.admit(writePackage()))).message).toBe('the user did not allow the native backend')
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks again when the content changed after the migrated consent', async () => {
+    store.migratePreInstallConsent(installed)
+    const { instance } = controller({ promptConsent: allow })
+    await instance.admit(writePackage({}, 'binary-v1'))
+    expect(allow).not.toHaveBeenCalled()
+    const changed = writePackage({}, 'binary-v2')
+    expect(await instance.status(changed)).toMatchObject({ changedSinceConsent: true })
+    expect(await instance.status(changed)).not.toHaveProperty('allowedBy')
+    await instance.admit(changed)
+    expect(allow).toHaveBeenCalledTimes(1)
+    expect(allow.mock.calls[0][0]).toMatchObject({ update: true })
+    // The user's own answer replaces the migration's mark.
+    expect(store.record('acme.indexer').consent).not.toHaveProperty('grantedBy')
+  })
+
+  it('grants nothing while the global switch is off, and does not run it later', async () => {
+    store.setEnabled(false)
+    expect(store.migratePreInstallConsent(installed)).toEqual([])
+    const { instance } = controller({ promptConsent: deny })
+    const spec = writePackage()
+    expect((await refusal(instance.admit(spec))).message).toBe('third-party native backends are turned off')
+    expect(deny).not.toHaveBeenCalled()
+    store.setEnabled(true)
+    expect(store.migratePreInstallConsent(installed)).toEqual([])
+    await refusal(instance.admit(spec))
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves Developer Mode folders, Plans and first-party backends out', async () => {
+    const entry = (pluginId: string, backend = true): PluginActivationCatalogEntry => ({
+      pluginId,
+      packageVersion: '1.0.0',
+      packageDir: join(root, pluginId),
+      views: [],
+      ...(backend ? { backend: { entryFile: join(root, pluginId, 'b'), protocolVersion: 1, activation: 'startup' as const } } : {}),
+    })
+    expect(preInstallConsentCandidates(
+      [entry('acme.indexer'), entry('acme.folder'), entry('navide.plans'), entry('navide.browser'), entry('acme.viewonly', false)],
+      new Set(['acme.folder']),
+    )).toEqual([{ pluginId: 'acme.indexer', packageVersion: '1.0.0' }])
+    // A folder left out keeps being asked under its folder-bound rule.
+    store.migratePreInstallConsent([])
+    const { instance } = controller({ promptConsent: deny })
+    await refusal(instance.admit(writePackage()))
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves an install of 0.2.31 or later as it was', async () => {
+    store.noteInstallConsent('acme.indexer', '1.0.0')
+    expect(store.migratePreInstallConsent(installed)).toEqual([])
+    expect(store.record('acme.indexer').installConsent).toEqual({ packageVersion: '1.0.0' })
+    const { instance } = controller({ promptConsent: deny })
+    const spec = writePackage()
+    await instance.admit(spec)
+    expect(deny).not.toHaveBeenCalled()
+    expect(store.record('acme.indexer').consent).not.toHaveProperty('grantedBy')
+    expect(await instance.status(spec)).not.toHaveProperty('allowedBy')
+  })
+
+  it('does not write over a decision file it could not read', () => {
+    const file = join(root, 'store', 'native-backends.json')
+    writeFileSync(file, '{"schemaVersion":1,"enabled":true,"plugins":', { mode: 0o600 })
+    expect(new NativeBackendStore(join(root, 'store')).migratePreInstallConsent(installed)).toEqual([])
+    expect(readFileSync(file, 'utf8')).toBe('{"schemaVersion":1,"enabled":true,"plugins":')
+  })
+})
+
+describe.skipIf(POSIX_SANDBOX_SKIPPED)('a saved "not now" (0.2.32)', () => {
+  beforeEach(() => {
+    // Installed by 0.2.30, the migration already ran: the first start asks.
+    store.forget('acme.indexer')
+    store.migratePreInstallConsent([])
+  })
+
+  it('is not asked again after a relaunch, and its row says so', async () => {
+    const spec = writePackage()
+    await refusal(controller({ promptConsent: deny }).instance.admit(spec))
+    expect(deny).toHaveBeenCalledTimes(1)
+    expect(store.record('acme.indexer').consentDeclined).toMatchObject({ packageVersion: '1.0.0' })
+    store = new NativeBackendStore(join(root, 'store'))
+    const { instance } = controller({ promptConsent: allow })
+    expect((await refusal(instance.admit(spec))).message).toBe('the user did not allow the native backend')
+    expect(allow).not.toHaveBeenCalled()
+    expect(await instance.status(spec)).toMatchObject({ status: 'needs-consent', declined: true })
+  })
+
+  it('Allow on the Settings page runs it and clears the decline', async () => {
+    const spec = writePackage()
+    const { instance } = controller({ promptConsent: deny })
+    await refusal(instance.admit(spec))
+    await instance.allow(spec)
+    expect(store.record('acme.indexer')).not.toHaveProperty('consentDeclined')
+    await instance.admit(spec)
+    expect(deny).toHaveBeenCalledTimes(1)
+    expect(await instance.status(spec)).not.toHaveProperty('declined')
+  })
+
+  it('asks again for new content', async () => {
+    await refusal(controller({ promptConsent: deny }).instance.admit(writePackage({}, 'binary-v1')))
+    const { instance } = controller({ promptConsent: allow })
+    await instance.admit(writePackage({}, 'binary-v2'))
+    expect(allow).toHaveBeenCalledTimes(1)
+    expect(store.record('acme.indexer')).not.toHaveProperty('consentDeclined')
+  })
+
+  it('is cleared by a new install dialog', async () => {
+    const spec = writePackage()
+    await refusal(controller({ promptConsent: deny }).instance.admit(spec))
+    store.noteInstallConsent('acme.indexer', '1.0.0')
+    await controller({ promptConsent: deny }).instance.admit(spec)
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('is not saved when the dialog itself failed', async () => {
+    const broken = vi.fn(async (_prompt: NativeBackendConsentPrompt): Promise<boolean> => { throw new Error('no window') })
+    await refusal(controller({ promptConsent: broken }).instance.admit(writePackage()))
+    expect(store.record('acme.indexer')).not.toHaveProperty('consentDeclined')
+  })
+
+  it('keeps the migration from granting a declined package', () => {
+    const fresh = join(root, 'store-declined')
+    const declined = new NativeBackendStore(fresh)
+    declined.declineConsent('acme.indexer', { binarySha256: 'c'.repeat(64), permissionsKey: '{}', packageVersion: '1.0.0' })
+    const reloaded = new NativeBackendStore(fresh)
+    expect(reloaded.record('acme.indexer').consentDeclined).toMatchObject({ binarySha256: 'c'.repeat(64) })
+    expect(reloaded.migratePreInstallConsent([{ pluginId: 'acme.indexer', packageVersion: '1.0.0' }])).toEqual([])
+    expect(reloaded.record('acme.indexer')).not.toHaveProperty('installConsent')
+  })
+})
+
 describe('NativeBackendStore', () => {
   // POSIX permission bits do not exist on Windows; ownerOnlyJsonPersistence
   // accepts any mode there.
@@ -1336,7 +1566,7 @@ describe('native backend consent text', () => {
     expect(detail).toContain('Settings → Navide Plugins')
     expect(detail).not.toContain('Settings → Extensions')
     expect(title).toBe('Native code')
-    expect(buttons).toEqual(['Not now', 'Allow'])
+    expect(buttons).toEqual(['Don\'t allow', 'Allow'])
   })
 
   it('says "no network access" only for a package without shell', () => {
@@ -1372,7 +1602,7 @@ describe('native backend consent text', () => {
     expect(update.detail).not.toMatch(/no network/i)
   })
 
-  it('lists each agent tool with its method, declared claim, timeout and whole input schema, plus count and size', () => {
+  it('lists each agent tool with its method, declared claim and timeout, plus count and size', () => {
     const agentTools = [
       { name: 'indexer_find', method: 'files.search', risk: 'read', title: 'Find', description: 'Find files.',
         inputSchema: { type: 'object', properties: { q: { type: 'string' } } }, timeoutMs: 30000 },
@@ -1384,17 +1614,18 @@ describe('native backend consent text', () => {
       `Agents will be able to call these 2 tools of Indexer (their text and input schemas total ${
         Buffer.byteLength(JSON.stringify(agentTools))} bytes):`,
     )
-    expect(detail).toContain('• indexer_find → files.search (declared read-only, times out after 30 s): Find files.')
-    expect(detail).toContain('  Input schema: {"type":"object","properties":{"q":{"type":"string"}}}')
-    expect(detail).toContain('• indexer_tag → files.tag (declared as changing data, times out after 5 s): Tag a file.')
+    expect(detail).toContain('• indexer_find → files.search (declared read-only, times out after 30 s)')
+    expect(detail).toContain('• indexer_tag → files.tag (declared as changing data, times out after 5 s)')
+    expect(detail).toContain("Each tool's full description and input schema are shown in Settings → Navide Plugins.")
+    expect(detail).not.toContain('"properties"')
     expect(detail.indexOf('Agents will be able')).toBeLessThan(detail.indexOf('You can disable it at any time'))
     expect(nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [] }).detail).not.toContain('Agents will')
   })
 
   // D-g with #346: the agent-tool section is in the dialog's language too.
   it.each([
-    ['zh-TW', 'agent 將可以呼叫 Indexer 的這 1 個工具', '• indexer_find → files.search（外掛宣告為唯讀，30 秒後逾時）：Find files.', '  輸入結構描述：{"type":"object"}'],
-    ['ja-JP', 'agent は Indexer のこれら 1 個のツールを呼び出せるようになります', '• indexer_find → files.search（プラグインの宣言：読み取り専用、30 秒でタイムアウト）：Find files.', '  入力スキーマ：{"type":"object"}'],
+    ['zh-TW', 'agent 將可以呼叫 Indexer 的這 1 個工具', '• indexer_find → files.search（外掛宣告為唯讀，30 秒後逾時）', '「設定 → Navide 外掛」'],
+    ['ja-JP', 'agent は Indexer のこれら 1 個のツールを呼び出せるようになります', '• indexer_find → files.search（プラグインの宣言：読み取り専用、30 秒でタイムアウト）', '「設定 → Navide プラグイン」'],
   ] as const)('words the agent tools in the dialog language (%s)', (locale, intro, line, schema) => {
     const tool = {
       name: 'indexer_find', method: 'files.search', risk: 'read' as const, title: 'Find', description: 'Find files.',
@@ -1407,14 +1638,43 @@ describe('native backend consent text', () => {
     expect(detail).not.toMatch(/Agents will|Input schema|declared read-only|What these tools return/)
   })
 
-  it('spells out invisible characters in a tool schema instead of showing them raw', () => {
+  it('keeps invisible characters in a tool schema out of the dialog (the schema is on the Settings page)', () => {
     const tool = {
       name: 'indexer_find', method: 'files.search', risk: 'read' as const, title: 'Find', description: 'Find files.',
       inputSchema: { type: 'object', properties: { 'k\u202ex': { enum: ['a\u200bb', 'v\ufe0f'] } } }, timeoutMs: 30000,
     }
     const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [tool] })
-    expect(detail).toContain('  Input schema: {"type":"object","properties":{"k\\u{202e}x":{"enum":["a\\u{200b}b","v\\u{fe0f}"]}}}')
     expect(detail).not.toMatch(/[\u200b\u202e\ufe0f]/)
+    expect(detail).not.toContain('enum')
+  })
+
+  // A native message box does not scroll: 15 tools with ~10 KB of schemas
+  // (devmap 0.0.4) ran past the screen and hid the Allow button.
+  it('stays bounded for many tools with large schemas and still names every tool and the risks', () => {
+    const agentTools = Array.from({ length: 15 }, (_, index) => ({
+      name: `devmap_tool_${index}`, method: `devmap.method${index}`, risk: index % 2 ? 'write' as const : 'read' as const,
+      title: `Tool ${index}`, description: 'Reads or changes the development map. '.repeat(8),
+      inputSchema: {
+        type: 'object',
+        properties: Object.fromEntries(Array.from({ length: 8 }, (_, key) => [
+          `field${key}`, { type: 'string', description: 'A long field description for the schema. '.repeat(1) },
+        ])),
+      },
+      timeoutMs: 30000,
+    }))
+    expect(Buffer.byteLength(JSON.stringify(agentTools))).toBeGreaterThan(10_000)
+    const methods = agentTools.map((tool) => tool.method)
+    const { message, detail } = nativeBackendConsentText({ ...base, system: ['fs'], shell: 'allowlist', methods, agentTools })
+    expect(message.length + detail.length).toBeLessThan(3_500)
+    expect(detail.split('\n').length).toBeLessThan(30)
+    expect(detail).toContain('High risk:')
+    expect(detail).toContain('Navide runs it in a sandbox')
+    expect(detail).toContain(`Methods it serves: ${[...methods].sort().join(', ')}.`)
+    for (const tool of agentTools) expect(detail).toContain(tool.name)
+    expect(detail).toContain('• devmap_tool_0 → devmap.method0 (declared read-only, times out after 30 s)')
+    expect(detail).toContain('• and 7 more (3 declared as changing data): devmap_tool_8, devmap_tool_9, devmap_tool_10')
+    expect(detail).not.toContain('devmap_tool_8 →')
+    expect(detail).toContain('Settings → Navide Plugins')
   })
 })
 

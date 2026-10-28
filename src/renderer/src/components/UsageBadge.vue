@@ -462,6 +462,7 @@ async function chooseDefault(id: string): Promise<void> {
 }
 
 function onRowClick(id: string): void {
+  if (paneOnlyMode.value) return moveThisPane(id)
   void (followMode.value ? chooseDefault(id) : selectProfile(id))
 }
 
@@ -482,6 +483,25 @@ function unpinAll(): void {
   if (!pins) return
   closePop()
   void pins.unpinAll()
+}
+
+// A pane with "follow account switch" off: a row moves only this pane, into
+// that account's own dir (reopened once, its conversation resumed). The live
+// credential, the default and every other pane stay as they are. An account
+// with no dir login yet starts that sign-in instead; the built-in Default has
+// no dir, so it is refused.
+const paneOnlyMode = computed(() => liveMode.value && props.paneFollow === 'fixed' && !!props.paneId)
+
+function moveThisPane(id: string): void {
+  if (!pins || !props.paneId || switching.value !== null) return
+  if (id === paneDirProfileId.value) return
+  if (id === '') {
+    void notifyAlert(t('account-follow.pin-default-refused'), { title: t('cli-account.switch-title') })
+    return
+  }
+  if (!accountDirSignedIn(id)) return signInDir(id)
+  closePop()
+  void pins.movePane(props.paneId, id)
 }
 
 // ── Renaming an account from the list ───────────────────────────────────────

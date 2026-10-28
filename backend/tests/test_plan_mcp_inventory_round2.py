@@ -760,6 +760,28 @@ async def test_mcp_list_merges_live_status_and_keeps_the_answer_a_summary(
 
 
 @pytest.mark.asyncio
+async def test_mcp_list_says_when_the_tool_count_is_unknown(
+    mcp_sources: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed tool listing must not read as a server with no tools."""
+    monkeypatch.setattr(
+        backend_app,
+        "mcp_manager",
+        _FakeMcpManager([{
+            "name": "ctx", "status": "connected", "tool_count": 0, "tools": [],
+            "tools_error": "cannot reach https://u:p@host/mcp",
+        }]),
+    )
+    agent_messaging.register("pa", "caller", "/ws")
+
+    result = await plan_mcp.mcp_list(_ctx())
+
+    row = {r["name"]: r for r in result["servers"]}["ctx"]
+    assert row["tool_count"] == 0
+    assert row["tools_error"] == "cannot reach https://***@host/mcp"
+
+
+@pytest.mark.asyncio
 async def test_mcp_list_answers_an_unreadable_settings_file_with_ok_false(
     mcp_sources: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

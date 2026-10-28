@@ -63,6 +63,7 @@ const aiPanelStub = {
   props: {
     controller: { type: Object, required: false, default: null },
     buildContext: { type: Function, required: false, default: null },
+    widthKey: { type: String, required: false, default: undefined },
   },
   template: '<div data-test="ai-panel" />',
 }
@@ -350,6 +351,22 @@ describe('Plans window — embedded CLI agent panel', () => {
     const view = await mountPlans()
     const buildContext = view.findComponent({ name: 'SafeAiCliPanel' }).props('buildContext') as () => string
     expect(buildContext()).toContain('No plan document is currently open.')
+  })
+
+  it('keeps its own width setting instead of sharing the Git window\'s', async () => {
+    const view = await mountPlans()
+    expect(view.findComponent({ name: 'SafeAiCliPanel' }).props('widthKey')).toBe('plans-ai-panel-width')
+  })
+
+  // The panel sizes itself (resizable, 42px collapsed). A fixed width on the
+  // wrapping aside left a blank strip beside the collapsed panel and squeezed
+  // the document frame.
+  it('gives the aside around the panel no width of its own', () => {
+    const source = import.meta.glob<string>('./PlansApp.vue', { query: '?raw', import: 'default', eager: true })['./PlansApp.vue']
+    const style = source.slice(source.lastIndexOf('<style'))
+    const rules = [...style.matchAll(/\.ai-sidebar\s*\{([^}]*)\}/g)].map((m) => m[1])
+    expect(rules.length).toBeGreaterThan(0)
+    for (const body of rules) expect(body).not.toMatch(/(^|[\s;])(min-|max-)?width\s*:/)
   })
 })
 

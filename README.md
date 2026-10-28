@@ -10,9 +10,13 @@ It is not another chat panel inside the traditional IDE. Navide is being built a
 
 English | [繁體中文](README.zh-TW.md) | [日本語](README.ja-JP.md)
 
-[Download v0.2.30](https://github.com/Navide-dev/Navide/releases/tag/v0.2.30) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
+[Download v0.2.32](https://github.com/Navide-dev/Navide/releases/tag/v0.2.32) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Navide-dev/Navide/total?label=downloads&logo=github&color=2ea043)](https://github.com/Navide-dev/Navide/releases)
+[![Commits per month](https://img.shields.io/github/commit-activity/m/Navide-dev/Navide?label=commits%2Fmonth&logo=git&logoColor=white&color=f0883e)](https://github.com/Navide-dev/Navide/commits/main)
+[![Last commit](https://img.shields.io/github/last-commit/Navide-dev/Navide?label=last%20commit&logo=github)](https://github.com/Navide-dev/Navide/commits/main)
+
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron)](https://www.electronjs.org/)
 [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js)](https://vuejs.org/)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python)](https://python.org/)
@@ -33,12 +37,16 @@ AI changes that premise. One engineer can now ask multiple agents to research, p
 
 AI models provide the execution power. Navide provides the engineering system required to direct it.
 
-```text
-Traditional IDE
-Engineer -> edits files and operates tools -> software
-
-Navide
-Engineer -> directs goals, agents, decisions, and evidence -> software
+```mermaid
+flowchart LR
+  subgraph trad["Traditional IDE"]
+    direction LR
+    e1["Engineer"] --> w1["Edits files,<br/>operates tools"] --> s1["Software"]
+  end
+  subgraph nav["Navide"]
+    direction LR
+    e2["Engineer"] --> w2["Directs goals, agents,<br/>decisions, evidence"] --> p2["Parallel agent<br/>sessions"] --> s2["Software"]
+  end
 ```
 
 The engineer remains responsible for intent, architecture, risk, judgment, and final acceptance. Agents take on repeatable execution. Navide keeps the work visible, synchronized, interruptible, and recoverable.
@@ -59,6 +67,13 @@ Let reversible work continue while it remains visible. Return the engineer's att
 
 ## One environment, three engineering loops
 
+```mermaid
+flowchart LR
+  g["Genesis<br/>Idea to first working form"] --> e["Evolution<br/>Continuous product development<br/>the repeated daily loop"]
+  e <-->|"when judgment matters"| i["Intervention<br/>Precise human control"]
+  e --> e
+```
+
 ### Genesis — idea to first working form
 
 Start a new project through a configurable pipeline covering requirements, planning, design, implementation, security review, and testing. Multiple agent slots can work in parallel while context moves between stages.
@@ -78,6 +93,29 @@ Navide is already the primary development environment used by its founder to evo
 New projects begin from requirements and a Pipeline. Daily product work happens through multiple agent sessions for implementation, testing, correction, review, and refinement. The integrated mini IDE is opened selectively to inspect results or make precise edits.
 
 This is first-party dogfooding evidence, not independent customer validation. The next proof must come from other engineers using Navide on their own real projects.
+
+### Navide's own development, by the numbers
+
+| Since 2026-05-28 | |
+|---|---|
+| Commits | **4,182** |
+| Releases | **87** |
+| Commits per month | **~1,384** |
+
+Commits per week over the last eight weeks - never fewer than 130:
+
+| Week | | Commits |
+|---|---|---|
+| 8 weeks ago | ██████ | 137 |
+| 7 weeks ago | ██████████████ | 324 |
+| 6 weeks ago | ████████ | 185 |
+| 5 weeks ago | █████████ | 209 |
+| 4 weeks ago | ███████████ | 253 |
+| 3 weeks ago | █████████████████████████ | 577 |
+| 2 weeks ago | █████████████ | 293 |
+| last week | █████████ | 204 |
+
+Counts as of 2026-10-27 (v0.2.32). The badges at the top track the live numbers.
 
 ## Available today
 
@@ -115,13 +153,13 @@ Read [Privacy and Data Flows](docs/en-US/privacy.md) and the [Security Policy](S
 
 ## Try Navide
 
-Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.30 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
+Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.32 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
 
-- [Download DMG](https://dl.navide.dev/releases/v0.2.30/Navide-0.2.30-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.30/Navide-0.2.30-arm64.dmg))
-- [Download ZIP](https://dl.navide.dev/releases/v0.2.30/Navide-0.2.30-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.30/Navide-0.2.30-arm64.zip))
-- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.30/Navide-0.2.30-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.30/Navide-0.2.30-win-x64.exe))
-- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.30/Navide-0.2.30-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.30/Navide-0.2.30-win-arm64.exe))
-- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.30/Navide-0.2.30-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.30/Navide-0.2.30-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.30/Navide-0.2.30-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.30/Navide-0.2.30-amd64.deb))
+- [Download DMG](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.dmg))
+- [Download ZIP](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.zip))
+- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-x64.exe))
+- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-arm64.exe))
+- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-amd64.deb))
 
 Links go to dl.navide.dev, the same host the app updates itself from; the *GitHub* link beside each one is the same file, byte for byte, on the GitHub Release (the release workflow publishes both and checks their checksums match).
 

@@ -95,7 +95,7 @@ You never need to read or modify the shared orchestration code.
    when you declare `account_switch`.
 10. Set `extensions` to say where the CLI keeps the CLI extensions it installs
     for itself (plugins, extensions, hooks; see the [glossary](en-US/glossary.md)),
-    for the read-only inventory on Settings → CLI Extensions. Declare an
+    for the read-only inventory on Settings → Extensions. Declare an
     `ExtensionsSpec` of `ExtensionsSource` rows, each naming a reader in
     `backend/agent_team_backend/cli_extensions.py`, a path under the user's
     home and the vendor's own type label ("Codex hook"). A CLI with an
@@ -103,7 +103,10 @@ You never need to read or modify the shared orchestration code.
     `ExtensionsSpec(supported=False, note=...)` rather than a guess; only a CLI
     with no extension system at all leaves it `None`, which hides it from the
     page. `backend/tests/test_cli_extensions.py` fails for a vendor that
-    declares nothing.
+    declares nothing. A CLI Navide lists without running it in a pane (Gemini
+    CLI) is declared in `_UNMANAGED_CLIS` in `cli_extensions.py`; when it
+    becomes a vendor, move that declaration onto its spec (the vendor spec
+    wins while both exist).
 
 ## Frontend
 

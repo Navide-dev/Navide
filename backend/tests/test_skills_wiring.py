@@ -247,6 +247,54 @@ def test_config_env_keeps_a_users_own_skill_paths(
     assert json.loads(env["OPENCODE_CONFIG_CONTENT"])["skills"]["paths"] == ["/mine", str(view)]
 
 
+@pytest.mark.parametrize("existing", ["{not json", "[1, 2]"])
+def test_config_env_never_replaces_a_broken_users_document(
+    existing: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    view = tmp_path / "view"
+    _skill(view, "alpha")
+    monkeypatch.setattr(skills_wiring, "prepare_view", lambda *a, **k: view)
+    skills_wiring.take_spawn_warnings("pane-broken")
+    env = {"OPENCODE_CONFIG_CONTENT": existing}
+
+    assert skills_wiring.wire_command("opencode", "opencode", None, "pane-broken", env, "") == "opencode"
+
+    assert env == {"OPENCODE_CONFIG_CONTENT": existing}
+    [line] = skills_wiring.take_spawn_warnings("pane-broken")
+    assert line.startswith("navide skills not wired: OPENCODE_CONFIG_CONTENT is not a valid JSON object")
+    assert skills_wiring.take_spawn_warnings("pane-broken") == []
+
+
+def test_view_failure_is_kept_for_the_pane_to_print(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(*_args, **_kwargs):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(skills_wiring, "_managed_sources", fail)
+    monkeypatch.setattr(skills_wiring, "views_root", lambda: tmp_path / "views")
+    skills_wiring.take_spawn_warnings("pane-a")
+
+    assert skills_wiring.wire_command("claude", "claude", None, "pane-a", {}, "") == "claude"
+
+    assert skills_wiring.take_spawn_warnings("pane-a") == ["navide skills not wired: disk unavailable"]
+    assert skills_wiring.take_spawn_warnings("pane-b") == []
+
+
+def test_root_failure_is_kept_for_the_pane_to_print(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(*_args, **_kwargs):
+        raise OSError("shim unavailable")
+
+    monkeypatch.setattr(skills_wiring, "_managed_sources", fail)
+    monkeypatch.setattr(skills_wiring, "panes_root", lambda: tmp_path / "panes")
+    monkeypatch.setattr(skills_wiring, "real_home", lambda: tmp_path / "home")
+    skills_wiring.take_spawn_warnings("pane-q")
+    env: dict[str, str] = {}
+
+    skills_wiring.wire_command("qwen", "qwen", None, "pane-q", env, "")
+
+    assert "QWEN_HOME" not in env
+    assert skills_wiring.take_spawn_warnings("pane-q") == ["navide skills not wired: shim unavailable"]
+
+
 @pytest.mark.parametrize("agent_key", ["kilo", "aider", "terminal"])
 def test_wire_command_noops_for_agents_without_wiring(
     agent_key: str, monkeypatch: pytest.MonkeyPatch

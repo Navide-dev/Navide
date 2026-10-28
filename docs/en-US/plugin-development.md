@@ -505,7 +505,7 @@ automatically; the rules are in the
 A packaged build reads `AGENT_TEAM_MARKETPLACE_URL` and
 `AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE` only while **Developer Mode** is on
 (Settings → Navide Plugins); with it off, both are ignored and a package
-installed from a self-hosted Registry is not loaded, and the Extensions page
+installed from a self-hosted Registry is not loaded, and the Navide Plugins page
 says so. A packaged build never reads `AGENT_TEAM_OFFICIAL_PLUGIN_KEY`.
 Publishing requires a publisher account on the registry instance you are
 targeting; on the Official Registry that is a namespace claimed with your

@@ -1,5 +1,5 @@
-import { watch } from 'node:fs'
-import { sep } from 'node:path'
+import { statSync, watch } from 'node:fs'
+import { join, sep } from 'node:path'
 
 // DESIGN-A2 G1: reload a developer folder when a file in it changes. The
 // watch only says "something changed"; what a reload may do (load again, or
@@ -28,12 +28,44 @@ export function ignoredDeveloperFolderChange(relativePath: string | null): boole
   return parts.includes('.git')
 }
 
+/** Plan 4a05af P1: a build that writes this file into the folder last marks
+ *  its output complete. Once the folder has it, only a newer copy of it
+ *  reloads, so a build still writing never loads half its files. A folder
+ *  without it reloads on any change, as before. */
+export const DEVELOPER_FOLDER_BUILD_MARKER = '.navide-build-complete'
+
+/** Decides, per change event, whether `dir` may reload: always until the
+ *  marker is seen (at the start or later), then only when its modification
+ *  time has moved since the last reload it allowed. */
+export function developerFolderBuildGate(dir: string): () => boolean {
+  const stamp = (): number | null => {
+    try {
+      return statSync(join(dir, DEVELOPER_FOLDER_BUILD_MARKER)).mtimeMs
+    } catch {
+      return null
+    }
+  }
+  let marked = stamp() !== null
+  let last = stamp()
+  return () => {
+    const now = stamp()
+    if (!marked) {
+      if (now === null) return true
+      marked = true
+    }
+    if (now === null || now === last) return false
+    last = now
+    return true
+  }
+}
+
 export const watchDeveloperFolder: WatchDeveloperFolder = (dir, onChange, onError) => {
   let timer: ReturnType<typeof setTimeout> | null = null
   let closed = false
+  const buildComplete = developerFolderBuildGate(dir)
   const watcher = watch(dir, { recursive: true, persistent: false }, (_event, filename) => {
     const relative = filename === null ? null : String(filename).split(sep).join('/')
-    if (closed || ignoredDeveloperFolderChange(relative)) return
+    if (closed || ignoredDeveloperFolderChange(relative) || !buildComplete()) return
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
       timer = null

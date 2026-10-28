@@ -17,9 +17,6 @@ import {
   type CliProfileDefaults,
   type CliProfileDuplicates,
   type CliProfileIdentities,
-  type CliPortableCredentials,
-  type CliCloudCredentials,
-  type CloudCredentialStatus,
 } from '../../composables/useCliProfiles'
 import { usageVersion, type UsageSnapshot } from '../../composables/useUsage'
 
@@ -70,10 +67,6 @@ interface ApiOptions {
   duplicates?: CliProfileDuplicates
   supported?: string[]
   error?: string
-  portable?: CliPortableCredentials
-  portableSupported?: string[]
-  cloud?: CliCloudCredentials
-  cloudStatus?: CloudCredentialStatus
   /** Provider scopes per agent (the backend capability's `scopes`). */
   scopes?: Record<string, string[]>
   /** Agents whose capability says loginIsolation === 'global'. */
@@ -92,10 +85,6 @@ function makeApi(opts: ApiOptions = {}) {
   const duplicates = ref<CliProfileDuplicates>(opts.duplicates ?? {})
   const supportedAgents = ref<string[]>(opts.supported ?? SUPPORTED)
   const error = ref<string>(opts.error ?? '')
-  const portable = ref<CliPortableCredentials>(opts.portable ?? {})
-  const portableSupported = ref<string[]>(opts.portableSupported ?? [])
-  const cloud = ref<CliCloudCredentials>(opts.cloud ?? {})
-  const cloudStatus = ref<CloudCredentialStatus>(opts.cloudStatus ?? 'off')
 
   const api = {
     profiles,
@@ -137,65 +126,6 @@ function makeApi(opts: ApiOptions = {}) {
       profileId && profileId !== '__default__' ? (opts.accountDirs?.[agentKey]?.[profileId] ?? null) : null,
     duplicateFor: (agentKey: string, profileId: string | null) =>
       duplicates.value[agentKey]?.[profileId ?? '__default__'] ?? null,
-    portable,
-    portableSupported,
-    portableSupportedFor: (agentKey: string) => portableSupported.value.includes(agentKey),
-    portableFor: (agentKey: string, profileId: string | null) =>
-      portable.value[`${agentKey}/${profileId ?? '__default__'}`] ?? null,
-    portableSet: vi.fn(async (agentKey: string, profileId: string | null) => {
-      portable.value = {
-        ...portable.value,
-        [`${agentKey}/${profileId ?? '__default__'}`]: {
-          agentKey,
-          slotId: profileId ?? '__default__',
-          configured: true,
-          enabled: true,
-          env: 'CLAUDE_CODE_OAUTH_TOKEN',
-        },
-      }
-      return { ok: true as const }
-    }),
-    portableClear: vi.fn(async () => true),
-    portableDescribe: vi.fn(async (agentKey: string, profileId: string | null) => {
-      const meta = {
-        agentKey,
-        slotId: profileId ?? '__default__',
-        configured: false,
-        enabled: false,
-        env: 'CLAUDE_CODE_OAUTH_TOKEN',
-        obtainCommand: 'claude setup-token',
-        docsUrl: 'https://example.invalid/docs',
-      }
-      portable.value = { ...portable.value, [`${agentKey}/${profileId ?? '__default__'}`]: meta }
-      return meta
-    }),
-    portableEnable: vi.fn(async (agentKey: string, slotId: string, enabled: boolean) => {
-      const key = `${agentKey}/${slotId}`
-      const current = portable.value[key]
-      if (current) portable.value = { ...portable.value, [key]: { ...current, enabled } }
-      return { ok: true as const }
-    }),
-    importedSlotsFor: (agentKey: string) => {
-      const foreign = (slotId: string) =>
-        slotId !== '__default__' && !profiles.value.some((p) => p.id === slotId)
-      const out = new Map<string, CliPortableCredentials[string]>()
-      for (const m of Object.values(portable.value)) {
-        if (m.agentKey === agentKey && m.source === 'imported' && foreign(m.slotId)) out.set(m.slotId, m)
-      }
-      for (const slotId of Object.keys(cloud.value[agentKey] ?? {})) {
-        if (foreign(slotId) && !out.has(slotId)) {
-          out.set(slotId, { agentKey, slotId, configured: false, enabled: false, source: 'none' })
-        }
-      }
-      return [...out.values()]
-    },
-    cloud,
-    cloudStatus,
-    cloudError: ref(''),
-    cloudFor: (agentKey: string, profileId: string | null) =>
-      cloud.value[agentKey]?.[profileId ?? '__default__'] ?? [],
-    refreshCloud: vi.fn(async () => {}),
-    useFromCloud: vi.fn(async () => ({ ok: true as const })),
   }
   return api as unknown as ReturnType<typeof useCliProfiles>
 }
@@ -300,8 +230,8 @@ describe('CliAccountsPane', () => {
     const names = section(w, 0)
       .findAll('.cli-card-id')
       .map((n) => n.text())
-    // Row 0 is the built-in Default (no identity -> "Default" label).
-    expect(names).toEqual(['Default', 'me@example.com', 'Account 3', 'Not signed in'])
+    // Row 0 is the built-in Default (no identity -> "Original login" label).
+    expect(names).toEqual(['Original login', 'me@example.com', 'Account 3', 'Not signed in'])
   })
 
   // ── renaming a card ────────────────────────────────────────────────────────
@@ -609,6 +539,24 @@ describe('CliAccountsPane', () => {
     expect(w.emitted('login')).toEqual([['claude', 'p1']])
   })
 
+  it('with an empty Default, signIn on another non-active profile asks nothing and switches nothing', async () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2'), profile('p2', 'claude', 'Account 3')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { p1: { email: 'me@example.com', signedIn: true } } },
+    })
+    const w = mountPane(api)
+
+    // Row 0 is the collapsed empty Default, row 1 the active p1, row 2 p2.
+    const row = section(w, 0).findAll('.cli-card')[2]
+    await row.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
+    await flushPromises()
+
+    expect(notify.confirm).not.toHaveBeenCalled()
+    expect(api.setDefault).not.toHaveBeenCalled()
+    expect(w.emitted('login')).toEqual([['claude', 'p2']])
+  })
+
   it('signIn on the ACTIVE profile stays a live login (no profile id)', async () => {
     const api = makeApi({
       profiles: [profile('p1', 'claude', 'Account 2')],
@@ -635,8 +583,93 @@ describe('CliAccountsPane', () => {
     await defaultRow.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
     await flushPromises()
 
+    // The Default is empty, so the switch clears the live login: asked first.
+    expect(notify.confirm).toHaveBeenCalledTimes(1)
+    const [body, opts] = notify.confirm.mock.calls[0] as [string, { title?: string; confirmText?: string }]
+    expect(opts.title).toBe('Switch to the Original Login?')
+    expect(opts.confirmText).toBe('Switch and Sign In')
+    expect(body).toContain('the live login (Not signed in) is cleared')
     expect(api.setDefault).toHaveBeenCalledWith('claude', null)
     expect(w.emitted('login')).toEqual([['claude']])
+  })
+
+  it('a declined confirm on the empty Default neither switches nor signs in', async () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { p1: { email: 'me@example.com', signedIn: true } } },
+    })
+    notify.confirm.mockResolvedValueOnce(false)
+    const w = mountPane(api)
+
+    const defaultRow = section(w, 0).findAll('.cli-card')[0]
+    await defaultRow.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
+    await flushPromises()
+
+    expect((notify.confirm.mock.calls[0] as [string])[0]).toContain('(me@example.com)')
+    expect(api.setDefault).not.toHaveBeenCalled()
+    expect(w.emitted('login')).toBeUndefined()
+  })
+
+  it('Sign In on a signed-in (expired) Default switches without the empty-slot confirm', async () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { __default__: { email: 'a@b.c', signedIn: true } } },
+    })
+    usage.accountUsageFor.mockImplementation((_key, profileId) =>
+      profileId === null ? usageSnapshot({ status: 'expired' }) : undefined,
+    )
+    const w = mountPane(api)
+
+    const defaultRow = section(w, 0).findAll('.cli-card')[0]
+    await defaultRow.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
+    await flushPromises()
+
+    expect(notify.confirm).not.toHaveBeenCalled()
+    expect(api.setDefault).toHaveBeenCalledWith('claude', null)
+  })
+
+  // ── the built-in Default card ──────────────────────────────────────────────
+
+  it('collapses an empty, inactive Default to one line with only Sign In', () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { p1: { email: 'me@example.com', signedIn: true } } },
+    })
+    const w = mountPane(api)
+
+    const row = section(w, 0).findAll('.cli-card')[0]
+    expect(row.classes()).toContain('cli-card-collapsed')
+    expect(row.text()).toContain('Original login (outside Navide): not signed in')
+    expect(row.findAll('button').map((b) => b.text())).toEqual(['Sign In'])
+    // The active profile carries the "Active" badge.
+    expect(section(w, 0).findAll('.cli-card')[1].get('.cli-badge').text()).toBe('Active')
+  })
+
+  it('keeps an empty Default as a full card while it is the active account', () => {
+    const w = mountPane(makeApi({ profiles: [profile('p1', 'claude', 'Account 2')] }))
+
+    const row = section(w, 0).findAll('.cli-card')[0]
+    expect(row.classes()).not.toContain('cli-card-collapsed')
+    expect(row.get('.cli-card-id').text()).toBe('Original login')
+    expect(row.get('.cli-badge').text()).toBe('Active')
+    expect(buttonByText(row, 'Sign In')).toBeDefined()
+  })
+
+  it('a signed-in, inactive Default is a full card that can be switched to', () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { __default__: { email: 'a@b.c', signedIn: true } } },
+    })
+    const w = mountPane(api)
+
+    const row = section(w, 0).findAll('.cli-card')[0]
+    expect(row.classes()).not.toContain('cli-card-collapsed')
+    expect(row.text()).toContain('Your original login credentials')
+    expect(buttonByText(row, 'Switch to This Account')).toBeDefined()
   })
 
   it('sets a profile as default via the Set as default button', async () => {
@@ -644,8 +677,8 @@ describe('CliAccountsPane', () => {
     const setDefault = api.setDefault as ReturnType<typeof vi.fn>
     const w = mountPane(api)
 
-    // Default is null, so the profile row shows "Set as Default".
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    // Default is null, so the profile row shows "Switch to This Account".
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -661,13 +694,13 @@ describe('CliAccountsPane', () => {
     )
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     const busy = buttonByText(section(w, 0), 'Switching…')
     expect(busy).toBeDefined()
     expect(busy!.attributes('disabled')).toBeDefined()
-    expect(buttonByText(section(w, 0), 'Set as Default')).toBeUndefined()
+    expect(buttonByText(section(w, 0), 'Switch to This Account')).toBeUndefined()
 
     release({ ok: true })
     await flushPromises()
@@ -682,7 +715,7 @@ describe('CliAccountsPane', () => {
     const handler = vi.fn(async () => ({ ok: true as const }))
     const w = mountPane(api, { switchHandler: handler })
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(handler).toHaveBeenCalledWith('claude', 'p1')
@@ -704,7 +737,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api, { switchHandler: handler })
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(notify.confirm).toHaveBeenCalledTimes(1)
@@ -726,7 +759,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api, { switchHandler: handler })
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -740,7 +773,7 @@ describe('CliAccountsPane', () => {
     setDefault.mockResolvedValue({ ok: false, code: 'PANES_RUNNING', count: 1, message: 'panes running' })
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -764,7 +797,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -1108,7 +1141,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
     expect(usage.refreshUsage).toHaveBeenCalledTimes(1)
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
     expect(usage.refreshUsage).toHaveBeenCalledTimes(2)
   })
@@ -1307,12 +1340,15 @@ describe('CliAccountsPane', () => {
   })
 
   it('stamps a current reading with when it was taken', () => {
-    usage.accountUsageFor.mockReturnValue(usageSnapshot({ fetchedAt: '2026-07-26T04:00:00Z' }))
+    // The stamp is shown in local time, so build the reading from a local
+    // wall-clock time; a fixed UTC instant lands on 7/25 west of UTC-4.
+    const fetchedAt = new Date(2026, 6, 26, 4, 0).toISOString()
+    usage.accountUsageFor.mockReturnValue(usageSnapshot({ fetchedAt }))
     const w = mountPane(
       makeApi({ identities: { claude: { __default__: { email: 'me@x.com', signedIn: true } } } }),
     )
     const updated = section(w, 0).findAll('.cli-card')[0].get('.cli-card-updated').text()
-    expect(updated).toMatch(/^updated 7\/26 \d\d:\d\d$/)
+    expect(updated).toBe('updated 7/26 04:00')
   })
 
   it('stops promising a read once the backend is gone', () => {
@@ -1409,369 +1445,5 @@ describe('CliAccountsPane', () => {
       dirActions: dirActions(),
     })
     expect(section(same, 0).find('.cli-card-dir-mismatch').exists()).toBe(false)
-  })
-
-  // ── portable credentials ───────────────────────────────────────────────────
-
-  const PORTABLE_META = {
-    agentKey: 'claude',
-    slotId: '__default__',
-    configured: false,
-    enabled: false,
-    env: 'CLAUDE_CODE_OAUTH_TOKEN',
-    obtainCommand: 'claude setup-token',
-    docsUrl: 'https://example.invalid/docs',
-  }
-
-  it('offers a compact paste button only on agents with a portable interface', () => {
-    const api = makeApi({ portableSupported: ['claude'], cloudStatus: 'ok' })
-    const w = mountPane(api)
-    // Section 0 is claude, section 1 is codex (CLI_AGENT_SPECS order).
-    // An empty slot has no block, just the button in its action row.
-    expect(section(w, 0).find('.cli-card-portable').exists()).toBe(false)
-    expect(buttonByText(section(w, 0).find('.cli-card-actions'), 'Paste Credential')).toBeDefined()
-    expect(buttonByText(section(w, 1), 'Paste Credential')).toBeUndefined()
-  })
-
-  it('offers the paste button and saves while credential sync is off', async () => {
-    const api = makeApi({ portableSupported: ['claude'], cloudStatus: 'off' })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-    expect(card.find('.cli-card-portable').exists()).toBe(false)
-    await buttonByText(card.find('.cli-card-actions'), 'Paste Credential')!.trigger('click')
-    await flushPromises()
-    await card.get('input.cli-portable-input').setValue('sk-ant-oat01-SYNTHETIC')
-    await card.get('form').trigger('submit')
-    await flushPromises()
-    expect(api.portableSet).toHaveBeenCalledWith('claude', null, 'sk-ant-oat01-SYNTHETIC')
-    expect(card.get('.cli-portable-flag').text()).toBe('Set')
-    // Sync is off, so the stored credential shows no cloud column.
-    expect(card.find('.cli-portable-cloud').exists()).toBe(false)
-  })
-
-  it('keeps a stored credential manageable while credential sync is off', () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: { 'claude/__default__': { ...PORTABLE_META, configured: true, enabled: true } },
-      cloudStatus: 'off',
-    })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-    expect(card.find('.cli-card-portable').exists()).toBe(true)
-    expect(buttonByText(card, 'Remove from This Device')).toBeDefined()
-  })
-
-  it('opens the form from the compact button and collapses again on cancel', async () => {
-    const api = makeApi({ portableSupported: ['claude'], cloudStatus: 'ok' })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Paste Credential')!.trigger('click')
-    await flushPromises()
-    expect(card.find('input.cli-portable-input').exists()).toBe(true)
-    expect(buttonByText(card.find('.cli-card-actions'), 'Paste Credential')).toBeUndefined()
-    await buttonByText(card.find('.cli-card-portable'), 'Cancel')!.trigger('click')
-    await flushPromises()
-    expect(card.find('.cli-card-portable').exists()).toBe(false)
-    expect(buttonByText(card.find('.cli-card-actions'), 'Paste Credential')).toBeDefined()
-  })
-
-  it('sends the pasted value once and clears the input after saving', async () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: { 'claude/__default__': PORTABLE_META },
-      cloudStatus: 'ok',
-    })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-
-    await buttonByText(card, 'Paste Credential')!.trigger('click')
-    await flushPromises()
-    const input = card.get('input.cli-portable-input')
-    expect(input.attributes('type')).toBe('password')
-    expect(input.attributes('placeholder')).toContain('claude setup-token')
-    await input.setValue('  sk-ant-oat01-SYNTHETIC  ')
-    await card.get('form').trigger('submit')
-    await flushPromises()
-
-    expect(api.portableSet).toHaveBeenCalledTimes(1)
-    expect(api.portableSet).toHaveBeenCalledWith('claude', null, 'sk-ant-oat01-SYNTHETIC')
-    // The form is gone, the draft with it, and the value appears nowhere.
-    expect(card.find('input.cli-portable-input').exists()).toBe(false)
-    expect(w.text()).not.toContain('sk-ant-oat01')
-    expect(w.html()).not.toContain('sk-ant-oat01')
-    // What the card shows now is the metadata the save returned.
-    expect(card.get('.cli-portable-flag').text()).toBe('Set')
-    expect(card.text()).toContain('CLAUDE_CODE_OAUTH_TOKEN')
-    expect(buttonByText(card, 'Replace')).toBeDefined()
-    expect(buttonByText(card, 'Remove from This Device')).toBeDefined()
-  })
-
-  it('does not save an empty paste', async () => {
-    const api = makeApi({ portableSupported: ['claude'], cloudStatus: 'ok' })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Paste Credential')!.trigger('click')
-    await flushPromises()
-    expect(card.get('button[type="submit"]').attributes('disabled')).toBeDefined()
-    await card.get('form').trigger('submit')
-    expect(api.portableSet).not.toHaveBeenCalled()
-  })
-
-  it('warns when a local login file shadows the pasted credential', () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: {
-        'claude/__default__': { ...PORTABLE_META, configured: true, enabled: true, shadowedBy: ['.claude/.credentials.json'] },
-      },
-    })
-    const w = mountPane(api)
-    expect(section(w, 0).get('.cli-portable-warn').text()).toContain('.claude/.credentials.json')
-  })
-
-  it('removing sends the clear and keeps the wording local', async () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: { 'claude/__default__': { ...PORTABLE_META, configured: true, enabled: true } },
-    })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Remove from This Device')!.trigger('click')
-    await flushPromises()
-    expect(api.portableClear).toHaveBeenCalledWith('claude', null)
-  })
-
-  it('fetches the vendor descriptor for an empty slot when the form opens', async () => {
-    const api = makeApi({ portableSupported: ['claude'], cloudStatus: 'ok' })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Paste Credential')!.trigger('click')
-    await flushPromises()
-    expect(api.portableDescribe).toHaveBeenCalledWith('claude', null)
-    expect(card.get('input.cli-portable-input').attributes('placeholder')).toContain('claude setup-token')
-    expect(card.text()).toContain('CLAUDE_CODE_OAUTH_TOKEN')
-  })
-
-  it('drops the typed value even when the save fails', async () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: { 'claude/__default__': PORTABLE_META },
-      cloudStatus: 'ok',
-    })
-    ;(api.portableSet as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      ok: false,
-      message: 'nope',
-    })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Paste Credential')!.trigger('click')
-    await flushPromises()
-    await card.get('input.cli-portable-input').setValue('sk-ant-oat01-SYNTHETIC')
-    await card.get('form').trigger('submit')
-    await flushPromises()
-
-    expect(api.portableSet).toHaveBeenCalledTimes(1)
-    // The form stays open for another try, but the value is gone.
-    const input = card.get('input.cli-portable-input')
-    expect((input.element as HTMLInputElement).value).toBe('')
-    expect(w.html()).not.toContain('sk-ant-oat01')
-  })
-
-  it('lets the stored credential be selected for new panes and deselected again', async () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: { 'claude/__default__': { ...PORTABLE_META, configured: true, enabled: false, source: 'local' } },
-    })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Use for New Panes')!.trigger('click')
-    await flushPromises()
-    expect(api.portableEnable).toHaveBeenCalledWith('claude', '__default__', true)
-    expect(card.text()).toContain('In use')
-    await buttonByText(card, 'Stop Using')!.trigger('click')
-    await flushPromises()
-    expect(api.portableEnable).toHaveBeenLastCalledWith('claude', '__default__', false)
-  })
-
-  it('shows a credential imported into a named account elsewhere as its own card', async () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: {
-        'claude/p-on-other-device': {
-          agentKey: 'claude',
-          slotId: 'p-on-other-device',
-          configured: true,
-          enabled: false,
-          source: 'imported',
-          available: true,
-          env: 'CLAUDE_CODE_OAUTH_TOKEN',
-        },
-      },
-    })
-    const w = mountPane(api)
-    const cards = section(w, 0).findAll('.cli-card')
-    // The built-in Default card plus one imported card; no local profile exists.
-    expect(cards).toHaveLength(2)
-    const imported = cards[1]
-    expect(imported.classes()).toContain('cli-card-imported')
-    expect(imported.text()).toContain('Account from another device')
-    expect(imported.get('.cli-portable-flag').text()).toBe('From cloud')
-    // It can be selected and removed here, but not replaced (that is the pasting device's job).
-    expect(buttonByText(imported, 'Replace')).toBeUndefined()
-    expect(buttonByText(imported, 'Paste Credential')).toBeUndefined()
-    expect(buttonByText(imported, 'Remove from This Device')).toBeDefined()
-    await buttonByText(imported, 'Use for New Panes')!.trigger('click')
-    await flushPromises()
-    expect(api.portableEnable).toHaveBeenCalledWith('claude', 'p-on-other-device', true)
-    // Its slot id — another install's profile id — is not shown.
-    expect(imported.text()).not.toContain('p-on-other-device')
-  })
-
-  it('keeps a card for a named account removed here while its cloud copy remains, so it can be taken back', async () => {
-    const remoteOnly = {
-      itemId: 'c-99999999999999999999999999999999',
-      state: 'remote-only' as const,
-      localPresent: false,
-      remotePresent: true,
-      updatedAt: '2026-09-16T05:06:19Z',
-      deviceId: 'Studio',
-      readable: true,
-    }
-    // After "Remove from This Device" the backend no longer lists the import;
-    // only the cloud inventory still knows the slot.
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: {},
-      cloudStatus: 'ok',
-      cloud: { claude: { 'p-on-other-device': [remoteOnly] } },
-    })
-    const w = mountPane(api)
-    const cards = section(w, 0).findAll('.cli-card')
-    expect(cards).toHaveLength(2)
-    const card = cards[1]
-    expect(card.classes()).toContain('cli-card-imported')
-    expect(card.get('.cli-portable-flag').text()).toBe('Not set')
-    expect(card.get('.cli-cloud-badge').text()).toBe('In cloud, not used here')
-    // Nothing local to paste into or remove; the one action is to take it back.
-    expect(buttonByText(card, 'Paste Credential')).toBeUndefined()
-    expect(buttonByText(card, 'Remove from This Device')).toBeUndefined()
-    await buttonByText(card, 'Use on This Device')!.trigger('click')
-    await flushPromises()
-    expect(api.useFromCloud).toHaveBeenCalledWith('c-99999999999999999999999999999999')
-  })
-
-  it('names an import this device cannot open and does not offer to select it', () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: {
-        'claude/__default__': { ...PORTABLE_META, configured: true, enabled: false, source: 'imported', available: false },
-      },
-    })
-    const w = mountPane(api)
-    const card = section(w, 0).findAll('.cli-card')[0]
-    expect(card.get('.cli-portable-warn').text()).toContain('cannot be opened on this device')
-    expect(buttonByText(card, 'Use for New Panes')!.attributes('disabled')).toBeDefined()
-  })
-
-  // ── cloud column ───────────────────────────────────────────────────────────
-
-  it('shows no cloud column for a stored credential while cloud sync is off', () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: { 'claude/__default__': { ...PORTABLE_META, configured: true, enabled: true } },
-      cloudStatus: 'off',
-    })
-    const w = mountPane(api)
-    expect(section(w, 0).find('.cli-portable-cloud').exists()).toBe(false)
-    expect(section(w, 0).text()).not.toContain('Cloud sync for credentials is off')
-  })
-
-  it('shows no cloud column for an empty slot while cloud sync is off', () => {
-    const api = makeApi({ portableSupported: ['claude'], cloudStatus: 'off' })
-    const w = mountPane(api)
-    expect(section(w, 0).find('.cli-portable-cloud').exists()).toBe(false)
-  })
-
-  it('shows each cloud copy by state, with when and where it last changed', () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      portable: { 'claude/__default__': { ...PORTABLE_META, configured: true, enabled: true } },
-      cloudStatus: 'ok',
-      cloud: {
-        claude: {
-          __default__: [
-            {
-              itemId: 'c-0123456789abcdef0123456789abcdef',
-              state: 'in-sync',
-              localPresent: true,
-              remotePresent: true,
-              updatedAt: '2026-09-16T05:06:19Z',
-              deviceId: 'MacBook',
-              readable: true,
-            },
-          ],
-        },
-      },
-    })
-    const w = mountPane(api)
-    const cloud = section(w, 0).findAll('.cli-card')[0].find('.cli-portable-cloud')
-    expect(cloud.get('.cli-cloud-badge').text()).toBe('In sync')
-    expect(cloud.text()).toContain('MacBook')
-    // Opaque ids are for the engine, not the person.
-    expect(cloud.text()).not.toContain('c-0123456789abcdef')
-    expect(buttonByText(cloud, 'Use on This Device')).toBeUndefined()
-  })
-
-  it('lets a cloud-only credential be taken into use here by its item id', async () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      cloudStatus: 'ok',
-      cloud: {
-        claude: {
-          __default__: [
-            {
-              itemId: 'c-feedfacefeedfacefeedfacefeedface',
-              state: 'remote-only',
-              localPresent: false,
-              remotePresent: true,
-              updatedAt: '2026-09-16T05:06:19Z',
-              deviceId: 'Studio',
-              readable: true,
-            },
-          ],
-        },
-      },
-    })
-    const w = mountPane(api)
-    const cloud = section(w, 0).findAll('.cli-card')[0].find('.cli-portable-cloud')
-    expect(cloud.get('.cli-cloud-badge').text()).toBe('In cloud, not used here')
-    await buttonByText(cloud, 'Use on This Device')!.trigger('click')
-    await flushPromises()
-    expect(api.useFromCloud).toHaveBeenCalledWith('c-feedfacefeedfacefeedfacefeedface')
-  })
-
-  it('names a cloud copy this device cannot open instead of offering it', () => {
-    const api = makeApi({
-      portableSupported: ['claude'],
-      cloudStatus: 'ok',
-      cloud: {
-        claude: {
-          __default__: [
-            {
-              itemId: 'c-00000000000000000000000000000000',
-              state: 'remote-only',
-              localPresent: false,
-              remotePresent: true,
-              updatedAt: '',
-              deviceId: 'Studio',
-              readable: false,
-            },
-          ],
-        },
-      },
-    })
-    const w = mountPane(api)
-    const cloud = section(w, 0).findAll('.cli-card')[0].find('.cli-portable-cloud')
-    expect(cloud.text()).toContain('Sealed under a key this device does not hold')
-    expect(buttonByText(cloud, 'Use on This Device')).toBeUndefined()
   })
 })

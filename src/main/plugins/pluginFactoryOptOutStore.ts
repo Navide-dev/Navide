@@ -144,7 +144,7 @@ export class PluginFactoryOptOutStore {
   private writableState(): PersistedFactoryOptOutState {
     const read = this.read()
     if (read.status === 'unreadable') {
-      throw new Error(`plugin id store at ${this.file} is unreadable; reset it in Settings → Extensions`)
+      throw new Error(`plugin id store at ${this.file} is unreadable; reset it in Settings → Navide Plugins`)
     }
     return read.state
   }

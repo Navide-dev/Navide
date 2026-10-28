@@ -74,7 +74,7 @@ CONFLICT_MIN_ATTEMPT = 4
 # is handled by the channel manager.
 BOT_COMMANDS = [
     {"command": "pending", "description": "列出等待確認的 pane"},
-    {"command": "prompts", "description": "Prompt 清單"},
+    {"command": "prompts", "description": "Prompt 技能清單"},
     {"command": "skills", "description": "技能清單"},
     {"command": "mcp", "description": "MCP server 清單"},
     {"command": "status", "description": "pane 狀態"},
@@ -105,9 +105,90 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "cancel": "まだ pane に送っていないメッセージを取り消す",
         "resume": "中断した pane を再開",
     },
+    "zh-CN": {
+        "pending": "列出等待确认的 pane",
+        "prompts": "Prompt 技能列表",
+        "skills": "技能列表",
+        "mcp": "MCP server 列表",
+        "status": "pane 状态",
+        "stop": "中断 pane",
+        "cancel": "撤回还没送进 pane 的消息",
+        "resume": "恢复被中断的 pane",
+    },
+    "ko-KR": {
+        "pending": "확인 대기 중인 pane 목록",
+        "prompts": "프롬프트 목록",
+        "skills": "스킬 목록",
+        "mcp": "MCP 서버 목록",
+        "status": "pane 상태",
+        "stop": "pane 중단",
+        "cancel": "아직 pane에 보내지 않은 메시지 철회",
+        "resume": "중단된 pane 재개",
+    },
+    "es-ES": {
+        "pending": "Panes en espera de confirmación",
+        "prompts": "Lista de prompts",
+        "skills": "Lista de skills",
+        "mcp": "Lista de servidores MCP",
+        "status": "Estado del pane",
+        "stop": "Interrumpir el pane",
+        "cancel": "Retirar mensajes aún no enviados al pane",
+        "resume": "Reanudar un pane interrumpido",
+    },
+    "fr-FR": {
+        "pending": "Lister les panes en attente de confirmation",
+        "prompts": "Liste des prompts",
+        "skills": "Liste des skills",
+        "mcp": "Liste des serveurs MCP",
+        "status": "État du pane",
+        "stop": "Interrompre le pane",
+        "cancel": "Retirer les messages pas encore envoyés au pane",
+        "resume": "Reprendre un pane interrompu",
+    },
+    "de-DE": {
+        "pending": "Panes auflisten, die auf Bestätigung warten",
+        "prompts": "Prompt-Liste",
+        "skills": "Skill-Liste",
+        "mcp": "MCP-Server-Liste",
+        "status": "pane-Status",
+        "stop": "Das pane unterbrechen",
+        "cancel": "Noch nicht an das pane gesendete Nachrichten zurückziehen",
+        "resume": "Ein unterbrochenes pane fortsetzen",
+    },
+    "pt-BR": {
+        "pending": "Panes aguardando confirmação",
+        "prompts": "Lista de prompts",
+        "skills": "Lista de skills",
+        "mcp": "Lista de servidores MCP",
+        "status": "Status do pane",
+        "stop": "Interromper o pane",
+        "cancel": "Retirar mensagens ainda não enviadas ao pane",
+        "resume": "Retomar um pane interrompido",
+    },
+    "ru-RU": {
+        "pending": "Pane, ожидающие подтверждения",
+        "prompts": "Список промптов",
+        "skills": "Список skills",
+        "mcp": "Список серверов MCP",
+        "status": "Состояние pane",
+        "stop": "Прервать pane",
+        "cancel": "Отозвать сообщения, ещё не отправленные в pane",
+        "resume": "Возобновить прерванный pane",
+    },
+    "vi-VN": {
+        "pending": "Liệt kê các pane đang chờ xác nhận",
+        "prompts": "Danh sách prompt",
+        "skills": "Danh sách skill",
+        "mcp": "Danh sách máy chủ MCP",
+        "status": "Trạng thái pane",
+        "stop": "Ngắt pane",
+        "cancel": "Rút lại tin nhắn chưa gửi vào pane",
+        "resume": "Tiếp tục pane bị ngắt",
+    },
 }
 # Descriptions earlier builds registered: a command still carrying one is ours to update.
-_OLD_COMMAND_DESCRIPTIONS = {"menu": {"快速選單", "Prompt 與技能選單", "Prompts and skills menu", "プロンプトとスキルのメニュー"}}
+_OLD_COMMAND_DESCRIPTIONS = {"menu": {"快速選單", "Prompt 與技能選單", "Prompts and skills menu", "プロンプトとスキルのメニュー"},
+                             "prompts": {"Prompt 清單", "Prompt 列表"}}
 # Commands earlier builds registered and this one no longer offers: one still carrying a
 # description of ours is removed; worded otherwise it is the user's and stays.
 _RETIRED_COMMANDS = {"menu"}
@@ -180,7 +261,7 @@ class TelegramAdapter:
         # Receives each ManagedBotUpdated (a bot this one manages was created, re-tokened
         # or changed owner); the manager decides what it means. None: such updates are skipped.
         self.on_managed_bot: Callable[[dict[str, Any]], Awaitable[None]] | None = None
-        # Returns the Navide language ("zh-TW", "en-US", "ja-JP") the "/" menu is described
+        # Returns the Navide language (one of prompt_skills.LANGUAGES) the "/" menu is described
         # in, read at each session; set by the manager. None: zh-TW.
         self.command_language: Callable[[], str] | None = None
         self.bot_id = self._token.split(":", 1)[0]

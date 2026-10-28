@@ -253,6 +253,46 @@ describe('PipelineEditor', () => {
     expect(calls).toEqual([{ nodeId: 'gate' }])
   })
 
+  it('starts a run from the toolbar through ui.pipeline.start, with this pipeline and the task', async () => {
+    const calls: unknown[] = []
+    registerCommand('ui.pipeline.start', (args) => { calls.push(args) })
+    const { w } = await mountEditor()
+    const btn = w.find('.pe-start-btn')
+    expect(btn.text()).toBe('▶ Run Pipeline')
+    expect(btn.attributes('disabled')).toBeDefined()
+    await w.find('.pe-start-input').setValue('  Ship it  ')
+    expect(btn.attributes('disabled')).toBeUndefined()
+    await w.find('.pe-start').trigger('submit')
+    await flushPromises()
+    expect(calls).toEqual([{ pipelineId: 'p1', task: 'Ship it' }])
+    expect((w.find('.pe-start-input').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('keeps the task when the start is refused, and offers no start while a run is going', async () => {
+    registerCommand('ui.pipeline.start', () => { throw new Error('nope') })
+    const { w } = await mountEditor()
+    await w.find('.pe-start-input').setValue('Ship it')
+    await w.find('.pe-start').trigger('submit')
+    await flushPromises()
+    expect((w.find('.pe-start-input').element as HTMLInputElement).value).toBe('Ship it')
+    await w.setProps({ run: { pipelineId: 'other', state: 'running', gate: null, nodes: {} } })
+    expect(w.find('.pe-start').exists()).toBe(false)
+  })
+
+  it('resets a finished run of this pipeline from Executions through ui.pipeline.reset', async () => {
+    let resets = 0
+    registerCommand('ui.pipeline.reset', () => { resets++ })
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: {} }
+    const { w } = await mountEditor({ run })
+    await w.findAll('.pe-seg-btn')[2].trigger('click')
+    await flushPromises()
+    const reset = w.find('.px-reset')
+    expect(reset.text()).toBe('Reset')
+    await reset.trigger('click')
+    await flushPromises()
+    expect(resets).toBe(1)
+  })
+
   it('reports a run command the host does not know instead of failing silently', async () => {
     const run: RunSnapshot = { pipelineId: 'p1', state: 'running', gate: 'gate', nodes: { gate: { status: 'awaiting' } } }
     const { w } = await mountEditor({ run, locked: true })

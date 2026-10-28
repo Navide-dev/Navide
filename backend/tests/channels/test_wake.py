@@ -11,7 +11,9 @@ from typing import Any
 import pytest
 
 import agent_team_backend.channels as channels_pkg
+from agent_team_backend import prompt_skills as ps
 from agent_team_backend.channels import manager as mgr_mod
+from agent_team_backend.channels import registry
 from agent_team_backend.channels import store as store_mod
 from agent_team_backend.channels import wake
 from agent_team_backend.channels.base import Capabilities, Location
@@ -388,7 +390,7 @@ async def test_a_turn_end_refreshes_the_wake_target(env: Env) -> None:
 
 def test_wake_texts_exist_in_every_language() -> None:
     keys = set(wake.STRINGS["zh-TW"])
-    for lang in ("en-US", "ja-JP"):
+    for lang in ps.LANGUAGES:
         assert set(wake.STRINGS[lang]) == keys
 
 
@@ -410,10 +412,17 @@ def seam(monkeypatch):
                                          spawn_status="spawned", custom_name="api", auto_name="")],
         registry={}, refusal=None, exhausted=False, probe=True, opened_ws=[], placeholder_calls=[],
         placeholder={"ok": True, "reason": "opened", "launched_session_id": "sess-1"}, spawns=[],
-        settings={})
+        settings={}, spawn_answer=None, retired=[])
     monkeypatch.setattr(app, "live_main_window_ids", lambda: set(state.windows))
+    def unspawn(ws, *, pane_id):
+        state.retired.append(pane_id)
+        for record in state.records:
+            if record.pane_id == pane_id:
+                record.spawn_status = "removed"
+
     monkeypatch.setattr(app, "project_store", SimpleNamespace(
-        peek=lambda ws: SimpleNamespace(panes=state.records) if ws == "/ws" else None), raising=False)
+        peek=lambda ws: SimpleNamespace(panes=state.records) if ws == "/ws" else None,
+        record_pane_unspawn_by_id=unspawn), raising=False)
     monkeypatch.setattr(app, "ui_settings_store", SimpleNamespace(get=lambda: dict(state.settings)),
                         raising=False)
     monkeypatch.setattr(agent_messaging, "current", lambda pid: state.registry.get(pid))
@@ -441,7 +450,9 @@ def seam(monkeypatch):
 
     async def open_agent(*a, **kw):
         state.spawns.append((a, kw))
-        return {"ok": True, "pane_id": "spawned-1"}
+        if state.spawn_answer is not None:
+            return state.spawn_answer
+        return {"ok": True, "pane_id": "spawned-1", "resumed_session_id": kw.get("session_id")}
 
     monkeypatch.setattr(mcp, "_probe_window", probe)
     monkeypatch.setattr(mcp, "workspace_open", workspace_open)
@@ -449,6 +460,7 @@ def seam(monkeypatch):
     monkeypatch.setattr(mcp, "cli_open_agent", open_agent)
     monkeypatch.setattr(channels_pkg, "_host_ctx", lambda: None)
     monkeypatch.setattr(channels_pkg, "WAKE_PANE_WAIT_S", 0.05)
+    monkeypatch.setattr(channels_pkg, "WAKE_HELD_GRACE_S", 0.02)
     monkeypatch.setattr(channels_pkg, "WAKE_PANE_POLL_S", 0.01)
     return state
 
@@ -520,12 +532,60 @@ async def test_seam_passes_on_a_window_that_would_not_resume(seam) -> None:
         "ok": False, "code": "fresh-refused", "started": True}
 
 
+async def test_seam_reopens_a_restore_placeholder_in_place(seam) -> None:
+    # (a) The window holds the workspace and restored the pane as a placeholder.
+    seam.registry["old-1"] = SimpleNamespace(pane_id="old-1", realized=False)
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "new-1"}
+    assert seam.placeholder_calls == [("old-1", True)] and seam.spawns == [] and seam.opened_ws == []
+
+
+async def test_seam_opens_the_conversation_when_the_window_holds_no_placeholder(seam) -> None:
+    # (b) The workspace is open but the pane is not in its window (the 2026-10-27 report): the
+    # wake asks the window to open it onto the same session instead of waiting it out.
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "spawned-1"}
+    [(_, kw)] = seam.spawns
+    assert kw["session_id"] == "sess-1" and kw["workspace_path"] == "/ws"
+    assert kw["agent"] == "claude" and kw["name"] == "api" and kw["task"] == ""
+    assert seam.placeholder_calls == [] and seam.opened_ws == []
+    # The record it replaced would otherwise come back on the next restore.
+    assert seam.retired == ["old-1"]
+
+
+async def test_seam_opens_the_workspace_then_the_conversation(seam) -> None:
+    # (c) No window holds the workspace and its restore brings no placeholder back either.
+    seam.probe = False
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "spawned-1"}
+    assert seam.opened_ws == ["/ws"] and len(seam.spawns) == 1
+
+
 async def test_seam_never_opens_a_second_pane_onto_the_conversation(seam) -> None:
-    # The window has not brought the pane back (still loading, or a detached group's): opening
-    # another pane onto the same session would run two CLIs on one conversation.
+    # The conversation came back in another pane while the wake waited: nothing is opened.
+    seam.records.append(_Record(pane_id="other-1", agent="claude", session_id="sess-1",
+                                spawn_status="spawned", custom_name="api", auto_name=""))
+    seam.registry["other-1"] = SimpleNamespace(pane_id="other-1", realized=True)
+    seam.placeholder = {"ok": True, "reason": "already-open", "launched_session_id": "sess-1"}
+    result = await channels_pkg.wake_pane("old-1", "/ws", "sess-1")
+    assert result["code"] == "session-open-elsewhere" and seam.spawns == []
+
+
+@pytest.mark.parametrize("answer, code", [
+    ({"ok": False, "error": "spawn refused"}, "window-refused"),
+    ({"ok": False, "error": "no answer from the window that owns your pane"}, "window-timeout"),
+    ({"ok": False, "error_code": "unknown-session-id", "error": "gone"}, "unknown-session-id"),
+    ({"ok": True, "pane_id": "spawned-1", "resumed_session_id": "sess-other"}, "session-mismatch"),
+])
+async def test_seam_says_why_the_window_did_not_open_the_conversation(seam, answer, code) -> None:
+    seam.spawn_answer = answer
     assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
-        "ok": False, "code": "pane-not-restored", "started": True}
-    assert seam.spawns == []
+        "ok": False, "code": code, "started": True}
+    assert seam.retired == []
+
+
+def test_a_window_refusal_and_timeout_have_their_own_chat_reason() -> None:
+    refused = wake.outcome_text("zh-TW", {"code": "window-refused"})
+    timeout = wake.outcome_text("zh-TW", {"code": "window-timeout"})
+    assert wake.text("zh-TW", "reason_refused") in refused
+    assert wake.text("zh-TW", "reason_window") in timeout and refused != timeout
 
 
 async def test_seam_refuses_a_conversation_whose_pane_was_closed(seam) -> None:
@@ -710,3 +770,133 @@ async def test_seam_passes_on_the_window_finding_the_session_open_elsewhere(seam
     seam.placeholder = {"ok": False, "reason": "session-open-elsewhere"}
     assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
         "ok": False, "code": "session-open-elsewhere", "started": True}
+
+
+# --- every platform ---------------------------------------------------------------
+
+
+def _real_capabilities(platform: str) -> Capabilities:
+    module = registry.load_module(platform)
+    assert module is not None, platform
+    found = [v.capabilities for v in vars(module).values()
+             if isinstance(v, type) and isinstance(getattr(v, "capabilities", None), Capabilities)]
+    assert len(found) == 1, platform
+    return found[0]
+
+
+@pytest.mark.parametrize("platform", registry.PLATFORMS)
+async def test_every_platform_wakes_through_the_one_wake_path(env: Env, platform: str) -> None:
+    # No adapter has wake code of its own: each offers the wake (a button where it has
+    # buttons, the typed /wake where it has none), routes it to the same wake seam, says why
+    # a wake failed, and moves the binding onto the woken pane with what was kept.
+    if platform != "telegram":
+        assert (await env.m.configure(platform, {}, {"token": f"tok-{platform}"}))["ok"]
+        env.store.add_allow(platform, "7", "alice", 1)
+    adapter = env.adapters[platform]
+    adapter.capabilities = _real_capabilities(platform)
+    env.store.bind("pane-2", Location(platform, "default", "c1", "", "ops"), verbosity="full")
+    fw = FakeWake(env).install()
+    env.store.set_wake_target("pane-2", "/ws", "sess-2")
+    env.fake.gone.add("pane-2")
+    at = {"platform": platform, "chat": "c1", "thread": ""}
+
+    await env.inbound("hello", **at)
+    offer = adapter.texts()[-1]
+    if adapter.capabilities.buttons:
+        assert adapter.buttons[offer] == WAKE_BUTTONS
+        wake_it = {"text": "", "callback": WAKE_CALLBACK}
+    else:
+        word = "wake" if platform == "mattermost" else "/wake"
+        assert f"{word} {_zh('button').split(' ', 1)[-1]}" in offer
+        wake_it = {"text": word}
+
+    fw.result = {"ok": False, "code": "window-refused", "started": True}
+    await env.inbound(**wake_it, **at)
+    assert adapter.texts()[-1] == _zh("failed", reason=_zh("reason_refused"))
+
+    env.m._wake_limits = wake.WakeLimits()  # past the cooldown the failed wake started
+    fw.result = {"ok": True, "pane_id": "pane-2b"}
+    await env.inbound(**wake_it, **at)
+    assert fw.calls == [("pane-2", "/ws", "sess-2")] * 2
+    assert env.fake.delivered[-1][:2] == ("pane-2b", "hello")
+    assert "pane-2b" in [b.pane_id for b in env.store.bindings()]
+
+
+# --- the Navide language, and Mattermost's bare word --------------------------------
+
+
+@pytest.mark.parametrize("lang", ["zh-TW", "en-US", "ja-JP"])
+async def test_every_wake_text_follows_the_navide_language(env: Env, lang: str) -> None:
+    fw = _wakeable(env)
+    env.fake.settings = {"agent-team:language": lang}
+    await env.inbound("hello")
+    offer = env.tg.texts()[-1]
+    assert offer == wake.text(lang, "offline_wake", max=wake.STASH_MAX, minutes=int(wake.STASH_TTL_S // 60))
+    assert env.tg.buttons[offer] == [(wake.text(lang, "button"), WAKE_CALLBACK)]
+    fw.result = {"ok": False, "code": "window-refused", "started": True}
+    await _press_wake(env)
+    texts = env.tg.texts()
+    assert wake.text(lang, "waking") in texts
+    assert texts[-1] == wake.text(lang, "failed", reason=wake.text(lang, "reason_refused"))
+    env.m._wake_limits = wake.WakeLimits()
+    fw.result = {"ok": True, "pane_id": "pane-1b"}
+    await _press_wake(env)
+    assert env.tg.texts()[-1] == wake.text(lang, "woke_sent", count=1)
+
+
+@pytest.mark.parametrize("lang", ["zh-TW", "en-US", "ja-JP"])
+async def test_the_typed_wake_hint_follows_the_navide_language(env: Env, lang: str) -> None:
+    _wakeable(env)
+    _no_buttons(env)
+    env.fake.settings = {"agent-team:language": lang}
+    await env.inbound("hello")
+    label = wake.text(lang, "button").split(" ", 1)[-1]
+    hint = wake.text(lang, "typed_hint", commands=f"/wake {label}")
+    assert env.tg.texts()[-1].endswith("\n" + hint)
+    assert all(text not in env.tg.texts()[-1] for text in ("可直接輸入", "Type:", "次のように")
+               if text not in hint)
+
+
+@pytest.mark.parametrize("saved, lang", [("ko-KR", "ko-KR"), ("de-DE", "de-DE"), ("xx-XX", "zh-TW"), (None, "zh-TW")])
+async def test_wake_texts_fall_back_like_every_channel_text(env: Env, saved, lang: str) -> None:
+    # Every UI language reads its own text; an unknown or unset one reads the renderer's
+    # fallback locale, as prompt_skills.language decides for every channel.
+    _wakeable(env)
+    env.fake.settings = {} if saved is None else {"agent-team:language": saved}
+    await env.inbound("hello")
+    offer = env.tg.texts()[-1]
+    assert env.tg.buttons[offer] == [(wake.text(lang, "button"), WAKE_CALLBACK)]
+    assert offer == wake.text(lang, "offline_wake", max=wake.STASH_MAX, minutes=int(wake.STASH_TTL_S // 60))
+
+
+async def test_mattermost_wakes_with_the_bare_word_and_still_with_the_command(env: Env) -> None:
+    # Mattermost's client keeps a leading "/" for its own slash commands (not verified against
+    # a real server). The bare word wakes there, and so does /wake where it gets through.
+    assert (await env.m.configure("mattermost", {}, {"token": "tok-mm"}))["ok"]
+    env.store.add_allow("mattermost", "7", "alice", 1)
+    env.store.bind("pane-2", Location("mattermost", "default", "c1", "", "ops"), verbosity="full")
+    fw = FakeWake(env).install()
+    env.store.set_wake_target("pane-2", "/ws", "sess-2")
+    env.fake.gone.add("pane-2")
+    at = {"platform": "mattermost", "chat": "c1", "thread": ""}
+    env.adapters["mattermost"].capabilities = _real_capabilities("mattermost")
+    await env.inbound("hello", **at)
+    assert "wake 喚醒" in env.adapters["mattermost"].texts()[-1]
+    assert "/wake" not in env.adapters["mattermost"].texts()[-1]
+    fw.result = {"ok": False, "code": "window-refused", "started": True}
+    await env.inbound("Wake", **at)
+    env.m._wake_limits = wake.WakeLimits()
+    fw.result = {"ok": True, "pane_id": "pane-2b"}
+    await env.inbound("/wake", **at)
+    assert fw.calls == [("pane-2", "/ws", "sess-2")] * 2
+    assert env.fake.delivered[-1][:2] == ("pane-2b", "hello")
+
+
+async def test_the_bare_word_is_only_a_wake_on_mattermost(env: Env) -> None:
+    # Elsewhere "wake" is an ordinary message: kept for the pane, not a wake.
+    fw = _wakeable(env)
+    await env.inbound("wake")
+    assert fw.calls == []
+    fw.result = {"ok": True, "pane_id": "pane-1b"}
+    await _press_wake(env)
+    assert env.fake.delivered[-1][:2] == ("pane-1b", "wake")

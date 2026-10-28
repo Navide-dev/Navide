@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop – den konfigurierten Loop-Prompt an dieses pane senden",
       "skill-cast-failed": "Der Skill „{name}“ konnte nicht an dieses pane gesendet werden",
       "skill-cast-busy": "Der Loop sendet gerade seinen nächsten Prompt – lösen Sie „{name}“ gleich erneut aus",
+      "loop-start-failed": "Der Loop mit „{name}“ konnte in diesem pane nicht gestartet werden",
       "loop-badge-tooltip": "Der Loop-Prompt wurde an dieses pane gesendet – klicken, um den Loop auszuschalten",
       "loop-waiting-tooltip": "Loop pausiert – Session-Limit erreicht; automatische Fortsetzung um {time}. Klicken, um jetzt fortzusetzen",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -1474,6 +1475,8 @@
       "unsupported": "Navide kann noch nicht lesen, wo diese CLI ihre CLI-Erweiterungen ablegt.",
       "invalid": "Konnte nicht gelesen werden: {error}",
       "disabled": "Deaktiviert",
+      "enabledUnknown": "Status unbekannt",
+      "enabledUnknownReason": "Ob dies aktiviert ist, lässt sich nicht feststellen: {error}",
       "ownerNavide": "Von Navide installiert",
       "inferred": "abgeleitet",
       "inferredHint": "Aus dem Quelltext abgelesen; das Manifest der CLI gibt dies nicht an.",
@@ -1565,7 +1568,7 @@
           "summary": "Nur lesende Ansicht der MCP-Server, die jede CLI in ihrer eigenen Konfiguration führt, und wo jeder Server eingerichtet ist."
         },
         "credentials": {
-          "title": "Anmeldeinformationen und Schlüssel",
+          "title": "Zugangsdaten",
           "summary": "Nur lesender Scan, wo auf diesem Rechner Anmeldeinformationen und Schlüssel liegen, mit Hinweisen."
         },
         "skills": {
@@ -1573,7 +1576,7 @@
           "summary": "Von der App verwaltete Agent-Skills erstellen, bearbeiten, aktivieren, deaktivieren und prüfen."
         },
         "prompts": {
-          "title": "Prompt-Skills",
+          "title": "Prompts",
           "summary": "Die Prompt-Skills erstellen und bearbeiten, die ein CLI-pane über seine Loop-Schaltfläche auslösen kann."
         },
         "memory": {
@@ -1730,6 +1733,7 @@
       "export-failed": "Export fehlgeschlagen",
       "import-dialog-title": "JSON-Einstellungspaket importieren",
       "imported": "Importiert: {items}",
+      "mcp-needs-secrets": "Auf diesem Rechner einzutragende MCP-Geheimnisse: {items}",
       "import-failed": "Import fehlgeschlagen"
     },
     "executionPolicy": {
@@ -1882,6 +1886,8 @@
         "title": "Native Backends",
         "description": "Manche Navide-Plug-ins enthalten nativen Code. Navide führt ihn in einer Sandbox ohne eigenen Netzwerkzugriff aus; er kann nur die Arbeitsbereiche lesen, die Sie damit öffnen, und Dateien nur dort ändern, wo Sie es erlauben. Ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (unten als hohes Risiko markiert), kann darüber Netzwerk-Hosts kontaktieren, Daten aus dem Arbeitsbereich senden sowie Dateien im Arbeitsbereich ohne diese Berechtigung lesen und ändern. Solange der Schalter unten eingeschaltet ist, erlauben Sie mit der Installation eines Navide-Plug-ins mit nativem Code dessen Ausführung; schalten Sie ihn aus, um alle zu stoppen.",
         "enable": "Navide-Plug-ins von Drittanbietern erlauben, native Backends auszuführen",
+        "offUnsaved": "Native Backends von Drittanbietern sind vorerst aus, aber Navide konnte das nicht speichern. Nach einem Neustart von Navide sind sie wieder an.",
+        "offUnsavedRetry": "Erneut versuchen",
         "agentTools": {
           "enable": "Agents erlauben, Tools aus Navide-Plug-ins von Drittanbietern aufzurufen",
           "description": "Standardmäßig aus. Ist die Option aktiv, können Agents in Ihren panes die Tools aufrufen, die ein Navide-Plug-in eines Drittanbieters deklariert, sobald Sie dieses Navide-Plug-in erlaubt haben. Ein Tool, das Dateien ändert, fragt Sie einmal pro Arbeitsbereich. Ist sie aus, verhält sich Navide so, als hätte kein Navide-Plug-in Tools.",
@@ -1889,11 +1895,15 @@
           "externalCallersDisclosure": "Externe Programme teilen sich ein einziges Token, daher kann der Eintrag eines Aufrufs nur „ein externer Client“ angeben, nicht welches Programm es war. Die Host-Anmeldeinformation wird genauso behandelt."
         },
         "empty": "Kein installiertes Navide-Plug-in hat ein natives Backend.",
-        "windowWithout": "{name} wurde ohne sein natives Backend geöffnet: {reason}. Funktionen, die das Backend brauchen, funktionieren nicht. Um das Backend zuzulassen, öffnen Sie „Einstellungen → Navide-Plug-ins → {page}“.",
+        "windowWithout": "{name} wurde ohne sein natives Backend geöffnet: {reason}. Funktionen, die das Backend brauchen, funktionieren nicht. {next}",
+        "windowWithoutAllow": "Um das Backend zuzulassen, öffnen Sie „Einstellungen → Navide-Plug-ins → {page}“ und öffnen Sie das Fenster danach erneut.",
+        "windowWithoutDetails": "Warum, steht unter „Einstellungen → Navide-Plug-ins → {page}“.",
         "allow": "Erlauben",
         "disable": "Deaktivieren",
         "enable_plugin": "Aktivieren",
         "changed": "Sein nativer Code oder seine Berechtigungen haben sich geändert, seit Sie es erlaubt haben.",
+        "allowedPreInstall": "Ohne Nachfrage erlaubt: Es wurde vor Navide 0.2.31 installiert, das die Zustimmung bei der Installation noch nicht gespeichert hat.",
+        "declined": "Sie haben es beim Start abgelehnt. Navide fragt für diese Version nicht mehr nach, und es bleibt aus. Klicken Sie auf „Erlauben“, um es auszuführen.",
         "writeAllowed": "Darf Dateien in {path} ändern",
         "revoke": "Widerrufen",
         "violation": "Nach Überschreiten seines Limits für {kind} beendet.",
@@ -1976,6 +1986,14 @@
       "installed": "Installiert",
       "sensitive": "sensibel",
       "empty": "Keine Navide-Plug-ins installiert.",
+      "backgroundAi": {
+        "title": "Im Hintergrund laufende AI CLI ({count})",
+        "note": "Diese AI-CLI-Sitzungen laufen weiter, nachdem sein Fenster geschlossen wurde. Sie laufen, bis du sie hier beendest, es deaktivierst oder entfernst oder Navide beendest.",
+        "item": "{profile} · Version {version} · seit {time}",
+        "end": "Beenden",
+        "gone": "Diese Sitzung läuft nicht mehr im Hintergrund.",
+        "endFailed": "Die Sitzung konnte nicht beendet werden: {error}"
+      },
       "permissionDetails": "Berechtigungen und Gewährungen",
       "permissionDetailsWithActivity": "Berechtigungen, Gewährungen und Aktivität",
       "plansRiskNote": "Dieses Navide-Plug-in hat ein eigenes Backend-Programm, das mit Ihren Benutzerrechten und ohne Sandbox läuft. Es arbeitet mit Plan-Dokumenten im aktuellen Projekt, ausgehend vom darüber gefundenen Stammverzeichnis des Git-Repositorys (einschließlich darin verschachtelter Repositorys): die Plan- und Berichtsordner unter .agent-team, .claude, .cursor und docs in beliebiger Tiefe, .plans im Stammverzeichnis sowie deren .history (nur lesend). Sein Backend liest und schreibt sie direkt; Löschen und Umbenennen laufen weiterhin über Navide.",
@@ -2122,7 +2140,7 @@
         },
         "reloadFailed": "Die neueste Änderung konnte nicht geladen werden; die vorherige Version läuft weiter: {error}",
         "autoReloadNeedsConsent": "Die Berechtigungen oder das Backend von {id} haben sich geändert, daher wurde es entladen. Stimmen Sie unter „Einstellungen → Navide-Plug-ins“ erneut zu.",
-        "autoReloadMixedHint": "Ein Neuladen, während ein Build oder Speichervorgang noch Dateien schreibt, kann eine unvollständige Mischung aus alten und neuen Dateien laden.",
+        "autoReloadMixedHint": "Ein Neuladen, während ein Build oder Speichervorgang noch Dateien schreibt, kann eine unvollständige Mischung aus alten und neuen Dateien laden. Ein Build, der zuletzt .navide-build-complete in den Ordner schreibt, vermeidet das: Der Ordner wird dann nur neu geladen, wenn diese Datei erneut geschrieben wird.",
         "reloadFailedNothingRunning": "Das letzte Neuladen ist fehlgeschlagen, und derzeit läuft keine Version: {error}",
         "removeFolder": "Entfernen",
         "needsConsent": "Berechtigungen oder Backend geändert; erneut zustimmen",
@@ -2152,7 +2170,8 @@
           "computing": "Wird berechnet …",
           "loadedBy": "Geladen von",
           "notReviewed": "Von Navide nicht geprüft, nicht signiert, nicht gescannt.",
-          "mayChange": "Sein Inhalt kann sich jederzeit ändern. Der Fingerabdruck hält nur fest, was der Ordner beim Laden enthielt; Navide verwendet ihn nicht, um ein Laden abzulehnen."
+          "mayChange": "Sein Inhalt kann sich jederzeit ändern. Der Fingerabdruck hält nur fest, was der Ordner beim Laden enthielt; Navide verwendet ihn nicht, um ein Laden abzulehnen.",
+          "consentScope": "Wenn sich Dateien im Ordner ändern, auch das native Backend-Programm selbst, wird nicht erneut gefragt. Wenn sich die angegebenen Berechtigungen oder das Backend ändern, schon: Das Navide-Plug-in wird entladen, bis Sie erneut zustimmen."
         },
         "selfHostedQuarantine": "{id} {version} stammt aus einer selbst gehosteten Registry und wird nicht geladen. Schalten Sie den Entwicklermodus ein oder installieren Sie es aus dem Navide Marketplace."
       },
@@ -2176,9 +2195,13 @@
         "signature": "Keine: Der Urheber kann nicht bestätigt werden, und die Datei wurde möglicherweise verändert",
         "digestLabel": "SHA-256 der Datei",
         "acknowledge": "Mir ist bewusst, dass Navide dieses Navide-Plug-in nicht geprüft hat, und ich möchte seinen Code ausführen.",
-        "versionExists": "Diese Versionsnummer ist bereits mit anderem Inhalt installiert. Erhöhen Sie die Version und packen Sie das Paket erneut.",
+        "versionExists": "Diese Versionsnummer ist bereits installiert. Erhöhen Sie die Version und packen Sie das Paket neu.",
         "installFailed": "Das Navide-Plug-in konnte nicht installiert werden.",
         "chooseAgain": "Schließen Sie diesen Dialog und wählen Sie die Datei erneut aus, um es noch einmal zu versuchen.",
+        "approveAgain": "Die Datei liegt noch bereit, Sie können sie also erneut genehmigen.",
+        "askAgentAgain": "Schließen Sie diesen Dialog und bitten Sie den Agenten, die Anfrage erneut zu senden.",
+        "startAgain": "Schließen Sie diesen Dialog und versuchen Sie es von vorn.",
+        "rollbackFailed": "Die Rückkehr zu dieser Version ist fehlgeschlagen.",
         "replaceTitle": "Installiertes Navide-Plug-in ersetzen",
         "replaceMarketplace": "{id} (Version {version} aus dem Navide Marketplace) durch die Version aus dieser Datei ersetzen? Es wird dann nicht mehr automatisch aktualisiert.",
         "replaceLocal": "Die Dateiversion {version} von {id} durch diese Datei ersetzen?",
@@ -2493,6 +2516,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "Maschinell übersetzt. Prüfung durch Muttersprachler steht noch aus.",
       "language-hint": "Die Sprache ist eine Benutzereinstellung, die für alle Arbeitsbereiche gilt.",
+      "language-display": "Anzeigesprache",
       "ui-scale": "Oberflächenskalierung",
       "ui-scale-hint": "Die gesamte Oberfläche – Text, Symbole und Abstände – in jedem Fenster skalieren. Unabhängig von den Schriftgrößen in Terminal und Editor, die ihre eigenen Tastenkombinationen ⌘= / ⌘- behalten.",
       "restore-windows": "Fenster wiederherstellen",
@@ -3117,7 +3141,7 @@
           "p11": "Der erste Block unter Einstellungen ▸ Navide Cloud heißt Sync. <strong>Er ist kein eigener Tab</strong> – er ist der oberste Abschnitt dieser einen Seite. Jeder synchronisierbare Bereich erhält eine Zeile mit einem Schalter; schalten Sie einen ein, bleibt dieser Bereich auf jedem mit <strong>demselben Konto</strong> angemeldeten Gerät gleich. Einträge werden <strong>auf diesem Rechner verschlüsselt</strong>, und der Server speichert nur Chiffretext, für den er keinen Schlüssel hat.",
           "sync": {
             "scopes": "<strong>Fünf Zeilen, eine pro Seite der Agent-Assets und in der Reihenfolge der Seitenleiste; drei lassen sich einschalten</strong>: <em>MCP</em> (die in Navide hinzugefügten Server; ihre Geheimnisse werden verschlüsselt, bevor sie den Rechner verlassen), <em>Skills</em> (welche Skills aktiv sind und an welche CLIs jeder geht, dazu die Dateien der in Navide erstellten Skills; Skills, die Sie selbst in den Ordner gelegt haben, synchronisieren nur ihre Einstellungen) und <em>Prompts</em> (Prompt-Skills und der Loop-Prompt).",
-            "credentials": "<em>Gedächtnis</em> und <em>CLI-Erweiterungen</em> sind <strong>aufgeführt, aber ausgegraut</strong>, und ihre Zeile lautet „noch nicht synchronisierbar“. Das bedeutet nicht „standardmäßig aus, wartet darauf, dass Sie es einschalten“ – der Schalter bewegt sich nicht. Ein Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, lässt sich noch ausschalten. <em>Anmeldeinformationen &amp; Schlüssel</em> hat überhaupt keine Zeile: Kontoanmeldeinformationen und Schlüssel verlassen diesen Rechner nie. Ein Schalter für Anmeldeinformationen, den eine ältere Version eingeschaltet gelassen hat, gilt als ausgeschaltet. MCP-Einstellungen werden bei eingeschaltetem Sync auf diesem Rechner verschlüsselt, bevor sie hochgeladen werden, und der Server hat keinen Schlüssel, um sie zu entschlüsseln.",
+            "credentials": "<em>Gedächtnis</em> und <em>Erweiterungen</em> sind <strong>aufgeführt, aber ausgegraut</strong>, und ihre Zeile lautet „noch nicht synchronisierbar“. Das bedeutet nicht „standardmäßig aus, wartet darauf, dass Sie es einschalten“ – der Schalter bewegt sich nicht. Ein Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, lässt sich noch ausschalten. <em>Zugangsdaten</em> hat überhaupt keine Zeile: Kontoanmeldeinformationen und Schlüssel verlassen diesen Rechner nie. Ein Zugangsdaten-Schalter, den eine ältere Version eingeschaltet gelassen hat, gilt als ausgeschaltet. MCP-Einstellungen werden bei eingeschaltetem Sync auf diesem Rechner verschlüsselt, bevor sie hochgeladen werden, und der Server hat keinen Schlüssel, um sie zu entschlüsseln.",
             "states": "Zwei Zustände werden unter dem Block ausdrücklich genannt: <em>nicht verbunden</em> (eingeschaltete Bereiche holen auf, sobald die Verbindung wieder besteht) und <em>dieses Gerät hat noch keinen Sync-Schlüssel</em> (nichts wird hochgeladen, bis es einen hat). Außerdem gibt es eine Schaltfläche <em>Jetzt synchronisieren</em>, die nur bei bestehender Verbindung aktiv ist.",
             "key": "<strong>Der Sync-Schlüssel wird als die ersten 8 Zeichen seiner ID angezeigt</strong>, nie als der Schlüssel selbst. <em>Schlüssel rotieren</em> erfordert <strong>zwei Klicks</strong>: Der erste macht daraus <em>Jetzt rotieren</em> und fügt daneben <em>Abbrechen</em> hinzu. Das Rotieren setzt den aktuellen Schlüssel außer Dienst, versiegelt jeden synchronisierten Eintrag unter einem neuen und übergibt den neuen Schlüssel Ihren anderen Geräten beim nächsten Schlüsselaustausch – der richtige Schritt bei einem Schlüssel, den Sie für kompromittiert halten.",
             "legacy": "<em>Für dieses Konto übernehmen</em> erscheint nur, wenn dieses Gerät einen Sync-Schlüssel aus der Zeit vor der Kontobindung besitzt <em>und</em> dieses Konto noch keinen Schlüssel hat. Es ist eine einmalige Entscheidung: Ohne Übernahme können Sie nicht lesen, was unter diesem Schlüssel synchronisiert wurde, und ein stattdessen neu erzeugter Schlüssel würde diese Einträge dauerhaft unlesbar machen.",
@@ -4399,10 +4423,6 @@
             "title": "Die Verknüpfung erfolgt an anderer Stelle",
             "text": "„Welches Git-Konto dieser Arbeitsbereich verwendet“ wählen Sie mit der Konto-Pille im <strong>Git-Panel der Seitenleiste</strong>. Die Einstellungsseite fügt Konten nur hinzu, bearbeitet und löscht sie. Das Löschen eines Kontos hebt auch jede Verknüpfung auf, die darauf verwies."
           },
-          "hPortable": "Übertragbare Anmeldeinformationen",
-          "portable1": "Kontokarten haben ein Feld <strong>Portable Anmeldeinformation</strong> erhalten: Führen Sie den eigenen Befehl des Anbieters aus, um eine zu erhalten, und fügen Sie das Ergebnis ein. Derzeit <strong>deklariert nur Claude Code eine portable Anmeldeinformation</strong> (der Befehl ist <code>claude setup-token</code>); die anderen dreizehn haben kein solches Feld. Was Sie einfügen, wird auf diesem Rechner verschlüsselt und <strong>neu gestarteten panes</strong> über ihre Umgebung übergeben – es wird <strong>nie in die eigenen Anmeldedateien der CLI geschrieben</strong>.",
-          "portable2": "Die Karte zeigt <em>Nicht festgelegt</em> oder <em>Festgelegt</em>, und wird die Anmeldeinformation übertroffen, sagt sie das deutlich – „nicht wirksam“, mit Nennung dessen, was Vorrang hat –, denn die meisten CLIs stellen ihre eigene Anmeldedatei, einen Schlüssel-Helper oder das Richtlinienverzeichnis eines Administrators vor die Umgebung. Damit eine eingefügte Anmeldeinformation wirkt, melden Sie sich zuerst dort in der CLI ab.",
-          "portableNote": "Die Karte trägt außerdem Kennzeichnungen wie „Aus der Cloud“ und „In Verwendung“; diese gehören zu Anmeldeinformationen, die über die Cloud-Synchronisierung angekommen sind. Der Bereich „Anmeldeinformationen“ von Navide Cloud ist derzeit <strong>aufgeführt, aber nicht schaltbar</strong>, die Wiederverwendung einer auf einem anderen Gerät eingefügten Anmeldeinformation ist also noch nicht möglich – was Sie einfügen, bleibt auf diesem Rechner.",
           "switchToast": "<strong>Ein fehlgeschlagener Wechsel ist jetzt immer sichtbar.</strong> Früher lösten nur zwei Ablehnungen eine Meldung aus – „panes laufen“ und „zu häufiger Wechsel“. Alles andere, auch ein fehlgeschlagener Austausch der Anmeldeinformationen, landete im eigenen Banner des Panels „Konten“, das längst aus dem Blickfeld gescrollt war, während Sie die Zeilen eines Anbieters betrachteten; ein Klick auf „Als Standard festlegen“ sah aus, als sei gar nichts passiert. Jede Art von Fehlschlag beim Wechsel löst jetzt eine Meldung aus."
         },
         "s6": {
@@ -6784,7 +6804,7 @@
         "s7": {
           "title": "Eine Person, mehrere Rechner",
           "p1": "Zwei Rechner mit unterschiedlichen Betriebssystemen zu verbinden, ist an sich keine Plattformfrage: Die Anmeldung bei Navide Cloud, das Koppeln und geräteübergreifende Nachrichten funktionieren auf allen dreien gleich und werden unter <strong>Einstellungen und System</strong> behandelt. Dieser Abschnitt ergänzt nur, was sich ändert, wenn die Rechner nicht dieselbe Plattform haben.",
-          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste drei Dinge einschalten: MCP, Skills und Prompts. <em>Gedächtnis</em> und <em>CLI-Erweiterungen</em> sind ebenfalls aufgeführt, aber ausgegraut und mit „Noch nicht synchronisierbar.“ beschrieben; einen Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, können Sie weiterhin ausschalten. Für Anmeldeinformationen gibt es keinen Eintrag: Die Anmeldeinformationen von CLI-Konten werden nur auf diesem Computer gespeichert und nie synchronisiert.",
+          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste drei Dinge einschalten: MCP, Skills und Prompts. <em>Gedächtnis</em> und <em>Erweiterungen</em> sind ebenfalls aufgeführt, aber ausgegraut und mit „Noch nicht synchronisierbar.“ beschrieben; einen Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, können Sie weiterhin ausschalten. Für <em>Zugangsdaten</em> gibt es keinen Eintrag: Die Anmeldeinformationen von CLI-Konten werden nur auf diesem Computer gespeichert und nie synchronisiert.",
           "note": "Was ohnehin nie mitreist: die Installation und Anmeldung jeder CLI, Anmeldeinformationen (im eigenen Tresor jeder Plattform gespeichert, in nicht austauschbaren Formaten) und jeder absolute Pfad. Auf einem zweiten Rechner müssen die CLIs eigens installiert und angemeldet werden."
         },
         "mock": {
@@ -6814,6 +6834,12 @@
       "no-arguments": "Keine Argumente",
       "env": "Umgebungsvariablen",
       "no-env": "Keine Umgebungsvariablen",
+      "needs-setup": "Einrichtung nötig",
+      "needs-node": "Benötigt Node.js",
+      "needs-node-hint": "Dieser Server startet mit {command}, das zu Node.js gehört. Node.js wurde auf diesem Computer nicht gefunden, daher kann der Server erst nach der Installation starten.",
+      "install-node": "Node.js installieren",
+      "fill-locally": "Einige Werte sind leer. Tragen Sie sie auf diesem Gerät ein – Werte von Umgebungsvariablen und Headern werden nie zwischen Geräten synchronisiert.",
+      "fill-credentials-locally": "Einige Werte in der URL oder den Argumenten sind leer. War es ein Zugangsdatum, tragen Sie es auf diesem Gerät ein – Zugangsdaten in URL und Argumenten werden nie zwischen Geräten synchronisiert.",
       "headers": "Header",
       "no-headers": "Keine Header",
       "show": "Anzeigen",
@@ -6860,6 +6886,7 @@
       "status": "Status: {status}",
       "starting-note": "Startet nach {seconds} s immer noch. Läuft der Server über npx oder uvx, lädt der erste Start möglicherweise noch das Paket herunter.",
       "error-reason": "Start fehlgeschlagen: {reason}",
+      "tools-error": "Werkzeugliste konnte nicht gelesen werden: {reason}",
       "stderr-tail": "Letzte Zeilen, die der Server ausgegeben hat",
       "open-config-file": "Konfigurationsdatei öffnen",
       "native-readonly-hint": "Navide liest diese Dateien und schreibt nie hinein. Gescannt wird nur die Konfiguration jeder CLI auf Benutzerebene – MCP auf Projektebene wird nicht angezeigt. Ändern Sie einen Server dort, wo seine CLI ihn erwartet, und aktualisieren Sie dann.",
@@ -6879,7 +6906,7 @@
       "header-name-placeholder": "Headername"
     },
     "credentials": {
-      "title": "Anmeldeinformationen und Schlüssel",
+      "title": "Zugangsdaten",
       "intro": "Ein nur lesender Scan, wo auf diesem Rechner Anmeldeinformationen und Schlüssel liegen. Nichts wird geändert, verschoben oder irgendwohin gesendet.",
       "meta": "Nur lokal · Werte werden nie angezeigt · Synchronisierung aus",
       "keyring-ok": "Schlüsselbund verfügbar: {backend}",
@@ -7240,7 +7267,7 @@
       "scope-hint-mcp": "MCP-Server, die Sie in Navide hinzugefügt haben. Ihre Geheimnisse werden verschlüsselt, bevor sie den Rechner verlassen.",
       "scope-hint-skills": "Welche Skills eingeschaltet sind und an welche CLIs jeder geht, sowie die Dateien der in Navide erstellten Skills (große werden als verschlüsselte Blobs übertragen). Skills, die Sie selbst in den Ordner gelegt haben, synchronisieren nur ihre Einstellungen.",
       "scope-hint-memory": "Globale Anweisungsdateien wie ~/.claude/CLAUDE.md. Dateien innerhalb eines Projekts bleiben bei git.",
-      "scope-credentials": "Anmeldeinformationen",
+      "scope-credentials": "Zugangsdaten",
       "sealed": "(Anmeldeinformation – nicht angezeigt)",
       "key-id": "Synchronisierungsschlüssel {id}",
       "rotate": "Schlüssel rotieren",
@@ -7378,7 +7405,7 @@
       }
     },
     "memory": {
-      "title": "Anweisungsdateien der CLIs",
+      "title": "Gedächtnis",
       "intro": "Jede CLI liest eine Anweisungsdatei, bevor sie mit der Arbeit beginnt – CLAUDE.md, AGENTS.md, QWEN.md, .cursor-Regeln. Jede Datei wird einmal aufgeführt, zusammen mit allen CLIs, die sie laden, und kann direkt bearbeitet werden.",
       "scope-user": "Benutzerebene",
       "scope-project": "Projektebene",
@@ -7390,6 +7417,25 @@
       "conflict-title": "Diese Datei wurde auf dem Datenträger geändert",
       "conflict-body": "Ein anderes Programm – eine CLI oder ein Editor – hat diese Datei geändert, während Sie sie bearbeitet haben. Jetzt zu speichern, würde diese Änderung überschreiben.",
       "conflict-reload": "Vom Datenträger neu laden (verwirft Ihren Entwurf)",
+      "discard-confirm": "Nicht gespeicherte Änderungen an {name} verwerfen?",
+      "previous-kept": "Vorherige Version aufbewahrt · {when}",
+      "restore-previous": "Vorherige Version wiederherstellen",
+      "restore-hint": "Jedes Speichern bewahrt die ersetzte Version in Navides eigenem Ordner auf. Beim Wiederherstellen wird der aktuelle Text zur vorherigen Version, sodass sich das Wiederherstellen genauso rückgängig machen lässt.",
+      "error-restore": "Die vorherige Version konnte nicht wiederhergestellt werden.",
+      "created-by-navide": "Von Navide erstellte Datei · {when}",
+      "undo-create": "Erstellen rückgängig machen (in den Papierkorb)",
+      "undo-create-hint": "Diese Datei existierte nicht, bevor Navide sie gespeichert hat. Rückgängig machen verschiebt sie in den Papierkorb des Systems, wo sie wiederhergestellt werden kann.",
+      "undo-create-changed": "Diese Datei wurde geändert, nachdem Navide sie erstellt hat – etwas anderes, etwa eine CLI, hat hineingeschrieben. Prüfe den Unterschied, bevor du sie in den Papierkorb verschiebst.",
+      "undo-create-diff-legend": "− was Navide geschrieben hat · + aktueller Inhalt der Datei",
+      "undo-create-confirm": "Trotzdem in den Papierkorb",
+      "undo-create-keep": "Datei behalten",
+      "undo-create-failed": "Die Datei wurde nicht in den Papierkorb verschoben: {reason}",
+      "undo-create-unavailable": "Der Papierkorb ist hier nicht verfügbar, daher wurde die Datei nicht angetastet.",
+      "scope-auto": "Claude Auto-Memory",
+      "auto-intro": "Notizen, die Claude Code bei der Arbeit selbst über dieses Projekt schreibt. Zu Beginn jeder Sitzung lädt es den Index MEMORY.md. Sie können die Notizen hier bearbeiten, Claude kann sie aber später neu schreiben.",
+      "auto-empty": "Claude hat für dieses Projekt noch keine Notizen gespeichert.",
+      "auto-tag": "Von Claude geschrieben",
+      "auto-editor-hint": "Claude Code hat diese Datei selbst geschrieben und kann sie in einer späteren Sitzung erneut ändern.",
       "agents-title": "CLI-Abdeckung",
       "agents-mapped": "Zugeordnet",
       "agents-mapped-hint": "Navide weiß, wo diese CLIs ihre Anweisungen ablegen.",
@@ -7402,7 +7448,7 @@
       "error-save": "Diese Datei konnte nicht gespeichert werden. Ihr Entwurf bleibt im Editor."
     },
     "prompts": {
-      "title": "Prompt-Skills",
+      "title": "Prompts",
       "intro": "Wiederverwendbare vollständige Anweisungen, die ein CLI-pane über seine ∞-Schaltfläche auslösen kann. Ein Skill ist ein vollständiger Prompt – die Wahl eines Skills ersetzt den Prompt und hängt nie an einen anderen an. Nur der Standard-Skill läuft als Loop; jeder andere Skill wird einmal gesendet.",
       "new": "Neuer Skill",
       "new-name": "Neuer Skill",
@@ -7434,7 +7480,9 @@
       "advanced": "Erweitert",
       "send-once": "Wird einmal gesendet",
       "send-once-hint": "Nur der Standard-Skill läuft als Loop; dieser wird einmal gesendet, ohne Fortsetzung oder Turn-Limit.",
-      "untitled-name": "Unbenannter Skill"
+      "untitled-name": "Unbenannter Skill",
+      "prompt-empty": "Ein Prompt darf nicht leer sein – der bisherige Text wurde beibehalten. Um diesen Skill zu entfernen, „Löschen“ verwenden.",
+      "delete-confirm": "„{name}“ löschen? Das lässt sich nicht rückgängig machen, und Geräte, die Prompts synchronisieren, entfernen ihn ebenfalls."
     },
     "section": {
       "general-behavior": "Allgemeines Verhalten",
@@ -7442,7 +7490,6 @@
       "notifications": "Benachrichtigungen",
       "settings-management": "Einstellungsverwaltung",
       "theme": "Design",
-      "language": "Sprache",
       "other": "Sonstiges",
       "updates": "Aktualisierungen"
     },
@@ -8160,8 +8207,12 @@
         "dir-sign-in-hint": "Dieses Konto einmal in seinem eigenen Ordner anmelden, damit sein Kontingent auch im Ruhezustand live gelesen werden kann. Der Browser fragt erneut nach einer Autorisierung; verwenden Sie dieselbe E-Mail-Adresse.",
         "dir-email-mismatch": "Der eigene Ordner ist als {dirEmail} angemeldet, nicht als {expected}. Das Kontingent auf dieser Karte gehört zu {dirEmail}.",
         "default-hint": "Ihre ursprünglichen Anmeldeinformationen",
-        "is-default": "Standard",
-        "set-default": "Als Standard festlegen",
+        "default-collapsed": "Ursprüngliche Anmeldung (außerhalb von Navide): nicht angemeldet",
+        "default-sign-in-title": "Zur ursprünglichen Anmeldung wechseln?",
+        "default-sign-in-body": "Wenn Sie sich hier anmelden, wechselt {agent} zuerst zur ursprünglichen Anmeldung. Sie enthält keine Anmeldung, daher wird die aktive Anmeldung ({current}) entfernt: Dieses Konto bleibt auf seiner eigenen Karte gespeichert, und Sie können zurückwechseln. Neue panes von {agent} sind erst angemeldet, wenn diese Anmeldung abgeschlossen ist.",
+        "default-sign-in-confirm": "Wechseln und anmelden",
+        "is-default": "Aktiv",
+        "set-default": "Zu diesem Konto wechseln",
         "switching": "Wird gewechselt …",
         "not-signed-in": "Nicht angemeldet",
         "rename": "Umbenennen",
@@ -8175,43 +8226,8 @@
         "active-error": "Dieses Konto ist derzeit aktiv und kann nicht gelöscht werden. Wechseln Sie zuerst zu einem anderen Konto.",
         "login-in-progress-error": "Eine Anmeldung für dieses Konto läuft noch. Schließen Sie zuerst deren Anmelde-pane ab oder schließen Sie es.",
         "account-dir-in-use-error": "{count} laufendes pane verwendet den eigenen Ordner dieses Kontos. Schließen Sie es, bevor Sie das Konto löschen. | {count} laufende panes verwenden den eigenen Ordner dieses Kontos. Schließen Sie sie, bevor Sie das Konto löschen.",
-        "portable-label": "Portable Anmeldeinformation",
-        "portable-present": "Festgelegt",
-        "portable-absent": "Nicht festgelegt",
-        "portable-paste": "Anmeldeinformation einfügen",
-        "portable-replace": "Ersetzen",
-        "portable-remove": "Von diesem Gerät entfernen",
-        "portable-save": "Speichern",
-        "portable-docs": "So erhalten Sie eine",
-        "portable-placeholder": "Führen Sie {command} aus und fügen Sie das Ergebnis ein",
-        "portable-placeholder-plain": "Anmeldeinformation einfügen",
-        "portable-saved": "Anmeldeinformation auf diesem Gerät gespeichert. Sie wird neuen panes über deren Umgebung übergeben und nie in die eigenen Dateien der CLI geschrieben.",
-        "portable-save-failed": "Die Anmeldeinformation konnte nicht gespeichert werden.",
-        "portable-clear-failed": "Die Anmeldeinformation konnte nicht entfernt werden.",
-        "portable-shadowed": "Nicht wirksam: Diese CLI stuft {files} höher ein als die eingefügte Anmeldeinformation. Melden Sie sich dort von der CLI ab, um sie zu verwenden.",
-        "cloud-off": "Die Cloud-Synchronisierung für Anmeldeinformationen ist aus („Einstellungen → Synchronisierung“).",
-        "cloud-status-no-key": "Dieses Gerät hat noch keinen Synchronisierungsschlüssel – koppeln Sie es mit einem Gerät, das einen hat.",
-        "cloud-status-not-connected": "Nicht mit Navide Cloud verbunden.",
-        "cloud-status-error": "Der Cloud-Zustand konnte nicht gelesen werden: {error}",
-        "cloud-none": "Nicht in der Cloud.",
-        "cloud-state-in-sync": "Synchron",
-        "cloud-state-local-only": "Nur dieses Gerät",
-        "cloud-state-remote-only": "In der Cloud, hier nicht verwendet",
-        "cloud-state-diverged": "Weicht von der Cloud ab",
-        "cloud-state-conflict": "Ihre Entscheidung erforderlich („Einstellungen → Synchronisierung“)",
-        "cloud-updated": "Cloud-Kopie aktualisiert {when} von {device}",
-        "cloud-unreadable": "Mit einem Schlüssel versiegelt, den dieses Gerät nicht besitzt.",
-        "cloud-use": "Auf diesem Gerät verwenden",
-        "cloud-using": "Wird abgerufen …",
-        "cloud-use-failed": "Die Anmeldeinformation konnte nicht aus der Cloud abgerufen werden.",
-        "portable-imported": "Aus der Cloud",
-        "portable-selected": "In Verwendung",
-        "portable-select": "Für neue panes verwenden",
-        "portable-deselect": "Nicht mehr verwenden",
-        "portable-select-failed": "Die Anmeldeinformation konnte nicht ausgewählt werden.",
-        "portable-unavailable": "Gespeichert, kann auf diesem Gerät derzeit aber nicht geöffnet werden (der Synchronisierungsschlüssel fehlt oder ist veraltet).",
-        "imported-account": "Konto von einem anderen Gerät",
-        "imported-account-hint": "Eine Anmeldeinformation, die anderswo in ein benanntes Konto eingefügt wurde; verwenden Sie sie hier für neue panes oder entfernen Sie sie von diesem Gerät."
+        "portable-removed-title": "„Anmeldeinformation einfügen“ wurde entfernt",
+        "portable-removed-text": "Navide übergibt eingefügte Anmeldeinformationen nicht mehr an neue panes, und die auf diesem Gerät gespeicherten wurden beim Update gelöscht. Neue Claude-panes verwenden jetzt die eigene Anmeldung von Claude – das kann ein anderes Konto sein, dessen Kontingent dann belastet wird."
       }
     },
     "color": {
@@ -8238,6 +8254,8 @@
       "inference-url": "URL des Inferenzservers",
       "recheck-title": "Verbindung erneut prüfen",
       "ollama-connected": "Ollama {version} verbunden",
+      "ollama-missing": "Ollama ist auf diesem Computer nicht installiert.",
+      "install-ollama": "Ollama installieren",
       "not-connected": "Nicht verbunden · ausführen:",
       "model-manager": "Modellverwaltung",
       "model-manager-note": "Ein Modell per Name aus Ollama laden oder ein nicht mehr benötigtes löschen",
@@ -9492,7 +9510,7 @@
     "failed": "Diese Unterhaltung konnte nicht wieder verbunden werden – ihr Transkript existiert möglicherweise nicht mehr"
   },
   "cli-account": {
-    "default": "Standard",
+    "default": "Ursprüngliche Anmeldung",
     "switch-title": "Konto wechseln",
     "swap-failed": "Kontowechsel fehlgeschlagen – das vorherige Konto ist weiterhin aktiv.",
     "panes-running": "{count} laufendes CLI-pane verwendet dieses Konto – schließen Sie es vor dem Wechsel. | {count} laufende CLI-panes verwenden dieses Konto – schließen Sie sie vor dem Wechsel.",
@@ -9661,6 +9679,7 @@
     "queue": "{count} ausstehend",
     "requester": "Angefordert von",
     "source": "Quelle",
+    "source-bundled": "Mit Navide ausgeliefert ({name})",
     "digest": "Prüfsumme",
     "targets": "Zustellung",
     "targets-all": "Alle angebundenen CLIs",
@@ -9676,7 +9695,21 @@
     "installing": "Wird installiert …",
     "failed": "Installation fehlgeschlagen",
     "dismiss": "Schließen",
-    "expired": "Diese Anfrage ist abgelaufen, bevor sie genehmigt wurde. Bitten Sie den Agent, den Skill erneut vorzubereiten."
+    "expired": "Diese Anfrage ist abgelaufen, bevor sie genehmigt wurde. Bitten Sie den Agent, den Skill erneut vorzubereiten.",
+    "delivery-kicker": "Anfrage zur Skill-Zustellung",
+    "delivery-title": "Skill „{name}“ an weitere CLIs zustellen?",
+    "delivery-desc": "Ein Agent möchte ändern, an welche CLIs dieser Skill zugestellt wird. Nichts ändert sich, bis du hier zustimmst; der Agent kann nicht für dich zustimmen.",
+    "delivery-shared": "Gemeinsame Skill-Bibliothek",
+    "delivery-current": "Aktuell zugestellt an",
+    "delivery-next": "Nach der Änderung",
+    "delivery-none": "Keine weitere CLI",
+    "delivery-state": "Status",
+    "delivery-turns-on": "Schaltet den Skill ein (derzeit aus)",
+    "delivery-note": "Mit der Zustimmung laden die oben genannten CLIs diesen Skill in neuen Sitzungen. Die Dateien des Skills werden nicht geändert. Eine CLI später zu entfernen braucht nie eine Zustimmung.",
+    "delivery-approve": "Änderung genehmigen",
+    "delivery-applying": "Wird angewendet…",
+    "delivery-failed": "Die Zustellungsänderung konnte nicht angewendet werden",
+    "delivery-expired": "Diese Anfrage ist abgelaufen, bevor sie genehmigt wurde. Bitte den Agenten, den Skill erneut zu prüfen und es noch einmal zu versuchen."
   },
   "cli-manage": {
     "title": "Installation und Updates",
@@ -9931,6 +9964,7 @@
       }
     },
     "blocked-by": "Installieren Sie zuerst {names} – das ist Voraussetzung, bevor dies hier installiert werden kann.",
+    "installs-first": "Bei der Installation wird zuerst auch {names} eingerichtet.",
     "go-install": "Zuerst {name} installieren",
     "complete-failed": "Ihr Einrichtungsfortschritt konnte nicht gespeichert werden: {error}. Versuchen Sie es erneut.",
     "ollama-start-failed": "Der Ollama-Dienst konnte nicht gestartet werden. Details finden Sie im Protokoll, oder führen Sie `ollama serve` in einem Terminal aus.",
@@ -11241,10 +11275,13 @@
       "undo-none": "Nichts rückgängig zu machen",
       "view": "Ansicht",
       "show-palette": "Knotenpanel anzeigen",
-      "hide-palette": "Knotenpanel ausblenden"
+      "hide-palette": "Knotenpanel ausblenden",
+      "task": "Aufgabe für diesen Lauf"
     },
     "controlPane": {
-      "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen"
+      "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen",
+      "gate-toast": "Die Pipeline wartet bei {name} auf Ihre Genehmigung",
+      "next-gated": "Genehmigen Sie diese Schranke oder schicken Sie sie zurück, bevor es mit der nächsten Stufe weitergeht."
     },
     "edge": {
       "title": "Rückweisungsschleife",
@@ -11485,7 +11522,7 @@
     "follow-wait": "Nach Abschluss verschieben",
     "follow-skip-running": "Laufende panes überspringen",
     "follow-switch-label": "Kontowechsel folgen",
-    "follow-switch-hint": "An: Dieses pane wechselt bei seinem nächsten Turn zum neuen Konto. Aus: Es bleibt im eigenen Ordner seines Kontos. Jede Änderung öffnet es einmal neu.",
+    "follow-switch-hint": "An: Die Kontowahl unten wechselt das Standardkonto, und dieses pane wechselt bei seinem nächsten Turn dorthin. Aus: Die Kontowahl verschiebt nur dieses pane und öffnet es einmal im eigenen Ordner dieses Kontos neu; das Standardkonto und andere panes bleiben, wie sie sind. Auch das Umschalten öffnet es einmal neu.",
     "pinned-indicator-label": "An sein Konto gebunden",
     "pinned-indicator-tooltip": "Gebunden: Ein Kontowechsel verschiebt dieses pane nicht. Öffnen Sie das Konto-Badge, damit es wieder folgt.",
     "unpin-title": "{count} pane, das folgen soll, arbeitet gerade | {count} panes, die folgen sollen, arbeiten gerade",
@@ -11665,6 +11702,7 @@
       "added": "Neu",
       "removed": "Entfernt",
       "declaredScope": "Angegebener Bereich (nur zur Information)",
+      "declaredScopeNote": "Navide erzwingt einen angegebenen Bereich nicht. Ein Navide-Plug-in mit Dateizugriff kann weiterhin Dateien außerhalb davon lesen und ändern.",
       "unchanged": "Unverändert ({count})",
       "fullCard": "Vollständige Offenlegungskarte",
       "badgeMore": "Mehr Berechtigungen",

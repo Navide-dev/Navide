@@ -13,7 +13,7 @@ import {
 } from '../composables/useConvenience'
 import { convenienceText } from '../lib/convenienceText'
 
-// Settings → CLI Extensions → 「便利功能與 Navide 對你電腦的修改」: one card per
+// Settings → Extensions → 「便利功能與 Navide 對你電腦的修改」: one card per
 // convenience feature (docs/en-US/convenience-features.md). Turning one off
 // asks first and names what Navide will remove; allowing needs no confirm.
 

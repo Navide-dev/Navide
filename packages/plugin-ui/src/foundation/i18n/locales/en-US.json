@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop — send the configured loop prompt to this pane",
       "skill-cast-failed": "Could not send the skill \"{name}\" to this pane",
       "skill-cast-busy": "The loop is sending its next prompt — cast \"{name}\" again in a moment",
+      "loop-start-failed": "Could not start the loop with \"{name}\" in this pane",
       "loop-badge-tooltip": "Loop prompt was sent to this pane — click to turn the loop off",
       "loop-waiting-tooltip": "Loop paused — session limit hit; auto-resume at {time}. Click to resume now",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -1474,6 +1475,8 @@
       "unsupported": "Navide cannot read where this CLI keeps its CLI extensions yet.",
       "invalid": "Could not read: {error}",
       "disabled": "Disabled",
+      "enabledUnknown": "State unknown",
+      "enabledUnknownReason": "Could not tell whether this is enabled: {error}",
       "ownerNavide": "Installed by Navide",
       "inferred": "inferred",
       "inferredHint": "Read off the source text; the CLI's manifest does not state these.",
@@ -1565,7 +1568,7 @@
           "summary": "Read-only view of the MCP servers each CLI keeps in its own config, and where each server is set up."
         },
         "credentials": {
-          "title": "Credentials & keys",
+          "title": "Credentials & Keys",
           "summary": "Read-only scan of where credentials and keys live on this machine, with reminders."
         },
         "skills": {
@@ -1573,7 +1576,7 @@
           "summary": "Create, edit, enable, disable, and inspect app-managed agent skills."
         },
         "prompts": {
-          "title": "Prompt Skills",
+          "title": "Prompts",
           "summary": "Create and edit the prompt skills a CLI pane can cast from its loop button."
         },
         "memory": {
@@ -1730,6 +1733,7 @@
       "export-failed": "Export failed",
       "import-dialog-title": "Import Settings Bundle JSON",
       "imported": "Imported: {items}",
+      "mcp-needs-secrets": "MCP secrets to fill in on this machine: {items}",
       "import-failed": "Import failed"
     },
     "executionPolicy": {
@@ -1882,6 +1886,8 @@
         "title": "Native backends",
         "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. While the switch below is on, installing a Navide plugin that has native code allows it to run; turning the switch off stops all of them.",
         "enable": "Allow third-party Navide plugins to run native backends",
+        "offUnsaved": "Third-party native backends are off for now, but Navide could not save that, so they will be on again after Navide restarts.",
+        "offUnsavedRetry": "Try Again",
         "agentTools": {
           "enable": "Let agents call tools from third-party Navide plugins",
           "description": "Off by default. When on, agents in your panes can call the tools a third-party Navide plugin declares, once you have allowed that Navide plugin. A tool that changes files asks you once per workspace. With this off, Navide behaves as if no Navide plugin had tools.",
@@ -1889,11 +1895,15 @@
           "externalCallersDisclosure": "External programs share a single token, so the record of a call can only say \"an external client\", not which program it was. The Host credential is treated the same way."
         },
         "empty": "No installed Navide plugin has a native backend.",
-        "windowWithout": "{name} opened without its native backend: {reason}. The parts of it that need the backend will not work. To allow the backend, go to Settings → Navide Plugins → {page}.",
+        "windowWithout": "{name} opened without its native backend: {reason}. The parts of it that need the backend will not work. {next}",
+        "windowWithoutAllow": "To allow the backend, go to Settings → Navide Plugins → {page}, then reopen the window.",
+        "windowWithoutDetails": "Settings → Navide Plugins → {page} shows why.",
         "allow": "Allow",
         "disable": "Disable",
         "enable_plugin": "Enable",
         "changed": "Its native code or permissions changed since you allowed it.",
+        "allowedPreInstall": "Allowed without asking: it was installed before Navide 0.2.31, which did not record install consent.",
+        "declined": "You declined it when it was about to start, so Navide does not ask again for this version and it stays off. Press Allow to run it.",
         "writeAllowed": "May change files in {path}",
         "revoke": "Revoke",
         "violation": "Stopped after exceeding its {kind} limit.",
@@ -1976,6 +1986,14 @@
       "installed": "Installed",
       "sensitive": "sensitive",
       "empty": "No Navide plugins installed.",
+      "backgroundAi": {
+        "title": "AI CLI running in the background ({count})",
+        "note": "These AI CLI sessions kept running after its window closed. They run until you end them here, disable or remove it, or quit Navide.",
+        "item": "{profile} · version {version} · since {time}",
+        "end": "End",
+        "gone": "That session is no longer running in the background.",
+        "endFailed": "Could not end the session: {error}"
+      },
       "permissionDetails": "Permissions and grants",
       "permissionDetailsWithActivity": "Permissions, grants and activity",
       "plansRiskNote": "This Navide plugin has its own backend program, which runs with your user permissions and has no sandbox. It works on plan documents in the current project, starting from the Git repository root found above it (including repositories nested inside): the plan and report folders under .agent-team, .claude, .cursor and docs at any depth, .plans at the root, and their .history (read only). Its backend reads and writes them directly; deletes and renames still go through Navide.",
@@ -2122,7 +2140,7 @@
         },
         "reloadFailed": "The latest change could not be loaded; the previous version keeps running: {error}",
         "autoReloadNeedsConsent": "The permissions or backend of {id} changed, so it was unloaded. Consent again in Settings → Navide Plugins.",
-        "autoReloadMixedHint": "A reload while a build or save is still writing files may load an incomplete mix of old and new files.",
+        "autoReloadMixedHint": "A reload while a build or save is still writing files may load an incomplete mix of old and new files. A build that writes .navide-build-complete into the folder last avoids this: the folder then reloads only when that file is written again.",
         "reloadFailedNothingRunning": "The last reload failed and no version is running now: {error}",
         "removeFolder": "Remove",
         "needsConsent": "Permissions or backend changed; consent again",
@@ -2152,7 +2170,8 @@
           "computing": "Computing…",
           "loadedBy": "Loaded by",
           "notReviewed": "Not reviewed by Navide, not signed, not scanned.",
-          "mayChange": "Its contents can change at any time. The fingerprint only records what the folder held when it was loaded; Navide does not use it to refuse a load."
+          "mayChange": "Its contents can change at any time. The fingerprint only records what the folder held when it was loaded; Navide does not use it to refuse a load.",
+          "consentScope": "Changing the folder's files, its native backend program included, does not ask you again. Changing its declared permissions or backend does: it is unloaded until you consent again."
         },
         "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
       },
@@ -2176,9 +2195,13 @@
         "signature": "None: the author cannot be confirmed and the file may have been changed",
         "digestLabel": "File SHA-256",
         "acknowledge": "I understand Navide has not reviewed this Navide plugin, and I want to run its code.",
-        "versionExists": "This version number is already installed with different contents. Bump the version and package it again.",
+        "versionExists": "This version number is already installed. Bump the version and package it again.",
         "installFailed": "The Navide plugin could not be installed.",
         "chooseAgain": "Close this dialog and choose the file again to try once more.",
+        "approveAgain": "The file is still ready, so you can approve it again.",
+        "askAgentAgain": "Close this dialog and ask the agent to send the request again.",
+        "startAgain": "Close this dialog and try again from the start.",
+        "rollbackFailed": "Could not go back to this version.",
         "replaceTitle": "Replace an installed Navide plugin",
         "replaceMarketplace": "Replace {id} (Navide Marketplace version {version}) with the version from this file? It will no longer update automatically.",
         "replaceLocal": "Replace the file version {version} of {id} with this file?",
@@ -2493,6 +2516,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "Machine-translated. Native-speaker review pending.",
       "language-hint": "Language is a user-level preference applied across all workspaces.",
+      "language-display": "Display language",
       "ui-scale": "Interface Scale",
       "ui-scale-hint": "Scale the whole interface — text, icons, and spacing — in every window. Separate from the terminal and editor font sizes, which keep their own ⌘= / ⌘- shortcuts.",
       "restore-windows": "Restore Windows",
@@ -3117,7 +3141,7 @@
           "p11": "The first block on Settings ▸ Navide Cloud is called Sync. <strong>It is not a separate tab</strong> — it is the top section of this one page. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
           "sync": {
             "scopes": "<strong>Five rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
-            "credentials": "<em>Memory</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory switch an older build left on can still be turned off. <em>Credentials &amp; keys</em> has no row at all: account credentials and keys never leave this machine. A Credentials switch an older build left on is treated as off. MCP settings, when their sync is on, are encrypted on this machine before they are uploaded, and the server has no key to decrypt them.",
+            "credentials": "<em>Memory</em> and <em>Extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory switch an older build left on can still be turned off. <em>Credentials &amp; Keys</em> has no row at all: account credentials and keys never leave this machine. A Credentials &amp; Keys switch an older build left on is treated as off. MCP settings, when their sync is on, are encrypted on this machine before they are uploaded, and the server has no key to decrypt them.",
             "states": "Two states are spelled out under the block: <em>not connected</em> (scopes you turned on catch up once the link is back) and <em>this device has no sync key yet</em> (nothing is uploaded until it has one). There is also a <em>Sync Now</em> button, enabled only while connected.",
             "key": "<strong>The sync key is shown as the first 8 characters of its id</strong>, never as the key itself. <em>Rotate Key</em> takes <strong>two clicks</strong>: the first turns it into <em>Rotate Now</em> and adds a <em>Cancel</em> beside it. Rotating retires the current key, re-seals every synced record under a new one, and hands the new key to your other devices the next time they exchange keys — it is the move for a key you think has leaked.",
             "legacy": "<em>Adopt for This Account</em> appears only when this device holds a sync key from before accounts were bound <em>and</em> this account has no key yet. It is a one-time choice: without adopting it you cannot read what was synced under that key, and minting a fresh key instead would leave those records permanently unreadable.",
@@ -4399,10 +4423,6 @@
             "title": "Binding is done elsewhere",
             "text": "\"Which Git account this workspace uses\" is chosen with the account pill on the <strong>Git panel in the sidebar</strong>. The Settings page only adds, edits and deletes accounts. Deleting an account also clears any binding that pointed to it."
           },
-          "hPortable": "Portable credentials",
-          "portable1": "Account cards gained a <strong>Portable credential</strong> field: run the vendor’s own command to obtain one and paste the result in. Today <strong>only Claude Code declares a portable credential</strong> (the command is <code>claude setup-token</code>); the other thirteen have no such field. What you paste is encrypted on this machine and handed to <strong>newly spawned panes</strong> through their environment — it is <strong>never written into the CLI’s own credential files</strong>.",
-          "portable2": "The card shows <em>Not set</em> or <em>Set</em>, and when the credential is outranked it says so plainly — \"not in effect\", naming what ranks above it — because most CLIs put their own login file, a key helper or an administrator’s policy directory ahead of the environment. To make a pasted credential take effect, sign out of the CLI there first.",
-          "portableNote": "The card also carries marks such as \"From cloud\" and \"In use\"; those belong to credentials that arrived through cloud sync. Navide Cloud’s Credentials scope is currently <strong>listed but not switchable</strong>, so reusing a credential pasted on another device is not reachable yet — what you paste stays on this machine.",
           "switchToast": "<strong>A failed switch is now always visible.</strong> Only two refusals used to raise a toast — \"panes are running\" and \"switching too often\". Everything else, a failed credential swap included, went into the Accounts panel’s own banner, which had long scrolled out of view while you were looking at one vendor’s rows; pressing \"Set as Default\" looked like nothing happened at all. Every kind of switch failure raises a toast now."
         },
         "s6": {
@@ -6784,7 +6804,7 @@
         "s7": {
           "title": "One person, several machines",
           "p1": "Connecting two machines running different operating systems is not itself a platform matter: signing in to Navide Cloud, pairing, and cross-device messaging work the same way on all three, and are covered in <strong>Settings &amp; System</strong>. This section only adds what changes when the machines are not the same platform.",
-          "p2": "In <strong>Settings ▸ Navide Cloud</strong>, the sync list lets you turn on three things: MCP, Skills and Prompts. <em>Memory</em> and <em>CLI extensions</em> are listed too, greyed out and described as “Not syncable yet.”; a memory switch an older version left on can still be turned off. There is no row for credentials: CLI account credentials are stored only on this computer and are never synced.",
+          "p2": "In <strong>Settings ▸ Navide Cloud</strong>, the sync list lets you turn on three things: MCP, Skills and Prompts. <em>Memory</em> and <em>Extensions</em> are listed too, greyed out and described as “Not syncable yet.”; a memory switch an older version left on can still be turned off. There is no <em>Credentials &amp; Keys</em> row: CLI account credentials are stored only on this computer and are never synced.",
           "note": "Things that never travel with you anyway: each CLI's own installation and sign-in, credentials (held in each platform's own vault, in formats that do not interchange), and every absolute path. A second machine needs its CLIs installed and signed in on its own."
         },
         "mock": {
@@ -6814,6 +6834,12 @@
       "no-arguments": "No arguments",
       "env": "Environment variables",
       "no-env": "No environment variables",
+      "needs-setup": "Needs setup",
+      "needs-node": "Needs Node.js",
+      "needs-node-hint": "This server starts with {command}, which comes with Node.js. Node.js was not found on this computer, so the server cannot start until it is installed.",
+      "install-node": "Install Node.js",
+      "fill-locally": "Some values are empty. Fill them in on this machine — env and header values never sync between devices.",
+      "fill-credentials-locally": "Some values in the URL or arguments are empty. If one held a credential, fill it in on this machine — credentials in the URL and arguments never sync between devices.",
       "headers": "Headers",
       "no-headers": "No headers",
       "show": "Show",
@@ -6860,6 +6886,7 @@
       "status": "Status: {status}",
       "starting-note": "Still starting after {seconds} s. If it runs through npx or uvx, the first run may be downloading the package.",
       "error-reason": "Failed to start: {reason}",
+      "tools-error": "Could not list its tools: {reason}",
       "stderr-tail": "Last lines the server printed",
       "open-config-file": "Open Config File",
       "native-readonly-hint": "Navide reads these files and never writes to them. Only each CLI's user-level config is scanned — project-level MCP is not shown. Change a server where its CLI expects it, then refresh.",
@@ -6879,7 +6906,7 @@
       "header-name-placeholder": "Header"
     },
     "credentials": {
-      "title": "Credentials & keys",
+      "title": "Credentials & Keys",
       "intro": "A read-only scan of where credentials and keys live on this machine. Nothing is changed, moved or sent anywhere.",
       "meta": "Local only · values never shown · sync off",
       "keyring-ok": "Keyring available: {backend}",
@@ -7240,7 +7267,7 @@
       "scope-hint-mcp": "MCP servers you added in Navide. Their secrets are encrypted before they leave.",
       "scope-hint-skills": "Which skills are on and which CLIs each one goes to, plus the files of skills created in Navide (large ones travel as encrypted blobs). Skills you put in the folder yourself sync their settings only.",
       "scope-hint-memory": "Global instruction files such as ~/.claude/CLAUDE.md. Files inside a project stay with git.",
-      "scope-credentials": "Credentials",
+      "scope-credentials": "Credentials & Keys",
       "sealed": "(credential — not shown)",
       "key-id": "Sync key {id}",
       "rotate": "Rotate Key",
@@ -7378,7 +7405,7 @@
       }
     },
     "memory": {
-      "title": "CLI Instruction Files",
+      "title": "Memory",
       "intro": "Every CLI reads an instruction file before it starts working — CLAUDE.md, AGENTS.md, QWEN.md, .cursor rules. Each file is listed once, with every CLI that loads it, and can be edited in place.",
       "scope-user": "User level",
       "scope-project": "Project level",
@@ -7390,6 +7417,25 @@
       "conflict-title": "This file changed on disk",
       "conflict-body": "Another program — a CLI or an editor — changed this file while you were editing it. Saving now would overwrite that change.",
       "conflict-reload": "Reload from Disk (Discards Your Draft)",
+      "discard-confirm": "Discard your unsaved changes to {name}?",
+      "previous-kept": "Previous version kept · {when}",
+      "restore-previous": "Restore Previous Version",
+      "restore-hint": "Each save keeps the version it replaced in Navide's own folder. Restoring keeps the current text as the previous version, so a restore can be undone the same way.",
+      "error-restore": "The previous version could not be restored.",
+      "created-by-navide": "Navide created this file · {when}",
+      "undo-create": "Undo Create (Move to Trash)",
+      "undo-create-hint": "The file did not exist before Navide saved it. Undoing moves it to the system Trash, where it can still be recovered.",
+      "undo-create-changed": "This file changed after Navide created it — something else, such as a CLI, has written to it. Review the difference before moving it to the Trash.",
+      "undo-create-diff-legend": "− what Navide wrote · + what is in the file now",
+      "undo-create-confirm": "Move to Trash Anyway",
+      "undo-create-keep": "Keep File",
+      "undo-create-failed": "The file was not moved to the Trash: {reason}",
+      "undo-create-unavailable": "Moving files to the Trash is not available here, so the file was left in place.",
+      "scope-auto": "Claude auto-memory",
+      "auto-intro": "Notes Claude Code writes about this project by itself as it works. It loads MEMORY.md, the index, at the start of every session. You can edit them here, but Claude may rewrite them later.",
+      "auto-empty": "Claude has not saved any notes for this project yet.",
+      "auto-tag": "Written by Claude",
+      "auto-editor-hint": "Claude Code wrote this file itself and may change it again in a later session.",
       "agents-title": "CLI coverage",
       "agents-mapped": "Mapped",
       "agents-mapped-hint": "Navide knows where these CLIs keep their instructions.",
@@ -7402,7 +7448,7 @@
       "error-save": "Could not save this file. Your draft remains in the editor."
     },
     "prompts": {
-      "title": "Prompt Skills",
+      "title": "Prompts",
       "intro": "Reusable whole instructions a CLI pane can cast from its ∞ button. One skill is one complete prompt — picking a skill replaces the prompt, it never appends to another. Only the default skill runs as a loop; every other skill is sent once.",
       "new": "New Skill",
       "new-name": "New skill",
@@ -7434,7 +7480,9 @@
       "advanced": "Advanced",
       "send-once": "Sends once",
       "send-once-hint": "Only the default skill runs as a loop; this one is sent once, with no resume or turn cap.",
-      "untitled-name": "Untitled skill"
+      "untitled-name": "Untitled skill",
+      "prompt-empty": "A prompt can't be empty — the previous text was kept. To remove this skill, use Delete.",
+      "delete-confirm": "Delete \"{name}\"? This can't be undone, and machines that sync prompts will remove it too."
     },
     "section": {
       "general-behavior": "General behavior",
@@ -7442,7 +7490,6 @@
       "notifications": "Notifications",
       "settings-management": "Settings management",
       "theme": "Theme",
-      "language": "Language",
       "other": "Other",
       "updates": "Updates"
     },
@@ -8160,8 +8207,12 @@
         "dir-sign-in-hint": "Sign this account in once inside its own folder so its quota can be read live while it is parked. The browser asks you to authorize again; use the same email.",
         "dir-email-mismatch": "Its own folder is signed in as {dirEmail}, not {expected}. The quota on this card is {dirEmail}'s.",
         "default-hint": "Your original login credentials",
-        "is-default": "Default",
-        "set-default": "Set as Default",
+        "default-collapsed": "Original login (outside Navide): not signed in",
+        "default-sign-in-title": "Switch to the Original Login?",
+        "default-sign-in-body": "Signing in here first switches {agent} to the original login. It holds no sign-in, so the live login ({current}) is cleared: that account stays saved on its own card, and you can switch back to it. New {agent} panes are not signed in until this sign-in finishes.",
+        "default-sign-in-confirm": "Switch and Sign In",
+        "is-default": "Active",
+        "set-default": "Switch to This Account",
         "switching": "Switching…",
         "not-signed-in": "Not signed in",
         "rename": "Rename",
@@ -8175,43 +8226,8 @@
         "active-error": "This account is currently active and cannot be deleted. Switch to another account first.",
         "login-in-progress-error": "A sign-in for this account is still running. Finish or close its login pane first.",
         "account-dir-in-use-error": "{count} running pane uses this account's own folder. Close it before deleting the account. | {count} running panes use this account's own folder. Close them before deleting the account.",
-        "portable-label": "Portable credential",
-        "portable-present": "Set",
-        "portable-absent": "Not set",
-        "portable-paste": "Paste Credential",
-        "portable-replace": "Replace",
-        "portable-remove": "Remove from This Device",
-        "portable-save": "Save",
-        "portable-docs": "How to get one",
-        "portable-placeholder": "Run {command} and paste the result",
-        "portable-placeholder-plain": "Paste the credential",
-        "portable-saved": "Credential saved on this device. It is handed to new panes in their environment and never written to the CLI's own files.",
-        "portable-save-failed": "The credential could not be saved.",
-        "portable-clear-failed": "The credential could not be removed.",
-        "portable-shadowed": "Not in effect: this CLI ranks {files} above the pasted credential. Sign out of the CLI there to use it.",
-        "cloud-off": "Cloud sync for credentials is off (Settings → Sync).",
-        "cloud-status-no-key": "This device has no sync key yet — pair it with a device that does.",
-        "cloud-status-not-connected": "Not connected to Navide Cloud.",
-        "cloud-status-error": "Cloud state could not be read: {error}",
-        "cloud-none": "Not in the cloud.",
-        "cloud-state-in-sync": "In sync",
-        "cloud-state-local-only": "This device only",
-        "cloud-state-remote-only": "In cloud, not used here",
-        "cloud-state-diverged": "Differs from cloud",
-        "cloud-state-conflict": "Needs your decision (Settings → Sync)",
-        "cloud-updated": "Cloud copy updated {when} from {device}",
-        "cloud-unreadable": "Sealed under a key this device does not hold.",
-        "cloud-use": "Use on This Device",
-        "cloud-using": "Fetching…",
-        "cloud-use-failed": "The credential could not be fetched from the cloud.",
-        "portable-imported": "From cloud",
-        "portable-selected": "In use",
-        "portable-select": "Use for New Panes",
-        "portable-deselect": "Stop Using",
-        "portable-select-failed": "The credential could not be selected.",
-        "portable-unavailable": "Stored, but cannot be opened on this device right now (the sync key is missing or outdated).",
-        "imported-account": "Account from another device",
-        "imported-account-hint": "A credential pasted into a named account elsewhere; use it here for new panes, or remove it from this device."
+        "portable-removed-title": "“Paste Credential” has been removed",
+        "portable-removed-text": "Navide no longer hands pasted credentials to new panes, and the ones stored on this device were erased during the update. New Claude panes now use Claude’s own sign-in, which may be a different account and draws on that account’s quota."
       }
     },
     "color": {
@@ -8238,6 +8254,8 @@
       "inference-url": "Inference server URL",
       "recheck-title": "Re-check Connection",
       "ollama-connected": "Ollama {version} connected",
+      "ollama-missing": "Ollama is not installed on this computer.",
+      "install-ollama": "Install Ollama",
       "not-connected": "Not connected · run",
       "model-manager": "Model Manager",
       "model-manager-note": "Pull a model from Ollama by name, or delete one you no longer need",
@@ -9492,7 +9510,7 @@
     "failed": "Could not reconnect that conversation — its transcript may no longer exist"
   },
   "cli-account": {
-    "default": "Default",
+    "default": "Original login",
     "switch-title": "Switch account",
     "swap-failed": "Account switch failed — the previous account is still active.",
     "panes-running": "{count} running CLI pane is using this account — close it before switching. | {count} running CLI panes are using this account — close them before switching.",
@@ -9661,6 +9679,7 @@
     "queue": "{count} pending",
     "requester": "Requested by",
     "source": "Source",
+    "source-bundled": "Bundled with Navide ({name})",
     "digest": "Digest",
     "targets": "Delivery",
     "targets-all": "All wired CLIs",
@@ -9676,7 +9695,21 @@
     "installing": "Installing…",
     "failed": "Installation failed",
     "dismiss": "Close",
-    "expired": "This request expired before it was approved. Ask the agent to prepare the skill again."
+    "expired": "This request expired before it was approved. Ask the agent to prepare the skill again.",
+    "delivery-kicker": "Skill delivery request",
+    "delivery-title": "Deliver skill “{name}” to more CLIs?",
+    "delivery-desc": "An agent asked to change where this skill is delivered. Nothing changes until you approve it here; the agent cannot approve on your behalf.",
+    "delivery-shared": "Shared skills library",
+    "delivery-current": "Delivered now",
+    "delivery-next": "After the change",
+    "delivery-none": "No other CLI",
+    "delivery-state": "State",
+    "delivery-turns-on": "Turns the skill on (it is off now)",
+    "delivery-note": "Approving lets the CLIs above load this skill in new sessions. The skill's files are not changed. Removing a CLI later never needs approval.",
+    "delivery-approve": "Approve Change",
+    "delivery-applying": "Applying…",
+    "delivery-failed": "The delivery change could not be applied",
+    "delivery-expired": "This request expired before it was approved. Ask the agent to inspect the skill and try again."
   },
   "cli-manage": {
     "title": "Installation and updates",
@@ -9931,6 +9964,7 @@
       }
     },
     "blocked-by": "Install {names} first — it is required before this can be installed here.",
+    "installs-first": "Install also sets up {names} first.",
     "go-install": "Install {name} First",
     "complete-failed": "Could not save your setup progress: {error}. Try again.",
     "ollama-start-failed": "Could not start the Ollama service. See the log for details, or run `ollama serve` in a terminal.",
@@ -11241,10 +11275,13 @@
       "undo-none": "Nothing to undo",
       "view": "View",
       "show-palette": "Show Nodes Panel",
-      "hide-palette": "Hide Nodes Panel"
+      "hide-palette": "Hide Nodes Panel",
+      "task": "Task for this run"
     },
     "controlPane": {
-      "open-in-canvas": "Open in the Pipeline Canvas"
+      "open-in-canvas": "Open in the Pipeline Canvas",
+      "gate-toast": "The pipeline is waiting for your approval at {name}",
+      "next-gated": "Approve or send back this gate before moving on to the next stage."
     },
     "edge": {
       "title": "Reject loop",
@@ -11485,7 +11522,7 @@
     "follow-wait": "Move When Finished",
     "follow-skip-running": "Skip Running Panes",
     "follow-switch-label": "Follow account switch",
-    "follow-switch-hint": "On: this pane moves to the new account on its next turn. Off: it stays in its account’s own folder. Either change reopens it once.",
+    "follow-switch-hint": "On: choosing an account below switches the default, and this pane moves to it on its next turn. Off: choosing an account moves only this pane, reopening it once in that account’s own folder; the default and other panes stay as they are. Flipping this switch also reopens it once.",
     "pinned-indicator-label": "Fixed to its account",
     "pinned-indicator-tooltip": "Fixed: switching accounts does not move this pane. Open the account badge to make it follow again.",
     "unpin-title": "{count} pane to make follow is working | {count} panes to make follow are working",
@@ -11665,6 +11702,7 @@
       "added": "New",
       "removed": "Removed",
       "declaredScope": "Declared scope (informational)",
+      "declaredScopeNote": "Navide does not enforce a declared scope. A Navide plugin with file access can still read and change files outside it.",
       "unchanged": "Unchanged ({count})",
       "fullCard": "Full disclosure card",
       "badgeMore": "More permissions",

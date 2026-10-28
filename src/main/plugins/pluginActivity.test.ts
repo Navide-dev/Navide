@@ -287,12 +287,24 @@ describe('PluginActivityRecorder', () => {
     expect(recorder.pending).toBe(0)
   })
 
-  it('never makes the caller wait for the backend', () => {
+  it('never makes the caller wait for the backend', async () => {
+    vi.useFakeTimers()
+    const sent: Array<{ rows: unknown[] }> = []
     let release: () => void = () => {}
-    const recorder = new PluginActivityRecorder(() => () => new Promise<void>((resolve) => { release = resolve }), 0)
-    const started = performance.now()
-    for (let i = 0; i < 10_000; i++) recorder.record(sample)
-    expect(performance.now() - started).toBeLessThan(200)
+    const recorder = new PluginActivityRecorder(() => (_type, payload) => {
+      sent.push(payload)
+      return new Promise<void>((resolve) => { release = resolve })
+    }, 0)
+    // record() only queues: no call reaches the backend until the batch timer fires.
+    for (let i = 0; i < 10_000; i++) expect(recorder.record(sample)).toBeUndefined()
+    expect(sent).toEqual([])
+    expect(recorder.pending).toBe(1)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sent).toEqual([{ rows: [{ ...sample, count: 10_000 }] }])
+    // A send that never settles does not hold up the next call either.
+    recorder.record(sample)
+    expect(sent).toHaveLength(1)
+    expect(recorder.pending).toBe(1)
     release()
   })
 })

@@ -26,6 +26,11 @@ on:
         description: Full 40-character commit SHA, branch or tag to build (actions/checkout does not resolve short SHAs)
         required: true
         type: string
+      artifact_version:
+        description: Optional MAJOR.MINOR.PATCH to stamp on the packages instead of the ref's package.json version, so a plugin release need not wait for an App version
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -87,12 +92,12 @@ jobs:
           node-version: 22
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: true
           cache-suffix: plugin-packages-${{ matrix.target }}
@@ -110,7 +115,18 @@ jobs:
 
       - name: Build navide.plans
         # The same build commands scripts/publish-first-party-plugins.sh runs.
+        # The input reaches the build through env, never the script text; empty
+        # keeps the ref's package.json version (the vite configs' default).
+        env:
+          ARTIFACT_VERSION: ${{ inputs.artifact_version }}
         run: |
+          if [ -n "${ARTIFACT_VERSION}" ]; then
+            if ! printf '%s' "${ARTIFACT_VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "artifact_version must be MAJOR.MINOR.PATCH, got '${ARTIFACT_VERSION}'" >&2
+              exit 1
+            fi
+            export NAVIDE_PLUGIN_ARTIFACT_VERSION="${ARTIFACT_VERSION}"
+          fi
           bun run build:public-packages
           bun run build:plans:v2
           bun run build:plans:backend
@@ -162,12 +178,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: true
           cache-suffix: plugin-packages-pack

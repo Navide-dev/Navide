@@ -57,6 +57,8 @@ interface McpServer {
   error?: string
   /** The end of what a stdio server printed on stderr (logs/mcp-<name>.log). */
   stderr_tail?: string
+  /** Why its tool list could not be read; tool_count is then unknown, not 0. */
+  tools_error?: string
 }
 
 /** One row: a server name and everywhere on this machine it is configured. */
@@ -80,6 +82,8 @@ const props = defineProps<{
   loading?: boolean
   /** Server to open the drawer on, e.g. one just added from the catalog. */
   selectName?: string
+  /** Node.js was not found on this machine, so npx/node servers cannot start. */
+  nodeMissing?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -89,9 +93,22 @@ const emit = defineEmits<{
   refresh: []
   /** `selectName` has been acted on; the parent may clear it. */
   'select-consumed': []
+  /** The user asked to install Node.js for a server that needs it. */
+  'install-node': []
 }>()
 
 const { t } = useI18n()
+
+/** Launchers that come with Node.js — context7, the default server, uses npx. */
+const NODE_LAUNCHERS = new Set(['npx', 'npm', 'node'])
+
+/** A stdio server that cannot start because Node.js is missing. Said up front:
+ *  otherwise the launch just fails with a spawn error the user has to decode. */
+function needsNode(server: McpServer | null | undefined): boolean {
+  if (!props.nodeMissing || !server || server.transport !== 'stdio' || !server.command) return false
+  const base = (server.command.split(/[\\/]/).pop() ?? '').toLowerCase().replace(/\.(cmd|exe)$/, '')
+  return NODE_LAUNCHERS.has(base)
+}
 
 const query = ref('')
 const view = ref<'browse' | 'compare'>('browse')
@@ -236,6 +253,31 @@ function placeChips(row: McpRow): { key: string; label: string; off: boolean }[]
     chips.push({ key: native.agent, label: native.agent, off: !native.enabled })
   }
   return chips
+}
+
+/** How many env entries (stdio) or headers (http/sse) have no value. A synced
+ *  server arrives that way: values never leave the machine they were typed on. */
+function emptyFields(server: McpServer | null | undefined): number {
+  if (!server) return 0
+  const record = server.transport === 'stdio' ? server.env : server.headers
+  return Object.values(record ?? {}).filter((value) => value === '').length
+}
+
+/** Whether a URL has an emptied credential slot: `scheme://@host` userinfo or
+ *  a query parameter with no value. Sync leaves one where a credential was. */
+function emptyUrlSlot(url: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\/:?@/i.test(url) || /[?&][^=&#]+=(?=[&#]|$)/.test(url)
+}
+
+/** How many credentials in the URL (http/sse) or arguments (stdio) are empty:
+ *  an empty argument, a `--name=` / `Name:` one, or an emptied URL slot.
+ *  Sync empties them on the way out, as it does env and header values. */
+function emptyCredentials(server: McpServer | null | undefined): number {
+  if (!server) return 0
+  if (server.transport !== 'stdio') return server.url && emptyUrlSlot(server.url) ? 1 : 0
+  return (server.args ?? []).filter(
+    (arg) => arg === '' || /^[A-Za-z0-9_.-]+[=:]$/.test(arg) || emptyUrlSlot(arg),
+  ).length
 }
 
 function nativeFor(row: McpRow, agentKey: string): NativeMcpServer | undefined {
@@ -507,6 +549,11 @@ function entries(map: Record<string, string>): [string, string][] {
                   ></span>
                   <strong v-truncate>{{ row.name }}</strong>
                   <span class="mcp-tag">{{ rowTransport(row) }}</span>
+                  <span
+                    v-if="needsNode(row.navide)"
+                    class="mcp-tag mcp-tag-warn"
+                    data-testid="mcp-needs-node"
+                  >{{ t('settings.mcp.needs-node') }}</span>
                 </span>
                 <span class="mcp-card-detail" v-truncate>
                   {{ row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—' }}
@@ -520,6 +567,12 @@ function entries(map: Record<string, string>): [string, string][] {
                   >{{ chip.label }}</span>
                   <span v-if="(row.navide?.tool_count ?? 0) > 0" class="pchip tools">
                     {{ t('settings.mcp.tool-count', { n: row.navide?.tool_count ?? 0 }) }}
+                  </span>
+                  <span
+                    v-if="emptyFields(row.navide) + emptyCredentials(row.navide) > 0"
+                    class="pchip needs"
+                  >
+                    {{ t('settings.mcp.needs-setup') }}
                   </span>
                 </span>
               </button>
@@ -614,12 +667,24 @@ function entries(map: Record<string, string>): [string, string][] {
                 class="mcp-status-error"
                 data-testid="mcp-error-reason"
               >{{ t('settings.mcp.error-reason', { reason: selectedRow.navide.error }) }}</small>
+              <small
+                v-if="selectedRow.navide?.tools_error"
+                class="mcp-status-error"
+                data-testid="mcp-tools-error"
+              >{{ t('settings.mcp.tools-error', { reason: selectedRow.navide.tools_error }) }}</small>
             </span>
             <ToggleSwitch
               :model-value="draft.enabled"
               :aria-label="draft.enabled ? t('settings.mcp.state-off') : t('settings.mcp.state-on')"
               @update:model-value="toggleEnabled"
             />
+          </div>
+
+          <div v-if="needsNode(selectedRow.navide)" class="mcp-needs-node" role="status" data-testid="mcp-needs-node-notice">
+            <span>{{ t('settings.mcp.needs-node-hint', { command: selectedRow.navide?.command ?? '' }) }}</span>
+            <button type="button" class="nv-btn nv-btn--primary" @click="emit('install-node')">
+              {{ t('settings.mcp.install-node') }}
+            </button>
           </div>
 
           <details v-if="selectedRow.navide?.stderr_tail" class="mcp-stderr" data-testid="mcp-stderr-tail">
@@ -674,6 +739,9 @@ function entries(map: Record<string, string>): [string, string][] {
               <p v-if="!draft.args?.length" class="mcp-drawer-hint">
                 {{ t('settings.mcp.no-arguments') }}
               </p>
+              <p v-else-if="emptyCredentials(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-credentials-locally') }}
+              </p>
             </div>
             <div class="mcp-field">
               <span class="mcp-field-head">
@@ -708,6 +776,9 @@ function entries(map: Record<string, string>): [string, string][] {
               <p v-if="!Object.keys(draft.env ?? {}).length" class="mcp-drawer-hint">
                 {{ t('settings.mcp.no-env') }}
               </p>
+              <p v-else-if="emptyFields(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-locally') }}
+              </p>
             </div>
           </template>
 
@@ -720,6 +791,9 @@ function entries(map: Record<string, string>): [string, string][] {
                 spellcheck="false"
                 placeholder="https://example.com/mcp"
               />
+              <span v-if="emptyCredentials(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-credentials-locally') }}
+              </span>
             </label>
             <div class="mcp-field">
               <span class="mcp-field-head">
@@ -753,6 +827,9 @@ function entries(map: Record<string, string>): [string, string][] {
               </div>
               <p v-if="!Object.keys(draft.headers ?? {}).length" class="mcp-drawer-hint">
                 {{ t('settings.mcp.no-headers') }}
+              </p>
+              <p v-else-if="emptyFields(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-locally') }}
               </p>
             </div>
           </template>
@@ -910,6 +987,19 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-status-dot.starting { background: var(--warning-fg); }
 .mcp-status-note { display: block; color: var(--warning-fg); }
 .mcp-status-error { display: block; color: var(--danger-fg); }
+.mcp-tag.mcp-tag-warn { color: var(--warning-fg); border-color: var(--warning-fg); text-transform: none; }
+.mcp-needs-node {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--warning-fg);
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+}
 .mcp-stderr pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
 .mcp-status-dot.disabled { background: var(--border-default); }
 .mcp-card-detail {
@@ -936,6 +1026,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 }
 .pchip.off { color: var(--text-secondary); border-color: var(--border-muted); opacity: 0.75; }
 .pchip.tools { color: var(--text-secondary); border-color: var(--border-muted); font-weight: 500; }
+.pchip.needs { color: var(--warning-fg); border-color: var(--warning-fg); }
 .mcp-tag {
   display: inline-block;
   padding: 1px 6px;
@@ -1042,6 +1133,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-drawer-section h4 { margin: 0; font-size: var(--font-3xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .mcp-drawer-hint { margin: 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; }
 .mcp-drawer-hint.danger { color: var(--danger-fg); }
+.mcp-drawer-hint.warn { color: var(--warning-fg); }
 .mcp-drawer-meta { font-size: 10.5px; color: var(--text-secondary); }
 .mcp-drawer-path {
   display: block;

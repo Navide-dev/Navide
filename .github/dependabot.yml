@@ -38,6 +38,12 @@ updates:
       # on its own branch, with the full suite — not from a bot PR (#59).
       - dependency-name: "mcp"
         update-types: ["version-update:semver-major"]
+      # pyproject.toml holds Windows on Arm at cryptography 46.0.3, the last
+      # release with a win_arm64 wheel. Dependabot cannot bump the unpinned
+      # requirement without also rewriting that pin (#691), so cryptography
+      # moves by hand in the dependency batches. Drop this when upstream
+      # ships win_arm64 wheels again and the pin is lifted.
+      - dependency-name: "cryptography"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

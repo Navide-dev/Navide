@@ -27,12 +27,16 @@ D7_LOGIN_FUNCTIONS = frozenset({
 })
 
 #: sha256 of each module's remaining non-blank lines on main (6d2b4fa6).
+#: quota_failover was updated deliberately in 0.2.32 for the removal of the
+#: portable-credential feature: credential_env_vars reads only
+#: AccountSwitchSpec.credential_env_vars (same names, same order), and
+#: pane_auth_scope loses its portable_slot_id parameter and "portable" source.
 MAIN_DIGESTS = {
     "usage_service": (
         "bdf088458f80023a085c30a88987e01c13d550a5bfff66f73f8dd9d986188943", D7_LOGIN_FUNCTIONS,
     ),
     "quota_failover": (
-        "9d83b2fb721f2e4ccea13c1d5e89a7f65c5eb3d08e5628a7966706988c880e6e", frozenset(),
+        "d9bc71903376ba235c897520fe902ce5d5d1c1b6958f5a5d95e9296902249579", frozenset(),
     ),
 }
 

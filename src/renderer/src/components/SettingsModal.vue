@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { canonicalJson } from '../../../shared/canonicalJson'
-import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { disabledReasonKey } from '../lib/linkStatus'
 import type { LegalRoute } from '../../../shared/legalLinks'
@@ -111,6 +111,7 @@ import { useGitAccounts } from '../composables/useGitAccounts'
 import GitAccountsPane from './GitAccountsPane.vue'
 import CliAccountsPane from './CliAccountsPane.vue'
 import CliManagementPanel from './CliManagementPanel.vue'
+import OllamaSetup from './OllamaSetup.vue'
 import CliRiskRangesPane from './CliRiskRangesPane.vue'
 import CliExtensionsPane from './CliExtensionsPane.vue'
 import type { useCliProfiles } from '../composables/useCliProfiles'
@@ -426,6 +427,24 @@ const { order: cliOrder, disabled: cliDisabled } = useCliAgentPrefs()
 // shells out once per dep — rather than a second reader of this one.
 const onboarding = useOnboarding(props.backend)
 
+const CliInstallDialog = defineAsyncComponent(() => import('./CliInstallDialog.vue'))
+
+/** npx/node MCP servers (context7 by default) cannot start without Node.js.
+ *  Only a confirmed miss counts: 'unknown' is the quick pass not knowing yet. */
+const mcpNodeMissing = computed(() => onboarding.deps.value.find((d) => d.id === 'node')?.status === 'missing')
+const mcpNodeInstallOpen = ref(false)
+
+function closeMcpNodeInstall(): void {
+  mcpNodeInstallOpen.value = false
+  void onboarding.refresh({ fresh: true })
+  void mLoad(true)
+}
+
+/** A guided install opened from the Analyzer or MCP tab; Esc must not close
+ *  Settings under it, since that would kill the command it is running. */
+const ollamaInstallOpen = ref(false)
+const settingsInstallOpen = computed(() => mcpNodeInstallOpen.value || ollamaInstallOpen.value)
+
 /** vue-i18n's `t` is overloaded, and neither overload alone accepts the
  *  "params or nothing" shape the chip builder is written against. */
 const translateChip = (key: string, params?: Record<string, unknown>): string =>
@@ -670,6 +689,14 @@ const lastManagedCliKey = ref('')
 const cliDrawerRef = ref<HTMLElement | null>(null)
 const cliGridRef = ref<HTMLElement | null>(null)
 const cliPanelRef = ref<InstanceType<typeof CliManagementPanel> | null>(null)
+const memoryPaneRef = ref<InstanceType<typeof MemoryPane> | null>(null)
+
+/** Close Settings, unless the Memory editor holds a draft the user keeps. */
+function requestCloseSettings(): void {
+  // Optional call: a shallow-mounted pane is a stub without the method.
+  if (memoryPaneRef.value?.confirmDiscard?.() === false) return
+  emit('close')
+}
 const cliInstallOpen = ref(false)
 let cliDrawerTrigger: HTMLElement | null = null
 const selectedCli = computed(() => cliAgentRows.value.find((row) => row.agentKey === selectedCliKey.value))
@@ -726,7 +753,7 @@ async function closeCliDrawer(restoreFocus = true): Promise<void> {
 function closeSettingsLayer(): void {
   if (cliInstallOpen.value) { cliPanelRef.value?.closeInstallDialog(); return }
   if (selectedCliKey.value) { void closeCliDrawer(); return }
-  emit('close')
+  requestCloseSettings()
 }
 
 async function openCliSection(section: string, query = ''): Promise<void> {
@@ -1774,7 +1801,7 @@ async function importSettingsBundle(): Promise<void> {
     const result = await window.agentTeam.openJson({ title: t('settings.management.import-dialog-title') })
     if (!result.ok || !result.content) return
     const bundle = JSON.parse(result.content) as Record<string, unknown>
-    const resp = await props.backend.send<{ applied: string[]; paths: SettingsPaths }>('settings.bundle.import', { bundle })
+    const resp = await props.backend.send<{ applied: string[]; mcp_needs_secrets?: string[]; paths: SettingsPaths }>('settings.bundle.import', { bundle })
     if (!resp.ok) {
       settingsBundleError.value = resp.error?.message ?? t('settings.management.import-failed')
       return
@@ -1802,6 +1829,10 @@ async function importSettingsBundle(): Promise<void> {
     const applied = resp.payload?.applied ?? []
     if (shouldReloadMcpAfterBundleImport(applied)) await mLoad(true)
     settingsBundleSummary.value = t('settings.management.imported', { items: applied.join(', ') || 'appearance' })
+    const needsSecrets = resp.payload?.mcp_needs_secrets ?? []
+    if (needsSecrets.length) {
+      settingsBundleSummary.value += ` ${t('settings.management.mcp-needs-secrets', { items: needsSecrets.join(', ') })}`
+    }
   } catch (err) {
     settingsBundleError.value = err instanceof Error ? err.message : t('settings.management.import-failed')
   } finally {
@@ -2142,7 +2173,8 @@ function onKeyDown(e: KeyboardEvent) {
   }
   if (e.key !== 'Escape') return
   if (e.defaultPrevented) return
-  emit('close')
+  if (settingsInstallOpen.value) return
+  requestCloseSettings()
 }
 // Pending Registry plugin updates (pushed by the main process's periodic
 // check) badge the Extensions nav item.
@@ -2156,7 +2188,7 @@ onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
   stopPluginUpdates = pluginUpdates.subscribe()
   refreshLaunchOverrides()
-  if (activeTab.value === 'cliAgents') void onboarding.refresh()
+  if (['cliAgents', 'analyzer', 'mcp'].includes(activeTab.value)) void onboarding.refresh()
   void loadSettingsPaths()
   void loadDetectedEditors()
   void perms.refresh()
@@ -2246,6 +2278,7 @@ interface McpServer {
   // Live fields (returned by backend, not saved):
   status?: 'starting' | 'connected' | 'error' | 'disabled' | 'unknown'
   tool_count?: number; tools?: McpTool[]
+  starting_seconds?: number; slow_start?: boolean; error?: string; stderr_tail?: string; tools_error?: string
 }
 // CatalogEntry type alias (re-exported from mcpCatalog.ts)
 type CatalogEntry = McpCatalogEntry
@@ -2376,6 +2409,12 @@ async function mRefreshLive(): Promise<void> {
       server.status = live?.status ?? 'unknown'
       server.tool_count = live?.tool_count
       server.tools = live?.tools
+      // The reasons too, or the drawer keeps showing the previous failure.
+      server.starting_seconds = live?.starting_seconds
+      server.slow_start = live?.slow_start
+      server.error = live?.error
+      server.stderr_tail = live?.stderr_tail
+      server.tools_error = live?.tools_error
     }
     mConfigPath.value = resp.payload.path ?? mConfigPath.value
     mRevision.value = resp.payload.revision
@@ -2467,6 +2506,7 @@ async function mCreateCustom() {
     mCustomUrl.value = ''
     mSelectName.value = name
     mView.value = 'list'
+    mSummary.value = `Added ${name}`
   } else {
     mServers.value = mServers.value.filter((item) => item !== server)
   }
@@ -2478,7 +2518,7 @@ async function mReplaceServer(next: McpServer) {
   const idx = mServers.value.findIndex((server) => server.name === next.name)
   if (idx === -1) return
   mServers.value[idx] = mNormalizeServer(next)
-  await mSave(true)
+  await mSave()
 }
 
 async function mRemoveByName(name: string) {
@@ -2489,7 +2529,7 @@ async function mRemoveByName(name: string) {
 async function mRemoveServer(idx: number) {
   if (mServers.value[idx]?.name === mSelectName.value) mSelectName.value = ''
   mServers.value.splice(idx, 1)
-  await mSave(true)
+  await mSave()
 }
 
 
@@ -2598,6 +2638,8 @@ watch(activeTab, (tab) => {
   if (tab === 'mcp') { void eaLoad(); void cdpLoad() }
   if (tab === 'appearance') void loadAutoRestore()
   if (tab === 'accounts') void accountsApi.refresh()
+  // Analyzer shows Ollama's install state, MCP whether Node.js is there.
+  if (tab === 'analyzer' || tab === 'mcp') void onboarding.refresh()
   if (tab === 'cliAgents') {
     refreshLaunchOverrides()
     void onboarding.refresh()
@@ -2810,7 +2852,7 @@ watch(activeTab, (tab) => {
 
         <!-- ── Content (close button + all tab bodies) ───────────────────── -->
         <div class="s-content">
-          <button class="s-close" :inert="!!selectedCliKey" @click="emit('close')" :title="$t('action.close-esc')">✕</button>
+          <button class="s-close" :inert="!!selectedCliKey" @click="requestCloseSettings" :title="$t('action.close-esc')">✕</button>
 
         <!-- ── MCP TAB ───────────────────────────────────────────────────── -->
         <div v-show="activeTab === 'mcp'" class="s-body s-body--bleed mcp-body">
@@ -2848,10 +2890,22 @@ watch(activeTab, (tab) => {
               :agents="mAgents"
               :loading="mLoading"
               :select-name="mSelectName"
+              :node-missing="mcpNodeMissing"
               @save="mReplaceServer"
               @remove="mRemoveByName"
               @refresh="mLoad(true)"
               @select-consumed="mSelectName = ''"
+              @install-node="mcpNodeInstallOpen = true"
+            />
+            <!-- The same guided install the spawn dropdown uses for a CLI's
+                 Node prerequisite (Homebrew first where it is missing). -->
+            <CliInstallDialog
+              v-if="mcpNodeInstallOpen"
+              :backend="props.backend"
+              dep-id="node"
+              origin="settings"
+              fallback-label="Node.js"
+              @close="closeMcpNodeInstall"
             />
 
             <!-- ── EXTERNAL ACCESS ──────────────────────────────────────── -->
@@ -2920,6 +2974,7 @@ watch(activeTab, (tab) => {
             <div class="mcp-catalog-hint">
               💡 <span v-html="$t('settings.mcp.catalog-hint')"></span>
             </div>
+            <p v-if="mError" class="err-msg" style="margin:6px 22px 0">{{ mError }}</p>
 
             <div class="mcp-catalog-list">
               <div v-for="item in mFilteredCatalog" :key="item.name" class="mcp-catalog-card">
@@ -2944,6 +2999,7 @@ watch(activeTab, (tab) => {
             </div>
             <form class="mcp-custom-form" @submit.prevent="mCreateCustom">
               <p>{{ $t('settings.mcp.custom-hint') }}</p>
+              <p v-if="mError" class="err-msg">{{ mError }}</p>
               <div class="field">
                 <label class="lbl">{{ $t('settings.mcp.server-name') }}</label>
                 <input v-model="mCustomName" required pattern="[a-z0-9][a-z0-9_-]{0,63}" maxlength="64" spellcheck="false" autocomplete="off" placeholder="my-server" />
@@ -3019,6 +3075,7 @@ watch(activeTab, (tab) => {
           <!-- Project files belong to the folder that is actually open; the
                first known workspace is the current one whenever there is one. -->
           <MemoryPane
+            ref="memoryPaneRef"
             :backend="props.backend"
             :workspace-path="props.workspacePath ?? ''"
           />
@@ -3143,6 +3200,12 @@ watch(activeTab, (tab) => {
                     {{ $t('settings.analyzer.not-connected') }} <code class="az-code">ollama serve</code>
                   </span>
                 </div>
+                <OllamaSetup
+                  :backend="props.backend"
+                  :onboarding="onboarding"
+                  @changed="azRecheck"
+                  @install-open-change="ollamaInstallOpen = $event"
+                />
               </div>
             </template>
           </div>
@@ -4524,34 +4587,32 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'language'" class="s-body appearance-body">
           <h1 class="s-page-title">{{ $t('settings.nav.language') }}</h1>
 
-          <SettingsSection :label="$t('settings.section.language')">
-            <SettingsCard>
-              <SettingRow
-                data-settings-section="appearance-language"
-                :title="$t('settings.appearance.language')"
-                :description="$t('settings.appearance.language-hint')"
-              >
-                <template #control>
-                  <div class="ap-lang-row">
-                    <button
-                      v-for="lang in SUPPORTED_LANGUAGES"
-                      :key="lang.value"
-                      :class="['ap-lang-btn', { active: currentLanguage === lang.value }]"
-                      @click="setLanguage(lang.value)"
-                    >
-                      {{ $t(lang.labelKey) }}
-                      <span
-                        v-if="lang.beta"
-                        class="scope-badge"
-                        :title="$t('settings.appearance.language-beta-hint')"
-                      >{{ $t('settings.appearance.language-beta') }}</span>
-                      <span v-if="currentLanguage === lang.value" class="ap-check">✓</span>
-                    </button>
-                  </div>
-                </template>
-              </SettingRow>
-            </SettingsCard>
-          </SettingsSection>
+          <SettingsCard>
+            <SettingRow
+              data-settings-section="appearance-language"
+              :title="$t('settings.appearance.language-display')"
+              :description="$t('settings.appearance.language-hint')"
+            >
+              <template #control>
+                <div class="ap-lang-row">
+                  <button
+                    v-for="lang in SUPPORTED_LANGUAGES"
+                    :key="lang.value"
+                    :class="['ap-lang-btn', { active: currentLanguage === lang.value }]"
+                    @click="setLanguage(lang.value)"
+                  >
+                    {{ $t(lang.labelKey) }}
+                    <span
+                      v-if="lang.beta"
+                      class="scope-badge"
+                      :title="$t('settings.appearance.language-beta-hint')"
+                    >{{ $t('settings.appearance.language-beta') }}</span>
+                    <span v-if="currentLanguage === lang.value" class="ap-check">✓</span>
+                  </button>
+                </div>
+              </template>
+            </SettingRow>
+          </SettingsCard>
         </div>
 
         <div v-show="activeTab === 'accounts'" class="s-body s-body--bleed accounts-body" data-settings-section="accounts">
@@ -5166,7 +5227,9 @@ watch(activeTab, (tab) => {
 .ap-swatch { width: 24px; height: 24px; border-radius: var(--radius-sm); border: 1px solid var(--border-muted); }
 .ap-theme-label { font-size: var(--font-xs); font-weight: 500; color: var(--text-primary); }
 .ap-check { position: absolute; top: 10px; right: 11px; font-size: var(--font-xs); color: var(--accent-fg); }
-.ap-lang-row { display: flex; gap: 10px; flex-wrap: wrap; }
+/* Asks for the full viewport so the row wraps it under the text, then fills
+   the row width with aligned columns. */
+.ap-lang-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 10px; width: 100vw; max-width: 100%; }
 .ap-toggle-row { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: var(--font-sm); }
 .ap-toggle-row input { cursor: pointer; }
 .ap-lang-btn {
@@ -5180,6 +5243,8 @@ watch(activeTab, (tab) => {
   cursor: pointer;
   transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
+.ap-lang-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.ap-lang-btn .ap-check { position: static; }
 .ap-lang-btn:hover { border-color: var(--border-strong); background: var(--bg-muted); }
 .ap-lang-btn.active { border-color: var(--accent-emphasis); box-shadow: 0 0 0 1px var(--accent-emphasis); }
 .ap-timeout-field { max-width: 140px; }

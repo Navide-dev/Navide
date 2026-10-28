@@ -42,6 +42,11 @@ a = Analysis(
         # The builtin prompt skill, read via Path(__file__) by prompt_skills.py
         # (the renderer imports the same file at build time).
         ('agent_team_backend/prompt_skill_seed.json', 'agent_team_backend'),
+        # Skills shipped with Navide, read via Path(__file__) by
+        # skills_installer.py for a `navide:<folder>` source.
+        # test_pyinstaller_spec.py fails when a file there is not listed.
+        ('agent_team_backend/bundled_skills/plugin-authoring/SKILL.md',
+         'agent_team_backend/bundled_skills/plugin-authoring'),
         # Builtin backend plugins: the host discovers plugin dirs on disk
         # (plugin.json + backend.py) and imports backend.py by file path, so
         # both must exist as real files next to the extracted package.

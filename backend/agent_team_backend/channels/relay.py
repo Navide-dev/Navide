@@ -100,6 +100,8 @@ class RelayRequest:
     multi: bool = False
     # The boxes ticked with the buttons so far (multi-select); starts as the screen shows them.
     ticked: set[int] = field(default_factory=set)
+    # Navide Guard would refuse a chat approval of this prompt: only deny is offered.
+    local_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -194,11 +196,12 @@ def is_deny(request: RelayRequest, answer: dict[str, Any]) -> bool:
     return 1 <= n <= len(request.options) and bool(_DENY_OPTION_RE.match(request.options[n - 1]))
 
 
-def screen_approval(pane_id: str, prompt: str, workspace: str) -> Any:
+def screen_approval(pane_id: str, prompt: str, workspace: str, *, record: bool = True) -> Any:
     """Navide Guard on an approval made away from the computer (chat, or an
     agent through MCP): the guard Decision, whose action is "allow" only when
     the prompt may be approved remotely. High/critical, unscreenable or empty
-    prompts need someone at the computer. Deterministic, never an LLM."""
+    prompts need someone at the computer. Deterministic, never an LLM.
+    ``record=False`` previews it (which buttons to offer) without auditing it."""
     from .. import guard
 
     if not prompt.strip():
@@ -206,7 +209,7 @@ def screen_approval(pane_id: str, prompt: str, workspace: str) -> Any:
         return guard.Decision("deny", "normal", (), "no prompt on screen to screen", False)
     return guard.evaluate(
         pane_id=pane_id, vendor="", tool="prompt", tool_input={"text": prompt},
-        cwd=workspace, workspace=workspace, source="relay",
+        cwd=workspace, workspace=workspace, source="relay", record=record,
     )
 
 
@@ -231,7 +234,7 @@ def _free_text_option(request: RelayRequest) -> int:
 
 
 def _allow_offered(request: RelayRequest) -> bool:
-    return not refuses_permanent(request, "y")
+    return not request.local_only and not refuses_permanent(request, "y")
 
 
 def answer_payload(request: RelayRequest, choice: str, text: str = "") -> dict[str, Any] | None:
@@ -285,6 +288,8 @@ def prompt_text(request: RelayRequest, prompt: str) -> str:
         lines.append(answer_hint(request))
     elif _allow_offered(request):
         lines.append(f"回覆 yes {request.id} / no {request.id}")
+    elif request.local_only:
+        lines.append(f"回覆 no {request.id}（這個動作需要在電腦前允許）")
     else:
         lines.append(f"回覆 no {request.id}（允許會永久放行，請在電腦前操作）")
     return "\n".join(lines)

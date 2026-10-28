@@ -148,9 +148,10 @@ server = NavideMCP(
         "is queued until that pane is idle, "
         "so cli_send returns before the other agent has read anything. It "
         "returns a msg_key — pass it to cli_check_message to find out whether "
-        "the message was delivered, refused (with a reason) or still queued. "
+        "the message was delivered, failed (with a reason) or still queued; "
+        "a send refused outright returns ok: false and no msg_key at all. "
         "That table is backend memory, not a log: only the last hour and the "
-        "last few hundred sends, gone on restart, so an unknown key means "
+        "last 500 sends, gone on restart, so an unknown key means "
         "\"no longer tracked\", not \"never sent\".\n"
         "\n"
         "Other machines: when this machine is linked to a Navide-Server, the "
@@ -3141,8 +3142,11 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
     the same reason the Messages panel shows — and `held_for_s` is how long it
     has been that way. `hold.key` is "typing" (someone is typing in that pane),
     "mid-turn" (its agent is working), "behind" (`n` messages ahead of it),
-    "starting", "settling", "not-ready", "gone", "paused" or "remote-ack". Both
-    keys are absent once the message settles, and while no window has reported
+    "starting", "settling", "not-ready", "gone", "paused", "remote-ack",
+    "composer" (text from an earlier push may still sit in that pane's input
+    box, so nothing is typed until the pane shows activity) or "pty-blocked"
+    (it is being typed in, but the pane's terminal has stopped reading
+    input). Both keys are absent once the message settles, and while no window has reported
     a hold at all — a message queued with no hold is simply on its way in.
 
     A message to another device that has gone a minute without an answer is
@@ -3160,7 +3164,7 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
     and decide whether to wait, address someone else, or tell the user.
 
     Bounds: this is in-memory backend state, not a log. It is lost on backend
-    restart, keeps only the last hour, and only the most recent few hundred
+    restart, keeps only the last hour, and only the most recent 500
     sends — an unknown `msg_key` means "not tracked any more", not "never
     sent". Returns {ok: false, error} for an unknown key.
     """
@@ -3215,7 +3219,7 @@ async def cli_inbox_summary(ctx: Context) -> dict[str, Any]:
     stale?, reason?, hold?, held_for_s?, excerpt}], tracked, tracking_since_s},
     newest send last. `excerpt` is the first 60 characters of what you sent, so
     a message is recognizable without keeping every msg_key. The same in-memory
-    bounds as cli_check_message apply: the last hour, the last few hundred
+    bounds as cli_check_message apply: the last hour, the last 500
     sends, gone on backend restart. An empty list means nothing of yours is
     stuck — it never means nothing was sent.
 
@@ -8108,14 +8112,17 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
 
     Returns {servers, native, agents}. Each managed server is {name, enabled,
     transport, command, args, env} or {name, enabled, transport, url, headers},
-    plus `status` (disabled / connected / error / unknown) and `tool_count`.
+    plus `status` (disabled / connected / error / unknown) and `tool_count`;
+    `tools_error`, when present, says the tool list could not be read, so a
+    `tool_count` of 0 there is unknown rather than zero.
     Each native entry is {name, agent, transport, path, command, args, url,
     env, headers, enabled, valid, error}. `agents` is every vendor with what
     Navide can do with its MCP (wired / planned / unsupported) and whether its
     own config is reflected here.
 
     Every credential-shaped value — env and header values, `--api-key=` style
-    arguments, URL userinfo and secret query parameters — is already masked
+    arguments, URL userinfo and secret query parameters, and any value or
+    argument shaped like a known token whatever it is named — is already masked
     as `***` in both halves; names and hosts are kept so an entry stays
     recognisable. This is a global inventory: it does not vary by workspace.
     """
@@ -8138,10 +8145,11 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
             status = info.get("status", "unknown")
         # The tool list itself stays out: this is a summary, and a server with
         # dozens of tools would swamp the answer.
-        detail = {key: info[key] for key in ("starting_seconds", "error") if key in info}
-        if "error" in detail:
-            # Masked like the URL above: a library may quote the URL it failed on.
-            detail["error"] = native_mcp.mask_urls_in_text(str(detail["error"]))
+        detail = {key: info[key] for key in ("starting_seconds", "error", "tools_error") if key in info}
+        for key in ("error", "tools_error"):
+            if key in detail:
+                # Masked like the URL above: a library may quote the URL it failed on.
+                detail[key] = native_mcp.mask_urls_in_text(str(detail[key]))
         servers.append({**row, "status": status, "tool_count": info.get("tool_count", 0), **detail})
     reflected = await asyncio.to_thread(_native_mcp_inventory)
     return {"servers": servers, **reflected}
@@ -8154,25 +8162,35 @@ async def cli_extensions_list(ctx: Context) -> dict[str, Any]:
     These are the CLIs' own add-ons, not Navide plugins (see
     docs/en-US/glossary.md): Claude plugins and mods, Codex plugins and
     hooks, Copilot and Droid plugins, opencode and Kilo plugins, Pi
-    extensions, Qwen extensions, and every CLI's hooks. The same inventory
-    Settings → CLI Extensions shows. Read it before telling the user a CLI
+    extensions, Qwen and Gemini CLI extensions, and every CLI's hooks. Gemini
+    CLI is listed though Navide does not run it in a pane. The same inventory
+    Settings → Extensions shows. Read it before telling the user a CLI
     has, or lacks, an add-on. Read-only: installing, enabling or removing a
     CLI extension is the user's decision and there is no tool here for it.
 
-    Returns {vendors, items}. `vendors` is every CLI with an extension system
-    ({cli, label, supported, note, count}); `supported: false` means Navide
-    cannot read where that CLI keeps them yet. Each item is {cli, id, name,
-    version, kind (plugin / mod / extension / hook / package), type_label
-    (the vendor's own name), scope, enabled, exec_tier (L1 text assets, L2
-    subprocess such as hooks and MCP, L3 code inside the CLI's own process),
-    capabilities, native_consent (what the CLI itself asks before running
-    it), owner (navide when Navide installed it), evidence (inferred when
-    capabilities were read off source text)}.
+    Returns {vendors, items, unreadable}. `vendors` is every CLI with an
+    extension system ({cli, label, supported, note, count, unreadable});
+    `supported: false` means Navide cannot read where that CLI keeps them yet.
+    Each item is {cli, id, name, version, kind (plugin / mod / extension /
+    hook / package), type_label (the vendor's own name), scope, enabled,
+    exec_tier (L1 text assets, L2 subprocess such as hooks and MCP, L3 code
+    inside the CLI's own process), capabilities, native_consent (what the
+    CLI itself asks before running it), owner (navide when Navide installed
+    it), evidence (inferred when capabilities were read off source text),
+    enabled_error}. A non-empty `enabled_error` says the file holding the
+    on/off switch could not be read: `enabled` is then a default, not the
+    extension's real state — say it is unknown.
+
+    `unreadable` lists what could not be read at all ({cli, id, name, kind,
+    type_label, error}); `vendors[].unreadable` counts them per CLI. A CLI
+    with unreadable entries may have extensions that are not in `items`, so
+    do not report "not installed" for it — report that it could not be read
+    and why.
 
     Items of kind `navide-change` are what Navide itself wrote into a CLI's
     world for a convenience feature (name = the feature id, enabled = the
     feature is allowed); their id ends with a hash of the file Navide changed
-    — the file itself is named on Settings → CLI Extensions, where the user
+    — the file itself is named on Settings → Extensions, where the user
     can see exactly what was touched.
 
     Names and metadata only: no paths and no hook command lines, which can
@@ -8203,7 +8221,7 @@ async def _credentials_scan_result() -> dict[str, Any]:
 async def credentials_list(ctx: Context) -> dict[str, Any]:
     """List this machine's credentials and keys by name and metadata only.
 
-    What the user sees in Settings → Credentials & keys: git credential
+    What the user sees in Settings → Credentials & Keys: git credential
     helpers, gh / glab accounts, SSH private keys, OS keyring item metadata,
     remotes whose URL carries userinfo, token-looking environment variable
     names, and plaintext credential files. Read it to tell the user which
@@ -9362,14 +9380,16 @@ async def pipeline_resume(ctx: Context, workspace_path: str = "") -> dict[str, A
 
 @server.tool()
 async def pipeline_reset(ctx: Context, workspace_path: str = "") -> dict[str, Any]:
-    """Clear the workspace back to idle: close EVERY pane and drop the run's progress.
+    """Clear the workspace back to idle: close EVERY pane and end the run for good.
 
     DESTRUCTIVE, AND WIDER THAN IT SOUNDS. Unlike pipeline_abort, which pauses
     the orchestration and leaves the panes alive to be resumed, reset tears
     down every pane in the workspace — the ones the pipeline opened AND the
-    ones the user or another agent opened by hand — and returns the workspace
-    to an idle, empty state with the run's task, stage index and log cleared.
-    There is no resume afterwards and no undo.
+    ones the user or another agent opened by hand — and sets the stored run's
+    state to idle. Only the state moves: the run's task, stages, log file and
+    run directory are kept as history, but pipeline_status stops reporting it
+    as active and nothing offers to resume it. There is no resume afterwards
+    and no undo.
 
     Read pipeline_status first: it says whether a run is in progress and how
     far it got, and cli_list_targets says which panes are about to be closed.

@@ -26,6 +26,9 @@ export interface PipelineDagDeps {
   send: (type: string, payload: Record<string, unknown>) => Promise<Record<string, unknown> | null>
   log: (line: string) => void
   workspacePath: () => string
+  /** Called once when the run starts waiting on a gate (not again while it
+   *  keeps waiting on the same one), so the user is told the run paused. */
+  onGate?: (gate: AwaitingGate) => void
 }
 
 export interface AwaitingGate {
@@ -188,10 +191,12 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     if (!pending.length) return false
     const gateId = pending[0]
     const gateNode = p.graph.nodes.find((n) => n.id === gateId)
+    const already = awaitingGate.value?.gateId === gateId
     run.gates[gateId] = 'awaiting'
     run.nodes[gateId] = { ...run.nodes[gateId], status: 'awaiting', startedAt: run.nodes[gateId]?.startedAt ?? now() }
     awaitingGate.value = { gateId, label: gateNode?.label || gateId, prompt: gateNode?.gate?.prompt ?? '', nextIndex }
     deps.log(`◆ Gate "${awaitingGate.value.label}" — waiting for approval`)
+    if (!already) deps.onGate?.(awaitingGate.value)
     void report()
     return true
   }

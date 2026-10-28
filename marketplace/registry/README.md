@@ -408,7 +408,7 @@ checks the backend's architecture, and uploads
 workflow has no secrets: signing and publishing stay on the maintainer's Mac.
 
 ```bash
-gh workflow run plugin-packages.yml -f ref=<commit or tag>
+gh workflow run plugin-packages.yml -f ref=<commit or tag> [-f artifact_version=<x.y.z>]
 gh run list --workflow plugin-packages.yml --limit 1   # note the run id
 
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
@@ -417,6 +417,13 @@ NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
 scripts/publish-first-party-plugins.sh --from-run <run id> --version <version> \
   --target "linux-x64 linux-arm64" --yes
 ```
+
+The packages carry the `ref`'s root `package.json` version unless
+`artifact_version` is given; then that version is stamped on them instead, so
+a plugin release does not have to wait for an App version. Build the local
+packages with the same version: `NAVIDE_PLUGIN_ARTIFACT_VERSION=<x.y.z>
+scripts/publish-first-party-plugins.sh` (the plugin builds read it), and pass it
+as `--version` to `--from-run`.
 
 Without `--yes` the script downloads the packages (`gh run download`), checks
 each sha256 and the manifest id/version, and prints what it would publish.

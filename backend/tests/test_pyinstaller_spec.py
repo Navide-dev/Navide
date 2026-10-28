@@ -158,6 +158,22 @@ def test_every_builtin_plugin_entry_pins_its_sibling_imports():
     assert not missing, f"builtin plugin imports not pinned in hiddenimports: {missing}"
 
 
+def test_every_bundled_skill_file_ships():
+    # skills_installer reads navide:<folder> sources from disk, so a file left
+    # out here is missing from an installed build with no error at all.
+    shipped = {(src, dest) for src, dest in _keyword("datas")}
+    root = BACKEND_ROOT / "agent_team_backend" / "bundled_skills"
+    files = sorted(path for path in root.rglob("*") if path.is_file() and "__pycache__" not in path.parts)
+    assert files, "no bundled skills found"
+    missing = [
+        str(path.relative_to(BACKEND_ROOT))
+        for path in files
+        if (path.relative_to(BACKEND_ROOT).as_posix(), path.parent.relative_to(BACKEND_ROOT).as_posix())
+        not in shipped
+    ]
+    assert not missing, f"bundled skill files missing from datas: {missing}"
+
+
 def test_datas_sources_exist():
     missing = [src for src, _dest in _keyword("datas") if not (BACKEND_ROOT / src).is_file()]
     assert not missing, f"datas entries point at files that are not there: {missing}"

@@ -6,11 +6,27 @@
   "name": {
     "zh-TW": "開發推進",
     "en-US": "Keep building",
-    "ja-JP": "実装を続ける"
+    "ja-JP": "実装を続ける",
+    "zh-CN": "开发推进",
+    "ko-KR": "계속 개발",
+    "es-ES": "Seguir construyendo",
+    "fr-FR": "Poursuivre le développement",
+    "de-DE": "Weiterentwickeln",
+    "pt-BR": "Continuar construindo",
+    "ru-RU": "Продолжать разработку",
+    "vi-VN": "Tiếp tục phát triển"
   },
   "description": {
     "zh-TW": "持續推進到完成度 100%，完成後產出 HTML 報告書。",
     "en-US": "Keep going until it is 100% complete, then produce an HTML report.",
-    "ja-JP": "100% 完了するまで作業を続け、最後に HTML レポートを作成します。"
+    "ja-JP": "100% 完了するまで作業を続け、最後に HTML レポートを作成します。",
+    "zh-CN": "持续推进到完成度 100%，完成后生成 HTML 报告。",
+    "ko-KR": "100% 완료될 때까지 계속 진행한 뒤 HTML 보고서를 만들어요.",
+    "es-ES": "Sigue hasta completarlo al 100 % y luego genera un informe en HTML.",
+    "fr-FR": "Continuer jusqu’à 100 % d’achèvement, puis produire un rapport HTML.",
+    "de-DE": "Weitermachen, bis es zu 100 % fertig ist, dann einen HTML-Bericht erstellen.",
+    "pt-BR": "Continue até chegar a 100% de conclusão e depois gere um relatório em HTML.",
+    "ru-RU": "Продолжай, пока работа не будет завершена на 100%, затем подготовь HTML-отчёт.",
+    "vi-VN": "Tiếp tục cho đến khi hoàn thành 100%, rồi xuất báo cáo HTML."
   }
 }

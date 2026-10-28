@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from agent_team_backend import app, native_memory
+from agent_team_backend import app, applog, native_memory
 from agent_team_backend.cli_vendors.registry import VENDORS
 
 
@@ -445,3 +447,285 @@ async def test_memory_save_without_text_is_rejected(tmp_path: Path) -> None:
     assert reply["ok"] is False
     assert reply["error"]["code"] == "MEMORY_FILE_REJECTED"
     assert not target.exists()
+
+
+# ---- previous version -------------------------------------------------------
+
+
+def test_a_save_keeps_the_replaced_text_in_navides_own_folder(tmp_path: Path) -> None:
+    """The file is the CLI's, so the version a save replaces is kept aside --
+    in the app data dir, never next to the file -- and can be written back."""
+    home = _home(tmp_path)
+    target = _write(home, (".codex", "AGENTS.md"), "original\n")
+
+    assert "previous" not in native_memory.read(str(target), home)
+    saved = native_memory.save(str(target), "mine\n", home)
+
+    assert saved["previous"]["size"] == len("original\n")
+    kept = list((applog.app_data_dir() / native_memory.BACKUP_DIR_NAME).glob("*.txt"))
+    assert [p.read_text(encoding="utf-8") for p in kept] == ["original\n"]
+    assert [p.name for p in target.parent.iterdir()] == ["AGENTS.md"]
+    assert native_memory.read(str(target), home)["previous"]["size"] == len("original\n")
+
+    restored = native_memory.restore_previous(
+        str(target), home, expected_modified=saved["modified"]
+    )
+
+    assert target.read_text(encoding="utf-8") == "original\n"
+    # Restoring kept what it replaced, so the restore is undone the same way.
+    assert restored["previous"]["size"] == len("mine\n")
+    native_memory.restore_previous(str(target), home)
+    assert target.read_text(encoding="utf-8") == "mine\n"
+
+
+def test_creating_a_file_keeps_nothing_and_offers_no_restore(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = home / ".codex" / "AGENTS.md"
+
+    saved = native_memory.save(str(target), "new\n", home)
+
+    assert "previous" not in saved
+    with pytest.raises(ValueError):
+        native_memory.restore_previous(str(target), home)
+
+
+def test_an_unchanged_save_keeps_the_older_previous_version(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = _write(home, (".codex", "AGENTS.md"), "one\n")
+    native_memory.save(str(target), "two\n", home)
+
+    native_memory.save(str(target), "two\n", home)
+
+    native_memory.restore_previous(str(target), home)
+    assert target.read_text(encoding="utf-8") == "one\n"
+
+
+def test_restore_refuses_a_file_that_moved_on_and_unlisted_paths(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = _write(home, (".codex", "AGENTS.md"), "one\n")
+    saved = native_memory.save(str(target), "two\n", home)
+    os.utime(target, (saved["modified"] + 10, saved["modified"] + 10))
+
+    with pytest.raises(native_memory.MemoryConflictError):
+        native_memory.restore_previous(str(target), home, expected_modified=saved["modified"])
+    assert target.read_text(encoding="utf-8") == "two\n"
+    with pytest.raises(ValueError):
+        native_memory.restore_previous(str(home / "stray.md"), home)
+
+
+def test_creating_a_file_records_that_navide_created_it(tmp_path: Path) -> None:
+    """The record the main process trashes by: the exact text, in Navide's
+    own folder, keyed like the previous version."""
+    home = _home(tmp_path)
+    target = home / ".codex" / "AGENTS.md"
+
+    saved = native_memory.save(str(target), "new\n", home)
+
+    assert saved["created"]["size"] == len("new\n")
+    record_path = native_memory._created_path(target)
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert record_path.parent == applog.app_data_dir() / native_memory.BACKUP_DIR_NAME
+    assert record["path"] == str(target)
+    assert record["text"] == "new\n"
+    assert record["sha256"] == hashlib.sha256(b"new\n").hexdigest()
+    assert native_memory.read(str(target), home)["created"]["size"] == len("new\n")
+
+
+def test_a_file_navide_did_not_create_has_no_create_record(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = _write(home, (".codex", "AGENTS.md"), "theirs\n")
+
+    native_memory.save(str(target), "mine\n", home)
+
+    assert "created" not in native_memory.read(str(target), home)
+    assert not native_memory._created_path(target).exists()
+
+
+def test_a_later_save_drops_the_create_record_for_the_previous_version(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = home / ".codex" / "AGENTS.md"
+    native_memory.save(str(target), "new\n", home)
+
+    # Saving the same text changes nothing, so the creation can still be undone.
+    native_memory.save(str(target), "new\n", home)
+    assert "created" in native_memory.read(str(target), home)
+
+    saved = native_memory.save(str(target), "edited\n", home)
+
+    assert "created" not in native_memory.read(str(target), home)
+    assert saved["previous"]["size"] == len("new\n")
+
+
+def test_a_create_record_is_not_shown_once_the_file_is_gone(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = home / ".codex" / "AGENTS.md"
+    native_memory.save(str(target), "new\n", home)
+    target.unlink()
+
+    assert "created" not in native_memory.read(str(target), home)
+
+
+def test_an_unlisted_path_is_neither_created_nor_recorded(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    stray = home / "stray.md"
+
+    with pytest.raises(ValueError):
+        native_memory.save(str(stray), "x\n", home)
+
+    assert not stray.exists()
+    assert not native_memory._created_path(stray).exists()
+
+
+@pytest.mark.asyncio
+async def test_memory_restore_writes_back_the_previous_version(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    target = _write(workspace, ("AGENTS.md",), "original\n")
+    saved = await _request(
+        "memory.save",
+        {"workspace_path": str(workspace), "path": str(target), "text": "mine\n"},
+    )
+    assert saved["payload"]["previous"]["size"] == len("original\n")
+
+    reply = await _request(
+        "memory.restore",
+        {
+            "workspace_path": str(workspace),
+            "path": str(target),
+            "expected_modified": saved["payload"]["modified"],
+        },
+    )
+
+    assert reply["ok"] is True
+    assert target.read_text(encoding="utf-8") == "original\n"
+
+
+@pytest.mark.asyncio
+async def test_memory_restore_without_a_previous_version_is_rejected(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    target = _write(workspace, ("AGENTS.md",), "original\n")
+
+    reply = await _request(
+        "memory.restore", {"workspace_path": str(workspace), "path": str(target)}
+    )
+
+    assert reply["ok"] is False
+    assert reply["error"]["code"] == "MEMORY_FILE_REJECTED"
+    assert target.read_text(encoding="utf-8") == "original\n"
+
+
+# ---- Claude auto-memory -------------------------------------------------------
+
+
+def _auto_memory(home: Path, workspace: Path) -> Path:
+    folder = native_memory.auto_memory_dir(home, workspace)
+    assert folder is not None
+    folder.mkdir(parents=True)
+    return folder
+
+
+def test_the_project_slug_matches_claude_code() -> None:
+    """Every non-alphanumeric UTF-16 unit becomes "-", and a name past 200
+    characters is cut and suffixed with Claude's hash (values from
+    Claude Code 2.1.310, computed in JavaScript)."""
+    assert native_memory._claude_project_slug("/Users/x/my.proj_1") == "-Users-x-my-proj-1"
+    assert native_memory._claude_project_slug("/Users/x/客戶") == "-Users-x---"
+    assert native_memory._claude_project_slug("/x/\U0001F600") == "-x---"
+    long = native_memory._claude_project_slug("/x/" + "a" * 300)
+    assert long == "-x-" + "a" * 197 + "-rtseee"
+
+
+def test_a_worktree_shares_the_main_checkouts_auto_memory(tmp_path: Path) -> None:
+    """Claude keys auto-memory by repository: a linked worktree and a
+    subdirectory both resolve to the main working tree."""
+    home = _home(tmp_path)
+    main = tmp_path / "repo"
+    (main / ".git" / "worktrees" / "wt").mkdir(parents=True)
+    (main / ".git" / "worktrees" / "wt" / "commondir").write_text("../..\n", encoding="utf-8")
+    (main / "src").mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    (worktree / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'wt'}\n", encoding="utf-8")
+
+    expected = native_memory.auto_memory_dir(home, main)
+
+    assert expected == (
+        home / ".claude" / "projects" / native_memory._claude_project_slug(str(main.resolve())) / "memory"
+    )
+    assert native_memory.auto_memory_dir(home, worktree) == expected
+    assert native_memory.auto_memory_dir(home, main / "src") == expected
+    assert native_memory.auto_memory_dir(home, None) is None
+
+
+def test_auto_memory_files_are_listed_as_claude_written_project_rows(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    folder = _auto_memory(home, workspace)
+    _write(folder, ("MEMORY.md",), "- [Topic](topic.md)\n")
+    _write(folder, ("topic.md",), "a fact\n")
+    _write(folder, ("notes.txt",), "not markdown\n")
+    _write(folder, ("proposals", "draft.md"), "nested\n")
+
+    rows = [f for f in native_memory.scan(home, workspace) if f.auto_memory]
+
+    assert [(f.relative, f.scope, f.readers, f.canonical) for f in rows] == [
+        ("MEMORY.md", native_memory.PROJECT_SCOPE, ("claude",), False),
+        ("topic.md", native_memory.PROJECT_SCOPE, ("claude",), False),
+    ]
+    assert rows[0].as_dict()["auto_memory"] is True
+    # Nothing is offered for creation, and nothing is listed without a workspace.
+    assert not [f for f in native_memory.scan(home, None) if f.auto_memory]
+    assert all(
+        f.as_dict()["auto_memory"] is False
+        for f in native_memory.scan(home, workspace)
+        if not f.auto_memory
+    )
+
+
+def test_an_auto_memory_link_out_of_its_folder_is_not_offered(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    folder = _auto_memory(home, workspace)
+    secret = _write(home, (".ssh", "notes.md"), "private\n")
+    (folder / "linked.md").symlink_to(secret)
+
+    assert not [f for f in native_memory.scan(home, workspace) if f.auto_memory]
+    with pytest.raises(ValueError):
+        native_memory.read(str(folder / "linked.md"), home, workspace)
+
+
+def test_an_auto_memory_file_saves_and_restores_like_any_other(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    target = _write(_auto_memory(home, workspace), ("MEMORY.md",), "claude wrote\n")
+
+    read = native_memory.read(str(target), home, workspace)
+    saved = native_memory.save(
+        str(target), "user edit\n", home, workspace, expected_modified=read["modified"]
+    )
+
+    assert target.read_text(encoding="utf-8") == "user edit\n"
+    assert saved["previous"]["size"] == len("claude wrote\n")
+    native_memory.restore_previous(str(target), home, workspace, saved["modified"])
+    assert target.read_text(encoding="utf-8") == "claude wrote\n"
+    # Another project's memory folder is not reachable from this workspace.
+    other = tmp_path / "other"
+    other.mkdir()
+    with pytest.raises(ValueError):
+        native_memory.save(str(target), "x\n", home, other)
+
+
+@pytest.mark.asyncio
+async def test_memory_list_names_the_auto_memory_folder(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+
+    listed = await _request("memory.list", {"workspace_path": str(workspace)})
+    without = await _request("memory.list", {})
+
+    assert listed["payload"]["auto_memory_dir"] == str(
+        native_memory.auto_memory_dir(None, workspace)
+    )
+    assert without["payload"]["auto_memory_dir"] == ""

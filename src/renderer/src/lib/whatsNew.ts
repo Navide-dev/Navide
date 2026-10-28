@@ -121,11 +121,121 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.33',
+    title: {
+      'zh-TW': '從聊天喚醒 pane 會接回原本的對話，聊天文字支援 11 種語言',
+      'en-US': 'Waking a Pane from Chat Brings Back Its Conversation, in All 11 Languages',
+      'ja-JP': 'チャットから pane を起こすと元の会話に戻り、チャットの文字は 11 言語に対応',
+    },
+    highlights: [
+      {
+        'zh-TW': '頻道：在 Telegram 等聊天軟體喚醒離線的 pane 時，Navide 會直接把 pane 開回原本的對話，不再等 30 秒後回報「喚醒失敗」；八個聊天平台都適用。聊天裡的文字（喚醒按鈕與提示、快速選單、檔案通知、Telegram 的指令選單）現在跟著 Navide 的介面語言，11 種語言都有；Prompt 技能和技能的名稱也和設定頁一致。Mattermost 上直接輸入 wake 就能喚醒。',
+        'en-US': 'Channels: waking an offline pane from Telegram or another chat app now opens the pane onto its conversation, instead of waiting 30 seconds and answering that the wake failed, on all eight chat platforms. Chat text (the wake button and hint, the quick menu, file notices and Telegram’s command menu) now follows Navide’s interface language, in all 11 languages, and names Prompts and Skills as the Settings pages do. On Mattermost, typing wake wakes the pane.',
+        'ja-JP': 'チャンネル：Telegram などのチャットアプリからオフラインの pane を起こすと、30 秒待って「起こせませんでした」と返すのではなく、pane を元の会話のまま開くようになりました。8 つのチャットプラットフォームすべてで同じです。チャットの文字（起こすボタンと案内、クイックメニュー、ファイルのお知らせ、Telegram のコマンドメニュー）は Navide の表示言語に合わせて 11 言語で表示され、プロンプトとスキルの名前も設定ページと同じになりました。Mattermost では wake と入力するだけで起こせます。',
+      },
+      {
+        'zh-TW': '頻道：轉到聊天的權限確認，不會再因為 Claude Code 自動拒絕的倒數秒數而每秒重送一次，導致回覆 yes 也核准不了。Navide Guard 一定會擋下的確認，聊天裡只提供「拒絕」，並說明這個動作要在電腦前允許。',
+        'en-US': 'Channels: a permission prompt relayed to chat is no longer sent again every second as Claude Code’s auto-deny countdown ticks, which kept a yes reply from approving it. A prompt Navide Guard will always refuse from chat now offers only 拒絕 (Deny) and says it must be allowed at the computer.',
+        'ja-JP': 'チャンネル：チャットに転送した権限の確認が、Claude Code の自動拒否のカウントダウンで毎秒送り直され、yes と返信しても承認できなくなることはなくなりました。Navide Guard が必ず拒否する確認は、チャットでは「拒絕」（拒否）だけを表示し、パソコンで許可する必要があることを伝えます。',
+      },
+      {
+        'zh-TW': '第一次啟動：設定精靈拿掉了「環境」步驟（Homebrew、Node、pnpm、Python、uv），在 Linux 上也能直接進入 App。安裝 CLI 時會先說明並依序裝好它需要的東西。Ollama 的安裝、啟動和選第一個模型移到「設定 → Analyzer」；需要 Node.js 的 MCP 伺服器會標示「需要 Node.js」，並有「安裝 Node.js」按鈕。',
+        'en-US': 'First run: the setup wizard no longer has its Environment step (Homebrew, Node, pnpm, Python, uv), so you can open the app on Linux too. Installing a CLI says what it installs first and installs it in order. Installing Ollama, starting it and picking a first model move to Settings → Analyzer, and an MCP server that runs on Node.js is marked Needs Node.js, with an Install Node.js button.',
+        'ja-JP': '初回起動：セットアップウィザードから「環境」のステップ（Homebrew、Node、pnpm、Python、uv）をなくし、Linux でもそのままアプリを開けるようになりました。CLI をインストールするときは、先に必要なものを案内して順番にインストールします。Ollama のインストール、起動、最初のモデルの選択は「設定 → Analyzer」に移りました。Node.js で動く MCP サーバーには「Node.js が必要」と表示され、「Node.js をインストール」ボタンがあります。',
+      },
+      {
+        'zh-TW': 'Pipeline：停在閘門等你核准的執行，側欄的執行卡會顯示正在哪個閘門等待，並提供「核准並繼續」和「退回修改」；等待時「下一步」會停用並說明原因。在 Pipeline 編輯器輸入任務，就能按「▶ 執行流程」直接執行；「執行紀錄」對已結束的執行多了「重設」。',
+        'en-US': 'Pipelines: a run waiting at a gate for your approval now says so on the sidebar’s run card, naming the gate, with Approve and Continue and Send Back; Next is disabled while it waits and says why. In the pipeline editor, type a task and press ▶ Run Pipeline to run it there, and Executions offers Reset for a finished run.',
+        'ja-JP': 'パイプライン：ゲートで承認を待っている実行は、サイドバーの実行カードにどのゲートで待っているかを表示し、「承認して続行」と「差し戻す」を出すようになりました。待っている間は「次へ」が無効になり、理由を表示します。パイプラインエディターでタスクを入力して「▶ パイプラインを実行」を押せばその場で実行でき、「実行履歴」では終わった実行を「リセット」できます。',
+      },
+      {
+        'zh-TW': '帳號：「設定 → CLI 帳號」的第一張卡改名為「原始登入」（你在 Navide 外原本的登入），正在使用的帳號標示「生效中」，「設為預設」改為「切換到此帳號」。原始登入是空的時，不再提供會清掉目前登入的切換按鈕；按「登入」之前會先說明會發生什麼。',
+        'en-US': 'Accounts: the first card in Settings → CLI Accounts is now named Original login (the login you had outside Navide), the account in use is marked Active, and Set as Default reads Switch to This Account. While Original login is empty, it no longer offers a switch that would clear your current login, and Sign In says what happens before it goes ahead.',
+        'ja-JP': 'アカウント：「設定 → CLI アカウント」の最初のカードは「元のログイン」（Navide の外で使っていたログイン）という名前になり、使用中のアカウントには「有効」と表示され、「既定に設定」は「このアカウントに切り替え」になりました。元のログインが空のときは、今のログインを消してしまう切り替えボタンを表示せず、「ログイン」を押すと先に何が起きるかを説明します。',
+      },
+      {
+        'zh-TW': '檔案選擇器：把 agent 給的位置（例如 app/Services/OrderService.php:137-158）貼進來，現在找得到檔案並開在第 137 行，不再顯示「No files found」。含資料夾的搜尋也找得到，完全符合的排在前面；@file 自動完成也一樣。',
+        'en-US': 'File picker: pasting a location an agent gave you, such as app/Services/OrderService.php:137-158, now finds the file and opens it at line 137 instead of showing No files found. A search that includes folders finds the file too, with exact matches first, and so does @file autocomplete.',
+        'ja-JP': 'ファイルピッカー：agent が示した場所（app/Services/OrderService.php:137-158 など）を貼り付けると、「No files found」ではなく、ファイルを見つけて 137 行目で開くようになりました。フォルダーを含めて検索しても見つかり、完全に一致するものが先に並びます。@file の補完も同じです。',
+      },
+    ],
+  },
+  {
+    version: '0.2.32',
+    title: {
+      'zh-TW': '金鑰只留在本機：MCP 同步只同步安裝，Agent 資產的修改都能復原',
+      'en-US': 'Secrets Stay on This Machine: MCP Sync Carries Only What Is Installed, and Agent Asset Edits Can Be Undone',
+      'ja-JP': 'シークレットはこのマシンだけに：MCP の同期はインストール内容だけ、エージェント資産の変更は元に戻せます',
+    },
+    highlights: [
+      {
+        'zh-TW': 'MCP 同步只同步「裝了哪些伺服器」：名稱、連線方式、指令與參數、網址、開關，以及環境變數和 header 的名稱。它們的值不會離開這台電腦，網址和參數裡的帳密與 token（例如 user:password@、?api_key=、ghp_…、--token 後面的值）也一樣。從別台裝置同步過來的伺服器，只有在指令與參數或網址都沒變時，才會沿用這台電腦自己填過的值；改了要執行的東西，或這台電腦還沒有的值，都會留空，即使你核准了這個變更也一樣，「設定 → MCP」會標「需要設定」並提醒你在這台電腦填入，你的 token 不會被交給另一個程式或網址。只改值不再觸發同步，其他裝置也不會再為此要你核准。舊版已上傳的值仍留在伺服器上，這一版不會刪除；還沒更新的裝置照舊同步，不會收到被清空的設定。',
+        'en-US': 'MCP sync now carries only which servers are installed: name, transport, command and arguments, URL, on/off, and the names of environment variables and headers. Their values never leave this machine, and neither do credentials inside a URL or the arguments (such as user:password@, ?api_key=, ghp_… or the value after --token). A server that arrives from another device keeps the values this machine already has only if it still runs the same command and arguments, or the same URL; if it changed what it runs, or this machine has no value yet, the field is left empty, even after you approve the change, and Settings → MCP marks the server Needs setup and asks you to fill it in here, so your token is never handed to a different program or address. Changing only a value no longer syncs or asks for approval on your other devices. Values older versions uploaded stay on the server and are not deleted by this release, and devices not yet updated keep syncing as before, without being sent servers with their values emptied.',
+        'ja-JP': 'MCP の同期は「どのサーバーをインストールしているか」だけになりました：名前、接続方式、コマンドと引数、URL、オン／オフ、環境変数とヘッダーの名前です。それらの値はこのマシンから出ません。URL や引数に含まれる認証情報やトークン（user:password@、?api_key=、ghp_…、--token の後の値など）も同じです。ほかのデバイスから届いたサーバーがこのマシンにすでにある値を使うのは、コマンドと引数、または URL が変わっていない場合だけです。実行するものが変わった場合や、このマシンにまだ値がない場合は、変更を承認しても空欄のままで、「設定 → MCP」に「要設定」と表示され、このマシンで入力するよう案内します。トークンが別のプログラムやアドレスに渡されることはありません。値だけを変えても同期されず、ほかのデバイスで承認を求められることもなくなりました。旧バージョンがアップロードした値はサーバーに残り、このリリースでは削除しません。まだ更新していないデバイスはこれまでどおり同期し、値が空になったサーバーを受け取ることはありません。',
+      },
+      {
+        'zh-TW': '「設定 → 帳號」裡的「貼入憑證」已移除：Navide 不再把貼入的憑證（例如 claude setup-token 產生的）交給新開的 pane。用過這個功能的裝置，更新時會清除存在本機的憑證、加密它的金鑰，以及舊版從雲端拉下來的副本，並在第一次啟動時通知一次；沒用過的裝置什麼都不會動。新的 Claude pane 改用 Claude 自己的登入，可能是另一個帳號，並扣用那個帳號的額度。已經開著的 pane 會沿用原本的憑證，直到關閉或重新啟動。',
+        'en-US': 'Paste Credential is gone from Settings → Accounts: Navide no longer hands pasted credentials (such as one from claude setup-token) to new panes. On a device that used it, the update erases the stored credentials, the key that encrypted them and the copies older versions pulled from the cloud, and says so once at the first launch; a device that never used it is not touched. New Claude panes now use Claude’s own sign-in, which may be a different account and draws on that account’s quota. Panes already open keep their credential until they are closed or restarted.',
+        'ja-JP': '「設定 → アカウント」の「認証情報を貼り付け」を廃止しました。Navide は貼り付けた認証情報（claude setup-token で作ったものなど）を新しい pane に渡さなくなります。この機能を使ったデバイスでは、更新時に保存されていた認証情報、それを暗号化していた鍵、旧バージョンがクラウドから取得したコピーを消去し、初回起動時に一度だけお知らせします。使っていないデバイスには何もしません。新しい Claude pane は Claude 自身のサインインを使うため、別のアカウントになり、そのアカウントの使用量枠が消費されることがあります。すでに開いている pane は、閉じるか再起動するまで元の認証情報を使い続けます。',
+      },
+      {
+        'zh-TW': '「設定 → Agent 資產 → 記憶」：沒存的草稿不會再被默默丟掉，取消、關閉、切到別的檔案或關掉設定之前都會先問你。每次存檔都會把被取代的版本留一份在 Navide 自己的資料夾，按「還原上一版」就能救回來；編輯器新建的檔案也能「復原建立」，移到系統垃圾桶，不會直接刪除。這一頁也開始列出 Claude Code 自己寫的專案自動記憶（MEMORY.md 和各主題檔），可以打開、編輯和還原，並標明是 Claude 寫的、之後可能被它改寫。',
+        'en-US': 'Settings → Agent Assets → Memory: an unsaved draft is no longer thrown away without asking; Cancel, closing, opening another file and closing Settings ask first. Each save keeps the version it replaced in Navide’s own folder, and Restore Previous Version brings it back; a file the editor created can be undone with Undo Create, which moves it to the system Trash instead of deleting it. The page now also lists the auto-memory Claude Code writes about the project by itself (MEMORY.md and one file per topic), which you can open, edit and restore; it is marked as written by Claude, which may rewrite it later.',
+        'ja-JP': '「設定 → エージェント資産 → メモリ」：保存していない下書きが確認なしに破棄されることはなくなりました。キャンセル、閉じる、別のファイルを開く、設定を閉じる前に確認します。保存するたびに置き換えられた版を Navide 自身のフォルダーに 1 つ残し、「前のバージョンに戻す」で元に戻せます。エディターで新しく作ったファイルは「作成を取り消す」でシステムのゴミ箱に移せ、直接削除はしません。このページには、Claude Code がプロジェクトについて自分で書く自動メモリ（MEMORY.md とトピックごとのファイル）も表示されるようになり、開く・編集する・元に戻すことができます。Claude が書いたもので、後で Claude が書き換えることがあると表示されます。',
+      },
+      {
+        'zh-TW': '「設定 → Agent 資產 → Prompt 技能」：把內容清空不會再把整個 Prompt 技能刪掉（以前連同步的其他電腦也會跟著刪），原本的文字會保留，並提示要刪除請按「刪除」；按「刪除」也會先確認，並說明同步的電腦也會一起移除。Prompt 技能在 pane 裡啟動循環失敗時，會跳出錯誤通知。',
+        'en-US': 'Settings → Agent Assets → Prompts: clearing a prompt’s text no longer deletes the prompt (on your synced machines too); the previous text is kept, with a note to use Delete to remove it. Delete now asks first and says your synced machines will remove it too. When a prompt’s loop fails to start in a pane, an error notice says so.',
+        'ja-JP': '「設定 → エージェント資産 → プロンプト」：内容を空にしてもプロンプト自体が削除されることはなくなりました（以前は同期しているほかのマシンでも削除されていました）。元のテキストは残り、削除するには「削除」を使うよう案内します。「削除」も先に確認し、同期しているマシンからも削除されることを伝えます。pane でプロンプトのループを開始できなかったときは、エラーの通知が表示されます。',
+      },
+      {
+        'zh-TW': '「設定 → Agent 資產 → MCP」遮蔽得更完整：除了看名稱，也會看值，網址裡的帳密、token 樣式的值和參數都會遮起來，agent 用 mcp_list 讀到的也一樣。匯入舊版設定包時，只有名稱和連線位置（指令與參數，或網址）都相同的伺服器，才會補回這台電腦的金鑰；同名但指向別處的不會拿到，沒有可補的就留空並列在匯入結果裡。列不出工具的伺服器會顯示原因，不再看起來像是沒有工具。',
+        'en-US': 'Settings → Agent Assets → MCP masks more: values are checked as well as names, so a user:password@ in a URL and token-shaped values and arguments are masked, including what agents read through mcp_list. Importing an older settings bundle puts this machine’s secret back only for a server whose name and endpoint (command and arguments, or URL) both match; a same-named server pointing elsewhere no longer gets it, and anything left empty is listed in the import summary. A server whose tools cannot be listed says why instead of looking like it has none.',
+        'ja-JP': '「設定 → エージェント資産 → MCP」のマスクがより確実になりました。名前だけでなく値も確認し、URL 内のユーザー名とパスワード、トークンの形をした値や引数をマスクします。agent が mcp_list で読む内容も同じです。古い設定バンドルをインポートしたとき、このマシンのシークレットを戻すのは、名前と接続先（コマンドと引数、または URL）の両方が一致するサーバーだけです。同じ名前でも別の場所を指すサーバーには戻さず、空欄のままのものはインポート結果に一覧表示します。ツールを一覧できないサーバーは、ツールがないように見えるのではなく、その理由を表示します。',
+      },
+      {
+        'zh-TW': 'Skills：agent 想把技能送到更多 CLI，或打開停用中的共用技能時，要先在主視窗經你核准，和安裝一樣；縮小範圍則照舊直接生效。Navide 也內建了一個教 agent 寫 Navide 外掛的技能（navide:plugin-authoring），同樣要你核准才會安裝。技能接到 pane 失敗時，pane 啟動時會印出來，不再只寫進紀錄。',
+        'en-US': 'Skills: when an agent asks to deliver a skill to more CLIs, or to turn a disabled shared skill on, you now approve it in the main window, as with an install; narrowing still applies at once. Navide also ships a skill that teaches an agent to write Navide plugins (navide:plugin-authoring), installed only once you approve it. When wiring skills into a pane fails, the pane prints it at startup instead of only logging it.',
+        'ja-JP': 'Skills：agent がスキルを配信する CLI を増やしたり、無効になっている共有スキルをオンにしたりするときは、インストールと同じようにメインウィンドウでの承認が必要になりました。範囲を狭める変更はこれまでどおりすぐに反映されます。agent に Navide プラグインの作り方を教えるスキル（navide:plugin-authoring）も同梱しました。承認したときだけインストールされます。pane へのスキルの接続に失敗したときは、ログに書くだけでなく pane の起動時に表示します。',
+      },
+      {
+        'zh-TW': '「設定 → Agent 資產 → 擴充」開始列出 Gemini CLI 的擴充和 hooks。讀不到某個 CLI 的開關設定檔時，會顯示「狀態不明」和原因，不再一律顯示成已啟用。Agent 資產各頁的名稱也統一成設定側欄上的名字；以前指向「擴充」的 Navide 外掛提示，改成指向「設定 → Navide 外掛」。',
+        'en-US': 'Settings → Agent Assets → Extensions now lists Gemini CLI’s extensions and hooks. When a CLI’s on/off settings file cannot be read, its entries show State unknown with the reason instead of all showing as on. Agent Assets pages are now named everywhere as in the Settings sidebar, and messages about Navide plugins that pointed to Extensions now point to Settings → Navide Plugins.',
+        'ja-JP': '「設定 → エージェント資産 → 拡張機能」に Gemini CLI の拡張機能と hooks が表示されるようになりました。CLI のオン／オフの設定ファイルを読めないときは、すべてオンと表示するのではなく、「状態不明」と理由を表示します。エージェント資産の各ページの名前は、どこでも設定のサイドバーと同じになりました。Navide プラグインについて「拡張機能」を案内していたメッセージは、「設定 → Navide プラグイン」を案内します。',
+      },
+      {
+        'zh-TW': 'Navide 外掛：在開發者模式重新載入資料夾時，新版本要先準備好才會換下正在跑的版本；新版本有問題就保留舊版本，卡片上會說明原因。第三方外掛在視窗關掉後仍在背景執行的 AI CLI，會列在「設定 → Navide 外掛」該外掛的卡片上，每一個都可以按「結束」；這些 session 也改成依外掛版本分開保存。',
+        'en-US': 'Navide plugins: reloading a Developer Mode folder now readies the new version before the running one is unloaded; if the new version is broken, the running one stays and its card says why. AI CLI sessions a third-party plugin keeps running in the background after its window closes are listed on that plugin’s card in Settings → Navide Plugins, each with an End button, and they are now stored separately for each plugin version.',
+        'ja-JP': 'Navide プラグイン：開発者モードでフォルダーを再読み込みするとき、新しいバージョンの準備ができてから実行中のバージョンを入れ替えるようになりました。新しいバージョンに問題があれば実行中のバージョンを残し、カードに理由を表示します。サードパーティ製プラグインがウィンドウを閉じた後もバックグラウンドで動かしている AI CLI は、「設定 → Navide プラグイン」のそのプラグインのカードに一覧表示され、それぞれ「終了」できます。これらの session はプラグインのバージョンごとに分けて保存されるようになりました。',
+      },
+      {
+        'zh-TW': 'Navide 外掛：0.2.31 以前安裝的第三方外掛，原生後端啟動前不會再每次都問；在詢問對話框按「不允許」會記住，不再每次啟動都跳出來。工具很多的外掛，詢問對話框不會再高過螢幕、按不到按鈕。開發者模式提醒按「知道了」之後，所有工作區視窗都會關掉。關閉第三方原生後端時如果設定存不下來，會自動重試，仍失敗就在開關下方一直顯示提示和「再試一次」。開發者資料夾的卡片會說明：改資料夾裡的檔案（包括原生後端程式）不會再問你，改宣告的權限或後端才會。從檔案安裝核准失敗時，如果檔案仍然備妥，可以直接再核准一次，不必重選檔案。視窗少了原生後端、安裝核准失敗、更新時宣告的檔案範圍，這些提示都改得更清楚。',
+        'en-US': 'Navide plugins: a third-party plugin installed before 0.2.31 no longer asks at every start before its native backend runs, and answering Don’t allow in that dialog is remembered instead of coming back at every launch. For a plugin with many tools, the dialog no longer grows taller than the screen and hides its buttons. Got It on the Developer Mode reminder closes it in every workspace window. If turning third-party native backends off cannot be saved, Navide retries, and if it still fails, a notice stays under the switch with Try Again. A developer folder’s card says that changing the folder’s files, its native backend program included, does not ask again, while changing its declared permissions or backend does. When approving an install from a file fails and the file is still ready, you can approve it again without choosing the file again. The messages for a window without its native backend, a failed install approval and a declared file scope in an update are clearer.',
+        'ja-JP': 'Navide プラグイン：0.2.31 より前にインストールしたサードパーティ製プラグインが、ネイティブバックエンドの起動前に毎回確認することはなくなりました。確認のダイアログで「許可しない」を選ぶと記憶され、起動のたびに表示されることもなくなりました。ツールが多いプラグインでも、ダイアログが画面より高くなってボタンが押せなくなることはありません。開発者モードのお知らせで「了解」を押すと、すべてのワークスペースのウィンドウで閉じます。サードパーティのネイティブバックエンドをオフにした設定を保存できなかったときは自動で再試行し、それでも失敗した場合はスイッチの下にお知らせと「もう一度試す」を表示し続けます。開発者フォルダーのカードには、フォルダー内のファイル（ネイティブバックエンドのプログラムを含む）を変更しても再確認されず、宣言した権限やバックエンドを変更したときは再確認されることが表示されます。ファイルからのインストールの承認に失敗しても、ファイルがまだ準備できていれば、ファイルを選び直さずにもう一度承認できます。ネイティブバックエンドなしで開いたウィンドウ、インストールの承認の失敗、更新で宣言されたファイルの範囲についてのメッセージがわかりやすくなりました。',
+      },
+      {
+        'zh-TW': 'Plans 視窗：計畫文件不會再被擠成一條窄欄、旁邊空出一大塊。收起來的 AI CLI 側欄現在只佔它自己的寬度，寬度也和 Git 視窗分開記。',
+        'en-US': 'Plans window: plan documents are no longer squeezed into a narrow column beside a blank strip. The AI CLI side panel now takes only its own width when collapsed, and its width is remembered separately from the Git window’s.',
+        'ja-JP': 'Plans ウィンドウ：プランのドキュメントが細い列に押し込まれ、横に大きな空白ができることはなくなりました。折りたたんだ AI CLI のサイドパネルは自分の幅だけを使い、幅は Git ウィンドウとは別に記憶します。',
+      },
+      {
+        'zh-TW': '帳號：在關閉「跟隨帳號切換」的 Claude pane 上選別的帳號，現在只會移動這個 pane：它會在那個帳號裡重新開啟並接續原本的對話，預設帳號和其他 pane 都不受影響。開著「跟隨」時照舊。',
+        'en-US': 'Accounts: on a Claude pane with Follow account switch off, choosing another account in its menu now moves only that pane: it reopens in that account with its conversation resumed, and the default account and every other pane stay as they are. With Follow on, nothing changes.',
+        'ja-JP': 'アカウント：「アカウント切り替えに追従」をオフにした Claude pane でメニューから別のアカウントを選ぶと、その pane だけが移るようになりました。そのアカウントで開き直し、会話を再開します。既定のアカウントとほかの pane はそのままです。「追従」がオンのときは変わりません。',
+      },
+      {
+        'zh-TW': '更穩定：Git 面板和 issue 檢視執行的指令逾時時，連同它啟動的所有程式都會一起結束（macOS、Linux 和 Windows），不再留下佔住 Git 的程式。同步過來、等待核准的大型技能，不會再一直卡在「等待空間下載檔案」。',
+        'en-US': 'Steadier: when a command the Git panel or the issue views run times out, everything it started ends with it, on macOS, Linux and Windows, instead of leaving a program behind that keeps Git busy. A synced large skill waiting for approval no longer stays stuck at waiting for space to download its files.',
+        'ja-JP': '安定性の向上：Git パネルや issue の表示が実行したコマンドがタイムアウトしたとき、そのコマンドが起動したプログラムもすべて一緒に終了するようになりました（macOS、Linux、Windows）。Git を使ったまま残るプログラムはなくなります。同期された大きなスキルが承認を待っている間、「ファイルをダウンロードする空き容量を待っています」のまま止まることもなくなりました。',
+      },
+    ],
+  },
+  {
     version: '0.2.31',
     title: {
-      'zh-TW': '修正 Linux 記憶體持續增加，「Navide 外掛」設定分成四個子頁',
-      'en-US': 'Linux Memory Growth Fixed, and Navide Plugins Settings in Four Pages',
-      'ja-JP': 'Linux でメモリが増え続ける問題を修正、「Navide プラグイン」の設定を 4 つのページに',
+      'zh-TW': 'Linux 不再越用越慢：修正後端記憶體每分鐘增加約 90 MB',
+      'en-US': 'Linux No Longer Slows Down Over Time: Backend Memory Growth of About 90 MB a Minute Fixed',
+      'ja-JP': 'Linux で使うほど重くなる問題を修正：バックエンドのメモリが毎分約 90 MB 増える不具合',
     },
     highlights: [
       {

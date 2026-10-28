@@ -975,6 +975,7 @@
       "loop-tooltip": "Loop — gửi prompt loop đã cấu hình tới pane này",
       "skill-cast-failed": "Không gửi được skill “{name}” tới pane này",
       "skill-cast-busy": "Loop đang gửi prompt tiếp theo — hãy dùng lại “{name}” sau giây lát",
+      "loop-start-failed": "Không bắt đầu được loop với “{name}” trong pane này",
       "loop-badge-tooltip": "Đã gửi prompt loop tới pane này — nhấp để tắt loop",
       "loop-waiting-tooltip": "Loop tạm dừng — đã chạm giới hạn session; tự động tiếp tục lúc {time}. Nhấp để tiếp tục ngay",
       "loop-badge-estimate": "∞ Loop · ~{time}",
@@ -1474,6 +1475,8 @@
       "unsupported": "Navide chưa đọc được nơi CLI này lưu tiện ích mở rộng CLI.",
       "invalid": "Không đọc được: {error}",
       "disabled": "Đã tắt",
+      "enabledUnknown": "Không rõ trạng thái",
+      "enabledUnknownReason": "Không xác định được có đang bật hay không: {error}",
       "ownerNavide": "Do Navide cài",
       "inferred": "suy ra",
       "inferredHint": "Đọc từ mã nguồn; manifest của CLI không nêu những điều này.",
@@ -1573,7 +1576,7 @@
           "summary": "Tạo, sửa, bật, tắt và xem các skill agent do ứng dụng quản lý."
         },
         "prompts": {
-          "title": "Skill prompt",
+          "title": "Prompt",
           "summary": "Tạo và sửa các skill prompt mà pane CLI có thể dùng từ nút loop của nó."
         },
         "memory": {
@@ -1730,6 +1733,7 @@
       "export-failed": "Không xuất được",
       "import-dialog-title": "Nhập JSON gói cài đặt",
       "imported": "Đã nhập: {items}",
+      "mcp-needs-secrets": "Khóa bí mật MCP cần tự điền trên máy này: {items}",
       "import-failed": "Không nhập được"
     },
     "executionPolicy": {
@@ -1882,6 +1886,8 @@
         "title": "Backend gốc",
         "description": "Một số plugin Navide có chứa mã gốc. Navide chạy mã đó trong sandbox không có quyền truy cập mạng riêng; nó chỉ đọc được các workspace bạn mở cùng nó và chỉ thay đổi tệp ở nơi bạn cho phép. Plugin Navide nào còn chạy lệnh git, gh và glab (được đánh dấu rủi ro cao bên dưới) thì qua các lệnh đó có thể liên lạc với máy chủ mạng và gửi dữ liệu workspace, cũng như đọc và thay đổi tệp workspace mà không cần quyền đó. Khi công tắc bên dưới đang bật, cài một plugin Navide có mã gốc nghĩa là cho phép nó chạy; tắt công tắc để dừng tất cả.",
         "enable": "Cho phép plugin Navide của bên thứ ba chạy backend gốc",
+        "offUnsaved": "Backend gốc của bên thứ ba hiện đang tắt, nhưng Navide không lưu được thiết lập này, nên chúng sẽ bật lại sau khi Navide khởi động lại.",
+        "offUnsavedRetry": "Thử lại",
         "agentTools": {
           "enable": "Cho phép agent gọi công cụ từ plugin Navide của bên thứ ba",
           "description": "Mặc định tắt. Khi bật, agent trong các pane của bạn có thể gọi công cụ mà một plugin Navide của bên thứ ba khai báo, sau khi bạn đã cho phép plugin Navide đó. Công cụ nào thay đổi tệp sẽ hỏi bạn một lần cho mỗi workspace. Khi tắt, Navide hoạt động như thể không plugin Navide nào có công cụ.",
@@ -1889,11 +1895,15 @@
           "externalCallersDisclosure": "Các chương trình bên ngoài dùng chung một token, nên bản ghi một lệnh gọi chỉ có thể ghi là “một client bên ngoài”, không biết là chương trình nào. Thông tin xác thực của Host cũng được xử lý như vậy."
         },
         "empty": "Không plugin Navide nào đã cài có backend gốc.",
-        "windowWithout": "{name} đã mở mà không có backend gốc: {reason}. Các phần cần backend sẽ không hoạt động. Để cho phép backend, hãy vào Cài đặt → Plugin Navide → {page}.",
+        "windowWithout": "{name} đã mở mà không có backend gốc: {reason}. Các phần cần backend sẽ không hoạt động. {next}",
+        "windowWithoutAllow": "Để cho phép backend, hãy vào Cài đặt → Plugin Navide → {page}, rồi mở lại cửa sổ.",
+        "windowWithoutDetails": "Lý do được nêu trong Cài đặt → Plugin Navide → {page}.",
         "allow": "Cho phép",
         "disable": "Tắt",
         "enable_plugin": "Bật",
         "changed": "Mã gốc hoặc quyền của nó đã thay đổi kể từ khi bạn cho phép.",
+        "allowedPreInstall": "Được cho phép mà không hỏi: nó được cài trước Navide 0.2.31, phiên bản chưa ghi lại sự đồng ý khi cài.",
+        "declined": "Bạn đã không cho phép khi nó sắp khởi động, nên Navide không hỏi lại cho phiên bản này và nó vẫn tắt. Nhấn Cho phép để chạy nó.",
         "writeAllowed": "Được thay đổi tệp trong {path}",
         "revoke": "Thu hồi",
         "violation": "Đã dừng sau khi vượt giới hạn {kind}.",
@@ -1976,6 +1986,14 @@
       "installed": "Đã cài",
       "sensitive": "nhạy cảm",
       "empty": "Chưa cài plugin Navide nào.",
+      "backgroundAi": {
+        "title": "AI CLI đang chạy nền ({count})",
+        "note": "Các phiên AI CLI này vẫn chạy sau khi cửa sổ đóng. Chúng chạy cho đến khi bạn kết thúc tại đây, tắt hoặc gỡ nó, hoặc thoát Navide.",
+        "item": "{profile} · phiên bản {version} · từ {time}",
+        "end": "Kết thúc",
+        "gone": "Phiên này không còn chạy nền nữa.",
+        "endFailed": "Không thể kết thúc phiên: {error}"
+      },
       "permissionDetails": "Quyền và cấp phép",
       "permissionDetailsWithActivity": "Quyền, cấp phép và hoạt động",
       "plansRiskNote": "Plugin Navide này có chương trình backend riêng, chạy với quyền người dùng của bạn và không có sandbox. Nó làm việc với tài liệu Plan trong dự án hiện tại, bắt đầu từ thư mục gốc của kho Git tìm thấy phía trên (kể cả các kho lồng bên trong): các thư mục plan và báo cáo trong .agent-team, .claude, .cursor và docs ở mọi cấp, .plans ở thư mục gốc và .history của chúng (chỉ đọc). Backend của nó đọc và ghi trực tiếp các tệp đó; thao tác xóa và đổi tên vẫn đi qua Navide.",
@@ -2122,7 +2140,7 @@
         },
         "reloadFailed": "Không tải được thay đổi mới nhất; phiên bản trước vẫn đang chạy: {error}",
         "autoReloadNeedsConsent": "Quyền hoặc backend của {id} đã thay đổi, nên nó đã bị gỡ tải. Hãy đồng ý lại trong Cài đặt → Plugin Navide.",
-        "autoReloadMixedHint": "Tải lại trong lúc quá trình build hoặc lưu vẫn đang ghi tệp có thể tải một hỗn hợp tệp cũ và mới chưa hoàn chỉnh.",
+        "autoReloadMixedHint": "Tải lại trong lúc quá trình build hoặc lưu vẫn đang ghi tệp có thể tải một hỗn hợp tệp cũ và mới chưa hoàn chỉnh. Bản build ghi tệp .navide-build-complete vào thư mục sau cùng sẽ tránh được điều này: khi đó thư mục chỉ tải lại khi tệp đó được ghi lại.",
         "reloadFailedNothingRunning": "Lần tải lại cuối không thành công và hiện không có phiên bản nào đang chạy: {error}",
         "removeFolder": "Gỡ",
         "needsConsent": "Quyền hoặc backend đã thay đổi; hãy đồng ý lại",
@@ -2152,7 +2170,8 @@
           "computing": "Đang tính…",
           "loadedBy": "Người tải",
           "notReviewed": "Chưa được Navide duyệt, không được ký, không được quét.",
-          "mayChange": "Nội dung của nó có thể thay đổi bất cứ lúc nào. Dấu vân tay chỉ ghi lại những gì thư mục chứa lúc được tải; Navide không dùng nó để từ chối tải."
+          "mayChange": "Nội dung của nó có thể thay đổi bất cứ lúc nào. Dấu vân tay chỉ ghi lại những gì thư mục chứa lúc được tải; Navide không dùng nó để từ chối tải.",
+          "consentScope": "Thay đổi tệp trong thư mục, kể cả chính chương trình backend gốc, sẽ không hỏi lại bạn. Thay đổi quyền hoặc backend đã khai báo thì có: nó bị gỡ tải cho đến khi bạn đồng ý lại."
         },
         "selfHostedQuarantine": "{id} {version} đến từ Registry tự lưu trữ và chưa được tải. Hãy bật Chế độ nhà phát triển hoặc cài nó từ Navide Marketplace."
       },
@@ -2176,9 +2195,13 @@
         "signature": "Không có: không xác nhận được tác giả và tệp có thể đã bị thay đổi",
         "digestLabel": "SHA-256 của tệp",
         "acknowledge": "Tôi hiểu Navide chưa duyệt plugin Navide này và tôi muốn chạy mã của nó.",
-        "versionExists": "Số phiên bản này đã được cài với nội dung khác. Hãy tăng phiên bản rồi đóng gói lại.",
+        "versionExists": "Số phiên bản này đã được cài đặt. Hãy tăng số phiên bản rồi đóng gói lại.",
         "installFailed": "Không thể cài plugin Navide này.",
         "chooseAgain": "Hãy đóng hộp thoại này và chọn lại tệp để thử lại.",
+        "approveAgain": "Tệp vẫn sẵn sàng, nên bạn có thể phê duyệt lại.",
+        "askAgentAgain": "Hãy đóng hộp thoại này và nhờ agent gửi lại yêu cầu.",
+        "startAgain": "Hãy đóng hộp thoại này và thử lại từ đầu.",
+        "rollbackFailed": "Không thể quay lại phiên bản này.",
         "replaceTitle": "Thay thế plugin Navide đã cài",
         "replaceMarketplace": "Thay {id} (phiên bản {version} trên Navide Marketplace) bằng phiên bản từ tệp này? Nó sẽ không còn tự động cập nhật.",
         "replaceLocal": "Thay phiên bản từ tệp {version} của {id} bằng tệp này?",
@@ -2493,6 +2516,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "Dịch bằng máy. Đang chờ người bản ngữ duyệt.",
       "language-hint": "Ngôn ngữ là tùy chọn cấp người dùng, áp dụng cho mọi workspace.",
+      "language-display": "Ngôn ngữ hiển thị",
       "ui-scale": "Tỷ lệ giao diện",
       "ui-scale-hint": "Thu phóng toàn bộ giao diện — chữ, biểu tượng và khoảng cách — trong mọi cửa sổ. Tách biệt với cỡ chữ của terminal và trình soạn thảo, vốn có phím tắt ⌘= / ⌘- riêng.",
       "restore-windows": "Khôi phục cửa sổ",
@@ -3117,7 +3141,7 @@
           "p11": "Khối đầu tiên trong Cài đặt ▸ Navide Cloud tên là Đồng bộ. <strong>Đây không phải một tab riêng</strong> — mà là phần trên cùng của chính trang này. Mỗi phạm vi đồng bộ được có một hàng với công tắc; bật một phạm vi lên thì phạm vi đó sẽ giống nhau trên mọi thiết bị đăng nhập <strong>cùng một tài khoản</strong>. Bản ghi được <strong>mã hóa trên máy này</strong>, và máy chủ chỉ lưu bản mã mà nó không có khóa.",
           "sync": {
             "scopes": "<strong>Năm hàng, mỗi hàng ứng với một trang tài nguyên agent và theo thứ tự của thanh bên; bật được ba hàng</strong>: <em>MCP</em> (các máy chủ bạn đã thêm trong Navide; bí mật của chúng được mã hóa trước khi gửi đi), <em>Skill</em> (skill nào đang bật và mỗi skill được gửi cho CLI nào, cùng các tệp của skill tạo trong Navide; skill bạn tự đặt vào thư mục chỉ đồng bộ phần cài đặt) và <em>Prompt</em> (skill prompt và prompt của Loop).",
-            "credentials": "<em>Bộ nhớ</em> và <em>Tiện ích mở rộng CLI</em> <strong>có trong danh sách nhưng bị làm mờ</strong>, và dòng của chúng ghi “chưa đồng bộ được”. Điều này không có nghĩa là “mặc định tắt, chờ bạn bật” — công tắc không di chuyển. Công tắc Bộ nhớ mà phiên bản cũ để ở trạng thái bật vẫn có thể tắt. <em>Thông tin xác thực và khóa</em> hoàn toàn không có hàng nào: thông tin xác thực tài khoản và khóa không bao giờ rời khỏi máy này. Công tắc Thông tin xác thực mà phiên bản cũ để bật được coi là đã tắt. Cài đặt MCP, khi bật đồng bộ, được mã hóa trên máy này trước khi tải lên, và máy chủ không có khóa để giải mã.",
+            "credentials": "<em>Bộ nhớ</em> và <em>Tiện ích mở rộng</em> <strong>có trong danh sách nhưng bị làm mờ</strong>, và dòng của chúng ghi “chưa đồng bộ được”. Điều này không có nghĩa là “mặc định tắt, chờ bạn bật” — công tắc không di chuyển. Công tắc Bộ nhớ mà phiên bản cũ để ở trạng thái bật vẫn có thể tắt. <em>Thông tin xác thực và khóa</em> hoàn toàn không có hàng nào: thông tin xác thực tài khoản và khóa không bao giờ rời khỏi máy này. Công tắc Thông tin xác thực mà phiên bản cũ để bật được coi là đã tắt. Cài đặt MCP, khi bật đồng bộ, được mã hóa trên máy này trước khi tải lên, và máy chủ không có khóa để giải mã.",
             "states": "Bên dưới khối nêu rõ hai trạng thái: <em>chưa kết nối</em> (các phạm vi bạn đã bật sẽ bắt kịp khi liên kết trở lại) và <em>thiết bị này chưa có khóa đồng bộ</em> (không tải lên gì cho đến khi có khóa). Ngoài ra có nút <em>Đồng bộ ngay</em>, chỉ bật khi có kết nối.",
             "key": "<strong>Khóa đồng bộ được hiển thị bằng 8 ký tự đầu của ID</strong>, không bao giờ hiện chính khóa. <em>Xoay vòng khóa</em> cần <strong>nhấp hai lần</strong>: lần đầu biến nút thành <em>Xoay vòng ngay</em> và thêm <em>Hủy</em> bên cạnh. Đổi khóa sẽ cho khóa hiện tại ngừng dùng, niêm phong lại mọi bản ghi đã đồng bộ bằng khóa mới và trao khóa mới cho các thiết bị khác của bạn vào lần trao đổi khóa tiếp theo — đó là việc cần làm với khóa mà bạn nghĩ đã bị lộ.",
             "legacy": "<em>Dùng cho tài khoản này</em> chỉ xuất hiện khi thiết bị này giữ một khóa đồng bộ từ trước khi có liên kết tài khoản <em>và</em> tài khoản này chưa có khóa. Đây là lựa chọn một lần: nếu không dùng khóa đó, bạn không đọc được những gì đã đồng bộ bằng khóa ấy, còn nếu tạo khóa mới thay thế thì các bản ghi đó sẽ vĩnh viễn không đọc được.",
@@ -4399,10 +4423,6 @@
             "title": "Liên kết được thực hiện ở nơi khác",
             "text": "“Workspace này dùng tài khoản Git nào” được chọn bằng nhãn tài khoản trên <strong>bảng Git ở thanh bên</strong>. Trang Cài đặt chỉ thêm, sửa và xóa tài khoản. Xóa một tài khoản cũng xóa luôn mọi liên kết đang trỏ tới nó."
           },
-          "hPortable": "Thông tin xác thực di động",
-          "portable1": "Thẻ tài khoản đã có thêm trường <strong>Thông tin xác thực di động</strong>: chạy lệnh của chính nhà cung cấp để lấy và dán kết quả vào. Hiện tại <strong>chỉ Claude Code khai báo thông tin xác thực di động</strong> (lệnh là <code>claude setup-token</code>); mười ba CLI còn lại không có trường này. Những gì bạn dán được mã hóa trên máy này và trao cho <strong>các pane mới khởi chạy</strong> qua môi trường của chúng — <strong>không bao giờ được ghi vào tệp thông tin xác thực riêng của CLI</strong>.",
-          "portable2": "Thẻ hiển thị <em>Chưa đặt</em> hoặc <em>Đã đặt</em>, và khi thông tin xác thực bị lấn quyền thì thẻ nói rõ — “không có hiệu lực”, kèm tên thứ được ưu tiên hơn — vì hầu hết CLI đặt tệp đăng nhập riêng, trình trợ giúp khóa hoặc thư mục chính sách của quản trị viên lên trước môi trường. Để thông tin xác thực đã dán có hiệu lực, trước tiên hãy đăng xuất khỏi CLI ở nơi đó.",
-          "portableNote": "Thẻ còn có các dấu như “Từ đám mây” và “Đang dùng”; chúng thuộc về thông tin xác thực đến qua đồng bộ đám mây. Phạm vi Thông tin xác thực của Navide Cloud hiện <strong>có trong danh sách nhưng không bật được</strong>, nên chưa thể dùng lại thông tin xác thực đã dán trên thiết bị khác — những gì bạn dán chỉ ở trên máy này.",
           "switchToast": "<strong>Chuyển tài khoản thất bại giờ luôn hiện rõ.</strong> Trước đây chỉ hai trường hợp từ chối mới hiện thông báo nổi — “có pane đang chạy” và “chuyển quá thường xuyên”. Mọi trường hợp khác, kể cả hoán đổi thông tin xác thực thất bại, đều đổ vào biểu ngữ riêng của bảng Tài khoản, vốn đã cuộn khuất từ lâu trong lúc bạn xem các hàng của một nhà cung cấp; nhấp “Đặt làm mặc định” trông như không có gì xảy ra. Giờ mọi kiểu chuyển thất bại đều hiện thông báo nổi."
         },
         "s6": {
@@ -5556,7 +5576,7 @@
             "legend": {
               "nav": {
                 "label": "Thanh bên của Cài đặt",
-                "text": "MCP nằm trong Tài nguyên agent, cùng với Skills, Prompts và Bộ nhớ."
+                "text": "MCP nằm trong Tài nguyên agent, cùng với Skill, Prompt và Bộ nhớ."
               },
               "actions": {
                 "label": "Thao tác trên thanh trên cùng",
@@ -6784,7 +6804,7 @@
         "s7": {
           "title": "Một người, nhiều máy",
           "p1": "Kết nối hai máy chạy hệ điều hành khác nhau bản thân không phải vấn đề nền tảng: đăng nhập Navide Cloud, ghép đôi và nhắn tin giữa các thiết bị đều hoạt động như nhau trên cả ba, và được trình bày trong <strong>Cài đặt và hệ thống</strong>. Phần này chỉ bổ sung những gì thay đổi khi các máy không cùng nền tảng.",
-          "p2": "Trong <strong>Cài đặt ▸ Navide Cloud</strong>, danh sách đồng bộ cho phép bật ba thứ: MCP, Skill và Prompt. <em>Bộ nhớ</em> và <em>tiện ích mở rộng CLI</em> cũng có trong danh sách, nhưng bị làm mờ và được mô tả là “Chưa đồng bộ được.”; công tắc bộ nhớ mà phiên bản cũ để bật vẫn có thể tắt được. Không có mục cho thông tin xác thực: thông tin xác thực của tài khoản CLI chỉ được lưu trên máy tính này và không bao giờ được đồng bộ.",
+          "p2": "Trong <strong>Cài đặt ▸ Navide Cloud</strong>, danh sách đồng bộ cho phép bật ba thứ: MCP, Skill và Prompt. <em>Bộ nhớ</em> và <em>Tiện ích mở rộng</em> cũng có trong danh sách, nhưng bị làm mờ và được mô tả là “Chưa đồng bộ được.”; công tắc bộ nhớ mà phiên bản cũ để bật vẫn có thể tắt được. Không có mục <em>Thông tin xác thực và khóa</em>: thông tin xác thực của tài khoản CLI chỉ được lưu trên máy tính này và không bao giờ được đồng bộ.",
           "note": "Những thứ vốn không bao giờ đi theo bạn: bản cài và phần đăng nhập của từng CLI, thông tin xác thực (lưu trong kho bảo mật riêng của từng nền tảng, với định dạng không trao đổi được) và mọi đường dẫn tuyệt đối. Máy thứ hai cần tự cài CLI và tự đăng nhập."
         },
         "mock": {
@@ -6814,6 +6834,12 @@
       "no-arguments": "Không có đối số",
       "env": "Biến môi trường",
       "no-env": "Không có biến môi trường",
+      "needs-setup": "Cần thiết lập",
+      "needs-node": "Cần Node.js",
+      "needs-node-hint": "Máy chủ này khởi động bằng {command}, đi kèm với Node.js. Không tìm thấy Node.js trên máy tính này nên máy chủ không thể khởi động cho đến khi cài đặt.",
+      "install-node": "Cài đặt Node.js",
+      "fill-locally": "Một số giá trị đang trống. Hãy điền trên máy này — giá trị biến môi trường và header không bao giờ được đồng bộ giữa các thiết bị.",
+      "fill-credentials-locally": "Một số giá trị trong URL hoặc đối số đang trống. Nếu đó là thông tin xác thực, hãy điền trên máy này — thông tin xác thực trong URL và đối số không bao giờ được đồng bộ giữa các thiết bị.",
       "headers": "Header",
       "no-headers": "Không có header",
       "show": "Hiện",
@@ -6860,6 +6886,7 @@
       "status": "Trạng thái: {status}",
       "starting-note": "Vẫn đang khởi động sau {seconds} giây. Nếu máy chủ chạy qua npx hoặc uvx, lần chạy đầu có thể đang tải gói về.",
       "error-reason": "Không khởi động được: {reason}",
+      "tools-error": "Không thể liệt kê công cụ: {reason}",
       "stderr-tail": "Những dòng cuối máy chủ đã in ra",
       "open-config-file": "Mở tệp cấu hình",
       "native-readonly-hint": "Navide đọc các tệp này và không bao giờ ghi vào chúng. Chỉ quét cấu hình cấp người dùng của từng CLI — MCP cấp dự án không được hiển thị. Hãy thay đổi máy chủ ở nơi CLI của nó quy định, rồi làm mới.",
@@ -7240,7 +7267,7 @@
       "scope-hint-mcp": "Máy chủ MCP bạn đã thêm trong Navide. Bí mật của chúng được mã hóa trước khi rời máy.",
       "scope-hint-skills": "Skill nào đang bật và mỗi skill đi tới CLI nào, cùng các tệp của skill tạo trong Navide (skill lớn được chuyển dưới dạng blob mã hóa). Skill bạn tự đặt vào thư mục chỉ đồng bộ cài đặt.",
       "scope-hint-memory": "Các tệp hướng dẫn chung như ~/.claude/CLAUDE.md. Tệp bên trong dự án vẫn đi theo git.",
-      "scope-credentials": "Thông tin xác thực",
+      "scope-credentials": "Thông tin xác thực và khóa",
       "sealed": "(thông tin xác thực — không hiển thị)",
       "key-id": "Khóa đồng bộ {id}",
       "rotate": "Xoay vòng khóa",
@@ -7378,7 +7405,7 @@
       }
     },
     "memory": {
-      "title": "Tệp hướng dẫn CLI",
+      "title": "Bộ nhớ",
       "intro": "Mọi CLI đều đọc một tệp hướng dẫn trước khi bắt đầu làm việc — CLAUDE.md, AGENTS.md, QWEN.md, quy tắc .cursor. Mỗi tệp được liệt kê một lần, kèm mọi CLI tải nó và có thể sửa ngay tại chỗ.",
       "scope-user": "Cấp người dùng",
       "scope-project": "Cấp dự án",
@@ -7390,6 +7417,25 @@
       "conflict-title": "Tệp này đã thay đổi trên đĩa",
       "conflict-body": "Một chương trình khác — một CLI hoặc trình soạn thảo — đã thay đổi tệp này trong lúc bạn đang sửa. Lưu bây giờ sẽ ghi đè thay đổi đó.",
       "conflict-reload": "Tải lại từ đĩa (bỏ bản nháp của bạn)",
+      "discard-confirm": "Bỏ các thay đổi chưa lưu trong {name}?",
+      "previous-kept": "Đã giữ phiên bản trước · {when}",
+      "restore-previous": "Khôi phục phiên bản trước",
+      "restore-hint": "Mỗi lần lưu, Navide giữ phiên bản bị thay thế trong thư mục riêng của Navide. Khi khôi phục, nội dung hiện tại trở thành phiên bản trước, nên có thể hoàn tác theo cách tương tự.",
+      "error-restore": "Không thể khôi phục phiên bản trước.",
+      "created-by-navide": "Tệp do Navide tạo · {when}",
+      "undo-create": "Hoàn tác tạo (chuyển vào Thùng rác)",
+      "undo-create-hint": "Tệp này chưa tồn tại trước khi Navide lưu. Hoàn tác sẽ chuyển tệp vào Thùng rác của hệ thống, nơi vẫn có thể khôi phục.",
+      "undo-create-changed": "Tệp đã thay đổi sau khi Navide tạo — một chương trình khác, như CLI, đã ghi vào. Hãy xem phần khác biệt trước khi chuyển vào Thùng rác.",
+      "undo-create-diff-legend": "− nội dung Navide đã ghi · + nội dung hiện tại của tệp",
+      "undo-create-confirm": "Vẫn chuyển vào Thùng rác",
+      "undo-create-keep": "Giữ tệp",
+      "undo-create-failed": "Tệp chưa được chuyển vào Thùng rác: {reason}",
+      "undo-create-unavailable": "Không thể dùng Thùng rác ở đây, nên tệp được giữ nguyên.",
+      "scope-auto": "Bộ nhớ tự động của Claude",
+      "auto-intro": "Ghi chú mà Claude Code tự viết về dự án này trong lúc làm việc. Mỗi phiên, nó tải chỉ mục MEMORY.md trước tiên. Bạn có thể sửa ở đây, nhưng Claude có thể viết lại sau.",
+      "auto-empty": "Claude chưa lưu ghi chú nào cho dự án này.",
+      "auto-tag": "Do Claude viết",
+      "auto-editor-hint": "Claude Code tự viết tệp này và có thể thay đổi lại trong một phiên sau.",
       "agents-title": "Mức hỗ trợ CLI",
       "agents-mapped": "Đã ánh xạ",
       "agents-mapped-hint": "Navide biết các CLI này lưu hướng dẫn ở đâu.",
@@ -7402,7 +7448,7 @@
       "error-save": "Không lưu được tệp này. Bản nháp của bạn vẫn còn trong trình soạn thảo."
     },
     "prompts": {
-      "title": "Skill prompt",
+      "title": "Prompt",
       "intro": "Các chỉ thị hoàn chỉnh dùng lại được mà pane CLI có thể dùng từ nút ∞ của nó. Một skill là một prompt hoàn chỉnh — chọn skill sẽ thay thế prompt, không bao giờ nối thêm vào prompt khác. Chỉ skill mặc định chạy dạng loop; mọi skill khác chỉ được gửi một lần.",
       "new": "Skill mới",
       "new-name": "Skill mới",
@@ -7434,7 +7480,9 @@
       "advanced": "Nâng cao",
       "send-once": "Gửi một lần",
       "send-once-hint": "Chỉ skill mặc định chạy dạng loop; skill này được gửi một lần, không có văn bản tiếp tục hay giới hạn lượt.",
-      "untitled-name": "Skill chưa đặt tên"
+      "untitled-name": "Skill chưa đặt tên",
+      "prompt-empty": "Prompt không được để trống — đã giữ lại nội dung trước đó. Để gỡ skill này, hãy dùng Xóa.",
+      "delete-confirm": "Xóa “{name}”? Không thể hoàn tác, và các máy đồng bộ prompt cũng sẽ xóa nó."
     },
     "section": {
       "general-behavior": "Hành vi chung",
@@ -7442,7 +7490,6 @@
       "notifications": "Thông báo",
       "settings-management": "Quản lý cài đặt",
       "theme": "Chủ đề",
-      "language": "Ngôn ngữ",
       "other": "Khác",
       "updates": "Cập nhật"
     },
@@ -8160,8 +8207,12 @@
         "dir-sign-in-hint": "Đăng nhập tài khoản này một lần trong thư mục riêng của nó để có thể đọc hạn mức trực tiếp khi nó đang tạm gác. Trình duyệt sẽ yêu cầu ủy quyền lại; hãy dùng cùng email.",
         "dir-email-mismatch": "Thư mục riêng của nó đang đăng nhập với {dirEmail}, không phải {expected}. Hạn mức trên thẻ này là của {dirEmail}.",
         "default-hint": "Thông tin đăng nhập ban đầu của bạn",
-        "is-default": "Mặc định",
-        "set-default": "Đặt làm mặc định",
+        "default-collapsed": "Đăng nhập ban đầu (ngoài Navide): chưa đăng nhập",
+        "default-sign-in-title": "Chuyển sang đăng nhập ban đầu?",
+        "default-sign-in-body": "Đăng nhập tại đây sẽ chuyển {agent} sang đăng nhập ban đầu trước. Đăng nhập ban đầu không lưu thông tin đăng nhập nào, nên đăng nhập đang dùng ({current}) sẽ bị xóa: tài khoản đó vẫn được lưu trên thẻ của nó và bạn có thể chuyển lại. Các pane {agent} mới sẽ chưa đăng nhập cho đến khi lần đăng nhập này hoàn tất.",
+        "default-sign-in-confirm": "Chuyển và đăng nhập",
+        "is-default": "Đang dùng",
+        "set-default": "Chuyển sang tài khoản này",
         "switching": "Đang chuyển…",
         "not-signed-in": "Chưa đăng nhập",
         "rename": "Đổi tên",
@@ -8175,43 +8226,8 @@
         "active-error": "Tài khoản này đang hoạt động nên không xóa được. Hãy chuyển sang tài khoản khác trước.",
         "login-in-progress-error": "Một lần đăng nhập cho tài khoản này vẫn đang chạy. Hãy hoàn tất hoặc đóng pane đăng nhập của nó trước.",
         "account-dir-in-use-error": "{count} pane đang chạy dùng thư mục riêng của tài khoản này. Hãy đóng chúng trước khi xóa tài khoản.",
-        "portable-label": "Thông tin xác thực di động",
-        "portable-present": "Đã đặt",
-        "portable-absent": "Chưa đặt",
-        "portable-paste": "Dán thông tin xác thực",
-        "portable-replace": "Thay thế",
-        "portable-remove": "Gỡ khỏi thiết bị này",
-        "portable-save": "Lưu",
-        "portable-docs": "Cách lấy",
-        "portable-placeholder": "Chạy {command} và dán kết quả",
-        "portable-placeholder-plain": "Dán thông tin xác thực",
-        "portable-saved": "Đã lưu thông tin xác thực trên thiết bị này. Nó được truyền cho các pane mới qua biến môi trường và không bao giờ được ghi vào tệp riêng của CLI.",
-        "portable-save-failed": "Không lưu được thông tin xác thực.",
-        "portable-clear-failed": "Không gỡ được thông tin xác thực.",
-        "portable-shadowed": "Chưa có hiệu lực: CLI này ưu tiên {files} hơn thông tin xác thực đã dán. Hãy đăng xuất CLI ở đó để dùng nó.",
-        "cloud-off": "Đồng bộ đám mây cho thông tin xác thực đang tắt (Cài đặt → Đồng bộ).",
-        "cloud-status-no-key": "Thiết bị này chưa có khóa đồng bộ — hãy ghép đôi nó với một thiết bị đã có khóa.",
-        "cloud-status-not-connected": "Chưa kết nối Navide Cloud.",
-        "cloud-status-error": "Không đọc được trạng thái đám mây: {error}",
-        "cloud-none": "Không có trên đám mây.",
-        "cloud-state-in-sync": "Đã đồng bộ",
-        "cloud-state-local-only": "Chỉ có trên thiết bị này",
-        "cloud-state-remote-only": "Có trên đám mây, chưa dùng ở đây",
-        "cloud-state-diverged": "Khác với đám mây",
-        "cloud-state-conflict": "Cần bạn quyết định (Cài đặt → Đồng bộ)",
-        "cloud-updated": "Bản trên đám mây được cập nhật {when} từ {device}",
-        "cloud-unreadable": "Được niêm phong bằng khóa mà thiết bị này không có.",
-        "cloud-use": "Dùng trên thiết bị này",
-        "cloud-using": "Đang lấy…",
-        "cloud-use-failed": "Không lấy được thông tin xác thực từ đám mây.",
-        "portable-imported": "Từ đám mây",
-        "portable-selected": "Đang dùng",
-        "portable-select": "Dùng cho pane mới",
-        "portable-deselect": "Ngừng dùng",
-        "portable-select-failed": "Không chọn được thông tin xác thực.",
-        "portable-unavailable": "Đã lưu, nhưng hiện không mở được trên thiết bị này (khóa đồng bộ bị thiếu hoặc đã cũ).",
-        "imported-account": "Tài khoản từ thiết bị khác",
-        "imported-account-hint": "Thông tin xác thực đã dán vào một tài khoản có tên trên thiết bị khác; hãy dùng nó ở đây cho các pane mới hoặc gỡ nó khỏi thiết bị này."
+        "portable-removed-title": "Đã gỡ bỏ “Dán thông tin xác thực”",
+        "portable-removed-text": "Navide không còn truyền thông tin xác thực đã dán cho các pane mới, và những gì đã lưu trên thiết bị này đã bị xóa khi cập nhật. Các pane Claude mới giờ dùng đăng nhập riêng của Claude, có thể là một tài khoản khác và sẽ trừ hạn mức của tài khoản đó."
       }
     },
     "color": {
@@ -8238,6 +8254,8 @@
       "inference-url": "URL máy chủ suy luận",
       "recheck-title": "Kiểm tra lại kết nối",
       "ollama-connected": "Đã kết nối Ollama {version}",
+      "ollama-missing": "Ollama chưa được cài đặt trên máy tính này.",
+      "install-ollama": "Cài đặt Ollama",
       "not-connected": "Chưa kết nối · hãy chạy",
       "model-manager": "Trình quản lý model",
       "model-manager-note": "Tải một model từ Ollama theo tên hoặc xóa model không còn cần",
@@ -9492,7 +9510,7 @@
     "failed": "Không kết nối lại được cuộc hội thoại đó — bản ghi của nó có thể không còn"
   },
   "cli-account": {
-    "default": "Mặc định",
+    "default": "Đăng nhập ban đầu",
     "switch-title": "Chuyển tài khoản",
     "swap-failed": "Không chuyển tài khoản được — tài khoản trước vẫn đang dùng.",
     "panes-running": "Có {count} pane CLI đang chạy dùng tài khoản này — hãy đóng chúng trước khi chuyển.",
@@ -9661,6 +9679,7 @@
     "queue": "{count} đang chờ",
     "requester": "Người yêu cầu",
     "source": "Nguồn",
+    "source-bundled": "Đi kèm Navide ({name})",
     "digest": "Mã băm",
     "targets": "Phân phối",
     "targets-all": "Mọi CLI đã kết nối",
@@ -9676,7 +9695,21 @@
     "installing": "Đang cài…",
     "failed": "Không cài đặt được",
     "dismiss": "Đóng",
-    "expired": "Yêu cầu này đã hết hạn trước khi được phê duyệt. Hãy nhờ agent chuẩn bị lại skill."
+    "expired": "Yêu cầu này đã hết hạn trước khi được phê duyệt. Hãy nhờ agent chuẩn bị lại skill.",
+    "delivery-kicker": "Yêu cầu phân phối skill",
+    "delivery-title": "Phân phối skill “{name}” cho thêm CLI?",
+    "delivery-desc": "Một agent yêu cầu thay đổi các CLI nhận skill này. Không có gì thay đổi cho đến khi bạn phê duyệt tại đây; agent không thể phê duyệt thay bạn.",
+    "delivery-shared": "Thư viện skill dùng chung",
+    "delivery-current": "Đang phân phối cho",
+    "delivery-next": "Sau khi thay đổi",
+    "delivery-none": "Không CLI nào khác",
+    "delivery-state": "Trạng thái",
+    "delivery-turns-on": "Bật skill (hiện đang tắt)",
+    "delivery-note": "Khi phê duyệt, các CLI ở trên sẽ tải skill này trong các phiên mới. Tệp của skill không bị thay đổi. Gỡ một CLI sau này không bao giờ cần phê duyệt.",
+    "delivery-approve": "Phê duyệt thay đổi",
+    "delivery-applying": "Đang áp dụng…",
+    "delivery-failed": "Không thể áp dụng thay đổi phân phối",
+    "delivery-expired": "Yêu cầu này đã hết hạn trước khi được phê duyệt. Hãy nhờ agent xem lại skill rồi thử lại."
   },
   "cli-manage": {
     "title": "Cài đặt và cập nhật",
@@ -9931,6 +9964,7 @@
       }
     },
     "blocked-by": "Hãy cài {names} trước — nó là điều kiện để cài mục này ở đây.",
+    "installs-first": "Khi cài đặt, {names} cũng sẽ được thiết lập trước.",
     "go-install": "Cài {name} trước",
     "complete-failed": "Không lưu được tiến độ thiết lập: {error}. Hãy thử lại.",
     "ollama-start-failed": "Không khởi động được dịch vụ Ollama. Xem nhật ký để biết chi tiết, hoặc chạy `ollama serve` trong terminal.",
@@ -11241,10 +11275,13 @@
       "undo-none": "Không có gì để hoàn tác",
       "view": "Chế độ xem",
       "show-palette": "Hiện bảng nút",
-      "hide-palette": "Ẩn bảng nút"
+      "hide-palette": "Ẩn bảng nút",
+      "task": "Nhiệm vụ cho lần chạy này"
     },
     "controlPane": {
-      "open-in-canvas": "Mở trong canvas pipeline"
+      "open-in-canvas": "Mở trong canvas pipeline",
+      "gate-toast": "Pipeline đang chờ bạn phê duyệt tại {name}",
+      "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo."
     },
     "edge": {
       "title": "Vòng trả về",
@@ -11485,7 +11522,7 @@
     "follow-wait": "Chuyển khi xong",
     "follow-skip-running": "Bỏ qua các pane đang chạy",
     "follow-switch-label": "Đi theo khi chuyển tài khoản",
-    "follow-switch-hint": "Bật: pane này chuyển sang tài khoản mới ở lượt tiếp theo. Tắt: nó ở lại thư mục riêng của tài khoản. Thay đổi theo hướng nào cũng mở lại pane một lần.",
+    "follow-switch-hint": "Bật: chọn tài khoản bên dưới sẽ đổi tài khoản mặc định, và pane này chuyển sang nó ở lượt tiếp theo. Tắt: chọn tài khoản chỉ chuyển pane này, mở lại một lần trong thư mục riêng của tài khoản đó; tài khoản mặc định và các pane khác giữ nguyên. Gạt công tắc này cũng mở lại pane một lần.",
     "pinned-indicator-label": "Cố định vào tài khoản",
     "pinned-indicator-tooltip": "Đã cố định: chuyển tài khoản không di chuyển pane này. Mở huy hiệu tài khoản để cho nó đi theo lại.",
     "unpin-title": "{count} pane cần cho đi theo đang làm việc",
@@ -11665,6 +11702,7 @@
       "added": "Mới",
       "removed": "Đã gỡ",
       "declaredScope": "Phạm vi đã khai báo (chỉ để tham khảo)",
+      "declaredScopeNote": "Navide không áp đặt phạm vi đã khai báo. Plugin Navide có quyền truy cập tệp vẫn có thể đọc và sửa tệp nằm ngoài phạm vi đó.",
       "unchanged": "Không đổi ({count})",
       "fullCard": "Thẻ công khai thông tin đầy đủ",
       "badgeMore": "Thêm quyền",

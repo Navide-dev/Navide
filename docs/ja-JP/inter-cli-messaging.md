@@ -30,6 +30,10 @@ Navide で動作する 2 つの CLI Agent は互いに会話できます。ど�
 - Pane のタイトルを消すと、Handle は自動導出されたタイトルに戻ります。それも
   ない場合はベンダーラベルに戻ります。
 - Handle は再起動しても保持されます。
+- 照合は完全一致で、大文字と小文字を区別します。`Reviewer` では `reviewer` に
+  届きません。大文字小文字を無視するのは Broadcast の宛先（`all`、`*`）だけです。
+  `parent` という別名はありません。Spawn された Pane には親の実際のアドレスが
+  渡されるので、それを使います。
 - プレーンな Terminal Pane（ログインシェル、agent key `terminal`）にも Handle
   はありますが、受信専用です。シェルには MCP ツールがなく、その出力からメッセージ
   ブロックを探すこともありません。[プレーンな Terminal Pane](#プレーンな-terminal-pane)
@@ -99,6 +103,12 @@ Parser が適用するルール:
 - `---MSG-END---` の欠落は許容されます。ブロックは次の `---MSG-START---` か、
   Turn の終わりで閉じます。
 - 宛先が空、または本文が空のブロックは破棄されます。
+- 閉じられていない Fence は Turn の終わりまで続きます。ブロックの本文内で開いた
+  場合、そのブロックは開いたままになり、その `---MSG-END---` と以降のすべての
+  Marker は本文になります（Zero-width Space で分断）。そのため、そのブロック 1 つ
+  が Turn の終わりに送信され、後続のブロックは個別には送信されません。どの
+  ブロックよりも前で開いた場合は、後続のブロックがすべて隠れ、それらについて
+  Format 通知も送られません。
 - 1 つの Turn に複数のブロックを含めることができ、そのすべてが送信されます。
 - 本文中の `---MARKER---` 形式の Token は、配信前に Zero-width Space で分断され
   ます。転送されたテキストが Parser を再び起動させることは決してありません。
@@ -211,12 +221,27 @@ Rebased onto main — please re-run the suite.
 （`/Users/me/Agent-Team/reviewer`）を使います。`/` を含まない宛先は、常に送信側
 の Window 内で解決されます。
 
+その逆が成り立つのは `cli_send` だけです。MSG ブロックはまず名前が完全一致する
+ローカルの Pane を探すので、名前がそのまま `fix/bug` の Pane にも自分の Window
+からは届きます。`cli_send` は `/` を含む宛先をすべて修飾アドレスとして読むので、
+そうした Pane にはそこでは `pane_id` でしか届きません。3 部構成の
+`<device>/<workspace>/<pane>` が別のマシンへ送られるのは、最初の部分がデバイス
+（別のマシンの id、または Roster にあるデバイス）を指し、かつアドレス全体に一致
+するローカルの宛先が先に見つからない場合だけです。そうでなければ `a/b/c` は
+Workspace `a/b` の Pane `c` として読まれます。`cli_read_log` にはリモートの分岐が
+なく、別のデバイスのアドレスを渡すと `unknown-target` を返します。入力ミスのよう
+に見えますが、そうではありません。
+
 ### 返信
 
 配信されたメッセージは Correlation ID を伴います。それを `re:` フィールドに
 そのまま返すと、返信が元のメッセージに紐づきます。Messages パネルはこれを使って
 2 つの行をスレッドとしてまとめます。`re:` なしで書かれた返信も配信されます。
 紐づけがない状態で届くだけです。
+
+`reply_to` は別のデバイスには伝わりません。Navide-Server 経由で中継された
+メッセージはそれを持たずに届くため、送信側の行が相手の返信と紐づくことはありま
+せん。相手側では、自分の返信を受け取ったメッセージに引き続き紐づけます。
 
 ---
 
@@ -593,6 +618,8 @@ hook は実行中ずっと Agent を Block するため、Window の応答時間
 メッセージは Queue の先頭に戻され、通常の入力による経路で送出されます。何も失われ
 ず、二重配信も起きません。遅れて届いた応答には、hook はすでに諦めたと伝えられ
 ます。
+Window が Backend に応答を返す呼び出し自体の上限は **5 秒**です。呼び出しが失敗
+するか時間内に応答がなければ、メッセージは同じように Queue の先頭に戻されます。
 
 「Queue に何もない」という応答は JSON ではなく**空応答**です。Claude Code は hook
 の stdout をその判断として読み取り、認識できない JSON Object は hook Error として
@@ -603,7 +630,8 @@ Block された Turn も CLI の会話 Log には書き込まれ、その Reader
 Turn 終了として報告します。Navide はその記録を Superseded とマークします。そこ
 から読み取れるもの（Pane が他者に宛てた MSG ブロック、Sentinel、Auto-name）は
 すべて有効ですが、それはもはや Pane が空いていることを意味しません。実際に空い
-ていないからです。
+ていないからです。このマークは hook が Pane を Block してから **15 秒**
+続くか、次に通された Stop hook で早めに解除されます。
 
 ### カバーしない範囲
 
@@ -764,7 +792,7 @@ Pane は最初から新しい Settings File を持っています。
 
 | Guard | 上限 |
 |---|---|
-| 送信者→対象ペアごとの Rate Limit | 60 秒あたり 5 通 |
+| 送信者→対象ペアごとの Rate Limit | 60 秒あたり 5 通（別のデバイスから中継されたメッセージも含む） |
 | 対象 Pane ごとの Pending メッセージ | 10 |
 | 配信 Log | 直近 500 行 |
 | グローバル一時停止 | Messages パネルのヘッダー |
@@ -834,6 +862,8 @@ MCP の `cli_send` から、あるいは別の Machine から中継されたも�
 | `busy` / `not-ready` | 対象 Pane が入力を受け付ける状態ではない |
 | `starting` | 対象 Pane がまだ起動中 |
 | `typing` | 誰かが対象 Pane で入力している |
+| `composer` | 以前の Push のテキストが対象の入力欄にまだ残っている可能性がある（その送信が失敗し、クリアも確認できていない）。その Push より新しい活動が Pane に現れるまで何も入力しない |
+| `pty-blocked` | 入力中だが、対象のターミナルが入力の読み取りを止めている。読み取りが再開するまで保留される |
 | `mid-turn` | 対象 Agent が作業中（Turn の途中で入力を Queue するベンダーでは決して報告されない） |
 | `settling` | 対象が静かになったばかりで、落ち着くのを待っている（同じ免除が適用される） |
 | `paused` | この Window の配信が一時停止中 |
@@ -868,7 +898,6 @@ MCP の `cli_send` から、あるいは別の Machine から中継されたも�
 | `rate-limit` / `queue-full` | 上記の Guard Rail |
 | `pane-closed` | 配信前に対象が閉じた |
 | `inject-failed` / `inject-error` | Pane への入力が通らなかった |
-| `delivery-unconfirmed` | 失敗ではない：Resume 直後の CLI に入力・送信したが、受信がまだ示されていない。行は delivered にこの注記付きで表示される。再送前に Pane を確認すること。Transcript にメッセージが現れると注記は消える |
 | `window-reloaded` | In-flight の間に Window が Reload した |
 | `no-report` | 相手の Window が結果を報告しなかった |
 | `receiver-error` | 別のデバイスが受け取ったが、処理中に失敗した。トレースバックはその Backend の Log にある。再試行で成功する可能性がある |
@@ -876,6 +905,17 @@ MCP の `cli_send` から、あるいは別の Machine から中継されたも�
 | `unknown-target-in-workspace` / `ambiguous-target` | Workspace は解決したが、Pane 名が一致しなかった、または 2 つに一致した |
 | `unknown-pane-id` | このマシンのどの Pane も指さない `pane_id` — `cli_list_targets` から新しいものを読み直す |
 | `no-group` | Pane を持たず、したがって Group も持たない呼び出し元が `cli_send` に Group Broadcast を求めた |
+
+`delivery-unconfirmed` がこの表にないのは、失敗ではないからです。メッセージは
+Resume 直後の CLI に入力・送信されたものの、受信がまだ示されていません。Messages
+パネルの行はこの注記付きで `delivered` と表示され、`cli_check_message` は状態
+`unconfirmed` を返します。Transcript にメッセージが現れると、どちらも単なる
+`delivered` になります。再送前に Pane を確認してください。すでに実行中かもしれません。
+
+「refused」も状態ではありません。Queue に入る前に断られた送信（たとえば存在しない宛先や
+拒否されたコマンド）は `ok: false` を返し、`msg_key` はありません。
+Queue に入った後で断られたものは、この表の Reason 付きで `failed` になり、別の
+デバイスの Pane ポリシーが拒否した場合は `rejected` になります。
 
 ---
 

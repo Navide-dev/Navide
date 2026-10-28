@@ -39,7 +39,6 @@ from . import (
     native_memory,
     osplat,
     pane_policy,
-    portable_credentials,
     quota_failover,
     remote_roster,
     server_link,
@@ -58,6 +57,7 @@ from .mcp_settings import (
     MCPSettingsConflictError,
     MCPSettingsError,
     restore_mcp_server_secrets,
+    unfilled_mcp_secrets,
 )
 from .plan_index import resolve_plan_root
 from .stages_store import GraphNonLinearError
@@ -2364,35 +2364,10 @@ def _account_dir_for_spawn(
     return slot
 
 
-#: Terminal metadata key carrying the portable slot a launch was injected
-#: with. Non-secret. Written once at spawn; read by the bookkeeping messages
-#: that follow (pipeline.slot_spawn, manual_pane.spawn) so they record the
-#: launch's identity rather than whatever slot is selected by then.
-PORTABLE_SLOT_METADATA_KEY = "portable_slot_id"
-
-
-def _launch_portable_slot(pane_id: str) -> str:
-    """The portable slot the pane's most recent launch ran on, or "".
-
-    The fact was fixed at terminal.create (``portable_credentials.note_launch``
-    plus the terminal's own metadata) — never the current selection, which
-    can have moved on between the launch and this message. It outlives the
-    terminal: a CLI that exits before the bookkeeping arrives has already
-    been reaped from _PTY_OWNERS, and reading only live terminals would
-    record it as native. A login or native relaunch of the same pane writes
-    "" over it, so a stale portable fact cannot resurface on a respawn."""
-    return portable_credentials.launch_slot(pane_id)
-
-
 def _profile_pin_for_bookkeeping(
     agent_key: str, pane_id: object, payload_profile_id: object
 ) -> str:
-    """``_profile_pin_for_spawn`` for the bookkeeping messages: the launch's
-    own portable slot when the pane has one, else the native rule."""
-    if agent_key in PROFILE_AGENT_KEYS:
-        launched = _launch_portable_slot(str(pane_id or ""))
-        if launched:
-            return launched
+    """``_profile_pin_for_spawn`` for the bookkeeping messages."""
     return _profile_pin_for_spawn(agent_key, payload_profile_id)
 
 
@@ -2415,7 +2390,6 @@ async def _broadcast_profiles_changed(
     from . import app
 
     view = await asyncio.to_thread(_profile_account_view)
-    portable = await asyncio.to_thread(_portable_credentials_view)
     doc = app.cli_profiles_store.list()
     payload = {
         "profiles": doc["profiles"],
@@ -2429,9 +2403,6 @@ async def _broadcast_profiles_changed(
         # {signedIn, email}}}, and the account new panes start on.
         "accountDirs": view["accountDirs"],
         "paneDefaults": doc["paneDefaults"],
-        # Pasted portable credentials, metadata only (never the value):
-        # {"<agentKey>/<slotId>": {configured, enabled, kind, updatedAt, ...}}.
-        "portable_credentials": portable,
         "reason": reason,
     }
     if harvested_profile_ids:
@@ -2461,7 +2432,6 @@ async def cli_profiles_list(session: "Session", msg_id: str, msg_type: str, payl
 
     doc = app.cli_profiles_store.list()
     view = await asyncio.to_thread(_profile_account_view)
-    portable = await asyncio.to_thread(_portable_credentials_view)
     await session.send_json(
         make_response(
             msg_id,
@@ -2475,8 +2445,6 @@ async def cli_profiles_list(session: "Session", msg_id: str, msg_type: str, payl
                 "accountDirs": view["accountDirs"],
                 "paneDefaults": doc["paneDefaults"],
                 "supported_agents": list(PROFILE_AGENT_KEYS),
-                "portable_credentials": portable,
-                "portable_supported": portable_credentials.supported_agent_keys(),
                 # Per vendor: hot/restart/manual, the credential pool, the
                 # provider scopes a new profile may bind to, resume ability.
                 "account_capabilities": quota_failover.capabilities(),
@@ -2485,92 +2453,15 @@ async def cli_profiles_list(session: "Session", msg_id: str, msg_type: str, payl
     )
 
 
-def _portable_credentials_view() -> dict[str, dict]:
-    """Metadata for every pasted portable credential, keyed
-    "<agentKey>/<slotId>" — the value itself is never part of it. Shadowing
-    is checked against the real home only; a pane's cwd is only known at
-    spawn. Blocking; call off the loop."""
-    try:
-        return portable_credentials.describe_all(home=Path.home())
-    except Exception as err:  # noqa: BLE001 - a locked vault must not break the accounts list
-        log.warning("portable credentials could not be listed: %s", err)
-        return {}
+@handler("cli_profiles.portable_removal_notice")
+async def cli_profiles_portable_removal_notice(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """``{"show": true}`` exactly once on a machine whose pasted credentials the
+    0.2.32 upgrade erased (portable_credentials_cleanup); false everywhere else."""
+    from . import app, portable_credentials_cleanup
 
-
-def _portable_address(payload: dict) -> tuple[str, str]:
-    """(agent_key, slot_id) from a cli_profiles.portable_* payload. The
-    built-in Default row sends "__default__" (or nothing) as its profile id."""
-    agent_key = str(payload.get("agent_key") or "")
-    slot_id = str(payload.get("profile_id") or DEFAULT_SLOT_ID)
-    return agent_key, slot_id
-
-
-async def _reply_portable(
-    session: "Session", msg_id: str, msg_type: str, reason: str, portable: dict | None
-) -> None:
-    body: dict[str, Any] = {"ok": True}
-    if portable is not None:
-        body["portable"] = portable
-    await session.send_json(make_response(msg_id, msg_type, body))
-    await _broadcast_profiles_changed(reason)
-
-
-@handler("cli_profiles.portable_get")
-async def cli_profiles_portable_get(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    agent_key, slot_id = _portable_address(payload)
-    try:
-        portable = await asyncio.to_thread(
-            portable_credentials.describe, agent_key, slot_id, home=Path.home()
-        )
-    except portable_credentials.PortableCredentialError as err:
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err)))
-        return
-    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "portable": portable}))
-
-
-@handler("cli_profiles.portable_set")
-async def cli_profiles_portable_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    """Store a pasted credential. The reply and the broadcast carry metadata
-    only; the secret is consumed here and never echoed."""
-    agent_key, slot_id = _portable_address(payload)
-    secret = payload.get("secret")
-    if not isinstance(secret, str):
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "secret must be a string"))
-        return
-    try:
-        portable = await asyncio.to_thread(portable_credentials.store, agent_key, slot_id, secret)
-    except portable_credentials.PortableCredentialError as err:
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err)))
-        return
-    # On the loop, after the store: sync schedules its push as a task here.
-    portable_credentials.notify_saved(agent_key, slot_id)
-    await _reply_portable(session, msg_id, msg_type, "portable-set", portable)
-
-
-@handler("cli_profiles.portable_enable")
-async def cli_profiles_portable_enable(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    agent_key, slot_id = _portable_address(payload)
-    try:
-        portable = await asyncio.to_thread(
-            portable_credentials.set_enabled, agent_key, slot_id, bool(payload.get("enabled"))
-        )
-    except portable_credentials.PortableCredentialError as err:
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err)))
-        return
-    await _reply_portable(session, msg_id, msg_type, "portable-enable", portable)
-
-
-@handler("cli_profiles.portable_clear")
-async def cli_profiles_portable_clear(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    """Local removal only: the entry on this machine goes away; nothing is
-    deleted anywhere else (the plan's chosen deletion semantics)."""
-    agent_key, slot_id = _portable_address(payload)
-    try:
-        await asyncio.to_thread(portable_credentials.forget, agent_key, slot_id)
-    except portable_credentials.PortableCredentialError as err:
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err)))
-        return
-    await _reply_portable(session, msg_id, msg_type, "portable-clear", None)
+    show = await asyncio.to_thread(
+        portable_credentials_cleanup.take_notice, app.database, now=int(time.time()))
+    await session.send_json(make_response(msg_id, msg_type, {"show": show}))
 
 
 @handler("cli_profiles.create")
@@ -3684,7 +3575,7 @@ async def agent_reap_orphans(session: "Session", msg_id: str, msg_type: str, pay
 
 # ── MCP servers (mcp.*) ─────────────────────────────────────────────────────
 # Live MCP status fields passed through to Settings -> MCP as they are.
-_MCP_LIVE_DETAIL = ("starting_seconds", "slow_start", "error", "stderr_tail")
+_MCP_LIVE_DETAIL = ("starting_seconds", "slow_start", "error", "stderr_tail", "tools_error")
 
 
 @handler("mcp.list_servers")
@@ -4241,6 +4132,9 @@ async def memory_list(session: "Session", msg_id: str, msg_type: str, payload: d
     # The scan stats every candidate in the home and the workspace; a thread
     # keeps that file I/O off the loop, as the native MCP scan does.
     files = await asyncio.to_thread(native_memory.scan, None, workspace)
+    # Shown even before Claude has written anything, so the page can say where
+    # its notes for this project will appear.
+    memory_dir = await asyncio.to_thread(native_memory.auto_memory_dir, None, workspace)
     await session.send_json(
         make_response(
             msg_id,
@@ -4249,6 +4143,7 @@ async def memory_list(session: "Session", msg_id: str, msg_type: str, payload: d
                 "files": [f.as_dict() for f in files],
                 "agents": native_memory.agent_targets(),
                 "workspace_path": str(workspace) if workspace else "",
+                "auto_memory_dir": str(memory_dir) if memory_dir else "",
             },
         )
     )
@@ -4306,6 +4201,35 @@ async def memory_save(session: "Session", msg_id: str, msg_type: str, payload: d
         return
     await session.send_json(make_response(msg_id, msg_type, result))
     server_link.sync_soon("memory")
+
+
+@handler("memory.restore")
+async def memory_restore(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Write back the version the last save replaced, kept in Navide's data dir."""
+    workspace = _memory_workspace(payload)
+    path = str(payload.get("path") or "")
+    expected_raw = payload.get("expected_modified")
+    expected = float(expected_raw) if isinstance(expected_raw, (int, float)) else None
+    try:
+        result = await asyncio.to_thread(
+            native_memory.restore_previous, path, None, workspace, expected
+        )
+    except native_memory.MemoryConflictError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_FILE_CONFLICT", str(err), {"path": path})
+        )
+        return
+    except ValueError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_FILE_REJECTED", str(err), {"path": path})
+        )
+        return
+    except OSError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_WRITE_FAILED", str(err), {"path": path})
+        )
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
 
 
 # ── Cross-device sync (sync.*) ──────────────────────────────────────────────
@@ -6110,6 +6034,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
         # stages still name, and an imported document can name a key this
         # machine has never had.
         await _clear_dangling_role_refs("bundle_import")
+    mcp_needs_secrets: list[str] = []
     if isinstance(bundle.get("mcp_servers"), list):
         incoming_servers = bundle["mcp_servers"]
         if not all(isinstance(server, dict) for server in incoming_servers):
@@ -6128,6 +6053,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
                 incoming_servers,
                 existing_servers,
             )
+            mcp_needs_secrets = unfilled_mcp_secrets(incoming_servers, restored_servers)
             app.mcp_settings_store.replace_servers(restored_servers)
         except ValidationError as err:
             await session.send_json(
@@ -6162,6 +6088,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
     await session.send_json(make_response(msg_id, msg_type, {
         "ok": True,
         "applied": applied,
+        "mcp_needs_secrets": mcp_needs_secrets,
         "paths": app._settings_paths(),
     }))
 
@@ -8514,7 +8441,7 @@ async def _terminal_create_impl(
     agent_key = payload.get("agent_key") or ""
     # The window's per-vendor env settings, first in the chain on purpose: the
     # vendor defaults below use setdefault, while onboarding, login profiles,
-    # home management, wiring and portable credentials all update over the top,
+    # home management and wiring all update over the top,
     # so a user value can never displace something the backend must control.
     # It is also the only untrusted source in the chain — filter it here, and
     # keep what survived so the window can be told which of its settings a
@@ -8861,6 +8788,10 @@ async def _terminal_create_impl(
             env,
             str(payload.get("cwd") or ""),
         )
+        # The builtin skills transformer cannot return lines; it keeps them.
+        from .plugins.builtin.navide_skills import skills_wiring
+
+        wiring_warnings.extend(skills_wiring.take_spawn_warnings(str(payload.get("pane_id") or "")))
     # Give the pane whatever its push channel needs (a port to serve on, a file
     # to watch) so a message can later reach it without being typed in. Last,
     # so the flags it adds cannot be displaced by MCP or skills wiring; a CLI
@@ -9062,54 +8993,6 @@ async def _terminal_create_impl(
                 ))
                 await _reclaim_codex_home(str(transaction.get("codex_home_id") or ""))
                 return
-            # The portable credential this agent's panes are set to run on,
-            # if any — read here, under the same lock, so a switch racing
-            # this spawn cannot pair one account's live files with another's
-            # token. The selection is its own record: it does not follow the
-            # native default profile or the payload's pin (bookkeeping, see
-            # _profile_pin_for_spawn), so a credential synced from another
-            # machine is usable without that account ever signing in here.
-            try:
-                # A login pane — isolated (login_profile_id, which does not
-                # reach this branch) or live (is_login alone) — exists to
-                # sign in; the token would make the CLI skip exactly that.
-                # An account-dir pane already runs on its account's own
-                # login; a portable token would outrank it and switch the
-                # identity silently.
-                injection = None if is_login or account_dir_slot else await vault_to_thread(
-                    functools.partial(
-                        portable_credentials.spawn_env, agent_key,
-                        home=Path.home(), cwd=Path(str(payload.get("cwd") or "")),
-                    )
-                )
-            except portable_credentials.PortableCredentialUnavailable as unavailable:
-                # Selected but unusable: refuse rather than start the pane on
-                # whatever login the CLI would fall back to — that would be a
-                # silent switch of identity. The data names what to fix.
-                app.log.warning("terminal.create refused: %s", unavailable)
-                await session.send_json(
-                    make_error(
-                        msg_id, msg_type, "PORTABLE_CREDENTIAL_UNAVAILABLE",
-                        str(unavailable),
-                        {
-                            "agent_key": agent_key,
-                            "profile_id": unavailable.slot_id,
-                            "reason": unavailable.reason,
-                            "shadowedBy": list(unavailable.shadowed_by),
-                        },
-                    )
-                )
-                await _reclaim_codex_home(str(transaction.get("codex_home_id") or ""))
-                return
-            if injection is not None:
-                env.update(injection.env)
-                env_remove = list(env_remove or []) + list(injection.env_remove)
-                metadata[PORTABLE_SLOT_METADATA_KEY] = injection.slot_id
-            # The launch's identity, fixed here for the bookkeeping that
-            # follows in separate messages (see _launch_portable_slot). A
-            # login or native launch writes "" and retires any earlier fact.
-            portable_credentials.note_launch(
-                str(payload["pane_id"]), injection.slot_id if injection else "")
             # Launch provenance for the account-switch authority: the profile
             # this pane starts on and the credential pool it resolves to,
             # decided under the same lock as the credentials themselves. The
@@ -9124,7 +9007,6 @@ async def _terminal_create_impl(
             )
             provenance = quota_failover.pane_auth_scope(
                 agent_key, launch_profile, env=env, env_remove=env_remove or (),
-                portable_slot_id=injection.slot_id if injection else None,
                 account_dir=bool(account_dir_slot),
             )
             metadata["launch_profile_id"] = provenance["profileId"]
@@ -9249,7 +9131,6 @@ async def _terminal_create_impl(
             finally:
                 switch_lock.release()
     else:
-        portable_credentials.note_launch(str(payload["pane_id"]), "")
         term = _spawn_and_claim()
     # What became of the window's own env settings. Only now is the answer
     # final: `env` is written by six later sources and `env_remove` (applied
@@ -9933,7 +9814,6 @@ async def terminal_kill_surface(session: "Session", msg_id: str, msg_type: str, 
         app.attribution.unregister_pane(pane_id)
         ended.setdefault(pane_id, workspace_path)
     for pane_id, workspace_path in ended.items():
-        portable_credentials.forget_launch(pane_id)
         for ws in app.dev_time_store.pane_removed(pane_id):
             await app.broadcast(make_event("devtime.changed", {"workspace_path": ws}))
         entry = agent_messaging.get(pane_id)
@@ -11187,7 +11067,6 @@ async def pipeline_slot_unspawn(session: "Session", msg_id: str, msg_type: str, 
         "",
     )
     await _sweep_pane_ptys(session, pane_id)
-    portable_credentials.forget_launch(str(pane_id or ""))
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )
@@ -11445,7 +11324,6 @@ async def manual_pane_unspawn(session: "Session", msg_id: str, msg_type: str, pa
     )
     for swept_id in dict.fromkeys([pane_id, *removed_pane_ids]):
         await _sweep_pane_ptys(session, swept_id)
-        portable_credentials.forget_launch(str(swept_id))
     # A Codex pane's home is named after its pane id, or after the id a
     # restored pane kept using (session_home_id). Its PTY is down by now.
     for home_id in dict.fromkeys([
@@ -13031,7 +12909,7 @@ async def evolve_badges(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 # ── CLI extensions (cli_extensions.*) ──────────────────────────────────────
-# The read-only inventory behind Settings → CLI Extensions. Scanning reads
+# The read-only inventory behind Settings → Extensions. Scanning reads
 # files and at most a declared listing command with a timeout, so a thread
 # keeps it off the loop.
 @handler("cli_extensions.list")

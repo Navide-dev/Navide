@@ -13,7 +13,8 @@ Two rules the vendor specs exist to keep:
   flag that replaces the CLI's own discovery (kimi's ``--skills-dir``) gets
   the discovery roots passed back alongside ours.
 - **A spawn never breaks over skills.** Every failure path returns the command
-  unchanged; the worst outcome is a pane without managed skills.
+  unchanged; the worst outcome is a pane without managed skills, and the pane
+  says so at startup (``take_spawn_warnings``).
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ import re
 import shutil
 import stat
 import tempfile
+import threading
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
@@ -43,6 +45,27 @@ PANES_DIR_NAME = ".navide-panes"
 #: Same guard pane_home applies — the lookahead rejects "." and ".." on their
 #: own, which would otherwise resolve a shim onto a directory we do not own.
 _SAFE_PANE_ID = re.compile(r"^(?!\.+$)[A-Za-z0-9_.:-]+$")
+
+#: pane id -> lines that pane prints at startup because its skills could not
+#: be wired. Filled by wire_command, drained by the spawn handler right after
+#: the spawn transformers ran.
+_spawn_warnings: dict[str, list[str]] = {}
+_spawn_warnings_lock = threading.Lock()
+
+
+def take_spawn_warnings(pane_id: str) -> list[str]:
+    """The startup lines for ``pane_id`` collected by wire_command, once."""
+    with _spawn_warnings_lock:
+        return _spawn_warnings.pop(pane_id or "", [])
+
+
+def _record_spawn_warnings(pane_id: str, errors: list[str]) -> None:
+    if not errors:
+        return
+    with _spawn_warnings_lock:
+        _spawn_warnings.setdefault(pane_id or "", []).extend(
+            f"navide skills not wired: {error}" for error in errors
+        )
 
 
 def views_root() -> Path:
@@ -65,13 +88,14 @@ def prepare_view(
     store: SkillsStore | None = None,
     native_root: Path | None = None,
     view_root: Path | None = None,
+    errors: list[str] | None = None,
 ) -> Path | None:
     """Build this agent's view of the managed library, or None when empty.
 
     The view is rebuilt from scratch and swapped in atomically, so a removed
     or newly-targeted skill can never linger. Returns the path the CLI should
     be pointed at — the view root, with the vendor's required layout already
-    materialised inside it.
+    materialised inside it. ``errors``, when given, collects why it failed.
     """
     try:
         view_root = view_root or agent_view_root(agent_key)
@@ -80,6 +104,8 @@ def prepare_view(
         return view_root if sources else None
     except Exception as err:  # noqa: BLE001 - optional wiring must never block spawn
         log.warning("Managed-skills view for %s failed: %s", agent_key, err)
+        if errors is not None:
+            errors.append(str(err))
         return None
 
 
@@ -131,14 +157,12 @@ def config_document(wiring: SkillsWiring, existing: str, view: Path) -> str:
 
     The variable is shared with MCP wiring, so this merges into whatever is
     already there instead of replacing it, and keeps any path the user's own
-    document already registered.
+    document already registered. A document that is not a JSON object raises
+    ValueError: it is the user's, and replacing it would drop what it holds.
     """
-    try:
-        document = json.loads(existing) if existing.strip() else {}
-    except json.JSONDecodeError:
-        document = {}
+    document = json.loads(existing) if existing.strip() else {}
     if not isinstance(document, dict):
-        document = {}
+        raise ValueError("not a JSON object")
     node: dict[str, Any] = document
     for step in wiring.config_paths_key[:-1]:
         child = node.get(step)
@@ -220,13 +244,14 @@ def prepare_root(
     store: SkillsStore | None = None,
     native_root: Path | None = None,
     home: Path | None = None,
+    errors: list[str] | None = None,
 ) -> str | None:
     """Materialise this CLI's own skills directory inside a per-pane root.
 
     Skills-owned roots mirror the real one entry by entry. An isolated root
     owned by the vendor's home manager keeps its sibling entries unchanged.
     Returns the value ``root_env`` should carry, or None when nothing should
-    be wired.
+    be wired. ``errors``, when given, collects why it failed.
     """
     if not _SAFE_PANE_ID.match(pane_id or ""):
         _warn_uncarried(agent_key, pane_id, "no pane shim for this pane id")
@@ -281,6 +306,8 @@ def prepare_root(
     except Exception as err:  # noqa: BLE001 - optional wiring must never block spawn
         log.warning("Managed-skills root for %s failed: %s", agent_key, err)
         _warn_uncarried(agent_key, pane_id, "its shim could not be built")
+        if errors is not None:
+            errors.append(str(err))
         return None
 
 
@@ -292,6 +319,7 @@ def sync_project_dir(
     store: SkillsStore | None = None,
     native_root: Path | None = None,
     skipped: list[Path] | None = None,
+    errors: list[str] | None = None,
 ) -> bool:
     """Keep our links in the workspace's skill directory up to date.
 
@@ -304,7 +332,8 @@ def sync_project_dir(
     manifest is the user's and is left untouched.
 
     ``skipped`` collects the links a skill's name kept from being created
-    (one named like the manifest), for the caller to tell the user.
+    (one named like the manifest), for the caller to tell the user, and
+    ``errors`` why the sync failed.
     """
     if not cwd:
         return False
@@ -372,6 +401,8 @@ def sync_project_dir(
         return bool(sources)
     except Exception as err:  # noqa: BLE001 - optional wiring must never block spawn
         log.warning("Managed-skills project directory for %s failed: %s", agent_key, err)
+        if errors is not None:
+            errors.append(str(err))
         return False
 
 
@@ -663,8 +694,25 @@ def wire_command(
     """Point one pane spawn at the managed skills library.
 
     No-op for a CLI with no skills wiring, an empty command, a spawn already
-    carrying our view, or a library with nothing targeted at this agent.
+    carrying our view, or a library with nothing targeted at this agent. A
+    failure leaves the spawn as it was and is kept for the pane to print
+    (``take_spawn_warnings``).
     """
+    errors: list[str] = []
+    try:
+        return _wire_command(agent_key, command, pane_id, env, cwd, errors)
+    finally:
+        _record_spawn_warnings(pane_id, errors)
+
+
+def _wire_command(
+    agent_key: str,
+    command: Any,
+    pane_id: str,
+    env: dict[str, str] | None,
+    cwd: str,
+    errors: list[str],
+) -> Any:
     wiring = skills_wiring(agent_key)
     if wiring is None:
         return command
@@ -673,27 +721,33 @@ def wire_command(
         return command
     if wiring.root_env:
         if env is not None:
-            root = prepare_root(agent_key, wiring, pane_id, env)
+            root = prepare_root(agent_key, wiring, pane_id, env, errors=errors)
             if root is not None:
                 env[wiring.root_env] = root
         return command
     if wiring.project_rel:
         from agent_team_backend.convenience_wiring import sync_project_dir_gated
 
-        sync_project_dir_gated(agent_key, wiring, cwd)
+        sync_project_dir_gated(agent_key, wiring, cwd, errors=errors)
         return command
     try:
-        view = prepare_view(agent_key, wiring)
+        view = prepare_view(agent_key, wiring, errors=errors)
     except Exception as err:  # noqa: BLE001 - optional wiring must never block spawn
         log.warning("Managed-skills wiring for %s failed: %s", agent_key, err)
+        errors.append(str(err))
         return command
     if view is None:
         return command
     if wiring.config_env:
         if env is not None:
-            env[wiring.config_env] = config_document(
-                wiring, env.get(wiring.config_env, ""), view
-            )
+            try:
+                env[wiring.config_env] = config_document(
+                    wiring, env.get(wiring.config_env, ""), view
+                )
+            except ValueError as err:
+                # The user's own document: kept as it is, at the cost of skills.
+                log.warning("%s for %s is unusable, left unchanged: %s", wiring.config_env, agent_key, err)
+                errors.append(f"{wiring.config_env} is not a valid JSON object ({err}); left unchanged")
         return command
     if not wiring.flag or str(view) in text:
         return command

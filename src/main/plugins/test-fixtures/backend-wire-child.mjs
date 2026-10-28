@@ -519,6 +519,10 @@ function handle(frame) {
     response(frame.id, cancelledCount)
     return
   }
+  if (name === 'fixture.pendingdelays') {
+    response(frame.id, pendingDelays.size)
+    return
+  }
   if (name === 'fixture.emit') {
     const requestedId = isRecord(args) ? args.subscriptionId : undefined
     const subscription = isRequestId(requestedId)

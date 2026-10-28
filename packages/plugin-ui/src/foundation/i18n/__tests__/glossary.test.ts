@@ -162,7 +162,8 @@ const RULES: Record<string, LocaleRules> = {
 
 // The one exception (the user's call, 2026-10-11): the Settings page listing
 // CLI extensions is named "Extensions" on its own. Its name may stand bare as
-// the page's label and search title, and when prose points at that page.
+// the page's label and search title, and when prose points at that page:
+// "Settings → Extensions", or help prose quoting the label as <em>Extensions</em>.
 const CLI_EXTENSIONS_PAGE_KEYS = ['settings.nav.cliExtensions', 'settings.search.item.cliExtensions.title']
 
 function leaves(value: unknown, prefix = ''): Array<[string, string]> {
@@ -203,7 +204,8 @@ function violations(locale: string, text: string, key = ''): string[] {
   if (!rules) throw new Error(`no glossary rules for locale "${locale}": add them to RULES in glossary.test.ts`)
   const normalized = text.normalize('NFC')
   if (CLI_EXTENSIONS_PAGE_KEYS.includes(key) && normalized === rules.page.name.normalize('NFC')) return []
-  const body = prose(normalized, rules).replace(rules.page.ref, ' ')
+  const quoted = new RegExp(`<em>${escape(rules.page.name.normalize('NFC'))}</em>`, 'gu')
+  const body = prose(normalized.replace(quoted, ' '), rules).replace(rules.page.ref, ' ')
   const found: string[] = []
   for (const banned of rules.banned) for (const match of body.matchAll(banned)) found.push(`banned "${match[0]}"`)
   for (const rule of rules.terms) {
@@ -254,6 +256,9 @@ describe('glossary: plugin, extension and marketplace terms always carry a prefi
     expect(violations('ja-JP', '拡張機能', 'settings.nav.cliExtensions')).toEqual([])
     expect(violations('en-US', 'the same inventory Settings → Extensions shows')).toEqual([])
     expect(violations('zh-TW', '跟「設定 → 擴充」看到的是同一份')).toEqual([])
+    expect(violations('en-US', '<em>Memory</em> and <em>Extensions</em> are listed')).toEqual([])
+    expect(violations('ja-JP', '<em>メモリ</em>と<em>拡張機能</em>の行')).toEqual([])
+    expect(violations('en-US', 'Extensions are listed')).toEqual(['bare "Extensions"'])
     expect(violations('en-US', 'Extensions', 'settings.nav.extensions')).toEqual(['bare "Extensions"'])
     expect(violations('ja-JP', '拡張機能', 'settings.nav.marketplace')).toContain('banned "拡張機能"')
     expect(violations('zh-TW', '安裝擴充')).toEqual(['bare "擴充"'])
