@@ -8969,6 +8969,7 @@
     "statusbar-note": "sus ventanas emergentes van con ella"
   },
   "error": {
+    "pipeline-node-failed": "Etapa {stage}: el paso {slot} informó de un fallo ({reason}) y no le quedan intentos. La ejecución se detuvo; reanúdala para volver a intentarlo.",
     "pipeline-start-refused": "La pipeline no se ha iniciado: {reason}",
     "pipeline-kickoff-failed": "Falló la pipeline: etapa {stage}, hueco {slot}: {reason}. Sus panes siguen abiertos.",
     "pipeline-kickoff-held": "Falló la pipeline: etapa {stage}, hueco {slot}: su tarea inicial está esperando en el cuadro de entrada. Déjala ahí y al reanudar se enviará, o bórrala. Sus panes siguen abiertos.",
@@ -10132,6 +10133,9 @@
     "weekday-6": "sábado"
   },
   "scheduler": {
+    "pipeline-title": "Cada ejecución de esta tarea inicia una ejecución de pipeline, que abre paneles de CLI y consume su cuota",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "inicia la pipeline {name}",
     "system": {
       "tag": "Sistema",
       "manage": "Gestionar en el área de trabajo →",
@@ -10173,6 +10177,16 @@
       "unknown": "Omitida"
     },
     "editor": {
+      "err-task": "Escribe una tarea",
+      "err-pipeline": "Elige una pipeline",
+      "task-placeholder": "Para qué sirve cada ejecución de la pipeline…",
+      "task": "Tarea",
+      "pipeline-cost": "Cada ejecución abre los paneles de CLI de esta pipeline y consume su cuota. Nunca abre una ventana: si el workspace no está abierto, la ejecución falla y explica por qué.",
+      "pick-pipeline": "Elige una pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Iniciar una pipeline",
+      "action-message": "Enviar una instrucción a un panel",
+      "action": "Acción",
       "title-new": "Nueva tarea programada",
       "title-edit": "Editar tarea programada",
       "name": "Nombre",
@@ -10212,6 +10226,7 @@
       "save": "Guardar"
     },
     "owner": {
+      "user": "creada por ti",
       "agent": "agent · {name}",
       "external": "agent externo",
       "agent-title": "Creada por el agent «{name}»; aparte de ti, solo ese agent puede cambiarla",
@@ -11190,6 +11205,7 @@
       "reject": "Devolver"
     },
     "history": {
+      "retry": "Cambiar reintentos",
       "add": "Añadir {name}",
       "edit-cli": "Cambiar CLI",
       "edit-field": "Editar {field}",
@@ -11214,6 +11230,15 @@
       "loop-budget": "Cambiar el límite de reintentos"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Solo se puede reintentar un paso fallido",
+      "retry-blocked-no-run": "No disponible: no hay ninguna ejecución de esta pipeline",
+      "retry-blocked-running": "No disponible mientras hay una ejecución en curso",
+      "retry-node-help": "Volver a ejecutar este paso fallido: la ejecución se reanuda en él, o se reinicia desde él si los pasos posteriores ya se ejecutaron",
+      "retry-node": "Reintentar este paso",
+      "retry-wait": "Espera antes de cada reintento (segundos)",
+      "retry-help": "Un intento fallido (la tarea no llegó al agente o el agente informó de un fallo) se vuelve a ejecutar en el mismo paso, hasta {max} intentos en total.",
+      "retry-tries": "Intentos en total",
+      "retry-title": "Reintentar si falla",
       "aria": "Ajustes de {name}",
       "attempts": "Intentos",
       "elapsed": "Tiempo",

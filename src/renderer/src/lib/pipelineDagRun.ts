@@ -67,6 +67,8 @@ export interface DagRunState {
   notes: Record<number, string>
   /** True once a reject loop has sent the run back. */
   looped: boolean
+  /** slot node id → retries taken this run (see RetryPolicy). */
+  retries: Record<string, number>
 }
 
 export type RejectResult =
@@ -156,7 +158,7 @@ export function createRunState(
     gates[g] = before ? 'approved' : 'pending'
     nodes[g] = { status: before ? 'skipped' : 'pending' }
   }
-  return { gates, loops: {}, nodes, notes: {}, looped: false }
+  return { gates, loops: {}, nodes, notes: {}, looped: false, retries: {} }
 }
 
 /** Pending gates that must be resolved before stage `nextIndex` may start;
@@ -214,6 +216,7 @@ export function rejectGate(
     for (const id of ids) {
       if (plan.nodeLayer[id] >= targetLayer && !node(plan, id)?.pinned) {
         state.nodes[id] = { status: 'pending', attempts: state.nodes[id]?.attempts }
+        delete state.retries[id]
       }
     }
   })
@@ -390,6 +393,47 @@ export function conditionalLabels(plan: DagPlan, index: number): Set<string> {
   return out
 }
 
+/** The node's retry policy, or null when it has none (or allows one try). */
+export function retryPolicyOf(plan: DagPlan, nodeId: string): { maxTries: number; waitMs: number } | null {
+  const r = node(plan, nodeId)?.retry
+  if (!r || r.maxTries <= 1) return null
+  return { maxTries: r.maxTries, waitMs: r.waitMs ?? 0 }
+}
+
+/** True for a node that reads ---NODE-FAILED---: it has an error edge or
+ *  retries. Every other node ignores the signal, as before. */
+export function readsFailure(plan: DagPlan, nodeId: string): boolean {
+  return hasErrorEdge(plan, nodeId) || retryPolicyOf(plan, nodeId) !== null
+}
+
+export interface RetryTurn {
+  /** The try about to run (2 for the first retry). */
+  attempt: number
+  maxTries: number
+  waitMs: number
+  /** Put in front of the retried kickoff. */
+  note: string
+}
+
+/** Take one retry of `nodeId` after a failed try: the node goes back to
+ *  pending with the failure as its error. null when it has no retry policy
+ *  or its tries are spent — the caller then fails it as before. */
+export function takeRetry(plan: DagPlan, state: DagRunState, nodeId: string, reason: string): RetryTurn | null {
+  const policy = retryPolicyOf(plan, nodeId)
+  if (!policy) return null
+  const used = state.retries[nodeId] ?? 0
+  if (used + 1 >= policy.maxTries) return null
+  state.retries[nodeId] = used + 1
+  state.nodes[nodeId] = { ...state.nodes[nodeId], status: 'pending', error: reason }
+  const attempt = used + 2
+  return {
+    attempt,
+    maxTries: policy.maxTries,
+    waitMs: policy.waitMs,
+    note: `[重試 第 ${attempt}/${policy.maxTries} 次 — 上次失敗：${reason}]`,
+  }
+}
+
 export function hasErrorEdge(plan: DagPlan, nodeId: string): boolean {
   return plan.graph.edges.some((e) => e.kind === 'error' && e.from === nodeId)
 }
@@ -493,8 +537,9 @@ export function kickoffHints(plan: DagPlan, nodeId: string): string {
   if (hasOutputContract(plan, nodeId)) {
     lines.push('[結構化輸出] 結束前輸出一段 JSON：上一行單獨寫 ---OUTPUT-START---，下一行單獨寫 ---OUTPUT-END---，下游節點會讀取這段 JSON。')
   }
-  if (hasErrorEdge(plan, nodeId)) {
-    lines.push('[失敗回報] 如果這一步無法完成，另起一行，從行首輸出 ---NODE-FAILED: <原因>---，再照常輸出完成標記；流程會改走錯誤處理分支。')
+  if (readsFailure(plan, nodeId)) {
+    const then = hasErrorEdge(plan, nodeId) ? '流程會改走錯誤處理分支' : '這一步會重試'
+    lines.push(`[失敗回報] 如果這一步無法完成，另起一行，從行首輸出 ---NODE-FAILED: <原因>---，再照常輸出完成標記；${then}。`)
   }
   return lines.length ? `\n\n${lines.join('\n')}` : ''
 }

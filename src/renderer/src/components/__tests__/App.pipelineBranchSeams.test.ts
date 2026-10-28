@@ -24,7 +24,7 @@ describe('App.vue seams for branch and error edges', () => {
   })
 
   it('a stage skips its untaken slots and counts them finished after everything else', () => {
-    const act = body('async function activateStage(index: number): Promise<void> {', '\nasync function spawnPipelineStage(')
+    const act = body('async function activateStage(index: number, opts: { only?: string; note?: string } = {}): Promise<void> {', '\nasync function spawnPipelineStage(')
     expect(act).toContain('const untaken = pipelineDag.untakenLabels(index)')
     expect(act.indexOf('if (untaken.has(slot.label))')).toBeLessThan(act.indexOf('const contextHeader = buildStageContext('))
     const tail = act.slice(act.lastIndexOf('prewarmNextStage(index)'))

@@ -374,6 +374,18 @@ async function startRun(): Promise<void> {
 const decideGate = (nodeId: string, decision: 'approve' | 'reject', comment: string): Promise<void> =>
   command(decision === 'approve' ? 'ui.pipeline.gate_pass' : 'ui.pipeline.gate_reject', decision === 'reject' ? { nodeId, comment } : { nodeId })
 const restartFrom = (nodeId: string): Promise<void> => command('ui.pipeline.restart_from', { nodeId })
+/** Retry a failed step of a stopped run: a resume when it sits in the first
+ *  unfinished layer (the stage the run resumes at, panes and context kept),
+ *  otherwise a restart from it (earlier outputs reused). */
+function retryNode(nodeId: string): Promise<void> {
+  const g = graph.value
+  if (!g) return Promise.resolve()
+  const { layers } = layerGraph(g)
+  const at = layers.findIndex((l) => l.includes(nodeId))
+  const finished = (id: string): boolean => byId.value.get(id)?.kind !== 'slot' || ['done', 'skipped'].includes(props.run.nodes[id]?.status ?? '')
+  const firstOpen = layers.findIndex((l) => !l.every(finished))
+  return at >= 0 && at === firstOpen ? control('resume') : restartFrom(nodeId)
+}
 async function openPane(paneId: string): Promise<void> {
   await command('ui.pane.focus', { paneId })
   emit('leave')
@@ -684,7 +696,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
           :workspace-path="workspacePath"
           @edit="editFromInspector" @stage-meta="editStageMeta" @remove="removeNode"
           @close="select(null); selectedLayer = null"
-          @open-pane="openPane" @restart-from="restartFrom" @gate="decideGate"
+          @open-pane="openPane" @restart-from="restartFrom" @retry-node="retryNode" @gate="decideGate"
         />
       </Transition>
     </div>

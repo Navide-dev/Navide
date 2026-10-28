@@ -8969,6 +8969,7 @@
     "statusbar-note": "its popovers go with it"
   },
   "error": {
+    "pipeline-node-failed": "Stage {stage}: step {slot} reported a failure ({reason}) and has no tries left. The run stopped; resume it to try again.",
     "pipeline-start-refused": "The pipeline did not start: {reason}",
     "pipeline-kickoff-failed": "Pipeline failed: stage {stage}, slot {slot} — {reason}. Its panes are still open.",
     "pipeline-kickoff-held": "Pipeline failed: stage {stage}, slot {slot} — its kickoff is waiting in the input box. Leave it there and resume will submit it, or clear it. Its panes are still open.",
@@ -10132,6 +10133,9 @@
     "weekday-6": "Saturday"
   },
   "scheduler": {
+    "pipeline-title": "Every run of this job starts a pipeline run, which opens CLI panes and spends their quota",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "starts pipeline {name}",
     "system": {
       "tag": "System",
       "manage": "Manage in Workspace →",
@@ -10173,6 +10177,16 @@
       "unknown": "Skipped"
     },
     "editor": {
+      "err-task": "Enter a task",
+      "err-pipeline": "Choose a pipeline",
+      "task-placeholder": "What each pipeline run is for…",
+      "task": "Task",
+      "pipeline-cost": "Every run opens this pipeline's CLI panes and spends their quota. It never opens a window: if the workspace is not open, the run fails and says so.",
+      "pick-pipeline": "Choose a pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Start a pipeline",
+      "action-message": "Send an instruction to a pane",
+      "action": "Action",
       "title-new": "New Scheduled Job",
       "title-edit": "Edit Scheduled Job",
       "name": "Name",
@@ -10212,6 +10226,7 @@
       "save": "Save"
     },
     "owner": {
+      "user": "by you",
       "agent": "agent · {name}",
       "external": "external agent",
       "agent-title": "Created by the agent \"{name}\"; only it and you can change it",
@@ -11190,6 +11205,7 @@
       "reject": "Send Back"
     },
     "history": {
+      "retry": "Change Retries",
       "add": "Add {name}",
       "edit-cli": "Change CLI",
       "edit-field": "Edit {field}",
@@ -11214,6 +11230,15 @@
       "loop-budget": "Change Retry Limit"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Only a failed step can be retried",
+      "retry-blocked-no-run": "Not available: no run of this pipeline",
+      "retry-blocked-running": "Not available while a run is in progress",
+      "retry-node-help": "Run this failed step again: the run resumes at it, or restarts from it when later steps already ran",
+      "retry-node": "Retry This Step",
+      "retry-wait": "Wait before each retry (seconds)",
+      "retry-help": "A failed try (its task never reached the agent, or the agent reported a failure) runs again on the same step, up to {max} tries in all.",
+      "retry-tries": "Tries in all",
+      "retry-title": "Retry on failure",
       "aria": "Settings for {name}",
       "attempts": "Attempts",
       "elapsed": "Time",

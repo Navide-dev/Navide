@@ -8969,6 +8969,7 @@
     "statusbar-note": "các cửa sổ bật lên của nó cũng ẩn theo"
   },
   "error": {
+    "pipeline-node-failed": "Giai đoạn {stage}: bước {slot} báo lỗi ({reason}) và đã hết lượt thử. Lượt chạy đã dừng; hãy tiếp tục để thử lại.",
     "pipeline-start-refused": "Pipeline không khởi động: {reason}",
     "pipeline-kickoff-failed": "Pipeline không khởi động được: giai đoạn {stage}, vị trí {slot} — {reason}. Các pane của nó vẫn đang mở.",
     "pipeline-kickoff-held": "Pipeline không khởi động được: giai đoạn {stage}, vị trí {slot} — lời khởi động của nó đang chờ trong ô nhập. Cứ để đó thì khi tiếp tục sẽ gửi đi, hoặc xóa nó. Các pane của nó vẫn đang mở.",
@@ -10132,6 +10133,9 @@
     "weekday-6": "Thứ bảy"
   },
   "scheduler": {
+    "pipeline-title": "Mỗi lần chạy công việc này sẽ khởi động một lượt pipeline, mở các pane CLI và tiêu tốn hạn mức của chúng",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "khởi động pipeline {name}",
     "system": {
       "tag": "Hệ thống",
       "manage": "Quản lý trong workspace →",
@@ -10173,6 +10177,16 @@
       "unknown": "Đã bỏ qua"
     },
     "editor": {
+      "err-task": "Hãy nhập tác vụ",
+      "err-pipeline": "Hãy chọn pipeline",
+      "task-placeholder": "Mỗi lượt pipeline dùng để làm gì…",
+      "task": "Tác vụ",
+      "pipeline-cost": "Mỗi lần chạy sẽ mở các pane CLI của pipeline này và tiêu tốn hạn mức. Không bao giờ tự mở cửa sổ: nếu workspace chưa mở, lần chạy sẽ thất bại và nêu lý do.",
+      "pick-pipeline": "Chọn pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Khởi động pipeline",
+      "action-message": "Gửi chỉ dẫn tới một pane",
+      "action": "Hành động",
       "title-new": "Tác vụ theo lịch mới",
       "title-edit": "Sửa tác vụ theo lịch",
       "name": "Tên",
@@ -10212,6 +10226,7 @@
       "save": "Lưu"
     },
     "owner": {
+      "user": "do bạn tạo",
       "agent": "agent · {name}",
       "external": "agent bên ngoài",
       "agent-title": "Do agent “{name}” tạo; chỉ nó và bạn mới thay đổi được",
@@ -11190,6 +11205,7 @@
       "reject": "Trả về"
     },
     "history": {
+      "retry": "Đổi số lần thử lại",
       "add": "Thêm {name}",
       "edit-cli": "Đổi CLI",
       "edit-field": "Sửa {field}",
@@ -11214,6 +11230,15 @@
       "loop-budget": "Đổi giới hạn thử lại"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Chỉ có thể thử lại bước bị lỗi",
+      "retry-blocked-no-run": "Không dùng được: pipeline này chưa có lượt chạy",
+      "retry-blocked-running": "Không dùng được khi đang có lượt chạy",
+      "retry-node-help": "Chạy lại bước bị lỗi này: lượt chạy tiếp tục từ bước này, hoặc khởi động lại từ bước này nếu các bước sau đã chạy",
+      "retry-node": "Thử lại bước này",
+      "retry-wait": "Chờ trước mỗi lần thử lại (giây)",
+      "retry-help": "Một lần thử lỗi (tác vụ không tới được agent, hoặc agent báo lỗi) sẽ chạy lại ở cùng bước, tối đa {max} lần thử.",
+      "retry-tries": "Tổng số lần thử",
+      "retry-title": "Thử lại khi lỗi",
       "aria": "Cài đặt cho {name}",
       "attempts": "Số lần thử",
       "elapsed": "Thời gian",

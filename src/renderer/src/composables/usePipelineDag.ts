@@ -16,17 +16,20 @@ import {
   kickoffHints,
   parseNodeSignals,
   pinnedLabels as planPinnedLabels,
+  readsFailure,
   rejectGate,
   restartPointFor,
   routeFailure as planRouteFailure,
   settleUntaken,
   slotNodeIdAt,
+  takeRetry,
   untakenLabels as planUntakenLabels,
   upstreamSlotNodes,
   type DagPlan,
   type DagRunState,
   type NodeResult,
   type RejectResult,
+  type RetryTurn,
 } from '../lib/pipelineDagRun'
 
 /** Characters of a finished slot's terminal tail kept as its summary. */
@@ -259,6 +262,36 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     return p && p.hasBranching ? planConditionalLabels(p, index) : new Set()
   }
 
+  /** The failure a running slot reported with ---NODE-FAILED---, or '' —
+   *  always '' for a node with neither an error edge nor a retry policy,
+   *  which does not read the signal. */
+  function reportedFailure(index: number, label: string, tail: string): string {
+    const p = plan.value
+    const id = nodeId(index, label)
+    if (!p || !run || !id || run.nodes[id]?.status !== 'running' || !readsFailure(p, id)) return ''
+    return parseNodeSignals(tail).failed ?? ''
+  }
+
+  /** One more try of a failed slot, if its retry policy has one left: the
+   *  node goes back to pending and the caller re-runs it after waitMs. */
+  function retryAfterFailure(index: number, label: string, reason: string): RetryTurn | null {
+    const p = plan.value
+    const id = nodeId(index, label)
+    if (!p || !run || !id) return null
+    const turn = takeRetry(p, run, id, reason)
+    if (!turn) return null
+    deps.log(`DAG ↻ "${label}" failed (${reason}) — retrying, try ${turn.attempt}/${turn.maxTries}` + (turn.waitMs ? ` in ${turn.waitMs} ms` : ''))
+    void report()
+    return turn
+  }
+
+  /** True when this slot's failures go down an error edge. */
+  function routesFailure(index: number, label: string): boolean {
+    const p = plan.value
+    const id = nodeId(index, label)
+    return !!p && !!id && hasErrorEdge(p, id)
+  }
+
   /** A failed slot with an error edge: fail its node down that edge and let
    *  the run go on. false when it has none (the run fails as before). */
   function routeFailure(index: number, label: string, error: string): boolean {
@@ -427,6 +460,9 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     untakenLabels,
     conditionalLabels,
     routeFailure,
+    reportedFailure,
+    retryAfterFailure,
+    routesFailure,
     takeNote,
     looped,
     slotStarted,
