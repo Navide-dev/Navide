@@ -198,3 +198,59 @@ async def test_config_status_rejects_a_malformed_request() -> None:
     session = app.Session(FakeWebSocket())  # type: ignore[arg-type]
     await ws_handlers.terminal_config_status(session, "q", "terminal.config_status", {"terminal_session_ids": "x"})
     assert session.websocket.sent[-1]["ok"] is False
+
+
+# A fake secret, assembled so no scanner mistakes the fixture for a real one.
+FAKE_TOKEN = "sk-" + "ant-" + "fixture" + "0" * 24
+
+
+def _claude_config_with_secrets(home: Path, value: str, email: str) -> Path:
+    path = home / ".claude.json"
+    path.write_text(json.dumps({
+        "oauthAccount": {"emailAddress": email, "accountUuid": "uuid-" + value[-6:]},
+        "mcpServers": {
+            "remote": {
+                "type": "http",
+                "url": "https://mcp.example.test/v1?api_key=" + value,
+                "headers": {"Authorization": "Bearer " + value, "X-Plain": "plain-" + value},
+            },
+            "local": {"command": "srv", "args": ["--port", "1"], "env": {"API_TOKEN": value, "LOG": "v-" + value}},
+        },
+    }))
+    return path
+
+
+def test_mcp_fingerprint_ignores_secret_values_and_account_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(native_mcp, "_home", lambda: tmp_path)
+    path = _claude_config_with_secrets(tmp_path, FAKE_TOKEN, "a@example.test")
+    before = path.stat()
+    first = pane_config_fingerprint.fingerprint("claude")
+
+    assert first["mcp"] is not None
+    assert FAKE_TOKEN not in json.dumps(first)
+    assert FAKE_TOKEN not in caplog.text
+    # Read only: the file's bytes, mode and timestamps are untouched.
+    after = path.stat()
+    assert (after.st_mode, after.st_mtime_ns, after.st_size) == (before.st_mode, before.st_mtime_ns, before.st_size)
+
+    # Values (env, headers, secrets inside urls) and the account never reach the
+    # hash: changing only them, or switching the account, changes nothing.
+    _claude_config_with_secrets(tmp_path, "sk-" + "ant-" + "other" + "1" * 24, "b@example.test")
+    assert pane_config_fingerprint.mcp_fingerprint("claude") == first["mcp"]
+
+
+@pytest.mark.asyncio
+async def test_config_status_answer_carries_no_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(native_mcp, "_home", lambda: tmp_path)
+    _claude_config_with_secrets(tmp_path, FAKE_TOKEN, "a@example.test")
+    session = app.Session(FakeWebSocket())  # type: ignore[arg-type]
+    session.terminals = SimpleNamespace(  # type: ignore[assignment]
+        _sessions={"t": _stored("claude", {"mcp": "old", "skills": None})}
+    )
+    monkeypatch.setitem(app._PTY_OWNERS, "t", session)
+    await ws_handlers.terminal_config_status(session, "q", "terminal.config_status", {"terminal_session_ids": ["t"]})
+    reply = session.websocket.sent[-1]
+    assert reply["payload"]["stale"] == [{"terminal_session_id": "t", "pane_id": "pane-claude", "parts": ["mcp"]}]
+    assert FAKE_TOKEN not in json.dumps(reply)

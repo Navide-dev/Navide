@@ -7,15 +7,23 @@ spawn, a fingerprint of each of the two inputs, so the window can later list
 the panes whose inputs moved on and offer the user a rebuild. It never
 rebuilds anything itself.
 
-- **mcp**: the agent's own user-global MCP config (``~/.claude.json`` and the
-  like), read through :mod:`native_mcp` -- already masked, so no secret value
-  feeds the hash. Navide's Settings -> MCP servers are not an input: those are
-  the servers the backend connects to as a client, and no spawn reads them.
+- **mcp**: the MCP section of the agent's own user-global config
+  (``~/.claude.json``'s ``mcpServers`` and the like), read through
+  :mod:`native_mcp`, which only ever hands back that section's records. The
+  hash covers each server's name, transport, command, args and url (args and
+  url already masked) and the *names* of its env and header keys -- never
+  their values, which are dropped here and never logged or returned. Nothing
+  else in the file (``~/.claude.json`` also carries the display-only
+  ``oauthAccount`` that account switching rewrites) reaches the hash, so an
+  account switch never marks a pane stale. Navide's Settings -> MCP servers
+  are not an input: those are the servers the backend connects to as a
+  client, and no spawn reads them.
 - **skills**: the managed-skills delivery for that agent -- each targeted
   shared skill with its SKILL.md revision, plus the native skills routed to it.
 
-Read-only by construction: the skills side reads the store's state and never
-rebuilds the runtime projection the spawn wiring maintains. A part is ``None``
+Read-only by construction: native_mcp has no write path (no file is written,
+moved, chmod-ed or touched), and the skills side reads the store's state and
+never rebuilds the runtime projection the spawn wiring maintains. A part is ``None``
 for a CLI that has no such input, and a part that cannot be read is ``None``
 too -- an unknown fingerprint never marks a pane stale.
 """
@@ -43,14 +51,26 @@ def mcp_fingerprint(agent_key: str) -> str | None:
     if not any(source.agent == agent_key for source in native_mcp.NATIVE_SOURCES):
         return None
     try:
-        rows = [server.as_dict() for server in native_mcp.scan() if server.agent == agent_key]
+        rows = [_mcp_shape(server) for server in native_mcp.scan() if server.agent == agent_key]
     except Exception as err:  # noqa: BLE001 - a disclosure must never break a spawn
-        log.warning("MCP fingerprint for %s failed: %s", agent_key, err)
+        log.warning("MCP fingerprint for %s failed: %s", agent_key, type(err).__name__)
         return None
-    for row in rows:
-        # The file path is where the servers live, not what they are.
-        row.pop("path", None)
     return _digest(sorted(rows, key=lambda row: json.dumps(row, sort_keys=True)))
+
+
+def _mcp_shape(server: Any) -> dict[str, Any]:
+    """The parts of one server record a CLI acts on, without any env or header value."""
+    return {
+        "name": server.name,
+        "transport": server.transport,
+        "command": server.command,
+        "args": list(server.args),
+        "url": server.url,
+        "env_keys": sorted(key for key, _ in server.env),
+        "header_keys": sorted(key for key, _ in server.headers),
+        "enabled": server.enabled,
+        "valid": server.valid,
+    }
 
 
 def skills_fingerprint(agent_key: str) -> str | None:
@@ -67,7 +87,7 @@ def skills_fingerprint(agent_key: str) -> str | None:
         ]
         native = sorted(store.native_targets_for(agent_key))
     except Exception as err:  # noqa: BLE001 - a disclosure must never break a spawn
-        log.warning("Skills fingerprint for %s failed: %s", agent_key, err)
+        log.warning("Skills fingerprint for %s failed: %s", agent_key, type(err).__name__)
         return None
     return _digest({"shared": shared, "native": native})
 

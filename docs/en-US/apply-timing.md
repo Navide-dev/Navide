@@ -35,8 +35,11 @@ conversation (`--resume`). It interrupts a turn in progress and reprints the
 conversation. Navide never rebuilds a pane on its own.
 
 How it is detected: when a pane starts, Navide records a fingerprint of the
-MCP servers in that CLI's own config file (read with secret values already
-masked) and of the skills delivered to it. Navide compares it with the current
+MCP section of that CLI's own config file and of the skills delivered to it.
+The MCP fingerprint covers each server's name, command, arguments and URL
+(with secret-looking parts masked) and the names of its environment variables
+and headers, never their values. Nothing else in the file counts, so the
+account details `~/.claude.json` also holds never mark a pane. Navide compares it with the current
 state every 30 seconds, when the window regains focus, and after a skills
 change. Navide only reads these files and never writes to them. A CLI with no
 such config, or a file Navide cannot read, never marks a pane.
