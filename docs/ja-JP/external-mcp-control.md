@@ -622,7 +622,7 @@ Renderer のものなので、それぞれ `ui.pipeline.next` / `.resume` / `.re
 
 #### テンプレートを編集する
 
-さらに四つの Tool が、実行の元になる定義そのものを書きます。上の八つと違い、これらは
+さらに五つの Tool が、実行の元になる定義そのものを書きます。上の八つと違い、これらは
 ウィンドウを**通りません**: Backend 自身の Store に書き、WS handler と同じ
 `pipelines.changed` / `stages.changed` / `roles.changed` イベントを Broadcast するので
 （`pipeline_graph` は先に `pipeline.graph_changed` を送り、続いて Stage と Pipeline の
@@ -635,6 +635,7 @@ Renderer のものなので、それぞれ `ui.pipeline.next` / `.resume` / `.re
 | `stage_define` | `op`, `pipeline_id`, `stage_id`, `stage`, `ids`, `workspace_path` | 一つの Pipeline の中の **Stage** を追加・編集・削除・並べ替え・再シードします。Stage は一つの工程で、Pane になる Slot を持ちます: 各 Slot は CLI（`agent_key`）と Role（`role_key`）を指名し、その Pane が起動時に受け取る Kickoff テキストを持ちます。`pipeline_id` を空にすると **Active な** Pipeline を意味します。それは Pipelines ウィンドウが選択しているもので、あなたが読んでいたものとは限りません — 明示してください。`{ok, op, stages, pipeline_id, pipelines, active_pipeline_id}` を返し、`upsert` はさらに `stage` を返します。Pipeline の最後に残った Stage は削除できません |
 | `role_define` | `op`, `key`, `new_key`, `label`, `one_line`, `system_prompt`, `properties` | Slot がキャスティングする **Role** を作成・編集・改名・削除・再シードします。Role は名前の付いた System Prompt で、Slot は `role_key` で一つを指名し、その Slot が開く Pane はその Prompt で起動します。Role はマシン全体でグローバルです — Pipeline ごとでも Workspace ごとでもありません — なのでここでの編集はその Role を指名するすべての Pipeline に届き、範囲を絞る `workspace_path` もありません。`{ok, op, roles}` を返し、`upsert` と `rename` はさらに `role`、`rename` は `repointed_pipeline_ids` も返します。最後に残った Role は削除できません。既に起動している Pane は与えられた Prompt を保ちます。変更が届くのはその Slot で次に開かれる Pane であって、画面にあるものではありません |
 | `pipeline_graph` | `op`, `pipeline_id`, `ops`, `graph`, `workspace_path` | Pipeline **テンプレート**をグラフとして読み書きします: Slot ノード（それぞれ一つの CLI Pane で、Stage Slot と同じ Agent・Role・Label・Kickoff・Commander のフィールドに加え、任意の `params` を持ちます）、Gate ノード（`pipeline_gate` が決めるまで実行はそこで止まります）、Trigger を、`main` と `reject` のエッジでつなぎます。ノードは上流のすべてのノードを待ちます。グラフとして編集されたことの無い Pipeline は、`get` に対して Stage から導いたグラフ（`derived: true`）を返し、書き込むまで変わりません。`pipeline_id` を空にすると Active な Pipeline を意味します — 明示してください。`{ok, op, pipeline_id, graph, stages}` を返し、`get` はさらに `derived` を返します。不正なグラフは `error_code: "invalid"` で理由が `errors` に並び、何も書かれません |
+| `pipeline_import_n8n` | `json`, `dry_run`, `default_agent`, `name`, `workspace_path` | エクスポートした n8n のワークフローを**新しい** Pipeline テンプレートに変換します。`dry_run`（既定は `true`）は何も書かず、プレビュー用の `graph`、変換レポート `report`、認証情報のリスト `credentials` を返します。`dry_run: false` では新しい Pipeline を作ります — 既存のものは決して上書きせず、使用中の名前には ` (2)`、` (3)`… が付きます — グラフに加えて、マスク済みの元の JSON と認証情報のリストを保存し、後の二つはこのマシンにだけ残ります（設定バンドルのエクスポートには含まれません）。ほとんどのステップは CLI Agent が元のノードのパラメータから代行するため、結果は n8n と異なることがあります。`report.slots` は各 Slot の Kickoff 全文、`report.gates` は各 Gate のプロンプトを並べます。埋め込まれた秘密はすべて `<removed: add credential for …>` に置き換えられ、`report.secretsRemoved` にはノードとフィールドだけが載ります。インポートした Pipeline は、誰が開始しても実行のたびにその Pane に Navide Guard の外部コンテンツのマークが付きます。`{ok, dry_run, graph, report, credentials}` を返し、Pipeline を作ったときは `pipeline` と `pipelines` も返します。n8n のワークフローでない入力は `error_code: "invalid"` です |
 
 **各 `op` が必要とする引数。** これらの Tool を最も誤用しやすいのがここです: `op` が他の
 どの引数を必須にするかを決め、足りなければ `ok: false` と
@@ -672,7 +673,7 @@ Stage リストとして表せないため、`stage_define` の `upsert`・`dele
 **実行中に編集した場合。** その Workspace の実行が `running` 状態の間、
 `pipeline_define` の `delete` と `set_active` は即座に拒否され、`reset_builtin` は
 進行中の実行がその Pipeline を使っている間は拒否されます。`stage_define` の四つの op と
-`pipeline_graph` の `apply`・`set` は**すべて**同じように拒否されます — 実行中に編集された Stage リストは、その実行の足元で
+`pipeline_graph` の `apply`・`set` は**すべて**同じように拒否されます（`pipeline_import_n8n` の `dry_run: false` は `delete` と同じく、そのワークスペースに `running` 状態の実行がある間は拒否されます） — 実行中に編集された Stage リストは、その実行の足元で
 流れを変えてしまうからです。拒否は `ok: false` と
 `error_code: "pipeline_running"` で、何も書かれていません。実行は開始時に記録した
 Pipeline と照合するため、その Pipeline を明示してもガードは抜けられません。他の
@@ -689,7 +690,7 @@ Slot を `usages` に並べるので、`stage_define` の `upsert` で張り替�
 られます。削除された Role を指す Slot は Role 注入に失敗し、その Stage の Pane は理由を
 示すものが画面に何も無いまま空の Prompt の前で止まります。この拒否はそのためにあります。
 
-この四つが返す他の `error_code` は `not_found` と `invalid`（Store が値を拒否した）です。
+この五つが返す他の `error_code` は `not_found` と `invalid`（Store が値を拒否した）です。
 どの失敗でも何も書き込まれません。
 
 ### スケジューラ

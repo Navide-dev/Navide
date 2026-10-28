@@ -9337,6 +9337,80 @@ async def pipeline_graph(
     return {"ok": True, "op": op, **out}
 
 
+@server.tool()
+async def pipeline_import_n8n(
+    ctx: Context,
+    json: str,
+    dry_run: bool = True,
+    default_agent: str = "",
+    name: str = "",
+    workspace_path: str = "",
+) -> dict[str, Any]:
+    """Convert an exported n8n workflow into a NEW pipeline template.
+
+    `json` is the workflow as n8n exports or copies it (nodes + connections).
+    With `dry_run` true (the default) nothing is written: you get the preview
+    graph and the conversion report to show the user first. With `dry_run`
+    false a new pipeline is created — an existing one is never overwritten, and
+    a name already in use gets " (2)", " (3)"… — holding the graph, the
+    redacted source JSON and the credential checklist. `name` defaults to the
+    workflow's name; `default_agent` (an agentKey, default "claude") is the CLI
+    for slots no AI Agent model decides.
+
+    What the user should know before importing (say it):
+    - CLI agents carry out most steps. HTTP Request, Code, Set, app nodes
+      (Google Sheets, Slack, Gmail…), unknown or community nodes are run by an
+      agent from the node's original parameters, so results can differ from
+      n8n's. Runs of steps with no branching, small IF/Switch regions and loop
+      bodies are folded into one slot each; an AI Agent and its model, memory,
+      tools and output parser become one slot. Wait and send-and-wait become
+      gates. report.slots lists every slot's full kickoff and report.gates every
+      gate prompt; report.stats.needsReview counts steps to confirm.
+    - Embedded secrets are removed. Authorization headers, API keys, bearer and
+      common token shapes found anywhere in the workflow are replaced with
+      "<removed: add credential for …>" — in the graph, the report and the
+      stored source alike. report.secretsRemoved names only the node and field
+      of each; the values are not kept anywhere. Credentials themselves are
+      listed by type and name (`credentials`) for the user to set up locally
+      (an MCP server or the service's CLI login); n8n credential ids are
+      dropped and nothing is put into an environment.
+    - Schedule, webhook and app triggers, sub-workflows and large branches are
+      imported but marked pending: start such a pipeline by hand.
+    - Everything imported is external content. Every run of an imported
+      pipeline marks its panes with Navide Guard's external-content taint,
+      whoever starts it; that cannot be turned off.
+
+    Refused while the workspace has a run in progress (error_code
+    "pipeline_running"), like pipeline_define's delete. Returns {ok, dry_run,
+    graph, report, credentials} plus `pipeline` (the new pipeline's summary)
+    and `pipelines` when one was created; ok false carries `error` and
+    `error_code` ("invalid" for input that is not an n8n workflow,
+    "pipeline_running").
+    """
+    caller = _resolve_caller(ctx)
+    from agent_team_backend import app as _app
+    from agent_team_backend.n8n_import import N8nImportError, import_into_store
+
+    if not dry_run:
+        workspace_path = await _definition_workspace(caller, workspace_path)
+        if await asyncio.to_thread(_run_is_active, workspace_path):
+            return _run_in_progress("import a pipeline")
+    try:
+        out = await asyncio.to_thread(
+            import_into_store,
+            _app.stages_store,
+            json,
+            dry_run=bool(dry_run),
+            default_agent=str(default_agent or "claude"),
+            name=str(name or ""),
+        )
+    except N8nImportError as exc:
+        return {"ok": False, "error": str(exc), "error_code": "invalid"}
+    if not dry_run:
+        out.update(await _publish_pipelines("import"))
+    return {"ok": True, **out}
+
+
 # ── Pipelines: driving a run that is already going ──────────────────────────
 # Same reason pipeline_start and pipeline_abort go through the window: the
 # renderer owns the orchestration — it watches the panes, decides a stage is

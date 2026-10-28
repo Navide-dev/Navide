@@ -104,7 +104,9 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.34 P2 (previous pin 742078e6…): the cli_get_status
 #: description documents the new `account` block and that `profileId` is
 #: bookkeeping only for a pane on the live login. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "c9430be99972c680fd14e19226ebea3e6942c55c5984b6aaa802ddab4ff89b2f"
+#: Re-pinned for 0.2.34 n8n import (previous pin c9430be9…): adds the core
+#: tool pipeline_import_n8n. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "4a44016c0738c94bfb9fd5e92c4f50a174b1732f315426c5f6038ecf098db16d"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

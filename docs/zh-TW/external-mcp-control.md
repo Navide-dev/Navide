@@ -560,7 +560,7 @@ Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`�
 
 #### 編輯樣板
 
-另外四個 Tool 寫的是「一輪執行是從什麼定義組出來的」。和上面八個不同，它們**不**走視窗：
+另外五個 Tool 寫的是「一輪執行是從什麼定義組出來的」。和上面八個不同，它們**不**走視窗：
 它們直接寫後端自己的 Store，並廣播與 WS handler 相同的 `pipelines.changed`／
 `stages.changed`／`roles.changed` 事件（`pipeline_graph` 會先送 `pipeline.graph_changed`，
 再送 Stage 與 Pipeline 的事件），所以開著的 Pipelines 視窗會自己更新。前三個的讀取端是
@@ -572,6 +572,7 @@ Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`�
 | `stage_define` | `op`、`pipeline_id`、`stage_id`、`stage`、`ids`、`workspace_path` | 在一個 Pipeline 裡新增、編輯、移除、重新排序或重新灌入它的 **Stage**。一個 Stage 是一個步驟，裡面裝著會變成 Pane 的 Slot：每個 Slot 指名一個 CLI（`agent_key`）與一個 Role（`role_key`），並帶著那個 Pane 啟動時要用的 Kickoff 文字。`pipeline_id` 留空代表**作用中**的那個 Pipeline，也就是 Pipelines 視窗選定的那個，不一定是你剛才在讀的那個 —— 請明寫。回傳 `{ok, op, stages, pipeline_id, pipelines, active_pipeline_id}`，`upsert` 另外帶 `stage`。一個 Pipeline 的最後一個 Stage 不能刪 |
 | `role_define` | `op`、`key`、`new_key`、`label`、`one_line`、`system_prompt`、`properties` | 建立、編輯、更名、刪除或重新灌入 Slot 選角用的 **Role**。Role 就是一段有名字的 System Prompt：Slot 以 `role_key` 指名一個，而那個 Slot 開出來的 Pane 就以這段 Prompt 啟動。Role 是整台機器共用的 —— 不分 Pipeline、不分 Workspace —— 所以這裡改一次會影響每個指名該 Role 的 Pipeline，也因此沒有 `workspace_path` 可以縮小範圍。回傳 `{ok, op, roles}`，`upsert` 與 `rename` 另外帶 `role`，`rename` 還帶 `repointed_pipeline_ids`。最後一個 Role 不能刪。已經開起來的 Pane 會保留它拿到的那段 Prompt；改動影響的是那個 Slot 下一次開出來的 Pane，不是螢幕上這些 |
 | `pipeline_graph` | `op`、`pipeline_id`、`ops`、`graph`、`workspace_path` | 把 Pipeline **樣板**當成一張圖來讀或編輯：Slot 節點（各是一個 CLI Pane，帶著和 Stage Slot 相同的 Agent、Role、Label、Kickoff 與 Commander 欄位，另可有 `params`）、Gate 節點（執行會停在那裡，直到 `pipeline_gate` 決定）與一個 Trigger，用 `main` 與 `reject` 邊連起來。一個節點會等它上游的每個節點都完成。從沒以圖編輯過的 Pipeline，`get` 會回它的 Stage 推導出來的圖（`derived: true`），在你寫入之前都不會改變。`pipeline_id` 留空代表作用中的 Pipeline —— 請明寫。回傳 `{ok, op, pipeline_id, graph, stages}`，`get` 另外帶 `derived`；不合法的圖回 `error_code: "invalid"`，原因列在 `errors`，而且什麼都沒寫進去 |
+| `pipeline_import_n8n` | `json`、`dry_run`、`default_agent`、`name`、`workspace_path` | 把匯出的 n8n workflow 轉成一個**新的** Pipeline 樣板。`dry_run`（預設 `true`）什麼都不寫，只回預覽用的 `graph`、轉換報告 `report` 與憑證清單 `credentials`；`dry_run: false` 會建立新的 Pipeline —— 絕不覆寫既有的，名稱撞到會加上 ` (2)`、` (3)`…… —— 存進圖、遮蔽過的來源 JSON 與憑證清單，後兩者只留在這台機器（設定包匯出不含它們）。大多數步驟由 CLI Agent 依節點原本的參數代行，結果可能和 n8n 不同；`report.slots` 列出每個 Slot 完整的 Kickoff，`report.gates` 列出每個 Gate 的提示。內嵌的秘密一律換成 `<removed: add credential for …>`，`report.secretsRemoved` 只寫節點與欄位。匯入的 Pipeline 不論由誰啟動，每次執行都會把它的 Pane 標上 Navide Guard 的外部內容標記。回傳 `{ok, dry_run, graph, report, credentials}`，建立了 Pipeline 時另帶 `pipeline` 與 `pipelines`；不是 n8n workflow 的輸入回 `error_code: "invalid"` |
 
 **每個 `op` 各需要哪些參數。** 這是這幾個 Tool 最容易用錯的地方：`op` 決定了其他參數
 哪些是必要的，缺了就會回 `ok: false` 帶 `error_code: "missing_argument"`，而且什麼都
@@ -606,7 +607,7 @@ Pipeline 則照常可用，圖也會跟著更新。
 
 **執行進行中還去編輯會怎樣。** 當該 Workspace 有一輪執行處於 `running` 狀態時，
 `pipeline_define` 的 `delete` 與 `set_active` 會直接被拒絕；`reset_builtin` 則是在
-進行中的那一輪正用著該 Pipeline 時被拒絕。`stage_define` 的四個 op 與 `pipeline_graph` 的 `apply`、`set` **全部**同樣被拒絕
+進行中的那一輪正用著該 Pipeline 時被拒絕。`stage_define` 的四個 op 與 `pipeline_graph` 的 `apply`、`set` **全部**同樣被拒絕；`pipeline_import_n8n` 的 `dry_run: false` 則和 `delete` 一樣，在該工作區有 `running` 狀態的執行時被拒絕
 —— 執行中途被改掉的 Stage 清單，等於在這一輪腳下換了流程。拒絕的形式是 `ok: false` 帶
 `error_code: "pipeline_running"`，而且什麼都沒寫進去。一輪執行是跟它啟動當下記錄的
 Pipeline 比對，所以明寫那個 Pipeline 也繞不過這道守衛；其他 Workspace、或跑著別的
@@ -620,7 +621,7 @@ Pipeline 的執行則不受影響。`workspace_path` 指的是「要檢查哪個
 它們改指到別的 Role，或改成更名。指著已刪除 Role 的 Slot 會讓 Role 注入失敗，那個 Stage
 的 Pane 會停在一個空 Prompt 前面，畫面上沒有任何東西說明原因 —— 這道拒絕就是為了這個。
 
-這四個 Tool 還會回的 `error_code` 是 `not_found` 與 `invalid`（Store 拒絕了那個值）。
+這五個 Tool 還會回的 `error_code` 是 `not_found` 與 `invalid`（Store 拒絕了那個值）。
 任何一種失敗都不會寫入。
 
 ### 排程
