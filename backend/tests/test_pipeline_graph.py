@@ -105,6 +105,143 @@ class TestPureHelpers:
             pg.apply_graph_ops(pg.derive_graph_from_stages(LEGACY), [{"op": "move_node", "id": "nope", "position": {"x": 0, "y": 0}}])
 
 
+def branching_graph() -> dict:
+    """check → (ok: ship | default: fix) and an error edge to alert; fix and
+    ship join into report. Matches the TS twin in pipelineGraph.test.ts."""
+    return {
+        "version": 1,
+        "nodes": [
+            {"id": "trigger", "kind": "trigger", "position": {"x": 0, "y": 0}},
+            *[slot_node(i) for i in ("check", "ship", "fix", "alert", "report")],
+        ],
+        "edges": [
+            {"id": "e-trigger-check", "from": "trigger", "to": "check", "kind": "main"},
+            {"id": "b-check-ship", "from": "check", "to": "ship", "kind": "branch", "when": "ok"},
+            {"id": "b-check-fix", "from": "check", "to": "fix", "kind": "branch", "when": "default"},
+            {"id": "x-check-alert", "from": "check", "to": "alert", "kind": "error"},
+            {"id": "e-ship-report", "from": "ship", "to": "report", "kind": "main"},
+            {"id": "e-fix-report", "from": "fix", "to": "report", "kind": "main"},
+        ],
+    }
+
+
+class TestBranchAndErrorEdges:
+    def test_branching_graph_is_valid_and_layers_over_every_forward_edge(self):
+        g = branching_graph()
+        assert pg.validate_graph(g) == []
+        assert pg.layer_graph(g)[0] == [["check"], ["ship", "fix", "alert"], ["report"]]
+        assert pg.has_branching_edges(g)
+        assert not pg.has_branching_edges(pg.derive_graph_from_stages(LEGACY))
+        assert not pg.is_linear_graph(g)
+
+    def test_edge_ids_per_kind(self):
+        assert pg.edge_id("a", "b") == "e-a-b"
+        assert pg.edge_id("a", "b", "reject") == "r-a-b"
+        assert pg.edge_id("a", "b", "branch") == "b-a-b"
+        assert pg.edge_id("a", "b", "error") == "x-a-b"
+
+    def test_object_when_compares_a_field(self):
+        g = branching_graph()
+        g["edges"][1]["when"] = {"path": "status", "equals": "ok"}
+        assert pg.validate_graph(g) == []
+
+    @pytest.mark.parametrize("when, msg", [
+        (None, "when must be a non-empty string or {path, equals}"),
+        ("  ", "when must not be empty"),
+        ({"path": "status"}, "when must be a non-empty string or {path, equals}"),
+        ({"path": "", "equals": 1}, "when must be a non-empty string or {path, equals}"),
+        ({"path": "a", "equals": [1]}, "when must be a non-empty string or {path, equals}"),
+        ({"path": "a", "equals": 1, "op": "gt"}, "when must be a non-empty string or {path, equals}"),
+    ])
+    def test_branch_edge_needs_a_valid_when(self, when, msg):
+        g = branching_graph()
+        if when is None:
+            g["edges"][1].pop("when")
+        else:
+            g["edges"][1]["when"] = when
+        assert f"branch edge b-check-ship: {msg}" in pg.validate_graph(g)
+
+    def test_when_and_max_loops_belong_to_their_own_kinds(self):
+        g = branching_graph()
+        g["edges"][0]["when"] = "ok"
+        g["edges"][3]["maxLoops"] = 2
+        errs = pg.validate_graph(g)
+        assert "edge e-trigger-check: when is only for branch edges" in errs
+        assert "edge x-check-alert: maxLoops is only for reject edges" in errs
+
+    def test_branch_and_error_edges_start_at_a_slot(self):
+        g = branching_graph()
+        g["edges"].append({"id": "b-trigger-fix", "from": "trigger", "to": "fix", "kind": "branch", "when": "x"})
+        g["edges"].append({"id": "x-trigger-alert", "from": "trigger", "to": "alert", "kind": "error"})
+        errs = pg.validate_graph(g)
+        assert "branch edge b-trigger-fix must start at a slot node" in errs
+        assert "error edge x-trigger-alert must start at a slot node" in errs
+
+    def test_a_cycle_through_branch_or_error_edges_is_rejected(self):
+        g = branching_graph()
+        g["edges"].append({"id": "x-report-check", "from": "report", "to": "check", "kind": "error"})
+        assert any("cycle" in e for e in pg.validate_graph(g))
+
+    def test_reject_may_point_back_over_a_branch_edge(self):
+        g = branching_graph()
+        g["edges"].append({"id": "r-report-check", "from": "report", "to": "check", "kind": "reject", "maxLoops": 2})
+        assert pg.validate_graph(g) == []
+
+    def test_remove_node_reconnects_main_edges_only(self):
+        g = pg.apply_graph_ops(branching_graph(), [{"op": "remove_node", "id": "ship"}])
+        assert {e["id"] for e in g["edges"]} == {"e-trigger-check", "b-check-fix", "x-check-alert", "e-fix-report"}
+
+    def test_add_edge_defaults_its_id_by_kind(self):
+        g = pg.apply_graph_ops(branching_graph(), [
+            {"op": "add_edge", "edge": {"from": "alert", "to": "report", "kind": "error"}},
+        ])
+        assert g["edges"][-1]["id"] == "x-alert-report"
+
+
+class TestLegacyCompatibility:
+    """R8: definitions without branch/error edges load, validate, layer and
+    save back exactly as before this schema extension."""
+
+    def legacy_graph(self) -> dict:
+        g = pg.apply_graph_ops(pg.derive_graph_from_stages(LEGACY), [
+            {"op": "add_node", "node": {"id": "gate", "kind": "gate", "label": "Approve", "position": {"x": 1, "y": 2},
+                                        "gate": {"prompt": "check"}},
+             "after": ["n-02-0", "n-02-1"], "before": ["n-03-0"]},
+            {"op": "add_edge", "edge": {"id": "rej", "from": "gate", "to": "n-02-0", "kind": "reject", "maxLoops": 3}},
+            {"op": "set_pin", "id": "n-01-0", "pinned": True},
+        ])
+        return g
+
+    def test_layers_and_stages_are_unchanged(self):
+        g = self.legacy_graph()
+        assert pg.validate_graph(g) == []
+        assert pg.layer_graph(g) == ([["n-01-0"], ["n-02-0", "n-02-1"], ["gate"], ["n-03-0"]], ["trigger"])
+        assert [st["id"] for st in pg.derive_stages_from_graph(g, LEGACY)] == ["01", "02", "03"]
+        assert not pg.has_branching_edges(g)
+
+    def test_stored_definition_round_trips_byte_for_byte(self, tmp_path):
+        import json
+
+        s = StagesStore(tmp_path / PIPELINES_FILE)
+        pid = s.create_pipeline("legacy")["id"]
+        for st in LEGACY:
+            s.upsert(copy_stage(st), pid)
+        s.set_graph(pid, self.legacy_graph())
+        before = json.dumps(s.export_document(), sort_keys=True)
+        reloaded = StagesStore(tmp_path / PIPELINES_FILE)
+        out = reloaded.get_graph(pid)
+        assert out["derived"] is False
+        assert pg.validate_graph(out["graph"]) == []
+        reloaded.set_graph(pid, out["graph"])
+        assert json.dumps(reloaded.export_document(), sort_keys=True) == before
+
+
+def copy_stage(st: dict) -> dict:
+    import copy
+
+    return copy.deepcopy(st)
+
+
 class TestStoreGraph:
     def store(self, tmp_path: Path) -> StagesStore:
         return StagesStore(tmp_path / PIPELINES_FILE)
@@ -116,7 +253,8 @@ class TestStoreGraph:
         assert out["derived"] is True
         assert pg.validate_graph(out["graph"]) == []
         assert s.export_document() == before
-        assert all(p["has_graph"] is False for p in s.list_pipelines())
+        # The linear seeds stay graphless; only the landing built-in ships one.
+        assert all(p["has_graph"] is (p["id"] == "evolve-landing") for p in s.list_pipelines())
 
     def test_graph_ops_store_graph_and_rederive_stages(self, tmp_path):
         s = self.store(tmp_path)

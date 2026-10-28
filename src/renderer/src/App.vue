@@ -399,6 +399,7 @@ import {
 import { accountLabel } from './lib/accountLabel'
 import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
 import { runAgentAccountSwitch, type AgentAccountSwitchConfirmRequest } from './lib/agentAccountSwitch'
+import { runAgentPaneAccountSwitch } from './lib/agentPaneAccountSwitch'
 import { usePluginMainTab } from './lib/pluginMainTab'
 import {
   DEFAULT_SLOT_ID,
@@ -425,6 +426,7 @@ import {
   restoreSpawnPin,
   type AccountDirsGate,
 } from './lib/accountFollowPanes'
+import { idleRebuildable, staleConfigKey, staleEntriesFromStatus, staleParts, type StaleConfigEntry, type StaleConfigPane, type StaleConfigPart, type StaleConfigRow } from './lib/staleConfigPanes'
 import {
   chainsDirLogin,
   dirLoginLanded,
@@ -2851,6 +2853,32 @@ async function refreshTerminalPrompts(): Promise<void> {
   }
 }
 
+/** Panes whose CLI started before an MCP or skills change (hot reload H0):
+ *  pane id -> the terminal the answer was about and what changed. Disclosure
+ *  only — rebuilding stays the user's click. */
+const staleConfigByPane = ref<Record<string, StaleConfigEntry>>({})
+
+async function refreshStaleConfigPanes(): Promise<void> {
+  const bySession = new Map<string, string>()
+  for (const p of panes.value) {
+    const sid = p.agentKey !== TERMINAL_AGENT_KEY ? paneRefs[p.id]?.sessionId : undefined
+    if (sid) bySession.set(sid as string, p.id)
+  }
+  if (bySession.size === 0) { staleConfigByPane.value = {}; return }
+  try {
+    const resp = await backend.send<{ stale?: StaleConfigRow[] }>(
+      'terminal.config_status', { terminal_session_ids: [...bySession.keys()] })
+    staleConfigByPane.value = staleEntriesFromStatus(bySession, resp.payload?.stale)
+  } catch {
+    // An older backend has no such request; keep showing nothing rather than guessing.
+  }
+}
+
+/** What a pane's title bar shows: empty once it runs a different terminal (rebuilt). */
+function paneStaleConfig(p: ActivePane): StaleConfigPart[] {
+  return staleParts(staleConfigByPane.value[p.id], paneRefs[p.id]?.sessionId as string | undefined)
+}
+
 /** idleHoldKey() dep: why a message cannot be injected into this pane right
  *  now, as an i18n key suffix under `msg.hold-*`, or null when it can be.
  *  Gate: PTY alive and past startup, nobody typing into it, not mid role/kickoff
@@ -3259,7 +3287,7 @@ async function createRequestedPane(
   // Only these three are read, which is what lets a cross-workspace spawn hand
   // in a parent that lives in another workspace, with the child's workspace.
   parent: Pick<ActivePane, 'id' | 'workspacePath' | 'runGroupId'>,
-  req: { agentKey: string; name: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string },
+  req: { agentKey: string; name: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(parent.workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3300,6 +3328,9 @@ async function createRequestedPane(
     spawnedBy: resumeSpawnedBy,
     model: req.model,
     effort: req.effort,
+    // cli_open_agent's `account`: the explicit pin a 📌 pinned pane is spawned
+    // with. Absent when the pane runs on the live login, as before.
+    profileId: req.profileId,
   })
   if (!paneId) return null
   // Persistence only — the pane is already usable, and both responses are
@@ -3331,6 +3362,9 @@ async function createRequestedPane(
     // Must agree with where the pane was actually placed, or the next restore
     // pulls a resumed conversation back under the caller.
     spawned_by: resumeSpawnedBy,
+    // A pinned pane's record keeps its pin, as a rebuild's does; without it the
+    // backend files the pane under the live login and a restore reopens it there.
+    ...(req.profileId ? { profile_id: req.profileId } : {}),
   })
   void sendQuiet('project.rename_pane', {
     workspace_path: parent.workspacePath,
@@ -3374,7 +3408,7 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
  *  would never actually be injected. */
 async function createStandaloneRequestedPane(
   workspacePath: string,
-  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string },
+  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3410,6 +3444,8 @@ async function createStandaloneRequestedPane(
     spawnedBy: resumeSpawnedBy || undefined,
     model: req.model,
     effort: req.effort,
+    // Same as createRequestedPane: cli_open_agent's explicit account pin.
+    profileId: req.profileId,
   })
   if (!paneId) return null
   void sendQuiet<ProjectPayload>('manual_pane.spawn', {
@@ -3433,6 +3469,7 @@ async function createStandaloneRequestedPane(
     // Written so the record agrees with the tree; a failed resume that wrote
     // '' here would otherwise become the "last position" of the conversation.
     spawned_by: resumeSpawnedBy,
+    ...(req.profileId ? { profile_id: req.profileId } : {}),
   })
   void sendQuiet('project.rename_pane', {
     workspace_path: workspacePath,
@@ -3829,6 +3866,9 @@ async function handleMcpSpawnRequest(ev: {
   cross_workspace?: boolean
   /** The requester's `<folder>/<pane>` address, for its report. */
   parent_address?: string
+  /** cli_open_agent's `account`, resolved by the backend to an explicit pin.
+   *  Absent when the pane runs on the live login. */
+  profile_id?: string
 }): Promise<void> {
   const standalone = !!ev.target_workspace
   const cross = !!ev.cross_workspace
@@ -3899,7 +3939,7 @@ async function handleMcpSpawnRequest(ev: {
   try {
     // The gate decides identity (name collisions, model/effort); the session to
     // resume is not its business, so it rides alongside rather than through it.
-    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id }
+    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id, profileId: (ev.profile_id ?? '').trim() || undefined }
     paneId = cross
       ? await createRequestedPane(
           { id: ev.requester_pane_id, workspacePath: ev.target_workspace as string, runGroupId: undefined },
@@ -4096,6 +4136,8 @@ watch(
 
 let _msgPumpTimer = 0
 let _remoteTargetsTimer = 0
+let _staleConfigTimer = 0
+const onStaleConfigFocus = (): void => { void refreshStaleConfigPanes() }
 onMounted(() => {
   messaging.configureMessaging({
     now: () => Date.now(),
@@ -4151,6 +4193,11 @@ onMounted(() => {
   }, 1000)
   void refreshRemoteMessagingTargets()
   _remoteTargetsTimer = window.setInterval(() => void refreshRemoteMessagingTargets(), 10_000)
+  // A CLI's own MCP file can change outside Navide (`claude mcp add` in any
+  // shell), so poll slowly as well as on the change events below.
+  void refreshStaleConfigPanes()
+  _staleConfigTimer = window.setInterval(() => void refreshStaleConfigPanes(), 30_000)
+  window.addEventListener('focus', onStaleConfigFocus)
   window.addEventListener('beforeunload', msgLog.flushOnExit)
   // A hard teardown (⌘R's `role: 'reload'`, app quit) never runs a pane's
   // onScopeDispose, so this is the last chance to catch the ≤60s of scrollback
@@ -4166,6 +4213,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.clearInterval(_msgPumpTimer)
   window.clearInterval(_remoteTargetsTimer)
+  window.clearInterval(_staleConfigTimer)
+  window.removeEventListener('focus', onStaleConfigFocus)
   window.removeEventListener('beforeunload', msgLog.flushOnExit)
   window.removeEventListener('beforeunload', saveAllScrollSnapshots)
   window.removeEventListener('beforeunload', flushSettingsOnExit)
@@ -9175,6 +9224,49 @@ provide(accountPinKey, {
   movePane: moveFixedAccountPane,
 })
 
+function staleConfigPanes(): StaleConfigPane[] {
+  return panes.value
+    .filter((p) => p.realized && paneStaleConfig(p).length)
+    .map((p) => {
+      const paneRef = paneRefs[p.id]
+      return {
+        id: p.id,
+        name: p.messagingName || p.customName || p.autoName || p.agentLabel,
+        parts: paneStaleConfig(p),
+        busy: !!paneBusyForRebuild(
+          paneRef?.displayStatus as string | undefined,
+          paneRef?.status as string | undefined,
+          paneRef?.startingAgeMs as number | null | undefined,
+        ),
+        canRebuild: paneCanRebuild(p),
+      }
+    })
+}
+
+/** "Rebuild all idle" on the MCP / Skills pages: only stale panes that are not
+ *  mid-turn, grouped per workspace because the batch rebuild works on one
+ *  workspace's panes at a time. Running panes are listed, never touched. */
+async function rebuildStaleIdlePanes(): Promise<void> {
+  const groups = new Map<string, { workspacePath: string; ids: string[] }>()
+  for (const row of idleRebuildable(staleConfigPanes())) {
+    const pane = panes.value.find((p) => p.id === row.id)
+    if (!pane) continue
+    const key = normWs(pane.workspacePath)
+    const group = groups.get(key) ?? { workspacePath: pane.workspacePath, ids: [] }
+    group.ids.push(pane.id)
+    groups.set(key, group)
+  }
+  for (const { workspacePath, ids } of groups.values()) {
+    await rebuildPanesViaResume('all', workspacePath, ids)
+  }
+}
+
+provide(staleConfigKey, {
+  panes: staleConfigPanes,
+  rebuild: (paneId: string) => { void rebuildPaneViaResume(paneId) },
+  rebuildAllIdle: () => { void rebuildStaleIdlePanes() },
+})
+
 async function rebuildPanesViaResume(
   scope: 'tab' | 'all',
   workspacePath?: string,
@@ -11481,7 +11573,13 @@ useUiActionBus({
   isPipelineSlot: (id) => panes.value.some((p) => p.id === id && p.origin === 'pipeline'),
   heldWorkspaces: () => (isDetachedWindow ? [] : workspaceOrder.value),
   connectionStatus: backend.status,
-  accountActions: { signIn: agentSignIn, switch: agentAccountSwitch },
+  // A switch naming a pane moves only that pane (cli_account_switch pane_id);
+  // without one it is the CLI-wide switch, unchanged.
+  accountActions: {
+    signIn: agentSignIn,
+    switch: (args, callerPaneId, signal) =>
+      (args.paneId ? agentPaneAccountSwitch : agentAccountSwitch)(args, callerPaneId, signal),
+  },
 })
 
 // MCP cli_account_sign_in (ui.accounts.signIn — on the bus, never in the
@@ -11560,6 +11658,63 @@ async function agentAccountSwitch(args: Record<string, unknown>, callerPaneId: s
     { type: 'info' },
   )
   return outcome
+}
+
+// MCP cli_account_switch with pane_id (plan mcp-pane-cli-usage_213031 P4):
+// the badge's "switch only this pane", asked through the same confirm dialog
+// (which names the pane). Only that pane is reopened in the account's own
+// folder; the live login and every other pane stay as they are.
+async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const outcome = await runAgentPaneAccountSwitch(args, callerPaneId, {
+    accounts: cliProfilesApi,
+    folderAgent: FOLLOW_SWITCH_AGENT,
+    pane: (id) => {
+      const pane = panes.value.find((p) => p.id === id)
+      if (!pane) return undefined
+      const fixed = paneAccountFixed(pane)
+      return {
+        agentKey: pane.agentKey,
+        name: pane.messagingName || pane.customName || id,
+        isLogin: !!pane.isLogin,
+        fixed,
+        profileId: fixed ? (pane.profileId ?? null) : cliProfilesApi.defaultProfileId(pane.agentKey),
+      }
+    },
+    dirSignedIn: followDirSignedIn,
+    callerPane: (id) => {
+      const pane = panes.value.find((p) => p.id === id)
+      return pane ? { workspacePath: pane.workspacePath, name: pane.messagingName || pane.customName || id } : undefined
+    },
+    accountLabel: (key, id) => accountLabel(cliProfilesApi, key, id, i18n.global.t),
+    confirm: agentAccountSwitchConfirm.ask,
+    movePane: moveAgentPaneAccount,
+    now: () => Date.now(),
+  }, signal)
+  if (outcome.status !== 'switched-pane') return outcome
+  const caller = panes.value.find((p) => p.id === callerPaneId)
+  notifyRestore.toast(
+    i18n.global.t('settings.accounts.cli.agent-switch-pane-done', {
+      agent: revealInvisibleText(caller?.messagingName || caller?.customName || callerPaneId),
+      from: String(outcome.from ?? ''),
+      to: String(outcome.to ?? ''),
+      reason: revealInvisibleText(String(args.reason ?? '')),
+    }),
+    { type: 'info' },
+  )
+  return outcome
+}
+
+/** Reopen one pane in `profileId`'s own folder: a fixed pane exactly as
+ *  moveFixedAccountPane does, a following one as fixing it (📌) does, with the
+ *  follow flag put back when the rebuild does not happen. */
+async function moveAgentPaneAccount(paneId: string, profileId: string): Promise<string | undefined> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return 'missing-pane'
+  if (paneAccountFixed(pane)) return rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
+  accountFollow.remove(paneId)
+  const failure = await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
+  if (failure) accountFollow.add(paneId)
+  return failure
 }
 
 // Single source of truth for the 'modalOpen' keybinding context. Hoisted so
@@ -14032,8 +14187,11 @@ async function preSpawnStage(index: number): Promise<void> {
   registerStage(stageCompletions, index, stage.slots.length)
   pipelineLog(`Stage ${stage.id} ⚡ pre-spawn ${stage.slots.length} slot(s) (role only)`)
   const pinned = pipelineDag.pinnedLabels(index)
+  // Slots behind a branch or error edge may never run; activateStage spawns
+  // them once their inputs have decided.
+  const conditional = pipelineDag.conditionalLabels(index)
   await Promise.all(stage.slots.map(async (slot) => {
-    if (pinned.has(slot.label)) return
+    if (pinned.has(slot.label) || conditional.has(slot.label)) return
     // A reject loop re-enters stages whose panes may still be alive; reuse
     // them (activateStage injects the kickoff) instead of spawning twins.
     if (pipelineDag.looped() && panes.value.some(
@@ -14188,11 +14346,18 @@ async function activateStage(index: number): Promise<void> {
   // DAG: pinned slots reuse their frozen output (counted done at the end);
   // a reject loop's note and outputs of nodes this run skipped go in front.
   const pinned = pipelineDag.pinnedLabels(index)
+  // DAG: slots none of whose inputs was taken (unchosen branch, error edge of
+  // a node that did not fail) are skipped and counted done at the end too.
+  const untaken = pipelineDag.untakenLabels(index)
   const dagPrefix = pipelineDag.takeNote(index) + pipelineDag.frozenContext(index)
 
   await Promise.all(stage.slots.map(async (slot) => {
     if (pinned.has(slot.label)) {
       pipelineLog(`Stage ${stage.id}/${slot.label} 📌 pinned — reusing its frozen output`)
+      return
+    }
+    if (untaken.has(slot.label)) {
+      pipelineLog(`Stage ${stage.id}/${slot.label} ⤼ skipped — none of its inputs was taken`)
       return
     }
     // Per-slot cross-stage context: workers get summaries + paths, the Manager
@@ -14476,6 +14641,7 @@ async function activateStage(index: number): Promise<void> {
   // Last, so a stage made only of pinned slots hands off after everything
   // above (the hand-off re-enters activateStage for the next stage).
   for (const label of pinned) onStageSlotCompleted(index, `pinned:${label}`, 'pinned')
+  for (const label of untaken) onStageSlotCompleted(index, `skipped:${label}`, 'skipped')
 }
 
 async function spawnPipelineStage(index: number): Promise<void> {
@@ -14892,6 +15058,14 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   // A kickoff that finishes late, after the user stopped this run and another
   // one moved to a different stage, must not fail that one.
   if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
+  // A slot with an error edge fails down that edge: its node is failed, the
+  // slot counts as finished and the run goes on.
+  if (pipeline.state === 'running' && pipelineDag.routeFailure(stageIndex, slotLabel, reason)) {
+    const stageId = stagesApi.stages.value[stageIndex]?.id
+    const pane = panes.value.find((p) => p.stageId === stageId && p.slotLabel === slotLabel && p.origin === 'pipeline')
+    onStageSlotCompleted(stageIndex, pane?.id ?? `failed:${slotLabel}`, 'error-edge')
+    return
+  }
   pipelineDag.slotFailed(stageIndex, slotLabel, reason)
   if (pipeline.state !== 'running') return
   const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
@@ -15721,6 +15895,10 @@ backend.on('backfill.changed', (raw) => {
   backfill.count = ev?.count ?? 0
 })
 
+// An MCP or skills change may leave running CLIs on the old set (hot reload H0).
+backend.on('skills.changed', () => { void refreshStaleConfigPanes() })
+backend.on('mcp.servers_changed', () => { void refreshStaleConfigPanes() })
+
 // STOP badge broadcast from the backend (another window issued/cleared a stop,
 // or this window's own persist echoed back). Reflect stored truth into the
 // pane's composable ONLY — never persist here (would loop: broadcast → set →
@@ -15852,6 +16030,9 @@ backend.on('agent_spawn.request', (raw) => {
     run_group_id?: string
     cross_workspace?: boolean
     parent_address?: string
+    // cli_open_agent's account pin; dropped here, the pane would open on the
+    // live login while the tool reports the account it asked for.
+    profile_id?: string
   }
   // An external caller (no requesting pane) addresses this by target_workspace
   // instead — accept the event as long as one of the two identifies an owner.
@@ -15877,6 +16058,7 @@ backend.on('agent_spawn.request', (raw) => {
     run_group_id: ev.run_group_id ?? undefined,
     cross_workspace: ev.cross_workspace === true,
     parent_address: ev.parent_address ?? '',
+    profile_id: ev.profile_id ?? '',
   })
 })
 
@@ -16623,7 +16805,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
 // How a slot was judged finished — recorded for history.jsonl auditing so a
 // stage_advance can be traced to N/N reliable signals (vs a forced advance).
-type SlotFinishReason = 'sentinel' | 'turn_complete' | 'analyzer' | 'cap-auto' | 'force' | 'pinned'
+type SlotFinishReason = 'sentinel' | 'turn_complete' | 'analyzer' | 'cap-auto' | 'force' | 'pinned' | 'skipped' | 'error-edge'
 
 // Build a SlotSignal per pipeline slot of a stage, for allSlotsFinished(). A
 // slot already counted as done is finished by definition; otherwise we read its
@@ -23291,6 +23473,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :login-expired="p.loginExpired"
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"
+          :stale-config="paneStaleConfig(p)"
           :muted="isPaneMuted(p.id)"
           :readback-available="readbackOffered"
           :readback="isPaneReadback(p.id)"

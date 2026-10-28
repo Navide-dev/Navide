@@ -214,13 +214,16 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
   })
 
   it('reopens fresh only on the single-pane account moves, never in a batch', () => {
-    // Fixing, unfixing, "continue on this account" and moving a fixed pane
-    // from its own list: the move is the point
+    // Fixing, unfixing, "continue on this account", moving a fixed pane
+    // from its own list and an agent's single-pane switch (cli_account_switch
+    // pane_id, moveAgentPaneAccount: a fixed pane or a following one): the
+    // move is the point
     // and a pane with no transcript has nothing to lose. The follow batch and
     // every other rebuild keep the plain resume preflight.
     const optIns = appSource.split('freshWhenNoTranscript: true').length - 1
-    expect(optIns).toBe(4)
+    expect(optIns).toBe(6)
     expect(functionBody('toggleAccountPin').split('freshWhenNoTranscript: true').length - 1).toBe(2)
+    expect(functionBody('moveAgentPaneAccount').split('freshWhenNoTranscript: true').length - 1).toBe(2)
     expect(appSource).toContain(
       'await rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true })'
     )

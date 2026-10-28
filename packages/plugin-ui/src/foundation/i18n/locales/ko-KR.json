@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI가 종료 코드 {code}(으)로 끝났어요. 비정상 종료되었을 수 있으며, 코드는 오류 대장에도 기록돼요.",
       "stuck-badge": "⏳ {minutes}분 이상 활동 없음",
       "stuck-tooltip": "이번 턴은 {minutes}분 넘게 로그 활동도 출력도 없어요. CLI가 멈췄을 수 있어요. 아무것도 중단하지 않았어요.",
+      "stale-config-badge": "설정 변경됨",
+      "stale-config-tooltip-mcp": "이 pane이 시작된 뒤 이 CLI의 MCP 서버가 바뀌었습니다. 다시 빌드하기 전까지 이전 목록을 씁니다. 클릭하면 다시 빌드합니다(대화 이어가기).",
+      "stale-config-tooltip-skills": "이 pane이 시작된 뒤 이 CLI에 전달되는 skills가 바뀌었습니다. 다시 빌드하기 전까지 이전 것을 쓸 수 있습니다. 클릭하면 다시 빌드합니다(대화 이어가기).",
+      "stale-config-tooltip-both": "이 pane이 시작된 뒤 이 CLI의 MCP 서버와 skills가 바뀌었습니다. 다시 빌드하기 전까지 이전 것을 씁니다. 클릭하면 다시 빌드합니다(대화 이어가기).",
       "usage-limit-badge": "⛔ {time} 복귀",
       "usage-limit-badge-unknown": "⛔ 할당량 소진",
       "usage-limit-tooltip": "이 CLI의 할당량이 소진되었어요 — {time}에 복귀할 예정이에요. 클릭해서 닫기",
@@ -1507,6 +1511,19 @@
         "hot-reload": "핫 리로드 전에 session마다 한 번 물어요"
       }
     },
+    "applies": {
+      "new-panes-only": "새 pane에만 적용",
+      "new-panes-only-tooltip": "CLI는 시작할 때 이 설정을 읽습니다. 이미 열린 pane은 다시 빌드할 때까지 이전 값을 유지합니다."
+    },
+    "stale-config": {
+      "title": "이번 변경 전에 시작된 열린 pane: {count}개",
+      "body-mcp": "CLI는 시작할 때 자신의 MCP 서버를 읽으므로 이 pane들은 아직 이전 목록을 씁니다. 다시 빌드하면 대화를 이어가지만 진행 중인 턴이 중단되고 대화가 다시 출력됩니다.",
+      "body-skills": "CLI는 시작할 때 skills를 읽으므로 이 pane들은 아직 이전 것을 쓸 수 있습니다. 다시 빌드하면 대화를 이어가지만 진행 중인 턴이 중단되고 대화가 다시 출력됩니다.",
+      "rebuild-all-idle": "유휴 pane 모두 다시 빌드({count})",
+      "busy": "실행 중 — '유휴 pane 모두 다시 빌드'에서 건너뜀",
+      "cannot-rebuild": "이어갈 대화가 없습니다",
+      "rebuild": "다시 빌드"
+    },
     "limits": {
       "hint": "Navide와 Navide가 실행하는 agent가 이 컴퓨터에 과부하를 주지 않도록 하는 선택적 제한이에요. 직접 바꾸기 전까지는 각각 꺼져 있거나 Navide의 이전 동작을 따라요.",
       "test-workers": "새 pane의 테스트 러너 worker 수 제한",
@@ -1956,7 +1973,7 @@
       "restore": "복원",
       "candidateReady": "업데이트 {version} 준비됨",
       "activationFailed": "{plugin}은(는) 설치되었지만 활성화하지 못했어요: {reason}. 아래 목록에서 다시 시작하거나 삭제하세요.",
-      "switchNow": "승인하면 {id}이(가) 바로 {version}(으)로 전환돼요. 열려 있는 보기는 다시 로드되고, 저장하지 않은 내용은 사라져요. 전환 내역은 공지에 기록되며, 거기서 한 번에 되돌릴 수 있어요.",
+      "switchNow": "승인하면 {id}이(가) 바로 {version}(으)로 전환돼요. 열려 있는 보기는 다시 로드돼요. Navide SDK로 상태를 저장하는 보기는 원래 상태로 돌아오고, 그 밖에 저장하지 않은 내용은 사라져요. 전환 내역은 공지에 기록되며, 거기서 한 번에 되돌릴 수 있어요.",
       "restartPlugin": "Navide 플러그인 다시 시작",
       "disable": "사용 안 함",
       "enable": "사용",
@@ -8212,11 +8229,14 @@
         "agent-switch-confirm-to": "전환할 계정",
         "agent-switch-confirm-caller": "요청한 pane",
         "agent-switch-confirm-workspace": "pane의 작업 영역",
+        "agent-switch-confirm-pane": "옮길 pane",
+        "agent-switch-confirm-pane-body": "동의하기 전에는 아무것도 바뀌지 않아요. 이 pane만 옮겨지며, 다른 계정의 전용 폴더에서 대화를 이어서 다시 열려요. CLI의 라이브 로그인과 다른 pane은 그대로예요. pane이 작업 중이면 멈추기 전에 다시 물어봐요. 응답하지 않으면 요청은 저절로 닫혀요.",
         "agent-switch-confirm-reason": "agent가 작성한 이유",
         "agent-switch-confirm-reason-truncated": "agent의 이유가 300자를 넘어서 앞의 300자만 표시돼요.",
         "agent-switch-confirm-cancel": "취소",
         "agent-switch-confirm-ok": "계정 전환",
         "agent-switch-done": "{agent}이(가) {vendor}을(를) {from}에서 {to}(으)로 전환했어요. agent가 밝힌 이유: {reason}",
+        "agent-switch-pane-done": "{agent}이(가) pane 하나를 {from}에서 {to}(으)로 옮겼어요. 라이브 로그인과 다른 pane은 바뀌지 않았어요. agent가 밝힌 이유: {reason}",
         "login-complete": "{email}(으)로 로그인했어요. 계정을 저장했어요.",
         "login-complete-no-email": "로그인을 완료했어요. 계정을 저장했어요.",
         "login-step2": "1단계 완료: {email}을(를) 저장했어요. 한 번 더 승인하면 이 계정이 자체 폴더에 로그인돼요. 방금 열린 로그인 pane에서 브라우저로 마무리하세요.",
@@ -8945,6 +8965,7 @@
     "drag-resize-log": "드래그해서 로그 패널 크기 조절",
     "filter-by-type": "유형별 필터",
     "all-stages-finished": "Stage {count}개가 모두 성공적으로 끝났어요",
+    "region-switching": "{title}을(를) {version}(으)로 전환하는 중…",
     "region-unavailable": "{title}을(를) 사용할 수 없어요"
   },
   "layout": {
@@ -11145,6 +11166,8 @@
     },
     "canvas": {
       "insert-on-edge": "여기에 단계 삽입",
+      "branch-label": "{when}일 때",
+      "error-label": "실패 시",
       "loop-label": "↺ 최대 {max}",
       "minimap": "전체 pipeline 개요",
       "pass": "승인되면 계속",
@@ -11204,6 +11227,8 @@
       "tidy": "정리",
       "unlink": "연결 제거",
       "unpin": "출력 고정 해제",
+      "link-kind": "연결 유형 변경",
+      "link-when": "분기 값 변경",
       "loop-budget": "재시도 한도 변경"
     },
     "inspector": {
@@ -11288,6 +11313,7 @@
       "awaiting": "승인 필요",
       "rejected": "되돌려 보냄",
       "failed": "실패",
+      "untaken": "건너뜀(선택된 경로 아님)",
       "skipped": "고정된 출력 재사용",
       "aborted": "중단됨",
       "pinned": "출력 고정됨"
@@ -11315,6 +11341,17 @@
       "open-in-canvas": "pipeline 캔버스에서 열기",
       "gate-toast": "pipeline이 {name}에서 승인을 기다리고 있어요",
       "next-gated": "다음 단계로 넘어가기 전에 이 게이트를 승인하거나 되돌려 보내세요."
+    },
+    "link": {
+      "title": "연결",
+      "desc": "{from} → {to}",
+      "kind": "연결 유형",
+      "kind-main": "항상",
+      "kind-branch": "분기(조건)",
+      "kind-error": "실패 시",
+      "when": "분기 값",
+      "when-placeholder": "단계가 보고하는 값 또는 default",
+      "remove": "연결 제거"
     },
     "edge": {
       "title": "반려 루프",
@@ -11411,6 +11448,14 @@
       "not-reclaimed": "(회수 안 됨)",
       "fix": "수정",
       "proposal": "제안",
+      "proposal-reason": "사유: {reason}",
+      "effect-title": "효과와 빈도",
+      "adoption": "채택 {adopted} / {resolved}",
+      "adoption-none": "결과가 나온 제안이 아직 없습니다",
+      "lowered": "{date}부터 주 1회로 자동 하향: 최근 {n}개 제안이 연속으로 채택되지 않았습니다",
+      "landed-title": "반영된 제안",
+      "landed-none": "반영된 제안이 아직 없습니다",
+      "effect-counts": "{before} → {after} (반영 전/후 7일)",
       "history": "기록(최근 30개)",
       "unsaved": "저장하지 않은 변경 사항",
       "save": "저장",
@@ -11448,6 +11493,11 @@
       "scope-propose": "제안만(코드 변경 없음)",
       "scope-fix-no-git": "이 작업 영역은 git repo가 아니어서 작업할 worktree나 main 브랜치가 없으므로 제안만 할 수 있어요.",
       "scope-always-propose": "새 기능, 설계 절충, 데이터 삭제 / 마이그레이션, 푸시와 릴리스는 항상 제안으로만 처리돼요(기본 규칙).",
+      "retro": "회고",
+      "retro-tools": "반복되는 수작업",
+      "retro-tools-hint": "실행당 최대 {tokens} 토큰. 이 workspace의 최근 7일 메시지 기록과 예약 작업 실행 기록을 횟수만 읽습니다. 3번 이상 반복한 작업은 pipeline, skill, Prompt 등으로 만드는 제안이 됩니다.",
+      "retro-corrections": "나의 지적",
+      "retro-corrections-hint": "실행당 최대 {tokens} 토큰. 이 workspace의 plan에 남긴 review note와 반려된 제안의 사유를 최근 7일, 횟수만 읽습니다. 2번 이상 나온 지적은 규칙 변경 제안이 됩니다.",
       "rules": "규칙",
       "rules-builtin": "기본 제공 v{version}",
       "rules-view": "전체 텍스트 보기",
@@ -11472,6 +11522,29 @@
       "error": "실패",
       "timeout": "시간 초과",
       "skipped": "건너뜀"
+    },
+    "source": {
+      "failures": "오류 분류",
+      "tools": "반복되는 수작업",
+      "corrections": "나의 지적"
+    },
+    "freq": {
+      "daily": "매일",
+      "weekly": "매주"
+    },
+    "effect": {
+      "effective": "효과 있음",
+      "not-effective": "효과 없음",
+      "insufficient": "표본 부족",
+      "pending": "판정 전"
+    },
+    "proposal-status": {
+      "proposed": "제안됨",
+      "approved": "승인됨",
+      "rejected": "반려됨",
+      "in-progress": "진행 중",
+      "landed": "반영됨",
+      "abandoned": "폐기됨"
     },
     "history": {
       "date": "날짜",

@@ -7,13 +7,16 @@ import type { AgentAccountSwitchConfirmRequest } from '../lib/agentAccountSwitch
 import { useDialogFocus } from '../composables/useDialogFocus'
 import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 
-const props = defineProps<{ request: AgentAccountSwitchConfirmRequest }>()
+// `paneName` is set when the agent asked to move only that pane
+// (cli_account_switch pane_id): the live login and other panes stay.
+const props = defineProps<{ request: AgentAccountSwitchConfirmRequest & { paneName?: string } }>()
 const emit = defineEmits<{ answer: [confirmed: boolean] }>()
 
 // The agent wrote the reason, and the pane name can be set by one: invisible
 // and direction-changing characters are shown, not applied.
 const reason = computed(() => revealInvisibleText(props.request.reason))
 const caller = computed(() => revealInvisibleText(props.request.callerName || props.request.callerPaneId))
+const paneName = computed(() => props.request.paneName ? revealInvisibleText(props.request.paneName) : '')
 
 // Esc is a no, and must not reach anything behind the dialog.
 function onKeydown(event: KeyboardEvent): void {
@@ -48,11 +51,18 @@ useDialogFocus(card, () => cancelButton.value)
         </div>
       </div>
       <div id="switch-confirm-desc" class="nv-dialog-body">
-        <p>{{ $t('settings.accounts.cli.agent-switch-confirm-body') }}</p>
-        <p>{{ $t('settings.accounts.cli.agent-switch-confirm-late') }}</p>
+        <p v-if="paneName" data-testid="switch-confirm-pane-body">{{ $t('settings.accounts.cli.agent-switch-confirm-pane-body') }}</p>
+        <template v-else>
+          <p>{{ $t('settings.accounts.cli.agent-switch-confirm-body') }}</p>
+          <p>{{ $t('settings.accounts.cli.agent-switch-confirm-late') }}</p>
+        </template>
         <dl class="switch-confirm-facts">
           <dt>{{ $t('settings.accounts.cli.agent-switch-confirm-vendor') }}</dt>
           <dd><code>{{ request.agentKey }}</code></dd>
+          <template v-if="paneName">
+            <dt>{{ $t('settings.accounts.cli.agent-switch-confirm-pane') }}</dt>
+            <dd data-testid="switch-confirm-pane">{{ paneName }}</dd>
+          </template>
           <dt>{{ $t('settings.accounts.cli.agent-switch-confirm-from') }}</dt>
           <dd>{{ request.fromLabel }}</dd>
           <dt>{{ $t('settings.accounts.cli.agent-switch-confirm-to') }}</dt>

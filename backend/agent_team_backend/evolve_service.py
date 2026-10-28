@@ -100,6 +100,11 @@ DEFAULTS: dict[str, Any] = {
     "scope": "fix",
     "extra": "",
     "ledger_plan": "",
+    "retro_tools": True,
+    "retro_corrections": False,
+    #: How often each proposal source runs (S4): "daily", or "weekly" once
+    #: Navide lowered it (only the user raises it again).
+    "retro_freq": {"failures": "daily", "tools": "daily", "corrections": "daily"},
 }
 _INT_BOUNDS = {
     "token_budget": (1_000, 10_000_000),
@@ -111,6 +116,45 @@ _AT_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 _PANE_ID_RE = re.compile(r"^[A-Za-z0-9._:\-]{1,128}$")
 _LEDGER_RE = re.compile(r"^\.agent-team/plans/[A-Za-z0-9._\-]+\.(?:html|plan\.md)$")
 _COMMIT_RE = re.compile(r"^[0-9a-fA-F]{4,64}$")
+#: Commit-shaped words in a plan's notes; commit_exists decides which are real.
+_NOTE_COMMIT_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+_NOTE_PR_RE = re.compile(r"(?i)(?:\bPR\s*#?|/pull/)(\d{1,7})\b")
+#: Commit candidates checked per plan, so a note full of hex stays cheap.
+_MAX_COMMIT_CANDIDATES = 10
+#: How far back the next run's task looks in the proposal ledger.
+LEDGER_DAYS = 30
+#: Ledger statuses the next run's task carries.
+_LEDGER_IN_TASK = ("rejected", "in-progress", "approved")
+#: Ledger statuses a sync no longer changes.
+_LEDGER_FINAL = ("landed", "abandoned")
+#: The retro passes (S2) read this many days back.
+RETRO_DAYS = 7
+RETRO_MAX_GROUPS = 20
+#: Same kind of message or job run this many times: a repeated manual chore.
+RETRO_TOOLS_MIN = 3
+#: Same correction in this many plans: a rule, not a remark.
+RETRO_CORRECTIONS_MIN = 2
+_RETRO_KEY_CHARS = 40
+_TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?Z?)?|\b\d{1,2}:\d{2}(?::\d{2})?\b")
+_HASH_RE = re.compile(r"\b(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{7,}\b")
+#: Proposal sources: the part of a proposal's kind before ":" (S2 labels).
+SOURCES = ("failures", "tools", "corrections")
+_FREQS = ("daily", "weekly")
+_ADOPTED = ("approved", "in-progress", "landed")
+_NOT_ADOPTED = ("rejected", "abandoned")
+#: This many resolved proposals of one source in a row, none adopted, lower it to weekly.
+LOWER_AFTER = 10
+WEEK_MS = 7 * 86_400_000
+#: A landed proposal is judged on this window before and after it landed.
+EFFECT_DAYS = 7
+#: Fewer occurrences than this, before and after together, are not judged.
+EFFECT_MIN = 3
+_CADENCE_KEY = "evolve_cadence"
+_PATH_RE = re.compile(r"(?:[A-Za-z]:)?(?:[\\/][^\s\\/'\"()]+)+[\\/]?")
+_STAGE_STATUS = {
+    "draft": "proposed", "in-review": "proposed", "approved": "approved",
+    "in-progress": "in-progress",
+}
 _MAX_EXTRA = 4000
 
 #: Same families the rules ask the agent to mask; applied again on the way in.
@@ -168,9 +212,9 @@ def _local_tz() -> str:
 
 def _field(key: str, value: Any) -> Any:
     """One settings field, validated; raises :class:`SettingsInvalid`."""
-    if key == "enabled":
+    if key in ("enabled", "retro_tools", "retro_corrections"):
         if not isinstance(value, bool):
-            raise SettingsInvalid("enabled must be true or false")
+            raise SettingsInvalid(f"{key} must be true or false")
     elif key == "at":
         if not isinstance(value, str) or not _AT_RE.match(value):
             raise SettingsInvalid('at must be "HH:MM"')
@@ -191,6 +235,10 @@ def _field(key: str, value: Any) -> Any:
     elif key == "scope":
         if value not in ("fix", "propose"):
             raise SettingsInvalid('scope must be "fix" or "propose"')
+    elif key == "retro_freq":
+        if not isinstance(value, dict) or any(k not in SOURCES or v not in _FREQS for k, v in value.items()):
+            raise SettingsInvalid('retro_freq must map failures / tools / corrections to "daily" or "weekly"')
+        value = {**DEFAULTS["retro_freq"], **value}
     elif key in _INT_BOUNDS:
         low, high = _INT_BOUNDS[key]
         if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
@@ -214,6 +262,9 @@ def normalize_settings(raw: Any, current: dict[str, Any]) -> dict[str, Any]:
     for key, value in raw.items():
         if key not in DEFAULTS or value is None:
             continue
+        if key == "retro_freq" and isinstance(value, dict):
+            # A partial change: the sources it does not name keep their value.
+            value = {**(current.get(key) or {}), **value}
         out[key] = _field(key, value)
     if out["mode"] == "pane" and not out["pane_id"]:
         raise SettingsInvalid('mode "pane" needs a pane_id')
@@ -312,6 +363,45 @@ def _add_token_hash(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE evolve_runs ADD COLUMN token_hash TEXT")
 
 
+def _add_effect(cur: sqlite3.Cursor) -> None:
+    # S4: a landed proposal's effect check, written once, 7 days after it landed.
+    for column in ("effect TEXT", "effect_before INTEGER", "effect_after INTEGER", "effect_checked_at INTEGER"):
+        cur.execute(f"ALTER TABLE evolve_proposals ADD COLUMN {column}")
+
+
+def _create_proposals(cur: sqlite3.Cursor) -> None:
+    # The proposal ledger (S1): one row per proposal a run reported. Its status
+    # is derived from the plan's stage, never set by hand.
+    cur.execute(
+        "CREATE TABLE evolve_proposals ("
+        " id TEXT PRIMARY KEY,"
+        " run_id TEXT NOT NULL,"
+        " rel_path TEXT NOT NULL,"
+        " name TEXT,"
+        " kind TEXT,"
+        " signature TEXT,"
+        " status TEXT NOT NULL,"
+        " reason TEXT,"
+        " pr TEXT,"
+        " commits TEXT,"
+        " created_at INTEGER NOT NULL,"
+        " updated_at INTEGER NOT NULL)"
+    )
+    cur.execute("CREATE INDEX evolve_proposals_created ON evolve_proposals (created_at)")
+
+
+def _proposal_row(row: sqlite3.Row) -> dict[str, Any]:
+    proposal = dict(row)
+    try:
+        proposal["commits"] = json.loads(proposal["commits"]) if proposal["commits"] else []
+    except json.JSONDecodeError:
+        proposal["commits"] = []
+    for key in ("name", "kind", "signature", "reason", "pr"):
+        proposal[key] = proposal[key] or ""
+    proposal["effect"] = proposal.get("effect") or ""
+    return proposal
+
+
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -348,6 +438,8 @@ class _Store:
         if key not in self._ready:
             db.migrate(_COMPONENT, 1, _create_schema)
             db.migrate(_COMPONENT, 2, _add_token_hash)
+            db.migrate(_COMPONENT, 3, _create_proposals)
+            db.migrate(_COMPONENT, 4, _add_effect)
             self._ready.add(key)
         return db
 
@@ -448,6 +540,59 @@ class _Store:
                 "DELETE FROM evolve_runs WHERE id NOT IN"
                 " (SELECT id FROM evolve_runs ORDER BY started_at DESC LIMIT ?)",
                 (RUNS_KEPT,),
+            )
+
+    def add_proposals(self, workspace: str, run_id: str, items: list[dict[str, str]], now: int) -> None:
+        db = self.db(workspace, create=False)
+        if db is None or not items:
+            return
+        with db.transaction() as cur:
+            for item in items:
+                cur.execute(
+                    "INSERT INTO evolve_proposals (id, run_id, rel_path, name, kind, signature, status,"
+                    " reason, pr, commits, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, 'proposed', '', '', '[]', ?, ?)",
+                    (uuid.uuid4().hex[:12], run_id, item["rel_path"], item["name"], item["kind"],
+                     item["signature"], now, now),
+                )
+
+    def cadence(self, workspace: str) -> dict[str, Any]:
+        """When each weekly section last went into a task, and why a source was lowered."""
+        db = self.db(workspace, create=False)
+        stored = db.kv_get(_CADENCE_KEY) if db is not None else None
+        stored = stored if isinstance(stored, dict) else {}
+        return {key: stored.get(key) if isinstance(stored.get(key), dict) else {}
+                for key in ("included_at", "lowered", "raised_at")} | {
+                    "summary_at": stored.get("summary_at") if isinstance(stored.get("summary_at"), int) else 0}
+
+    def save_cadence(self, workspace: str, cadence: dict[str, Any]) -> None:
+        db = self.db(workspace, create=True)
+        if db is not None:
+            db.kv_set(_CADENCE_KEY, cadence, now=int(time.time()))
+
+    def proposals(self, workspace: str, since_ms: int = 0) -> list[dict[str, Any]]:
+        db = self.db(workspace, create=False)
+        if db is None:
+            return []
+        with db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT * FROM evolve_proposals WHERE created_at >= ? ORDER BY created_at DESC, rowid",
+                (since_ms,),
+            ).fetchall()
+        return [_proposal_row(r) for r in rows]
+
+    def update_proposal(self, workspace: str, proposal_id: str, fields: dict[str, Any]) -> None:
+        db = self.db(workspace, create=False)
+        if db is None or not fields:
+            return
+        values = dict(fields)
+        if "commits" in values:
+            values["commits"] = json.dumps(values["commits"] or [], ensure_ascii=False)
+        assignments = ", ".join(f"{key} = ?" for key in values)
+        with db.transaction() as cur:
+            cur.execute(
+                f"UPDATE evolve_proposals SET {assignments} WHERE id = ?",
+                [*values.values(), proposal_id],
             )
 
     def update(self, workspace: str, run_id: str, fields: dict[str, Any]) -> None:
@@ -590,6 +735,38 @@ class LiveHost:
 
         return scheduler.get_service()
 
+    def error_rows(self, workspace: str) -> tuple[list[dict[str, Any]], int | None]:
+        """This workspace's error-ledger rows (matched on the workspace the row
+        was recorded for; rows with none are left out), and the oldest row's
+        time across the whole ledger, which tells how far back it still reaches."""
+        from . import error_ledger
+
+        rows = error_ledger.get().read(limit=1_000_000)
+        oldest = next((t for t in (_ts_ms(r.get("ts")) for r in rows) if t is not None), None)
+        want = error_ledger._canonical(workspace)
+        return [r for r in rows if r.get("workspace") and error_ledger._canonical(str(r["workspace"])) == want], oldest
+
+    def flaky_tests(self, root: str) -> list[dict[str, Any]]:
+        """The tests recorded in the repository's docs/testing/flaky.json."""
+        try:
+            with open(os.path.join(root, "docs", "testing", "flaky.json"), encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            return []
+        tests = data.get("tests") if isinstance(data, dict) else None
+        return [t for t in tests if isinstance(t, dict)] if isinstance(tests, list) else []
+
+    def message_rows(self) -> list[dict[str, Any]]:
+        """The persisted message log (every workspace); the retro pass scopes it."""
+        from . import app
+
+        return app.agent_message_log.tail()
+
+    async def schedule_records(self) -> list[dict[str, Any]]:
+        """Every scheduled job with its kept runs; the retro pass scopes them."""
+        store = self.scheduler().store
+        return [{**job, "runs": await store.list_runs(job["id"], 200)} for job in await store.list_jobs()]
+
 
 # ── the service ─────────────────────────────────────────────────────────────
 
@@ -714,11 +891,16 @@ class EvolveService:
         workspace = _canonical(workspace)
         if not os.path.isdir(workspace):
             return {"ok": False, "error": "the workspace folder does not exist", "reason": "workspace_gone"}
+        git = await self.host.git_info(workspace)
+        await self._sync_proposals(workspace, git)
+        await self._review(workspace, git)
         settings = await self._settings(workspace)
         checked = await asyncio.to_thread(self.store.settings_checked, workspace)
-        git = await self.host.git_info(workspace)
         job = await self._job(workspace)
         runs = await asyncio.to_thread(self.store.runs, workspace)
+        run_ids = {r["id"] for r in runs}
+        proposals = [p for p in await asyncio.to_thread(self.store.proposals, workspace)
+                     if p["run_id"] in run_ids]
         legacy = await self.legacy_jobs(workspace)
         return {
             "ok": True,
@@ -731,6 +913,14 @@ class EvolveService:
             },
             "running": next((r for r in runs if r["status"] == "running"), None),
             "runs": runs,
+            # The proposal ledger rows of the runs above, each with its status.
+            "proposals": proposals,
+            # Landed proposals with their effect check (S4), newest first.
+            "landed": [p for p in await asyncio.to_thread(self.store.proposals, workspace)
+                       if p["status"] == "landed"][:30],
+            # Adoption per proposal source, and why a source was lowered to weekly.
+            "adoption": _adoption(await asyncio.to_thread(self.store.proposals, workspace)),
+            "cadence": {"lowered": (await asyncio.to_thread(self.store.cadence, workspace))["lowered"]},
             "legacy": [{"id": j["id"], "name": j["name"], "enabled": j["enabled"]} for j in legacy],
             "template": {"version": evolve_rules.VERSION, "text": evolve_rules.preview()},
             # Stored fields that failed validation and were reset to defaults.
@@ -799,12 +989,22 @@ class EvolveService:
             if not settings["tz"]:
                 settings["tz"] = _local_tz()
             turning_on = settings["enabled"] and not current.get("enabled")
+            raised = [src for src in SOURCES if (current.get("retro_freq") or {}).get(src) == "weekly"
+                      and settings["retro_freq"][src] == "daily"]
             try:
                 await asyncio.to_thread(self.store.save_settings, workspace, settings)
                 await self._sync_job(workspace, settings)
             except SettingsInvalid as err:
                 return {"ok": False, "error": str(err)}
             self._known.add(workspace)
+            if raised:
+                # The user raised a source: its lowering is over, and only
+                # proposals from now on count towards lowering it again.
+                cadence = await asyncio.to_thread(self.store.cadence, workspace)
+                for src in raised:
+                    cadence["lowered"].pop(src, None)
+                    cadence["raised_at"][src] = self.now_ms()
+                await asyncio.to_thread(self.store.save_cadence, workspace, cadence)
             if turning_on:
                 # The user turned this on: the jobs it replaces stop (never
                 # deleted), as the user — they are the only one who may.
@@ -901,6 +1101,12 @@ class EvolveService:
         self, workspace: str, settings: dict[str, Any], run: dict[str, Any], token: str
     ) -> dict[str, Any]:
         git = await self.host.git_info(workspace)
+        await self._sync_proposals(workspace, git)
+        await self._review(workspace, git)
+        settings = {**settings, "retro_freq": (await self._settings(workspace))["retro_freq"]}
+        ledger = [p for p in await asyncio.to_thread(
+            self.store.proposals, workspace, self.now_ms() - LEDGER_DAYS * 86_400_000
+        ) if p["status"] in _LEDGER_IN_TASK]
         scope = settings["scope"] if git["is_repo"] else "propose"
         if not git["is_repo"] and settings["scope"] == "fix":
             await self._notice(workspace, "not_git", run)
@@ -910,13 +1116,26 @@ class EvolveService:
             "token_budget": settings["token_budget"], "max_minutes": settings["max_minutes"],
             "max_fixes": settings["max_fixes"], "ledger_plan": settings["ledger_plan"],
             "extra": settings["extra"],
+            "retro_tools": settings["retro_tools"], "retro_corrections": settings["retro_corrections"],
         }
+        await self._cadence_into(workspace, settings, render)
+        since = self.now_ms() - RETRO_DAYS * 86_400_000
+        try:
+            if render["retro_tools"]:
+                render["retro_tools_data"] = _tools_records(
+                    workspace, await asyncio.to_thread(self.host.message_rows),
+                    await self.host.schedule_records(), since)
+            if render["retro_corrections"]:
+                render["retro_corrections_data"] = await asyncio.to_thread(
+                    _corrections_records, workspace, self.store.proposals(workspace, since), since)
+        except Exception as err:  # noqa: BLE001 — a record that cannot be read leaves the pass empty
+            log.warning("evolve: gathering retro records failed: %s", err)
         fields: dict[str, Any] = {"scope": scope}
         checked = await asyncio.to_thread(self.store.settings_checked, workspace)
         if checked and checked[1]:
             fields["detail"] = "stored settings reset to defaults: " + ", ".join(checked[1])
         try:
-            task = evolve_rules.render(render)
+            task = evolve_rules.render(render, ledger)
         except evolve_rules.UnsafeValue as err:
             return await self._fail(workspace, run, fields, "error", "unsafe_value", str(err))
         mode = settings["mode"]
@@ -1011,6 +1230,9 @@ class EvolveService:
                 fields["detail"] = (str(run.get("detail") or "") + " reported commits not found: "
                                     + ", ".join(m or "(no hash)" for m in missing)).strip()
         await asyncio.to_thread(self.store.update, workspace, run_id, fields)
+        await asyncio.to_thread(
+            self.store.add_proposals, workspace, run_id, _ledger_items(payload.get("proposals")), self.now_ms()
+        )
         finished = {**run, **fields}
         await self._notice(workspace, "finished", finished)
         await self._changed(workspace)
@@ -1165,6 +1387,145 @@ class EvolveService:
         self._idle[key] = (now, sent + 1)
         await self._notice(workspace, "nudged", {**run, "nudges": sent + 1, "delivered": bool(answer.get("ok"))})
 
+    # ── the proposal ledger ──────────────────────────────────────────────
+
+    async def _sync_proposals(self, workspace: str, git: dict[str, Any]) -> None:
+        """Bring each open ledger row up to date with its plan's stage. Never
+        raises: a ledger that cannot be read must not stop a run or the panel."""
+        try:
+            rows = await asyncio.to_thread(self.store.proposals, workspace)
+            root = git.get("root") or workspace
+            for row in rows:
+                if row["status"] in _LEDGER_FINAL:
+                    continue
+                fields = await self._derive(workspace, root, row)
+                changed = {k: v for k, v in fields.items() if row.get(k) != v}
+                if changed:
+                    changed["updated_at"] = self.now_ms()
+                    await asyncio.to_thread(self.store.update_proposal, workspace, row["id"], changed)
+        except Exception as err:  # noqa: BLE001
+            log.warning("evolve: syncing the proposal ledger failed: %s", err)
+
+    async def _derive(self, workspace: str, root: str, row: dict[str, Any]) -> dict[str, Any]:
+        meta = await asyncio.to_thread(_read_plan_meta, workspace, row["rel_path"])
+        if meta is None:
+            return {"status": "abandoned"}
+        if meta is False:  # there, but not readable as a plan: leave it as it is
+            return {}
+        stage = meta.get("stage")
+        notes = [n for n in meta.get("reviewNotes") or [] if isinstance(n, dict)]
+        if stage == "abandoned":
+            user = [n for n in notes if n.get("author") == "user" and isinstance(n.get("text"), str)]
+            return {"status": "rejected", "reason": mask(user[-1]["text"])[:500] if user else ""}
+        if stage == "done":
+            text = "\n".join(
+                str(n.get(k) or "") for n in notes for k in ("text", "reply")
+            ) + "\n" + json.dumps({k: v for k, v in meta.items() if k in ("commit", "commits", "pr")})
+            commits: list[str] = []
+            for candidate in list(dict.fromkeys(_NOTE_COMMIT_RE.findall(text)))[:_MAX_COMMIT_CANDIDATES]:
+                if await self.host.commit_exists(root, candidate):
+                    commits.append(candidate)
+            pr = _NOTE_PR_RE.search(text)
+            if commits or pr:
+                return {"status": "landed", "commits": commits, "pr": f"#{pr.group(1)}" if pr else ""}
+            return {"status": "in-progress"}
+        status = _STAGE_STATUS.get(str(stage))
+        return {"status": status} if status else {}
+
+    # ── effect check, adoption and cadence (S4) ──────────────────────────
+
+    async def _review(self, workspace: str, git: dict[str, Any]) -> None:
+        """Judge landed proposals that are due, and lower a source whose
+        proposals keep being turned down. Never raises, like the ledger sync."""
+        try:
+            await self._check_effects(workspace, git.get("root") or workspace)
+            await self._lower_sources(workspace)
+        except Exception as err:  # noqa: BLE001
+            log.warning("evolve: reviewing the proposal ledger failed: %s", err)
+
+    async def _check_effects(self, workspace: str, root: str) -> None:
+        now = self.now_ms()
+        due = [p for p in await asyncio.to_thread(self.store.proposals, workspace)
+               if p["status"] == "landed" and not p["effect"] and now - int(p["updated_at"]) >= WEEK_MS]
+        if not due:
+            return
+        errors, oldest = await asyncio.to_thread(self.host.error_rows, workspace)
+        flaky = await asyncio.to_thread(self.host.flaky_tests, root)
+        for row in due:
+            verdict = _effect(row, errors, oldest, flaky)
+            # updated_at stays the time it landed: the windows are measured from it.
+            await asyncio.to_thread(self.store.update_proposal, workspace, row["id"],
+                                    {**verdict, "effect_checked_at": now})
+
+    async def _lower_sources(self, workspace: str) -> None:
+        rows = await asyncio.to_thread(self.store.proposals, workspace)
+        async with self._lock:
+            settings = await asyncio.to_thread(self.store.settings, workspace)
+            if settings is None:
+                return
+            cadence = await asyncio.to_thread(self.store.cadence, workspace)
+            freq = dict(settings["retro_freq"])
+            lowered = []
+            for src in SOURCES:
+                if freq[src] != "daily":
+                    continue
+                since = int(cadence["raised_at"].get(src) or 0)
+                recent = sorted((r for r in rows if _source(r["kind"]) == src and r["created_at"] > since
+                                 and r["status"] in _ADOPTED + _NOT_ADOPTED),
+                                key=lambda r: r["created_at"], reverse=True)[:LOWER_AFTER]
+                if len(recent) == LOWER_AFTER and all(r["status"] in _NOT_ADOPTED for r in recent):
+                    freq[src] = "weekly"
+                    cadence["lowered"][src] = {
+                        "at": self.now_ms(),
+                        "reason": f"the last {LOWER_AFTER} {src} proposals in a row were not adopted"
+                                  " (rejected or abandoned)",
+                    }
+                    lowered.append(src)
+            if lowered:
+                # Disclosed in the panel (get's cadence.lowered), with the reason.
+                await asyncio.to_thread(self.store.save_settings, workspace, {**settings, "retro_freq": freq})
+                await asyncio.to_thread(self.store.save_cadence, workspace, cadence)
+
+    async def _cadence_into(self, workspace: str, settings: dict[str, Any], render: dict[str, Any]) -> None:
+        """Which sections this run gets, and the S4 records it carries."""
+        now = self.now_ms()
+        cadence = await asyncio.to_thread(self.store.cadence, workspace)
+        freq = settings["retro_freq"]
+
+        def due(src: str) -> bool:
+            return freq[src] == "daily" or now - int(cadence["included_at"].get(src) or 0) >= WEEK_MS
+
+        render["failures_due"] = due("failures")
+        render["retro_tools"] = bool(settings["retro_tools"]) and due("tools")
+        render["retro_corrections"] = bool(settings["retro_corrections"]) and due("corrections")
+        for src, on in (("failures", render["failures_due"]), ("tools", render["retro_tools"]),
+                        ("corrections", render["retro_corrections"])):
+            if on:
+                cadence["included_at"][src] = now
+        rows = await asyncio.to_thread(self.store.proposals, workspace)
+        lines = [
+            f'not-effective: "{_label(p["name"], 80)}" ({_label(p["rel_path"], 80)}) signature'
+            f' "{_label(p["signature"], 120)}": {p["effect_before"]} before, {p["effect_after"]} after'
+            for p in rows if p["effect"] == "not-effective"
+            and now - int(p["effect_checked_at"] or 0) < LEDGER_DAYS * 86_400_000
+        ]
+        for src, why in cadence["lowered"].items():
+            if src in SOURCES and freq.get(src) == "weekly":
+                lines.append(f"cadence: {src} is weekly since {_day(why.get('at'))}: {_label(why.get('reason'), 120)}")
+        week = [p for p in rows if p["created_at"] >= now - WEEK_MS]
+        if week and now - int(cadence["summary_at"] or 0) >= WEEK_MS:
+            proposed = len(week)
+            line = (f"weekly summary: {proposed} proposed, {sum(p['status'] in _ADOPTED for p in week)} adopted,"
+                    f" {sum(p['status'] == 'landed' for p in week)} landed,"
+                    f" {sum(p['effect'] == 'effective' for p in week)} effective")
+            if proposed < EFFECT_MIN:
+                line += f" (sample of {proposed}, under {EFFECT_MIN})"
+            lines.append(line)
+            render["review_summary"] = True
+            cadence["summary_at"] = now
+        render["review_data"] = lines
+        await asyncio.to_thread(self.store.save_cadence, workspace, cadence)
+
     # ── events ───────────────────────────────────────────────────────────
 
     async def _changed(self, workspace: str) -> None:
@@ -1186,6 +1547,209 @@ def _clean_list(value: Any, keys: tuple[str, str]) -> list[dict[str, str]]:
         if isinstance(item, dict):
             out.append({key: mask(str(item.get(key) or ""))[:300] for key in keys})
     return out[:20]
+
+
+def _ledger_items(value: Any) -> list[dict[str, str]]:
+    """The reported proposals as ledger rows: the same items run.proposals
+    keeps, plus the optional kind and signature."""
+    return [{
+        "rel_path": mask(str(item.get("rel_path") or ""))[:300],
+        "name": mask(str(item.get("name") or ""))[:300],
+        "kind": mask(str(item.get("kind") or ""))[:80],
+        "signature": mask(str(item.get("signature") or ""))[:300],
+    } for item in (value if isinstance(value, list) else []) if isinstance(item, dict)][:20]
+
+
+def _retro_key(text: Any) -> str:
+    """A record's group key: masked, without timestamps, hashes or digits,
+    lower case on one line, the first few words."""
+    out = _TIMESTAMP_RE.sub(" ", mask(str(text or "")))
+    out = re.sub(r"\d+", "", _HASH_RE.sub(" ", out))
+    return re.sub(r"\s+", " ", out).strip().lower()[:_RETRO_KEY_CHARS].strip()
+
+
+def _label(text: Any, limit: int = 30) -> str:
+    return re.sub(r"\s+", " ", mask(str(text or ""))).strip()[:limit]
+
+
+def _same_ws(value: Any, workspace: str) -> bool:
+    return bool(value) and _canonical(str(value)) == workspace
+
+
+def _tools_records(workspace: str, rows: list[dict[str, Any]], jobs: list[dict[str, Any]],
+                   since: int) -> list[str]:
+    """This workspace's repeated messages and job runs as "key: count" lines.
+
+    A message row is this workspace's when the backend stamped one of its
+    sides with this workspace's path; the other side, when stamped with
+    another workspace (or not at all), is named only as such. Unstamped rows
+    belong to no workspace and are left out. Jobs are this workspace's when
+    their owner or action names it; evolve's own job is left out.
+    """
+    groups: dict[str, int] = {}
+    for row in rows:
+        if int(row.get("created_at") or 0) < since:
+            continue
+        mine_s = _same_ws(row.get("sender_workspace"), workspace)
+        mine_r = _same_ws(row.get("recipient_workspace"), workspace)
+        if not (mine_s or mine_r):
+            continue
+        key = _retro_key(row.get("content"))
+        if not key:
+            continue
+        sender = _label(row.get("sender")) if mine_s else "(another workspace)"
+        recipient = _label(row.get("recipient")) if mine_r else "(another workspace)"
+        line = f'messages {sender} -> {recipient} "{key}"'
+        groups[line] = groups.get(line, 0) + 1
+    out = [f"{line}: {n}" for line, n in sorted(groups.items(), key=lambda kv: -kv[1]) if n >= RETRO_TOOLS_MIN]
+    own_job = job_id_for(workspace)
+    for job in jobs:
+        owner, action = job.get("owner") or {}, job.get("action") or {}
+        if job.get("id") == own_job or (owner.get("kind") == "system" and owner.get("feature") == FEATURE):
+            continue
+        if not (_same_ws(owner.get("workspace"), workspace) or _same_ws(action.get("workspace"), workspace)):
+            continue
+        runs = [r for r in job.get("runs") or [] if int(r.get("started_at") or 0) >= since]
+        if len(runs) < RETRO_TOOLS_MIN:
+            continue
+        statuses: dict[str, int] = {}
+        for run in runs:
+            status = _label(run.get("status"), 12)
+            statuses[status] = statuses.get(status, 0) + 1
+        detail = ", ".join(f"{k} {v}" for k, v in sorted(statuses.items()))
+        out.append(f'schedule "{_label(job.get("name"), 60)}": {len(runs)} runs ({detail})')
+    return [line[:120] for line in out[:RETRO_MAX_GROUPS]]
+
+
+def _corrections_records(workspace: str, ledger: list[dict[str, Any]], since: int) -> list[str]:
+    """Corrections the user repeated, as "key: count" lines: the user's review
+    notes on this workspace's plans changed in the window, and the ledger's
+    rejection reasons, each plan counted once per key."""
+    from .plugins.builtin.navide_plans.plan_meta import parse_plan_meta
+
+    seen: set[tuple[str, str]] = set()
+    plans = os.path.join(workspace, ".agent-team", "plans")
+    try:
+        names = sorted(n for n in os.listdir(plans) if n.endswith(".html") and not n.startswith((".", "_")))
+    except OSError:
+        names = []
+    for name in names:
+        path = os.path.join(plans, name)
+        try:
+            if os.path.getmtime(path) * 1000 < since:
+                continue
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                meta = parse_plan_meta(handle.read()) or {}
+        except OSError:
+            continue
+        for note in meta.get("reviewNotes") or []:
+            if isinstance(note, dict) and note.get("author") == "user" and (key := _retro_key(note.get("text"))):
+                seen.add((f".agent-team/plans/{name}", key))
+    for row in ledger:
+        if row.get("reason") and int(row.get("updated_at") or 0) >= since and (key := _retro_key(row["reason"])):
+            seen.add((row["rel_path"], key))
+    counts: dict[str, int] = {}
+    for _plan, key in seen:
+        counts[key] = counts.get(key, 0) + 1
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [f'"{key}": {n}'[:120] for key, n in ranked if n >= RETRO_CORRECTIONS_MIN][:RETRO_MAX_GROUPS]
+
+
+def normalize_signature(text: Any) -> str:
+    """The F1 triage signature: masked, with paths, hex ids and numbers
+    stripped, on one line in lower case."""
+    out = _PATH_RE.sub(" ", mask(str(text or "")))
+    out = re.sub(r"\d+", " ", _HASH_RE.sub(" ", out))
+    return re.sub(r"\s+", " ", out).strip().lower()[:300]
+
+
+def error_signature(row: dict[str, Any]) -> str:
+    """An error-ledger row's signature: its code plus its message (F1)."""
+    return normalize_signature(f"{row.get('code') or ''} {row.get('message') or ''}")
+
+
+def _ts_ms(value: Any) -> int | None:
+    try:
+        return int(datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp() * 1000)
+    except (TypeError, ValueError):
+        return None
+
+
+def _day(ms: Any) -> str:
+    return datetime.fromtimestamp(int(ms or 0) / 1000).strftime("%Y-%m-%d")
+
+
+def _source(kind: Any) -> str:
+    src = str(kind or "").split(":", 1)[0].strip()
+    return src if src in SOURCES else ""
+
+
+def _adoption(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Per source: proposals, resolved ones, adopted ones, adopted ÷ resolved."""
+    out = {}
+    for src in SOURCES:
+        mine = [r for r in rows if _source(r["kind"]) == src]
+        resolved = [r for r in mine if r["status"] in _ADOPTED + _NOT_ADOPTED]
+        adopted = sum(r["status"] in _ADOPTED for r in resolved)
+        out[src] = {"proposed": len(mine), "resolved": len(resolved), "adopted": adopted,
+                    "rate": adopted / len(resolved) if resolved else None}
+    return out
+
+
+def _effect(row: dict[str, Any], errors: list[dict[str, Any]], oldest: int | None,
+            flaky: list[dict[str, Any]]) -> dict[str, Any]:
+    """Count a landed proposal's signature 7 days before and after it landed."""
+    landed = int(row["updated_at"])
+    start, end = landed - EFFECT_DAYS * 86_400_000, landed + EFFECT_DAYS * 86_400_000
+    before = after = 0
+
+    def count(at: int | None) -> None:
+        nonlocal before, after
+        if at is None:
+            return
+        if start <= at < landed:
+            before += 1
+        elif landed <= at < end:
+            after += 1
+
+    signature = normalize_signature(row["signature"])
+    if signature:
+        for entry in errors:
+            if error_signature(entry) == signature:
+                count(_ts_ms(entry.get("ts")))
+    test_id = str(row["signature"] or "").strip()
+    for test in flaky:
+        if test_id and test.get("test") == test_id:
+            for run in test.get("runs") or []:
+                if isinstance(run, dict):
+                    count(_ts_ms(run.get("at")))
+    # A ledger rotated past the window would undercount "before".
+    complete = oldest is None or oldest <= start
+    if not complete or before + after < EFFECT_MIN:
+        effect = "insufficient"
+    else:
+        effect = "effective" if after < before else "not-effective"
+    return {"effect": effect, "effect_before": before, "effect_after": after}
+
+
+def _read_plan_meta(workspace: str, rel_path: str) -> dict[str, Any] | bool | None:
+    """A ledger row's plan meta: None when the plan is gone (or lies outside
+    this workspace, which is never read), False when it is there but has no
+    readable plan-meta."""
+    from .plugins.builtin.navide_plans.plan_meta import parse_plan_meta
+
+    if not rel_path:
+        return None
+    base = os.path.realpath(workspace)
+    path = os.path.realpath(os.path.join(base, rel_path))
+    if not path.startswith(base + os.sep) or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            meta = parse_plan_meta(handle.read())
+    except OSError:
+        return None
+    return meta if meta is not None else False
 
 
 _service: EvolveService | None = None
