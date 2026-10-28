@@ -11399,6 +11399,13 @@
       "fix": "Fix",
       "proposal": "Proposal",
       "proposal-reason": "Reason: {reason}",
+      "effect-title": "Effect and cadence",
+      "adoption": "Adopted {adopted} / {resolved}",
+      "adoption-none": "No resolved proposals yet",
+      "lowered": "Lowered to weekly on {date}: the last {n} proposals in a row were not adopted",
+      "landed-title": "Landed proposals",
+      "landed-none": "No landed proposals yet",
+      "effect-counts": "{before} → {after} (7 days before / after)",
       "history": "History (last 30)",
       "unsaved": "Unsaved changes",
       "save": "Save",
@@ -11465,6 +11472,21 @@
       "error": "Failed",
       "timeout": "Timed out",
       "skipped": "Skipped"
+    },
+    "source": {
+      "failures": "Error triage",
+      "tools": "Repeated manual work",
+      "corrections": "Your corrections"
+    },
+    "freq": {
+      "daily": "Daily",
+      "weekly": "Weekly"
+    },
+    "effect": {
+      "effective": "Effective",
+      "not-effective": "Not effective",
+      "insufficient": "Too few to judge",
+      "pending": "Not judged yet"
     },
     "proposal-status": {
       "proposed": "Proposed",

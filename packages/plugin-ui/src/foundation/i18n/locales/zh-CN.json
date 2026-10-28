@@ -11399,6 +11399,13 @@
       "fix": "修正",
       "proposal": "提案",
       "proposal-reason": "理由：{reason}",
+      "effect-title": "成效与频率",
+      "adoption": "采用 {adopted} / {resolved}",
+      "adoption-none": "尚无已有结果的提案",
+      "lowered": "{date} 起自动降为每周：连续 {n} 份提案都没被采用",
+      "landed-title": "已落地的提案",
+      "landed-none": "尚无已落地的提案",
+      "effect-counts": "{before} → {after}（落地前／后 7 天）",
       "history": "历史（最近 30 次）",
       "unsaved": "有未保存的变更",
       "save": "保存",
@@ -11465,6 +11472,21 @@
       "error": "失败",
       "timeout": "超时",
       "skipped": "未运行"
+    },
+    "source": {
+      "failures": "错误分诊",
+      "tools": "重复手动的事",
+      "corrections": "你的纠正"
+    },
+    "freq": {
+      "daily": "每天",
+      "weekly": "每周"
+    },
+    "effect": {
+      "effective": "见效",
+      "not-effective": "未见效",
+      "insufficient": "样本不足",
+      "pending": "待判定"
     },
     "proposal-status": {
       "proposed": "提案中",

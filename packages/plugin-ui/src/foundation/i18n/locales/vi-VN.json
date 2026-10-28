@@ -11399,6 +11399,13 @@
       "fix": "Bản sửa",
       "proposal": "Đề xuất",
       "proposal-reason": "Lý do: {reason}",
+      "effect-title": "Hiệu quả và tần suất",
+      "adoption": "Đã nhận {adopted} / {resolved}",
+      "adoption-none": "Chưa có đề xuất nào có kết quả",
+      "lowered": "Tự hạ xuống hằng tuần từ {date}: {n} đề xuất gần nhất liên tiếp không được nhận",
+      "landed-title": "Đề xuất đã áp dụng",
+      "landed-none": "Chưa có đề xuất nào đã áp dụng",
+      "effect-counts": "{before} → {after} (7 ngày trước / sau)",
       "history": "Lịch sử (30 lần gần nhất)",
       "unsaved": "Có thay đổi chưa lưu",
       "save": "Lưu",
@@ -11465,6 +11472,21 @@
       "error": "Thất bại",
       "timeout": "Hết thời gian",
       "skipped": "Đã bỏ qua"
+    },
+    "source": {
+      "failures": "Phân loại lỗi",
+      "tools": "Việc thủ công lặp lại",
+      "corrections": "Các góp ý của bạn"
+    },
+    "freq": {
+      "daily": "Hằng ngày",
+      "weekly": "Hằng tuần"
+    },
+    "effect": {
+      "effective": "Có hiệu quả",
+      "not-effective": "Không hiệu quả",
+      "insufficient": "Quá ít để đánh giá",
+      "pending": "Chưa đánh giá"
     },
     "proposal-status": {
       "proposed": "Đã đề xuất",

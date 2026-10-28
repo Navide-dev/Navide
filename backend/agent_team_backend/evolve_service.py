@@ -102,6 +102,9 @@ DEFAULTS: dict[str, Any] = {
     "ledger_plan": "",
     "retro_tools": True,
     "retro_corrections": False,
+    #: How often each proposal source runs (S4): "daily", or "weekly" once
+    #: Navide lowered it (only the user raises it again).
+    "retro_freq": {"failures": "daily", "tools": "daily", "corrections": "daily"},
 }
 _INT_BOUNDS = {
     "token_budget": (1_000, 10_000_000),
@@ -134,6 +137,20 @@ RETRO_CORRECTIONS_MIN = 2
 _RETRO_KEY_CHARS = 40
 _TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?Z?)?|\b\d{1,2}:\d{2}(?::\d{2})?\b")
 _HASH_RE = re.compile(r"\b(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{7,}\b")
+#: Proposal sources: the part of a proposal's kind before ":" (S2 labels).
+SOURCES = ("failures", "tools", "corrections")
+_FREQS = ("daily", "weekly")
+_ADOPTED = ("approved", "in-progress", "landed")
+_NOT_ADOPTED = ("rejected", "abandoned")
+#: This many resolved proposals of one source in a row, none adopted, lower it to weekly.
+LOWER_AFTER = 10
+WEEK_MS = 7 * 86_400_000
+#: A landed proposal is judged on this window before and after it landed.
+EFFECT_DAYS = 7
+#: Fewer occurrences than this, before and after together, are not judged.
+EFFECT_MIN = 3
+_CADENCE_KEY = "evolve_cadence"
+_PATH_RE = re.compile(r"(?:[A-Za-z]:)?(?:[\\/][^\s\\/'\"()]+)+[\\/]?")
 _STAGE_STATUS = {
     "draft": "proposed", "in-review": "proposed", "approved": "approved",
     "in-progress": "in-progress",
@@ -218,6 +235,10 @@ def _field(key: str, value: Any) -> Any:
     elif key == "scope":
         if value not in ("fix", "propose"):
             raise SettingsInvalid('scope must be "fix" or "propose"')
+    elif key == "retro_freq":
+        if not isinstance(value, dict) or any(k not in SOURCES or v not in _FREQS for k, v in value.items()):
+            raise SettingsInvalid('retro_freq must map failures / tools / corrections to "daily" or "weekly"')
+        value = {**DEFAULTS["retro_freq"], **value}
     elif key in _INT_BOUNDS:
         low, high = _INT_BOUNDS[key]
         if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
@@ -241,6 +262,9 @@ def normalize_settings(raw: Any, current: dict[str, Any]) -> dict[str, Any]:
     for key, value in raw.items():
         if key not in DEFAULTS or value is None:
             continue
+        if key == "retro_freq" and isinstance(value, dict):
+            # A partial change: the sources it does not name keep their value.
+            value = {**(current.get(key) or {}), **value}
         out[key] = _field(key, value)
     if out["mode"] == "pane" and not out["pane_id"]:
         raise SettingsInvalid('mode "pane" needs a pane_id')
@@ -339,6 +363,12 @@ def _add_token_hash(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE evolve_runs ADD COLUMN token_hash TEXT")
 
 
+def _add_effect(cur: sqlite3.Cursor) -> None:
+    # S4: a landed proposal's effect check, written once, 7 days after it landed.
+    for column in ("effect TEXT", "effect_before INTEGER", "effect_after INTEGER", "effect_checked_at INTEGER"):
+        cur.execute(f"ALTER TABLE evolve_proposals ADD COLUMN {column}")
+
+
 def _create_proposals(cur: sqlite3.Cursor) -> None:
     # The proposal ledger (S1): one row per proposal a run reported. Its status
     # is derived from the plan's stage, never set by hand.
@@ -368,6 +398,7 @@ def _proposal_row(row: sqlite3.Row) -> dict[str, Any]:
         proposal["commits"] = []
     for key in ("name", "kind", "signature", "reason", "pr"):
         proposal[key] = proposal[key] or ""
+    proposal["effect"] = proposal.get("effect") or ""
     return proposal
 
 
@@ -408,6 +439,7 @@ class _Store:
             db.migrate(_COMPONENT, 1, _create_schema)
             db.migrate(_COMPONENT, 2, _add_token_hash)
             db.migrate(_COMPONENT, 3, _create_proposals)
+            db.migrate(_COMPONENT, 4, _add_effect)
             self._ready.add(key)
         return db
 
@@ -523,6 +555,20 @@ class _Store:
                     (uuid.uuid4().hex[:12], run_id, item["rel_path"], item["name"], item["kind"],
                      item["signature"], now, now),
                 )
+
+    def cadence(self, workspace: str) -> dict[str, Any]:
+        """When each weekly section last went into a task, and why a source was lowered."""
+        db = self.db(workspace, create=False)
+        stored = db.kv_get(_CADENCE_KEY) if db is not None else None
+        stored = stored if isinstance(stored, dict) else {}
+        return {key: stored.get(key) if isinstance(stored.get(key), dict) else {}
+                for key in ("included_at", "lowered", "raised_at")} | {
+                    "summary_at": stored.get("summary_at") if isinstance(stored.get("summary_at"), int) else 0}
+
+    def save_cadence(self, workspace: str, cadence: dict[str, Any]) -> None:
+        db = self.db(workspace, create=True)
+        if db is not None:
+            db.kv_set(_CADENCE_KEY, cadence, now=int(time.time()))
 
     def proposals(self, workspace: str, since_ms: int = 0) -> list[dict[str, Any]]:
         db = self.db(workspace, create=False)
@@ -689,6 +735,27 @@ class LiveHost:
 
         return scheduler.get_service()
 
+    def error_rows(self, workspace: str) -> tuple[list[dict[str, Any]], int | None]:
+        """This workspace's error-ledger rows (matched on the workspace the row
+        was recorded for; rows with none are left out), and the oldest row's
+        time across the whole ledger, which tells how far back it still reaches."""
+        from . import error_ledger
+
+        rows = error_ledger.get().read(limit=1_000_000)
+        oldest = next((t for t in (_ts_ms(r.get("ts")) for r in rows) if t is not None), None)
+        want = error_ledger._canonical(workspace)
+        return [r for r in rows if r.get("workspace") and error_ledger._canonical(str(r["workspace"])) == want], oldest
+
+    def flaky_tests(self, root: str) -> list[dict[str, Any]]:
+        """The tests recorded in the repository's docs/testing/flaky.json."""
+        try:
+            with open(os.path.join(root, "docs", "testing", "flaky.json"), encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            return []
+        tests = data.get("tests") if isinstance(data, dict) else None
+        return [t for t in tests if isinstance(t, dict)] if isinstance(tests, list) else []
+
     def message_rows(self) -> list[dict[str, Any]]:
         """The persisted message log (every workspace); the retro pass scopes it."""
         from . import app
@@ -824,11 +891,12 @@ class EvolveService:
         workspace = _canonical(workspace)
         if not os.path.isdir(workspace):
             return {"ok": False, "error": "the workspace folder does not exist", "reason": "workspace_gone"}
+        git = await self.host.git_info(workspace)
+        await self._sync_proposals(workspace, git)
+        await self._review(workspace, git)
         settings = await self._settings(workspace)
         checked = await asyncio.to_thread(self.store.settings_checked, workspace)
-        git = await self.host.git_info(workspace)
         job = await self._job(workspace)
-        await self._sync_proposals(workspace, git)
         runs = await asyncio.to_thread(self.store.runs, workspace)
         run_ids = {r["id"] for r in runs}
         proposals = [p for p in await asyncio.to_thread(self.store.proposals, workspace)
@@ -847,6 +915,12 @@ class EvolveService:
             "runs": runs,
             # The proposal ledger rows of the runs above, each with its status.
             "proposals": proposals,
+            # Landed proposals with their effect check (S4), newest first.
+            "landed": [p for p in await asyncio.to_thread(self.store.proposals, workspace)
+                       if p["status"] == "landed"][:30],
+            # Adoption per proposal source, and why a source was lowered to weekly.
+            "adoption": _adoption(await asyncio.to_thread(self.store.proposals, workspace)),
+            "cadence": {"lowered": (await asyncio.to_thread(self.store.cadence, workspace))["lowered"]},
             "legacy": [{"id": j["id"], "name": j["name"], "enabled": j["enabled"]} for j in legacy],
             "template": {"version": evolve_rules.VERSION, "text": evolve_rules.preview()},
             # Stored fields that failed validation and were reset to defaults.
@@ -915,12 +989,22 @@ class EvolveService:
             if not settings["tz"]:
                 settings["tz"] = _local_tz()
             turning_on = settings["enabled"] and not current.get("enabled")
+            raised = [src for src in SOURCES if (current.get("retro_freq") or {}).get(src) == "weekly"
+                      and settings["retro_freq"][src] == "daily"]
             try:
                 await asyncio.to_thread(self.store.save_settings, workspace, settings)
                 await self._sync_job(workspace, settings)
             except SettingsInvalid as err:
                 return {"ok": False, "error": str(err)}
             self._known.add(workspace)
+            if raised:
+                # The user raised a source: its lowering is over, and only
+                # proposals from now on count towards lowering it again.
+                cadence = await asyncio.to_thread(self.store.cadence, workspace)
+                for src in raised:
+                    cadence["lowered"].pop(src, None)
+                    cadence["raised_at"][src] = self.now_ms()
+                await asyncio.to_thread(self.store.save_cadence, workspace, cadence)
             if turning_on:
                 # The user turned this on: the jobs it replaces stop (never
                 # deleted), as the user — they are the only one who may.
@@ -1018,6 +1102,8 @@ class EvolveService:
     ) -> dict[str, Any]:
         git = await self.host.git_info(workspace)
         await self._sync_proposals(workspace, git)
+        await self._review(workspace, git)
+        settings = {**settings, "retro_freq": (await self._settings(workspace))["retro_freq"]}
         ledger = [p for p in await asyncio.to_thread(
             self.store.proposals, workspace, self.now_ms() - LEDGER_DAYS * 86_400_000
         ) if p["status"] in _LEDGER_IN_TASK]
@@ -1032,13 +1118,14 @@ class EvolveService:
             "extra": settings["extra"],
             "retro_tools": settings["retro_tools"], "retro_corrections": settings["retro_corrections"],
         }
+        await self._cadence_into(workspace, settings, render)
         since = self.now_ms() - RETRO_DAYS * 86_400_000
         try:
-            if settings["retro_tools"]:
+            if render["retro_tools"]:
                 render["retro_tools_data"] = _tools_records(
                     workspace, await asyncio.to_thread(self.host.message_rows),
                     await self.host.schedule_records(), since)
-            if settings["retro_corrections"]:
+            if render["retro_corrections"]:
                 render["retro_corrections_data"] = await asyncio.to_thread(
                     _corrections_records, workspace, self.store.proposals(workspace, since), since)
         except Exception as err:  # noqa: BLE001 — a record that cannot be read leaves the pass empty
@@ -1345,6 +1432,100 @@ class EvolveService:
         status = _STAGE_STATUS.get(str(stage))
         return {"status": status} if status else {}
 
+    # ── effect check, adoption and cadence (S4) ──────────────────────────
+
+    async def _review(self, workspace: str, git: dict[str, Any]) -> None:
+        """Judge landed proposals that are due, and lower a source whose
+        proposals keep being turned down. Never raises, like the ledger sync."""
+        try:
+            await self._check_effects(workspace, git.get("root") or workspace)
+            await self._lower_sources(workspace)
+        except Exception as err:  # noqa: BLE001
+            log.warning("evolve: reviewing the proposal ledger failed: %s", err)
+
+    async def _check_effects(self, workspace: str, root: str) -> None:
+        now = self.now_ms()
+        due = [p for p in await asyncio.to_thread(self.store.proposals, workspace)
+               if p["status"] == "landed" and not p["effect"] and now - int(p["updated_at"]) >= WEEK_MS]
+        if not due:
+            return
+        errors, oldest = await asyncio.to_thread(self.host.error_rows, workspace)
+        flaky = await asyncio.to_thread(self.host.flaky_tests, root)
+        for row in due:
+            verdict = _effect(row, errors, oldest, flaky)
+            # updated_at stays the time it landed: the windows are measured from it.
+            await asyncio.to_thread(self.store.update_proposal, workspace, row["id"],
+                                    {**verdict, "effect_checked_at": now})
+
+    async def _lower_sources(self, workspace: str) -> None:
+        rows = await asyncio.to_thread(self.store.proposals, workspace)
+        async with self._lock:
+            settings = await asyncio.to_thread(self.store.settings, workspace)
+            if settings is None:
+                return
+            cadence = await asyncio.to_thread(self.store.cadence, workspace)
+            freq = dict(settings["retro_freq"])
+            lowered = []
+            for src in SOURCES:
+                if freq[src] != "daily":
+                    continue
+                since = int(cadence["raised_at"].get(src) or 0)
+                recent = sorted((r for r in rows if _source(r["kind"]) == src and r["created_at"] > since
+                                 and r["status"] in _ADOPTED + _NOT_ADOPTED),
+                                key=lambda r: r["created_at"], reverse=True)[:LOWER_AFTER]
+                if len(recent) == LOWER_AFTER and all(r["status"] in _NOT_ADOPTED for r in recent):
+                    freq[src] = "weekly"
+                    cadence["lowered"][src] = {
+                        "at": self.now_ms(),
+                        "reason": f"the last {LOWER_AFTER} {src} proposals in a row were not adopted"
+                                  " (rejected or abandoned)",
+                    }
+                    lowered.append(src)
+            if lowered:
+                # Disclosed in the panel (get's cadence.lowered), with the reason.
+                await asyncio.to_thread(self.store.save_settings, workspace, {**settings, "retro_freq": freq})
+                await asyncio.to_thread(self.store.save_cadence, workspace, cadence)
+
+    async def _cadence_into(self, workspace: str, settings: dict[str, Any], render: dict[str, Any]) -> None:
+        """Which sections this run gets, and the S4 records it carries."""
+        now = self.now_ms()
+        cadence = await asyncio.to_thread(self.store.cadence, workspace)
+        freq = settings["retro_freq"]
+
+        def due(src: str) -> bool:
+            return freq[src] == "daily" or now - int(cadence["included_at"].get(src) or 0) >= WEEK_MS
+
+        render["failures_due"] = due("failures")
+        render["retro_tools"] = bool(settings["retro_tools"]) and due("tools")
+        render["retro_corrections"] = bool(settings["retro_corrections"]) and due("corrections")
+        for src, on in (("failures", render["failures_due"]), ("tools", render["retro_tools"]),
+                        ("corrections", render["retro_corrections"])):
+            if on:
+                cadence["included_at"][src] = now
+        rows = await asyncio.to_thread(self.store.proposals, workspace)
+        lines = [
+            f'not-effective: "{_label(p["name"], 80)}" ({_label(p["rel_path"], 80)}) signature'
+            f' "{_label(p["signature"], 120)}": {p["effect_before"]} before, {p["effect_after"]} after'
+            for p in rows if p["effect"] == "not-effective"
+            and now - int(p["effect_checked_at"] or 0) < LEDGER_DAYS * 86_400_000
+        ]
+        for src, why in cadence["lowered"].items():
+            if src in SOURCES and freq.get(src) == "weekly":
+                lines.append(f"cadence: {src} is weekly since {_day(why.get('at'))}: {_label(why.get('reason'), 120)}")
+        week = [p for p in rows if p["created_at"] >= now - WEEK_MS]
+        if week and now - int(cadence["summary_at"] or 0) >= WEEK_MS:
+            proposed = len(week)
+            line = (f"weekly summary: {proposed} proposed, {sum(p['status'] in _ADOPTED for p in week)} adopted,"
+                    f" {sum(p['status'] == 'landed' for p in week)} landed,"
+                    f" {sum(p['effect'] == 'effective' for p in week)} effective")
+            if proposed < EFFECT_MIN:
+                line += f" (sample of {proposed}, under {EFFECT_MIN})"
+            lines.append(line)
+            render["review_summary"] = True
+            cadence["summary_at"] = now
+        render["review_data"] = lines
+        await asyncio.to_thread(self.store.save_cadence, workspace, cadence)
+
     # ── events ───────────────────────────────────────────────────────────
 
     async def _changed(self, workspace: str) -> None:
@@ -1472,6 +1653,83 @@ def _corrections_records(workspace: str, ledger: list[dict[str, Any]], since: in
         counts[key] = counts.get(key, 0) + 1
     ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     return [f'"{key}": {n}'[:120] for key, n in ranked if n >= RETRO_CORRECTIONS_MIN][:RETRO_MAX_GROUPS]
+
+
+def normalize_signature(text: Any) -> str:
+    """The F1 triage signature: masked, with paths, hex ids and numbers
+    stripped, on one line in lower case."""
+    out = _PATH_RE.sub(" ", mask(str(text or "")))
+    out = re.sub(r"\d+", " ", _HASH_RE.sub(" ", out))
+    return re.sub(r"\s+", " ", out).strip().lower()[:300]
+
+
+def error_signature(row: dict[str, Any]) -> str:
+    """An error-ledger row's signature: its code plus its message (F1)."""
+    return normalize_signature(f"{row.get('code') or ''} {row.get('message') or ''}")
+
+
+def _ts_ms(value: Any) -> int | None:
+    try:
+        return int(datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp() * 1000)
+    except (TypeError, ValueError):
+        return None
+
+
+def _day(ms: Any) -> str:
+    return datetime.fromtimestamp(int(ms or 0) / 1000).strftime("%Y-%m-%d")
+
+
+def _source(kind: Any) -> str:
+    src = str(kind or "").split(":", 1)[0].strip()
+    return src if src in SOURCES else ""
+
+
+def _adoption(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Per source: proposals, resolved ones, adopted ones, adopted ÷ resolved."""
+    out = {}
+    for src in SOURCES:
+        mine = [r for r in rows if _source(r["kind"]) == src]
+        resolved = [r for r in mine if r["status"] in _ADOPTED + _NOT_ADOPTED]
+        adopted = sum(r["status"] in _ADOPTED for r in resolved)
+        out[src] = {"proposed": len(mine), "resolved": len(resolved), "adopted": adopted,
+                    "rate": adopted / len(resolved) if resolved else None}
+    return out
+
+
+def _effect(row: dict[str, Any], errors: list[dict[str, Any]], oldest: int | None,
+            flaky: list[dict[str, Any]]) -> dict[str, Any]:
+    """Count a landed proposal's signature 7 days before and after it landed."""
+    landed = int(row["updated_at"])
+    start, end = landed - EFFECT_DAYS * 86_400_000, landed + EFFECT_DAYS * 86_400_000
+    before = after = 0
+
+    def count(at: int | None) -> None:
+        nonlocal before, after
+        if at is None:
+            return
+        if start <= at < landed:
+            before += 1
+        elif landed <= at < end:
+            after += 1
+
+    signature = normalize_signature(row["signature"])
+    if signature:
+        for entry in errors:
+            if error_signature(entry) == signature:
+                count(_ts_ms(entry.get("ts")))
+    test_id = str(row["signature"] or "").strip()
+    for test in flaky:
+        if test_id and test.get("test") == test_id:
+            for run in test.get("runs") or []:
+                if isinstance(run, dict):
+                    count(_ts_ms(run.get("at")))
+    # A ledger rotated past the window would undercount "before".
+    complete = oldest is None or oldest <= start
+    if not complete or before + after < EFFECT_MIN:
+        effect = "insufficient"
+    else:
+        effect = "effective" if after < before else "not-effective"
+    return {"effect": effect, "effect_before": before, "effect_after": after}
 
 
 def _read_plan_meta(workspace: str, rel_path: str) -> dict[str, Any] | bool | None:
