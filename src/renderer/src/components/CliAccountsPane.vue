@@ -180,6 +180,28 @@ async function confirmGlobalLogin(agentKey: string): Promise<boolean> {
   })
 }
 
+/** Switching to an empty built-in Default restores nothing, so the live login
+ *  is cleared (the outgoing account stays in its own slot). Ask before a
+ *  Sign In on that row takes that switch. */
+async function confirmEmptyDefaultSignIn(agentKey: string): Promise<boolean> {
+  if (rowIdentity(agentKey, null)?.signedIn) return true
+  const agent = CLI_AGENT_SPECS.find((s) => s.agentKey === agentKey)?.label ?? agentKey
+  const activeId = props.api.defaultProfileId(agentKey)
+  const current = rowName(agentKey, activeId ? (props.api.findProfile(activeId) ?? null) : null)
+  return confirm(t('settings.accounts.cli.default-sign-in-body', { agent, current }), {
+    title: t('settings.accounts.cli.default-sign-in-title'),
+    confirmText: t('settings.accounts.cli.default-sign-in-confirm'),
+    cancelText: t('settings.accounts.cli.cancel'),
+  })
+}
+
+/** The built-in Default shrinks to one line while it holds no login and is
+ *  not the active account. Active and empty (a fresh install) it stays a full
+ *  card: that is where the first sign-in happens. */
+function defaultCollapsed(agentKey: string): boolean {
+  return props.api.defaultProfileId(agentKey) !== null && !rowIdentity(agentKey, null)?.signedIn
+}
+
 async function addAccount(agentKey: string): Promise<void> {
   if (saving.value) return
   if (!requireWorkspace()) return
@@ -229,6 +251,7 @@ async function signIn(agentKey: string, profileId: string | null): Promise<void>
   // by the usage poller). Signing in on a non-active Default row still
   // switches to it first, as before.
   if (activeId !== profileId) {
+    if (!(await confirmEmptyDefaultSignIn(agentKey))) return
     if (!(await requestSetDefault(agentKey, profileId))) return
   }
   emit('login', agentKey)
@@ -627,9 +650,21 @@ onMounted(() => refreshUsage())
 
       <div class="cli-card-grid">
         <!-- First card is the built-in Default (the user's real home). -->
+        <template v-for="p in [null, ...api.profilesForAgent(spec.agentKey)]" :key="p?.id ?? '__default__'">
+        <div v-if="!p && defaultCollapsed(spec.agentKey)" class="cli-card cli-card-collapsed">
+          <span class="cli-card-collapsed-text" v-truncate>{{
+            $t('settings.accounts.cli.default-collapsed')
+          }}</span>
+          <button
+            class="cli-btn ghost sm"
+            :disabled="switching !== null"
+            @click="signIn(spec.agentKey, null)"
+          >
+            {{ $t('settings.accounts.cli.sign-in') }}
+          </button>
+        </div>
         <div
-          v-for="p in [null, ...api.profilesForAgent(spec.agentKey)]"
-          :key="p?.id ?? '__default__'"
+          v-else
           class="cli-card"
           :class="{ active: api.defaultProfileId(spec.agentKey) === (p?.id ?? null) }"
         >
@@ -819,8 +854,13 @@ onMounted(() => refreshUsage())
                     : $t('settings.accounts.cli.refresh-quota')
                 }}
               </button>
+              <!-- An empty Default has nothing to switch to: switching would
+                   only clear the live login. Its Sign In asks first. -->
               <button
-                v-if="api.defaultProfileId(spec.agentKey) !== (p?.id ?? null)"
+                v-if="
+                  api.defaultProfileId(spec.agentKey) !== (p?.id ?? null) &&
+                  (p || rowIdentity(spec.agentKey, null)?.signedIn)
+                "
                 class="cli-btn ghost sm"
                 :disabled="switching !== null"
                 @click="requestSetDefault(spec.agentKey, p?.id ?? null)"
@@ -857,6 +897,7 @@ onMounted(() => refreshUsage())
             </template>
           </div>
         </div>
+        </template>
 
       </div>
     </section>
@@ -940,6 +981,21 @@ onMounted(() => refreshUsage())
 .cli-card.active {
   border-color: var(--accent-emphasis);
   box-shadow: 0 0 0 1px var(--accent-emphasis);
+}
+/* The empty, inactive built-in Default: one line across the grid. */
+.cli-card.cli-card-collapsed {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  padding: 6px 12px;
+  border-style: dashed;
+  background: transparent;
+}
+.cli-card-collapsed-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 .cli-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .cli-card-av {

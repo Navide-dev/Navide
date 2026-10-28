@@ -8207,8 +8207,12 @@
         "dir-sign-in-hint": "Connecter une fois ce compte dans son propre dossier pour que son quota puisse être lu en direct pendant qu’il est en réserve. Le navigateur vous demande de nouveau une autorisation ; utilisez la même adresse e-mail.",
         "dir-email-mismatch": "Son propre dossier est connecté en tant que {dirEmail}, et non {expected}. Le quota affiché sur cette carte est celui de {dirEmail}.",
         "default-hint": "Vos identifiants de connexion d’origine",
-        "is-default": "Par défaut",
-        "set-default": "Définir par défaut",
+        "default-collapsed": "Connexion d’origine (hors de Navide) : non connecté",
+        "default-sign-in-title": "Passer à la connexion d’origine ?",
+        "default-sign-in-body": "Se connecter ici fait d’abord passer {agent} à la connexion d’origine. Elle ne contient aucune connexion, donc la connexion active ({current}) est effacée : ce compte reste enregistré sur sa propre carte et vous pouvez y revenir. Les nouveaux panes {agent} ne sont pas connectés tant que cette connexion n’est pas terminée.",
+        "default-sign-in-confirm": "Changer et se connecter",
+        "is-default": "Actif",
+        "set-default": "Passer à ce compte",
         "switching": "Changement…",
         "not-signed-in": "Non connecté",
         "rename": "Renommer",
@@ -9506,7 +9510,7 @@
     "failed": "Impossible de reconnecter cette conversation : sa transcription n’existe peut-être plus."
   },
   "cli-account": {
-    "default": "Par défaut",
+    "default": "Connexion d’origine",
     "switch-title": "Changer de compte",
     "swap-failed": "Échec du changement de compte : le compte précédent reste actif.",
     "panes-running": "{count} pane CLI en cours d’exécution utilise ce compte : fermez-le avant de changer. | {count} panes CLI en cours d’exécution utilisent ce compte : fermez-les avant de changer.",

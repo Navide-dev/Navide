@@ -8207,8 +8207,12 @@
         "dir-sign-in-hint": "Conecte esta conta uma vez dentro da própria pasta para que a cota dela possa ser lida ao vivo enquanto estiver estacionada. O navegador pede uma nova autorização; use o mesmo e-mail.",
         "dir-email-mismatch": "A própria pasta está conectada como {dirEmail}, não {expected}. A cota deste cartão é de {dirEmail}.",
         "default-hint": "Suas credenciais de login originais",
-        "is-default": "Padrão",
-        "set-default": "Definir como padrão",
+        "default-collapsed": "Login original (fora do Navide): sem login",
+        "default-sign-in-title": "Trocar para o login original?",
+        "default-sign-in-body": "Entrar aqui primeiro troca o {agent} para o login original. Ele não tem nenhum login salvo, então o login ativo ({current}) é apagado: essa conta continua salva no próprio cartão e você pode voltar para ela. Novos panes do {agent} ficam sem login até este login terminar.",
+        "default-sign-in-confirm": "Trocar e entrar",
+        "is-default": "Ativa",
+        "set-default": "Trocar para esta conta",
         "switching": "Trocando…",
         "not-signed-in": "Sem login",
         "rename": "Renomear",
@@ -9506,7 +9510,7 @@
     "failed": "Não foi possível reconectar essa conversa – a transcrição dela pode não existir mais"
   },
   "cli-account": {
-    "default": "Padrão",
+    "default": "Login original",
     "switch-title": "Trocar de conta",
     "swap-failed": "Falha na troca de conta – a conta anterior continua ativa.",
     "panes-running": "{count} pane de CLI em execução está usando esta conta – feche-o antes de trocar. | {count} panes de CLI em execução estão usando esta conta – feche-os antes de trocar.",

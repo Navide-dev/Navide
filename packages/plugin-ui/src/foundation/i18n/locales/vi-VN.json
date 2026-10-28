@@ -8207,8 +8207,12 @@
         "dir-sign-in-hint": "Đăng nhập tài khoản này một lần trong thư mục riêng của nó để có thể đọc hạn mức trực tiếp khi nó đang tạm gác. Trình duyệt sẽ yêu cầu ủy quyền lại; hãy dùng cùng email.",
         "dir-email-mismatch": "Thư mục riêng của nó đang đăng nhập với {dirEmail}, không phải {expected}. Hạn mức trên thẻ này là của {dirEmail}.",
         "default-hint": "Thông tin đăng nhập ban đầu của bạn",
-        "is-default": "Mặc định",
-        "set-default": "Đặt làm mặc định",
+        "default-collapsed": "Đăng nhập ban đầu (ngoài Navide): chưa đăng nhập",
+        "default-sign-in-title": "Chuyển sang đăng nhập ban đầu?",
+        "default-sign-in-body": "Đăng nhập tại đây sẽ chuyển {agent} sang đăng nhập ban đầu trước. Đăng nhập ban đầu không lưu thông tin đăng nhập nào, nên đăng nhập đang dùng ({current}) sẽ bị xóa: tài khoản đó vẫn được lưu trên thẻ của nó và bạn có thể chuyển lại. Các pane {agent} mới sẽ chưa đăng nhập cho đến khi lần đăng nhập này hoàn tất.",
+        "default-sign-in-confirm": "Chuyển và đăng nhập",
+        "is-default": "Đang dùng",
+        "set-default": "Chuyển sang tài khoản này",
         "switching": "Đang chuyển…",
         "not-signed-in": "Chưa đăng nhập",
         "rename": "Đổi tên",
@@ -9506,7 +9510,7 @@
     "failed": "Không kết nối lại được cuộc hội thoại đó — bản ghi của nó có thể không còn"
   },
   "cli-account": {
-    "default": "Mặc định",
+    "default": "Đăng nhập ban đầu",
     "switch-title": "Chuyển tài khoản",
     "swap-failed": "Không chuyển tài khoản được — tài khoản trước vẫn đang dùng.",
     "panes-running": "Có {count} pane CLI đang chạy dùng tài khoản này — hãy đóng chúng trước khi chuyển.",

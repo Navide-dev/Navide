@@ -8207,8 +8207,12 @@
         "dir-sign-in-hint": "在這個帳號自己的資料夾登入一次，停放時也能即時讀取額度。瀏覽器會再請你授權一次，請使用同一個 email。",
         "dir-email-mismatch": "帳號資料夾登入的是 {dirEmail}，不是 {expected}。這張卡片上的額度屬於 {dirEmail}。",
         "default-hint": "你原本的登入憑證",
-        "is-default": "預設",
-        "set-default": "設為預設",
+        "default-collapsed": "原始登入（Navide 外）：尚未登入",
+        "default-sign-in-title": "切換到原始登入？",
+        "default-sign-in-body": "在這裡登入會先把 {agent} 切換到原始登入。原始登入沒有儲存任何登入，所以目前的線上登入（{current}）會被清除；那個帳號仍保存在它自己的卡片上，之後可以再切換回去。這次登入完成前，新開的 {agent} pane 都不會是登入狀態。",
+        "default-sign-in-confirm": "切換並登入",
+        "is-default": "使用中",
+        "set-default": "切換到此帳號",
         "switching": "切換中…",
         "not-signed-in": "尚未登入",
         "rename": "重新命名",
@@ -9506,7 +9510,7 @@
     "failed": "無法接回這段對話，其歷史紀錄可能已不存在"
   },
   "cli-account": {
-    "default": "預設",
+    "default": "原始登入",
     "switch-title": "切換帳號",
     "swap-failed": "帳號切換失敗，仍使用原本的帳號。",
     "panes-running": "有 {count} 個執行中的 CLI pane 正在使用此帳號，請先關閉再切換。",

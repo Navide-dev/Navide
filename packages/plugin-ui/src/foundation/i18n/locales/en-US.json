@@ -8207,8 +8207,12 @@
         "dir-sign-in-hint": "Sign this account in once inside its own folder so its quota can be read live while it is parked. The browser asks you to authorize again; use the same email.",
         "dir-email-mismatch": "Its own folder is signed in as {dirEmail}, not {expected}. The quota on this card is {dirEmail}'s.",
         "default-hint": "Your original login credentials",
-        "is-default": "Default",
-        "set-default": "Set as Default",
+        "default-collapsed": "Original login (outside Navide): not signed in",
+        "default-sign-in-title": "Switch to the Original Login?",
+        "default-sign-in-body": "Signing in here first switches {agent} to the original login. It holds no sign-in, so the live login ({current}) is cleared: that account stays saved on its own card, and you can switch back to it. New {agent} panes are not signed in until this sign-in finishes.",
+        "default-sign-in-confirm": "Switch and Sign In",
+        "is-default": "Active",
+        "set-default": "Switch to This Account",
         "switching": "Switching…",
         "not-signed-in": "Not signed in",
         "rename": "Rename",
@@ -9506,7 +9510,7 @@
     "failed": "Could not reconnect that conversation — its transcript may no longer exist"
   },
   "cli-account": {
-    "default": "Default",
+    "default": "Original login",
     "switch-title": "Switch account",
     "swap-failed": "Account switch failed — the previous account is still active.",
     "panes-running": "{count} running CLI pane is using this account — close it before switching. | {count} running CLI panes are using this account — close them before switching.",
