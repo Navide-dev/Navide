@@ -11274,7 +11274,9 @@
       "hide-palette": "隐藏节点面板"
     },
     "controlPane": {
-      "open-in-canvas": "在 pipeline 画布中打开"
+      "open-in-canvas": "在 pipeline 画布中打开",
+      "gate-toast": "pipeline 已暂停，等待你在“{name}”核准",
+      "next-gated": "先核准或退回这个闸门，才能进入下一阶段。"
     },
     "edge": {
       "title": "退回循环",

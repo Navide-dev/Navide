@@ -11274,7 +11274,9 @@
       "hide-palette": "Masquer le panneau des nœuds"
     },
     "controlPane": {
-      "open-in-canvas": "Ouvrir dans le canevas du pipeline"
+      "open-in-canvas": "Ouvrir dans le canevas du pipeline",
+      "gate-toast": "Le pipeline attend votre approbation à {name}",
+      "next-gated": "Approuvez ou renvoyez cette validation avant de passer à l’étape suivante."
     },
     "edge": {
       "title": "Boucle de renvoi",

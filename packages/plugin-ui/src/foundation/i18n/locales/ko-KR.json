@@ -11274,7 +11274,9 @@
       "hide-palette": "노드 패널 숨기기"
     },
     "controlPane": {
-      "open-in-canvas": "pipeline 캔버스에서 열기"
+      "open-in-canvas": "pipeline 캔버스에서 열기",
+      "gate-toast": "pipeline이 {name}에서 승인을 기다리고 있어요",
+      "next-gated": "다음 단계로 넘어가기 전에 이 게이트를 승인하거나 되돌려 보내세요."
     },
     "edge": {
       "title": "반려 루프",

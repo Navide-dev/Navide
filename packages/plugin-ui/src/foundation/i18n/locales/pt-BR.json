@@ -11274,7 +11274,9 @@
       "hide-palette": "Ocultar painel de nós"
     },
     "controlPane": {
-      "open-in-canvas": "Abrir na tela do pipeline"
+      "open-in-canvas": "Abrir na tela do pipeline",
+      "gate-toast": "O pipeline está aguardando sua aprovação em {name}",
+      "next-gated": "Aprove ou devolva este ponto de aprovação antes de seguir para a próxima etapa."
     },
     "edge": {
       "title": "Loop de rejeição",

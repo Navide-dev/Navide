@@ -11274,7 +11274,9 @@
       "hide-palette": "Ẩn bảng nút"
     },
     "controlPane": {
-      "open-in-canvas": "Mở trong canvas pipeline"
+      "open-in-canvas": "Mở trong canvas pipeline",
+      "gate-toast": "Pipeline đang chờ bạn phê duyệt tại {name}",
+      "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo."
     },
     "edge": {
       "title": "Vòng trả về",

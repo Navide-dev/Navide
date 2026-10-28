@@ -11274,7 +11274,9 @@
       "hide-palette": "Knotenpanel ausblenden"
     },
     "controlPane": {
-      "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen"
+      "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen",
+      "gate-toast": "Die Pipeline wartet bei {name} auf Ihre Genehmigung",
+      "next-gated": "Genehmigen Sie diese Schranke oder schicken Sie sie zurück, bevor es mit der nächsten Stufe weitergeht."
     },
     "edge": {
       "title": "Rückweisungsschleife",

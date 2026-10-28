@@ -310,6 +310,9 @@ export interface PipelineStatusView {
   projectFile: string
   pipelineLogFile: string
   backendLogFile: string
+  /** The gate the run is paused on, or null; the sidebar's Next stays
+   *  disabled until it is passed or sent back. */
+  awaitingGate?: { gateId: string; label: string } | null
 }
 
 export interface ExistingProjectInfo {
@@ -1147,6 +1150,8 @@ const emit = defineEmits<{
   (e: 'context-menu', paneId: string, ev: MouseEvent): void
   (e: 'pipeline-start', payload: { task: string; workspacePath: string; pipelineId?: string }): void
   (e: 'pipeline-next'): void
+  (e: 'pipeline-gate-approve', gateId: string): void
+  (e: 'pipeline-gate-reject', gateId: string): void
   (e: 'pipeline-abort'): void
   (e: 'pipeline-reset'): void
   (e: 'update:yoloEnabled', v: boolean): void
@@ -2891,6 +2896,8 @@ const pipelineNextStage = computed<Stage | null>(() => {
   return props.stages[props.pipeline.stageIndex + 1] ?? null
 })
 
+const pipelineGate = computed(() => (props.pipeline.state === 'running' ? props.pipeline.awaitingGate ?? null : null))
+
 function injectionLabel(status: ActivePaneView['injectionStatus']): string {
   switch (status) {
     case 'pending':
@@ -3518,8 +3525,21 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             {{ $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: pipeline.totalStages }) }}
             <span v-if="pipelineCurrentStage" class="muted">· {{ pipelineCurrentStage.shortTitle }}</span>
           </div>
+          <div v-if="pipelineGate" class="pipeline-gate">
+            <p class="hint warn pipeline-gate-label">{{ $t('pipelineEditor.run.gate', { name: pipelineGate.label }) }}</p>
+            <div class="row pipeline-row">
+              <button class="primary wide pipeline-gate-approve" @click="emit('pipeline-gate-approve', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.approve') }}</button>
+              <button class="ghost pipeline-gate-reject" @click="emit('pipeline-gate-reject', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.reject') }}</button>
+            </div>
+            <p class="hint pipeline-gate-why">{{ $t('pipelineEditor.controlPane.next-gated') }}</p>
+          </div>
           <div class="row pipeline-row">
-            <button class="primary wide" :disabled="!pipelineNextStage" @click="emit('pipeline-next')">
+            <button
+              class="primary wide"
+              :disabled="!pipelineNextStage || !!pipelineGate"
+              :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
+              @click="emit('pipeline-next')"
+            >
               {{ pipelineNextStage ? `Next → ${pipelineNextStage.shortTitle}` : $t('action.finish') }}
             </button>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
@@ -4598,10 +4618,19 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               · {{ pipelineCurrentStage.shortTitle }}
             </span>
           </div>
+          <div v-if="pipelineGate" class="pipeline-gate">
+            <p class="hint warn pipeline-gate-label">{{ $t('pipelineEditor.run.gate', { name: pipelineGate.label }) }}</p>
+            <div class="row pipeline-row">
+              <button class="primary wide pipeline-gate-approve" @click="emit('pipeline-gate-approve', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.approve') }}</button>
+              <button class="ghost pipeline-gate-reject" @click="emit('pipeline-gate-reject', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.reject') }}</button>
+            </div>
+            <p class="hint pipeline-gate-why">{{ $t('pipelineEditor.controlPane.next-gated') }}</p>
+          </div>
           <div class="row pipeline-row">
             <button
               class="primary wide"
-              :disabled="!pipelineNextStage"
+              :disabled="!pipelineNextStage || !!pipelineGate"
+              :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
               {{ pipelineNextStage ? `Next → ${pipelineNextStage.shortTitle}` : $t('action.finish') }}

@@ -11274,7 +11274,9 @@
       "hide-palette": "Ocultar el panel de nodos"
     },
     "controlPane": {
-      "open-in-canvas": "Abrir en el lienzo de pipelines"
+      "open-in-canvas": "Abrir en el lienzo de pipelines",
+      "gate-toast": "La pipeline está esperando tu aprobación en {name}",
+      "next-gated": "Aprueba o devuelve esta puerta antes de pasar a la siguiente etapa."
     },
     "edge": {
       "title": "Bucle de rechazo",

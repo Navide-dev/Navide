@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { usePipelineDag } from '../usePipelineDag'
+import { usePipelineDag, type AwaitingGate } from '../usePipelineDag'
+import { applyGraphOps, deriveGraphFromStages } from '../../lib/pipelineGraph'
 import type { Stage } from '../../data/stages'
 
 const STAGES = [{
@@ -56,5 +57,32 @@ describe('usePipelineDag node-state reporting', () => {
     // A sibling stopped with the run says why, instead of looking broken itself.
     expect(last['n-01-1']).toMatchObject({ status: 'failed', error: 'run stopped: slot "a" failed' })
     expect(dag.nodeStates.value['n-01-0'].error).toBe('kickoff never reached the agent')
+  })
+})
+
+describe('usePipelineDag gate notice', () => {
+  const TWO_STAGES = [
+    { id: '01', title: '01', shortTitle: '01', sentinel: '', slots: [{ agentKey: 'claude', roleKey: '', label: 'a', kickoffBody: '' }] },
+    { id: '02', title: '02', shortTitle: '02', sentinel: '', slots: [{ agentKey: 'claude', roleKey: '', label: 'b', kickoffBody: '' }] },
+  ] as unknown as Stage[]
+
+  it('tells onGate once when the run starts waiting, not again while it keeps waiting', async () => {
+    const graph = applyGraphOps(deriveGraphFromStages(TWO_STAGES), [
+      { op: 'add_node', node: { id: 'gate', kind: 'gate', label: 'OK?', position: { x: 0, y: 0 } }, after: ['n-01-0'], before: ['n-02-0'] },
+    ])
+    const gates: AwaitingGate[] = []
+    const dag = usePipelineDag({
+      send: async (type) => (type === 'pipelines.graph.get' ? { derived: false, graph } : {}),
+      log: () => {},
+      workspacePath: () => '/ws',
+      onGate: (gate) => gates.push(gate),
+    })
+    expect(await dag.begin('p1', TWO_STAGES)).toBe(0)
+    expect(dag.holdBeforeStage(1)).toBe(true)
+    expect(dag.holdBeforeStage(1)).toBe(true)
+    expect(gates).toEqual([{ gateId: 'gate', label: 'OK?', prompt: '', nextIndex: 1 }])
+    expect(dag.approve('gate')).toBe(true)
+    expect(dag.holdBeforeStage(1)).toBe(false)
+    expect(gates).toHaveLength(1)
   })
 })
