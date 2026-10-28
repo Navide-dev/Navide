@@ -758,3 +758,63 @@ def test_list_dir_discovery_mode_2001_truncation(tmp_path: Path) -> None:
     names = [e["name"] for e in res["entries"]]
     assert names[-1] == "r0000-within"
     assert "z0000-beyond" not in names
+
+
+# ── list_files_flat query matching ──────────────────────────────────────────
+def _flat_ws(tmp_path: Path) -> str:
+    for rel in (
+        "app/Services/OrderService.php",
+        "app/Services/OrderServiceTest.php",
+        "legacy/app/Services/OrderService.php",
+        "app/Http/OrderController.php",
+    ):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("<?php", encoding="utf-8")
+    return str(tmp_path)
+
+
+def _flat(ws: str, query: str) -> list[str]:
+    res = fs_service.list_files_flat(ws, query, max_results=20)
+    assert res["ok"] is True
+    return [p.replace("\\", "/") for p in res["files"]]
+
+
+def test_list_files_flat_bare_name_matches_file_name_only(tmp_path: Path) -> None:
+    ws = _flat_ws(tmp_path)
+    assert sorted(_flat(ws, "OrderService.php")) == [
+        "app/Services/OrderService.php",
+        "legacy/app/Services/OrderService.php",
+    ]
+    # A bare query never matches a directory segment.
+    assert _flat(ws, "Services") == []
+
+
+def test_list_files_flat_path_query_matches_relative_path(tmp_path: Path) -> None:
+    ws = _flat_ws(tmp_path)
+    assert sorted(_flat(ws, "app/Services/OrderService.php")) == [
+        "app/Services/OrderService.php",
+        "legacy/app/Services/OrderService.php",
+    ]
+    assert sorted(_flat(ws, "Http/Order")) == ["app/Http/OrderController.php"]
+    assert _flat(ws, "./app/Http/OrderController.php") == ["app/Http/OrderController.php"]
+    assert _flat(ws, "nope/OrderService.php") == []
+
+
+def test_list_files_flat_accepts_windows_separators(tmp_path: Path) -> None:
+    ws = _flat_ws(tmp_path)
+    assert sorted(_flat(ws, "app\\Services\\OrderService.php")) == [
+        "app/Services/OrderService.php",
+        "legacy/app/Services/OrderService.php",
+    ]
+
+
+def test_list_files_flat_sorts_exact_matches_first(tmp_path: Path) -> None:
+    # Within one directory the walk is alphabetical, so the partial match
+    # (AFoo.ts / Foo.ts.orig) comes up before the exact one unless sorted.
+    d = tmp_path / "src" / "x"
+    d.mkdir(parents=True)
+    for name in ("AFoo.ts", "Foo.ts", "Foo.ts.orig"):
+        (d / name).write_text("x", encoding="utf-8")
+    ws = str(tmp_path)
+    assert _flat(ws, "foo.ts") == ["src/x/Foo.ts", "src/x/AFoo.ts", "src/x/Foo.ts.orig"]
+    assert _flat(ws, "x/Foo.ts") == ["src/x/Foo.ts", "src/x/Foo.ts.orig"]

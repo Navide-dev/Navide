@@ -8,12 +8,18 @@ export interface FilePickerRequest {
 }
 
 /** Terminal file references preserve the existing :line[:column], (line),
- * [line] and #line suffix forms. Parsing never resolves filesystem authority. */
-export function splitFilePickerCandidate(raw: string): { path: string; line?: number } {
-  const match = /(?::([\d]+)(?:[.:]([\d]+))?|[(\[]([\d]+)(?:[,:]([\d]+))?[)\]]|#([\d]+)(?::([\d]+))?)$/.exec(raw)
+ * [line] and #line suffix forms, plus a :start-end range whose end is only
+ * reported. Parsing never resolves filesystem authority. */
+export function splitFilePickerCandidate(raw: string): { path: string; line?: number; endLine?: number } {
+  const match = /(?::([\d]+)(?:[.:]([\d]+))?|[(\[]([\d]+)(?:[,:]([\d]+))?[)\]]|#([\d]+)(?::([\d]+))?|:([\d]+)-([\d]+))$/.exec(raw)
   if (!match || match.index === undefined) return { path: raw }
-  const line = Number(match[1] ?? match[3] ?? match[5])
-  return { path: raw.slice(0, match.index), ...(line > 0 ? { line } : {}) }
+  const line = Number(match[1] ?? match[3] ?? match[5] ?? match[7])
+  const endLine = Number(match[8])
+  return {
+    path: raw.slice(0, match.index),
+    ...(line > 0 ? { line } : {}),
+    ...(line > 0 && endLine >= line ? { endLine } : {}),
+  }
 }
 
 export function validFilePickerRequest(value: unknown): value is FilePickerRequest {

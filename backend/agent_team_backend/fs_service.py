@@ -179,14 +179,22 @@ def list_files_flat(
 ) -> dict[str, Any]:
     """Return a flat list of file rel_paths matching *query* (case-insensitive substring).
 
+    A query with a path separator (``/`` or ``\\``) matches against the
+    relative path, so a pasted ``app/Services/Foo.php`` finds its file; any
+    other query matches the file name only. Exact matches sort first.
+
     Skips noise directories, hidden files, and binary-ish extensions.
     Used by the AI chat @file autocomplete.
     """
     root = Path(workspace_path).resolve()
     if not root.is_dir():
         return {"ok": False, "error": "workspace not found"}
-    lower_q = query.lower()
+    lower_q = query.lower().replace("\\", "/")
+    path_q = "/" in lower_q
+    if path_q:
+        lower_q = lower_q.removeprefix("./").lstrip("/")
     results: list[str] = []
+    exact: list[str] = []
     _BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2",
                    ".ttf", ".eot", ".mp4", ".mp3", ".zip", ".gz", ".tar", ".pdf", ".bin",
                    ".lock", ".pyc"}
@@ -197,17 +205,24 @@ def list_files_flat(
                 continue
             if Path(fn).suffix.lower() in _BINARY_EXT:
                 continue
-            if lower_q and lower_q not in fn.lower():
+            if not path_q and lower_q and lower_q not in fn.lower():
                 continue
             fp = Path(dirpath) / fn
             try:
                 rel = str(fp.relative_to(root))
             except ValueError:
                 continue
-            results.append(rel)
-            if len(results) >= max_results:
-                return {"ok": True, "files": results, "truncated": True}
-    return {"ok": True, "files": results, "truncated": False}
+            if path_q:
+                rel_key = rel.lower().replace("\\", "/")
+                if lower_q not in rel_key:
+                    continue
+                is_exact = rel_key == lower_q or rel_key.endswith("/" + lower_q)
+            else:
+                is_exact = fn.lower() == lower_q
+            (exact if is_exact else results).append(rel)
+            if len(exact) + len(results) >= max_results:
+                return {"ok": True, "files": exact + results, "truncated": True}
+    return {"ok": True, "files": exact + results, "truncated": False}
 
 
 def glob_files(
