@@ -34,6 +34,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 - File picker (0.2.33): pasting a location such as `app/Services/OrderService.php:137-158` now finds the file and opens it at the start line, instead of showing "No files found" (#723). A query with a `/` or `\` is matched against the relative path instead of only the file name, exact matches sort first, and the picker strips a `:line`, `:line:column` or `:start-end` suffix before searching. This also changes results for other callers of the same search, such as `@file` autocomplete and the Mini-IDE's ⌘P workspace results. Range selection is not done yet.
 
+- Settings (0.2.33): a setting whose control is wider than its row now moves the control under its text, instead of squeezing the text to one word per line and letting the control overflow the card (#725). This fixes Settings → Language, where the language buttons ran off the card, and the Default editor, CLI quota badge and Antigravity credentials rows on General at narrow widths; rows whose control fits are unchanged. On the Language page, the buttons sit in an aligned grid with the check mark beside the name, the repeated section label is gone, and the row is titled "Display language". One new string in all 11 interface languages, and one that only this page used is removed.
+
 - Tests and CI: the CliAccountsPane "updated" stamp test no longer depends on the time zone (#706), and the pluginActivity test checks its bound deterministically instead of against 200 ms of wall clock (#707).
 
 ## [0.2.32] — 2026-10-27 — signed release
