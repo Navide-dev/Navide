@@ -335,7 +335,19 @@ async function command(id: string, args?: unknown): Promise<void> {
   const result = await invokeCommand(id, args)
   if (!result.ok) notify.toast(result.error ?? t('pipelineEditor.error.command-failed'), { type: 'error' })
 }
-const control = (action: 'next' | 'abort' | 'resume' | 'restart'): Promise<void> => command(`ui.pipeline.${action}`)
+const control = (action: 'next' | 'abort' | 'resume' | 'restart' | 'reset'): Promise<void> => command(`ui.pipeline.${action}`)
+/** Task for a run started from here; ui.pipeline.start runs the same
+ *  onPipelineStart as the sidebar's Run. */
+const runTask = ref('')
+const canStart = computed(() =>
+  !!props.workspacePath && props.run.state !== 'running' && stepCount.value > 0 && runTask.value.trim().length > 0
+)
+async function startRun(): Promise<void> {
+  if (!canStart.value) return
+  const result = await invokeCommand('ui.pipeline.start', { pipelineId: props.pipelineId, task: runTask.value.trim() })
+  if (!result.ok) notify.toast(result.error ?? t('pipelineEditor.error.command-failed'), { type: 'error' })
+  else runTask.value = ''
+}
 const decideGate = (nodeId: string, decision: 'approve' | 'reject', comment: string): Promise<void> =>
   command(decision === 'approve' ? 'ui.pipeline.gate_pass' : 'ui.pipeline.gate_reject', decision === 'reject' ? { nodeId, comment } : { nodeId })
 const restartFrom = (nodeId: string): Promise<void> => command('ui.pipeline.restart_from', { nodeId })
@@ -513,6 +525,14 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
       </span>
 
       <span class="pe-spacer"></span>
+
+      <form v-if="graph && run.state !== 'running'" class="pe-start" @submit.prevent="startRun">
+        <input
+          v-model="runTask" type="text" class="pe-start-input" spellcheck="false"
+          :placeholder="t('pipelineEditor.toolbar.task')" :aria-label="t('pipelineEditor.toolbar.task')"
+        />
+        <button type="submit" class="pe-text-btn pe-start-btn" :disabled="!canStart">{{ t('action.run-pipeline') }}</button>
+      </form>
 
       <template v-if="tab === 'editor'">
         <button
@@ -784,6 +804,21 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
 }
 .pe-text-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .pe-text-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pe-start { display: flex; align-items: center; gap: var(--space-2); }
+.pe-start-input {
+  width: 220px;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-xs);
+}
+.pe-start-input:focus { outline: none; border-color: var(--accent-emphasis); }
+.pe-start-btn:not(:disabled) { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
+.pe-start-btn:hover:not(:disabled) { background: var(--accent-bright); }
 
 .pe-main {
   flex: 1;

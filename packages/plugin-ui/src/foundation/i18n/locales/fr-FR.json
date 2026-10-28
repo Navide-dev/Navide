@@ -11271,7 +11271,8 @@
       "undo-none": "Rien à annuler",
       "view": "Vue",
       "show-palette": "Afficher le panneau des nœuds",
-      "hide-palette": "Masquer le panneau des nœuds"
+      "hide-palette": "Masquer le panneau des nœuds",
+      "task": "Tâche pour cette exécution"
     },
     "controlPane": {
       "open-in-canvas": "Ouvrir dans le canevas du pipeline"

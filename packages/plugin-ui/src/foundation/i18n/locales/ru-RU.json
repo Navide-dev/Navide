@@ -11271,7 +11271,8 @@
       "undo-none": "Нечего отменять",
       "view": "Вид",
       "show-palette": "Показать панель узлов",
-      "hide-palette": "Скрыть панель узлов"
+      "hide-palette": "Скрыть панель узлов",
+      "task": "Задача для этого запуска"
     },
     "controlPane": {
       "open-in-canvas": "Открыть на холсте pipeline"

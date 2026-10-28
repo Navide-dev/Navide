@@ -11271,7 +11271,8 @@
       "undo-none": "Nada para desfazer",
       "view": "Visualização",
       "show-palette": "Mostrar painel de nós",
-      "hide-palette": "Ocultar painel de nós"
+      "hide-palette": "Ocultar painel de nós",
+      "task": "Tarefa desta execução"
     },
     "controlPane": {
       "open-in-canvas": "Abrir na tela do pipeline"

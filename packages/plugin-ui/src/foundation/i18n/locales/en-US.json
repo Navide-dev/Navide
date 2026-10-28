@@ -11271,7 +11271,8 @@
       "undo-none": "Nothing to undo",
       "view": "View",
       "show-palette": "Show Nodes Panel",
-      "hide-palette": "Hide Nodes Panel"
+      "hide-palette": "Hide Nodes Panel",
+      "task": "Task for this run"
     },
     "controlPane": {
       "open-in-canvas": "Open in the Pipeline Canvas"

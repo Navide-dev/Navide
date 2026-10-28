@@ -37,7 +37,7 @@ const props = defineProps<{
   now: number
 }>()
 const emit = defineEmits<{
-  (e: 'control', action: 'next' | 'abort' | 'resume' | 'restart'): void
+  (e: 'control', action: 'next' | 'abort' | 'resume' | 'restart' | 'reset'): void
   (e: 'gate', nodeId: string, decision: 'approve' | 'reject', comment: string): void
   (e: 'select-node', id: string): void
 }>()
@@ -211,6 +211,7 @@ const gateComment = ref('')
         <template v-else-if="run.pipelineId === pipelineId && run.state !== 'running' && run.state !== 'idle'">
           <button type="button" class="px-btn" @click="emit('control', 'resume')">{{ t('pipelineEditor.exec.resume') }}</button>
           <button type="button" class="px-btn" @click="emit('control', 'restart')">{{ t('pipelineEditor.exec.restart') }}</button>
+          <button type="button" class="px-btn px-reset" :title="t('action.clear-pipeline')" @click="emit('control', 'reset')">{{ t('action.reset') }}</button>
         </template>
       </footer>
     </section>

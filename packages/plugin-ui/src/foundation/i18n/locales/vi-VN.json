@@ -11271,7 +11271,8 @@
       "undo-none": "Không có gì để hoàn tác",
       "view": "Chế độ xem",
       "show-palette": "Hiện bảng nút",
-      "hide-palette": "Ẩn bảng nút"
+      "hide-palette": "Ẩn bảng nút",
+      "task": "Nhiệm vụ cho lần chạy này"
     },
     "controlPane": {
       "open-in-canvas": "Mở trong canvas pipeline"
