@@ -1891,9 +1891,9 @@
         "total": "ツール {count} 個、テキストと入力スキーマの合計 {size}。"
       },
       "nativeBackends": {
-        "title": "ネイティブバックエンド",
+        "title": "Navide プラグインに含まれるプログラム",
         "description": "一部の Navide プラグインにはネイティブコードが含まれます。Navide はそれをサンドボックスで実行し、それ自体はネットワークに接続できません。読み取れるのは一緒に開いたワークスペースだけで、ファイルの変更は許可した場所に限られます。ただし git、gh、glab のコマンドも実行する Navide プラグイン（下に高リスクと表示）は、それらを通じてネットワーク上のホストに接続してワークスペースのデータを送信でき、この許可なしにワークスペースのファイルを読み取り・変更できます。下のスイッチがオンの間は、ネイティブコードを含む Navide プラグインをインストールすると、その実行を許可したことになります。オフにするとすべて停止します。",
-        "enable": "サードパーティ製 Navide プラグインのネイティブバックエンド実行を許可",
+        "enable": "サードパーティ製 Navide プラグインが独自のプログラムを実行することを許可",
         "offUnsaved": "サードパーティのネイティブバックエンドはいまはオフですが、Navide がこの設定を保存できなかったため、Navide を再起動するとまたオンになります。",
         "offUnsavedRetry": "もう一度試す",
         "agentTools": {
@@ -1902,7 +1902,7 @@
           "externalCallers": "外部の MCP クライアントにも許可",
           "externalCallersDisclosure": "外部プログラムは 1 つのトークンを共有するため、呼び出しの記録には「外部クライアント」としか残らず、どのプログラムかは区別できません。Host の資格情報も同じ扱いです。"
         },
-        "empty": "ネイティブバックエンドを含む Navide プラグインはインストールされていません。",
+        "empty": "独自のプログラムを含む Navide プラグインはインストールされていません。",
         "windowWithout": "{name} はネイティブバックエンドなしで開きました：{reason}。バックエンドが必要な機能は動作しません。{next}",
         "windowWithoutAllow": "バックエンドを許可するには「設定 → Navide プラグイン → {page}」を開き、そのあとウィンドウを開き直してください。",
         "windowWithoutDetails": "理由は「設定 → Navide プラグイン → {page}」で確認できます。",
@@ -1940,7 +1940,8 @@
       "listTitle": "インストール済み",
       "developerNative": "開発者とネイティブコード",
       "pageOn": "オン",
-      "developerOnMarker": "開発者オン",
+      "developerOnMarker": "開発",
+      "browseMarketplace": "Navide マーケットプレイスを見る",
       "bundledGit": "同梱の Git",
       "state": {
         "active": "有効",
@@ -2122,7 +2123,7 @@
         },
         "title": "開発者モード",
         "switch": "開発者モードをオンにする",
-        "hint": "フォルダーから Navide プラグインを読み込んで開発・テストでき、自前の Registry も使えます。オフにすると、それらの Navide プラグインは取り外されます。",
+        "hint": "フォルダーから Navide プラグインを読み込んで開発・テストでき、Navide マーケットプレイスの代わりに自分のサーバーから Navide プラグインをインストールすることもできます。オフにすると、それらの Navide プラグインは取り外されます。",
         "banner": "開発者モードがオンです。フォルダーから読み込んだ Navide プラグインは審査されていません。",
         "reminder": "開発者モードがオンです：フォルダーから読み込んだ Navide プラグインは審査されていません。不要になったら「設定 → Navide プラグイン」でオフにしてください。",
         "reminderClose": "了解",
@@ -6951,9 +6952,7 @@
       "all": "すべて",
       "loading": "このマシンをスキャン中…",
       "error-load": "スキャンに失敗しました。",
-      "empty-findings-title": "検出はありません",
       "empty-findings-body": "現在の絞り込みに該当するリスクはありません。",
-      "empty-inventory-title": "インベントリはありません",
       "empty-inventory-body": "現在の絞り込みに該当する認証情報はありません。",
       "not-scanned": "「スキャン」を押すとこのマシンの認証情報を調べます。",
       "severity": {
@@ -10652,7 +10651,7 @@
     "desc": {
       "telegram": "{'@'}BotFather で作成した bot",
       "discord": "サーバー内の bot アプリケーション",
-      "slack": "ワークスペースの Socket Mode アプリ",
+      "slack": "このコンピューターから接続する Slack アプリ（Slack で Socket Mode をオンにします）",
       "feishu": "Feishu または Lark のカスタムアプリ",
       "dingtalk": "Stream モードの社内ロボット",
       "matrix": "任意の homeserver 上の bot ユーザー",
@@ -10899,7 +10898,7 @@
     },
     "vendors": {
       "title": "Guard がブロックできる CLI",
-      "hint": "Guard は CLI 自身の hook で操作を止めます。hook のない CLI は、チャットでの承認を拒否することと YOLO モードで動かさないことでしか守れません。",
+      "hint": "Guard が操作を止められるのは、実行前に Navide が各操作を確認できる CLI だけです。それ以外の CLI は、チャットから届く承認依頼を拒否し、権限の確認をオンのままにすることでしか守れません。",
       "block": "ブロック可能",
       "none": "ブロック不可",
       "unknown": "不明"

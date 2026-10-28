@@ -24,6 +24,7 @@ import {
   type UsageWindow,
 } from '../composables/useUsage'
 import { i18n } from '@navide/plugin-ui/foundation'
+import SettingsNotice from './settings/SettingsNotice.vue'
 
 const props = defineProps<{
   api: ReturnType<typeof useCliProfiles>
@@ -629,7 +630,7 @@ onMounted(() => refreshUsage())
       </button>
     </div>
 
-    <div v-if="error" class="cli-banner danger">{{ error }}</div>
+    <SettingsNotice v-if="error" class="cli-banner danger" tone="danger" role="alert" :message="error" />
 
     <!-- Multi-account CLIs first; the rest share one line at the end
          instead of repeating the same sentence under each name. -->
@@ -762,7 +763,6 @@ onMounted(() => refreshUsage())
           >
             <template v-if="u && !u.noData">
               <div v-if="u.resetExpired" class="cli-card-none">
-                <span class="cli-card-dash">—</span>
                 <span class="cli-card-foot">{{ $t('usage.cached-reset-expired') }}</span>
               </div>
               <template v-else>
@@ -809,7 +809,6 @@ onMounted(() => refreshUsage())
               v-else-if="u || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn"
               class="cli-card-none"
             >
-              <span class="cli-card-dash">—</span>
               <span class="cli-card-foot">{{ $t('usage.no-data') }}</span>
               <span v-if="u?.expired" class="cli-card-expired">
                 ⚠ {{ $t('usage.expired-tooltip') }}
@@ -854,7 +853,7 @@ onMounted(() => refreshUsage())
               <button
                 v-if="canRefreshCard(spec.agentKey, p?.id ?? null)"
                 class="cli-btn ghost sm cli-card-refresh-btn"
-                :disabled="refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null))"
+                :disabled="refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null)) || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn === false"
                 :title="$t('settings.accounts.cli.refresh-quota-card-hint')"
                 @click="refreshCardQuota(spec.agentKey, p?.id ?? null)"
               >
@@ -942,18 +941,6 @@ onMounted(() => refreshUsage())
 .cli-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .cli-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 72ch; line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
 
-.cli-banner {
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 11.5px;
-  line-height: 1.4;
-  margin-bottom: 12px;
-}
-.cli-banner.danger {
-  background: var(--danger-subtle, var(--bg-muted));
-  border: 1px solid var(--danger-muted, var(--border-default));
-  color: var(--danger-fg, var(--text-primary));
-}
 
 .cli-agent { margin-bottom: 18px; }
 .cli-agent-head {
@@ -1135,12 +1122,6 @@ onMounted(() => refreshUsage())
 }
 .cli-card-expired { font-size: var(--font-2xs); font-weight: 600; color: var(--danger-fg); }
 .cli-card-none { display: flex; flex-direction: column; gap: 2px; }
-.cli-card-dash {
-  font-size: var(--font-xl);
-  font-weight: 700;
-  line-height: 1.1;
-  color: var(--text-muted);
-}
 
 .cli-card-actions {
   display: flex;

@@ -1891,9 +1891,9 @@
         "total": "{count} công cụ; văn bản và lược đồ đầu vào của chúng tổng cộng {size}."
       },
       "nativeBackends": {
-        "title": "Backend gốc",
+        "title": "Chương trình trong plugin Navide",
         "description": "Một số plugin Navide có chứa mã gốc. Navide chạy mã đó trong sandbox không có quyền truy cập mạng riêng; nó chỉ đọc được các workspace bạn mở cùng nó và chỉ thay đổi tệp ở nơi bạn cho phép. Plugin Navide nào còn chạy lệnh git, gh và glab (được đánh dấu rủi ro cao bên dưới) thì qua các lệnh đó có thể liên lạc với máy chủ mạng và gửi dữ liệu workspace, cũng như đọc và thay đổi tệp workspace mà không cần quyền đó. Khi công tắc bên dưới đang bật, cài một plugin Navide có mã gốc nghĩa là cho phép nó chạy; tắt công tắc để dừng tất cả.",
-        "enable": "Cho phép plugin Navide của bên thứ ba chạy backend gốc",
+        "enable": "Cho phép plugin Navide của bên thứ ba chạy chương trình riêng",
         "offUnsaved": "Backend gốc của bên thứ ba hiện đang tắt, nhưng Navide không lưu được thiết lập này, nên chúng sẽ bật lại sau khi Navide khởi động lại.",
         "offUnsavedRetry": "Thử lại",
         "agentTools": {
@@ -1902,7 +1902,7 @@
           "externalCallers": "Cho phép cả client MCP bên ngoài gọi chúng",
           "externalCallersDisclosure": "Các chương trình bên ngoài dùng chung một token, nên bản ghi một lệnh gọi chỉ có thể ghi là “một client bên ngoài”, không biết là chương trình nào. Thông tin xác thực của Host cũng được xử lý như vậy."
         },
-        "empty": "Không plugin Navide nào đã cài có backend gốc.",
+        "empty": "Không plugin Navide nào đã cài có chương trình riêng.",
         "windowWithout": "{name} đã mở mà không có backend gốc: {reason}. Các phần cần backend sẽ không hoạt động. {next}",
         "windowWithoutAllow": "Để cho phép backend, hãy vào Cài đặt → Plugin Navide → {page}, rồi mở lại cửa sổ.",
         "windowWithoutDetails": "Lý do được nêu trong Cài đặt → Plugin Navide → {page}.",
@@ -1940,7 +1940,8 @@
       "listTitle": "Đã cài",
       "developerNative": "Nhà phát triển và mã gốc",
       "pageOn": "Bật",
-      "developerOnMarker": "Dev: bật",
+      "developerOnMarker": "Dev.",
+      "browseMarketplace": "Duyệt Navide Marketplace",
       "bundledGit": "Git đi kèm",
       "state": {
         "active": "Đang hoạt động",
@@ -2122,7 +2123,7 @@
         },
         "title": "Chế độ nhà phát triển",
         "switch": "Bật Chế độ nhà phát triển",
-        "hint": "Cho phép tải plugin Navide từ một thư mục để phát triển và kiểm thử, và dùng Registry tự lưu trữ; khi tắt, các plugin Navide đó sẽ bị gỡ.",
+        "hint": "Cho phép tải plugin Navide từ một thư mục để phát triển và kiểm thử, và cài plugin Navide từ máy chủ của riêng bạn thay vì Navide Marketplace; khi tắt, các plugin Navide đó sẽ bị gỡ.",
         "banner": "Chế độ nhà phát triển đang bật. Plugin Navide tải từ thư mục chưa được duyệt.",
         "reminder": "Chế độ nhà phát triển đang bật: plugin Navide tải từ thư mục chưa được duyệt. Hãy tắt nó trong Cài đặt → Plugin Navide khi không còn cần.",
         "reminderClose": "Đã hiểu",
@@ -6951,9 +6952,7 @@
       "all": "Tất cả",
       "loading": "Đang quét máy này…",
       "error-load": "Không quét được.",
-      "empty-findings-title": "Không có phát hiện",
       "empty-findings-body": "Không có mục rủi ro nào khớp với bộ lọc hiện tại.",
-      "empty-inventory-title": "Chưa kiểm kê được gì",
       "empty-inventory-body": "Không có thông tin xác thực nào khớp với bộ lọc hiện tại.",
       "not-scanned": "Nhấn Quét để tìm thông tin xác thực trên máy này.",
       "severity": {
@@ -10652,7 +10651,7 @@
     "desc": {
       "telegram": "Bot tạo bằng {'@'}BotFather",
       "discord": "Ứng dụng bot trong máy chủ của bạn",
-      "slack": "Ứng dụng Socket Mode trong workspace của bạn",
+      "slack": "Ứng dụng Slack kết nối từ máy tính này (bật Socket Mode trong Slack)",
       "feishu": "Ứng dụng tùy chỉnh trên Feishu hoặc Lark",
       "dingtalk": "Robot nội bộ ở chế độ Stream",
       "matrix": "Người dùng bot trên bất kỳ homeserver nào",
@@ -10899,7 +10898,7 @@
     },
     "vendors": {
       "title": "Guard chặn được những CLI nào",
-      "hint": "Guard dừng một hành động thông qua hook riêng của CLI. CLI không có hook chỉ được bảo vệ bằng việc từ chối phê duyệt qua trò chuyện và bằng cách không chạy chúng ở chế độ YOLO.",
+      "hint": "Guard chỉ dừng được hành động trong các CLI cho phép Navide kiểm tra từng hành động trước khi chạy. Các CLI khác chỉ được bảo vệ bằng cách từ chối yêu cầu phê duyệt gửi từ trò chuyện và giữ bật lời nhắc cấp quyền của chúng.",
       "block": "Chặn được",
       "none": "Không chặn được",
       "unknown": "Không rõ"

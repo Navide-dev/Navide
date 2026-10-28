@@ -171,7 +171,7 @@ const updateFlow = usePluginInstallFlow()
 const notify = useNotify()
 // D-f: rows whose permissions section is open; the activity panel (and its
 // reads) exists only then.
-const emit = defineEmits<{ openDisclosureOverview: [id?: string]; developerOn: [switches: string[]] }>()
+const emit = defineEmits<{ openDisclosureOverview: [id?: string]; developerOn: [switches: string[]]; openMarketplace: [] }>()
 // Settings shows this pane on two of the Navide Plugins pages: the plugins
 // themselves, and Developer Mode with native backends. Everything stays
 // mounted; the page only decides what is shown.
@@ -766,7 +766,7 @@ watch(installed, () => {
          with its permissions and disclosure, on the right. All cards stay in
          the page (only the selected one is shown), so nothing a card offers
          depends on the selection. -->
-    <div v-show="props.page === 'plugins'" class="ext-md-toolbar">
+    <div v-show="props.page === 'plugins' && !(inventoryLoaded && factoryRows.length + packs.length + nonFactoryInstalled.length === 0)" class="ext-md-toolbar">
       <!-- Updates are for installed packages; with none installed the line
            would contradict the empty list. -->
       <span v-if="pluginUpdates.count.value && nonFactoryInstalled.length" class="ext-updates-summary" role="status">
@@ -791,7 +791,26 @@ watch(installed, () => {
         {{ $t('settings.extensions.marketplace.retry') }}
       </button>
     </div>
-    <div v-show="props.page === 'plugins' && inventoryLoaded" class="ext-md">
+    <!-- Nothing bundled and nothing installed: one full-width empty state with
+         the page's actions, not a list beside a blank detail pane. -->
+    <SettingsEmptyState
+      v-if="inventoryLoaded && factoryRows.length + packs.length + nonFactoryInstalled.length === 0"
+      v-show="props.page === 'plugins'"
+      class="ext-inventory-empty"
+      :message="$t('settings.extensions.empty')"
+    >
+      <button
+        class="ext-install-file nv-btn nv-btn--primary nv-btn--sm"
+        :disabled="busy || updateFlow.busy.value"
+        @click="updateFlow.installFromFile()"
+      >
+        {{ $t('settings.extensions.localInstall.button') }}
+      </button>
+      <button type="button" class="ext-browse-marketplace nv-btn nv-btn--sm" @click="emit('openMarketplace')">
+        {{ $t('settings.extensions.browseMarketplace') }}
+      </button>
+    </SettingsEmptyState>
+    <div v-show="props.page === 'plugins' && inventoryLoaded && factoryRows.length + packs.length + nonFactoryInstalled.length > 0" class="ext-md">
       <div class="ext-md-list">
         <section class="ext-section" data-settings-section="extensions-bundled">
           <h3 class="ext-section-title">

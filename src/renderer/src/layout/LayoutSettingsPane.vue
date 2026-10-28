@@ -96,13 +96,17 @@ function onSize(id: SlotId, raw: string): void {
 
       <ul v-else class="ls-views">
         <li v-for="v in rowsFor(id)" :key="v.id" class="ls-view">
+          <!-- The region's shown view carries a small accent dot, not a
+               selection fill: every row reads the same, the dot says which
+               one the region shows. -->
           <button
             class="ls-view-name"
             :class="{ active: layout.slots[id].active === v.id }"
             :title="$t('layout.make-active')"
+            :aria-pressed="layout.slots[id].active === v.id"
             @click="setActiveView(id, v.id)"
           >
-            <span class="ls-view-icon">{{ v.icon }}</span>
+            <span class="ls-view-dot" aria-hidden="true"></span>
             {{ $t(v.titleKey) }}
           </button>
           <select
@@ -119,8 +123,14 @@ function onSize(id: SlotId, raw: string): void {
           <!-- A view pinned to one slot can still be removed from the layout;
                what it cannot do is move. `isMovable` is the removal gate
                because only a view with somewhere to belong can be restored. -->
-          <button class="nv-btn nv-btn--sm ls-hide" :disabled="!isMovable(v.id)" @click="hideView(v.id)">
-            {{ $t('layout.remove') }}
+          <button
+            class="nv-btn nv-btn--sm ls-hide"
+            :disabled="!isMovable(v.id)"
+            :aria-label="$t('layout.remove')"
+            :title="$t('layout.remove')"
+            @click="hideView(v.id)"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>
           </button>
         </li>
       </ul>
@@ -134,9 +144,7 @@ function onSize(id: SlotId, raw: string): void {
       </header>
       <ul class="ls-views">
         <li class="ls-view">
-          <span class="ls-view-name is-static">
-            <span class="ls-view-icon">🖥</span>{{ $t('label.cli-stage') }}
-          </span>
+          <span class="ls-view-name is-static">{{ $t('label.cli-stage') }}</span>
         </li>
       </ul>
     </section>
@@ -147,9 +155,7 @@ function onSize(id: SlotId, raw: string): void {
       </header>
       <ul class="ls-views">
         <li v-for="v in hiddenRows" :key="v.id" class="ls-view">
-          <span class="ls-view-name is-static">
-            <span class="ls-view-icon">{{ v.icon }}</span>{{ $t(v.titleKey) }}
-          </span>
+          <span class="ls-view-name is-static">{{ $t(v.titleKey) }}</span>
           <button class="nv-btn nv-btn--sm ls-restore" @click="showView(v.id)">{{ $t('layout.restore') }}</button>
         </li>
       </ul>
@@ -205,16 +211,17 @@ function onSize(id: SlotId, raw: string): void {
   flex-wrap: wrap;
   margin-bottom: 10px;
 }
-/* Section headings share SettingsSection's small uppercase label. */
-.ls-slot-name { margin: 0; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+/* Inside its card a region's name is the card's first row title, not a
+   second section-heading style. */
+.ls-slot-name { margin: 0; margin-right: auto; font-size: var(--font-row-title); font-weight: 600; color: var(--text-bright); }
 .ls-fixed-note { font-size: var(--font-2xs); color: var(--text-secondary); }
 
 .ls-size { display: flex; align-items: center; gap: 6px; font-size: var(--font-2xs); color: var(--text-secondary); }
 .ls-size-input { width: 76px; height: var(--control-h-md); box-sizing: border-box; }
-/* Disabled keeps its frame and readable text, so an empty slot's size and a
-   pinned view's "Pinned" still read as fields rather than fading out. */
-.ls-size-input:disabled,
-.ls-move:disabled { opacity: 1; background: transparent; color: var(--text-secondary); cursor: default; }
+/* Disabled keeps its frame and readable text, so an empty slot's size still
+   reads as a field. A pinned view's picker looks like every other picker and
+   takes the shared disabled look of .nv-select. */
+.ls-size-input:disabled { opacity: 1; background: transparent; color: var(--text-secondary); cursor: default; }
 
 .ls-toggle.is-fixed { opacity: 0.7; cursor: default; }
 .ls-toggle {
@@ -231,8 +238,9 @@ function onSize(id: SlotId, raw: string): void {
 /* A toggle's note is its own line under the label, not a run-on after it. */
 .ls-toggle .ls-fixed-note { flex-basis: 100%; padding-left: 19px; }
 
-.ls-views { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.ls-view { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+/* Views are rows of the card, hairlines between. */
+.ls-views { list-style: none; margin: 0 -14px; padding: 0; display: flex; flex-direction: column; }
+.ls-view { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 4px 14px; border-top: 1px solid var(--border-muted); }
 
 .ls-view-name {
   flex: 1 1 180px;
@@ -241,28 +249,26 @@ function onSize(id: SlotId, raw: string): void {
   gap: 8px;
   min-width: 0;
   height: 28px;
-  padding: 0 10px;
-  background: var(--bg-base);
-  border: 1px solid var(--border-muted);
+  padding: 0 6px;
+  background: transparent;
+  border: 0;
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   text-align: left;
   cursor: pointer;
 }
-/* The active view is marked by fill and weight, not by a coloured border: a
-   resting blue outline reads as keyboard focus. Focus keeps the house ring. */
-.ls-view-name.active { background: var(--bg-muted); color: var(--text-bright); font-weight: 600; }
-.ls-view-name.is-static { cursor: default; }
-/* The registry mixes colour emoji with text glyphs (⏱ ✉). Here they render as
-   one even column: emoji presentation, one width, and no colour. */
-.ls-view-icon {
-  flex: 0 0 18px;
-  text-align: center;
-  font-size: var(--font-sm);
-  font-variant-emoji: emoji;
-  filter: grayscale(1);
+.ls-view-name:hover:not(.is-static) { background: var(--bg-hover); }
+.ls-view-name.is-static { cursor: default; padding-left: 20px; }
+/* The view the region shows: an accent dot, same weight and no fill. */
+.ls-view-dot {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
 }
+.ls-view-name.active .ls-view-dot { background: var(--accent-fg); }
 
 .ls-move,
 .ls-hide,
@@ -272,10 +278,17 @@ function onSize(id: SlotId, raw: string): void {
   height: var(--control-h-md);
   box-sizing: border-box;
 }
-/* One minimum for the picker so the Remove buttons mostly line up, but it
-   grows to its longest option ("Verschieben nach …") rather than cutting it;
-   a row too narrow for both wraps the controls under the view name. */
-.ls-move { min-width: 136px; max-width: 100%; }
+/* Every picker is one width, so the Remove buttons line up; a row too narrow
+   for both wraps the controls under the view name. */
+.ls-move { flex: 0 0 168px; width: 168px; max-width: 100%; text-overflow: ellipsis; }
+/* Remove is a small icon button, named by its aria-label and tooltip. */
+.ls-hide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h-md);
+  padding: 0;
+}
 
 .ls-presets { display: flex; gap: 8px; flex-wrap: wrap; }
 

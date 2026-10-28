@@ -2706,6 +2706,8 @@ watch(activeTab, (tab) => {
 
         <!-- ── Sidebar (title + search + grouped nav) ────────────────────── -->
         <aside class="s-sidebar" :inert="!!selectedCliKey">
+          <!-- Title and search stay put; only the list below them scrolls. -->
+          <div class="s-sidebar-head">
           <div class="s-ws-header">
             <div class="s-ws-avatar" aria-hidden="true">
               <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7 3.4 3.4"/></svg>
@@ -2741,6 +2743,7 @@ watch(activeTab, (tab) => {
                 {{ $t('settings.search.no-results') }}
               </div>
             </div>
+          </div>
           </div>
 
           <nav class="s-nav" ref="navRef" :aria-label="$t('settings.nav.sections-label')">
@@ -3145,9 +3148,10 @@ watch(activeTab, (tab) => {
           </div>
 
           <!-- ① Inference backend -->
-          <div class="az-section" data-settings-section="analyzer-backend">
-            <div class="az-section-title">{{ $t('settings.analyzer.inference-backend') }}</div>
-            <div class="az-backend-toggle">
+          <SettingsSection class="az-section" data-settings-section="analyzer-backend" :label="$t('settings.analyzer.inference-backend')">
+            <SettingsCard>
+            <div class="az-row">
+            <div class="az-backend-toggle settings-segmented">
               <button
                 :class="['az-backend-btn', { active: props.analyzerApi.analyzerSettings.value.backend === 'ollama' }]"
                 @click="props.analyzerApi.saveSettings({ backend: 'ollama' })"
@@ -3157,10 +3161,11 @@ watch(activeTab, (tab) => {
                 @click="props.analyzerApi.saveSettings({ backend: 'llama_cpp' })"
               >llama.cpp</button>
             </div>
+            </div>
 
             <!-- llama.cpp-specific settings -->
             <template v-if="props.analyzerApi.analyzerSettings.value.backend === 'llama_cpp'">
-              <div class="az-subsection">
+              <div class="az-subsection az-row">
                 <label class="az-label">{{ $t('settings.analyzer.llama-cli-path') }}
                   <span class="az-hint-inline">{{ $t('settings.analyzer.llama-cli-path-hint') }}</span>
                 </label>
@@ -3189,7 +3194,7 @@ watch(activeTab, (tab) => {
                 </div>
               </div>
 
-              <div class="az-subsection">
+              <div class="az-subsection az-row">
                 <label class="az-label">{{ $t('settings.analyzer.gguf-path') }}
                   <span class="az-hint-inline">{{ $t('settings.analyzer.gguf-path-hint') }}</span>
                 </label>
@@ -3224,7 +3229,7 @@ watch(activeTab, (tab) => {
 
             <!-- Ollama REST-specific settings -->
             <template v-if="props.analyzerApi.analyzerSettings.value.backend === 'ollama'">
-              <div class="az-subsection">
+              <div class="az-subsection az-row">
                 <label class="az-label">{{ $t('settings.analyzer.inference-url') }}</label>
                 <div class="az-url-row">
                   <input
@@ -3258,16 +3263,17 @@ watch(activeTab, (tab) => {
                 />
               </div>
             </template>
-          </div>
+            </SettingsCard>
+          </SettingsSection>
 
           <!-- ② Model manager (Ollama mode only) -->
-          <div v-if="props.analyzerApi.analyzerSettings.value.backend === 'ollama'" class="az-section az-models-section" data-settings-section="analyzer-models">
-            <div class="az-section-header">
-              <div class="az-section-title">{{ $t('settings.analyzer.model-manager') }}</div>
-              <span class="az-section-note">{{ $t('settings.analyzer.model-manager-note') }}</span>
-            </div>
-
+          <SettingsSection v-if="props.analyzerApi.analyzerSettings.value.backend === 'ollama'" class="az-section az-models-section" data-settings-section="analyzer-models" :label="$t('settings.analyzer.model-manager')">
+            <!-- The standard label → description spacing, so the note never
+                 runs into the heading at narrow widths. -->
+            <p class="az-section-desc">{{ $t('settings.analyzer.model-manager-note') }}</p>
+            <SettingsCard>
             <!-- Pull a new model -->
+            <div class="az-row">
             <div class="az-pull-row">
               <input
                 class="az-input az-pull-input"
@@ -3310,6 +3316,7 @@ watch(activeTab, (tab) => {
             <div v-if="props.analyzerApi.pullError.value" class="az-pull-error">
               ⚠ {{ props.analyzerApi.pullError.value }}
             </div>
+            </div>
 
             <!-- Installed models list -->
             <div class="az-model-list">
@@ -3331,12 +3338,24 @@ watch(activeTab, (tab) => {
                 <button class="az-del-btn nv-btn nv-btn--danger" @click="azDoDelete(m.name)" :title="$t('settings.analyzer.delete-local-title')">✕</button>
               </div>
             </div>
-          </div>
+            </SettingsCard>
+          </SettingsSection>
 
           <!-- ③ Model benchmark -->
-          <div class="az-section az-benchmark-section" data-settings-section="analyzer-models">
-            <div class="az-section-header">
-              <div class="az-section-title">{{ $t('settings.analyzer.model-benchmark') }}</div>
+          <SettingsSection class="az-section az-benchmark-section" data-settings-section="analyzer-models" :label="$t('settings.analyzer.model-benchmark')">
+            <SettingsCard>
+            <!-- First row: what the benchmark does (or its result), Run on the right. -->
+            <div class="az-row az-run-row">
+              <div class="az-run-text">
+                <div v-if="props.analyzerApi.benchmarkResults.value.length > 0" class="az-results-summary">
+                  {{ $t('settings.analyzer.passed') }}
+                  <strong>{{ props.analyzerApi.benchmarkResults.value.filter(r => r.passed).length }}</strong>
+                  /
+                  {{ props.analyzerApi.benchmarkResults.value.length }}
+                  {{ $t('settings.analyzer.models', props.analyzerApi.benchmarkResults.value.length) }}
+                </div>
+                <p v-else class="az-run-desc">{{ $t('settings.analyzer.benchmark-hint') }}</p>
+              </div>
               <button
                 class="az-run-btn nv-btn nv-btn--primary"
                 :disabled="props.analyzerApi.benchmarking.value || !props.analyzerApi.health.value?.ok"
@@ -3355,8 +3374,7 @@ watch(activeTab, (tab) => {
               <div v-else class="az-progress-label">{{ $t('settings.analyzer.preparing') }}</div>
             </div>
 
-            <div v-if="!props.analyzerApi.benchmarking.value && props.analyzerApi.benchmarkResults.value.length === 0" class="az-hint">
-              <p>{{ $t('settings.analyzer.benchmark-hint') }}</p>
+            <div v-if="!props.analyzerApi.benchmarking.value && props.analyzerApi.benchmarkResults.value.length === 0" class="az-hint az-row">
               <ul>
                 <li><strong>T1</strong> {{ $t('settings.analyzer.task-t1') }}</li>
                 <li><strong>T2</strong> {{ $t('settings.analyzer.task-t2') }}</li>
@@ -3367,13 +3385,6 @@ watch(activeTab, (tab) => {
             </div>
 
             <div v-if="props.analyzerApi.benchmarkResults.value.length > 0" class="az-results">
-              <div class="az-results-summary">
-                {{ $t('settings.analyzer.passed') }}
-                <strong>{{ props.analyzerApi.benchmarkResults.value.filter(r => r.passed).length }}</strong>
-                /
-                {{ props.analyzerApi.benchmarkResults.value.length }}
-                {{ $t('settings.analyzer.models', props.analyzerApi.benchmarkResults.value.length) }}
-              </div>
               <table class="az-table">
                 <thead>
                   <tr>
@@ -3412,7 +3423,8 @@ watch(activeTab, (tab) => {
                 </tbody>
               </table>
             </div>
-          </div>
+            </SettingsCard>
+          </SettingsSection>
 
         </div>
 
@@ -4641,10 +4653,12 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'language'" class="s-body appearance-body">
           <h1 class="s-page-title">{{ $t('settings.nav.language') }}</h1>
 
+          <!-- The one heading style: a section label over the card, not a
+               bold row title standing in for a heading. -->
+          <SettingsSection :label="$t('settings.appearance.language-display')">
           <SettingsCard>
             <SettingRow
               data-settings-section="appearance-language"
-              :title="$t('settings.appearance.language-display')"
               :description="$t('settings.appearance.language-hint')"
             >
               <template #control>
@@ -4667,6 +4681,7 @@ watch(activeTab, (tab) => {
               </template>
             </SettingRow>
           </SettingsCard>
+          </SettingsSection>
         </div>
 
         <div v-show="activeTab === 'accounts'" class="s-body s-body--bleed s-body--wide accounts-body" data-settings-section="accounts">
@@ -4750,6 +4765,7 @@ watch(activeTab, (tab) => {
               v-show="pluginsPage === 'plugins' || pluginsPage === 'developer'"
               :page="pluginsPage === 'developer' ? 'developer' : 'plugins'"
               @open-disclosure-overview="openDisclosureOverview"
+              @open-marketplace="activeTab = 'marketplace'"
               @developer-on="(switches) => (developerSwitchesOn = switches)"
             />
             <!-- Plan B D5, D-f: records only, it changes nothing a Navide plugin may do. -->
@@ -4927,6 +4943,19 @@ watch(activeTab, (tab) => {
   padding: var(--space-3, 12px) var(--space-2, 8px);
   gap: var(--space-2, 8px);
 }
+/* The title and search stick to the top of the scrolling sidebar on its own
+   background, so only the nav list scrolls under them. */
+.s-sidebar-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  margin: calc(-1 * var(--space-3, 12px)) calc(-1 * var(--space-2, 8px)) 0;
+  padding: var(--space-3, 12px) var(--space-2, 8px) var(--space-1, 4px);
+  background: var(--bg-inset);
+}
 .s-ws-header {
   display: flex;
   align-items: center;
@@ -5009,6 +5038,10 @@ watch(activeTab, (tab) => {
   }
   .s-sidebar {
     padding: var(--space-2, 8px) 4px;
+  }
+  .s-sidebar-head {
+    margin: calc(-1 * var(--space-2, 8px)) -4px 0;
+    padding: var(--space-2, 8px) 4px var(--space-1, 4px);
   }
   .s-ws-header {
     justify-content: center;
@@ -5336,16 +5369,23 @@ watch(activeTab, (tab) => {
   cursor: pointer;
 }
 .ap-reset:hover { color: var(--danger-fg); border-color: var(--danger-fg); }
-.ap-color-list { display: flex; flex-direction: column; gap: 8px; }
+/* One card, one row per colour, hairlines between. */
+.ap-color-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
 .ap-color-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 7px 10px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  min-height: 40px;
+  padding: 6px var(--space-row-x);
 }
+.ap-color-row + .ap-color-row { border-top: 1px solid var(--border-muted); }
 .ap-color-input {
   width: 34px;
   height: 26px;
@@ -5788,13 +5828,13 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .help-body { overflow-y: auto; padding: 18px 22px; }
 /* One row of tabs at any width: long German labels scroll sideways instead
    of stacking the tab bar four rows high. */
+/* At narrow widths the topics wrap onto a second row instead of scrolling
+   sideways with the last ones hidden past the edge. */
 .help-topics {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 4px;
   max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
   flex-shrink: 0;
   margin-bottom: 18px;
   padding: 3px;
@@ -5939,16 +5979,18 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 /* ── Analyzer tab ─────────────────────────────────────────────────────────── */
 .analyzer-body { display: flex; flex-direction: column; gap: 0; overflow-y: auto; padding: 0; }
 
+/* Each part is a SettingsSection (the one heading style) over a card of rows,
+   inset to the page gutter: no full-bleed dividers. */
 .az-section {
-  padding: 14px 22px;
-  border-bottom: 1px solid var(--border-muted);
+  padding: 0 22px;
   flex-shrink: 0;
 }
-.az-section-title { font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 10px; }
-.az-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.az-section-header .az-section-title { margin-bottom: 0; }
-.az-section-note { font-size: var(--font-2xs); color: var(--text-muted); }
-.az-subsection { margin-top: 12px; }
+.az-section:last-child { padding-bottom: 22px; }
+.az-section-desc { margin: 0 0 8px; max-width: 75ch; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: var(--lh-base); }
+.az-row { padding: var(--space-row-y) var(--space-row-x); }
+.az-run-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px var(--space-row-x); }
+.az-run-text { flex: 1 1 260px; min-width: 0; }
+.az-run-desc { margin: 0; max-width: 75ch; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: var(--lh-base); }
 .az-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
 .az-status-dot.ok { background: var(--success-fg); }
 .az-status-dot.err { background: var(--danger-fg); }
@@ -5982,19 +6024,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 .az-browse-btn:hover { background: var(--border-default); color: var(--text-bright); }
 
-/* The same segmented control as Execution Policy's mode and source: one
-   bordered strip, a segment per choice, the chosen one tinted. */
-.az-backend-toggle { display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 0; border: 1px solid var(--border-default); border-radius: var(--radius-control); background: var(--bg-base); overflow: hidden; width: fit-content; }
-.az-backend-btn {
-  display: flex; align-items: center; min-height: var(--control-h-lg);
-  background: transparent; border: none; border-left: 1px solid var(--border-default); border-radius: 0;
-  color: var(--text-primary); font-size: var(--font-sm);
-  padding: 4px 14px; cursor: pointer; transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
-}
-.az-backend-btn:first-child { border-left: 0; }
-.az-backend-btn:hover { background: var(--bg-hover); }
-.az-backend-btn.active { background: var(--accent-subtle); color: var(--accent-fg); font-weight: 600; }
-.az-backend-btn:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: -2px; }
+/* The backend switch is the shared .settings-segmented control. */
 
 .az-label { display: block; font-size: var(--font-2xs); color: var(--text-secondary); margin-bottom: 5px; }
 .az-hint-inline { color: var(--text-muted); font-style: italic; }
@@ -6007,7 +6037,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-input:focus { border-color: var(--accent-focus); }
 .az-status-row { margin-top: 8px; }
 
-.az-pull-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.az-pull-row { display: flex; gap: 8px; align-items: center; }
 .az-pull-input { flex: 1; margin-bottom: 0; }
 /* Secondary on purpose: "run benchmark" is the page's one primary action. */
 .az-pull-btn { font-size: var(--font-xs); font-weight: 600; padding: 7px 16px; }
@@ -6018,12 +6048,14 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 .az-progress-bar { height: 100%; background: var(--accent-emphasis); border-radius: var(--radius-xs); transition: width var(--motion-base) var(--ease-out); }
 
-.az-model-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
-.az-no-models { font-size: var(--font-xs); color: var(--text-muted); padding: 8px 0; }
+/* Installed models are rows of the card, hairlines between. */
+.az-model-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+.az-no-models { font-size: var(--font-row-desc); color: var(--text-secondary); padding: var(--space-row-y) var(--space-row-x); }
 .az-model-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 7px 10px; background: var(--bg-base); border: 1px solid var(--border-muted); border-radius: var(--radius-sm);
+  padding: 8px var(--space-row-x);
 }
+.az-model-row + .az-model-row { border-top: 1px solid var(--border-muted); }
 .az-model-info { display: flex; flex-direction: column; gap: 2px; }
 .az-model-name { font-size: var(--font-xs); color: var(--text-bright); font-family: var(--font-mono); }
 .az-model-meta { font-size: var(--font-xs); color: var(--text-secondary); }
@@ -6053,11 +6085,10 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .az-progress-wrap {
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--border-muted);
-  background: var(--bg-base);
+  padding: 10px 0 0;
   flex-shrink: 0;
 }
+.az-benchmark-section .az-progress-wrap { padding: 10px var(--space-row-x); }
 .az-progress-label { font-size: var(--font-xs); color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
 .az-spin {
   display: inline-block;
@@ -6072,9 +6103,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 @media (prefers-reduced-motion: reduce) { .az-spin { animation: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* No side padding: the hint lines up with its section title above it. */
 .az-hint {
-  padding: 8px 0 4px;
   color: var(--text-secondary);
   font-size: var(--font-xs);
   line-height: 1.7;
@@ -6085,11 +6114,10 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-hint code { background: var(--bg-subtle); padding: 1px 5px; border-radius: var(--radius-xs); font-size: var(--font-2xs); color: var(--text-bright); }
 .az-pass-rule { color: var(--text-secondary); font-size: var(--font-2xs); }
 
-.az-results { padding: 16px 20px; flex: 1; overflow-y: auto; min-height: 0; }
+.az-results { padding: 8px var(--space-row-x) 12px; flex: 1; overflow-x: auto; min-height: 0; }
 .az-results-summary {
-  font-size: var(--font-xs);
+  font-size: var(--font-row-desc);
   color: var(--text-secondary);
-  margin-bottom: 12px;
 }
 .az-results-summary strong { color: var(--success-fg); }
 
@@ -6239,6 +6267,51 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   outline: 2px solid var(--accent-fg);
   outline-offset: 2px;
 }
+/* The same ring for the panes mounted inside a page, at the lowest
+   specificity so a control that draws its own focus keeps it. */
+.s-body :deep(:where(button, a[href], input, textarea, select, summary, [role='tab'], [tabindex]:not([tabindex='-1'])):focus-visible) {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: 2px;
+}
+
+/* One checkbox for every settings page: a 16px box in the theme's colours,
+   filled with the accent and a check mark when on, the shared focus ring.
+   Labels around it give the 24px hit area. */
+.s-body :deep(input[type='checkbox']) {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-base) center / 12px 12px no-repeat;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+.s-body :deep(input[type='checkbox']:hover:not(:disabled)) { border-color: var(--accent-fg); }
+.s-body :deep(input[type='checkbox']:checked),
+.s-body :deep(input[type='checkbox']:indeterminate) {
+  border-color: var(--accent-emphasis);
+  background-color: var(--accent-emphasis);
+}
+.s-body :deep(input[type='checkbox']:checked) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3.5 8.5 3 3 6-7'/%3E%3C/svg%3E");
+}
+.s-body :deep(input[type='checkbox']:indeterminate) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+}
+.s-body :deep(input[type='checkbox']:focus-visible) {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: 2px;
+}
+.s-body :deep(input[type='checkbox']:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .ap-theme-card:focus-visible,
 .ap-lang-btn:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: 2px; }
 .ap-theme-card.active,
@@ -6257,5 +6330,67 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   box-shadow: none;
   transform: none;
   cursor: default;
+}
+
+/* The one segmented control for every in-page view switch and mode picker
+   (Execution Policy, Analyzer, MCP, Skills, Credentials): one outlined strip
+   on no fill of its own, a segment per choice, the chosen one tinted. A
+   segment is a button (.on / .active / aria-pressed) or a label around a
+   visually hidden radio. Page-level tabs stay underline tabs. */
+.s-body :deep(.settings-segmented) {
+  display: inline-flex;
+  flex-wrap: wrap;
+  flex: none;
+  max-width: 100%;
+  width: fit-content;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: transparent;
+  overflow: hidden;
+}
+.s-body :deep(.settings-segmented > button),
+.s-body :deep(.settings-segmented > label) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--control-h-md);
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-left: 1px solid var(--border-default);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  font-weight: 400;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+.s-body :deep(.settings-segmented > :first-child) { border-left: 0; }
+.s-body :deep(.settings-segmented > button:hover:not(:disabled)),
+.s-body :deep(.settings-segmented > label:hover:not(:has(input:disabled))) { background: var(--bg-hover); }
+.s-body :deep(.settings-segmented > button.on),
+.s-body :deep(.settings-segmented > button.active),
+.s-body :deep(.settings-segmented > button[aria-pressed='true']),
+.s-body :deep(.settings-segmented > button[aria-selected='true']),
+.s-body :deep(.settings-segmented > label:has(input:checked)) {
+  background: var(--accent-subtle);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+.s-body :deep(.settings-segmented > button:focus-visible),
+.s-body :deep(.settings-segmented > label:has(input:focus-visible)) {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: -2px;
+}
+.s-body :deep(.settings-segmented > label:has(input:disabled)) { cursor: not-allowed; opacity: 0.55; }
+.s-body :deep(.settings-segmented > label > input[type='radio']) {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
 }
 </style>

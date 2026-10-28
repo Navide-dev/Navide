@@ -1891,9 +1891,9 @@
         "total": "{count} ferramentas; o texto e os esquemas de entrada delas somam {size}."
       },
       "nativeBackends": {
-        "title": "Back-ends nativos",
+        "title": "Programas em plug-ins do Navide",
         "description": "Alguns plug-ins do Navide incluem código nativo. O Navide o executa em uma sandbox sem acesso próprio à rede; ele só pode ler os workspaces que você abrir com ele e só altera arquivos onde você permitir. Um plug-in do Navide que também executa comandos git, gh e glab (marcado como alto risco abaixo) pode, por meio deles, contatar hosts da rede e enviar dados do workspace, além de ler e alterar arquivos do workspace sem essa permissão. Enquanto a chave abaixo estiver ativada, instalar um plug-in do Navide com código nativo permite que ele seja executado; desativá-la para todos.",
-        "enable": "Permitir que plug-ins do Navide de terceiros executem back-ends nativos",
+        "enable": "Permitir que plug-ins do Navide de terceiros executem seus próprios programas",
         "offUnsaved": "Os backends nativos de terceiros estão desativados por enquanto, mas o Navide não conseguiu salvar isso, então eles voltarão a ficar ativados quando o Navide reiniciar.",
         "offUnsavedRetry": "Tentar de novo",
         "agentTools": {
@@ -1902,7 +1902,7 @@
           "externalCallers": "Permitir que clientes MCP externos também as chamem",
           "externalCallersDisclosure": "Programas externos compartilham um único token, então o registro de uma chamada só pode dizer “um cliente externo”, não qual programa foi. A credencial do host é tratada da mesma forma."
         },
-        "empty": "Nenhum plug-in do Navide instalado tem back-end nativo.",
+        "empty": "Nenhum plug-in do Navide instalado inclui um programa próprio.",
         "windowWithout": "{name} foi aberto sem o seu backend nativo: {reason}. As funções que precisam do backend não vão funcionar. {next}",
         "windowWithoutAllow": "Para permitir o backend, vá em Configurações → Plug-ins do Navide → {page} e depois abra a janela de novo.",
         "windowWithoutDetails": "O motivo aparece em Configurações → Plug-ins do Navide → {page}.",
@@ -1940,7 +1940,8 @@
       "listTitle": "Instalados",
       "developerNative": "Desenvolvedor e código nativo",
       "pageOn": "Ativado",
-      "developerOnMarker": "Dev. ativado",
+      "developerOnMarker": "Dev.",
+      "browseMarketplace": "Explorar o Navide Marketplace",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Ativo",
@@ -2122,7 +2123,7 @@
         },
         "title": "Modo de desenvolvedor",
         "switch": "Ativar o modo de desenvolvedor",
-        "hint": "Permite carregar um plug-in do Navide de uma pasta para desenvolvê-lo e testá-lo e usar um Registry próprio; desligar descarrega esses plug-ins do Navide.",
+        "hint": "Permite carregar um plug-in do Navide de uma pasta para desenvolvê-lo e testá-lo e instalar plug-ins do Navide do seu próprio servidor em vez do Navide Marketplace; desligar descarrega esses plug-ins do Navide.",
         "banner": "O modo de desenvolvedor está ativado. Os plug-ins do Navide carregados de pastas não foram revisados.",
         "reminder": "O modo de desenvolvedor está ativado: os plug-ins do Navide carregados de pastas não foram revisados. Desative-o em Configurações → Plug-ins do Navide quando não precisar mais dele.",
         "reminderClose": "Entendi",
@@ -6951,9 +6952,7 @@
       "all": "Tudo",
       "loading": "Verificando esta máquina…",
       "error-load": "A verificação falhou.",
-      "empty-findings-title": "Nenhum achado",
       "empty-findings-body": "Nada arriscado corresponde ao filtro atual.",
-      "empty-inventory-title": "Nada inventariado",
       "empty-inventory-body": "Nenhuma credencial corresponde ao filtro atual.",
       "not-scanned": "Pressione “Verificar” para procurar credenciais nesta máquina.",
       "severity": {
@@ -10652,7 +10651,7 @@
     "desc": {
       "telegram": "Bot criado com o {'@'}BotFather",
       "discord": "Aplicativo de bot no seu servidor",
-      "slack": "App em Socket Mode no seu workspace",
+      "slack": "App do Slack que se conecta a partir deste computador (ative o Socket Mode no Slack)",
       "feishu": "App personalizado no Feishu ou no Lark",
       "dingtalk": "Robô interno em modo Stream",
       "matrix": "Usuário bot em qualquer homeserver",
@@ -10899,7 +10898,7 @@
     },
     "vendors": {
       "title": "Quais CLIs o Guard consegue bloquear",
-      "hint": "O Guard impede uma ação pelo hook da própria CLI. As CLIs sem hook só podem ser protegidas pela recusa de aprovações por chat e por não serem executadas no modo YOLO.",
+      "hint": "O Guard só consegue impedir uma ação nas CLIs que deixam o Navide verificar cada ação antes de ela rodar. As demais só podem ser protegidas recusando pedidos de aprovação vindos do chat e mantendo seus pedidos de permissão ativados.",
       "block": "Pode ser bloqueada",
       "none": "Não pode ser bloqueada",
       "unknown": "Desconhecido"

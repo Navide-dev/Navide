@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import SettingsNotice from './settings/SettingsNotice.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import type { useBackend } from '../composables/useBackend'
 
 type Backend = ReturnType<typeof useBackend>
@@ -374,8 +376,8 @@ async function saveRoots(): Promise<void> {
     </div>
 
     <p v-if="error" class="cred-error" role="alert">{{ error }}</p>
-    <p v-if="scan && !scan.keyring.available" class="cred-warn">{{ t('settings.credentials.keyring-bad-hint') }}</p>
-    <div v-if="scan && !scan.complete" class="cred-warn" role="status">
+    <SettingsNotice v-if="scan && !scan.keyring.available" class="cred-warn" tone="warning" :message="t('settings.credentials.keyring-bad-hint')" />
+    <SettingsNotice v-if="scan && !scan.complete" class="cred-warn" tone="warning" role="status">
       <p class="cred-incomplete">{{ t('settings.credentials.incomplete') }}</p>
       <ul class="cred-root-list">
         <li v-for="r in scan.roots.filter((x) => x.truncated)" :key="r.path">
@@ -383,11 +385,11 @@ async function saveRoots(): Promise<void> {
           <span class="cred-tag cred-root-truncated">{{ t('settings.credentials.roots.truncated') }}</span>
         </li>
       </ul>
-    </div>
-    <div v-if="scan && scan.high > 0" class="cred-banner" role="status">
+    </SettingsNotice>
+    <SettingsNotice v-if="scan && scan.high > 0" class="cred-banner" tone="danger" role="status">
       <strong>{{ t('settings.credentials.banner-high', { count: scan.high }, scan.high) }}</strong>
       <span>{{ t('settings.credentials.banner-high-hint') }}</span>
-    </div>
+    </SettingsNotice>
 
     <section v-if="rootsOpen" class="cred-roots">
       <h3>{{ t('settings.credentials.roots.title') }}</h3>
@@ -422,7 +424,7 @@ async function saveRoots(): Promise<void> {
     <!-- Scan time on the left, the Findings/Inventory switch on the right. -->
     <div class="cred-viewbar">
       <p class="cred-scanned">{{ scannedLabel }}</p>
-      <div class="cred-view-switch" role="group" :aria-label="t('settings.credentials.view-label')">
+      <div class="cred-view-switch settings-segmented" role="group" :aria-label="t('settings.credentials.view-label')">
         <button type="button" :class="{ on: view === 'findings' }" :aria-pressed="view === 'findings'" @click="view = 'findings'">{{ t('settings.credentials.view-findings') }}</button>
         <button type="button" :class="{ on: view === 'inventory' }" :aria-pressed="view === 'inventory'" @click="view = 'inventory'">{{ t('settings.credentials.view-inventory') }}</button>
       </div>
@@ -446,13 +448,10 @@ async function saveRoots(): Promise<void> {
     <div class="cred-body" :class="{ 'drawer-open': drawerOpen }">
       <div class="cred-main">
         <div v-if="loading && !scan" class="cred-state nv-loading">{{ t('settings.credentials.loading') }}</div>
-        <div v-else-if="!scan" class="cred-state nv-empty">{{ t('settings.credentials.not-scanned') }}</div>
+        <SettingsEmptyState v-else-if="!scan" class="cred-empty" :message="t('settings.credentials.not-scanned')" />
 
         <template v-else-if="view === 'findings'">
-          <div v-if="findingGroups.length === 0" class="cred-state nv-empty">
-            <strong>{{ t('settings.credentials.empty-findings-title') }}</strong>
-            <span>{{ t('settings.credentials.empty-findings-body') }}</span>
-          </div>
+          <SettingsEmptyState v-if="findingGroups.length === 0" class="cred-empty" :message="t('settings.credentials.empty-findings-body')" />
           <section v-for="g in findingGroups" :key="g.severity" class="cred-group" :data-severity="g.severity">
             <h3 class="cred-group-title">{{ t(`settings.credentials.severity.${g.severity}`) }}<span class="count">{{ g.rows.length }}</span></h3>
             <div class="cred-cards">
@@ -472,10 +471,7 @@ async function saveRoots(): Promise<void> {
         </template>
 
         <template v-else>
-          <div v-if="itemGroups.length === 0" class="cred-state nv-empty">
-            <strong>{{ t('settings.credentials.empty-inventory-title') }}</strong>
-            <span>{{ t('settings.credentials.empty-inventory-body') }}</span>
-          </div>
+          <SettingsEmptyState v-if="itemGroups.length === 0" class="cred-empty" :message="t('settings.credentials.empty-inventory-body')" />
           <section v-for="g in itemGroups" :key="g.kind" class="cred-group" :data-kind="g.kind">
             <h3 class="cred-group-title">{{ kindLabel(g.kind) }}<span class="count">{{ g.rows.length }}</span></h3>
             <div class="cred-cards">
@@ -500,7 +496,7 @@ async function saveRoots(): Promise<void> {
         <p>{{ findingBody(selectedFinding) }}</p>
         <template v-if="selectedFinding.manualFix">
           <h4>{{ t('settings.credentials.drawer.steps') }}</h4>
-          <p class="cred-warn cred-manual-fix">{{ t('settings.credentials.drawer.manual-fix') }}</p>
+          <SettingsNotice class="cred-warn cred-manual-fix" tone="warning" :message="t('settings.credentials.drawer.manual-fix')" />
         </template>
         <template v-else-if="selectedFinding.steps.length">
           <h4>{{ t('settings.credentials.drawer.steps') }}</h4>
@@ -566,8 +562,6 @@ button.primary { background: var(--accent-emphasis); border-color: var(--accent-
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-emphasis); outline-offset: 2px; }
 input { min-width: 0; border: 1px solid var(--border-default); border-radius: var(--radius-control); background: var(--bg-base); color: var(--text-primary); padding: 7px 8px; }
 .cred-error { margin: 0; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--danger-fg) 45%, var(--border-default)); border-radius: var(--radius-control); color: var(--danger-fg); background: color-mix(in srgb, var(--danger-fg) 8%, var(--bg-subtle)); font-size: var(--font-2xs); }
-.cred-warn { margin: 0; padding: 8px 10px; border-left: 3px solid var(--attention-fg); background: color-mix(in srgb, var(--attention-fg) 8%, var(--bg-subtle)); font-size: var(--font-2xs); }
-.cred-banner { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-left: 3px solid var(--danger-fg); background: color-mix(in srgb, var(--danger-fg) 8%, var(--bg-subtle)); font-size: var(--font-2xs); }
 .cred-banner strong { color: var(--danger-fg); }
 .cred-scanned, .cred-muted { margin: 0; color: var(--text-secondary); font-size: var(--font-2xs); }
 .cred-roots { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border-default); border-radius: var(--radius-card); background: var(--bg-subtle); }
@@ -579,22 +573,22 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-root-add input { flex: 1; }
 .cred-viewbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cred-filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.cred-chips, .cred-view-switch { display: flex; flex-wrap: wrap; gap: 4px; }
+.cred-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .cred-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-pill); font-size: var(--font-2xs); }
-.cred-view-switch button.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
+
 .cred-chip.on { background: var(--accent-subtle, var(--bg-elevated)); border-color: var(--accent-muted, var(--accent-fg)); color: var(--accent-fg); font-weight: 600; }
 .cred-chip .count { font-size: var(--font-2xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
 .cred-search { flex: 1; min-width: 220px; }
-/* Findings / Inventory is one control with two states, not two buttons. */
-.cred-view-switch { margin-left: auto; flex-wrap: nowrap; gap: 0; padding: 2px; border: 1px solid var(--border-default); border-radius: var(--radius-control); background: var(--bg-inset); }
-.cred-view-switch button { border-color: transparent; background: transparent; color: var(--text-secondary); padding: 3px 10px; font-size: var(--font-2xs); }
+/* Findings / Inventory is one control with two states: the modal's shared
+   .settings-segmented. */
+.cred-view-switch { margin-left: auto; }
 .cred-body { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; flex: 1; gap: 12px; }
 .cred-body.drawer-open { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
 .cred-main { min-width: 0; min-height: 0; overflow-y: auto; }
 .cred-state { display: flex; flex-direction: column; gap: 4px; padding: 18px 8px; color: var(--text-secondary); font-size: var(--font-2xs); text-align: center; }
-.cred-state strong { color: var(--text-bright); }
+
 .cred-group { margin-bottom: 16px; }
-.cred-group-title { display: flex; align-items: baseline; gap: 6px; margin: 0 2px 8px; font-size: var(--font-2xs); font-weight: 700; color: var(--text-secondary); }
+.cred-group-title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: var(--font-row-desc); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .cred-group-title .count { font-size: var(--font-2xs); font-weight: 500; opacity: 0.6; }
 .cred-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
 .cred-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px 11px; text-align: left; border: 1px solid var(--border-muted); border-radius: var(--radius-card); background: var(--bg-subtle); min-width: 0; }

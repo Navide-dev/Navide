@@ -295,13 +295,13 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(wrapper!.findAllComponents(SettingsNavSubItem).filter((n) => n.props('active')).map((n) => n.props('label'))).toEqual(['Disclosure overview'])
   })
 
-  it('puts the folded pages\' marker on the Navide Plugins row, a warning before "Developer on"', async () => {
+  it('puts the folded pages\' marker on the Navide Plugins row, a warning before the "Dev" pill', async () => {
     await mountModal('general')
     expect(pluginsRow().props('marker')).toBeNull()
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
     await flushPromises()
-    expect(pluginsRow().props('marker')).toEqual({ text: 'Developer on', tone: 'on', label: 'Developer and native code: Turn on Developer Mode' })
+    expect(pluginsRow().props('marker')).toEqual({ text: 'Dev', tone: 'on', label: 'Developer and native code: Turn on Developer Mode' })
 
     wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', ['Effective policy: Stale'])
     await flushPromises()

@@ -1891,9 +1891,9 @@
         "total": "도구 {count}개, 텍스트와 입력 스키마 합계 {size}."
       },
       "nativeBackends": {
-        "title": "네이티브 백엔드",
+        "title": "Navide 플러그인에 포함된 프로그램",
         "description": "일부 Navide 플러그인에는 네이티브 코드가 들어 있어요. Navide는 이 코드를 자체 네트워크 접근이 없는 샌드박스에서 실행해요. 함께 연 작업 영역만 읽을 수 있고, 허용한 곳에서만 파일을 변경할 수 있어요. git, gh, glab 명령도 실행하는 Navide 플러그인(아래에 고위험으로 표시)은 이 명령을 통해 네트워크 호스트에 접속해 작업 영역 데이터를 보내고, 그 권한 없이도 작업 영역 파일을 읽고 변경할 수 있어요. 아래 스위치가 켜져 있으면 네이티브 코드가 있는 Navide 플러그인을 설치하는 것이 실행 허용이 돼요. 스위치를 끄면 모두 멈춰요.",
-        "enable": "타사 Navide 플러그인의 네이티브 백엔드 실행 허용",
+        "enable": "타사 Navide 플러그인이 자체 프로그램을 실행하도록 허용",
         "offUnsaved": "서드파티 네이티브 백엔드는 지금은 꺼져 있지만 Navide가 이 설정을 저장하지 못해서, Navide를 다시 시작하면 다시 켜져요.",
         "offUnsavedRetry": "다시 시도",
         "agentTools": {
@@ -1902,7 +1902,7 @@
           "externalCallers": "외부 MCP 클라이언트도 호출하도록 허용",
           "externalCallersDisclosure": "외부 프로그램은 token 하나를 공유하므로 호출 기록에는 어떤 프로그램인지가 아니라 \"외부 클라이언트\"라고만 남아요. Host 자격 증명도 같은 방식으로 처리돼요."
         },
-        "empty": "설치된 Navide 플러그인 중 네이티브 백엔드가 있는 것이 없어요.",
+        "empty": "설치된 Navide 플러그인 중 자체 프로그램이 있는 것이 없어요.",
         "windowWithout": "{name}이(가) 네이티브 백엔드 없이 열렸어요: {reason}. 백엔드가 필요한 기능은 작동하지 않아요. {next}",
         "windowWithoutAllow": "백엔드를 허용하려면 설정 → Navide 플러그인 → {page}(으)로 가서 허용한 뒤 창을 다시 여세요.",
         "windowWithoutDetails": "이유는 설정 → Navide 플러그인 → {page}에서 볼 수 있어요.",
@@ -1940,7 +1940,8 @@
       "listTitle": "설치됨",
       "developerNative": "개발자 및 네이티브 코드",
       "pageOn": "켜짐",
-      "developerOnMarker": "개발자 켜짐",
+      "developerOnMarker": "개발",
+      "browseMarketplace": "Navide 마켓플레이스 둘러보기",
       "bundledGit": "기본 포함 Git",
       "state": {
         "active": "사용 중",
@@ -2122,7 +2123,7 @@
         },
         "title": "Developer Mode",
         "switch": "Developer Mode 켜기",
-        "hint": "폴더에서 Navide 플러그인을 불러와 개발하고 테스트하며 자체 호스팅 Registry를 쓸 수 있어요. 끄면 그 Navide 플러그인을 내려요.",
+        "hint": "폴더에서 Navide 플러그인을 불러와 개발하고 테스트하며 Navide 마켓플레이스 대신 직접 운영하는 서버에서 Navide 플러그인을 설치할 수 있어요. 끄면 그 Navide 플러그인을 내려요.",
         "banner": "Developer Mode가 켜져 있어요. 폴더에서 불러온 Navide 플러그인은 검토되지 않았어요.",
         "reminder": "Developer Mode가 켜져 있어요: 폴더에서 불러온 Navide 플러그인은 검토되지 않았어요. 더 이상 필요하지 않으면 설정 → Navide 플러그인에서 끄세요.",
         "reminderClose": "확인",
@@ -6951,9 +6952,7 @@
       "all": "전체",
       "loading": "이 컴퓨터를 스캔하는 중…",
       "error-load": "스캔하지 못했어요.",
-      "empty-findings-title": "발견 항목 없음",
       "empty-findings-body": "현재 필터와 일치하는 위험 항목이 없어요.",
-      "empty-inventory-title": "목록 없음",
       "empty-inventory-body": "현재 필터와 일치하는 자격 증명이 없어요.",
       "not-scanned": "스캔을 누르면 이 컴퓨터에서 자격 증명을 찾아요.",
       "severity": {
@@ -10652,7 +10651,7 @@
     "desc": {
       "telegram": "{'@'}BotFather로 만든 bot",
       "discord": "서버의 bot 애플리케이션",
-      "slack": "작업 공간의 Socket Mode 앱",
+      "slack": "이 컴퓨터에서 연결하는 Slack 앱 (Slack에서 Socket Mode를 켜세요)",
       "feishu": "Feishu 또는 Lark의 사용자 지정 앱",
       "dingtalk": "Stream 모드의 내부 로봇",
       "matrix": "모든 홈서버의 bot 사용자",
@@ -10899,7 +10898,7 @@
     },
     "vendors": {
       "title": "Guard가 차단할 수 있는 CLI",
-      "hint": "Guard는 CLI 자체 hook을 통해 동작을 막아요. hook이 없는 CLI는 채팅 승인 거부와 YOLO 모드로 실행하지 않는 것으로만 보호할 수 있어요.",
+      "hint": "Guard는 실행 전에 Navide가 각 동작을 확인할 수 있는 CLI에서만 동작을 막을 수 있어요. 그 외 CLI는 채팅에서 온 승인 요청을 거부하고 권한 확인을 켜 두는 것으로만 보호할 수 있어요.",
       "block": "차단 가능",
       "none": "차단 불가",
       "unknown": "알 수 없음"

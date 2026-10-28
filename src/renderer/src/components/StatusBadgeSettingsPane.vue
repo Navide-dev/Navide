@@ -106,7 +106,10 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
           {{ previewLabel(status, locale) }}
         </span>
         <span class="sb-key">
-          <span class="sb-key-name" v-truncate>{{ status }}</span>
+          <!-- The localized status name titles the card; the internal key
+               stays beside it as muted secondary text. -->
+          <span class="sb-key-name" v-truncate>{{ defaultLabel(status, locale) }}</span>
+          <code class="sb-key-id">{{ status }}</code>
           <em v-if="ROW_ONLY.includes(status)" class="sb-rowonly">
             {{ $t('statusBadges.row-only') }}
           </em>
@@ -269,6 +272,13 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-key-id {
+  font-family: var(--font-mono);
+  font-size: var(--font-2xs);
+  font-weight: 400;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 .sb-rowonly {

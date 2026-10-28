@@ -12,6 +12,7 @@ import MarketplaceIcon from './MarketplaceIcon.vue'
 import PluginAgentToolsList from './PluginAgentToolsList.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingRow from './settings/SettingRow.vue'
+import SettingsNotice from './settings/SettingsNotice.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
 import { leadSentence } from '../lib/leadSentence'
 
@@ -113,13 +114,9 @@ watch(installed, refresh)
          governs, and the external-callers switch is indented under the switch
          it depends on. -->
     <SettingsCard class="native-backends-card">
-      <div class="native-backends-callout">
-        <svg class="native-backends-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M7.1 2.6 1.9 12a1 1 0 0 0 .9 1.5h10.4a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0Z" />
-          <path d="M8 6.2v3M8 11.3v.1" />
-        </svg>
+      <SettingsNotice class="native-backends-callout" tone="warning">
         <p class="native-backends-description"><strong class="native-backends-lead">{{ nativeWarning.lead }}</strong>{{ nativeWarning.separator }}{{ nativeWarning.rest }}</p>
-      </div>
+      </SettingsNotice>
       <SettingRow :title="$t('settings.extensions.nativeBackends.enable')">
         <template #control>
           <ToggleSwitch
@@ -263,36 +260,22 @@ watch(installed, refresh)
   /* Native controls (checkboxes, scrollbars) follow the theme. */
   color-scheme: var(--nv-color-scheme);
 }
+/* The section heading is SettingsSection's label. */
 .native-backends-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-3);
-  color: var(--text-bright);
-  font-size: var(--font-lg);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-/* The warning is a row of the switch card, in the page's one warning style:
-   a 2px amber edge and the warning icon over the card's own surface. */
+/* The warning is the first row of the switch card: SettingsNotice, flush
+   with the card's edges. */
 .native-backends-callout {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-row-x);
-  box-shadow: inset 2px 0 0 var(--risk-fg);
-  border-bottom: 1px solid var(--border-muted);
-  color: var(--text-primary);
-}
-.native-backends-callout .native-backends-description {
-  max-width: 72ch;
-}
-.native-backends-icon {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  color: var(--risk-fg);
+  margin: 0;
+  padding-block: var(--space-3);
+  border-radius: 0;
+  background: transparent;
 }
 .native-backends-description {
   margin: 0;

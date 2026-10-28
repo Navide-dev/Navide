@@ -948,7 +948,7 @@ watch(
         type="search"
         :placeholder="t('settings.skills.search')"
       />
-      <div class="skills-view-switch" role="group" :aria-label="t('settings.skills.view-label')">
+      <div class="skills-view-switch settings-segmented" role="group" :aria-label="t('settings.skills.view-label')">
         <button
           type="button"
           :class="{ on: view === 'browse' }"
@@ -1334,10 +1334,19 @@ watch(
 /* Narrow widths: the actions wrap below the heading instead of squeezing it. */
 .skills-toolbar,
 .skills-toolbar-actions { flex-wrap: wrap; }
-.skills-toolbar > div:first-child { flex: 1 1 16em; min-width: 0; }
-.skills-toolbar h2,
+/* The text keeps a ~480px basis, so under ~700px of width the buttons drop
+   below it instead of squeezing it into a narrow column. */
+.skills-toolbar > div:first-child { flex: 1 1 480px; min-width: 0; }
 .skill-editor-head h3 { margin: 0; color: var(--text-bright); }
-.skills-toolbar h2 { font-size: 15px; }
+/* The section heading is SettingsSection's label. */
+.skills-toolbar h2 {
+  margin: 0 0 8px;
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
 .skill-editor-head h3 { font-size: var(--font-md); }
 .skills-toolbar p,
 .skill-editor-head p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); }
@@ -1630,20 +1639,7 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 }
 
 /* ── Capability matrix ─────────────────────────────────────────────────── */
-.skills-view-switch {
-  display: inline-flex;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-  overflow: hidden;
-}
-.skills-view-switch button {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 5px 11px;
-  font-size: var(--font-2xs);
-}
-.skills-view-switch button.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
+/* The view switch is the modal's shared .settings-segmented control. */
 .skills-matrix {
   display: flex;
   flex: 1;
@@ -1742,10 +1738,11 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 .skills-matrix-legend .swatch.unsupported { background: var(--bg-muted); }
 /* ── Two sources ─────────────────────────────────────────────────────── */
 .skills-group-title {
-  margin: 10px 4px 4px;
-  font-size: var(--font-2xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  /* SettingsSection's label, on the page's left content line. */
+  margin: 10px 0 8px;
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }

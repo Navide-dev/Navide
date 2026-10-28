@@ -23,6 +23,7 @@ const emit = defineEmits<{
     type="button"
     class="settings-nav-subitem"
     :class="{ active }"
+    :title="label"
     :aria-current="active ? 'page' : undefined"
     @click="emit('select')"
   >
@@ -100,13 +101,14 @@ const emit = defineEmits<{
   background: var(--bg-muted);
   color: var(--text-primary);
 }
-/* A long page name wraps under its own first letter, never cut off
-   (de-DE "Entwickler und nativer Code"). */
+/* One line per row: a long page name (de-DE "Entwickler und nativer Code")
+   ends in an ellipsis; the title attribute carries the full name. */
 .settings-nav-subitem-label {
   min-width: 0;
   margin-right: 6px;
-  white-space: normal;
-  overflow-wrap: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   line-height: 1.3;
 }
 @media (max-width: 720px) {

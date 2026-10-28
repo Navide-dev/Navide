@@ -700,15 +700,16 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   display: flex;
   align-items: baseline;
   gap: 6px;
-  margin: 10px 4px 6px;
-  font-size: var(--font-2xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  /* SettingsSection's label, on the page's left content line. */
+  margin: 10px 0 8px;
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
 .memory-group-title .count { font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
-.memory-group-note { margin: 0 4px; color: var(--text-secondary); font-size: var(--font-2xs); }
+.memory-group-note { margin: 0; color: var(--text-secondary); font-size: var(--font-2xs); }
 .memory-auto { display: flex; flex-direction: column; gap: 6px; }
 .memory-auto .memory-group-title { margin-bottom: 0; }
 .memory-auto-dir {

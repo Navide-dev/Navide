@@ -1620,7 +1620,7 @@
           "summary": "Scale the whole interface — text, icons, and spacing — in every window."
         },
         "appearance-runtime": {
-          "title": "Restore Windows",
+          "title": "Restore windows",
           "summary": "Reopen the workspace windows you had open when you last quit."
         },
         "status-badges": {
@@ -1891,9 +1891,9 @@
         "total": "{count} tools; their text and input schemas total {size}."
       },
       "nativeBackends": {
-        "title": "Native backends",
+        "title": "Programs in Navide plugins",
         "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. While the switch below is on, installing a Navide plugin that has native code allows it to run; turning the switch off stops all of them.",
-        "enable": "Allow third-party Navide plugins to run native backends",
+        "enable": "Let third-party Navide plugins run their own programs",
         "offUnsaved": "Third-party native backends are off for now, but Navide could not save that, so they will be on again after Navide restarts.",
         "offUnsavedRetry": "Try Again",
         "agentTools": {
@@ -1902,7 +1902,7 @@
           "externalCallers": "Let external MCP clients call them too",
           "externalCallersDisclosure": "External programs share a single token, so the record of a call can only say \"an external client\", not which program it was. The Host credential is treated the same way."
         },
-        "empty": "No installed Navide plugin has a native backend.",
+        "empty": "No installed Navide plugin includes its own program.",
         "windowWithout": "{name} opened without its native backend: {reason}. The parts of it that need the backend will not work. {next}",
         "windowWithoutAllow": "To allow the backend, go to Settings → Navide Plugins → {page}, then reopen the window.",
         "windowWithoutDetails": "Settings → Navide Plugins → {page} shows why.",
@@ -1940,7 +1940,8 @@
       "listTitle": "Installed",
       "developerNative": "Developer and native code",
       "pageOn": "On",
-      "developerOnMarker": "Developer on",
+      "developerOnMarker": "Dev",
+      "browseMarketplace": "Browse Navide Marketplace",
       "bundledGit": "Bundled Git",
       "state": {
         "active": "Active",
@@ -2122,7 +2123,7 @@
         },
         "title": "Developer Mode",
         "switch": "Turn on Developer Mode",
-        "hint": "Lets you load a Navide plugin from a folder to develop and test it, and use a self-hosted Registry; turning it off unloads those Navide plugins.",
+        "hint": "Lets you load a Navide plugin from a folder to develop and test it, and install Navide plugins from your own server instead of the Navide Marketplace; turning it off unloads those Navide plugins.",
         "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
         "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
         "reminderClose": "Got It",
@@ -2526,7 +2527,7 @@
       "language-display": "Display language",
       "ui-scale": "Interface scale",
       "ui-scale-hint": "Scale the whole interface — text, icons, and spacing — in every window. Separate from the terminal and editor font sizes, which keep their own ⌘= / ⌘- shortcuts.",
-      "restore-windows": "Restore Windows",
+      "restore-windows": "Restore windows",
       "restore-windows-hint": "Reopen the workspace windows you had open when you last quit.",
       "restore-windows-label": "Reopen windows on next launch",
       "custom-colors": "Custom colors",
@@ -2883,7 +2884,7 @@
             "theme": "<strong>Theme</strong> — five built in: Dark (GitHub), Midnight, Forest, Light and High Contrast, with Dark (GitHub) as the default.",
             "colors": "<strong>Custom Colors</strong> — eight overridable color tokens (background, surface, text, secondary text, border, accent, success, danger). Overrides sit on top of the current theme and are <strong>kept when you switch themes</strong>; <em>↺ Reset to Defaults</em> restores them.",
             "uiScale": "<strong>Interface Scale</strong> — the first row of the <strong>Appearance ▸ Other</strong> block, and a <strong>dropdown</strong> rather than a slider: six steps (80%, 90%, 100%, 110%, 125%, 150%; 100% by default), on <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>. It drives Electron's page zoom rather than a CSS variable, so text, icons, borders and spacing all move together, and the main process applies it to <strong>every window</strong>, Navide plugin windows included. It is a <strong>separate axis</strong> from pane font size: <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> change only the terminal <strong>content</strong> font size (one value shared by every CLI pane in the window), while Interface Scale changes the shell around it — and the two <strong>multiply</strong>, the way a browser's page zoom multiplies with a site's own font size.",
-            "restore": "<strong>Restore Windows</strong> — reopen the workspace windows that were open when you last quit."
+            "restore": "<strong>Restore windows</strong> — reopen the workspace windows that were open when you last quit."
           },
           "callout": {
             "title": "Notifications and sound live on the Notifications tab",
@@ -6951,9 +6952,7 @@
       "all": "All",
       "loading": "Scanning this machine…",
       "error-load": "The scan failed.",
-      "empty-findings-title": "No findings",
       "empty-findings-body": "Nothing risky matched the current filter.",
-      "empty-inventory-title": "Nothing inventoried",
       "empty-inventory-body": "No credentials matched the current filter.",
       "not-scanned": "Press Scan to look for credentials on this machine.",
       "severity": {
@@ -10652,7 +10651,7 @@
     "desc": {
       "telegram": "Bot created with {'@'}BotFather",
       "discord": "Bot application in your server",
-      "slack": "Socket Mode app in your workspace",
+      "slack": "Slack app that connects out from this computer (turn on Socket Mode in Slack)",
       "feishu": "Custom app on Feishu or Lark",
       "dingtalk": "Internal robot in Stream mode",
       "matrix": "Bot user on any homeserver",
@@ -10899,7 +10898,7 @@
     },
     "vendors": {
       "title": "Which CLIs Guard can block",
-      "hint": "Guard stops an action through the CLI's own hook. CLIs without one can only be protected by chat-approval refusal and by not running them in YOLO mode.",
+      "hint": "Guard can stop an action only in CLIs that let Navide check each action before it runs. For the others, the only protection is to refuse approval requests that come from chat and to keep their permission prompts on.",
       "block": "Can be blocked",
       "none": "Cannot be blocked",
       "unknown": "Unknown"

@@ -1891,9 +1891,9 @@
         "total": "共 {count} 個工具，文字與輸入結構合計 {size}。"
       },
       "nativeBackends": {
-        "title": "原生後端",
+        "title": "Navide 外掛內含的程式",
         "description": "部分 Navide 外掛內含原生程式。Navide 會把它放在沙盒裡執行，它本身沒有網路：只能讀取你一起開啟的工作區，也只能在你允許的地方修改檔案。但同時會執行 git、gh、glab 指令的 Navide 外掛（下方標示為高風險）可以透過這些指令連到網路主機、送出工作區資料，也可以不經上述允許就讀取與修改工作區檔案。下方開關開啟時，安裝含原生程式碼的 Navide 外掛即代表允許它執行；關閉開關可停用全部。",
-        "enable": "允許第三方 Navide 外掛執行原生後端",
+        "enable": "允許第三方 Navide 外掛執行自帶的程式",
         "offUnsaved": "第三方原生後端目前已關閉，但 Navide 無法儲存這個設定，重新啟動 Navide 後會再變回開啟。",
         "offUnsavedRetry": "再試一次",
         "agentTools": {
@@ -1902,7 +1902,7 @@
           "externalCallers": "外部 MCP 客戶端也能呼叫",
           "externalCallersDisclosure": "外部程式只共用一組 token，稽核紀錄分不出是哪個程式，只能記成「外部客戶端」。Host 憑證也比照處理。"
         },
-        "empty": "目前沒有安裝任何含原生後端的 Navide 外掛。",
+        "empty": "目前沒有安裝任何自帶程式的 Navide 外掛。",
         "windowWithout": "{name} 已開啟，但沒有原生後端：{reason}。需要後端的功能將無法使用。{next}",
         "windowWithoutAllow": "要允許後端，請到「設定 → Navide 外掛 → {page}」，然後重新開啟視窗。",
         "windowWithoutDetails": "原因可在「設定 → Navide 外掛 → {page}」查看。",
@@ -1940,7 +1940,8 @@
       "listTitle": "已安裝",
       "developerNative": "開發者與原生程式碼",
       "pageOn": "已開啟",
-      "developerOnMarker": "開發者已開啟",
+      "developerOnMarker": "開發",
+      "browseMarketplace": "瀏覽 Navide 市集",
       "bundledGit": "內建 Git",
       "state": {
         "active": "啟用中",
@@ -2122,7 +2123,7 @@
         },
         "title": "開發者模式",
         "switch": "開啟開發者模式",
-        "hint": "可從資料夾載入 Navide 外掛來開發與測試，並使用自架的 Registry；關閉時會卸下這些 Navide 外掛。",
+        "hint": "可從資料夾載入 Navide 外掛來開發與測試，也能從你自己的伺服器、而非 Navide 市集安裝 Navide 外掛；關閉時會卸下這些 Navide 外掛。",
         "banner": "開發者模式已開啟，從資料夾載入的 Navide 外掛沒有經過審核。",
         "reminder": "開發者模式已開啟：從資料夾載入的 Navide 外掛沒有經過審核。不用時請到「設定 → Navide 外掛」關閉。",
         "reminderClose": "知道了",
@@ -6951,9 +6952,7 @@
       "all": "全部",
       "loading": "正在掃描這台機器…",
       "error-load": "掃描失敗。",
-      "empty-findings-title": "沒有發現項目",
       "empty-findings-body": "目前的篩選條件下沒有風險項目。",
-      "empty-inventory-title": "沒有清單項目",
       "empty-inventory-body": "目前的篩選條件下沒有憑證。",
       "not-scanned": "按「掃描」開始檢查這台機器上的憑證。",
       "severity": {
@@ -10652,7 +10651,7 @@
     "desc": {
       "telegram": "用 {'@'}BotFather 建立的 bot",
       "discord": "伺服器裡的 bot 應用程式",
-      "slack": "工作區裡的 Socket Mode 應用程式",
+      "slack": "從這台電腦主動連線的 Slack 應用程式（請在 Slack 開啟 Socket Mode）",
       "feishu": "飛書或 Lark 的自建應用",
       "dingtalk": "Stream 模式的企業內部機器人",
       "matrix": "任一 homeserver 上的 bot 使用者",
@@ -10899,7 +10898,7 @@
     },
     "vendors": {
       "title": "Guard 能擋哪些 CLI",
-      "hint": "Guard 透過 CLI 自己的 hook 擋下動作。沒有 hook 的 CLI 只能靠拒絕聊天室核准、以及不用 YOLO 模式執行來保護。",
+      "hint": "只有能讓 Navide 在每個動作執行前先檢查的 CLI，Guard 才擋得下。其他 CLI 只能靠拒絕來自聊天室的核准請求、並保持權限提示開啟來保護。",
       "block": "可阻擋",
       "none": "無法阻擋",
       "unknown": "未知"

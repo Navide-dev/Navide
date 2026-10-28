@@ -11,6 +11,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import PromptSkillIcon from './PromptSkillIcon.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import { usePromptSkills } from '../composables/usePromptSkills'
 import { reorderByIds } from '../lib/paneOrder'
 import {
@@ -276,9 +277,7 @@ function applyCustomIcon(): void {
             </span>
           </button>
         </div>
-        <div v-else class="prompts-state">
-          <strong>{{ t('settings.prompts.empty') }}</strong>
-        </div>
+        <SettingsEmptyState v-else class="prompts-empty" :message="t('settings.prompts.empty')" />
       </div>
 
       <!-- ── Drawer ─────────────────────────────────────────────────────── -->
@@ -555,18 +554,7 @@ textarea:focus {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
 }
-.prompts-state {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 18px 8px;
-  color: var(--text-secondary);
-  font-size: var(--font-2xs);
-  text-align: center;
-}
-.prompts-state strong {
-  color: var(--text-bright);
-}
+
 
 /* ── Card ─────────────────────────────────────────────────────────────── */
 .prompt-card {

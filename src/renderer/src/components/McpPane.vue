@@ -513,7 +513,7 @@ function entries(map: Record<string, string>): [string, string][] {
         type="search"
         :placeholder="t('settings.mcp.agent-search')"
       />
-      <div class="mcp-view-switch" role="group" :aria-label="t('settings.mcp.view-label')">
+      <div class="mcp-view-switch settings-segmented" role="group" :aria-label="t('settings.mcp.view-label')">
         <button
           type="button"
           :class="{ on: view === 'browse' }"
@@ -950,15 +950,8 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-chip.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
 .mcp-chip .count { font-size: var(--font-xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
 .mcp-pane-search { flex: 1; min-width: 140px; max-width: 260px; }
-.mcp-view-switch {
-  margin-left: auto;
-  display: inline-flex;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-  overflow: hidden;
-}
-.mcp-view-switch button { border: 0; border-radius: 0; background: transparent; padding: 5px 11px; font-size: var(--font-2xs); }
-.mcp-view-switch button.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
+/* The modal's shared .settings-segmented control. */
+.mcp-view-switch { margin-left: auto; }
 
 /* ── Body: main region + optional drawer ───────────────────────────────── */
 .mcp-pane-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-height: 0; }
@@ -973,10 +966,11 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   display: flex;
   align-items: baseline;
   gap: 6px;
-  margin: 10px 4px 6px;
-  font-size: var(--font-2xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  /* SettingsSection's label, on the page's left content line. */
+  margin: 10px 0 8px;
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }

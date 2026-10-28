@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import SettingsEmptyState from './settings/SettingsEmptyState.vue'
+import SettingsNotice from './settings/SettingsNotice.vue'
 import type { useGitAccounts, GitAccountPublic } from '../composables/useGitAccounts'
 
 const props = defineProps<{
@@ -105,12 +106,10 @@ async function remove(id: string): Promise<void> {
       </div>
 
       <!-- safeStorage unavailable -->
-      <div v-if="!available" class="ga-banner warn">
-        {{ $t('settings.accounts.unavailable') }}
-      </div>
+      <SettingsNotice v-if="!available" class="ga-unavailable" tone="warning" :message="$t('settings.accounts.unavailable')" />
 
       <!-- Error surface -->
-      <div v-if="error" class="ga-banner danger">{{ error }}</div>
+      <SettingsNotice v-if="error" class="ga-error" tone="danger" role="alert" :message="error" />
 
       <!-- Account list -->
       <div v-if="accounts.length" class="ga-list">
@@ -208,24 +207,6 @@ async function remove(id: string): Promise<void> {
 /* Section headings share SettingsSection's small uppercase label. */
 .ga-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .ga-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 60ch; line-height: 1.4; text-wrap: pretty; word-break: auto-phrase; }
-
-.ga-banner {
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 11.5px;
-  line-height: 1.4;
-  margin-bottom: 12px;
-}
-.ga-banner.warn {
-  background: var(--attention-subtle, var(--bg-muted));
-  border: 1px solid var(--attention-muted, var(--border-default));
-  color: var(--attention-fg, var(--text-primary));
-}
-.ga-banner.danger {
-  background: var(--danger-subtle, var(--bg-muted));
-  border: 1px solid var(--danger-muted, var(--border-default));
-  color: var(--danger-fg, var(--text-primary));
-}
 
 .ga-list { display: flex; flex-direction: column; gap: 6px; }
 .ga-row {

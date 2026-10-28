@@ -1891,9 +1891,9 @@
         "total": "{count} herramientas; su texto y sus esquemas de entrada suman {size}."
       },
       "nativeBackends": {
-        "title": "Backends nativos",
+        "title": "Programas en complementos de Navide",
         "description": "Algunos complementos de Navide incluyen código nativo. Navide lo ejecuta en un entorno aislado sin acceso propio a la red; solo puede leer las áreas de trabajo que abras con él y modificar archivos solo donde lo permitas. Un complemento de Navide que además ejecuta comandos git, gh y glab (marcado abajo como de alto riesgo) puede, a través de ellos, contactar con servidores de la red y enviar datos del área de trabajo, y leer y modificar archivos del área de trabajo sin ese permiso. Mientras el interruptor de abajo esté activado, instalar un complemento de Navide con código nativo permite que se ejecute; al desactivarlo se detienen todos.",
-        "enable": "Permitir que los complementos de Navide de terceros ejecuten backends nativos",
+        "enable": "Permitir que los complementos de Navide de terceros ejecuten sus propios programas",
         "offUnsaved": "Los backends nativos de terceros están desactivados por ahora, pero Navide no pudo guardarlo, así que volverán a estar activados al reiniciar Navide.",
         "offUnsavedRetry": "Reintentar",
         "agentTools": {
@@ -1902,7 +1902,7 @@
           "externalCallers": "Permitir que también las llamen clientes MCP externos",
           "externalCallersDisclosure": "Los programas externos comparten un único token, así que el registro de una llamada solo puede indicar «un cliente externo», no qué programa fue. La credencial del host se trata de la misma forma."
         },
-        "empty": "Ningún complemento de Navide instalado tiene un backend nativo.",
+        "empty": "Ningún complemento de Navide instalado incluye un programa propio.",
         "windowWithout": "{name} se abrió sin su backend nativo: {reason}. Las funciones que necesitan el backend no funcionarán. {next}",
         "windowWithoutAllow": "Para permitir el backend, ve a «Ajustes → Complementos de Navide → {page}» y vuelve a abrir la ventana.",
         "windowWithoutDetails": "En «Ajustes → Complementos de Navide → {page}» se explica el motivo.",
@@ -1940,7 +1940,8 @@
       "listTitle": "Instalados",
       "developerNative": "Desarrollador y código nativo",
       "pageOn": "Activado",
-      "developerOnMarker": "Desarrollo activo",
+      "developerOnMarker": "Desarr.",
+      "browseMarketplace": "Explorar Navide Marketplace",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Activo",
@@ -2122,7 +2123,7 @@
         },
         "title": "Modo de desarrollador",
         "switch": "Activar el modo de desarrollador",
-        "hint": "Te permite cargar un complemento de Navide desde una carpeta para desarrollarlo y probarlo, y usar un Registry propio; al desactivarlo se descargan esos complementos de Navide.",
+        "hint": "Te permite cargar un complemento de Navide desde una carpeta para desarrollarlo y probarlo, e instalar complementos de Navide desde tu propio servidor en lugar de Navide Marketplace; al desactivarlo se descargan esos complementos de Navide.",
         "banner": "El modo de desarrollador está activado. Los complementos de Navide cargados desde una carpeta no se han revisado.",
         "reminder": "El modo de desarrollador está activado: los complementos de Navide cargados desde una carpeta no se han revisado. Desactívalo en «Ajustes → Complementos de Navide» cuando ya no lo necesites.",
         "reminderClose": "Entendido",
@@ -6951,9 +6952,7 @@
       "all": "Todo",
       "loading": "Analizando este equipo…",
       "error-load": "El análisis falló.",
-      "empty-findings-title": "Sin hallazgos",
       "empty-findings-body": "Nada de riesgo coincide con el filtro actual.",
-      "empty-inventory-title": "Nada inventariado",
       "empty-inventory-body": "Ninguna credencial coincide con el filtro actual.",
       "not-scanned": "Pulsa «Analizar» para buscar credenciales en este equipo.",
       "severity": {
@@ -10652,7 +10651,7 @@
     "desc": {
       "telegram": "Bot creado con {'@'}BotFather",
       "discord": "Aplicación de bot en tu servidor",
-      "slack": "App en Socket Mode en tu espacio de trabajo",
+      "slack": "App de Slack que se conecta desde este equipo (activa Socket Mode en Slack)",
       "feishu": "App personalizada en Feishu o Lark",
       "dingtalk": "Robot interno en modo Stream",
       "matrix": "Usuario bot en cualquier homeserver",
@@ -10899,7 +10898,7 @@
     },
     "vendors": {
       "title": "Qué CLI puede bloquear Guard",
-      "hint": "Guard detiene una acción a través del propio hook de la CLI. Las CLI que no lo tienen solo se pueden proteger con el rechazo de aprobaciones desde el chat y no ejecutándolas en modo YOLO.",
+      "hint": "Guard solo puede detener una acción en las CLI que permiten a Navide revisar cada acción antes de ejecutarla. Las demás solo se pueden proteger rechazando las solicitudes de aprobación que llegan desde el chat y manteniendo activadas sus solicitudes de permiso.",
       "block": "Se puede bloquear",
       "none": "No se puede bloquear",
       "unknown": "Desconocido"

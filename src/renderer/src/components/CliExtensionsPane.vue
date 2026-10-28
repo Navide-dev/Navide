@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
 import { consumeConvenienceOverviewRequest, useConvenienceState } from '../composables/useConvenience'
 import ConvenienceOverview from './ConvenienceOverview.vue'
+import PathText from './settings/PathText.vue'
 import { convenienceText } from '../lib/convenienceText'
 
 // Settings → Extensions: what each AI CLI installed for itself, as the
@@ -190,7 +191,9 @@ onMounted(() => { void load() })
               </div>
               <p v-if="!isNavideChange(item)" class="cli-ext-consent">{{ t(`settings.cliExtensions.consent.${item.native_consent}`) }}</p>
               <code v-if="item.detail" v-truncate class="cli-ext-detail">{{ item.detail }}</code>
-              <code v-if="item.path" v-truncate class="cli-ext-path">{{ item.path }}</code>
+              <!-- Shortened in the middle and wrapped after a separator, so a
+                   narrow window never hard-clips the folder that matters. -->
+              <code v-if="item.path" class="cli-ext-path"><PathText :path="item.path" /></code>
             </template>
           </li>
         </ul>
@@ -273,4 +276,5 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
 .cli-ext-inferred { border-style: dashed; }
 .cli-ext-consent { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); }
 .cli-ext-detail, .cli-ext-path { display: block; min-width: 0; padding: 3px 6px; border-radius: var(--radius-xs); background: var(--bg-inset); font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cli-ext-path { white-space: normal; }
 </style>

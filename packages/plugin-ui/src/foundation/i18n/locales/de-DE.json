@@ -1891,9 +1891,9 @@
         "total": "{count} Tools; ihr Text und ihre Eingabeschemas umfassen insgesamt {size}."
       },
       "nativeBackends": {
-        "title": "Native Backends",
+        "title": "Programme in Navide-Plug-ins",
         "description": "Manche Navide-Plug-ins enthalten nativen Code. Navide führt ihn in einer Sandbox ohne eigenen Netzwerkzugriff aus; er kann nur die Arbeitsbereiche lesen, die Sie damit öffnen, und Dateien nur dort ändern, wo Sie es erlauben. Ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (unten als hohes Risiko markiert), kann darüber Netzwerk-Hosts kontaktieren, Daten aus dem Arbeitsbereich senden sowie Dateien im Arbeitsbereich ohne diese Berechtigung lesen und ändern. Solange der Schalter unten eingeschaltet ist, erlauben Sie mit der Installation eines Navide-Plug-ins mit nativem Code dessen Ausführung; schalten Sie ihn aus, um alle zu stoppen.",
-        "enable": "Navide-Plug-ins von Drittanbietern erlauben, native Backends auszuführen",
+        "enable": "Navide-Plug-ins von Drittanbietern erlauben, eigene Programme auszuführen",
         "offUnsaved": "Native Backends von Drittanbietern sind vorerst aus, aber Navide konnte das nicht speichern. Nach einem Neustart von Navide sind sie wieder an.",
         "offUnsavedRetry": "Erneut versuchen",
         "agentTools": {
@@ -1902,7 +1902,7 @@
           "externalCallers": "Auch externen MCP-Clients den Aufruf erlauben",
           "externalCallersDisclosure": "Externe Programme teilen sich ein einziges Token, daher kann der Eintrag eines Aufrufs nur „ein externer Client“ angeben, nicht welches Programm es war. Die Host-Anmeldeinformation wird genauso behandelt."
         },
-        "empty": "Kein installiertes Navide-Plug-in hat ein natives Backend.",
+        "empty": "Kein installiertes Navide-Plug-in enthält ein eigenes Programm.",
         "windowWithout": "{name} wurde ohne sein natives Backend geöffnet: {reason}. Funktionen, die das Backend brauchen, funktionieren nicht. {next}",
         "windowWithoutAllow": "Um das Backend zuzulassen, öffnen Sie „Einstellungen → Navide-Plug-ins → {page}“ und öffnen Sie das Fenster danach erneut.",
         "windowWithoutDetails": "Warum, steht unter „Einstellungen → Navide-Plug-ins → {page}“.",
@@ -1940,7 +1940,8 @@
       "listTitle": "Installiert",
       "developerNative": "Entwickler und nativer Code",
       "pageOn": "An",
-      "developerOnMarker": "Entwickler an",
+      "developerOnMarker": "Entw.",
+      "browseMarketplace": "Navide Marketplace durchsuchen",
       "bundledGit": "Mitgeliefertes Git",
       "state": {
         "active": "Aktiv",
@@ -2122,7 +2123,7 @@
         },
         "title": "Entwicklermodus",
         "switch": "Entwicklermodus einschalten",
-        "hint": "Ermöglicht, ein Navide-Plug-in zum Entwickeln und Testen aus einem Ordner zu laden und eine selbst gehostete Registry zu nutzen; beim Ausschalten werden diese Navide-Plug-ins entladen.",
+        "hint": "Ermöglicht, ein Navide-Plug-in zum Entwickeln und Testen aus einem Ordner zu laden und Navide-Plug-ins statt aus dem Navide Marketplace von Ihrem eigenen Server zu installieren; beim Ausschalten werden diese Navide-Plug-ins entladen.",
         "banner": "Der Entwicklermodus ist aktiv. Aus einem Ordner geladene Navide-Plug-ins wurden nicht geprüft.",
         "reminder": "Der Entwicklermodus ist aktiv: Aus einem Ordner geladene Navide-Plug-ins wurden nicht geprüft. Schalten Sie ihn unter „Einstellungen → Navide-Plug-ins“ aus, wenn Sie ihn nicht mehr benötigen.",
         "reminderClose": "Verstanden",
@@ -6951,9 +6952,7 @@
       "all": "Alle",
       "loading": "Dieser Rechner wird gescannt …",
       "error-load": "Der Scan ist fehlgeschlagen.",
-      "empty-findings-title": "Keine Funde",
       "empty-findings-body": "Nichts Riskantes entspricht dem aktuellen Filter.",
-      "empty-inventory-title": "Nichts erfasst",
       "empty-inventory-body": "Keine Anmeldeinformationen entsprechen dem aktuellen Filter.",
       "not-scanned": "Klicken Sie auf „Scannen“, um auf diesem Rechner nach Anmeldeinformationen zu suchen.",
       "severity": {
@@ -10652,7 +10651,7 @@
     "desc": {
       "telegram": "Mit {'@'}BotFather erstellter Bot",
       "discord": "Bot-Anwendung auf Ihrem Server",
-      "slack": "Socket-Mode-App in Ihrem Workspace",
+      "slack": "Slack-App, die sich von diesem Computer aus verbindet (in Slack Socket Mode einschalten)",
       "feishu": "Eigene App auf Feishu oder Lark",
       "dingtalk": "Interner Roboter im Stream-Modus",
       "matrix": "Bot-Benutzer auf einem beliebigen Homeserver",
@@ -10899,7 +10898,7 @@
     },
     "vendors": {
       "title": "Welche CLIs Guard blockieren kann",
-      "hint": "Guard stoppt eine Aktion über den eigenen Hook der CLI. CLIs ohne Hook lassen sich nur durch das Ablehnen von Chat-Genehmigungen schützen und dadurch, dass sie nicht im YOLO-Modus laufen.",
+      "hint": "Guard kann eine Aktion nur in CLIs stoppen, bei denen Navide jede Aktion vor dem Ausführen prüfen kann. Die anderen lassen sich nur schützen, indem Sie Genehmigungsanfragen aus dem Chat ablehnen und ihre Berechtigungsabfragen eingeschaltet lassen.",
       "block": "Kann blockiert werden",
       "none": "Kann nicht blockiert werden",
       "unknown": "Unbekannt"

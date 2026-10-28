@@ -32,10 +32,18 @@ describe('ExtensionsPane developer page', () => {
     await flushPromises()
     const section = () => wrapper!.get('[data-settings-section="extensions-developer-mode"]').element as HTMLElement
     expect(section().style.display).toBe('none')
-    expect((wrapper.get('.ext-md').element as HTMLElement).style.display).not.toBe('none')
+    // Nothing bundled or installed: the plugins page is one full-width empty
+    // state with its actions, not the list/detail split.
+    const empty = () => wrapper!.get('.ext-inventory-empty').element as HTMLElement
+    expect(empty().style.display).not.toBe('none')
+    expect((wrapper.get('.ext-md').element as HTMLElement).style.display).toBe('none')
+    expect(wrapper.get('.ext-inventory-empty .ext-install-file').text()).toBe(i18n.global.t('settings.extensions.localInstall.button'))
+    await wrapper.get('.ext-browse-marketplace').trigger('click')
+    expect(wrapper.emitted('openMarketplace')).toHaveLength(1)
 
     await wrapper.setProps({ page: 'developer' })
     expect(section().style.display).not.toBe('none')
+    expect(empty().style.display).toBe('none')
     expect((wrapper.get('.ext-md').element as HTMLElement).style.display).toBe('none')
     const toggle = wrapper.get('.ext-devmode-toggle')
     expect(toggle.attributes('role')).toBe('switch')

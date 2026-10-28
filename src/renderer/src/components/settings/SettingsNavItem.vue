@@ -46,7 +46,7 @@ const emit = defineEmits<{
       role="img"
       :aria-label="marker.label"
       :title="marker.label"
-    >{{ marker.tone === 'on' ? '' : marker.text }}</span>
+    >{{ marker.text }}</span>
   </button>
 </template>
 
@@ -123,35 +123,29 @@ const emit = defineEmits<{
   background: var(--risk-subtle);
   color: var(--risk-fg);
 }
-/* An "on" state ("Developer on") is a dot on the row's icon, named by its
-   tooltip and accessible label: as text it pushed the label onto a second
-   line, so the row changed height when a switch was turned on. Out of flow,
-   it leaves the label's width the same in both states. */
+/* An "on" state is a short labelled pill after the label ("Dev"), with the
+   full meaning in its tooltip and accessible label. The label beside it
+   truncates, so the row never grows a second line. */
 .settings-nav-item-marker--on {
-  position: absolute;
-  top: 7px;
-  left: calc(var(--space-row-x) + 11px);
-  width: 8px;
-  height: 8px;
-  margin: 0;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--text-secondary);
-  box-shadow: 0 0 0 2px var(--bg-inset);
-  line-height: 0;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: var(--font-2xs);
+  white-space: nowrap;
 }
 .settings-nav-item-icon {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
 }
-/* A long label wraps onto a second line instead of being cut off: some
-   languages cannot shorten a name the glossary fixes (es-ES "Complementos de
-   Navide" is 14px wider than the sidebar). */
+/* One line per row: a label too long for the sidebar (ja-JP "Navide
+   マーケットプレイス", es-ES "Complementos de Navide") ends in an ellipsis and
+   the row's title attribute carries the full name. */
 .settings-nav-item-label {
+  flex: 0 1 auto;
   min-width: 0;
-  white-space: normal;
-  overflow-wrap: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   line-height: 1.3;
 }
 
@@ -168,6 +162,11 @@ const emit = defineEmits<{
   }
   .settings-nav-item.active.expanded::before {
     display: none;
+  }
+  /* It contains the selection: its icon takes the accent colour, the page
+     row under it keeps the only fill. */
+  .settings-nav-item.active.expanded .settings-nav-item-icon {
+    color: var(--accent-fg);
   }
 }
 

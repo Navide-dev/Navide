@@ -1891,9 +1891,9 @@
         "total": "共 {count} 个工具，文字与输入结构合计 {size}。"
       },
       "nativeBackends": {
-        "title": "原生后端",
+        "title": "Navide 插件内含的程序",
         "description": "部分 Navide 插件内含原生程序。Navide 会把它放在沙盒里运行，它本身没有网络：只能读取你一起打开的工作区，也只能在你允许的地方修改文件。但同时会运行 git、gh、glab 指令的 Navide 插件（下方标示为高风险）可以通过这些指令连到网络主机、送出工作区数据，也可以不经上述允许就读取与修改工作区文件。下方开关打开时，安装含原生代码的 Navide 插件即表示允许它运行；关闭开关可停用全部。",
-        "enable": "允许第三方 Navide 插件运行原生后端",
+        "enable": "允许第三方 Navide 插件运行自带的程序",
         "offUnsaved": "第三方原生后端目前已关闭，但 Navide 无法保存这个设置，重新启动 Navide 后会再变回开启。",
         "offUnsavedRetry": "再试一次",
         "agentTools": {
@@ -1902,7 +1902,7 @@
           "externalCallers": "外部 MCP 客户端也能调用",
           "externalCallersDisclosure": "外部程序只共用一组 token，审核记录分不出是哪个程序，只能记成“外部客户端”。Host 凭据也比照处理。"
         },
-        "empty": "目前没有安装任何含原生后端的 Navide 插件。",
+        "empty": "目前没有安装任何自带程序的 Navide 插件。",
         "windowWithout": "{name} 已打开，但没有原生后端：{reason}。需要后端的功能将无法使用。{next}",
         "windowWithoutAllow": "要允许后端，请到“设置 → Navide 插件 → {page}”，然后重新打开窗口。",
         "windowWithoutDetails": "原因可在“设置 → Navide 插件 → {page}”中查看。",
@@ -1940,7 +1940,8 @@
       "listTitle": "已安装",
       "developerNative": "开发者与原生代码",
       "pageOn": "已开启",
-      "developerOnMarker": "开发者已开启",
+      "developerOnMarker": "开发",
+      "browseMarketplace": "浏览 Navide 市场",
       "bundledGit": "内置 Git",
       "state": {
         "active": "激活中",
@@ -2122,7 +2123,7 @@
         },
         "title": "开发者模式",
         "switch": "打开开发者模式",
-        "hint": "可从文件夹加载 Navide 插件来开发与测试，并使用自架的 Registry；关闭时会卸下这些 Navide 插件。",
+        "hint": "可从文件夹加载 Navide 插件来开发与测试，也能从你自己的服务器、而非 Navide 市场安装 Navide 插件；关闭时会卸下这些 Navide 插件。",
         "banner": "开发者模式已打开，从文件夹加载的 Navide 插件没有经过审核。",
         "reminder": "开发者模式已打开：从文件夹加载的 Navide 插件没有经过审核。不用时请到“设置 → Navide 插件”关闭。",
         "reminderClose": "知道了",
@@ -6951,9 +6952,7 @@
       "all": "全部",
       "loading": "正在扫描这台机器…",
       "error-load": "扫描失败。",
-      "empty-findings-title": "没有发现项目",
       "empty-findings-body": "目前的筛选条件下没有风险项目。",
-      "empty-inventory-title": "没有清单项目",
       "empty-inventory-body": "目前的筛选条件下没有凭据。",
       "not-scanned": "按“扫描”开始检查这台机器上的凭据。",
       "severity": {
@@ -10652,7 +10651,7 @@
     "desc": {
       "telegram": "用 {'@'}BotFather 创建的 bot",
       "discord": "服务器里的 bot 应用程序",
-      "slack": "工作区里的 Socket Mode 应用程序",
+      "slack": "从这台电脑主动连接的 Slack 应用程序（请在 Slack 开启 Socket Mode）",
       "feishu": "飞书或 Lark 的自建应用",
       "dingtalk": "Stream 模式的企业内部机器人",
       "matrix": "任一 homeserver 上的 bot 用户",
@@ -10899,7 +10898,7 @@
     },
     "vendors": {
       "title": "Guard 能挡哪些 CLI",
-      "hint": "Guard 通过 CLI 自己的 hook 挡下动作。没有 hook 的 CLI 只能靠拒绝聊天室核准、以及不用 YOLO 模式运行来保护。",
+      "hint": "只有能让 Navide 在每个动作执行前先检查的 CLI，Guard 才挡得下。其他 CLI 只能靠拒绝来自聊天室的核准请求、并保持权限提示开启来保护。",
       "block": "可阻挡",
       "none": "无法阻挡",
       "unknown": "未知"

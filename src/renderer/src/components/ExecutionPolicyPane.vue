@@ -508,7 +508,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
         <h2>{{ $t('settings.executionPolicy.sourceTitle') }}</h2>
       </div>
       <p class="ep-hint">{{ $t('settings.executionPolicy.sourceHint') }}</p>
-      <div class="ep-source-list">
+      <div class="ep-source-list settings-segmented">
         <label v-for="source in (['default', 'user', 'repository'] as ExecutionPolicySource[])" :key="source" class="ep-source-option">
           <input
             type="radio"
@@ -588,7 +588,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
         <span class="ep-readonly" v-if="!hasUserPolicy">{{ $t('settings.executionPolicy.notCreated') }}</span>
       </div>
       <p class="ep-hint">{{ $t('settings.executionPolicy.userHint') }}</p>
-      <div class="ep-mode-list" role="radiogroup" :aria-label="$t('settings.executionPolicy.modeLabel')">
+      <div class="ep-mode-list settings-segmented" role="radiogroup" :aria-label="$t('settings.executionPolicy.modeLabel')">
         <label v-for="mode in policyModes" :key="mode" class="ep-mode-option" :data-mode="mode">
           <input
             type="radio"
@@ -728,14 +728,22 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 }
 .ep-section.ep-effective { border-top: 0; padding-top: var(--space-1); }
 /* Sections are divided by hairlines, Linear-style; the one part the user edits
-   is the page's single card, with the accent edge. */
+   is the page's single card. */
 [data-section='user-policy'] {
   margin: var(--space-2) 0 var(--space-4);
   padding: var(--space-row-y) var(--space-row-x);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
-  box-shadow: inset 3px 0 0 var(--accent-emphasis);
+}
+/* Inside the card its heading is the card's first row title, not a second
+   section-label style. */
+[data-section='user-policy'] .ep-section-heading h2 {
+  font-size: var(--font-row-title);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-bright);
 }
 [data-section='user-policy'] + .ep-section { border-top: 0; }
 .ep-effective {
@@ -838,41 +846,12 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 }
 .ep-conflict button { flex: 0 0 auto; }
 .ep-recommendation-policy { margin-top: var(--space-2); }
-/* Mode and source are segmented controls: one bordered strip, a segment per
-   choice, the checked one tinted. The radio stays in the DOM for keyboard and
-   assistive tech; the segment draws its focus. */
-.ep-mode-list, .ep-source-list {
-  display: inline-flex;
-  flex-wrap: wrap;
-  max-width: 100%;
-  margin: var(--space-1) 0 var(--space-3);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-  background: var(--bg-base);
-  overflow: hidden;
-}
-.ep-mode-option, .ep-source-option {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: var(--control-h-lg);
-  padding: 4px 14px;
-  border-left: 1px solid var(--border-default);
-  cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
-}
-.ep-mode-option:first-child, .ep-source-option:first-child { border-left: 0; }
-.ep-mode-option:hover, .ep-source-option:hover:not(:has(input:disabled)) { background: var(--bg-hover); }
-.ep-mode-option:has(input:checked), .ep-source-option:has(input:checked) {
-  background: var(--accent-subtle);
-  color: var(--accent-fg);
-  font-weight: 600;
-}
-.ep-mode-option:has(input:focus-visible), .ep-source-option:has(input:focus-visible) {
-  outline: 2px solid var(--accent-focus);
-  outline-offset: -2px;
-}
-.ep-source-option:has(input:disabled) { cursor: not-allowed; opacity: 0.55; }
+/* Mode and source are the Settings modal's shared segmented control
+   (.settings-segmented); the radio stays in the DOM for keyboard and
+   assistive tech and the segment draws its focus. Only the spacing and the
+   hidden radio are set here, so the pane still works mounted on its own. */
+.ep-mode-list, .ep-source-list { margin: var(--space-1) 0 var(--space-3); }
+.ep-mode-option, .ep-source-option { position: relative; }
 .ep-mode-option input, .ep-source-option input {
   position: absolute;
   inset: 0;
