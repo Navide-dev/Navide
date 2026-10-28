@@ -40,6 +40,10 @@ const settings = (over: Partial<EvolveSettings> = {}): EvolveSettings => ({
   retro_tools: true,
   retro_corrections: false,
   retro_freq: { failures: 'daily', tools: 'daily', corrections: 'daily' },
+  trigger_burst: false,
+  burst_minutes: 30,
+  burst_count: 10,
+  burst_max_per_day: 1,
   ...over,
 })
 
@@ -365,6 +369,35 @@ describe('EvolvePanel', () => {
     expect(items[1].get('[data-test="effect"]').text()).toBe('未見效')
     expect(items[2].get('[data-test="effect"]').text()).toBe('樣本不足')
     expect(items[3].get('[data-test="effect"]').text()).toBe('待判定')
+  })
+
+  it('S5a: the burst trigger is off by default and saves its threshold with it', async () => {
+    wrapper = await mountPanel(A)
+    const row = wrapper.get('[data-test="burst"]')
+    const box = row.get('[data-field="trigger_burst"]')
+    expect((box.element as HTMLInputElement).checked).toBe(false)
+    expect(row.text()).toContain('錯誤帳本')
+    await box.setValue(true)
+    await flushPromises()
+    await row.get('[data-field="burst_count"]').setValue(25)
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set').at(-1)?.payload).toEqual({
+      workspace: A,
+      settings: { trigger_burst: true, burst_count: 25 },
+    })
+  })
+
+  it('S5a: refuses an out-of-range burst threshold', async () => {
+    wrapper = await mountPanel(A)
+    const row = wrapper.get('[data-test="burst"]')
+    await row.get('[data-field="trigger_burst"]').setValue(true)
+    await flushPromises()
+    await row.get('[data-field="burst_count"]').setValue(1)
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set')).toHaveLength(0)
+    expect(wrapper.find('[data-error="burst_count"]').text()).not.toBe('')
   })
 
   it('S1: an older backend without a ledger still shows the proposals', async () => {
