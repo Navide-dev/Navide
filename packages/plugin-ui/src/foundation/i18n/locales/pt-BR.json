@@ -11395,6 +11395,7 @@
       "not-reclaimed": "(não liberado)",
       "fix": "Correção",
       "proposal": "Proposta",
+      "proposal-reason": "Motivo: {reason}",
       "history": "Histórico (últimas 30)",
       "unsaved": "Alterações não salvas",
       "save": "Salvar",
@@ -11456,6 +11457,14 @@
       "error": "Falhou",
       "timeout": "Tempo esgotado",
       "skipped": "Ignorada"
+    },
+    "proposal-status": {
+      "proposed": "Proposta",
+      "approved": "Aprovada",
+      "rejected": "Rejeitada",
+      "in-progress": "Em andamento",
+      "landed": "Aplicada",
+      "abandoned": "Abandonada"
     },
     "history": {
       "date": "Data",

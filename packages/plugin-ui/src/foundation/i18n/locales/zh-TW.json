@@ -11395,6 +11395,7 @@
       "not-reclaimed": "（未回收）",
       "fix": "修正",
       "proposal": "提案",
+      "proposal-reason": "理由：{reason}",
       "history": "歷史（最近 30 次）",
       "unsaved": "有未儲存的變更",
       "save": "儲存",
@@ -11456,6 +11457,14 @@
       "error": "失敗",
       "timeout": "逾時",
       "skipped": "未執行"
+    },
+    "proposal-status": {
+      "proposed": "提案中",
+      "approved": "已核准",
+      "rejected": "已退回",
+      "in-progress": "進行中",
+      "landed": "已落地",
+      "abandoned": "已放棄"
     },
     "history": {
       "date": "日期",

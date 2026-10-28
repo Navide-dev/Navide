@@ -8,7 +8,12 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { ref } from 'vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
-import { __resetEvolveForTest, type EvolveSettings, type EvolveState } from '../../composables/useEvolve'
+import {
+  __resetEvolveForTest,
+  type EvolveProposal,
+  type EvolveSettings,
+  type EvolveState,
+} from '../../composables/useEvolve'
 import EvolvePanel from '../EvolvePanel.vue'
 
 const A = '/Users/me/alpha'
@@ -245,5 +250,59 @@ describe('EvolvePanel', () => {
     expect(last).toContain('142k')
     expect(last).toContain('a1b2c3d fix(scheduler): x')
     expect(wrapper.get('[data-test="history"]').findAll('tbody tr')).toHaveLength(30)
+  })
+
+  it('S1: lists each proposal of the last run with its ledger status, display only', async () => {
+    const run = {
+      id: 'r0',
+      trigger: 'schedule' as const,
+      status: 'ok' as const,
+      started_at: 1_900_000_000_000,
+      ended_at: 1_900_000_100_000,
+      tokens: 1000,
+      commits: [],
+      proposals: [
+        { rel_path: '.agent-team/plans/a.html', name: '提案甲' },
+        { rel_path: '.agent-team/plans/b.html', name: '提案乙' },
+        { rel_path: '.agent-team/plans/c.html', name: '提案丙' },
+      ],
+      reclaimed: true,
+    }
+    const row = (rel_path: string, status: EvolveProposal['status'], reason = ''): EvolveProposal => ({
+      id: rel_path, run_id: 'r0', rel_path, name: '', kind: '', signature: '', status, reason, pr: '',
+      commits: [], created_at: 1, updated_at: 1,
+    })
+    states[A] = stateFor(A, {
+      runs: [run],
+      proposals: [
+        row('.agent-team/plans/a.html', 'rejected', '太大，先不要'),
+        row('.agent-team/plans/b.html', 'landed'),
+        { ...row('.agent-team/plans/c.html', 'approved'), run_id: 'other-run' },
+      ],
+    })
+    wrapper = await mountPanel(A)
+    const items = wrapper.get('[data-test="last-result"]').findAll('[data-test="proposal"]')
+    expect(items).toHaveLength(3)
+    expect(items[0].get('[data-test="proposal-status"]').text()).toBe('已退回')
+    expect(items[0].text()).toContain('理由：太大，先不要')
+    expect(items[1].get('[data-test="proposal-status"]').text()).toBe('已落地')
+    // A row of another run is not this proposal's status.
+    expect(items[2].find('[data-test="proposal-status"]').exists()).toBe(false)
+    const sentBefore = calls.length
+    await items[0].get('[data-test="proposal-status"]').trigger('click')
+    expect(calls.length).toBe(sentBefore)
+  })
+
+  it('S1: an older backend without a ledger still shows the proposals', async () => {
+    const run = {
+      id: 'r0', trigger: 'schedule' as const, status: 'ok' as const, started_at: 1_900_000_000_000,
+      tokens: 1, commits: [], proposals: [{ rel_path: '.agent-team/plans/a.html', name: '提案甲' }], reclaimed: true,
+    }
+    states[A] = stateFor(A, { runs: [run] })
+    wrapper = await mountPanel(A)
+    const items = wrapper.get('[data-test="last-result"]').findAll('[data-test="proposal"]')
+    expect(items).toHaveLength(1)
+    expect(items[0].text()).toContain('提案甲')
+    expect(items[0].find('[data-test="proposal-status"]').exists()).toBe(false)
   })
 })
