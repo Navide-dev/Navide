@@ -81,10 +81,15 @@ function normaliseInner(raw: string): string {
 }
 
 export function findQuestionBlock(text: string, from: number = 0): QuestionBlock | null {
-  const startIdx = text.indexOf(QUESTION_START, from)
-  if (startIdx < 0) return null
-  const endIdx = text.indexOf(QUESTION_END, startIdx + QUESTION_START.length)
+  const firstStart = text.indexOf(QUESTION_START, from)
+  if (firstStart < 0) return null
+  const endIdx = text.indexOf(QUESTION_END, firstStart + QUESTION_START.length)
   if (endIdx < 0) return null
+  // Pair the END with the START closest before it. When an earlier block's
+  // END was mangled by a TUI redraw (#733: an echoed kickoff example lost a
+  // dash), that orphan START would otherwise swallow everything up to the
+  // next block's END.
+  const startIdx = text.lastIndexOf(QUESTION_START, endIdx - QUESTION_START.length)
   const rawInner = text.slice(startIdx + QUESTION_START.length, endIdx)
   if (!rawInner.trim()) return null
 
@@ -226,13 +231,21 @@ export function splitNumberedPrompt(prompt: string): string[] {
 export function findConsecutiveQuestionBlocks(
   text: string,
   from: number = 0,
-  maxGap: number = 600
+  maxGap: number = 600,
+  skipPrompts: readonly string[] = []
 ): QuestionBlock[] {
   const blocks: QuestionBlock[] = []
   let cursor = from
   while (true) {
     const b = findQuestionBlock(text, cursor)
     if (!b) break
+    // A block whose prompt is one of `skipPrompts` (the protocol's own
+    // examples, echoed with the kickoff) is stepped over without anchoring
+    // the gap check, so the agent's real block after it is still reached.
+    if (skipPrompts.includes(b.prompt)) {
+      cursor = b.endIndex
+      continue
+    }
     if (blocks.length > 0) {
       const gap = b.startIndex - blocks[blocks.length - 1].endIndex
       if (gap > maxGap) break

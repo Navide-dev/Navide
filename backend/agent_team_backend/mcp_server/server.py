@@ -1122,6 +1122,7 @@ async def cli_open_agent(
     run_group_id: str | None = None,
     window: str = "",
     window_id: str = "",
+    account: str = "",
 ) -> dict[str, Any]:
     """Open a new CLI pane and give it a task.
 
@@ -1229,6 +1230,28 @@ async def cli_open_agent(
     here — an unknown one is the CLI's own error to report — but effort is
     checked against that CLI's vocabulary before the pane opens.
 
+    `account` says which account the new pane runs on, and by DEFAULT it is
+    the account YOU run on ("" = "inherit"). Only a claude pane can run on an
+    account other than its vendor's live login: one opened inside that
+    account's own folder, as the 📌 pin and "switch only this pane" do. So
+    "inherit" from such a pane opens the child in the same folder (it then
+    spends that account's quota and, like its parent, stays put when the live
+    login is switched); in every other case — you follow the live login, you
+    are another CLI, or you have no pane — the child opens exactly as before,
+    on the live login. "active" always asks for that old behaviour. An
+    account id (from cli_accounts_list) opens a claude pane in that
+    account's folder; the account must exist ("unknown-profile"), belong to
+    `agent` ("vendor-mismatch"), be a claude account other than the built-in
+    Default ("unsupported" — other CLIs run every pane on their live login)
+    and have signed in inside its own folder ("needs-user": the user signs it
+    in through cli_account_sign_in with mode "folder"). Naming the live
+    account is the same as "active". This never switches the live login and
+    never moves another pane. When you passed `account`, or the pane opened
+    on an account other than the live login, the answer carries `account`:
+    {mode, profile_id, runs_on: "account-dir"|"live", fixed}, for a CLI
+    Navide keeps accounts for. Ignored with `pane_id`, which reopens a pane
+    on its own.
+
     Use the returned name, not the one you asked for: a concurrent request may
     have taken that name, in which case yours gets a suffix.
 
@@ -1241,8 +1264,8 @@ async def cli_open_agent(
     `ui.pane.focus` and `ui.pane.getStatus` take through ui_invoke, all of which
     refuse a pane NAME. Keep it if you may want to close or focus what you
     opened; `address` remains the right thing to send to.
-    Returns {ok, name, address, pane_id, kickoff, hint?, advisories?} or
-    {ok: false, error}.
+    Returns {ok, name, address, pane_id, kickoff, hint?, account?, advisories?}
+    or {ok: false, error}.
 
     Passing `pane_id` REOPENS an existing pane instead of creating one: the
     one whose cli_list_targets row says `realized: false` — a restore
@@ -1346,6 +1369,20 @@ async def cli_open_agent(
             "error": 'window_id goes with window "existing"',
             "error_code": "invalid-window",
         }
+    # Checked before anything is prepared or opened: a refused account leaves
+    # no pane and no adopted workspace behind.
+    from agent_team_backend.mcp_server import open_agent_account
+
+    caller_entry = agent_messaging.get(caller.pane_id) if caller.kind == "pane" else None
+    account_choice = await asyncio.to_thread(
+        open_agent_account.resolve,
+        agent_key,
+        account,
+        caller.pane_id if caller.kind == "pane" else "",
+        caller_entry.agent_key if caller_entry else "",
+    )
+    if isinstance(account_choice, dict):
+        return account_choice
     target_workspace = ""
     # A pane caller naming another project: the child goes there, still
     # parented on the caller. Empty when omitted or naming its own workspace,
@@ -1468,6 +1505,11 @@ async def cli_open_agent(
             spawn_payload["effort"] = effort.strip()
         if run_group_id is not None:
             spawn_payload["run_group_id"] = run_group_id
+        # The explicit pin the window hands to spawnPane, the same pin a 📌
+        # pinned pane is spawned with. Absent when the pane runs on the live
+        # login: the payload is then exactly what it was before `account`.
+        if account_choice.pin:
+            spawn_payload["profile_id"] = account_choice.pin
         # The window turns this into the vendor's own resume command; absent
         # means a fresh conversation, which is what every older build does with
         # a key it does not know.
@@ -1605,6 +1647,16 @@ async def cli_open_agent(
         reason = str(kickoff_verdict.get("reason") or "")
         if reason:
             advisories.append(f"kickoff: {reason}")
+    from agent_team_backend.profiles_store import SUPPORTED_AGENT_KEYS
+
+    # Only when an account was asked for or the pane got one: a default call
+    # that opened on the live login answers exactly what it did before.
+    if agent_key in SUPPORTED_AGENT_KEYS and ((account or "").strip() or account_choice.pin):
+        result["account"] = await asyncio.to_thread(
+            open_agent_account.report, account_choice, new_pane_id, agent_key
+        )
+    if account_choice.advisory:
+        advisories.append(account_choice.advisory)
     if advisories:
         result["advisories"] = advisories
     return result
@@ -4078,7 +4130,7 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 
     `target` uses the same addressing as cli_send, and `pane_id` names one
     exact pane instead. Returns {ok, name,
-    agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
+    agent_key, busy, last_activity?, usage?, account?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
     is {type: "agent_active"|"turn_complete", text? (turn_complete only),
     age_seconds}. Right after a Claude turn end reported by its Stop hook,
     `text` is absent until Navide has read the turn from the conversation log
@@ -4096,10 +4148,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     name behind `agent_key`; `model` / `effort` are what cli_open_agent or the
     spawn form asked for — absent means the vendor's own default, and a
     `/model` switch typed inside the CLI is invisible here; `profileId` is
-    the account pin the pane was spawned on ("__default__" = the real home),
-    bookkeeping only — every pane runs on the vendor's live credentials, so
+    the account pin the pane was spawned on ("__default__" = the real home)
+    — for a pane on the vendor's live credentials it is bookkeeping, and
     after an account switch it names the old login while the CLI already runs
-    on the new one; `loginExpired` (true) and `usageLimitUntil` (wall-clock
+    on the new one, so read the top-level `account` for the login a pane runs
+    on now; `loginExpired` (true) and `usageLimitUntil` (wall-clock
     ms) appear only while the CLI has printed its expired-login / hit-your-
     limit message — live detection from the pane's output, not a poll.
 
@@ -4109,9 +4162,21 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     stale, …}. It is a CACHED read — nothing is refreshed on this call, which
     cli_wait_idle polls every second — so `fetchedAt` / `stale` say how old it
     is, and cli_usage or the window's own refresh is where a fresh number
-    comes from. For claude it is the ACTIVE account's snapshot, which is the
-    login every claude pane actually runs on (see `profileId` above). Absent
-    when Navide has no snapshot for that vendor at all.
+    comes from. For claude it is the ACTIVE account's snapshot: the login a
+    pane whose `account.runs_on` is "live" runs on. A pane in an account's
+    own folder spends that account's quota instead, which cli_usage reports
+    under `accounts.claude[<account.profile_id>]`. Absent when Navide has no
+    snapshot for that vendor at all.
+
+    `account` is the account this pane runs on now, for a vendor Navide keeps
+    accounts for: {profile_id, runs_on, live_profile_id, pin}. `runs_on`
+    "account-dir" means it runs inside that claude account's own folder
+    (CLAUDE_CONFIG_DIR), so an account switch does not move it; "live" means
+    it runs on the vendor's live login, `live_profile_id`, and so follows
+    every switch. `pin` is the account the pane is filed under for
+    bookkeeping (the backend's side of `ui.profileId`, "unknown" when none
+    was recorded) and can lag behind a switch. Absent for a vendor without
+    accounts.
 
     `git` is the pane's checkout, in the shape and with the caveats
     cli_list_targets gives it: branch, worktree, dirty count and drift against
@@ -4201,6 +4266,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     usage = await _cached_usage_snapshot(pane.agent_key)
     if usage is not None:
         status["usage"] = usage
+    from agent_team_backend.mcp_server import pane_accounts
+
+    account = await asyncio.to_thread(pane_accounts.pane_status_account, pane.pane_id, pane.agent_key)
+    if account is not None:
+        status["account"] = account
     git = await pane_git(pane.pane_id, pane.workspace_path)
     if git is not None:
         status["git"] = git
@@ -7312,6 +7382,12 @@ async def cli_usage(ctx: Context, agent: str = "") -> dict[str, Any]:
     vendor with quota left. A snapshot with status "unverified" is not an
     error: no standard pane has verified that vendor's credential store yet,
     so nothing is read until the user opens one; its quota is unknown.
+
+    This call only reads what Navide already holds and never contacts a
+    vendor: each snapshot is what the background poll last read (about every
+    `intervalSec` seconds), and its `fetchedAt` says when. A connection error
+    from the call itself (such as EADDRNOTAVAIL) is the link to Navide's
+    backend failing, not the quota being unreadable — call it again.
     """
     try:
         _resolve_caller(ctx)
@@ -11271,8 +11347,8 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
     same key cli_whoami reports as agent_key. Left empty, every vendor comes
     back.
 
-    Returns {ok, accounts, active, defaultNames, paneDefaults}, plus `agent`
-    when a filter was applied.
+    Returns {ok, accounts, active, defaultNames, paneDefaults, panes}, plus
+    `agent` when a filter was applied.
       - `accounts` is every account row the user added: {id, agentKey, name,
         scope?, createdAt}. `scope` is the provider an account of a
         multi-provider CLI is bound to.
@@ -11282,6 +11358,12 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
       - `defaultNames` holds the names the user gave a vendor's Default row.
       - `paneDefaults` maps a vendor to the account new panes are pinned to,
         when the user chose one that differs from `active`.
+      - `panes` is every open pane on this machine of a vendor with accounts:
+        {paneId, name, address, agentKey, profileId, runsOn}. `profileId` is
+        the account the pane runs on now; `runsOn` "account-dir" means inside
+        that claude account's own folder, untouched by an account switch,
+        and "live" means on the vendor's `active` login. cli_get_status'
+        `account` gives the same for one pane.
     """
     try:
         _resolve_caller(ctx)
@@ -11312,6 +11394,9 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
     result["paneDefaults"] = {
         key: value for key, value in (doc.get("paneDefaults") or {}).items() if wanted(key)
     }
+    from agent_team_backend.mcp_server import pane_accounts
+
+    result["panes"] = pane_accounts.pane_rows(doc, agent)
     return result
 
 

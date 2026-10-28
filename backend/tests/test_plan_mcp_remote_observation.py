@@ -258,7 +258,9 @@ async def test_get_status_keeps_the_local_answer_byte_for_byte(
 
     result = await plan_mcp.cli_get_status("worker", _ctx())
 
-    assert set(result) == {"ok", "name", "agent_key", "busy", "last_activity"}
+    # `account` is 0.2.34 P2's addition for every local pane of a vendor with
+    # accounts (codex is one), not something the remote roster brought in.
+    assert set(result) == {"ok", "name", "agent_key", "busy", "last_activity", "account"}
     assert result["busy"] is True
     assert result["last_activity"]["text"] == "all done"
 

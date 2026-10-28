@@ -129,6 +129,7 @@ import {
   renderSlotKickoff,
   MANAGER_READY_SENTINEL,
   MANAGER_STAGE_DONE_SENTINEL,
+  PROTOCOL_EXAMPLE_PROMPTS,
   ASK_START,
   ASK_END,
   REPORT_START,
@@ -3259,7 +3260,7 @@ async function createRequestedPane(
   // Only these three are read, which is what lets a cross-workspace spawn hand
   // in a parent that lives in another workspace, with the child's workspace.
   parent: Pick<ActivePane, 'id' | 'workspacePath' | 'runGroupId'>,
-  req: { agentKey: string; name: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string },
+  req: { agentKey: string; name: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(parent.workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3300,6 +3301,9 @@ async function createRequestedPane(
     spawnedBy: resumeSpawnedBy,
     model: req.model,
     effort: req.effort,
+    // cli_open_agent's `account`: the explicit pin a 📌 pinned pane is spawned
+    // with. Absent when the pane runs on the live login, as before.
+    profileId: req.profileId,
   })
   if (!paneId) return null
   // Persistence only — the pane is already usable, and both responses are
@@ -3331,6 +3335,9 @@ async function createRequestedPane(
     // Must agree with where the pane was actually placed, or the next restore
     // pulls a resumed conversation back under the caller.
     spawned_by: resumeSpawnedBy,
+    // A pinned pane's record keeps its pin, as a rebuild's does; without it the
+    // backend files the pane under the live login and a restore reopens it there.
+    ...(req.profileId ? { profile_id: req.profileId } : {}),
   })
   void sendQuiet('project.rename_pane', {
     workspace_path: parent.workspacePath,
@@ -3374,7 +3381,7 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
  *  would never actually be injected. */
 async function createStandaloneRequestedPane(
   workspacePath: string,
-  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string },
+  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3410,6 +3417,8 @@ async function createStandaloneRequestedPane(
     spawnedBy: resumeSpawnedBy || undefined,
     model: req.model,
     effort: req.effort,
+    // Same as createRequestedPane: cli_open_agent's explicit account pin.
+    profileId: req.profileId,
   })
   if (!paneId) return null
   void sendQuiet<ProjectPayload>('manual_pane.spawn', {
@@ -3433,6 +3442,7 @@ async function createStandaloneRequestedPane(
     // Written so the record agrees with the tree; a failed resume that wrote
     // '' here would otherwise become the "last position" of the conversation.
     spawned_by: resumeSpawnedBy,
+    ...(req.profileId ? { profile_id: req.profileId } : {}),
   })
   void sendQuiet('project.rename_pane', {
     workspace_path: workspacePath,
@@ -3829,6 +3839,9 @@ async function handleMcpSpawnRequest(ev: {
   cross_workspace?: boolean
   /** The requester's `<folder>/<pane>` address, for its report. */
   parent_address?: string
+  /** cli_open_agent's `account`, resolved by the backend to an explicit pin.
+   *  Absent when the pane runs on the live login. */
+  profile_id?: string
 }): Promise<void> {
   const standalone = !!ev.target_workspace
   const cross = !!ev.cross_workspace
@@ -3899,7 +3912,7 @@ async function handleMcpSpawnRequest(ev: {
   try {
     // The gate decides identity (name collisions, model/effort); the session to
     // resume is not its business, so it rides alongside rather than through it.
-    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id }
+    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id, profileId: (ev.profile_id ?? '').trim() || undefined }
     paneId = cross
       ? await createRequestedPane(
           { id: ev.requester_pane_id, workspacePath: ev.target_workspace as string, runGroupId: undefined },
@@ -15290,6 +15303,9 @@ interface StageWatcher {
    *  drops the buffer's front without telling anyone — comparing this pair
    *  with the current one says how far the whole coordinate system moved. */
   bufferAnchor: BufferObservation
+  /** Timestamp + text of the turn whose questions judgeTurnText last surfaced,
+   *  so a re-delivered turn_complete for the same turn never asks twice. */
+  turnQuestionKey: string
 }
 
 // Keyed by paneId so multiple parallel agents in the same stage each get
@@ -15724,20 +15740,45 @@ function judgeTurnText(paneId: string, text: string, timestamp: string): void {
   // none. Judging would fall back to stale content, so never proceed.
   if (!text) return
   const stage = stagesApi.stages.value[watcher.stageIndex]
-  if (!stage || !stage.sentinel) return
+  if (!stage) return
   // Freshness: a replayed historical turn_complete (backend restart re-parses
   // the whole log) carries its original, older CLI timestamp. Reject it so a
   // prior turn's sentinel can't complete a freshly armed stage at kickoff.
   const armedAt = paneArmedAt.get(paneId) ?? watcher.armedAt
   const eventMs = timestamp ? Date.parse(timestamp) : NaN
   if (!Number.isNaN(eventMs) && eventMs < armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS) return
-  // Question wins: if this turn also asked a real question, defer to the buffer
-  // question path instead of completing the stage.
+  // Question wins: if this turn also asked a real question, never complete the
+  // stage on it. For a turn-text vendor this is also where the question is
+  // surfaced: its buffer can hold the echoed kickoff with the protocol's own
+  // QUESTION examples (#733), so the buffer question scan skips it.
   if (stage.allowQuestions) {
-    const blocks = findConsecutiveQuestionBlocks(text, 0)
-    if (blocks.some((b) => !QUESTION_PLACEHOLDER_RE.test(b.prompt.trim()))) return
+    const realBlocks = findConsecutiveQuestionBlocks(text, 0).filter(
+      (b) => !QUESTION_PLACEHOLDER_RE.test(b.prompt.trim())
+    )
+    if (realBlocks.length > 0) {
+      const paneMeta = panes.value.find((p) => p.id === paneId)
+      const turnKey = `${timestamp}\n${text}`
+      if (
+        TURN_TEXT_VENDORS.has(paneMeta?.agentKey ?? '') &&
+        !watcher.waitingForAnswer &&
+        watcher.turnQuestionKey !== turnKey
+      ) {
+        watcher.turnQuestionKey = turnKey
+        watcher.waitingForAnswer = true
+        enqueueQuestion({
+          paneId,
+          stageIndex: watcher.stageIndex,
+          questions: realBlocks.map((b) => ({ prompt: b.prompt, type: b.type, options: b.options })),
+          agentLabel: paneMeta?.agentLabel ?? 'Agent',
+          stageTitle: stage.title,
+          slotLabel: paneMeta?.slotLabel ?? ''
+        })
+        pipelineLog(`Stage ${stage.id} ❓ agent asked ${realBlocks.length} question(s) (turn text)`)
+      }
+      return
+    }
   }
-  if (turnEndsWithSentinel(text, stage.sentinel)) {
+  if (stage.sentinel && turnEndsWithSentinel(text, stage.sentinel)) {
     cancelWatcher(paneId)
     pipelineLog(`Stage ${stage.id} ✓ sentinel detected (turn text)`)
     onStageSlotCompleted(watcher.stageIndex, paneId, 'sentinel')
@@ -15887,6 +15928,9 @@ backend.on('agent_spawn.request', (raw) => {
     run_group_id?: string
     cross_workspace?: boolean
     parent_address?: string
+    // cli_open_agent's account pin; dropped here, the pane would open on the
+    // live login while the tool reports the account it asked for.
+    profile_id?: string
   }
   // An external caller (no requesting pane) addresses this by target_workspace
   // instead — accept the event as long as one of the two identifies an owner.
@@ -15912,6 +15956,7 @@ backend.on('agent_spawn.request', (raw) => {
     run_group_id: ev.run_group_id ?? undefined,
     cross_workspace: ev.cross_workspace === true,
     parent_address: ev.parent_address ?? '',
+    profile_id: ev.profile_id ?? '',
   })
 })
 
@@ -18020,7 +18065,8 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
     bufferAnchor: {
       len: ((pane.cleanBuffer as unknown as string) ?? '').length,
       bytesSeen: paneCleanBytes(paneId)
-    }
+    },
+    turnQuestionKey: ''
   }
   watchers.set(paneId, watcher)
   paneArmedAt.set(paneId, watcher.armedAt)
@@ -18100,8 +18146,11 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
     // turn, the question is surfaced instead of silently advancing the stage.
     // Only applies to allowQuestions stages (currently Stage 01); other stages
     // have no question detection and the sentinel remains fully unconditional.
-    if (stage.allowQuestions && !watcher.waitingForAnswer && buf.length > watcher.scanFrom && !agentGenerating) {
-      const preBlocks = findConsecutiveQuestionBlocks(buf, watcher.scanFrom)
+    // Turn-text vendors (claude/codex) get their questions from judgeTurnText
+    // instead: the buffer can hold the echoed kickoff's QUESTION examples (#733).
+    const turnTextVendor = TURN_TEXT_VENDORS.has(panes.value.find((p) => p.id === paneId)?.agentKey ?? '')
+    if (stage.allowQuestions && !turnTextVendor && !watcher.waitingForAnswer && buf.length > watcher.scanFrom && !agentGenerating) {
+      const preBlocks = findConsecutiveQuestionBlocks(buf, watcher.scanFrom, undefined, PROTOCOL_EXAMPLE_PROMPTS)
       const realPreBlocks = preBlocks.filter((b) => !QUESTION_PLACEHOLDER_RE.test(b.prompt.trim()))
       if (realPreBlocks.length > 0) {
         watcher.waitingForAnswer = true
@@ -18170,6 +18219,7 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
           // on the next stable tick instead of erroneously nudging.
           const hasPendingQuestion =
             stage.allowQuestions &&
+            !turnTextVendor &&
             buf.indexOf('---QUESTION-START---', watcher.scanFrom) >= 0 &&
             buf.indexOf('---QUESTION-END---', watcher.scanFrom) >= 0
           if (hasPendingQuestion) {
@@ -18189,8 +18239,8 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
       //    (stage.allowQuestions === true, currently only Stage 01).
       //    Later stages run autonomously and must not pause for user input.
       //    Skipped when agentGenerating so we never parse a partial block.
-      if (stage.allowQuestions && buf.length > watcher.scanFrom && !agentGenerating) {
-        const blocks = findConsecutiveQuestionBlocks(buf, watcher.scanFrom)
+      if (stage.allowQuestions && !turnTextVendor && buf.length > watcher.scanFrom && !agentGenerating) {
+        const blocks = findConsecutiveQuestionBlocks(buf, watcher.scanFrom, undefined, PROTOCOL_EXAMPLE_PROMPTS)
         // Drop any block whose prompt is still a template placeholder (e.g.
         // "<你的問題>", "<your question>"). The agent copied the INTERACTION_PROTOCOL
         // example verbatim instead of filling in real content.
