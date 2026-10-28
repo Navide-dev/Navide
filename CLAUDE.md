@@ -17,6 +17,7 @@ This file is a router — read the referenced file BEFORE doing the matching wor
 | Inter-CLI messaging: the bare-line protocol, handles, delivery rules | `docs/en-US/inter-cli-messaging.md` |
 | Editor, diff, or plan surfaces | `docs/en-US/editor-design.md` |
 | Keyboard shortcuts and the key resolver | `docs/en-US/keybindings.md` |
+| Any UI check or screenshot: layout fixes, before/after pairs, design reviews | `docs/en-US/ui-verification.md` |
 
 Read routed files on demand, not all up front.
 
@@ -41,7 +42,8 @@ in-repo docs above.
 3. **No self-initiated commits** — the user decides when to commit, unless
    they explicitly authorized committing for the task.
 4. **No UI automation** (cliclick/screencapture/AppleScript) — the user tests
-   UI manually.
+   UI manually. Agents may check the main window only through dev web mode
+   against its isolated backend (`docs/en-US/ui-verification.md`).
 5. **Giant files** — any file over ~2K lines: Grep tool to locate → Read with
    offset/limit → batch edits through one subagent. Never whole-file Read,
    never bash/python inline search. The largest are `src/renderer/src/App.vue`
