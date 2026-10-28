@@ -1,3 +1,5 @@
+import { splitTerminalLinkSuffix } from './terminalLinkInteraction'
+
 export interface PickerItem {
   abs: string
   name: string
@@ -97,6 +99,10 @@ export function createTerminalFilePicker(options: TerminalFilePickerOptions): Te
     let selectedIdx = 0
     let debounceTimer: ReturnType<typeof setTimeout>
     let searchPending = true
+    // A line suffix typed or pasted into the box (`path:12`, `path:12-30`)
+    // overrides the request's line; it is never part of the search query.
+    let typedLine: number | undefined
+    const pickLine = (): number | undefined => typedLine ?? request.lineNum
 
     let rowEls: HTMLElement[] = []
     const SELECTED_BG = 'rgba(56,139,253,0.2)'
@@ -135,7 +141,7 @@ export function createTerminalFilePicker(options: TerminalFilePickerOptions): Te
         row.addEventListener('mousedown', (e) => {
           e.preventDefault()
           close('select')
-          options.onPick(item, request.lineNum, e)
+          options.onPick(item, pickLine(), e)
         })
         rowEls.push(row)
         itemList.appendChild(row)
@@ -155,8 +161,10 @@ export function createTerminalFilePicker(options: TerminalFilePickerOptions): Te
 
     async function doSearch(q: string): Promise<void> {
       searchPending = true
+      const { filepath, line } = splitTerminalLinkSuffix(q.trim())
+      typedLine = line
       let items: PickerItem[] = []
-      try { items = await options.query(q) } catch { items = [] }
+      try { items = await options.query(filepath) } catch { items = [] }
       currentItems = mergePreferredPath(items, request.preferredAbsPath, q === request.initialQuery)
       searchPending = false
       selectedIdx = 0
@@ -178,7 +186,7 @@ export function createTerminalFilePicker(options: TerminalFilePickerOptions): Te
       } else if (e.key === 'Enter') {
         e.preventDefault()
         const item = currentItems[selectedIdx]
-        if (item) { close('select'); options.onPick(item, request.lineNum, e) }
+        if (item) { close('select'); options.onPick(item, pickLine(), e) }
       }
     })
 
