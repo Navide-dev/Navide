@@ -8207,8 +8207,12 @@
         "dir-sign-in-hint": "Inicia la sesión de esta cuenta una vez dentro de su propia carpeta para que su cuota se pueda leer en directo mientras está aparcada. El navegador te pide que vuelvas a autorizar; usa el mismo correo electrónico.",
         "dir-email-mismatch": "Su propia carpeta tiene la sesión iniciada como {dirEmail}, no como {expected}. La cuota de esta tarjeta es la de {dirEmail}.",
         "default-hint": "Tus credenciales de inicio de sesión originales",
-        "is-default": "Por defecto",
-        "set-default": "Establecer como predeterminada",
+        "default-collapsed": "Inicio de sesión original (fuera de Navide): sin sesión iniciada",
+        "default-sign-in-title": "¿Cambiar al inicio de sesión original?",
+        "default-sign-in-body": "Al iniciar sesión aquí, {agent} cambia primero al inicio de sesión original. No contiene ninguna sesión, así que se borra el inicio de sesión activo ({current}): esa cuenta sigue guardada en su propia tarjeta y puedes volver a ella. Los nuevos panes de {agent} no tendrán sesión iniciada hasta que termine este inicio de sesión.",
+        "default-sign-in-confirm": "Cambiar e iniciar sesión",
+        "is-default": "Activa",
+        "set-default": "Cambiar a esta cuenta",
         "switching": "Cambiando…",
         "not-signed-in": "Sin sesión iniciada",
         "rename": "Cambiar nombre",
@@ -9506,7 +9510,7 @@
     "failed": "No se pudo volver a conectar esa conversación: puede que su transcripción ya no exista"
   },
   "cli-account": {
-    "default": "Por defecto",
+    "default": "Inicio de sesión original",
     "switch-title": "Cambiar de cuenta",
     "swap-failed": "No se pudo cambiar de cuenta: la cuenta anterior sigue activa.",
     "panes-running": "{count} pane de CLI en ejecución está usando esta cuenta: ciérralo antes de cambiar. | {count} panes de CLI en ejecución están usando esta cuenta: ciérralos antes de cambiar.",

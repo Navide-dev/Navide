@@ -8207,8 +8207,12 @@
         "dir-sign-in-hint": "在这个账号自己的文件夹登录一次，停放时也能实时读取额度。浏览器会再请你授权一次，请使用同一个 email。",
         "dir-email-mismatch": "账号文件夹登录的是 {dirEmail}，不是 {expected}。这张卡片上的额度属于 {dirEmail}。",
         "default-hint": "你原本的登录凭据",
-        "is-default": "默认",
-        "set-default": "设为默认",
+        "default-collapsed": "原始登录（Navide 外）：尚未登录",
+        "default-sign-in-title": "切换到原始登录？",
+        "default-sign-in-body": "在这里登录会先把 {agent} 切换到原始登录。原始登录没有保存任何登录，所以当前的在线登录（{current}）会被清除；那个账号仍保存在它自己的卡片上，之后可以再切换回去。这次登录完成前，新开的 {agent} pane 都不会处于登录状态。",
+        "default-sign-in-confirm": "切换并登录",
+        "is-default": "使用中",
+        "set-default": "切换到此账号",
         "switching": "切换中…",
         "not-signed-in": "尚未登录",
         "rename": "重命名",
@@ -9506,7 +9510,7 @@
     "failed": "无法接回这段对话，其历史记录可能已不存在"
   },
   "cli-account": {
-    "default": "默认",
+    "default": "原始登录",
     "switch-title": "切换账号",
     "swap-failed": "账号切换失败，仍使用原本的账号。",
     "panes-running": "有 {count} 个运行中的 CLI pane 正在使用此账号，请先关闭再切换。",

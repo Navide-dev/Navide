@@ -8207,8 +8207,12 @@
         "dir-sign-in-hint": "Dieses Konto einmal in seinem eigenen Ordner anmelden, damit sein Kontingent auch im Ruhezustand live gelesen werden kann. Der Browser fragt erneut nach einer Autorisierung; verwenden Sie dieselbe E-Mail-Adresse.",
         "dir-email-mismatch": "Der eigene Ordner ist als {dirEmail} angemeldet, nicht als {expected}. Das Kontingent auf dieser Karte gehört zu {dirEmail}.",
         "default-hint": "Ihre ursprünglichen Anmeldeinformationen",
-        "is-default": "Standard",
-        "set-default": "Als Standard festlegen",
+        "default-collapsed": "Ursprüngliche Anmeldung (außerhalb von Navide): nicht angemeldet",
+        "default-sign-in-title": "Zur ursprünglichen Anmeldung wechseln?",
+        "default-sign-in-body": "Wenn Sie sich hier anmelden, wechselt {agent} zuerst zur ursprünglichen Anmeldung. Sie enthält keine Anmeldung, daher wird die aktive Anmeldung ({current}) entfernt: Dieses Konto bleibt auf seiner eigenen Karte gespeichert, und Sie können zurückwechseln. Neue panes von {agent} sind erst angemeldet, wenn diese Anmeldung abgeschlossen ist.",
+        "default-sign-in-confirm": "Wechseln und anmelden",
+        "is-default": "Aktiv",
+        "set-default": "Zu diesem Konto wechseln",
         "switching": "Wird gewechselt …",
         "not-signed-in": "Nicht angemeldet",
         "rename": "Umbenennen",
@@ -9506,7 +9510,7 @@
     "failed": "Diese Unterhaltung konnte nicht wieder verbunden werden – ihr Transkript existiert möglicherweise nicht mehr"
   },
   "cli-account": {
-    "default": "Standard",
+    "default": "Ursprüngliche Anmeldung",
     "switch-title": "Konto wechseln",
     "swap-failed": "Kontowechsel fehlgeschlagen – das vorherige Konto ist weiterhin aktiv.",
     "panes-running": "{count} laufendes CLI-pane verwendet dieses Konto – schließen Sie es vor dem Wechsel. | {count} laufende CLI-panes verwenden dieses Konto – schließen Sie sie vor dem Wechsel.",
