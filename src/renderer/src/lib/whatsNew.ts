@@ -121,6 +121,46 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.33',
+    title: {
+      'zh-TW': '從聊天喚醒 pane 會接回原本的對話，聊天文字支援 11 種語言',
+      'en-US': 'Waking a Pane from Chat Brings Back Its Conversation, in All 11 Languages',
+      'ja-JP': 'チャットから pane を起こすと元の会話に戻り、チャットの文字は 11 言語に対応',
+    },
+    highlights: [
+      {
+        'zh-TW': '頻道：在 Telegram 等聊天軟體喚醒離線的 pane 時，Navide 會直接把 pane 開回原本的對話，不再等 30 秒後回報「喚醒失敗」；八個聊天平台都適用。聊天裡的文字（喚醒按鈕與提示、快速選單、檔案通知、Telegram 的指令選單）現在跟著 Navide 的介面語言，11 種語言都有；Prompt 技能和技能的名稱也和設定頁一致。Mattermost 上直接輸入 wake 就能喚醒。',
+        'en-US': 'Channels: waking an offline pane from Telegram or another chat app now opens the pane onto its conversation, instead of waiting 30 seconds and answering that the wake failed, on all eight chat platforms. Chat text (the wake button and hint, the quick menu, file notices and Telegram’s command menu) now follows Navide’s interface language, in all 11 languages, and names Prompts and Skills as the Settings pages do. On Mattermost, typing wake wakes the pane.',
+        'ja-JP': 'チャンネル：Telegram などのチャットアプリからオフラインの pane を起こすと、30 秒待って「起こせませんでした」と返すのではなく、pane を元の会話のまま開くようになりました。8 つのチャットプラットフォームすべてで同じです。チャットの文字（起こすボタンと案内、クイックメニュー、ファイルのお知らせ、Telegram のコマンドメニュー）は Navide の表示言語に合わせて 11 言語で表示され、プロンプトとスキルの名前も設定ページと同じになりました。Mattermost では wake と入力するだけで起こせます。',
+      },
+      {
+        'zh-TW': '頻道：轉到聊天的權限確認，不會再因為 Claude Code 自動拒絕的倒數秒數而每秒重送一次，導致回覆 yes 也核准不了。Navide Guard 一定會擋下的確認，聊天裡只提供「拒絕」，並說明這個動作要在電腦前允許。',
+        'en-US': 'Channels: a permission prompt relayed to chat is no longer sent again every second as Claude Code’s auto-deny countdown ticks, which kept a yes reply from approving it. A prompt Navide Guard will always refuse from chat now offers only 拒絕 (Deny) and says it must be allowed at the computer.',
+        'ja-JP': 'チャンネル：チャットに転送した権限の確認が、Claude Code の自動拒否のカウントダウンで毎秒送り直され、yes と返信しても承認できなくなることはなくなりました。Navide Guard が必ず拒否する確認は、チャットでは「拒絕」（拒否）だけを表示し、パソコンで許可する必要があることを伝えます。',
+      },
+      {
+        'zh-TW': '第一次啟動：設定精靈拿掉了「環境」步驟（Homebrew、Node、pnpm、Python、uv），在 Linux 上也能直接進入 App。安裝 CLI 時會先說明並依序裝好它需要的東西。Ollama 的安裝、啟動和選第一個模型移到「設定 → Analyzer」；需要 Node.js 的 MCP 伺服器會標示「需要 Node.js」，並有「安裝 Node.js」按鈕。',
+        'en-US': 'First run: the setup wizard no longer has its Environment step (Homebrew, Node, pnpm, Python, uv), so you can open the app on Linux too. Installing a CLI says what it installs first and installs it in order. Installing Ollama, starting it and picking a first model move to Settings → Analyzer, and an MCP server that runs on Node.js is marked Needs Node.js, with an Install Node.js button.',
+        'ja-JP': '初回起動：セットアップウィザードから「環境」のステップ（Homebrew、Node、pnpm、Python、uv）をなくし、Linux でもそのままアプリを開けるようになりました。CLI をインストールするときは、先に必要なものを案内して順番にインストールします。Ollama のインストール、起動、最初のモデルの選択は「設定 → Analyzer」に移りました。Node.js で動く MCP サーバーには「Node.js が必要」と表示され、「Node.js をインストール」ボタンがあります。',
+      },
+      {
+        'zh-TW': 'Pipeline：停在閘門等你核准的執行，側欄的執行卡會顯示正在哪個閘門等待，並提供「核准並繼續」和「退回修改」；等待時「下一步」會停用並說明原因。在 Pipeline 編輯器輸入任務，就能按「▶ 執行流程」直接執行；「執行紀錄」對已結束的執行多了「重設」。',
+        'en-US': 'Pipelines: a run waiting at a gate for your approval now says so on the sidebar’s run card, naming the gate, with Approve and Continue and Send Back; Next is disabled while it waits and says why. In the pipeline editor, type a task and press ▶ Run Pipeline to run it there, and Executions offers Reset for a finished run.',
+        'ja-JP': 'パイプライン：ゲートで承認を待っている実行は、サイドバーの実行カードにどのゲートで待っているかを表示し、「承認して続行」と「差し戻す」を出すようになりました。待っている間は「次へ」が無効になり、理由を表示します。パイプラインエディターでタスクを入力して「▶ パイプラインを実行」を押せばその場で実行でき、「実行履歴」では終わった実行を「リセット」できます。',
+      },
+      {
+        'zh-TW': '帳號：「設定 → CLI 帳號」的第一張卡改名為「原始登入」（你在 Navide 外原本的登入），正在使用的帳號標示「生效中」，「設為預設」改為「切換到此帳號」。原始登入是空的時，不再提供會清掉目前登入的切換按鈕；按「登入」之前會先說明會發生什麼。',
+        'en-US': 'Accounts: the first card in Settings → CLI Accounts is now named Original login (the login you had outside Navide), the account in use is marked Active, and Set as Default reads Switch to This Account. While Original login is empty, it no longer offers a switch that would clear your current login, and Sign In says what happens before it goes ahead.',
+        'ja-JP': 'アカウント：「設定 → CLI アカウント」の最初のカードは「元のログイン」（Navide の外で使っていたログイン）という名前になり、使用中のアカウントには「有効」と表示され、「既定に設定」は「このアカウントに切り替え」になりました。元のログインが空のときは、今のログインを消してしまう切り替えボタンを表示せず、「ログイン」を押すと先に何が起きるかを説明します。',
+      },
+      {
+        'zh-TW': '檔案選擇器：把 agent 給的位置（例如 app/Services/OrderService.php:137-158）貼進來，現在找得到檔案並開在第 137 行，不再顯示「No files found」。含資料夾的搜尋也找得到，完全符合的排在前面；@file 自動完成也一樣。',
+        'en-US': 'File picker: pasting a location an agent gave you, such as app/Services/OrderService.php:137-158, now finds the file and opens it at line 137 instead of showing No files found. A search that includes folders finds the file too, with exact matches first, and so does @file autocomplete.',
+        'ja-JP': 'ファイルピッカー：agent が示した場所（app/Services/OrderService.php:137-158 など）を貼り付けると、「No files found」ではなく、ファイルを見つけて 137 行目で開くようになりました。フォルダーを含めて検索しても見つかり、完全に一致するものが先に並びます。@file の補完も同じです。',
+      },
+    ],
+  },
+  {
     version: '0.2.32',
     title: {
       'zh-TW': '金鑰只留在本機：MCP 同步只同步安裝，Agent 資產的修改都能復原',
