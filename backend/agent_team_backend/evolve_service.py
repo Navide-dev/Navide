@@ -105,12 +105,21 @@ DEFAULTS: dict[str, Any] = {
     #: How often each proposal source runs (S4): "daily", or "weekly" once
     #: Navide lowered it (only the user raises it again).
     "retro_freq": {"failures": "daily", "tools": "daily", "corrections": "daily"},
+    #: S5a: start a run early when one signature of this workspace's error
+    #: ledger appears burst_count times within burst_minutes (off by default).
+    "trigger_burst": False,
+    "burst_minutes": 30,
+    "burst_count": 10,
+    "burst_max_per_day": 1,
 }
 _INT_BOUNDS = {
     "token_budget": (1_000, 10_000_000),
     "max_runs_per_day": (1, 10),
     "max_fixes": (0, 10),
     "max_minutes": (10, 600),
+    "burst_minutes": (5, 1440),
+    "burst_count": (3, 1000),
+    "burst_max_per_day": (1, 10),
 }
 _AT_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 _PANE_ID_RE = re.compile(r"^[A-Za-z0-9._:\-]{1,128}$")
@@ -150,6 +159,11 @@ EFFECT_DAYS = 7
 #: Fewer occurrences than this, before and after together, are not judged.
 EFFECT_MIN = 3
 _CADENCE_KEY = "evolve_cadence"
+_BURST_KEY = "evolve_burst"
+#: A signature that started an early run does not start another for this long.
+BURST_QUIET_MS = 24 * 3_600_000
+#: The error ledger is read for bursts at most this often per workspace.
+BURST_CHECK_MS = 120_000
 _PATH_RE = re.compile(r"(?:[A-Za-z]:)?(?:[\\/][^\s\\/'\"()]+)+[\\/]?")
 _STAGE_STATUS = {
     "draft": "proposed", "in-review": "proposed", "approved": "approved",
@@ -212,7 +226,7 @@ def _local_tz() -> str:
 
 def _field(key: str, value: Any) -> Any:
     """One settings field, validated; raises :class:`SettingsInvalid`."""
-    if key in ("enabled", "retro_tools", "retro_corrections"):
+    if key in ("enabled", "retro_tools", "retro_corrections", "trigger_burst"):
         if not isinstance(value, bool):
             raise SettingsInvalid(f"{key} must be true or false")
     elif key == "at":
@@ -570,6 +584,18 @@ class _Store:
         if db is not None:
             db.kv_set(_CADENCE_KEY, cadence, now=int(time.time()))
 
+    def bursts(self, workspace: str) -> dict[str, int]:
+        """Signature → when it last started an early run (ms)."""
+        db = self.db(workspace, create=False)
+        stored = db.kv_get(_BURST_KEY) if db is not None else None
+        fired = stored.get("fired") if isinstance(stored, dict) else None
+        return {k: v for k, v in fired.items() if isinstance(v, int)} if isinstance(fired, dict) else {}
+
+    def save_bursts(self, workspace: str, fired: dict[str, int]) -> None:
+        db = self.db(workspace, create=True)
+        if db is not None:
+            db.kv_set(_BURST_KEY, {"fired": fired}, now=int(time.time()))
+
     def proposals(self, workspace: str, since_ms: int = 0) -> list[dict[str, Any]]:
         db = self.db(workspace, create=False)
         if db is None:
@@ -793,6 +819,8 @@ class EvolveService:
         #: run id → (ms the run's pane was first seen idle, nudges sent). In
         #: memory only: a restart at worst grants a run another round of nudges.
         self._idle: dict[str, tuple[int | None, int]] = {}
+        #: workspace → when its error ledger was last read for a burst (S5a).
+        self._burst_checked: dict[str, int] = {}
         #: run id → its task, for a run whose kickoff could not be confirmed and
         #: whose pane has shown no activity yet. In memory only, like _idle.
         self._unconfirmed: dict[str, str] = {}
@@ -1067,7 +1095,7 @@ class EvolveService:
         """The scheduler fired (or the user asked): start a run; answer a run outcome."""
         return await self.start_run(workspace, "manual" if manual else "schedule")
 
-    async def start_run(self, workspace: str, trigger: str) -> dict[str, Any]:
+    async def start_run(self, workspace: str, trigger: str, burst: list[str] | None = None) -> dict[str, Any]:
         workspace = _canonical(workspace)
         if not os.path.isdir(workspace):
             await self._notice(workspace, "failed", {"status": "skipped", "reason": "workspace_gone"})
@@ -1095,10 +1123,11 @@ class EvolveService:
                 return {"status": "skipped", "reason": refusal["reason"], "detail": refusal["detail"]}
             # Claimed before anything is opened: this row is the reentry lock.
             await asyncio.to_thread(self.store.insert, workspace, {**run, "token_hash": _token_hash(token)})
-        return await self._launch(workspace, settings, run, token)
+        return await self._launch(workspace, settings, run, token, burst)
 
     async def _launch(
-        self, workspace: str, settings: dict[str, Any], run: dict[str, Any], token: str
+        self, workspace: str, settings: dict[str, Any], run: dict[str, Any], token: str,
+        burst: list[str] | None = None,
     ) -> dict[str, Any]:
         git = await self.host.git_info(workspace)
         await self._sync_proposals(workspace, git)
@@ -1119,6 +1148,8 @@ class EvolveService:
             "retro_tools": settings["retro_tools"], "retro_corrections": settings["retro_corrections"],
         }
         await self._cadence_into(workspace, settings, render)
+        if burst:
+            render["burst_data"] = burst
         since = self.now_ms() - RETRO_DAYS * 86_400_000
         try:
             if render["retro_tools"]:
@@ -1305,6 +1336,43 @@ class EvolveService:
                 )
                 if settings.get("enabled"):
                     self._spawn(self.start_run(workspace, "catch_up"))
+            if settings.get("enabled") and settings.get("trigger_burst"):
+                try:
+                    await self._check_burst(workspace, settings, now)
+                except Exception as err:  # noqa: BLE001 — a burst check must never stop the watchdog
+                    log.warning("evolve: burst check failed: %s", err)
+
+    async def _check_burst(self, workspace: str, settings: dict[str, Any], now: int) -> None:
+        """Start an early run when one signature of this workspace's error
+        ledger bursts (S5a), within the usual gate and a daily limit of its own."""
+        if now - self._burst_checked.get(workspace, 0) < BURST_CHECK_MS:
+            return
+        self._burst_checked[workspace] = now
+        window = int(settings["burst_minutes"]) * 60_000
+        rows, _oldest = await asyncio.to_thread(self.host.error_rows, workspace)
+        counts: dict[str, int] = {}
+        for row in rows:
+            at = _ts_ms(row.get("ts"))
+            if at is not None and now - window <= at <= now and (sig := error_signature(row)):
+                counts[sig] = counts.get(sig, 0) + 1
+        fired = await asyncio.to_thread(self.store.bursts, workspace)
+        today = sum(1 for at in fired.values() if at >= self._day_start_ms(settings))
+        if today >= int(settings["burst_max_per_day"]):
+            return
+        hot = sorted(((n, sig) for sig, n in counts.items() if n >= int(settings["burst_count"])
+                      and now - fired.get(sig, 0) >= BURST_QUIET_MS), reverse=True)
+        if not hot:
+            return
+        # Refused here rather than by start_run: a busy or spent workspace
+        # would otherwise record a skipped row every check until it frees up.
+        if await self._gate(workspace, settings) is not None:
+            return
+        count, sig = hot[0]
+        answer = await self.start_run(workspace, "burst", [
+            f'signature "{_label(sig, 200)}": {count} times in the last {settings["burst_minutes"]} minutes'])
+        if answer.get("status") == "ok":
+            fired[sig] = now
+            await asyncio.to_thread(self.store.save_bursts, workspace, fired)
 
     async def _reclaim_timed_out(self, workspace: str, now: int) -> None:
         """Reclaim the pane of a run that timed out and never reported, once

@@ -142,6 +142,13 @@ const errors = computed(() => {
   range('max_runs_per_day')
   range('max_fixes')
   range('max_minutes')
+  if (d.trigger_burst) {
+    for (const key of ['burst_minutes', 'burst_count', 'burst_max_per_day'] as const) {
+      const [min, max] = EVOLVE_BOUNDS[key]
+      const v = d[key]
+      if (!Number.isInteger(v) || (v as number) < min || (v as number) > max) out[key] = t('evolve.error.range', { min, max })
+    }
+  }
   if (!Number.isInteger(d.token_budget) || d.token_budget <= 0) out.token_budget = t('evolve.error.budget')
   if (d.extra.length > EVOLVE_BOUNDS.extra) out.extra = t('evolve.error.extra', { max: EVOLVE_BOUNDS.extra })
   if (d.mode === 'pane' && !d.pane_id) out.pane_id = t('evolve.error.pane')
@@ -555,6 +562,38 @@ async function openProposal(rel: string): Promise<void> {
                 <span>{{ t('evolve.field.scope-propose') }}</span>
               </label>
               <span class="ev-muted">{{ t('evolve.field.scope-always-propose') }}</span>
+            </div>
+          </div>
+
+          <!-- Early run on a burst (S5a) -->
+          <div v-if="draft.trigger_burst !== undefined" class="ev-row" data-test="burst">
+            <span class="ev-k">{{ t('evolve.field.burst') }}</span>
+            <div class="ev-v ev-col">
+              <label class="ev-radio">
+                <input v-model="draft.trigger_burst" type="checkbox" data-field="trigger_burst" />
+                <span>{{ t('evolve.field.burst-on') }}</span>
+              </label>
+              <div class="ev-budget">
+                <label>
+                  <input v-model.number="draft.burst_count" class="nv-input ev-num-s" data-field="burst_count" type="number"
+                    :min="EVOLVE_BOUNDS.burst_count[0]" :max="EVOLVE_BOUNDS.burst_count[1]" />
+                  <span class="ev-unit">{{ t('evolve.field.burst-count') }}</span>
+                </label>
+                <label>
+                  <input v-model.number="draft.burst_minutes" class="nv-input ev-num-s" data-field="burst_minutes" type="number"
+                    :min="EVOLVE_BOUNDS.burst_minutes[0]" :max="EVOLVE_BOUNDS.burst_minutes[1]" />
+                  <span class="ev-unit">{{ t('evolve.field.burst-minutes') }}</span>
+                </label>
+                <label>
+                  <input v-model.number="draft.burst_max_per_day" class="nv-input ev-num-s" data-field="burst_max_per_day" type="number"
+                    :min="EVOLVE_BOUNDS.burst_max_per_day[0]" :max="EVOLVE_BOUNDS.burst_max_per_day[1]" />
+                  <span class="ev-unit">{{ t('evolve.field.burst-per-day') }}</span>
+                </label>
+                <span v-for="k in (['burst_count', 'burst_minutes', 'burst_max_per_day'] as const)" v-show="errors[k]" :key="k" class="ev-err" :data-error="k">
+                  {{ errors[k] }}
+                </span>
+              </div>
+              <span class="ev-muted">{{ t('evolve.field.burst-hint') }}</span>
             </div>
           </div>
 

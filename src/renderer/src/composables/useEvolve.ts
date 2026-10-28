@@ -42,6 +42,13 @@ export interface EvolveSettings {
   /** S4: how often each proposal source runs. Navide only ever lowers one to
    *  weekly; raising it back is the user's. Optional for an older backend. */
   retro_freq?: Record<EvolveSource, EvolveFreq>
+  /** S5a: start a run early when one error signature appears burst_count
+   *  times within burst_minutes; at most burst_max_per_day such runs. Off by
+   *  default. Optional for an older backend. */
+  trigger_burst?: boolean
+  burst_minutes?: number
+  burst_count?: number
+  burst_max_per_day?: number
   /** Read-only (v1.1): a missed run is waiting for the workspace to open. */
   pending_catch_up?: boolean
 }
@@ -50,7 +57,7 @@ export type EvolveRunStatus = 'running' | 'ok' | 'error' | 'timeout' | 'skipped'
 
 export interface EvolveRun {
   id: string
-  trigger: 'schedule' | 'manual' | 'catch_up'
+  trigger: 'schedule' | 'manual' | 'catch_up' | 'burst'
   status: EvolveRunStatus
   reason?: string | null
   started_at: number
@@ -136,6 +143,9 @@ export const EVOLVE_BOUNDS = {
   max_runs_per_day: [1, 10],
   max_fixes: [0, 10],
   max_minutes: [10, 600],
+  burst_minutes: [5, 1440],
+  burst_count: [3, 1000],
+  burst_max_per_day: [1, 10],
   extra: 4000,
   /** Tokens each retro pass may spend of a run's budget (evolve_rules.RETRO_SUB_BUDGET). */
   retro_sub_budget: 50_000,
