@@ -1033,6 +1033,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "n8n에서 가져오기",
     "switch-and-resume": "↻ 전환 후 재개",
     "go-to-stage": "이 단계 열기",
     "new-pipeline": "＋ 새 pipeline",
@@ -8308,6 +8309,7 @@
     }
   },
   "label": {
+    "imported-from-n8n": "n8n에서 가져옴",
     "resume-other-pipeline": "완료되지 않은 실행이 \"{name}\"에 속해 있어요. 계속하려면 해당 pipeline으로 전환하세요.",
     "role-rename-repointed": "pipeline {count}개의 역할 참조를 업데이트했어요.",
     "pipeline-manager": "Pipeline Manager",
@@ -8999,6 +9001,7 @@
     "merge-aborted": "병합 중단됨 — 충돌이 취소되었어요."
   },
   "hint": {
+    "imported-from-n8n": "이 pipeline의 실행은 외부 콘텐츠로 표시돼요.",
     "role-not-found-refresh": "역할 \"{key}\"이(가) 더 이상 없어요. 다른 창에서 삭제했을 수 있어요. 왼쪽 목록은 이미 최신 상태이니 역할을 다시 선택하세요.",
     "role-key-exists-recover": "키가 \"{key}\"인 역할이 이미 있어요. 이름 바꾸기가 중간에 멈춰서 남은 것이라면 먼저 왼쪽 목록에서 \"{key}\"을(를) 삭제한 뒤 다시 이름을 바꾸세요.",
     "role-in-use-list": "먼저 다음 단계 슬롯을 다른 역할로 바꾸거나 제거하세요:",
@@ -12078,6 +12081,81 @@
       "not-signed-in": "먼저 개발자 계정에서 로그인하세요.",
       "qualification": "먼저 개발자 신청이 승인되어야 해요.",
       "registry": "Navide 마켓플레이스에서 거부했어요({status} {code}): {message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "n8n에서 가져오기",
+    "subtitle": "n8n에서 내보낸 워크플로를 붙여 넣고 변환 결과를 미리 본 다음 새 pipeline으로 가져오세요.",
+    "default-agent": "Agent 단계에 쓸 CLI",
+    "default-agent-hint": "Agent가 필요한 단계는 이 CLI의 pane에서 실행돼요. 가져온 뒤에도 단계마다 바꿀 수 있어요.",
+    "json-label": "워크플로 JSON",
+    "json-placeholder": "n8n에서 내보낸 워크플로 JSON을 붙여 넣으세요",
+    "choose-file": "파일 선택…",
+    "choose-file-title": "n8n 워크플로 선택",
+    "preview": "미리 보기",
+    "previewing": "미리 보는 중…",
+    "import": "가져오기",
+    "importing": "가져오는 중…",
+    "preview-stale": "미리 본 뒤 JSON이 바뀌었어요. 가져오기 전에 다시 미리 보세요.",
+    "stats": {
+      "workflow": "워크플로",
+      "nodes": "n8n 노드",
+      "slots": "단계",
+      "gates": "승인 게이트",
+      "triggers": "트리거"
+    },
+    "category": {
+      "native": "바로 변환",
+      "agent": "Agent가 실행",
+      "pending": "검토 필요",
+      "unsupported": "지원 안 됨"
+    },
+    "needs-review": "검토가 필요한 단계 {n}개",
+    "needs-review-hint": "그래도 가져올 수 있어요. pipeline을 실행하기 전에 편집기에서 이 단계들을 확인하세요.",
+    "subworkflow": "이 워크플로는 다른 n8n 워크플로를 호출해요. 그 워크플로의 JSON도 여기에 붙여 넣어 따로 가져오세요.",
+    "external": "가져온 pipeline의 모든 실행은 외부 콘텐츠로 표시돼요. 단계가 Navide 밖에서 만든 파일에서 왔기 때문이에요.",
+    "warnings": "경고",
+    "canvas-title": "변환된 그래프",
+    "legend": "색상 범례",
+    "report-title": "변환 보고서",
+    "col": {
+      "node": "노드",
+      "type": "노드 유형",
+      "result": "변환 결과",
+      "category": "분류",
+      "detail": "세부 정보",
+      "actions": "할 일",
+      "field": "필드"
+    },
+    "result": {
+      "trigger": "트리거",
+      "slot": "단계",
+      "gate": "승인 게이트",
+      "folded": "단계에 합쳐짐",
+      "removed": "제거됨"
+    },
+    "review-mark": "검토 필요",
+    "action-code": {
+      "add-credential": "자격 증명 추가",
+      "confirm-step": "단계 확인",
+      "choose-mcp": "MCP 서버 선택",
+      "start-manually": "직접 시작",
+      "paste-subworkflow": "하위 워크플로 붙여 넣기",
+      "keep-in-n8n": "n8n에 남겨 두기"
+    },
+    "kickoffs-title": "단계 지시문",
+    "kickoffs-hint": "각 pane이 단계가 시작될 때 받는 텍스트 그대로예요.",
+    "gates-title": "승인 게이트",
+    "gates-hint": "실행이 각 게이트에 도달하면 표시되는 질문 그대로예요.",
+    "credentials-title": "자격 증명",
+    "credentials-hint": "자격 증명은 이 컴퓨터에서 설정해요. 설정 → MCP에서 MCP 서버를 추가하거나 해당 서비스의 CLI로 로그인하세요. pipeline에는 절대 저장되지 않아요.",
+    "credentials-used-by": "사용하는 노드: {nodes}",
+    "secrets-title": "제거된 비밀 값",
+    "secrets-hint": "이 값들은 pipeline에 남기지 않았어요. 이 컴퓨터에서 다시 설정하세요.",
+    "error": {
+      "invalid": "Navide가 읽을 수 있는 n8n 워크플로가 아니에요.",
+      "preview-failed": "미리 보기에 실패했어요.",
+      "import-failed": "가져오기에 실패했어요."
     }
   }
 }

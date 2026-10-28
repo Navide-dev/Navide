@@ -18,6 +18,7 @@ import { aiTerminalPaneId } from '@navide/plugin-shell'
 import { backendErrorText } from '../lib/pipelineErrors'
 import { usePipelineRunState, type HostRun } from '../composables/usePipelineRunState'
 import PipelineEditor from './pipeline/PipelineEditor.vue'
+import N8nImportDialog from './pipeline/N8nImportDialog.vue'
 import RolePropertiesEditor, { rolePropertyProblems } from './pipeline/RolePropertiesEditor.vue'
 import type { RoleProperty } from '../lib/pipelineGraph'
 
@@ -75,6 +76,10 @@ const backendStatusLabel = computed(
 // here would be dead code behind the capture-phase keybinding dispatcher. The
 // host calls this first so a nested confirm dialog closes before the modal.
 function closeTopLayer(): boolean {
+  if (plN8nImportOpen.value) {
+    plN8nImportOpen.value = false
+    return true
+  }
   const openConfirm = sConfirmReset.value || rConfirmDelete.value || rConfirmReset.value
   if (!openConfirm) return !!editorRef.value?.closeTopLayer()
   sConfirmReset.value = false
@@ -96,6 +101,7 @@ const plBusy = ref(false)
 const plSummary = ref('')
 const plRenamingId = ref('')
 const plRenameText = ref('')
+const plN8nImportOpen = ref(false)
 
 // Stage cache scoped to the pipeline being edited: getActivePipelineId feeds
 // both refresh() and the stages.changed broadcast filter, so external edits to
@@ -636,6 +642,7 @@ function buildAiContext(): string {
       <template v-if="plView === 'list'">
         <div class="toolbar">
           <button class="ghost" :disabled="plBusy" @click="plCreating = !plCreating">{{ $t('action.new-pipeline') }}</button>
+          <button class="ghost pl-import-n8n" :disabled="plBusy" @click="plN8nImportOpen = true">{{ $t('action.import-from-n8n') }}</button>
           <span v-if="plSummary" class="summary-ok">{{ plSummary }}</span>
           <span v-if="plCount" class="pl-count">{{ $t('label.pipeline-count', { count: plCount }) }}</span>
         </div>
@@ -663,6 +670,9 @@ function buildAiContext(): string {
             <span class="pl-tags">
               <span v-if="p.id === pipelinesApi.activePipelineId.value" class="pl-badge">{{ $t('label.default') }}</span>
               <span v-if="p.builtin" class="pl-badge pl-badge--builtin">{{ $t('label.builtin') }}</span>
+              <span
+                v-if="p.imported_from?.kind === 'n8n'" class="pl-badge pl-badge--imported"
+                :title="$t('hint.imported-from-n8n')">{{ $t('label.imported-from-n8n') }}</span>
             </span>
             <span class="pl-meta">{{ $t('label.stage-count', { count: p.stage_count }) }}</span>
             <span class="pl-actions">
@@ -733,6 +743,9 @@ function buildAiContext(): string {
                 @click="plStartRename(plEditingId, plCurrentPipeline?.name ?? '')">✎</button>
             </h2>
             <span v-if="plEditingId === pipelinesApi.activePipelineId.value" class="pl-badge">{{ $t('label.default') }}</span>
+            <span
+              v-if="plCurrentPipeline?.imported_from?.kind === 'n8n'" class="pl-badge pl-badge--imported"
+              :title="$t('hint.imported-from-n8n')">{{ $t('label.imported-from-n8n') }}</span>
           </template>
           <template #trail>
             <div class="toolbar">
@@ -843,6 +856,11 @@ function buildAiContext(): string {
       :build-context="buildAiContext"
     />
     </div><!-- end main-row -->
+
+    <N8nImportDialog
+      :backend="backend" :open="plN8nImportOpen" :workspace-path="workspacePath"
+      @close="plN8nImportOpen = false" @imported="plEnterDetail"
+    />
 
     <!-- ── Confirm dialogs ───────────────────────────────────────────────── -->
     <div v-if="sConfirmReset" class="modal" @click.self="sConfirmReset = false">
@@ -1121,6 +1139,12 @@ function buildAiContext(): string {
   white-space: nowrap;
 }
 .pl-badge--builtin {
+  color: var(--text-secondary);
+  background: var(--bg-muted);
+  border-color: var(--border-default);
+}
+/* Where the pipeline came from, not a state: neutral like builtin. */
+.pl-badge--imported {
   color: var(--text-secondary);
   background: var(--bg-muted);
   border-color: var(--border-default);

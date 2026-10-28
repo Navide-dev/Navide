@@ -1033,6 +1033,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "Nhập từ n8n",
     "switch-and-resume": "↻ Chuyển và tiếp tục",
     "go-to-stage": "Mở giai đoạn này",
     "new-pipeline": "＋ Pipeline mới",
@@ -8308,6 +8309,7 @@
     }
   },
   "label": {
+    "imported-from-n8n": "Đã nhập từ n8n",
     "resume-other-pipeline": "Một lượt chạy chưa xong thuộc về “{name}”. Hãy chuyển sang pipeline đó để tiếp tục.",
     "role-rename-repointed": "Đã cập nhật tham chiếu vai trò trong {count} pipeline.",
     "pipeline-manager": "Pipeline Manager",
@@ -8999,6 +9001,7 @@
     "merge-aborted": "Đã hủy merge — các xung đột đã được bỏ."
   },
   "hint": {
+    "imported-from-n8n": "Các lần chạy của pipeline này được đánh dấu là nội dung bên ngoài.",
     "role-not-found-refresh": "Vai trò “{key}” không còn tồn tại — có thể cửa sổ khác đã xóa nó. Danh sách bên trái đã được cập nhật; hãy chọn lại vai trò.",
     "role-key-exists-recover": "Đã có vai trò với khóa “{key}”. Nếu đó là phần sót lại của lần đổi tên dang dở, hãy xóa “{key}” khỏi danh sách bên trái trước, rồi đổi tên lại.",
     "role-in-use-list": "Hãy trỏ lại hoặc gỡ các vị trí giai đoạn sau trước:",
@@ -12078,6 +12081,81 @@
       "not-signed-in": "Hãy đăng nhập trong mục Tài khoản nhà phát triển trước.",
       "qualification": "Đơn đăng ký nhà phát triển của bạn phải được duyệt trước.",
       "registry": "Navide Marketplace đã từ chối ({status} {code}): {message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "Nhập từ n8n",
+    "subtitle": "Dán workflow đã xuất từ n8n, xem trước kết quả chuyển đổi rồi nhập thành pipeline mới.",
+    "default-agent": "CLI cho các bước cần agent",
+    "default-agent-hint": "Các bước cần agent sẽ chạy trong một pane của CLI này. Bạn có thể đổi từng bước sau khi nhập.",
+    "json-label": "JSON của workflow",
+    "json-placeholder": "Dán JSON của workflow đã xuất từ n8n",
+    "choose-file": "Chọn tệp…",
+    "choose-file-title": "Chọn workflow n8n",
+    "preview": "Xem trước",
+    "previewing": "Đang xem trước…",
+    "import": "Nhập",
+    "importing": "Đang nhập…",
+    "preview-stale": "JSON đã thay đổi sau khi xem trước. Hãy xem trước lại trước khi nhập.",
+    "stats": {
+      "workflow": "Tên workflow",
+      "nodes": "Nút n8n",
+      "slots": "Bước",
+      "gates": "Điểm phê duyệt",
+      "triggers": "Trình kích hoạt"
+    },
+    "category": {
+      "native": "Chuyển trực tiếp",
+      "agent": "Do agent chạy",
+      "pending": "Cần xem lại",
+      "unsupported": "Không hỗ trợ"
+    },
+    "needs-review": "{n} bước cần xem lại",
+    "needs-review-hint": "Vẫn có thể nhập. Hãy kiểm tra các bước này trong trình chỉnh sửa trước khi chạy pipeline.",
+    "subworkflow": "Workflow này gọi một workflow n8n khác. Hãy dán cả JSON của workflow đó vào đây và nhập riêng.",
+    "external": "Mọi lần chạy của pipeline đã nhập đều được đánh dấu là nội dung bên ngoài, vì các bước của nó đến từ một tệp tạo bên ngoài Navide.",
+    "warnings": "Cảnh báo",
+    "canvas-title": "Đồ thị đã chuyển đổi",
+    "legend": "Chú thích màu",
+    "report-title": "Báo cáo chuyển đổi",
+    "col": {
+      "node": "Nút",
+      "type": "Loại nút",
+      "result": "Trở thành",
+      "category": "Phân loại",
+      "detail": "Chi tiết",
+      "actions": "Cần làm",
+      "field": "Trường"
+    },
+    "result": {
+      "trigger": "Trình kích hoạt",
+      "slot": "Bước",
+      "gate": "Điểm phê duyệt",
+      "folded": "Gộp vào một bước",
+      "removed": "Đã xóa"
+    },
+    "review-mark": "Cần xem lại",
+    "action-code": {
+      "add-credential": "Thêm thông tin xác thực",
+      "confirm-step": "Xác nhận bước",
+      "choose-mcp": "Chọn máy chủ MCP",
+      "start-manually": "Khởi động thủ công",
+      "paste-subworkflow": "Dán workflow con",
+      "keep-in-n8n": "Giữ lại trong n8n"
+    },
+    "kickoffs-title": "Hướng dẫn của các bước",
+    "kickoffs-hint": "Đây đúng là văn bản mỗi pane nhận được khi bước của nó bắt đầu.",
+    "gates-title": "Điểm phê duyệt",
+    "gates-hint": "Đây đúng là câu hỏi hiển thị khi lần chạy đến từng điểm phê duyệt.",
+    "credentials-title": "Thông tin xác thực",
+    "credentials-hint": "Thông tin xác thực được thiết lập trên máy này, dưới dạng máy chủ MCP trong Cài đặt → MCP hoặc qua đăng nhập CLI của chính dịch vụ. Chúng không bao giờ được lưu trong pipeline.",
+    "credentials-used-by": "Dùng bởi {nodes}",
+    "secrets-title": "Bí mật đã xóa",
+    "secrets-hint": "Các giá trị này không được giữ trong pipeline. Hãy thiết lập lại trên máy này.",
+    "error": {
+      "invalid": "Đây không phải workflow n8n mà Navide đọc được.",
+      "preview-failed": "Xem trước thất bại.",
+      "import-failed": "Nhập thất bại."
     }
   }
 }
