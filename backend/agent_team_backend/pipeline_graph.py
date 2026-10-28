@@ -21,7 +21,11 @@ DEFAULT_MAX_LOOPS = 2
 MAX_LOOPS_CEILING = 10
 TRIGGER_NODE_ID = "trigger"
 NODE_KINDS = ("trigger", "slot", "gate")
-EDGE_KINDS = ("main", "reject")
+EDGE_KINDS = ("main", "reject", "branch", "error")
+# Edge kinds that carry flow forward (layering, cycle check, readiness).
+FORWARD_EDGE_KINDS = ("main", "branch", "error")
+# Reserved branch value: taken when no other branch edge of the source matched.
+BRANCH_DEFAULT = "default"
 _LAYER_DX = 280
 _LANE_DY = 140
 
@@ -42,11 +46,34 @@ def slot_node_id(stage_id: str, slot_index: int) -> str:
 
 
 def edge_id(src: str, dst: str, kind: str = "main") -> str:
-    return f"r-{src}-{dst}" if kind == "reject" else f"e-{src}-{dst}"
+    prefix = {"reject": "r", "branch": "b", "error": "x"}.get(kind, "e")
+    return f"{prefix}-{src}-{dst}"
 
 
 def _is_main(e: dict[str, Any]) -> bool:
     return (e.get("kind") or "main") == "main"
+
+
+def _is_forward(e: dict[str, Any]) -> bool:
+    return (e.get("kind") or "main") in FORWARD_EDGE_KINDS
+
+
+def has_branching_edges(graph: dict[str, Any]) -> bool:
+    """True for a graph with any branch or error edge (see the TS twin)."""
+    return any(e.get("kind") in ("branch", "error") for e in graph.get("edges", []))
+
+
+def _branch_when_errors(e: dict[str, Any]) -> list[str]:
+    w = e.get("when")
+    if isinstance(w, str):
+        return [] if w.strip() else [f"branch edge {e.get('id')}: when must not be empty"]
+    if isinstance(w, dict):
+        eq = w.get("equals")
+        ok_eq = eq is None or isinstance(eq, (str, bool, int, float))
+        path = w.get("path")
+        if isinstance(path, str) and path.strip() and "equals" in w and ok_eq and not set(w) - {"path", "equals"}:
+            return []
+    return [f"branch edge {e.get('id')}: when must be a non-empty string or {{path, equals}}"]
 
 
 def _slot_to_graph(slot: dict[str, Any]) -> dict[str, Any]:
@@ -117,11 +144,11 @@ def derive_graph_from_stages(stages: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def layer_graph(graph: dict[str, Any]) -> tuple[list[list[str]], list[str]]:
-    """Longest-path layering over main edges → (layers, triggers)."""
+    """Longest-path layering over forward (main, branch, error) edges → (layers, triggers)."""
     kind = {n["id"]: n.get("kind") for n in graph.get("nodes", [])}
     preds: dict[str, list[str]] = {nid: [] for nid in kind}
     for e in graph.get("edges", []):
-        if _is_main(e) and e.get("from") in kind and e.get("to") in kind:
+        if _is_forward(e) and e.get("from") in kind and e.get("to") in kind:
             preds[e["to"]].append(e["from"])
     depth: dict[str, float] = {}
     visiting: set[str] = set()
@@ -268,7 +295,8 @@ def validate_graph(graph: Any) -> list[str]:
             errors.append(f"duplicate edge id {eid}")
         edge_ids.add(eid)
         kind = e.get("kind") or "main"
-        if kind not in EDGE_KINDS:
+        known = kind in EDGE_KINDS
+        if not known:
             errors.append(f"edge {eid}: unknown kind {kind}")
         src, dst = e.get("from"), e.get("to")
         if src not in nodes or dst not in nodes:
@@ -282,18 +310,24 @@ def validate_graph(graph: Any) -> list[str]:
         pairs.add(pair)
         if nodes[dst].get("kind") == "trigger":
             errors.append(f"edge {eid} points into a trigger")
-        if kind == "main":
-            succ[src].append(dst)
-            if e.get("maxLoops") is not None:
-                errors.append(f"edge {eid}: maxLoops is only for reject edges")
-        else:
+        if kind == "reject":
             if nodes[src].get("kind") == "trigger":
                 errors.append(f"reject edge {eid} cannot start at a trigger")
             m = e.get("maxLoops", DEFAULT_MAX_LOOPS)
             if not isinstance(m, int) or isinstance(m, bool) or m < 1 or m > MAX_LOOPS_CEILING:
                 errors.append(f"reject edge {eid}: maxLoops must be an integer 1..{MAX_LOOPS_CEILING}")
             rejects.append(e)
-    # Main-edge cycle check.
+        elif known:
+            succ[src].append(dst)
+            if e.get("maxLoops") is not None:
+                errors.append(f"edge {eid}: maxLoops is only for reject edges")
+            if kind != "main" and nodes[src].get("kind") != "slot":
+                errors.append(f"{kind} edge {eid} must start at a slot node")
+        if kind == "branch":
+            errors.extend(_branch_when_errors(e))
+        elif e.get("when") is not None:
+            errors.append(f"edge {eid}: when is only for branch edges")
+    # Forward-edge cycle check.
     colour: dict[str, int] = {}
     cyclic = False
     for start in nodes:

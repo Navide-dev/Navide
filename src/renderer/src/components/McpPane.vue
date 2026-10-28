@@ -24,6 +24,7 @@ import { vTruncate } from '@navide/plugin-ui/foundation'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
 import SettingsOverflowActions from './settings/SettingsOverflowActions.vue'
 import { shortenMiddle } from '../lib/shortenPath'
+import StaleConfigNotice from './StaleConfigNotice.vue'
 import {
   isSecretSettingKey,
   nextRecordKey,
@@ -506,6 +507,7 @@ function cardDetail(row: McpRow): string {
       </div>
     </header>
 
+    <StaleConfigNotice part="mcp" />
     <div class="mcp-filterbar">
       <div class="mcp-chips" role="group" :aria-label="t('settings.mcp.filter-label')">
         <button

@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI が終了コード {code} で終了しました。クラッシュした可能性があります。コードはエラー台帳にも記録されています。",
       "stuck-badge": "⏳ {minutes} 分以上動きなし",
       "stuck-tooltip": "このターンは {minutes} 分以上、ログにも画面にも動きがありません。CLI が止まっている可能性があります。Navide は中断していません。",
+      "stale-config-badge": "設定が変更されました",
+      "stale-config-tooltip-mcp": "この pane の起動後に、この CLI の MCP サーバーが変更されました。再構築するまで古い一覧のままです。クリックで再構築（会話を再開）。",
+      "stale-config-tooltip-skills": "この pane の起動後に、この CLI に渡す skills が変更されました。再構築するまで古いままの可能性があります。クリックで再構築（会話を再開）。",
+      "stale-config-tooltip-both": "この pane の起動後に、この CLI の MCP サーバーと skills が変更されました。再構築するまで古いままです。クリックで再構築（会話を再開）。",
       "usage-limit-badge": "⛔ {time} に回復",
       "usage-limit-badge-unknown": "⛔ 利用枠なし",
       "usage-limit-tooltip": "この CLI の利用枠を使い切りました。{time} に回復する見込みです。クリックで閉じます",
@@ -1507,6 +1511,19 @@
         "hot-reload": "ホットリロード前にセッションごとに 1 回確認します"
       }
     },
+    "applies": {
+      "new-panes-only": "新しい pane のみ",
+      "new-panes-only-tooltip": "CLI は起動時にこの設定を読みます。開いている pane は再構築するまで古い値のままです。"
+    },
+    "stale-config": {
+      "title": "この変更より前から開いている pane：{count} 件",
+      "body-mcp": "CLI は起動時に自身の MCP サーバーを読むため、これらの pane は古い一覧のままです。再構築すると会話を再開しますが、進行中のターンは中断され、会話が再表示されます。",
+      "body-skills": "CLI は起動時に skills を読むため、これらの pane は古いままの可能性があります。再構築すると会話を再開しますが、進行中のターンは中断され、会話が再表示されます。",
+      "rebuild-all-idle": "アイドル中をすべて再構築（{count}）",
+      "busy": "実行中——「アイドル中をすべて再構築」ではスキップ",
+      "cannot-rebuild": "再開できる会話がありません",
+      "rebuild": "再構築"
+    },
     "limits": {
       "hint": "Navide と、Navide が起動するエージェントがこのマシンに過負荷をかけないための任意の制限です。変更するまで、どの項目もオフ、または Navide の従来の動作のままです。",
       "test-workers": "新しいペインのテストワーカー数を制限",
@@ -1956,7 +1973,7 @@
       "restore": "復元",
       "candidateReady": "アップデート {version} の準備ができました",
       "activationFailed": "{plugin} はインストールされましたが、有効化できませんでした：{reason}。下の一覧で再起動するか破棄してください。",
-      "switchNow": "承認すると {id} はすぐに {version} に切り替わります。開いている画面は再読み込みされ、保存していない内容は失われます。切り替えはお知らせに記録され、ワンクリックで戻せます。",
+      "switchNow": "承認すると {id} はすぐに {version} に切り替わります。開いている画面は再読み込みされます。Navide SDK で状態を保存している画面は元の状態に戻り、それ以外の保存していない内容は失われます。切り替えはお知らせに記録され、ワンクリックで戻せます。",
       "restartPlugin": "Navide プラグインを再起動",
       "disable": "無効化",
       "enable": "有効化",
@@ -8212,11 +8229,14 @@
         "agent-switch-confirm-to": "切り替え後",
         "agent-switch-confirm-caller": "要求した Pane",
         "agent-switch-confirm-workspace": "Pane のワークスペース",
+        "agent-switch-confirm-pane": "移動する Pane",
+        "agent-switch-confirm-pane-body": "同意するまで何も切り替わりません。移動するのはこの Pane だけで、もう一方のアカウント専用フォルダで会話を続けたまま開き直します。CLI のライブのログインと他の Pane はそのままです。Pane が作業中なら、止める前にもう一度確認します。回答がなければ、この要求は自動的に閉じます。",
         "agent-switch-confirm-reason": "理由（エージェントが記入）",
         "agent-switch-confirm-reason-truncated": "エージェントの理由が 300 文字を超えたため、最初の 300 文字だけを表示しています。",
         "agent-switch-confirm-cancel": "キャンセル",
         "agent-switch-confirm-ok": "アカウントを切り替える",
         "agent-switch-done": "{agent} が {vendor} を {from} から {to} に切り替えました。エージェントが示した理由：{reason}",
+        "agent-switch-pane-done": "{agent} が Pane を 1 つ {from} から {to} に移しました。ライブのログインと他の Pane は変わっていません。エージェントが示した理由：{reason}",
         "login-complete": "{email} としてログインしました。アカウントを保存しました。",
         "login-complete-no-email": "ログインが完了しました。アカウントを保存しました。",
         "login-step2": "ステップ 1 完了：{email} を保存しました。このアカウントを専用フォルダーにログインするため、もう一度承認が必要です。開いたログイン用ペインからブラウザーで承認してください。",
@@ -8945,6 +8965,7 @@
     "drag-resize-log": "ドラッグしてログパネルのサイズを変更",
     "filter-by-type": "種類で絞り込み",
     "all-stages-finished": "全 {count} ステージが正常に完了しました",
+    "region-switching": "{title} を {version} に切り替えています…",
     "region-unavailable": "{title} は利用できません"
   },
   "layout": {
@@ -11145,6 +11166,8 @@
     },
     "canvas": {
       "insert-on-edge": "ここにステップを挿入",
+      "branch-label": "{when} のとき",
+      "error-label": "失敗時",
       "loop-label": "↺ 最大 {max} 回",
       "minimap": "パイプライン全体の縮小図",
       "pass": "承認されたら続行",
@@ -11204,6 +11227,8 @@
       "tidy": "整列",
       "unlink": "接続を削除",
       "unpin": "固定を解除",
+      "link-kind": "接続の種類を変更",
+      "link-when": "分岐の値を変更",
       "loop-budget": "再試行上限を変更"
     },
     "inspector": {
@@ -11288,6 +11313,7 @@
       "awaiting": "承認待ち",
       "rejected": "差し戻し",
       "failed": "失敗",
+      "untaken": "スキップ（通った経路の外）",
       "skipped": "固定出力を再利用",
       "aborted": "中止",
       "pinned": "出力固定済み"
@@ -11315,6 +11341,17 @@
       "open-in-canvas": "パイプラインキャンバスで開く",
       "gate-toast": "パイプラインは「{name}」で承認待ちです",
       "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。"
+    },
+    "link": {
+      "title": "接続",
+      "desc": "{from} → {to}",
+      "kind": "接続の種類",
+      "kind-main": "常に",
+      "kind-branch": "分岐（条件）",
+      "kind-error": "失敗時",
+      "when": "分岐の値",
+      "when-placeholder": "ステップが報告する値、または default",
+      "remove": "接続を削除"
     },
     "edge": {
       "title": "差し戻しループ",
@@ -11411,6 +11448,14 @@
       "not-reclaimed": "（未回収）",
       "fix": "修正",
       "proposal": "提案",
+      "proposal-reason": "理由：{reason}",
+      "effect-title": "効果と頻度",
+      "adoption": "採用 {adopted} / {resolved}",
+      "adoption-none": "結果の出た提案はまだありません",
+      "lowered": "{date} から自動で週 1 回に下げました：直近 {n} 件の提案が続けて採用されませんでした",
+      "landed-title": "反映済みの提案",
+      "landed-none": "反映済みの提案はまだありません",
+      "effect-counts": "{before} → {after}（反映前／後 7 日）",
       "history": "履歴（直近 30 回）",
       "unsaved": "未保存の変更があります",
       "save": "保存",
@@ -11448,6 +11493,11 @@
       "scope-propose": "提案のみ（コードを変更しない）",
       "scope-fix-no-git": "この workspace は git リポジトリではなく、worktree もメインブランチもないため「提案のみ」しか選べません。",
       "scope-always-propose": "新機能・設計上のトレードオフ・データ削除／migration・push・リリースは常に提案になります（組み込みルール）。",
+      "retro": "振り返り",
+      "retro-tools": "繰り返しの手作業",
+      "retro-tools-hint": "1 回あたり最大 {tokens} トークン。この workspace の直近 7 日間のメッセージ履歴とスケジュール実行履歴を回数だけ読みます。3 回以上繰り返した作業は pipeline、skill、Prompt などにする提案になります。",
+      "retro-corrections": "あなたの指摘",
+      "retro-corrections-hint": "1 回あたり最大 {tokens} トークン。この workspace の plan に残した review note と却下された提案の理由を、直近 7 日間・回数だけ読みます。2 回以上出た指摘はルール変更の提案になります。",
       "rules": "ルールテンプレート",
       "rules-builtin": "組み込み v{version}",
       "rules-view": "全文を表示",
@@ -11472,6 +11522,29 @@
       "error": "失敗",
       "timeout": "タイムアウト",
       "skipped": "未実行"
+    },
+    "source": {
+      "failures": "エラーの仕分け",
+      "tools": "繰り返しの手作業",
+      "corrections": "あなたの指摘"
+    },
+    "freq": {
+      "daily": "毎日",
+      "weekly": "毎週"
+    },
+    "effect": {
+      "effective": "効果あり",
+      "not-effective": "効果なし",
+      "insufficient": "件数不足",
+      "pending": "未判定"
+    },
+    "proposal-status": {
+      "proposed": "提案中",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "in-progress": "進行中",
+      "landed": "反映済み",
+      "abandoned": "破棄"
     },
     "history": {
       "date": "日付",

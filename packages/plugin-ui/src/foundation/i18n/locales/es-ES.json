@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "La CLI terminó con el código de salida {code}. Puede que se haya bloqueado; el código también se registra en el registro de errores.",
       "stuck-badge": "⏳ Sin actividad desde hace {minutes}+ min",
       "stuck-tooltip": "Este turno no ha mostrado actividad en el registro ni salida durante más de {minutes} minutos. Puede que la CLI esté atascada; no se ha interrumpido nada.",
+      "stale-config-badge": "Ajustes cambiados",
+      "stale-config-tooltip-mcp": "Los servidores MCP de esta CLI cambiaron después de abrir el panel. Sigue con la lista anterior hasta que lo reconstruyas. Haz clic para reconstruir (reanudar la conversación).",
+      "stale-config-tooltip-skills": "Las skills que recibe esta CLI cambiaron después de abrir el panel. Puede seguir con las anteriores hasta que lo reconstruyas. Haz clic para reconstruir (reanudar la conversación).",
+      "stale-config-tooltip-both": "Los servidores MCP y las skills de esta CLI cambiaron después de abrir el panel. Sigue con los anteriores hasta que lo reconstruyas. Haz clic para reconstruir (reanudar la conversación).",
       "usage-limit-badge": "⛔ vuelve {time}",
       "usage-limit-badge-unknown": "⛔ sin cuota",
       "usage-limit-tooltip": "Esta CLI se ha quedado sin cuota: se espera que vuelva a las {time}. Haz clic para descartar",
@@ -1507,6 +1511,19 @@
         "hot-reload": "Se pregunta una vez por session antes de la recarga en caliente"
       }
     },
+    "applies": {
+      "new-panes-only": "Solo paneles nuevos",
+      "new-panes-only-tooltip": "Una CLI lee esto al iniciarse. Los paneles ya abiertos conservan el valor anterior hasta que los reconstruyas."
+    },
+    "stale-config": {
+      "title": "Paneles abiertos que se iniciaron antes de este cambio: {count}",
+      "body-mcp": "Una CLI lee sus propios servidores MCP al iniciarse, así que estos paneles siguen con la lista anterior. Reconstruir reanuda la conversación, pero interrumpe un turno en curso y vuelve a mostrar la conversación.",
+      "body-skills": "Una CLI lee sus skills al iniciarse, así que estos paneles pueden seguir con las anteriores. Reconstruir reanuda la conversación, pero interrumpe un turno en curso y vuelve a mostrar la conversación.",
+      "rebuild-all-idle": "Reconstruir todos los inactivos ({count})",
+      "busy": "En ejecución: «Reconstruir todos los inactivos» lo omite",
+      "cannot-rebuild": "No hay conversación guardada que reanudar",
+      "rebuild": "Reconstruir"
+    },
     "limits": {
       "hint": "Límites opcionales que evitan que Navide y los agents que ejecuta sobrecarguen este equipo. Cada uno está desactivado, o con el comportamiento anterior de Navide, hasta que lo cambies.",
       "test-workers": "Limitar los procesos de pruebas en los panes nuevos",
@@ -1956,7 +1973,7 @@
       "restore": "Restaurar",
       "candidateReady": "La actualización {version} está lista",
       "activationFailed": "{plugin} se instaló, pero no se pudo activar: {reason}. Reinícialo o descártalo en la lista de abajo.",
-      "switchNow": "Al aprobar, {id} cambia a {version} de inmediato. Sus vistas abiertas se recargan y se pierde todo lo que no esté guardado en ellas. El cambio queda registrado en los avisos, donde puedes volver atrás con un clic.",
+      "switchNow": "Al aprobar, {id} cambia a {version} de inmediato. Sus vistas abiertas se recargan: una vista que guarda su estado con el SDK de Navide vuelve a donde estaba, y se pierde todo lo demás que no esté guardado en ellas. El cambio queda registrado en los avisos, donde puedes volver atrás con un clic.",
       "restartPlugin": "Reiniciar complemento de Navide",
       "disable": "Desactivar",
       "enable": "Activar",
@@ -8212,11 +8229,14 @@
         "agent-switch-confirm-to": "A la cuenta",
         "agent-switch-confirm-caller": "Solicitado por el pane",
         "agent-switch-confirm-workspace": "Área de trabajo del pane",
+        "agent-switch-confirm-pane": "Pane que se mueve",
+        "agent-switch-confirm-pane-body": "No se cambia nada hasta que aceptes. Solo se mueve este pane: se vuelve a abrir con su conversación dentro de la carpeta propia de la otra cuenta. El inicio de sesión activo de la CLI y los demás panes no cambian. Si el pane está trabajando, Navide te vuelve a preguntar antes de detenerlo. Si no respondes, la solicitud se cierra sola.",
         "agent-switch-confirm-reason": "Motivo, escrito por el agent",
         "agent-switch-confirm-reason-truncated": "El motivo del agent superaba los 300 caracteres; solo se muestran los 300 primeros.",
         "agent-switch-confirm-cancel": "Cancelar",
         "agent-switch-confirm-ok": "Cambiar cuenta",
         "agent-switch-done": "{agent} cambió {vendor} de {from} a {to}. Motivo del agent: {reason}",
+        "agent-switch-pane-done": "{agent} movió un pane de {from} a {to}. El inicio de sesión activo y los demás panes no cambiaron. Motivo del agent: {reason}",
         "login-complete": "Sesión iniciada como {email}. Cuenta guardada.",
         "login-complete-no-email": "Inicio de sesión completado. Cuenta guardada.",
         "login-step2": "Paso 1 completado: {email} está guardada. Una autorización más inicia la sesión de esta cuenta en su propia carpeta. Termínala en el navegador desde el pane de inicio de sesión que se acaba de abrir.",
@@ -8945,6 +8965,7 @@
     "drag-resize-log": "Arrastra para cambiar el tamaño del panel de registro",
     "filter-by-type": "Filtrar por tipo",
     "all-stages-finished": "Las {count} etapas terminaron correctamente",
+    "region-switching": "Cambiando {title} a {version}…",
     "region-unavailable": "{title} no disponible"
   },
   "layout": {
@@ -11145,6 +11166,8 @@
     },
     "canvas": {
       "insert-on-edge": "Insertar un paso aquí",
+      "branch-label": "si {when}",
+      "error-label": "en caso de error",
       "loop-label": "↺ máx. {max}",
       "minimap": "Vista general de toda la pipeline",
       "pass": "Continuar cuando se apruebe",
@@ -11204,6 +11227,8 @@
       "tidy": "Ordenar",
       "unlink": "Quitar enlace",
       "unpin": "Descongelar la salida",
+      "link-kind": "Cambiar tipo de enlace",
+      "link-when": "Cambiar valor de rama",
       "loop-budget": "Cambiar el límite de reintentos"
     },
     "inspector": {
@@ -11288,6 +11313,7 @@
       "awaiting": "Necesita aprobación",
       "rejected": "Devuelto",
       "failed": "Fallido",
+      "untaken": "Omitido (fuera de la ruta tomada)",
       "skipped": "Salida congelada reutilizada",
       "aborted": "Cancelado",
       "pinned": "Salida congelada"
@@ -11315,6 +11341,17 @@
       "open-in-canvas": "Abrir en el lienzo de pipelines",
       "gate-toast": "La pipeline está esperando tu aprobación en {name}",
       "next-gated": "Aprueba o devuelve esta puerta antes de pasar a la siguiente etapa."
+    },
+    "link": {
+      "title": "Enlace",
+      "desc": "{from} → {to}",
+      "kind": "Tipo de enlace",
+      "kind-main": "Siempre",
+      "kind-branch": "Rama (si…)",
+      "kind-error": "En caso de error",
+      "when": "Valor de rama",
+      "when-placeholder": "Valor que informa el paso, o default",
+      "remove": "Quitar enlace"
     },
     "edge": {
       "title": "Bucle de rechazo",
@@ -11411,6 +11448,14 @@
       "not-reclaimed": "(no liberado)",
       "fix": "Corrección",
       "proposal": "Propuesta",
+      "proposal-reason": "Motivo: {reason}",
+      "effect-title": "Efecto y frecuencia",
+      "adoption": "Adoptadas {adopted} / {resolved}",
+      "adoption-none": "Aún no hay propuestas resueltas",
+      "lowered": "Bajada a semanal el {date}: las últimas {n} propuestas seguidas no se adoptaron",
+      "landed-title": "Propuestas aplicadas",
+      "landed-none": "Aún no hay propuestas aplicadas",
+      "effect-counts": "{before} → {after} (7 días antes / después)",
       "history": "Historial (últimas 30)",
       "unsaved": "Cambios sin guardar",
       "save": "Guardar",
@@ -11448,6 +11493,11 @@
       "scope-propose": "Solo proponer (sin cambios de código)",
       "scope-fix-no-git": "Esta área de trabajo no es un repo de git: no hay worktree ni rama principal con los que trabajar, así que solo puede proponer.",
       "scope-always-propose": "Las funciones nuevas, las decisiones de diseño, la eliminación o migración de datos, el push y la publicación son siempre propuestas (regla integrada).",
+      "retro": "Retrospectivas",
+      "retro-tools": "Trabajo manual repetido",
+      "retro-tools-hint": "Hasta {tokens} tokens por ejecución. Lee el registro de mensajes y las ejecuciones de tareas programadas de este workspace de los últimos 7 días, solo como recuentos; una tarea hecha 3 o más veces se propone como pipeline, skill, Prompt o similar.",
+      "retro-corrections": "Tus correcciones",
+      "retro-corrections-hint": "Hasta {tokens} tokens por ejecución. Lee tus review notes en los plans de este workspace y los motivos de las propuestas rechazadas de los últimos 7 días, solo como recuentos; una corrección repetida 2 o más veces se propone como cambio de regla.",
       "rules": "Reglas",
       "rules-builtin": "Integradas v{version}",
       "rules-view": "Ver texto completo",
@@ -11472,6 +11522,29 @@
       "error": "Fallido",
       "timeout": "Tiempo agotado",
       "skipped": "Omitido"
+    },
+    "source": {
+      "failures": "Clasificación de errores",
+      "tools": "Trabajo manual repetido",
+      "corrections": "Tus correcciones"
+    },
+    "freq": {
+      "daily": "Diaria",
+      "weekly": "Semanal"
+    },
+    "effect": {
+      "effective": "Eficaz",
+      "not-effective": "No eficaz",
+      "insufficient": "Datos insuficientes",
+      "pending": "Sin evaluar"
+    },
+    "proposal-status": {
+      "proposed": "Propuesta",
+      "approved": "Aprobada",
+      "rejected": "Rechazada",
+      "in-progress": "En curso",
+      "landed": "Aplicada",
+      "abandoned": "Abandonada"
     },
     "history": {
       "date": "Fecha",

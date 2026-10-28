@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "The CLI ended with exit code {code}. It may have crashed; the code is also recorded in the error ledger.",
       "stuck-badge": "⏳ No activity {minutes}+ min",
       "stuck-tooltip": "This turn has shown no log activity and no output for over {minutes} minutes. The CLI may be stuck; nothing was interrupted.",
+      "stale-config-badge": "Settings changed",
+      "stale-config-tooltip-mcp": "This CLI's MCP servers changed after the pane started. It keeps the old list until rebuilt. Click to rebuild (resume the conversation).",
+      "stale-config-tooltip-skills": "The skills delivered to this CLI changed after the pane started. It may keep the old set until rebuilt. Click to rebuild (resume the conversation).",
+      "stale-config-tooltip-both": "This CLI's MCP servers and skills changed after the pane started. It keeps the old set until rebuilt. Click to rebuild (resume the conversation).",
       "usage-limit-badge": "⛔ back {time}",
       "usage-limit-badge-unknown": "⛔ out of quota",
       "usage-limit-tooltip": "This CLI is out of quota — expected back at {time}. Click to dismiss",
@@ -1507,6 +1511,19 @@
         "hot-reload": "Asked once per session before hot reload"
       }
     },
+    "applies": {
+      "new-panes-only": "New panes only",
+      "new-panes-only-tooltip": "A CLI reads this when it starts. Panes already open keep the old value until you rebuild them."
+    },
+    "stale-config": {
+      "title": "Open panes that started before this change: {count}",
+      "body-mcp": "A CLI reads its own MCP servers when it starts, so these panes still use the old list. Rebuilding resumes the conversation; it interrupts a turn in progress and reprints the conversation.",
+      "body-skills": "A CLI reads its skills when it starts, so these panes may still use the old set. Rebuilding resumes the conversation; it interrupts a turn in progress and reprints the conversation.",
+      "rebuild-all-idle": "Rebuild all idle ({count})",
+      "busy": "Running — Rebuild all idle skips it",
+      "cannot-rebuild": "No saved conversation to resume",
+      "rebuild": "Rebuild"
+    },
     "limits": {
       "hint": "Optional limits that keep Navide and the agents it runs from overloading this machine. Each one is off, or at Navide's previous behavior, until you change it.",
       "test-workers": "Cap test-runner workers in new panes",
@@ -1956,7 +1973,7 @@
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
       "activationFailed": "{plugin} was installed but could not be activated: {reason}. Restart or discard it in the list below.",
-      "switchNow": "Approving switches {id} to {version} right away. Its open views reload, and anything not saved in them is lost. The switch is recorded in the announcements, where you can go back in one click.",
+      "switchNow": "Approving switches {id} to {version} right away. Its open views reload: a view that saves its state through the Navide SDK comes back where it was, and anything else not saved in them is lost. The switch is recorded in the announcements, where you can go back in one click.",
       "restartPlugin": "Restart Navide Plugin",
       "disable": "Disable",
       "enable": "Enable",
@@ -8212,11 +8229,14 @@
         "agent-switch-confirm-to": "To account",
         "agent-switch-confirm-caller": "Asked by pane",
         "agent-switch-confirm-workspace": "Pane's workspace",
+        "agent-switch-confirm-pane": "Pane to move",
+        "agent-switch-confirm-pane-body": "Nothing switches unless you agree. Only this pane moves: it reopens on its conversation inside the other account's own folder. The CLI's live login and every other pane stay as they are. If the pane is working, Navide asks you again before stopping it. If you do not answer, the request closes by itself.",
         "agent-switch-confirm-reason": "Reason, written by the agent",
         "agent-switch-confirm-reason-truncated": "The agent's reason was longer than 300 characters; only the first 300 are shown.",
         "agent-switch-confirm-cancel": "Cancel",
         "agent-switch-confirm-ok": "Switch Account",
         "agent-switch-done": "{agent} switched {vendor} from {from} to {to}. The agent's reason: {reason}",
+        "agent-switch-pane-done": "{agent} moved one pane from {from} to {to}. The live login and the other panes did not change. The agent's reason: {reason}",
         "login-complete": "Signed in as {email}. Account saved.",
         "login-complete-no-email": "Sign-in complete. Account saved.",
         "login-step2": "Step 1 done: {email} is saved. One more authorization signs this account in to its own folder. Finish it in the browser from the sign-in pane that just opened.",
@@ -8945,6 +8965,7 @@
     "drag-resize-log": "Drag to resize log panel",
     "filter-by-type": "Filter by type",
     "all-stages-finished": "All {count} stages finished successfully",
+    "region-switching": "Switching {title} to {version}…",
     "region-unavailable": "{title} unavailable"
   },
   "layout": {
@@ -11145,6 +11166,8 @@
     },
     "canvas": {
       "insert-on-edge": "Insert a Step Here",
+      "branch-label": "if {when}",
+      "error-label": "on error",
       "loop-label": "↺ max {max}",
       "minimap": "Overview of the whole pipeline",
       "pass": "Continue when approved",
@@ -11204,6 +11227,8 @@
       "tidy": "Tidy Up",
       "unlink": "Remove Link",
       "unpin": "Unfreeze Output",
+      "link-kind": "Change Link Type",
+      "link-when": "Change Branch Value",
       "loop-budget": "Change Retry Limit"
     },
     "inspector": {
@@ -11288,6 +11313,7 @@
       "awaiting": "Needs approval",
       "rejected": "Sent back",
       "failed": "Failed",
+      "untaken": "Skipped (not on the taken path)",
       "skipped": "Reused frozen output",
       "aborted": "Aborted",
       "pinned": "Output frozen"
@@ -11315,6 +11341,17 @@
       "open-in-canvas": "Open in the Pipeline Canvas",
       "gate-toast": "The pipeline is waiting for your approval at {name}",
       "next-gated": "Approve or send back this gate before moving on to the next stage."
+    },
+    "link": {
+      "title": "Link",
+      "desc": "{from} → {to}",
+      "kind": "Link type",
+      "kind-main": "Always",
+      "kind-branch": "Branch (if…)",
+      "kind-error": "On error",
+      "when": "Branch value",
+      "when-placeholder": "Value the step reports, or default",
+      "remove": "Remove Link"
     },
     "edge": {
       "title": "Reject loop",
@@ -11411,6 +11448,14 @@
       "not-reclaimed": "(not reclaimed)",
       "fix": "Fix",
       "proposal": "Proposal",
+      "proposal-reason": "Reason: {reason}",
+      "effect-title": "Effect and cadence",
+      "adoption": "Adopted {adopted} / {resolved}",
+      "adoption-none": "No resolved proposals yet",
+      "lowered": "Lowered to weekly on {date}: the last {n} proposals in a row were not adopted",
+      "landed-title": "Landed proposals",
+      "landed-none": "No landed proposals yet",
+      "effect-counts": "{before} → {after} (7 days before / after)",
       "history": "History (last 30)",
       "unsaved": "Unsaved changes",
       "save": "Save",
@@ -11448,6 +11493,11 @@
       "scope-propose": "Propose only (no code changes)",
       "scope-fix-no-git": "This workspace is not a git repo: there is no worktree or main branch to work with, so it can only propose.",
       "scope-always-propose": "New features, design trade-offs, data deletion / migrations, push and release are always proposals (built-in rule).",
+      "retro": "Retrospectives",
+      "retro-tools": "Repeated manual work",
+      "retro-tools-hint": "Up to {tokens} tokens per run. Reads this workspace's message log and scheduled-job runs of the last 7 days, as counts only; proposes turning a chore done 3 or more times into a pipeline, skill, prompt and the like.",
+      "retro-corrections": "Your corrections",
+      "retro-corrections-hint": "Up to {tokens} tokens per run. Reads your review notes on this workspace's plans and the reasons for rejected proposals, last 7 days, as counts only; a correction made 2 or more times becomes a proposed rule change.",
       "rules": "Rules",
       "rules-builtin": "Built-in v{version}",
       "rules-view": "View full text",
@@ -11472,6 +11522,29 @@
       "error": "Failed",
       "timeout": "Timed out",
       "skipped": "Skipped"
+    },
+    "source": {
+      "failures": "Error triage",
+      "tools": "Repeated manual work",
+      "corrections": "Your corrections"
+    },
+    "freq": {
+      "daily": "Daily",
+      "weekly": "Weekly"
+    },
+    "effect": {
+      "effective": "Effective",
+      "not-effective": "Not effective",
+      "insufficient": "Too few to judge",
+      "pending": "Not judged yet"
+    },
+    "proposal-status": {
+      "proposed": "Proposed",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "in-progress": "In progress",
+      "landed": "Landed",
+      "abandoned": "Abandoned"
     },
     "history": {
       "date": "Date",

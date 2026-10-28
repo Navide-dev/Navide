@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI 以结束代码 {code} 结束，可能是当掉了；这个代码也记录在错误帐本里。",
       "stuck-badge": "⏳ 超过 {minutes} 分钟没有动静",
       "stuck-tooltip": "这个回合已超过 {minutes} 分钟没有任何记录或输出，CLI 可能卡住了；Navide 没有中断它。",
+      "stale-config-badge": "设置已更新",
+      "stale-config-tooltip-mcp": "这个 pane 打开后，此 CLI 的 MCP server 有变动。重建前它会沿用旧列表。点一下重建（接续对话）。",
+      "stale-config-tooltip-skills": "这个 pane 打开后，发给此 CLI 的 skills 有变动。重建前它可能沿用旧的。点一下重建（接续对话）。",
+      "stale-config-tooltip-both": "这个 pane 打开后，此 CLI 的 MCP server 和 skills 都有变动。重建前它会沿用旧的。点一下重建（接续对话）。",
       "usage-limit-badge": "⛔ {time} 恢复",
       "usage-limit-badge-unknown": "⛔ 额度用完",
       "usage-limit-tooltip": "此 CLI 的额度已用完 — 预计 {time} 恢复。点击可清除",
@@ -1507,6 +1511,19 @@
         "hot-reload": "热重载前，每个 session 会询问一次"
       }
     },
+    "applies": {
+      "new-panes-only": "仅对新开的 pane 生效",
+      "new-panes-only-tooltip": "CLI 启动时才读取这项设置。已打开的 pane 会沿用旧值，重建后才应用。"
+    },
+    "stale-config": {
+      "title": "在这次变更前就已打开的 pane：{count} 个",
+      "body-mcp": "CLI 启动时才读取自己的 MCP server，所以这些 pane 仍在用旧列表。重建会接续对话，但会中断进行中的回合并重新输出对话。",
+      "body-skills": "CLI 启动时才读取 skills，所以这些 pane 可能仍在用旧的。重建会接续对话，但会中断进行中的回合并重新输出对话。",
+      "rebuild-all-idle": "重建所有空闲的（{count}）",
+      "busy": "运行中——“重建所有空闲的”会跳过",
+      "cannot-rebuild": "没有可接续的对话",
+      "rebuild": "重建"
+    },
     "limits": {
       "hint": "选用的限制，避免 Navide 与它启动的 agent 把这台电脑压垮。每一项在你调整之前都是关闭，或维持 Navide 原本的行为。",
       "test-workers": "限制新 pane 的测试 worker 数",
@@ -1956,7 +1973,7 @@
       "restore": "还原",
       "candidateReady": "更新 {version} 已就绪",
       "activationFailed": "{plugin} 已安装，但无法激活：{reason}。请在下方清单重新启动或放弃它。",
-      "switchNow": "核准后，{id} 会立即切换到 {version}。开着的画面会重新加载，画面里没存的内容会遗失。这次切换会记录在公告中心，可以一键退回。",
+      "switchNow": "核准后，{id} 会立即切换到 {version}。开着的画面会重新加载：用 Navide SDK 保存状态的画面会回到原来的位置，其他没存的内容会遗失。这次切换会记录在公告中心，可以一键退回。",
       "restartPlugin": "重新启动 Navide 插件",
       "disable": "禁用",
       "enable": "激活",
@@ -8212,11 +8229,14 @@
         "agent-switch-confirm-to": "切换后账号",
         "agent-switch-confirm-caller": "提出要求的 pane",
         "agent-switch-confirm-workspace": "pane 所在的 workspace",
+        "agent-switch-confirm-pane": "要移动的 pane",
+        "agent-switch-confirm-pane-body": "你同意之前什么都不会切换。只有这个 pane 会移动：它会在另一个账号自己的文件夹里接着原来的对话重新打开。CLI 当前登录的账号和其他 pane 都保持不变。如果这个 pane 正在工作，停止它之前会再问你一次。没有回答的话，这个请求会自动关闭。",
         "agent-switch-confirm-reason": "理由（由 agent 提供）",
         "agent-switch-confirm-reason-truncated": "agent 的理由超过 300 字，只显示前 300 字。",
         "agent-switch-confirm-cancel": "取消",
         "agent-switch-confirm-ok": "切换账号",
         "agent-switch-done": "{agent} 把 {vendor} 从 {from} 切换到 {to}。agent 给的理由：{reason}",
+        "agent-switch-pane-done": "{agent} 把一个 pane 从 {from} 移到了 {to}。当前登录的账号和其他 pane 都没有变。agent 给的理由：{reason}",
         "login-complete": "已登录 {email}，账号已保存。",
         "login-complete-no-email": "登录完成，账号已保存。",
         "login-step2": "第 1 步完成：{email} 已保存。还要再授权一次，让这个账号登录到自己的文件夹，请在新开的登录 pane 里完成浏览器授权。",
@@ -8945,6 +8965,7 @@
     "drag-resize-log": "拖曳以调整记录面板高度",
     "filter-by-type": "依类型筛选",
     "all-stages-finished": "{count} 个阶段全部顺利完成",
+    "region-switching": "正在把 {title} 切换到 {version}…",
     "region-unavailable": "{title} 无法使用"
   },
   "layout": {
@@ -11145,6 +11166,8 @@
     },
     "canvas": {
       "insert-on-edge": "在这里插入步骤",
+      "branch-label": "若 {when}",
+      "error-label": "失败时",
       "loop-label": "↺ 最多 {max} 次",
       "minimap": "整条 pipeline 的缩略图",
       "pass": "核准后继续",
@@ -11204,6 +11227,8 @@
       "tidy": "整理排版",
       "unlink": "移除连接",
       "unpin": "取消冻结",
+      "link-kind": "更改连接类型",
+      "link-when": "更改分支值",
       "loop-budget": "修改重试上限"
     },
     "inspector": {
@@ -11288,6 +11313,7 @@
       "awaiting": "等待核准",
       "rejected": "已退回",
       "failed": "失败",
+      "untaken": "已跳过（不在执行路径上）",
       "skipped": "沿用冻结产出",
       "aborted": "已中止",
       "pinned": "产出已冻结"
@@ -11315,6 +11341,17 @@
       "open-in-canvas": "在 pipeline 画布中打开",
       "gate-toast": "pipeline 已暂停，等待你在“{name}”核准",
       "next-gated": "先核准或退回这个闸门，才能进入下一阶段。"
+    },
+    "link": {
+      "title": "连接",
+      "desc": "{from} → {to}",
+      "kind": "连接类型",
+      "kind-main": "始终",
+      "kind-branch": "分支（条件）",
+      "kind-error": "失败时",
+      "when": "分支值",
+      "when-placeholder": "步骤报告的值，或 default",
+      "remove": "移除连接"
     },
     "edge": {
       "title": "退回循环",
@@ -11411,6 +11448,14 @@
       "not-reclaimed": "（未回收）",
       "fix": "修正",
       "proposal": "提案",
+      "proposal-reason": "理由：{reason}",
+      "effect-title": "成效与频率",
+      "adoption": "采用 {adopted} / {resolved}",
+      "adoption-none": "尚无已有结果的提案",
+      "lowered": "{date} 起自动降为每周：连续 {n} 份提案都没被采用",
+      "landed-title": "已落地的提案",
+      "landed-none": "尚无已落地的提案",
+      "effect-counts": "{before} → {after}（落地前／后 7 天）",
       "history": "历史（最近 30 次）",
       "unsaved": "有未保存的变更",
       "save": "保存",
@@ -11448,6 +11493,11 @@
       "scope-propose": "只提案（不改程序）",
       "scope-fix-no-git": "这个 workspace 不是 git repo，没有 worktree 与主分支可用，只能“只提案”。",
       "scope-always-propose": "新功能、设计取舍、删数据／migration、push、发版一律写提案（内置规则）。",
+      "retro": "回顾",
+      "retro-tools": "重复手动的事",
+      "retro-tools-hint": "每次最多 {tokens} token。读取这个 workspace 近 7 天的消息记录与计划任务执行记录，只取次数；同一件事做了 3 次以上，就提议做成 pipeline、skill、Prompt 等。",
+      "retro-corrections": "你的纠正",
+      "retro-corrections-hint": "每次最多 {tokens} token。读取你在这个 workspace 的 plan 上留下的 review note 与提案退回理由，近 7 天、只取次数；同一个纠正出现 2 次以上，就提议修改规则。",
       "rules": "规则模板",
       "rules-builtin": "内置 v{version}",
       "rules-view": "查看全文",
@@ -11472,6 +11522,29 @@
       "error": "失败",
       "timeout": "超时",
       "skipped": "未运行"
+    },
+    "source": {
+      "failures": "错误分诊",
+      "tools": "重复手动的事",
+      "corrections": "你的纠正"
+    },
+    "freq": {
+      "daily": "每天",
+      "weekly": "每周"
+    },
+    "effect": {
+      "effective": "见效",
+      "not-effective": "未见效",
+      "insufficient": "样本不足",
+      "pending": "待判定"
+    },
+    "proposal-status": {
+      "proposed": "提案中",
+      "approved": "已批准",
+      "rejected": "已退回",
+      "in-progress": "进行中",
+      "landed": "已落地",
+      "abandoned": "已放弃"
     },
     "history": {
       "date": "日期",
