@@ -186,7 +186,7 @@ _ROLE_CATEGORY = {
     "noop": "native", "sticky": "native",
     "model": "native", "memory": "native", "tool": "native", "parser": "native",
     "mcp_tool": "native", "tool_workflow": "pending", "vector": "unsupported",
-    "step": "agent", "app": "agent", "if": "agent", "switch": "agent", "loop": "agent",
+    "step": "agent", "app": "agent", "if": "native", "switch": "native", "loop": "agent",
     "trigger_schedule": "pending", "trigger_webhook": "pending", "trigger_error": "pending",
     "trigger_app": "pending", "subworkflow": "pending", "respond": "pending",
 }
@@ -305,16 +305,78 @@ def _dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
 
 
-def _output_label(node: dict[str, Any], role: str, index: int, count: int) -> str:
-    if node.get("onError") == "continueErrorOutput" and index == count - 1 and count > 1:
-        return "error"
+def _branch_values(node: dict[str, Any], role: str) -> list[str]:
+    """The branch edge `when` of each regular output of an IF or Switch node,
+    by n8n output index: IF true/false; Switch one per rule (its output name
+    when renamed, else the index) plus "default" for a fallback output."""
     if role == "if":
-        return {0: "true", 1: "false"}.get(index, f"output {index}")
+        return ["true", "false"]
+    if role != "switch":
+        return []
+    p = node.get("parameters") if isinstance(node.get("parameters"), dict) else {}
+    rules = p.get("rules") if isinstance(p.get("rules"), dict) else {}
+    listed = rules.get("values") if isinstance(rules.get("values"), list) else rules.get("rules")
+    out: list[str] = []
+    for i, rule in enumerate(listed if isinstance(listed, list) else []):
+        key = rule.get("outputKey") if isinstance(rule, dict) and rule.get("renameOutput") else None
+        value = key.strip() if isinstance(key, str) and key.strip() else str(i)
+        if value.lower() == pg.BRANCH_DEFAULT or value in out:
+            value = f"{value} ({i})"
+        out.append(value)
+    if not out and isinstance(p.get("numberOutputs"), int):
+        out = [str(i) for i in range(max(0, p["numberOutputs"]))]
+    opts = p.get("options") if isinstance(p.get("options"), dict) else {}
+    if opts.get("fallbackOutput") == "extra":
+        out.append(pg.BRANCH_DEFAULT)
+    return out
+
+
+def _error_index(node: dict[str, Any], role: str) -> int | None:
+    """The n8n output index of a node's error output, or None without one
+    (onError "continueErrorOutput" adds it after the regular outputs)."""
+    if node.get("onError") != "continueErrorOutput":
+        return None
+    if role in ("if", "switch"):
+        return len(_branch_values(node, role)) or 1
+    return 2 if role == "loop" else 1
+
+
+def _output_label(node: dict[str, Any], role: str, index: int) -> str:
+    if index == _error_index(node, role):
+        return "error"
+    values = _branch_values(node, role)
+    if index < len(values):
+        return values[index]
     if role == "loop" and isinstance(node.get("typeVersion"), (int, float)) and node["typeVersion"] >= 3:
         return {0: "done", 1: "loop"}.get(index, f"output {index}")
-    if role == "switch":
-        return f"rule {index}"
     return f"output {index}"
+
+
+_REF_PATTERNS = (
+    re.compile(r"\$\(\s*(['\"])(.+?)\1\s*\)"),
+    re.compile(r"\$node\[\s*(['\"])(.+?)\1\s*\]"),
+)
+
+
+def _referenced_nodes(node: dict[str, Any]) -> list[str]:
+    """Names a node's parameters read with $('X') or $node["X"], in order."""
+    text = json.dumps(node.get("parameters") or {}, ensure_ascii=False)
+    found: list[str] = []
+    for pat in _REF_PATTERNS:
+        for m in pat.finditer(text.replace('\\"', '"')):
+            if m.group(2) not in found:
+                found.append(m.group(2))
+    return found
+
+
+N8N_MCP_STEPS = (
+    "In Navide, add the n8n instance's MCP server in Settings → MCP: its Server URL (it ends in "
+    "/mcp-server/http) and an access token, which is entered on this machine only.",
+    "In n8n, turn on Available in MCP for this workflow (workflow Settings), after an owner or admin has "
+    "enabled instance-level MCP access.",
+    "Executing it through MCP does not hand its result back to this pipeline: Navide does not wait for the n8n "
+    "execution, so check the run in n8n.",
+)
 
 
 _CODE_FIELDS = (("jsCode", "javascript"), ("pythonCode", "python"), ("functionCode", "javascript"), ("code", "javascript"))
@@ -479,15 +541,29 @@ def convert_n8n_workflow(
         if info[root]["role"] not in ("agent_root",):
             info[root].update(role="agent_root", category="native")
 
+    # A workflow that is its own error workflow: its Error Trigger's steps
+    # become the target of error edges instead of a second start.
+    settings = wf.get("settings") if isinstance(wf.get("settings"), dict) else {}
+    error_wf = str(settings.get("errorWorkflow") or "")
+    error_triggers = [n for n in by_name if info[n]["role"] == "trigger_error" and n not in removed]
+    handler_trigger = error_triggers[0] if error_wf and error_wf == str(wf.get("id") or "") and error_triggers else None
+    if error_wf and handler_trigger is None:
+        warnings.append("settings.errorWorkflow names another n8n workflow; its error handling is not imported")
+    if handler_trigger:
+        info[handler_trigger].update(category="native", reason="error-workflow",
+                                     detail="this workflow is its own error workflow: the steps after it run "
+                                            "through error edges when a step fails")
+
     # Main flow, with disabled and NoOp nodes bypassed (n8n passes data
     # through a disabled node).
-    flow = [n for n in by_name if n not in removed and n not in cluster_of]
+    flow = [n for n in by_name if n not in removed and n not in cluster_of and n != handler_trigger]
     main = [(s, oi, d) for s, ct, oi, d in conns if ct == "main" and s not in cluster_of and d not in cluster_of]
     for r in [n for n in by_name if removed.get(n) in ("disabled", "noop")]:
         ins = [(s, oi) for s, oi, d in main if d == r and s != r]
         outs = [d for s, _, d in main if s == r and d != r]
         main = [e for e in main if r not in (e[0], e[2])]
         main += [(s, oi, d) for s, oi in ins for d in outs]
+    handler_heads = [d for s, _, d in main if s == handler_trigger and d in flow]
     main = [e for e in main if e[0] in flow and e[2] in flow]
     for s, oi, d in list(main):
         if info[d]["role"] in _TRIGGER_ROLES:
@@ -495,9 +571,14 @@ def convert_n8n_workflow(
             warnings.append(f"dropped a connection into trigger node \"{d}\"")
     seen_e: set[tuple[str, int, str]] = set()
     main = [e for e in main if not (e in seen_e or seen_e.add(e))]
+    # Error outputs (onError "continueErrorOutput") become error edges.
+    err_index = {n: _error_index(by_name[n], info[n]["role"]) for n in flow}
+    errs = [e for e in main if err_index[e[0]] is not None and e[1] == err_index[e[0]]]
+    main = [e for e in main if e not in errs]
+    fwd = main + errs
     succ: dict[str, list[str]] = {n: [] for n in flow}
     pred: dict[str, list[str]] = {n: [] for n in flow}
-    for s, _, d in main:
+    for s, _, d in fwd:
         if d not in succ[s]:
             succ[s].append(d)
         if s not in pred[d]:
@@ -511,7 +592,7 @@ def convert_n8n_workflow(
     while queue:
         n = queue.pop(0)
         bfs.append(n)
-        for m in sorted(succ[n], key=lambda x: (min(oi for s, oi, d in main if s == n and d == x), order_index[x])):
+        for m in sorted(succ[n], key=lambda x: (min(oi for s, oi, d in fwd if s == n and d == x), order_index[x])):
             if m not in seen:
                 seen.add(m)
                 queue.append(m)
@@ -540,11 +621,17 @@ def convert_n8n_workflow(
             info[n].update(needsReview=True, reason=info[n]["reason"] or "loop-collapsed",
                            detail=info[n]["detail"] or "loop collapsed into one slot that processes the items one by one")
 
-    # 2. Small IF / Switch (or any multi-output) regions collapse whole.
-    open_branches: set[str] = set()
+    # 2. IF and Switch become branch edges; any other node with several
+    # outputs has its small region folded into one slot.
+    branch_src: dict[str, list[str]] = {}
     for b in bfs:
         outs = {oi for s, oi, d in main if s == b}
-        if len(outs) < 2 or kind_of(b) != "step" or group_note.get(b) == "loop":
+        if kind_of(b) != "step" or group_note.get(b) in ("loop", "branch"):
+            continue
+        if info[b]["role"] in ("if", "switch"):
+            branch_src[b] = _branch_values(by_name[b], info[b]["role"])
+            continue
+        if len(outs) < 2:
             continue
         heads = [[d for s, oi, d in main if s == b and oi == o] for o in sorted(outs)]
         reaches = [set().union(*(_reach(succ, h, b) for h in hs)) for hs in heads]
@@ -561,18 +648,6 @@ def convert_n8n_workflow(
                 uf.union(b, n)
                 group_note.setdefault(n, "branch")
             group_note.setdefault(b, "branch")
-        elif info[b]["role"] in ("if", "switch"):
-            open_branches.add(b)
-            info[b].update(category="pending", reason="branch-too-large",
-                           detail="every branch runs until Navide has conditional edges (Phase 2); "
-                                  "the branches were too large or held an agent or gate to fold into one slot")
-
-    # Merges downstream of an unfolded branch wait for branches that never run.
-    for n in flow:
-        if info[n]["role"] == "merge" and uf.find(n) == n and group_note.get(n) is None:
-            if any(n in _reach(succ, b) for b in open_branches):
-                info[n].update(category="pending", reason="merge-after-branch",
-                               detail="a merge after a conditional branch needs a skip-aware join (Phase 2)")
 
     # 3. Chains of steps with no branching collapse.
     def is_step_group(g: str) -> bool:
@@ -594,6 +669,9 @@ def convert_n8n_workflow(
             if len(nxt) != 1:
                 continue
             gd = next(iter(nxt))
+            # A branch node ends its slot: the slot reports which way it went.
+            if any(uf.find(b) == gs for b in branch_src):
+                continue
             if gpred.get(gd) == {gs} and is_step_group(gs) and is_step_group(gd):
                 uf.union(gs, gd)
                 changed = True
@@ -603,7 +681,7 @@ def convert_n8n_workflow(
     while True:
         groups = sorted({uf.find(n) for n in flow}, key=lambda g: rank[g])
         gs_map: dict[str, list[str]] = {g: [] for g in groups}
-        for s, _, d in main:
+        for s, _, d in fwd:
             a, b2 = uf.find(s), uf.find(d)
             if a != b2 and b2 not in gs_map[a]:
                 gs_map[a].append(b2)
@@ -647,19 +725,119 @@ def convert_n8n_workflow(
     group_cat: dict[str, str] = {}
     group_agent: dict[str, str] = {}
 
-    edges_g: list[tuple[str, str]] = []
-    for s, _, d in main:
-        a, b2 = gid[uf.find(s)], gid[uf.find(d)]
-        if a != b2 and (a, b2) not in edges_g:
-            edges_g.append((a, b2))
-    has_pred = {d for _, d in edges_g}
+    node_of = {m: gid[g] for g, mem in members.items() for m in mem}
+    is_slot_group = {gid[g]: not (len(members[g]) == 1 and kind_of(members[g][0]) in ("trigger", "gate"))
+                     for g in group_list}
+    edges_out: list[dict[str, Any]] = []
+    seen_edges: set[tuple[str, str, str]] = set()
+
+    def add_edge(kind: str, src: str, dst: str, when: str | None = None) -> None:
+        if src == dst or (kind, src, dst) in seen_edges:
+            return
+        if kind != "main" and not is_slot_group.get(src):
+            warnings.append(f"a {kind} connection out of \"{src}\" became a plain one: only steps can branch or fail")
+            kind, when = "main", None
+            if (kind, src, dst) in seen_edges:
+                return
+        seen_edges.add((kind, src, dst))
+        edge: dict[str, Any] = {"id": pg.edge_id(src, dst, kind), "from": src, "to": dst, "kind": kind}
+        if when is not None:
+            edge["when"] = when
+        edges_out.append(edge)
+
+    branch_hits: dict[tuple[str, str], list[str]] = {}
+    for s_, oi, d in main:
+        a, b2 = node_of[s_], node_of[d]
+        if a == b2:
+            continue
+        if s_ in branch_src and node_of[s_] == a:
+            values = branch_src[s_]
+            branch_hits.setdefault((a, b2), []).append(values[oi] if oi < len(values) else str(oi))
+        else:
+            add_edge("main", a, b2)
+    for (a, b2), whens in branch_hits.items():
+        src_node = next(b for b in branch_src if node_of[b] == a)
+        taken = {(branch_src[src_node][oi] if oi < len(branch_src[src_node]) else str(oi))
+                 for s_, oi, d in main if s_ == src_node}
+        if set(whens) >= taken:
+            add_edge("main", a, b2)  # every way out leads here
+        else:
+            if len(set(whens)) > 1:
+                warnings.append(f"several outputs of \"{src_node}\" lead to the same step; only \"{whens[0]}\" is kept")
+            add_edge("branch", a, b2, whens[0])
+    for s_, _, d in errs:
+        add_edge("error", node_of[s_], node_of[d])
+    if handler_heads:
+        heads = [node_of[h] for h in handler_heads]
+        adj: dict[str, list[str]] = {}
+        for e in edges_out:
+            adj.setdefault(e["from"], []).append(e["to"])
+        handler_region: set[str] = set()
+        for h in heads:
+            handler_region |= _reach(adj, h)
+        has_error = {e["from"] for e in edges_out if e["kind"] == "error"}
+        for g in group_list:
+            nid = gid[g]
+            if is_slot_group[nid] and nid not in handler_region and nid not in has_error:
+                for h in heads:
+                    add_edge("error", nid, h)
+    has_pred = {e["to"] for e in edges_out}
     if primary_trigger is None:
         nodes_out.append({"id": pg.TRIGGER_NODE_ID, "kind": "trigger", "label": "Start", "position": {"x": 0, "y": 0}})
     for g in group_list:
         nid = gid[g]
         if nid != pg.TRIGGER_NODE_ID and nid not in has_pred and kind_of(members[g][0]) != "trigger":
-            edges_g.append((pg.TRIGGER_NODE_ID, nid))
-    upstream_labels = {d for s, d in edges_g if s != pg.TRIGGER_NODE_ID and not _is_trigger_id(s, gid, members, kind_of)}
+            add_edge("main", pg.TRIGGER_NODE_ID, nid)
+    upstream_labels = {e["to"] for e in edges_out
+                       if e["from"] != pg.TRIGGER_NODE_ID and not _is_trigger_id(e["from"], gid, members, kind_of)}
+    ancestors: dict[str, set[str]] = {}
+    rev: dict[str, list[str]] = {}
+    for e in edges_out:
+        rev.setdefault(e["to"], []).append(e["from"])
+    for g in group_list:
+        ancestors[gid[g]] = _reach(rev, gid[g]) - {gid[g]}
+
+    # Cross-node reads ($('X').item.json) become {{node.<slot>.output}}.
+    refs: dict[str, list[tuple[str, str, str | None]]] = {}  # slot → (reader, read node, its slot or None)
+    contract: set[str] = set()
+    for g in group_list:
+        nid = gid[g]
+        for m in members[g]:
+            for x in _referenced_nodes(by_name[m]):
+                if x not in by_name or x in removed:
+                    continue
+                owner = node_of.get(cluster_of.get(x, x))
+                if owner is None or owner == nid or not is_slot_group.get(owner):
+                    continue
+                if owner in ancestors[nid]:
+                    refs.setdefault(nid, []).append((m, x, owner))
+                    contract.add(owner)
+                else:
+                    refs.setdefault(nid, []).append((m, x, None))
+
+    # Retry policy per slot, from its nodes' retryOnFail settings.
+    retry_of: dict[str, dict[str, Any]] = {}
+    retry_note: dict[str, dict[str, Any]] = {}
+    for g in group_list:
+        tries = waits = 0
+        for m in members[g]:
+            n = by_name[m]
+            if not n.get("retryOnFail"):
+                continue
+            t = n.get("maxTries", 3)
+            w = n.get("waitBetweenTries", 1000)
+            t = int(t) if isinstance(t, (int, float)) and not isinstance(t, bool) else 3
+            w = int(w) if isinstance(w, (int, float)) and not isinstance(w, bool) else 1000
+            applied = {"maxTries": max(1, min(t, pg.MAX_TRIES_CEILING)), "waitMs": max(0, min(w, pg.MAX_RETRY_WAIT_MS))}
+            capped = applied["maxTries"] != t or applied["waitMs"] != w
+            retry_note[m] = {"requested": {"maxTries": t, "waitMs": w}, "applied": applied, "capped": capped}
+            if capped:
+                warnings.append(f"\"{m}\" retries {t} times {w} ms apart in n8n; Navide allows at most "
+                                f"{pg.MAX_TRIES_CEILING} tries {pg.MAX_RETRY_WAIT_MS} ms apart, so it uses "
+                                f"{applied['maxTries']} tries {applied['waitMs']} ms apart")
+            tries, waits = max(tries, applied["maxTries"]), max(waits, applied["waitMs"])
+        if tries and is_slot_group[gid[g]]:
+            retry_of[gid[g]] = {"maxTries": tries, "waitMs": waits}
 
     for g in group_list:
         mem = members[g]
@@ -680,23 +858,29 @@ def convert_n8n_workflow(
             agent_key = _cluster_agent(mem[0], cluster_of, by_name) or default_agent
         label = mem[0] if len(mem) == 1 else (
             f"Loop: {mem[0]}" if all(group_note.get(m) == "loop" for m in mem) else f"{mem[0]} (+{len(mem) - 1})")
+        extras = _kickoff_extras(mem, by_name, info, branch_src, refs.get(nid, []), nid in contract,
+                                 {m: retry_note[m] for m in mem if m in retry_note})
         kickoff = _kickoff(
-            wf_name, mem, by_name, info, cluster_of, succ, main, pin_data, sticky_notes.get(nid, []),
-            agent_key, nid in upstream_labels, group_note,
+            wf_name, mem, by_name, info, cluster_of, succ, fwd, pin_data, sticky_notes.get(nid, []),
+            agent_key, nid in upstream_labels, group_note, extras,
         )
         group_agent[nid] = agent_key
-        nodes_out.append({"id": nid, "kind": "slot", "label": label, "position": {"x": 0, "y": 0},
-                          "slot": {"agentKey": agent_key, "roleKey": "", "label": label,
-                                   "kickoffBody": kickoff, "isCommander": False}})
+        slot_node: dict[str, Any] = {"id": nid, "kind": "slot", "label": label, "position": {"x": 0, "y": 0},
+                                     "slot": {"agentKey": agent_key, "roleKey": "", "label": label,
+                                              "kickoffBody": kickoff, "isCommander": False}}
+        if nid in retry_of:
+            slot_node["retry"] = retry_of[nid]
+        nodes_out.append(slot_node)
         slots_report.append({
             "id": nid, "label": label, "agentKey": agent_key, "category": cat, "nodes": list(mem),
             "needsReview": any(info[m]["needsReview"] for m in mem), "kickoffBody": kickoff, "tainted": True,
+            **({"retry": retry_of[nid]} if nid in retry_of else {}),
         })
 
     graph: dict[str, Any] = {
         "version": pg.GRAPH_VERSION,
         "nodes": nodes_out,
-        "edges": [{"id": pg.edge_id(s, d), "from": s, "to": d, "kind": "main"} for s, d in edges_g],
+        "edges": edges_out,
     }
     _place(graph)
     errors = pg.validate_graph(graph)
@@ -704,7 +888,6 @@ def convert_n8n_workflow(
         raise N8nImportError("internal: the converted graph is invalid: " + "; ".join(errors))
 
     # ── report ───────────────────────────────────────────────────────────
-    node_of = {m: gid[g] for g, mem in members.items() for m in mem}
     entries: list[dict[str, Any]] = []
     for n in wf["nodes"]:
         name = n["name"]
@@ -720,6 +903,8 @@ def convert_n8n_workflow(
                 "disabled": "disabled in n8n: left out, its connections pass through",
                 "noop": "No Operation node: removed and its connections joined",
             }[removed[name]])
+        elif name == handler_trigger:
+            entry.update(result="folded")
         elif name in cluster_of:
             entry.update(result="folded", node=node_of.get(cluster_of[name]))
             role = i["role"]
@@ -744,8 +929,19 @@ def convert_n8n_workflow(
                     "trigger": "trigger", "trigger_schedule": "schedule-trigger", "trigger_webhook": "webhook-trigger",
                     "trigger_error": "error-trigger", "trigger_app": "app-trigger", "gate": "gate",
                     "agent_root": "agent-cluster", "subworkflow": "subworkflow", "respond": "webhook-response",
+                    "if": "branch", "switch": "branch", "merge": "merge",
                 }.get(i["role"], "agent-step")
-                entry["detail"] = entry["detail"] or "an agent carries it out from the original parameters"
+                entry["detail"] = entry["detail"] or {
+                    "if": "branch edges: the agent reports which way the condition went and only that branch runs",
+                    "switch": "branch edges, one per rule: the agent reports which rule matched and only that branch runs",
+                    "merge": "waits for the inputs that run; an input whose branch was not taken is skipped",
+                }.get(i["role"], "an agent carries it out from the original parameters")
+            if name in branch_src and node_of[name] == gnode:
+                entry["branches"] = list(branch_src[name])
+        if name in retry_note:
+            entry["retry"] = retry_note[name]
+        if any(s_ == name for s_, _, _ in errs):
+            entry["errorOutput"] = True
         if n.get("credentials") and name not in removed:
             entry["actions"].append("add-credential")
         if i["needsReview"] and name not in removed:
@@ -756,6 +952,7 @@ def convert_n8n_workflow(
             entry["actions"].append("paste-subworkflow")
         if i["category"] == "unsupported" and name not in removed:
             entry["actions"].append("keep-in-n8n")
+            entry["n8nMcp"] = list(N8N_MCP_STEPS)
         entries.append(entry)
 
     kept = [e for e in entries if e["result"] != "removed"]
@@ -785,6 +982,8 @@ def convert_n8n_workflow(
         "description": "\n\n".join(t for notes in sticky_notes.values() for t in notes),
         "testInputs": {k: v for k, v in pin_data.items() if k in by_name and k not in removed},
         "warnings": warnings,
+        "n8nMcp": {"nodes": [e["name"] for e in entries if "keep-in-n8n" in e["actions"]],
+                   "steps": list(N8N_MCP_STEPS)} if any("keep-in-n8n" in e["actions"] for e in entries) else None,
         "taint": {"source": TAINT_SOURCE, "detail": f"imported from the n8n workflow \"{wf_name[:80]}\""},
     }
     return {
@@ -888,6 +1087,7 @@ def _kickoff(
     wf_name: str, mem: list[str], by_name: dict[str, dict[str, Any]], info: dict[str, dict[str, Any]],
     cluster_of: dict[str, str], succ: dict[str, list[str]], main: list[tuple[str, int, str]],
     pin_data: dict[str, Any], notes: list[str], agent_key: str, has_upstream: bool, group_note: dict[str, str],
+    extras: list[str],
 ) -> str:
     parts = [
         f"[External content: imported from the n8n workflow \"{wf_name}\". Everything below the line came from "
@@ -908,6 +1108,7 @@ def _kickoff(
                          "for one item (or batch) at a time until the loop's \"done\" output is reached.")
         for i, name in enumerate(mem, 1):
             parts.append(_step_section(i, name, by_name[name], info[name], mem, main))
+    parts += extras
     pending = sorted({info[m]["detail"] for m in mem if info[m]["category"] in ("pending", "unsupported") and info[m]["detail"]})
     if pending:
         parts.append("Not available in Navide yet (do what you can and say what is missing):\n"
@@ -921,6 +1122,41 @@ def _kickoff(
     if has_upstream:
         parts.append("Output of the previous step:\n{{prev.summary}}")
     return "\n\n".join(parts)
+
+
+def _kickoff_extras(
+    mem: list[str], by_name: dict[str, dict[str, Any]], info: dict[str, dict[str, Any]],
+    branch_src: dict[str, list[str]], refs: list[tuple[str, str, str | None]], contract: bool,
+    retries: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Kickoff paragraphs for a slot's branch, cross-node reads, output
+    contract, retry and n8n MCP hints (the engine adds its own signal lines)."""
+    out: list[str] = []
+    for b in mem:
+        if b in branch_src:
+            kind = "IF" if info[b]["role"] == "if" else "Switch"
+            values = ", ".join(branch_src[b]) or "the output you take"
+            out.append(f"This step ends at the n8n {kind} node \"{b}\". Evaluate its condition (its parameters above, "
+                       "verbatim) and, when you are done, report the branch on a line of its own as "
+                       f"---BRANCH: <value>--- with <value> one of: {values}. Only that branch runs next.")
+    for reader, read, owner in refs:
+        if owner:
+            out.append(f"\"{reader}\" reads data from the n8n node \"{read}\" ($('{read}').item.json). That node ran in "
+                       f"an earlier step; its result is:\n{{{{node.{owner}.output}}}}")
+        else:
+            out.append(f"\"{reader}\" reads data from the n8n node \"{read}\", which does not run before this step; "
+                       "work without it or say what is missing.")
+    if contract:
+        out.append("Later steps read this step's result as JSON: end your reply with that JSON between a line "
+                   "---OUTPUT-START--- and a line ---OUTPUT-END---.")
+    for m, note in retries.items():
+        if note["capped"]:
+            out.append(f"In n8n \"{m}\" retried {note['requested']['maxTries']} times; here this step is retried "
+                       f"{note['applied']['maxTries']} times in all.")
+    if any(info[m]["category"] == "unsupported" for m in mem):
+        out.append("Part of this step is better left in n8n and called through n8n's MCP server:\n"
+                   + "\n".join(f"- {line}" for line in N8N_MCP_STEPS))
+    return out
 
 
 def _step_section(i: int, name: str, node: dict[str, Any], inf: dict[str, Any], mem: list[str],
@@ -952,7 +1188,7 @@ def _step_section(i: int, name: str, node: dict[str, Any], inf: dict[str, Any], 
         for oi in outs:
             targets = [d for s, o, d in main if s == name and o == oi]
             where = ", ".join(f"\"{t}\"" + ("" if t in mem else " (a later step)") for t in targets)
-            nxt.append(f"{_output_label(node, inf['role'], oi, max(outs) + 1)} → {where}")
+            nxt.append(f"{_output_label(node, inf['role'], oi)} → {where}")
         lines.append("Next: " + "; ".join(nxt))
     return "\n".join(lines)
 

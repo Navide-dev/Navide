@@ -212,27 +212,173 @@ def test_ai_agent_cluster_folds_into_one_slot(model, agent):
     assert "{{prev.summary}}" in slot(out, "n8n-notify")["slot"]["kickoffBody"]
 
 
-def test_small_if_and_merge_collapse_into_one_agent_slot():
+def edges(out: dict) -> list:
+    return sorted((e["kind"], e["from"], e["to"], e.get("when")) for e in out["graph"]["edges"])
+
+
+def test_if_becomes_branch_edges_and_the_merge_is_native():
     out = convert(if_merge())
-    assert shape(out) == {
-        "nodes": [("trigger", "trigger", "Start"), ("n8n-check", "slot", "Check (+4)")],
-        "edges": [("trigger", "n8n-check")],
-    }
+    assert shape(out)["nodes"] == [("trigger", "trigger", "Start"), ("n8n-check", "slot", "Check"),
+                                   ("n8n-yes", "slot", "Yes"), ("n8n-no", "slot", "No"), ("n8n-join", "slot", "Join (+1)")]
+    assert edges(out) == [
+        ("branch", "n8n-check", "n8n-no", "false"), ("branch", "n8n-check", "n8n-yes", "true"),
+        ("main", "n8n-no", "n8n-join", None), ("main", "n8n-yes", "n8n-join", None),
+        ("main", "trigger", "n8n-check", None),
+    ]
     kick = slot(out, "n8n-check")["slot"]["kickoffBody"]
-    assert "taking only the branch whose condition holds" in kick
-    assert "Next: true → \"Yes\"; false → \"No\"" in kick
-    assert entry(out, "Check")["category"] == "agent"
+    assert "---BRANCH: <value>--- with <value> one of: true, false" in kick
+    assert '"combinator": "and"' in kick  # the condition, verbatim
+    assert (entry(out, "Check")["category"], entry(out, "Check")["reason"]) == ("native", "branch")
+    assert entry(out, "Check")["branches"] == ["true", "false"]
+    assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("native", "merge")
 
 
-def test_large_branch_is_pending_and_the_merge_after_it_too():
+def test_a_large_branch_is_native_too():
     out = convert(if_merge(big=True))
-    ids = [n[0] for n in shape(out)["nodes"]]
-    assert ids == ["trigger", "n8n-check", "n8n-yes", "n8n-no", "n8n-think", "n8n-join"]
-    assert ("n8n-check", "n8n-yes") in shape(out)["edges"] and ("n8n-check", "n8n-no") in shape(out)["edges"]
-    assert entry(out, "Check")["category"] == "pending" and entry(out, "Check")["reason"] == "branch-too-large"
-    assert entry(out, "Join")["category"] == "pending" and entry(out, "Join")["reason"] == "merge-after-branch"
-    assert out["report"]["nodeCategories"]["n8n-join"] == "pending"
-    assert entry(out, "Think")["result"] == "slot"
+    assert [n[0] for n in shape(out)["nodes"]] == ["trigger", "n8n-check", "n8n-yes", "n8n-no", "n8n-think", "n8n-join"]
+    assert ("branch", "n8n-check", "n8n-yes", "true") in edges(out)
+    assert entry(out, "Check")["category"] == "native" and entry(out, "Join")["category"] == "native"
+    assert out["report"]["stats"]["byCategory"]["pending"] == 0
+
+
+def test_steps_before_an_if_fold_into_its_slot_but_nothing_after_it():
+    w = if_merge()
+    w["nodes"].insert(1, node("Load", "httpRequest", 4.2, 100))
+    w["connections"] = {**link(("Start", "Load"), ("Load", "Check")),
+                        **{k: v for k, v in w["connections"].items() if k != "Start"}}
+    out = convert(w)
+    assert slot(out, "n8n-load")["label"] == "Load (+1)"
+    assert ("branch", "n8n-load", "n8n-yes", "true") in edges(out)
+
+
+def test_switch_rules_map_one_by_one_and_the_fallback_to_default():
+    rules = {"values": [{"outputKey": "Refund", "renameOutput": True}, {}]}
+    w = wf([node("Start", "manualTrigger"),
+            node("Route", "switch", 3.2, 200, parameters={"rules": rules, "options": {"fallbackOutput": "extra"}}),
+            node("A", "set", 3.4, 400, -100), node("B", "set", 3.4, 400), node("C", "set", 3.4, 400, 100)],
+           link(("Start", "Route"), ("Route", "A", 0), ("Route", "B", 1), ("Route", "C", 2)))
+    out = convert(w)
+    assert [e for e in edges(out) if e[0] == "branch"] == [
+        ("branch", "n8n-route", "n8n-a", "Refund"), ("branch", "n8n-route", "n8n-b", "1"),
+        ("branch", "n8n-route", "n8n-c", "default"),
+    ]
+    assert "one of: Refund, 1, default" in slot(out, "n8n-route")["slot"]["kickoffBody"]
+
+
+def test_two_outputs_into_one_step_keep_one_branch_and_warn():
+    w = wf([node("Start", "manualTrigger"),
+            node("Route", "switch", 3.2, 200, parameters={"rules": {"values": [{}, {}, {}]}}),
+            node("A", "set", 3.4, 400), node("B", "set", 3.4, 400, 100)],
+           link(("Start", "Route"), ("Route", "A", 0), ("Route", "A", 1), ("Route", "B", 2)))
+    out = convert(w)
+    assert ("branch", "n8n-route", "n8n-a", "0") in edges(out)
+    assert any("only \"0\" is kept" in x for x in out["report"]["warnings"])
+
+
+def test_both_if_outputs_into_one_step_is_a_plain_edge():
+    w = wf([node("Start", "manualTrigger"), node("Check", "if", 2, 200), node("A", "set", 3.4, 400)],
+           link(("Start", "Check"), ("Check", "A", 0), ("Check", "A", 1)))
+    out = convert(w)
+    assert ("main", "n8n-check", "n8n-a", None) in edges(out)
+
+
+def test_an_error_output_becomes_an_error_edge():
+    w = wf([node("Start", "manualTrigger"),
+            node("Call", "httpRequest", 4.2, 200, onError="continueErrorOutput"),
+            node("Ok", "set", 3.4, 400), node("Alert", "slack", 2.3, 400, 100)],
+           link(("Start", "Call"), ("Call", "Ok", 0), ("Call", "Alert", 1)))
+    out = convert(w)
+    assert ("error", "n8n-call", "n8n-alert", None) in edges(out)
+    assert slot(out, "n8n-call")["label"] == "Call (+1)"  # the regular output still chains
+    assert entry(out, "Call")["errorOutput"] is True
+    assert "error → \"Alert\"" in slot(out, "n8n-call")["slot"]["kickoffBody"]
+
+
+def test_an_if_with_an_error_output():
+    w = wf([node("Start", "manualTrigger"), node("Check", "if", 2, 200, onError="continueErrorOutput"),
+            node("Y", "set", 3.4, 400), node("N", "set", 3.4, 400, 100), node("E", "set", 3.4, 400, 200)],
+           link(("Start", "Check"), ("Check", "Y", 0), ("Check", "N", 1), ("Check", "E", 2)))
+    out = convert(w)
+    assert {e for e in edges(out) if e[1] == "n8n-check"} == {
+        ("branch", "n8n-check", "n8n-y", "true"), ("branch", "n8n-check", "n8n-n", "false"),
+        ("error", "n8n-check", "n8n-e", None)}
+
+
+def test_its_own_error_workflow_becomes_error_edges():
+    w = wf([node("Start", "manualTrigger"), node("Work", "httpRequest", 4.2, 200),
+            node("Think", ni.LANGCHAIN + "chainLlm", 1.5, 400),
+            node("On error", "errorTrigger", 1, 0, 300), node("Page", "slack", 2.3, 200, 300)],
+           link(("Start", "Work"), ("Work", "Think"), ("On error", "Page")),
+           id="wf-7", settings={"errorWorkflow": "wf-7"})
+    out = convert(w)
+    assert shape(out)["nodes"][0] == ("trigger", "trigger", "Start")
+    assert edges(out) == [
+        ("error", "n8n-think", "n8n-page", None), ("error", "n8n-work", "n8n-page", None),
+        ("main", "n8n-work", "n8n-think", None), ("main", "trigger", "n8n-work", None),
+    ]
+    e = entry(out, "On error")
+    assert (e["result"], e["category"], e["reason"]) == ("folded", "native", "error-workflow")
+
+
+def test_another_error_workflow_is_only_a_warning():
+    w = wf([node("Start", "manualTrigger"), node("Work", "set", 3.4, 200)], link(("Start", "Work")),
+           id="wf-7", settings={"errorWorkflow": "wf-9"})
+    out = convert(w)
+    assert any("errorWorkflow names another" in x for x in out["report"]["warnings"])
+    assert all(e[0] == "main" for e in edges(out))
+
+
+def test_retry_settings_map_to_the_slot_and_are_capped_at_five():
+    w = wf([node("Start", "manualTrigger"),
+            node("Call", "httpRequest", 4.2, 200, retryOnFail=True, maxTries=8, waitBetweenTries=500_000),
+            node("Think", ni.LANGCHAIN + "chainLlm", 1.5, 400, retryOnFail=True)],
+           link(("Start", "Call"), ("Call", "Think")))
+    out = convert(w)
+    assert slot(out, "n8n-call")["retry"] == {"maxTries": 5, "waitMs": 300_000}
+    assert slot(out, "n8n-think")["retry"] == {"maxTries": 3, "waitMs": 1000}
+    note = entry(out, "Call")["retry"]
+    assert note["capped"] is True and note["requested"] == {"maxTries": 8, "waitMs": 500_000}
+    assert entry(out, "Think")["retry"]["capped"] is False
+    assert any("Navide allows at most 5 tries" in x for x in out["report"]["warnings"])
+    assert "retried 5 times in all" in slot(out, "n8n-call")["slot"]["kickoffBody"]
+
+
+def test_a_cross_node_read_becomes_a_node_output_reference():
+    w = wf([node("Start", "manualTrigger"),
+            node("Lookup", ni.LANGCHAIN + "chainLlm", 1.5, 200),
+            node("Mid", ni.LANGCHAIN + "chainLlm", 1.5, 400),
+            node("Use", "set", 3.4, 600, parameters={"value": "={{ $('Lookup').item.json.email }}",
+                                                      "old": "={{ $node[\"Mid\"].json.x }}"})],
+           link(("Start", "Lookup"), ("Lookup", "Mid"), ("Mid", "Use")))
+    out = convert(w)
+    kick = slot(out, "n8n-use")["slot"]["kickoffBody"]
+    assert "{{node.n8n-lookup.output}}" in kick and "{{node.n8n-mid.output}}" in kick
+    assert "---OUTPUT-START---" in slot(out, "n8n-lookup")["slot"]["kickoffBody"]
+    assert "---OUTPUT-START---" not in slot(out, "n8n-use")["slot"]["kickoffBody"]
+
+
+def test_a_read_of_a_step_that_does_not_run_first_is_disclosed():
+    w = wf([node("Start", "manualTrigger"), node("Check", "if", 2, 200),
+            node("Y", ni.LANGCHAIN + "chainLlm", 1.5, 400), node("N", "set", 3.4, 400, 100,
+                                                              parameters={"v": "={{ $('Y').item.json.a }}"})],
+           link(("Start", "Check"), ("Check", "Y", 0), ("Check", "N", 1)))
+    out = convert(w)
+    kick = slot(out, "n8n-n")["slot"]["kickoffBody"]
+    assert "does not run before this step" in kick and "{{node." not in kick
+
+
+def test_steps_left_in_n8n_carry_the_n8n_mcp_hint():
+    lc = ni.LANGCHAIN
+    w = wf([node("Start", "manualTrigger"), node("Index", lc + "vectorStoreInMemory", 1, 200)],
+           link(("Start", "Index")))
+    out = convert(w)
+    e = entry(out, "Index")
+    assert "keep-in-n8n" in e["actions"] and e["n8nMcp"] == list(ni.N8N_MCP_STEPS)
+    assert out["report"]["n8nMcp"]["nodes"] == ["Index"]
+    steps = " ".join(ni.N8N_MCP_STEPS)
+    assert "Settings → MCP" in steps and "Available in MCP" in steps and "does not wait" in steps
+    assert "n8n's MCP server" in slot(out, "n8n-index")["slot"]["kickoffBody"]
+    assert convert(linear())["report"]["n8nMcp"] is None
 
 
 def test_split_in_batches_back_edge_becomes_one_loop_slot():
@@ -395,6 +541,7 @@ def test_rejects_input_that_is_not_a_workflow(bad):
 def test_every_fixture_passes_validate_graph_and_is_tainted():
     for w in (linear(), ai_cluster(), if_merge(), if_merge(True), loop(), webhook(), schedule(), subworkflow(),
               removals()):
+        assert ni.pg.validate_graph(ni.convert_n8n_workflow(w)["graph"]) == []
         out = convert(w)
         assert out["report"]["taint"]["source"] == ni.TAINT_SOURCE
         assert "Fixture" in out["report"]["taint"]["detail"]

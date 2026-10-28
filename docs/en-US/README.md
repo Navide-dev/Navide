@@ -21,6 +21,7 @@ The root [README](../../README.md) introduces the product and current distributi
 |---|---|
 | [Getting started](getting-started.md) | Download the signed macOS build or the Windows or Linux installer, or install from source, then complete the first launch |
 | [User guide](user-guide.md) | Learn workspaces, panes, pipelines, coordination, Git, history, and editor workflows |
+| [Import from n8n](import-from-n8n.md) | Turn an exported n8n workflow into a pipeline: preview, credentials, external-content taint, n8n MCP |
 | [Troubleshooting](troubleshooting.md) | Resolve startup, permissions, agent-session, analyzer, and token-tracking problems |
 
 ## Trust and safety
