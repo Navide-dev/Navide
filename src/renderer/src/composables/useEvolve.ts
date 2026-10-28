@@ -42,6 +42,9 @@ export interface EvolveSettings {
   /** S4: how often each proposal source runs. Navide only ever lowers one to
    *  weekly; raising it back is the user's. Optional for an older backend. */
   retro_freq?: Record<EvolveSource, EvolveFreq>
+  /** S5b: the reclaim retrospective, off by default, at most this many a day. */
+  reclaim_retro?: boolean
+  reclaim_retro_max_per_day?: number
   /** S5a: start a run early when one error signature appears burst_count
    *  times within burst_minutes; at most burst_max_per_day such runs. Off by
    *  default. Optional for an older backend. */
@@ -112,6 +115,9 @@ export interface EvolveBadge {
   /** v1.2: panes this workspace's recent runs used, newest first (incl. the
    *  running one). Optional so an older backend's badge still reads. */
   pane_ids?: readonly string[]
+  /** S5b: ask a long-running dispatched pane for three lines before an
+   *  automatic or agent-requested reclaim. Optional for an older backend. */
+  reclaim_retro?: boolean
 }
 
 export interface EvolveState {
@@ -146,6 +152,7 @@ export const EVOLVE_BOUNDS = {
   burst_minutes: [5, 1440],
   burst_count: [3, 1000],
   burst_max_per_day: [1, 10],
+  reclaim_retro_max_per_day: [1, 10],
   extra: 4000,
   /** Tokens each retro pass may spend of a run's budget (evolve_rules.RETRO_SUB_BUDGET). */
   retro_sub_budget: 50_000,
@@ -220,6 +227,43 @@ export async function evolveSet(
 
 export function evolveRunNow(backend: Backend, workspace: string): Promise<EvolveResult<{ run_id: string }>> {
   return call<{ run_id: string }>(backend, 'evolve.run_now', { workspace })
+}
+
+/** S5b: the reclaims that may ask for a retrospective first. A reclaim the
+ *  user clicked passes none and is never held up. */
+export type ReclaimRetroSource = 'idle-sweep' | 'agent' | 'pipeline'
+
+/** The longest a reclaim waits here; the backend itself gives up at 90 s. */
+export const RECLAIM_RETRO_WAIT_MS = 95_000
+
+/** Before an automatic or agent-requested reclaim: when this workspace's
+ *  badge has the reclaim retrospective on, ask the backend to have the pane
+ *  write its three lines and wait for its turn end (bounded). Answers whether
+ *  a retrospective was asked, so the caller re-checks its reclaim guards (the
+ *  pane was busy for a turn). With the switch off it sends nothing. Never
+ *  throws: a reclaim always goes on. */
+export async function retroBeforeReclaim(
+  backend: Backend,
+  workspace: string | undefined,
+  paneId: string,
+  source?: ReclaimRetroSource,
+): Promise<boolean> {
+  if (!source || !workspace || !badges.value[workspace]?.reclaim_retro) return false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const reply = await Promise.race([
+      backend.send('evolve.retro_request', { workspace, pane_id: paneId }, RECLAIM_RETRO_WAIT_MS),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), RECLAIM_RETRO_WAIT_MS)
+      }),
+    ])
+    const payload = reply && reply.ok ? (reply.payload as { asked?: boolean } | null) : null
+    return payload?.asked === true
+  } catch {
+    return false
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
 }
 
 /** Store one badge (from a reply or a broadcast). */
