@@ -6,13 +6,23 @@
 defineProps<{
   title: string
   description?: string
+  /** Marks a setting a CLI reads once at start: panes already open keep the
+   *  old value until they are rebuilt. */
+  newPanesOnly?: boolean
 }>()
 </script>
 
 <template>
   <div class="setting-row">
     <div class="setting-row-text">
-      <div class="setting-row-title">{{ title }}</div>
+      <div class="setting-row-title">
+        {{ title }}<span
+          v-if="newPanesOnly"
+          class="setting-row-applies"
+          data-testid="setting-row-new-panes-only"
+          :title="$t('settings.applies.new-panes-only-tooltip')"
+        >{{ $t('settings.applies.new-panes-only') }}</span>
+      </div>
       <div v-if="description" class="setting-row-desc">{{ description }}</div>
     </div>
     <div class="setting-row-control">
@@ -43,6 +53,16 @@ defineProps<{
   font-size: var(--font-row-title);
   font-weight: 600;
   color: var(--text-bright);
+}
+.setting-row-applies {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-row-desc);
+  font-weight: 500;
+  white-space: nowrap;
 }
 .setting-row-desc {
   font-size: var(--font-row-desc);

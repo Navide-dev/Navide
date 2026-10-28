@@ -764,6 +764,8 @@ async def test_tools_are_registered_without_a_ctx_argument() -> None:
         # DESIGN-C §3.1: where a child in another project goes ("current" / "new"
         # / "existing"), and which window for "existing".
         "window", "window_id",
+        # 0.2.34 P3: which account the new pane runs on (default: the caller's).
+        "account",
     }
     assert set((tools["cli_check_message"].inputSchema.get("properties") or {})) == {"msg_key"}
     assert set((tools["cli_send_and_wait"].inputSchema.get("properties") or {})) == {

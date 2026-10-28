@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "A CLI terminou com o código de saída {code}. Ela pode ter travado; o código também é registrado no registro de erros.",
       "stuck-badge": "⏳ Sem atividade há {minutes}+ min",
       "stuck-tooltip": "Este turno não mostrou atividade no log nem saída por mais de {minutes} minutos. A CLI pode estar travada; nada foi interrompido.",
+      "stale-config-badge": "Configurações alteradas",
+      "stale-config-tooltip-mcp": "Os servidores MCP desta CLI mudaram depois que o painel foi aberto. Ela mantém a lista antiga até ser reconstruída. Clique para reconstruir (retomar a conversa).",
+      "stale-config-tooltip-skills": "As skills entregues a esta CLI mudaram depois que o painel foi aberto. Ela pode manter as antigas até ser reconstruída. Clique para reconstruir (retomar a conversa).",
+      "stale-config-tooltip-both": "Os servidores MCP e as skills desta CLI mudaram depois que o painel foi aberto. Ela mantém os antigos até ser reconstruída. Clique para reconstruir (retomar a conversa).",
       "usage-limit-badge": "⛔ volta {time}",
       "usage-limit-badge-unknown": "⛔ sem cota",
       "usage-limit-tooltip": "Esta CLI está sem cota: deve voltar às {time}. Clique para dispensar",
@@ -1505,6 +1509,19 @@
         "capability-approve": "A CLI pede primeiro que você aprove os recursos dela",
         "hot-reload": "Perguntado uma vez por session antes do recarregamento a quente"
       }
+    },
+    "applies": {
+      "new-panes-only": "Só painéis novos",
+      "new-panes-only-tooltip": "Uma CLI lê isto ao iniciar. Painéis já abertos mantêm o valor antigo até você reconstruí-los."
+    },
+    "stale-config": {
+      "title": "Painéis abertos iniciados antes desta mudança: {count}",
+      "body-mcp": "Uma CLI lê seus próprios servidores MCP ao iniciar, então estes painéis ainda usam a lista antiga. Reconstruir retoma a conversa, mas interrompe um turno em andamento e reexibe a conversa.",
+      "body-skills": "Uma CLI lê suas skills ao iniciar, então estes painéis podem ainda usar as antigas. Reconstruir retoma a conversa, mas interrompe um turno em andamento e reexibe a conversa.",
+      "rebuild-all-idle": "Reconstruir todos os ociosos ({count})",
+      "busy": "Em execução — “Reconstruir todos os ociosos” o ignora",
+      "cannot-rebuild": "Nenhuma conversa salva para retomar",
+      "rebuild": "Reconstruir"
     },
     "limits": {
       "hint": "Limites opcionais que impedem o Navide e os agents que ele executa de sobrecarregar esta máquina. Cada um fica desativado, ou com o comportamento anterior do Navide, até que você o altere.",
@@ -8176,11 +8193,14 @@
         "agent-switch-confirm-to": "Para a conta",
         "agent-switch-confirm-caller": "Solicitado pelo pane",
         "agent-switch-confirm-workspace": "Workspace do pane",
+        "agent-switch-confirm-pane": "Pane a mover",
+        "agent-switch-confirm-pane-body": "Nada muda sem a sua concordância. Só este pane é movido: ele reabre na conversa dentro da pasta própria da outra conta. O login ativo da CLI e todos os outros panes continuam como estão. Se o pane estiver trabalhando, o Navide pergunta de novo antes de pará-lo. Sem resposta, a solicitação se fecha sozinha.",
         "agent-switch-confirm-reason": "Motivo, escrito pelo agent",
         "agent-switch-confirm-reason-truncated": "O motivo do agent tinha mais de 300 caracteres; só os 300 primeiros são mostrados.",
         "agent-switch-confirm-cancel": "Cancelar",
         "agent-switch-confirm-ok": "Trocar conta",
         "agent-switch-done": "{agent} trocou {vendor} de {from} para {to}. Motivo do agent: {reason}",
+        "agent-switch-pane-done": "{agent} moveu um pane de {from} para {to}. O login ativo e os outros panes não mudaram. Motivo do agent: {reason}",
         "login-complete": "Conectado como {email}. Conta salva.",
         "login-complete-no-email": "Login concluído. Conta salva.",
         "login-step2": "Etapa 1 concluída: {email} foi salva. Mais uma autorização conecta esta conta na própria pasta. Conclua no navegador a partir do pane de login que acabou de abrir.",
@@ -11394,6 +11414,14 @@
       "not-reclaimed": "(não liberado)",
       "fix": "Correção",
       "proposal": "Proposta",
+      "proposal-reason": "Motivo: {reason}",
+      "effect-title": "Efeito e frequência",
+      "adoption": "Adotadas {adopted} / {resolved}",
+      "adoption-none": "Ainda não há propostas resolvidas",
+      "lowered": "Reduzida para semanal em {date}: as últimas {n} propostas seguidas não foram adotadas",
+      "landed-title": "Propostas aplicadas",
+      "landed-none": "Ainda não há propostas aplicadas",
+      "effect-counts": "{before} → {after} (7 dias antes / depois)",
       "history": "Histórico (últimas 30)",
       "unsaved": "Alterações não salvas",
       "save": "Salvar",
@@ -11431,6 +11459,11 @@
       "scope-propose": "Somente propor (sem alterar código)",
       "scope-fix-no-git": "Este workspace não é um repositório git: não há worktree nem branch principal para trabalhar; por isso, ele só pode propor.",
       "scope-always-propose": "Novos recursos, decisões de design, exclusão / migração de dados, push e publicação de versões são sempre propostas (regra integrada).",
+      "retro": "Retrospectivas",
+      "retro-tools": "Trabalho manual repetido",
+      "retro-tools-hint": "Até {tokens} tokens por execução. Lê o registro de mensagens e as execuções de tarefas agendadas deste workspace dos últimos 7 dias, só como contagens; uma tarefa feita 3 ou mais vezes vira proposta de pipeline, skill, Prompt e afins.",
+      "retro-corrections": "Suas correções",
+      "retro-corrections-hint": "Até {tokens} tokens por execução. Lê suas review notes nos plans deste workspace e os motivos das propostas rejeitadas dos últimos 7 dias, só como contagens; uma correção repetida 2 ou mais vezes vira proposta de mudança de regra.",
       "rules": "Regras",
       "rules-builtin": "Integradas v{version}",
       "rules-view": "Ver o texto completo",
@@ -11455,6 +11488,29 @@
       "error": "Falhou",
       "timeout": "Tempo esgotado",
       "skipped": "Ignorada"
+    },
+    "source": {
+      "failures": "Triagem de erros",
+      "tools": "Trabalho manual repetido",
+      "corrections": "Suas correções"
+    },
+    "freq": {
+      "daily": "Diária",
+      "weekly": "Semanal"
+    },
+    "effect": {
+      "effective": "Eficaz",
+      "not-effective": "Não eficaz",
+      "insufficient": "Poucos dados",
+      "pending": "Ainda não avaliada"
+    },
+    "proposal-status": {
+      "proposed": "Proposta",
+      "approved": "Aprovada",
+      "rejected": "Rejeitada",
+      "in-progress": "Em andamento",
+      "landed": "Aplicada",
+      "abandoned": "Abandonada"
     },
     "history": {
       "date": "Data",

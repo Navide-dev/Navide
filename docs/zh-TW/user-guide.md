@@ -81,6 +81,8 @@ These observations help you inspect local activity; they do not prove exfiltrati
 - **凍結產出（Pin）。** 在 Inspector 中凍結的步驟，之後的執行會跳過它並沿用它上次的產出。
 - **從這裡重跑（Restart from）。** 在步驟的 Inspector 中，當這個 Pipeline 有一輪已停止的執行時，可從該步驟開始新的一輪，並保留前面步驟的產出 —— 比全部重跑的**重新開始**便宜。
 
+第三個內建範本 **提案落地流程**（id `evolve-landing`）是已核准的自我優化提案在你或指揮 pane 派工之後走的路：實作 → 唯讀審查 → CI 檢查（回報 workflow run 各 job 的結果，不 rerun、不合併）→ 只有你能通過的核准 gate。它只是範本：不會自動啟動、不會被設成目前使用的 pipeline，也沒有合併、上架、載入外掛、投遞 skill 或建立排程的步驟。Navide 只會把它加進既有的 pipeline 清單一次；你刪掉後不會再補回來。**Reset** 會還原它的步驟和 gate。和其他內建範本一樣，名稱寫在種子裡，不隨介面語言翻譯。
+
 一個 Stage 可以平行執行多個 slot。Navide 會根據設定的 Completion Signal 與 Agent State 推進。務必檢查生成變更與測試結果；自動完成只代表工作流進度，不代表成果正確。
 
 ## Manager 與 Worker 協調
