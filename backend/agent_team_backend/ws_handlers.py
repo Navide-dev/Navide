@@ -38,6 +38,7 @@ from . import (
     native_mcp,
     native_memory,
     osplat,
+    pane_config_fingerprint,
     pane_policy,
     quota_failover,
     remote_roster,
@@ -8436,7 +8437,8 @@ async def _terminal_create_impl(
     for key in ("quota_transaction_id", "quota_original_pane_id", "credential_epoch",
                 "credential_store_verified", "credential_store_id", "credential_store_error",
                 "credential_launch_term_id", "guard_pane_token",
-                ACCOUNT_DIR_METADATA_KEY, "account_dir_login"):
+                ACCOUNT_DIR_METADATA_KEY, "account_dir_login",
+                pane_config_fingerprint.METADATA_KEY):
         metadata.pop(key, None)
     agent_key = payload.get("agent_key") or ""
     # The window's per-vendor env settings, first in the chain on purpose: the
@@ -8792,6 +8794,12 @@ async def _terminal_create_impl(
         from .plugins.builtin.navide_skills import skills_wiring
 
         wiring_warnings.extend(skills_wiring.take_spawn_warnings(str(payload.get("pane_id") or "")))
+        # What this pane loaded, so a later MCP or skills change can name it
+        # stale (terminal.config_status). Read-only; the command is untouched.
+        if agent_key:
+            metadata[pane_config_fingerprint.METADATA_KEY] = await asyncio.to_thread(
+                pane_config_fingerprint.fingerprint, agent_key
+            )
     # Give the pane whatever its push channel needs (a port to serve on, a file
     # to watch) so a message can later reach it without being typed in. Last,
     # so the flags it adds cannot be displaced by MCP or skills wiring; a CLI
@@ -9872,6 +9880,41 @@ async def terminal_dock_retire(session: "Session", msg_id: str, msg_type: str, p
     if pane_id and workspace_path and surface and surface != "main":
         _retire_dock_record(workspace_path, pane_id, surface)
     await session.send_json(make_response(msg_id, msg_type, {}))
+
+
+@handler("terminal.config_status")
+async def terminal_config_status(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Which of this window's panes started before an MCP or skills change.
+
+    Disclosure only: the answer lists stale parts per terminal and the window
+    offers the user a rebuild; nothing is restarted here.
+    """
+    from . import app
+
+    ids = payload.get("terminal_session_ids") if isinstance(payload, dict) else None
+    if not isinstance(ids, list):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "terminal_session_ids must be a list")
+        )
+        return
+    stored_sessions = session.terminals._sessions  # noqa: SLF001
+    current: dict[str, dict[str, str | None]] = {}
+    stale: list[dict[str, Any]] = []
+    for tid in (str(x) for x in ids):
+        stored = stored_sessions.get(tid)
+        if stored is None or stored.closed or app._PTY_OWNERS.get(tid) is not session:
+            continue
+        recorded = stored.metadata.get(pane_config_fingerprint.METADATA_KEY)
+        if not isinstance(recorded, dict) or not stored.agent_key:
+            continue
+        if stored.agent_key not in current:
+            current[stored.agent_key] = await asyncio.to_thread(
+                pane_config_fingerprint.fingerprint, stored.agent_key
+            )
+        parts = pane_config_fingerprint.stale_parts(recorded, current[stored.agent_key])
+        if parts:
+            stale.append({"terminal_session_id": tid, "pane_id": stored.pane_id, "parts": parts})
+    await session.send_json(make_response(msg_id, msg_type, {"stale": stale}))
 
 
 @handler("terminal.reattach")

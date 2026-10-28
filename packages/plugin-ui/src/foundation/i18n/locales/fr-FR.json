@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "La CLI s’est terminée avec le code de sortie {code}. Elle a peut-être planté ; le code est aussi consigné dans le registre des erreurs.",
       "stuck-badge": "⏳ Aucune activité depuis {minutes} min ou plus",
       "stuck-tooltip": "Ce tour n’a montré aucune activité dans le journal ni aucune sortie depuis plus de {minutes} minutes. La CLI est peut-être bloquée ; rien n’a été interrompu.",
+      "stale-config-badge": "Réglages modifiés",
+      "stale-config-tooltip-mcp": "Les serveurs MCP de cette CLI ont changé après l'ouverture du panneau. Elle garde l'ancienne liste jusqu'à sa reconstruction. Cliquez pour reconstruire (reprendre la conversation).",
+      "stale-config-tooltip-skills": "Les skills fournies à cette CLI ont changé après l'ouverture du panneau. Elle peut garder les anciennes jusqu'à sa reconstruction. Cliquez pour reconstruire (reprendre la conversation).",
+      "stale-config-tooltip-both": "Les serveurs MCP et les skills de cette CLI ont changé après l'ouverture du panneau. Elle garde les anciens jusqu'à sa reconstruction. Cliquez pour reconstruire (reprendre la conversation).",
       "usage-limit-badge": "⛔ retour à {time}",
       "usage-limit-badge-unknown": "⛔ quota épuisé",
       "usage-limit-tooltip": "Le quota de cette CLI est épuisé – retour prévu à {time}. Cliquer pour masquer",
@@ -1505,6 +1509,19 @@
         "capability-approve": "La CLI vous demande d’abord d’approuver ses capacités",
         "hot-reload": "Demandé une fois par session avant le rechargement à chaud"
       }
+    },
+    "applies": {
+      "new-panes-only": "Nouveaux panneaux uniquement",
+      "new-panes-only-tooltip": "Une CLI lit ce réglage au démarrage. Les panneaux déjà ouverts gardent l'ancienne valeur jusqu'à leur reconstruction."
+    },
+    "stale-config": {
+      "title": "Panneaux ouverts avant ce changement : {count}",
+      "body-mcp": "Une CLI lit ses propres serveurs MCP au démarrage, donc ces panneaux utilisent encore l'ancienne liste. La reconstruction reprend la conversation, mais interrompt un tour en cours et réaffiche la conversation.",
+      "body-skills": "Une CLI lit ses skills au démarrage, donc ces panneaux utilisent peut-être encore les anciennes. La reconstruction reprend la conversation, mais interrompt un tour en cours et réaffiche la conversation.",
+      "rebuild-all-idle": "Reconstruire tous les inactifs ({count})",
+      "busy": "En cours — ignoré par « Reconstruire tous les inactifs »",
+      "cannot-rebuild": "Aucune conversation enregistrée à reprendre",
+      "rebuild": "Reconstruire"
     },
     "limits": {
       "hint": "Limites facultatives qui empêchent Navide et les agents qu’il exécute de surcharger cette machine. Chacune est désactivée, ou conserve le comportement précédent de Navide, tant que vous ne la modifiez pas.",
