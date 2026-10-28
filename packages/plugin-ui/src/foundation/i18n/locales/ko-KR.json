@@ -1962,7 +1962,7 @@
       "developerNative": "개발자 및 네이티브 코드",
       "pageOn": "켜짐",
       "developerOnMarker": "개발",
-      "nativeOnMarker": "네이티브",
+      "nativeOnMarker": "네이티브 켜짐",
       "browseMarketplace": "Navide 마켓플레이스 둘러보기",
       "bundledGit": "기본 포함 Git",
       "state": {
@@ -2350,7 +2350,7 @@
       "user": "사용자",
       "userWorkspace": "사용자 / 작업 영역",
       "accountServer": "계정 / 서버",
-      "userWorkspaceBindings": "사용자 / 작업 영역 연결"
+      "userWorkspaceBindings": "사용자 및 작업 영역별 계정 선택"
     },
     "storage": {
       "localStorage": "ui_settings.json(앱 데이터) + 작업 영역 백업",
@@ -2497,8 +2497,8 @@
         "unknown": "아직 테스트하지 않았어요.",
         "not-applicable": "이 플랫폼에서는 사용할 수 없어요."
       },
-      "auto-resume-reconnect-hint": "백엔드가 충돌하거나 다시 시작되면 모든 CLI 프로세스도 함께 종료돼요. 켜 두면 백엔드가 돌아왔을 때 화면에 있는 pane과 화면 밖에서 작업 중이던 pane 최대 여섯 개의 대화를 자동으로 다시 연결해서, 하나씩 직접 다시 빌드하지 않아도 돼요. 다시 연결된 pane은 스스로 이어가지 않고, 그 pane을 연 pane에 알림이 가며, 공지에 경과가 표시돼요. 곧바로 다시 충돌하면 더는 자동으로 다시 연결하지 않아요.",
-      "resume-interrupted-on-launch-hint": "Navide가 다시 시작되면 턴을 실행 중이거나 권한 확인·질문을 기다리던 pane과, 그 보고를 기다리던 상위 pane이 자동으로 재개돼요(최대 6개, 나머지는 \"다시 시작할 때 작업 중\"으로 표시). 저절로 계속되지는 않아요: 계속을 누르거나 상위 pane이 지시하게 하세요. 상위 pane에는 어떤 pane이 중단되었는지 알려 줘요.",
+      "auto-resume-reconnect-hint": "백그라운드 서비스가 다시 시작된 뒤 돌아오면 pane의 대화를 다시 연결해요. 다시 시작되면 모든 CLI 프로세스가 함께 종료돼요. 화면에 있는 pane과 화면 밖에서 작업 중이던 pane 최대 여섯 개가 스스로 이어가지 않은 채 돌아오고, 그 pane을 연 pane에 알림이 가며, 공지에 경과가 표시돼요. 곧바로 다시 충돌하면 더는 자동으로 다시 연결하지 않아요.",
+      "resume-interrupted-on-launch-hint": "Navide가 다시 시작되면 작업 중이던 pane이 재개되고, 계속하라는 지시를 기다려요. 턴을 실행 중이거나 권한 확인·질문을 기다리던 pane과 그 보고를 기다리던 상위 pane이 대상이에요(최대 6개, 나머지는 \"다시 시작할 때 작업 중\"으로 표시). 계속을 누르거나 상위 pane이 지시하게 하세요. 상위 pane에는 어떤 pane이 중단되었는지 알려 줘요.",
       "confirm-close-pane": "pane을 닫기 전에 확인",
       "confirm-close-pane-hint": "pane 닫기 단축키로 CLI pane을 닫기 전에 물어봐요. 턴이 진행 중인 pane은 이 설정과 관계없이 항상 물어봐요.",
       "confirm-close-workspace": "작업 영역을 닫기 전에 확인",
@@ -7280,7 +7280,7 @@
       "approval-cut": "… 미리보기는 여기까지이고 파일은 계속돼요",
       "approval-expand": "전체 보기",
       "approval-deletes": "여기서 프롬프트 {name}이(가) 삭제돼요.",
-      "approval-new-loop": "{name}이(가) 루프 프롬프트가 돼요.",
+      "approval-new-loop": "{name}이(가) 기본 프롬프트가 돼요.",
       "approval-text": "받은 텍스트 전체",
       "approval-diff": "이 기기와 비교한 변경 사항",
       "approval-changes": "변경된 필드",
@@ -7305,7 +7305,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "스킬",
       "scope-memory": "메모리",
-      "scope-hint-prompts": "프롬프트 스킬과 루프 프롬프트.",
+      "scope-hint-prompts": "저장된 프롬프트와 어느 것이 기본인지.",
       "error-load": "동기화 설정을 읽지 못했어요.",
       "scope-hint-mcp": "Navide에서 추가한 MCP 서버예요. 비밀 값은 전송 전에 암호화돼요.",
       "scope-hint-skills": "어떤 스킬이 켜져 있고 각각 어느 CLI로 가는지, 그리고 Navide에서 만든 스킬의 파일이에요(큰 파일은 암호화된 blob으로 전달돼요). 폴더에 직접 넣은 스킬은 설정만 동기화돼요.",
@@ -7491,7 +7491,7 @@
       "error-save": "이 파일을 저장하지 못했어요. 초안은 편집기에 남아 있어요."
     },
     "prompts": {
-      "intro": "CLI pane이 ∞ 버튼으로 보내는 저장된 프롬프트예요. 하나를 고르면 프롬프트 전체가 바뀌고, 기본 프롬프트만 루프로 실행되며 나머지는 한 번만 전송돼요.",
+      "intro": "CLI pane 제목 표시줄의 반복 버튼(∞)으로 보내는 저장된 프롬프트예요. 하나를 고르면 프롬프트 전체가 바뀌고, 기본 프롬프트만 턴마다 다시 전송되며 나머지는 한 번만 전송돼요.",
       "new": "새 프롬프트",
       "new-name": "새 프롬프트",
       "copy-name": "{name} 사본",
@@ -7518,10 +7518,10 @@
       "disable": "사용 안 함",
       "duplicate": "복제",
       "delete": "삭제",
-      "hint": "기본 프롬프트는 ∞를 그냥 클릭했을 때 보내는 프롬프트이며 유일하게 루프로 실행돼요. 사용하지 않는 프롬프트는 여기 남지만 선택기에서는 빠져요.",
+      "hint": "반복 버튼을 그냥 클릭하면 기본 프롬프트를 보내며, 이것만 반복돼요. 사용하지 않는 프롬프트는 여기 남지만 선택기에서는 빠져요.",
       "advanced": "고급",
       "send-once": "한 번만 전송",
-      "send-once-hint": "기본 프롬프트만 루프로 실행돼요. 이 프롬프트는 재개나 턴 제한 없이 한 번만 전송돼요.",
+      "send-once-hint": "기본 프롬프트만 턴마다 다시 전송돼요. 이 프롬프트는 재개나 턴 제한 없이 한 번만 전송돼요.",
       "untitled-name": "제목 없는 프롬프트",
       "prompt-empty": "프롬프트는 비울 수 없어요. 이전 내용을 그대로 두었어요. 이 프롬프트를 없애려면 삭제를 사용하세요.",
       "delete-confirm": "\"{name}\"을(를) 삭제할까요? 되돌릴 수 없으며, 프롬프트를 동기화하는 다른 기기에서도 삭제돼요."
@@ -7798,8 +7798,8 @@
       "filter-attention": "확인 필요",
       "count": "agent {total}개 중 {visible}개 · {enabled}개 사용 중",
       "reorder-filtered": "순서를 바꾸려면 검색을 지우고 전체를 선택하세요",
-      "enabled": "사용",
-      "enable-agent": "{agent} 사용",
+      "enabled": "메뉴에 표시",
+      "enable-agent": "{agent}을(를) 메뉴에 표시",
       "manage": "관리",
       "manage-agent": "{agent} 관리",
       "move-up": "{agent} 앞으로 이동",
@@ -7830,9 +7830,9 @@
         "perm-inherit": "권한 상속",
         "perm-force-on": "권한 강제 켬",
         "perm-force-off": "권한 강제 끔",
-        "push": "푸시 켜짐",
-        "push-off": "푸시 꺼짐",
-        "no-push": "푸시 채널 없음",
+        "push": "직접 전달 켜짐",
+        "push-off": "직접 전달 꺼짐",
+        "no-push": "입력창으로 전달",
         "accounts": "계정 {count}개 | 계정 {count}개 | 계정 {count}개",
         "signed-out": "로그아웃됨",
         "custom-binary": "사용자 지정 바이너리",
@@ -7879,7 +7879,8 @@
       "restart-note": "플래그는 pane이 시작될 때 명령에 고정돼요. 여기서 바꾼 내용은 이후에 생성되는 pane에 적용되고, 이미 실행 중인 pane은 다시 빌드하거나 복원할 때까지 시작할 때의 설정을 유지해요."
     },
     "keybindings": {
-      "intro": "아래 단축키를 원하는 대로 다시 지정하세요. 키 모양을 클릭하면 새 조합을 녹화하고, +로 두 번째 바인딩을 추가하며, ✕로 제거해요. 변경 사항은 keybindings.json에 바로 저장되고 열려 있는 모든 창에 적용돼요.",
+      "intro": "아래 단축키를 원하는 대로 다시 지정하세요. 키 모양을 클릭하면 새 조합을 녹화하고, +로 두 번째 바인딩을 추가하며, ✕로 제거해요. 변경 사항은 단축키 파일에 바로 저장되고 열려 있는 모든 창에 적용돼요.",
+      "file-tooltip": "Navide 앱 데이터 폴더의 keybindings.json",
       "search-placeholder": "명령, 키 또는 컨텍스트 검색…",
       "filter": {
         "all": "전체",

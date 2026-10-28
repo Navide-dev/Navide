@@ -979,12 +979,17 @@ function formatTime(ts: number | null | undefined): string {
 .ch-remove-ask { color: var(--danger-fg); }
 
 /* Status pill: same shape as the account badges on the Accounts page. */
+/* As tall as the Connect button beside it (28px), so the two read as one row. */
 .ch-pill {
   flex-shrink: 0;
-  font-size: var(--font-2xs);
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--control-h-md);
+  font-size: var(--font-xs);
   font-weight: 600;
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 0 10px;
   color: var(--text-secondary);
   background: var(--bg-muted);
   border: 1px solid var(--border-default);
@@ -1040,7 +1045,7 @@ function formatTime(ts: number | null | undefined): string {
   white-space: nowrap;
 }
 /* Small in type, not in reach: Connect and the row actions keep a 28px target. */
-.ch-btn.sm { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-h-md); font-size: var(--font-2xs); padding: 3px 8px; }
+.ch-btn.sm { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: var(--control-h-md); font-size: var(--font-xs); padding: 0 10px; }
 .ch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ch-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
 .ch-btn.primary:hover:not(:disabled) { background: var(--accent-fg); border-color: var(--accent-fg); }

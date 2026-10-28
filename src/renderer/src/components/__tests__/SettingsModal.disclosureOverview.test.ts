@@ -265,7 +265,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     // Developer Mode off, a native-code switch on: the marker names that switch.
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Allow native backends'])
     await flushPromises()
-    expect(marker('Developer and native code')).toMatchObject({ text: 'Native' })
+    expect(marker('Developer and native code')).toMatchObject({ text: 'Native on' })
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', [])
     await flushPromises()

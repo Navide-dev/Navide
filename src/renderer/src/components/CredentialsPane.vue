@@ -345,9 +345,10 @@ async function saveRoots(): Promise<void> {
 <template>
   <div class="cred-pane" data-settings-section="credentials">
     <div class="cred-toolbar">
-      <!-- The page title above already names this page; no second heading. -->
+      <!-- The page title above already names this page and the page intro
+           under it (rendered by the settings modal) says what it is; this row
+           keeps the keyring facts and the actions. -->
       <div>
-        <p>{{ t('settings.credentials.intro') }}</p>
         <p class="cred-meta">
           <span>{{ t('settings.credentials.meta') }}</span>
           <span
@@ -550,7 +551,7 @@ async function saveRoots(): Promise<void> {
 .cred-toolbar-actions { flex-shrink: 0; }
 .cred-toolbar-actions button { white-space: nowrap; }
 .cred-toolbar p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
-.cred-toolbar p:first-child { margin-top: 0; color: var(--text-primary); font-size: var(--font-xs); }
+.cred-toolbar p:first-child { margin-top: 0; }
 .cred-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .cred-keyring.ok { color: var(--success-fg); }
 .cred-keyring.bad { color: var(--attention-fg); }
@@ -576,7 +577,8 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .cred-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-pill); font-size: var(--font-xs); }
 
-.cred-chip.on { background: var(--accent-subtle, var(--bg-elevated)); border-color: var(--accent-muted, var(--accent-fg)); color: var(--accent-fg); font-weight: 600; }
+/* Neutral selected fill, like the shared filter chip: accent is for the primary button. */
+.cred-chip.on { background: var(--bg-hover-strong); border-color: var(--border-strong); color: var(--text-bright); font-weight: 600; }
 .cred-chip .count { font-size: var(--font-xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
 .cred-search { flex: 1; min-width: 220px; }
 /* Findings / Inventory is one control with two states: the modal's shared
@@ -590,7 +592,7 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-group { margin-bottom: 16px; }
 .cred-group-title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: var(--font-row-desc); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .cred-group-title .count { font-size: var(--font-xs); font-weight: 500; opacity: 0.6; }
-.cred-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.cred-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px; }
 .cred-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px 11px; text-align: left; border: 1px solid var(--settings-card-border, var(--border-muted)); border-radius: var(--radius-card); background: var(--bg-subtle); min-width: 0; }
 .cred-card:hover:not(:disabled) { background: var(--bg-muted); border-color: var(--border-default); }
 .cred-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }

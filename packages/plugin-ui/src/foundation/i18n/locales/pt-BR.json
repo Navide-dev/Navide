@@ -1962,7 +1962,7 @@
       "developerNative": "Desenvolvedor e código nativo",
       "pageOn": "Ativado",
       "developerOnMarker": "Dev.",
-      "nativeOnMarker": "Nativo",
+      "nativeOnMarker": "Nativo ativo",
       "browseMarketplace": "Explorar o Navide Marketplace",
       "bundledGit": "Git integrado",
       "state": {
@@ -2350,7 +2350,7 @@
       "user": "Usuário",
       "userWorkspace": "Usuário / workspace",
       "accountServer": "Conta / servidor",
-      "userWorkspaceBindings": "Vínculos de usuário / workspace"
+      "userWorkspaceBindings": "Usuário, mais a conta escolhida em cada workspace"
     },
     "storage": {
       "localStorage": "ui_settings.json (dados do app) + backup no workspace",
@@ -2497,8 +2497,8 @@
         "unknown": "Ainda não testado.",
         "not-applicable": "Não disponível nesta plataforma."
       },
-      "auto-resume-reconnect-hint": "Quando o backend falha ou reinicia, ele leva junto todos os processos de CLI. Ative isto para retomar automaticamente, quando ele voltar, as conversas dos painéis na tela e de até seis painéis fora da tela que estavam trabalhando, em vez de reconstruir cada um à mão. Os painéis retomados não continuam sozinhos, os painéis que os abriram são avisados e os avisos mostram o que aconteceu. Se o backend falhar de novo logo em seguida, nada mais é retomado.",
-      "resume-interrupted-on-launch-hint": "Quando o Navide reinicia, os panes que estavam executando um turno ou aguardando uma solicitação de permissão ou uma pergunta, além dos panes pais que aguardam os relatórios deles, são retomados automaticamente (até 6; os demais são marcados como “Trabalhando na reinicialização”). Nada continua sozinho: pressione “Continuar” ou deixe o pane pai mandar. O pane pai é informado de quais panes dele foram interrompidos.",
+      "auto-resume-reconnect-hint": "Retoma as conversas dos seus painéis quando o serviço em segundo plano volta após reiniciar. Um reinício encerra todos os processos de CLI; os painéis na tela e até seis painéis fora da tela que estavam trabalhando voltam sem continuar sozinhos, os painéis que os abriram são avisados e os avisos mostram o que aconteceu. Se ele falhar de novo logo em seguida, nada mais é retomado.",
+      "resume-interrupted-on-launch-hint": "Quando o Navide reinicia, os panes que estavam trabalhando voltam e esperam você continuar. Isso inclui os panes que executavam um turno ou aguardavam uma solicitação de permissão ou uma pergunta, e os panes pais que aguardam os relatórios deles, até 6 (os demais são marcados como “Trabalhando na reinicialização”). Pressione “Continuar” ou deixe o pane pai mandar; ele é informado de quais panes dele foram interrompidos.",
       "confirm-close-pane": "Confirmar antes de fechar um pane",
       "confirm-close-pane-hint": "Pergunta antes que o atalho de fechar pane feche um pane de CLI. Um pane com um turno em andamento sempre pergunta, independentemente desta configuração.",
       "confirm-close-workspace": "Confirmar antes de fechar um workspace",
@@ -7280,7 +7280,7 @@
       "approval-cut": "… a pré-visualização termina aqui; o arquivo continua",
       "approval-expand": "Mostrar tudo",
       "approval-deletes": "Excluiria o prompt {name} aqui.",
-      "approval-new-loop": "{name} passaria a ser o prompt do loop.",
+      "approval-new-loop": "{name} passaria a ser o prompt padrão.",
       "approval-text": "Texto recebido, completo",
       "approval-diff": "Alterações em relação a este dispositivo",
       "approval-changes": "Campos alterados",
@@ -7305,7 +7305,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "Skills",
       "scope-memory": "Memória",
-      "scope-hint-prompts": "Skills de prompt e o prompt do loop.",
+      "scope-hint-prompts": "Prompts salvos e qual é o padrão.",
       "error-load": "Não foi possível ler as configurações de sincronização.",
       "scope-hint-mcp": "Servidores MCP que você adicionou no Navide. Os segredos deles são criptografados antes de sair.",
       "scope-hint-skills": "Quais skills estão ativadas e para quais CLIs cada uma vai, além dos arquivos das skills criadas no Navide (as grandes trafegam como blobs criptografados). As skills que você mesmo colocou na pasta sincronizam apenas as configurações.",
@@ -7491,7 +7491,7 @@
       "error-save": "Não foi possível salvar este arquivo. Seu rascunho continua no editor."
     },
     "prompts": {
-      "intro": "Prompts salvos que um pane de CLI envia pelo botão ∞. Escolher um substitui o prompt inteiro; só o prompt padrão roda em loop, os outros são enviados uma vez.",
+      "intro": "Prompts salvos que um pane de CLI envia pelo botão de repetir (∞) da barra de título. Escolher um substitui o prompt inteiro; só o prompt padrão se repete após cada turno, os outros são enviados uma vez.",
       "new": "Novo prompt",
       "new-name": "Novo prompt",
       "copy-name": "Cópia de {name}",
@@ -7518,10 +7518,10 @@
       "disable": "Desativar",
       "duplicate": "Duplicar",
       "delete": "Excluir",
-      "hint": "O prompt padrão é o enviado por um clique simples em ∞ e o único que roda em loop; os prompts desativados ficam aqui, mas saem do seletor.",
+      "hint": "Um clique simples no botão de repetir envia o prompt padrão, o único que se repete; os prompts desativados ficam aqui, mas saem do seletor.",
       "advanced": "Avançado",
       "send-once": "Enviada uma vez",
-      "send-once-hint": "Só o prompt padrão é executado em loop; este é enviado uma vez, sem retomada nem limite de turnos.",
+      "send-once-hint": "Só o prompt padrão se repete após cada turno; este é enviado uma vez, sem retomada nem limite de turnos.",
       "untitled-name": "Prompt sem título",
       "prompt-empty": "Um prompt não pode ficar vazio: o texto anterior foi mantido. Para remover este prompt, use Excluir.",
       "delete-confirm": "Excluir “{name}”? Não é possível desfazer, e as máquinas que sincronizam prompts também vão removê-la."
@@ -7798,8 +7798,8 @@
       "filter-attention": "Precisam de atenção",
       "count": "{visible} de {total} agents · {enabled} ativados",
       "reorder-filtered": "Limpe a pesquisa e escolha “Todos” para reordenar",
-      "enabled": "Ativado",
-      "enable-agent": "Ativar {agent}",
+      "enabled": "Mostrar no menu",
+      "enable-agent": "Mostrar {agent} no menu",
       "manage": "Gerenciar",
       "manage-agent": "Gerenciar {agent}",
       "move-up": "Mover {agent} para antes",
@@ -7832,7 +7832,7 @@
         "perm-force-off": "Ignorar permissões bloqueado",
         "push": "Envio direto ativado",
         "push-off": "Envio direto desativado",
-        "no-push": "Sem canal de envio direto",
+        "no-push": "Mensagens digitadas",
         "accounts": "{count} contas | {count} conta | {count} contas",
         "signed-out": "Sem login",
         "custom-binary": "Binário personalizado",
@@ -7879,7 +7879,8 @@
       "restart-note": "A opção é fixada no comando do pane quando ele inicia. Alterar algo aqui afeta os panes criados depois; um pane já em execução mantém o que tinha ao iniciar até ser reconstruído ou restaurado."
     },
     "keybindings": {
-      "intro": "Reatribua qualquer atalho abaixo. Clique em uma tecla para gravar uma nova combinação, use + para adicionar uma segunda atribuição e ✕ para remover uma. As alterações são salvas em keybindings.json na hora e valem para todas as janelas abertas.",
+      "intro": "Reatribua qualquer atalho abaixo. Clique em uma tecla para gravar uma nova combinação, use + para adicionar uma segunda atribuição e ✕ para remover uma. As alterações são salvas no seu arquivo de atalhos na hora e valem para todas as janelas abertas.",
+      "file-tooltip": "keybindings.json na pasta de dados do app do Navide",
       "search-placeholder": "Pesquisar comando, tecla ou contexto…",
       "filter": {
         "all": "Todos",

@@ -199,10 +199,9 @@ function applyCustomIcon(): void {
 <template>
   <div class="prompts-pane" data-settings-section="prompts">
     <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
+    <!-- The page intro sits under the page title (the settings modal renders
+         it); the toolbar keeps the page's one primary action at the right. -->
     <div class="prompts-toolbar">
-      <div class="prompts-intro">
-        <p>{{ t('settings.prompts.intro') }}</p>
-      </div>
       <button type="button" class="primary" @click="createSkill">
         {{ t('settings.prompts.new') }}
       </button>
@@ -477,24 +476,12 @@ textarea:focus {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
 }
 /* A narrow page wraps the toolbar, never the button's label. */
 .prompts-toolbar > button {
   white-space: nowrap;
-}
-/* The intro takes the shared prose measure, set at body size so it ends where
-   the other prose pages do. */
-.prompts-intro {
-  flex: 1 1 24em;
-  max-width: var(--settings-page-max);
-}
-.prompts-toolbar p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--font-row-desc);
-  line-height: 1.5;
 }
 
 /* ── Filter bar ───────────────────────────────────────────────────────── */
@@ -535,7 +522,7 @@ textarea:focus {
 }
 .prompts-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
   gap: 8px;
 }
 

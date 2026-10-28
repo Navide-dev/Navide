@@ -489,13 +489,12 @@ function cardDetail(row: McpRow): string {
 
 <template>
   <section class="mcp-pane" :aria-label="t('settings.mcp.agent-title')">
-    <!-- The page's one toolbar row: what the list is, then the parent's
-         secondary actions (slot) and Refresh, then its one primary action at
-         the right. The page title already names the page, so the section
-         keeps its name as an aria-label only. On a narrow page the secondary
-         actions fold into one "⋯" menu; the primary stays visible. -->
+    <!-- The page's one toolbar row: the parent's secondary actions (slot) and
+         Refresh, then its one primary action at the right. The page intro
+         sits under the page title (the settings modal renders it), and the
+         section keeps its name as an aria-label only. On a narrow page the
+         secondary actions fold into one "⋯" menu; the primary stays visible. -->
     <header class="mcp-pane-head">
-      <p>{{ t('settings.mcp.agent-intro') }}</p>
       <div class="mcp-pane-actions">
         <SettingsOverflowActions align="start">
           <slot name="actions" />
@@ -520,6 +519,9 @@ function cardDetail(row: McpRow): string {
           @click="sourceFilter = chip.key"
         >{{ chip.label }}<span class="count">{{ chip.count }}</span></button>
       </div>
+      <!-- Search and the view switch wrap as one unit at the right, so the
+           switch never lands on a row of its own. -->
+      <div class="mcp-filter-end">
       <input
         v-model="query"
         class="mcp-pane-search"
@@ -539,6 +541,7 @@ function cardDetail(row: McpRow): string {
           :aria-pressed="view === 'compare'"
           @click="view = 'compare'"
         >{{ t('settings.mcp.view-compare') }}</button>
+      </div>
       </div>
     </div>
 
@@ -923,9 +926,8 @@ function cardDetail(row: McpRow): string {
   color: var(--text-primary);
   container: mcp-pane / inline-size;
 }
-.mcp-pane-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
-.mcp-pane-head p { flex: 1 1 24em; margin: 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.5; max-width: 72ch; }
-.mcp-pane-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mcp-pane-head { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px 12px; }
+.mcp-pane-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 /* Refresh is the same size as the page's actions beside it (.mcp-action-btn). */
 .mcp-pane-actions > button { min-height: var(--control-h-md); padding: 0 11px; font-size: var(--font-xs); }
 button, input, select { font: inherit; }
@@ -956,9 +958,10 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mcp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 /* The chips are the Settings window's shared .settings-filter-chip. */
-.mcp-pane-search { flex: 1; min-width: 140px; max-width: 260px; }
+.mcp-filter-end { display: flex; align-items: center; gap: 10px; margin-left: auto; min-width: 0; }
+.mcp-pane-search { flex: 1 1 200px; min-width: 140px; max-width: 260px; }
 /* The modal's shared .settings-segmented control. */
-.mcp-view-switch { margin-left: auto; }
+.mcp-view-switch { flex: none; }
 
 /* ── Body: main region + optional drawer ───────────────────────────────── */
 .mcp-pane-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-height: 0; }
@@ -982,7 +985,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   color: var(--text-secondary);
 }
 .mcp-group-title .count { font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
-.mcp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.mcp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px; }
 .mcp-card {
   display: flex;
   flex-direction: column;
@@ -1209,13 +1212,12 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 @media (max-width: 900px) {
   .mcp-pane-body, .mcp-pane-body.drawer-open { grid-template-columns: 1fr; }
 }
-/* Narrow page: the intro takes its own row and the actions start at the
-   content edge as one group under it; the search takes a full row of its
-   own, then the chips at the content edge with the view switch at the right
-   of the same row while it fits. */
+/* Narrow page: the actions start at the content edge as one group; the
+   search and the view switch take the first filter row together (the search
+   stretching, the switch at its right), then the chips at the content edge. */
 @container mcp-pane (max-width: 720px) {
-  .mcp-pane-head p { flex-basis: 100%; }
   .mcp-pane-actions { flex: 1 1 100%; justify-content: flex-start; }
-  .mcp-pane-search { order: -1; flex: 1 1 100%; max-width: none; }
+  .mcp-filter-end { order: -1; flex: 1 1 100%; margin-left: 0; }
+  .mcp-pane-search { max-width: none; }
 }
 </style>

@@ -1962,7 +1962,7 @@
       "developerNative": "Developer and native code",
       "pageOn": "On",
       "developerOnMarker": "Dev",
-      "nativeOnMarker": "Native",
+      "nativeOnMarker": "Native on",
       "browseMarketplace": "Browse Navide Marketplace",
       "bundledGit": "Bundled Git",
       "state": {
@@ -2350,7 +2350,7 @@
       "user": "User",
       "userWorkspace": "User / workspace",
       "accountServer": "Account / server",
-      "userWorkspaceBindings": "User / workspace bindings"
+      "userWorkspaceBindings": "User, plus each workspace's account choice"
     },
     "storage": {
       "localStorage": "ui_settings.json (app data) + workspace backup",
@@ -2497,8 +2497,8 @@
         "unknown": "Not tested yet.",
         "not-applicable": "Not available on this platform."
       },
-      "auto-resume-reconnect-hint": "When the backend crashes or restarts it takes every CLI process with it. Turn this on to resume, once it is back, the conversations of the panes on screen and of up to six panes off screen that were working, instead of rebuilding each one by hand. Resumed panes do not continue on their own, the panes that spawned them are told, and the announcements list what happened. If the backend crashes again soon after, nothing is resumed again.",
-      "resume-interrupted-on-launch-hint": "When Navide restarts, panes that were running a turn or waiting on a permission prompt or a question, plus the parent panes waiting on their reports, resume automatically (up to 6; the rest are marked \"Working at restart\"). Nothing continues on its own: press Continue, or let the parent tell it to. The parent is told which of its panes were interrupted.",
+      "auto-resume-reconnect-hint": "Resumes your panes' conversations once the background service is back after a restart. A restart ends every CLI process; the panes on screen and up to six working panes off screen come back without continuing on their own, the panes that spawned them are told, and the announcements list what happened. If it crashes again soon after, nothing is resumed.",
+      "resume-interrupted-on-launch-hint": "When Navide restarts, panes that were working come back and wait for you to continue. That covers panes running a turn or waiting on a permission prompt or a question, and the parent panes waiting on their reports, up to 6 (the rest are marked \"Working at restart\"). Press Continue or let the parent tell it to; the parent is told which of its panes were interrupted.",
       "confirm-close-pane": "Confirm before closing a pane",
       "confirm-close-pane-hint": "Ask before the close-pane shortcut closes a CLI pane. A pane with a turn in progress always asks, regardless of this setting.",
       "confirm-close-workspace": "Confirm before closing a workspace",
@@ -7280,7 +7280,7 @@
       "approval-cut": "… preview cut here; the file goes on",
       "approval-expand": "Show It Whole",
       "approval-deletes": "Would delete the prompt {name} here.",
-      "approval-new-loop": "{name} would become the loop prompt.",
+      "approval-new-loop": "{name} would become the default prompt.",
       "approval-text": "Incoming text, whole",
       "approval-diff": "Changes against this device",
       "approval-changes": "Changed fields",
@@ -7305,7 +7305,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "Skills",
       "scope-memory": "Memory",
-      "scope-hint-prompts": "Prompt skills and the loop prompt.",
+      "scope-hint-prompts": "Saved prompts and which one is the default.",
       "error-load": "Sync settings could not be read.",
       "scope-hint-mcp": "MCP servers you added in Navide. Their secrets are encrypted before they leave.",
       "scope-hint-skills": "Which skills are on and which CLIs each one goes to, plus the files of skills created in Navide (large ones travel as encrypted blobs). Skills you put in the folder yourself sync their settings only.",
@@ -7491,7 +7491,7 @@
       "error-save": "Could not save this file. Your draft remains in the editor."
     },
     "prompts": {
-      "intro": "Saved prompts a CLI pane sends from its ∞ button. Picking one replaces the whole prompt; only the default prompt loops, the others are sent once.",
+      "intro": "Saved prompts a CLI pane sends from the repeat button (∞) in its title bar. Picking one replaces the whole prompt; only the default prompt repeats after each turn, the others are sent once.",
       "new": "New Prompt",
       "new-name": "New prompt",
       "copy-name": "{name} copy",
@@ -7518,10 +7518,10 @@
       "disable": "Disable",
       "duplicate": "Duplicate",
       "delete": "Delete",
-      "hint": "The default prompt is what a plain click on ∞ sends, and the only one that loops; disabled prompts stay here but leave the picker.",
+      "hint": "A plain click on the repeat button sends the default prompt, the only one that repeats; disabled prompts stay here but leave the picker.",
       "advanced": "Advanced",
       "send-once": "Sends once",
-      "send-once-hint": "Only the default prompt runs as a loop; this one is sent once, with no resume or turn cap.",
+      "send-once-hint": "Only the default prompt repeats after each turn; this one is sent once, with no resume or turn cap.",
       "untitled-name": "Untitled prompt",
       "prompt-empty": "A prompt can’t be empty — the previous text was kept. To remove this prompt, use Delete.",
       "delete-confirm": "Delete \"{name}\"? This can't be undone, and machines that sync prompts will remove it too."
@@ -7798,8 +7798,8 @@
       "filter-attention": "Needs attention",
       "count": "{visible} of {total} agents · {enabled} enabled",
       "reorder-filtered": "Clear search and choose All to reorder",
-      "enabled": "Enabled",
-      "enable-agent": "Enable {agent}",
+      "enabled": "Show in menu",
+      "enable-agent": "Show {agent} in the menu",
       "manage": "Manage",
       "manage-agent": "Manage {agent}",
       "move-up": "Move {agent} earlier",
@@ -7830,9 +7830,9 @@
         "perm-inherit": "Permissions inherited",
         "perm-force-on": "Permissions forced on",
         "perm-force-off": "Permissions forced off",
-        "push": "Push on",
-        "push-off": "Push off",
-        "no-push": "No push channel",
+        "push": "Direct delivery on",
+        "push-off": "Direct delivery off",
+        "no-push": "Messages typed in",
         "accounts": "{count} accounts | {count} account | {count} accounts",
         "signed-out": "Signed out",
         "custom-binary": "Custom binary",
@@ -7879,7 +7879,8 @@
       "restart-note": "The flag is fixed into a pane's command when it starts. Changing anything here affects panes spawned afterwards; a pane already running keeps whatever it started with until it is rebuilt or restored."
     },
     "keybindings": {
-      "intro": "Rebind any shortcut below. Click a key cap to record a new combination, use + to add a second binding, and ✕ to remove one. Changes are saved to keybindings.json immediately and apply to every open window.",
+      "intro": "Rebind any shortcut below. Click a key cap to record a new combination, use + to add a second binding, and ✕ to remove one. Changes are saved to your shortcuts file immediately and apply to every open window.",
+      "file-tooltip": "keybindings.json in Navide's app data folder",
       "search-placeholder": "Search command, key or context…",
       "filter": {
         "all": "All",

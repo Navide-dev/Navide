@@ -654,7 +654,7 @@ onMounted(() => refreshUsage())
          instead of repeating the same sentence under each name. -->
     <section v-for="spec in CLI_AGENT_SPECS.filter((s) => supported(s.agentKey))" :key="spec.agentKey" class="cli-agent">
       <div class="cli-agent-head">
-        <span class="cli-agent-name">{{ spec.label }}</span>
+        <span class="cli-agent-name cli-group-label">{{ spec.label }}</span>
         <select
           v-if="supported(spec.agentKey) && scopeChoices(spec.agentKey).length > 0"
           class="cli-scope-select"
@@ -975,7 +975,9 @@ onMounted(() => refreshUsage())
   gap: 8px 12px;
   margin-bottom: 8px;
 }
-.cli-agent-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
+/* A provider names a group of account cards: the page's one section-label
+   style (SettingsSection), not a third heading size. */
+.cli-agent-name { font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .cli-unsupported-group { padding-top: 12px; border-top: 1px solid var(--border-muted); }
 .cli-unsupported { margin: 0 0 6px; font-size: var(--font-2xs); color: var(--text-secondary); }
 .cli-unsupported-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }

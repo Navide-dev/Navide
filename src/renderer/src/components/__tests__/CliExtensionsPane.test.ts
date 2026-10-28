@@ -168,7 +168,9 @@ describe('CliExtensionsPane', () => {
     it('never scrolls sideways: long names wrap, paths and command lines truncate', () => {
       expect(rule('.cli-ext')).toMatch(/overflow-x:\s*hidden/)
       expect(rule('.cli-ext-name')).toMatch(/overflow-wrap:\s*anywhere/)
-      expect(rule('.cli-ext-detail, .cli-ext-path')).toMatch(/text-overflow:\s*ellipsis/)
+      expect(rule('.cli-ext-detail')).toMatch(/text-overflow:\s*ellipsis/)
+      // The path box only clips; the PathText inside shortens and ellipsizes.
+      expect(rule('.cli-ext-path')).toMatch(/overflow:\s*hidden/)
     })
 
     it('puts the name on its own line above the badges', async () => {

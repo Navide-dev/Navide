@@ -9,6 +9,7 @@ import { computed } from 'vue'
 import { useLayoutStore } from './useLayoutStore'
 import { LAYOUT_PRESETS, SLOT_LIMITS, type SlotId } from './slots'
 import { isMovable, moveTargetsFor, viewById, type ViewDescriptor } from './viewRegistry'
+import SettingsSection from '../components/settings/SettingsSection.vue'
 
 const {
   layout,
@@ -53,18 +54,16 @@ function onSize(id: SlotId, raw: string): void {
 
 <template>
   <div class="ls">
-    <p class="ls-intro">{{ $t('layout.settings-intro') }}</p>
 
-    <section class="ls-slot">
-      <header class="ls-slot-hdr">
-        <h2 class="ls-slot-name">{{ $t('layout.presets') }}</h2>
-      </header>
+    <!-- A page section, not a card: the one section-heading style, with the
+         preset buttons right under it. -->
+    <SettingsSection class="ls-presets-section" :label="$t('layout.presets')">
       <div class="ls-presets">
         <button v-for="p in LAYOUT_PRESETS" :key="p.id" class="nv-btn nv-btn--sm ls-preset" @click="applyPreset(p.id)">
           {{ $t(p.labelKey) }}
         </button>
       </div>
-    </section>
+    </SettingsSection>
 
     <section v-for="id in SLOT_ORDER" :key="id" class="ls-slot">
       <header class="ls-slot-hdr">
@@ -195,7 +194,8 @@ function onSize(id: SlotId, raw: string): void {
 
 <style scoped>
 .ls { display: flex; flex-direction: column; gap: 18px; max-width: 720px; }
-.ls-intro { margin: 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.6; text-wrap: pretty; }
+/* The page header already sets the gap above the first section. */
+.ls > .ls-presets-section { margin-top: 0; }
 
 .ls-slot {
   border: 1px solid var(--border-muted);
@@ -280,7 +280,10 @@ function onSize(id: SlotId, raw: string): void {
 }
 /* Every picker is one width, so the Remove buttons line up; a row too narrow
    for both wraps the controls under the view name. */
-.ls-move { flex: 0 0 168px; width: 168px; max-width: 100%; text-overflow: ellipsis; }
+/* At least one width, so the Remove buttons line up; a longer label
+   ("Verschieben nach …") sizes the picker to its longest option instead of
+   cutting it, never wider than the row. */
+.ls-move { flex: 0 0 auto; width: auto; min-width: 168px; max-width: 100%; text-overflow: ellipsis; }
 /* "Pinned here" is the view's real place, not a placeholder: shown in the
    secondary text colour at full strength while the picker is disabled. */
 .ls-move:disabled { opacity: 1; color: var(--text-secondary); cursor: default; }

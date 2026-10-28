@@ -340,8 +340,8 @@ const visibleReference = computed(() => {
 
 <template>
   <div class="kse">
-    <p class="kse-intro">{{ $t('settings.keybindings.intro') }}</p>
-
+    <!-- The page intro sits under the page title (the settings modal renders
+         it, with the file's name and place in its tooltip). -->
     <div class="kse-toolbar">
       <input
         v-model="query"
@@ -594,7 +594,6 @@ const visibleReference = computed(() => {
   color: var(--text-primary);
 }
 
-.kse-intro,
 .kse-footnote {
   margin: 0;
   font-size: var(--font-sm);
@@ -790,10 +789,14 @@ const visibleReference = computed(() => {
 @container kse-bindings (max-width: 600px) {
   .kse-bindings, .kse-bindings tbody { display: block; }
   .kse-bindings thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* Two columns for the labelled lines, shared by all three through a
+     subgrid: the labels end on one line and every value (key caps included)
+     starts on one line, each label on its value's first baseline. */
   .kse-bindings tr {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'command actions' 'keys keys' 'when when' 'source source';
+    grid-template-columns: max-content minmax(0, 1fr) auto;
+    grid-template-areas: 'command command actions' 'keys keys keys' 'when when when' 'source source source';
+    column-gap: 12px;
     row-gap: 4px;
     padding: 8px 12px;
     border-bottom: 1px solid var(--border-muted);
@@ -807,16 +810,17 @@ const visibleReference = computed(() => {
   .kse-bindings .kse-td-source { grid-area: source; }
   .kse-bindings td[data-label] {
     display: grid;
-    grid-template-columns: minmax(6em, 30%) minmax(0, 1fr);
-    align-items: start;
-    gap: 8px;
+    grid-template-columns: subgrid;
+    align-items: baseline;
   }
+  .kse-bindings td[data-label] > * { grid-column: 2 / -1; min-width: 0; }
   .kse-bindings td[data-label]::before {
     content: attr(data-label);
+    grid-column: 1;
+    max-width: 12em;
     font-size: var(--font-xs);
     color: var(--text-secondary);
     overflow-wrap: anywhere;
-    padding-top: 2px;
   }
   .kse-bindings .kse-source { justify-self: start; }
 }

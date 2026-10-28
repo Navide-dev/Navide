@@ -2957,6 +2957,7 @@ watch(activeTab, (tab) => {
         <!-- ── MCP TAB ───────────────────────────────────────────────────── -->
         <div v-show="activeTab === 'mcp'" class="s-body s-body--bleed s-body--wide mcp-body">
           <h1 class="s-page-title">{{ $t('settings.nav.mcp') }}</h1>
+          <p v-if="mView === 'list'" class="s-page-intro">{{ $t('settings.mcp.agent-intro') }}</p>
 
           <!-- ── LIST VIEW ──────────────────────────────────────────────── -->
           <template v-if="mView === 'list'">
@@ -2965,7 +2966,7 @@ watch(activeTab, (tab) => {
             <div class="settings-meta-row settings-meta-row--paths" data-settings-section="mcp-installed">
               <span class="settings-meta-scope">
                 <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-                <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
+                <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
               </span>
               <span class="settings-meta-paths">
                 <span class="settings-meta-path">
@@ -3145,10 +3146,11 @@ watch(activeTab, (tab) => {
         <!-- ── SKILLS TAB ───────────────────────────────────────────────── -->
         <div v-show="activeTab === 'skills'" class="s-body s-body--bleed s-body--wide" data-settings-section="skills">
           <h1 class="s-page-title">{{ $t('settings.nav.skills') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.skills.intro') }}</p>
           <div class="settings-meta-row settings-meta-row--paths">
             <span class="settings-meta-scope">
               <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-              <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
+              <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
             </span>
             <span class="settings-meta-paths">
               <span class="settings-meta-path">
@@ -3163,9 +3165,10 @@ watch(activeTab, (tab) => {
         <!-- ── CREDENTIALS TAB ──────────────────────────────────────────── -->
         <div v-show="activeTab === 'credentials'" class="s-body s-body--bleed" data-settings-section="credentials">
           <h1 class="s-page-title">{{ $t('settings.nav.credentials') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.credentials.intro') }}</p>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.credentials.scope) }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.credentials.scope) }}</span>
           </div>
           <CredentialsPane :backend="props.backend" :active="activeTab === 'credentials'" @high-count="credentialsHighCount = $event" />
         </div>
@@ -3173,9 +3176,10 @@ watch(activeTab, (tab) => {
         <!-- ── PROMPTS TAB ──────────────────────────────────────────────── -->
         <div v-show="activeTab === 'prompts'" class="s-body s-body--bleed s-body--wide" data-settings-section="prompts">
           <h1 class="s-page-title">{{ $t('settings.nav.prompts') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.prompts.intro') }}</p>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.prompts.scope) }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.prompts.scope) }}</span>
           </div>
           <PromptSkillsPane />
         </div>
@@ -3183,9 +3187,10 @@ watch(activeTab, (tab) => {
         <!-- ── MEMORY TAB ───────────────────────────────────────────────── -->
         <div v-show="activeTab === 'memory'" class="s-body s-body--bleed" data-settings-section="memory">
           <h1 class="s-page-title">{{ $t('settings.nav.memory') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.memory.intro') }}</p>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.memory.scope) }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.memory.scope) }}</span>
           </div>
           <!-- Project files belong to the folder that is actually open; the
                first known workspace is the current one whenever there is one. -->
@@ -3204,16 +3209,16 @@ watch(activeTab, (tab) => {
           <div class="settings-meta-row settings-meta-row--paths">
             <span class="settings-meta-scope">
               <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-              <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
+              <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
             </span>
             <span class="settings-meta-paths">
               <span class="settings-meta-path">
-                <PathText class="settings-path" :path="settingsPaths.analyzer" />
+                <PathText class="settings-path" :path="settingsPaths.analyzer ?? ''" />
                 <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.analyzer" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.analyzer)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
               </span>
               <span class="settings-meta-path">
                 <span class="settings-meta-label">{{ $t('settings.analyzer.ai-keys-label') }}</span>
-                <PathText class="settings-path" :path="settingsPaths.ai_chat" :max="48" />
+                <PathText class="settings-path" :path="settingsPaths.ai_chat ?? ''" :max="48" />
                 <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.ai_chat" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.ai_chat)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
               </span>
             </span>
@@ -3505,7 +3510,7 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.cliExtensions') }}</h1>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.cliExtensions.scope) }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.cliExtensions.scope) }}</span>
           </div>
           <!-- Mounted on first visit only: the scan reads every CLI's files. -->
           <CliExtensionsPane v-if="visitedCliExtensions" :backend="props.backend" />
@@ -3515,8 +3520,8 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'cliAgents'" class="s-body s-body--wide cli-agents-body">
           <div ref="cliGridRef" class="cli-agent-roster" :inert="!!selectedCliKey">
           <h1 class="s-page-title">{{ $t('settings.nav.cliAgents') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.cliAgents.hint') }}</p>
           <section class="ap-section" data-settings-section="cli-agents-list">
-            <p class="ap-hint">{{ $t('settings.cliAgents.hint') }}</p>
             <div class="cli-agent-toolbar">
               <input v-model="cliFilterQuery" type="search" class="cli-agent-filter-search" :placeholder="$t('settings.cliAgents.search')" :aria-label="$t('settings.cliAgents.search')" />
               <!-- Filters and Redetect wrap as one group, right-aligned, so the
@@ -3556,10 +3561,12 @@ watch(activeTab, (tab) => {
                        what (the install chip's "Update available …"), not just that. -->
                   <span v-if="row.needsAttention && row.installed" class="cli-card-attention" role="img" :title="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')" :aria-label="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')">!</span>
                 </div>
-                <div class="cli-card-status">
-                  <span v-for="chip in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id" v-truncate class="cli-chip" :class="`cli-chip--${chip.tone}`">{{ chip.label }}</span>
-                  <span v-if="!row.chips.some((chip) => chip.id === 'install')" class="cli-agent-hint">{{ $t('settings.cliAgents.not-detected') }}</span>
-                </div>
+                <!-- One line of short facts joined by "·"; only a label that
+                     needs attention (amber / red) keeps a colour. -->
+                <p class="cli-card-status">
+                  <template v-for="(chip, index) in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id"><span v-if="index" class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact" :class="`cli-card-fact--${chip.tone}`">{{ chip.label }}</span></template>
+                  <template v-if="!row.chips.some((chip) => chip.id === 'install')"><span class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact">{{ $t('settings.cliAgents.not-detected') }}</span></template>
+                </p>
                 <div class="cli-card-footer">
                   <label class="cli-agent-toggle" @click.stop>
                     <input type="checkbox" :checked="cliAgentEnabled(row.agentKey)" :disabled="cliAgentEnabled(row.agentKey) && cliEnabledCount <= 1" :aria-label="$t('settings.cliAgents.enable-agent', { agent: row.label })" @change="toggleCliAgent(row.agentKey)" />
@@ -3941,6 +3948,7 @@ watch(activeTab, (tab) => {
                 data-settings-section="general-auto-resume-reconnect"
                 :title="$t('settings.general.auto-resume-reconnect')"
                 :description="$t('settings.general.auto-resume-reconnect-hint')"
+                fold-description
               >
                 <template #control>
                   <ToggleSwitch
@@ -3955,6 +3963,7 @@ watch(activeTab, (tab) => {
                 data-settings-section="general-resume-interrupted-launch"
                 :title="$t('settings.general.resume-interrupted-on-launch')"
                 :description="$t('settings.general.resume-interrupted-on-launch-hint')"
+                fold-description
               >
                 <template #control>
                   <ToggleSwitch
@@ -4215,7 +4224,7 @@ watch(activeTab, (tab) => {
               <div class="s-fullrow">
                 <div class="settings-meta-row inline">
                   <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-                  <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.general.scope) }}</span>
+                  <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.general.scope) }}</span>
                   <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.general.storage) }" v-truncate>{{ pathForTab('general') }}</span>
                 </div>
                 <p v-if="settingsBundleSummary.length" class="summary-ok">{{ settingsBundleSummary.map(bundleMessageText).join(' ') }}</p>
@@ -4683,6 +4692,8 @@ watch(activeTab, (tab) => {
                     @input="onPickColor(tok.id, ($event.target as HTMLInputElement).value)"
                   />
                   <span class="ap-color-name">{{ $t('settings.color.' + tok.id.slice(2)) }}</span>
+                  <!-- The value as text, so a pale swatch on a pale card still reads. -->
+                  <span class="ap-color-hex">{{ resolvedTokenValue(tok.id) }}</span>
                   <button
                     v-if="customOverrides[tok.id]"
                     class="ap-color-clear"
@@ -4749,6 +4760,7 @@ watch(activeTab, (tab) => {
                     {{ $t(lang.labelKey) }}
                     <span
                       v-if="lang.beta"
+                      v-truncate
                       class="scope-badge"
                       :title="$t('settings.appearance.language-beta-hint')"
                     >{{ $t('settings.appearance.language-beta') }}</span>
@@ -4765,7 +4777,7 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.accounts') }}</h1>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.accounts.scope) }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.accounts.scope) }}</span>
             <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.accounts.storage) }" v-truncate>{{ pathForTab('accounts') }}</span>
           </div>
           <GitAccountsPane :api="accountsApi" />
@@ -4781,6 +4793,8 @@ watch(activeTab, (tab) => {
              central rule table does not own) ─────────────────────────────── -->
         <div v-show="activeTab === 'keybindings'" class="s-body keybindings-body" data-settings-section="keybindings">
           <h1 class="s-page-title">{{ $t('settings.nav.keybindings') }}</h1>
+          <!-- The shortcuts file's name and place only in the tooltip. -->
+          <p class="s-page-intro" :title="$t('settings.keybindings.file-tooltip')">{{ $t('settings.keybindings.intro') }}</p>
           <KeyboardShortcutsEditor v-if="activeTab === 'keybindings'" :initial-query="shortcutsQuery" />
         </div>
 
@@ -4812,6 +4826,7 @@ watch(activeTab, (tab) => {
              because the policy is the part that is per user and per workspace. -->
         <div v-show="activeTab === 'extensions'" class="s-body s-body--bleed extensions-body" data-settings-section="extensions">
           <h1 class="s-page-title">{{ $t(pluginsPageTitle) }}</h1>
+          <p v-if="pluginsPage === 'disclosure'" class="s-page-intro">{{ $t('pluginActivity.overview.intro') }}</p>
           <!-- In the icon-only sidebar the pages have no rows of their own there. -->
           <div class="ext-pages" role="tablist" :aria-label="$t('settings.nav.extensions')">
             <button
@@ -4838,7 +4853,7 @@ watch(activeTab, (tab) => {
             <section v-show="pluginsPage === 'policy'" class="ext-policy-block" data-settings-section="execution-policy">
               <div class="settings-meta-row inline">
                 <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-                <span class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
+                <span v-truncate class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
                 <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(executionPolicyScopeNote.storage) }" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" @attention="(reasons) => (policyAttention = reasons)" />
@@ -4893,12 +4908,14 @@ watch(activeTab, (tab) => {
         <!-- ── STATUS BADGES TAB ─────────────────────────────────────────── -->
         <div v-show="activeTab === 'statusBadges'" class="s-body status-badges-body" data-settings-section="statusBadges">
           <h1 class="s-page-title">{{ $t('settings.nav.statusBadges') }}</h1>
+          <p class="s-page-intro">{{ $t('statusBadges.intro') }}</p>
           <StatusBadgeSettingsPane />
         </div>
 
         <!-- ── LAYOUT TAB ────────────────────────────────────────────────── -->
         <div v-show="activeTab === 'layout'" class="s-body layout-body" data-settings-section="layout">
           <h1 class="s-page-title">{{ $t('settings.nav.layout') }}</h1>
+          <p class="s-page-intro">{{ $t('layout.settings-intro') }}</p>
           <LayoutSettingsPane />
         </div>
 
@@ -5239,8 +5256,13 @@ watch(activeTab, (tab) => {
 .ap-hint-warn { color: var(--danger-fg); }
 
 /* ── Two-column settings layout (page title / full-width rows / control labels) ── */
+/* One page header on every page: title → intro (8px) → scope strip → toolbar
+   → content, each later step --settings-head-gap below the one before. The
+   first thing under the header drops its own top margin/padding so no page
+   adds a gap of its own. */
+.s-content { --settings-head-gap: var(--space-4, 16px); }
 .s-page-title {
-  margin: 0 0 var(--space-group);
+  margin: 0 0 var(--settings-head-gap);
   font-size: var(--font-page-title);
   font-weight: 700;
   color: var(--text-bright);
@@ -5251,7 +5273,7 @@ watch(activeTab, (tab) => {
 /* One page intro: directly under the title, outside any card, one measure. */
 .s-page-title:has(+ .s-page-intro) { margin-bottom: var(--space-2, 8px); }
 .s-page-intro {
-  margin: 0 0 var(--space-group);
+  margin: 0 0 var(--settings-head-gap);
   max-width: 70ch;
   font-size: var(--font-row-desc);
   line-height: var(--lh-base);
@@ -5259,13 +5281,18 @@ watch(activeTab, (tab) => {
   text-wrap: pretty;
 }
 .s-page-intro + .settings-section { margin-top: 0; }
-/* The panes that write their own intro under the title take the same
-   measure. */
-.s-body :deep(:is(
-  .sb-intro, .kse-intro, .cli-ext-intro, .prompts-intro p, .nv-overview-intro,
-  .skills-toolbar > div:first-child > p, .memory-pane-head > div > p,
-  .cred-toolbar > div > p:first-child
-)) {
+/* Full-bleed pages: the intro takes the title's 22px gutter. */
+.s-body--bleed > .s-page-intro { margin: 0 22px var(--settings-head-gap); flex-shrink: 0; }
+/* The scope strip right under the header, then the toolbar one gap below. */
+:is(.s-page-title, .s-page-intro) + .settings-meta-row { margin-top: 0; margin-bottom: var(--settings-head-gap); }
+.s-body :deep(.settings-meta-row + :is(.skills-pane, .prompts-pane, .memory-pane, .cred-pane, .ga-pane, .mcp-agent-pane)) { padding-top: 0; }
+.s-body :deep(.settings-meta-row + .cli-ext-tabs) { margin-top: 0; }
+.settings-meta-row + .settings-section { margin-top: 0; }
+.ext-policy-block > .settings-meta-row.inline:first-child { margin-bottom: var(--settings-head-gap); }
+.extensions-scroll :deep(.nv-overview) { padding-top: 0; }
+/* The CLI extensions pane writes its intro inside its tab; it takes the
+   same measure. */
+.s-body :deep(.cli-ext-intro) {
   max-width: 70ch;
 }
 .s-fullrow {
@@ -5315,8 +5342,13 @@ watch(activeTab, (tab) => {
 .cli-card-heading .cli-agent-vendor { font-size: var(--font-xs); font-weight: 400; color: var(--text-secondary); }
 .cli-card-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px; background: var(--bg-muted); color: var(--text-secondary); font-size: var(--font-xs); font-weight: 700; }
 .cli-card-attention { margin-left: auto; color: var(--warning-fg, #c77400); font-weight: 700; }
-.cli-card-status { display: flex; align-items: flex-start; flex-direction: column; gap: 4px; min-height: 42px; }
-.cli-card-status .cli-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
+.cli-card-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; min-width: 0; min-height: 20px; margin: 0; font-size: var(--font-xs); line-height: 1.5; color: var(--text-secondary); }
+.cli-card-fact { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cli-card-sep { color: var(--text-muted); }
+/* Colour only where something needs attention; installed, signed in and a
+   channel that is on read as plain facts. */
+.cli-card-fact--warn { color: var(--attention-on-subtle, #c77400); font-weight: 600; }
+.cli-card-fact--bad { color: var(--danger-fg, #c0392b); font-weight: 600; }
 .cli-card-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; margin-top: auto; font-size: var(--font-xs); }
 .cli-agent-empty { color: var(--text-secondary); text-align: center; padding: 30px 10px; }
 .cli-drawer-layer { position: absolute; inset: 0; z-index: 20; }
@@ -5375,10 +5407,12 @@ watch(activeTab, (tab) => {
 .cli-chip--bad { color: var(--danger-fg, #c0392b); background: var(--danger-subtle); border-color: var(--danger-muted); }
 /* Neutral chips ("Signed out", "Not installed") read in the primary text
    colour: secondary grey on the muted fill sits too close to 4.5:1 in dark
-   themes. Informational ones (a chosen model, "Push on") take the accent's
-   subtle tint, so green stays "installed" alone. */
+   themes. */
 .cli-chip--neutral { color: var(--text-primary); }
-.cli-chip--info { color: var(--accent-fg); background: var(--accent-subtle); border-color: transparent; }
+/* A positive configured fact ("Direct delivery on", a chosen model) is
+   neutral text with a small dot, not an accent pill that reads as selected. */
+.cli-chip--info { color: var(--text-primary); background: transparent; border-color: transparent; padding-left: 2px; }
+.cli-chip--info::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 5px; vertical-align: 1px; border-radius: 50%; background: var(--success-emphasis, var(--text-secondary)); }
 /* Launch overrides for the selected agent. */
 .launch-row { flex-direction: column; align-items: stretch; padding: 0; }
 .launch-row.launch-open { border-color: var(--accent-focus); }
@@ -5533,6 +5567,7 @@ watch(activeTab, (tab) => {
   flex-shrink: 0;
 }
 .ap-color-name { font-size: var(--font-xs); color: var(--text-primary); min-width: 92px; flex: 1; }
+.ap-color-hex { flex-shrink: 0; font-family: var(--font-mono); font-size: var(--font-xs); color: var(--text-secondary); text-transform: lowercase; }
 .ap-color-clear {
   width: 20px;
   height: 20px;
@@ -5677,7 +5712,12 @@ watch(activeTab, (tab) => {
   outline: 2px solid var(--accent-focus);
   outline-offset: -2px;
 }
-.extensions-scroll { padding-top: var(--space-2); }
+/* The page tabs only show on the narrow rail; without them the content
+   starts right at the header gap. */
+.extensions-scroll { padding-top: 0; }
+@media (max-width: 720px) {
+  .extensions-scroll { padding-top: var(--space-2); }
+}
 /* The "Applies to" strip: one inset strip inside the page gutter on every page
    that has one — never a full-bleed band. Inside a card (General) the card
    already supplies the gutter, so `.inline` only drops the side margins. */
@@ -6515,7 +6555,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   .ep-section h2, .ext-section-title, .native-backends-title,
   .mcp-group-title, .skills-group-title, .memory-group-title,
   .cred-group-title, .kse-group-title, .su-group-head, .sb-head,
-  .mkt-section-label
+  .mkt-section-label, .cli-group-label
 )) {
   text-transform: none !important;
   letter-spacing: normal !important;
@@ -6546,6 +6586,13 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   line-height: 1.5;
 }
 .s-body :deep(.settings-more > summary) {
+  /* A 24px target: the summary is a control, not a line of text. It keeps
+     its list-item display, so the disclosure triangle stays. */
+  box-sizing: border-box;
+  min-height: 24px;
+  padding: 2px 4px;
+  margin-left: -4px;
+  border-radius: var(--radius-xs, 4px);
   width: fit-content;
   cursor: pointer;
   color: var(--accent-fg);
@@ -6557,8 +6604,10 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 
 /* The one list filter chip (CLI Agents, Skills, Prompts, Shortcuts): a pill
-   with its count, the chosen one filled with the selection tint. Page tabs
-   are underline tabs and view switches are .settings-segmented. */
+   with its count, the chosen one on a neutral selected fill. Accent stays for
+   the page's primary button and the sidebar selection, so a toolbar has one
+   accent focus. Page tabs are underline tabs and view switches are
+   .settings-segmented. */
 .s-body :deep(.settings-filter-chip) {
   display: inline-flex;
   align-items: center;
@@ -6585,18 +6634,33 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .s-body :deep(.settings-filter-chip[aria-pressed='true']),
 .s-body :deep(.settings-filter-chip.on),
 .s-body :deep(.settings-filter-chip.active) {
-  border-color: var(--accent-muted);
-  background: var(--bg-selected);
-  color: var(--accent-bright);
+  border-color: var(--border-strong);
+  background: var(--bg-hover-strong);
+  color: var(--text-bright);
   font-weight: 600;
 }
 .s-body :deep(.settings-filter-chip[aria-pressed='true'] .count),
 .s-body :deep(.settings-filter-chip.on .count),
 .s-body :deep(.settings-filter-chip.active .count) { color: inherit; }
 
+/* Every status pill and tag ends in an ellipsis inside its card instead of
+   being cut mid-letter; the ones that can run long carry v-truncate, which
+   shows the full text on hover. */
+.s-body :deep(:is(
+  .scope-badge, .cli-chip, .skill-source-tag, .skill-badge, .prompt-badge,
+  .memory-tag, .cred-sev, .dchip, .rchip
+)) {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The one segmented control for every in-page view switch and mode picker
    (Execution Policy, Analyzer, MCP, Skills, Credentials): one outlined strip
-   on no fill of its own, a segment per choice, the chosen one tinted. A
+   on no fill of its own, a segment per choice, the chosen one filled. A
    segment is a button (.on / .active / aria-pressed) or a label around a
    visually hidden radio. Page-level tabs stay underline tabs. */
 .s-body :deep(.settings-segmented) {
@@ -6638,9 +6702,10 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .s-body :deep(.settings-segmented > button[aria-pressed='true']),
 .s-body :deep(.settings-segmented > button[aria-selected='true']),
 .s-body :deep(.settings-segmented > label:has(input:checked)) {
-  /* A filled tint (the sidebar's selection fill), not just a coloured label. */
-  background: var(--bg-selected);
-  color: var(--accent-bright);
+  /* A neutral filled segment, not just a coloured label; accent is kept for
+     the primary button and the sidebar selection. */
+  background: var(--bg-hover-strong);
+  color: var(--text-bright);
   font-weight: 600;
 }
 .s-body :deep(.settings-segmented > button:focus-visible),

@@ -1962,7 +1962,7 @@
       "developerNative": "Entwickler und nativer Code",
       "pageOn": "An",
       "developerOnMarker": "Entw.",
-      "nativeOnMarker": "Nativ",
+      "nativeOnMarker": "Nativ an",
       "browseMarketplace": "Navide Marketplace durchsuchen",
       "bundledGit": "Mitgeliefertes Git",
       "state": {
@@ -2350,7 +2350,7 @@
       "user": "Benutzer",
       "userWorkspace": "Benutzer / Arbeitsbereich",
       "accountServer": "Konto / Server",
-      "userWorkspaceBindings": "Benutzer- / Arbeitsbereichszuordnungen"
+      "userWorkspaceBindings": "Benutzer, plus die Kontowahl je Arbeitsbereich"
     },
     "storage": {
       "localStorage": "ui_settings.json (App-Daten) + Sicherung im Arbeitsbereich",
@@ -2497,8 +2497,8 @@
         "unknown": "Noch nicht getestet.",
         "not-applicable": "Auf dieser Plattform nicht verfügbar."
       },
-      "auto-resume-reconnect-hint": "Wenn das Backend abstürzt oder neu startet, beendet es alle CLI-Prozesse mit. Schalten Sie dies ein, damit nach seiner Rückkehr die Unterhaltungen der Panes auf dem Bildschirm und von bis zu sechs arbeitenden Panes außerhalb des Bildschirms automatisch wiederaufgenommen werden, statt jedes einzeln neu aufzubauen. Wiederaufgenommene Panes machen nicht von selbst weiter, die Panes, die sie geöffnet haben, werden benachrichtigt, und die Ankündigungen listen auf, was passiert ist. Stürzt das Backend kurz darauf erneut ab, wird nichts mehr wiederaufgenommen.",
-      "resume-interrupted-on-launch-hint": "Beim Neustart von Navide werden panes, die gerade einen Turn ausgeführt oder auf eine Berechtigungsabfrage oder eine Frage gewartet haben, sowie die übergeordneten panes, die auf deren Berichte warten, automatisch fortgesetzt (bis zu 6; die übrigen werden als „Beim Neustart aktiv“ markiert). Nichts läuft von selbst weiter: Klicken Sie auf „Fortfahren“ oder lassen Sie das übergeordnete pane die Anweisung geben. Das übergeordnete pane erfährt, welche seiner panes unterbrochen wurden.",
+      "auto-resume-reconnect-hint": "Setzt die Unterhaltungen Ihrer Panes fort, sobald der Hintergrunddienst nach einem Neustart zurück ist. Ein Neustart beendet alle CLI-Prozesse; die Panes auf dem Bildschirm und bis zu sechs arbeitende Panes außerhalb davon kommen zurück, ohne von selbst weiterzumachen, die Panes, die sie geöffnet haben, werden benachrichtigt, und die Ankündigungen listen auf, was passiert ist. Stürzt er kurz darauf erneut ab, wird nichts mehr wiederaufgenommen.",
+      "resume-interrupted-on-launch-hint": "Beim Neustart von Navide kehren arbeitende panes zurück und warten, bis Sie fortfahren. Das betrifft panes, die einen Turn ausgeführt oder auf eine Berechtigungsabfrage oder eine Frage gewartet haben, sowie die übergeordneten panes, die auf deren Berichte warten, bis zu 6 (die übrigen werden als „Beim Neustart aktiv“ markiert). Klicken Sie auf „Fortfahren“ oder lassen Sie das übergeordnete pane die Anweisung geben; es erfährt, welche seiner panes unterbrochen wurden.",
       "confirm-close-pane": "Vor dem Schließen eines Panes bestätigen",
       "confirm-close-pane-hint": "Nachfragen, bevor die Tastenkombination zum Schließen ein CLI-Pane schließt. Ein Pane mit laufendem Turn fragt unabhängig von dieser Einstellung immer nach.",
       "confirm-close-workspace": "Vor dem Schließen eines Arbeitsbereichs bestätigen",
@@ -7280,7 +7280,7 @@
       "approval-cut": "… Vorschau hier abgeschnitten; die Datei geht weiter",
       "approval-expand": "Vollständig anzeigen",
       "approval-deletes": "Würde den Prompt {name} hier löschen.",
-      "approval-new-loop": "{name} würde zum Loop-Prompt.",
+      "approval-new-loop": "{name} würde zum Standard-Prompt.",
       "approval-text": "Eingehender Text, vollständig",
       "approval-diff": "Änderungen gegenüber diesem Gerät",
       "approval-changes": "Geänderte Felder",
@@ -7305,7 +7305,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "Skills",
       "scope-memory": "Gedächtnis",
-      "scope-hint-prompts": "Prompt-Skills und der Loop-Prompt.",
+      "scope-hint-prompts": "Gespeicherte Prompts und welcher der Standard ist.",
       "error-load": "Die Synchronisierungseinstellungen konnten nicht gelesen werden.",
       "scope-hint-mcp": "MCP-Server, die Sie in Navide hinzugefügt haben. Ihre Geheimnisse werden verschlüsselt, bevor sie den Rechner verlassen.",
       "scope-hint-skills": "Welche Skills eingeschaltet sind und an welche CLIs jeder geht, sowie die Dateien der in Navide erstellten Skills (große werden als verschlüsselte Blobs übertragen). Skills, die Sie selbst in den Ordner gelegt haben, synchronisieren nur ihre Einstellungen.",
@@ -7491,7 +7491,7 @@
       "error-save": "Diese Datei konnte nicht gespeichert werden. Ihr Entwurf bleibt im Editor."
     },
     "prompts": {
-      "intro": "Gespeicherte Prompts, die ein CLI-Pane über seine ∞-Schaltfläche sendet. Die Wahl eines Prompts ersetzt den ganzen Prompt; nur der Standard-Prompt läuft als Loop, die anderen werden einmal gesendet.",
+      "intro": "Gespeicherte Prompts, die ein CLI-Pane über die Wiederholen-Schaltfläche (∞) in seiner Titelleiste sendet. Die Wahl eines Prompts ersetzt den ganzen Prompt; nur der Standard-Prompt wird nach jedem Turn erneut gesendet, die anderen einmal.",
       "new": "Neuer Prompt",
       "new-name": "Neuer Prompt",
       "copy-name": "{name} – Kopie",
@@ -7518,10 +7518,10 @@
       "disable": "Deaktivieren",
       "duplicate": "Duplizieren",
       "delete": "Löschen",
-      "hint": "Der Standard-Prompt wird durch einen einfachen Klick auf ∞ gesendet und ist der einzige, der als Loop läuft; deaktivierte Prompts bleiben hier, erscheinen aber nicht mehr in der Auswahl.",
+      "hint": "Ein einfacher Klick auf die Wiederholen-Schaltfläche sendet den Standard-Prompt, den einzigen, der sich wiederholt; deaktivierte Prompts bleiben hier, erscheinen aber nicht mehr in der Auswahl.",
       "advanced": "Erweitert",
       "send-once": "Wird einmal gesendet",
-      "send-once-hint": "Nur der Standard-Prompt läuft als Loop; dieser wird einmal gesendet, ohne Fortsetzung oder Turn-Limit.",
+      "send-once-hint": "Nur der Standard-Prompt wird nach jedem Turn erneut gesendet; dieser wird einmal gesendet, ohne Fortsetzung oder Turn-Limit.",
       "untitled-name": "Unbenannter Prompt",
       "prompt-empty": "Ein Prompt darf nicht leer sein – der bisherige Text wurde beibehalten. Um diesen Prompt zu entfernen, „Löschen“ verwenden.",
       "delete-confirm": "„{name}“ löschen? Das lässt sich nicht rückgängig machen, und Geräte, die Prompts synchronisieren, entfernen ihn ebenfalls."
@@ -7798,8 +7798,8 @@
       "filter-attention": "Erfordert Aufmerksamkeit",
       "count": "{visible} von {total} Agents · {enabled} aktiviert",
       "reorder-filtered": "Suche leeren und „Alle“ wählen, um neu anzuordnen",
-      "enabled": "Aktiviert",
-      "enable-agent": "{agent} aktivieren",
+      "enabled": "Im Menü zeigen",
+      "enable-agent": "{agent} im Menü zeigen",
       "manage": "Verwalten",
       "manage-agent": "{agent} verwalten",
       "move-up": "{agent} nach vorne verschieben",
@@ -7830,9 +7830,9 @@
         "perm-inherit": "Berechtigungen geerbt",
         "perm-force-on": "Berechtigungen erzwungen an",
         "perm-force-off": "Berechtigungen erzwungen aus",
-        "push": "Push an",
-        "push-off": "Push aus",
-        "no-push": "Kein Push-Kanal",
+        "push": "Direktzustellung an",
+        "push-off": "Direktzustellung aus",
+        "no-push": "Nachrichten eingetippt",
         "accounts": "{count} Konten | {count} Konto | {count} Konten",
         "signed-out": "Abgemeldet",
         "custom-binary": "Eigene Binärdatei",
@@ -7879,7 +7879,8 @@
       "restart-note": "Das Flag wird beim Start eines Panes in dessen Befehl festgelegt. Änderungen hier wirken sich auf danach gestartete Panes aus; ein bereits laufendes Pane behält seine Startwerte, bis es neu aufgebaut oder wiederhergestellt wird."
     },
     "keybindings": {
-      "intro": "Belegen Sie jede Tastenkombination unten neu. Klicken Sie auf eine Taste, um eine neue Kombination aufzuzeichnen, verwenden Sie +, um eine zweite Belegung hinzuzufügen, und ✕, um eine zu entfernen. Änderungen werden sofort in keybindings.json gespeichert und gelten für jedes geöffnete Fenster.",
+      "intro": "Belegen Sie jede Tastenkombination unten neu. Klicken Sie auf eine Taste, um eine neue Kombination aufzuzeichnen, verwenden Sie +, um eine zweite Belegung hinzuzufügen, und ✕, um eine zu entfernen. Änderungen werden sofort in Ihrer Tastenkürzel-Datei gespeichert und gelten für jedes geöffnete Fenster.",
+      "file-tooltip": "keybindings.json im App-Datenordner von Navide",
       "search-placeholder": "Befehl, Taste oder Kontext suchen …",
       "filter": {
         "all": "Alle",

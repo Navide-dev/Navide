@@ -114,7 +114,8 @@ onBeforeUnmount(stopPolling)
 
 <template>
   <div class="nv-overview">
-    <p class="nv-overview-intro">{{ $t('pluginActivity.overview.intro') }}</p>
+    <!-- The page intro sits under the page title (the settings modal renders
+         it while this page is shown). -->
     <p v-if="loading" class="nv-overview-muted">{{ $t('pluginActivity.loading') }}</p>
     <SettingsEmptyState v-else-if="entries.length === 0" :message="$t('pluginActivity.overview.empty')" />
     <article v-for="entry in entries" :key="entry.id" class="nv-overview-entry" :data-id="entry.id">
@@ -182,11 +183,6 @@ onBeforeUnmount(stopPolling)
 .nv-overview h3,
 .nv-overview h4 {
   margin: 0;
-}
-.nv-overview-intro {
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
-  line-height: var(--lh-base);
 }
 .nv-overview-entry {
   display: flex;

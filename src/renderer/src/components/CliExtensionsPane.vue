@@ -283,6 +283,7 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
 .cli-ext-feature-link { font: inherit; font-weight: 600; background: none; border: none; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; }
 .cli-ext-inferred { border-style: dashed; }
 .cli-ext-consent { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); }
-.cli-ext-detail, .cli-ext-path { display: block; min-width: 0; padding: 3px 6px; border-radius: var(--radius-xs); background: var(--bg-inset); font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cli-ext-path { white-space: normal; }
+.cli-ext-detail { display: block; min-width: 0; padding: 3px 6px; border-radius: var(--radius-xs); background: var(--bg-inset); font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Same box as .cli-ext-detail; the PathText inside does its own clipping. */
+.cli-ext-path { display: block; min-width: 0; padding: 3px 6px; border-radius: var(--radius-xs); background: var(--bg-inset); font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; }
 </style>

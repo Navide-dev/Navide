@@ -1962,7 +1962,7 @@
       "developerNative": "Développeur et code natif",
       "pageOn": "Activé",
       "developerOnMarker": "Dév.",
-      "nativeOnMarker": "Natif",
+      "nativeOnMarker": "Natif activé",
       "browseMarketplace": "Parcourir Navide Marketplace",
       "bundledGit": "Git fourni",
       "state": {
@@ -2350,7 +2350,7 @@
       "user": "Utilisateur",
       "userWorkspace": "Utilisateur / espace de travail",
       "accountServer": "Compte / serveur",
-      "userWorkspaceBindings": "Associations utilisateur / espace de travail"
+      "userWorkspaceBindings": "Utilisateur, plus le compte choisi par espace de travail"
     },
     "storage": {
       "localStorage": "ui_settings.json (données de l’application) + sauvegarde dans l’espace de travail",
@@ -2497,8 +2497,8 @@
         "unknown": "Pas encore testé.",
         "not-applicable": "Non disponible sur cette plateforme."
       },
-      "auto-resume-reconnect-hint": "Quand le backend plante ou redémarre, il emporte tous les processus de CLI. Activez cette option pour reprendre automatiquement, à son retour, les conversations des panneaux à l’écran et de jusqu’à six panneaux hors écran qui étaient au travail, au lieu de reconstruire chacun à la main. Les panneaux repris ne continuent pas seuls, les panneaux qui les ont ouverts sont prévenus et les annonces indiquent ce qui s’est passé. Si le backend replante peu après, plus rien n’est repris.",
-      "resume-interrupted-on-launch-hint": "Au redémarrage de Navide, les panes qui exécutaient un tour ou attendaient une demande d’autorisation ou une question, ainsi que les panes parents qui attendent leurs rapports, reprennent automatiquement (6 au maximum ; les autres sont marqués « Actif au redémarrage »). Rien ne continue tout seul : cliquez sur « Continuer », ou laissez le parent lui en donner l’ordre. Le parent est informé de ceux de ses panes qui ont été interrompus.",
+      "auto-resume-reconnect-hint": "Reprend les conversations de vos panneaux dès que le service d’arrière-plan revient après un redémarrage. Un redémarrage arrête tous les processus de CLI ; les panneaux à l’écran et jusqu’à six panneaux hors écran qui étaient au travail reviennent sans continuer seuls, les panneaux qui les ont ouverts sont prévenus et les annonces indiquent ce qui s’est passé. S’il replante peu après, plus rien n’est repris.",
+      "resume-interrupted-on-launch-hint": "Au redémarrage de Navide, les panes qui travaillaient reviennent et attendent que vous continuiez. Cela concerne les panes qui exécutaient un tour ou attendaient une demande d’autorisation ou une question, ainsi que les panes parents qui attendent leurs rapports, 6 au maximum (les autres sont marqués « Actif au redémarrage »). Cliquez sur « Continuer » ou laissez le parent lui en donner l’ordre ; le parent est informé de ceux de ses panes qui ont été interrompus.",
       "confirm-close-pane": "Confirmer avant de fermer un pane",
       "confirm-close-pane-hint": "Demander confirmation avant que le raccourci de fermeture ne ferme un pane CLI. Un pane dont un tour est en cours demande toujours, quel que soit ce paramètre.",
       "confirm-close-workspace": "Confirmer avant de fermer un espace de travail",
@@ -7280,7 +7280,7 @@
       "approval-cut": "… aperçu coupé ici ; le fichier continue",
       "approval-expand": "Tout afficher",
       "approval-deletes": "Supprimerait le prompt {name} ici.",
-      "approval-new-loop": "{name} deviendrait le prompt de boucle.",
+      "approval-new-loop": "{name} deviendrait le prompt par défaut.",
       "approval-text": "Texte entrant, en entier",
       "approval-diff": "Modifications par rapport à cet appareil",
       "approval-changes": "Champs modifiés",
@@ -7305,7 +7305,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "Skills",
       "scope-memory": "Mémoire",
-      "scope-hint-prompts": "Les skills de prompt et le prompt de boucle.",
+      "scope-hint-prompts": "Les prompts enregistrés et celui qui est par défaut.",
       "error-load": "Impossible de lire les paramètres de synchronisation.",
       "scope-hint-mcp": "Les serveurs MCP ajoutés dans Navide. Leurs secrets sont chiffrés avant de partir.",
       "scope-hint-skills": "Quels skills sont activés et vers quelles CLI chacun est envoyé, plus les fichiers des skills créés dans Navide (les gros transitent sous forme de blobs chiffrés). Les skills que vous avez placés vous-même dans le dossier ne synchronisent que leurs paramètres.",
@@ -7491,7 +7491,7 @@
       "error-save": "Impossible d’enregistrer ce fichier. Votre brouillon reste dans l’éditeur."
     },
     "prompts": {
-      "intro": "Des prompts enregistrés qu’un pane CLI envoie depuis son bouton ∞. En choisir un remplace tout le prompt ; seul le prompt par défaut tourne en boucle, les autres sont envoyés une fois.",
+      "intro": "Des prompts enregistrés qu’un pane CLI envoie depuis le bouton de répétition (∞) de sa barre de titre. En choisir un remplace tout le prompt ; seul le prompt par défaut est renvoyé après chaque tour, les autres sont envoyés une fois.",
       "new": "Nouveau prompt",
       "new-name": "Nouveau prompt",
       "copy-name": "{name} (copie)",
@@ -7518,10 +7518,10 @@
       "disable": "Désactiver",
       "duplicate": "Dupliquer",
       "delete": "Supprimer",
-      "hint": "Le prompt par défaut est celui qu’envoie un simple clic sur ∞, et le seul qui tourne en boucle ; les prompts désactivés restent ici mais disparaissent du sélecteur.",
+      "hint": "Un simple clic sur le bouton de répétition envoie le prompt par défaut, le seul qui se répète ; les prompts désactivés restent ici mais disparaissent du sélecteur.",
       "advanced": "Avancé",
       "send-once": "Envoyé une fois",
-      "send-once-hint": "Seul le prompt par défaut s’exécute en boucle ; celui-ci est envoyé une seule fois, sans reprise ni limite de tours.",
+      "send-once-hint": "Seul le prompt par défaut est renvoyé après chaque tour ; celui-ci est envoyé une seule fois, sans reprise ni limite de tours.",
       "untitled-name": "Prompt sans titre",
       "prompt-empty": "Un prompt ne peut pas être vide – le texte précédent a été conservé. Pour retirer ce prompt, utilisez Supprimer.",
       "delete-confirm": "Supprimer « {name} » ? Cette action est irréversible, et les machines qui synchronisent les prompts le supprimeront aussi."
@@ -7798,8 +7798,8 @@
       "filter-attention": "À vérifier",
       "count": "{visible} agents sur {total} · {enabled} activés",
       "reorder-filtered": "Effacez la recherche et choisissez « Tous » pour réordonner",
-      "enabled": "Activé",
-      "enable-agent": "Activer {agent}",
+      "enabled": "Afficher dans le menu",
+      "enable-agent": "Afficher {agent} dans le menu",
       "manage": "Gérer",
       "manage-agent": "Gérer {agent}",
       "move-up": "Placer {agent} plus haut",
@@ -7830,9 +7830,9 @@
         "perm-inherit": "Autorisations héritées",
         "perm-force-on": "Contournement forcé",
         "perm-force-off": "Contournement interdit",
-        "push": "Push activé",
-        "push-off": "Push désactivé",
-        "no-push": "Pas de canal de push",
+        "push": "Remise directe activée",
+        "push-off": "Remise directe désactivée",
+        "no-push": "Messages saisis",
         "accounts": "{count} compte | {count} compte | {count} comptes",
         "signed-out": "Déconnecté",
         "custom-binary": "Binaire personnalisé",
@@ -7879,7 +7879,8 @@
       "restart-note": "L’option est figée dans la commande d’un pane à son démarrage. Toute modification ici concerne les panes lancés ensuite ; un pane déjà en cours conserve ce avec quoi il a démarré jusqu’à ce qu’il soit reconstruit ou restauré."
     },
     "keybindings": {
-      "intro": "Réaffectez n’importe quel raccourci ci-dessous. Cliquez sur une touche pour enregistrer une nouvelle combinaison, utilisez + pour ajouter une seconde affectation et ✕ pour en supprimer une. Les modifications sont enregistrées immédiatement dans keybindings.json et s’appliquent à toutes les fenêtres ouvertes.",
+      "intro": "Réaffectez n’importe quel raccourci ci-dessous. Cliquez sur une touche pour enregistrer une nouvelle combinaison, utilisez + pour ajouter une seconde affectation et ✕ pour en supprimer une. Les modifications sont enregistrées immédiatement dans votre fichier de raccourcis et s’appliquent à toutes les fenêtres ouvertes.",
+      "file-tooltip": "keybindings.json dans le dossier de données de l’app Navide",
       "search-placeholder": "Rechercher une commande, une touche ou un contexte…",
       "filter": {
         "all": "Tous",

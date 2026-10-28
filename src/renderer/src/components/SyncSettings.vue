@@ -582,7 +582,7 @@ onBeforeUnmount(() => offResult?.())
     <p v-else-if="!hasKey" class="sync-note">{{ t('settings.sync.no-key') }}</p>
 
     <div class="sync-actions">
-      <button class="nv-btn nv-btn--sm" type="button" :disabled="busy === 'all' || !connected" @click="syncNow">
+      <button class="nv-btn nv-btn--sm sync-now-btn" type="button" :disabled="busy === 'all' || !connected" @click="syncNow">
         {{ t('settings.sync.now') }}
       </button>
     </div>
@@ -732,6 +732,8 @@ onBeforeUnmount(() => offResult?.())
 </template>
 
 <style scoped>
+/* The page's main action meets the 28px target the other settings buttons use. */
+.sync-now-btn { box-sizing: border-box; min-height: var(--control-h-md); }
 .sync-row-off :deep(.setting-row-title) {
   color: var(--text-secondary);
   font-weight: 500;

@@ -1962,7 +1962,7 @@
       "developerNative": "Nhà phát triển và mã gốc",
       "pageOn": "Bật",
       "developerOnMarker": "Dev.",
-      "nativeOnMarker": "Gốc",
+      "nativeOnMarker": "Gốc đang bật",
       "browseMarketplace": "Duyệt Navide Marketplace",
       "bundledGit": "Git đi kèm",
       "state": {
@@ -2350,7 +2350,7 @@
       "user": "Người dùng",
       "userWorkspace": "Người dùng / Workspace",
       "accountServer": "Tài khoản / Máy chủ",
-      "userWorkspaceBindings": "Liên kết Người dùng / Workspace"
+      "userWorkspaceBindings": "Người dùng, cùng tài khoản đã chọn cho từng Workspace"
     },
     "storage": {
       "localStorage": "ui_settings.json (dữ liệu ứng dụng) + bản sao lưu workspace",
@@ -2497,8 +2497,8 @@
         "unknown": "Chưa thử.",
         "not-applicable": "Không có trên nền tảng này."
       },
-      "auto-resume-reconnect-hint": "Khi backend gặp sự cố hoặc khởi động lại, mọi tiến trình CLI cũng kết thúc theo. Bật mục này để khi backend trở lại, tự động nối lại cuộc trò chuyện của các pane trên màn hình và của tối đa sáu pane ngoài màn hình đang làm việc, thay vì dựng lại từng pane bằng tay. Pane được nối lại không tự tiếp tục, pane đã mở nó sẽ được báo, và thông báo sẽ ghi lại những gì đã xảy ra. Nếu backend lại gặp sự cố ngay sau đó, sẽ không tự nối lại nữa.",
-      "resume-interrupted-on-launch-hint": "Khi Navide khởi động lại, các pane đang chạy một lượt hoặc đang chờ lời nhắc cấp quyền hay câu hỏi, cùng các pane cha đang chờ báo cáo của chúng, sẽ tự động tiếp tục (tối đa 6; số còn lại được đánh dấu “Đang làm việc lúc khởi động lại”). Không có gì tự chạy tiếp: hãy nhấn Tiếp tục hoặc để pane cha bảo nó tiếp tục. Pane cha được cho biết pane nào của nó bị gián đoạn.",
+      "auto-resume-reconnect-hint": "Nối lại cuộc trò chuyện của các pane khi dịch vụ nền trở lại sau khi khởi động lại. Khởi động lại sẽ kết thúc mọi tiến trình CLI; các pane trên màn hình và tối đa sáu pane ngoài màn hình đang làm việc sẽ trở lại mà không tự tiếp tục, pane đã mở chúng sẽ được báo, và thông báo sẽ ghi lại những gì đã xảy ra. Nếu dịch vụ lại gặp sự cố ngay sau đó, sẽ không tự nối lại nữa.",
+      "resume-interrupted-on-launch-hint": "Khi Navide khởi động lại, các pane đang làm việc sẽ trở lại và chờ bạn cho tiếp tục. Gồm các pane đang chạy một lượt hoặc đang chờ lời nhắc cấp quyền hay câu hỏi, cùng các pane cha đang chờ báo cáo của chúng, tối đa 6 (số còn lại được đánh dấu “Đang làm việc lúc khởi động lại”). Hãy nhấn Tiếp tục hoặc để pane cha bảo nó tiếp tục; pane cha được cho biết pane nào của nó bị gián đoạn.",
       "confirm-close-pane": "Xác nhận trước khi đóng pane",
       "confirm-close-pane-hint": "Hỏi trước khi phím tắt đóng pane đóng một pane CLI. Pane đang có lượt chạy dở luôn hỏi, bất kể cài đặt này.",
       "confirm-close-workspace": "Xác nhận trước khi đóng workspace",
@@ -7280,7 +7280,7 @@
       "approval-cut": "… bản xem trước dừng ở đây; tệp còn tiếp",
       "approval-expand": "Hiện toàn bộ",
       "approval-deletes": "Sẽ xóa prompt {name} ở đây.",
-      "approval-new-loop": "{name} sẽ trở thành prompt loop.",
+      "approval-new-loop": "{name} sẽ trở thành prompt mặc định.",
       "approval-text": "Văn bản nhận được, toàn bộ",
       "approval-diff": "Thay đổi so với thiết bị này",
       "approval-changes": "Các trường đã thay đổi",
@@ -7305,7 +7305,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "Skill",
       "scope-memory": "Bộ nhớ",
-      "scope-hint-prompts": "Skill prompt và prompt loop.",
+      "scope-hint-prompts": "Các prompt đã lưu và prompt nào là mặc định.",
       "error-load": "Không đọc được cài đặt đồng bộ.",
       "scope-hint-mcp": "Máy chủ MCP bạn đã thêm trong Navide. Bí mật của chúng được mã hóa trước khi rời máy.",
       "scope-hint-skills": "Skill nào đang bật và mỗi skill đi tới CLI nào, cùng các tệp của skill tạo trong Navide (skill lớn được chuyển dưới dạng blob mã hóa). Skill bạn tự đặt vào thư mục chỉ đồng bộ cài đặt.",
@@ -7491,7 +7491,7 @@
       "error-save": "Không lưu được tệp này. Bản nháp của bạn vẫn còn trong trình soạn thảo."
     },
     "prompts": {
-      "intro": "Các prompt đã lưu mà pane CLI gửi từ nút ∞. Chọn một prompt sẽ thay toàn bộ prompt; chỉ prompt mặc định chạy dạng loop, các prompt khác gửi một lần.",
+      "intro": "Các prompt đã lưu mà pane CLI gửi từ nút lặp lại (∞) trên thanh tiêu đề. Chọn một prompt sẽ thay toàn bộ prompt; chỉ prompt mặc định được gửi lại sau mỗi lượt, các prompt khác gửi một lần.",
       "new": "Prompt mới",
       "new-name": "Prompt mới",
       "copy-name": "Bản sao của {name}",
@@ -7518,10 +7518,10 @@
       "disable": "Tắt",
       "duplicate": "Nhân bản",
       "delete": "Xóa",
-      "hint": "Prompt mặc định là prompt được gửi khi nhấp thường vào ∞ và là prompt duy nhất chạy loop; prompt đã tắt vẫn ở đây nhưng không có trong bảng chọn.",
+      "hint": "Nhấp thường vào nút lặp lại sẽ gửi prompt mặc định, prompt duy nhất được lặp lại; prompt đã tắt vẫn ở đây nhưng không có trong bảng chọn.",
       "advanced": "Nâng cao",
       "send-once": "Gửi một lần",
-      "send-once-hint": "Chỉ prompt mặc định chạy dạng loop; prompt này được gửi một lần, không có văn bản tiếp tục hay giới hạn lượt.",
+      "send-once-hint": "Chỉ prompt mặc định được gửi lại sau mỗi lượt; prompt này được gửi một lần, không có văn bản tiếp tục hay giới hạn lượt.",
       "untitled-name": "Prompt chưa đặt tên",
       "prompt-empty": "Prompt không được để trống — đã giữ lại nội dung trước đó. Để gỡ prompt này, hãy dùng Xóa.",
       "delete-confirm": "Xóa “{name}”? Không thể hoàn tác, và các máy đồng bộ prompt cũng sẽ xóa nó."
@@ -7798,8 +7798,8 @@
       "filter-attention": "Cần chú ý",
       "count": "{visible} / {total} agent · {enabled} đã bật",
       "reorder-filtered": "Hãy xóa tìm kiếm và chọn Tất cả để sắp xếp lại",
-      "enabled": "Đã bật",
-      "enable-agent": "Bật {agent}",
+      "enabled": "Hiện trong menu",
+      "enable-agent": "Hiện {agent} trong menu",
       "manage": "Quản lý",
       "manage-agent": "Quản lý {agent}",
       "move-up": "Chuyển {agent} lên trước",
@@ -7832,7 +7832,7 @@
         "perm-force-off": "Buộc không bỏ qua quyền",
         "push": "Đẩy trực tiếp đang bật",
         "push-off": "Đẩy trực tiếp đang tắt",
-        "no-push": "Không có kênh đẩy trực tiếp",
+        "no-push": "Tin nhắn được gõ vào",
         "accounts": "{count} tài khoản",
         "signed-out": "Đã đăng xuất",
         "custom-binary": "Tệp thực thi tùy chỉnh",
@@ -7879,7 +7879,8 @@
       "restart-note": "Cờ được cố định vào lệnh của pane khi nó khởi động. Thay đổi ở đây ảnh hưởng tới các pane tạo sau đó; pane đang chạy giữ nguyên thiết lập ban đầu cho đến khi được dựng lại hoặc khôi phục."
     },
     "keybindings": {
-      "intro": "Gán lại bất kỳ phím tắt nào bên dưới. Nhấp vào một phím để ghi tổ hợp mới, dùng + để thêm phím tắt thứ hai và ✕ để gỡ một phím tắt. Thay đổi được lưu vào keybindings.json ngay lập tức và áp dụng cho mọi cửa sổ đang mở.",
+      "intro": "Gán lại bất kỳ phím tắt nào bên dưới. Nhấp vào một phím để ghi tổ hợp mới, dùng + để thêm phím tắt thứ hai và ✕ để gỡ một phím tắt. Thay đổi được lưu vào tệp phím tắt của bạn ngay lập tức và áp dụng cho mọi cửa sổ đang mở.",
+      "file-tooltip": "keybindings.json trong thư mục dữ liệu ứng dụng của Navide",
       "search-placeholder": "Tìm lệnh, phím hoặc ngữ cảnh…",
       "filter": {
         "all": "Tất cả",

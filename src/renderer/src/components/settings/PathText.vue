@@ -4,6 +4,7 @@
 // path stays in the tooltip). If even that is wider than the space it has, the
 // line ends in an ellipsis rather than wrapping inside a segment.
 import { computed } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { shortenPath } from '../../lib/shortenPath'
 
 const props = withDefaults(defineProps<{ path: string; max?: number }>(), { max: 48 })
@@ -12,7 +13,7 @@ const shown = computed(() => shortenPath(props.path, props.max))
 </script>
 
 <template>
-  <span class="path-text" :title="path">{{ shown }}</span>
+  <span v-truncate="path" class="path-text">{{ shown }}</span>
 </template>
 
 <style scoped>

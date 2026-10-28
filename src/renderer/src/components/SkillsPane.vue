@@ -899,9 +899,10 @@ watch(
   <div class="skills-pane" data-settings-section="skills">
     <!-- ── Toolbar: title, filter chips, view switch, actions ─────────── -->
     <div class="skills-toolbar">
+      <!-- The page intro sits under the page title (the settings modal
+           renders it); this row is the list's label and its actions. -->
       <div>
         <h2>{{ t('settings.skills.title') }}</h2>
-        <p>{{ t('settings.skills.intro') }}</p>
       </div>
       <div class="skills-toolbar-actions">
         <button type="button" :disabled="loading || busy" @click="loadSkills()">
@@ -991,7 +992,7 @@ watch(
         <template v-else-if="view === 'browse'">
           <section v-for="group in groupedRows" :key="group.source" class="skills-group">
             <h3 class="skills-group-title">
-              <i18n-t :keypath="group.keypath" tag="span" scope="global"><template #[group.param]><span class="skills-group-id">{{ group.value }}</span></template></i18n-t><span class="count">{{ group.rows.length }}</span>
+              <i18n-t :keypath="group.keypath" tag="span" scope="global"><template #[group.param]><span class="skills-group-id" :class="{ 'skills-group-id--path': group.param === 'root' }">{{ group.value }}</span></template></i18n-t><span class="count">{{ group.rows.length }}</span>
             </h3>
             <div class="skills-cards">
               <button
@@ -1014,7 +1015,7 @@ watch(
                 </span>
                 <!-- The source and sync badges lead the meta line, so the name keeps the full width. -->
                 <span class="skill-card-delivery">
-                  <span class="skill-source-tag" :class="row.kind">{{ rowSourceLabel(row) }}</span>
+                  <span v-truncate class="skill-source-tag" :class="row.kind">{{ rowSourceLabel(row) }}</span>
                   <span
                     v-if="row.kind === 'shared' && row.skill.syncTooLarge"
                     class="skill-badge warning"
@@ -1127,7 +1128,7 @@ watch(
         <header class="skill-drawer-head">
           <div class="skill-drawer-title">
             <h3>{{ selectedRow.skill.name }}</h3>
-            <span class="skill-source-tag" :class="selectedRow.kind">{{ rowSourceLabel(selectedRow) }}</span>
+            <span v-truncate class="skill-source-tag" :class="selectedRow.kind">{{ rowSourceLabel(selectedRow) }}</span>
             <span
               v-if="selectedRow.kind === 'shared' && selectedRow.skill.valid === false"
               class="skill-badge danger"
@@ -1352,7 +1353,7 @@ watch(
 .skill-editor-head h3 { margin: 0; color: var(--text-bright); }
 /* The section heading is SettingsSection's label. */
 .skills-toolbar h2 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: var(--font-row-desc);
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -1360,10 +1361,7 @@ watch(
   color: var(--text-secondary);
 }
 .skill-editor-head h3 { font-size: var(--font-md); }
-.skills-toolbar p,
 .skill-editor-head p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); }
-/* The page intro uses the same size as every other page's intro. */
-.skills-toolbar > div:first-child > p { font-size: var(--font-row-desc); line-height: 1.5; }
 button,
 input,
 textarea {
@@ -1753,6 +1751,8 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 .skill-migrate { padding: 3px 8px; font-size: var(--font-2xs); white-space: nowrap; }
 /* Paths and ids keep their own case in every locale. */
 .skills-group-id { text-transform: none; letter-spacing: normal; }
+/* A folder in a heading is a path, not part of the label: muted mono. */
+.skills-group-id--path { font-family: var(--font-mono); font-weight: 400; color: var(--text-muted, var(--text-secondary)); }
 .skill-source-tag,
 .skills-matrix .matrix-source {
   display: inline-block;

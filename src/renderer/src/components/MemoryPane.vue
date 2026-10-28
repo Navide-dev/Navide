@@ -448,10 +448,9 @@ defineExpose({ reload, confirmDiscard })
 
 <template>
   <section class="memory-pane" :aria-label="t('settings.memory.title')">
+    <!-- The page intro sits under the page title (the settings modal renders
+         it); the head keeps the one action at the right. -->
     <header class="memory-pane-head">
-      <div>
-        <p>{{ t('settings.memory.intro') }}</p>
-      </div>
       <button type="button" :disabled="loading || busy" @click="reload">{{ t('action.refresh') }}</button>
     </header>
 
@@ -664,9 +663,8 @@ defineExpose({ reload, confirmDiscard })
   overflow: hidden;
   color: var(--text-primary);
 }
-.memory-pane-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.memory-pane-head { display: flex; align-items: flex-start; justify-content: flex-end; gap: 10px; }
 /* The page intro uses the same size as every other page's intro. */
-.memory-pane-head p { margin: 0; color: var(--text-secondary); font-size: var(--font-row-desc); line-height: 1.5; }
 button, textarea { font: inherit; }
 button {
   border: 1px solid var(--border-default);
@@ -730,7 +728,10 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   padding: 4px 9px 4px 4px;
   min-width: 0;
 }
-.memory-row.missing { border-style: dashed; }
+/* A file not created yet is still a real row (open it to create the file):
+   solid like the others, set apart by its tag and no fill. Dashed borders
+   are for empty states only. */
+.memory-row.missing { background: transparent; }
 .memory-row.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
 .memory-open {
   flex: 1;

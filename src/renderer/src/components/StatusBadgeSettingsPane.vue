@@ -61,6 +61,11 @@ function swatchStyle(color: StatusColorKey): Record<string, string> {
 }
 
 function previewStyle(status: PaneStatusValue): Record<string, string> {
+  // An unchanged 'starting' paints through its role tokens on every pane, so
+  // the preview uses the same ones (a theme may move them off the yellow).
+  if (status === 'starting' && !prefs.value[status]?.color) {
+    return { background: 'var(--status-starting-subtle)', color: 'var(--status-starting-fg)' }
+  }
   const spec = STATUS_COLOR_PALETTE[colorOf(status)]
   return { background: spec.bg, color: spec.fg }
 }
@@ -92,7 +97,6 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
 <template>
   <div class="sb-wrap">
   <div class="sb" :style="{ '--sb-label-cols': LABEL_COLUMNS.length }">
-    <p class="sb-intro">{{ $t('statusBadges.intro') }}</p>
 
     <div class="sb-head">
       <span class="sb-h-status">{{ $t('statusBadges.col.status') }}</span>
@@ -196,16 +200,8 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   column-gap: 12px;
   row-gap: 2px;
 }
-.sb-intro,
 .sb-foot {
   grid-column: 1 / -1;
-}
-.sb-intro {
-  margin: 0 0 14px;
-  font-size: var(--font-row-desc);
-  color: var(--text-secondary);
-  line-height: 1.6;
-  max-width: 68ch;
 }
 
 /* The header and every row are subgrids of .sb, so the auto-sized colour and
@@ -260,6 +256,7 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   align-self: center;
   justify-self: start;
   font-size: var(--font-2xs);
+  font-weight: 600;
   text-transform: uppercase;
   padding: 2px 8px;
   border-radius: 999px;

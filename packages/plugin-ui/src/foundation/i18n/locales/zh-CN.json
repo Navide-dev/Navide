@@ -1962,7 +1962,7 @@
       "developerNative": "开发者与原生代码",
       "pageOn": "已开启",
       "developerOnMarker": "开发",
-      "nativeOnMarker": "原生",
+      "nativeOnMarker": "原生已开",
       "browseMarketplace": "浏览 Navide 市场",
       "bundledGit": "内置 Git",
       "state": {
@@ -2350,7 +2350,7 @@
       "user": "用户",
       "userWorkspace": "用户／工作区",
       "accountServer": "账号／服务器",
-      "userWorkspaceBindings": "用户／工作区绑定"
+      "userWorkspaceBindings": "用户，以及各工作区选用的账号"
     },
     "storage": {
       "localStorage": "ui_settings.json（App 数据）＋工作区备份",
@@ -2497,8 +2497,8 @@
         "unknown": "尚未测试。",
         "not-applicable": "此平台不提供。"
       },
-      "auto-resume-reconnect-hint": "后端崩溃或重新启动时，会一并带走所有 CLI 进程。开启后，后端恢复时会自动接回画面上的 pane，以及画面外最多六个正在工作的 pane 的对话，不必逐一手动重建。接回的 pane 不会自己继续，派出它的 pane 会收到通知，公告中心会列出经过。如果后端很快又崩溃，就不会再自动接回。",
-      "resume-interrupted-on-launch-hint": "重开 Navide 时，正在跑回合、停在权限询问或快选等待的 pane，以及等它们回报的母 pane，会自动接回（最多 6 个，其余标记“重开时工作中”）。接回后不会自动续跑，按“继续”或由母 pane 下令才会继续；母 pane 会收到哪些子 pane 被中断的通知。",
+      "auto-resume-reconnect-hint": "后台服务重启回来后，自动接回 pane 的对话。重启会一并结束所有 CLI 进程；画面上的 pane 以及画面外最多六个正在工作的 pane 会接回但不自己继续，派出它的 pane 会收到通知，公告中心会列出经过。如果很快又崩溃，就不会再自动接回。",
+      "resume-interrupted-on-launch-hint": "重开 Navide 时，自动接回工作中的 pane，等你下令再继续。范围是正在跑回合、停在权限询问或快选等待的 pane，以及等它们回报的母 pane（最多 6 个，其余标记“重开时工作中”）。按“继续”或由母 pane 下令才会继续；母 pane 会收到哪些子 pane 被中断的通知。",
       "confirm-close-pane": "关闭 pane 前确认",
       "confirm-close-pane-hint": "用关闭 pane 快捷键关闭 CLI pane 前先跳出确认。运行中的 pane 一律会确认，不受此设置影响。",
       "confirm-close-workspace": "关闭工作区前确认",
@@ -7280,7 +7280,7 @@
       "approval-cut": "……预览到此为止，文件还有后续内容",
       "approval-expand": "显示完整内容",
       "approval-deletes": "会删除这台的提示词 {name}。",
-      "approval-new-loop": "{name} 会变成 loop 提示词。",
+      "approval-new-loop": "{name} 会变成默认技能。",
       "approval-text": "收到的完整内容",
       "approval-diff": "与这台的差异",
       "approval-changes": "有变动的字段",
@@ -7305,7 +7305,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "技能",
       "scope-memory": "记忆",
-      "scope-hint-prompts": "提示词技能与 Loop 提示词。",
+      "scope-hint-prompts": "已存指令，以及哪一个是默认技能。",
       "error-load": "读不到同步设置。",
       "scope-hint-mcp": "你在 Navide 加的 MCP。其中的秘密会加密后才离开这台机器。",
       "scope-hint-skills": "哪些技能开着、各自送给哪几家 CLI，以及在 Navide 创建的技能的文件（大型技能以加密 blob 发送）。你自己放进文件夹的技能只同步设置。",
@@ -7491,7 +7491,7 @@
       "error-save": "无法保存这个文件，草稿仍留在编辑器中。"
     },
     "prompts": {
-      "intro": "CLI pane 的 ∞ 按钮送出的已存指令。选一个技能就是整段替换；只有默认技能会 loop，其他只送出一次。",
+      "intro": "CLI pane 标题栏的重复按钮（∞）送出的已存指令。选一个技能就是整段替换；只有默认技能会在每轮结束后重复送出，其他只送出一次。",
       "new": "添加 Prompt",
       "new-name": "新 Prompt",
       "copy-name": "{name} 副本",
@@ -7518,10 +7518,10 @@
       "disable": "禁用",
       "duplicate": "复制",
       "delete": "删除",
-      "hint": "默认技能就是单击 ∞ 会送出的那一段，也是唯一会 loop 的技能；禁用的技能留在这里，但不会出现在菜单上。",
+      "hint": "单击重复按钮会送出默认技能，也是唯一会重复的技能；禁用的技能留在这里，但不会出现在菜单上。",
       "advanced": "高级",
       "send-once": "单次送出",
-      "send-once-hint": "只有默认技能会以 loop 方式运行；这个技能只送出一次，没有续跑词与轮次上限。",
+      "send-once-hint": "只有默认技能会在每轮结束后重复送出；这个技能只送出一次，没有续跑词与轮次上限。",
       "untitled-name": "未命名技能",
       "prompt-empty": "Prompt 不能为空，已保留原本的内容。要移除这个技能，请使用“删除”。",
       "delete-confirm": "删除“{name}”？此操作无法撤销，同步 prompt 的其他机器也会一并删除。"
@@ -7798,8 +7798,8 @@
       "filter-attention": "需要注意",
       "count": "显示 {visible} / {total} 个 agent · {enabled} 个已激活",
       "reorder-filtered": "清除搜索并选择“全部”后即可排序",
-      "enabled": "已激活",
-      "enable-agent": "激活 {agent}",
+      "enabled": "显示在菜单",
+      "enable-agent": "在菜单中显示 {agent}",
       "manage": "管理",
       "manage-agent": "管理 {agent}",
       "move-up": "将 {agent} 向前移",
@@ -7830,9 +7830,9 @@
         "perm-inherit": "权限 继承",
         "perm-force-on": "权限 强制开",
         "perm-force-off": "权限 强制关",
-        "push": "推送打开",
-        "push-off": "推送已关",
-        "no-push": "无推送通道",
+        "push": "直接送达开启",
+        "push-off": "直接送达已关",
+        "no-push": "以输入方式送达",
         "accounts": "{count} 账号",
         "signed-out": "未登录",
         "custom-binary": "自订可执行文件",
@@ -7879,7 +7879,8 @@
       "restart-note": "旗标在 pane 启动时就写进它的命令。这里的变更只影响之后生成的 pane；已经在跑的 pane 会保留启动时的设置，直到重建或还原。"
     },
     "keybindings": {
-      "intro": "下方任何快捷键都可以重新设置。点击键帽即可录制新组合，用 + 添加第二组绑定，用 ✕ 移除。变更会立即写入 keybindings.json，并应用到所有打开中的窗口。",
+      "intro": "下方任何快捷键都可以重新设置。点击键帽即可录制新组合，用 + 添加第二组绑定，用 ✕ 移除。变更会立即写入快捷键文件，并应用到所有打开中的窗口。",
+      "file-tooltip": "Navide 应用数据文件夹中的 keybindings.json",
       "search-placeholder": "搜索命令、按键或情境…",
       "filter": {
         "all": "全部",

@@ -1962,7 +1962,7 @@
       "developerNative": "Desarrollador y código nativo",
       "pageOn": "Activado",
       "developerOnMarker": "Desarr.",
-      "nativeOnMarker": "Nativo",
+      "nativeOnMarker": "Nativo activo",
       "browseMarketplace": "Explorar Navide Marketplace",
       "bundledGit": "Git integrado",
       "state": {
@@ -2350,7 +2350,7 @@
       "user": "Usuario",
       "userWorkspace": "Usuario / área de trabajo",
       "accountServer": "Cuenta / servidor",
-      "userWorkspaceBindings": "Vinculaciones de usuario / área de trabajo"
+      "userWorkspaceBindings": "Usuario, más la cuenta elegida en cada área de trabajo"
     },
     "storage": {
       "localStorage": "ui_settings.json (datos de la app) + copia en el área de trabajo",
@@ -2497,8 +2497,8 @@
         "unknown": "Aún no se ha probado.",
         "not-applicable": "No disponible en esta plataforma."
       },
-      "auto-resume-reconnect-hint": "Cuando el backend falla o se reinicia, arrastra consigo todos los procesos de CLI. Activa esta opción para reanudar automáticamente, cuando vuelva, las conversaciones de los paneles en pantalla y de hasta seis paneles fuera de pantalla que estaban trabajando, en lugar de reconstruir cada uno a mano. Los paneles reanudados no siguen por su cuenta, se avisa a los paneles que los abrieron y los avisos muestran lo que pasó. Si el backend vuelve a fallar poco después, no se reanuda nada más.",
-      "resume-interrupted-on-launch-hint": "Cuando Navide se reinicia, los panes que estaban ejecutando un turno o esperando una solicitud de permiso o una pregunta, además de los panes padre que esperan sus informes, se reanudan automáticamente (hasta 6; el resto se marca como «Trabajando al reiniciar»). Nada continúa por sí solo: pulsa «Continuar» o deja que el padre se lo indique. Al padre se le informa de cuáles de sus panes se interrumpieron.",
+      "auto-resume-reconnect-hint": "Reanuda las conversaciones de tus paneles cuando el servicio en segundo plano vuelve tras reiniciarse. Un reinicio cierra todos los procesos de CLI; los paneles en pantalla y hasta seis paneles fuera de pantalla que estaban trabajando vuelven sin seguir por su cuenta, se avisa a los paneles que los abrieron y los avisos muestran lo que pasó. Si vuelve a fallar poco después, no se reanuda nada más.",
+      "resume-interrupted-on-launch-hint": "Cuando Navide se reinicia, los panes que estaban trabajando vuelven y esperan a que continúes. Incluye los panes que ejecutaban un turno o esperaban una solicitud de permiso o una pregunta, y los panes padre que esperan sus informes, hasta 6 (el resto se marca como «Trabajando al reiniciar»). Pulsa «Continuar» o deja que el padre se lo indique; al padre se le informa de cuáles de sus panes se interrumpieron.",
       "confirm-close-pane": "Confirmar antes de cerrar un pane",
       "confirm-close-pane-hint": "Pregunta antes de que el atajo de cerrar pane cierre un pane de CLI. Un pane con un turno en curso siempre pregunta, independientemente de este ajuste.",
       "confirm-close-workspace": "Confirmar antes de cerrar un área de trabajo",
@@ -7280,7 +7280,7 @@
       "approval-cut": "… la vista previa se corta aquí; el archivo continúa",
       "approval-expand": "Mostrarlo completo",
       "approval-deletes": "Eliminaría aquí el prompt {name}.",
-      "approval-new-loop": "{name} pasaría a ser el prompt del loop.",
+      "approval-new-loop": "{name} pasaría a ser el prompt predeterminado.",
       "approval-text": "Texto entrante, completo",
       "approval-diff": "Cambios respecto a este dispositivo",
       "approval-changes": "Campos cambiados",
@@ -7305,7 +7305,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "Skills",
       "scope-memory": "Memoria",
-      "scope-hint-prompts": "Skills de prompt y el prompt del loop.",
+      "scope-hint-prompts": "Prompts guardados y cuál es el predeterminado.",
       "error-load": "No se pudieron leer los ajustes de sincronización.",
       "scope-hint-mcp": "Servidores MCP que añadiste en Navide. Sus secretos se cifran antes de salir.",
       "scope-hint-skills": "Qué skills están activadas y a qué CLI va cada una, además de los archivos de las skills creadas en Navide (las grandes viajan como blobs cifrados). Las skills que pusiste tú en la carpeta solo sincronizan sus ajustes.",
@@ -7491,7 +7491,7 @@
       "error-save": "No se pudo guardar este archivo. Tu borrador sigue en el editor."
     },
     "prompts": {
-      "intro": "Prompts guardados que un pane de CLI envía desde su botón ∞. Elegir uno sustituye el prompt entero; solo el prompt predeterminado se ejecuta en loop, los demás se envían una vez.",
+      "intro": "Prompts guardados que un pane de CLI envía desde el botón de repetir (∞) de su barra de título. Elegir uno sustituye el prompt entero; solo el prompt predeterminado se repite tras cada turno, los demás se envían una vez.",
       "new": "Nuevo prompt",
       "new-name": "Nuevo prompt",
       "copy-name": "Copia de {name}",
@@ -7518,10 +7518,10 @@
       "disable": "Desactivar",
       "duplicate": "Duplicar",
       "delete": "Eliminar",
-      "hint": "El prompt predeterminado es el que envía un clic simple en ∞ y el único que se ejecuta en loop; los prompts desactivados se quedan aquí, pero salen del selector.",
+      "hint": "Un clic simple en el botón de repetir envía el prompt predeterminado, el único que se repite; los prompts desactivados se quedan aquí, pero salen del selector.",
       "advanced": "Avanzado",
       "send-once": "Se envía una vez",
-      "send-once-hint": "Solo el prompt predeterminado se ejecuta como loop; este se envía una vez, sin reanudación ni límite de turnos.",
+      "send-once-hint": "Solo el prompt predeterminado se repite tras cada turno; este se envía una vez, sin reanudación ni límite de turnos.",
       "untitled-name": "Prompt sin título",
       "prompt-empty": "Un prompt no puede quedar vacío: se conservó el texto anterior. Para quitar este prompt, usa Eliminar.",
       "delete-confirm": "¿Eliminar «{name}»? No se puede deshacer, y los equipos que sincronizan prompts también la eliminarán."
@@ -7798,8 +7798,8 @@
       "filter-attention": "Requieren atención",
       "count": "{visible} de {total} agents · {enabled} activados",
       "reorder-filtered": "Borra la búsqueda y elige «Todos» para reordenar",
-      "enabled": "Activado",
-      "enable-agent": "Activar {agent}",
+      "enabled": "Mostrar en el menú",
+      "enable-agent": "Mostrar {agent} en el menú",
       "manage": "Gestionar",
       "manage-agent": "Gestionar {agent}",
       "move-up": "Mover {agent} antes",
@@ -7832,7 +7832,7 @@
         "perm-force-off": "Omisión de permisos bloqueada",
         "push": "Envío directo activado",
         "push-off": "Envío directo desactivado",
-        "no-push": "Sin canal de envío directo",
+        "no-push": "Mensajes tecleados",
         "accounts": "{count} cuentas | {count} cuenta | {count} cuentas",
         "signed-out": "Sesión cerrada",
         "custom-binary": "Binario personalizado",
@@ -7879,7 +7879,8 @@
       "restart-note": "La opción queda fijada en el comando de un pane al iniciarse. Cambiar algo aquí afecta a los panes que se creen después; un pane que ya está en ejecución conserva lo que tenía al iniciarse hasta que se reconstruya o restaure."
     },
     "keybindings": {
-      "intro": "Reasigna cualquier atajo de abajo. Haz clic en una tecla para grabar una combinación nueva, usa + para añadir una segunda asignación y ✕ para quitar una. Los cambios se guardan en keybindings.json al instante y se aplican a todas las ventanas abiertas.",
+      "intro": "Reasigna cualquier atajo de abajo. Haz clic en una tecla para grabar una combinación nueva, usa + para añadir una segunda asignación y ✕ para quitar una. Los cambios se guardan en tu archivo de atajos al instante y se aplican a todas las ventanas abiertas.",
+      "file-tooltip": "keybindings.json en la carpeta de datos de la app de Navide",
       "search-placeholder": "Buscar comando, tecla o contexto…",
       "filter": {
         "all": "Todos",
