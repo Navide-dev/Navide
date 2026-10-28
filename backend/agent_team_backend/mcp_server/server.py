@@ -11440,11 +11440,30 @@ async def cli_account_sign_in(
 
 @server.tool()
 async def cli_account_switch(
-    ctx: Context, agent: str, profile_id: str, reason: str,
+    ctx: Context, agent: str, profile_id: str, reason: str, pane_id: str = "",
 ) -> dict[str, Any]:
     """Ask the user to switch one CLI to another of its accounts — for
     example when the active account's quota ran out and another account of
     the same vendor still has some.
+
+    What it changes: the CLI's LIVE login, which every pane of that CLI not
+    pinned to an account runs on. claude switches hot: no pane restarts, and
+    running claude panes use the new account from their next request. Other
+    CLIs restart their running panes, after the user agrees (see below).
+    claude panes running inside an account's own folder (cli_get_status
+    `account.runs_on` "account-dir") are not moved by it.
+
+    `pane_id` (claude only) switches ONE pane instead, as the account badge's
+    "switch only this pane" does: that pane reopens on its conversation inside
+    `profile_id`'s own folder and stays there; the live login and every other
+    pane are left alone. The account must have signed in inside its own
+    folder ("needs-user" otherwise: cli_account_sign_in with mode "folder"),
+    and the built-in Default has no folder ("unsupported"). A pane that is
+    working is stopped only if the user agrees ("restart-declined"
+    otherwise); moving your own pane restarts you, so its result never
+    reaches you. A pane not in your window, or not running `agent`, is
+    "unknown-pane". On success status is "switched-pane" and the answer also
+    carries `pane_id`.
 
     Your window first asks the user, naming which agent asked, the account it
     switches from and to, and your `reason` (required; cut at 300
@@ -11506,15 +11525,20 @@ async def cli_account_switch(
     # As for the sign-in: the user's yes is due one ordinary action's wait
     # before this action's slow wait ends, leaving the window time to switch.
     confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
+    switch_args: dict[str, Any] = {
+        "agentKey": agent, "profileId": profile_id, "reason": reason,
+        "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
+    }
+    # Only when asked for: without it the window gets exactly the CLI-wide request.
+    target_pane = str(pane_id or "").strip()
+    if target_pane:
+        switch_args["paneId"] = target_pane
     answer = await _ui_request(
         pane.workspace_path if pane else "",
         "invoke",
         caller=caller,
         action="ui.accounts.switch",
-        args={
-            "agentKey": agent, "profileId": profile_id, "reason": reason,
-            "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
-        },
+        args=switch_args,
     )
     result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
     status = str(result.get("status") or "") if answer.get("ok") else ""
@@ -11535,6 +11559,16 @@ async def cli_account_switch(
             "status": status,
             "agent": agent,
             "profile_id": profile_id,
+            "from": str(result.get("from") or ""),
+            "to": str(result.get("to") or ""),
+        }
+    if status == "switched-pane" and target_pane:
+        return {
+            "ok": True,
+            "status": status,
+            "agent": agent,
+            "profile_id": profile_id,
+            "pane_id": target_pane,
             "from": str(result.get("from") or ""),
             "to": str(result.get("to") or ""),
         }
