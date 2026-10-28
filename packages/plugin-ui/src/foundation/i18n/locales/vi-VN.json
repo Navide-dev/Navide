@@ -1957,7 +1957,7 @@
       "restore": "Khôi phục",
       "candidateReady": "Bản cập nhật {version} đã sẵn sàng",
       "activationFailed": "{plugin} đã được cài nhưng không kích hoạt được: {reason}. Hãy khởi động lại hoặc loại bỏ nó trong danh sách bên dưới.",
-      "switchNow": "Khi phê duyệt, {id} sẽ chuyển sang {version} ngay lập tức. Các khung xem đang mở của nó sẽ tải lại và mọi thứ chưa lưu trong đó sẽ bị mất. Việc chuyển được ghi trong thông báo, nơi bạn có thể quay lại chỉ với một cú nhấp.",
+      "switchNow": "Khi phê duyệt, {id} sẽ chuyển sang {version} ngay lập tức. Các khung xem đang mở của nó sẽ tải lại: khung xem lưu trạng thái qua Navide SDK sẽ trở lại đúng chỗ cũ, còn mọi thứ khác chưa lưu trong đó sẽ bị mất. Việc chuyển được ghi trong thông báo, nơi bạn có thể quay lại chỉ với một cú nhấp.",
       "restartPlugin": "Khởi động lại plugin Navide",
       "disable": "Tắt",
       "enable": "Bật",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "Kéo để đổi kích thước bảng nhật ký",
     "filter-by-type": "Lọc theo loại",
     "all-stages-finished": "Đã hoàn tất thành công cả {count} giai đoạn",
+    "region-switching": "Đang chuyển {title} sang {version}…",
     "region-unavailable": "{title} không khả dụng"
   },
   "layout": {

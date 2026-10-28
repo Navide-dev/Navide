@@ -1957,7 +1957,7 @@
       "restore": "Restaurar",
       "candidateReady": "A atualização {version} está pronta",
       "activationFailed": "{plugin} foi instalado, mas não pôde ser ativado: {reason}. Reinicie-o ou descarte-o na lista abaixo.",
-      "switchNow": "Ao aprovar, {id} passa para {version} imediatamente. As visualizações abertas dele são recarregadas, e o que não estiver salvo nelas é perdido. A troca fica registrada nos avisos, onde você pode voltar com um clique.",
+      "switchNow": "Ao aprovar, {id} passa para {version} imediatamente. As visualizações abertas dele são recarregadas: uma visualização que salva seu estado pelo SDK do Navide volta para onde estava, e o resto que não estiver salvo nelas é perdido. A troca fica registrada nos avisos, onde você pode voltar com um clique.",
       "restartPlugin": "Reiniciar plug-in do Navide",
       "disable": "Desativar",
       "enable": "Ativar",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "Arraste para redimensionar o painel de log",
     "filter-by-type": "Filtrar por tipo",
     "all-stages-finished": "Todas as {count} etapas foram concluídas com sucesso",
+    "region-switching": "Mudando {title} para {version}…",
     "region-unavailable": "{title} indisponível"
   },
   "layout": {

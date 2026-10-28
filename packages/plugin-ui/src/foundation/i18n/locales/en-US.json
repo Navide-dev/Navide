@@ -1957,7 +1957,7 @@
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
       "activationFailed": "{plugin} was installed but could not be activated: {reason}. Restart or discard it in the list below.",
-      "switchNow": "Approving switches {id} to {version} right away. Its open views reload, and anything not saved in them is lost. The switch is recorded in the announcements, where you can go back in one click.",
+      "switchNow": "Approving switches {id} to {version} right away. Its open views reload: a view that saves its state through the Navide SDK comes back where it was, and anything else not saved in them is lost. The switch is recorded in the announcements, where you can go back in one click.",
       "restartPlugin": "Restart Navide Plugin",
       "disable": "Disable",
       "enable": "Enable",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "Drag to resize log panel",
     "filter-by-type": "Filter by type",
     "all-stages-finished": "All {count} stages finished successfully",
+    "region-switching": "Switching {title} to {version}…",
     "region-unavailable": "{title} unavailable"
   },
   "layout": {

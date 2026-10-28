@@ -1957,7 +1957,7 @@
       "restore": "还原",
       "candidateReady": "更新 {version} 已就绪",
       "activationFailed": "{plugin} 已安装，但无法激活：{reason}。请在下方清单重新启动或放弃它。",
-      "switchNow": "核准后，{id} 会立即切换到 {version}。开着的画面会重新加载，画面里没存的内容会遗失。这次切换会记录在公告中心，可以一键退回。",
+      "switchNow": "核准后，{id} 会立即切换到 {version}。开着的画面会重新加载：用 Navide SDK 保存状态的画面会回到原来的位置，其他没存的内容会遗失。这次切换会记录在公告中心，可以一键退回。",
       "restartPlugin": "重新启动 Navide 插件",
       "disable": "禁用",
       "enable": "激活",
@@ -8929,6 +8929,7 @@
     "drag-resize-log": "拖曳以调整记录面板高度",
     "filter-by-type": "依类型筛选",
     "all-stages-finished": "{count} 个阶段全部顺利完成",
+    "region-switching": "正在把 {title} 切换到 {version}…",
     "region-unavailable": "{title} 无法使用"
   },
   "layout": {
