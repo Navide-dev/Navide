@@ -1122,6 +1122,7 @@ async def cli_open_agent(
     run_group_id: str | None = None,
     window: str = "",
     window_id: str = "",
+    account: str = "",
 ) -> dict[str, Any]:
     """Open a new CLI pane and give it a task.
 
@@ -1229,6 +1230,28 @@ async def cli_open_agent(
     here — an unknown one is the CLI's own error to report — but effort is
     checked against that CLI's vocabulary before the pane opens.
 
+    `account` says which account the new pane runs on, and by DEFAULT it is
+    the account YOU run on ("" = "inherit"). Only a claude pane can run on an
+    account other than its vendor's live login: one opened inside that
+    account's own folder, as the 📌 pin and "switch only this pane" do. So
+    "inherit" from such a pane opens the child in the same folder (it then
+    spends that account's quota and, like its parent, stays put when the live
+    login is switched); in every other case — you follow the live login, you
+    are another CLI, or you have no pane — the child opens exactly as before,
+    on the live login. "active" always asks for that old behaviour. An
+    account id (from cli_accounts_list) opens a claude pane in that
+    account's folder; the account must exist ("unknown-profile"), belong to
+    `agent` ("vendor-mismatch"), be a claude account other than the built-in
+    Default ("unsupported" — other CLIs run every pane on their live login)
+    and have signed in inside its own folder ("needs-user": the user signs it
+    in through cli_account_sign_in with mode "folder"). Naming the live
+    account is the same as "active". This never switches the live login and
+    never moves another pane. When you passed `account`, or the pane opened
+    on an account other than the live login, the answer carries `account`:
+    {mode, profile_id, runs_on: "account-dir"|"live", fixed}, for a CLI
+    Navide keeps accounts for. Ignored with `pane_id`, which reopens a pane
+    on its own.
+
     Use the returned name, not the one you asked for: a concurrent request may
     have taken that name, in which case yours gets a suffix.
 
@@ -1241,8 +1264,8 @@ async def cli_open_agent(
     `ui.pane.focus` and `ui.pane.getStatus` take through ui_invoke, all of which
     refuse a pane NAME. Keep it if you may want to close or focus what you
     opened; `address` remains the right thing to send to.
-    Returns {ok, name, address, pane_id, kickoff, hint?, advisories?} or
-    {ok: false, error}.
+    Returns {ok, name, address, pane_id, kickoff, hint?, account?, advisories?}
+    or {ok: false, error}.
 
     Passing `pane_id` REOPENS an existing pane instead of creating one: the
     one whose cli_list_targets row says `realized: false` — a restore
@@ -1346,6 +1369,20 @@ async def cli_open_agent(
             "error": 'window_id goes with window "existing"',
             "error_code": "invalid-window",
         }
+    # Checked before anything is prepared or opened: a refused account leaves
+    # no pane and no adopted workspace behind.
+    from agent_team_backend.mcp_server import open_agent_account
+
+    caller_entry = agent_messaging.get(caller.pane_id) if caller.kind == "pane" else None
+    account_choice = await asyncio.to_thread(
+        open_agent_account.resolve,
+        agent_key,
+        account,
+        caller.pane_id if caller.kind == "pane" else "",
+        caller_entry.agent_key if caller_entry else "",
+    )
+    if isinstance(account_choice, dict):
+        return account_choice
     target_workspace = ""
     # A pane caller naming another project: the child goes there, still
     # parented on the caller. Empty when omitted or naming its own workspace,
@@ -1468,6 +1505,11 @@ async def cli_open_agent(
             spawn_payload["effort"] = effort.strip()
         if run_group_id is not None:
             spawn_payload["run_group_id"] = run_group_id
+        # The explicit pin the window hands to spawnPane, the same pin a 📌
+        # pinned pane is spawned with. Absent when the pane runs on the live
+        # login: the payload is then exactly what it was before `account`.
+        if account_choice.pin:
+            spawn_payload["profile_id"] = account_choice.pin
         # The window turns this into the vendor's own resume command; absent
         # means a fresh conversation, which is what every older build does with
         # a key it does not know.
@@ -1605,6 +1647,16 @@ async def cli_open_agent(
         reason = str(kickoff_verdict.get("reason") or "")
         if reason:
             advisories.append(f"kickoff: {reason}")
+    from agent_team_backend.profiles_store import SUPPORTED_AGENT_KEYS
+
+    # Only when an account was asked for or the pane got one: a default call
+    # that opened on the live login answers exactly what it did before.
+    if agent_key in SUPPORTED_AGENT_KEYS and ((account or "").strip() or account_choice.pin):
+        result["account"] = await asyncio.to_thread(
+            open_agent_account.report, account_choice, new_pane_id, agent_key
+        )
+    if account_choice.advisory:
+        advisories.append(account_choice.advisory)
     if advisories:
         result["advisories"] = advisories
     return result

@@ -104,7 +104,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.34 P2 (previous pin 742078e6…): the cli_get_status
 #: description documents the new `account` block and that `profileId` is
 #: bookkeeping only for a pane on the live login. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "c9430be99972c680fd14e19226ebea3e6942c55c5984b6aaa802ddab4ff89b2f"
+#: Re-pinned for 0.2.34 P3 (previous pin c9430be9…): cli_open_agent's new
+#: `account` parameter and its description (default: the caller's account).
+#: No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "8e8801c0091e65692f4164b060aa70eb65aa4b12f0d8fec800db7ed190b84792"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
