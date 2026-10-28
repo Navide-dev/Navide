@@ -98,7 +98,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for the 0.2.33 pipeline doc sync (previous pin cb0297f4…): the
 #: pipeline_reset description says the stored run only moves to idle and its
 #: task, stages, log and run directory stay as history. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "a5d72f419c55bcaa864063fdafc18f7014783c7d30c9e9b3e4101707ae783b32"
+#: Re-pinned for 0.2.34 P3 (previous pin a5d72f41…): cli_open_agent's new
+#: `account` parameter and its description (default: the caller's account).
+#: No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "14f59f2e5ef915bdec4fa1b7a6107413ebe181cf34d8a513ed09d0724df1f0ee"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

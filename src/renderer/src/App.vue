@@ -3258,7 +3258,7 @@ async function createRequestedPane(
   // Only these three are read, which is what lets a cross-workspace spawn hand
   // in a parent that lives in another workspace, with the child's workspace.
   parent: Pick<ActivePane, 'id' | 'workspacePath' | 'runGroupId'>,
-  req: { agentKey: string; name: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string },
+  req: { agentKey: string; name: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(parent.workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3299,6 +3299,9 @@ async function createRequestedPane(
     spawnedBy: resumeSpawnedBy,
     model: req.model,
     effort: req.effort,
+    // cli_open_agent's `account`: the explicit pin a 📌 pinned pane is spawned
+    // with. Absent when the pane runs on the live login, as before.
+    profileId: req.profileId,
   })
   if (!paneId) return null
   // Persistence only — the pane is already usable, and both responses are
@@ -3330,6 +3333,9 @@ async function createRequestedPane(
     // Must agree with where the pane was actually placed, or the next restore
     // pulls a resumed conversation back under the caller.
     spawned_by: resumeSpawnedBy,
+    // A pinned pane's record keeps its pin, as a rebuild's does; without it the
+    // backend files the pane under the live login and a restore reopens it there.
+    ...(req.profileId ? { profile_id: req.profileId } : {}),
   })
   void sendQuiet('project.rename_pane', {
     workspace_path: parent.workspacePath,
@@ -3373,7 +3379,7 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
  *  would never actually be injected. */
 async function createStandaloneRequestedPane(
   workspacePath: string,
-  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string },
+  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3409,6 +3415,8 @@ async function createStandaloneRequestedPane(
     spawnedBy: resumeSpawnedBy || undefined,
     model: req.model,
     effort: req.effort,
+    // Same as createRequestedPane: cli_open_agent's explicit account pin.
+    profileId: req.profileId,
   })
   if (!paneId) return null
   void sendQuiet<ProjectPayload>('manual_pane.spawn', {
@@ -3432,6 +3440,7 @@ async function createStandaloneRequestedPane(
     // Written so the record agrees with the tree; a failed resume that wrote
     // '' here would otherwise become the "last position" of the conversation.
     spawned_by: resumeSpawnedBy,
+    ...(req.profileId ? { profile_id: req.profileId } : {}),
   })
   void sendQuiet('project.rename_pane', {
     workspace_path: workspacePath,
@@ -3828,6 +3837,9 @@ async function handleMcpSpawnRequest(ev: {
   cross_workspace?: boolean
   /** The requester's `<folder>/<pane>` address, for its report. */
   parent_address?: string
+  /** cli_open_agent's `account`, resolved by the backend to an explicit pin.
+   *  Absent when the pane runs on the live login. */
+  profile_id?: string
 }): Promise<void> {
   const standalone = !!ev.target_workspace
   const cross = !!ev.cross_workspace
@@ -3898,7 +3910,7 @@ async function handleMcpSpawnRequest(ev: {
   try {
     // The gate decides identity (name collisions, model/effort); the session to
     // resume is not its business, so it rides alongside rather than through it.
-    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id }
+    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id, profileId: (ev.profile_id ?? '').trim() || undefined }
     paneId = cross
       ? await createRequestedPane(
           { id: ev.requester_pane_id, workspacePath: ev.target_workspace as string, runGroupId: undefined },
@@ -15823,6 +15835,9 @@ backend.on('agent_spawn.request', (raw) => {
     run_group_id?: string
     cross_workspace?: boolean
     parent_address?: string
+    // cli_open_agent's account pin; dropped here, the pane would open on the
+    // live login while the tool reports the account it asked for.
+    profile_id?: string
   }
   // An external caller (no requesting pane) addresses this by target_workspace
   // instead — accept the event as long as one of the two identifies an owner.
@@ -15848,6 +15863,7 @@ backend.on('agent_spawn.request', (raw) => {
     run_group_id: ev.run_group_id ?? undefined,
     cross_workspace: ev.cross_workspace === true,
     parent_address: ev.parent_address ?? '',
+    profile_id: ev.profile_id ?? '',
   })
 })
 
