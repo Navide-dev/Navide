@@ -144,14 +144,20 @@ function factoryWarnings(p: FactoryRow): string[] {
 const busy = ref(false)
 const error = ref('')
 // A failed inventory read, shown apart from the action error it may follow.
-const inventoryError = ref('')
+// It keeps its i18n key and is translated when shown, so a language change
+// never leaves it in the previous language.
+const inventoryError = ref<{ key: string; params: Record<string, unknown> } | null>(null)
+// Until the first read answers, the list says it is loading (or why it is not
+// there) instead of showing an empty page.
+const inventoryLoaded = ref(false)
 
 async function reloadInventory(): Promise<void> {
   try {
     await refreshInstalled()
-    inventoryError.value = ''
+    inventoryError.value = null
+    inventoryLoaded.value = true
   } catch (err) {
-    inventoryError.value = t('settings.extensions.inventoryRefreshFailed', { error: ipcErrorMessage(err) })
+    inventoryError.value = { key: 'settings.extensions.inventoryRefreshFailed', params: { error: ipcErrorMessage(err) } }
   }
 }
 // Updates for installed Registry packages; the Update button reuses the
@@ -710,7 +716,7 @@ watch(installed, () => {
 <template>
   <div class="extensions-pane">
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
-    <p v-if="inventoryError" class="ext-error" role="alert">{{ inventoryError }}</p>
+    <p v-if="inventoryError && inventoryLoaded" class="ext-error" role="alert">{{ $t(inventoryError.key, inventoryError.params) }}</p>
     <p v-if="updateFlow.error.value" class="ext-error" role="alert">{{ updateFlow.error.value }}</p>
     <!-- Card K4: shown above the lists for as long as Developer Mode is on. -->
     <p v-if="developerMode.enabled" class="ext-devmode-banner ext-risk-banner" role="status">
@@ -775,7 +781,16 @@ watch(installed, () => {
         {{ $t('settings.extensions.localInstall.button') }}
       </button>
     </div>
-    <div v-show="props.page === 'plugins'" class="ext-md">
+    <p v-if="!inventoryLoaded && !inventoryError" v-show="props.page === 'plugins'" class="ext-inventory-state nv-loading" role="status">
+      {{ $t('label.loading') }}
+    </p>
+    <div v-else-if="!inventoryLoaded && inventoryError" v-show="props.page === 'plugins'" class="ext-inventory-state nv-empty" role="alert">
+      <p class="ext-inventory-state-text">{{ $t(inventoryError.key, inventoryError.params) }}</p>
+      <button type="button" class="ext-inventory-retry nv-btn nv-btn--sm" @click="reloadInventory">
+        {{ $t('settings.extensions.marketplace.retry') }}
+      </button>
+    </div>
+    <div v-show="props.page === 'plugins' && inventoryLoaded" class="ext-md">
       <div class="ext-md-list">
         <section class="ext-section" data-settings-section="extensions-bundled">
           <h3 class="ext-section-title">
@@ -2257,6 +2272,16 @@ watch(installed, () => {
   color: var(--text-secondary);
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
+}
+/* The first inventory read is out or failed: one line, and Retry under it. */
+.ext-inventory-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ext-inventory-state-text {
+  margin: 0;
 }
 /* Long setting descriptions keep a readable line length. */
 :deep(.setting-row-desc) {

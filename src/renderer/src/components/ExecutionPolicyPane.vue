@@ -25,17 +25,24 @@ const props = defineProps<{
 const emit = defineEmits<{ attention: [reasons: string[]] }>()
 
 const { t, te } = useI18n()
+// Messages keep their i18n key and are translated when shown, so a language
+// change never leaves one in the previous language. Text from the main
+// process (no key for its code) is shown as given.
+type PaneMessage = { key: string; params?: Record<string, unknown> } | { text: string }
+function messageText(message: PaneMessage): string {
+  return 'key' in message ? t(message.key, message.params ?? {}) : message.text
+}
 const snapshot = ref<ExecutionPolicySettingsSnapshot | null>(null)
 const draft = ref<ExecutionPolicy | null>(null)
 const draftBasePolicy = ref<ExecutionPolicy | null>(null)
 const draftBaseRevision = ref<number | null>(null)
 const selectedSource = ref<ExecutionPolicySource | null>(null)
 const shellInput = ref('')
-const shellInputError = ref('')
+const shellInputError = ref<PaneMessage | null>(null)
 const loading = ref(false)
 const busy = ref(false)
-const error = ref('')
-const notice = ref('')
+const error = ref<PaneMessage | null>(null)
+const notice = ref<PaneMessage | null>(null)
 const fullConfirmed = ref(false)
 const repositoryFullConfirmed = ref(false)
 const rebuildArmed = ref(false)
@@ -93,7 +100,7 @@ function replaceDraftFromSnapshot(next: ExecutionPolicySettingsSnapshot): void {
   draftBasePolicy.value = clonePolicy(source)
   draftBaseRevision.value = next.global.revision
   fullConfirmed.value = false
-  shellInputError.value = ''
+  shellInputError.value = null
   externalUpdate.value = false
 }
 
@@ -111,20 +118,20 @@ function applySnapshotPreservingDraft(next: ExecutionPolicySettingsSnapshot): vo
 async function load(options: { replaceDraft?: boolean } = {}): Promise<void> {
   const api = policyApi()
   if (!api) {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
     return
   }
   const sequence = ++loadSequence
   const replaceDraft = options.replaceDraft ?? !draftDirty.value
   loading.value = true
-  if (!externalUpdate.value) error.value = ''
+  if (!externalUpdate.value) error.value = null
   try {
     const next = await api.inspect(props.workspacePath)
     if (sequence !== loadSequence) return
     if (replaceDraft) replaceDraftFromSnapshot(next)
     else applySnapshotPreservingDraft(next)
   } catch {
-    if (sequence === loadSequence) error.value = t('settings.executionPolicy.unavailable')
+    if (sequence === loadSequence) error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     if (sequence === loadSequence) loading.value = false
   }
@@ -258,14 +265,14 @@ function toggleSystem(namespace: PluginSystemNamespace): void {
 
 function addShell(): void {
   if (!draft.value || draft.value.mode === 'full') return
-  shellInputError.value = ''
+  shellInputError.value = null
   const name = shellInput.value.trim().toLowerCase()
   if (!/^[a-z0-9][a-z0-9._+-]*$/u.test(name)) {
-    shellInputError.value = t('settings.executionPolicy.shellInvalid')
+    shellInputError.value = { key: 'settings.executionPolicy.shellInvalid' }
     return
   }
   if (draft.value.shell.includes(name)) {
-    shellInputError.value = t('settings.executionPolicy.shellDuplicate', { name })
+    shellInputError.value = { key: 'settings.executionPolicy.shellDuplicate', params: { name } }
     return
   }
   draft.value.shell = [...draft.value.shell, name]
@@ -279,9 +286,9 @@ function removeShell(name: string): void {
 
 type OperationKind = 'save' | 'resetUser' | 'source' | 'rebuild' | 'resetSources'
 
-function operationErrorMessage(operationError: ExecutionPolicyError): string {
+function operationErrorMessage(operationError: ExecutionPolicyError): PaneMessage {
   const key = `settings.executionPolicy.errors.${operationError.code}`
-  return te(key) ? t(key) : operationError.message
+  return te(key) ? { key } : { text: operationError.message }
 }
 
 function applyOperationResult(
@@ -299,7 +306,7 @@ function applyOperationResult(
   } else {
     applySnapshotPreservingDraft(result.snapshot)
   }
-  notice.value = t(`settings.executionPolicy.notice.${operation}`)
+  notice.value = { key: `settings.executionPolicy.notice.${operation}` }
   return true
 }
 
@@ -309,8 +316,8 @@ async function save(): Promise<void> {
   const expectedRevision = draftBaseRevision.value
   if (expectedRevision === null) return
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.setUser({
       policy: clonePolicy(draft.value),
@@ -320,7 +327,7 @@ async function save(): Promise<void> {
     })
     applyOperationResult(result, 'save')
   } catch {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -332,8 +339,8 @@ async function resetUser(): Promise<void> {
   const expectedRevision = snapshot.value?.global.revision
   if (expectedRevision === undefined) return
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.resetUser(
       {
@@ -343,7 +350,7 @@ async function resetUser(): Promise<void> {
     )
     applyOperationResult(result, 'resetUser')
   } catch {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -364,8 +371,8 @@ async function selectSource(source: ExecutionPolicySource): Promise<void> {
     return
   }
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.selectSource({
       workspacePath,
@@ -377,7 +384,7 @@ async function selectSource(source: ExecutionPolicySource): Promise<void> {
     applyOperationResult(result, 'source')
   } catch {
     if (snapshot.value) selectedSource.value = sourceSelectionFor(snapshot.value)
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -387,8 +394,8 @@ async function rebuild(): Promise<void> {
   const api = policyApi()
   if (!api || !rebuildConfirmed.value) return
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.rebuild({
       confirmed: true,
@@ -399,7 +406,7 @@ async function rebuild(): Promise<void> {
       rebuildConfirmed.value = false
     }
   } catch {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -419,8 +426,8 @@ async function resetSourceSelections(): Promise<void> {
   const api = policyApi()
   if (!api || !sourceResetConfirmed.value) return
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.resetSourceSelections({
       confirmed: true,
@@ -431,7 +438,7 @@ async function resetSourceSelections(): Promise<void> {
       sourceResetConfirmed.value = false
     }
   } catch {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -463,8 +470,8 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 <template>
   <div class="execution-policy-pane">
     <p v-if="loading" class="ep-loading">{{ $t('settings.executionPolicy.loading') }}</p>
-    <p v-if="error" class="ep-error" role="alert">{{ error }}</p>
-    <p v-if="notice" class="ep-notice" role="status">{{ notice }}</p>
+    <p v-if="error" class="ep-error" role="alert">{{ messageText(error) }}</p>
+    <p v-if="notice" class="ep-notice" role="status">{{ messageText(notice) }}</p>
     <div v-if="externalUpdate" class="ep-conflict" role="alert">
       <span>{{ $t('settings.executionPolicy.externalUpdate') }}</span>
       <button type="button" class="nv-btn nv-btn--sm" :disabled="busy" @click="reloadLatest">
@@ -636,7 +643,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
             />
             <button type="submit" class="nv-btn" :disabled="!shellInput.trim()">{{ $t('settings.executionPolicy.add') }}</button>
           </form>
-          <p v-if="shellInputError" class="ep-error" role="alert">{{ shellInputError }}</p>
+          <p v-if="shellInputError" class="ep-error" role="alert">{{ messageText(shellInputError) }}</p>
           <div v-if="draft.shell.length" class="ep-chip-list">
             <span v-for="name in draft.shell" :key="name" class="ep-chip">
               <code>{{ name }}</code>

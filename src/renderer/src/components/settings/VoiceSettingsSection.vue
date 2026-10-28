@@ -376,7 +376,8 @@ function previewReadback(): void {
 </script>
 
 <template>
-  <SettingsSection :label="t('settings.voice.section')">
+  <!-- No label: the page title already says Voice Input. -->
+  <SettingsSection>
     <SettingsCard>
       <SettingRow
         data-settings-section="voice-input"

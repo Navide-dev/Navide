@@ -50,6 +50,7 @@
   --success-emphasis: #1f883d;
   --success-muted: #aceebb;
   --success-subtle: #dafbe1;
+  --success-on-subtle: #116329; /* ~6.6:1 on success-subtle */
 
   /* Toast variants */
   --toast-external-bg: #a40e26;
@@ -75,6 +76,7 @@
   --attention-emphasis: #bf8700;
   --attention-muted: #fae17d;
   --attention-subtle: #fff8c5;
+  --attention-on-subtle: #7d4e00; /* ~6.6:1 on attention-subtle */
   --warning-fg: #bc4c00;
   --manager-fg: #8a6d3b;     /* darker tan, AA on light bg */
 

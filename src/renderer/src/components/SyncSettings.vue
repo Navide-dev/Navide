@@ -756,6 +756,11 @@ onBeforeUnmount(() => offResult?.())
 .sync-actions {
   margin-top: 10px;
 }
+/* A disabled Sync Now keeps readable text instead of the faint native grey. */
+.sync-actions button:disabled {
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
 .sync-results {
   list-style: none;
   margin: 10px 0 0;

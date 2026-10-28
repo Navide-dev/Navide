@@ -56,9 +56,9 @@ describe('cliAgentRowChips', () => {
     })
   })
 
-  it('paints a missing CLI red and an outdated one amber', () => {
+  it('shows a missing CLI as a neutral fact and an outdated one amber', () => {
     expect(chip('install', { install: { status: 'missing', version: '' } }))
-      .toMatchObject({ tone: 'bad' })
+      .toMatchObject({ tone: 'neutral' })
     expect(chip('install', { install: { status: 'outdated', version: '1.0' } }))
       .toMatchObject({ tone: 'warn' })
   })

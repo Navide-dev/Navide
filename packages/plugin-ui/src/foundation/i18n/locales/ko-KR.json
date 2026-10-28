@@ -1482,7 +1482,7 @@
       "inferredHint": "소스 텍스트에서 읽은 내용이에요. CLI의 매니페스트에는 명시되어 있지 않아요.",
       "tier": {
         "L1": "L1 텍스트 자산",
-        "L2": "L2 하위 프로세스",
+        "L2": "L2 명령 실행",
         "L3": "L3 프로세스 내 코드"
       },
       "tierHint": {
@@ -1925,7 +1925,8 @@
           "shellNotAllowed": "차단됨: 전체 셸 접근을 요청함",
           "stoppedAfterCrashes": "반복된 실패로 중지됨",
           "unavailable": "사용할 수 없음"
-        }
+        },
+        "loadFailed": "네이티브 백엔드 설정을 읽을 수 없습니다."
       },
       "bundled": "기본 포함",
       "listTitle": "Navide 플러그인",
@@ -2323,8 +2324,8 @@
     },
     "storage": {
       "localStorage": "ui_settings.json(앱 데이터) + 작업 영역 백업",
-      "mainProcess": "Electron 메인 프로세스 userData",
-      "safeStorage": "암호화된 로컬 safeStorage 레지스트리",
+      "mainProcess": "이 컴퓨터의 Navide 앱 데이터에 저장됨",
+      "safeStorage": "이 컴퓨터에 암호화되어 저장됨",
       "cliFiles": "각 CLI의 자체 지시 파일"
     },
     "voice": {
@@ -2349,7 +2350,6 @@
       "readback-rate": "속도",
       "readback-preview": "미리 듣기",
       "readback-stop-hint": "Esc 키나 음성 입력 단축키를 누르면 바로 읽기를 멈춰요.",
-      "section": "음성 입력",
       "enabled": "음성 입력(길게 눌러 말하기)",
       "enabled-hint": "Ctrl+Alt+M(단축키에서 변경 가능)을 길게 누르면 포커스된 CLI pane에 받아쓰기해요. 텍스트는 직접 입력한 것처럼 입력란에 들어가며, Enter 키를 직접 누르기 전까지 아무것도 보내지 않아요. 음성은 이 컴퓨터의 로컬 Whisper 모델이 받아쓰며, 오디오는 절대 컴퓨터 밖으로 나가지 않아요.",
       "device": "마이크",
@@ -2546,7 +2546,14 @@
       "restore-scope-auto": "자동",
       "resume-concurrency": "동시 재개 한도",
       "resume-concurrency-hint": "작업 영역을 열거나 레이아웃을 복원할 때 동시에 재개할 수 있는 CLI pane 수예요. 나머지는 대기해요. 한 번에 많은 pane을 재개할 때 'terminal.create timeout' 오류가 나면 줄이세요(1–10).",
-      "resume-concurrency-label": "최대 동시 재개 수"
+      "resume-concurrency-label": "최대 동시 재개 수",
+      "theme-name": {
+        "dark-github": "다크(GitHub)",
+        "dark-midnight": "미드나이트",
+        "dark-forest": "포레스트",
+        "light": "라이트",
+        "high-contrast": "고대비"
+      }
     },
     "roles": {
       "title": "역할",
@@ -7486,7 +7493,6 @@
     "section": {
       "general-behavior": "일반 동작",
       "resource-limits": "리소스 제한",
-      "notifications": "알림",
       "settings-management": "설정 관리",
       "theme": "테마",
       "other": "기타"
@@ -8129,7 +8135,13 @@
       "conflict-soft": "공유 키",
       "when-any": "항상",
       "no-results": "이 검색과 일치하는 명령이 없어요.",
-      "footnote": "두 키 연속 조합을 지원해요. 첫 조합을 녹화한 뒤 두 번째를 누르세요. 이 표가 관리하지 않는 키는 이 페이지 아래쪽에 읽기 전용으로 나열돼요."
+      "footnote": "두 키 연속 조합을 지원해요. 첫 조합을 녹화한 뒤 두 번째를 누르세요. 이 표가 관리하지 않는 키는 이 페이지 아래쪽에 읽기 전용으로 나열돼요.",
+      "category": {
+        "workbench": "워크벤치",
+        "editor": "편집기",
+        "controlPane": "CLI 창",
+        "ui": "외부 제어"
+      }
     },
     "accounts": {
       "title": "Git 계정",
@@ -8269,7 +8281,7 @@
       "testing": "테스트 중:",
       "preparing": "준비하는 중…",
       "benchmark-hint": "모든 로컬 모델로 표준 작업 4개를 실행해 pipeline 의도 감지에 적합한 모델을 판단해요:",
-      "task-t1": "기술 스택 감지 — JSON 출력",
+      "task-t1": "기술 스택 감지 — 워크스페이스가 쓰는 라이브러리를 찾음",
       "task-t2": "작업 영역 요약 — 한 문장 요약",
       "task-t3": "관련성 선택 — 문서 목록에서 가장 관련 있는 항목 선택",
       "task-t4": "CLI 의도 분석 — agent 출력을 분석해 질문과 선택지를 추출",
@@ -9055,7 +9067,6 @@
     "attention-body": "{label}이(가) 답변을 기다리고 있어요"
   },
   "updater": {
-    "section-title": "업데이트",
     "section-hint": "Navide를 최신 상태로 유지하세요. 업데이트는 모든 작업 영역에 적용돼요.",
     "current-version": "현재 버전",
     "check": "업데이트 확인",

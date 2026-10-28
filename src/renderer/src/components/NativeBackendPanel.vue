@@ -33,6 +33,7 @@ const switchesOn = computed<string[]>(() => {
 watch(switchesOn, (switches) => emit('on', switches), { immediate: true })
 const busy = ref(false)
 const error = ref('')
+const noAnswer = ref(false)
 
 function api() {
   return window.agentTeam?.plugins?.nativeBackends
@@ -51,8 +52,12 @@ async function setMasterSwitch(on: boolean): Promise<void> {
 async function run(action: () => Promise<NativeBackendOverview>): Promise<void> {
   busy.value = true
   error.value = ''
+  noAnswer.value = false
   try {
-    overview.value = await action()
+    const next = await action()
+    // No answer is a failed read: keep the last state the page showed.
+    if (next && Array.isArray(next.plugins)) overview.value = next
+    else noAnswer.value = true
   } catch (err) {
     error.value = ipcErrorMessage(err)
   } finally {
@@ -78,6 +83,7 @@ function statusText(row: NativeBackendStatusRow): string {
 function refresh(): void {
   const backends = api()
   if (backends) void run(() => backends.list())
+  else noAnswer.value = true
 }
 
 onMounted(refresh)
@@ -87,7 +93,20 @@ watch(installed, refresh)
 </script>
 
 <template>
-  <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
+  <!-- Before the first answer the section says it is loading, or why it is
+       not there, with Retry: never an empty page. -->
+  <section v-if="!overview" class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
+    <h3 id="native-backends-title" class="native-backends-title">{{ $t('settings.extensions.nativeBackends.title') }}</h3>
+    <p v-if="!error && !noAnswer" class="native-backends-state nv-loading" role="status">{{ $t('label.loading') }}</p>
+    <div v-else class="native-backends-state nv-empty" role="alert">
+      <p class="native-backends-state-text">{{ $t('settings.extensions.nativeBackends.loadFailed') }}</p>
+      <code v-if="error" class="native-backends-state-detail">{{ error }}</code>
+      <button type="button" class="native-backends-retry nv-btn nv-btn--sm" :disabled="busy" @click="refresh">
+        {{ $t('settings.extensions.marketplace.retry') }}
+      </button>
+    </div>
+  </section>
+  <section v-else class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
     <h3 id="native-backends-title" class="native-backends-title">{{ $t('settings.extensions.nativeBackends.title') }}</h3>
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
     <!-- One card: the warning about native code sits right above the switch it
@@ -303,6 +322,19 @@ watch(installed, refresh)
 .native-backends-unsaved p {
   margin: 0;
   flex: 1;
+}
+.native-backends-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.native-backends-state-text {
+  margin: 0;
+}
+.native-backends-state-detail {
+  font-size: var(--font-2xs);
+  overflow-wrap: anywhere;
 }
 .ext-error {
   margin: var(--space-3) 0;

@@ -1482,7 +1482,7 @@
       "inferredHint": "這些能力是從原始碼文字推定的，CLI 的 manifest 沒有宣告。",
       "tier": {
         "L1": "L1 文字資產",
-        "L2": "L2 子程序",
+        "L2": "L2 會執行指令",
         "L3": "L3 程序內程式碼"
       },
       "tierHint": {
@@ -1925,7 +1925,8 @@
           "shellNotAllowed": "已封鎖：要求完整 shell 權限",
           "stoppedAfterCrashes": "多次失敗後已停止",
           "unavailable": "無法使用"
-        }
+        },
+        "loadFailed": "無法讀取原生後端設定。"
       },
       "bundled": "內建",
       "listTitle": "Navide 外掛",
@@ -2323,8 +2324,8 @@
     },
     "storage": {
       "localStorage": "ui_settings.json（App 資料）＋工作區備份",
-      "mainProcess": "Electron 主行程 userData",
-      "safeStorage": "本機加密的 safeStorage 登錄",
+      "mainProcess": "與 Navide 的 App 資料一起存在這台電腦上",
+      "safeStorage": "加密儲存在這台電腦上",
       "cliFiles": "各 CLI 自己的指示檔"
     },
     "voice": {
@@ -2349,7 +2350,6 @@
       "readback-rate": "語速",
       "readback-preview": "試聽",
       "readback-stop-hint": "朗讀中按 Esc 或語音輸入快捷鍵即可立刻停止。",
-      "section": "語音輸入",
       "enabled": "語音輸入（按住說話）",
       "enabled-hint": "按住 Ctrl+Alt+M（可在快捷鍵設定中更改）即可對目前聚焦的 CLI pane 聽寫。文字會像手動輸入一樣填進輸入框，不會自動送出，確認後請自己按 Enter。語音由本機的 Whisper 模型轉成文字，音訊不會離開這台電腦。",
       "device": "麥克風",
@@ -2546,7 +2546,14 @@
       "restore-scope-auto": "自動",
       "resume-concurrency": "同時恢復上限",
       "resume-concurrency-hint": "開啟工作區或還原版面時，最多可同時恢復幾個 CLI pane，其餘依序排隊。若一次恢復太多 pane 導致「terminal.create timeout」錯誤，就把這個值調小（1–10）。",
-      "resume-concurrency-label": "同時恢復數上限"
+      "resume-concurrency-label": "同時恢復數上限",
+      "theme-name": {
+        "dark-github": "深色（GitHub）",
+        "dark-midnight": "午夜",
+        "dark-forest": "森林",
+        "light": "淺色",
+        "high-contrast": "高對比"
+      }
     },
     "roles": {
       "title": "角色",
@@ -7486,7 +7493,6 @@
     "section": {
       "general-behavior": "一般行為",
       "resource-limits": "資源限制",
-      "notifications": "通知",
       "settings-management": "設定管理",
       "theme": "主題",
       "other": "其他"
@@ -8129,7 +8135,13 @@
       "conflict-soft": "共用按鍵",
       "when-any": "總是生效",
       "no-results": "沒有符合搜尋條件的命令。",
-      "footnote": "支援兩段式和弦：先錄一組組合鍵，再按第二組。不歸此表管轄的按鍵，已列在本頁下方的唯讀區塊。"
+      "footnote": "支援兩段式和弦：先錄一組組合鍵，再按第二組。不歸此表管轄的按鍵，已列在本頁下方的唯讀區塊。",
+      "category": {
+        "workbench": "工作台",
+        "editor": "編輯器",
+        "controlPane": "CLI pane",
+        "ui": "外部控制"
+      }
     },
     "accounts": {
       "title": "Git 帳號",
@@ -8269,7 +8281,7 @@
       "testing": "測試中：",
       "preparing": "準備中…",
       "benchmark-hint": "對所有本地模型執行 4 項標準任務，以判斷哪些模型適合用於流程意圖偵測：",
-      "task-t1": "技術堆疊偵測 — 輸出 JSON",
+      "task-t1": "技術堆疊偵測 — 列出工作區使用的函式庫",
       "task-t2": "工作區摘要 — 單句摘要",
       "task-t3": "相關性選擇 — 從文件清單中挑選最相關的項目",
       "task-t4": "CLI 意圖解析 — 解析 Agent 輸出並提取問題與選項",
@@ -9055,7 +9067,6 @@
     "attention-body": "{label} 正在等待你的輸入"
   },
   "updater": {
-    "section-title": "更新",
     "section-hint": "讓 Navide 保持在最新版本。更新會套用到所有工作區。",
     "current-version": "目前版本",
     "check": "檢查更新",

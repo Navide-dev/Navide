@@ -1482,7 +1482,7 @@
       "inferredHint": "Lido do texto-fonte; o manifesto da CLI não informa isso.",
       "tier": {
         "L1": "L1: recursos de texto",
-        "L2": "L2: subprocesso",
+        "L2": "L2: executa comandos",
         "L3": "L3: código no processo"
       },
       "tierHint": {
@@ -1925,7 +1925,8 @@
           "shellNotAllowed": "Bloqueado: solicita acesso total ao shell",
           "stoppedAfterCrashes": "Parado após falhas repetidas",
           "unavailable": "Indisponível"
-        }
+        },
+        "loadFailed": "Não foi possível ler as configurações dos back-ends nativos."
       },
       "bundled": "Integrado",
       "listTitle": "Plug-ins do Navide",
@@ -2323,8 +2324,8 @@
     },
     "storage": {
       "localStorage": "ui_settings.json (dados do app) + backup no workspace",
-      "mainProcess": "userData do processo principal do Electron",
-      "safeStorage": "Registro local criptografado do safeStorage",
+      "mainProcess": "Salvo com os dados do app Navide neste computador",
+      "safeStorage": "Armazenado com criptografia neste computador",
       "cliFiles": "Os arquivos de instruções de cada CLI"
     },
     "voice": {
@@ -2349,7 +2350,6 @@
       "readback-rate": "Velocidade",
       "readback-preview": "Ouvir amostra",
       "readback-stop-hint": "Pressione Esc ou o atalho de entrada por voz para parar a leitura na hora.",
-      "section": "Entrada por voz",
       "enabled": "Entrada por voz (pressionar para falar)",
       "enabled-hint": "Mantenha Ctrl+Alt+M pressionado (reatribuível em Atalhos) para ditar no pane de CLI em foco. O texto vai para a caixa de entrada como se você o tivesse digitado; nada é enviado até você pressionar Enter. A fala é transcrita neste computador por um modelo Whisper local; o áudio nunca sai da máquina.",
       "device": "Microfone",
@@ -2546,7 +2546,14 @@
       "restore-scope-auto": "Automático",
       "resume-concurrency": "Limite de retomadas simultâneas",
       "resume-concurrency-hint": "Quantos panes de CLI podem ser retomados ao mesmo tempo ao abrir um workspace ou restaurar um layout; os demais entram na fila. Diminua este valor se retomar muitos panes de uma vez causar erros “terminal.create timeout” (1–10).",
-      "resume-concurrency-label": "Máximo de retomadas simultâneas"
+      "resume-concurrency-label": "Máximo de retomadas simultâneas",
+      "theme-name": {
+        "dark-github": "Escuro (GitHub)",
+        "dark-midnight": "Meia-noite",
+        "dark-forest": "Floresta",
+        "light": "Claro",
+        "high-contrast": "Alto contraste"
+      }
     },
     "roles": {
       "title": "Papéis",
@@ -7486,7 +7493,6 @@
     "section": {
       "general-behavior": "Comportamento geral",
       "resource-limits": "Limites de recursos",
-      "notifications": "Notificações",
       "settings-management": "Gerenciamento de configurações",
       "theme": "Tema",
       "other": "Outros"
@@ -8129,7 +8135,13 @@
       "conflict-soft": "tecla compartilhada",
       "when-any": "sempre",
       "no-results": "Nenhum comando corresponde a esta pesquisa.",
-      "footnote": "Combinações em duas etapas são aceitas: grave uma combinação e depois pressione a segunda. As teclas que esta tabela não controla aparecem como somente leitura no fim desta página."
+      "footnote": "Combinações em duas etapas são aceitas: grave uma combinação e depois pressione a segunda. As teclas que esta tabela não controla aparecem como somente leitura no fim desta página.",
+      "category": {
+        "workbench": "Área de trabalho",
+        "editor": "Editor",
+        "controlPane": "Painéis de CLI",
+        "ui": "Controle externo"
+      }
     },
     "accounts": {
       "title": "Contas do Git",
@@ -8269,7 +8281,7 @@
       "testing": "Testando:",
       "preparing": "Preparando…",
       "benchmark-hint": "Executa 4 tarefas padrão em todos os modelos locais para determinar quais servem para a detecção de intenção do pipeline:",
-      "task-t1": "Detecção da stack tecnológica: gera JSON",
+      "task-t1": "Detecção da stack tecnológica: aponta as bibliotecas que o espaço de trabalho usa",
       "task-t2": "Resumo do workspace: resumo de uma frase",
       "task-t3": "Seleção por relevância: escolhe o item mais relevante de uma lista de documentos",
       "task-t4": "Análise da intenção da CLI: analisa a saída do agent e extrai perguntas e opções",
@@ -9055,7 +9067,6 @@
     "attention-body": "{label} está aguardando sua resposta"
   },
   "updater": {
-    "section-title": "Atualizações",
     "section-hint": "Mantenha o Navide atualizado. As atualizações valem para todos os workspaces.",
     "current-version": "Versão atual",
     "check": "Verificar atualizações",

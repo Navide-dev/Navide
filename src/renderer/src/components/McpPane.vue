@@ -548,17 +548,19 @@ function entries(map: Record<string, string>): [string, string][] {
                     :class="row.navide.status ?? 'unknown'"
                   ></span>
                   <strong v-truncate>{{ row.name }}</strong>
+                </span>
+                <span class="mcp-card-detail" v-truncate>
+                  {{ row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—' }}
+                </span>
+                <!-- The transport and Node badges lead the meta line, so the name keeps the full width. -->
+                <span class="mcp-card-places">
                   <span class="mcp-tag">{{ rowTransport(row) }}</span>
                   <span
                     v-if="needsNode(row.navide)"
                     class="mcp-tag mcp-tag-warn"
                     data-testid="mcp-needs-node"
                   >{{ t('settings.mcp.needs-node') }}</span>
-                </span>
-                <span class="mcp-card-detail" v-truncate>
-                  {{ row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—' }}
-                </span>
-                <span class="mcp-card-places" aria-hidden="true">
+                  <span class="mcp-card-places-chips" aria-hidden="true">
                   <span
                     v-for="chip in placeChips(row)"
                     :key="chip.key"
@@ -573,6 +575,7 @@ function entries(map: Record<string, string>): [string, string][] {
                     class="pchip needs"
                   >
                     {{ t('settings.mcp.needs-setup') }}
+                  </span>
                   </span>
                 </span>
               </button>
@@ -980,7 +983,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
 .mcp-card.native { border-style: dashed; }
 .mcp-card-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.mcp-card-head strong { flex: 1; font-size: var(--font-xs); color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-card-head strong { flex: 1; min-width: 0; font-size: var(--font-xs); color: var(--text-bright); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .mcp-status-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
 .mcp-status-dot.connected { background: var(--success-fg); }
 .mcp-status-dot.error { background: var(--danger-fg); }
@@ -1012,7 +1015,8 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   overflow: hidden;
   word-break: break-all;
 }
-.mcp-card-places { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.mcp-card-places { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 2px; }
+.mcp-card-places-chips { display: contents; }
 .pchip {
   display: inline-block;
   padding: 1px 7px;

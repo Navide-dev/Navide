@@ -135,6 +135,11 @@
   --risk-fg: var(--attention-fg);
   --risk-subtle: var(--attention-subtle);
   --risk-muted: var(--attention-muted);
+  /* Text on a status family's own subtle fill (pills, chips). The -fg colour
+   * already clears 4.5:1 there in the dark themes; light.css darkens these
+   * so small pill text keeps that margin on pale yellow and green. */
+  --attention-on-subtle: var(--attention-fg);
+  --success-on-subtle: var(--success-fg);
 
   /* ── Icon button containers (3 sizes) ───────────────────────── */
   --icon-btn-sm: 20px;

@@ -63,7 +63,8 @@ export function cliAgentRowChips(facts: CliAgentRowFacts, t: Translate): CliRowC
   if (facts.install && facts.install.status !== 'unknown') {
     const { status, version } = facts.install
     if (status === 'missing') {
-      chip('install', 'bad', t('settings.cliAgents.chip.not-installed'))
+      // Not installing a CLI is a choice, not a risk: a neutral fact.
+      chip('install', 'neutral', t('settings.cliAgents.chip.not-installed'))
     } else if (status === 'outdated') {
       chip('install', 'warn', t('settings.cliAgents.chip.outdated', { version }))
     } else {

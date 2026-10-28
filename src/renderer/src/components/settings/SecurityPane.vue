@@ -174,10 +174,11 @@ async function runTest(): Promise<void> {
         </template>
       </SettingRow>
       <div v-if="store.available.value" class="gd-counts" data-testid="guard-counts">
-        <span class="gd-pill bad">{{ t('guard.counts.critical', { n: store.counts.value.critical }) }}</span>
-        <span class="gd-pill warn">{{ t('guard.counts.high', { n: store.counts.value.high }) }}</span>
-        <span class="gd-pill warn">{{ t('guard.counts.asks', { n: store.counts.value.asks }) }}</span>
-        <span class="gd-pill bad">{{ t('guard.counts.denies', { n: store.counts.value.denies_24h }) }}</span>
+        <!-- A counter takes its colour only once something was counted: zero is neutral. -->
+        <span class="gd-pill" :class="{ bad: store.counts.value.critical > 0 }">{{ t('guard.counts.critical', { n: store.counts.value.critical }) }}</span>
+        <span class="gd-pill" :class="{ warn: store.counts.value.high > 0 }">{{ t('guard.counts.high', { n: store.counts.value.high }) }}</span>
+        <span class="gd-pill" :class="{ warn: store.counts.value.asks > 0 }">{{ t('guard.counts.asks', { n: store.counts.value.asks }) }}</span>
+        <span class="gd-pill" :class="{ bad: store.counts.value.denies_24h > 0 }">{{ t('guard.counts.denies', { n: store.counts.value.denies_24h }) }}</span>
       </div>
     </SettingsCard>
     <p v-if="actionError || store.error.value" class="gd-error" role="alert">{{ actionError || store.error.value }}</p>
@@ -185,6 +186,8 @@ async function runTest(): Promise<void> {
     <SettingsSection :label="t('guard.policy.title')">
       <p class="gd-hint">{{ t('guard.policy.hint') }}</p>
       <SettingsCard>
+        <!-- In a narrow window the table scrolls inside its card instead of clipping a column. -->
+        <div class="gd-table-scroll">
         <table class="gd-table" data-testid="guard-policy">
           <thead>
             <tr>
@@ -201,6 +204,7 @@ async function runTest(): Promise<void> {
             </tr>
           </tbody>
         </table>
+        </div>
       </SettingsCard>
       <p class="gd-hint gd-footnote">{{ t('guard.policy.levels') }}</p>
     </SettingsSection>
@@ -371,10 +375,11 @@ async function runTest(): Promise<void> {
   border: 1px solid var(--border-default);
   white-space: nowrap;
 }
-.gd-pill.ok { color: var(--success-fg); background: var(--success-subtle); border-color: var(--success-muted); }
-.gd-pill.warn { color: var(--attention-fg); background: var(--attention-subtle); border-color: var(--attention-muted); }
+.gd-pill.ok { color: var(--success-on-subtle); background: var(--success-subtle); border-color: var(--success-muted); }
+.gd-pill.warn { color: var(--attention-on-subtle); background: var(--attention-subtle); border-color: var(--attention-muted); }
 .gd-pill.bad { color: var(--danger-fg); background: var(--danger-subtle); border-color: var(--danger-muted); }
 
+.gd-table-scroll { overflow-x: auto; }
 .gd-table { width: 100%; border-collapse: collapse; font-size: var(--font-2xs); }
 .gd-table th, .gd-table td { padding: 6px var(--space-row-x); text-align: left; }
 .gd-table thead th { color: var(--text-secondary); font-weight: 600; border-bottom: 1px solid var(--border-muted); }
@@ -437,7 +442,7 @@ async function runTest(): Promise<void> {
   white-space: nowrap;
 }
 .gd-btn.sm { font-size: var(--font-2xs); padding: 3px 8px; }
-.gd-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.gd-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 /* A primary waiting for input keeps its frame instead of fading to a ghost of itself. */
 .gd-btn.primary:disabled { opacity: 1; background: transparent; border-color: var(--border-default); color: var(--text-secondary); }
 .gd-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }

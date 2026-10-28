@@ -258,12 +258,13 @@ function applyCustomIcon(): void {
             <span class="prompt-card-head">
               <PromptSkillIcon :name="skill.icon" />
               <strong v-truncate>{{ skill.name }}</strong>
+            </span>
+            <span class="prompt-card-desc" v-truncate>{{ skill.description || skill.prompt }}</span>
+            <!-- The source badge sits on the meta line, so the name keeps the full width. -->
+            <span class="prompt-card-tags">
               <span v-if="skill.isDefault" class="prompt-badge default">{{
                 t('settings.prompts.default-badge')
               }}</span>
-            </span>
-            <span class="prompt-card-desc" v-truncate>{{ skill.description || skill.prompt }}</span>
-            <span class="prompt-card-tags">
               <span class="pchip">{{ skill.category }}</span>
               <span v-if="skill.isDefault" class="pchip">{{
                 skill.maxTurns > 0
@@ -475,9 +476,14 @@ textarea:focus {
 /* ── Toolbar ──────────────────────────────────────────────────────────── */
 .prompts-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+/* A narrow page wraps the toolbar, never the button's label. */
+.prompts-toolbar > button {
+  white-space: nowrap;
 }
 .prompts-toolbar p {
   margin: 0;
@@ -599,9 +605,13 @@ textarea:focus {
   min-width: 0;
   font-size: var(--font-xs);
   color: var(--text-bright);
+  /* Up to two lines; a long name breaks anywhere rather than hiding. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .prompt-card-desc {
   font-size: var(--font-2xs);

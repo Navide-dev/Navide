@@ -587,6 +587,8 @@ const cliAgentRows = computed(() => {
         label: spec.label,
         hint: spec.hint ?? '',
         version: dep?.version ?? '',
+        // A CLI that is not installed has nothing to fix yet: no warning glyph.
+        installed: dep?.status !== 'missing',
         needsAttention: dep?.status === 'missing' || dep?.status === 'outdated'
           || identity?.signedIn === false
           || !!onboarding.cliHealth.value?.findings.some((finding) => finding.agent_key === spec.agentKey),
@@ -843,7 +845,7 @@ function onCliDrop(k: string): void {
   cliOrder.value = keys
 }
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 interface SettingsSearchItem {
   id: string
@@ -1392,6 +1394,11 @@ const {
   setCustomOverrides,
   resetCustom,
 } = useTheme()
+/** A built-in theme's name in the UI language; its catalog label otherwise. */
+function themeLabel(theme: { id: string; label: string }): string {
+  const key = `settings.appearance.theme-name.${theme.id}`
+  return te(key) ? t(key) : theme.label
+}
 
 // ── Language ──────────────────────────────────────────────────────────────────
 const { language: currentLanguage, setLanguage, healthCheckTimeoutSec, setHealthCheckTimeoutSec } = useSettings()
@@ -1671,8 +1678,14 @@ interface SettingsPaths {
 }
 const settingsPaths = ref<SettingsPaths>({})
 const settingsBundleBusy = ref(false)
-const settingsBundleSummary = ref('')
-const settingsBundleError = ref('')
+// Bundle messages keep their i18n keys and are translated when shown, so a
+// language change on the Language page never leaves them in the old language.
+type BundleMessage = { key: string; params?: Record<string, unknown> } | { text: string }
+const settingsBundleSummary = ref<BundleMessage[]>([])
+const settingsBundleError = ref<BundleMessage | null>(null)
+function bundleMessageText(message: BundleMessage): string {
+  return 'key' in message ? t(message.key, message.params ?? {}) : message.text
+}
 
 /** Tabs that actually hold settings. `help` is read-only reference material, so
  *  it has no scope badge and no settings file to reveal. `disclosureOverview`
@@ -1775,11 +1788,11 @@ function stampForFile(): string {
 async function exportSettingsBundle(): Promise<void> {
   if (!window.agentTeam?.saveJson) return
   settingsBundleBusy.value = true
-  settingsBundleError.value = ''
+  settingsBundleError.value = null
   try {
     const resp = await props.backend.send<{ bundle: Record<string, unknown> }>('settings.bundle.export', {})
     if (!resp.ok || !resp.payload?.bundle) {
-      settingsBundleError.value = resp.error?.message ?? t('settings.management.export-failed')
+      settingsBundleError.value = resp.error?.message != null ? { text: resp.error.message } : { key: 'settings.management.export-failed' }
       return
     }
     const bundle = {
@@ -1797,9 +1810,9 @@ async function exportSettingsBundle(): Promise<void> {
       defaultName: `agent-team-settings-${stampForFile()}.json`,
       content: JSON.stringify(bundle, null, 2),
     })
-    if (result.ok) settingsBundleSummary.value = t('settings.management.exported')
+    if (result.ok) settingsBundleSummary.value = [{ key: 'settings.management.exported' }]
   } catch (err) {
-    settingsBundleError.value = err instanceof Error ? err.message : t('settings.management.export-failed')
+    settingsBundleError.value = err instanceof Error ? { text: err.message } : { key: 'settings.management.export-failed' }
   } finally {
     settingsBundleBusy.value = false
   }
@@ -1808,14 +1821,14 @@ async function exportSettingsBundle(): Promise<void> {
 async function importSettingsBundle(): Promise<void> {
   if (!window.agentTeam?.openJson) return
   settingsBundleBusy.value = true
-  settingsBundleError.value = ''
+  settingsBundleError.value = null
   try {
     const result = await window.agentTeam.openJson({ title: t('settings.management.import-dialog-title') })
     if (!result.ok || !result.content) return
     const bundle = JSON.parse(result.content) as Record<string, unknown>
     const resp = await props.backend.send<{ applied: string[]; mcp_needs_secrets?: string[]; paths: SettingsPaths }>('settings.bundle.import', { bundle })
     if (!resp.ok) {
-      settingsBundleError.value = resp.error?.message ?? t('settings.management.import-failed')
+      settingsBundleError.value = resp.error?.message != null ? { text: resp.error.message } : { key: 'settings.management.import-failed' }
       return
     }
     const appearance = bundle.appearance as Record<string, unknown> | undefined
@@ -1840,13 +1853,13 @@ async function importSettingsBundle(): Promise<void> {
     ])
     const applied = resp.payload?.applied ?? []
     if (shouldReloadMcpAfterBundleImport(applied)) await mLoad(true)
-    settingsBundleSummary.value = t('settings.management.imported', { items: applied.join(', ') || 'appearance' })
+    settingsBundleSummary.value = [{ key: 'settings.management.imported', params: { items: applied.join(', ') || 'appearance' } }]
     const needsSecrets = resp.payload?.mcp_needs_secrets ?? []
     if (needsSecrets.length) {
-      settingsBundleSummary.value += ` ${t('settings.management.mcp-needs-secrets', { items: needsSecrets.join(', ') })}`
+      settingsBundleSummary.value.push({ key: 'settings.management.mcp-needs-secrets', params: { items: needsSecrets.join(', ') } })
     }
   } catch (err) {
-    settingsBundleError.value = err instanceof Error ? err.message : t('settings.management.import-failed')
+    settingsBundleError.value = err instanceof Error ? { text: err.message } : { key: 'settings.management.import-failed' }
   } finally {
     settingsBundleBusy.value = false
   }
@@ -2876,12 +2889,12 @@ watch(activeTab, (tab) => {
 
           <!-- ── LIST VIEW ──────────────────────────────────────────────── -->
           <template v-if="mView === 'list'">
+            <!-- The page title and the list's own heading already name this view,
+                 and the list carries the one Refresh. -->
             <div class="mcp-topbar" data-settings-section="mcp-installed">
-              <span class="mcp-page-title">{{ $t('settings.mcp.all-title') }}</span>
               <div class="mcp-topbar-actions">
                 <button class="mcp-action-btn" @click="mView = 'catalog'">{{ $t('action.add-mcp') }}</button>
                 <button class="mcp-action-btn" @click="mView = 'custom'">{{ $t('settings.mcp.add-custom') }}</button>
-                <button class="mcp-action-btn" @click="mLoad()" :disabled="mLoading">{{ $t('action.refresh') }}</button>
                 <button class="mcp-action-btn" @click="mOpenConfig" :disabled="!mConfigPath">{{ $t('action.open-mcp-config') }}</button>
               </div>
             </div>
@@ -3324,7 +3337,7 @@ watch(activeTab, (tab) => {
             <div v-if="!props.analyzerApi.benchmarking.value && props.analyzerApi.benchmarkResults.value.length === 0" class="az-hint">
               <p>{{ $t('settings.analyzer.benchmark-hint') }}</p>
               <ul>
-                <li><strong>T1</strong> {{ $t('settings.analyzer.task-t1') }} <code>{libraries, doc_query}</code></li>
+                <li><strong>T1</strong> {{ $t('settings.analyzer.task-t1') }}</li>
                 <li><strong>T2</strong> {{ $t('settings.analyzer.task-t2') }}</li>
                 <li><strong>T3</strong> {{ $t('settings.analyzer.task-t3') }}</li>
                 <li><strong>T4</strong> {{ $t('settings.analyzer.task-t4') }}</li>
@@ -3427,7 +3440,7 @@ watch(activeTab, (tab) => {
                   <span class="cli-agent-grip" :title="$t('settings.cliAgents.drag-hint')" aria-hidden="true">⠿</span>
                   <span class="cli-card-icon" aria-hidden="true">{{ cardInitials(row.label) }}</span>
                   <span class="cli-agent-label">{{ row.label }}</span>
-                  <span v-if="row.needsAttention" class="cli-card-attention" :title="$t('settings.cliAgents.filter-attention')" :aria-label="$t('settings.cliAgents.filter-attention')">!</span>
+                  <span v-if="row.needsAttention && row.installed" class="cli-card-attention" :title="$t('settings.cliAgents.filter-attention')" :aria-label="$t('settings.cliAgents.filter-attention')">!</span>
                 </div>
                 <div class="cli-card-status">
                   <span v-for="chip in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id" v-truncate class="cli-chip" :class="`cli-chip--${chip.tone}`">{{ chip.label }}</span>
@@ -4089,8 +4102,8 @@ watch(activeTab, (tab) => {
                   <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.general.scope) }}</span>
                   <span class="settings-path" v-truncate>{{ pathForTab('general') }}</span>
                 </div>
-                <p v-if="settingsBundleSummary" class="summary-ok">{{ settingsBundleSummary }}</p>
-                <p v-if="settingsBundleError" class="err-msg">{{ settingsBundleError }}</p>
+                <p v-if="settingsBundleSummary.length" class="summary-ok">{{ settingsBundleSummary.map(bundleMessageText).join(' ') }}</p>
+                <p v-if="settingsBundleError" class="err-msg">{{ bundleMessageText(settingsBundleError) }}</p>
               </div>
             </SettingsCard>
           </SettingsSection>
@@ -4300,7 +4313,8 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.updates') }}</h1>
 
           <SettingsCard data-settings-section="updates">
-            <SettingRow :title="$t('updater.section-title')" :description="$t('updater.section-hint')">
+            <!-- No row title: the page title already says Updates. -->
+            <SettingRow :description="$t('updater.section-hint')">
               <template #control>
                 <button class="ap-reset" :disabled="updIsBusy || updateState.status === 'unsupported'" @click="checkForUpdates">{{ $t('updater.check') }}</button>
               </template>
@@ -4521,7 +4535,7 @@ watch(activeTab, (tab) => {
                       :style="{ background: c }"
                     />
                   </div>
-                  <span class="ap-theme-label">{{ t.label }}</span>
+                  <span class="ap-theme-label">{{ themeLabel(t) }}</span>
                   <span v-if="currentTheme === t.id" class="ap-check">✓</span>
                 </button>
               </div>
@@ -4784,7 +4798,8 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'notifications'" class="s-body notifications-body" data-settings-section="notifications">
           <h1 class="s-page-title">{{ $t('settings.nav.notifications') }}</h1>
 
-          <SettingsSection :label="$t('settings.section.notifications')">
+          <!-- No label: the page title already says Notifications. -->
+          <SettingsSection>
             <SettingsCard>
               <SettingRow
                 data-settings-section="general-system-notify"
@@ -5089,18 +5104,21 @@ watch(activeTab, (tab) => {
 .setting-row-control input[type='number'] { width: 96px; }
 
 /* CLI Agents cards and the selected agent's contained drawer. */
-.cli-agent-roster { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 22px; }
+.cli-agent-roster { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 18px 22px; }
 .cli-agent-toolbar, .cli-agent-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .cli-agent-toolbar input { flex: 1; min-width: 130px; }
 .cli-agent-toolbar button, .cli-agent-manage {
   border: 1px solid var(--border-default); border-radius: var(--radius-sm);
   background: var(--bg-elevated); color: var(--text-primary); padding: 5px 9px; font: inherit; font-size: var(--font-xs); cursor: pointer;
+  /* The toolbar wraps; a label never breaks across two lines. */
+  white-space: nowrap;
 }
 .cli-agent-toolbar button[aria-pressed='true'] { color: var(--accent-fg); background: var(--accent-subtle); border-color: var(--accent-focus); }
-.cli-agent-toolbar button:disabled { opacity: .4; cursor: default; }
+.cli-agent-toolbar button:disabled { opacity: .6; cursor: default; }
 .cli-agent-count { margin: 10px 0 14px; }
-.cli-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 12px; list-style: none; padding: 0; margin: 0; }
-.cli-agent-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer; }
+.cli-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 12px; list-style: none; padding: 0; margin: 0; max-width: 100%; }
+/* border-box: a card's padding and border stay inside its grid column. */
+.cli-agent-card { box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer; }
 .cli-agent-card:hover { border-color: var(--border-strong); }
 .cli-agent-card.drag-over { box-shadow: inset 0 0 0 2px var(--accent-focus); }
 .cli-agent-card.is-disabled { background: var(--bg-muted); }
@@ -5113,7 +5131,7 @@ watch(activeTab, (tab) => {
 .cli-card-attention { margin-left: auto; color: var(--warning-fg, #c77400); font-weight: 700; }
 .cli-card-status { display: flex; align-items: flex-start; flex-direction: column; gap: 4px; min-height: 42px; }
 .cli-card-status .cli-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
-.cli-card-footer { display: flex; align-items: center; gap: 8px; margin-top: auto; font-size: var(--font-xs); }
+.cli-card-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; margin-top: auto; font-size: var(--font-xs); }
 .cli-agent-empty { color: var(--text-secondary); text-align: center; padding: 30px 10px; }
 .cli-drawer-layer { position: absolute; inset: 0; z-index: 20; }
 .cli-drawer-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / .25); }
@@ -5588,7 +5606,8 @@ button {
     color var(--motion-fast) var(--ease-out),
     opacity var(--motion-fast) var(--ease-out);
 }
-button:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Disabled text stays readable: 0.6 keeps small labels near 4.5:1. */
+button:disabled { opacity: 0.6; cursor: not-allowed; }
 button.primary { background: var(--success-emphasis); border-color: var(--success-strong); color: var(--text-on-emphasis); font-weight: 600; }
 button.primary:not(:disabled):hover { background: var(--success-strong); }
 button.danger { background: var(--danger-deep); border-color: var(--danger-muted); color: var(--text-on-emphasis); }

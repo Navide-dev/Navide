@@ -1482,7 +1482,7 @@
       "inferredHint": "Deducido del texto fuente; el manifiesto de la CLI no lo indica.",
       "tier": {
         "L1": "L1: recursos de texto",
-        "L2": "L2: subproceso",
+        "L2": "L2: ejecuta comandos",
         "L3": "L3: código en el proceso"
       },
       "tierHint": {
@@ -1925,7 +1925,8 @@
           "shellNotAllowed": "Bloqueado: solicita acceso completo a la shell",
           "stoppedAfterCrashes": "Detenido tras fallos repetidos",
           "unavailable": "No disponible"
-        }
+        },
+        "loadFailed": "No se pudo leer la configuración de los backends nativos."
       },
       "bundled": "Integrados",
       "listTitle": "Complementos de Navide",
@@ -2323,8 +2324,8 @@
     },
     "storage": {
       "localStorage": "ui_settings.json (datos de la app) + copia en el área de trabajo",
-      "mainProcess": "userData del proceso principal de Electron",
-      "safeStorage": "Registro local cifrado de safeStorage",
+      "mainProcess": "Se guarda con los datos de la app de Navide en este equipo",
+      "safeStorage": "Se guarda cifrado en este equipo",
       "cliFiles": "Los archivos de instrucciones propios de cada CLI"
     },
     "voice": {
@@ -2349,7 +2350,6 @@
       "readback-rate": "Velocidad",
       "readback-preview": "Escuchar",
       "readback-stop-hint": "Pulsa Esc o el atajo de entrada de voz para detener la lectura al instante.",
-      "section": "Entrada de voz",
       "enabled": "Entrada de voz (mantener pulsado para hablar)",
       "enabled-hint": "Mantén pulsado Ctrl+Alt+M (se puede reasignar en Atajos) para dictar en el pane de CLI enfocado. El texto va a su cuadro de entrada como si lo hubieras escrito; no se envía nada hasta que pulses Enter tú. La voz se transcribe en este equipo con un modelo Whisper local; el audio nunca sale del equipo.",
       "device": "Micrófono",
@@ -2546,7 +2546,14 @@
       "restore-scope-auto": "Automático",
       "resume-concurrency": "Límite de reanudaciones simultáneas",
       "resume-concurrency-hint": "Cuántos panes de CLI pueden reanudarse a la vez al abrir un área de trabajo o restaurar una disposición; el resto espera en cola. Reduce este valor si reanudar muchos panes a la vez provoca errores «terminal.create timeout» (1–10).",
-      "resume-concurrency-label": "Máximo de reanudaciones simultáneas"
+      "resume-concurrency-label": "Máximo de reanudaciones simultáneas",
+      "theme-name": {
+        "dark-github": "Oscuro (GitHub)",
+        "dark-midnight": "Medianoche",
+        "dark-forest": "Bosque",
+        "light": "Claro",
+        "high-contrast": "Alto contraste"
+      }
     },
     "roles": {
       "title": "Roles",
@@ -7486,7 +7493,6 @@
     "section": {
       "general-behavior": "Comportamiento general",
       "resource-limits": "Límites de recursos",
-      "notifications": "Notificaciones",
       "settings-management": "Gestión de ajustes",
       "theme": "Tema",
       "other": "Otros"
@@ -8129,7 +8135,13 @@
       "conflict-soft": "tecla compartida",
       "when-any": "siempre",
       "no-results": "Ningún comando coincide con esta búsqueda.",
-      "footnote": "Se admiten combinaciones de dos pasos: graba una combinación y luego pulsa la segunda. Las teclas que esta tabla no gestiona aparecen en solo lectura al final de esta página."
+      "footnote": "Se admiten combinaciones de dos pasos: graba una combinación y luego pulsa la segunda. Las teclas que esta tabla no gestiona aparecen en solo lectura al final de esta página.",
+      "category": {
+        "workbench": "Área de trabajo",
+        "editor": "Editor",
+        "controlPane": "Paneles de CLI",
+        "ui": "Control externo"
+      }
     },
     "accounts": {
       "title": "Cuentas de Git",
@@ -8269,7 +8281,7 @@
       "testing": "Probando:",
       "preparing": "Preparando…",
       "benchmark-hint": "Ejecuta 4 tareas estándar con todos los modelos locales para determinar cuáles sirven para detectar la intención en la pipeline:",
-      "task-t1": "Detección de la pila tecnológica: genera JSON",
+      "task-t1": "Detección de la pila tecnológica: nombra las bibliotecas que usa el espacio de trabajo",
       "task-t2": "Resumen del área de trabajo: resumen de una frase",
       "task-t3": "Selección por relevancia: elige el elemento más relevante de una lista de documentos",
       "task-t4": "Análisis de la intención de la CLI: analiza la salida del agent y extrae preguntas y opciones",
@@ -9055,7 +9067,6 @@
     "attention-body": "{label} está esperando tu respuesta"
   },
   "updater": {
-    "section-title": "Actualizaciones",
     "section-hint": "Mantén Navide actualizado. Las actualizaciones se aplican a todas las áreas de trabajo.",
     "current-version": "Versión actual",
     "check": "Buscar actualizaciones",

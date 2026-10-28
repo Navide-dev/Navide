@@ -141,6 +141,7 @@
     "settings.help.workspace.s5.sidebarTabs.pipeline.keys",
     "settings.help.workspace.s5.sidebarTabs.plans.keys",
     "settings.help.workspace.s7.shortcuts.pipeline.action",
+    "settings.keybindings.category.editor",
     "settings.keybindings.reference.terminal.title",
     "settings.mcp.cdp-title",
     "settings.nav.crossDevice",
@@ -375,7 +376,6 @@
     "settings.search.item.general-p2p.title",
     "settings.search.item.marketplace.title",
     "settings.search.item.prompts.title",
-    "settings.section.notifications",
     "settings.sharing.bundle.description-label",
     "settings.sharing.cloud.col-remote",
     "settings.skills.description",
@@ -537,6 +537,7 @@
     "settings.help.workspace.s5.sidebarTabs.explorer.keys",
     "settings.help.workspace.s5.sidebarTabs.pipeline.keys",
     "settings.help.workspace.s5.sidebarTabs.plans.keys",
+    "settings.keybindings.category.editor",
     "settings.keybindings.reference.terminal.title",
     "settings.mcp.cdp-title",
     "settings.mcp.status",
@@ -565,8 +566,7 @@
     "statusBadges.color.pink",
     "turn-stats.col-version",
     "turn-stats.session",
-    "turn-stats.title",
-    "updater.section-title"
+    "turn-stats.title"
   ],
   "pt-BR": [
     "account.title",
@@ -721,6 +721,7 @@
     "settings.help.workspace.s5.sidebarTabs.pipeline.keys",
     "settings.help.workspace.s5.sidebarTabs.plans.keys",
     "settings.help.workspace.s7.shortcuts.pipeline.action",
+    "settings.keybindings.category.editor",
     "settings.keybindings.reference.terminal.title",
     "settings.mcp.cdp-title",
     "settings.mcp.status",

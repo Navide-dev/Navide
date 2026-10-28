@@ -1482,7 +1482,7 @@
       "inferredHint": "ソースコードの文字列から推定しました。CLI のマニフェストには記載されていません。",
       "tier": {
         "L1": "L1 テキスト資産",
-        "L2": "L2 サブプロセス",
+        "L2": "L2 コマンドを実行",
         "L3": "L3 プロセス内コード"
       },
       "tierHint": {
@@ -1925,7 +1925,8 @@
           "shellNotAllowed": "ブロック：完全なシェルアクセスを要求しています",
           "stoppedAfterCrashes": "失敗が続いたため停止",
           "unavailable": "利用不可"
-        }
+        },
+        "loadFailed": "ネイティブバックエンドの設定を読み込めませんでした。"
       },
       "bundled": "同梱",
       "listTitle": "Navide プラグイン",
@@ -2323,8 +2324,8 @@
     },
     "storage": {
       "localStorage": "ui_settings.json（アプリデータ）+ ワークスペースのバックアップ",
-      "mainProcess": "Electron メインプロセスの userData",
-      "safeStorage": "暗号化されたローカルの safeStorage レジストリ",
+      "mainProcess": "このコンピューターの Navide のアプリデータに保存",
+      "safeStorage": "このコンピューターに暗号化して保存",
       "cliFiles": "各 CLI 固有の指示ファイル"
     },
     "voice": {
@@ -2349,7 +2350,6 @@
       "readback-rate": "速度",
       "readback-preview": "試聴",
       "readback-stop-hint": "読み上げ中に Esc か音声入力のショートカットを押すとすぐに止まります。",
-      "section": "音声入力",
       "enabled": "音声入力（押して話す）",
       "enabled-hint": "Ctrl+Alt+M を押している間（ショートカットで変更可）、フォーカス中の CLI ペインに音声入力できます。テキストは手で打ったのと同じように入力欄に入り、Enter を押すまで送信されません。音声はこのコンピューター上のローカル Whisper モデルで文字起こしされ、外部に送信されません。",
       "device": "マイク",
@@ -2546,7 +2546,14 @@
       "restore-scope-auto": "自動",
       "resume-concurrency": "同時再開の上限",
       "resume-concurrency-hint": "ワークスペースを開くときやレイアウトを復元するときに、同時に再開できる CLI ペインの数です。残りは待機します。多数のペインを同時に再開して「terminal.create timeout」エラーが発生する場合は、この値を下げてください（1～10）。",
-      "resume-concurrency-label": "最大同時再開数"
+      "resume-concurrency-label": "最大同時再開数",
+      "theme-name": {
+        "dark-github": "ダーク（GitHub）",
+        "dark-midnight": "ミッドナイト",
+        "dark-forest": "フォレスト",
+        "light": "ライト",
+        "high-contrast": "ハイコントラスト"
+      }
     },
     "roles": {
       "title": "ロール",
@@ -7486,7 +7493,6 @@
     "section": {
       "general-behavior": "一般的な動作",
       "resource-limits": "リソース制限",
-      "notifications": "通知",
       "settings-management": "設定の管理",
       "theme": "テーマ",
       "other": "その他"
@@ -8129,7 +8135,13 @@
       "conflict-soft": "共有キー",
       "when-any": "常時",
       "no-results": "検索に一致するコマンドはありません。",
-      "footnote": "2 段階のキー操作に対応しています。最初の組み合わせを記録した後、2 つ目を押してください。この表で管理しないキーは、ページ下部に読み取り専用で表示されます。"
+      "footnote": "2 段階のキー操作に対応しています。最初の組み合わせを記録した後、2 つ目を押してください。この表で管理しないキーは、ページ下部に読み取り専用で表示されます。",
+      "category": {
+        "workbench": "ワークベンチ",
+        "editor": "エディター",
+        "controlPane": "CLI ペイン",
+        "ui": "外部コントロール"
+      }
     },
     "accounts": {
       "title": "Git アカウント",
@@ -8269,7 +8281,7 @@
       "testing": "テスト中：",
       "preparing": "準備中…",
       "benchmark-hint": "すべてのローカルモデルで 4 つの標準タスクを実行し、パイプラインの意図検出に適しているか確認します：",
-      "task-t1": "技術スタックの検出 — JSON を出力",
+      "task-t1": "技術スタックの検出 — ワークスペースが使うライブラリを挙げる",
       "task-t2": "ワークスペースの要約 — 1 文で要約",
       "task-t3": "関連項目の選択 — 文書一覧から最も関連する項目を選択",
       "task-t4": "CLI の意図解析 — エージェントの出力を解析し、質問と選択肢を抽出",
@@ -9055,7 +9067,6 @@
     "attention-body": "{label} があなたの返信を待っています"
   },
   "updater": {
-    "section-title": "アップデート",
     "section-hint": "Navide を最新の状態に保ちます。アップデートはすべてのワークスペースに適用されます。",
     "current-version": "現在のバージョン",
     "check": "アップデートを確認",

@@ -116,6 +116,8 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
 
       <label v-for="column in LABEL_COLUMNS" :key="column.code" class="sb-field">
         <span class="sb-sr">{{ $t(column.headingKey) }} — {{ status }}</span>
+        <!-- Stacked (narrow) rows have no column heading above them, so each input names its language. -->
+        <span class="sb-field-label" aria-hidden="true">{{ $t(column.headingKey) }}</span>
         <input
           type="text"
           maxlength="24"
@@ -287,6 +289,9 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   display: block;
   min-width: 0;
 }
+.sb-field-label {
+  display: none;
+}
 .sb-field input {
   width: 100%;
   box-sizing: border-box;
@@ -417,6 +422,12 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   }
   .sb-reset {
     justify-self: start;
+  }
+  .sb-field-label {
+    display: block;
+    margin-bottom: 2px;
+    font-size: var(--font-2xs);
+    color: var(--text-secondary);
   }
 }
 </style>

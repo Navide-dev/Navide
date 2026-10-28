@@ -1482,7 +1482,7 @@
       "inferredHint": "这些能力是从源代码文字推定的，CLI 的 manifest 没有声明。",
       "tier": {
         "L1": "L1 文字资产",
-        "L2": "L2 子进程",
+        "L2": "L2 会运行命令",
         "L3": "L3 进程内代码"
       },
       "tierHint": {
@@ -1925,7 +1925,8 @@
           "shellNotAllowed": "已封锁：要求完整 shell 权限",
           "stoppedAfterCrashes": "多次失败后已停止",
           "unavailable": "无法使用"
-        }
+        },
+        "loadFailed": "无法读取原生后端设置。"
       },
       "bundled": "内置",
       "listTitle": "Navide 插件",
@@ -2323,8 +2324,8 @@
     },
     "storage": {
       "localStorage": "ui_settings.json（App 数据）＋工作区备份",
-      "mainProcess": "Electron 主进程 userData",
-      "safeStorage": "本机加密的 safeStorage 登录",
+      "mainProcess": "与 Navide 的应用数据一起存在这台电脑上",
+      "safeStorage": "加密存储在这台电脑上",
       "cliFiles": "各 CLI 自己的指示档"
     },
     "voice": {
@@ -2349,7 +2350,6 @@
       "readback-rate": "语速",
       "readback-preview": "试听",
       "readback-stop-hint": "朗读中按 Esc 或语音输入快捷键即可立刻停止。",
-      "section": "语音输入",
       "enabled": "语音输入（按住说话）",
       "enabled-hint": "按住 Ctrl+Alt+M（可在快捷键设置中更改）即可对目前聚焦的 CLI pane 听写。文字会像手动输入一样填进输入框，不会自动送出，确认后请自己按 Enter。语音由本机的 Whisper 模型转成文字，音频不会离开这台电脑。",
       "device": "麦克风",
@@ -2546,7 +2546,14 @@
       "restore-scope-auto": "自动",
       "resume-concurrency": "同时恢复上限",
       "resume-concurrency-hint": "打开工作区或还原版面时，最多可同时恢复几个 CLI pane，其余依序排队。若一次恢复太多 pane 导致“terminal.create timeout”错误，就把这个值调小（1–10）。",
-      "resume-concurrency-label": "同时恢复数上限"
+      "resume-concurrency-label": "同时恢复数上限",
+      "theme-name": {
+        "dark-github": "深色（GitHub）",
+        "dark-midnight": "午夜",
+        "dark-forest": "森林",
+        "light": "浅色",
+        "high-contrast": "高对比度"
+      }
     },
     "roles": {
       "title": "角色",
@@ -7486,7 +7493,6 @@
     "section": {
       "general-behavior": "一般行为",
       "resource-limits": "资源限制",
-      "notifications": "通知",
       "settings-management": "设置管理",
       "theme": "主题",
       "other": "其他"
@@ -8129,7 +8135,13 @@
       "conflict-soft": "共用按键",
       "when-any": "总是生效",
       "no-results": "没有符合搜索条件的命令。",
-      "footnote": "支持两段式和弦：先录一组组合键，再按第二组。不归此表管辖的按键，已列在本页下方的唯读区块。"
+      "footnote": "支持两段式和弦：先录一组组合键，再按第二组。不归此表管辖的按键，已列在本页下方的唯读区块。",
+      "category": {
+        "workbench": "工作台",
+        "editor": "编辑器",
+        "controlPane": "CLI pane",
+        "ui": "外部控制"
+      }
     },
     "accounts": {
       "title": "Git 账号",
@@ -8269,7 +8281,7 @@
       "testing": "测试中：",
       "preparing": "准备中…",
       "benchmark-hint": "对所有本地模型运行 4 项标准任务，以判断哪些模型适合用于流程意图侦测：",
-      "task-t1": "技术堆栈侦测 — 输出 JSON",
+      "task-t1": "技术堆栈侦测 — 列出工作区使用的库",
       "task-t2": "工作区摘要 — 单句摘要",
       "task-t3": "相关性选择 — 从文档清单中挑选最相关的项目",
       "task-t4": "CLI 意图解析 — 解析 Agent 输出并提取问题与选项",
@@ -9055,7 +9067,6 @@
     "attention-body": "{label} 正在等待你的输入"
   },
   "updater": {
-    "section-title": "更新",
     "section-hint": "让 Navide 保持在最新版本。更新会应用到所有工作区。",
     "current-version": "目前版本",
     "check": "检查更新",

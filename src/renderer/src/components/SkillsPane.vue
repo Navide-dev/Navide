@@ -996,6 +996,12 @@ watch(
               >
                 <span class="skill-card-head">
                   <strong v-truncate>{{ row.skill.name }}</strong>
+                </span>
+                <span class="skill-card-desc" v-truncate>
+                  {{ row.skill.description || (row.kind === 'native' ? row.skill.error : '') || t('settings.skills.no-description') }}
+                </span>
+                <!-- The source and sync badges lead the meta line, so the name keeps the full width. -->
+                <span class="skill-card-delivery">
                   <span class="skill-source-tag" :class="row.kind">{{ rowSourceLabel(row) }}</span>
                   <span
                     v-if="row.kind === 'shared' && row.skill.syncTooLarge"
@@ -1009,19 +1015,16 @@ watch(
                     data-testid="skill-sync-via-blobs"
                     :title="t('settings.skills.sync-via-blobs-hint')"
                   >{{ blobSyncBadge(row.skill) }}</span>
-                </span>
-                <span class="skill-card-desc" v-truncate>
-                  {{ row.skill.description || (row.kind === 'native' ? row.skill.error : '') || t('settings.skills.no-description') }}
-                </span>
-                <span class="skill-card-delivery" aria-hidden="true">
-                  <span v-if="deliverySummary(row).auto.length" class="dchip auto">
-                    {{ t('settings.skills.delivery-auto', { n: deliverySummary(row).auto.length }) }}
+                  <span class="skill-card-delivery-chips" aria-hidden="true">
+                    <span v-if="deliverySummary(row).auto.length" class="dchip auto">
+                      {{ t('settings.skills.delivery-auto', { n: deliverySummary(row).auto.length }) }}
+                    </span>
+                    <span v-for="key in deliverySummary(row).on" :key="key" class="dchip on">{{ key }}</span>
+                    <span
+                      v-if="!deliverySummary(row).auto.length && !deliverySummary(row).on.length"
+                      class="dchip none"
+                    >{{ t('settings.skills.delivery-none') }}</span>
                   </span>
-                  <span v-for="key in deliverySummary(row).on" :key="key" class="dchip on">{{ key }}</span>
-                  <span
-                    v-if="!deliverySummary(row).auto.length && !deliverySummary(row).on.length"
-                    class="dchip none"
-                  >{{ t('settings.skills.delivery-none') }}</span>
                 </span>
               </button>
             </div>
@@ -1511,7 +1514,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
 .skill-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
 .skill-card.off { opacity: 0.55; }
 .skill-card-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
-.skill-card-head strong { font-size: var(--font-xs); color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-card-head strong { font-size: var(--font-xs); color: var(--text-bright); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .skill-card-desc {
   font-size: var(--font-2xs);
   color: var(--text-secondary);
@@ -1521,7 +1524,8 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.skill-card-delivery { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.skill-card-delivery { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 2px; }
+.skill-card-delivery-chips { display: contents; }
 
 /* delivery chips — cards (read-only) and drawer (interactive) share the look */
 .dchip {
@@ -1536,8 +1540,8 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   white-space: nowrap;
   line-height: var(--lh-base);
 }
-.dchip.on { color: var(--success-fg); border-color: color-mix(in srgb, var(--success-fg) 40%, transparent); }
-.dchip.auto { color: var(--success-fg); background: color-mix(in srgb, var(--success-fg) 14%, transparent); border-color: transparent; }
+.dchip.on { color: var(--success-on-subtle); border-color: color-mix(in srgb, var(--success-fg) 40%, transparent); }
+.dchip.auto { color: var(--success-on-subtle); background: color-mix(in srgb, var(--success-fg) 14%, transparent); border-color: transparent; }
 .dchip.none { font-style: italic; opacity: 0.8; }
 .dchip.planned, .dchip.off { opacity: 0.7; }
 button.dchip { cursor: pointer; }

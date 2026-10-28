@@ -69,14 +69,16 @@ const detailState = ref<'loading' | 'ready' | 'error'>('loading')
 const detailError = ref('')
 // A page-level failure that is not about the listing or the detail itself
 // (the installed inventory, the pre-release switch), shown in the top banner.
-const pageError = ref('')
+// It keeps its i18n key and is translated when shown, so a language change
+// never leaves it in the previous language.
+const pageError = ref<{ key: string; params: Record<string, unknown> } | null>(null)
 
 // The page keeps working on the last inventory it read; say that it is stale.
 async function refreshInventory(): Promise<void> {
   try {
     await inventory.refresh()
   } catch (err) {
-    pageError.value = t('settings.extensions.inventoryRefreshFailed', { error: ipcErrorMessage(err) })
+    pageError.value = { key: 'settings.extensions.inventoryRefreshFailed', params: { error: ipcErrorMessage(err) } }
   }
 }
 
@@ -137,6 +139,8 @@ async function search(): Promise<void> {
   loadMoreError.value = ''
   try {
     const res = await api.marketplaceSearch(query.value || undefined, sort.value, searchOptions(0))
+    // No answer is a failed load, shown with Retry, never a blank page.
+    if (!res || !Array.isArray(res.items)) throw new Error('no answer from the main process')
     results.value = res.items
     total.value = res.total
     listState.value = 'ready'
@@ -174,7 +178,8 @@ async function loadCategories(): Promise<void> {
   const api = pluginsApi()
   if (!api?.marketplaceCategories) return
   try {
-    categories.value = await api.marketplaceCategories()
+    const next = await api.marketplaceCategories()
+    categories.value = Array.isArray(next) ? next : []
   } catch {
     categories.value = []
   }
@@ -338,7 +343,7 @@ async function setPrerelease(enabled: boolean, input?: HTMLInputElement): Promis
   const d = detail.value
   if (!api?.setPrerelease || !current || !d) return
   prereleaseBusy.value = true
-  pageError.value = ''
+  pageError.value = null
   try {
     await api.setPrerelease(idOf(d), enabled)
     const next = await api.marketplaceDetail({ namespace: d.namespace, name: d.name })
@@ -346,7 +351,7 @@ async function setPrerelease(enabled: boolean, input?: HTMLInputElement): Promis
     void refreshInventory()
     void pluginUpdates.refresh()
   } catch (err) {
-    pageError.value = t('settings.extensions.getPrereleasesFailed', { error: ipcErrorMessage(err) })
+    pageError.value = { key: 'settings.extensions.getPrereleasesFailed', params: { error: ipcErrorMessage(err) } }
     // The bound value did not change, so Vue will not redraw the box the user
     // just clicked: put it back to the state the page still shows.
     if (input) input.checked = d.gets_prereleases === true
@@ -503,7 +508,7 @@ watch(
   <div class="marketplace-pane">
     <p v-if="flow.error.value" class="ext-error" role="alert">{{ flow.error.value }}</p>
     <p v-if="packFlow.error.value" class="ext-error mkt-pack-error" role="alert">{{ packFlow.error.value }}</p>
-    <p v-if="pageError" class="ext-error mkt-page-error" role="alert">{{ pageError }}</p>
+    <p v-if="pageError" class="ext-error mkt-page-error" role="alert">{{ $t(pageError.key, pageError.params) }}</p>
 
     <!-- Detail view -->
     <section v-if="selected" class="mkt-detail" :data-detail-id="idOf(selected)">

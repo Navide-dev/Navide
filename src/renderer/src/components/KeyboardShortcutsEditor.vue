@@ -59,6 +59,12 @@ function labelFor(row: BindingRow): string {
   return te(key) ? t(key) : row.label
 }
 
+/** A group heading in the UI language; the catalog's English name otherwise. */
+function categoryLabel(row: BindingRow): string {
+  const key = `settings.keybindings.category.${row.command.split('.')[0]}`
+  return te(key) ? t(key) : row.category
+}
+
 const userRules = ref<KeybindingRule[]>([...getUserRules()])
 const query = ref(props.initialQuery ?? '')
 const filterMode = ref<FilterMode>('all')
@@ -376,7 +382,7 @@ const visibleReference = computed(() => {
     </p>
 
     <div v-for="group in groupedRows" :key="group.category" class="kse-group">
-      <h3 class="kse-group-title">{{ group.category }}</h3>
+      <h3 class="kse-group-title">{{ categoryLabel(group.rows[0]) }}</h3>
       <div class="kse-table-scroll">
         <table class="kse-table">
           <thead>

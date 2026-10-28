@@ -1482,7 +1482,7 @@
       "inferredHint": "Read off the source text; the CLI's manifest does not state these.",
       "tier": {
         "L1": "L1 text assets",
-        "L2": "L2 subprocess",
+        "L2": "L2 runs commands",
         "L3": "L3 in-process code"
       },
       "tierHint": {
@@ -1925,7 +1925,8 @@
           "shellNotAllowed": "Blocked: requests full shell access",
           "stoppedAfterCrashes": "Stopped after repeated failures",
           "unavailable": "Unavailable"
-        }
+        },
+        "loadFailed": "Could not read the native backend settings."
       },
       "bundled": "Bundled",
       "listTitle": "Navide plugins",
@@ -2323,8 +2324,8 @@
     },
     "storage": {
       "localStorage": "ui_settings.json (app data) + workspace backup",
-      "mainProcess": "Electron main process userData",
-      "safeStorage": "Encrypted local safeStorage registry",
+      "mainProcess": "Saved with Navide's app data on this computer",
+      "safeStorage": "Stored encrypted on this computer",
       "cliFiles": "Each CLI's own instruction files"
     },
     "voice": {
@@ -2349,7 +2350,6 @@
       "readback-rate": "Speed",
       "readback-preview": "Preview",
       "readback-stop-hint": "Press Esc or the voice input shortcut to stop reading at once.",
-      "section": "Voice input",
       "enabled": "Voice input (hold to talk)",
       "enabled-hint": "Hold Ctrl+Alt+M (rebindable under Shortcuts) to dictate into the focused CLI pane. The text goes into its input box as if you typed it — nothing is sent until you press Enter yourself. Speech is transcribed on this computer by a local Whisper model; audio never leaves the machine.",
       "device": "Microphone",
@@ -2546,7 +2546,14 @@
       "restore-scope-auto": "Auto",
       "resume-concurrency": "Concurrent resume limit",
       "resume-concurrency-hint": "How many CLI panes may resume at the same time when opening a workspace or restoring a layout; the rest queue. Lower this if resuming many panes at once causes 'terminal.create timeout' errors (1–10).",
-      "resume-concurrency-label": "Max concurrent resumes"
+      "resume-concurrency-label": "Max concurrent resumes",
+      "theme-name": {
+        "dark-github": "Dark (GitHub)",
+        "dark-midnight": "Midnight",
+        "dark-forest": "Forest",
+        "light": "Light",
+        "high-contrast": "High contrast"
+      }
     },
     "roles": {
       "title": "Roles",
@@ -7486,7 +7493,6 @@
     "section": {
       "general-behavior": "General behavior",
       "resource-limits": "Resource limits",
-      "notifications": "Notifications",
       "settings-management": "Settings management",
       "theme": "Theme",
       "other": "Other"
@@ -8129,7 +8135,13 @@
       "conflict-soft": "shared key",
       "when-any": "always",
       "no-results": "No command matches this search.",
-      "footnote": "Two-key chords are supported: record one combination, then press the second. Keys this table does not own are listed read-only at the bottom of this page."
+      "footnote": "Two-key chords are supported: record one combination, then press the second. Keys this table does not own are listed read-only at the bottom of this page.",
+      "category": {
+        "workbench": "Workbench",
+        "editor": "Editor",
+        "controlPane": "CLI panes",
+        "ui": "External control"
+      }
     },
     "accounts": {
       "title": "Git Accounts",
@@ -8269,7 +8281,7 @@
       "testing": "Testing:",
       "preparing": "Preparing…",
       "benchmark-hint": "Runs 4 standard tasks against all local models to determine which ones are suitable for pipeline intent detection:",
-      "task-t1": "Tech stack detection — outputs JSON",
+      "task-t1": "Tech stack detection — names the libraries the workspace uses",
       "task-t2": "Workspace summary — one-sentence summary",
       "task-t3": "Relevance selection — picks the most relevant item from a doc list",
       "task-t4": "CLI intent parsing — parses agent output and extracts questions and options",
@@ -9055,7 +9067,6 @@
     "attention-body": "{label} is waiting for your reply"
   },
   "updater": {
-    "section-title": "Updates",
     "section-hint": "Keep Navide up to date. Updates apply to all workspaces.",
     "current-version": "Current version",
     "check": "Check for Updates",

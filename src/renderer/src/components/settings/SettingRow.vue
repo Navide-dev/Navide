@@ -4,7 +4,8 @@
  * right-aligned `control` slot on the right.
  */
 defineProps<{
-  title: string
+  /** Left out when the page title already names the row. */
+  title?: string
   description?: string
 }>()
 </script>
@@ -12,7 +13,7 @@ defineProps<{
 <template>
   <div class="setting-row">
     <div class="setting-row-text">
-      <div class="setting-row-title">{{ title }}</div>
+      <div v-if="title" class="setting-row-title">{{ title }}</div>
       <div v-if="description" class="setting-row-desc">{{ description }}</div>
     </div>
     <div class="setting-row-control">

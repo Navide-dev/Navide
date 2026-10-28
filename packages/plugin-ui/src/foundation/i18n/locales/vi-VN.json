@@ -1482,7 +1482,7 @@
       "inferredHint": "Đọc từ mã nguồn; manifest của CLI không nêu những điều này.",
       "tier": {
         "L1": "L1 tài nguyên văn bản",
-        "L2": "L2 tiến trình con",
+        "L2": "L2 chạy lệnh",
         "L3": "L3 mã trong tiến trình"
       },
       "tierHint": {
@@ -1925,7 +1925,8 @@
           "shellNotAllowed": "Bị chặn: yêu cầu toàn quyền shell",
           "stoppedAfterCrashes": "Đã dừng sau nhiều lần lỗi liên tiếp",
           "unavailable": "Không khả dụng"
-        }
+        },
+        "loadFailed": "Không thể đọc cài đặt backend gốc."
       },
       "bundled": "Đi kèm",
       "listTitle": "Plugin Navide",
@@ -2323,8 +2324,8 @@
     },
     "storage": {
       "localStorage": "ui_settings.json (dữ liệu ứng dụng) + bản sao lưu workspace",
-      "mainProcess": "userData của tiến trình chính Electron",
-      "safeStorage": "Registry safeStorage cục bộ được mã hóa",
+      "mainProcess": "Được lưu cùng dữ liệu ứng dụng Navide trên máy tính này",
+      "safeStorage": "Được lưu mã hóa trên máy tính này",
       "cliFiles": "Tệp hướng dẫn riêng của từng CLI"
     },
     "voice": {
@@ -2349,7 +2350,6 @@
       "readback-rate": "Tốc độ",
       "readback-preview": "Nghe thử",
       "readback-stop-hint": "Nhấn Esc hoặc phím tắt nhập bằng giọng nói để dừng đọc ngay.",
-      "section": "Nhập bằng giọng nói",
       "enabled": "Nhập bằng giọng nói (nhấn giữ để nói)",
       "enabled-hint": "Nhấn giữ Ctrl+Alt+M (có thể gán lại trong Phím tắt) để đọc chính tả vào pane CLI đang được chọn. Văn bản được đưa vào ô nhập như thể bạn tự gõ — không gửi gì cho đến khi bạn tự nhấn Enter. Giọng nói được chuyển thành văn bản trên máy tính này bằng model Whisper cục bộ; âm thanh không bao giờ rời khỏi máy.",
       "device": "Micrô",
@@ -2546,7 +2546,14 @@
       "restore-scope-auto": "Tự động",
       "resume-concurrency": "Giới hạn tiếp tục đồng thời",
       "resume-concurrency-hint": "Số pane CLI được tiếp tục cùng lúc khi mở workspace hoặc khôi phục bố cục; số còn lại xếp hàng. Hãy giảm giá trị này nếu tiếp tục nhiều pane cùng lúc gây lỗi 'terminal.create timeout' (1–10).",
-      "resume-concurrency-label": "Số lần tiếp tục đồng thời tối đa"
+      "resume-concurrency-label": "Số lần tiếp tục đồng thời tối đa",
+      "theme-name": {
+        "dark-github": "Tối (GitHub)",
+        "dark-midnight": "Nửa đêm",
+        "dark-forest": "Rừng",
+        "light": "Sáng",
+        "high-contrast": "Tương phản cao"
+      }
     },
     "roles": {
       "title": "Vai trò",
@@ -7486,7 +7493,6 @@
     "section": {
       "general-behavior": "Hành vi chung",
       "resource-limits": "Giới hạn tài nguyên",
-      "notifications": "Thông báo",
       "settings-management": "Quản lý cài đặt",
       "theme": "Chủ đề",
       "other": "Khác"
@@ -8129,7 +8135,13 @@
       "conflict-soft": "phím dùng chung",
       "when-any": "luôn luôn",
       "no-results": "Không có lệnh nào khớp với tìm kiếm này.",
-      "footnote": "Hỗ trợ tổ hợp hai bước: ghi một tổ hợp, rồi nhấn tổ hợp thứ hai. Các phím mà bảng này không quản lý được liệt kê ở dạng chỉ đọc ở cuối trang."
+      "footnote": "Hỗ trợ tổ hợp hai bước: ghi một tổ hợp, rồi nhấn tổ hợp thứ hai. Các phím mà bảng này không quản lý được liệt kê ở dạng chỉ đọc ở cuối trang.",
+      "category": {
+        "workbench": "Bàn làm việc",
+        "editor": "Trình soạn thảo",
+        "controlPane": "Khung CLI",
+        "ui": "Điều khiển bên ngoài"
+      }
     },
     "accounts": {
       "title": "Tài khoản Git",
@@ -8269,7 +8281,7 @@
       "testing": "Đang thử:",
       "preparing": "Đang chuẩn bị…",
       "benchmark-hint": "Chạy 4 tác vụ chuẩn trên mọi model cục bộ để xác định model nào phù hợp cho việc phát hiện ý định trong pipeline:",
-      "task-t1": "Phát hiện công nghệ sử dụng — xuất JSON",
+      "task-t1": "Phát hiện công nghệ sử dụng — liệt kê các thư viện mà không gian làm việc dùng",
       "task-t2": "Tóm tắt workspace — tóm tắt trong một câu",
       "task-t3": "Chọn theo mức liên quan — chọn mục liên quan nhất trong danh sách tài liệu",
       "task-t4": "Phân tích ý định CLI — phân tích đầu ra của agent và trích xuất câu hỏi cùng lựa chọn",
@@ -9055,7 +9067,6 @@
     "attention-body": "{label} đang chờ bạn trả lời"
   },
   "updater": {
-    "section-title": "Cập nhật",
     "section-hint": "Giữ Navide luôn mới nhất. Bản cập nhật áp dụng cho mọi workspace.",
     "current-version": "Phiên bản hiện tại",
     "check": "Kiểm tra cập nhật",

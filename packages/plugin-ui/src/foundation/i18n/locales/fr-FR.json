@@ -1482,7 +1482,7 @@
       "inferredHint": "Déduit du texte source ; le manifeste de la CLI ne l’indique pas.",
       "tier": {
         "L1": "L1 ressources texte",
-        "L2": "L2 sous-processus",
+        "L2": "L2 exécute des commandes",
         "L3": "L3 code dans le processus"
       },
       "tierHint": {
@@ -1925,7 +1925,8 @@
           "shellNotAllowed": "Bloqué : demande un accès complet au shell",
           "stoppedAfterCrashes": "Arrêté après des échecs répétés",
           "unavailable": "Indisponible"
-        }
+        },
+        "loadFailed": "Impossible de lire les réglages des backends natifs."
       },
       "bundled": "Fournis",
       "listTitle": "Plugins Navide",
@@ -2323,8 +2324,8 @@
     },
     "storage": {
       "localStorage": "ui_settings.json (données de l’application) + sauvegarde dans l’espace de travail",
-      "mainProcess": "userData du processus principal Electron",
-      "safeStorage": "Registre safeStorage local chiffré",
+      "mainProcess": "Enregistré avec les données de l’app Navide sur cet ordinateur",
+      "safeStorage": "Enregistré chiffré sur cet ordinateur",
       "cliFiles": "Les fichiers d’instructions propres à chaque CLI"
     },
     "voice": {
@@ -2349,7 +2350,6 @@
       "readback-rate": "Vitesse",
       "readback-preview": "Aperçu",
       "readback-stop-hint": "Appuyez sur Esc ou sur le raccourci de saisie vocale pour arrêter immédiatement la lecture.",
-      "section": "Saisie vocale",
       "enabled": "Saisie vocale (maintenir pour parler)",
       "enabled-hint": "Maintenez Ctrl+Alt+M (modifiable dans Raccourcis) pour dicter dans le pane CLI actif. Le texte arrive dans sa zone de saisie comme si vous l’aviez tapé – rien n’est envoyé avant que vous n’appuyiez vous-même sur Enter. La parole est transcrite sur cet ordinateur par un modèle Whisper local ; l’audio ne quitte jamais la machine.",
       "device": "Microphone",
@@ -2546,7 +2546,14 @@
       "restore-scope-auto": "Automatique",
       "resume-concurrency": "Limite de reprises simultanées",
       "resume-concurrency-hint": "Nombre de panes CLI pouvant reprendre en même temps à l’ouverture d’un espace de travail ou à la restauration d’une disposition ; les autres attendent. Réduisez cette valeur si la reprise de nombreux panes à la fois provoque des erreurs « terminal.create timeout » (1 à 10).",
-      "resume-concurrency-label": "Reprises simultanées max."
+      "resume-concurrency-label": "Reprises simultanées max.",
+      "theme-name": {
+        "dark-github": "Sombre (GitHub)",
+        "dark-midnight": "Minuit",
+        "dark-forest": "Forêt",
+        "light": "Clair",
+        "high-contrast": "Contraste élevé"
+      }
     },
     "roles": {
       "title": "Rôles",
@@ -7486,7 +7493,6 @@
     "section": {
       "general-behavior": "Comportement général",
       "resource-limits": "Limites de ressources",
-      "notifications": "Notifications",
       "settings-management": "Gestion des paramètres",
       "theme": "Thème",
       "other": "Autres"
@@ -8129,7 +8135,13 @@
       "conflict-soft": "touche partagée",
       "when-any": "toujours",
       "no-results": "Aucune commande ne correspond à cette recherche.",
-      "footnote": "Les raccourcis à deux touches sont pris en charge : enregistrez une combinaison, puis appuyez sur la seconde. Les touches qui n’appartiennent pas à cette table sont listées en lecture seule en bas de cette page."
+      "footnote": "Les raccourcis à deux touches sont pris en charge : enregistrez une combinaison, puis appuyez sur la seconde. Les touches qui n’appartiennent pas à cette table sont listées en lecture seule en bas de cette page.",
+      "category": {
+        "workbench": "Espace de travail",
+        "editor": "Éditeur",
+        "controlPane": "Volets CLI",
+        "ui": "Contrôle externe"
+      }
     },
     "accounts": {
       "title": "Comptes Git",
@@ -8269,7 +8281,7 @@
       "testing": "Test :",
       "preparing": "Préparation…",
       "benchmark-hint": "Exécute 4 tâches standard sur tous les modèles locaux pour déterminer ceux qui conviennent à la détection d’intention des pipelines :",
-      "task-t1": "Détection de la stack technique – produit du JSON",
+      "task-t1": "Détection de la stack technique – nomme les bibliothèques utilisées par l’espace de travail",
       "task-t2": "Résumé de l’espace de travail – résumé en une phrase",
       "task-t3": "Sélection par pertinence – choisit l’élément le plus pertinent d’une liste de documents",
       "task-t4": "Analyse d’intention de la CLI – analyse la sortie de l’agent et en extrait les questions et les options",
@@ -9055,7 +9067,6 @@
     "attention-body": "{label} attend votre réponse"
   },
   "updater": {
-    "section-title": "Mises à jour",
     "section-hint": "Gardez Navide à jour. Les mises à jour s’appliquent à tous les espaces de travail.",
     "current-version": "Version actuelle",
     "check": "Rechercher des mises à jour",
