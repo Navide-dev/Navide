@@ -130,7 +130,7 @@ async def test_codex_home_lookup_prepare_and_spawn_wiring_use_to_thread(
     # wire_command is core's own MCP wiring, offloaded the same way and run
     # ahead of the plugin transformers: the endpoint it hands the pane is
     # Navide's own, and a pane that misses it loses every navide tool.
-    assert threaded == ["probe", "find_session_home", *([] if default_home else ["prepare"]), "wire", "wire_command", "wire"]
+    assert threaded == ["probe", "find_session_home", *([] if default_home else ["prepare"]), "wire", "wire_command", "wire", "fingerprint"]
     # The probe runs in its own pool, never on asyncio's shared default one.
     assert probe_threads[0].startswith("cli-probe")
     created = session.terminals.created[0]  # type: ignore[attr-defined]
@@ -205,7 +205,7 @@ async def test_claude_spawn_wiring_uses_to_thread_and_preserves_transformer_resu
     # wire_command is core's own MCP wiring, offloaded the same way and run
     # ahead of the plugin transformers: the endpoint it hands the pane is
     # Navide's own, and a pane that misses it loses every navide tool.
-    assert threaded == ["probe", "wire_command", "wire"]
+    assert threaded == ["probe", "wire_command", "wire", "fingerprint"]
     # The probe runs in its own pool, never on asyncio's shared default one.
     assert probe_threads[0].startswith("cli-probe")
     created = session.terminals.created[0]  # type: ignore[attr-defined]

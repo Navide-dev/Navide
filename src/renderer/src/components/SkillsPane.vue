@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import StaleConfigNotice from './StaleConfigNotice.vue'
 
 type Backend = ReturnType<typeof useBackend>
 
@@ -902,6 +903,7 @@ watch(
       </div>
     </div>
 
+    <StaleConfigNotice part="skills" />
     <p v-if="error" class="skills-error" role="alert">{{ error }}</p>
     <div v-if="conflict" class="skills-conflict">
       <div>

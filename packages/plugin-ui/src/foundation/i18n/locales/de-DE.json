@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "Die CLI wurde mit dem Exit-Code {code} beendet. Sie ist möglicherweise abgestürzt; der Code ist auch im Fehlerprotokoll vermerkt.",
       "stuck-badge": "⏳ Keine Aktivität seit {minutes}+ Min.",
       "stuck-tooltip": "Dieser Turn zeigt seit über {minutes} Minuten weder Protokollaktivität noch Ausgabe. Die CLI hängt möglicherweise; es wurde nichts unterbrochen.",
+      "stale-config-badge": "Einstellungen geändert",
+      "stale-config-tooltip-mcp": "Die MCP-Server dieser CLI haben sich nach dem Start des Panes geändert. Bis zum Neuaufbau nutzt sie die alte Liste. Klicken zum Neuaufbau (Unterhaltung fortsetzen).",
+      "stale-config-tooltip-skills": "Die an diese CLI gelieferten Skills haben sich nach dem Start des Panes geändert. Bis zum Neuaufbau nutzt sie womöglich die alten. Klicken zum Neuaufbau (Unterhaltung fortsetzen).",
+      "stale-config-tooltip-both": "MCP-Server und Skills dieser CLI haben sich nach dem Start des Panes geändert. Bis zum Neuaufbau nutzt sie die alten. Klicken zum Neuaufbau (Unterhaltung fortsetzen).",
       "usage-limit-badge": "⛔ wieder um {time}",
       "usage-limit-badge-unknown": "⛔ Kontingent aufgebraucht",
       "usage-limit-tooltip": "Das Kontingent dieser CLI ist aufgebraucht – voraussichtlich wieder verfügbar um {time}. Zum Ausblenden klicken",
@@ -1505,6 +1509,19 @@
         "capability-approve": "Die CLI bittet Sie zuerst, ihre Fähigkeiten zu genehmigen",
         "hot-reload": "Einmal pro Session vor dem Hot Reload gefragt"
       }
+    },
+    "applies": {
+      "new-panes-only": "Nur neue Panes",
+      "new-panes-only-tooltip": "Eine CLI liest das beim Start. Bereits offene Panes behalten den alten Wert, bis Sie sie neu aufbauen."
+    },
+    "stale-config": {
+      "title": "Offene Panes, die vor dieser Änderung gestartet wurden: {count}",
+      "body-mcp": "Eine CLI liest ihre MCP-Server beim Start, daher nutzen diese Panes noch die alte Liste. Ein Neuaufbau setzt die Unterhaltung fort, unterbricht aber einen laufenden Turn und gibt die Unterhaltung neu aus.",
+      "body-skills": "Eine CLI liest ihre Skills beim Start, daher nutzen diese Panes womöglich noch die alten. Ein Neuaufbau setzt die Unterhaltung fort, unterbricht aber einen laufenden Turn und gibt die Unterhaltung neu aus.",
+      "rebuild-all-idle": "Alle inaktiven neu aufbauen ({count})",
+      "busy": "Läuft – wird von „Alle inaktiven neu aufbauen“ übersprungen",
+      "cannot-rebuild": "Keine gespeicherte Unterhaltung zum Fortsetzen",
+      "rebuild": "Neu aufbauen"
     },
     "limits": {
       "hint": "Optionale Grenzen, die verhindern, dass Navide und die von Navide gestarteten Agents diesen Rechner überlasten. Jede ist ausgeschaltet bzw. entspricht dem bisherigen Verhalten von Navide, bis Sie sie ändern.",

@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI が終了コード {code} で終了しました。クラッシュした可能性があります。コードはエラー台帳にも記録されています。",
       "stuck-badge": "⏳ {minutes} 分以上動きなし",
       "stuck-tooltip": "このターンは {minutes} 分以上、ログにも画面にも動きがありません。CLI が止まっている可能性があります。Navide は中断していません。",
+      "stale-config-badge": "設定が変更されました",
+      "stale-config-tooltip-mcp": "この pane の起動後に、この CLI の MCP サーバーが変更されました。再構築するまで古い一覧のままです。クリックで再構築（会話を再開）。",
+      "stale-config-tooltip-skills": "この pane の起動後に、この CLI に渡す skills が変更されました。再構築するまで古いままの可能性があります。クリックで再構築（会話を再開）。",
+      "stale-config-tooltip-both": "この pane の起動後に、この CLI の MCP サーバーと skills が変更されました。再構築するまで古いままです。クリックで再構築（会話を再開）。",
       "usage-limit-badge": "⛔ {time} に回復",
       "usage-limit-badge-unknown": "⛔ 利用枠なし",
       "usage-limit-tooltip": "この CLI の利用枠を使い切りました。{time} に回復する見込みです。クリックで閉じます",
@@ -1505,6 +1509,19 @@
         "capability-approve": "CLI が先に機能の承認を求めます",
         "hot-reload": "ホットリロード前にセッションごとに 1 回確認します"
       }
+    },
+    "applies": {
+      "new-panes-only": "新しい pane のみ",
+      "new-panes-only-tooltip": "CLI は起動時にこの設定を読みます。開いている pane は再構築するまで古い値のままです。"
+    },
+    "stale-config": {
+      "title": "この変更より前から開いている pane：{count} 件",
+      "body-mcp": "CLI は起動時に自身の MCP サーバーを読むため、これらの pane は古い一覧のままです。再構築すると会話を再開しますが、進行中のターンは中断され、会話が再表示されます。",
+      "body-skills": "CLI は起動時に skills を読むため、これらの pane は古いままの可能性があります。再構築すると会話を再開しますが、進行中のターンは中断され、会話が再表示されます。",
+      "rebuild-all-idle": "アイドル中をすべて再構築（{count}）",
+      "busy": "実行中——「アイドル中をすべて再構築」ではスキップ",
+      "cannot-rebuild": "再開できる会話がありません",
+      "rebuild": "再構築"
     },
     "limits": {
       "hint": "Navide と、Navide が起動するエージェントがこのマシンに過負荷をかけないための任意の制限です。変更するまで、どの項目もオフ、または Navide の従来の動作のままです。",

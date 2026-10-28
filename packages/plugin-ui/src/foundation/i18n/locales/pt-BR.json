@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "A CLI terminou com o código de saída {code}. Ela pode ter travado; o código também é registrado no registro de erros.",
       "stuck-badge": "⏳ Sem atividade há {minutes}+ min",
       "stuck-tooltip": "Este turno não mostrou atividade no log nem saída por mais de {minutes} minutos. A CLI pode estar travada; nada foi interrompido.",
+      "stale-config-badge": "Configurações alteradas",
+      "stale-config-tooltip-mcp": "Os servidores MCP desta CLI mudaram depois que o painel foi aberto. Ela mantém a lista antiga até ser reconstruída. Clique para reconstruir (retomar a conversa).",
+      "stale-config-tooltip-skills": "As skills entregues a esta CLI mudaram depois que o painel foi aberto. Ela pode manter as antigas até ser reconstruída. Clique para reconstruir (retomar a conversa).",
+      "stale-config-tooltip-both": "Os servidores MCP e as skills desta CLI mudaram depois que o painel foi aberto. Ela mantém os antigos até ser reconstruída. Clique para reconstruir (retomar a conversa).",
       "usage-limit-badge": "⛔ volta {time}",
       "usage-limit-badge-unknown": "⛔ sem cota",
       "usage-limit-tooltip": "Esta CLI está sem cota: deve voltar às {time}. Clique para dispensar",
@@ -1505,6 +1509,19 @@
         "capability-approve": "A CLI pede primeiro que você aprove os recursos dela",
         "hot-reload": "Perguntado uma vez por session antes do recarregamento a quente"
       }
+    },
+    "applies": {
+      "new-panes-only": "Só painéis novos",
+      "new-panes-only-tooltip": "Uma CLI lê isto ao iniciar. Painéis já abertos mantêm o valor antigo até você reconstruí-los."
+    },
+    "stale-config": {
+      "title": "Painéis abertos iniciados antes desta mudança: {count}",
+      "body-mcp": "Uma CLI lê seus próprios servidores MCP ao iniciar, então estes painéis ainda usam a lista antiga. Reconstruir retoma a conversa, mas interrompe um turno em andamento e reexibe a conversa.",
+      "body-skills": "Uma CLI lê suas skills ao iniciar, então estes painéis podem ainda usar as antigas. Reconstruir retoma a conversa, mas interrompe um turno em andamento e reexibe a conversa.",
+      "rebuild-all-idle": "Reconstruir todos os ociosos ({count})",
+      "busy": "Em execução — “Reconstruir todos os ociosos” o ignora",
+      "cannot-rebuild": "Nenhuma conversa salva para retomar",
+      "rebuild": "Reconstruir"
     },
     "limits": {
       "hint": "Limites opcionais que impedem o Navide e os agents que ele executa de sobrecarregar esta máquina. Cada um fica desativado, ou com o comportamento anterior do Navide, até que você o altere.",

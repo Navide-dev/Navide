@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI가 종료 코드 {code}(으)로 끝났어요. 비정상 종료되었을 수 있으며, 코드는 오류 대장에도 기록돼요.",
       "stuck-badge": "⏳ {minutes}분 이상 활동 없음",
       "stuck-tooltip": "이번 턴은 {minutes}분 넘게 로그 활동도 출력도 없어요. CLI가 멈췄을 수 있어요. 아무것도 중단하지 않았어요.",
+      "stale-config-badge": "설정 변경됨",
+      "stale-config-tooltip-mcp": "이 pane이 시작된 뒤 이 CLI의 MCP 서버가 바뀌었습니다. 다시 빌드하기 전까지 이전 목록을 씁니다. 클릭하면 다시 빌드합니다(대화 이어가기).",
+      "stale-config-tooltip-skills": "이 pane이 시작된 뒤 이 CLI에 전달되는 skills가 바뀌었습니다. 다시 빌드하기 전까지 이전 것을 쓸 수 있습니다. 클릭하면 다시 빌드합니다(대화 이어가기).",
+      "stale-config-tooltip-both": "이 pane이 시작된 뒤 이 CLI의 MCP 서버와 skills가 바뀌었습니다. 다시 빌드하기 전까지 이전 것을 씁니다. 클릭하면 다시 빌드합니다(대화 이어가기).",
       "usage-limit-badge": "⛔ {time} 복귀",
       "usage-limit-badge-unknown": "⛔ 할당량 소진",
       "usage-limit-tooltip": "이 CLI의 할당량이 소진되었어요 — {time}에 복귀할 예정이에요. 클릭해서 닫기",
@@ -1505,6 +1509,19 @@
         "capability-approve": "CLI가 먼저 기능 권한 승인을 요청해요",
         "hot-reload": "핫 리로드 전에 session마다 한 번 물어요"
       }
+    },
+    "applies": {
+      "new-panes-only": "새 pane에만 적용",
+      "new-panes-only-tooltip": "CLI는 시작할 때 이 설정을 읽습니다. 이미 열린 pane은 다시 빌드할 때까지 이전 값을 유지합니다."
+    },
+    "stale-config": {
+      "title": "이번 변경 전에 시작된 열린 pane: {count}개",
+      "body-mcp": "CLI는 시작할 때 자신의 MCP 서버를 읽으므로 이 pane들은 아직 이전 목록을 씁니다. 다시 빌드하면 대화를 이어가지만 진행 중인 턴이 중단되고 대화가 다시 출력됩니다.",
+      "body-skills": "CLI는 시작할 때 skills를 읽으므로 이 pane들은 아직 이전 것을 쓸 수 있습니다. 다시 빌드하면 대화를 이어가지만 진행 중인 턴이 중단되고 대화가 다시 출력됩니다.",
+      "rebuild-all-idle": "유휴 pane 모두 다시 빌드({count})",
+      "busy": "실행 중 — '유휴 pane 모두 다시 빌드'에서 건너뜀",
+      "cannot-rebuild": "이어갈 대화가 없습니다",
+      "rebuild": "다시 빌드"
     },
     "limits": {
       "hint": "Navide와 Navide가 실행하는 agent가 이 컴퓨터에 과부하를 주지 않도록 하는 선택적 제한이에요. 직접 바꾸기 전까지는 각각 꺼져 있거나 Navide의 이전 동작을 따라요.",
