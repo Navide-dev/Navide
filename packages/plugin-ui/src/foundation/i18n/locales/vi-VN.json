@@ -1481,9 +1481,9 @@
       "inferred": "suy ra",
       "inferredHint": "Đọc từ mã nguồn; manifest của CLI không nêu những điều này.",
       "tier": {
-        "L1": "L1 tài nguyên văn bản",
-        "L2": "L2 chạy lệnh",
-        "L3": "L3 mã trong tiến trình"
+        "L1": "Chỉ văn bản",
+        "L2": "Chạy lệnh shell",
+        "L3": "Chạy bên trong CLI"
       },
       "tierHint": {
         "L1": "Chỉ có hướng dẫn và văn bản khác; không có gì tự chạy.",
@@ -1491,7 +1491,7 @@
         "L3": "Chạy bên trong tiến trình của chính CLI với quyền của CLI và không có lời nhắc cấp quyền."
       },
       "capability": {
-        "exec": "Chạy lệnh",
+        "exec": "Chạy lệnh shell",
         "network": "Mạng",
         "fs": "Tệp",
         "intercept-tools": "Chặn lệnh gọi công cụ",
@@ -1739,7 +1739,7 @@
     "executionPolicy": {
       "unavailable": "Chính sách thực thi không khả dụng. Hãy kiểm tra Navide host rồi thử lại.",
       "errors": {
-        "invalid-policy": "Chính sách thực thi không hợp lệ. Hãy dùng các chế độ, không gian tên hệ thống và tên tệp thực thi được hỗ trợ.",
+        "invalid-policy": "Chính sách thực thi không hợp lệ. Hãy dùng các chế độ, tính năng của Navide và tên tệp thực thi được hỗ trợ.",
         "high-risk-confirmation-required": "Chế độ Toàn quyền cần xác nhận rõ ràng rằng mọi tệp thực thi đều có thể chạy.",
         "recovery-confirmation-required": "Dựng lại chính sách thực thi cần xác nhận rõ ràng.",
         "source-reset-confirmation-required": "Đặt lại mọi lựa chọn nguồn chính sách cần xác nhận rõ ràng.",
@@ -1805,11 +1805,11 @@
       "denylistWarning": "Chế độ Danh sách chặn cấp quyền theo mặc định: liệt kê tên không giới hạn được những gì nó cấp, nên Navide coi mọi danh sách chặn là lựa chọn rủi ro cao. Hãy xem kỹ trước khi lưu.",
       "denylistConfirmation": "Tôi hiểu rằng chế độ Danh sách chặn cấp quyền theo mặc định và không bị thu hẹp bởi các tên tôi liệt kê.",
       "shellDenylistScope": "Ở chế độ Danh sách chặn, agent chỉ chạy được các lệnh mà Host này hỗ trợ ({executables}), trừ những lệnh bạn chặn ở đây. Chặn một tên nằm ngoài danh sách đó không có tác dụng.",
-      "systemLabel": "Không gian tên hệ thống",
+      "systemLabel": "Tính năng của Navide",
       "systemHint": "Chọn những tính năng Navide mà agent được dùng.",
-      "systemAllowlistLabel": "Không gian tên hệ thống được cho phép",
+      "systemAllowlistLabel": "Tính năng của Navide được cho phép",
       "systemAllowlistHint": "Chọn những tính năng Navide mà agent được dùng.",
-      "systemDenylistLabel": "Không gian tên hệ thống bị chặn",
+      "systemDenylistLabel": "Tính năng của Navide bị chặn",
       "systemDenylistHint": "Chọn những tính năng Navide mà agent không được dùng.",
       "namespace": {
         "fs": "Tệp trong không gian làm việc",
@@ -2196,7 +2196,7 @@
       },
       "localInstall": {
         "agentRequest": "Do {requester} yêu cầu. Navide chưa duyệt gói này; cài đặt hay không là quyết định của bạn.",
-        "button": "Cài từ tệp .vsix…",
+        "button": "Cài từ tệp…",
         "backToMarketplace": "Chuyển lại phiên bản trên Navide Marketplace",
         "warning": "Plugin Navide này đến từ một tệp trên máy tính này. Navide chưa duyệt và nó không được ký: không xác nhận được tác giả và tệp có thể đã bị thay đổi. Chỉ cài tệp từ người bạn tin cậy.",
         "signatureLabel": "Chữ ký",
@@ -6898,6 +6898,9 @@
       "state-on": "Đã bật",
       "state-off": "Đã tắt",
       "status": "Trạng thái: {status}",
+      "transport-local": "Cục bộ",
+      "transport-remote": "Từ xa",
+      "status-failed": "Không khởi động được",
       "starting-note": "Vẫn đang khởi động sau {seconds} giây. Nếu máy chủ chạy qua npx hoặc uvx, lần chạy đầu có thể đang tải gói về.",
       "error-reason": "Không khởi động được: {reason}",
       "tools-error": "Không thể liệt kê công cụ: {reason}",
@@ -7159,7 +7162,7 @@
       "group-native": "Của riêng {agent}",
       "delivery-title": "Phân phối tới",
       "delivery-hint": "● tự đọc · ✓ do Navide phân phối (nhấp để bật/tắt) · màu xám: chưa phân phối",
-      "delivery-auto": "{n} tự đọc",
+      "delivery-auto": "{n} CLI tự tải",
       "delivery-none": "chưa phân phối tới đâu",
       "location": "Vị trí",
       "also-linked-from": "Cũng được liên kết từ: {roots}",
@@ -7765,7 +7768,7 @@
     },
     "cliAgents": {
       "title": "CLI agent",
-      "hint": "Bật và sắp xếp lại các CLI agent trong danh sách khởi chạy thủ công. Mở một thẻ để quản lý agent đó. Phải luôn có ít nhất một agent được bật.",
+      "hint": "Bật và sắp xếp lại các CLI agent trong menu pane mới. Mở một thẻ để quản lý agent đó. Phải luôn có ít nhất một agent được bật.",
       "drag-hint": "Kéo để sắp xếp lại",
       "search": "Tìm agent…",
       "filter-label": "Lọc CLI agent",
@@ -8152,6 +8155,7 @@
       "conflict-hard": "xung đột",
       "conflict-soft": "phím dùng chung",
       "when-any": "luôn luôn",
+      "when-limited": "Chỉ trong một số ngữ cảnh",
       "no-results": "Không có lệnh nào khớp với tìm kiếm này.",
       "footnote": "Hỗ trợ tổ hợp hai bước: ghi một tổ hợp, rồi nhấn tổ hợp thứ hai. Các phím mà bảng này không quản lý được liệt kê ở dạng chỉ đọc ở cuối trang.",
       "category": {
@@ -8163,7 +8167,7 @@
     },
     "accounts": {
       "title": "Tài khoản Git",
-      "encrypted-note": "Token được mã hóa khi lưu bằng keychain của hệ điều hành (safeStorage) và lưu cục bộ trên máy này.",
+      "encrypted-note": "Token được mã hóa bằng keychain của hệ điều hành và chỉ lưu trên máy này.",
       "unavailable": "Hệ thống này không hỗ trợ mã hóa, nên không thêm được tài khoản. Thường là do không truy cập được keychain của hệ điều hành.",
       "empty": "Chưa có tài khoản nào.",
       "new-account": "+ Tài khoản mới",
@@ -8175,7 +8179,7 @@
       "host": "Máy chủ",
       "username": "Tên người dùng",
       "token": "Token",
-      "token-hint": "Dán Personal Access Token. Token được mã hóa bằng safeStorage và lưu cục bộ — không bao giờ ở dạng văn bản thường.",
+      "token-hint": "Dán Personal Access Token. Token được mã hóa và chỉ lưu trên máy này — không bao giờ ở dạng văn bản thường.",
       "token-keep": "Để trống để giữ token hiện tại",
       "delete-confirm": "Xóa tài khoản này?",
       "cli": {
@@ -8240,7 +8244,6 @@
         "default-sign-in-body": "Đăng nhập tại đây sẽ chuyển {agent} sang đăng nhập ban đầu trước. Đăng nhập ban đầu không lưu thông tin đăng nhập nào, nên đăng nhập đang dùng ({current}) sẽ bị xóa: tài khoản đó vẫn được lưu trên thẻ của nó và bạn có thể chuyển lại. Các pane {agent} mới sẽ chưa đăng nhập cho đến khi lần đăng nhập này hoàn tất.",
         "default-sign-in-confirm": "Chuyển và đăng nhập",
         "is-default": "Đang dùng",
-        "is-default-signed-out": "Đã chọn",
         "set-default": "Chuyển sang tài khoản này",
         "switching": "Đang chuyển…",
         "not-signed-in": "Chưa đăng nhập",
@@ -9358,9 +9361,6 @@
     "intro": "Đổi tên bất kỳ trạng thái pane nào và chọn màu cho nó. Thay đổi áp dụng ở mọi nơi hiển thị trạng thái — huy hiệu pane, thanh bên, dải họp và bảng tài nguyên — và được lưu vào tài khoản của bạn, không phải vào dự án.",
     "col": {
       "status": "Trạng thái",
-      "zh": "Tiếng Trung phồn thể",
-      "en": "Tiếng Anh",
-      "ja": "Tiếng Nhật",
       "color": "Màu"
     },
     "row-only": "chỉ trong danh sách",
@@ -9848,6 +9848,7 @@
     "reading-short": "đang đọc",
     "reading-tooltip": "Tài khoản này vừa được kích hoạt. Việc đọc hạn mức sẽ khởi chạy một Claude Code, nên các số bên dưới là của lần đọc trước cho đến khi xong — tối đa 3 phút.",
     "refresh-status": "Làm mới: {status}",
+    "refresh-not-signed-in": "Không thể làm mới — chưa đăng nhập",
     "refresh-error": "Lý do: {reason}",
     "refresh-status-ok": "đã cập nhật",
     "refresh-status-not-refreshed": "chưa làm mới",

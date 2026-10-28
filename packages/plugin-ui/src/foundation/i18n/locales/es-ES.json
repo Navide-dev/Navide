@@ -1481,9 +1481,9 @@
       "inferred": "deducido",
       "inferredHint": "Deducido del texto fuente; el manifiesto de la CLI no lo indica.",
       "tier": {
-        "L1": "L1: recursos de texto",
-        "L2": "L2: ejecuta comandos",
-        "L3": "L3: código en el proceso"
+        "L1": "Solo texto",
+        "L2": "Ejecuta comandos de shell",
+        "L3": "Se ejecuta dentro de la CLI"
       },
       "tierHint": {
         "L1": "Solo instrucciones y otro texto; nada se ejecuta por sí solo.",
@@ -1491,7 +1491,7 @@
         "L3": "Se ejecuta dentro del propio proceso de la CLI, con los permisos de la CLI y sin solicitud de permiso."
       },
       "capability": {
-        "exec": "Ejecuta comandos",
+        "exec": "Ejecuta comandos de shell",
         "network": "Red",
         "fs": "Archivos",
         "intercept-tools": "Intercepta llamadas a herramientas",
@@ -1739,7 +1739,7 @@
     "executionPolicy": {
       "unavailable": "La política de ejecución no está disponible. Comprueba el host de Navide y vuelve a intentarlo.",
       "errors": {
-        "invalid-policy": "La política de ejecución no es válida. Usa modos admitidos, espacios de nombres del sistema y nombres de ejecutables.",
+        "invalid-policy": "La política de ejecución no es válida. Usa modos admitidos, funciones de Navide y nombres de ejecutables.",
         "high-risk-confirmation-required": "El modo completo requiere confirmar explícitamente que se pueden ejecutar ejecutables arbitrarios.",
         "recovery-confirmation-required": "Para reconstruir la política de ejecución se requiere una confirmación explícita.",
         "source-reset-confirmation-required": "Para restablecer todas las selecciones de fuente de política se requiere una confirmación explícita.",
@@ -1805,11 +1805,11 @@
       "denylistWarning": "El modo de lista de denegados concede por defecto: enumerar nombres no limita lo que concede, así que Navide trata toda lista de denegados como una opción de alto riesgo. Revísala antes de guardar.",
       "denylistConfirmation": "Entiendo que el modo de lista de denegados concede por defecto y que los nombres que enumero no lo restringen.",
       "shellDenylistScope": "En el modo de lista de denegados, un agent solo puede ejecutar los comandos que admite este host ({executables}), menos los que deniegues aquí. Denegar un nombre que no esté en esa lista no tiene efecto.",
-      "systemLabel": "Espacios de nombres del sistema",
+      "systemLabel": "Funciones de Navide",
       "systemHint": "Elige qué funciones de Navide pueden usar los agentes.",
-      "systemAllowlistLabel": "Espacios de nombres del sistema permitidos",
+      "systemAllowlistLabel": "Funciones de Navide permitidas",
       "systemAllowlistHint": "Elige qué funciones de Navide pueden usar los agentes.",
-      "systemDenylistLabel": "Espacios de nombres del sistema denegados",
+      "systemDenylistLabel": "Funciones de Navide denegadas",
       "systemDenylistHint": "Elige qué funciones de Navide no deben usar los agentes.",
       "namespace": {
         "fs": "Archivos del espacio de trabajo",
@@ -2196,7 +2196,7 @@
       },
       "localInstall": {
         "agentRequest": "Solicitado por {requester}. Navide no ha revisado este paquete; instalarlo es decisión tuya.",
-        "button": "Instalar desde archivo .vsix…",
+        "button": "Instalar desde archivo…",
         "backToMarketplace": "Volver a la versión de Navide Marketplace",
         "warning": "Este complemento de Navide procede de un archivo de este equipo. Navide no lo ha revisado y no está firmado: no se puede confirmar su autoría y el archivo puede haberse modificado. Instala solo archivos de personas de confianza.",
         "signatureLabel": "Firma",
@@ -6898,6 +6898,9 @@
       "state-on": "Activado",
       "state-off": "Desactivado",
       "status": "Estado: {status}",
+      "transport-local": "Local",
+      "transport-remote": "Remoto",
+      "status-failed": "No se pudo iniciar",
       "starting-note": "Sigue iniciándose tras {seconds} s. Si se ejecuta con npx o uvx, puede que la primera ejecución esté descargando el paquete.",
       "error-reason": "No se pudo iniciar: {reason}",
       "tools-error": "No se pudo obtener la lista de herramientas: {reason}",
@@ -7159,7 +7162,7 @@
       "group-native": "Propias de {agent}",
       "delivery-title": "Entregada a",
       "delivery-hint": "● la lee por su cuenta · ✓ entregada por Navide (haz clic para cambiar) · en gris: no entregada",
-      "delivery-auto": "{n} la leen por su cuenta",
+      "delivery-auto": "Lo carga {n} CLI por su cuenta | Lo cargan {n} CLI por su cuenta",
       "delivery-none": "no se entrega a ningún sitio",
       "location": "Ubicación",
       "also-linked-from": "También enlazada desde: {roots}",
@@ -7765,7 +7768,7 @@
     },
     "cliAgents": {
       "title": "Agents de CLI",
-      "hint": "Activa y reordena los agents CLI en el desplegable de creación manual. Abre una tarjeta para gestionar ese agent. Al menos uno debe seguir activado.",
+      "hint": "Activa y reordena los agents CLI en el menú de panes nuevos. Abre una tarjeta para gestionar ese agent. Al menos uno debe seguir activado.",
       "drag-hint": "Arrastra para reordenar",
       "search": "Buscar un agent…",
       "filter-label": "Filtrar agents CLI",
@@ -8152,6 +8155,7 @@
       "conflict-hard": "conflicto",
       "conflict-soft": "tecla compartida",
       "when-any": "siempre",
+      "when-limited": "Solo en algunos contextos",
       "no-results": "Ningún comando coincide con esta búsqueda.",
       "footnote": "Se admiten combinaciones de dos pasos: graba una combinación y luego pulsa la segunda. Las teclas que esta tabla no gestiona aparecen en solo lectura al final de esta página.",
       "category": {
@@ -8163,7 +8167,7 @@
     },
     "accounts": {
       "title": "Cuentas de Git",
-      "encrypted-note": "Los tokens se cifran en reposo con el llavero del sistema operativo (safeStorage) y se guardan localmente en este equipo.",
+      "encrypted-note": "Los tokens se cifran con el llavero del sistema y solo se guardan en este equipo.",
       "unavailable": "El cifrado no está disponible en este sistema, así que no se pueden añadir cuentas. Normalmente significa que no se puede acceder al llavero del sistema operativo.",
       "empty": "Aún no hay cuentas.",
       "new-account": "+ Nueva cuenta",
@@ -8175,7 +8179,7 @@
       "host": "Servidor",
       "username": "Nombre de usuario",
       "token": "Token",
-      "token-hint": "Pega un token de acceso personal. Se cifra con safeStorage y se guarda localmente, nunca en texto sin cifrar.",
+      "token-hint": "Pega un token de acceso personal. Se cifra y solo se guarda en este equipo, nunca en texto sin cifrar.",
       "token-keep": "Déjalo vacío para conservar el token actual",
       "delete-confirm": "¿Eliminar esta cuenta?",
       "cli": {
@@ -8240,7 +8244,6 @@
         "default-sign-in-body": "Al iniciar sesión aquí, {agent} cambia primero al inicio de sesión original. No contiene ninguna sesión, así que se borra el inicio de sesión activo ({current}): esa cuenta sigue guardada en su propia tarjeta y puedes volver a ella. Los nuevos panes de {agent} no tendrán sesión iniciada hasta que termine este inicio de sesión.",
         "default-sign-in-confirm": "Cambiar e iniciar sesión",
         "is-default": "Activa",
-        "is-default-signed-out": "Seleccionada",
         "set-default": "Cambiar a esta cuenta",
         "switching": "Cambiando…",
         "not-signed-in": "Sin sesión iniciada",
@@ -9358,9 +9361,6 @@
     "intro": "Cambia el nombre de cualquier estado de pane y elige su color. Los cambios se aplican en todos los sitios donde se muestra un estado —la insignia del pane, la barra lateral, la franja de reuniones y el panel de recursos— y se guardan en tu cuenta, no en un proyecto.",
     "col": {
       "status": "Estado",
-      "zh": "Chino tradicional",
-      "en": "Inglés",
-      "ja": "Japonés",
       "color": "Color"
     },
     "row-only": "solo en la lista",
@@ -9848,6 +9848,7 @@
     "reading-short": "leyendo",
     "reading-tooltip": "Esta cuenta acaba de activarse. Leer su cuota inicia un Claude Code, así que las cifras de abajo son de la lectura anterior hasta que termine: hasta 3 minutos.",
     "refresh-status": "Actualización: {status}",
+    "refresh-not-signed-in": "No se puede actualizar: no has iniciado sesión",
     "refresh-error": "Motivo: {reason}",
     "refresh-status-ok": "al día",
     "refresh-status-not-refreshed": "aún no actualizada",

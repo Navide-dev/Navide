@@ -203,7 +203,7 @@ function ruleLabel(rule: string): string {
 .tp-input:focus { outline: none; border-color: var(--accent-focus); }
 .tp-result { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 var(--space-row-x) 10px; }
 .tp-pill {
-  flex-shrink: 0; font-size: var(--font-3xs); font-weight: 600; border-radius: 999px; padding: 1px 8px;
+  flex-shrink: 0; font-size: var(--font-2xs); font-weight: 600; border-radius: 999px; padding: 1px 8px;
   border: 1px solid var(--border-default); white-space: nowrap;
 }
 .tp-pill.ok { color: var(--success-fg); background: var(--success-subtle); border-color: var(--success-muted); }

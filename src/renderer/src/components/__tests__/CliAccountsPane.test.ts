@@ -654,8 +654,8 @@ describe('CliAccountsPane', () => {
     const row = section(w, 0).findAll('.cli-card')[0]
     expect(row.classes()).not.toContain('cli-card-collapsed')
     expect(row.get('.cli-card-id').text()).toBe('Original login')
-    // Not signed in, so the badge says "Selected" rather than "Active".
-    expect(row.get('.cli-badge').text()).toBe('Selected')
+    // Not signed in, so it carries no "Active" pill at all.
+    expect(row.find('.cli-badge').exists()).toBe(false)
     expect(buttonByText(row, 'Sign In')).toBeDefined()
   })
 

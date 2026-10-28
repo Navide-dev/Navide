@@ -1481,9 +1481,9 @@
       "inferred": "推定",
       "inferredHint": "ソースコードの文字列から推定しました。CLI のマニフェストには記載されていません。",
       "tier": {
-        "L1": "L1 テキスト資産",
-        "L2": "L2 コマンドを実行",
-        "L3": "L3 プロセス内コード"
+        "L1": "テキストのみ",
+        "L2": "シェルコマンドを実行",
+        "L3": "CLI 内で動作"
       },
       "tierHint": {
         "L1": "指示や説明などのテキストだけで、それ自体は実行されません。",
@@ -1491,7 +1491,7 @@
         "L3": "CLI 自身のプロセス内で CLI と同じ権限で動き、権限の確認は表示されません。"
       },
       "capability": {
-        "exec": "コマンド実行",
+        "exec": "シェルコマンドを実行",
         "network": "ネットワーク",
         "fs": "ファイル読み書き",
         "intercept-tools": "ツール呼び出しへの介入",
@@ -1739,7 +1739,7 @@
     "executionPolicy": {
       "unavailable": "実行ポリシーを利用できません。Navide ホストを確認して、もう一度お試しください。",
       "errors": {
-        "invalid-policy": "実行ポリシーが無効です。対応するモード、システム名前空間、実行ファイル名を使用してください。",
+        "invalid-policy": "実行ポリシーが無効です。対応するモード、Navide の機能、実行ファイル名を使用してください。",
         "high-risk-confirmation-required": "フルモードでは任意の実行ファイルを実行できることへの明示的な同意が必要です。",
         "recovery-confirmation-required": "実行ポリシーの再構築には明示的な確認が必要です。",
         "source-reset-confirmation-required": "ポリシー適用元の選択をすべてリセットするには、明示的な確認が必要です。",
@@ -1805,11 +1805,11 @@
       "denylistWarning": "拒否リストモードでは原則として実行が許可されます。名前を列挙しても許可範囲全体を制限できないため、Navide はすべての拒否リストを高リスクの選択として扱います。保存する前に確認してください。",
       "denylistConfirmation": "拒否リストモードでは原則として許可され、列挙した名前だけでは許可範囲が限定されないことを理解しています。",
       "shellDenylistScope": "拒否リストモードでエージェントが実行できるのは、このホストが対応するコマンド（{executables}）から、ここで拒否したものを除いたコマンドだけです。その一覧にない名前を拒否しても効果はありません。",
-      "systemLabel": "システム名前空間",
+      "systemLabel": "Navide の機能",
       "systemHint": "エージェントが使える Navide の機能を選びます。",
-      "systemAllowlistLabel": "許可するシステム名前空間",
+      "systemAllowlistLabel": "許可する Navide の機能",
       "systemAllowlistHint": "エージェントが使える Navide の機能を選びます。",
-      "systemDenylistLabel": "拒否するシステム名前空間",
+      "systemDenylistLabel": "拒否する Navide の機能",
       "systemDenylistHint": "エージェントに使わせない Navide の機能を選びます。",
       "namespace": {
         "fs": "ワークスペースのファイル",
@@ -2196,7 +2196,7 @@
       },
       "localInstall": {
         "agentRequest": "{requester} からのリクエストです。Navide はこの Navide プラグインを審査していません。インストールするかどうかはあなたが決めます。",
-        "button": ".vsix ファイルからインストール…",
+        "button": "ファイルからインストール…",
         "backToMarketplace": "Navide マーケットプレイス版に戻す",
         "warning": "この Navide プラグインは、このコンピューター上のファイルから読み込まれます。Navide の審査を受けておらず署名もないため、作成者を確認できず、ファイルが改変されている可能性もあります。信頼できる相手から受け取ったファイルだけをインストールしてください。",
         "signatureLabel": "署名",
@@ -6898,6 +6898,9 @@
       "state-on": "有効",
       "state-off": "無効",
       "status": "状態：{status}",
+      "transport-local": "ローカル",
+      "transport-remote": "リモート",
+      "status-failed": "起動に失敗しました",
       "starting-note": "起動中です（{seconds} 秒経過）。npx や uvx で実行している場合、初回はパッケージをダウンロードしている可能性があります。",
       "error-reason": "起動に失敗しました：{reason}",
       "tools-error": "ツール一覧を取得できませんでした：{reason}",
@@ -7159,7 +7162,7 @@
       "group-native": "{agent} 固有",
       "delivery-title": "配布先",
       "delivery-hint": "● 直接読み込み · ✓ Navide から配布（クリックで切り替え）· グレー：未配布",
-      "delivery-auto": "{n} 件が直接読み込み",
+      "delivery-auto": "{n} 個の CLI が自動で読み込み",
       "delivery-none": "どこにも配布されていません",
       "location": "場所",
       "also-linked-from": "他のリンク元：{roots}",
@@ -7765,7 +7768,7 @@
     },
     "cliAgents": {
       "title": "CLI エージェント",
-      "hint": "手動起動メニューに表示する CLI エージェントを有効化し、並べ替えます。カードを開くと、そのエージェントを管理できます。1 つ以上は有効にしておく必要があります。",
+      "hint": "新しいペインのメニューに表示する CLI エージェントを有効化し、並べ替えます。カードを開くと、そのエージェントを管理できます。1 つ以上は有効にしておく必要があります。",
       "drag-hint": "ドラッグして並べ替え",
       "search": "エージェントを検索…",
       "filter-label": "CLI エージェントを絞り込み",
@@ -8152,6 +8155,7 @@
       "conflict-hard": "競合",
       "conflict-soft": "共有キー",
       "when-any": "常時",
+      "when-limited": "特定の状況でのみ",
       "no-results": "検索に一致するコマンドはありません。",
       "footnote": "2 段階のキー操作に対応しています。最初の組み合わせを記録した後、2 つ目を押してください。この表で管理しないキーは、ページ下部に読み取り専用で表示されます。",
       "category": {
@@ -8163,7 +8167,7 @@
     },
     "accounts": {
       "title": "Git アカウント",
-      "encrypted-note": "トークンは OS のキーチェーン（safeStorage）で暗号化され、このマシンにローカル保存されます。",
+      "encrypted-note": "トークンは OS のキーチェーンで暗号化され、このマシンにのみ保存されます。",
       "unavailable": "このシステムでは暗号化を利用できないため、アカウントを追加できません。通常は OS のキーチェーンにアクセスできないことが原因です。",
       "empty": "アカウントはまだありません。",
       "new-account": "+ 新しいアカウント",
@@ -8175,7 +8179,7 @@
       "host": "ホスト",
       "username": "ユーザー名",
       "token": "トークン",
-      "token-hint": "Personal Access Token を貼り付けてください。safeStorage で暗号化してローカルに保存され、平文では保存されません。",
+      "token-hint": "Personal Access Token を貼り付けてください。暗号化してこのマシンにのみ保存され、平文では保存されません。",
       "token-keep": "空欄の場合は現在のトークンを保持",
       "delete-confirm": "このアカウントを削除しますか？",
       "cli": {
@@ -8235,7 +8239,6 @@
         "default-sign-in-body": "ここでサインインすると、まず {agent} が元のログインに切り替わります。元のログインにはサインイン情報がないため、現在有効なログイン（{current}）は消去されます。そのアカウントは自身のカードに保存されたままで、あとで切り替えて戻せます。このサインインが完了するまで、新しい {agent} ペインはサインインされていない状態になります。",
         "default-sign-in-confirm": "切り替えてサインイン",
         "is-default": "使用中",
-        "is-default-signed-out": "選択中",
         "set-default": "このアカウントに切り替え",
         "switching": "切り替え中…",
         "not-signed-in": "未ログイン",
@@ -9358,9 +9361,6 @@
     "intro": "ペインの各状態の名前と色を変更できます。変更はペインのバッジ、サイドバー、会議バー、リソースパネルなど、状態が表示されるすべての場所に適用され、プロジェクトではなくアカウントに保存されます。",
     "col": {
       "status": "状態",
-      "zh": "繁体字中国語",
-      "en": "英語",
-      "ja": "日本語",
       "color": "色"
     },
     "row-only": "一覧のみ",
@@ -9848,6 +9848,7 @@
     "reading-short": "読み取り中",
     "reading-tooltip": "このアカウントは有効になったばかりです。利用枠の読み取りには Claude Code を起動するため、完了するまで下には前回の値を表示します。最大 3 分ほどかかります。",
     "refresh-status": "更新：{status}",
+    "refresh-not-signed-in": "更新できません — サインインしていません",
     "refresh-error": "理由：{reason}",
     "refresh-status-ok": "最新",
     "refresh-status-not-refreshed": "未更新",

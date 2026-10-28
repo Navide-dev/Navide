@@ -641,7 +641,7 @@ function formatTime(ts: number | null | undefined): string {
                     <span v-else class="ch-bot-name" data-testid="channel-bot-name">{{ botLabel(bot) }}</span>
                   </template>
                   <span v-else-if="bot.isNew" class="ch-bot-name">{{ t('channels.bot.new') }}</span>
-                  <span class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
+                  <span v-if="bot.isNew || bot.configured" class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
                 </div>
                 <div
                   v-if="bot.status.last_error"
@@ -659,6 +659,9 @@ function formatTime(ts: number | null | undefined): string {
                   :aria-label="t('channels.enable-platform', { platform: `${platformName(spec.id)} ${botLabel(bot)}` })"
                   @update:model-value="(v: boolean) => run(bot.key, () => store.setEnabled(spec.id, v, bot.account))"
                 />
+                <!-- "Not set up" sits beside its Connect button, on one line in
+                     the control column, instead of up in the title. -->
+                <span v-if="!bot.isNew && !bot.configured" class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
                 <button v-if="!bot.isNew && !bot.configured" type="button" class="ch-btn ghost sm" data-testid="channel-manage" @click="toggleExpanded(spec, bot)">
                   {{ t('channels.connect') }}
                 </button>
@@ -882,7 +885,7 @@ function formatTime(ts: number | null | undefined): string {
   border: 1px solid var(--border-default);
   background: var(--bg-muted);
   color: var(--text-secondary);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -943,7 +946,7 @@ function formatTime(ts: number | null | undefined): string {
 .ch-menu > button:hover:not(:disabled) { background: var(--bg-muted); }
 .ch-menu > button:disabled { opacity: 0.55; cursor: not-allowed; }
 .ch-menu > button.danger { color: var(--danger-fg); }
-.ch-menu-note { font-size: var(--font-3xs); color: var(--text-secondary); }
+.ch-menu-note { font-size: var(--font-2xs); color: var(--text-secondary); }
 .ch-row-error {
   font-size: var(--font-row-desc);
   color: var(--text-secondary);
@@ -970,7 +973,7 @@ function formatTime(ts: number | null | undefined): string {
 /* Status pill: same shape as the account badges on the Accounts page. */
 .ch-pill {
   flex-shrink: 0;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   border-radius: 999px;
   padding: 1px 8px;

@@ -523,7 +523,7 @@ textarea:focus {
   font-weight: 600;
 }
 .prompts-chip .count {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   opacity: 0.6;
   font-variant-numeric: tabular-nums;
 }
@@ -638,7 +638,7 @@ textarea:focus {
   display: inline-block;
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   border: 1px solid var(--border-muted);
   color: var(--text-secondary);
@@ -650,7 +650,7 @@ textarea:focus {
 .prompt-badge {
   border-radius: var(--radius-pill);
   padding: 2px 7px;
-  font-size: 9px;
+  font-size: var(--font-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -710,7 +710,7 @@ textarea:focus {
 }
 .drawer-section h4 {
   margin: 0;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -724,7 +724,7 @@ textarea:focus {
 }
 .drawer-section label > span,
 .drawer-field > span {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -781,7 +781,7 @@ textarea:focus {
 }
 .drawer-hint {
   margin: 0;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   color: var(--text-secondary);
   line-height: 1.4;
 }

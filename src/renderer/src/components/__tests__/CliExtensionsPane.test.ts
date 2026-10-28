@@ -64,10 +64,18 @@ describe('CliExtensionsPane', () => {
     expect(ids[0]).toBe('nextstep@mkt')
     const mod = wrapper.get('[data-id="nextstep@mkt"]')
     expect(mod.get('.cli-ext-type').text()).toBe('Claude mod')
-    expect(mod.get('.cli-ext-tier').text()).toBe('L3 程序內程式碼')
+    expect(mod.get('.cli-ext-tier').text()).toBe('在 CLI 內執行')
     expect(mod.get('.cli-ext-disabled').text()).toBe('已停用')
     expect(mod.find('.cli-ext-inferred').exists()).toBe(true)
-    expect(mod.findAll('.cli-ext-cap').map((cap) => cap.text())).toEqual(['執行指令', '連網'])
+    expect(mod.findAll('.cli-ext-cap').map((cap) => cap.text())).toEqual(['執行 shell 指令', '連網'])
+  })
+
+  it('says "runs shell commands" once on an L2 row, not as a tier and a capability', async () => {
+    render()
+    await flushPromises()
+    const helper = wrapper.get('[data-id="helper@mkt"]')
+    expect(helper.get('.cli-ext-tier').text()).toBe('Runs shell commands')
+    expect(helper.findAll('.cli-ext-cap').map((cap) => cap.text())).toEqual(['Intercepts tool calls'])
   })
 
   it('marks the hooks Navide installed and shows their masked command line', async () => {

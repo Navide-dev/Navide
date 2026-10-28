@@ -250,7 +250,9 @@ function onSize(id: SlotId, raw: string): void {
   text-align: left;
   cursor: pointer;
 }
-.ls-view-name.active { border-color: var(--accent-fg); color: var(--text-bright); }
+/* The active view is marked by fill and weight, not by a coloured border: a
+   resting blue outline reads as keyboard focus. Focus keeps the house ring. */
+.ls-view-name.active { background: var(--bg-muted); color: var(--text-bright); font-weight: 600; }
 .ls-view-name.is-static { cursor: default; }
 /* The registry mixes colour emoji with text glyphs (⏱ ✉). Here they render as
    one even column: emoji presentation, one width, and no colour. */

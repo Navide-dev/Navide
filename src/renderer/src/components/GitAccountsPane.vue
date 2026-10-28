@@ -259,7 +259,7 @@ async function remove(id: string): Promise<void> {
 .ga-form-title { font-size: var(--font-xs); font-weight: 600; color: var(--text-bright); }
 .ga-field { display: flex; flex-direction: column; gap: 4px; }
 .ga-label { font-size: var(--font-2xs); color: var(--text-secondary); }
-.ga-field-hint { margin: 2px 0 0; font-size: 10.5px; color: var(--text-muted); line-height: 1.4; }
+.ga-field-hint { margin: 2px 0 0; font-size: var(--font-xs); color: var(--text-muted); line-height: 1.4; }
 .ga-input {
   background: var(--bg-base);
   border: 1px solid var(--border-default);

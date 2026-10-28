@@ -480,12 +480,12 @@ describe('ExecutionPolicyPane', () => {
     await flushPromises()
 
     const editorBlocks = wrapper.findAll('.ep-editor-block')
-    expect(editorBlocks[0].get('h3').text()).toBe('System namespaces to allow')
+    expect(editorBlocks[0].get('h3').text()).toBe('Navide features to allow')
     expect(editorBlocks[0].text()).toContain('agents can use')
     expect(editorBlocks[1].get('h3').text()).toBe('Shell executables to allow')
 
     await wrapper.get('[data-mode="denylist"] input').setValue(true)
-    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('System namespaces to deny')
+    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('Navide features to deny')
     expect(wrapper.findAll('.ep-editor-block')[0].text()).toContain('must not use')
     expect(wrapper.findAll('.ep-editor-block')[1].get('h3').text()).toBe('Shell executables to deny')
     expect(api.setUser).not.toHaveBeenCalled()
@@ -588,19 +588,19 @@ describe('ExecutionPolicyPane', () => {
     await flushPromises()
 
     await wrapper.get('[data-mode="denylist"] input').setValue(true)
-    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('System namespaces to deny')
+    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('Navide features to deny')
     expect(changedHandler).toBeDefined()
     changedHandler?.()
     await flushPromises()
 
     expect(wrapper.find('.ep-conflict').exists()).toBe(true)
-    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('System namespaces to deny')
+    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('Navide features to deny')
     expect(wrapper.get('.ep-conflict').text()).toContain('draft is preserved')
 
     await wrapper.get('.ep-conflict button').trigger('click')
     await flushPromises()
     expect(wrapper.find('.ep-conflict').exists()).toBe(false)
-    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('System namespaces to allow')
+    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('Navide features to allow')
     expect(wrapper.get('.ep-chip code').text()).toBe('gh')
   })
 

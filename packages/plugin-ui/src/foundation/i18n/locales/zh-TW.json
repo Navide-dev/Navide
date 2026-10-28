@@ -1481,9 +1481,9 @@
       "inferred": "推定",
       "inferredHint": "這些能力是從原始碼文字推定的，CLI 的 manifest 沒有宣告。",
       "tier": {
-        "L1": "L1 文字資產",
-        "L2": "L2 會執行指令",
-        "L3": "L3 程序內程式碼"
+        "L1": "僅文字",
+        "L2": "執行 shell 指令",
+        "L3": "在 CLI 內執行"
       },
       "tierHint": {
         "L1": "只有指令、說明之類的文字，不會自己執行。",
@@ -1491,7 +1491,7 @@
         "L3": "在 CLI 自己的程序裡執行，權限跟 CLI 一樣，而且不會跳出權限提示。"
       },
       "capability": {
-        "exec": "執行指令",
+        "exec": "執行 shell 指令",
         "network": "連網",
         "fs": "讀寫檔案",
         "intercept-tools": "攔截工具呼叫",
@@ -1739,7 +1739,7 @@
     "executionPolicy": {
       "unavailable": "執行政策目前無法使用。請檢查 Navide 主程式後再試。",
       "errors": {
-        "invalid-policy": "執行政策無效。請使用支援的模式、系統命名空間與可執行檔名稱。",
+        "invalid-policy": "執行政策無效。請使用支援的模式、Navide 功能與可執行檔名稱。",
         "high-risk-confirmation-required": "完整模式需要明確確認允許任意可執行檔執行。",
         "recovery-confirmation-required": "重建執行政策需要明確確認。",
         "source-reset-confirmation-required": "重設所有政策來源選擇需要明確確認。",
@@ -1805,11 +1805,11 @@
       "denylistWarning": "拒絕清單模式是預設放行：列出名稱並不會限制它實際授予的範圍，因此 Navide 一律將拒絕清單視為高風險選擇，儲存前請再次確認。",
       "denylistConfirmation": "我了解拒絕清單模式預設放行，不會因為我列出的名稱而縮小授予範圍。",
       "shellDenylistScope": "在拒絕清單模式下，Agent 只能執行這台主機支援的指令（{executables}），再扣掉你在這裡拒絕的項目；拒絕清單外的名稱不會有任何作用。",
-      "systemLabel": "系統命名空間",
+      "systemLabel": "Navide 功能",
       "systemHint": "選擇 agent 可以使用的 Navide 功能。",
-      "systemAllowlistLabel": "要允許的系統命名空間",
+      "systemAllowlistLabel": "要允許的 Navide 功能",
       "systemAllowlistHint": "選擇 agent 可以使用的 Navide 功能。",
-      "systemDenylistLabel": "要拒絕的系統命名空間",
+      "systemDenylistLabel": "要拒絕的 Navide 功能",
       "systemDenylistHint": "選擇 agent 不得使用的 Navide 功能。",
       "namespace": {
         "fs": "工作區檔案",
@@ -2196,7 +2196,7 @@
       },
       "localInstall": {
         "agentRequest": "由 {requester} 提出。Navide 沒有審核過這個 Navide 外掛，要不要安裝由你決定。",
-        "button": "從檔案安裝 .vsix…",
+        "button": "從檔案安裝…",
         "backToMarketplace": "換回 Navide 市集版本",
         "warning": "這個 Navide 外掛來自你選的本機檔案，沒有經過 Navide 審核，也沒有簽章：無法確認作者，檔案也可能被改過。只安裝你信任的人給你的檔案。",
         "signatureLabel": "簽章",
@@ -6898,6 +6898,9 @@
       "state-on": "已啟用",
       "state-off": "已停用",
       "status": "狀態：{status}",
+      "transport-local": "本機",
+      "transport-remote": "遠端",
+      "status-failed": "啟動失敗",
       "starting-note": "啟動中，已等 {seconds} 秒。若是透過 npx 或 uvx 執行，第一次可能正在下載套件。",
       "error-reason": "啟動失敗：{reason}",
       "tools-error": "無法讀取工具清單：{reason}",
@@ -7159,7 +7162,7 @@
       "group-native": "{agent} 自己的",
       "delivery-title": "投遞給",
       "delivery-hint": "● 自己就讀得到 · ✓ 由 Navide 投遞（點擊切換）· 灰色：未投遞",
-      "delivery-auto": "{n} 家自己讀得到",
+      "delivery-auto": "{n} 個 CLI 自行讀取",
       "delivery-none": "尚未投遞給任何一家",
       "location": "位置",
       "also-linked-from": "也連結自：{roots}",
@@ -7765,7 +7768,7 @@
     },
     "cliAgents": {
       "title": "CLI Agents",
-      "hint": "啟用並排序手動生成選單中的 CLI agent；順序也會套用到 Ctrl+數字快捷鍵。開啟卡片即可管理該 agent，至少須保留一個啟用。",
+      "hint": "啟用並排序新增 pane 選單中的 CLI agent；順序也會套用到 Ctrl+數字快捷鍵。開啟卡片即可管理該 agent，至少須保留一個啟用。",
       "drag-hint": "拖曳以排序",
       "search": "搜尋 agent…",
       "filter-label": "篩選 CLI agent",
@@ -8152,6 +8155,7 @@
       "conflict-hard": "衝突",
       "conflict-soft": "共用按鍵",
       "when-any": "總是生效",
+      "when-limited": "僅在特定情況下",
       "no-results": "沒有符合搜尋條件的命令。",
       "footnote": "支援兩段式和弦：先錄一組組合鍵，再按第二組。不歸此表管轄的按鍵，已列在本頁下方的唯讀區塊。",
       "category": {
@@ -8163,7 +8167,7 @@
     },
     "accounts": {
       "title": "Git 帳號",
-      "encrypted-note": "Token 會透過作業系統金鑰鏈（safeStorage）加密後儲存在本機。",
+      "encrypted-note": "Token 會透過作業系統金鑰鏈加密，只儲存在本機。",
       "unavailable": "此系統無法使用加密功能，因此無法新增帳號。通常代表作業系統金鑰鏈無法存取。",
       "empty": "尚未新增任何帳號。",
       "new-account": "＋ 新增帳號",
@@ -8175,7 +8179,7 @@
       "host": "主機",
       "username": "使用者名稱",
       "token": "Token",
-      "token-hint": "貼上 Personal Access Token。會以 safeStorage 加密並儲存在本機，不會以明文儲存。",
+      "token-hint": "貼上 Personal Access Token。會加密並只儲存在本機，不會以明文儲存。",
       "token-keep": "留空則沿用現有 Token",
       "delete-confirm": "確定刪除此帳號？",
       "cli": {
@@ -8240,7 +8244,6 @@
         "default-sign-in-body": "在這裡登入會先把 {agent} 切換到原始登入。原始登入沒有儲存任何登入，所以目前的線上登入（{current}）會被清除；那個帳號仍保存在它自己的卡片上，之後可以再切換回去。這次登入完成前，新開的 {agent} pane 都不會是登入狀態。",
         "default-sign-in-confirm": "切換並登入",
         "is-default": "使用中",
-        "is-default-signed-out": "已選取",
         "set-default": "切換到此帳號",
         "switching": "切換中…",
         "not-signed-in": "尚未登入",
@@ -9358,9 +9361,6 @@
     "intro": "自訂每個 pane 狀態的名稱與顏色。變更會套用到所有顯示狀態的地方——pane 徽章、側欄、會議列與資源面板——並儲存於你的帳號，不隨專案切換。",
     "col": {
       "status": "狀態",
-      "zh": "繁體中文",
-      "en": "英文",
-      "ja": "日文",
       "color": "顏色"
     },
     "row-only": "僅清單",
@@ -9848,6 +9848,7 @@
     "reading-short": "讀取中",
     "reading-tooltip": "這個帳號剛切換為使用中。讀取額度需要啟動一次 Claude Code，因此在完成前下方顯示的是上一次的數字，最多約 3 分鐘。",
     "refresh-status": "重新整理：{status}",
+    "refresh-not-signed-in": "無法重新整理——尚未登入",
     "refresh-error": "原因：{reason}",
     "refresh-status-ok": "已是最新",
     "refresh-status-not-refreshed": "尚未重新整理",

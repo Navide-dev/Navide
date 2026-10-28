@@ -53,8 +53,11 @@ defineProps<{
 }
 .setting-row-control {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
+  /* Two buttons side by side never touch. */
+  gap: 8px;
   flex-shrink: 0;
   max-width: 100%;
 }

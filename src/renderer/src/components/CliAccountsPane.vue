@@ -398,6 +398,9 @@ interface CardUsage {
   lastSuccess: string
   updated: string
   refreshStatus: string
+  /** The whole refresh line: a status label after "Refresh:", or a sentence
+   *  of its own when the status alone would read as jargon. */
+  refreshLine: string
   refreshError: string
   notMeasuredHint: boolean
 }
@@ -413,6 +416,10 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
   const currentSnap = { ...snap, windows }
   const head = headlineWindow(currentSnap)
   const refreshStatus = refreshStatusLabel(snap.refreshStatus ?? snap.status)
+  const refreshLine =
+    (snap.refreshStatus ?? snap.status) === 'no-credentials'
+      ? t('usage.refresh-not-signed-in')
+      : t('usage.refresh-status', { status: refreshStatus })
   const base = {
     expired: snap.status === 'expired' || snap.refreshStatus === 'expired',
     cached,
@@ -425,6 +432,7 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
     // When a current figure was read; a cached one says so on its own line.
     updated: !cached && snap.status === 'ok' ? formatResetAbsolute(snap.fetchedAt) : '',
     refreshStatus,
+    refreshLine,
     notMeasuredHint:
       (snap.refreshStatus ?? snap.status) === 'not-measured' && canSignInDir(agentKey, profileId),
     // The backend's sentence for why the last read failed. `refreshStatus`
@@ -708,15 +716,13 @@ onMounted(() => refreshUsage())
             >
               ✎
             </button>
+            <!-- "Active" beside "Not signed in" reads as a contradiction, so a
+                 signed-out card carries no pill at all. -->
             <span
-              v-if="api.defaultProfileId(spec.agentKey) === (p?.id ?? null)"
+              v-if="api.defaultProfileId(spec.agentKey) === (p?.id ?? null) && rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn"
               class="cli-badge"
             >
-              <!-- "Active" beside "Not signed in" reads as a contradiction: a
-                   signed-out card in use is only the selected one. -->
-              {{ rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn
-                ? $t('settings.accounts.cli.is-default')
-                : $t('settings.accounts.cli.is-default-signed-out') }}
+              {{ $t('settings.accounts.cli.is-default') }}
             </span>
           </div>
           <!-- With an alias on top, the signed-in identity moves here. -->
@@ -787,7 +793,7 @@ onMounted(() => refreshUsage())
                 {{ $t('usage.reading-now') }}
               </div>
               <div v-else-if="u.cached" class="cli-card-refresh">
-                {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
+                {{ u.refreshLine }}
               </div>
               <div v-else-if="u.updated" class="cli-card-refresh cli-card-updated">
                 {{ $t('usage.updated', { time: u.updated }) }}
@@ -812,7 +818,7 @@ onMounted(() => refreshUsage())
                 {{ $t('usage.reading-now') }}
               </span>
               <span v-else-if="u?.refreshStatus" class="cli-card-refresh">
-                {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
+                {{ u.refreshLine }}
               </span>
               <span v-if="u?.notMeasuredHint" class="cli-card-reason cli-card-dir-hint">
                 {{ $t('usage.parked-not-measured-hint') }}
@@ -973,7 +979,9 @@ onMounted(() => refreshUsage())
 
 .cli-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  /* One account per row, across the page's width: half-width cards left an
+     empty column beside every vendor with a single account. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 .cli-card {
@@ -1002,7 +1010,7 @@ onMounted(() => refreshUsage())
 .cli-card-collapsed-text {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--font-xs);
   color: var(--text-secondary);
 }
 .cli-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -1027,9 +1035,14 @@ onMounted(() => refreshUsage())
   font-size: var(--font-xs);
   font-weight: 600;
   color: var(--text-primary);
+  /* Long localized names ("Ursprüngliche Anmeldung …") wrap to a second line
+     instead of losing their ending to an ellipsis. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .cli-card-id.dim { font-weight: 400; color: var(--text-muted); }
 .cli-card-rename-btn {
@@ -1068,13 +1081,13 @@ onMounted(() => refreshUsage())
   align-items: baseline;
   flex-wrap: wrap;
   gap: 3px 6px;
-  font-size: 10.5px;
+  font-size: var(--font-xs);
   line-height: 1.4;
   color: var(--attention-fg);
 }
 .cli-card-dup-flag {
   flex: none;
-  font-size: 9px;
+  font-size: var(--font-2xs);
   font-weight: 600;
   padding: 1px 5px;
   border-radius: 999px;
@@ -1090,7 +1103,7 @@ onMounted(() => refreshUsage())
   color: var(--text-primary);
 }
 .cli-card-big small {
-  font-size: 10.5px;
+  font-size: var(--font-xs);
   font-weight: 600;
   color: var(--text-secondary);
   margin-left: 4px;
@@ -1107,16 +1120,16 @@ onMounted(() => refreshUsage())
 .cli-mini-fill { height: 100%; border-radius: 999px; background: var(--success-fg); }
 .cli-mini-fill.warn { background: var(--attention-fg); }
 .cli-mini-fill.crit { background: var(--danger-fg); }
-.cli-card-foot { font-size: var(--font-3xs); color: var(--text-muted); }
-.cli-card-cache { font-size: var(--font-3xs); font-weight: 600; color: var(--attention-fg); }
-.cli-card-refresh { font-size: var(--font-3xs); color: var(--text-muted); }
+.cli-card-foot { font-size: var(--font-xs); color: var(--text-muted); }
+.cli-card-cache { font-size: var(--font-xs); font-weight: 600; color: var(--attention-fg); }
+.cli-card-refresh { font-size: var(--font-xs); color: var(--text-muted); }
 /* A read is in flight — the only line on the card that is about right now,
    so it must not read as quietly as the historical ones around it. */
 .cli-card-refresh.pending { color: var(--accent-fg); font-weight: 600; }
 /* The backend's own sentence; cards are narrow, so let it wrap instead of
    clipping the half that names the failure. */
 .cli-card-reason {
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }

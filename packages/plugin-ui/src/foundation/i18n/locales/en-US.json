@@ -1481,9 +1481,9 @@
       "inferred": "inferred",
       "inferredHint": "Read off the source text; the CLI's manifest does not state these.",
       "tier": {
-        "L1": "L1 text assets",
-        "L2": "L2 runs commands",
-        "L3": "L3 in-process code"
+        "L1": "Text only",
+        "L2": "Runs shell commands",
+        "L3": "Runs inside the CLI"
       },
       "tierHint": {
         "L1": "Instructions and other text only; nothing runs on its own.",
@@ -1491,7 +1491,7 @@
         "L3": "Runs inside the CLI's own process with the CLI's permissions, and no permission prompt."
       },
       "capability": {
-        "exec": "Runs commands",
+        "exec": "Runs shell commands",
         "network": "Network",
         "fs": "Files",
         "intercept-tools": "Intercepts tool calls",
@@ -1540,27 +1540,27 @@
           "summary": "Enable, disable and reorder the CLI agents, and read each one's install, permission, push and account state off its row."
         },
         "cli-agents-launch": {
-          "title": "Launch Overrides",
+          "title": "Launch overrides",
           "summary": "Per-CLI default model and effort, a launch command you write yourself, and extra environment variables."
         },
         "cli-agents-permissions": {
-          "title": "Permission Bypass",
+          "title": "Permission bypass",
           "summary": "The global switch for skipping a CLI's permission prompts, and the per-CLI override of it."
         },
         "cli-agents-push": {
-          "title": "Push Channels",
+          "title": "Push channels",
           "summary": "Per-CLI switches for handing a message straight to a pane instead of typing it in."
         },
         "cli-agents-maintenance": {
-          "title": "CLI Installation",
+          "title": "CLI installation",
           "summary": "Detect, install and update each CLI, and point one at a specific executable when several are installed."
         },
         "mcp-installed": {
-          "title": "Installed MCP Servers",
+          "title": "Installed MCP servers",
           "summary": "Refresh, open config, enable/disable, remove, inspect tools, edit command, args, and env vars."
         },
         "mcp-catalog": {
-          "title": "MCP Catalog",
+          "title": "MCP catalog",
           "summary": "Search and add context-reading MCP servers from the catalog."
         },
         "mcp-agents": {
@@ -1584,23 +1584,23 @@
           "summary": "View and edit the instruction files each CLI reads: CLAUDE.md, AGENTS.md, QWEN.md, .cursor rules."
         },
         "analyzer-backend": {
-          "title": "Inference Backend",
+          "title": "Inference backend",
           "summary": "Switch Ollama REST or llama.cpp, set base URL, llama-cli path, and GGUF model path."
         },
         "analyzer-models": {
-          "title": "Models & Benchmark",
+          "title": "Models & benchmark",
           "summary": "Download/delete Ollama models and run model benchmark tasks."
         },
         "appearance-theme": {
-          "title": "Theme & Custom Colors",
+          "title": "Theme & custom colors",
           "summary": "Built-in themes and semantic color overrides."
         },
         "general-default-editor": {
-          "title": "Default Editor",
+          "title": "Default editor",
           "summary": "Choose where files and folders open: Mini-IDE, the system default app, VS Code, Cursor, or a custom command."
         },
         "settings-management": {
-          "title": "Settings Management",
+          "title": "Settings management",
           "summary": "Export/import the full settings bundle and inspect where settings are stored."
         },
         "general-p2p": {
@@ -1608,7 +1608,7 @@
           "summary": "Join this machine to Navide Cloud so agents here can message agents on your other devices."
         },
         "general-p2p-policy": {
-          "title": "Navide Cloud Authorization",
+          "title": "Navide Cloud authorization",
           "summary": "Choose which remote devices may send instructions to panes on this machine. Everything is refused until a rule allows it."
         },
         "appearance-language": {
@@ -1616,7 +1616,7 @@
           "summary": "Switch between Traditional Chinese, English, and Japanese."
         },
         "appearance-ui-scale": {
-          "title": "Interface Scale",
+          "title": "Interface scale",
           "summary": "Scale the whole interface — text, icons, and spacing — in every window."
         },
         "appearance-runtime": {
@@ -1636,7 +1636,7 @@
           "summary": "Rerun the environment check (onboarding)."
         },
         "general-backend-timeout": {
-          "title": "Backend Timeout",
+          "title": "Backend timeout",
           "summary": "Set the backend startup health-check timeout."
         },
         "updates": {
@@ -1644,11 +1644,11 @@
           "summary": "Check for updates, auto-check/auto-download, and release channel."
         },
         "general-resume-behavior": {
-          "title": "Resume on Open",
+          "title": "Resume on open",
           "summary": "Whether opening a workspace resumes its previous CLI panes, starts them fresh, or asks each time."
         },
         "general-usage-badge": {
-          "title": "CLI Quota Badge",
+          "title": "CLI quota badge",
           "summary": "Show remaining CLI quota in pane headers (claude/codex/kimi/grok) and pick the refresh interval."
         },
         "general-quota-failover": {
@@ -1664,19 +1664,19 @@
           "summary": "Offer to resume panes on another account's own folder after a switch or when quota runs out"
         },
         "accounts": {
-          "title": "Git Accounts",
+          "title": "Git accounts",
           "summary": "Add, edit, and remove encrypted Git host credentials and tokens."
         },
         "cli-accounts": {
-          "title": "CLI Accounts",
+          "title": "CLI accounts",
           "summary": "Manage per-agent CLI login profiles (claude, codex, kimi, grok)."
         },
         "shortcuts": {
-          "title": "Keyboard Shortcuts Reference",
+          "title": "Keyboard shortcuts reference",
           "summary": "Every shortcut in one place: the editable rule table, plus read-only sections for terminal and native-menu keys."
         },
         "keybindings": {
-          "title": "Customize Shortcuts",
+          "title": "Customize shortcuts",
           "summary": "Rebind, add or remove keyboard shortcuts. Records the keys you press, flags conflicts, and resets to defaults per row."
         },
         "storage": {
@@ -1724,7 +1724,7 @@
       "no-results": "No matching settings"
     },
     "management": {
-      "title": "Settings Management",
+      "title": "Settings management",
       "export-bundle": "Export Settings Bundle",
       "import-bundle": "Import Settings Bundle",
       "bundle-hint": "Exports Roles, Pipelines, MCP, Analyzer, AI Chat and appearance settings, with API keys and tokens redacted.",
@@ -1739,7 +1739,7 @@
     "executionPolicy": {
       "unavailable": "Execution Policy is unavailable. Check the Navide host and try again.",
       "errors": {
-        "invalid-policy": "The execution policy is invalid. Use supported modes, system namespaces, and executable names.",
+        "invalid-policy": "The execution policy is invalid. Use supported modes, Navide features, and executable names.",
         "high-risk-confirmation-required": "Full mode requires explicit confirmation that arbitrary executables may run.",
         "recovery-confirmation-required": "Rebuilding the execution policy requires explicit confirmation.",
         "source-reset-confirmation-required": "Resetting all Policy Source selections requires explicit confirmation.",
@@ -1805,11 +1805,11 @@
       "denylistWarning": "Denylist mode grants by default: listing names does not bound what it grants, so Navide treats every denylist as a high-risk choice. Review it before saving.",
       "denylistConfirmation": "I understand that Denylist mode grants by default and is not narrowed by the names I list.",
       "shellDenylistScope": "In Denylist mode an agent can run only the commands this Host supports ({executables}), minus the ones you deny here. Denying a name outside that list has no effect.",
-      "systemLabel": "System namespaces",
+      "systemLabel": "Navide features",
       "systemHint": "Choose which Navide features agents can use.",
-      "systemAllowlistLabel": "System namespaces to allow",
+      "systemAllowlistLabel": "Navide features to allow",
       "systemAllowlistHint": "Choose which Navide features agents can use.",
-      "systemDenylistLabel": "System namespaces to deny",
+      "systemDenylistLabel": "Navide features to deny",
       "systemDenylistHint": "Choose which Navide features agents must not use.",
       "namespace": {
         "fs": "Workspace files",
@@ -2196,7 +2196,7 @@
       },
       "localInstall": {
         "agentRequest": "Requested by {requester}. Navide has not reviewed this package; installing it is your decision.",
-        "button": "Install from .vsix File…",
+        "button": "Install from File…",
         "backToMarketplace": "Switch Back to the Navide Marketplace Version",
         "warning": "This Navide plugin comes from a file on this computer. Navide has not reviewed it and it is not signed: its author cannot be confirmed and the file may have been changed. Only install files from people you trust.",
         "signatureLabel": "Signature",
@@ -2312,22 +2312,22 @@
       "storage": "storage",
       "yes": "yes",
       "no": "no",
-      "manifestPermissions": "Manifest Permissions",
+      "manifestPermissions": "Manifest permissions",
       "fileScopes": "File scope",
       "fileScopesRepository": "File scope (from the Git repository root)",
       "scopeReadWrite": "read and write",
       "scopeReadOnly": "read only",
       "scopeWriteOnly": "write only",
-      "packageVersionGrant": "Package-version Grant",
+      "packageVersionGrant": "Package-version grant",
       "noMatchingGrant": "No matching grant",
       "labeledValue": "{label}: {value}"
     },
     "scope": {
       "label": "Applies to",
       "user": "User",
-      "userWorkspace": "User / Workspace",
-      "accountServer": "Account / Server",
-      "userWorkspaceBindings": "User / Workspace bindings"
+      "userWorkspace": "User / workspace",
+      "accountServer": "Account / server",
+      "userWorkspaceBindings": "User / workspace bindings"
     },
     "storage": {
       "localStorage": "ui_settings.json (app data) + workspace backup",
@@ -2524,18 +2524,18 @@
       "language-beta-hint": "Machine-translated. Native-speaker review pending.",
       "language-hint": "Language is a user-level preference applied across all workspaces.",
       "language-display": "Display language",
-      "ui-scale": "Interface Scale",
+      "ui-scale": "Interface scale",
       "ui-scale-hint": "Scale the whole interface — text, icons, and spacing — in every window. Separate from the terminal and editor font sizes, which keep their own ⌘= / ⌘- shortcuts.",
       "restore-windows": "Restore Windows",
       "restore-windows-hint": "Reopen the workspace windows you had open when you last quit.",
       "restore-windows-label": "Reopen windows on next launch",
-      "custom-colors": "Custom Colors",
+      "custom-colors": "Custom colors",
       "reset-to-defaults": "↺ Reset to Defaults",
       "tweaks-hint": "Tweaks are layered on top of the current theme and preserved when switching themes.",
       "environment": "Environment",
       "environment-hint": "Re-run the first-launch environment detection wizard (checks Homebrew / Node / CLI / Ollama, etc.).",
       "rerun-env-check": "↻ Re-run Environment Check",
-      "backend-timeout": "Backend Startup Timeout",
+      "backend-timeout": "Backend startup timeout",
       "backend-timeout-hint": "How long to wait for the backend to become healthy on startup or restart before giving up. Raise this on slower machines (15–120 seconds).",
       "backend-timeout-label": "Timeout (seconds)",
       "resume-behavior": "Resume conversations on open",
@@ -6898,6 +6898,9 @@
       "state-on": "Enabled",
       "state-off": "Disabled",
       "status": "Status: {status}",
+      "transport-local": "Local",
+      "transport-remote": "Remote",
+      "status-failed": "Failed to start",
       "starting-note": "Still starting after {seconds} s. If it runs through npx or uvx, the first run may be downloading the package.",
       "error-reason": "Failed to start: {reason}",
       "tools-error": "Could not list its tools: {reason}",
@@ -6912,7 +6915,7 @@
       "catalog-filesystem": "Read the workspace's existing code, README and config files so the orchestrator can inject the current state into the kickoff and correct the agent's starting assumptions.",
       "catalog-brave-search": "Live web search, so the orchestrator can look up the latest technical decisions or API changes and inject them into the agent. Needs a Brave API key.",
       "catalog-sentry": "Read production errors and stack traces so the orchestrator can inject the bug background into the debug stage.",
-      "catalog-title": "Add MCP Servers",
+      "catalog-title": "Add MCP servers",
       "catalog-search": "Search MCP servers by name",
       "catalog-hint": "This catalog lists only <strong>\"Orchestrator context-reading\"</strong> MCPs — tools that read workspace / docs / external service data and inject it into kickoff prompts to ground agent knowledge. Execution actions (tests, browser automation, etc.) are handled by the CLI agents themselves.",
       "catalog-requires-env": "Requires env vars: {vars}",
@@ -7072,7 +7075,7 @@
       }
     },
     "skills": {
-      "title": "Managed Skills",
+      "title": "Managed skills",
       "intro": "One place to see every skill your CLIs have, decide who receives which, and create new ones in ~/.agents/skills. A skill in a CLI's own folder moves only when you choose “Move into Shared Library”, which leaves a link in its old place; “Restore” moves it back.",
       "new": "New Skill",
       "search": "Search skills",
@@ -7159,7 +7162,7 @@
       "group-native": "{agent}'s own",
       "delivery-title": "Delivered to",
       "delivery-hint": "● reads it on its own · ✓ delivered by Navide (click to toggle) · greyed: not delivered",
-      "delivery-auto": "{n} read it themselves",
+      "delivery-auto": "Loaded by {n} CLI | Loaded by {n} CLIs",
       "delivery-none": "not delivered anywhere",
       "location": "Location",
       "also-linked-from": "Also linked from: {roots}",
@@ -7315,7 +7318,7 @@
       "secret-differs": "differs",
       "secret-local-only": "only on this device",
       "secret-remote-only": "only on the other device",
-      "history-title": "Version History",
+      "history-title": "Version history",
       "history-hint": "The cloud keeps each synced item's last 10 versions or 30 days of them, whichever ends first.",
       "history-scope": "Section",
       "history-item": "Item",
@@ -7765,13 +7768,13 @@
     },
     "cliAgents": {
       "title": "CLI Agents",
-      "hint": "Enable and reorder the CLI agents in the manual spawn dropdown. Open a card to manage that agent. At least one must stay enabled.",
+      "hint": "Enable and reorder the CLI agents in the new-pane menu. Open a card to manage that agent. At least one must stay enabled.",
       "drag-hint": "Drag to reorder",
       "search": "Find an agent…",
       "filter-label": "Filter CLI agents",
       "filter-all": "All",
       "filter-enabled": "Enabled",
-      "filter-attention": "Needs Attention",
+      "filter-attention": "Needs attention",
       "count": "{visible} of {total} agents · {enabled} enabled",
       "reorder-filtered": "Clear search and choose All to reorder",
       "enabled": "Enabled",
@@ -8152,6 +8155,7 @@
       "conflict-hard": "conflict",
       "conflict-soft": "shared key",
       "when-any": "always",
+      "when-limited": "Only in some contexts",
       "no-results": "No command matches this search.",
       "footnote": "Two-key chords are supported: record one combination, then press the second. Keys this table does not own are listed read-only at the bottom of this page.",
       "category": {
@@ -8162,8 +8166,8 @@
       }
     },
     "accounts": {
-      "title": "Git Accounts",
-      "encrypted-note": "Tokens are encrypted at rest with your OS keychain (safeStorage) and stored locally on this machine.",
+      "title": "Git accounts",
+      "encrypted-note": "Tokens are encrypted with your system keychain and stored only on this computer.",
       "unavailable": "Encryption is unavailable on this system, so accounts cannot be added. This usually means the OS keychain is not accessible.",
       "empty": "No accounts yet.",
       "new-account": "+ New Account",
@@ -8175,11 +8179,11 @@
       "host": "Host",
       "username": "Username",
       "token": "Token",
-      "token-hint": "Paste a Personal Access Token. It is encrypted with safeStorage and stored locally — never in plain text.",
+      "token-hint": "Paste a personal access token. It is encrypted and stored only on this computer, never as plain text.",
       "token-keep": "Leave blank to keep the current token",
       "delete-confirm": "Delete this account?",
       "cli": {
-        "title": "CLI Accounts",
+        "title": "CLI accounts",
         "hint": "Click \"Sign In\" or \"+ New Account\" to open a temporary login pane; it closes once you authorize in the browser. \"Set as Default\" picks the account new panes use, and open panes keep theirs until reopened.",
         "hint-detail": "All accounts share your home directory, so sessions and history carry over; switching swaps the stored credentials in place, and signing in never touches the active account.",
         "hint-more": "Details",
@@ -8240,7 +8244,6 @@
         "default-sign-in-body": "Signing in here first switches {agent} to the original login. It holds no sign-in, so the live login ({current}) is cleared: that account stays saved on its own card, and you can switch back to it. New {agent} panes are not signed in until this sign-in finishes.",
         "default-sign-in-confirm": "Switch and Sign In",
         "is-default": "Active",
-        "is-default-signed-out": "Selected",
         "set-default": "Switch to This Account",
         "switching": "Switching…",
         "not-signed-in": "Not signed in",
@@ -8263,7 +8266,7 @@
       "bg-base": "Background",
       "bg-subtle": "Surface",
       "text-primary": "Text",
-      "text-secondary": "Muted Text",
+      "text-secondary": "Muted text",
       "border-default": "Border",
       "accent-fg": "Accent",
       "success-fg": "Success",
@@ -8272,7 +8275,7 @@
     "analyzer": {
       "select-llama-cli": "Select llama-cli executable",
       "select-gguf-model": "Select GGUF model file",
-      "inference-backend": "Inference Backend",
+      "inference-backend": "Inference backend",
       "llama-cli-path": "llama-cli executable path",
       "llama-cli-path-hint": "(leave blank to use the default from PATH)",
       "auto-detect": "Auto-detect",
@@ -8286,7 +8289,7 @@
       "ollama-missing": "Ollama is not installed on this computer.",
       "install-ollama": "Install Ollama",
       "not-connected": "Not connected · run",
-      "model-manager": "Model Manager",
+      "model-manager": "Model manager",
       "model-manager-note": "Pull a model from Ollama by name, or delete one you no longer need",
       "model-placeholder": "Model name, e.g. qwen2.5-coder, llama3.2, gemma3",
       "downloading": "Downloading…",
@@ -8294,7 +8297,7 @@
       "connecting": "Connecting…",
       "no-local-models": "No local models detected. Run ollama pull <model-name> or use the download field above.",
       "delete-local-title": "Delete Locally",
-      "model-benchmark": "Model Benchmark",
+      "model-benchmark": "Model benchmark",
       "running": "Running…",
       "run-benchmark": "Run Benchmark",
       "testing": "Testing:",
@@ -8971,7 +8974,7 @@
     "preset": {
       "default": "Default",
       "focus": "Focus",
-      "bottom-panel": "Bottom Panel"
+      "bottom-panel": "Bottom panel"
     },
     "presets": "Presets",
     "statusbar-note": "its popovers go with it"
@@ -9358,9 +9361,6 @@
     "intro": "Rename any pane status and pick its colour. Changes apply everywhere a status is shown — the pane badge, the sidebar, the meeting strip and the resource panel — and are saved to your account, not to a project.",
     "col": {
       "status": "Status",
-      "zh": "Traditional Chinese",
-      "en": "English",
-      "ja": "Japanese",
       "color": "Color"
     },
     "row-only": "list only",
@@ -9848,6 +9848,7 @@
     "reading-short": "reading",
     "reading-tooltip": "This account just became active. Reading its quota starts a Claude Code, so the numbers below are the previous reading until that finishes — up to 3 minutes.",
     "refresh-status": "Refresh: {status}",
+    "refresh-not-signed-in": "Can't refresh — not signed in",
     "refresh-error": "Reason: {reason}",
     "refresh-status-ok": "up to date",
     "refresh-status-not-refreshed": "not refreshed yet",
@@ -10742,9 +10743,9 @@
       "app_token": "App-level token",
       "bot_token": "Bot token",
       "app_id": "App ID",
-      "app_secret": "App Secret",
+      "app_secret": "App secret",
       "client_id": "Client ID",
-      "client_secret": "Client Secret",
+      "client_secret": "Client secret",
       "access_token": "Access token",
       "server_url": "Server URL",
       "homeserver": "Homeserver URL",
@@ -10838,7 +10839,7 @@
       "count-failed": "Could not load the chats this bot knows: {error}"
     },
     "monitor": {
-      "title": "Channel Connections",
+      "title": "Channel connections",
       "tagline": "Every pane linked to a chat. The status is the bot's: Connected means the bot is online, not that every chat can be reached.",
       "open": "Channel Connections",
       "close": "Close",

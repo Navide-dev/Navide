@@ -415,8 +415,10 @@ const visibleReference = computed(() => {
           <tbody>
             <tr v-for="row in group.rows" :key="row.id" :class="{ customized: row.customized }">
               <td class="kse-td-command">
-                <span class="kse-label">{{ labelFor(row) }}</span>
-                <span class="kse-id" v-truncate>{{ row.command }}</span>
+                <!-- The command id is for keybindings.json, not for reading: it
+                     stays searchable and in the tooltip, out of the visible line. -->
+                <span class="kse-label" :title="row.command">{{ labelFor(row) }}</span>
+                <span class="kse-id" aria-hidden="true">{{ row.command }}</span>
               </td>
 
               <td class="kse-td-keys" :data-label="$t('settings.keybindings.col.keys')">
@@ -508,7 +510,12 @@ const visibleReference = computed(() => {
               </td>
 
               <td class="kse-td-when" :data-label="$t('settings.keybindings.col.when')">
-                <code v-if="row.when">{{ row.when }}</code>
+                <!-- The raw condition is an expression; it waits behind a
+                     disclosure for the people who want it. -->
+                <details v-if="row.when" class="kse-when-details">
+                  <summary>{{ $t('settings.keybindings.when-limited') }}</summary>
+                  <code>{{ row.when }}</code>
+                </details>
                 <span v-else class="kse-when-any">{{ $t('settings.keybindings.when-any') }}</span>
               </td>
 
@@ -741,7 +748,7 @@ const visibleReference = computed(() => {
 }
 .kse-table th {
   text-align: left;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -808,7 +815,7 @@ const visibleReference = computed(() => {
 /* ── source badge ── */
 .kse-source {
   display: inline-block;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   padding: 1px 7px;
   border-radius: 999px;
@@ -838,15 +845,21 @@ const visibleReference = computed(() => {
   overflow-wrap: anywhere;
 }
 .kse-id {
-  display: block;
-  margin-top: 1px;
-  font-family: monospace;
-  font-size: var(--font-xs);
-  color: var(--text-muted);
-  /* The id is what people search for and paste into keybindings.json, so it
-     wraps rather than losing its tail to an ellipsis. */
-  overflow-wrap: anywhere;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
+.kse-td-command { position: relative; }
+
+.kse-when-details summary {
+  cursor: pointer;
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+}
+.kse-when-details[open] summary { margin-bottom: 4px; }
 
 .kse-td-when code {
   display: inline-block;
@@ -1008,7 +1021,7 @@ const visibleReference = computed(() => {
 }
 
 .kse-conflict {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 999px;

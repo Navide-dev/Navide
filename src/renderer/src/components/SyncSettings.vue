@@ -756,6 +756,10 @@ onBeforeUnmount(() => offResult?.())
 .sync-actions {
   margin-top: 10px;
 }
+/* Small in type, not in reach: every Settings button keeps a 28px target. */
+.nv-btn--sm {
+  min-height: var(--control-h-md);
+}
 .sync-results {
   list-style: none;
   margin: 10px 0 0;

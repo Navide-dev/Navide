@@ -46,7 +46,7 @@ const emit = defineEmits<{
       role="img"
       :aria-label="marker.label"
       :title="marker.label"
-    >{{ marker.text }}</span>
+    >{{ marker.tone === 'on' ? '' : marker.text }}</span>
   </button>
 </template>
 
@@ -123,9 +123,22 @@ const emit = defineEmits<{
   background: var(--risk-subtle);
   color: var(--risk-fg);
 }
+/* An "on" state ("Developer on") is a dot on the row's icon, named by its
+   tooltip and accessible label: as text it pushed the label onto a second
+   line, so the row changed height when a switch was turned on. Out of flow,
+   it leaves the label's width the same in both states. */
 .settings-nav-item-marker--on {
-  background: var(--bg-muted);
-  color: var(--text-primary);
+  position: absolute;
+  top: 7px;
+  left: calc(var(--space-row-x) + 11px);
+  width: 8px;
+  height: 8px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  box-shadow: 0 0 0 2px var(--bg-inset);
+  line-height: 0;
 }
 .settings-nav-item-icon {
   display: inline-flex;

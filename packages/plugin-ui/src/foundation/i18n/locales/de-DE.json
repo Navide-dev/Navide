@@ -1481,9 +1481,9 @@
       "inferred": "abgeleitet",
       "inferredHint": "Aus dem Quelltext abgelesen; das Manifest der CLI gibt dies nicht an.",
       "tier": {
-        "L1": "L1 Text-Assets",
-        "L2": "L2 führt Befehle aus",
-        "L3": "L3 Code im Prozess"
+        "L1": "Nur Text",
+        "L2": "Führt Shell-Befehle aus",
+        "L3": "Läuft im CLI-Prozess"
       },
       "tierHint": {
         "L1": "Nur Anweisungen und anderer Text; nichts wird von selbst ausgeführt.",
@@ -1491,7 +1491,7 @@
         "L3": "Läuft im eigenen Prozess der CLI mit deren Berechtigungen und ohne Berechtigungsabfrage."
       },
       "capability": {
-        "exec": "Führt Befehle aus",
+        "exec": "Führt Shell-Befehle aus",
         "network": "Netzwerk",
         "fs": "Dateien",
         "intercept-tools": "Fängt Tool-Aufrufe ab",
@@ -1739,7 +1739,7 @@
     "executionPolicy": {
       "unavailable": "Die Ausführungsrichtlinie ist nicht verfügbar. Prüfen Sie den Navide-Host und versuchen Sie es erneut.",
       "errors": {
-        "invalid-policy": "Die Ausführungsrichtlinie ist ungültig. Verwenden Sie unterstützte Modi, System-Namespaces und Namen ausführbarer Dateien.",
+        "invalid-policy": "Die Ausführungsrichtlinie ist ungültig. Verwenden Sie unterstützte Modi, Navide-Funktionen und Namen ausführbarer Dateien.",
         "high-risk-confirmation-required": "Der Vollmodus erfordert eine ausdrückliche Bestätigung, dass beliebige ausführbare Dateien laufen dürfen.",
         "recovery-confirmation-required": "Das Neuaufbauen der Ausführungsrichtlinie erfordert eine ausdrückliche Bestätigung.",
         "source-reset-confirmation-required": "Das Zurücksetzen aller Auswahlen der Richtlinienquelle erfordert eine ausdrückliche Bestätigung.",
@@ -1805,11 +1805,11 @@
       "denylistWarning": "Der Sperrlistenmodus gewährt standardmäßig: Aufgeführte Namen begrenzen nicht, was er gewährt, daher behandelt Navide jede Sperrliste als risikoreiche Wahl. Prüfen Sie sie vor dem Speichern.",
       "denylistConfirmation": "Mir ist bewusst, dass der Sperrlistenmodus standardmäßig gewährt und durch die aufgeführten Namen nicht eingeschränkt wird.",
       "shellDenylistScope": "Im Sperrlistenmodus kann ein Agent nur die Befehle ausführen, die dieser Host unterstützt ({executables}), abzüglich der hier gesperrten. Einen Namen außerhalb dieser Liste zu sperren, hat keine Wirkung.",
-      "systemLabel": "System-Namespaces",
+      "systemLabel": "Navide-Funktionen",
       "systemHint": "Wählen Sie, welche Navide-Funktionen Agents nutzen dürfen.",
-      "systemAllowlistLabel": "Zu erlaubende System-Namespaces",
+      "systemAllowlistLabel": "Zu erlaubende Navide-Funktionen",
       "systemAllowlistHint": "Wählen Sie, welche Navide-Funktionen Agents nutzen dürfen.",
-      "systemDenylistLabel": "Zu sperrende System-Namespaces",
+      "systemDenylistLabel": "Zu sperrende Navide-Funktionen",
       "systemDenylistHint": "Wählen Sie, welche Navide-Funktionen Agents nicht nutzen dürfen.",
       "namespace": {
         "fs": "Dateien im Arbeitsbereich",
@@ -2196,7 +2196,7 @@
       },
       "localInstall": {
         "agentRequest": "Angefordert von {requester}. Navide hat dieses Paket nicht geprüft; die Installation liegt in Ihrer Entscheidung.",
-        "button": "Aus .vsix-Datei installieren …",
+        "button": "Aus Datei installieren …",
         "backToMarketplace": "Zur Version aus dem Navide Marketplace zurückwechseln",
         "warning": "Dieses Navide-Plug-in stammt aus einer Datei auf diesem Computer. Navide hat es nicht geprüft, und es ist nicht signiert: Sein Urheber kann nicht bestätigt werden, und die Datei wurde möglicherweise verändert. Installieren Sie nur Dateien von Personen, denen Sie vertrauen.",
         "signatureLabel": "Signatur",
@@ -6898,6 +6898,9 @@
       "state-on": "Aktiviert",
       "state-off": "Deaktiviert",
       "status": "Status: {status}",
+      "transport-local": "Lokal",
+      "transport-remote": "Remote",
+      "status-failed": "Start fehlgeschlagen",
       "starting-note": "Startet nach {seconds} s immer noch. Läuft der Server über npx oder uvx, lädt der erste Start möglicherweise noch das Paket herunter.",
       "error-reason": "Start fehlgeschlagen: {reason}",
       "tools-error": "Werkzeugliste konnte nicht gelesen werden: {reason}",
@@ -7159,7 +7162,7 @@
       "group-native": "Eigene von {agent}",
       "delivery-title": "Zugestellt an",
       "delivery-hint": "● liest ihn selbst · ✓ von Navide zugestellt (zum Umschalten klicken) · ausgegraut: nicht zugestellt",
-      "delivery-auto": "{n} lesen ihn selbst",
+      "delivery-auto": "Von {n} CLI selbst geladen | Von {n} CLIs selbst geladen",
       "delivery-none": "nirgendwohin zugestellt",
       "location": "Speicherort",
       "also-linked-from": "Ebenfalls verlinkt aus: {roots}",
@@ -7765,7 +7768,7 @@
     },
     "cliAgents": {
       "title": "CLI-Agents",
-      "hint": "CLI-Agents im Dropdown zum manuellen Starten aktivieren und neu anordnen. Öffnen Sie eine Karte, um den jeweiligen Agent zu verwalten. Mindestens einer muss aktiviert bleiben.",
+      "hint": "CLI-Agents im Menü für neue Panes aktivieren und neu anordnen. Öffnen Sie eine Karte, um den jeweiligen Agent zu verwalten. Mindestens einer muss aktiviert bleiben.",
       "drag-hint": "Zum Neuanordnen ziehen",
       "search": "Agent suchen …",
       "filter-label": "CLI-Agents filtern",
@@ -8152,6 +8155,7 @@
       "conflict-hard": "Konflikt",
       "conflict-soft": "gemeinsame Taste",
       "when-any": "immer",
+      "when-limited": "Nur in bestimmten Kontexten",
       "no-results": "Kein Befehl entspricht dieser Suche.",
       "footnote": "Zweistufige Tastenfolgen werden unterstützt: Zeichnen Sie eine Kombination auf und drücken Sie dann die zweite. Tasten, die nicht zu dieser Tabelle gehören, stehen schreibgeschützt am Ende dieser Seite.",
       "category": {
@@ -8163,7 +8167,7 @@
     },
     "accounts": {
       "title": "Git-Konten",
-      "encrypted-note": "Tokens werden mit dem Schlüsselbund Ihres Betriebssystems (safeStorage) verschlüsselt und lokal auf diesem Rechner gespeichert.",
+      "encrypted-note": "Tokens werden mit dem Schlüsselbund Ihres Betriebssystems verschlüsselt und nur auf diesem Rechner gespeichert.",
       "unavailable": "Verschlüsselung ist auf diesem System nicht verfügbar, daher können keine Konten hinzugefügt werden. Das bedeutet meist, dass der Schlüsselbund des Betriebssystems nicht zugänglich ist.",
       "empty": "Noch keine Konten.",
       "new-account": "+ Neues Konto",
@@ -8175,7 +8179,7 @@
       "host": "Host",
       "username": "Benutzername",
       "token": "Token",
-      "token-hint": "Fügen Sie ein Personal Access Token ein. Es wird mit safeStorage verschlüsselt und lokal gespeichert – nie im Klartext.",
+      "token-hint": "Fügen Sie ein Personal Access Token ein. Es wird verschlüsselt und nur auf diesem Rechner gespeichert – nie im Klartext.",
       "token-keep": "Leer lassen, um das aktuelle Token zu behalten",
       "delete-confirm": "Dieses Konto löschen?",
       "cli": {
@@ -8240,7 +8244,6 @@
         "default-sign-in-body": "Wenn Sie sich hier anmelden, wechselt {agent} zuerst zur ursprünglichen Anmeldung. Sie enthält keine Anmeldung, daher wird die aktive Anmeldung ({current}) entfernt: Dieses Konto bleibt auf seiner eigenen Karte gespeichert, und Sie können zurückwechseln. Neue Panes von {agent} sind erst angemeldet, wenn diese Anmeldung abgeschlossen ist.",
         "default-sign-in-confirm": "Wechseln und anmelden",
         "is-default": "Aktiv",
-        "is-default-signed-out": "Ausgewählt",
         "set-default": "Zu diesem Konto wechseln",
         "switching": "Wird gewechselt …",
         "not-signed-in": "Nicht angemeldet",
@@ -9358,9 +9361,6 @@
     "intro": "Benennen Sie jeden Pane-Status um und wählen Sie seine Farbe. Änderungen gelten überall, wo ein Status angezeigt wird – im Pane-Badge, in der Seitenleiste, im Besprechungsstreifen und im Ressourcen-Panel – und werden in Ihrem Konto gespeichert, nicht in einem Projekt.",
     "col": {
       "status": "Status",
-      "zh": "Traditionelles Chinesisch",
-      "en": "Englisch",
-      "ja": "Japanisch",
       "color": "Farbe"
     },
     "row-only": "nur Liste",
@@ -9848,6 +9848,7 @@
     "reading-short": "wird gelesen",
     "reading-tooltip": "Dieses Konto wurde gerade aktiv. Zum Lesen seines Kontingents wird ein Claude Code gestartet, daher zeigen die Zahlen unten die vorherige Messung, bis das abgeschlossen ist – bis zu 3 Minuten.",
     "refresh-status": "Aktualisierung: {status}",
+    "refresh-not-signed-in": "Aktualisierung nicht möglich – nicht angemeldet",
     "refresh-error": "Grund: {reason}",
     "refresh-status-ok": "aktuell",
     "refresh-status-not-refreshed": "noch nicht aktualisiert",

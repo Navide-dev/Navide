@@ -1166,9 +1166,9 @@ describe('SkillsPane merged browse/route layout', () => {
     await mountAll()
     const shared = wrapper!.findAll('.skill-card').find((c) => c.find('strong').text() === 'review-code')!
 
-    // codex is a shared-root reader → "1 read it themselves"; claude/kimi/pi are delivered.
+    // codex is a shared-root reader → "Loaded by 1 CLI"; claude/kimi/pi are delivered.
     const chips = shared.findAll('.dchip').map((c) => c.text())
-    expect(chips).toContain('1 read it themselves')
+    expect(chips).toContain('Loaded by 1 CLI')
     expect(chips).toEqual(expect.arrayContaining(['claude', 'kimi', 'pi']))
     // native, opt-in, nothing chosen → says so
     const native = wrapper!.findAll('.skill-card').find((c) => c.find('strong').text() === 'bug-buster')!

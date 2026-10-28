@@ -239,6 +239,14 @@ function rowTransport(row: McpRow): string {
   return row.navide?.transport ?? row.natives[0]?.transport ?? 'unknown'
 }
 
+/** The transport in plain words: a stdio server runs on this machine, an
+ *  http/sse one is reached over the network. The raw value stays in the tooltip. */
+function transportLabel(transport: string): string {
+  if (transport === 'stdio') return t('settings.mcp.transport-local')
+  if (transport === 'http' || transport === 'sse') return t('settings.mcp.transport-remote')
+  return transport
+}
+
 /** Where the row is set up: one chip per place, Navide's first. */
 function placeChips(row: McpRow): { key: string; label: string; off: boolean }[] {
   const chips: { key: string; label: string; off: boolean }[] = []
@@ -549,6 +557,9 @@ function entries(map: Record<string, string>): [string, string][] {
                     v-if="row.navide"
                     class="mcp-status-dot"
                     :class="row.navide.status ?? 'unknown'"
+                    :role="row.navide.status === 'error' ? 'img' : undefined"
+                    :title="row.navide.status === 'error' ? t('settings.mcp.status-failed') : undefined"
+                    :aria-label="row.navide.status === 'error' ? t('settings.mcp.status-failed') : undefined"
                   ></span>
                   <strong v-truncate>{{ row.name }}</strong>
                 </span>
@@ -557,7 +568,7 @@ function entries(map: Record<string, string>): [string, string][] {
                 </span>
                 <!-- The transport and Node badges lead the meta line, so the name keeps the full width. -->
                 <span class="mcp-card-places">
-                  <span class="mcp-tag">{{ rowTransport(row) }}</span>
+                  <span class="mcp-tag" :title="rowTransport(row)">{{ transportLabel(rowTransport(row)) }}</span>
                   <span
                     v-if="needsNode(row.navide)"
                     class="mcp-tag mcp-tag-warn"
@@ -931,7 +942,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 24px;
+  min-height: var(--control-h-md);
   padding: 3px 9px;
   border-radius: var(--radius-pill);
   font-size: var(--font-xs);
@@ -963,7 +974,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   align-items: baseline;
   gap: 6px;
   margin: 10px 4px 6px;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1027,12 +1038,15 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   border-radius: var(--radius-pill);
   font-size: var(--font-xs);
   font-weight: 600;
-  border: 1px solid color-mix(in srgb, var(--success-fg) 40%, transparent);
-  color: var(--success-fg);
+  /* One neutral look for every source: green on some cards and grey on others
+     read as a status the chip does not carry. A switched-off source is told
+     apart by its dashed outline, not by colour. */
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
   white-space: nowrap;
   line-height: var(--lh-base);
 }
-.pchip.off { color: var(--text-secondary); border-color: var(--border-muted); opacity: 0.75; }
+.pchip.off { color: var(--text-secondary); border-style: dashed; }
 .pchip.tools { color: var(--text-secondary); border-color: var(--border-muted); font-weight: 500; }
 .pchip.needs { color: var(--warning-fg); border-color: var(--warning-fg); }
 .mcp-tag {
@@ -1044,7 +1058,6 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   color: var(--text-secondary);
   white-space: nowrap;
   flex: none;
-  text-transform: uppercase;
 }
 
 /* ── Compare: the matrix ───────────────────────────────────────────────── */
@@ -1092,7 +1105,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-matrix td.unsupported > span { color: var(--text-secondary); opacity: 0.6; }
 .mcp-matrix tbody tr.group th {
   background: var(--bg-muted);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1107,7 +1120,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   padding: 0;
   list-style: none;
   color: var(--text-secondary);
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
 }
 .mcp-matrix-legend li { display: flex; align-items: center; gap: 5px; }
 .mcp-matrix-legend .swatch {
@@ -1138,21 +1151,21 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-drawer-title h3 { margin: 0; font-size: var(--font-md); color: var(--text-bright); }
 .mcp-drawer-close { padding: 2px 7px; font-size: var(--font-xs); line-height: 1; }
 .mcp-drawer-section { display: flex; flex-direction: column; gap: 6px; }
-.mcp-drawer-section h4 { margin: 0; font-size: var(--font-3xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
-.mcp-drawer-hint { margin: 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; }
+.mcp-drawer-section h4 { margin: 0; font-size: var(--font-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.mcp-drawer-hint { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); line-height: 1.4; }
 .mcp-drawer-hint.danger { color: var(--danger-fg); }
 .mcp-drawer-hint.warn { color: var(--warning-fg); }
-.mcp-drawer-meta { font-size: 10.5px; color: var(--text-secondary); }
+.mcp-drawer-meta { font-size: var(--font-2xs); color: var(--text-secondary); }
 .mcp-drawer-path {
   display: block;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   padding: 5px 8px;
   border-radius: var(--radius-control);
   background: var(--bg-muted);
   word-break: break-all;
 }
 .mcp-drawer-path.muted { color: var(--text-secondary); }
-.mcp-drawer-kv { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: 10.5px; }
+.mcp-drawer-kv { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: var(--font-2xs); }
 .mcp-drawer-kv dt { color: var(--text-secondary); }
 .mcp-drawer-kv dd { margin: 0; word-break: break-all; }
 .mcp-drawer-actions { display: flex; justify-content: flex-start; gap: 8px; }
@@ -1170,26 +1183,26 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   border-radius: var(--radius-control);
 }
 .mcp-drawer-toggle strong { display: block; font-size: var(--font-2xs); color: var(--text-bright); }
-.mcp-drawer-toggle small { display: block; font-size: 10.5px; color: var(--text-secondary); }
-.mcp-tools { font-size: 10.5px; }
+.mcp-drawer-toggle small { display: block; font-size: var(--font-2xs); color: var(--text-secondary); }
+.mcp-tools { font-size: var(--font-2xs); }
 .mcp-tools summary { cursor: pointer; color: var(--text-secondary); }
 .mcp-tool-list { margin: 6px 0 0; padding-left: 16px; color: var(--text-secondary); }
 .mcp-field { display: flex; flex-direction: column; gap: 4px; }
 .mcp-field > span,
 .mcp-field-head {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-secondary);
 }
 .mcp-field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.mcp-field-head button { padding: 2px 7px; font-size: var(--font-3xs); text-transform: none; letter-spacing: 0; }
+.mcp-field-head button { padding: 2px 7px; font-size: var(--font-2xs); text-transform: none; letter-spacing: 0; }
 .mcp-kv-row { display: flex; align-items: center; gap: 5px; }
 .mcp-kv-row input { flex: 1; min-width: 0; font-size: var(--font-2xs); padding: 5px 7px; }
 .mcp-kv-row .mcp-kv-key { flex: 0 1 40%; }
-.mcp-kv-row button { padding: 3px 7px; font-size: var(--font-3xs); }
-.mcp-kv-index { flex: none; width: 14px; font-size: var(--font-3xs); color: var(--text-secondary); text-align: right; }
+.mcp-kv-row button { padding: 3px 7px; font-size: var(--font-2xs); }
+.mcp-kv-index { flex: none; width: 14px; font-size: var(--font-2xs); color: var(--text-secondary); text-align: right; }
 
 @media (max-width: 900px) {
   .mcp-pane-body, .mcp-pane-body.drawer-open { grid-template-columns: 1fr; }

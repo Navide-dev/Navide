@@ -10,6 +10,7 @@
 // has to stay legible across five themes, which a free hex cannot promise. The
 // swatches render their real resolved colour under the current theme by binding
 // the palette's token expressions straight into the button.
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AVAILABLE_UI_LOCALES, vTruncate, type UiLocale } from '@navide/plugin-ui/foundation'
 
@@ -67,17 +68,15 @@ function isCustomized(status: PaneStatusValue): boolean {
   return !!prefs.value[status]
 }
 
-/** One label column per UI language that has a catalog. The original three
- *  keep their column headings; a later language is headed by its own name. */
-const LEGACY_COLUMN_KEYS: Partial<Record<UiLocale, string>> = {
-  'zh-TW': 'statusBadges.col.zh',
-  'en-US': 'statusBadges.col.en',
-  'ja-JP': 'statusBadges.col.ja',
-}
-const LABEL_COLUMNS = AVAILABLE_UI_LOCALES.map((code) => ({
-  code,
-  headingKey: LEGACY_COLUMN_KEYS[code] ?? `settings.appearance.language-${code}`,
-}))
+/** One label column per UI language that has a catalog, each headed by the
+ *  language's own name ("日本語", "Deutsch") read from that language's catalog,
+ *  so every column is named the same way in every UI language. */
+const LABEL_COLUMNS = computed(() =>
+  AVAILABLE_UI_LOCALES.map((code) => ({
+    code,
+    heading: t(`settings.appearance.language-${code}`, {}, { locale: code }),
+  }))
+)
 
 function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void {
   setStatusBadgePref(status, { labels: { [locale]: value } })
@@ -91,7 +90,7 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
 
     <div class="sb-head">
       <span class="sb-h-status">{{ $t('statusBadges.col.status') }}</span>
-      <span v-for="column in LABEL_COLUMNS" :key="column.code" class="sb-h-label">{{ $t(column.headingKey) }}</span>
+      <span v-for="column in LABEL_COLUMNS" :key="column.code" class="sb-h-label">{{ column.heading }}</span>
       <span class="sb-h-color">{{ $t('statusBadges.col.color') }}</span>
       <span class="sb-h-reset"></span>
     </div>
@@ -116,9 +115,9 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
       </div>
 
       <label v-for="column in LABEL_COLUMNS" :key="column.code" class="sb-field">
-        <span class="sb-sr">{{ $t(column.headingKey) }} — {{ status }}</span>
+        <span class="sb-sr">{{ column.heading }} — {{ status }}</span>
         <!-- Stacked (narrow) rows have no column heading above them, so each input names its language. -->
-        <span class="sb-field-label" aria-hidden="true">{{ $t(column.headingKey) }}</span>
+        <span class="sb-field-label" aria-hidden="true">{{ column.heading }}</span>
         <input
           type="text"
           maxlength="24"
@@ -247,7 +246,7 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   grid-area: preview;
   align-self: center;
   justify-self: start;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   text-transform: uppercase;
   padding: 2px 8px;
   border-radius: 999px;
@@ -262,8 +261,8 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   align-items: center;
   gap: 2px 6px;
   min-width: 0;
-  font-family: var(--font-mono, monospace);
   font-size: var(--font-row-desc);
+  font-weight: 600;
   color: var(--text-primary);
 }
 .sb-key-name {
@@ -275,7 +274,7 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
 .sb-rowonly {
   font-family: inherit;
   font-style: normal;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);

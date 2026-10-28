@@ -1481,9 +1481,9 @@
       "inferred": "inferido",
       "inferredHint": "Lido do texto-fonte; o manifesto da CLI não informa isso.",
       "tier": {
-        "L1": "L1: recursos de texto",
-        "L2": "L2: executa comandos",
-        "L3": "L3: código no processo"
+        "L1": "Somente texto",
+        "L2": "Executa comandos de shell",
+        "L3": "Roda dentro da CLI"
       },
       "tierHint": {
         "L1": "Apenas instruções e outros textos; nada é executado por conta própria.",
@@ -1491,7 +1491,7 @@
         "L3": "É executado dentro do próprio processo da CLI, com as permissões da CLI e sem solicitação de permissão."
       },
       "capability": {
-        "exec": "Executa comandos",
+        "exec": "Executa comandos de shell",
         "network": "Rede",
         "fs": "Arquivos",
         "intercept-tools": "Intercepta chamadas de ferramentas",
@@ -1739,7 +1739,7 @@
     "executionPolicy": {
       "unavailable": "A política de execução não está disponível. Verifique o host do Navide e tente novamente.",
       "errors": {
-        "invalid-policy": "A política de execução é inválida. Use modos compatíveis, namespaces do sistema e nomes de executáveis.",
+        "invalid-policy": "A política de execução é inválida. Use modos compatíveis, recursos do Navide e nomes de executáveis.",
         "high-risk-confirmation-required": "O modo completo exige confirmação explícita de que executáveis arbitrários podem ser executados.",
         "recovery-confirmation-required": "Reconstruir a política de execução exige confirmação explícita.",
         "source-reset-confirmation-required": "Redefinir todas as seleções de fonte de política exige confirmação explícita.",
@@ -1805,11 +1805,11 @@
       "denylistWarning": "O modo de lista de bloqueios concede por padrão: listar nomes não limita o que ele concede, então o Navide trata toda lista de bloqueios como uma escolha de alto risco. Revise-a antes de salvar.",
       "denylistConfirmation": "Entendo que o modo de lista de bloqueios concede por padrão e não é restringido pelos nomes que eu listar.",
       "shellDenylistScope": "No modo de lista de bloqueios, um agent só pode executar os comandos compatíveis com este host ({executables}), menos os que você bloquear aqui. Bloquear um nome fora dessa lista não tem efeito.",
-      "systemLabel": "Namespaces do sistema",
+      "systemLabel": "Recursos do Navide",
       "systemHint": "Escolha quais recursos do Navide os agentes podem usar.",
-      "systemAllowlistLabel": "Namespaces do sistema permitidos",
+      "systemAllowlistLabel": "Recursos do Navide permitidos",
       "systemAllowlistHint": "Escolha quais recursos do Navide os agentes podem usar.",
-      "systemDenylistLabel": "Namespaces do sistema bloqueados",
+      "systemDenylistLabel": "Recursos do Navide bloqueados",
       "systemDenylistHint": "Escolha quais recursos do Navide os agentes não podem usar.",
       "namespace": {
         "fs": "Arquivos do espaço de trabalho",
@@ -2196,7 +2196,7 @@
       },
       "localInstall": {
         "agentRequest": "Solicitado por {requester}. O Navide não revisou este pacote; instalá-lo é decisão sua.",
-        "button": "Instalar de arquivo .vsix…",
+        "button": "Instalar de arquivo…",
         "backToMarketplace": "Voltar para a versão do Navide Marketplace",
         "warning": "Este plug-in do Navide vem de um arquivo deste computador. O Navide não o revisou e ele não está assinado: o autor não pode ser confirmado e o arquivo pode ter sido alterado. Instale apenas arquivos de pessoas de confiança.",
         "signatureLabel": "Assinatura",
@@ -6898,6 +6898,9 @@
       "state-on": "Ativado",
       "state-off": "Desativado",
       "status": "Status: {status}",
+      "transport-local": "Local",
+      "transport-remote": "Remoto",
+      "status-failed": "Falha ao iniciar",
       "starting-note": "Ainda iniciando após {seconds} s. Se ele roda via npx ou uvx, a primeira execução pode estar baixando o pacote.",
       "error-reason": "Falha ao iniciar: {reason}",
       "tools-error": "Não foi possível listar as ferramentas: {reason}",
@@ -7159,7 +7162,7 @@
       "group-native": "Próprias de {agent}",
       "delivery-title": "Entregue a",
       "delivery-hint": "● lê por conta própria · ✓ entregue pelo Navide (clique para alternar) · em cinza: não entregue",
-      "delivery-auto": "{n} a leem por conta própria",
+      "delivery-auto": "Carregado por {n} CLI | Carregado por {n} CLIs",
       "delivery-none": "não é entregue a lugar nenhum",
       "location": "Local",
       "also-linked-from": "Também vinculada a partir de: {roots}",
@@ -7765,7 +7768,7 @@
     },
     "cliAgents": {
       "title": "Agents de CLI",
-      "hint": "Ative e reordene os agents de CLI na lista de Iniciar manualmente. Abra um cartão para gerenciar esse agent. Pelo menos um precisa continuar ativado.",
+      "hint": "Ative e reordene os agents de CLI no menu de novos panes. Abra um cartão para gerenciar esse agent. Pelo menos um precisa continuar ativado.",
       "drag-hint": "Arraste para reordenar",
       "search": "Encontrar um agent…",
       "filter-label": "Filtrar agents de CLI",
@@ -8152,6 +8155,7 @@
       "conflict-hard": "conflito",
       "conflict-soft": "tecla compartilhada",
       "when-any": "sempre",
+      "when-limited": "Somente em alguns contextos",
       "no-results": "Nenhum comando corresponde a esta pesquisa.",
       "footnote": "Combinações em duas etapas são aceitas: grave uma combinação e depois pressione a segunda. As teclas que esta tabela não controla aparecem como somente leitura no fim desta página.",
       "category": {
@@ -8163,7 +8167,7 @@
     },
     "accounts": {
       "title": "Contas do Git",
-      "encrypted-note": "Os tokens são criptografados em repouso com o chaveiro do sistema operacional (safeStorage) e armazenados localmente nesta máquina.",
+      "encrypted-note": "Os tokens são criptografados com o chaveiro do sistema e armazenados apenas nesta máquina.",
       "unavailable": "A criptografia não está disponível neste sistema, então não é possível adicionar contas. Isso normalmente significa que o chaveiro do sistema operacional não está acessível.",
       "empty": "Nenhuma conta ainda.",
       "new-account": "+ Nova conta",
@@ -8175,7 +8179,7 @@
       "host": "Host",
       "username": "Nome de usuário",
       "token": "Token",
-      "token-hint": "Cole um token de acesso pessoal. Ele é criptografado com safeStorage e armazenado localmente, nunca em texto simples.",
+      "token-hint": "Cole um token de acesso pessoal. Ele é criptografado e armazenado apenas nesta máquina, nunca em texto simples.",
       "token-keep": "Deixe em branco para manter o token atual",
       "delete-confirm": "Excluir esta conta?",
       "cli": {
@@ -8240,7 +8244,6 @@
         "default-sign-in-body": "Entrar aqui primeiro troca o {agent} para o login original. Ele não tem nenhum login salvo, então o login ativo ({current}) é apagado: essa conta continua salva no próprio cartão e você pode voltar para ela. Novos panes do {agent} ficam sem login até este login terminar.",
         "default-sign-in-confirm": "Trocar e entrar",
         "is-default": "Ativa",
-        "is-default-signed-out": "Selecionada",
         "set-default": "Trocar para esta conta",
         "switching": "Trocando…",
         "not-signed-in": "Sem login",
@@ -9358,9 +9361,6 @@
     "intro": "Renomeie qualquer status de pane e escolha a cor dele. As alterações valem em todos os lugares onde um status aparece – o selo do pane, a barra lateral, a faixa de reunião e o painel de recursos – e são salvas na sua conta, não em um projeto.",
     "col": {
       "status": "Status",
-      "zh": "Chinês tradicional",
-      "en": "Inglês",
-      "ja": "Japonês",
       "color": "Cor"
     },
     "row-only": "somente na lista",
@@ -9848,6 +9848,7 @@
     "reading-short": "lendo",
     "reading-tooltip": "Esta conta acabou de ficar ativa. Ler a cota dela inicia um Claude Code; por isso, os números abaixo são a leitura anterior até que termine – até 3 minutos.",
     "refresh-status": "Atualização: {status}",
+    "refresh-not-signed-in": "Não é possível atualizar — sessão não iniciada",
     "refresh-error": "Motivo: {reason}",
     "refresh-status-ok": "atualizado",
     "refresh-status-not-refreshed": "ainda não atualizado",

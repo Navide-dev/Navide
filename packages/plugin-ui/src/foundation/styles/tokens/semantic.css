@@ -263,8 +263,11 @@
    * another status (dark-forest's green accent against green 'running')
    * overrides these rather than the family. */
   --status-starting-subtle: var(--attention-subtle);
-  --status-starting-muted: var(--attention-muted);
-  --status-starting-fg: var(--attention-fg);
+  /* A starting badge is small text on its own fill: the subtle tier and the
+   * on-subtle text keep it above 4.5:1 in light and dark (attention-fg on
+   * attention-muted was 2.6:1 dark, 3.7:1 light). */
+  --status-starting-muted: var(--attention-subtle);
+  --status-starting-fg: var(--attention-on-subtle);
   --status-starting-emphasis: var(--attention-emphasis);
   --status-idle-subtle: var(--accent-subtle);
   --status-idle-muted: var(--accent-muted);
@@ -337,10 +340,12 @@
   --modal-w-compact: 440px;   /* confirmations, single-field prompts */
   --modal-w-standard: 620px;  /* forms, guided flows */
   --modal-w-wide: 1100px;     /* data tables, multi-pane settings */
-  /* One measure for prose-like Settings pages (Help, Layout, Prompts intro,
-     Developer), set on the page container at body text size. Grids and
-     tables on other pages stay full width. */
-  --settings-page-max: 78ch;
+  /* Settings pages end at one of two right edges: every page at
+     --settings-page-max, and the card-grid / list pages (CLI Agents, MCP,
+     Skills, Prompts, Accounts) at --settings-page-max-wide. Fixed lengths,
+     not ch, so a page's edge does not move with its own font size. */
+  --settings-page-max: 960px;
+  --settings-page-max-wide: 1200px;
   --modal-backdrop: var(--shadow-overlay);
   --modal-backdrop-blur: 4px;
 

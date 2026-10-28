@@ -36,7 +36,7 @@ describe('Settings — remaining hard-coded strings', () => {
   // key → [template/script reference, en-US text, zh-TW text]
   const KEYS: Array<[string, string, string, string]> = [
     // A. Analyzer tab
-    ['settings.analyzer.ai-keys-label', "{{ $t('settings.analyzer.ai-keys-label') }} {{ settingsPaths.ai_chat }}", 'AI keys:', 'AI 金鑰：'],
+    ['settings.analyzer.ai-keys-label', "<span class=\"settings-meta-label\">{{ $t('settings.analyzer.ai-keys-label') }}</span>", 'AI keys:', 'AI 金鑰：'],
     ['settings.analyzer.llama-cli-placeholder', ":placeholder=\"$t('settings.analyzer.llama-cli-placeholder')\"", 'e.g. llama-cli or /usr/local/bin/llama-completion', '例如 llama-cli 或 /usr/local/bin/llama-completion'],
     ['settings.analyzer.gguf-file-found', "{{ $t('settings.analyzer.gguf-file-found') }} ·", 'File found', '已找到檔案'],
     ['settings.analyzer.gguf-not-detected', "?.gguf_warning ?? $t('settings.analyzer.gguf-not-detected')", 'Not yet detected', '尚未偵測到'],

@@ -1481,9 +1481,9 @@
       "inferred": "déduit",
       "inferredHint": "Déduit du texte source ; le manifeste de la CLI ne l’indique pas.",
       "tier": {
-        "L1": "L1 ressources texte",
-        "L2": "L2 exécute des commandes",
-        "L3": "L3 code dans le processus"
+        "L1": "Texte uniquement",
+        "L2": "Exécute des commandes shell",
+        "L3": "S’exécute dans la CLI"
       },
       "tierHint": {
         "L1": "Instructions et autres textes uniquement ; rien ne s’exécute tout seul.",
@@ -1491,7 +1491,7 @@
         "L3": "S’exécute dans le processus même de la CLI, avec ses autorisations et sans demande d’autorisation."
       },
       "capability": {
-        "exec": "Exécute des commandes",
+        "exec": "Exécute des commandes shell",
         "network": "Réseau",
         "fs": "Fichiers",
         "intercept-tools": "Intercepte les appels d’outils",
@@ -1739,7 +1739,7 @@
     "executionPolicy": {
       "unavailable": "La politique d’exécution n’est pas disponible. Vérifiez l’hôte Navide et réessayez.",
       "errors": {
-        "invalid-policy": "La politique d’exécution n’est pas valide. Utilisez des modes, des espaces de noms système et des noms d’exécutables pris en charge.",
+        "invalid-policy": "La politique d’exécution n’est pas valide. Utilisez des modes, des fonctionnalités de Navide et des noms d’exécutables pris en charge.",
         "high-risk-confirmation-required": "Le mode complet exige de confirmer explicitement que des exécutables arbitraires peuvent s’exécuter.",
         "recovery-confirmation-required": "La reconstruction de la politique d’exécution exige une confirmation explicite.",
         "source-reset-confirmation-required": "La réinitialisation de toutes les sélections de source de politique exige une confirmation explicite.",
@@ -1805,11 +1805,11 @@
       "denylistWarning": "Le mode liste de refus accorde tout par défaut : lister des noms ne limite pas ce qu’il accorde ; Navide traite donc chaque liste de refus comme un choix à haut risque. Examinez-la avant d’enregistrer.",
       "denylistConfirmation": "Je comprends que le mode liste de refus accorde tout par défaut et n’est pas restreint par les noms que je liste.",
       "shellDenylistScope": "En mode liste de refus, un agent ne peut exécuter que les commandes prises en charge par cet hôte ({executables}), moins celles que vous refusez ici. Refuser un nom hors de cette liste n’a aucun effet.",
-      "systemLabel": "Espaces de noms système",
+      "systemLabel": "Fonctionnalités de Navide",
       "systemHint": "Choisissez les fonctions de Navide que les agents peuvent utiliser.",
-      "systemAllowlistLabel": "Espaces de noms système à autoriser",
+      "systemAllowlistLabel": "Fonctionnalités de Navide à autoriser",
       "systemAllowlistHint": "Choisissez les fonctions de Navide que les agents peuvent utiliser.",
-      "systemDenylistLabel": "Espaces de noms système à refuser",
+      "systemDenylistLabel": "Fonctionnalités de Navide à refuser",
       "systemDenylistHint": "Choisissez les fonctions de Navide que les agents ne doivent pas utiliser.",
       "namespace": {
         "fs": "Fichiers de l’espace de travail",
@@ -2196,7 +2196,7 @@
       },
       "localInstall": {
         "agentRequest": "Demandé par {requester}. Navide n’a pas examiné ce paquet ; l’installer relève de votre décision.",
-        "button": "Installer depuis un fichier .vsix…",
+        "button": "Installer depuis un fichier…",
         "backToMarketplace": "Revenir à la version de la Navide Marketplace",
         "warning": "Ce plugin Navide provient d’un fichier de cet ordinateur. Navide ne l’a pas examiné et il n’est pas signé : son auteur ne peut pas être confirmé et le fichier a peut-être été modifié. N’installez que des fichiers provenant de personnes de confiance.",
         "signatureLabel": "Signature",
@@ -6898,6 +6898,9 @@
       "state-on": "Activé",
       "state-off": "Désactivé",
       "status": "État : {status}",
+      "transport-local": "Local",
+      "transport-remote": "Distant",
+      "status-failed": "Échec du démarrage",
       "starting-note": "Toujours en cours de démarrage après {seconds} s. S’il passe par npx ou uvx, le premier lancement télécharge peut-être le paquet.",
       "error-reason": "Échec du démarrage : {reason}",
       "tools-error": "Impossible de lister ses outils : {reason}",
@@ -7159,7 +7162,7 @@
       "group-native": "Propres à {agent}",
       "delivery-title": "Distribué à",
       "delivery-hint": "● le lit de lui-même · ✓ distribué par Navide (cliquer pour basculer) · grisé : non distribué",
-      "delivery-auto": "{n} le lisent eux-mêmes",
+      "delivery-auto": "Chargé par {n} CLI | Chargé par {n} CLI",
       "delivery-none": "distribué nulle part",
       "location": "Emplacement",
       "also-linked-from": "Également lié depuis : {roots}",
@@ -7765,7 +7768,7 @@
     },
     "cliAgents": {
       "title": "Agents CLI",
-      "hint": "Activer et réordonner les agents CLI de la liste déroulante de lancement manuel. Ouvrez une carte pour gérer l’agent correspondant. Au moins un doit rester activé.",
+      "hint": "Activer et réordonner les agents CLI du menu des nouveaux panes. Ouvrez une carte pour gérer l’agent correspondant. Au moins un doit rester activé.",
       "drag-hint": "Faire glisser pour réordonner",
       "search": "Rechercher un agent…",
       "filter-label": "Filtrer les agents CLI",
@@ -8152,6 +8155,7 @@
       "conflict-hard": "conflit",
       "conflict-soft": "touche partagée",
       "when-any": "toujours",
+      "when-limited": "Seulement dans certains contextes",
       "no-results": "Aucune commande ne correspond à cette recherche.",
       "footnote": "Les raccourcis à deux touches sont pris en charge : enregistrez une combinaison, puis appuyez sur la seconde. Les touches qui n’appartiennent pas à cette table sont listées en lecture seule en bas de cette page.",
       "category": {
@@ -8163,7 +8167,7 @@
     },
     "accounts": {
       "title": "Comptes Git",
-      "encrypted-note": "Les tokens sont chiffrés au repos avec le trousseau de votre système (safeStorage) et stockés localement sur cette machine.",
+      "encrypted-note": "Les tokens sont chiffrés avec le trousseau de votre système et stockés uniquement sur cette machine.",
       "unavailable": "Le chiffrement n’est pas disponible sur ce système ; il est donc impossible d’ajouter des comptes. Cela signifie généralement que le trousseau du système est inaccessible.",
       "empty": "Aucun compte pour l’instant.",
       "new-account": "+ Nouveau compte",
@@ -8175,7 +8179,7 @@
       "host": "Hôte",
       "username": "Nom d’utilisateur",
       "token": "Token",
-      "token-hint": "Collez un Personal Access Token. Il est chiffré avec safeStorage et stocké localement – jamais en clair.",
+      "token-hint": "Collez un Personal Access Token. Il est chiffré et stocké uniquement sur cette machine – jamais en clair.",
       "token-keep": "Laisser vide pour conserver le token actuel",
       "delete-confirm": "Supprimer ce compte ?",
       "cli": {
@@ -8240,7 +8244,6 @@
         "default-sign-in-body": "Se connecter ici fait d’abord passer {agent} à la connexion d’origine. Elle ne contient aucune connexion, donc la connexion active ({current}) est effacée : ce compte reste enregistré sur sa propre carte et vous pouvez y revenir. Les nouveaux panes {agent} ne sont pas connectés tant que cette connexion n’est pas terminée.",
         "default-sign-in-confirm": "Changer et se connecter",
         "is-default": "Actif",
-        "is-default-signed-out": "Sélectionné",
         "set-default": "Passer à ce compte",
         "switching": "Changement…",
         "not-signed-in": "Non connecté",
@@ -9358,9 +9361,6 @@
     "intro": "Renommez chaque état de pane et choisissez sa couleur. Les modifications s’appliquent partout où un état est affiché (badge du pane, barre latérale, bandeau de réunion et panneau des ressources) et sont enregistrées dans votre compte, pas dans un projet.",
     "col": {
       "status": "État",
-      "zh": "Chinois traditionnel",
-      "en": "Anglais",
-      "ja": "Japonais",
       "color": "Couleur"
     },
     "row-only": "liste uniquement",
@@ -9848,6 +9848,7 @@
     "reading-short": "lecture",
     "reading-tooltip": "Ce compte vient de devenir actif. La lecture de son quota lance un Claude Code ; les chiffres ci-dessous sont donc ceux de la mesure précédente jusqu’à la fin, soit jusqu’à 3 minutes.",
     "refresh-status": "Actualisation : {status}",
+    "refresh-not-signed-in": "Actualisation impossible – non connecté",
     "refresh-error": "Motif : {reason}",
     "refresh-status-ok": "à jour",
     "refresh-status-not-refreshed": "pas encore actualisé",

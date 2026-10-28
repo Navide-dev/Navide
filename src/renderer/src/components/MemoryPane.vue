@@ -21,6 +21,7 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import { formatBytes } from '../lib/formatBytes'
+import PathText from './settings/PathText.vue'
 
 type Backend = ReturnType<typeof useBackend>
 
@@ -499,7 +500,7 @@ defineExpose({ reload, confirmDiscard })
                     <template v-if="file.exists">
                       {{ formatBytes(file.size) }} · {{ modifiedLabel(file) }}
                     </template>
-                    <template v-else>{{ file.path }}</template>
+                    <PathText v-else :path="file.path" />
                   </span>
                 </button>
                 <button
@@ -519,7 +520,7 @@ defineExpose({ reload, confirmDiscard })
               {{ t('settings.memory.scope-auto') }}<span class="count">{{ autoMemoryFiles.length }}</span>
             </h3>
             <p class="memory-group-note">{{ t('settings.memory.auto-intro') }}</p>
-            <code v-if="autoMemoryDir" class="memory-auto-dir">{{ autoMemoryDir }}</code>
+            <PathText v-if="autoMemoryDir" class="memory-auto-dir" :path="autoMemoryDir" />
             <p v-if="autoMemoryFiles.length === 0" class="memory-group-note">
               {{ t('settings.memory.auto-empty') }}
             </p>
@@ -584,7 +585,7 @@ defineExpose({ reload, confirmDiscard })
             @click="requestClose"
           >✕</button>
         </header>
-        <code class="memory-editor-path">{{ selectedFile.path }}</code>
+        <PathText class="memory-editor-path" :path="selectedFile.path" />
         <p v-if="selectedFile.autoMemory" class="memory-editor-hint">
           {{ t('settings.memory.auto-editor-hint') }}
         </p>
@@ -700,7 +701,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   align-items: baseline;
   gap: 6px;
   margin: 10px 4px 6px;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -713,9 +714,8 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 .memory-auto-dir {
   display: block;
   margin: 0 4px;
-  font-size: 10.5px;
+  font-size: var(--font-xs);
   color: var(--text-secondary);
-  word-break: break-all;
 }
 .memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .memory-row {
@@ -745,26 +745,25 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 .memory-open:hover:not(:disabled) { background: var(--bg-muted); }
 .memory-row-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .memory-relative {
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
   color: var(--text-bright);
-  font-family: Menlo, Monaco, monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .memory-readers { display: flex; flex-wrap: wrap; gap: 3px; }
 .memory-row-meta {
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
-  word-break: break-all;
 }
 .memory-create { flex: none; font-size: var(--font-2xs); }
 .rchip {
   display: inline-block;
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   border: 1px solid var(--border-muted);
   color: var(--text-secondary);
@@ -776,7 +775,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-muted);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   color: var(--text-secondary);
   white-space: nowrap;
   flex: none;
@@ -795,7 +794,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 .memory-agent-group { display: flex; flex-direction: column; gap: 4px; }
 .memory-agent-state { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .memory-agent-state strong { font-size: var(--font-2xs); color: var(--text-bright); }
-.memory-agent-state span { font-size: 10.5px; color: var(--text-secondary); }
+.memory-agent-state span { font-size: var(--font-xs); color: var(--text-secondary); }
 .memory-agent-chips { display: flex; flex-wrap: wrap; gap: 3px; }
 .memory-agent-group[data-state='configured'] .rchip,
 .memory-agent-group[data-state='unknown'] .rchip { opacity: 0.7; border-style: dashed; }
@@ -819,14 +818,13 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 .memory-editor-close { padding: 2px 7px; font-size: var(--font-xs); line-height: 1; }
 .memory-editor-path {
   display: block;
-  font-size: 10.5px;
+  font-size: var(--font-xs);
   padding: 5px 8px;
   border-radius: var(--radius-control);
   background: var(--bg-muted);
   color: var(--text-secondary);
-  word-break: break-all;
 }
-.memory-editor-hint { margin: 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; }
+.memory-editor-hint { margin: 0; font-size: var(--font-xs); color: var(--text-secondary); line-height: 1.4; }
 .memory-conflict {
   display: flex;
   flex-direction: column;
@@ -864,7 +862,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   border-radius: var(--radius-control);
   background: var(--bg-base);
   font-family: Menlo, Monaco, monospace;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-all;

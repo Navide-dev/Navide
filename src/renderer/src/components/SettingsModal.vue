@@ -155,6 +155,7 @@ import SettingsSection from './settings/SettingsSection.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingRow from './settings/SettingRow.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import PathText from './settings/PathText.vue'
 import RecentWorkspacesLimitRow from './settings/RecentWorkspacesLimitRow.vue'
 import ResourceLimitsSection from './settings/ResourceLimitsSection.vue'
 import VoiceSettingsSection from './settings/VoiceSettingsSection.vue'
@@ -2904,7 +2905,7 @@ watch(activeTab, (tab) => {
           <button class="s-close" :inert="!!selectedCliKey" @click="requestCloseSettings" :title="$t('action.close-esc')">✕</button>
 
         <!-- ── MCP TAB ───────────────────────────────────────────────────── -->
-        <div v-show="activeTab === 'mcp'" class="s-body s-body--bleed mcp-body">
+        <div v-show="activeTab === 'mcp'" class="s-body s-body--bleed s-body--wide mcp-body">
           <h1 class="s-page-title">{{ $t('settings.nav.mcp') }}</h1>
 
           <!-- ── LIST VIEW ──────────────────────────────────────────────── -->
@@ -3082,7 +3083,7 @@ watch(activeTab, (tab) => {
         </div>
 
         <!-- ── SKILLS TAB ───────────────────────────────────────────────── -->
-        <div v-show="activeTab === 'skills'" class="s-body s-body--bleed" data-settings-section="skills">
+        <div v-show="activeTab === 'skills'" class="s-body s-body--bleed s-body--wide" data-settings-section="skills">
           <h1 class="s-page-title">{{ $t('settings.nav.skills') }}</h1>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
@@ -3104,7 +3105,7 @@ watch(activeTab, (tab) => {
         </div>
 
         <!-- ── PROMPTS TAB ──────────────────────────────────────────────── -->
-        <div v-show="activeTab === 'prompts'" class="s-body s-body--bleed" data-settings-section="prompts">
+        <div v-show="activeTab === 'prompts'" class="s-body s-body--bleed s-body--wide" data-settings-section="prompts">
           <h1 class="s-page-title">{{ $t('settings.nav.prompts') }}</h1>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
@@ -3135,10 +3136,11 @@ watch(activeTab, (tab) => {
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
-            <span class="settings-path" v-truncate>{{ settingsPaths.analyzer }}</span>
+            <PathText class="settings-path settings-path--wrap" :path="settingsPaths.analyzer" />
             <button class="settings-path-btn" :disabled="!settingsPaths.analyzer" @click="openSettingsPath(settingsPaths.analyzer)">{{ $t('action.open') }}</button>
             <span class="settings-path-divider">·</span>
-            <span class="settings-path" v-truncate>{{ $t('settings.analyzer.ai-keys-label') }} {{ settingsPaths.ai_chat }}</span>
+            <span class="settings-meta-label">{{ $t('settings.analyzer.ai-keys-label') }}</span>
+            <PathText class="settings-path settings-path--wrap" :path="settingsPaths.ai_chat" />
             <button class="settings-path-btn" :disabled="!settingsPaths.ai_chat" @click="openSettingsPath(settingsPaths.ai_chat)">{{ $t('action.open') }}</button>
           </div>
 
@@ -3426,7 +3428,7 @@ watch(activeTab, (tab) => {
         </div>
 
         <!-- ══ CLI AGENTS TAB ══ -->
-        <div v-show="activeTab === 'cliAgents'" class="s-body cli-agents-body">
+        <div v-show="activeTab === 'cliAgents'" class="s-body s-body--wide cli-agents-body">
           <div ref="cliGridRef" class="cli-agent-roster" :inert="!!selectedCliKey">
           <h1 class="s-page-title">{{ $t('settings.nav.cliAgents') }}</h1>
           <section class="ap-section" data-settings-section="cli-agents-list">
@@ -3437,7 +3439,7 @@ watch(activeTab, (tab) => {
                    action never lands alone on a line of its own. -->
               <div class="cli-agent-toolbar-controls">
                 <div class="cli-agent-filters" :aria-label="$t('settings.cliAgents.filter-label')">
-                  <button v-for="filter in (['all', 'enabled', 'attention'] as const)" :key="filter" type="button" :data-cli-filter="filter" :aria-pressed="cliFilter === filter" @click="cliFilter = filter">{{ $t(`settings.cliAgents.filter-${filter}`) }}</button>
+                  <button v-for="filter in (['all', 'enabled', 'attention'] as const)" :key="filter" type="button" class="cli-filter-chip" :data-cli-filter="filter" :aria-pressed="cliFilter === filter" @click="cliFilter = filter">{{ $t(`settings.cliAgents.filter-${filter}`) }}</button>
                 </div>
                 <button type="button" :disabled="onboarding.loading.value" @click="onboarding.refresh({ fresh: true })">{{ $t('cli-manage.redetect') }}</button>
               </div>
@@ -4667,7 +4669,7 @@ watch(activeTab, (tab) => {
           </SettingsCard>
         </div>
 
-        <div v-show="activeTab === 'accounts'" class="s-body s-body--bleed accounts-body" data-settings-section="accounts">
+        <div v-show="activeTab === 'accounts'" class="s-body s-body--bleed s-body--wide accounts-body" data-settings-section="accounts">
           <h1 class="s-page-title">{{ $t('settings.nav.accounts') }}</h1>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
@@ -4976,7 +4978,7 @@ watch(activeTab, (tab) => {
 }
 .s-nav-group-title {
   padding: 4px var(--space-row-x) 6px;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -5083,7 +5085,7 @@ watch(activeTab, (tab) => {
 }
 .s-search-result-group {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   color: var(--text-muted);
 }
 .s-search-result-summary {
@@ -5139,7 +5141,15 @@ watch(activeTab, (tab) => {
   /* The toolbar wraps; a label never breaks across two lines. */
   white-space: nowrap;
 }
-.cli-agent-toolbar button[aria-pressed='true'] { color: var(--accent-fg); background: var(--accent-subtle); border-color: var(--accent-focus); }
+/* List filters share one chip look with MCP and Skills: a pill, the pressed
+   one raised and bold rather than tinted with the accent. */
+.cli-agent-filters { gap: 4px; }
+.cli-agent-toolbar .cli-filter-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: var(--control-h-md); padding: 3px 9px;
+  border-radius: var(--radius-pill); background: var(--bg-muted);
+}
+.cli-agent-toolbar .cli-filter-chip[aria-pressed='true'] { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
 .cli-agent-toolbar button:disabled { opacity: .6; cursor: default; }
 .cli-agent-count { margin: 10px 0 14px; }
 .cli-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 12px; list-style: none; padding: 0; margin: 0; max-width: 100%; }
@@ -5210,7 +5220,12 @@ watch(activeTab, (tab) => {
 .cli-chip--ok { color: var(--success-fg, #2b8a3e); border-color: transparent; }
 .cli-chip--warn { color: var(--attention-fg, #c77400); border-color: transparent; }
 .cli-chip--bad { color: var(--danger-fg, #c0392b); border-color: transparent; }
-.cli-chip--info { color: var(--accent-fg, #3b5bdb); border-color: transparent; }
+/* Neutral and informational chips ("Signed out", "Not installed", a model)
+   read in the primary text colour: secondary grey on the muted fill sits too
+   close to 4.5:1 in dark themes, and accent is kept for selection and focus. */
+.cli-chip--neutral,
+.cli-chip--info { color: var(--text-primary); }
+.cli-chip--info { border-color: transparent; }
 /* Launch overrides for the selected agent. */
 .launch-row { flex-direction: column; align-items: stretch; padding: 0; }
 .launch-row.launch-open { border-color: var(--accent-focus); }
@@ -5308,7 +5323,11 @@ watch(activeTab, (tab) => {
 .ap-lang-btn.active { border-color: var(--accent-emphasis); box-shadow: 0 0 0 1px var(--accent-emphasis); }
 .ap-timeout-field { max-width: 140px; }
 .ap-reset {
-  font-size: var(--font-2xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-h-md);
+  font-size: var(--font-xs);
   padding: 4px 10px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
@@ -5381,7 +5400,14 @@ watch(activeTab, (tab) => {
 /* A stack of region cards needs the gutter and its own scroll, which the bare
    .s-body (overflow:hidden, no padding) does not give. */
 .layout-body { overflow-y: auto; padding: 18px 22px; }
-.layout-body > * { max-width: var(--settings-page-max); }
+/* One content width: every page stops at --settings-page-max, the card-grid
+   and list pages (.s-body--wide) at --settings-page-max-wide, so each page's
+   right edge is one of two values. The plugin and marketplace pages scroll
+   inside a wrapper, so the cap goes one level further down there. */
+.s-body > *,
+.extensions-scroll > *,
+.marketplace-scroll > * { max-width: var(--settings-page-max); }
+.s-body--wide > * { max-width: var(--settings-page-max-wide); }
 .notifications-body { overflow-y: auto; padding: 18px 22px; }
 .voice-body { overflow-y: auto; padding: 18px 22px; }
 .channels-body { overflow-y: auto; padding: 18px 22px; }
@@ -5498,7 +5524,8 @@ watch(activeTab, (tab) => {
   border: 1px solid var(--border-default);
   border-radius: 999px;
   padding: 2px 7px;
-  color: var(--accent-fg);
+  /* Neutral: accent is reserved for selection, the primary action and focus. */
+  color: var(--text-primary);
   background: var(--bg-muted);
   font-weight: 600;
 }
@@ -5510,6 +5537,8 @@ watch(activeTab, (tab) => {
   font-family: var(--font-mono);
 }
 .settings-path--prose { font-family: var(--font-ui); }
+/* A shortened path that may wrap, but only after a separator (PathText). */
+.settings-path--wrap { white-space: normal; overflow: visible; }
 .settings-path-divider { color: var(--text-muted); }
 .settings-path-btn {
   flex-shrink: 0;
@@ -5517,8 +5546,8 @@ watch(activeTab, (tab) => {
   background: var(--bg-subtle);
   color: var(--text-primary);
   border-radius: var(--radius-sm);
-  padding: 3px 7px;
-  min-height: 24px;
+  padding: 3px 9px;
+  min-height: var(--control-h-md);
   font-size: var(--font-xs);
   cursor: pointer;
 }
@@ -5530,8 +5559,9 @@ watch(activeTab, (tab) => {
 .settings-path-btn:disabled { opacity: 1; background: transparent; border-color: var(--border-muted); color: var(--text-secondary); cursor: not-allowed; }
 
 button.tiny {
-  padding: 3px 7px;
-  font-size: 10.5px;
+  min-height: var(--control-h-md);
+  padding: 3px 9px;
+  font-size: var(--font-xs);
   line-height: 1.2;
 }
 .summary-ok { font-size: var(--font-2xs); color: var(--success-fg); margin-left: 6px; }
@@ -5568,7 +5598,7 @@ button.tiny {
   height: 18px;
   border: 1px solid var(--border-default);
   border-radius: 50%;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   line-height: 1;
 }
 .upd-stage.active { color: var(--text-bright); }
@@ -5597,7 +5627,7 @@ button.tiny {
 
 /* ── Fields ───────────────────────────────────────────────────────────────── */
 .field { display: flex; flex-direction: column; gap: 4px; }
-.lbl { font-size: var(--font-3xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+.lbl { font-size: var(--font-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 input[type='text'], input[type='email'], input[type='number'], input[type='password'], textarea, select {
   background: var(--bg-subtle);
   border: 1px solid var(--border-default);
@@ -5616,7 +5646,7 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 /* ── List items ───────────────────────────────────────────────────────────── */
 .row-g { display: flex; align-items: center; gap: 6px; }
 .row-g.gap { gap: 8px; }
-.badge { background: var(--bg-muted); color: var(--text-secondary); font-size: 9px; padding: 1px 5px; border-radius: var(--radius-xs); }
+.badge { background: var(--bg-muted); color: var(--text-secondary); font-size: var(--font-2xs); padding: 1px 5px; border-radius: var(--radius-xs); }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 button {
@@ -5737,7 +5767,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
    claiming to be a rule. */
 .policy-rule-head {
   border: 0; background: none; padding: 2px 8px;
-  font-size: var(--font-3xs); text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: var(--font-2xs); text-transform: uppercase; letter-spacing: 0.06em;
 }
 .policy-rule-head span { color: var(--text-secondary); }
 .policy-any { color: var(--text-secondary); }
@@ -5756,10 +5786,16 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 /* ── Appearance tab ─────────────────────────────────────────────────────────── */
 .appearance-body { overflow-y: auto; }
 .help-body { overflow-y: auto; padding: 18px 22px; }
+/* One row of tabs at any width: long German labels scroll sideways instead
+   of stacking the tab bar four rows high. */
 .help-topics {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex-shrink: 0;
   margin-bottom: 18px;
   padding: 3px;
   border: 1px solid var(--border-muted);
@@ -5768,12 +5804,14 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   align-self: flex-start;
 }
 .help-topic {
+  flex: none;
+  white-space: nowrap;
   border: none;
   background: transparent;
   color: var(--text-secondary);
   font-size: 12.5px;
   font-weight: 600;
-  padding: 5px 14px;
+  padding: 5px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -5872,7 +5910,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .mcp-catalog-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .mcp-catalog-name { font-size: var(--font-sm); font-weight: 700; color: var(--text-bright); }
 .mcp-catalog-desc { font-size: var(--font-2xs); color: var(--text-secondary); line-height: var(--lh-base); }
-.mcp-catalog-note { font-size: var(--font-3xs); color: var(--attention-fg); margin-top: 2px; }
+.mcp-catalog-note { font-size: var(--font-2xs); color: var(--attention-fg); margin-top: 2px; }
 .mcp-add-btn {
   font-size: var(--font-2xs); padding: 6px 14px; border-radius: var(--radius-sm); white-space: nowrap; flex-shrink: 0;
   background: var(--accent-emphasis); border: 1px solid var(--accent-focus); color: var(--text-on-emphasis); font-weight: 600; cursor: pointer;
@@ -5909,7 +5947,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-section-title { font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 10px; }
 .az-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .az-section-header .az-section-title { margin-bottom: 0; }
-.az-section-note { font-size: var(--font-3xs); color: var(--text-muted); }
+.az-section-note { font-size: var(--font-2xs); color: var(--text-muted); }
 .az-subsection { margin-top: 12px; }
 .az-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
 .az-status-dot.ok { background: var(--success-fg); }
@@ -6070,7 +6108,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-td-task { text-align: center; white-space: nowrap; }
 .az-td-score { text-align: center; color: var(--text-secondary); }
 .az-td-verdict { text-align: center; }
-.az-elapsed { font-size: var(--font-3xs); color: var(--text-secondary); margin-left: 3px; }
+.az-elapsed { font-size: var(--font-2xs); color: var(--text-secondary); margin-left: 3px; }
 .az-pass,
 .az-fail { display: inline-flex; vertical-align: -2px; }
 .az-pass { color: var(--success-fg); }
@@ -6080,14 +6118,14 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .failover-table td { font-size: var(--font-2xs); }
 .failover-notes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .failover-tag {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   border-radius: 99px;
   padding: 0 6px;
   background: var(--bg-hover);
   color: var(--text-muted);
   white-space: nowrap;
 }
-.failover-todo { font-size: var(--font-3xs); color: var(--text-muted); }
+.failover-todo { font-size: var(--font-2xs); color: var(--text-muted); }
 .failover-warn { margin: 0 0 6px; font-size: var(--font-2xs); color: var(--attention-fg); }
 .az-row-fail td { color: var(--text-secondary); }
 .az-row-fail .az-td-model { color: var(--text-muted); }

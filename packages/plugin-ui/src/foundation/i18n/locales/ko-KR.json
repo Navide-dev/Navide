@@ -1481,9 +1481,9 @@
       "inferred": "추정",
       "inferredHint": "소스 텍스트에서 읽은 내용이에요. CLI의 매니페스트에는 명시되어 있지 않아요.",
       "tier": {
-        "L1": "L1 텍스트 자산",
-        "L2": "L2 명령 실행",
-        "L3": "L3 프로세스 내 코드"
+        "L1": "텍스트만",
+        "L2": "셸 명령 실행",
+        "L3": "CLI 안에서 실행"
       },
       "tierHint": {
         "L1": "지시문과 기타 텍스트만 있어요. 스스로 실행되는 것은 없어요.",
@@ -1491,7 +1491,7 @@
         "L3": "CLI 자체 프로세스 안에서 CLI의 권한으로, 권한 확인 없이 실행돼요."
       },
       "capability": {
-        "exec": "명령 실행",
+        "exec": "셸 명령 실행",
         "network": "네트워크",
         "fs": "파일",
         "intercept-tools": "도구 호출 가로채기",
@@ -1739,7 +1739,7 @@
     "executionPolicy": {
       "unavailable": "Execution Policy를 사용할 수 없어요. Navide 호스트를 확인하고 다시 시도하세요.",
       "errors": {
-        "invalid-policy": "실행 정책이 올바르지 않아요. 지원되는 모드, 시스템 네임스페이스, 실행 파일 이름을 사용하세요.",
+        "invalid-policy": "실행 정책이 올바르지 않아요. 지원되는 모드, Navide 기능, 실행 파일 이름을 사용하세요.",
         "high-risk-confirmation-required": "Full 모드에서는 임의의 실행 파일이 실행될 수 있다는 점을 명시적으로 확인해야 해요.",
         "recovery-confirmation-required": "실행 정책을 다시 만들려면 명시적으로 확인해야 해요.",
         "source-reset-confirmation-required": "모든 정책 소스 선택을 재설정하려면 명시적으로 확인해야 해요.",
@@ -1805,11 +1805,11 @@
       "denylistWarning": "거부 목록 모드는 기본적으로 허용해요. 이름을 나열해도 허용 범위가 제한되지 않으므로 Navide는 모든 거부 목록을 고위험 선택으로 취급해요. 저장하기 전에 검토하세요.",
       "denylistConfirmation": "거부 목록 모드는 기본적으로 허용하며 나열한 이름으로 범위가 좁혀지지 않는다는 것을 이해해요.",
       "shellDenylistScope": "거부 목록 모드에서 agent는 이 Host가 지원하는 명령({executables}) 중 여기서 거부한 것을 뺀 명령만 실행할 수 있어요. 그 목록 밖의 이름을 거부해도 효과가 없어요.",
-      "systemLabel": "시스템 네임스페이스",
+      "systemLabel": "Navide 기능",
       "systemHint": "에이전트가 쓸 수 있는 Navide 기능을 고르세요.",
-      "systemAllowlistLabel": "허용할 시스템 네임스페이스",
+      "systemAllowlistLabel": "허용할 Navide 기능",
       "systemAllowlistHint": "에이전트가 쓸 수 있는 Navide 기능을 고르세요.",
-      "systemDenylistLabel": "거부할 시스템 네임스페이스",
+      "systemDenylistLabel": "거부할 Navide 기능",
       "systemDenylistHint": "에이전트가 쓰면 안 되는 Navide 기능을 고르세요.",
       "namespace": {
         "fs": "작업 공간 파일",
@@ -2196,7 +2196,7 @@
       },
       "localInstall": {
         "agentRequest": "{requester}이(가) 요청했어요. Navide는 이 패키지를 검토하지 않았으며, 설치 여부는 직접 결정하세요.",
-        "button": ".vsix 파일에서 설치…",
+        "button": "파일에서 설치…",
         "backToMarketplace": "Navide 마켓플레이스 버전으로 되돌리기",
         "warning": "이 Navide 플러그인은 이 컴퓨터의 파일에서 가져온 거예요. Navide가 검토하지 않았고 서명되지도 않아서 작성자를 확인할 수 없으며 파일이 변경되었을 수 있어요. 신뢰하는 사람의 파일만 설치하세요.",
         "signatureLabel": "서명",
@@ -6898,6 +6898,9 @@
       "state-on": "사용",
       "state-off": "사용 안 함",
       "status": "상태: {status}",
+      "transport-local": "로컬",
+      "transport-remote": "원격",
+      "status-failed": "시작하지 못함",
       "starting-note": "아직 시작 중입니다({seconds}초 경과). npx 또는 uvx로 실행하는 경우 처음에는 패키지를 내려받고 있을 수 있습니다.",
       "error-reason": "시작하지 못했습니다: {reason}",
       "tools-error": "도구 목록을 읽지 못했습니다: {reason}",
@@ -7159,7 +7162,7 @@
       "group-native": "{agent} 자체 스킬",
       "delivery-title": "전달 대상",
       "delivery-hint": "● 직접 읽음 · ✓ Navide가 전달(클릭해서 전환) · 회색: 전달 안 됨",
-      "delivery-auto": "{n}개가 직접 읽음",
+      "delivery-auto": "CLI {n}개가 직접 불러옴",
       "delivery-none": "어디에도 전달 안 됨",
       "location": "위치",
       "also-linked-from": "다음 위치에서도 링크됨: {roots}",
@@ -7765,7 +7768,7 @@
     },
     "cliAgents": {
       "title": "CLI Agent",
-      "hint": "수동 생성 드롭다운에 표시할 CLI agent를 켜고 순서를 바꿔요. 카드를 열면 해당 agent를 관리할 수 있어요. 최소 하나는 켜 두어야 해요.",
+      "hint": "새 pane 메뉴에 표시할 CLI agent를 켜고 순서를 바꿔요. 카드를 열면 해당 agent를 관리할 수 있어요. 최소 하나는 켜 두어야 해요.",
       "drag-hint": "드래그해서 순서 변경",
       "search": "agent 찾기…",
       "filter-label": "CLI agent 필터",
@@ -8152,6 +8155,7 @@
       "conflict-hard": "충돌",
       "conflict-soft": "공유 키",
       "when-any": "항상",
+      "when-limited": "일부 상황에서만",
       "no-results": "이 검색과 일치하는 명령이 없어요.",
       "footnote": "두 키 연속 조합을 지원해요. 첫 조합을 녹화한 뒤 두 번째를 누르세요. 이 표가 관리하지 않는 키는 이 페이지 아래쪽에 읽기 전용으로 나열돼요.",
       "category": {
@@ -8163,7 +8167,7 @@
     },
     "accounts": {
       "title": "Git 계정",
-      "encrypted-note": "token은 OS 키체인(safeStorage)으로 암호화되어 이 컴퓨터에 로컬로 저장돼요.",
+      "encrypted-note": "token은 OS 키체인으로 암호화되어 이 컴퓨터에만 저장돼요.",
       "unavailable": "이 시스템에서는 암호화를 사용할 수 없어서 계정을 추가할 수 없어요. 대개 OS 키체인에 접근할 수 없다는 뜻이에요.",
       "empty": "계정이 아직 없어요.",
       "new-account": "+ 새 계정",
@@ -8175,7 +8179,7 @@
       "host": "호스트",
       "username": "사용자 이름",
       "token": "Token",
-      "token-hint": "Personal Access Token을 붙여 넣으세요. safeStorage로 암호화되어 로컬에 저장되며 일반 텍스트로는 절대 저장되지 않아요.",
+      "token-hint": "Personal Access Token을 붙여 넣으세요. 암호화되어 이 컴퓨터에만 저장되며 일반 텍스트로는 절대 저장되지 않아요.",
       "token-keep": "비워 두면 현재 token을 유지해요",
       "delete-confirm": "이 계정을 삭제할까요?",
       "cli": {
@@ -8240,7 +8244,6 @@
         "default-sign-in-body": "여기서 로그인하면 먼저 {agent}이(가) 원래 로그인으로 전환돼요. 원래 로그인에는 저장된 로그인이 없어서 현재 사용 중인 로그인({current})이 지워져요. 그 계정은 자기 카드에 그대로 저장되어 있어 다시 전환할 수 있어요. 이 로그인이 끝날 때까지 새로 여는 {agent} pane은 로그인되지 않은 상태예요.",
         "default-sign-in-confirm": "전환하고 로그인",
         "is-default": "사용 중",
-        "is-default-signed-out": "선택됨",
         "set-default": "이 계정으로 전환",
         "switching": "전환하는 중…",
         "not-signed-in": "로그인 안 됨",
@@ -9358,9 +9361,6 @@
     "intro": "pane 상태의 이름과 색상을 바꿀 수 있어요. 변경 사항은 상태가 표시되는 모든 곳(pane 배지, 사이드바, 회의 스트립, 리소스 패널)에 적용되며, 프로젝트가 아닌 계정에 저장돼요.",
     "col": {
       "status": "상태",
-      "zh": "중국어(번체)",
-      "en": "영어",
-      "ja": "일본어",
       "color": "색상"
     },
     "row-only": "목록 전용",
@@ -9848,6 +9848,7 @@
     "reading-short": "읽는 중",
     "reading-tooltip": "이 계정이 방금 활성화되었어요. 할당량을 읽으려면 Claude Code를 시작해야 하므로, 완료될 때까지(최대 3분) 아래 수치는 이전 측정값이에요.",
     "refresh-status": "새로 고침: {status}",
+    "refresh-not-signed-in": "새로 고칠 수 없어요 — 로그인되지 않음",
     "refresh-error": "이유: {reason}",
     "refresh-status-ok": "최신",
     "refresh-status-not-refreshed": "아직 새로 고치지 않음",
