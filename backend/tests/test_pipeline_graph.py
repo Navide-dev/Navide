@@ -116,7 +116,8 @@ class TestStoreGraph:
         assert out["derived"] is True
         assert pg.validate_graph(out["graph"]) == []
         assert s.export_document() == before
-        assert all(p["has_graph"] is False for p in s.list_pipelines())
+        # The linear seeds stay graphless; only the landing built-in ships one.
+        assert all(p["has_graph"] is (p["id"] == "evolve-landing") for p in s.list_pipelines())
 
     def test_graph_ops_store_graph_and_rederive_stages(self, tmp_path):
         s = self.store(tmp_path)

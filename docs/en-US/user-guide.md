@@ -81,6 +81,8 @@ The included pipeline covers requirements, planning, design, implementation, sec
 - **Freeze Output (pin).** In the Inspector, a frozen step is skipped on later runs and its last output is reused.
 - **Rerun from Here (restart from).** In the Inspector of a step, once the pipeline has a run that is not running, this starts a new run at that step and keeps the output of the steps before it — cheaper than **Start Over**, which re-runs everything.
 
+A third built-in, **提案落地流程** (proposal landing, id `evolve-landing`), is the path an approved self-evolution proposal takes once you or a commander pane dispatches it: an implementation step, a read-only review step, a CI check step that reports the workflow run's jobs and neither reruns nor merges, and an approval gate only you pass. It is a template: nothing starts it, it is never made the active pipeline, and it has no merge, publish, plugin-load, skill-delivery or schedule step. Navide adds it once to an existing pipeline list; if you delete it, it is not added back. **Reset** restores its stages and its gate. Like the other built-ins, its name is fixed in the seed rather than translated.
+
 A stage can run multiple slots in parallel. Navide advances based on configured completion signals and agent state. Always review generated changes and test results; automated completion indicates workflow progress, not correctness.
 
 ## Manager and worker coordination

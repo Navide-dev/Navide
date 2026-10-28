@@ -1309,3 +1309,70 @@ async def test_retro_corrections_count_ledger_rejections(env) -> None:
     await env.service.start_run(env.a, "manual")
     corr = env.host.opened[-1]["task"].split("USER CORRECTION RECORDS — BEGIN")[1]
     assert "too big for one pr" in corr.lower() and ": 2" in corr
+
+
+# ── landing paths (S3) ─────────────────────────────────────────────────────
+
+
+def _landing_section(task: str) -> str:
+    start = task.index("LANDING PATHS")
+    return " ".join(task[start:].split())
+
+
+def test_landing_paths_follow_the_retro_switches_or_a_ledger() -> None:
+    off = {"retro_tools": False, "retro_corrections": False}
+    assert "LANDING PATHS" not in evolve_rules.render(_params(**off))
+    assert "LANDING PATHS" not in evolve_rules.render(_params(**off), [])
+    assert _sha(evolve_rules.render(_params(**off), [])) == _MAIN_RENDER_FIX
+    row = {"name": "n", "rel_path": "p", "status": "rejected", "signature": "", "reason": ""}
+    for task in (evolve_rules.render(_params(retro_tools=True)),
+                 evolve_rules.render(_params(retro_corrections=True)),
+                 evolve_rules.render(_params(**off), [row])):
+        assert "LANDING PATHS" in task
+
+
+def test_landing_paths_name_every_landing_and_where_the_user_says_yes() -> None:
+    flat = _landing_section(evolve_rules.render(_params(retro_tools=True)))
+    for landing in evolve_rules.LANDINGS:
+        assert f"- {landing}" in flat or f"/ {landing}" in flat, landing
+    assert flat.count("The user's yes:") == 6
+    assert "draft pull request" in flat and "never merged by an agent" in flat
+    assert "plugins_validate_package" in flat and "Developer Mode" in flat
+    assert "skills_prepare_install" in flat and "pipeline_define" in flat and "scheduler_upsert" in flat
+    assert "only a diff inside the plan" in flat and "never write those files" in flat
+    assert '"提案落地流程" (id evolve-landing)' in flat
+
+
+def test_landing_paths_forbid_the_run_from_carrying_them_out() -> None:
+    flat = _landing_section(evolve_rules.render(_params(retro_tools=True)))
+    assert "do not call pipeline_start" in flat
+    assert "do not merge" in flat
+    assert "do not approve plans or gates" in flat
+    assert "do not open panes for a proposal's landing" in flat
+
+
+def test_evolve_itself_never_starts_dispatches_or_approves() -> None:
+    import inspect
+
+    source = inspect.getsource(ev) + inspect.getsource(evolve_rules)
+    # Rule text, docstrings and comments may name the tools; code may not.
+    code = re.sub(r"#[^\n]*", "", re.sub(r'(?s)""".*?"""', "", source))
+    for call in ("pipeline_start", "pipeline_gate", "gate_pass", "plan_update_stage", "merge(",
+                 "plugins_enable", "skills_install", "scheduler_upsert", "stages_store"):
+        assert call not in code, call
+
+
+async def test_a_landed_proposal_still_comes_from_the_plan_alone(env) -> None:
+    rel = _write_plan(env.a, "p1", "in-review")
+    await _reported(env, [{"rel_path": rel, "name": "P1", "kind": "tools:pipeline", "signature": "k"}])
+    _write_plan(env.a, "p1", "done", notes=[
+        {"id": "n1", "author": "ai", "text": "Landed via the proposal pipeline, PR #811.", "resolved": False, "reply": ""}])
+    row = (await _ledger(env))[rel]
+    assert row["status"] == "landed" and row["pr"] == "#811" and row["kind"] == "tools:pipeline"
+
+
+def test_the_rules_name_the_landing_pipeline_the_store_seeds() -> None:
+    from agent_team_backend import stages_store
+
+    assert evolve_rules.LANDING_PIPELINE_ID == stages_store.EVOLVE_LANDING_ID
+    assert evolve_rules.LANDING_PIPELINE_NAME == stages_store.EVOLVE_LANDING_NAME

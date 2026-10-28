@@ -295,6 +295,44 @@ $records
 USER CORRECTION RECORDS — END $fence
 """)
 
+#: The built-in pipeline proposals land through (stages_store.EVOLVE_LANDING_*;
+#: a test keeps the two equal, so this module stays clear of the store).
+LANDING_PIPELINE_ID = "evolve-landing"
+LANDING_PIPELINE_NAME = "提案落地流程"
+
+_LANDING = Template("""\
+
+LANDING PATHS
+- Every proposal plan gets a "Landing path" section for its landing (the
+  part after ":" in its kind): the steps below for that landing, and where
+  the user says yes. Write it into the plan; do not carry it out.
+- code: a worktree, a failing test first, then push a branch and open a
+  draft pull request, then CI (the whole run completed, every job success);
+  never merged by an agent. The user's yes: the merge (the user or the
+  commander).
+- plugin: build it, run plugins_validate_package, load it in Developer Mode
+  only after the user approves in the main window, and let the user try it;
+  publishing is a separate Marketplace review and signing. The user's yes:
+  loading it, and publishing separately.
+- skill / prompt: skills_prepare_install, then skills_install; wider delivery
+  with skills_set_delivery. The user's yes: the main window's approval, which
+  those tools wait for.
+- pipeline / role: pipeline_define / role_define create it and never start
+  it. The user's yes: pressing start.
+- schedule: scheduler_upsert, within the agent schedule limits; it shows in
+  the Schedule panel at once. The user's yes: they can turn it off there.
+- rule-diff: only a diff inside the plan (a rules file such as CLAUDE.md,
+  auto-memory, CLI settings, a skill's text); never write those files. The
+  user's yes: applying it themselves.
+- For code and plugin landings, name the built-in pipeline "$pipeline_name"
+  (id $pipeline_id): implement, read-only review, CI check, then the user's
+  gate.
+- AFTER APPROVAL THE USER OR THE COMMANDER DISPATCHES THE WORK, NEVER THIS
+  RUN: do not open panes for a proposal's landing, do not call pipeline_start,
+  do not approve plans or gates, do not merge, and do not install, load,
+  deliver or schedule anything for a proposal.
+""")
+
 _NO_RECORDS = "(no group reached the threshold)"
 
 
@@ -373,6 +411,8 @@ def render(params: dict[str, Any], ledger: list[dict[str, Any]] | None = None) -
         parts.append(_RETRO_CORRECTIONS.substitute(
             sub_budget=RETRO_SUB_BUDGET, records=_records(params.get("retro_corrections_data")),
             fence=secrets.token_hex(8)))
+    if retro_tools or retro_corrections or past:
+        parts.append(_LANDING.substitute(pipeline_name=LANDING_PIPELINE_NAME, pipeline_id=LANDING_PIPELINE_ID))
     if past:
         parts.append(_past(past))
     # Tabs and newlines are the user's own formatting; other control
