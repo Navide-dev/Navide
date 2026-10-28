@@ -11382,6 +11382,13 @@
       "fix": "Correctif",
       "proposal": "Proposition",
       "proposal-reason": "Motif : {reason}",
+      "effect-title": "Effet et fréquence",
+      "adoption": "Adoptées {adopted} / {resolved}",
+      "adoption-none": "Aucune proposition tranchée pour l'instant",
+      "lowered": "Passée en hebdomadaire le {date} : les {n} dernières propositions d'affilée n'ont pas été adoptées",
+      "landed-title": "Propositions intégrées",
+      "landed-none": "Aucune proposition intégrée pour l'instant",
+      "effect-counts": "{before} → {after} (7 jours avant / après)",
       "history": "Historique (30 dernières)",
       "unsaved": "Modifications non enregistrées",
       "save": "Enregistrer",
@@ -11448,6 +11455,21 @@
       "error": "Échouée",
       "timeout": "Délai dépassé",
       "skipped": "Ignorée"
+    },
+    "source": {
+      "failures": "Tri des erreurs",
+      "tools": "Travail manuel répété",
+      "corrections": "Vos corrections"
+    },
+    "freq": {
+      "daily": "Quotidienne",
+      "weekly": "Hebdomadaire"
+    },
+    "effect": {
+      "effective": "Efficace",
+      "not-effective": "Pas efficace",
+      "insufficient": "Trop peu pour juger",
+      "pending": "Pas encore évaluée"
     },
     "proposal-status": {
       "proposed": "Proposée",

@@ -11382,6 +11382,13 @@
       "fix": "수정",
       "proposal": "제안",
       "proposal-reason": "사유: {reason}",
+      "effect-title": "효과와 빈도",
+      "adoption": "채택 {adopted} / {resolved}",
+      "adoption-none": "결과가 나온 제안이 아직 없습니다",
+      "lowered": "{date}부터 주 1회로 자동 하향: 최근 {n}개 제안이 연속으로 채택되지 않았습니다",
+      "landed-title": "반영된 제안",
+      "landed-none": "반영된 제안이 아직 없습니다",
+      "effect-counts": "{before} → {after} (반영 전/후 7일)",
       "history": "기록(최근 30개)",
       "unsaved": "저장하지 않은 변경 사항",
       "save": "저장",
@@ -11448,6 +11455,21 @@
       "error": "실패",
       "timeout": "시간 초과",
       "skipped": "건너뜀"
+    },
+    "source": {
+      "failures": "오류 분류",
+      "tools": "반복되는 수작업",
+      "corrections": "나의 지적"
+    },
+    "freq": {
+      "daily": "매일",
+      "weekly": "매주"
+    },
+    "effect": {
+      "effective": "효과 있음",
+      "not-effective": "효과 없음",
+      "insufficient": "표본 부족",
+      "pending": "판정 전"
     },
     "proposal-status": {
       "proposed": "제안됨",

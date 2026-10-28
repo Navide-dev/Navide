@@ -40,6 +40,10 @@ class FakeHost:
         #: Message-log rows and schedule records the retro passes read (S2).
         self.message_log: list[dict[str, Any]] = []
         self.schedule: list[dict[str, Any]] = []
+        #: Error-ledger rows (every workspace), the oldest row's ms, flaky.json tests (S4).
+        self.error_log: list[dict[str, Any]] = []
+        self.error_oldest_ms: int | None = None
+        self.flaky: list[dict[str, Any]] = []
 
     async def git_info(self, workspace: str) -> dict[str, Any]:
         return {**self.git, "root": self.git["root"] or workspace} if self.git["is_repo"] else dict(self.git)
@@ -82,6 +86,13 @@ class FakeHost:
 
     async def schedule_records(self) -> list[dict[str, Any]]:
         return list(self.schedule)
+
+    def error_rows(self, workspace: str) -> tuple[list[dict[str, Any]], int | None]:
+        rows = [r for r in self.error_log if r.get("workspace") == workspace]
+        return rows, self.error_oldest_ms
+
+    def flaky_tests(self, root: str) -> list[dict[str, Any]]:
+        return list(self.flaky)
 
     def scheduler(self) -> SchedulerService:
         return self.sched
@@ -649,7 +660,7 @@ async def test_runs_live_in_the_workspace_database_under_a_versioned_component(e
     await enable(env, env.a)
     await env.service.start_run(env.a, "manual")
     db = env.databases.peek(env.a)
-    assert db.schema_version("evolve") == 3
+    assert db.schema_version("evolve") == 4
     assert db.kv_get("evolve_settings")["enabled"] is True
     assert env.databases.peek(env.b) is None
 
@@ -754,7 +765,7 @@ def test_a_v1_runs_table_upgrades_in_place(tmp_path: Path) -> None:
             cur.execute("INSERT INTO evolve_runs (id, trigger, status, started_at) VALUES ('r0', 'manual', 'ok', 1)")
         store = ev._Store(databases)  # noqa: SLF001
         assert [r["id"] for r in store.runs(str(ws))] == ["r0"]
-        assert db.schema_version("evolve") == 3
+        assert db.schema_version("evolve") == 4
         assert store.token_matches(str(ws), "r0", "anything") is False  # an old run has no token
     finally:
         databases.close_all()
@@ -1007,7 +1018,7 @@ async def test_each_reported_proposal_gets_a_ledger_row(env) -> None:
     assert ledger[rel2]["kind"] == "" and ledger[rel2]["signature"] == ""
     assert ledger[rel2]["commits"] == [] and ledger[rel2]["status"] == "proposed"
     db = env.databases.peek(env.a)
-    assert db.schema_version("evolve") == 3
+    assert db.schema_version("evolve") == 4
 
 
 @pytest.mark.parametrize("stage,status", [
@@ -1376,3 +1387,228 @@ def test_the_rules_name_the_landing_pipeline_the_store_seeds() -> None:
 
     assert evolve_rules.LANDING_PIPELINE_ID == stages_store.EVOLVE_LANDING_ID
     assert evolve_rules.LANDING_PIPELINE_NAME == stages_store.EVOLVE_LANDING_NAME
+
+
+# ── effect check, adoption and cadence (S4) ────────────────────────────────
+
+
+def _iso(ms: int) -> str:
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat(timespec="milliseconds")
+
+
+def _err(ws: str, at: int, code: str = "E_SYNC", message: str = "sync failed for /Users/x/a.txt after 3 tries (id 9f3a2b1c4d)") -> dict[str, Any]:
+    return {"ts": _iso(at), "source": "backend", "level": "error", "code": code, "message": message, "workspace": ws}
+
+
+SIG = "E_SYNC sync failed for /Users/x/b.txt after 5 tries (id 0aa1bb2cc3)"  # same signature, other numbers and paths
+
+
+async def _landed(env, signature: str = SIG, kind: str = "failures:code") -> str:
+    """One proposal that lands at NOW_MS (the clock is left there)."""
+    rel = _write_plan(env.a, "p1", "in-review")
+    await _reported(env, [{"rel_path": rel, "name": "Fix sync", "kind": kind, "signature": signature}])
+    _write_plan(env.a, "p1", "done", notes=[
+        {"id": "n1", "author": "ai", "text": "Merged as PR #900.", "resolved": False, "reply": ""}])
+    assert (await _ledger(env))[rel]["status"] == "landed"
+    return rel
+
+
+def test_error_signatures_follow_the_triage_rule() -> None:
+    a = ev.error_signature({"code": "E_SYNC", "message": "sync failed for /Users/x/a.txt after 3 tries (id 9f3a2b1c4d)"})
+    b = ev.error_signature({"code": "E_SYNC", "message": "Sync failed for /tmp/other/b.txt after 12 tries (id 0aa1bb2cc3)"})
+    assert a == b and a.startswith("e_sync ")
+    assert "9f3a" not in a and "/users" not in a and "3" not in a
+    assert ev.normalize_signature(SIG) == a
+    assert ev.error_signature({"code": "E_OTHER", "message": "sync failed"}) != a
+
+
+async def test_a_landed_fix_is_judged_only_after_seven_days(env) -> None:
+    rel = await _landed(env)
+    env.host.error_oldest_ms = NOW_MS - 30 * DAY_MS
+    env.host.error_log = [_err(env.a, NOW_MS - i * DAY_MS - 1000) for i in range(5)]
+    env.clock["now"] = NOW_MS + 6 * DAY_MS
+    assert (await _ledger(env))[rel]["effect"] == ""
+    env.clock["now"] = NOW_MS + 7 * DAY_MS
+    row = (await _ledger(env))[rel]
+    assert (row["effect"], row["effect_before"], row["effect_after"]) == ("effective", 5, 0)
+    assert row["effect_checked_at"] == NOW_MS + 7 * DAY_MS
+
+
+async def test_the_same_count_before_and_after_is_not_effective(env) -> None:
+    rel = await _landed(env)
+    env.host.error_oldest_ms = NOW_MS - 30 * DAY_MS
+    env.host.error_log = ([_err(env.a, NOW_MS - i * DAY_MS - 1000) for i in range(3)]
+                          + [_err(env.a, NOW_MS + i * DAY_MS + 1000) for i in range(3)])
+    env.clock["now"] = NOW_MS + 8 * DAY_MS
+    row = (await _ledger(env))[rel]
+    assert (row["effect"], row["effect_before"], row["effect_after"]) == ("not-effective", 3, 3)
+    # The next run's task brings it back for re-evaluation.
+    await env.service.set(env.a, {"enabled": True, "tz": "Asia/Taipei"})
+    await env.service.start_run(env.a, "manual")
+    flat = " ".join(env.host.opened[-1]["task"].split())
+    assert "not-effective" in flat and "Fix sync" in flat and "re-evaluate" in flat
+
+
+async def test_too_few_occurrences_are_insufficient(env) -> None:
+    rel = await _landed(env)
+    env.host.error_oldest_ms = NOW_MS - 30 * DAY_MS
+    env.host.error_log = [_err(env.a, NOW_MS - DAY_MS), _err(env.a, NOW_MS + DAY_MS)]
+    env.clock["now"] = NOW_MS + 8 * DAY_MS
+    row = (await _ledger(env))[rel]
+    assert (row["effect"], row["effect_before"], row["effect_after"]) == ("insufficient", 1, 1)
+
+
+async def test_a_ledger_rotated_past_the_before_window_is_insufficient(env) -> None:
+    rel = await _landed(env)
+    env.host.error_oldest_ms = NOW_MS - 2 * DAY_MS  # the older rows were rotated away
+    env.host.error_log = [_err(env.a, NOW_MS - i * 3_600_000) for i in range(6)]
+    env.clock["now"] = NOW_MS + 8 * DAY_MS
+    assert (await _ledger(env))[rel]["effect"] == "insufficient"
+
+
+async def test_flaky_runs_count_for_a_test_id_signature(env) -> None:
+    test_id = "backend/tests/test_x.py::test_y"
+    rel = await _landed(env, signature=test_id)
+    env.host.error_oldest_ms = NOW_MS - 30 * DAY_MS
+    env.host.flaky = [{"test": test_id, "category": "test-race",
+                       "runs": [{"at": _iso(NOW_MS - i * DAY_MS - 1000)} for i in range(4)]}]
+    env.clock["now"] = NOW_MS + 8 * DAY_MS
+    row = (await _ledger(env))[rel]
+    assert (row["effect"], row["effect_before"], row["effect_after"]) == ("effective", 4, 0)
+
+
+async def test_another_workspaces_errors_never_count(env) -> None:
+    rel = await _landed(env)
+    env.host.error_oldest_ms = NOW_MS - 30 * DAY_MS
+    env.host.error_log = [_err(env.b, NOW_MS + i * DAY_MS + 1000) for i in range(5)] + [
+        {**_err(env.a, NOW_MS + 1000), "workspace": ""}]
+    env.clock["now"] = NOW_MS + 8 * DAY_MS
+    row = (await _ledger(env))[rel]
+    assert (row["effect_before"], row["effect_after"]) == (0, 0) and row["effect"] == "insufficient"
+
+
+def test_live_error_rows_are_scoped_to_the_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend import error_ledger
+
+    ledger = error_ledger.ErrorLedger(tmp_path / "errors.jsonl")
+    ws_a, ws_b = tmp_path / "a", tmp_path / "b"
+    ws_a.mkdir()
+    ws_b.mkdir()
+    ledger.record("backend", "error", "E1", "a", workspace=str(ws_a))
+    ledger.record("backend", "error", "E2", "b", workspace=str(ws_b))
+    ledger.record("backend", "error", "E3", "none")
+    monkeypatch.setattr(error_ledger, "_ledger", ledger)
+    rows, oldest = ev.LiveHost().error_rows(str(ws_a.resolve()))
+    assert [r["code"] for r in rows] == ["E1"] and isinstance(oldest, int)
+    ledger.close()
+
+
+_STAGE_OF = {"approved": "approved", "rejected": "abandoned", "proposed": "in-review", "in-progress": "in-progress"}
+
+
+def _resolved(env, n: int, status: str, kind: str = "tools:pipeline", start: int = 0) -> None:
+    """n ledger rows in `status`, each with a plan whose stage keeps it there."""
+    db = env.databases.get(env.a)
+    env.service.store.db(env.a, create=True)
+    for i in range(n):
+        if status in _STAGE_OF:
+            _write_plan(env.a, f"gone{start + i}", _STAGE_OF[status], notes=[
+                {"id": "n1", "author": "user", "text": "no", "resolved": False, "reply": ""}])
+    with db.transaction() as cur:
+        for i in range(n):
+            cur.execute(
+                "INSERT INTO evolve_proposals (id, run_id, rel_path, name, kind, signature, status, reason, pr,"
+                " commits, created_at, updated_at) VALUES (?, 'r', ?, 'x', ?, '', ?, '', '', '[]', ?, ?)",
+                (f"x{start + i}", f".agent-team/plans/gone{start + i}.html", kind, status,
+                 NOW_MS - (1000 - start - i), NOW_MS - (1000 - start - i)))
+
+
+async def test_adoption_rate_counts_only_resolved_proposals(env) -> None:
+    _resolved(env, 2, "approved", kind="corrections:rule-diff")
+    _resolved(env, 1, "landed", kind="corrections:rule-diff", start=10)
+    _resolved(env, 3, "rejected", kind="corrections:rule-diff", start=20)
+    _resolved(env, 4, "proposed", kind="corrections:rule-diff", start=30)
+    adoption = (await env.service.get(env.a))["adoption"]["corrections"]
+    assert (adoption["adopted"], adoption["resolved"]) == (3, 6) and adoption["rate"] == 0.5
+
+
+async def test_ten_unadopted_in_a_row_lower_a_source_to_weekly_and_never_raise_it(env) -> None:
+    await enable(env, env.a)
+    _resolved(env, 9, "rejected")
+    assert (await env.service.get(env.a))["settings"]["retro_freq"]["tools"] == "daily"
+    _resolved(env, 1, "abandoned", start=9)
+    answer = await env.service.get(env.a)
+    assert answer["settings"]["retro_freq"] == {"failures": "daily", "tools": "weekly", "corrections": "daily"}
+    lowered = answer["cadence"]["lowered"]["tools"]
+    assert lowered["at"] == NOW_MS and "10" in lowered["reason"]
+    # Adopted proposals afterwards never raise it again.
+    _resolved(env, 10, "approved", start=40)
+    assert (await env.service.get(env.a))["settings"]["retro_freq"]["tools"] == "weekly"
+    # Only the user does: and the ten old rejections no longer lower it again.
+    answer = await env.service.set(env.a, {"retro_freq": {"tools": "daily"}})
+    assert answer["settings"]["retro_freq"]["tools"] == "daily" and "tools" not in answer["cadence"]["lowered"]
+    assert (await env.service.get(env.a))["settings"]["retro_freq"]["tools"] == "daily"
+
+
+def test_retro_freq_defaults_and_validation() -> None:
+    assert ev.DEFAULTS["retro_freq"] == {"failures": "daily", "tools": "daily", "corrections": "daily"}
+    old = {k: v for k, v in ev.DEFAULTS.items() if k != "retro_freq"}
+    assert ev.sanitize_stored(old)[0]["retro_freq"] == ev.DEFAULTS["retro_freq"]
+    merged = ev.normalize_settings({"retro_freq": {"tools": "weekly"}},
+                                   {**ev.DEFAULTS, "retro_freq": {**ev.DEFAULTS["retro_freq"], "failures": "weekly"}})
+    assert merged["retro_freq"] == {"failures": "weekly", "tools": "weekly", "corrections": "daily"}
+    for bad in ({"retro_freq": {"tools": "hourly"}}, {"retro_freq": {"nope": "daily"}}, {"retro_freq": "weekly"}):
+        with pytest.raises(ev.SettingsInvalid):
+            ev.normalize_settings(bad, dict(ev.DEFAULTS))
+
+
+async def test_a_weekly_section_waits_seven_days(env) -> None:
+    await enable(env, env.a, retro_freq={"tools": "weekly", "failures": "weekly"})
+    await env.service.start_run(env.a, "manual")
+    first = env.host.opened[-1]["task"]
+    assert "RETRO: REPEATED MANUAL WORK" in first and "SIGNALS (error triage" in first
+    await report(env, "p-run", {"run_id": (await env.service.get(env.a))["runs"][0]["id"], "status": "ok", "summary": "s"})
+    await drain(env)
+    env.clock["now"] = NOW_MS + 6 * DAY_MS
+    await env.service.start_run(env.a, "manual")
+    second = env.host.opened[-1]["task"]
+    assert "RETRO: REPEATED MANUAL WORK" not in second and "SIGNALS (error triage" not in second
+    assert "TRIAGE\n" not in second
+    flat = " ".join(second.split())
+    assert "This run has no error triage" in flat
+    await report(env, "p-run", {"run_id": (await env.service.get(env.a))["runs"][0]["id"], "status": "ok", "summary": "s"})
+    await drain(env)
+    env.clock["now"] = NOW_MS + 7 * DAY_MS
+    await env.service.start_run(env.a, "manual")
+    third = env.host.opened[-1]["task"]
+    assert "RETRO: REPEATED MANUAL WORK" in third and "SIGNALS (error triage" in third
+
+
+async def test_the_weekly_summary_goes_into_the_first_run_of_a_week(env) -> None:
+    await enable(env, env.a, ledger_plan=".agent-team/plans/ledger.html")
+    _resolved(env, 1, "approved")
+    _resolved(env, 1, "rejected", start=5)
+    await env.service.start_run(env.a, "manual")
+    task = env.host.opened[-1]["task"]
+    flat = " ".join(task.split())
+    assert "weekly summary: 2 proposed, 1 adopted, 0 landed, 0 effective (sample of 2, under 3)" in flat
+    assert "plan_add_note" in flat and "ledger.html" in flat
+    await report(env, "p-run", {"run_id": (await env.service.get(env.a))["runs"][0]["id"], "status": "ok", "summary": "s"})
+    await drain(env)
+    env.clock["now"] = NOW_MS + DAY_MS
+    await env.service.start_run(env.a, "manual")
+    assert "weekly summary" not in env.host.opened[-1]["task"]
+
+
+def test_no_landing_no_lowering_no_summary_keeps_the_task_text_byte_for_byte() -> None:
+    off = {"retro_tools": False, "retro_corrections": False}
+    assert _sha(evolve_rules.render(_params(**off), [])) == _MAIN_RENDER_FIX
+    assert _sha(evolve_rules.render(_params(**off, failures_due=True, review_data=[]), [])) == _MAIN_RENDER_FIX
+    assert "EFFECT AND CADENCE" not in evolve_rules.render(_params(retro_tools=True))
+
+
+def test_the_landing_section_asks_for_matchable_signatures() -> None:
+    flat = " ".join(evolve_rules.render(_params(retro_tools=True)).split())
+    assert "exactly the triage signature" in flat and "docs/testing/flaky.json" in flat

@@ -39,6 +39,7 @@ const settings = (over: Partial<EvolveSettings> = {}): EvolveSettings => ({
   ledger_plan: '',
   retro_tools: true,
   retro_corrections: false,
+  retro_freq: { failures: 'daily', tools: 'daily', corrections: 'daily' },
   ...over,
 })
 
@@ -309,6 +310,61 @@ describe('EvolvePanel', () => {
     await wrapper.get('[data-test="save"]').trigger('click')
     await flushPromises()
     expect(callsOf('evolve.set').at(-1)?.payload).toEqual({ workspace: A, settings: { retro_corrections: true } })
+  })
+
+  it('S4: shows adoption and cadence per source, and the user can raise a lowered one', async () => {
+    states[A] = stateFor(
+      A,
+      {
+        adoption: {
+          failures: { proposed: 4, resolved: 3, adopted: 2, rate: 2 / 3 },
+          tools: { proposed: 12, resolved: 10, adopted: 0, rate: 0 },
+          corrections: { proposed: 0, resolved: 0, adopted: 0, rate: null },
+        },
+        cadence: { lowered: { tools: { at: 1_900_000_000_000, reason: 'the last 10 tools proposals in a row were not adopted' } } },
+      },
+      { retro_freq: { failures: 'daily', tools: 'weekly', corrections: 'daily' } },
+    )
+    wrapper = await mountPanel(A)
+    const rows = wrapper.get('[data-test="cadence"]').findAll('[data-source]')
+    expect(rows.map((r) => r.attributes('data-source'))).toEqual(['failures', 'tools', 'corrections'])
+    expect(rows[0].text()).toContain('2 / 3')
+    expect(rows[2].text()).toContain('尚無')
+    expect(rows[1].get('[data-test="lowered"]').text()).toContain('10')
+    expect(rows[0].find('[data-test="lowered"]').exists()).toBe(false)
+    const freq = rows[1].get('select[data-field="retro_freq-tools"]')
+    expect((freq.element as HTMLSelectElement).value).toBe('weekly')
+    await freq.setValue('daily')
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set').at(-1)?.payload).toEqual({
+      workspace: A,
+      settings: { retro_freq: { failures: 'daily', tools: 'daily', corrections: 'daily' } },
+    })
+  })
+
+  it('S4: lists landed proposals with their before / after counts and verdict', async () => {
+    const landed = (rel_path: string, effect: EvolveProposal['effect'], before: number | null, after: number | null): EvolveProposal => ({
+      id: rel_path, run_id: 'r', rel_path, name: rel_path, kind: 'failures:code', signature: 's', status: 'landed' as const,
+      reason: '', pr: '#1', commits: [], created_at: 1, updated_at: 1, effect, effect_before: before, effect_after: after,
+      effect_checked_at: before === null ? null : 2,
+    })
+    states[A] = stateFor(A, {
+      landed: [
+        landed('a.html', 'effective', 5, 0),
+        landed('b.html', 'not-effective', 3, 3),
+        landed('c.html', 'insufficient', 1, 0),
+        landed('d.html', '', null, null),
+      ],
+    })
+    wrapper = await mountPanel(A)
+    const items = wrapper.get('[data-test="landed"]').findAll('[data-test="landed-item"]')
+    expect(items).toHaveLength(4)
+    expect(items[0].text()).toContain('5 → 0')
+    expect(items[0].get('[data-test="effect"]').text()).toBe('見效')
+    expect(items[1].get('[data-test="effect"]').text()).toBe('未見效')
+    expect(items[2].get('[data-test="effect"]').text()).toBe('樣本不足')
+    expect(items[3].get('[data-test="effect"]').text()).toBe('待判定')
   })
 
   it('S1: an older backend without a ledger still shows the proposals', async () => {
