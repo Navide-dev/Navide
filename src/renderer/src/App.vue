@@ -15802,15 +15802,14 @@ backend.on('agent.activity', (raw) => {
     // Judge THIS turn's own text (not a retained map): an empty-text
     // turn_complete (Claude Stop hook, thinking-only record, Codex cross-batch)
     // must never be judged against a previous turn's text.
+    let ownTurn: { text: string; at: number } | null = null
     if (ev.text && !markerReply && !isInjectedMessageText(ev.text)) {
       const at = ev.timestamp ? Date.parse(ev.timestamp) : NaN
-      paneSignalTurn.set(ev.pane_id, { text: ev.text, at: Number.isNaN(at) ? Date.now() : at })
+      ownTurn = { text: ev.text, at: Number.isNaN(at) ? Date.now() : at }
+      paneSignalTurn.set(ev.pane_id, ownTurn)
     }
     judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
-    if (ev.text && !markerReply && !isInjectedMessageText(ev.text)) {
-      const at = ev.timestamp ? Date.parse(ev.timestamp) : NaN
-      paneLastReply.set(ev.pane_id, { text: ev.text, at: Number.isNaN(at) ? Date.now() : at })
-    }
+    if (ownTurn) paneLastReply.set(ev.pane_id, ownTurn)
     if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
