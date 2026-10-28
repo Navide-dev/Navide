@@ -11133,6 +11133,8 @@
     },
     "canvas": {
       "insert-on-edge": "Insertar un paso aquí",
+      "branch-label": "si {when}",
+      "error-label": "en caso de error",
       "loop-label": "↺ máx. {max}",
       "minimap": "Vista general de toda la pipeline",
       "pass": "Continuar cuando se apruebe",
@@ -11192,6 +11194,8 @@
       "tidy": "Ordenar",
       "unlink": "Quitar enlace",
       "unpin": "Descongelar la salida",
+      "link-kind": "Cambiar tipo de enlace",
+      "link-when": "Cambiar valor de rama",
       "loop-budget": "Cambiar el límite de reintentos"
     },
     "inspector": {
@@ -11276,6 +11280,7 @@
       "awaiting": "Necesita aprobación",
       "rejected": "Devuelto",
       "failed": "Fallido",
+      "untaken": "Omitido (fuera de la ruta tomada)",
       "skipped": "Salida congelada reutilizada",
       "aborted": "Cancelado",
       "pinned": "Salida congelada"
@@ -11303,6 +11308,17 @@
       "open-in-canvas": "Abrir en el lienzo de pipelines",
       "gate-toast": "La pipeline está esperando tu aprobación en {name}",
       "next-gated": "Aprueba o devuelve esta puerta antes de pasar a la siguiente etapa."
+    },
+    "link": {
+      "title": "Enlace",
+      "desc": "{from} → {to}",
+      "kind": "Tipo de enlace",
+      "kind-main": "Siempre",
+      "kind-branch": "Rama (si…)",
+      "kind-error": "En caso de error",
+      "when": "Valor de rama",
+      "when-placeholder": "Valor que informa el paso, o default",
+      "remove": "Quitar enlace"
     },
     "edge": {
       "title": "Bucle de rechazo",

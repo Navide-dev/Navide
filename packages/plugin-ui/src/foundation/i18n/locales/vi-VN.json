@@ -11133,6 +11133,8 @@
     },
     "canvas": {
       "insert-on-edge": "Chèn một bước vào đây",
+      "branch-label": "nếu {when}",
+      "error-label": "khi lỗi",
       "loop-label": "↺ tối đa {max}",
       "minimap": "Tổng quan toàn bộ pipeline",
       "pass": "Tiếp tục khi được phê duyệt",
@@ -11192,6 +11194,8 @@
       "tidy": "Sắp gọn",
       "unlink": "Gỡ liên kết",
       "unpin": "Bỏ cố định đầu ra",
+      "link-kind": "Đổi loại liên kết",
+      "link-when": "Đổi giá trị nhánh",
       "loop-budget": "Đổi giới hạn thử lại"
     },
     "inspector": {
@@ -11276,6 +11280,7 @@
       "awaiting": "Cần phê duyệt",
       "rejected": "Đã trả về",
       "failed": "Thất bại",
+      "untaken": "Đã bỏ qua (không nằm trên nhánh đã chọn)",
       "skipped": "Dùng lại đầu ra đã cố định",
       "aborted": "Đã hủy",
       "pinned": "Đầu ra đã cố định"
@@ -11303,6 +11308,17 @@
       "open-in-canvas": "Mở trong canvas pipeline",
       "gate-toast": "Pipeline đang chờ bạn phê duyệt tại {name}",
       "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo."
+    },
+    "link": {
+      "title": "Liên kết",
+      "desc": "{from} → {to}",
+      "kind": "Loại liên kết",
+      "kind-main": "Luôn luôn",
+      "kind-branch": "Rẽ nhánh (nếu…)",
+      "kind-error": "Khi lỗi",
+      "when": "Giá trị nhánh",
+      "when-placeholder": "Giá trị bước báo về, hoặc default",
+      "remove": "Gỡ liên kết"
     },
     "edge": {
       "title": "Vòng trả về",

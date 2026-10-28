@@ -76,6 +76,32 @@ describe('PipelineCanvas', () => {
     w.unmount()
   })
 
+  it('labels branch and error links with their condition and selects them from it', async () => {
+    const branched: PipelineGraph = {
+      ...graph,
+      nodes: [...graph.nodes, { id: 'b', kind: 'slot', label: 'B', position: { x: 560, y: 200 }, slot: { agentKey: 'claude', roleKey: 'dev', label: 'B', kickoffBody: '', isCommander: false } }],
+      edges: [
+        ...graph.edges,
+        { id: 'b-a-b', from: 'a', to: 'b', kind: 'branch', when: 'ok' },
+        { id: 'x-a-g', from: 'a', to: 'g', kind: 'error' },
+      ],
+    }
+    const w = mount(PipelineCanvas, {
+      props: { graph: branched, roleLabels: {}, agentLabels: {}, runNodes: { a: { status: 'done' }, b: { status: 'skipped', skipReason: 'untaken' } }, now: 0, selectedId: null, locked: false, flowId: `t-${Math.random()}` },
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const labels = w.findAll('.pcv-cond-label').map((l) => l.text())
+    expect(labels.sort()).toEqual(['if ok', 'on error'])
+    expect(w.find('.vue-flow__edge[data-id="b-a-b"] .pcv-edge').classes()).toEqual(expect.arrayContaining(['pcv-edge--branch', 'is-idle']))
+    expect(w.text()).toContain('Skipped (not on the taken path)')
+    await w.find('.pcv-cond-label--error').trigger('click')
+    await flushPromises()
+    expect(w.emitted('select-edge')?.at(-1)).toEqual(['x-a-g'])
+    w.unmount()
+  })
+
   it('offers zoom controls with the current zoom level', async () => {
     const w = mountCanvas()
     await flushPromises()

@@ -231,6 +231,38 @@ describe('PipelineEditor', () => {
     expect(w.find('.pe-stepper-value').text()).toBe('at most 3×')
   })
 
+  it('turns a link out of a step into a branch and edits its value, one command each', async () => {
+    const { w, server } = await mountEditor()
+    await w.findAll('.pe-seg-btn')[1].trigger('click') // canvas
+    await flushPromises()
+    w.findComponent({ name: 'PipelineCanvas' }).vm.$emit('select-edge', 'e-plan-fe')
+    await flushPromises()
+    const panel = w.find('.pe-edge-panel')
+    expect(panel.text()).toContain('Link')
+    await panel.find('select').setValue('branch')
+    await flushPromises()
+    expect(server.lastOps()).toEqual([
+      { op: 'remove_edge', id: 'e-plan-fe' },
+      { op: 'add_edge', edge: { id: 'b-plan-fe', from: 'plan', to: 'fe', kind: 'branch', when: 'default' } },
+    ])
+    const when = w.find('.pe-edge-panel input')
+    await when.setValue('approved')
+    await flushPromises()
+    expect(server.lastOps()).toEqual([
+      { op: 'remove_edge', id: 'b-plan-fe' },
+      { op: 'add_edge', edge: { id: 'b-plan-fe', from: 'plan', to: 'fe', kind: 'branch', when: 'approved' } },
+    ])
+  })
+
+  it('offers no link kinds for a link out of the trigger', async () => {
+    const { w } = await mountEditor()
+    await w.findAll('.pe-seg-btn')[1].trigger('click')
+    await flushPromises()
+    w.findComponent({ name: 'PipelineCanvas' }).vm.$emit('select-edge', 'e-trigger-plan')
+    await flushPromises()
+    expect(w.find('.pe-edge-panel').exists()).toBe(false)
+  })
+
   it('locks every edit while the pipeline runs', async () => {
     const { w, server } = await mountEditor({ locked: true })
     expect(w.find('.pe-lock').exists()).toBe(true)

@@ -11133,6 +11133,8 @@
     },
     "canvas": {
       "insert-on-edge": "ここにステップを挿入",
+      "branch-label": "{when} のとき",
+      "error-label": "失敗時",
       "loop-label": "↺ 最大 {max} 回",
       "minimap": "パイプライン全体の縮小図",
       "pass": "承認されたら続行",
@@ -11192,6 +11194,8 @@
       "tidy": "整列",
       "unlink": "接続を削除",
       "unpin": "固定を解除",
+      "link-kind": "接続の種類を変更",
+      "link-when": "分岐の値を変更",
       "loop-budget": "再試行上限を変更"
     },
     "inspector": {
@@ -11276,6 +11280,7 @@
       "awaiting": "承認待ち",
       "rejected": "差し戻し",
       "failed": "失敗",
+      "untaken": "スキップ（通った経路の外）",
       "skipped": "固定出力を再利用",
       "aborted": "中止",
       "pinned": "出力固定済み"
@@ -11303,6 +11308,17 @@
       "open-in-canvas": "パイプラインキャンバスで開く",
       "gate-toast": "パイプラインは「{name}」で承認待ちです",
       "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。"
+    },
+    "link": {
+      "title": "接続",
+      "desc": "{from} → {to}",
+      "kind": "接続の種類",
+      "kind-main": "常に",
+      "kind-branch": "分岐（条件）",
+      "kind-error": "失敗時",
+      "when": "分岐の値",
+      "when-placeholder": "ステップが報告する値、または default",
+      "remove": "接続を削除"
     },
     "edge": {
       "title": "差し戻しループ",

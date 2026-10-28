@@ -14187,8 +14187,11 @@ async function preSpawnStage(index: number): Promise<void> {
   registerStage(stageCompletions, index, stage.slots.length)
   pipelineLog(`Stage ${stage.id} ⚡ pre-spawn ${stage.slots.length} slot(s) (role only)`)
   const pinned = pipelineDag.pinnedLabels(index)
+  // Slots behind a branch or error edge may never run; activateStage spawns
+  // them once their inputs have decided.
+  const conditional = pipelineDag.conditionalLabels(index)
   await Promise.all(stage.slots.map(async (slot) => {
-    if (pinned.has(slot.label)) return
+    if (pinned.has(slot.label) || conditional.has(slot.label)) return
     // A reject loop re-enters stages whose panes may still be alive; reuse
     // them (activateStage injects the kickoff) instead of spawning twins.
     if (pipelineDag.looped() && panes.value.some(
@@ -14343,11 +14346,18 @@ async function activateStage(index: number): Promise<void> {
   // DAG: pinned slots reuse their frozen output (counted done at the end);
   // a reject loop's note and outputs of nodes this run skipped go in front.
   const pinned = pipelineDag.pinnedLabels(index)
+  // DAG: slots none of whose inputs was taken (unchosen branch, error edge of
+  // a node that did not fail) are skipped and counted done at the end too.
+  const untaken = pipelineDag.untakenLabels(index)
   const dagPrefix = pipelineDag.takeNote(index) + pipelineDag.frozenContext(index)
 
   await Promise.all(stage.slots.map(async (slot) => {
     if (pinned.has(slot.label)) {
       pipelineLog(`Stage ${stage.id}/${slot.label} 📌 pinned — reusing its frozen output`)
+      return
+    }
+    if (untaken.has(slot.label)) {
+      pipelineLog(`Stage ${stage.id}/${slot.label} ⤼ skipped — none of its inputs was taken`)
       return
     }
     // Per-slot cross-stage context: workers get summaries + paths, the Manager
@@ -14631,6 +14641,7 @@ async function activateStage(index: number): Promise<void> {
   // Last, so a stage made only of pinned slots hands off after everything
   // above (the hand-off re-enters activateStage for the next stage).
   for (const label of pinned) onStageSlotCompleted(index, `pinned:${label}`, 'pinned')
+  for (const label of untaken) onStageSlotCompleted(index, `skipped:${label}`, 'skipped')
 }
 
 async function spawnPipelineStage(index: number): Promise<void> {
@@ -15047,6 +15058,14 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   // A kickoff that finishes late, after the user stopped this run and another
   // one moved to a different stage, must not fail that one.
   if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
+  // A slot with an error edge fails down that edge: its node is failed, the
+  // slot counts as finished and the run goes on.
+  if (pipeline.state === 'running' && pipelineDag.routeFailure(stageIndex, slotLabel, reason)) {
+    const stageId = stagesApi.stages.value[stageIndex]?.id
+    const pane = panes.value.find((p) => p.stageId === stageId && p.slotLabel === slotLabel && p.origin === 'pipeline')
+    onStageSlotCompleted(stageIndex, pane?.id ?? `failed:${slotLabel}`, 'error-edge')
+    return
+  }
   pipelineDag.slotFailed(stageIndex, slotLabel, reason)
   if (pipeline.state !== 'running') return
   const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
@@ -16786,7 +16805,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
 // How a slot was judged finished — recorded for history.jsonl auditing so a
 // stage_advance can be traced to N/N reliable signals (vs a forced advance).
-type SlotFinishReason = 'sentinel' | 'turn_complete' | 'analyzer' | 'cap-auto' | 'force' | 'pinned'
+type SlotFinishReason = 'sentinel' | 'turn_complete' | 'analyzer' | 'cap-auto' | 'force' | 'pinned' | 'skipped' | 'error-edge'
 
 // Build a SlotSignal per pipeline slot of a stage, for allSlotsFinished(). A
 // slot already counted as done is finished by definition; otherwise we read its

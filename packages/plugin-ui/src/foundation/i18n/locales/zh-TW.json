@@ -11133,6 +11133,8 @@
     },
     "canvas": {
       "insert-on-edge": "在這裡插入步驟",
+      "branch-label": "若 {when}",
+      "error-label": "失敗時",
       "loop-label": "↺ 最多 {max} 次",
       "minimap": "整條 pipeline 的縮圖",
       "pass": "核准後繼續",
@@ -11192,6 +11194,8 @@
       "tidy": "整理排版",
       "unlink": "移除連線",
       "unpin": "取消凍結",
+      "link-kind": "變更連線種類",
+      "link-when": "變更分支值",
       "loop-budget": "修改重試上限"
     },
     "inspector": {
@@ -11276,6 +11280,7 @@
       "awaiting": "等待核准",
       "rejected": "已退回",
       "failed": "失敗",
+      "untaken": "已略過（不在走過的路徑上）",
       "skipped": "沿用凍結產出",
       "aborted": "已中止",
       "pinned": "產出已凍結"
@@ -11303,6 +11308,17 @@
       "open-in-canvas": "在 pipeline 畫布中開啟",
       "gate-toast": "pipeline 已暫停，等待你在「{name}」核准",
       "next-gated": "先核准或退回這個閘門，才能進入下一階段。"
+    },
+    "link": {
+      "title": "連線",
+      "desc": "{from} → {to}",
+      "kind": "連線種類",
+      "kind-main": "一律",
+      "kind-branch": "分支（條件）",
+      "kind-error": "失敗時",
+      "when": "分支值",
+      "when-placeholder": "步驟回報的值，或 default",
+      "remove": "移除連線"
     },
     "edge": {
       "title": "退回迴圈",
