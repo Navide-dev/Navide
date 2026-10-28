@@ -9262,8 +9262,9 @@ async def pipeline_graph(
     has, plus optional `params`), gate nodes (the run pauses there until
     pipeline_gate passes or rejects it) and a trigger — joined by edges keyed
     by id. Its stages (what stage_define and pipeline_list show) are derived
-    from it: each longest-path layer of slot nodes is one stage, run in order,
-    so a node waits for every node upstream of it. A pipeline that has never
+    from it: each longest-path layer of slot nodes (over main, branch and error
+    edges) is one stage, run in order, so a node waits for every node upstream
+    of it. A pipeline that has never
     been edited as a graph answers "get" with the graph its stages imply
     (derived: true) and is unchanged until you write one.
 
@@ -9278,7 +9279,8 @@ async def pipeline_graph(
         {op:"remove_node", id, reconnect?:true}  (upstream rewired to downstream)
         {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?}}
         {op:"move_node", id, position:{x,y}}
-        {op:"add_edge", edge:{id?, from, to, kind?:"main"|"reject", maxLoops?}}
+        {op:"add_edge", edge:{id?, from, to,
+           kind?:"main"|"reject"|"branch"|"error", maxLoops?, when?}}
         {op:"remove_edge", id}
         {op:"set_gate", id, prompt?}
         {op:"set_pin", id, pinned}   (a pinned slot is skipped on later runs and
@@ -9288,10 +9290,22 @@ async def pipeline_graph(
            recommendedRoles?}  (metadata of the stage a layer derives to)
     - "set"   — needs `graph` ({version:1, nodes, edges}); replaces it whole.
 
-    Rules a write must satisfy: main edges form no cycle; the only loops are
-    "reject" edges, which must point to an upstream node and carry maxLoops
+    Rules a write must satisfy: main, branch and error edges form no cycle;
+    the only loops are "reject" edges, which must point to an upstream node and carry maxLoops
     1..10 (default 2) — a rejected gate follows its reject edge back and re-runs
-    from there at most that many times, then the run fails.
+    from there at most that many times, then the run fails. "branch" and
+    "error" edges start at a slot. A branch edge carries `when`: a string
+    matched (case-insensitively) against the value the agent reports with
+    ---BRANCH: <value>--- ("default" is taken when no other branch of that
+    slot matched), or {path, equals} compared with a field of the JSON the
+    slot reports between ---OUTPUT-START--- and ---OUTPUT-END---. An error
+    edge is taken only when its slot fails (its kickoff never landed, or it
+    reported ---NODE-FAILED: <reason>---); on a slot without one, a kickoff
+    that never landed still fails the run.
+    A node none of whose inputs was taken is skipped, and so are the nodes
+    only it feeds. A kickoff may read {{node.<id>.output}} or
+    {{node.<id>.output.<path>}}. A graph without branch or error edges runs
+    exactly as before.
 
     Refused while the workspace's run is using this pipeline (error_code
     "pipeline_running"), like stage_define. `pipeline_id` empty means the

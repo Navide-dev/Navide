@@ -23,7 +23,7 @@ function block(startMarker: string, endMarker: string): string {
   return appSource.slice(start, end)
 }
 
-async function loadFail() {
+async function loadFail(opts: { errorEdge?: boolean } = {}) {
   const source = block('async function failRunOnKickoff(', '\n/** Approve the gate the run is paused on')
   const { code } = await transformWithEsbuild(`${source}\nreturn failRunOnKickoff`, 'AppKickoffFailed.ts', { loader: 'ts' })
   const pipeline = { state: 'running', stageIndex: 1, workspacePath: '/ws', log: [] as string[] }
@@ -31,14 +31,23 @@ async function loadFail() {
   const failed: Array<[number, string, string]> = []
   const ends: Array<[string, string | undefined]> = []
   const toasts: Array<{ text: string; type: string }> = []
+  const routed: Array<[number, string, string]> = []
+  const completed: Array<[number, string, string]> = []
   const deps: Record<string, unknown> = {
     pipeline,
     stagesApi: { stages: { value: [{ id: 'storyboard' }, { id: 'illustration' }] } },
     pipelineLog: (line: string) => pipeline.log.push(line),
     pipelineDag: {
       slotFailed: (index: number, label: string, reason: string) => failed.push([index, label, reason]),
+      routeFailure: (index: number, label: string, reason: string) => {
+        if (!opts.errorEdge) return false
+        routed.push([index, label, reason])
+        return true
+      },
       end: vi.fn(async (outcome: string, reason?: string) => { ends.push([outcome, reason]) }),
     },
+    panes: { value: [{ id: 'pane-c1', stageId: 'illustration', slotLabel: 'codex-1', origin: 'pipeline' }] },
+    onStageSlotCompleted: (index: number, key: string, reason: string) => completed.push([index, key, reason]),
     tearDownPipelineOrchestration: vi.fn(() => { pipeline.state = 'aborted' }),
     sendQuiet: vi.fn(async (type: string, payload: Record<string, unknown>) => {
       sent.push({ type, payload })
@@ -52,7 +61,7 @@ async function loadFail() {
   const failRunOnKickoff = new Function(...Object.keys(deps), code)(...Object.values(deps)) as (
     stageIndex: number, slotLabel: string, reason: string, held?: boolean,
   ) => Promise<void>
-  return { failRunOnKickoff, pipeline, sent, failed, ends, toasts, deps }
+  return { failRunOnKickoff, pipeline, sent, failed, ends, toasts, routed, completed, deps }
 }
 
 describe('a kickoff that never reached its pane fails the run (#448)', () => {
@@ -112,6 +121,25 @@ describe('a kickoff that never reached its pane fails the run (#448)', () => {
     expect(t.failed).toEqual([])
     expect(t.sent).toEqual([])
     expect(t.pipeline.state).toBe('running')
+  })
+})
+
+describe('a slot with an error edge fails down that edge instead of failing the run', () => {
+  it('routes the failure, counts the slot finished and keeps the run going', async () => {
+    const t = await loadFail({ errorEdge: true })
+    await t.failRunOnKickoff(1, 'codex-1', 'kickoff never reached the agent')
+    expect(t.routed).toEqual([[1, 'codex-1', 'kickoff never reached the agent']])
+    expect(t.completed).toEqual([[1, 'pane-c1', 'error-edge']])
+    expect(t.failed).toEqual([])
+    expect(t.pipeline.state).toBe('running')
+    expect(t.sent).toEqual([])
+    expect(t.toasts).toEqual([])
+  })
+
+  it('a slot with no pane is counted under a synthetic key', async () => {
+    const t = await loadFail({ errorEdge: true })
+    await t.failRunOnKickoff(1, 'manager', 'role prompt never reached the agent')
+    expect(t.completed).toEqual([[1, 'failed:manager', 'error-edge']])
   })
 })
 

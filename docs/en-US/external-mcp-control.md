@@ -652,7 +652,8 @@ local file whose publisher key Navide has since revoked.
 A pipeline is a saved multi-stage run. Its shape is a graph — slot nodes (one
 CLI pane each, naming which CLI plays which role), gate nodes and a trigger,
 joined by edges — and its stages are derived from that graph: each
-longest-path layer of slot nodes is one stage, and the stages run in order. The
+longest-path layer of slot nodes (over `main`, `branch` and `error` edges) is
+one stage, and the stages run in order. The
 first two tools read; the other eight drive a run.
 
 | Tool | Parameters | What it does |
@@ -699,7 +700,7 @@ three; `pipeline_graph` op `get` reads the graph.
 | `pipeline_define` | `op`, `pipeline_id`, `name`, `workspace_path` | Create, rename, delete or re-seed a pipeline **template** — the named, ordered set of stages `pipeline_start` runs. Nothing here starts, stops or advances a run. Returns `{ok, op, pipelines, active_pipeline_id}`, plus `pipeline` for the ops that produce one (`create`, `rename`, `reset_builtin`). A created pipeline is empty and is not made active, so it cannot be run until `stage_define` gives it stages. The last remaining pipeline cannot be deleted at all, and deleting one does not stop or rewind a run already started — the run keeps its recorded `pipeline_id` and its open panes; what breaks is resuming it later, since the template it names is gone |
 | `stage_define` | `op`, `pipeline_id`, `stage_id`, `stage`, `ids`, `workspace_path` | Add, edit, remove, reorder or re-seed the **stages** inside one pipeline. A stage is one step and holds the slots that become panes: each slot names a CLI (`agent_key`) and a role (`role_key`) and carries the kickoff text that pane is started with. `pipeline_id` left empty means the *active* pipeline, which is what the Pipelines window has selected and not necessarily the one you were reading — name it. Returns `{ok, op, stages, pipeline_id, pipelines, active_pipeline_id}`, plus `stage` for `upsert`. A pipeline's last remaining stage cannot be deleted |
 | `role_define` | `op`, `key`, `new_key`, `label`, `one_line`, `system_prompt`, `properties` | Create, edit, rename, delete or re-seed the **roles** slots are cast from. A role is a named system prompt: a slot names one by `role_key`, and the pane that slot opens is started with that prompt. Roles are global to the machine — not per pipeline, not per workspace — so an edit here reaches every pipeline that names the role, and there is no `workspace_path` to narrow it. Returns `{ok, op, roles}`, plus `role` for `upsert` and `rename` and `repointed_pipeline_ids` for `rename`. The last remaining role cannot be deleted. A pane already started keeps the prompt it was given; a change reaches the next pane opened for that slot, not the ones on screen |
-| `pipeline_graph` | `op`, `pipeline_id`, `ops`, `graph`, `workspace_path` | Read or edit a pipeline **template** as a graph: slot nodes (one CLI pane each, carrying the same agent, role, label, kickoff and commander fields a stage slot has, plus optional `params`), gate nodes (the run pauses there until `pipeline_gate` decides) and a trigger, joined by `main` and `reject` edges. A node waits for every node upstream of it. A pipeline never edited as a graph answers `get` with the graph its stages imply (`derived: true`) and is unchanged until you write one. `pipeline_id` left empty means the active pipeline — name it. Returns `{ok, op, pipeline_id, graph, stages}`, plus `derived` for `get`; an invalid graph is `error_code: "invalid"` with the reasons in `errors`, and nothing was written |
+| `pipeline_graph` | `op`, `pipeline_id`, `ops`, `graph`, `workspace_path` | Read or edit a pipeline **template** as a graph: slot nodes (one CLI pane each, carrying the same agent, role, label, kickoff and commander fields a stage slot has, plus optional `params`), gate nodes (the run pauses there until `pipeline_gate` decides) and a trigger, joined by `main`, `reject`, `branch` and `error` edges. A node waits for every node upstream of it. A pipeline never edited as a graph answers `get` with the graph its stages imply (`derived: true`) and is unchanged until you write one. `pipeline_id` left empty means the active pipeline — name it. Returns `{ok, op, pipeline_id, graph, stages}`, plus `derived` for `get`; an invalid graph is `error_code: "invalid"` with the reasons in `errors`, and nothing was written |
 
 **Which arguments each `op` needs.** This is where these tools are easiest to
 misuse: `op` decides which other arguments are required, and a missing one
@@ -722,11 +723,11 @@ written. An unknown `op` is `"bad_op"`.
 | `role_define` | `delete` | `key` | Refused while any stage slot still names the role — see below |
 | `role_define` | `upsert` / `rename` | `properties` (optional) | The settings form a slot of this role shows: a list of `{name, type, label?, description?, default?, options?, required?, displayOptions?}`, `type` one of `string`, `text`, `template`, `number`, `boolean`, `options` (`options` needs an `options` list of `{value, label?}`). `displayOptions` is `{show?, hide?}`, mapping another property's name to the values that show or hide this one. Omitted, the role's existing properties are kept; `[]` clears them. A slot stores its values in `params` |
 | `pipeline_graph` | `get` | — | Returns `{graph, derived, stages}` |
-| `pipeline_graph` | `apply` | `ops` | A list of edits applied all-or-nothing: `add_node` (`node` `{id, kind: slot / gate / trigger, label?, position, slot?, gate?: {prompt?}}`, with `after` / `before` node ids to wire `main` edges — an existing `after`→`before` edge is replaced, which inserts the node on it), `remove_node` (`id`, `reconnect?` to rewire upstream to downstream), `update_node`, `move_node`, `add_edge` (`edge` `{id?, from, to, kind?: main / reject, maxLoops?}`), `remove_edge`, `set_gate` (`id`, `prompt?`), `set_pin` (`id`, `pinned` — a pinned slot is skipped on later runs and its last output reused) and `set_stage_meta` (`stageId` plus the metadata of the stage a layer derives to) |
+| `pipeline_graph` | `apply` | `ops` | A list of edits applied all-or-nothing: `add_node` (`node` `{id, kind: slot / gate / trigger, label?, position, slot?, gate?: {prompt?}}`, with `after` / `before` node ids to wire `main` edges — an existing `after`→`before` edge is replaced, which inserts the node on it), `remove_node` (`id`, `reconnect?` to rewire upstream to downstream), `update_node`, `move_node`, `add_edge` (`edge` `{id?, from, to, kind?: main / reject / branch / error, maxLoops?, when?}`), `remove_edge`, `set_gate` (`id`, `prompt?`), `set_pin` (`id`, `pinned` — a pinned slot is skipped on later runs and its last output reused) and `set_stage_meta` (`stageId` plus the metadata of the stage a layer derives to) |
 | `pipeline_graph` | `set` | `graph` | `{version: 1, nodes, edges}`; replaces the graph whole |
 | `role_define` | `reset` | — | Destructive: throws away every role, custom ones included, and puts back the built-in set. Slots left naming a role the seed set does not have are blanked rather than left dangling, so pipelines survive but those slots lose their role and must be re-cast. No undo |
 
-**Graph rules.** A graph write must keep `main` edges free of cycles; the only
+**Graph rules.** A graph write must keep `main`, `branch` and `error` edges free of cycles; the only
 loops are `reject` edges, which must point to an upstream node and carry
 `maxLoops` 1–10 (default 2). A rejected gate follows its reject edge back and
 re-runs from there at most that many times, then the run fails. A pipeline
@@ -734,6 +735,25 @@ whose graph has gates, reject loops or cross-layer edges cannot be expressed as
 a stage list, so `stage_define`'s `upsert`, `delete` and `reorder` are refused
 for it with `error_code: "graph_nonlinear"` — edit it with `pipeline_graph`. On
 a pipeline whose graph is still linear they work, and the graph follows.
+
+**Branch and error edges.** Both start at a slot. A `branch` edge carries
+`when`: a string, matched case-insensitively against the value the slot's agent
+reports on a line of its own as `---BRANCH: <value>---` (`"default"` is taken
+when no other branch of that slot matched), or `{path, equals}`, compared with
+one field of the JSON the agent reports between `---OUTPUT-START---` and
+`---OUTPUT-END---` lines. An `error` edge is taken only when its slot fails:
+its kickoff never reached the agent, or the agent reported
+`---NODE-FAILED: <reason>---`. On a slot without one, a kickoff that never
+landed still ends the run as failed. A node runs when at least one of its
+inputs was taken; a node none of whose inputs was taken is skipped (its
+`nodes` entry is `{status: "skipped", skipReason: "untaken"}`), and so is
+everything only it feeds. These signals are read from the agent's own reply,
+never from its kickoff, and a slot's kickoff explains the ones its edges need.
+A kickoff may also read another node's output as `{{node.<id>.output}}` (the
+whole JSON) or `{{node.<id>.output.<path>}}` (one field); a missing value is
+empty. Stages still run layer by layer, so a node whose inputs are settled can
+wait for unrelated nodes of its own layer. A graph without branch or error
+edges runs exactly as before.
 
 **Editing while a run is going.** `pipeline_define`'s `delete` and
 `set_active` are refused outright while that workspace has a run in the

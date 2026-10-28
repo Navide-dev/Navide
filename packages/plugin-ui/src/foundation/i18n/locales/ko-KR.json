@@ -11112,6 +11112,8 @@
     },
     "canvas": {
       "insert-on-edge": "여기에 단계 삽입",
+      "branch-label": "{when}일 때",
+      "error-label": "실패 시",
       "loop-label": "↺ 최대 {max}",
       "minimap": "전체 pipeline 개요",
       "pass": "승인되면 계속",
@@ -11171,6 +11173,8 @@
       "tidy": "정리",
       "unlink": "연결 제거",
       "unpin": "출력 고정 해제",
+      "link-kind": "연결 유형 변경",
+      "link-when": "분기 값 변경",
       "loop-budget": "재시도 한도 변경"
     },
     "inspector": {
@@ -11255,6 +11259,7 @@
       "awaiting": "승인 필요",
       "rejected": "되돌려 보냄",
       "failed": "실패",
+      "untaken": "건너뜀(선택된 경로 아님)",
       "skipped": "고정된 출력 재사용",
       "aborted": "중단됨",
       "pinned": "출력 고정됨"
@@ -11282,6 +11287,17 @@
       "open-in-canvas": "pipeline 캔버스에서 열기",
       "gate-toast": "pipeline이 {name}에서 승인을 기다리고 있어요",
       "next-gated": "다음 단계로 넘어가기 전에 이 게이트를 승인하거나 되돌려 보내세요."
+    },
+    "link": {
+      "title": "연결",
+      "desc": "{from} → {to}",
+      "kind": "연결 유형",
+      "kind-main": "항상",
+      "kind-branch": "분기(조건)",
+      "kind-error": "실패 시",
+      "when": "분기 값",
+      "when-placeholder": "단계가 보고하는 값 또는 default",
+      "remove": "연결 제거"
     },
     "edge": {
       "title": "반려 루프",

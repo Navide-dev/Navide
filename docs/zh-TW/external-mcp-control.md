@@ -530,7 +530,7 @@ Navide 資料夾內的路徑、比任何套件都大的檔案（256 MiB）都會
 
 Pipeline 是一份存起來的多階段執行。它的形狀是一張圖 —— Slot 節點（各是一個 CLI
 Pane，指名哪個 CLI 扮演哪個角色）、Gate 節點與一個 Trigger，用邊連起來 —— 而它的
-Stage 是從這張圖推導出來的：Slot 節點依最長路徑分層，每一層就是一個 Stage，依序執行。
+Stage 是從這張圖推導出來的：Slot 節點依（沿 `main`、`branch`、`error` 邊的）最長路徑分層，每一層就是一個 Stage，依序執行。
 前兩個 Tool 是讀，後八個會真的驅動一輪執行。
 
 | Tool | 參數 | 功能 |
@@ -571,7 +571,7 @@ Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`�
 | `pipeline_define` | `op`、`pipeline_id`、`name`、`workspace_path` | 建立、更名、刪除或重新灌入一個 Pipeline **樣板** —— 也就是 `pipeline_start` 會跑的那組具名、有序的 Stage。這裡的任何操作都不會啟動、停止或推進一輪執行。回傳 `{ok, op, pipelines, active_pipeline_id}`，會產生 Pipeline 的那些 op（`create`、`rename`、`reset_builtin`）另外帶 `pipeline`。新建的 Pipeline 是空的，也不會被設為作用中，所以在 `stage_define` 給它 Stage 之前跑不起來。最後一個 Pipeline 完全不能刪；而刪掉一個 Pipeline 不會停下或倒回已經啟動的執行 —— 那一輪保有自己記錄的 `pipeline_id` 與已經開出來的 Pane，壞掉的是「之後要恢復它」，因為它指名的樣板不見了 |
 | `stage_define` | `op`、`pipeline_id`、`stage_id`、`stage`、`ids`、`workspace_path` | 在一個 Pipeline 裡新增、編輯、移除、重新排序或重新灌入它的 **Stage**。一個 Stage 是一個步驟，裡面裝著會變成 Pane 的 Slot：每個 Slot 指名一個 CLI（`agent_key`）與一個 Role（`role_key`），並帶著那個 Pane 啟動時要用的 Kickoff 文字。`pipeline_id` 留空代表**作用中**的那個 Pipeline，也就是 Pipelines 視窗選定的那個，不一定是你剛才在讀的那個 —— 請明寫。回傳 `{ok, op, stages, pipeline_id, pipelines, active_pipeline_id}`，`upsert` 另外帶 `stage`。一個 Pipeline 的最後一個 Stage 不能刪 |
 | `role_define` | `op`、`key`、`new_key`、`label`、`one_line`、`system_prompt`、`properties` | 建立、編輯、更名、刪除或重新灌入 Slot 選角用的 **Role**。Role 就是一段有名字的 System Prompt：Slot 以 `role_key` 指名一個，而那個 Slot 開出來的 Pane 就以這段 Prompt 啟動。Role 是整台機器共用的 —— 不分 Pipeline、不分 Workspace —— 所以這裡改一次會影響每個指名該 Role 的 Pipeline，也因此沒有 `workspace_path` 可以縮小範圍。回傳 `{ok, op, roles}`，`upsert` 與 `rename` 另外帶 `role`，`rename` 還帶 `repointed_pipeline_ids`。最後一個 Role 不能刪。已經開起來的 Pane 會保留它拿到的那段 Prompt；改動影響的是那個 Slot 下一次開出來的 Pane，不是螢幕上這些 |
-| `pipeline_graph` | `op`、`pipeline_id`、`ops`、`graph`、`workspace_path` | 把 Pipeline **樣板**當成一張圖來讀或編輯：Slot 節點（各是一個 CLI Pane，帶著和 Stage Slot 相同的 Agent、Role、Label、Kickoff 與 Commander 欄位，另可有 `params`）、Gate 節點（執行會停在那裡，直到 `pipeline_gate` 決定）與一個 Trigger，用 `main` 與 `reject` 邊連起來。一個節點會等它上游的每個節點都完成。從沒以圖編輯過的 Pipeline，`get` 會回它的 Stage 推導出來的圖（`derived: true`），在你寫入之前都不會改變。`pipeline_id` 留空代表作用中的 Pipeline —— 請明寫。回傳 `{ok, op, pipeline_id, graph, stages}`，`get` 另外帶 `derived`；不合法的圖回 `error_code: "invalid"`，原因列在 `errors`，而且什麼都沒寫進去 |
+| `pipeline_graph` | `op`、`pipeline_id`、`ops`、`graph`、`workspace_path` | 把 Pipeline **樣板**當成一張圖來讀或編輯：Slot 節點（各是一個 CLI Pane，帶著和 Stage Slot 相同的 Agent、Role、Label、Kickoff 與 Commander 欄位，另可有 `params`）、Gate 節點（執行會停在那裡，直到 `pipeline_gate` 決定）與一個 Trigger，用 `main`、`reject`、`branch` 與 `error` 邊連起來。一個節點會等它上游的每個節點都完成。從沒以圖編輯過的 Pipeline，`get` 會回它的 Stage 推導出來的圖（`derived: true`），在你寫入之前都不會改變。`pipeline_id` 留空代表作用中的 Pipeline —— 請明寫。回傳 `{ok, op, pipeline_id, graph, stages}`，`get` 另外帶 `derived`；不合法的圖回 `error_code: "invalid"`，原因列在 `errors`，而且什麼都沒寫進去 |
 
 **每個 `op` 各需要哪些參數。** 這是這幾個 Tool 最容易用錯的地方：`op` 決定了其他參數
 哪些是必要的，缺了就會回 `ok: false` 帶 `error_code: "missing_argument"`，而且什麼都
@@ -594,15 +594,28 @@ Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`�
 | `role_define` | `upsert`／`rename` | `properties`（選填） | 這個 Role 的 Slot 要顯示的設定表單：一個 `{name, type, label?, description?, default?, options?, required?, displayOptions?}` 清單，`type` 是 `string`、`text`、`template`、`number`、`boolean`、`options` 之一（`options` 需要一個 `{value, label?}` 的 `options` 清單）。`displayOptions` 是 `{show?, hide?}`，把另一個屬性的名稱對應到會顯示或隱藏這一個的值。省略時保留該 Role 既有的 properties；`[]` 會清空。Slot 的值存在 `params` |
 | `role_define` | `reset` | — | 有破壞性：丟掉每一個 Role（自訂的也一樣），放回內建那一組。指著種子組沒有的 Role 的那些 Slot 會被清空，而不是留著懸空的指向，所以 Pipeline 活得下來，但那些 Slot 失去了 Role、必須重新選角。沒有復原 |
 | `pipeline_graph` | `get` | — | 回傳 `{graph, derived, stages}` |
-| `pipeline_graph` | `apply` | `ops` | 一串全有或全無套用的編輯：`add_node`（`node` 為 `{id, kind: slot／gate／trigger, label?, position, slot?, gate?: {prompt?}}`，可用 `after`／`before` 的節點 id 接上 `main` 邊 —— 既有的 `after`→`before` 邊會被取代，也就是把節點插到那條邊上）、`remove_node`（`id`，`reconnect?` 會把上游接到下游）、`update_node`、`move_node`、`add_edge`（`edge` 為 `{id?, from, to, kind?: main／reject, maxLoops?}`）、`remove_edge`、`set_gate`（`id`、`prompt?`）、`set_pin`（`id`、`pinned` —— 被釘選的 Slot 之後的執行會跳過並沿用它最後的產出）與 `set_stage_meta`（`stageId` 加上該層推導出的 Stage 的中繼資料） |
+| `pipeline_graph` | `apply` | `ops` | 一串全有或全無套用的編輯：`add_node`（`node` 為 `{id, kind: slot／gate／trigger, label?, position, slot?, gate?: {prompt?}}`，可用 `after`／`before` 的節點 id 接上 `main` 邊 —— 既有的 `after`→`before` 邊會被取代，也就是把節點插到那條邊上）、`remove_node`（`id`，`reconnect?` 會把上游接到下游）、`update_node`、`move_node`、`add_edge`（`edge` 為 `{id?, from, to, kind?: main／reject／branch／error, maxLoops?, when?}`）、`remove_edge`、`set_gate`（`id`、`prompt?`）、`set_pin`（`id`、`pinned` —— 被釘選的 Slot 之後的執行會跳過並沿用它最後的產出）與 `set_stage_meta`（`stageId` 加上該層推導出的 Stage 的中繼資料） |
 | `pipeline_graph` | `set` | `graph` | `{version: 1, nodes, edges}`；整張取代 |
 
-**圖的規則。** 寫入的圖必須讓 `main` 邊不成環；唯一允許的迴圈是 `reject` 邊，它必須
+**圖的規則。** 寫入的圖必須讓 `main`、`branch`、`error` 邊不成環；唯一允許的迴圈是 `reject` 邊，它必須
 指向上游節點，並帶 `maxLoops` 1–10（預設 2）。被退回的 Gate 會沿著 reject 邊往回走、
 從那裡最多重跑這麼多次，之後這一輪就失敗。圖裡有 Gate、reject 迴圈或跨層邊的 Pipeline
 無法用 Stage 清單表達，所以 `stage_define` 的 `upsert`、`delete`、`reorder` 對它會以
 `error_code: "graph_nonlinear"` 拒絕 —— 請改用 `pipeline_graph` 編輯。圖仍是線性的
 Pipeline 則照常可用，圖也會跟著更新。
+
+**branch 邊與 error 邊。** 兩者都從 Slot 出發。`branch` 邊帶 `when`：是字串時，與該 Slot 的
+Agent 獨立一行回報的 `---BRANCH: <value>---` 比對（不分大小寫；`"default"` 在該 Slot 其他
+branch 都沒對上時走）；是 `{path, equals}` 時，與 Agent 用 `---OUTPUT-START---`、
+`---OUTPUT-END---` 兩行包住回報的 JSON 的某個欄位比對。`error` 邊只在該 Slot 失敗時走：
+Kickoff 沒送到 Agent，或 Agent 回報了 `---NODE-FAILED: <reason>---`。沒有 error 邊的 Slot，
+Kickoff 沒送到時仍和以前一樣讓這一輪以失敗結束。節點只要有至少一條輸入被走過就會執行；所有輸入
+都沒被走過的節點會被略過（`nodes` 裡是 `{status: "skipped", skipReason: "untaken"}`），只由它
+接出去的節點也一樣略過。這些訊號只從 Agent 自己的回覆讀取，絕不從 Kickoff 讀；Slot 的 Kickoff
+會附上它的邊需要的訊號說明。Kickoff 也可以用 `{{node.<id>.output}}`（整段 JSON）或
+`{{node.<id>.output.<path>}}`（單一欄位）讀別的節點的產出，取不到時為空字串。Stage 仍是一層一層
+執行，所以輸入已經就緒的節點，可能還要等同一層裡不相關的節點。沒有 branch 邊也沒有 error 邊的圖，
+行為和以前完全相同。
 
 **執行進行中還去編輯會怎樣。** 當該 Workspace 有一輪執行處於 `running` 狀態時，
 `pipeline_define` 的 `delete` 與 `set_active` 會直接被拒絕；`reset_builtin` 則是在

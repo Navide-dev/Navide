@@ -1,0 +1,3920 @@
+{
+  "graphs": {
+    "linear": {
+      "layers": {
+        "layers": [
+          [
+            "n-01-0"
+          ],
+          [
+            "n-02-0"
+          ],
+          [
+            "n-03-0"
+          ]
+        ],
+        "triggers": [
+          "trigger"
+        ]
+      },
+      "errors": [],
+      "linear": true,
+      "stages": [
+        [
+          "01",
+          [
+            "a"
+          ]
+        ],
+        [
+          "02",
+          [
+            "b"
+          ]
+        ],
+        [
+          "03",
+          [
+            "c"
+          ]
+        ]
+      ]
+    },
+    "parallel": {
+      "layers": {
+        "layers": [
+          [
+            "n-01-0"
+          ],
+          [
+            "n-02-0",
+            "n-02-1"
+          ],
+          [
+            "n-03-0"
+          ]
+        ],
+        "triggers": [
+          "trigger"
+        ]
+      },
+      "errors": [],
+      "linear": true,
+      "stages": [
+        [
+          "01",
+          [
+            "a"
+          ]
+        ],
+        [
+          "02",
+          [
+            "b1",
+            "b2"
+          ]
+        ],
+        [
+          "03",
+          [
+            "c"
+          ]
+        ]
+      ]
+    },
+    "gated": {
+      "layers": {
+        "layers": [
+          [
+            "n-01-0"
+          ],
+          [
+            "n-02-0",
+            "n-02-1"
+          ],
+          [
+            "gate"
+          ],
+          [
+            "n-03-0"
+          ]
+        ],
+        "triggers": [
+          "trigger"
+        ]
+      },
+      "errors": [],
+      "linear": false,
+      "stages": [
+        [
+          "01",
+          [
+            "a"
+          ]
+        ],
+        [
+          "02",
+          [
+            "b1",
+            "b2"
+          ]
+        ],
+        [
+          "03",
+          [
+            "c"
+          ]
+        ]
+      ]
+    },
+    "looping": {
+      "layers": {
+        "layers": [
+          [
+            "n-01-0"
+          ],
+          [
+            "n-02-0",
+            "n-02-1"
+          ],
+          [
+            "gate"
+          ],
+          [
+            "n-03-0"
+          ]
+        ],
+        "triggers": [
+          "trigger"
+        ]
+      },
+      "errors": [],
+      "linear": false,
+      "stages": [
+        [
+          "01",
+          [
+            "a"
+          ]
+        ],
+        [
+          "02",
+          [
+            "b1",
+            "b2"
+          ]
+        ],
+        [
+          "03",
+          [
+            "c"
+          ]
+        ]
+      ]
+    },
+    "pinned": {
+      "layers": {
+        "layers": [
+          [
+            "n-01-0"
+          ],
+          [
+            "n-02-0"
+          ],
+          [
+            "n-03-0"
+          ]
+        ],
+        "triggers": [
+          "trigger"
+        ]
+      },
+      "errors": [],
+      "linear": true,
+      "stages": [
+        [
+          "01",
+          [
+            "a"
+          ]
+        ],
+        [
+          "02",
+          [
+            "b"
+          ]
+        ],
+        [
+          "03",
+          [
+            "c"
+          ]
+        ]
+      ]
+    },
+    "front": {
+      "layers": {
+        "layers": [
+          [
+            "g0"
+          ],
+          [
+            "n-01-0"
+          ],
+          [
+            "n-02-0"
+          ],
+          [
+            "n-03-0"
+          ]
+        ],
+        "triggers": [
+          "trigger"
+        ]
+      },
+      "errors": [],
+      "linear": false,
+      "stages": [
+        [
+          "01",
+          [
+            "a"
+          ]
+        ],
+        [
+          "02",
+          [
+            "b"
+          ]
+        ],
+        [
+          "03",
+          [
+            "c"
+          ]
+        ]
+      ]
+    }
+  },
+  "linear": {
+    "steps": [
+      [
+        "begin",
+        0
+      ],
+      [
+        "stage",
+        0,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        0,
+        "a",
+        "Context: (no upstream output)\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        1,
+        "b",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        2,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        2,
+        "c",
+        "Context: b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold-end",
+        false
+      ]
+    ],
+    "log": [],
+    "gates": [],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "pending"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {},
+        "outputs": {
+          "n-01-0": {
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-02-0": {
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-03-0": {
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-a",
+        "attempts": 1,
+        "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-02-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b",
+        "attempts": 1,
+        "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-03-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-c",
+        "attempts": 1,
+        "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      }
+    },
+    "looped": false
+  },
+  "parallel": {
+    "steps": [
+      [
+        "begin",
+        0
+      ],
+      [
+        "stage",
+        0,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        0,
+        "a",
+        "Context: (no upstream output)\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        1,
+        "b1",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "kickoff",
+        1,
+        "b2",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        2,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        2,
+        "c",
+        "Context: [b1]\nb1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\n\n[b2]\nb2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold-end",
+        false
+      ]
+    ],
+    "log": [],
+    "gates": [],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "pending"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {},
+        "outputs": {
+          "n-01-0": {
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-02-0": {
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-02-1": {
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-03-0": {
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-a",
+        "attempts": 1,
+        "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-02-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b1",
+        "attempts": 1,
+        "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-02-1": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b2",
+        "attempts": 1,
+        "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-03-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-c",
+        "attempts": 1,
+        "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      }
+    },
+    "looped": false
+  },
+  "gate": {
+    "steps": [
+      [
+        "begin",
+        0
+      ],
+      [
+        "stage",
+        0,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        0,
+        "a",
+        "Context: (no upstream output)\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        1,
+        "b1",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "kickoff",
+        1,
+        "b2",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold",
+        2
+      ],
+      [
+        "approve",
+        true
+      ],
+      [
+        "stage",
+        2,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        2,
+        "c",
+        "Context: [b1]\nb1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\n\n[b2]\nb2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold-end",
+        false
+      ]
+    ],
+    "log": [
+      "◆ Gate \"Approve\" — waiting for approval",
+      "◆ Gate \"gate\" ✓ approved"
+    ],
+    "gates": [
+      {
+        "gateId": "gate",
+        "label": "Approve",
+        "prompt": "check it",
+        "nextIndex": 2
+      }
+    ],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "pending"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {},
+        "outputs": {
+          "n-01-0": {
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-02-0": {
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-02-1": {
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-03-0": {
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "awaiting",
+            "startedAt": "T"
+          }
+        },
+        "gate": {
+          "gateId": "gate",
+          "label": "Approve",
+          "prompt": "check it",
+          "nextIndex": 2
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1
+          },
+          "gate": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "gate": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "gate": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-a",
+        "attempts": 1,
+        "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-02-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b1",
+        "attempts": 1,
+        "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-02-1": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b2",
+        "attempts": 1,
+        "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-03-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-c",
+        "attempts": 1,
+        "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "gate": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T"
+      }
+    },
+    "looped": false
+  },
+  "rejectLoop": {
+    "steps": [
+      [
+        "begin",
+        0
+      ],
+      [
+        "stage",
+        0,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        0,
+        "a",
+        "Context: (no upstream output)\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        1,
+        "b1",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "kickoff",
+        1,
+        "b2",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold",
+        2
+      ],
+      [
+        "reject",
+        {
+          "kind": "loop",
+          "edgeId": "rej",
+          "targetIndex": 1,
+          "count": 1,
+          "max": 2
+        }
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "[退回重做 — 「Approve」未通過（第 1/2 次）]\n意見：round 0\n\n",
+        ""
+      ],
+      [
+        "kickoff",
+        1,
+        "b1",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "kickoff",
+        1,
+        "b2",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold",
+        2
+      ],
+      [
+        "reject",
+        {
+          "kind": "loop",
+          "edgeId": "rej",
+          "targetIndex": 1,
+          "count": 2,
+          "max": 2
+        }
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "[退回重做 — 「Approve」未通過（第 2/2 次）]\n意見：round 1\n\n",
+        ""
+      ],
+      [
+        "kickoff",
+        1,
+        "b1",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "kickoff",
+        1,
+        "b2",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold",
+        2
+      ],
+      [
+        "reject",
+        {
+          "kind": "exhausted",
+          "edgeId": "rej",
+          "max": 2
+        }
+      ]
+    ],
+    "log": [
+      "◆ Gate \"Approve\" — waiting for approval",
+      "◆ Gate \"Approve\" — waiting for approval",
+      "◆ Gate \"Approve\" — waiting for approval"
+    ],
+    "gates": [
+      {
+        "gateId": "gate",
+        "label": "Approve",
+        "prompt": "check it",
+        "nextIndex": 2
+      },
+      {
+        "gateId": "gate",
+        "label": "Approve",
+        "prompt": "check it",
+        "nextIndex": 2
+      },
+      {
+        "gateId": "gate",
+        "label": "Approve",
+        "prompt": "check it",
+        "nextIndex": 2
+      }
+    ],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "pending"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {},
+        "outputs": {
+          "n-01-0": {
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-02-0": {
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-02-1": {
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "awaiting",
+            "startedAt": "T"
+          }
+        },
+        "gate": {
+          "gateId": "gate",
+          "label": "Approve",
+          "prompt": "check it",
+          "nextIndex": 2
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "pending",
+            "attempts": 1
+          },
+          "n-02-1": {
+            "status": "pending",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "running",
+            "attempts": 2,
+            "startedAt": "T",
+            "paneId": "pane-b1"
+          },
+          "n-02-1": {
+            "status": "pending",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 2,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "pending",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 2,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "running",
+            "attempts": 2,
+            "startedAt": "T",
+            "paneId": "pane-b2"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 2,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "attempts": 2,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 2,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "attempts": 2,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "awaiting",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {
+          "gateId": "gate",
+          "label": "Approve",
+          "prompt": "check it",
+          "nextIndex": 2
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "pending",
+            "attempts": 2
+          },
+          "n-02-1": {
+            "status": "pending",
+            "attempts": 2
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "running",
+            "attempts": 3,
+            "startedAt": "T",
+            "paneId": "pane-b1"
+          },
+          "n-02-1": {
+            "status": "pending",
+            "attempts": 2
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "pending",
+            "attempts": 2
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "running",
+            "attempts": 3,
+            "startedAt": "T",
+            "paneId": "pane-b2"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "awaiting",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {
+          "gateId": "gate",
+          "label": "Approve",
+          "prompt": "check it",
+          "nextIndex": 2
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-1": {
+            "status": "done",
+            "attempts": 3,
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "rejected",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-a",
+        "attempts": 1,
+        "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-02-0": {
+        "status": "done",
+        "attempts": 3,
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b1",
+        "summary": "b1 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-02-1": {
+        "status": "done",
+        "attempts": 3,
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b2",
+        "summary": "b2 finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-03-0": {
+        "status": "pending"
+      },
+      "gate": {
+        "status": "rejected",
+        "startedAt": "T",
+        "endedAt": "T"
+      }
+    },
+    "looped": true
+  },
+  "pin": {
+    "steps": [
+      [
+        "begin",
+        0
+      ],
+      [
+        "stage",
+        0,
+        [
+          "a"
+        ],
+        "",
+        ""
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "",
+        "[沿用的前置產出（未重跑）]\n- [📌 a] frozen a\n\n"
+      ],
+      [
+        "kickoff",
+        1,
+        "b",
+        "Context: frozen a\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        2,
+        [],
+        "",
+        "[沿用的前置產出（未重跑）]\n- [📌 a] frozen a\n\n"
+      ],
+      [
+        "kickoff",
+        2,
+        "c",
+        "Context: b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold-end",
+        false
+      ]
+    ],
+    "log": [],
+    "gates": [],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {},
+        "outputs": {
+          "n-02-0": {
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-03-0": {
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "skipped",
+        "pinned": true
+      },
+      "n-02-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b",
+        "attempts": 1,
+        "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-03-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-c",
+        "attempts": 1,
+        "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      }
+    },
+    "looped": false
+  },
+  "restartFrom": {
+    "steps": [
+      [
+        "canRestart",
+        true,
+        false
+      ],
+      [
+        "begin",
+        1
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "",
+        "[沿用的前置產出（未重跑）]\n- [📌 a] old a\n\n"
+      ],
+      [
+        "kickoff",
+        1,
+        "b",
+        "Context: old a\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        2,
+        [],
+        "",
+        "[沿用的前置產出（未重跑）]\n- [📌 a] old a\n\n"
+      ],
+      [
+        "kickoff",
+        2,
+        "c",
+        "Context: b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold-end",
+        false
+      ]
+    ],
+    "log": [],
+    "gates": [],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {},
+        "outputs": {
+          "n-02-0": {
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-03-0": {
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped",
+            "pinned": true
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "skipped",
+        "pinned": true
+      },
+      "n-02-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b",
+        "attempts": 1,
+        "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-03-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-c",
+        "attempts": 1,
+        "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      }
+    },
+    "looped": false
+  },
+  "frontGate": {
+    "steps": [
+      [
+        "begin",
+        0
+      ],
+      [
+        "hold",
+        0
+      ],
+      [
+        "approve",
+        true
+      ],
+      [
+        "stage",
+        0,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        0,
+        "a",
+        "Context: (no upstream output)\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        1,
+        "b",
+        "Context: a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        2,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        2,
+        "c",
+        "Context: b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold-end",
+        false
+      ]
+    ],
+    "log": [
+      "◆ Gate \"Go?\" — waiting for approval",
+      "◆ Gate \"g0\" ✓ approved"
+    ],
+    "gates": [
+      {
+        "gateId": "g0",
+        "label": "Go?",
+        "prompt": "",
+        "nextIndex": 0
+      }
+    ],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "pending"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "g0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "pending"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "g0": {
+            "status": "awaiting",
+            "startedAt": "T"
+          }
+        },
+        "gate": {
+          "gateId": "g0",
+          "label": "Go?",
+          "prompt": "",
+          "nextIndex": 0
+        },
+        "outputs": {
+          "n-01-0": {
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-02-0": {
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-03-0": {
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "pending"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "g0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "g0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "g0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "g0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "g0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1
+          },
+          "g0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "g0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "g0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-a",
+        "attempts": 1,
+        "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-02-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b",
+        "attempts": 1,
+        "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-03-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-c",
+        "attempts": 1,
+        "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "g0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T"
+      }
+    },
+    "looped": false
+  },
+  "resumeAtGate": {
+    "steps": [
+      [
+        "beginAtGate",
+        2
+      ],
+      [
+        "hold",
+        2
+      ],
+      [
+        "approve",
+        true
+      ],
+      [
+        "stage",
+        2,
+        [],
+        "",
+        "[沿用的前置產出（未重跑）]\n- [📌 b2] (no output recorded)\n\n"
+      ],
+      [
+        "kickoff",
+        2,
+        "c",
+        "Context: [b1]\nb1 out\n\n[b2]\n(no output recorded)\nTask: {{task}}"
+      ],
+      [
+        "hold-end",
+        false
+      ]
+    ],
+    "log": [
+      "◆ Gate \"Approve\" — waiting for approval",
+      "◆ Gate \"gate\" ✓ approved"
+    ],
+    "gates": [
+      {
+        "gateId": "gate",
+        "label": "Approve",
+        "prompt": "check it",
+        "nextIndex": 2
+      }
+    ],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "summary": "a out"
+          },
+          "n-02-0": {
+            "status": "done",
+            "summary": "b1 out"
+          },
+          "n-02-1": {
+            "status": "skipped"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "awaiting",
+            "startedAt": "T"
+          }
+        },
+        "gate": {
+          "gateId": "gate",
+          "label": "Approve",
+          "prompt": "check it",
+          "nextIndex": 2
+        },
+        "outputs": {
+          "n-03-0": {
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "summary": "a out"
+          },
+          "n-02-0": {
+            "status": "done",
+            "summary": "b1 out"
+          },
+          "n-02-1": {
+            "status": "skipped"
+          },
+          "n-03-0": {
+            "status": "pending"
+          },
+          "gate": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "summary": "a out"
+          },
+          "n-02-0": {
+            "status": "done",
+            "summary": "b1 out"
+          },
+          "n-02-1": {
+            "status": "skipped"
+          },
+          "n-03-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1
+          },
+          "gate": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "summary": "a out"
+          },
+          "n-02-0": {
+            "status": "done",
+            "summary": "b1 out"
+          },
+          "n-02-1": {
+            "status": "skipped"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "gate": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "summary": "a out"
+          },
+          "n-02-0": {
+            "status": "done",
+            "summary": "b1 out"
+          },
+          "n-02-1": {
+            "status": "skipped"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "gate": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "done",
+        "summary": "a out"
+      },
+      "n-02-0": {
+        "status": "done",
+        "summary": "b1 out"
+      },
+      "n-02-1": {
+        "status": "skipped"
+      },
+      "n-03-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-c",
+        "attempts": 1,
+        "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "gate": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T"
+      }
+    },
+    "looped": false
+  },
+  "resume": {
+    "steps": [
+      [
+        "begin",
+        1
+      ],
+      [
+        "stage",
+        1,
+        [],
+        "",
+        "[沿用的前置產出（未重跑）]\n- [📌 a] (no output recorded)\n\n"
+      ],
+      [
+        "kickoff",
+        1,
+        "b",
+        "Context: (no output recorded)\nTask: {{task}}"
+      ],
+      [
+        "stage",
+        2,
+        [],
+        "",
+        "[沿用的前置產出（未重跑）]\n- [📌 a] (no output recorded)\n\n"
+      ],
+      [
+        "kickoff",
+        2,
+        "c",
+        "Context: b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---\nTask: {{task}}"
+      ],
+      [
+        "hold-end",
+        false
+      ]
+    ],
+    "log": [],
+    "gates": [],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped"
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {},
+        "outputs": {
+          "n-02-0": {
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          },
+          "n-03-0": {
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "skipped"
+          },
+          "n-02-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b",
+            "attempts": 1,
+            "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-03-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-c",
+            "attempts": 1,
+            "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "skipped"
+      },
+      "n-02-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b",
+        "attempts": 1,
+        "summary": "b finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-03-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-c",
+        "attempts": 1,
+        "summary": "c finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      }
+    },
+    "looped": false
+  },
+  "kickoffFailed": {
+    "steps": [
+      [
+        "begin",
+        0
+      ],
+      [
+        "stage",
+        0,
+        [],
+        "",
+        ""
+      ],
+      [
+        "kickoff",
+        0,
+        "a",
+        "Context: (no upstream output)\nTask: {{task}}"
+      ],
+      [
+        "hold-end",
+        false
+      ]
+    ],
+    "log": [],
+    "gates": [],
+    "reports": [
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "pending"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {},
+        "outputs": {
+          "n-01-0": {
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---",
+            "at": "T"
+          }
+        }
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "pending"
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1
+          },
+          "n-02-1": {
+            "status": "pending"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1
+          },
+          "n-02-1": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "failed",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "error": "kickoff never reached the agent"
+          },
+          "n-02-1": {
+            "status": "running",
+            "startedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      },
+      {
+        "workspace_path": "/ws",
+        "nodes": {
+          "n-01-0": {
+            "status": "done",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-a",
+            "attempts": 1,
+            "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+          },
+          "n-02-0": {
+            "status": "failed",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b1",
+            "attempts": 1,
+            "error": "kickoff never reached the agent"
+          },
+          "n-02-1": {
+            "status": "failed",
+            "startedAt": "T",
+            "endedAt": "T",
+            "paneId": "pane-b2",
+            "attempts": 1,
+            "error": "run stopped: slot \"b1\" failed"
+          },
+          "n-03-0": {
+            "status": "pending"
+          }
+        },
+        "gate": {}
+      }
+    ],
+    "nodeStates": {
+      "n-01-0": {
+        "status": "done",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-a",
+        "attempts": 1,
+        "summary": "a finished the work\n---BRANCH: yes---\n---NODE-FAILED: nope---\n---OUTPUT-START---\n{\"status\": \"ok\"}\n---OUTPUT-END---\n---STAGE-DONE---"
+      },
+      "n-02-0": {
+        "status": "failed",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b1",
+        "attempts": 1,
+        "error": "kickoff never reached the agent"
+      },
+      "n-02-1": {
+        "status": "failed",
+        "startedAt": "T",
+        "endedAt": "T",
+        "paneId": "pane-b2",
+        "attempts": 1,
+        "error": "run stopped: slot \"b1\" failed"
+      },
+      "n-03-0": {
+        "status": "pending"
+      }
+    },
+    "looped": false
+  }
+}

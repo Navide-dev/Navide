@@ -11112,6 +11112,8 @@
     },
     "canvas": {
       "insert-on-edge": "Insert a Step Here",
+      "branch-label": "if {when}",
+      "error-label": "on error",
       "loop-label": "↺ max {max}",
       "minimap": "Overview of the whole pipeline",
       "pass": "Continue when approved",
@@ -11171,6 +11173,8 @@
       "tidy": "Tidy Up",
       "unlink": "Remove Link",
       "unpin": "Unfreeze Output",
+      "link-kind": "Change Link Type",
+      "link-when": "Change Branch Value",
       "loop-budget": "Change Retry Limit"
     },
     "inspector": {
@@ -11255,6 +11259,7 @@
       "awaiting": "Needs approval",
       "rejected": "Sent back",
       "failed": "Failed",
+      "untaken": "Skipped (not on the taken path)",
       "skipped": "Reused frozen output",
       "aborted": "Aborted",
       "pinned": "Output frozen"
@@ -11282,6 +11287,17 @@
       "open-in-canvas": "Open in the Pipeline Canvas",
       "gate-toast": "The pipeline is waiting for your approval at {name}",
       "next-gated": "Approve or send back this gate before moving on to the next stage."
+    },
+    "link": {
+      "title": "Link",
+      "desc": "{from} → {to}",
+      "kind": "Link type",
+      "kind-main": "Always",
+      "kind-branch": "Branch (if…)",
+      "kind-error": "On error",
+      "when": "Branch value",
+      "when-placeholder": "Value the step reports, or default",
+      "remove": "Remove Link"
     },
     "edge": {
       "title": "Reject loop",

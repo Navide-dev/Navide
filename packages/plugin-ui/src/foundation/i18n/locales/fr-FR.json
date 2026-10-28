@@ -11112,6 +11112,8 @@
     },
     "canvas": {
       "insert-on-edge": "Insérer une étape ici",
+      "branch-label": "si {when}",
+      "error-label": "en cas d’erreur",
       "loop-label": "↺ max. {max}",
       "minimap": "Vue d’ensemble de tout le pipeline",
       "pass": "Continuer une fois approuvé",
@@ -11171,6 +11173,8 @@
       "tidy": "Ranger",
       "unlink": "Supprimer le lien",
       "unpin": "Défiger la sortie",
+      "link-kind": "Changer le type de lien",
+      "link-when": "Changer la valeur de branche",
       "loop-budget": "Changer la limite de tentatives"
     },
     "inspector": {
@@ -11255,6 +11259,7 @@
       "awaiting": "Approbation requise",
       "rejected": "Renvoyée",
       "failed": "Échouée",
+      "untaken": "Ignorée (hors du chemin suivi)",
       "skipped": "Sortie figée réutilisée",
       "aborted": "Interrompue",
       "pinned": "Sortie figée"
@@ -11282,6 +11287,17 @@
       "open-in-canvas": "Ouvrir dans le canevas du pipeline",
       "gate-toast": "Le pipeline attend votre approbation à {name}",
       "next-gated": "Approuvez ou renvoyez cette validation avant de passer à l’étape suivante."
+    },
+    "link": {
+      "title": "Lien",
+      "desc": "{from} → {to}",
+      "kind": "Type de lien",
+      "kind-main": "Toujours",
+      "kind-branch": "Branche (si…)",
+      "kind-error": "En cas d’erreur",
+      "when": "Valeur de branche",
+      "when-placeholder": "Valeur renvoyée par l’étape, ou default",
+      "remove": "Supprimer le lien"
     },
     "edge": {
       "title": "Boucle de renvoi",

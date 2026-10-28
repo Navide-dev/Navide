@@ -11112,6 +11112,8 @@
     },
     "canvas": {
       "insert-on-edge": "Hier einen Schritt einfügen",
+      "branch-label": "wenn {when}",
+      "error-label": "bei Fehler",
       "loop-label": "↺ max. {max}",
       "minimap": "Übersicht über die gesamte Pipeline",
       "pass": "Nach Genehmigung fortfahren",
@@ -11171,6 +11173,8 @@
       "tidy": "Aufräumen",
       "unlink": "Verbindung entfernen",
       "unpin": "Einfrieren aufheben",
+      "link-kind": "Verbindungstyp ändern",
+      "link-when": "Verzweigungswert ändern",
       "loop-budget": "Wiederholungslimit ändern"
     },
     "inspector": {
@@ -11255,6 +11259,7 @@
       "awaiting": "Genehmigung erforderlich",
       "rejected": "Zurückgeschickt",
       "failed": "Fehlgeschlagen",
+      "untaken": "Übersprungen (nicht auf dem gewählten Pfad)",
       "skipped": "Eingefrorene Ausgabe wiederverwendet",
       "aborted": "Abgebrochen",
       "pinned": "Ausgabe eingefroren"
@@ -11282,6 +11287,17 @@
       "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen",
       "gate-toast": "Die Pipeline wartet bei {name} auf Ihre Genehmigung",
       "next-gated": "Genehmigen Sie diese Schranke oder schicken Sie sie zurück, bevor es mit der nächsten Stufe weitergeht."
+    },
+    "link": {
+      "title": "Verbindung",
+      "desc": "{from} → {to}",
+      "kind": "Verbindungstyp",
+      "kind-main": "Immer",
+      "kind-branch": "Verzweigung (wenn …)",
+      "kind-error": "Bei Fehler",
+      "when": "Verzweigungswert",
+      "when-placeholder": "Vom Schritt gemeldeter Wert oder default",
+      "remove": "Verbindung entfernen"
     },
     "edge": {
       "title": "Rückweisungsschleife",
