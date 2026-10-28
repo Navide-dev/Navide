@@ -10929,7 +10929,7 @@ async def pipeline_child_finished(session: "Session", msg_id: str, msg_type: str
     """The child run ended: restore its parent (run_stack pop) with the
     subpipeline node done or failed. {popped: false} when no parent waits."""
     from . import app
-    from .guard.taint import restore_pipeline_run_taint
+    from .guard.taint import pipeline_run_taint, restore_pipeline_run_taint
 
     ws = payload["workspace_path"]
     child = app.project_store.peek(ws)
@@ -10944,7 +10944,9 @@ async def pipeline_child_finished(session: "Session", msg_id: str, msg_type: str
         return
     project, frame = popped
     app.tokens_store.resume_suspended_run(ws, child_run_id=child_run_id)
-    restore_pipeline_run_taint(ws, str(frame.get("taint") or ""))
+    # Merged, never cleared: the child's output flows into the parent, so a
+    # taint the child run carries stays on the parent too.
+    restore_pipeline_run_taint(ws, str(frame.get("taint") or "") or pipeline_run_taint(ws))
     _mirror_pipeline_state(project)
     resp = app._project_payload(project)
     resp.update({"popped": True, "node_id": frame["node_id"], "next_index": frame["next_index"]})

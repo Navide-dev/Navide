@@ -202,6 +202,17 @@ async def test_a_child_inherits_its_parents_taint_and_the_parent_gets_it_back(wi
     assert guard_taint.pipeline_run_taint(ws) == "started by worker"
 
 
+async def test_a_tainted_child_keeps_its_taint_on_the_parent(wired, ws) -> None:
+    await _start(ws, "parent", "p", 2)
+    f = (await _suspend(ws))["payload"]["frame_id"]
+    await _start(ws, "child", "c", 1, child_of=f)
+    # The child run picked up a taint of its own (its parent's was clean).
+    guard_taint.restore_pipeline_run_taint(ws, "child read external content")
+    await _call(ws_handlers.pipeline_complete, {"workspace_path": ws})
+    await _call(ws_handlers.pipeline_child_finished, {"workspace_path": ws, "outcome": "completed"})
+    assert guard_taint.pipeline_run_taint(ws) == "child read external content"
+
+
 async def test_a_clean_parent_has_a_clean_child(wired, ws) -> None:
     await _start(ws, "parent", "p", 2)
     f = (await _suspend(ws))["payload"]["frame_id"]
