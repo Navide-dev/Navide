@@ -39,7 +39,7 @@ Intent、長期的な Decision、Credential、Destructive Action、External Publ
 
 | 領域 | 現在 | 目指す先 |
 |---|---|---|
-| Genesis | 設定可能な Linear SDLC Pipeline | 検証済み Initial System と持続可能な Project Intelligence を生む Adaptive Creation Workflow |
+| Genesis | 設定可能な SDLC Pipeline グラフ（並列 Stage、承認 Gate、回数上限付きの差し戻しループ、Pin されたノード、ノードからの再実行） | 検証済み Initial System と持続可能な Project Intelligence を生む Adaptive Creation Workflow |
 | Evolution | Manual Pane と Maintenance Task | Ownership と Dependency を持つ複数 Session を協調させる Intent-driven Daily Workspace |
 | Intervention | Monaco、Diff、Terminal、Git、Diagnostics、Review | Navigation、Editing、Execution、Debugging、Testing、Review、Versioning、Delivery の完全な環境 |
 | Coordination | Manager Protocol、Handoff、History、Session Attribution | Structured Shared State、Ownership、Dependency、Conflict、Progress Synchronization |

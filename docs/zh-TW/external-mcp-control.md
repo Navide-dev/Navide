@@ -371,6 +371,9 @@ Action —— `ui.pane.create`、`ui.preview.show`、`ui.window.openGit` —— 
 | `ui.pipeline.resume` | — | 從最後一個完成的 Stage 之後，接續這個 Workspace 記錄下來的那一輪。以下情況會報錯：沒有開啟的 Workspace、已經有一輪在跑（要先 Abort）、沒有記錄中的執行或它已經沒有剩下的 Stage、或恢復後始終沒有進入 `running`。回傳 `{workspacePath, state, stageIndex, stages}` |
 | `ui.pipeline.reset` | — | 關掉該視窗 Workspace 裡的每一個 Pane（包含手動開的），並把這一輪清回 idle。沒有開啟的 Workspace、或狀態最後沒有落在 `idle` 時會報錯。回傳 `{workspacePath, state, stageIndex}` |
 | `ui.pipeline.restart` | — | 用同一段任務從第一個 Stage 重跑記錄中的那一輪；任務先取自記錄中的執行，其次才是畫面上的任務欄位。以下情況會報錯：沒有開啟的 Workspace、已經有一輪在跑、沒有先前的任務可以重來、或重啟後始終沒有進入 `running`。回傳 `{pipelineId, stages, workspacePath, state, stageIndex}` |
+| `ui.pipeline.gate_pass` | `{nodeId?}` | 讓這一輪正在等待的 Gate 通過，執行接著跑下一個 Stage。以下情況會報錯：這一輪沒有在等 Gate、或給了 `nodeId` 卻不是它正在等的那個 Gate。回傳 `{gateId, state, stageIndex}` |
+| `ui.pipeline.gate_reject` | `{nodeId?, comment?}` | 退回這一輪正在等待的 Gate：沿著該 Gate 的 reject 邊往回走，從它指向的節點起的 Stage 重跑，並把 `comment` 放在這些 Stage 的 Kickoff 前面。該邊的迴圈次數用完、或 Gate 沒有 reject 邊時，這一輪會以失敗結束。報錯條件同 `gate_pass`。回傳 `{gateId, state, stageIndex}` |
+| `ui.pipeline.restart_from` | `{nodeId, task?}` | 從圖節點 `nodeId` 所在的 Stage 開始一輪新的執行；它之前的 Stage 不再重跑，沿用它們最後記錄的產出。`task` 預設取記錄中那一輪的任務，其次是畫面上的任務欄位。以下情況會報錯：沒有開啟的 Workspace、沒給 `nodeId`、已經有一輪在跑、沒有任務、或始終沒有進入 `running`。回傳 `{workspacePath, state, stageIndex}` |
 | `ui.messaging.readIncoming` | `{paneId, uids?, limit?, includeDelivered?, reserve?, maxChars?}` | 從視窗自己的佇列讀取該 Pane 的收件，以 Pane 目前的傳訊名稱比對。回傳 `{messages, reserved, paused}`；每則訊息是 `{uid, sender, status, kind, content, createdAt, correlationId, inReplyTo, hold}`。只有仍在 `queued` 的列會被保留，已送達的歷史可讀但無法消費（它已經被消費過了），`reserve: false` 則只讀不保留。`paused` 是「明明有信卻讀到空的」的原因，用來把「現在收不了」和「你沒有信」分開 |
 | `ui.messaging.settleRead` | `{paneId, uids, ok?}` | 結算 `ui.messaging.readIncoming` 拿走的保留：`ok` 只要不是 `false` 就消費掉那些 uid，`ok: false` 代表呼叫端在說文字根本沒送到，於是釋放保留、讓訊息回到佇列原位。回傳 `{settled}` |
 | `ui.groupPeers` | `{paneId}` | 從 `paneId` 發出的 `group` 廣播會送到哪些 Pane —— 群組成員是後端從不知道的 UI 狀態，所以只能問擁有寄件 Pane 的那個視窗。回傳 `{group_id, peers: [{pane_id, name}]}`；未分組的 Pane 共用一個合成的 `manual` 群組，因此會廣播給彼此，而不是誰都收不到 |
@@ -525,19 +528,23 @@ Navide 資料夾內的路徑、比任何套件都大的檔案（256 MiB）都會
 
 ### Pipeline
 
-Pipeline 是一份存起來的多階段執行：一組有序的 Stage，每個 Stage 有若干 Slot，
-指名哪個 CLI 扮演哪個角色。前兩個 Tool 是讀，後六個會真的驅動一輪執行。
+Pipeline 是一份存起來的多階段執行。它的形狀是一張圖 —— Slot 節點（各是一個 CLI
+Pane，指名哪個 CLI 扮演哪個角色）、Gate 節點與一個 Trigger，用邊連起來 —— 而它的
+Stage 是從這張圖推導出來的：Slot 節點依最長路徑分層，每一層就是一個 Stage，依序執行。
+前兩個 Tool 是讀，後八個會真的驅動一輪執行。
 
 | Tool | 參數 | 功能 |
 |---|---|---|
 | `pipeline_list` | — | 這台機器上有哪些 Pipeline 樣板，以及它們的 Stage 從哪些 Role 選角。回傳 `{pipelines, active_pipeline_id, roles}`：每個 Pipeline 是 `{id, name, builtin, stage_count, stages}`，每個 Stage 是 `{id, title, short_title, description, sentinel, allow_questions, recommended_roles, slots}`，每個 Slot 是 `{agent_key, role_key, label, is_commander}`。`roles` 給出每個 Role 的 `{key, label, one_line, is_default}` —— 足以知道某個 `role_key` 是什麼意思。有兩樣東西是刻意不放進來的，因為它們本身就是整段 Prompt：Slot 的 Kickoff 內文，以及 Role 的 System Prompt。`active_pipeline_id` 是 Pipelines 視窗目前選定的樣板。這裡只有樣板 —— 某一輪跑到哪了要看 `pipeline_status` |
-| `pipeline_status` | `workspace_path` | 某個 Workspace 的 Pipeline 執行跑到哪了（如果它有的話）—— 用它來確認自己是不是某個更大流程的一部分：以 Pipeline Slot 身分被開出來的 Pane 只被告知任務，不會被告知自己是五個 Stage 裡的第三個，而下一個 Stage 要等你這個被記為完成之後才會開始。回傳 `{workspace_path, active, …}`；`active` 只在一輪執行進行中時為真，而從來沒跑過 Pipeline 的 Workspace 就只回 `{workspace_path, active: false}`，那是空狀態，不是錯誤。有專案紀錄時還會帶：`state`（`idle`／`running`／`completed`／`aborted`）、`task_description`（這一輪是為了什麼而啟動）、`pipeline_id`（`pipeline_list` 裡的哪個樣板）、`current_stage_index` 與 `total_stages`、`run_count`、`log_file_name`、`updated_at`，外加 `stages`（各是 `{stage_id, title, agent, role, pane_id, status, started_at, ended_at}`）與 `panes`，也就是 Pipeline 的 Slot：`{pane_id, agent, role, stage_id, stage_index, slot_label, spawn_status, kickoff_status}`。使用者或 Agent 手動開的 Pane 不是 Pipeline Slot，不會列在這裡；要看全部的 Pane 請用 `cli_list_targets` |
+| `pipeline_status` | `workspace_path` | 某個 Workspace 的 Pipeline 執行跑到哪了（如果它有的話）—— 用它來確認自己是不是某個更大流程的一部分：以 Pipeline Slot 身分被開出來的 Pane 只被告知任務，不會被告知自己是五個 Stage 裡的第三個，而下一個 Stage 要等你這個被記為完成之後才會開始。回傳 `{workspace_path, active, …}`；`active` 只在一輪執行進行中時為真，而從來沒跑過 Pipeline 的 Workspace 就只回 `{workspace_path, active: false}`，那是空狀態，不是錯誤。有專案紀錄時還會帶：`state`（`idle`／`running`／`completed`／`aborted`）、`task_description`（這一輪是為了什麼而啟動）、`pipeline_id`（`pipeline_list` 裡的哪個樣板）、`current_stage_index` 與 `total_stages`、`run_count`、`log_file_name`、`updated_at`，外加 `stages`（各是 `{stage_id, title, agent, role, pane_id, status, started_at, ended_at}`）與 `panes`，也就是 Pipeline 的 Slot：`{pane_id, agent, role, stage_id, stage_index, slot_label, spawn_status, kickoff_status}`；`nodes` 是每個圖節點的 `{status, startedAt, endedAt, tokens, paneId, attempts, pinned, error}`；`gate` 是這一輪正停著等待的 Gate，形狀為 `{gateId, label, prompt, nextIndex}`（沒有在等時是 `{}`）。Kickoff 始終沒送到 Agent 的 Slot 會讓它的節點失敗、`error` 寫明原因，並結束這一輪（`state: aborted`，Pane 保留以便恢復）。使用者或 Agent 手動開的 Pane 不是 Pipeline Slot，不會列在這裡；要看全部的 Pane 請用 `cli_list_targets` |
 | `pipeline_start` | `task`、`pipeline_id`、`workspace_path` | 啟動一輪執行：開出第一個 Stage 的 Pane 並把任務交給它們。**這會開 CLI Pane 並消耗它們的額度** —— Stage 的每個 Slot 都是一個全新的 CLI 行程，有自己的 Context 也有自己的帳單，而且後續 Stage 會隨著執行推進陸續開出來。先讀 `pipeline_list` 看這台機器有哪些樣板、每個樣板由什麼組成，再讀 `pipeline_status` 看是不是已經有一輪在跑；憑猜測啟動不是可以走的路。`pipeline_id` 是要跑的樣板 id，就是 `pipeline_list` 報的那個；留空則跑這個 Workspace 目前選定的 Pipeline，而沒有選定任何 Pipeline 的 Workspace 會直接拒絕，不會替你挑一個。`task` 是這一輪要做的事 —— 每個 Stage 的 Kickoff 訊息就是從這段文字組出來的。回傳視窗自己的 `{ok, result, error}`，`result` 帶 `{pipelineId, stages, workspacePath, state}`。`ok` 為 false 代表什麼都沒啟動：已經有一輪在跑（先 Abort）、沒有 Pipeline 可跑、或第一個 Stage 的 Pane 全部 Spawn 失敗。視窗回報的是這一輪自己的狀態，而不是「呼叫有回來」這件事，所以這裡的 ok 不會是「啟動了但什麼也沒發生」那種答案 |
 | `pipeline_abort` | `workspace_path` | 停掉某個 Workspace 進行中的那一輪。Abort 是暫停，不是 Kill：編排會停下來（不再啟動下一個 Stage、Pane 之間不再路由），已經開著的 Pane 連同它們的工作都原封不動留著，使用者可以從視窗接著顯示的橫幅恢復這一輪。什麼都不會被刪除。回傳視窗自己的 `{ok, result, error}`，`result` 帶 `{workspacePath, state}`；`ok` 為 false 通常代表根本沒有執行在進行中，`pipeline_status` 可以確認 |
-| `pipeline_next` | `workspace_path` | 立刻讓這一輪推進到下一個 Stage，不等視窗自己判定目前這個 Stage 已完成。**這會開 CLI Pane 並消耗它們的額度** —— 下一個 Stage 的每個 Slot 會馬上被 Spawn 出來，而目前 Stage 還在跑的工作不會被等待，它的產出就是到不了後面那個 Stage。先讀 `pipeline_status` 的 `current_stage_index` 與 `total_stages`：已經在最後一個 Stage 時沒有下一個可推進，這個呼叫會被拒絕，而不是把整輪標成完成。回傳視窗自己的 `{ok, result, error}`，`result` 帶 `{workspacePath, state, stageIndex, stages}`；`ok` 為 false 代表什麼都沒推進，通常是因為根本沒有執行在進行中 |
-| `pipeline_resume` | `workspace_path` | 把被 Abort 或中斷的那一輪，從它停下來的地方接著跑 —— 這是 `pipeline_abort` 的另一半。記錄中的執行會從最後一個完成的 Stage 之後接續，並 Spawn 該 Stage 的 Pane，所以**這會開 CLI Pane 並消耗它們的額度**；但已經做出來的進度會保留下來：相對於 `pipeline_reset` 與 `pipeline_restart`，這是回到一輪執行裡的非破壞性作法。恢復時是對著它當初啟動時的那個 Pipeline 進行，若作用中的 Pipeline 已經換過會先換回來；而如果那個樣板已經不在，或它的 Stage 數已經到不了記錄中的索引，恢復會停下來並說明原因，而不是拿一個不相干的 Stage 去跑這一輪的任務。回傳 `{ok, result, error}`，`result` 帶 `{workspacePath, state, stageIndex, stages}`；`ok` 為 false 代表什麼都沒恢復 —— 沒有記錄中的執行，或已經有一輪在跑 |
-| `pipeline_reset` | `workspace_path` | **有破壞性，而且範圍比名字聽起來大。** `pipeline_abort` 是暫停編排、讓 Pane 活著等你恢復；Reset 則是把這個 Workspace 裡的**每一個** Pane 都拆掉 —— Pipeline 開的**和**使用者或其他 Agent 手動開的都一樣 —— 並把 Workspace 清回 idle，這一輪的任務、Stage 索引與 Log 一併清空。之後沒有恢復可言，也沒有復原。先讀 `pipeline_status` 看這一輪跑到哪、用 `cli_list_targets` 看有哪些 Pane 即將被關掉；如果只是想停下這一輪，`pipeline_abort` 會保住這些工作。回傳 `{ok, result, error}`，`result` 帶 `{workspacePath, state, stageIndex}` |
-| `pipeline_restart` | `workspace_path` | **有破壞性，而且會開 CLI Pane 並消耗它們的額度。** 把目前這一輪整個丟掉 —— Pipeline 開的 Pane 全部關閉、記錄的進度全部作廢 —— 然後用同一段任務、同一個 Pipeline 從第一個 Stage 重跑，所以已經跑完的那些 Stage 是付過錢又再跑一次。沒有復原。任務先取自記錄中的執行、其次才是畫面上的任務欄位，兩者都沒有的 Workspace 會被拒絕；已經有一輪在 `running` 時也會被拒絕（要先 Abort）。先讀 `pipeline_status`：一輪已經跑到第三個 Stage，就是三個 Stage 的工作要重做；如果目的只是越過一個卡住的 Stage，`pipeline_next` 不會浪費已經花掉的部分。回傳 `{ok, result, error}`，`result` 帶 `{pipelineId, stages, workspacePath, state, stageIndex}` |
+| `pipeline_next` | `workspace_path` | 立刻讓這一輪推進到下一個 Stage，不等視窗自己判定目前這個 Stage 已完成。**這會開 CLI Pane 並消耗它們的額度** —— 下一個 Stage 的每個 Slot 會馬上被 Spawn 出來，而目前 Stage 還在跑的工作不會被等待，它的產出就是到不了後面那個 Stage。先讀 `pipeline_status` 的 `current_stage_index` 與 `total_stages`：已經在最後一個 Stage 時沒有下一個可推進，這個呼叫會被拒絕，而不是把整輪標成完成。這一輪停在 Gate 上時（`pipeline_status` 的 `gate` 不是空的）也會被拒絕，錯誤會寫出是哪個 Gate —— Gate 要用 `pipeline_gate` 決定，不能用 Next 跳過。回傳視窗自己的 `{ok, result, error}`，`result` 帶 `{workspacePath, state, stageIndex, stages}`；`ok` 為 false 代表什麼都沒推進，通常是因為根本沒有執行在進行中 |
+| `pipeline_resume` | `workspace_path` | 把被 Abort 或中斷的那一輪，從它停下來的地方接著跑 —— 這是 `pipeline_abort` 的另一半。記錄中的執行會從最後一個完成的 Stage 之後接續，並 Spawn 該 Stage 的 Pane，所以**這會開 CLI Pane 並消耗它們的額度**；但已經做出來的進度會保留下來：相對於 `pipeline_reset` 與 `pipeline_restart`，這是回到一輪執行裡的非破壞性作法。恢復時是對著它當初啟動時的那個 Pipeline 進行，若作用中的 Pipeline 已經換過會先換回來；而如果那個樣板已經不在，或它的 Stage 數已經到不了記錄中的索引，恢復會停下來並說明原因，而不是拿一個不相干的 Stage 去跑這一輪的任務。在 Gate 上被 Abort 的那一輪，恢復後會回到等待同一個 Gate，`pipeline_gate` 決定之前不會 Spawn 任何 Pane；如果那個 Gate 已經不在這個 Pipeline 裡，就照一般方式恢復。回傳 `{ok, result, error}`，`result` 帶 `{workspacePath, state, stageIndex, stages}`；`ok` 為 false 代表什麼都沒恢復 —— 沒有記錄中的執行，或已經有一輪在跑 |
+| `pipeline_reset` | `workspace_path` | **有破壞性，而且範圍比名字聽起來大。** `pipeline_abort` 是暫停編排、讓 Pane 活著等你恢復；Reset 則是把這個 Workspace 裡的**每一個** Pane 都拆掉 —— Pipeline 開的**和**使用者或其他 Agent 手動開的都一樣 —— 並把記錄中那一輪的狀態設回 idle。只有狀態會變：這一輪的任務、Stage、Log 檔與執行目錄都保留為歷史，但 `pipeline_status` 不再把它報成進行中，也不會再提供恢復。之後沒有恢復可言，也沒有復原。先讀 `pipeline_status` 看這一輪跑到哪、用 `cli_list_targets` 看有哪些 Pane 即將被關掉；如果只是想停下這一輪，`pipeline_abort` 會保住這些工作。回傳 `{ok, result, error}`，`result` 帶 `{workspacePath, state, stageIndex}` |
+| `pipeline_restart` | `workspace_path` | **有破壞性，而且會開 CLI Pane 並消耗它們的額度。** 把目前這一輪整個丟掉 —— Pipeline 開的 Pane 全部關閉、記錄的進度全部作廢 —— 然後用同一段任務、同一個 Pipeline 從第一個 Stage 重跑，所以已經跑完的那些 Stage 是付過錢又再跑一次。沒有復原。任務先取自記錄中的執行、其次才是畫面上的任務欄位，兩者都沒有的 Workspace 會被拒絕；已經有一輪在 `running` 時也會被拒絕（要先 Abort）。先讀 `pipeline_status`：一輪已經跑到第三個 Stage，就是三個 Stage 的工作要重做；如果目的只是越過一個卡住的 Stage，`pipeline_next` 不會浪費已經花掉的部分，`pipeline_restart_from` 則會保留指定節點之前的 Stage。回傳 `{ok, result, error}`，`result` 帶 `{pipelineId, stages, workspacePath, state, stageIndex}` |
+| `pipeline_gate` | `op`、`node_id`、`comment`、`workspace_path` | 讓這一輪正停著等待的 Gate 通過或退回 —— 先讀 `pipeline_status` 的 `gate`（它的 `prompt` 說明要檢查什麼），看過工作成果再決定。`op` 為 `pass`：執行接著跑下一個 Stage，所以**這會開 CLI Pane 並消耗它們的額度**。`op` 為 `reject`：沿著該 Gate 的 reject 邊往回走，從它指向的節點起的 Stage 重跑，並把 `comment` 放在它們的 Kickoff 前面，讓 Agent 知道要修什麼；每條 reject 邊有迴圈次數上限（`maxLoops`，1–10，預設 2），用完之後、或 Gate 沒有 reject 邊時，退回會讓這一輪以失敗結束。`node_id` 可省略；有給的話必須是這一輪正在等的那個 Gate，避免決定到不是你讀過的那個。回傳 `{ok, result, error}`，`result` 帶 `{gateId, state, stageIndex}`；`ok` 為 false 代表沒有執行在等 Gate（或不是在等那一個），什麼都沒變。不認得的 `op` 是 `bad_op` |
+| `pipeline_restart_from` | `node_id`、`task`、`workspace_path` | 從某個節點、而不是從第一個 Stage，開始一輪新的執行。**這會關掉 Pipeline 的 Pane、開新的 Pane 並消耗它們的額度。** 該節點所在 Stage 之前的 Stage 不會重跑：沿用它們最後記錄的產出當 Context，和釘選（pin）節點一樣 —— 前面 Stage 的成果沒問題、只有後面需要重做時，比整輪重跑的 `pipeline_restart` 便宜。`node_id` 來自 `pipeline_graph` 的 `get`（或 `pipeline_status` 的 `nodes`）；`task` 預設是記錄中那一輪的任務。已經有一輪在跑（先 Abort）或沒有任務時會被拒絕。回傳 `{ok, result, error}`，`result` 帶 `{workspacePath, state, stageIndex}` |
 
 啟動與中止都是 Renderer 的工作 —— 後端自己的 `pipeline.start` handler 只寫執行
 紀錄，各 Stage 的 Pane 是由視窗 Spawn 出來的 —— 所以這兩個 Tool 是走 UI Action Bus
@@ -545,25 +552,28 @@ Pipeline 是一份存起來的多階段執行：一組有序的 Stage，每個 S
 `workspace_path` 的 Live 視窗，並且最多等它 15 秒。`workspace_path` 的行為和其他地方
 一致：Pane 呼叫端可以省略，省略就是自己的 Workspace。
 
-`pipeline_next`、`pipeline_resume`、`pipeline_reset`、`pipeline_restart` 也是同樣的
-形狀、同樣的理由 —— 編排歸 Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`
-／`.reset`／`.restart`，並繼承同一條「要有開著該 Workspace 的 Live 視窗」規則與 15 秒
+`pipeline_next`、`pipeline_resume`、`pipeline_reset`、`pipeline_restart`、
+`pipeline_gate`、`pipeline_restart_from` 也是同樣的形狀、同樣的理由 —— 編排歸
+Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`／`.restart`／
+`.gate_pass`／`.gate_reject`／`.restart_from`，並繼承同一條「要有開著該 Workspace 的 Live 視窗」規則與 15 秒
 等待。它們就是使用者在視窗上按的那幾顆按鈕，只是改用 MCP 定址。
 
 #### 編輯樣板
 
-另外三個 Tool 寫的是「一輪執行是從什麼定義組出來的」。和上面六個不同，它們**不**走視窗：
+另外四個 Tool 寫的是「一輪執行是從什麼定義組出來的」。和上面八個不同，它們**不**走視窗：
 它們直接寫後端自己的 Store，並廣播與 WS handler 相同的 `pipelines.changed`／
-`stages.changed`／`roles.changed` 事件，所以開著的 Pipelines 視窗會自己更新。這三個的
-讀取端都是 `pipeline_list`。
+`stages.changed`／`roles.changed` 事件（`pipeline_graph` 會先送 `pipeline.graph_changed`，
+再送 Stage 與 Pipeline 的事件），所以開著的 Pipelines 視窗會自己更新。前三個的讀取端是
+`pipeline_list`；圖則用 `pipeline_graph` 的 `get` 讀。
 
 | Tool | 參數 | 功能 |
 |---|---|---|
 | `pipeline_define` | `op`、`pipeline_id`、`name`、`workspace_path` | 建立、更名、刪除或重新灌入一個 Pipeline **樣板** —— 也就是 `pipeline_start` 會跑的那組具名、有序的 Stage。這裡的任何操作都不會啟動、停止或推進一輪執行。回傳 `{ok, op, pipelines, active_pipeline_id}`，會產生 Pipeline 的那些 op（`create`、`rename`、`reset_builtin`）另外帶 `pipeline`。新建的 Pipeline 是空的，也不會被設為作用中，所以在 `stage_define` 給它 Stage 之前跑不起來。最後一個 Pipeline 完全不能刪；而刪掉一個 Pipeline 不會停下或倒回已經啟動的執行 —— 那一輪保有自己記錄的 `pipeline_id` 與已經開出來的 Pane，壞掉的是「之後要恢復它」，因為它指名的樣板不見了 |
 | `stage_define` | `op`、`pipeline_id`、`stage_id`、`stage`、`ids`、`workspace_path` | 在一個 Pipeline 裡新增、編輯、移除、重新排序或重新灌入它的 **Stage**。一個 Stage 是一個步驟，裡面裝著會變成 Pane 的 Slot：每個 Slot 指名一個 CLI（`agent_key`）與一個 Role（`role_key`），並帶著那個 Pane 啟動時要用的 Kickoff 文字。`pipeline_id` 留空代表**作用中**的那個 Pipeline，也就是 Pipelines 視窗選定的那個，不一定是你剛才在讀的那個 —— 請明寫。回傳 `{ok, op, stages, pipeline_id, pipelines, active_pipeline_id}`，`upsert` 另外帶 `stage`。一個 Pipeline 的最後一個 Stage 不能刪 |
-| `role_define` | `op`、`key`、`new_key`、`label`、`one_line`、`system_prompt` | 建立、編輯、更名、刪除或重新灌入 Slot 選角用的 **Role**。Role 就是一段有名字的 System Prompt：Slot 以 `role_key` 指名一個，而那個 Slot 開出來的 Pane 就以這段 Prompt 啟動。Role 是整台機器共用的 —— 不分 Pipeline、不分 Workspace —— 所以這裡改一次會影響每個指名該 Role 的 Pipeline，也因此沒有 `workspace_path` 可以縮小範圍。回傳 `{ok, op, roles}`，`upsert` 與 `rename` 另外帶 `role`，`rename` 還帶 `repointed_pipeline_ids`。最後一個 Role 不能刪。已經開起來的 Pane 會保留它拿到的那段 Prompt；改動影響的是那個 Slot 下一次開出來的 Pane，不是螢幕上這些 |
+| `role_define` | `op`、`key`、`new_key`、`label`、`one_line`、`system_prompt`、`properties` | 建立、編輯、更名、刪除或重新灌入 Slot 選角用的 **Role**。Role 就是一段有名字的 System Prompt：Slot 以 `role_key` 指名一個，而那個 Slot 開出來的 Pane 就以這段 Prompt 啟動。Role 是整台機器共用的 —— 不分 Pipeline、不分 Workspace —— 所以這裡改一次會影響每個指名該 Role 的 Pipeline，也因此沒有 `workspace_path` 可以縮小範圍。回傳 `{ok, op, roles}`，`upsert` 與 `rename` 另外帶 `role`，`rename` 還帶 `repointed_pipeline_ids`。最後一個 Role 不能刪。已經開起來的 Pane 會保留它拿到的那段 Prompt；改動影響的是那個 Slot 下一次開出來的 Pane，不是螢幕上這些 |
+| `pipeline_graph` | `op`、`pipeline_id`、`ops`、`graph`、`workspace_path` | 把 Pipeline **樣板**當成一張圖來讀或編輯：Slot 節點（各是一個 CLI Pane，帶著和 Stage Slot 相同的 Agent、Role、Label、Kickoff 與 Commander 欄位，另可有 `params`）、Gate 節點（執行會停在那裡，直到 `pipeline_gate` 決定）與一個 Trigger，用 `main` 與 `reject` 邊連起來。一個節點會等它上游的每個節點都完成。從沒以圖編輯過的 Pipeline，`get` 會回它的 Stage 推導出來的圖（`derived: true`），在你寫入之前都不會改變。`pipeline_id` 留空代表作用中的 Pipeline —— 請明寫。回傳 `{ok, op, pipeline_id, graph, stages}`，`get` 另外帶 `derived`；不合法的圖回 `error_code: "invalid"`，原因列在 `errors`，而且什麼都沒寫進去 |
 
-**每個 `op` 各需要哪些參數。** 這是這三個 Tool 最容易用錯的地方：`op` 決定了其他參數
+**每個 `op` 各需要哪些參數。** 這是這幾個 Tool 最容易用錯的地方：`op` 決定了其他參數
 哪些是必要的，缺了就會回 `ok: false` 帶 `error_code: "missing_argument"`，而且什麼都
 沒寫進去。不認得的 `op` 則是 `"bad_op"`。
 
@@ -581,11 +591,22 @@ Pipeline 是一份存起來的多階段執行：一組有序的 Stage，每個 S
 | `role_define` | `upsert` | `key`、`label`、`system_prompt` | `key` 是 1–32 個字元的小寫字母、數字、底線或連字號。**它會整個取代這個 Role**：你沒給的 `label` 或 `system_prompt` 會被寫成空的，而空值會被拒絕 —— 這也是唯一擋住「半套 upsert 抹掉一段 Prompt」的東西。`one_line` 是顯示在 Label 旁邊的簡短說明 |
 | `role_define` | `rename` | `key`、`new_key` | 更名並在同一步把每個指名舊 key 的 Stage Slot 一起改指過去，所以不會出現「Slot 指著不存在的 Role」的中間狀態。這裡的 `label`／`one_line`／`system_prompt` 是選填：沒給的會從既有的 Role 沿用。`key` 不存在（`not_found`）或 `new_key` 已經被用掉（`role_key_exists`）都會被拒絕，因為把兩個 Role 併在一起等於無聲丟掉其中一邊的 Prompt |
 | `role_define` | `delete` | `key` | 只要還有 Stage Slot 指名這個 Role 就會被拒絕 —— 見下文 |
+| `role_define` | `upsert`／`rename` | `properties`（選填） | 這個 Role 的 Slot 要顯示的設定表單：一個 `{name, type, label?, description?, default?, options?, required?, displayOptions?}` 清單，`type` 是 `string`、`text`、`template`、`number`、`boolean`、`options` 之一（`options` 需要一個 `{value, label?}` 的 `options` 清單）。`displayOptions` 是 `{show?, hide?}`，把另一個屬性的名稱對應到會顯示或隱藏這一個的值。省略時保留該 Role 既有的 properties；`[]` 會清空。Slot 的值存在 `params` |
 | `role_define` | `reset` | — | 有破壞性：丟掉每一個 Role（自訂的也一樣），放回內建那一組。指著種子組沒有的 Role 的那些 Slot 會被清空，而不是留著懸空的指向，所以 Pipeline 活得下來，但那些 Slot 失去了 Role、必須重新選角。沒有復原 |
+| `pipeline_graph` | `get` | — | 回傳 `{graph, derived, stages}` |
+| `pipeline_graph` | `apply` | `ops` | 一串全有或全無套用的編輯：`add_node`（`node` 為 `{id, kind: slot／gate／trigger, label?, position, slot?, gate?: {prompt?}}`，可用 `after`／`before` 的節點 id 接上 `main` 邊 —— 既有的 `after`→`before` 邊會被取代，也就是把節點插到那條邊上）、`remove_node`（`id`，`reconnect?` 會把上游接到下游）、`update_node`、`move_node`、`add_edge`（`edge` 為 `{id?, from, to, kind?: main／reject, maxLoops?}`）、`remove_edge`、`set_gate`（`id`、`prompt?`）、`set_pin`（`id`、`pinned` —— 被釘選的 Slot 之後的執行會跳過並沿用它最後的產出）與 `set_stage_meta`（`stageId` 加上該層推導出的 Stage 的中繼資料） |
+| `pipeline_graph` | `set` | `graph` | `{version: 1, nodes, edges}`；整張取代 |
+
+**圖的規則。** 寫入的圖必須讓 `main` 邊不成環；唯一允許的迴圈是 `reject` 邊，它必須
+指向上游節點，並帶 `maxLoops` 1–10（預設 2）。被退回的 Gate 會沿著 reject 邊往回走、
+從那裡最多重跑這麼多次，之後這一輪就失敗。圖裡有 Gate、reject 迴圈或跨層邊的 Pipeline
+無法用 Stage 清單表達，所以 `stage_define` 的 `upsert`、`delete`、`reorder` 對它會以
+`error_code: "graph_nonlinear"` 拒絕 —— 請改用 `pipeline_graph` 編輯。圖仍是線性的
+Pipeline 則照常可用，圖也會跟著更新。
 
 **執行進行中還去編輯會怎樣。** 當該 Workspace 有一輪執行處於 `running` 狀態時，
 `pipeline_define` 的 `delete` 與 `set_active` 會直接被拒絕；`reset_builtin` 則是在
-進行中的那一輪正用著該 Pipeline 時被拒絕。`stage_define` 的四個 op **全部**同樣被拒絕
+進行中的那一輪正用著該 Pipeline 時被拒絕。`stage_define` 的四個 op 與 `pipeline_graph` 的 `apply`、`set` **全部**同樣被拒絕
 —— 執行中途被改掉的 Stage 清單，等於在這一輪腳下換了流程。拒絕的形式是 `ok: false` 帶
 `error_code: "pipeline_running"`，而且什麼都沒寫進去。一輪執行是跟它啟動當下記錄的
 Pipeline 比對，所以明寫那個 Pipeline 也繞不過這道守衛；其他 Workspace、或跑著別的
@@ -599,7 +620,7 @@ Pipeline 的執行則不受影響。`workspace_path` 指的是「要檢查哪個
 它們改指到別的 Role，或改成更名。指著已刪除 Role 的 Slot 會讓 Role 注入失敗，那個 Stage
 的 Pane 會停在一個空 Prompt 前面，畫面上沒有任何東西說明原因 —— 這道拒絕就是為了這個。
 
-這三個 Tool 還會回的 `error_code` 是 `not_found` 與 `invalid`（Store 拒絕了那個值）。
+這四個 Tool 還會回的 `error_code` 是 `not_found` 與 `invalid`（Store 拒絕了那個值）。
 任何一種失敗都不會寫入。
 
 ### 排程

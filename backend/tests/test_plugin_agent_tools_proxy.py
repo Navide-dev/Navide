@@ -95,7 +95,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for the 0.2.33 messaging doc fixes (previous pin e59a1099…): the
 #: cli_check_message description lists the `composer` and `pty-blocked` holds,
 #: and it and cli_inbox_summary state the 500-send bound. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "cb0297f49dc552b3cc9cbe4833be9d4339a3b21fbe73bb6ce242cff402af1d6d"
+#: Re-pinned for the 0.2.33 pipeline doc sync (previous pin cb0297f4…): the
+#: pipeline_reset description says the stored run only moves to idle and its
+#: task, stages, log and run directory stay as history. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "a5d72f419c55bcaa864063fdafc18f7014783c7d30c9e9b3e4101707ae783b32"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

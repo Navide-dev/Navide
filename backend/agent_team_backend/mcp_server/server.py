@@ -9380,14 +9380,16 @@ async def pipeline_resume(ctx: Context, workspace_path: str = "") -> dict[str, A
 
 @server.tool()
 async def pipeline_reset(ctx: Context, workspace_path: str = "") -> dict[str, Any]:
-    """Clear the workspace back to idle: close EVERY pane and drop the run's progress.
+    """Clear the workspace back to idle: close EVERY pane and end the run for good.
 
     DESTRUCTIVE, AND WIDER THAN IT SOUNDS. Unlike pipeline_abort, which pauses
     the orchestration and leaves the panes alive to be resumed, reset tears
     down every pane in the workspace — the ones the pipeline opened AND the
-    ones the user or another agent opened by hand — and returns the workspace
-    to an idle, empty state with the run's task, stage index and log cleared.
-    There is no resume afterwards and no undo.
+    ones the user or another agent opened by hand — and sets the stored run's
+    state to idle. Only the state moves: the run's task, stages, log file and
+    run directory are kept as history, but pipeline_status stops reporting it
+    as active and nothing offers to resume it. There is no resume afterwards
+    and no undo.
 
     Read pipeline_status first: it says whether a run is in progress and how
     far it got, and cli_list_targets says which panes are about to be closed.

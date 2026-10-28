@@ -70,7 +70,12 @@ These observations help you inspect local activity; they do not prove exfiltrati
 
 ## Pipeline
 
-付属 Pipeline は Requirement、Planning、Design、Implementation、Security Review、Testing を網羅します。Stage、Slot、Role、Kickoff Prompt、Question、Completion Sentinel は Settings で設定できます。
+付属 Pipeline は Requirement、Planning、Design、Implementation、Security Review、Testing を網羅します。Stage、Slot、Role、Kickoff Prompt、Question、Completion Sentinel は**パイプライン管理**で編集します（Window ▸ パイプライン管理、またはサイドバーの Pipeline タブにある ⚙ **パイプラインを管理** ボタン）。**スイムレーン**と**キャンバス**の表示は同じ Pipeline をステップのグラフとして編集し、**実行履歴**は実行とその操作ボタンを表示します。新しい実行はこれまでどおりサイドバーから始めます: Task を入力して Run を押します。
+
+- **承認ゲート（Gate）。** パレットから追加すると、二つのステップの間で実行を一時停止します。**確認する内容**には、確認者が何を見るべきかを書きます。実行が待っている間、エディターには**確認する**付きのバナーが表示され、ゲートでは**承認して続行**または**差し戻す**を選べ、エージェントへのメモを添えられます。サイドバーの Next ではゲートを越えられません。
+- **差し戻しループ（Loop）。** キャンバス表示で、ステップの下側のハンドルから上流のステップへドラッグします。**差し戻す**を押すと、そのステップから作業がやり直され、メモがその Kickoff の前に置かれます。ループは **↺ 最大** ピルに表示された回数（既定 2、上限 10）まで実行され、使い切った後にさらに差し戻すと実行は失敗として終わります。
+- **出力を固定（Pin）。** Inspector で固定したステップは、以降の実行でスキップされ、前回の出力が再利用されます。
+- **ここから再実行（Restart from）。** ステップの Inspector で、その Pipeline に停止済みの実行があるとき、そのステップから新しい実行を始め、それ以前のステップの出力を保持します — すべてをやり直す**最初からやり直す**より安く済みます。
 
 一つの Stage で複数 Slot を並行実行できます。Navide は設定された Completion Signal と Agent State に基づいて進行します。Generated Change と Test Result は必ず確認してください。Automatic Completion は Workflow Progress を示すもので、Correctness を保証しません。
 
