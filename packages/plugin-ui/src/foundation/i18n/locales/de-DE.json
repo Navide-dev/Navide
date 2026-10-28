@@ -11271,7 +11271,8 @@
       "undo-none": "Nichts rückgängig zu machen",
       "view": "Ansicht",
       "show-palette": "Knotenpanel anzeigen",
-      "hide-palette": "Knotenpanel ausblenden"
+      "hide-palette": "Knotenpanel ausblenden",
+      "task": "Aufgabe für diesen Lauf"
     },
     "controlPane": {
       "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen",

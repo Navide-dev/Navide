@@ -11271,7 +11271,8 @@
       "undo-none": "Nada que deshacer",
       "view": "Vista",
       "show-palette": "Mostrar el panel de nodos",
-      "hide-palette": "Ocultar el panel de nodos"
+      "hide-palette": "Ocultar el panel de nodos",
+      "task": "Tarea para esta ejecución"
     },
     "controlPane": {
       "open-in-canvas": "Abrir en el lienzo de pipelines",

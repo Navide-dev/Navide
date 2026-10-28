@@ -11271,7 +11271,8 @@
       "undo-none": "没有可恢复的操作",
       "view": "查看",
       "show-palette": "显示节点面板",
-      "hide-palette": "隐藏节点面板"
+      "hide-palette": "隐藏节点面板",
+      "task": "这次要运行的任务"
     },
     "controlPane": {
       "open-in-canvas": "在 pipeline 画布中打开",

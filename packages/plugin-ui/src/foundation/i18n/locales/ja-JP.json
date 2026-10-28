@@ -11271,7 +11271,8 @@
       "undo-none": "元に戻す操作はありません",
       "view": "表示",
       "show-palette": "ノードパネルを表示",
-      "hide-palette": "ノードパネルを隠す"
+      "hide-palette": "ノードパネルを隠す",
+      "task": "この実行のタスク"
     },
     "controlPane": {
       "open-in-canvas": "パイプラインキャンバスで開く",
