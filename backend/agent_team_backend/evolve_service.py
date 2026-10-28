@@ -100,6 +100,8 @@ DEFAULTS: dict[str, Any] = {
     "scope": "fix",
     "extra": "",
     "ledger_plan": "",
+    "retro_tools": True,
+    "retro_corrections": False,
 }
 _INT_BOUNDS = {
     "token_budget": (1_000, 10_000_000),
@@ -122,6 +124,16 @@ LEDGER_DAYS = 30
 _LEDGER_IN_TASK = ("rejected", "in-progress", "approved")
 #: Ledger statuses a sync no longer changes.
 _LEDGER_FINAL = ("landed", "abandoned")
+#: The retro passes (S2) read this many days back.
+RETRO_DAYS = 7
+RETRO_MAX_GROUPS = 20
+#: Same kind of message or job run this many times: a repeated manual chore.
+RETRO_TOOLS_MIN = 3
+#: Same correction in this many plans: a rule, not a remark.
+RETRO_CORRECTIONS_MIN = 2
+_RETRO_KEY_CHARS = 40
+_TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?Z?)?|\b\d{1,2}:\d{2}(?::\d{2})?\b")
+_HASH_RE = re.compile(r"\b(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{7,}\b")
 _STAGE_STATUS = {
     "draft": "proposed", "in-review": "proposed", "approved": "approved",
     "in-progress": "in-progress",
@@ -183,9 +195,9 @@ def _local_tz() -> str:
 
 def _field(key: str, value: Any) -> Any:
     """One settings field, validated; raises :class:`SettingsInvalid`."""
-    if key == "enabled":
+    if key in ("enabled", "retro_tools", "retro_corrections"):
         if not isinstance(value, bool):
-            raise SettingsInvalid("enabled must be true or false")
+            raise SettingsInvalid(f"{key} must be true or false")
     elif key == "at":
         if not isinstance(value, str) or not _AT_RE.match(value):
             raise SettingsInvalid('at must be "HH:MM"')
@@ -677,6 +689,17 @@ class LiveHost:
 
         return scheduler.get_service()
 
+    def message_rows(self) -> list[dict[str, Any]]:
+        """The persisted message log (every workspace); the retro pass scopes it."""
+        from . import app
+
+        return app.agent_message_log.tail()
+
+    async def schedule_records(self) -> list[dict[str, Any]]:
+        """Every scheduled job with its kept runs; the retro pass scopes them."""
+        store = self.scheduler().store
+        return [{**job, "runs": await store.list_runs(job["id"], 200)} for job in await store.list_jobs()]
+
 
 # ── the service ─────────────────────────────────────────────────────────────
 
@@ -1007,7 +1030,19 @@ class EvolveService:
             "token_budget": settings["token_budget"], "max_minutes": settings["max_minutes"],
             "max_fixes": settings["max_fixes"], "ledger_plan": settings["ledger_plan"],
             "extra": settings["extra"],
+            "retro_tools": settings["retro_tools"], "retro_corrections": settings["retro_corrections"],
         }
+        since = self.now_ms() - RETRO_DAYS * 86_400_000
+        try:
+            if settings["retro_tools"]:
+                render["retro_tools_data"] = _tools_records(
+                    workspace, await asyncio.to_thread(self.host.message_rows),
+                    await self.host.schedule_records(), since)
+            if settings["retro_corrections"]:
+                render["retro_corrections_data"] = await asyncio.to_thread(
+                    _corrections_records, workspace, self.store.proposals(workspace, since), since)
+        except Exception as err:  # noqa: BLE001 — a record that cannot be read leaves the pass empty
+            log.warning("evolve: gathering retro records failed: %s", err)
         fields: dict[str, Any] = {"scope": scope}
         checked = await asyncio.to_thread(self.store.settings_checked, workspace)
         if checked and checked[1]:
@@ -1342,6 +1377,101 @@ def _ledger_items(value: Any) -> list[dict[str, str]]:
         "kind": mask(str(item.get("kind") or ""))[:80],
         "signature": mask(str(item.get("signature") or ""))[:300],
     } for item in (value if isinstance(value, list) else []) if isinstance(item, dict)][:20]
+
+
+def _retro_key(text: Any) -> str:
+    """A record's group key: masked, without timestamps, hashes or digits,
+    lower case on one line, the first few words."""
+    out = _TIMESTAMP_RE.sub(" ", mask(str(text or "")))
+    out = re.sub(r"\d+", "", _HASH_RE.sub(" ", out))
+    return re.sub(r"\s+", " ", out).strip().lower()[:_RETRO_KEY_CHARS].strip()
+
+
+def _label(text: Any, limit: int = 30) -> str:
+    return re.sub(r"\s+", " ", mask(str(text or ""))).strip()[:limit]
+
+
+def _same_ws(value: Any, workspace: str) -> bool:
+    return bool(value) and _canonical(str(value)) == workspace
+
+
+def _tools_records(workspace: str, rows: list[dict[str, Any]], jobs: list[dict[str, Any]],
+                   since: int) -> list[str]:
+    """This workspace's repeated messages and job runs as "key: count" lines.
+
+    A message row is this workspace's when the backend stamped one of its
+    sides with this workspace's path; the other side, when stamped with
+    another workspace (or not at all), is named only as such. Unstamped rows
+    belong to no workspace and are left out. Jobs are this workspace's when
+    their owner or action names it; evolve's own job is left out.
+    """
+    groups: dict[str, int] = {}
+    for row in rows:
+        if int(row.get("created_at") or 0) < since:
+            continue
+        mine_s = _same_ws(row.get("sender_workspace"), workspace)
+        mine_r = _same_ws(row.get("recipient_workspace"), workspace)
+        if not (mine_s or mine_r):
+            continue
+        key = _retro_key(row.get("content"))
+        if not key:
+            continue
+        sender = _label(row.get("sender")) if mine_s else "(another workspace)"
+        recipient = _label(row.get("recipient")) if mine_r else "(another workspace)"
+        line = f'messages {sender} -> {recipient} "{key}"'
+        groups[line] = groups.get(line, 0) + 1
+    out = [f"{line}: {n}" for line, n in sorted(groups.items(), key=lambda kv: -kv[1]) if n >= RETRO_TOOLS_MIN]
+    own_job = job_id_for(workspace)
+    for job in jobs:
+        owner, action = job.get("owner") or {}, job.get("action") or {}
+        if job.get("id") == own_job or (owner.get("kind") == "system" and owner.get("feature") == FEATURE):
+            continue
+        if not (_same_ws(owner.get("workspace"), workspace) or _same_ws(action.get("workspace"), workspace)):
+            continue
+        runs = [r for r in job.get("runs") or [] if int(r.get("started_at") or 0) >= since]
+        if len(runs) < RETRO_TOOLS_MIN:
+            continue
+        statuses: dict[str, int] = {}
+        for run in runs:
+            status = _label(run.get("status"), 12)
+            statuses[status] = statuses.get(status, 0) + 1
+        detail = ", ".join(f"{k} {v}" for k, v in sorted(statuses.items()))
+        out.append(f'schedule "{_label(job.get("name"), 60)}": {len(runs)} runs ({detail})')
+    return [line[:120] for line in out[:RETRO_MAX_GROUPS]]
+
+
+def _corrections_records(workspace: str, ledger: list[dict[str, Any]], since: int) -> list[str]:
+    """Corrections the user repeated, as "key: count" lines: the user's review
+    notes on this workspace's plans changed in the window, and the ledger's
+    rejection reasons, each plan counted once per key."""
+    from .plugins.builtin.navide_plans.plan_meta import parse_plan_meta
+
+    seen: set[tuple[str, str]] = set()
+    plans = os.path.join(workspace, ".agent-team", "plans")
+    try:
+        names = sorted(n for n in os.listdir(plans) if n.endswith(".html") and not n.startswith((".", "_")))
+    except OSError:
+        names = []
+    for name in names:
+        path = os.path.join(plans, name)
+        try:
+            if os.path.getmtime(path) * 1000 < since:
+                continue
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                meta = parse_plan_meta(handle.read()) or {}
+        except OSError:
+            continue
+        for note in meta.get("reviewNotes") or []:
+            if isinstance(note, dict) and note.get("author") == "user" and (key := _retro_key(note.get("text"))):
+                seen.add((f".agent-team/plans/{name}", key))
+    for row in ledger:
+        if row.get("reason") and int(row.get("updated_at") or 0) >= since and (key := _retro_key(row["reason"])):
+            seen.add((row["rel_path"], key))
+    counts: dict[str, int] = {}
+    for _plan, key in seen:
+        counts[key] = counts.get(key, 0) + 1
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [f'"{key}": {n}'[:120] for key, n in ranked if n >= RETRO_CORRECTIONS_MIN][:RETRO_MAX_GROUPS]
 
 
 def _read_plan_meta(workspace: str, rel_path: str) -> dict[str, Any] | bool | None:

@@ -544,6 +544,25 @@ async function openProposal(rel: string): Promise<void> {
             </div>
           </div>
 
+          <!-- Retro passes (S2) -->
+          <div class="ev-row" data-test="retro">
+            <span class="ev-k">{{ t('evolve.field.retro') }}</span>
+            <div class="ev-v ev-col">
+              <label class="ev-radio">
+                <input v-model="draft.retro_tools" type="checkbox" data-field="retro_tools" />
+                <span>{{ t('evolve.field.retro-tools') }}</span>
+              </label>
+              <span class="ev-muted">{{ t('evolve.field.retro-tools-hint', { tokens: fmtTokens(EVOLVE_BOUNDS.retro_sub_budget) }) }}</span>
+              <label class="ev-radio">
+                <input v-model="draft.retro_corrections" type="checkbox" data-field="retro_corrections" />
+                <span>{{ t('evolve.field.retro-corrections') }}</span>
+              </label>
+              <span class="ev-muted">{{
+                t('evolve.field.retro-corrections-hint', { tokens: fmtTokens(EVOLVE_BOUNDS.retro_sub_budget) })
+              }}</span>
+            </div>
+          </div>
+
           <!-- Rules -->
           <div class="ev-row">
             <span class="ev-k">{{ t('evolve.field.rules') }}</span>

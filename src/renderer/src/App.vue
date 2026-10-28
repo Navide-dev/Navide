@@ -399,6 +399,7 @@ import {
 import { accountLabel } from './lib/accountLabel'
 import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
 import { runAgentAccountSwitch, type AgentAccountSwitchConfirmRequest } from './lib/agentAccountSwitch'
+import { runAgentPaneAccountSwitch } from './lib/agentPaneAccountSwitch'
 import { usePluginMainTab } from './lib/pluginMainTab'
 import {
   DEFAULT_SLOT_ID,
@@ -11572,7 +11573,13 @@ useUiActionBus({
   isPipelineSlot: (id) => panes.value.some((p) => p.id === id && p.origin === 'pipeline'),
   heldWorkspaces: () => (isDetachedWindow ? [] : workspaceOrder.value),
   connectionStatus: backend.status,
-  accountActions: { signIn: agentSignIn, switch: agentAccountSwitch },
+  // A switch naming a pane moves only that pane (cli_account_switch pane_id);
+  // without one it is the CLI-wide switch, unchanged.
+  accountActions: {
+    signIn: agentSignIn,
+    switch: (args, callerPaneId, signal) =>
+      (args.paneId ? agentPaneAccountSwitch : agentAccountSwitch)(args, callerPaneId, signal),
+  },
 })
 
 // MCP cli_account_sign_in (ui.accounts.signIn — on the bus, never in the
@@ -11651,6 +11658,63 @@ async function agentAccountSwitch(args: Record<string, unknown>, callerPaneId: s
     { type: 'info' },
   )
   return outcome
+}
+
+// MCP cli_account_switch with pane_id (plan mcp-pane-cli-usage_213031 P4):
+// the badge's "switch only this pane", asked through the same confirm dialog
+// (which names the pane). Only that pane is reopened in the account's own
+// folder; the live login and every other pane stay as they are.
+async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const outcome = await runAgentPaneAccountSwitch(args, callerPaneId, {
+    accounts: cliProfilesApi,
+    folderAgent: FOLLOW_SWITCH_AGENT,
+    pane: (id) => {
+      const pane = panes.value.find((p) => p.id === id)
+      if (!pane) return undefined
+      const fixed = paneAccountFixed(pane)
+      return {
+        agentKey: pane.agentKey,
+        name: pane.messagingName || pane.customName || id,
+        isLogin: !!pane.isLogin,
+        fixed,
+        profileId: fixed ? (pane.profileId ?? null) : cliProfilesApi.defaultProfileId(pane.agentKey),
+      }
+    },
+    dirSignedIn: followDirSignedIn,
+    callerPane: (id) => {
+      const pane = panes.value.find((p) => p.id === id)
+      return pane ? { workspacePath: pane.workspacePath, name: pane.messagingName || pane.customName || id } : undefined
+    },
+    accountLabel: (key, id) => accountLabel(cliProfilesApi, key, id, i18n.global.t),
+    confirm: agentAccountSwitchConfirm.ask,
+    movePane: moveAgentPaneAccount,
+    now: () => Date.now(),
+  }, signal)
+  if (outcome.status !== 'switched-pane') return outcome
+  const caller = panes.value.find((p) => p.id === callerPaneId)
+  notifyRestore.toast(
+    i18n.global.t('settings.accounts.cli.agent-switch-pane-done', {
+      agent: revealInvisibleText(caller?.messagingName || caller?.customName || callerPaneId),
+      from: String(outcome.from ?? ''),
+      to: String(outcome.to ?? ''),
+      reason: revealInvisibleText(String(args.reason ?? '')),
+    }),
+    { type: 'info' },
+  )
+  return outcome
+}
+
+/** Reopen one pane in `profileId`'s own folder: a fixed pane exactly as
+ *  moveFixedAccountPane does, a following one as fixing it (📌) does, with the
+ *  follow flag put back when the rebuild does not happen. */
+async function moveAgentPaneAccount(paneId: string, profileId: string): Promise<string | undefined> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return 'missing-pane'
+  if (paneAccountFixed(pane)) return rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
+  accountFollow.remove(paneId)
+  const failure = await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
+  if (failure) accountFollow.add(paneId)
+  return failure
 }
 
 // Single source of truth for the 'modalOpen' keybinding context. Hoisted so

@@ -37,6 +37,8 @@ const settings = (over: Partial<EvolveSettings> = {}): EvolveSettings => ({
   scope: 'fix',
   extra: '',
   ledger_plan: '',
+  retro_tools: true,
+  retro_corrections: false,
   ...over,
 })
 
@@ -291,6 +293,22 @@ describe('EvolvePanel', () => {
     const sentBefore = calls.length
     await items[0].get('[data-test="proposal-status"]').trigger('click')
     expect(calls.length).toBe(sentBefore)
+  })
+
+  it('S2: the retro passes are two checkboxes that disclose their budget and records', async () => {
+    wrapper = await mountPanel(A)
+    const tools = wrapper.get('[data-field="retro_tools"]')
+    const corrections = wrapper.get('[data-field="retro_corrections"]')
+    expect((tools.element as HTMLInputElement).checked).toBe(true)
+    expect((corrections.element as HTMLInputElement).checked).toBe(false)
+    const row = wrapper.get('[data-test="retro"]').text()
+    expect(row).toContain('50k')
+    expect(row).toContain('訊息紀錄')
+    expect(row).toContain('review note')
+    await corrections.setValue(true)
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set').at(-1)?.payload).toEqual({ workspace: A, settings: { retro_corrections: true } })
   })
 
   it('S1: an older backend without a ledger still shows the proposals', async () => {
