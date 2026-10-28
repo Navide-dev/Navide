@@ -196,11 +196,19 @@ _SUB_ROLES = ("model", "memory", "tool", "mcp_tool", "tool_workflow", "parser", 
 
 
 # ── secrets ──────────────────────────────────────────────────────────────
+# Strong words match anywhere in a field name; "token" and "...key" only
+# at the end (maxTokens, keyword and monkey are not secrets).
 _SENSITIVE_KEY = re.compile(
-    r"(?i)(?:authorization|api[-_ ]?key|apikey|access[-_ ]?token|auth[-_ ]?token|token|secret"
-    r"|password|passwd|private[-_ ]?key|cookie)$"
+    r"(?i)(?:authorization|api[-_ ]?key|apikey|access[-_ ]?token|auth[-_ ]?token|refresh[-_ ]?token"
+    r"|secret|password|passwd|private[-_ ]?key|cookie|credential)"
+    r"|(?:token|^key|access[-_ ]?key|subscription[-_ ]?key|signing[-_ ]?key|account[-_ ]?key)$"
 )
-_TEMPLATE = re.compile(r"\{\{.*?\}\}", re.S)
+# Names that hint at a key without matching above: a long letters-and-digits
+# value with no spaces under them is treated as a secret too.
+_KEYISH = re.compile(r"(?i)key|auth")
+_HIGH_ENTROPY = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9_\-+/=.]{20,}$")
+_TEMPLATE = re.compile(r"\{\{(.*?)\}\}", re.S)
+_QUOTED = re.compile(r"(['\"`])((?:(?!\1).){6,})\1", re.S)
 _AUTH_WORD = re.compile(r"(?i)\b(?:bearer|basic|token)\b")
 # (label, pattern, group holding the secret)
 _VALUE_PATTERNS: tuple[tuple[str, re.Pattern[str], int], ...] = (
@@ -231,6 +239,9 @@ def _literal_secret(value: str) -> bool:
     data at run time ({{ $json.token }}, "Bearer {{ … }}")."""
     if not value.strip() or value.startswith("<removed:"):
         return False
+    # A quoted literal inside {{ }} is still a literal: {{ "hunter2…" }}.
+    if any(_QUOTED.search(body) for body in _TEMPLATE.findall(value)):
+        return True
     rest = _AUTH_WORD.sub("", _TEMPLATE.sub("", value.lstrip("="))).strip(" \t\n\"'")
     return bool(rest)
 
@@ -265,6 +276,9 @@ def _redact(value: Any, path: str, found: list[str], key: str = "") -> Any:
         return [_redact(v, f"{path}[{i}]", found, key) for i, v in enumerate(value)]
     if isinstance(value, str):
         if key and _SENSITIVE_KEY.search(key) and _literal_secret(value):
+            found.append(path)
+            return _placeholder(key)
+        if key and _KEYISH.search(key) and _HIGH_ENTROPY.match(value.strip()):
             found.append(path)
             return _placeholder(key)
         new, changed = _scrub_string(value)

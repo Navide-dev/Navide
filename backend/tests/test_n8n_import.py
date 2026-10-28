@@ -469,6 +469,28 @@ def test_embedded_secrets_never_reach_any_output():
     assert url.startswith("https://api.example.com/v1?api_key=<removed:") and url.endswith("&page=2")
 
 
+def test_literals_inside_expressions_and_other_key_names_are_redacted():
+    in_expr = "hun" + "ter2" + "value99"
+    access = "AK" + "x9" + "q" * 8
+    sub_key = "4f3e" + "2d1c" + "0b9a" + "8877" + "6655"
+    keyish = "zz" + "9" * 10 + "Q" * 10
+    w = wf([node("Start", "manualTrigger"),
+            node("Call", "httpRequest", 4.2, 200, parameters={
+                "password": "={{ \"" + in_expr + "\" }}",
+                "accessKey": access,
+                "options": {"ocpApimSubscriptionKey": sub_key, "authHeaderValue": keyish,
+                            "maxTokens": "2000", "keyword": "invoice", "sessionKey": "={{ $json.sessionId }}"},
+            })],
+           link(("Start", "Call")))
+    out = convert(w)
+    blob = json.dumps(out, ensure_ascii=False)
+    for s in (in_expr, access, sub_key, keyish):
+        assert s not in blob
+    params = out["source"]["json"]["nodes"][1]["parameters"]
+    assert params["options"]["maxTokens"] == "2000" and params["options"]["keyword"] == "invoice"
+    assert params["options"]["sessionKey"] == "={{ $json.sessionId }}"
+
+
 def test_secret_values_are_not_in_errors_either():
     w, secrets = _secret_fixture()
     w["nodes"].append(dict(w["nodes"][1]))  # duplicate name → rejected
