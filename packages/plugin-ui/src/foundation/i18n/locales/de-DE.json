@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "Die CLI wurde mit dem Exit-Code {code} beendet. Sie ist möglicherweise abgestürzt; der Code ist auch im Fehlerprotokoll vermerkt.",
       "stuck-badge": "⏳ Keine Aktivität seit {minutes}+ Min.",
       "stuck-tooltip": "Dieser Turn zeigt seit über {minutes} Minuten weder Protokollaktivität noch Ausgabe. Die CLI hängt möglicherweise; es wurde nichts unterbrochen.",
+      "stale-config-badge": "Einstellungen geändert",
+      "stale-config-tooltip-mcp": "Die MCP-Server dieser CLI haben sich nach dem Start des Panes geändert. Bis zum Neuaufbau nutzt sie die alte Liste. Klicken zum Neuaufbau (Unterhaltung fortsetzen).",
+      "stale-config-tooltip-skills": "Die an diese CLI gelieferten Skills haben sich nach dem Start des Panes geändert. Bis zum Neuaufbau nutzt sie womöglich die alten. Klicken zum Neuaufbau (Unterhaltung fortsetzen).",
+      "stale-config-tooltip-both": "MCP-Server und Skills dieser CLI haben sich nach dem Start des Panes geändert. Bis zum Neuaufbau nutzt sie die alten. Klicken zum Neuaufbau (Unterhaltung fortsetzen).",
       "usage-limit-badge": "⛔ wieder um {time}",
       "usage-limit-badge-unknown": "⛔ Kontingent aufgebraucht",
       "usage-limit-tooltip": "Das Kontingent dieser CLI ist aufgebraucht – voraussichtlich wieder verfügbar um {time}. Zum Ausblenden klicken",
@@ -1507,6 +1511,19 @@
         "hot-reload": "Einmal pro Session vor dem Hot Reload gefragt"
       }
     },
+    "applies": {
+      "new-panes-only": "Nur neue Panes",
+      "new-panes-only-tooltip": "Eine CLI liest das beim Start. Bereits offene Panes behalten den alten Wert, bis Sie sie neu aufbauen."
+    },
+    "stale-config": {
+      "title": "Offene Panes, die vor dieser Änderung gestartet wurden: {count}",
+      "body-mcp": "Eine CLI liest ihre MCP-Server beim Start, daher nutzen diese Panes noch die alte Liste. Ein Neuaufbau setzt die Unterhaltung fort, unterbricht aber einen laufenden Turn und gibt die Unterhaltung neu aus.",
+      "body-skills": "Eine CLI liest ihre Skills beim Start, daher nutzen diese Panes womöglich noch die alten. Ein Neuaufbau setzt die Unterhaltung fort, unterbricht aber einen laufenden Turn und gibt die Unterhaltung neu aus.",
+      "rebuild-all-idle": "Alle inaktiven neu aufbauen ({count})",
+      "busy": "Läuft – wird von „Alle inaktiven neu aufbauen“ übersprungen",
+      "cannot-rebuild": "Keine gespeicherte Unterhaltung zum Fortsetzen",
+      "rebuild": "Neu aufbauen"
+    },
     "limits": {
       "hint": "Optionale Grenzen, die verhindern, dass Navide und die von Navide gestarteten Agents diesen Rechner überlasten. Jede ist ausgeschaltet bzw. entspricht dem bisherigen Verhalten von Navide, bis Sie sie ändern.",
       "test-workers": "Test-Worker in neuen panes begrenzen",
@@ -1941,7 +1958,7 @@
       "restore": "Wiederherstellen",
       "candidateReady": "Update {version} ist bereit",
       "activationFailed": "{plugin} wurde installiert, konnte aber nicht aktiviert werden: {reason}. Starten Sie es in der Liste unten neu oder verwerfen Sie es.",
-      "switchNow": "Mit der Genehmigung wird {id} sofort auf {version} umgestellt. Seine geöffneten Ansichten werden neu geladen, und alles, was darin nicht gespeichert ist, geht verloren. Der Wechsel wird in den Ankündigungen festgehalten, wo Sie ihn mit einem Klick rückgängig machen können.",
+      "switchNow": "Mit der Genehmigung wird {id} sofort auf {version} umgestellt. Seine geöffneten Ansichten werden neu geladen: Eine Ansicht, die ihren Zustand über das Navide SDK speichert, kehrt dorthin zurück, wo sie war; alles andere, was darin nicht gespeichert ist, geht verloren. Der Wechsel wird in den Ankündigungen festgehalten, wo Sie ihn mit einem Klick rückgängig machen können.",
       "restartPlugin": "Navide-Plug-in neu starten",
       "disable": "Deaktivieren",
       "enable": "Aktivieren",
@@ -2468,7 +2485,7 @@
         "unknown": "Noch nicht getestet.",
         "not-applicable": "Auf dieser Plattform nicht verfügbar."
       },
-      "auto-resume-reconnect-hint": "Wenn das Backend abstürzt, reißt es alle CLI-Prozesse mit. Schalten Sie dies ein, um die Unterhaltungen der sichtbaren panes automatisch fortzusetzen, sobald es wieder läuft, statt jedes einzeln von Hand neu aufzubauen.",
+      "auto-resume-reconnect-hint": "Wenn das Backend abstürzt oder neu startet, beendet es alle CLI-Prozesse mit. Schalten Sie dies ein, damit nach seiner Rückkehr die Unterhaltungen der Panes auf dem Bildschirm und von bis zu sechs arbeitenden Panes außerhalb des Bildschirms automatisch wiederaufgenommen werden, statt jedes einzeln neu aufzubauen. Wiederaufgenommene Panes machen nicht von selbst weiter, die Panes, die sie geöffnet haben, werden benachrichtigt, und die Ankündigungen listen auf, was passiert ist. Stürzt das Backend kurz darauf erneut ab, wird nichts mehr wiederaufgenommen.",
       "resume-interrupted-on-launch-hint": "Beim Neustart von Navide werden panes, die gerade einen Turn ausgeführt oder auf eine Berechtigungsabfrage oder eine Frage gewartet haben, sowie die übergeordneten panes, die auf deren Berichte warten, automatisch fortgesetzt (bis zu 6; die übrigen werden als „Beim Neustart aktiv“ markiert). Nichts läuft von selbst weiter: Klicken Sie auf „Fortfahren“ oder lassen Sie das übergeordnete pane die Anweisung geben. Das übergeordnete pane erfährt, welche seiner panes unterbrochen wurden.",
       "confirm-close-pane": "Vor dem Schließen eines panes bestätigen",
       "confirm-close-pane-hint": "Nachfragen, bevor die Tastenkombination zum Schließen ein CLI-pane schließt. Ein pane mit laufendem Turn fragt unabhängig von dieser Einstellung immer nach.",
@@ -2833,7 +2850,7 @@
               "fallback": "Eine CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Ein Absturz des Backends reißt alle CLI-Prozesse mit; ist dies aktiviert, werden die panes auf dem Bildschirm automatisch fortgesetzt, sobald es wieder läuft.",
+              "desc": "Ein Absturz oder Neustart des Backends beendet alle CLI-Prozesse; ist dies eingeschaltet, werden die Panes auf dem Bildschirm und bis zu sechs arbeitende Panes außerhalb automatisch wiederaufgenommen, sobald es zurück ist. Die Ankündigungen listen auf, welche Turns unterbrochen wurden.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -8177,11 +8194,14 @@
         "agent-switch-confirm-to": "Zu Konto",
         "agent-switch-confirm-caller": "Angefragt von pane",
         "agent-switch-confirm-workspace": "Arbeitsbereich des panes",
+        "agent-switch-confirm-pane": "Zu verschiebender Pane",
+        "agent-switch-confirm-pane-body": "Es wird nichts gewechselt, bevor du zustimmst. Nur dieser Pane wechselt: Er öffnet seine Unterhaltung im eigenen Ordner des anderen Kontos neu. Die Live-Anmeldung der CLI und alle anderen Panes bleiben unverändert. Arbeitet der Pane gerade, fragt Navide dich erneut, bevor er gestoppt wird. Ohne Antwort schließt sich die Anfrage von selbst.",
         "agent-switch-confirm-reason": "Begründung, vom Agent verfasst",
         "agent-switch-confirm-reason-truncated": "Die Begründung des Agents war länger als 300 Zeichen; nur die ersten 300 werden angezeigt.",
         "agent-switch-confirm-cancel": "Abbrechen",
         "agent-switch-confirm-ok": "Konto wechseln",
         "agent-switch-done": "{agent} hat {vendor} von {from} zu {to} gewechselt. Begründung des Agents: {reason}",
+        "agent-switch-pane-done": "{agent} hat einen Pane von {from} zu {to} verschoben. Die Live-Anmeldung und die anderen Panes sind unverändert. Begründung des Agents: {reason}",
         "login-complete": "Angemeldet als {email}. Konto gespeichert.",
         "login-complete-no-email": "Anmeldung abgeschlossen. Konto gespeichert.",
         "login-step2": "Schritt 1 erledigt: {email} ist gespeichert. Eine weitere Autorisierung meldet dieses Konto in seinem eigenen Ordner an. Schließen Sie sie im Browser über das gerade geöffnete Anmelde-pane ab.",
@@ -8911,6 +8931,7 @@
     "drag-resize-log": "Ziehen, um die Größe des Protokollbereichs zu ändern",
     "filter-by-type": "Nach Typ filtern",
     "all-stages-finished": "Alle {count} Stufen erfolgreich abgeschlossen",
+    "region-switching": "{title} wird auf {version} umgestellt …",
     "region-unavailable": "{title} nicht verfügbar"
   },
   "layout": {
@@ -8950,6 +8971,7 @@
     "statusbar-note": "ihre Pop-ups verschwinden mit ihr"
   },
   "error": {
+    "pipeline-node-failed": "Stufe {stage}: Schritt {slot} hat einen Fehler gemeldet ({reason}) und hat keine Versuche mehr. Der Lauf wurde angehalten; setze ihn fort, um es erneut zu versuchen.",
     "pipeline-start-refused": "Die Pipeline wurde nicht gestartet: {reason}",
     "pipeline-kickoff-failed": "Pipeline fehlgeschlagen: Stufe {stage}, Slot {slot} – {reason}. Ihre panes sind noch geöffnet.",
     "pipeline-kickoff-held": "Pipeline fehlgeschlagen: Stufe {stage}, Slot {slot} – der Startauftrag wartet im Eingabefeld. Lassen Sie ihn dort, dann sendet „Fortsetzen“ ihn ab, oder leeren Sie das Feld. Ihre panes sind noch geöffnet.",
@@ -9136,6 +9158,21 @@
     "load-more": "Mehr laden ({count} übrig)",
     "mcp-tools-changed": "MCP-Tools haben sich möglicherweise geändert",
     "mcp-tools-changed-note": "Ein CLI-Agent liest die MCP-Tool-Liste von Navide einmal beim Start. Alles, was noch aus der vorherigen Version ({from}) verbunden ist – ein CLI-pane oder ein externer MCP-Client –, behält die damals gesehenen Tools; öffnen Sie das pane erneut oder verbinden Sie den Client neu, um die neuen zu erhalten.",
+    "backend-restart": {
+      "title": "Backend um {time} neu gestartet",
+      "note": "Wiederaufgenommene Panes halten an der Eingabeaufforderung und machen nicht von selbst weiter; beendete Panes bleiben, wie sie sind, bis Sie sie neu aufbauen.",
+      "crash-loop": "Das Backend ist kurz nach dem Neustart erneut abgestürzt, daher wurde diesmal kein Pane automatisch wiederaufgenommen. Bauen Sie die benötigten neu auf.",
+      "resumed": "Wiederaufgenommen: {names}",
+      "interrupted": "Turn unterbrochen: {names}",
+      "rebuild": "{name} neu aufbauen",
+      "not-resumed": {
+        "crash-loop": "{name}: nicht wiederaufgenommen, weil das Backend in kurzer Zeit wiederholt abgestürzt ist",
+        "over-limit": "{name}: nicht wiederaufgenommen, weil mehr als sechs Panes außerhalb des Bildschirms arbeiteten",
+        "idle-off-screen": "{name}: nicht wiederaufgenommen, weil es außerhalb des Bildschirms und untätig war",
+        "no-session": "{name}: nicht wiederaufgenommen, weil es keine gespeicherte Unterhaltung zum Fortsetzen gibt",
+        "failed": "{name}: konnte nicht wiederaufgenommen werden"
+      }
+    },
     "scheduler-disabled": "Geplanter Auftrag „{name}“ wurde deaktiviert: Sein Ziel-pane existiert nicht mehr",
     "scheduler-disabled-note": "Sein Ziel-pane wurde {n}-mal hintereinander nicht gefunden, daher wurde der Auftrag deaktiviert. Verwenden Sie im Zeitplan-Panel „Neu binden“, um ihn auf ein aktives pane zu richten, und aktivieren Sie ihn dann wieder.",
     "quota": {
@@ -10099,6 +10136,9 @@
     "weekday-6": "Samstag"
   },
   "scheduler": {
+    "pipeline-title": "Jeder Lauf dieses Jobs startet einen Pipeline-Lauf, der CLI-Panes öffnet und deren Kontingent verbraucht",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "startet Pipeline {name}",
     "system": {
       "tag": "System",
       "manage": "Im Arbeitsbereich verwalten →",
@@ -10140,6 +10180,16 @@
       "unknown": "Übersprungen"
     },
     "editor": {
+      "err-task": "Gib eine Aufgabe ein",
+      "err-pipeline": "Wähle eine Pipeline",
+      "task-placeholder": "Wofür jeder Pipeline-Lauf da ist …",
+      "task": "Aufgabe",
+      "pipeline-cost": "Jeder Lauf öffnet die CLI-Panes dieser Pipeline und verbraucht deren Kontingent. Es wird nie ein Fenster geöffnet: Ist der Workspace nicht offen, schlägt der Lauf mit Begründung fehl.",
+      "pick-pipeline": "Pipeline wählen",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Eine Pipeline starten",
+      "action-message": "Eine Anweisung an ein Pane senden",
+      "action": "Aktion",
       "title-new": "Neuer geplanter Auftrag",
       "title-edit": "Geplanten Auftrag bearbeiten",
       "name": "Name",
@@ -10179,6 +10229,7 @@
       "save": "Speichern"
     },
     "owner": {
+      "user": "von dir",
       "agent": "Agent · {name}",
       "external": "externer Agent",
       "agent-title": "Vom Agent „{name}“ erstellt; nur er und Sie können ihn ändern",
@@ -11115,6 +11166,8 @@
     },
     "canvas": {
       "insert-on-edge": "Hier einen Schritt einfügen",
+      "branch-label": "wenn {when}",
+      "error-label": "bei Fehler",
       "loop-label": "↺ max. {max}",
       "minimap": "Übersicht über die gesamte Pipeline",
       "pass": "Nach Genehmigung fortfahren",
@@ -11155,6 +11208,7 @@
       "reject": "Zurückschicken"
     },
     "history": {
+      "retry": "Wiederholungen ändern",
       "add": "{name} hinzufügen",
       "edit-cli": "CLI ändern",
       "edit-field": "{field} bearbeiten",
@@ -11174,9 +11228,20 @@
       "tidy": "Aufräumen",
       "unlink": "Verbindung entfernen",
       "unpin": "Einfrieren aufheben",
+      "link-kind": "Verbindungstyp ändern",
+      "link-when": "Verzweigungswert ändern",
       "loop-budget": "Wiederholungslimit ändern"
     },
     "inspector": {
+      "retry-blocked-not-failed": "Nur ein fehlgeschlagener Schritt kann wiederholt werden",
+      "retry-blocked-no-run": "Nicht verfügbar: kein Lauf dieser Pipeline",
+      "retry-blocked-running": "Nicht verfügbar, solange ein Lauf aktiv ist",
+      "retry-node-help": "Diesen fehlgeschlagenen Schritt erneut ausführen: der Lauf wird hier fortgesetzt oder ab hier neu gestartet, wenn spätere Schritte schon liefen",
+      "retry-node": "Diesen Schritt wiederholen",
+      "retry-wait": "Wartezeit vor jeder Wiederholung (Sekunden)",
+      "retry-help": "Ein fehlgeschlagener Versuch (die Aufgabe hat den Agenten nicht erreicht oder der Agent hat einen Fehler gemeldet) läuft im selben Schritt erneut, insgesamt bis zu {max} Versuche.",
+      "retry-tries": "Versuche insgesamt",
+      "retry-title": "Bei Fehler wiederholen",
       "aria": "Einstellungen für {name}",
       "attempts": "Versuche",
       "elapsed": "Dauer",
@@ -11258,6 +11323,7 @@
       "awaiting": "Genehmigung erforderlich",
       "rejected": "Zurückgeschickt",
       "failed": "Fehlgeschlagen",
+      "untaken": "Übersprungen (nicht auf dem gewählten Pfad)",
       "skipped": "Eingefrorene Ausgabe wiederverwendet",
       "aborted": "Abgebrochen",
       "pinned": "Ausgabe eingefroren"
@@ -11285,6 +11351,17 @@
       "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen",
       "gate-toast": "Die Pipeline wartet bei {name} auf Ihre Genehmigung",
       "next-gated": "Genehmigen Sie diese Schranke oder schicken Sie sie zurück, bevor es mit der nächsten Stufe weitergeht."
+    },
+    "link": {
+      "title": "Verbindung",
+      "desc": "{from} → {to}",
+      "kind": "Verbindungstyp",
+      "kind-main": "Immer",
+      "kind-branch": "Verzweigung (wenn …)",
+      "kind-error": "Bei Fehler",
+      "when": "Verzweigungswert",
+      "when-placeholder": "Vom Schritt gemeldeter Wert oder default",
+      "remove": "Verbindung entfernen"
     },
     "edge": {
       "title": "Rückweisungsschleife",
@@ -11381,6 +11458,14 @@
       "not-reclaimed": "(nicht freigegeben)",
       "fix": "Korrektur",
       "proposal": "Vorschlag",
+      "proposal-reason": "Grund: {reason}",
+      "effect-title": "Wirkung und Häufigkeit",
+      "adoption": "Übernommen {adopted} / {resolved}",
+      "adoption-none": "Noch keine entschiedenen Vorschläge",
+      "lowered": "Seit {date} automatisch auf wöchentlich gesenkt: die letzten {n} Vorschläge in Folge wurden nicht übernommen",
+      "landed-title": "Umgesetzte Vorschläge",
+      "landed-none": "Noch keine umgesetzten Vorschläge",
+      "effect-counts": "{before} → {after} (7 Tage davor / danach)",
       "history": "Verlauf (letzte 30)",
       "unsaved": "Nicht gespeicherte Änderungen",
       "save": "Speichern",
@@ -11418,6 +11503,17 @@
       "scope-propose": "Nur vorschlagen (keine Codeänderungen)",
       "scope-fix-no-git": "Dieser Arbeitsbereich ist kein Git-Repository: Es gibt keinen Worktree und keinen Haupt-Branch, mit dem gearbeitet werden kann, daher kann er nur vorschlagen.",
       "scope-always-propose": "Neue Funktionen, Designabwägungen, Datenlöschung / Migrationen, Push und Release sind immer Vorschläge (integrierte Regel).",
+      "retro": "Rückblicke",
+      "retro-tools": "Wiederholte Handarbeit",
+      "retro-tools-hint": "Bis zu {tokens} Tokens pro Lauf. Liest Nachrichtenprotokoll und Läufe geplanter Aufgaben dieses Workspace der letzten 7 Tage, nur als Anzahlen; eine Aufgabe, die 3-mal oder öfter erledigt wurde, wird als Pipeline, Skill, Prompt o. Ä. vorgeschlagen.",
+      "retro-corrections": "Deine Korrekturen",
+      "retro-corrections-hint": "Bis zu {tokens} Tokens pro Lauf. Liest deine Review Notes in den Plans dieses Workspace und die Gründe abgelehnter Vorschläge der letzten 7 Tage, nur als Anzahlen; eine Korrektur, die 2-mal oder öfter vorkommt, wird als Regeländerung vorgeschlagen.",
+      "burst": "Früher Lauf",
+      "burst-on": "Einen Lauf früher starten, wenn ein Fehler gehäuft auftritt",
+      "burst-count": "Mal",
+      "burst-minutes": "Minuten",
+      "burst-per-day": "frühe Läufe pro Tag höchstens",
+      "burst-hint": "Liest nur das Fehlerprotokoll dieses Workspace. Standardmäßig aus; die tägliche Laufzahl und ein Lauf zur Zeit gelten weiter, und derselbe Fehler startet höchstens einen frühen Lauf in 24 Stunden.",
       "rules": "Regeln",
       "rules-builtin": "Integriert v{version}",
       "rules-view": "Volltext anzeigen",
@@ -11442,6 +11538,29 @@
       "error": "Fehlgeschlagen",
       "timeout": "Zeitüberschreitung",
       "skipped": "Übersprungen"
+    },
+    "source": {
+      "failures": "Fehler-Triage",
+      "tools": "Wiederholte Handarbeit",
+      "corrections": "Deine Korrekturen"
+    },
+    "freq": {
+      "daily": "Täglich",
+      "weekly": "Wöchentlich"
+    },
+    "effect": {
+      "effective": "Wirksam",
+      "not-effective": "Nicht wirksam",
+      "insufficient": "Zu wenig für ein Urteil",
+      "pending": "Noch nicht beurteilt"
+    },
+    "proposal-status": {
+      "proposed": "Vorgeschlagen",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "in-progress": "In Arbeit",
+      "landed": "Umgesetzt",
+      "abandoned": "Verworfen"
     },
     "history": {
       "date": "Datum",

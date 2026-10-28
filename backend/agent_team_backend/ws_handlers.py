@@ -38,7 +38,9 @@ from . import (
     native_mcp,
     native_memory,
     osplat,
+    pane_config_fingerprint,
     pane_policy,
+    pipeline_liveness,
     quota_failover,
     remote_roster,
     server_link,
@@ -6856,7 +6858,7 @@ async def pipelines_delete(session: "Session", msg_id: str, msg_type: str, paylo
     ws_path = payload.get("workspace_path", "") or ""
     if ws_path:
         proj = app.project_store.peek(ws_path)
-        if proj and proj.state == "running":
+        if pipeline_liveness.run_is_live(proj):
             await session.send_json(
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot delete pipeline while a project is running")
             )
@@ -6880,7 +6882,7 @@ async def pipelines_set_active(session: "Session", msg_id: str, msg_type: str, p
     ws_path = payload.get("workspace_path", "") or ""
     if ws_path:
         proj = app.project_store.peek(ws_path)
-        if proj and proj.state == "running":
+        if pipeline_liveness.run_is_live(proj):
             await session.send_json(
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot switch pipeline while a project is running")
             )
@@ -6946,7 +6948,7 @@ def _stage_edit_hits_running_pipeline(ws_path: str, pipeline_id: str | None) -> 
     if not ws_path:
         return False
     proj = app.project_store.peek(ws_path)
-    if not proj or proj.state != "running":
+    if not pipeline_liveness.run_is_live(proj):
         return False
     if not pipeline_id:
         # No id means "the active pipeline", which is what the run uses.
@@ -8475,7 +8477,8 @@ async def _terminal_create_impl(
     for key in ("quota_transaction_id", "quota_original_pane_id", "credential_epoch",
                 "credential_store_verified", "credential_store_id", "credential_store_error",
                 "credential_launch_term_id", "guard_pane_token",
-                ACCOUNT_DIR_METADATA_KEY, "account_dir_login"):
+                ACCOUNT_DIR_METADATA_KEY, "account_dir_login",
+                pane_config_fingerprint.METADATA_KEY):
         metadata.pop(key, None)
     agent_key = payload.get("agent_key") or ""
     # The window's per-vendor env settings, first in the chain on purpose: the
@@ -8831,6 +8834,12 @@ async def _terminal_create_impl(
         from .plugins.builtin.navide_skills import skills_wiring
 
         wiring_warnings.extend(skills_wiring.take_spawn_warnings(str(payload.get("pane_id") or "")))
+        # What this pane loaded, so a later MCP or skills change can name it
+        # stale (terminal.config_status). Read-only; the command is untouched.
+        if agent_key:
+            metadata[pane_config_fingerprint.METADATA_KEY] = await asyncio.to_thread(
+                pane_config_fingerprint.fingerprint, agent_key
+            )
     # Give the pane whatever its push channel needs (a port to serve on, a file
     # to watch) so a message can later reach it without being typed in. Last,
     # so the flags it adds cannot be displaced by MCP or skills wiring; a CLI
@@ -9913,6 +9922,41 @@ async def terminal_dock_retire(session: "Session", msg_id: str, msg_type: str, p
     await session.send_json(make_response(msg_id, msg_type, {}))
 
 
+@handler("terminal.config_status")
+async def terminal_config_status(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Which of this window's panes started before an MCP or skills change.
+
+    Disclosure only: the answer lists stale parts per terminal and the window
+    offers the user a rebuild; nothing is restarted here.
+    """
+    from . import app
+
+    ids = payload.get("terminal_session_ids") if isinstance(payload, dict) else None
+    if not isinstance(ids, list):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "terminal_session_ids must be a list")
+        )
+        return
+    stored_sessions = session.terminals._sessions  # noqa: SLF001
+    current: dict[str, dict[str, str | None]] = {}
+    stale: list[dict[str, Any]] = []
+    for tid in (str(x) for x in ids):
+        stored = stored_sessions.get(tid)
+        if stored is None or stored.closed or app._PTY_OWNERS.get(tid) is not session:
+            continue
+        recorded = stored.metadata.get(pane_config_fingerprint.METADATA_KEY)
+        if not isinstance(recorded, dict) or not stored.agent_key:
+            continue
+        if stored.agent_key not in current:
+            current[stored.agent_key] = await asyncio.to_thread(
+                pane_config_fingerprint.fingerprint, stored.agent_key
+            )
+        parts = pane_config_fingerprint.stale_parts(recorded, current[stored.agent_key])
+        if parts:
+            stale.append({"terminal_session_id": tid, "pane_id": stored.pane_id, "parts": parts})
+    await session.send_json(make_response(msg_id, msg_type, {"stale": stale}))
+
+
 @handler("terminal.reattach")
 async def terminal_reattach(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -10943,6 +10987,18 @@ def _imported_taint_detail(pipeline_id: str) -> str:
     return import_detail(record) if record else ""
 
 
+@handler("pipeline.claim")
+async def pipeline_claim(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """A window's claim of the pipeline runs it drives, sent on every
+    (re)connect — an empty list when it drives none. See pipeline_liveness."""
+    workspaces = payload.get("workspaces")
+    if not isinstance(workspaces, list):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "workspaces must be a list"))
+        return
+    pipeline_liveness.record_claim(session, [w for w in workspaces if isinstance(w, str)])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
 @handler("pipeline.resume")
 async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -10951,6 +11007,7 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     from .guard.taint import pipeline_run_resumed
 
     pipeline_run_resumed(payload["workspace_path"], _imported_taint_detail(getattr(project, "pipeline_id", "")))
+    pipeline_liveness.claim_run(session, project.workspace_path)
     _mirror_pipeline_state(project)
     resp = app._project_payload(project)
     resp["resume_index"] = resume_index
@@ -10973,6 +11030,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
     from .guard.taint import pipeline_run_started
 
     pipeline_run_started(payload["workspace_path"], _imported_taint_detail(getattr(project, "pipeline_id", "")))
+    pipeline_liveness.claim_run(session, project.workspace_path)
     app._register_workspace_and_backfill(project.workspace_path)
     _mirror_pipeline_state(project)
     # Start a fresh token-stats run for this workspace.
@@ -11007,6 +11065,7 @@ async def pipeline_stage_spawn(session: "Session", msg_id: str, msg_type: str, p
     from .guard.taint import pipeline_pane_spawned
 
     pipeline_pane_spawned(payload["workspace_path"], str(payload["pane_id"]))
+    pipeline_liveness.claim_run(session, project.workspace_path)
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )

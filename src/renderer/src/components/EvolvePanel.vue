@@ -19,6 +19,8 @@ import {
   evolveSet,
   formatEvolveNext,
   useEvolveBadges,
+  EVOLVE_SOURCES,
+  type EvolveProposal,
   type EvolveRun,
   type EvolveSettings,
   type EvolveState,
@@ -94,6 +96,22 @@ const missingPane = computed(() => {
 const lastRun = computed<EvolveRun | null>(() => state.value?.running ?? state.value?.runs[0] ?? null)
 const history = computed(() => (state.value?.runs ?? []).slice(0, 30))
 
+/** The ledger row of one of a run's proposals, matched by run and plan path. */
+const landed = computed(() => state.value?.landed ?? [])
+
+function effectText(p: EvolveProposal): string {
+  return t(`evolve.effect.${p.effect || 'pending'}`)
+}
+
+function adoptionText(src: (typeof EVOLVE_SOURCES)[number]): string {
+  const a = state.value?.adoption?.[src]
+  return a && a.resolved ? t('evolve.panel.adoption', { adopted: a.adopted, resolved: a.resolved }) : t('evolve.panel.adoption-none')
+}
+
+function ledgerRow(run: EvolveRun, relPath: string): EvolveProposal | undefined {
+  return state.value?.proposals?.find((p) => p.run_id === run.id && p.rel_path === relPath)
+}
+
 const runsToday = computed(() => {
   const today = new Date()
   return (state.value?.runs ?? []).filter((r) => {
@@ -124,6 +142,13 @@ const errors = computed(() => {
   range('max_runs_per_day')
   range('max_fixes')
   range('max_minutes')
+  if (d.trigger_burst) {
+    for (const key of ['burst_minutes', 'burst_count', 'burst_max_per_day'] as const) {
+      const [min, max] = EVOLVE_BOUNDS[key]
+      const v = d[key]
+      if (!Number.isInteger(v) || (v as number) < min || (v as number) > max) out[key] = t('evolve.error.range', { min, max })
+    }
+  }
   if (!Number.isInteger(d.token_budget) || d.token_budget <= 0) out.token_budget = t('evolve.error.budget')
   if (d.extra.length > EVOLVE_BOUNDS.extra) out.extra = t('evolve.error.extra', { max: EVOLVE_BOUNDS.extra })
   if (d.mode === 'pane' && !d.pane_id) out.pane_id = t('evolve.error.pane')
@@ -139,7 +164,8 @@ const changed = computed<Partial<EvolveSettings>>(() => {
   const out: Record<string, unknown> = {}
   for (const key of Object.keys(d) as (keyof EvolveSettings)[]) {
     if (key === 'enabled' || key === 'pending_catch_up') continue
-    if (d[key] !== s[key]) out[key] = d[key]
+    // retro_freq is an object: compare what it holds, not its identity.
+    if (key === 'retro_freq' ? JSON.stringify(d[key]) !== JSON.stringify(s[key]) : d[key] !== s[key]) out[key] = d[key]
   }
   return out as Partial<EvolveSettings>
 })
@@ -148,6 +174,7 @@ const dirty = computed(() => Object.keys(changed.value).length > 0)
 function adopt(next: EvolveState): void {
   state.value = next
   draft.value = { ...next.settings }
+  if (next.settings.retro_freq) draft.value.retro_freq = { ...next.settings.retro_freq }
   // Non-git workspaces can only propose; show the scope they will really run with.
   if (!next.git.is_repo) draft.value.scope = 'propose'
 }
@@ -538,6 +565,57 @@ async function openProposal(rel: string): Promise<void> {
             </div>
           </div>
 
+          <!-- Early run on a burst (S5a) -->
+          <div v-if="draft.trigger_burst !== undefined" class="ev-row" data-test="burst">
+            <span class="ev-k">{{ t('evolve.field.burst') }}</span>
+            <div class="ev-v ev-col">
+              <label class="ev-radio">
+                <input v-model="draft.trigger_burst" type="checkbox" data-field="trigger_burst" />
+                <span>{{ t('evolve.field.burst-on') }}</span>
+              </label>
+              <div class="ev-budget">
+                <label>
+                  <input v-model.number="draft.burst_count" class="nv-input ev-num-s" data-field="burst_count" type="number"
+                    :min="EVOLVE_BOUNDS.burst_count[0]" :max="EVOLVE_BOUNDS.burst_count[1]" />
+                  <span class="ev-unit">{{ t('evolve.field.burst-count') }}</span>
+                </label>
+                <label>
+                  <input v-model.number="draft.burst_minutes" class="nv-input ev-num-s" data-field="burst_minutes" type="number"
+                    :min="EVOLVE_BOUNDS.burst_minutes[0]" :max="EVOLVE_BOUNDS.burst_minutes[1]" />
+                  <span class="ev-unit">{{ t('evolve.field.burst-minutes') }}</span>
+                </label>
+                <label>
+                  <input v-model.number="draft.burst_max_per_day" class="nv-input ev-num-s" data-field="burst_max_per_day" type="number"
+                    :min="EVOLVE_BOUNDS.burst_max_per_day[0]" :max="EVOLVE_BOUNDS.burst_max_per_day[1]" />
+                  <span class="ev-unit">{{ t('evolve.field.burst-per-day') }}</span>
+                </label>
+                <span v-for="k in (['burst_count', 'burst_minutes', 'burst_max_per_day'] as const)" v-show="errors[k]" :key="k" class="ev-err" :data-error="k">
+                  {{ errors[k] }}
+                </span>
+              </div>
+              <span class="ev-muted">{{ t('evolve.field.burst-hint') }}</span>
+            </div>
+          </div>
+
+          <!-- Retro passes (S2) -->
+          <div class="ev-row" data-test="retro">
+            <span class="ev-k">{{ t('evolve.field.retro') }}</span>
+            <div class="ev-v ev-col">
+              <label class="ev-radio">
+                <input v-model="draft.retro_tools" type="checkbox" data-field="retro_tools" />
+                <span>{{ t('evolve.field.retro-tools') }}</span>
+              </label>
+              <span class="ev-muted">{{ t('evolve.field.retro-tools-hint', { tokens: fmtTokens(EVOLVE_BOUNDS.retro_sub_budget) }) }}</span>
+              <label class="ev-radio">
+                <input v-model="draft.retro_corrections" type="checkbox" data-field="retro_corrections" />
+                <span>{{ t('evolve.field.retro-corrections') }}</span>
+              </label>
+              <span class="ev-muted">{{
+                t('evolve.field.retro-corrections-hint', { tokens: fmtTokens(EVOLVE_BOUNDS.retro_sub_budget) })
+              }}</span>
+            </div>
+          </div>
+
           <!-- Rules -->
           <div class="ev-row">
             <span class="ev-k">{{ t('evolve.field.rules') }}</span>
@@ -581,9 +659,17 @@ async function openProposal(rel: string): Promise<void> {
               <div v-for="c in lastRun.commits" :key="c.hash" class="ev-mono">
                 {{ t('evolve.panel.fix') }} {{ c.hash.slice(0, 7) }} {{ c.title }}
               </div>
-              <div v-for="p in lastRun.proposals" :key="p.rel_path">
+              <div v-for="p in lastRun.proposals" :key="p.rel_path" data-test="proposal">
                 {{ t('evolve.panel.proposal') }}
                 <button class="ev-link" @click="openProposal(p.rel_path)">{{ p.name || p.rel_path }}</button>
+                <template v-if="ledgerRow(lastRun, p.rel_path)">
+                  <span class="ev-pstatus" :class="ledgerRow(lastRun, p.rel_path)!.status" data-test="proposal-status">{{
+                    t(`evolve.proposal-status.${ledgerRow(lastRun, p.rel_path)!.status}`)
+                  }}</span>
+                  <span v-if="ledgerRow(lastRun, p.rel_path)!.reason" class="ev-muted">{{
+                    t('evolve.panel.proposal-reason', { reason: ledgerRow(lastRun, p.rel_path)!.reason })
+                  }}</span>
+                </template>
               </div>
             </template>
           </div>
@@ -612,6 +698,33 @@ async function openProposal(rel: string): Promise<void> {
               </tbody>
             </table>
             <div v-else class="ev-muted">{{ t('evolve.panel.no-runs') }}</div>
+          </div>
+
+          <!-- Effect and cadence (S4) -->
+          <div v-if="draft.retro_freq" class="ev-section" data-test="cadence">
+            <div class="ev-sec-title">{{ t('evolve.panel.effect-title') }}</div>
+            <div v-for="src in EVOLVE_SOURCES" :key="src" class="ev-cadence" :data-source="src">
+              <span class="ev-k">{{ t(`evolve.source.${src}`) }}</span>
+              <span class="ev-muted">{{ adoptionText(src) }}</span>
+              <select v-model="draft.retro_freq[src]" class="nv-select" :data-field="`retro_freq-${src}`">
+                <option value="daily">{{ t('evolve.freq.daily') }}</option>
+                <option value="weekly">{{ t('evolve.freq.weekly') }}</option>
+              </select>
+              <span v-if="state.cadence?.lowered?.[src]" class="ev-muted" data-test="lowered">{{
+                t('evolve.panel.lowered', { date: fmtDate(state.cadence.lowered[src]!.at), n: 10 })
+              }}</span>
+            </div>
+            <div class="ev-sec-title">{{ t('evolve.panel.landed-title') }}</div>
+            <div v-if="landed.length" data-test="landed">
+              <div v-for="p in landed" :key="p.id" data-test="landed-item">
+                <button class="ev-link" @click="openProposal(p.rel_path)">{{ p.name || p.rel_path }}</button>
+                <span v-if="p.effect_before != null" class="ev-mono">
+                  {{ t('evolve.panel.effect-counts', { before: p.effect_before, after: p.effect_after }) }}</span
+                >
+                <span class="ev-pstatus" :class="p.effect || 'pending'" data-test="effect">{{ effectText(p) }}</span>
+              </div>
+            </div>
+            <div v-else class="ev-muted">{{ t('evolve.panel.landed-none') }}</div>
           </div>
 
           <!-- Ledger -->
@@ -891,6 +1004,36 @@ async function openProposal(rel: string): Promise<void> {
 .ev-dot.error,
 .ev-dot.timeout {
   background: var(--danger-fg);
+}
+.ev-pstatus {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-base);
+  font-size: var(--font-3xs);
+  color: var(--text-secondary);
+}
+.ev-pstatus.approved,
+.ev-pstatus.in-progress {
+  color: var(--accent-fg);
+}
+.ev-pstatus.landed {
+  color: var(--success-fg);
+}
+.ev-cadence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ev-pstatus.effective {
+  color: var(--success-fg);
+}
+.ev-pstatus.not-effective {
+  color: var(--danger-fg);
+}
+.ev-pstatus.rejected {
+  color: var(--danger-fg);
 }
 .ev-table {
   width: 100%;

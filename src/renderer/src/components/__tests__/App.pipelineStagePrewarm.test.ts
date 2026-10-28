@@ -41,7 +41,7 @@ const prewarmSource = block(
 )
 
 const activateSource = block(
-  'async function activateStage(index: number): Promise<void> {',
+  'async function activateStage(index: number, opts: { only?: string; note?: string } = {}): Promise<void> {',
   '\nasync function spawnPipelineStage(',
 )
 

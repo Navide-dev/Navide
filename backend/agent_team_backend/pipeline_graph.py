@@ -19,9 +19,16 @@ from typing import Any
 GRAPH_VERSION = 1
 DEFAULT_MAX_LOOPS = 2
 MAX_LOOPS_CEILING = 10
+# Bounds of a slot node's retry policy (maxTries counts the first try).
+MAX_TRIES_CEILING = 5
+MAX_RETRY_WAIT_MS = 300_000
 TRIGGER_NODE_ID = "trigger"
 NODE_KINDS = ("trigger", "slot", "gate")
-EDGE_KINDS = ("main", "reject")
+EDGE_KINDS = ("main", "reject", "branch", "error")
+# Edge kinds that carry flow forward (layering, cycle check, readiness).
+FORWARD_EDGE_KINDS = ("main", "branch", "error")
+# Reserved branch value: taken when no other branch edge of the source matched.
+BRANCH_DEFAULT = "default"
 _LAYER_DX = 280
 _LANE_DY = 140
 
@@ -42,11 +49,56 @@ def slot_node_id(stage_id: str, slot_index: int) -> str:
 
 
 def edge_id(src: str, dst: str, kind: str = "main") -> str:
-    return f"r-{src}-{dst}" if kind == "reject" else f"e-{src}-{dst}"
+    prefix = {"reject": "r", "branch": "b", "error": "x"}.get(kind, "e")
+    return f"{prefix}-{src}-{dst}"
 
 
 def _is_main(e: dict[str, Any]) -> bool:
     return (e.get("kind") or "main") == "main"
+
+
+def _is_forward(e: dict[str, Any]) -> bool:
+    return (e.get("kind") or "main") in FORWARD_EDGE_KINDS
+
+
+def has_branching_edges(graph: dict[str, Any]) -> bool:
+    """True for a graph with any branch or error edge (see the TS twin)."""
+    return any(e.get("kind") in ("branch", "error") for e in graph.get("edges", []))
+
+
+def _retry_errors(nid: str, kind: Any, retry: Any) -> list[str]:
+    """A slot node's retry policy {maxTries, waitMs?} (see the TS twin)."""
+    if kind != "slot":
+        return [f"node {nid}: only slot nodes carry retry"]
+    if not isinstance(retry, dict):
+        return [f"node {nid}: retry must be {{maxTries, waitMs?}}"]
+    errors: list[str] = []
+    if set(retry) - {"maxTries", "waitMs"}:
+        errors.append(f"node {nid}: retry takes only maxTries and waitMs")
+
+    def is_int(v: Any) -> bool:
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    tries = retry.get("maxTries")
+    if not is_int(tries) or tries < 1 or tries > MAX_TRIES_CEILING:
+        errors.append(f"node {nid}: retry.maxTries must be an integer 1..{MAX_TRIES_CEILING}")
+    wait = retry.get("waitMs")
+    if "waitMs" in retry and (not is_int(wait) or wait < 0 or wait > MAX_RETRY_WAIT_MS):
+        errors.append(f"node {nid}: retry.waitMs must be an integer 0..{MAX_RETRY_WAIT_MS}")
+    return errors
+
+
+def _branch_when_errors(e: dict[str, Any]) -> list[str]:
+    w = e.get("when")
+    if isinstance(w, str):
+        return [] if w.strip() else [f"branch edge {e.get('id')}: when must not be empty"]
+    if isinstance(w, dict):
+        eq = w.get("equals")
+        ok_eq = eq is None or isinstance(eq, (str, bool, int, float))
+        path = w.get("path")
+        if isinstance(path, str) and path.strip() and "equals" in w and ok_eq and not set(w) - {"path", "equals"}:
+            return []
+    return [f"branch edge {e.get('id')}: when must be a non-empty string or {{path, equals}}"]
 
 
 def _slot_to_graph(slot: dict[str, Any]) -> dict[str, Any]:
@@ -117,11 +169,11 @@ def derive_graph_from_stages(stages: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def layer_graph(graph: dict[str, Any]) -> tuple[list[list[str]], list[str]]:
-    """Longest-path layering over main edges → (layers, triggers)."""
+    """Longest-path layering over forward (main, branch, error) edges → (layers, triggers)."""
     kind = {n["id"]: n.get("kind") for n in graph.get("nodes", [])}
     preds: dict[str, list[str]] = {nid: [] for nid in kind}
     for e in graph.get("edges", []):
-        if _is_main(e) and e.get("from") in kind and e.get("to") in kind:
+        if _is_forward(e) and e.get("from") in kind and e.get("to") in kind:
             preds[e["to"]].append(e["from"])
     depth: dict[str, float] = {}
     visiting: set[str] = set()
@@ -255,6 +307,8 @@ def validate_graph(graph: Any) -> list[str]:
         pos = n.get("position")
         if not isinstance(pos, dict) or not _finite(pos.get("x")) or not _finite(pos.get("y")):
             errors.append(f"node {nid} needs a numeric position")
+        if n.get("retry") is not None:
+            errors.extend(_retry_errors(nid, k, n["retry"]))
     edge_ids: set[str] = set()
     pairs: set[tuple[str, str, str]] = set()
     succ: dict[str, list[str]] = {nid: [] for nid in nodes}
@@ -268,7 +322,8 @@ def validate_graph(graph: Any) -> list[str]:
             errors.append(f"duplicate edge id {eid}")
         edge_ids.add(eid)
         kind = e.get("kind") or "main"
-        if kind not in EDGE_KINDS:
+        known = kind in EDGE_KINDS
+        if not known:
             errors.append(f"edge {eid}: unknown kind {kind}")
         src, dst = e.get("from"), e.get("to")
         if src not in nodes or dst not in nodes:
@@ -282,18 +337,24 @@ def validate_graph(graph: Any) -> list[str]:
         pairs.add(pair)
         if nodes[dst].get("kind") == "trigger":
             errors.append(f"edge {eid} points into a trigger")
-        if kind == "main":
-            succ[src].append(dst)
-            if e.get("maxLoops") is not None:
-                errors.append(f"edge {eid}: maxLoops is only for reject edges")
-        else:
+        if kind == "reject":
             if nodes[src].get("kind") == "trigger":
                 errors.append(f"reject edge {eid} cannot start at a trigger")
             m = e.get("maxLoops", DEFAULT_MAX_LOOPS)
             if not isinstance(m, int) or isinstance(m, bool) or m < 1 or m > MAX_LOOPS_CEILING:
                 errors.append(f"reject edge {eid}: maxLoops must be an integer 1..{MAX_LOOPS_CEILING}")
             rejects.append(e)
-    # Main-edge cycle check.
+        elif known:
+            succ[src].append(dst)
+            if e.get("maxLoops") is not None:
+                errors.append(f"edge {eid}: maxLoops is only for reject edges")
+            if kind != "main" and nodes[src].get("kind") != "slot":
+                errors.append(f"{kind} edge {eid} must start at a slot node")
+        if kind == "branch":
+            errors.extend(_branch_when_errors(e))
+        elif e.get("when") is not None:
+            errors.append(f"edge {eid}: when is only for branch edges")
+    # Forward-edge cycle check.
     colour: dict[str, int] = {}
     cyclic = False
     for start in nodes:
@@ -453,6 +514,14 @@ def apply_graph_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[st
                 n["pinned"] = True
             else:
                 n.pop("pinned", None)
+        elif kind == "set_retry":
+            n = node(op.get("id"))
+            if n.get("kind") != "slot":
+                raise GraphError([f"only slot nodes can retry: {n['id']}"])
+            if op.get("retry"):
+                n["retry"] = copy.deepcopy(op["retry"])
+            else:
+                n.pop("retry", None)
         elif kind == "set_stage_meta":
             # Stage metadata is not part of the graph; StagesStore applies it.
             pass

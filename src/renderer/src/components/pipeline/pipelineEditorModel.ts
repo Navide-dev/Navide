@@ -66,6 +66,12 @@ export function nodeTitle(node: GraphNode): string {
   return node.slot?.label || node.label || node.id
 }
 
+/** The pipelineEditor.status.* key for a node's run state: a skip because no
+ *  input was taken reads differently from reusing a frozen output. */
+export function runStatusKey(run: NodeRunState): string {
+  return run.status === 'skipped' && run.skipReason === 'untaken' ? 'untaken' : run.status
+}
+
 /** The derived stage behind each layer (undefined for gate-only layers, which
  *  produce no stage). deriveStagesFromGraph emits one stage per layer that
  *  holds a slot, in layer order, so the two line up by counting. */

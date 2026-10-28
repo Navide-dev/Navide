@@ -46,6 +46,9 @@ export const GRAPH_VERSION = 1
 /** Default and ceiling for a reject edge's loop budget. */
 export const DEFAULT_MAX_LOOPS = 2
 export const MAX_LOOPS_CEILING = 10
+/** Bounds of a slot node's retry policy (maxTries counts the first try). */
+export const MAX_TRIES_CEILING = 5
+export const MAX_RETRY_WAIT_MS = 300_000
 
 export interface GraphPosition {
   x: number
@@ -76,20 +79,46 @@ export interface GraphNode {
   stageId?: string
   /** Frozen output: reruns skip this node and reuse its last result. */
   pinned?: boolean
+  /** Slot nodes only: a failed try (kickoff never landed, or the agent
+   *  reported ---NODE-FAILED---) is retried on the same node, up to maxTries
+   *  tries in all, waitMs apart, before its error edge or the run fails. */
+  retry?: RetryPolicy
 }
 
-export type GraphEdgeKind = 'main' | 'reject'
+export interface RetryPolicy {
+  /** Tries in all, the first one included: 1..MAX_TRIES_CEILING. */
+  maxTries: number
+  /** Wait before each retry: 0..MAX_RETRY_WAIT_MS (default 0). */
+  waitMs?: number
+}
+
+export type GraphEdgeKind = 'main' | 'reject' | 'branch' | 'error'
+
+/** Edge kinds that carry flow forward (layering, cycle check, readiness). */
+export const FORWARD_EDGE_KINDS: readonly GraphEdgeKind[] = ['main', 'branch', 'error']
+
+/** Reserved branch value: taken when no other branch edge of the source matched. */
+export const BRANCH_DEFAULT = 'default'
+
+/** A branch edge's condition: a string is matched (trimmed, case-insensitive)
+ *  against the value the agent reported with ---BRANCH: <value>---; an object
+ *  compares one field of the source node's structured output. */
+export type BranchWhen = string | { path: string; equals: string | number | boolean | null }
 
 export interface GraphEdge {
   id: string
   from: string
   to: string
   /** 'main' (default) is forward flow. 'reject' is a bounded loop back to an
-   *  upstream node, taken when a gate is rejected (or a slot reports reject). */
+   *  upstream node, taken when a gate is rejected (or a slot reports reject).
+   *  'branch' is forward flow taken only when `when` matches the source's
+   *  result; 'error' is forward flow taken only when the source slot failed. */
   kind?: GraphEdgeKind
   /** Reject edges only: how many times the loop may be taken in one run.
    *  Defaults to DEFAULT_MAX_LOOPS; 1..MAX_LOOPS_CEILING. */
   maxLoops?: number
+  /** Branch edges only (required there). */
+  when?: BranchWhen
 }
 
 export interface PipelineGraph {
@@ -108,6 +137,7 @@ export type GraphOp =
   | { op: 'remove_edge'; id: string }
   | { op: 'set_gate'; id: string; prompt?: string }
   | { op: 'set_pin'; id: string; pinned: boolean }
+  | { op: 'set_retry'; id: string; retry: RetryPolicy | null }
   | ({ op: 'set_stage_meta'; stageId: string } & StageMetaPatch)
 
 /** Layer (stage) metadata editable through set_stage_meta. The graph does not
@@ -126,7 +156,7 @@ export type NodeRunStatus =
   | 'awaiting' // gate waiting for approve/reject
   | 'rejected'
   | 'failed'
-  | 'skipped' // pinned node reused its frozen output this run
+  | 'skipped' // pinned node reused its frozen output this run, or (skipReason 'untaken') no input reached it
   | 'aborted'
 
 export interface NodeRunState {
@@ -142,6 +172,17 @@ export interface NodeRunState {
   summary?: string
   /** Why a `failed` node failed (e.g. its kickoff never reached the agent). */
   error?: string
+  /** 'untaken': skipped because none of its inputs was taken (an unchosen
+   *  branch, an error edge of a node that did not fail, or skipped upstream).
+   *  Absent for a skip that reuses a frozen output (pin, restart point). */
+  skipReason?: 'untaken'
+  /** A failed node whose failure went down its error edge(s): the run went on. */
+  errorRouted?: boolean
+  /** The value the agent reported with ---BRANCH: <value>---. */
+  branch?: string
+  /** The JSON the agent reported between ---OUTPUT-START/END--- (null when it
+   *  did not parse), for {{node.<id>.output}} and object branch conditions. */
+  output?: unknown
 }
 
 // ── Role properties (declarative node settings form) ─────────────────────────
@@ -202,11 +243,52 @@ export function slotNodeId(stageId: string, slotIndex: number): string {
 }
 
 export function edgeId(from: string, to: string, kind: GraphEdgeKind = 'main'): string {
-  return kind === 'reject' ? `r-${from}-${to}` : `e-${from}-${to}`
+  const prefix = kind === 'reject' ? 'r' : kind === 'branch' ? 'b' : kind === 'error' ? 'x' : 'e'
+  return `${prefix}-${from}-${to}`
 }
 
 function isMain(e: GraphEdge): boolean {
   return (e.kind ?? 'main') === 'main'
+}
+
+export function isForwardEdge(e: GraphEdge): boolean {
+  return FORWARD_EDGE_KINDS.includes(e.kind ?? 'main')
+}
+
+/** True for a graph with any branch or error edge — the only graphs the
+ *  readiness/skip rules change anything for. */
+export function hasBranchingEdges(graph: PipelineGraph): boolean {
+  return graph.edges.some((e) => e.kind === 'branch' || e.kind === 'error')
+}
+
+function retryErrors(n: GraphNode): string[] {
+  if (n.kind !== 'slot') return [`node ${n.id}: only slot nodes carry retry`]
+  const r = n.retry as unknown
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return [`node ${n.id}: retry must be {maxTries, waitMs?}`]
+  const o = r as Record<string, unknown>
+  const errors: string[] = []
+  if (Object.keys(o).some((k) => k !== 'maxTries' && k !== 'waitMs')) errors.push(`node ${n.id}: retry takes only maxTries and waitMs`)
+  const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v)
+  if (!isInt(o.maxTries) || o.maxTries < 1 || o.maxTries > MAX_TRIES_CEILING) {
+    errors.push(`node ${n.id}: retry.maxTries must be an integer 1..${MAX_TRIES_CEILING}`)
+  }
+  if (o.waitMs !== undefined && (!isInt(o.waitMs) || o.waitMs < 0 || o.waitMs > MAX_RETRY_WAIT_MS)) {
+    errors.push(`node ${n.id}: retry.waitMs must be an integer 0..${MAX_RETRY_WAIT_MS}`)
+  }
+  return errors
+}
+
+function branchWhenErrors(e: GraphEdge): string[] {
+  const w = e.when as unknown
+  if (typeof w === 'string') return w.trim() ? [] : [`branch edge ${e.id}: when must not be empty`]
+  if (w && typeof w === 'object' && !Array.isArray(w)) {
+    const o = w as Record<string, unknown>
+    const extra = Object.keys(o).filter((k) => k !== 'path' && k !== 'equals')
+    const eq = o.equals
+    const okEq = eq === null || ['string', 'number', 'boolean'].includes(typeof eq)
+    if (typeof o.path === 'string' && o.path.trim() && 'equals' in o && okEq && !extra.length) return []
+  }
+  return [`branch edge ${e.id}: when must be a non-empty string or {path, equals}`]
 }
 
 /** The graph a legacy linear pipeline implies: a trigger, one node per slot,
@@ -243,7 +325,7 @@ export interface GraphLayers {
   triggers: string[]
 }
 
-/** Longest-path layering over main edges. Triggers are depth -1 and are
+/** Longest-path layering over forward (main, branch, error) edges. Triggers are depth -1 and are
  *  reported separately, so layer 0 is the first real step (= legacy stage 0).
  *  Assumes the main edges are acyclic (see validateGraph); nodes on a cycle
  *  are dropped rather than looping. */
@@ -252,7 +334,7 @@ export function layerGraph(graph: PipelineGraph): GraphLayers {
   const preds = new Map<string, string[]>()
   for (const n of graph.nodes) preds.set(n.id, [])
   for (const e of graph.edges) {
-    if (!isMain(e) || !kind.has(e.from) || !kind.has(e.to)) continue
+    if (!isForwardEdge(e) || !kind.has(e.from) || !kind.has(e.to)) continue
     preds.get(e.to)!.push(e.from)
   }
   const depth = new Map<string, number>()
@@ -352,9 +434,11 @@ export function isLinearGraph(graph: PipelineGraph): boolean {
   return true
 }
 
-/** Structural problems, empty when the graph is valid. Main edges must form
- *  a DAG; the only cycles allowed are reject edges, which must point to an
- *  upstream node of their source and carry a bounded loop count. */
+/** Structural problems, empty when the graph is valid. Forward edges (main,
+ *  branch, error) must form a DAG; the only cycles allowed are reject edges,
+ *  which must point to an upstream node of their source and carry a bounded
+ *  loop count. Branch and error edges start at a slot; only branch edges carry
+ *  `when`, and they must. */
 export function validateGraph(graph: PipelineGraph): string[] {
   const errors: string[] = []
   if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
@@ -373,6 +457,7 @@ export function validateGraph(graph: PipelineGraph): string[] {
     if (!n.position || !Number.isFinite(n.position.x) || !Number.isFinite(n.position.y)) {
       errors.push(`node ${n.id} needs a numeric position`)
     }
+    if (n.retry != null) errors.push(...retryErrors(n))
   }
   const edgeIds = new Set<string>()
   const pairs = new Set<string>()
@@ -383,24 +468,29 @@ export function validateGraph(graph: PipelineGraph): string[] {
     if (edgeIds.has(e.id)) errors.push(`duplicate edge id ${e.id}`)
     edgeIds.add(e.id)
     const kind = e.kind ?? 'main'
-    if (kind !== 'main' && kind !== 'reject') errors.push(`edge ${e.id}: unknown kind ${String(kind)}`)
+    const known = kind === 'main' || kind === 'reject' || kind === 'branch' || kind === 'error'
+    if (!known) errors.push(`edge ${e.id}: unknown kind ${String(kind)}`)
     if (!nodes.has(e.from) || !nodes.has(e.to)) { errors.push(`edge ${e.id} references a missing node`); continue }
     if (e.from === e.to) errors.push(`edge ${e.id} is a self-loop`)
     const pair = `${kind}\u0000${e.from}\u0000${e.to}`
     if (pairs.has(pair)) errors.push(`duplicate edge ${e.from} → ${e.to}`)
     pairs.add(pair)
     if (nodes.get(e.to)!.kind === 'trigger') errors.push(`edge ${e.id} points into a trigger`)
-    if (kind === 'main') succ.get(e.from)!.push(e.to)
-    else {
+    if (kind === 'reject') {
       if (nodes.get(e.from)!.kind === 'trigger') errors.push(`reject edge ${e.id} cannot start at a trigger`)
       const m = e.maxLoops ?? DEFAULT_MAX_LOOPS
       if (!Number.isInteger(m) || m < 1 || m > MAX_LOOPS_CEILING) {
         errors.push(`reject edge ${e.id}: maxLoops must be an integer 1..${MAX_LOOPS_CEILING}`)
       }
+    } else if (known) {
+      succ.get(e.from)!.push(e.to)
+      if (e.maxLoops !== undefined) errors.push(`edge ${e.id}: maxLoops is only for reject edges`)
+      if (kind !== 'main' && nodes.get(e.from)!.kind !== 'slot') errors.push(`${kind} edge ${e.id} must start at a slot node`)
     }
-    if (kind === 'main' && e.maxLoops !== undefined) errors.push(`edge ${e.id}: maxLoops is only for reject edges`)
+    if (kind === 'branch') errors.push(...branchWhenErrors(e))
+    else if (e.when != null) errors.push(`edge ${e.id}: when is only for branch edges`)
   }
-  // Main-edge cycle check (iterative DFS, colour marking).
+  // Forward-edge cycle check (iterative DFS, colour marking).
   const colour = new Map<string, 0 | 1 | 2>()
   let cyclic = false
   for (const start of nodes.keys()) {
@@ -532,6 +622,13 @@ export function applyGraphOps(graph: PipelineGraph, ops: readonly GraphOp[]): Pi
         if (n.kind !== 'slot') throw new Error(`only slot nodes can be pinned: ${op.id}`)
         if (op.pinned) n.pinned = true
         else delete n.pinned
+        break
+      }
+      case 'set_retry': {
+        const n = node(op.id)
+        if (n.kind !== 'slot') throw new Error(`only slot nodes can retry: ${op.id}`)
+        if (op.retry) n.retry = { ...op.retry }
+        else delete n.retry
         break
       }
       case 'set_stage_meta':

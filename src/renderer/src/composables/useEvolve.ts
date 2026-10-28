@@ -35,6 +35,20 @@ export interface EvolveSettings {
   scope: 'fix' | 'propose'
   extra: string
   ledger_plan: string
+  /** S2 retro passes: repeated manual work (on by default) and the user's
+   *  corrections (off by default), each with its own token sub-budget. */
+  retro_tools: boolean
+  retro_corrections: boolean
+  /** S4: how often each proposal source runs. Navide only ever lowers one to
+   *  weekly; raising it back is the user's. Optional for an older backend. */
+  retro_freq?: Record<EvolveSource, EvolveFreq>
+  /** S5a: start a run early when one error signature appears burst_count
+   *  times within burst_minutes; at most burst_max_per_day such runs. Off by
+   *  default. Optional for an older backend. */
+  trigger_burst?: boolean
+  burst_minutes?: number
+  burst_count?: number
+  burst_max_per_day?: number
   /** Read-only (v1.1): a missed run is waiting for the workspace to open. */
   pending_catch_up?: boolean
 }
@@ -43,7 +57,7 @@ export type EvolveRunStatus = 'running' | 'ok' | 'error' | 'timeout' | 'skipped'
 
 export interface EvolveRun {
   id: string
-  trigger: 'schedule' | 'manual' | 'catch_up'
+  trigger: 'schedule' | 'manual' | 'catch_up' | 'burst'
   status: EvolveRunStatus
   reason?: string | null
   started_at: number
@@ -63,6 +77,32 @@ export interface EvolveRun {
   detail?: string
 }
 
+/** One row of the proposal ledger (S1). Its status is derived by the backend
+ *  from the proposal plan's stage; the panel only shows it. */
+export interface EvolveProposal {
+  id: string
+  run_id: string
+  rel_path: string
+  name: string
+  kind: string
+  signature: string
+  status: 'proposed' | 'approved' | 'rejected' | 'in-progress' | 'landed' | 'abandoned'
+  reason: string
+  pr: string
+  commits: string[]
+  created_at: number
+  updated_at: number
+  /** S4: the effect check, set once 7 days after a proposal landed ('' = not yet). */
+  effect?: '' | 'effective' | 'not-effective' | 'insufficient'
+  effect_before?: number | null
+  effect_after?: number | null
+  effect_checked_at?: number | null
+}
+
+export const EVOLVE_SOURCES = ['failures', 'tools', 'corrections'] as const
+export type EvolveSource = (typeof EVOLVE_SOURCES)[number]
+export type EvolveFreq = 'daily' | 'weekly'
+
 export interface EvolveBadge {
   enabled: boolean
   running: boolean
@@ -81,6 +121,14 @@ export interface EvolveState {
   job: { id: string; enabled: boolean; next_run_at: number | null } | null
   running: EvolveRun | null
   runs: EvolveRun[]
+  /** S1: ledger rows of the runs above. Optional so an older backend reads. */
+  proposals?: EvolveProposal[]
+  /** S4: landed proposals with their effect check, newest first. */
+  landed?: EvolveProposal[]
+  /** S4: per source, adopted ÷ resolved (approved, in progress or landed ÷ those plus rejected or abandoned). */
+  adoption?: Record<EvolveSource, { proposed: number; resolved: number; adopted: number; rate: number | null }>
+  /** S4: sources Navide lowered to weekly, with when and why. */
+  cadence?: { lowered: Partial<Record<EvolveSource, { at: number; reason: string }>> }
   legacy: { id: string; name: string; enabled: boolean }[]
   template: { version: string | number; text: string }
   /** evolve.set only: legacy jobs this call disabled. */
@@ -95,7 +143,12 @@ export const EVOLVE_BOUNDS = {
   max_runs_per_day: [1, 10],
   max_fixes: [0, 10],
   max_minutes: [10, 600],
+  burst_minutes: [5, 1440],
+  burst_count: [3, 1000],
+  burst_max_per_day: [1, 10],
   extra: 4000,
+  /** Tokens each retro pass may spend of a run's budget (evolve_rules.RETRO_SUB_BUDGET). */
+  retro_sub_budget: 50_000,
 } as const
 
 const RPC_TIMEOUT_MS = 15_000

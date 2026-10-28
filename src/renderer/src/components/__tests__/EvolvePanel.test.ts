@@ -8,7 +8,12 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { ref } from 'vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
-import { __resetEvolveForTest, type EvolveSettings, type EvolveState } from '../../composables/useEvolve'
+import {
+  __resetEvolveForTest,
+  type EvolveProposal,
+  type EvolveSettings,
+  type EvolveState,
+} from '../../composables/useEvolve'
 import EvolvePanel from '../EvolvePanel.vue'
 
 const A = '/Users/me/alpha'
@@ -32,6 +37,13 @@ const settings = (over: Partial<EvolveSettings> = {}): EvolveSettings => ({
   scope: 'fix',
   extra: '',
   ledger_plan: '',
+  retro_tools: true,
+  retro_corrections: false,
+  retro_freq: { failures: 'daily', tools: 'daily', corrections: 'daily' },
+  trigger_burst: false,
+  burst_minutes: 30,
+  burst_count: 10,
+  burst_max_per_day: 1,
   ...over,
 })
 
@@ -245,5 +257,159 @@ describe('EvolvePanel', () => {
     expect(last).toContain('142k')
     expect(last).toContain('a1b2c3d fix(scheduler): x')
     expect(wrapper.get('[data-test="history"]').findAll('tbody tr')).toHaveLength(30)
+  })
+
+  it('S1: lists each proposal of the last run with its ledger status, display only', async () => {
+    const run = {
+      id: 'r0',
+      trigger: 'schedule' as const,
+      status: 'ok' as const,
+      started_at: 1_900_000_000_000,
+      ended_at: 1_900_000_100_000,
+      tokens: 1000,
+      commits: [],
+      proposals: [
+        { rel_path: '.agent-team/plans/a.html', name: '提案甲' },
+        { rel_path: '.agent-team/plans/b.html', name: '提案乙' },
+        { rel_path: '.agent-team/plans/c.html', name: '提案丙' },
+      ],
+      reclaimed: true,
+    }
+    const row = (rel_path: string, status: EvolveProposal['status'], reason = ''): EvolveProposal => ({
+      id: rel_path, run_id: 'r0', rel_path, name: '', kind: '', signature: '', status, reason, pr: '',
+      commits: [], created_at: 1, updated_at: 1,
+    })
+    states[A] = stateFor(A, {
+      runs: [run],
+      proposals: [
+        row('.agent-team/plans/a.html', 'rejected', '太大，先不要'),
+        row('.agent-team/plans/b.html', 'landed'),
+        { ...row('.agent-team/plans/c.html', 'approved'), run_id: 'other-run' },
+      ],
+    })
+    wrapper = await mountPanel(A)
+    const items = wrapper.get('[data-test="last-result"]').findAll('[data-test="proposal"]')
+    expect(items).toHaveLength(3)
+    expect(items[0].get('[data-test="proposal-status"]').text()).toBe('已退回')
+    expect(items[0].text()).toContain('理由：太大，先不要')
+    expect(items[1].get('[data-test="proposal-status"]').text()).toBe('已落地')
+    // A row of another run is not this proposal's status.
+    expect(items[2].find('[data-test="proposal-status"]').exists()).toBe(false)
+    const sentBefore = calls.length
+    await items[0].get('[data-test="proposal-status"]').trigger('click')
+    expect(calls.length).toBe(sentBefore)
+  })
+
+  it('S2: the retro passes are two checkboxes that disclose their budget and records', async () => {
+    wrapper = await mountPanel(A)
+    const tools = wrapper.get('[data-field="retro_tools"]')
+    const corrections = wrapper.get('[data-field="retro_corrections"]')
+    expect((tools.element as HTMLInputElement).checked).toBe(true)
+    expect((corrections.element as HTMLInputElement).checked).toBe(false)
+    const row = wrapper.get('[data-test="retro"]').text()
+    expect(row).toContain('50k')
+    expect(row).toContain('訊息紀錄')
+    expect(row).toContain('review note')
+    await corrections.setValue(true)
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set').at(-1)?.payload).toEqual({ workspace: A, settings: { retro_corrections: true } })
+  })
+
+  it('S4: shows adoption and cadence per source, and the user can raise a lowered one', async () => {
+    states[A] = stateFor(
+      A,
+      {
+        adoption: {
+          failures: { proposed: 4, resolved: 3, adopted: 2, rate: 2 / 3 },
+          tools: { proposed: 12, resolved: 10, adopted: 0, rate: 0 },
+          corrections: { proposed: 0, resolved: 0, adopted: 0, rate: null },
+        },
+        cadence: { lowered: { tools: { at: 1_900_000_000_000, reason: 'the last 10 tools proposals in a row were not adopted' } } },
+      },
+      { retro_freq: { failures: 'daily', tools: 'weekly', corrections: 'daily' } },
+    )
+    wrapper = await mountPanel(A)
+    const rows = wrapper.get('[data-test="cadence"]').findAll('[data-source]')
+    expect(rows.map((r) => r.attributes('data-source'))).toEqual(['failures', 'tools', 'corrections'])
+    expect(rows[0].text()).toContain('2 / 3')
+    expect(rows[2].text()).toContain('尚無')
+    expect(rows[1].get('[data-test="lowered"]').text()).toContain('10')
+    expect(rows[0].find('[data-test="lowered"]').exists()).toBe(false)
+    const freq = rows[1].get('select[data-field="retro_freq-tools"]')
+    expect((freq.element as HTMLSelectElement).value).toBe('weekly')
+    await freq.setValue('daily')
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set').at(-1)?.payload).toEqual({
+      workspace: A,
+      settings: { retro_freq: { failures: 'daily', tools: 'daily', corrections: 'daily' } },
+    })
+  })
+
+  it('S4: lists landed proposals with their before / after counts and verdict', async () => {
+    const landed = (rel_path: string, effect: EvolveProposal['effect'], before: number | null, after: number | null): EvolveProposal => ({
+      id: rel_path, run_id: 'r', rel_path, name: rel_path, kind: 'failures:code', signature: 's', status: 'landed' as const,
+      reason: '', pr: '#1', commits: [], created_at: 1, updated_at: 1, effect, effect_before: before, effect_after: after,
+      effect_checked_at: before === null ? null : 2,
+    })
+    states[A] = stateFor(A, {
+      landed: [
+        landed('a.html', 'effective', 5, 0),
+        landed('b.html', 'not-effective', 3, 3),
+        landed('c.html', 'insufficient', 1, 0),
+        landed('d.html', '', null, null),
+      ],
+    })
+    wrapper = await mountPanel(A)
+    const items = wrapper.get('[data-test="landed"]').findAll('[data-test="landed-item"]')
+    expect(items).toHaveLength(4)
+    expect(items[0].text()).toContain('5 → 0')
+    expect(items[0].get('[data-test="effect"]').text()).toBe('見效')
+    expect(items[1].get('[data-test="effect"]').text()).toBe('未見效')
+    expect(items[2].get('[data-test="effect"]').text()).toBe('樣本不足')
+    expect(items[3].get('[data-test="effect"]').text()).toBe('待判定')
+  })
+
+  it('S5a: the burst trigger is off by default and saves its threshold with it', async () => {
+    wrapper = await mountPanel(A)
+    const row = wrapper.get('[data-test="burst"]')
+    const box = row.get('[data-field="trigger_burst"]')
+    expect((box.element as HTMLInputElement).checked).toBe(false)
+    expect(row.text()).toContain('錯誤帳本')
+    await box.setValue(true)
+    await flushPromises()
+    await row.get('[data-field="burst_count"]').setValue(25)
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set').at(-1)?.payload).toEqual({
+      workspace: A,
+      settings: { trigger_burst: true, burst_count: 25 },
+    })
+  })
+
+  it('S5a: refuses an out-of-range burst threshold', async () => {
+    wrapper = await mountPanel(A)
+    const row = wrapper.get('[data-test="burst"]')
+    await row.get('[data-field="trigger_burst"]').setValue(true)
+    await flushPromises()
+    await row.get('[data-field="burst_count"]').setValue(1)
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set')).toHaveLength(0)
+    expect(wrapper.find('[data-error="burst_count"]').text()).not.toBe('')
+  })
+
+  it('S1: an older backend without a ledger still shows the proposals', async () => {
+    const run = {
+      id: 'r0', trigger: 'schedule' as const, status: 'ok' as const, started_at: 1_900_000_000_000,
+      tokens: 1, commits: [], proposals: [{ rel_path: '.agent-team/plans/a.html', name: '提案甲' }], reclaimed: true,
+    }
+    states[A] = stateFor(A, { runs: [run] })
+    wrapper = await mountPanel(A)
+    const items = wrapper.get('[data-test="last-result"]').findAll('[data-test="proposal"]')
+    expect(items).toHaveLength(1)
+    expect(items[0].text()).toContain('提案甲')
+    expect(items[0].find('[data-test="proposal-status"]').exists()).toBe(false)
   })
 })

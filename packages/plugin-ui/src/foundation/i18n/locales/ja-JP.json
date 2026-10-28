@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI が終了コード {code} で終了しました。クラッシュした可能性があります。コードはエラー台帳にも記録されています。",
       "stuck-badge": "⏳ {minutes} 分以上動きなし",
       "stuck-tooltip": "このターンは {minutes} 分以上、ログにも画面にも動きがありません。CLI が止まっている可能性があります。Navide は中断していません。",
+      "stale-config-badge": "設定が変更されました",
+      "stale-config-tooltip-mcp": "この pane の起動後に、この CLI の MCP サーバーが変更されました。再構築するまで古い一覧のままです。クリックで再構築（会話を再開）。",
+      "stale-config-tooltip-skills": "この pane の起動後に、この CLI に渡す skills が変更されました。再構築するまで古いままの可能性があります。クリックで再構築（会話を再開）。",
+      "stale-config-tooltip-both": "この pane の起動後に、この CLI の MCP サーバーと skills が変更されました。再構築するまで古いままです。クリックで再構築（会話を再開）。",
       "usage-limit-badge": "⛔ {time} に回復",
       "usage-limit-badge-unknown": "⛔ 利用枠なし",
       "usage-limit-tooltip": "この CLI の利用枠を使い切りました。{time} に回復する見込みです。クリックで閉じます",
@@ -1507,6 +1511,19 @@
         "hot-reload": "ホットリロード前にセッションごとに 1 回確認します"
       }
     },
+    "applies": {
+      "new-panes-only": "新しい pane のみ",
+      "new-panes-only-tooltip": "CLI は起動時にこの設定を読みます。開いている pane は再構築するまで古い値のままです。"
+    },
+    "stale-config": {
+      "title": "この変更より前から開いている pane：{count} 件",
+      "body-mcp": "CLI は起動時に自身の MCP サーバーを読むため、これらの pane は古い一覧のままです。再構築すると会話を再開しますが、進行中のターンは中断され、会話が再表示されます。",
+      "body-skills": "CLI は起動時に skills を読むため、これらの pane は古いままの可能性があります。再構築すると会話を再開しますが、進行中のターンは中断され、会話が再表示されます。",
+      "rebuild-all-idle": "アイドル中をすべて再構築（{count}）",
+      "busy": "実行中——「アイドル中をすべて再構築」ではスキップ",
+      "cannot-rebuild": "再開できる会話がありません",
+      "rebuild": "再構築"
+    },
     "limits": {
       "hint": "Navide と、Navide が起動するエージェントがこのマシンに過負荷をかけないための任意の制限です。変更するまで、どの項目もオフ、または Navide の従来の動作のままです。",
       "test-workers": "新しいペインのテストワーカー数を制限",
@@ -1941,7 +1958,7 @@
       "restore": "復元",
       "candidateReady": "アップデート {version} の準備ができました",
       "activationFailed": "{plugin} はインストールされましたが、有効化できませんでした：{reason}。下の一覧で再起動するか破棄してください。",
-      "switchNow": "承認すると {id} はすぐに {version} に切り替わります。開いている画面は再読み込みされ、保存していない内容は失われます。切り替えはお知らせに記録され、ワンクリックで戻せます。",
+      "switchNow": "承認すると {id} はすぐに {version} に切り替わります。開いている画面は再読み込みされます。Navide SDK で状態を保存している画面は元の状態に戻り、それ以外の保存していない内容は失われます。切り替えはお知らせに記録され、ワンクリックで戻せます。",
       "restartPlugin": "Navide プラグインを再起動",
       "disable": "無効化",
       "enable": "有効化",
@@ -2468,7 +2485,7 @@
         "unknown": "まだテストしていません。",
         "not-applicable": "このプラットフォームでは利用できません。"
       },
-      "auto-resume-reconnect-hint": "バックエンドがクラッシュすると、すべての CLI プロセスも終了します。この設定を有効にすると、復旧後に表示中のペインの会話を自動で再開でき、手動で開き直す必要がなくなります。",
+      "auto-resume-reconnect-hint": "バックエンドがクラッシュまたは再起動すると、すべての CLI プロセスも終了します。オンにすると、バックエンドが戻ったときに、画面上の pane と、画面外で作業中だった最大 6 個の pane の会話を自動で再開し、1 つずつ再構築する必要がなくなります。再開した pane は自動では続行せず、それを起動した pane に通知され、お知らせに経緯が表示されます。すぐに再びクラッシュした場合は、もう自動で再開しません。",
       "resume-interrupted-on-launch-hint": "Navide の再起動時に、ターン実行中・権限の確認待ち・質問の回答待ちだったペインと、その報告を待っている親ペインを自動で再開します（最大 6 個。残りには「再起動時に作業中」と表示）。自動では続行しません。「続行」を押すか、親ペインが指示したときに続行します。親ペインには中断された子ペインが通知されます。",
       "confirm-close-pane": "ペインを閉じる前に確認",
       "confirm-close-pane-hint": "ペインを閉じるショートカットで CLI ペインを閉じる前に確認します。処理中のペインでは、この設定にかかわらず常に確認します。",
@@ -2833,7 +2850,7 @@
               "fallback": "1 つの CLI"
             },
             "resumeAfterRestart": {
-              "desc": "バックエンドがクラッシュすると、すべての CLI プロセスも終了します。この設定をオンにすると、復旧後に画面上のペインを自動で再開します。",
+              "desc": "バックエンドがクラッシュまたは再起動するとすべての CLI プロセスも終了します。オンにすると、戻ったときに画面上の pane と、画面外で作業中の最大 6 個の pane が自動で再開します。お知らせに中断されたターンが表示されます。",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -8177,11 +8194,14 @@
         "agent-switch-confirm-to": "切り替え後",
         "agent-switch-confirm-caller": "要求した Pane",
         "agent-switch-confirm-workspace": "Pane のワークスペース",
+        "agent-switch-confirm-pane": "移動する Pane",
+        "agent-switch-confirm-pane-body": "同意するまで何も切り替わりません。移動するのはこの Pane だけで、もう一方のアカウント専用フォルダで会話を続けたまま開き直します。CLI のライブのログインと他の Pane はそのままです。Pane が作業中なら、止める前にもう一度確認します。回答がなければ、この要求は自動的に閉じます。",
         "agent-switch-confirm-reason": "理由（エージェントが記入）",
         "agent-switch-confirm-reason-truncated": "エージェントの理由が 300 文字を超えたため、最初の 300 文字だけを表示しています。",
         "agent-switch-confirm-cancel": "キャンセル",
         "agent-switch-confirm-ok": "アカウントを切り替える",
         "agent-switch-done": "{agent} が {vendor} を {from} から {to} に切り替えました。エージェントが示した理由：{reason}",
+        "agent-switch-pane-done": "{agent} が Pane を 1 つ {from} から {to} に移しました。ライブのログインと他の Pane は変わっていません。エージェントが示した理由：{reason}",
         "login-complete": "{email} としてログインしました。アカウントを保存しました。",
         "login-complete-no-email": "ログインが完了しました。アカウントを保存しました。",
         "login-step2": "ステップ 1 完了：{email} を保存しました。このアカウントを専用フォルダーにサインインするため、もう一度承認が必要です。開いたサインイン用ペインからブラウザーで承認してください。",
@@ -8911,6 +8931,7 @@
     "drag-resize-log": "ドラッグしてログパネルのサイズを変更",
     "filter-by-type": "種類で絞り込み",
     "all-stages-finished": "全 {count} ステージが正常に完了しました",
+    "region-switching": "{title} を {version} に切り替えています…",
     "region-unavailable": "{title} は利用できません"
   },
   "layout": {
@@ -8950,6 +8971,7 @@
     "statusbar-note": "関連するポップオーバーも一緒に非表示になります"
   },
   "error": {
+    "pipeline-node-failed": "ステージ {stage}: ステップ {slot} が失敗を報告しました（{reason}）。試行回数を使い切ったため、実行は停止しました。resume で再試行できます。",
     "pipeline-start-refused": "パイプラインは開始されませんでした：{reason}",
     "pipeline-kickoff-failed": "パイプラインが失敗しました：ステージ {stage}、スロット {slot} — {reason}。ペインは開いたままです。",
     "pipeline-kickoff-held": "パイプラインが失敗しました：ステージ {stage}、スロット {slot} — キックオフが入力欄に残っています。そのままにすれば resume が送信します。不要なら消去してください。ペインは開いたままです。",
@@ -9136,6 +9158,21 @@
     "load-more": "さらに読み込む（残り {count} 件）",
     "mcp-tools-changed": "MCP ツールが変更された可能性があります",
     "mcp-tools-changed-note": "CLI エージェントは起動時に一度だけ Navide の MCP ツール一覧を読み込みます。以前のバージョン（{from}）から接続したままの CLI ペインや外部 MCP クライアントは、当時のツールを保持しています。新しいツールを読み込むには、ペインを開き直すか、クライアントを再接続してください。",
+    "backend-restart": {
+      "title": "{time} にバックエンドが再起動しました",
+      "note": "再開した pane はプロンプトで止まり、自動では続行しません。終了した pane は再構築するまでそのままです。",
+      "crash-loop": "再起動後すぐにバックエンドが再びクラッシュしたため、今回は pane を自動で再開しませんでした。必要なものは再構築してください。",
+      "resumed": "再開：{names}",
+      "interrupted": "ターンが中断：{names}",
+      "rebuild": "{name} を再構築",
+      "not-resumed": {
+        "crash-loop": "{name}：短時間にバックエンドが繰り返しクラッシュしたため再開していません",
+        "over-limit": "{name}：画面外で作業中の pane が 6 個を超えたため再開していません",
+        "idle-off-screen": "{name}：画面外でアイドルだったため再開していません",
+        "no-session": "{name}：再開できる会話がないため再開していません",
+        "failed": "{name}：再開できませんでした"
+      }
+    },
     "scheduler-disabled": "スケジュール「{name}」を停止しました：対象ペインが存在しません",
     "scheduler-disabled-note": "対象ペインが {n} 回続けて見つからなかったため、自動的に停止しました。スケジュールパネルの「再バインド」で既存のペインを指定してから、再度有効にしてください。",
     "quota": {
@@ -10099,6 +10136,9 @@
     "weekday-6": "土曜日"
   },
   "scheduler": {
+    "pipeline-title": "このジョブは実行のたびに Pipeline を開始し、CLI Pane を開いてクォータを消費します",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "Pipeline {name} を開始",
     "system": {
       "tag": "システム",
       "manage": "workspace で管理 →",
@@ -10140,6 +10180,16 @@
       "unknown": "スキップ"
     },
     "editor": {
+      "err-task": "タスクを入力してください",
+      "err-pipeline": "Pipeline を選択してください",
+      "task-placeholder": "各 Pipeline 実行の目的…",
+      "task": "タスク",
+      "pipeline-cost": "実行のたびにこの Pipeline の CLI Pane が開き、クォータを消費します。ウィンドウは開きません: workspace が開いていなければ、その回は理由付きで失敗します。",
+      "pick-pipeline": "Pipeline を選択",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Pipeline を開始",
+      "action-message": "Pane に指示を送る",
+      "action": "アクション",
       "title-new": "スケジュールジョブを追加",
       "title-edit": "スケジュールジョブを編集",
       "name": "名前",
@@ -10179,6 +10229,7 @@
       "save": "保存"
     },
     "owner": {
+      "user": "あなたが作成",
       "agent": "agent · {name}",
       "external": "外部 agent",
       "agent-title": "agent「{name}」が作成；変更できるのはその agent とあなただけです",
@@ -11115,6 +11166,8 @@
     },
     "canvas": {
       "insert-on-edge": "ここにステップを挿入",
+      "branch-label": "{when} のとき",
+      "error-label": "失敗時",
       "loop-label": "↺ 最大 {max} 回",
       "minimap": "パイプライン全体の縮小図",
       "pass": "承認されたら続行",
@@ -11155,6 +11208,7 @@
       "reject": "差し戻す"
     },
     "history": {
+      "retry": "リトライを変更",
       "add": "{name} を追加",
       "edit-cli": "CLI を変更",
       "edit-field": "{field} を編集",
@@ -11174,9 +11228,20 @@
       "tidy": "整列",
       "unlink": "接続を削除",
       "unpin": "固定を解除",
+      "link-kind": "接続の種類を変更",
+      "link-when": "分岐の値を変更",
       "loop-budget": "再試行上限を変更"
     },
     "inspector": {
+      "retry-blocked-not-failed": "リトライできるのは失敗したステップだけです",
+      "retry-blocked-no-run": "使用できません: この Pipeline の実行がありません",
+      "retry-blocked-running": "実行中は使用できません",
+      "retry-node-help": "失敗したステップをもう一度実行します: ここから resume し、後続のステップが実行済みならここから再スタートします",
+      "retry-node": "このステップをリトライ",
+      "retry-wait": "リトライ前の待機（秒）",
+      "retry-help": "失敗した試行（タスクが Agent に届かなかった、または Agent が失敗を報告した）は同じステップで再実行され、合計で最大 {max} 回まで試します。",
+      "retry-tries": "試行回数（合計）",
+      "retry-title": "失敗時にリトライ",
       "aria": "{name} の設定",
       "attempts": "試行回数",
       "elapsed": "所要時間",
@@ -11258,6 +11323,7 @@
       "awaiting": "承認待ち",
       "rejected": "差し戻し",
       "failed": "失敗",
+      "untaken": "スキップ（通った経路の外）",
       "skipped": "固定出力を再利用",
       "aborted": "中止",
       "pinned": "出力固定済み"
@@ -11285,6 +11351,17 @@
       "open-in-canvas": "パイプラインキャンバスで開く",
       "gate-toast": "パイプラインは「{name}」で承認待ちです",
       "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。"
+    },
+    "link": {
+      "title": "接続",
+      "desc": "{from} → {to}",
+      "kind": "接続の種類",
+      "kind-main": "常に",
+      "kind-branch": "分岐（条件）",
+      "kind-error": "失敗時",
+      "when": "分岐の値",
+      "when-placeholder": "ステップが報告する値、または default",
+      "remove": "接続を削除"
     },
     "edge": {
       "title": "差し戻しループ",
@@ -11381,6 +11458,14 @@
       "not-reclaimed": "（未回収）",
       "fix": "修正",
       "proposal": "提案",
+      "proposal-reason": "理由：{reason}",
+      "effect-title": "効果と頻度",
+      "adoption": "採用 {adopted} / {resolved}",
+      "adoption-none": "結果の出た提案はまだありません",
+      "lowered": "{date} から自動で週 1 回に下げました：直近 {n} 件の提案が続けて採用されませんでした",
+      "landed-title": "反映済みの提案",
+      "landed-none": "反映済みの提案はまだありません",
+      "effect-counts": "{before} → {after}（反映前／後 7 日）",
       "history": "履歴（直近 30 回）",
       "unsaved": "未保存の変更があります",
       "save": "保存",
@@ -11418,6 +11503,17 @@
       "scope-propose": "提案のみ（コードを変更しない）",
       "scope-fix-no-git": "この workspace は git リポジトリではなく、worktree もメインブランチもないため「提案のみ」しか選べません。",
       "scope-always-propose": "新機能・設計上のトレードオフ・データ削除／migration・push・リリースは常に提案になります（組み込みルール）。",
+      "retro": "振り返り",
+      "retro-tools": "繰り返しの手作業",
+      "retro-tools-hint": "1 回あたり最大 {tokens} トークン。この workspace の直近 7 日間のメッセージ履歴とスケジュール実行履歴を回数だけ読みます。3 回以上繰り返した作業は pipeline、skill、Prompt などにする提案になります。",
+      "retro-corrections": "あなたの指摘",
+      "retro-corrections-hint": "1 回あたり最大 {tokens} トークン。この workspace の plan に残した review note と却下された提案の理由を、直近 7 日間・回数だけ読みます。2 回以上出た指摘はルール変更の提案になります。",
+      "burst": "早めの実行",
+      "burst-on": "同じエラーが短時間に集中したら早めに 1 回実行する",
+      "burst-count": "回",
+      "burst-minutes": "分以内",
+      "burst-per-day": "回／日まで",
+      "burst-hint": "この workspace のエラー台帳だけを読みます。既定はオフ。1 日の実行回数の上限と同時 1 回の制限は変わらず、同じエラーで早めの実行が起きるのは 24 時間に 1 回までです。",
       "rules": "ルールテンプレート",
       "rules-builtin": "組み込み v{version}",
       "rules-view": "全文を表示",
@@ -11442,6 +11538,29 @@
       "error": "失敗",
       "timeout": "タイムアウト",
       "skipped": "未実行"
+    },
+    "source": {
+      "failures": "エラーの仕分け",
+      "tools": "繰り返しの手作業",
+      "corrections": "あなたの指摘"
+    },
+    "freq": {
+      "daily": "毎日",
+      "weekly": "毎週"
+    },
+    "effect": {
+      "effective": "効果あり",
+      "not-effective": "効果なし",
+      "insufficient": "件数不足",
+      "pending": "未判定"
+    },
+    "proposal-status": {
+      "proposed": "提案中",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "in-progress": "進行中",
+      "landed": "反映済み",
+      "abandoned": "破棄"
     },
     "history": {
       "date": "日付",
