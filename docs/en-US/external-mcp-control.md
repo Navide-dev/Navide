@@ -738,17 +738,22 @@ a pipeline whose graph is still linear they work, and the graph follows.
 
 **Branch and error edges.** Both start at a slot. A `branch` edge carries
 `when`: a string, matched case-insensitively against the value the slot's agent
-reports on a line of its own as `---BRANCH: <value>---` (`"default"` is taken
-when no other branch of that slot matched), or `{path, equals}`, compared with
-one field of the JSON the agent reports between `---OUTPUT-START---` and
-`---OUTPUT-END---` lines. An `error` edge is taken only when its slot fails:
-its kickoff never reached the agent, or the agent reported
-`---NODE-FAILED: <reason>---`. On a slot without one, a kickoff that never
+reports on a line of its own as `---BRANCH:<code>: <value>---` (`"default"` is
+taken when no other branch of that slot matched), or `{path, equals}`, compared
+with one field of the JSON the agent reports between `---OUTPUT-START:<code>---`
+and `---OUTPUT-END:<code>---` lines. An `error` edge is taken only when its slot
+fails: its kickoff never reached the agent, or the agent reported
+`---NODE-FAILED:<code>: <reason>---`. On a slot without one, a kickoff that never
 landed still ends the run as failed. A node runs when at least one of its
 inputs was taken; a node none of whose inputs was taken is skipped (its
 `nodes` entry is `{status: "skipped", skipReason: "untaken"}`), and so is
-everything only it feeds. These signals are read from the agent's own reply,
-never from its kickoff, and a slot's kickoff explains the ones its edges need.
+everything only it feeds. `<code>` is a random signal code that each kickoff
+names on its last line; a signal without it counts for nothing, so an echoed
+kickoff, a file or web page the agent read, or an imported template cannot
+take a branch, set an output or fail a step. Claude Code and Codex signals are
+read only from the turn text in the CLI's own log, never from the screen; for
+other CLIs the screen is read after the kickoff only. A slot's kickoff explains
+the signals its edges need.
 A kickoff may also read another node's output as `{{node.<id>.output}}` (the
 whole JSON) or `{{node.<id>.output.<path>}}` (one field); a missing value is
 empty. Stages still run layer by layer, so a node whose inputs are settled can

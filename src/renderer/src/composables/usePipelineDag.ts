@@ -14,6 +14,7 @@ import {
   hasOutputContract,
   isUntaken,
   kickoffHints,
+  newSignalNonce,
   parseNodeSignals,
   pinnedLabels as planPinnedLabels,
   readsFailure,
@@ -78,6 +79,9 @@ export function usePipelineDag(deps: PipelineDagDeps) {
   let run: DagRunState | null = null
   let outputs: Record<string, NodeOutput> = {}
   let pendingOutputs: Record<string, NodeOutput> = {}
+  /** Each node's signal code for its latest kickoff, in memory only: never
+   *  reported to the backend, so pipeline_status cannot hand it out. */
+  let nonces = new Map<string, string>()
   let reportChain: Promise<unknown> = Promise.resolve()
 
   const now = (): string => new Date().toISOString()
@@ -153,6 +157,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     }
     plan.value = built
     run = createRunState(built, startIndex, startLayer ?? built.stageLayer[startIndex] ?? Infinity)
+    nonces = new Map()
     void report()
     return startIndex
   }
@@ -186,6 +191,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     }
     plan.value = built
     run = createRunState(built, nextIndex, built.nodeLayer[gateId])
+    nonces = new Map()
     for (const [id, st] of Object.entries(restored)) {
       // Only finished work carries over; anything that was in flight is
       // what the gate is about to decide on, or runs again after it. A
@@ -262,14 +268,22 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     return p && p.hasBranching ? planConditionalLabels(p, index) : new Set()
   }
 
-  /** The failure a running slot reported with ---NODE-FAILED---, or '' —
-   *  always '' for a node with neither an error edge nor a retry policy,
-   *  which does not read the signal. */
-  function reportedFailure(index: number, label: string, tail: string): string {
+  /** The failure a running slot reported with ---NODE-FAILED--- carrying
+   *  its signal code, or '' — always '' for a node with neither an error edge
+   *  nor a retry policy, which does not read the signal. `text` is what the
+   *  caller trusts as the agent's own output (signalSource). */
+  function reportedFailure(index: number, label: string, text: string): string {
     const p = plan.value
     const id = nodeId(index, label)
     if (!p || !run || !id || run.nodes[id]?.status !== 'running' || !readsFailure(p, id)) return ''
-    return parseNodeSignals(tail).failed ?? ''
+    return parseNodeSignals(text, nonces.get(id) ?? '').failed ?? ''
+  }
+
+  /** The signal code of this slot's latest kickoff, or '' when its kickoff
+   *  asked for no signals. */
+  function signalNonce(index: number, label: string): string {
+    const id = nodeId(index, label)
+    return (id && nonces.get(id)) || ''
   }
 
   /** One more try of a failed slot, if its retry policy has one left: the
@@ -329,7 +343,10 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     void report()
   }
 
-  function slotFinished(index: number, label: string, tail: string): void {
+  /** `tail` becomes the node's summary; signals are read from `signals`
+   *  (what the caller trusts as the agent's own output), or from `tail` when
+   *  it is not given. Either way only signals with the node's code count. */
+  function slotFinished(index: number, label: string, tail: string, signals?: string): void {
     const id = nodeId(index, label)
     if (!run || !id) return
     const prev = run.nodes[id]
@@ -344,16 +361,16 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     const wantBranch = hasBranchEdge(p, id)
     const wantOutput = hasOutputContract(p, id)
     const wantFailure = hasErrorEdge(p, id)
-    const signals = wantBranch || wantOutput || wantFailure ? parseNodeSignals(tail) : {}
+    const found = wantBranch || wantOutput || wantFailure ? parseNodeSignals(signals ?? tail, nonces.get(id) ?? '') : {}
     const result: NodeResult = {}
-    if (wantBranch && signals.branch !== undefined) result.branch = signals.branch
-    if (wantOutput && signals.output) {
-      result.output = signals.output.value
-      if (signals.output.parseError) deps.log(`DAG ⚠ "${label}" output is not valid JSON (${signals.output.parseError}) — stored as null`)
+    if (wantBranch && found.branch !== undefined) result.branch = found.branch
+    if (wantOutput && found.output) {
+      result.output = found.output.value
+      if (found.output.parseError) deps.log(`DAG ⚠ "${label}" output is not valid JSON (${found.output.parseError}) — stored as null`)
     }
-    if (wantFailure && signals.failed !== undefined) {
-      run.nodes[id] = { ...prev, status: 'failed', endedAt: now(), summary, error: signals.failed, errorRouted: true }
-      deps.log(`DAG ↯ "${label}" reported a failure — taking its error edge (${signals.failed})`)
+    if (wantFailure && found.failed !== undefined) {
+      run.nodes[id] = { ...prev, status: 'failed', endedAt: now(), summary, error: found.failed, errorRouted: true }
+      deps.log(`DAG ↯ "${label}" reported a failure — taking its error edge (${found.failed})`)
     } else {
       run.nodes[id] = { ...prev, status: 'done', endedAt: now(), summary, ...result }
     }
@@ -406,7 +423,13 @@ export function usePipelineDag(deps: PipelineDagDeps) {
         summary: summaryOf(up) || '(no output recorded)',
       }))
     const expanded = expandNodeOutputs(expandPrevSummary(text, upstream), p.graph, (up) => resultOf(up).output)
-    return expanded + kickoffHints(p, id)
+    // A new code for every kickoff of the node: an earlier try's signals, or
+    // the screen of a previous run, can never answer this one.
+    const nonce = newSignalNonce()
+    const hints = kickoffHints(p, id, nonce)
+    if (hints) nonces.set(id, nonce)
+    else nonces.delete(id)
+    return expanded + hints
   }
 
   /** Context lines for earlier nodes this run did not execute (pinned or
@@ -461,6 +484,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     conditionalLabels,
     routeFailure,
     reportedFailure,
+    signalNonce,
     retryAfterFailure,
     routesFailure,
     takeNote,

@@ -115,7 +115,11 @@ pytestmark = pytest.mark.asyncio
 #: f50fb86a…): scheduler_upsert documents the pipeline_start action,
 #: pipeline_status the interrupted state and pipeline_graph the set_retry op.
 #: No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "879e4cb62105b609de3894f260937dd053487f00f4709509d26462bea916aa8e"
+#: Re-pinned for the pipeline signal-spoofing fix (previous pin 879e4cb6…):
+#: the pipeline_graph description documents the per-kickoff signal code in
+#: ---BRANCH--- / ---OUTPUT--- / ---NODE-FAILED--- and that claude / codex
+#: signals come from turn text only. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "421fe17362399e72d305bf1e17b55a6f9bc406b75990131dc2723a1f0585ebe2"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

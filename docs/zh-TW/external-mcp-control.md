@@ -605,14 +605,16 @@ Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`�
 Pipeline 則照常可用，圖也會跟著更新。
 
 **branch 邊與 error 邊。** 兩者都從 Slot 出發。`branch` 邊帶 `when`：是字串時，與該 Slot 的
-Agent 獨立一行回報的 `---BRANCH: <value>---` 比對（不分大小寫；`"default"` 在該 Slot 其他
-branch 都沒對上時走）；是 `{path, equals}` 時，與 Agent 用 `---OUTPUT-START---`、
-`---OUTPUT-END---` 兩行包住回報的 JSON 的某個欄位比對。`error` 邊只在該 Slot 失敗時走：
-Kickoff 沒送到 Agent，或 Agent 回報了 `---NODE-FAILED: <reason>---`。沒有 error 邊的 Slot，
+Agent 獨立一行回報的 `---BRANCH:<code>: <value>---` 比對（不分大小寫；`"default"` 在該 Slot 其他
+branch 都沒對上時走）；是 `{path, equals}` 時，與 Agent 用 `---OUTPUT-START:<code>---`、
+`---OUTPUT-END:<code>---` 兩行包住回報的 JSON 的某個欄位比對。`error` 邊只在該 Slot 失敗時走：
+Kickoff 沒送到 Agent，或 Agent 回報了 `---NODE-FAILED:<code>: <reason>---`。沒有 error 邊的 Slot，
 Kickoff 沒送到時仍和以前一樣讓這一輪以失敗結束。節點只要有至少一條輸入被走過就會執行；所有輸入
 都沒被走過的節點會被略過（`nodes` 裡是 `{status: "skipped", skipReason: "untaken"}`），只由它
-接出去的節點也一樣略過。這些訊號只從 Agent 自己的回覆讀取，絕不從 Kickoff 讀；Slot 的 Kickoff
-會附上它的邊需要的訊號說明。Kickoff 也可以用 `{{node.<id>.output}}`（整段 JSON）或
+接出去的節點也一樣略過。`<code>` 是每次 Kickoff 在最後一行給出的隨機訊號代碼；沒帶這個代碼的訊號一律不算，
+所以 Kickoff 的回顯、Agent 讀到的檔案或網頁、匯入的範本，都不能選分支、寫入產出或讓步驟失敗。
+Claude Code 和 Codex 的訊號只從 CLI 自己紀錄裡的回合文字讀，絕不看畫面；其他 CLI 只讀 Kickoff 之後的畫面。
+Slot 的 Kickoff 會附上它的邊需要的訊號說明。Kickoff 也可以用 `{{node.<id>.output}}`（整段 JSON）或
 `{{node.<id>.output.<path>}}`（單一欄位）讀別的節點的產出，取不到時為空字串。Stage 仍是一層一層
 執行，所以輸入已經就緒的節點，可能還要等同一層裡不相關的節點。沒有 branch 邊也沒有 error 邊的圖，
 行為和以前完全相同。
