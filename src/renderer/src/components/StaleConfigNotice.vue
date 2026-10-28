@@ -7,6 +7,7 @@
  */
 import { computed, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { idleRebuildable, staleConfigKey, type StaleConfigPart } from '../lib/staleConfigPanes'
 
 const props = defineProps<{ part: StaleConfigPart }>()
@@ -33,7 +34,7 @@ const idleCount = computed(() => idleRebuildable(panes.value).length)
     </div>
     <ul>
       <li v-for="pane in panes" :key="pane.id" :data-pane-id="pane.id">
-        <span class="stale-config-name">{{ pane.name }}</span>
+        <span v-truncate class="stale-config-name">{{ pane.name }}</span>
         <span v-if="pane.busy" class="stale-config-state">{{ t('settings.stale-config.busy') }}</span>
         <span v-else-if="!pane.canRebuild" class="stale-config-state">{{ t('settings.stale-config.cannot-rebuild') }}</span>
         <button
