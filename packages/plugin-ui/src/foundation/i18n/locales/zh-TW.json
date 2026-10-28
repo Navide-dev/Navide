@@ -2484,7 +2484,7 @@
         "unknown": "尚未測試。",
         "not-applicable": "此平台不提供。"
       },
-      "auto-resume-reconnect-hint": "後端崩潰時會一併帶走所有 CLI 行程。開啟後，後端恢復時會自動接回目前看得見的 pane 的對話，不必逐一手動重建。",
+      "auto-resume-reconnect-hint": "後端崩潰或重新啟動時，會一併帶走所有 CLI 行程。開啟後，後端恢復時會自動接回畫面上的 pane，以及畫面外最多六個正在工作的 pane 的對話，不必逐一手動重建。接回的 pane 不會自己繼續，派出它的 pane 會收到通知，公告中心會列出經過。如果後端很快又崩潰，就不會再自動接回。",
       "resume-interrupted-on-launch-hint": "重開 Navide 時，正在跑回合、停在權限詢問或快選等待的 pane，以及等它們回報的母 pane，會自動接回（最多 6 個，其餘標記「重開時工作中」）。接回後不會自動續跑，按「繼續」或由母 pane 下令才會繼續；母 pane 會收到哪些子 pane 被中斷的通知。",
       "confirm-close-pane": "關閉 pane 前確認",
       "confirm-close-pane-hint": "用關閉 pane 快捷鍵關閉 CLI pane 前先跳出確認。執行中的 pane 一律會確認，不受此設定影響。",
@@ -2849,7 +2849,7 @@
               "fallback": "單一 CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Backend 掛掉會帶走所有 CLI 行程；開著的話它回來後自動接續畫面上的面板。",
+              "desc": "後端崩潰或重新啟動時會帶走所有 CLI 行程；開啟後，後端恢復時會自動接回畫面上的 pane，以及畫面外最多六個正在工作的 pane。公告中心會列出哪些回合被中斷。",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -9154,6 +9154,21 @@
     "load-more": "載入更多（還有 {count} 則）",
     "mcp-tools-changed": "MCP 工具可能已變更",
     "mcp-tools-changed-note": "CLI agent 只在啟動時讀一次 Navide 的 MCP 工具清單。從上一個版本（{from}）就連著的對象 — CLI pane 或外部 MCP client — 拿到的還是當時那份清單；重開 pane 或重新連線才會拿到新的工具。",
+    "backend-restart": {
+      "title": "後端在 {time} 重新啟動",
+      "note": "接回的 pane 會停在提示字元，不會自己繼續；已結束的 pane 維持原狀，要你按「重建」才會重開。",
+      "crash-loop": "後端重啟後很快又崩潰，所以這次不再自動接回任何 pane。需要的請自己重建。",
+      "resumed": "已接回：{names}",
+      "interrupted": "回合被中斷：{names}",
+      "rebuild": "重建 {name}",
+      "not-resumed": {
+        "crash-loop": "{name}：未接回，因為後端短時間內反覆崩潰",
+        "over-limit": "{name}：未接回，因為畫面外正在工作的 pane 超過六個",
+        "idle-off-screen": "{name}：未接回，因為它在畫面外而且是閒置的",
+        "no-session": "{name}：未接回，因為沒有可接續的對話",
+        "failed": "{name}：接回失敗"
+      }
+    },
     "scheduler-disabled": "排程「{name}」已停用：目標 pane 不存在",
     "scheduler-disabled-note": "連續 {n} 次到點都找不到目標 pane，所以自動停用。到排程面板按「重新綁定」指向現有的 pane，再重新啟用。",
     "quota": {

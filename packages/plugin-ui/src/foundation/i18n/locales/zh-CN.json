@@ -2484,7 +2484,7 @@
         "unknown": "尚未测试。",
         "not-applicable": "此平台不提供。"
       },
-      "auto-resume-reconnect-hint": "后端崩溃时会一并带走所有 CLI 进程。打开后，后端恢复时会自动接回目前看得见的 pane 的对话，不必逐一手动重建。",
+      "auto-resume-reconnect-hint": "后端崩溃或重新启动时，会一并带走所有 CLI 进程。开启后，后端恢复时会自动接回画面上的 pane，以及画面外最多六个正在工作的 pane 的对话，不必逐一手动重建。接回的 pane 不会自己继续，派出它的 pane 会收到通知，公告中心会列出经过。如果后端很快又崩溃，就不会再自动接回。",
       "resume-interrupted-on-launch-hint": "重开 Navide 时，正在跑回合、停在权限询问或快选等待的 pane，以及等它们回报的母 pane，会自动接回（最多 6 个，其余标记“重开时工作中”）。接回后不会自动续跑，按“继续”或由母 pane 下令才会继续；母 pane 会收到哪些子 pane 被中断的通知。",
       "confirm-close-pane": "关闭 pane 前确认",
       "confirm-close-pane-hint": "用关闭 pane 快捷键关闭 CLI pane 前先跳出确认。运行中的 pane 一律会确认，不受此设置影响。",
@@ -2849,7 +2849,7 @@
               "fallback": "单一 CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Backend 挂掉会带走所有 CLI 进程；开着的话它回来后自动接续画面上的面板。",
+              "desc": "后端崩溃或重新启动时会带走所有 CLI 进程；开启后，后端恢复时会自动接回画面上的 pane，以及画面外最多六个正在工作的 pane。公告中心会列出哪些回合被中断。",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -9154,6 +9154,21 @@
     "load-more": "加载更多（还有 {count} 则）",
     "mcp-tools-changed": "MCP 工具可能已变更",
     "mcp-tools-changed-note": "CLI agent 只在启动时读一次 Navide 的 MCP 工具清单。从上一个版本（{from}）就连着的对象 — CLI pane 或外部 MCP client — 拿到的还是当时那份清单；重开 pane 或重新连接才会拿到新的工具。",
+    "backend-restart": {
+      "title": "后端在 {time} 重新启动",
+      "note": "接回的 pane 会停在提示符，不会自己继续；已结束的 pane 保持原状，要你点「重建」才会重开。",
+      "crash-loop": "后端重启后很快又崩溃，所以这次不再自动接回任何 pane。需要的请自己重建。",
+      "resumed": "已接回：{names}",
+      "interrupted": "回合被中断：{names}",
+      "rebuild": "重建 {name}",
+      "not-resumed": {
+        "crash-loop": "{name}：未接回，因为后端短时间内反复崩溃",
+        "over-limit": "{name}：未接回，因为画面外正在工作的 pane 超过六个",
+        "idle-off-screen": "{name}：未接回，因为它在画面外而且是空闲的",
+        "no-session": "{name}：未接回，因为没有可接续的对话",
+        "failed": "{name}：接回失败"
+      }
+    },
     "scheduler-disabled": "调度“{name}”已禁用：目标 pane 不存在",
     "scheduler-disabled-note": "连续 {n} 次到点都找不到目标 pane，所以自动禁用。到调度面板按“重新绑定”指向现有的 pane，再重新激活。",
     "quota": {
