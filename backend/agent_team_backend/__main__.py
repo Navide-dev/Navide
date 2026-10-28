@@ -288,6 +288,12 @@ def main() -> int:
         # 20s/20s. Under heavy PTY output a send can stall for seconds, and a
         # tight server-side timeout closes connections that are busy, not dead.
         ws_ping_interval=20.0,
+        # Every MCP tool call a CLI pane makes is an HTTP POST to /plan-mcp on
+        # loopback. With uvicorn's 5s default an agent pausing between calls
+        # reconnects every time, and each closed connection holds a local port
+        # in TIME_WAIT for ~30s; across many panes during a busy stretch that
+        # surfaced as EADDRNOTAVAIL on connect. Keep idle connections for reuse.
+        timeout_keep_alive=75,
         ws_ping_timeout=60.0,
         # Every idle Claude pane parks a rewake long-poll here (curl -m 1860).
         # Unbounded, shutdown closes the listener and then waits on all of them,

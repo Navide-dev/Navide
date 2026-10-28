@@ -104,6 +104,11 @@ pane 已經開起來但任務沒注入成功時，開頭是 ${MSG_SPAWN_PARTIAL_
 
 `
 
+// The prompts of the two QUESTION examples in INTERACTION_PROTOCOL. A CLI
+// that echoes the kickoff verbatim (Codex) puts these examples in the pane
+// buffer, so the buffer question scan skips blocks with these prompts (#733).
+export const PROTOCOL_EXAMPLE_PROMPTS: readonly string[] = ['請問系統的主要使用者是誰？', '資料庫要使用哪種技術？']
+
 // Universal pre-amble for Stage 01-style stages — the PM may ask the user.
 export const INTERACTION_PROTOCOL = `[Pipeline Control Protocol]
 你正在被 Agent-Team pipeline 驅動。控制訊號必須是裸文字，不可放進 markdown code block。
