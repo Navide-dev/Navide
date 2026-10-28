@@ -11274,7 +11274,9 @@
       "hide-palette": "ノードパネルを隠す"
     },
     "controlPane": {
-      "open-in-canvas": "パイプラインキャンバスで開く"
+      "open-in-canvas": "パイプラインキャンバスで開く",
+      "gate-toast": "パイプラインは「{name}」で承認待ちです",
+      "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。"
     },
     "edge": {
       "title": "差し戻しループ",

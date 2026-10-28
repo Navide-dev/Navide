@@ -525,6 +525,7 @@ const pipelineDag = usePipelineDag({
   },
   log: (line) => pipelineLog(line),
   workspacePath: () => pipeline.workspacePath,
+  onGate: (gate) => notifyRestore.toast(i18n.global.t('pipelineEditor.controlPane.gate-toast', { name: gate.label }), { type: 'info' }),
 })
 const analyzerApi = useAnalyzer(backend)
 const { recent: recentWorkspaces, touch: touchRecentWorkspace } = useRecentWorkspaces(backend)
@@ -11866,7 +11867,10 @@ const pipelineView = computed<PipelineStatusView>(() => ({
   projectId: pipeline.projectId,
   projectFile: pipeline.projectFile,
   pipelineLogFile: pipeline.pipelineLogFile,
-  backendLogFile: pipeline.backendLogFile
+  backendLogFile: pipeline.backendLogFile,
+  awaitingGate: pipelineDag.awaitingGate.value
+    ? { gateId: pipelineDag.awaitingGate.value.gateId, label: pipelineDag.awaitingGate.value.label }
+    : null
 }))
 
 interface ProjectSlot {
@@ -22787,6 +22791,8 @@ function paneIsCommander(p: ActivePane): boolean {
       @context-menu="(id, ev) => openPaneCtxMenu(ev, id)"
       @pipeline-start="onPipelineStartFromPanel"
       @pipeline-next="onPipelineNext"
+      @pipeline-gate-approve="onPipelineGateApprove"
+      @pipeline-gate-reject="onPipelineGateReject"
       @pipeline-abort="onPipelineAbort"
       @pipeline-reset="onPipelineUserReset"
       @workspace-check="onWorkspaceCheck"

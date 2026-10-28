@@ -11274,7 +11274,9 @@
       "hide-palette": "Hide Nodes Panel"
     },
     "controlPane": {
-      "open-in-canvas": "Open in the Pipeline Canvas"
+      "open-in-canvas": "Open in the Pipeline Canvas",
+      "gate-toast": "The pipeline is waiting for your approval at {name}",
+      "next-gated": "Approve or send back this gate before moving on to the next stage."
     },
     "edge": {
       "title": "Reject loop",
