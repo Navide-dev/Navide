@@ -233,6 +233,36 @@ def test_if_becomes_branch_edges_and_the_merge_is_native():
     assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("native", "merge")
 
 
+@pytest.mark.parametrize("mode", ["append", "chooseBranch", None])
+def test_a_merge_that_waits_for_its_inputs_is_native(mode):
+    w = if_merge()
+    if mode:
+        w["nodes"][4]["parameters"] = {"mode": mode}
+    out = convert(w)
+    assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("native", "merge")
+
+
+def test_a_combine_by_sql_merge_is_an_agent_step_folded_downstream():
+    w = if_merge()
+    sql = "SELECT * FROM input1 LEFT JOIN input2 ON input1.id = input2.id"
+    w["nodes"][4]["parameters"] = {"mode": "combineBySql", "query": sql}
+    out = convert(w)
+    e = entry(out, "Join")
+    assert (e["category"], e["reason"], e["node"]) == ("agent", "merge-combine", "n8n-join")
+    assert slot(out, "n8n-join")["label"] == "Join (+1)"  # After folds in behind it
+    kick = slot(out, "n8n-join")["slot"]["kickoffBody"]
+    assert "Merge rule" in kick and '"combineBySql" mode' in kick and sql in kick
+    assert ("main", "n8n-yes", "n8n-join", None) in edges(out)
+
+
+def test_a_combine_merge_is_an_agent_step():
+    w = if_merge()
+    w["nodes"][4]["parameters"] = {"mode": "combine", "combineBy": "combineByFields",
+                                   "fieldsToMatchString": "id"}
+    out = convert(w)
+    assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("agent", "merge-combine")
+
+
 def test_a_large_branch_is_native_too():
     out = convert(if_merge(big=True))
     assert [n[0] for n in shape(out)["nodes"]] == ["trigger", "n8n-check", "n8n-yes", "n8n-no", "n8n-think", "n8n-join"]

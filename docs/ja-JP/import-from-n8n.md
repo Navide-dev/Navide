@@ -17,15 +17,15 @@ Agent は MCP ツール `pipeline_import_n8n` で同じことができます。�
 
 キャンバスは、各ステップがどう変換されたかで色分けされます。
 
-- **そのまま変換**：Navide がワークフローの意図どおりに実行します。Manual・Chat・Execute Workflow トリガー、AI Agent クラスター（モデル、メモリ、ツール、出力パーサーは一つのステップにまとまります）、Wait と send-and-wait の承認（Gate）、IF と Switch（分岐）、Merge、エラー出力とリトライです。
-- **エージェントが実行**：HTTP Request、Code、Set、アプリのノード（Google Sheets、Slack、Gmail…）、コミュニティノード、未知のノード種別やバージョンです。CLI Agent がノードの元のパラメータからステップを実行し、expression と Code はそのまま渡されます。結果は n8n と異なることがあります。分岐のない連続したステップは一つのステップにまとまるため、ノードごとに Pane が開くことはありません。
+- **そのまま変換**：Navide がワークフローの意図どおりに実行します。Manual・Chat・Execute Workflow トリガー、AI Agent クラスター（モデル、メモリ、ツール、出力パーサーは一つのステップにまとまります）、Wait と send-and-wait の承認（Gate）、IF と Switch（分岐）、Append または Choose Branch モードの Merge、エラー出力とリトライです。
+- **エージェントが実行**：HTTP Request、Code、Set、データを結合する Merge（フィールド、位置、全組み合わせ、SQL。Agent がその結合ルールに従います）、アプリのノード（Google Sheets、Slack、Gmail…）、コミュニティノード、未知のノード種別やバージョンです。CLI Agent がノードの元のパラメータからステップを実行し、expression と Code はそのまま渡されます。結果は n8n と異なることがあります。分岐のない連続したステップは一つのステップにまとまるため、ノードごとに Pane が開くことはありません。
 - **要確認**：インポートされますが、Navide にまだ無い機能が必要です。Schedule・Webhook・Form・アプリのトリガー（Pipeline は手動で開始してください）、Respond to Webhook、Execute Workflow と Call n8n Workflow Tool（サブワークフロー：参照先のワークフローもインポートしてください）、n8n に残すべきステップ（下記。**未対応** と表示されます）です。
 
 キャンバスの下のレポートには、各 n8n ノードが何になり何をすべきか、各ステップの Kickoff 全文と各 Gate のプロンプト（各 Pane が受け取る文面そのもの）、設定が必要な認証情報、秘密が取り除かれた場所、確認が必要なステップ数が並びます。どれも **インポート** を妨げません。実行前に把握するためのものです。
 
 ### 分岐、エラー、リトライ、ステップ間のデータ
 
-- **IF** は `true` / `false` の分岐エッジになります。**Switch** はルールごとに一つの分岐（名前を変えた出力はその名前、それ以外は番号）になり、fallback 出力は `default` になります。そのステップの Agent が選んだ分岐を報告し（`---BRANCH: <値>---`）、その分岐だけが実行されます。後ろの Merge は実際に届いた入力で実行されます。
+- **IF** は `true` / `false` の分岐エッジになります。**Switch** はルールごとに一つの分岐（名前を変えた出力はその名前、それ以外は番号）になり、fallback 出力は `default` になります。そのステップの Agent が選んだ分岐を報告し（`---BRANCH: <値>---`）、その分岐だけが実行されます。後ろの Append または Choose Branch モードの Merge は実際に届いた入力で実行されます。
 - **On Error → Continue (using error output)** のノードにはエラーエッジが付き、失敗したときだけ次のステップが実行されます。自分自身をエラーワークフローにしているワークフロー（Settings → Error Workflow）では、Error Trigger の後のステップがすべてのステップからのエラーエッジとしてつながります。
 - **Retry On Fail** はそのステップのリトライになります：合計で最大 5 回、間隔は最大 300000 ms です。n8n の設定がこれを超えるノードは、レポートに示されます。
 - `$('Lookup').item.json` のように他のノードを読む expression は、Kickoff でそのステップの結果を `{{node.<ステップ id>.output}}` として受け取ります。読まれる側のステップには、最後に結果を JSON で出力するよう指示されます。

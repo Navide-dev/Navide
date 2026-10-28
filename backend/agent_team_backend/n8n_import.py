@@ -167,9 +167,17 @@ def _classify(node: dict[str, Any]) -> dict[str, Any]:
     params = node.get("parameters") if isinstance(node.get("parameters"), dict) else {}
     if out["role"] in ("app", "step") and params.get("operation") == _SEND_AND_WAIT:
         out["role"] = "gate"
+    # Only a Merge that waits for its inputs (append, chooseBranch) is a join;
+    # one that combines data (by fields, position, all, SQL) is an agent step.
+    mode = params.get("mode", "append")
+    if out["role"] == "merge" and mode not in _JOIN_MERGE_MODES:
+        out.update(role="step", reason="merge-combine",
+                   detail=f"Merge in \"{mode}\" mode combines data: an agent carries it out by its merge rule")
     out["detail"] = out["detail"] or _ROLE_DETAIL.get(out["role"], "")
     return out
 
+
+_JOIN_MERGE_MODES = ("append", "chooseBranch")
 
 _ROLE_DETAIL = {
     "trigger_schedule": "runs on a schedule in n8n: start it by hand until Navide schedules pipelines",
@@ -1163,6 +1171,9 @@ def _step_section(i: int, name: str, node: dict[str, Any], inf: dict[str, Any], 
                   main: list[tuple[str, int, str]]) -> str:
     params = copy.deepcopy(node.get("parameters")) if isinstance(node.get("parameters"), dict) else {}
     lines = [f"### Step {i}: {name}", f"n8n node: `{node['type']}` v{node.get('typeVersion')}"]
+    if inf["reason"] == "merge-combine":
+        lines.append(f"Merge rule: combine the inputs from the earlier steps the way this n8n Merge does in "
+                     f"\"{params.get('mode')}\" mode, using its parameters below (fields, join mode, SQL query) verbatim.")
     if inf["needsReview"]:
         lines.append(f"Needs review: {inf['detail']}")
     if isinstance(node.get("notes"), str) and node["notes"].strip():

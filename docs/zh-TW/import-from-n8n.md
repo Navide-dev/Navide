@@ -17,15 +17,15 @@ Agent 也能透過 MCP 工具 `pipeline_import_n8n` 做同樣的事，預設是 
 
 畫布依每個步驟的轉換方式上色：
 
-- **直接轉換**：Navide 照 workflow 原意執行。包括 Manual、Chat、Execute Workflow 觸發；AI Agent 叢集（模型、記憶、工具、輸出解析器併成一個步驟）；Wait 與 send-and-wait 核准（Gate）；IF 與 Switch（分支）；Merge；錯誤輸出與重試。
-- **由 agent 執行**：HTTP Request、Code、Set、應用程式節點（Google Sheets、Slack、Gmail……）、社群節點，以及不認得的節點類型或版本。由 CLI Agent 依節點原本的參數執行，expression 與 Code 原樣傳過去，結果可能和 n8n 不同。沒有分支的連續步驟會併成一個步驟，所以不會一個節點開一個 Pane。
+- **直接轉換**：Navide 照 workflow 原意執行。包括 Manual、Chat、Execute Workflow 觸發；AI Agent 叢集（模型、記憶、工具、輸出解析器併成一個步驟）；Wait 與 send-and-wait 核准（Gate）；IF 與 Switch（分支）；Append 或 Choose Branch 模式的 Merge；錯誤輸出與重試。
+- **由 agent 執行**：HTTP Request、Code、Set、會合併資料的 Merge（依欄位、位置、所有組合或 SQL；Agent 照它的合併規則做）、應用程式節點（Google Sheets、Slack、Gmail……）、社群節點，以及不認得的節點類型或版本。由 CLI Agent 依節點原本的參數執行，expression 與 Code 原樣傳過去，結果可能和 n8n 不同。沒有分支的連續步驟會併成一個步驟，所以不會一個節點開一個 Pane。
 - **需要確認**：已匯入，但需要 Navide 目前還沒有的能力。包括 Schedule、Webhook、Form 與應用程式觸發（請手動啟動 Pipeline）、Respond to Webhook、Execute Workflow 與 Call n8n Workflow Tool（sub-workflow：請一併匯入被引用的 workflow），以及建議留在 n8n 的步驟（見下文，標成 **不支援**）。
 
 畫布下方的報告會逐一列出：每個 n8n 節點變成什麼、你要做什麼；每個步驟完整的 Kickoff 與每個 Gate 的提示（也就是每個 Pane 會收到的原文）；要補的憑證；秘密在哪裡被移除；有幾個步驟需要確認。這些都不會擋住 **匯入**，只是讓你在執行前先知道。
 
 ### 分支、錯誤、重試與步驟之間的資料
 
-- **IF** 會變成 `true`／`false` 兩條分支邊；**Switch** 每條規則一條分支（有重新命名就用輸出名稱，否則用編號），fallback 輸出對到 `default`。該步驟的 Agent 會回報走了哪條分支（`---BRANCH: <值>---`），只有那條分支會執行；之後的 Merge 會用實際到達的輸入執行。
+- **IF** 會變成 `true`／`false` 兩條分支邊；**Switch** 每條規則一條分支（有重新命名就用輸出名稱，否則用編號），fallback 輸出對到 `default`。該步驟的 Agent 會回報走了哪條分支（`---BRANCH: <值>---`），只有那條分支會執行；之後的 Append 或 Choose Branch 模式 Merge 會用實際到達的輸入執行。
 - 設成 **On Error → Continue (using error output)** 的節點會有一條錯誤邊：只有它失敗時才會執行下一步。自己就是自己的 error workflow（Settings → Error Workflow）的 workflow，其 Error Trigger 之後的步驟會接成每個步驟的錯誤邊。
 - **Retry On Fail** 會變成該步驟的重試：總共最多 5 次，間隔最多 300000 ms。n8n 原設定超過這個上限的節點，報告會標出來。
 - 讀取其他節點的 expression，例如 `$('Lookup').item.json`，會在 Kickoff 裡拿到那個步驟的結果 `{{node.<步驟 id>.output}}`，而那個步驟會被要求在結尾以 JSON 輸出結果。

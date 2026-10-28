@@ -29,8 +29,8 @@ The canvas colors each step by how it was converted:
 - **Converted directly** — Navide runs it as the workflow meant: Manual, Chat and
   Execute Workflow triggers, AI Agent clusters (model, memory, tools and
   output parser fold into one step), Wait and send-and-wait approvals
-  (gates), IF and Switch (branches), Merge, error outputs and retries.
-- **Run by an agent** — HTTP Request, Code, Set, app nodes (Google
+  (gates), IF and Switch (branches), Merge in Append or Choose Branch mode, error outputs and retries.
+- **Run by an agent** — HTTP Request, Code, Set, Merge that combines data (by fields, position, all combinations or SQL; the agent follows its merge rule), app nodes (Google
   Sheets, Slack, Gmail…), community nodes and unknown node types or
   versions. A CLI agent does the step from the node's original parameters;
   expressions and Code are passed on verbatim. Results can differ from
@@ -53,8 +53,8 @@ secrets were removed, and how many steps need review. None of this blocks
 - **IF** becomes branch edges `true` / `false`; **Switch** one branch per
   rule (its output name when renamed, else its number) and `default` for
   the fallback output. The step's agent reports the branch it took
-  (`---BRANCH: <value>---`) and only that branch runs; a Merge after it runs
-  on the inputs that arrived.
+  (`---BRANCH: <value>---`) and only that branch runs; an Append or Choose Branch
+  Merge after it runs on the inputs that arrived.
 - A node with **On Error → Continue (using error output)** gets an error
   edge: the next step runs only when it fails. A workflow that is its own
   error workflow (Settings → Error Workflow) has its Error Trigger steps
