@@ -5,6 +5,7 @@ import { isEngineCompatible } from './pluginEngineCompat'
 import { OFFICIAL_PLUGIN_VERSIONS, officialPluginVersion, supersedingBundledVersions } from './officialPluginVersions'
 
 const sourceDirs: Record<string, string> = {
+  'navide.browser': 'plugins/navide-browser',
   'navide.git': 'plugins/navide-git',
   'navide.mini-ide': 'plugins/navide-mini-ide',
   'navide.plans': 'plugins/navide-plans',
