@@ -38,9 +38,9 @@ describe('macOS keeps its sidebar and Settings keys exactly', () => {
     const off = (await load('Win32')).defaults
     const added = off.filter((r) => /^ctrl\+alt\+[1-5]$|^ctrl\+,$/.test(r.key) && ADDED.test(r.command))
     expect(added).toHaveLength(6)
-    // Plans, Git and the Mini IDE also take Ctrl+Shift off macOS (builtinPluginKeys.test.ts).
-    added.push(...off.filter((r) => /^ctrl\+shift\+[dgm]$/.test(r.key)))
-    expect(added).toHaveLength(9)
+    // Plans, Git, the Mini IDE and Navide Browser also take Ctrl+Shift off macOS (builtinPluginKeys.test.ts).
+    added.push(...off.filter((r) => /^ctrl\+shift\+[dgmx]$/.test(r.key)))
+    expect(added).toHaveLength(10)
     expect(JSON.stringify(off.filter((r) => !added.includes(r)))).toBe(JSON.stringify(mac))
   })
 

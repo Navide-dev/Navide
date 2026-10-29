@@ -279,6 +279,7 @@ export const COMMAND_IDS: readonly string[] = [
   'workbench.action.navigateForward',
   'workbench.action.newFile',
   'workbench.action.newWindow',
+  'workbench.action.openBrowser',
   'workbench.action.openDebug',
   'workbench.action.openEditorAtIndex1',
   'workbench.action.openEditorAtIndex2',

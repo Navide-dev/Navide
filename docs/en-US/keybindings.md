@@ -11,7 +11,7 @@ and when-clause conditions.
 >
 > Two exceptions are bound for Windows and Linux out of the box. The main window's sidebar tabs answer **Ctrl+Alt+1–5** (Ctrl+1–9 already picks the CLI type for the next pane), and Settings answers **Ctrl+,**. Ctrl+Alt is AltGr on Windows: on a layout where AltGr+digit types a character (German `²` `³`, for example), that digit types the character and does not switch tabs.
 >
-> The built-in plugin windows are bound for Windows and Linux too: Open Plans answers **Ctrl+Shift+D** and the Git window **Ctrl+Shift+G**, the same letters as on macOS. The Mini IDE answers **Ctrl+Shift+M**, not Ctrl+Shift+I: off macOS Ctrl+Shift+I is the View menu's Toggle Developer Tools accelerator, which fires before any shortcut rule and keeps working as before, and Ctrl+Alt+I is not used because Ctrl+Alt is AltGr on Windows.
+> The built-in plugin windows are bound for Windows and Linux too: Open Plans answers **Ctrl+Shift+D**, the Git window **Ctrl+Shift+G** and Navide Browser **Ctrl+Shift+X**, the same letters as on macOS. The Mini IDE answers **Ctrl+Shift+M**, not Ctrl+Shift+I: off macOS Ctrl+Shift+I is the View menu's Toggle Developer Tools accelerator, which fires before any shortcut rule and keeps working as before, and Ctrl+Alt+I is not used because Ctrl+Alt is AltGr on Windows.
 
 Every binding below can be changed in **Settings → Shortcuts**; see
 [Customizing shortcuts](#customizing-shortcuts) for the file format and the
@@ -44,6 +44,7 @@ rules the editor writes.
 | `⌘⇧G` (Windows/Linux: `Ctrl+Shift+G`) | Open the Git window when Git is active; focus a Source Control view where a window owns one, such as the legacy Mini IDE editor window (when find is closed) |
 | `⌘⇧I` (Windows/Linux: `Ctrl+Shift+M`) | Open the Mini IDE window |
 | `⌘⇧D` (Windows/Linux: `Ctrl+Shift+D`) | Open Plans |
+| `⌘⇧X` (Windows/Linux: `Ctrl+Shift+X`) | Open Navide Browser |
 | `⌥⌘V` | Focus the right rail's Preview panel (main window) |
 | `⌘J` | Toggle AI Terminal panel |
 | `⌘⇧A` | Toggle AI Terminal panel |
