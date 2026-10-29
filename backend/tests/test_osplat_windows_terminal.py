@@ -638,6 +638,43 @@ class TestHandle:
         await asyncio.sleep(0.05)
         assert got == [b"a", b"b", None]
 
+    # ...but the queue a pause leaves behind is bounded. pywinpty keeps reading
+    # however long the drain stalls, so without a cap a flooding CLI grows the
+    # backend without limit; past the cap the OLDEST chunks go (the newest
+    # carry the TUI's current screen), as terminals' _BUF_CAP does on POSIX.
+    async def test_paused_queue_is_bounded_and_keeps_the_newest_output(self, monkeypatch):
+        monkeypatch.setattr(_windows, "_PAUSED_QUEUE_CAP", 4096)
+        pty = _FakePTY(80, 24)
+        pty.reads = [letter * 1024 for letter in "abcdefgh"] + [""]
+        pty.alive = False
+        handle = _handle(pty)
+        loop = asyncio.get_running_loop()
+        got: list[bytes] = []
+        eof = asyncio.Event()
+
+        def on_readable() -> None:
+            while True:
+                try:
+                    chunk = handle.read(64 * 1024)
+                except BlockingIOError:
+                    return
+                if chunk is None:
+                    eof.set()
+                    return
+                got.append(chunk)
+
+        handle.start_reading(loop, on_readable)
+        handle.pause_reading()  # before the loop runs the queued wake-up
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if handle._eof:
+                break
+        assert handle._eof
+        assert sum(len(c) for c in handle._chunks) <= 4096
+        handle.resume_reading()
+        await asyncio.wait_for(eof.wait(), 2)
+        assert b"".join(got) == b"".join(letter.encode() * 1024 for letter in "efgh")
+
     # ConPTY never closes the conout pipe on the child's behalf: the exit has
     # to be watched and turned into EOF, or the session outlives its process.
     async def test_child_exit_becomes_eof_while_conpty_keeps_the_pipe_open(
