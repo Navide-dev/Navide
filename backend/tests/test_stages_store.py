@@ -125,6 +125,23 @@ class TestPipelineCRUD:
         for p in pipelines:
             assert {"id", "name", "builtin", "stage_count"} <= p.keys()
 
+    def test_list_pipelines_counts_steps_not_layers(self, tmp_path):
+        # The sidebar showed "2 stages" next to an editor of 3 steps: a stage
+        # (layer) can hold several steps, and a gate is a step of its own.
+        store = fresh_store(tmp_path)
+        summary = next(x for x in store.list_pipelines() if x["id"] == "default")
+        slots = sum(len(s.get("slots") or []) for s in store.list("default"))
+        assert summary["step_count"] == slots
+        graph = store.get_graph("default")["graph"]
+        first, second = [n["id"] for n in graph["nodes"] if n["kind"] == "slot"][:2]
+        store.apply_graph_ops("default", [
+            {"op": "add_node", "node": {"id": "gate", "kind": "gate", "position": {"x": 0, "y": 0}},
+             "after": [first], "before": [second]},
+        ])
+        summary = next(x for x in store.list_pipelines() if x["id"] == "default")
+        assert summary["step_count"] == slots + 1
+        assert store.create_pipeline("Empty")["id"] in [x["id"] for x in store.list_pipelines() if x["step_count"] == 0]
+
     def test_create_pipeline(self, tmp_path):
         store = fresh_store(tmp_path)
         p = store.create_pipeline("我的流程")

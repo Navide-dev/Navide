@@ -8428,6 +8428,7 @@
     }
   },
   "label": {
+    "step-count": "{count} étape | {count} étapes",
     "imported-from-n8n": "Importé depuis n8n",
     "resume-other-pipeline": "Une exécution inachevée appartient à « {name} ». Passez à ce pipeline pour la poursuivre.",
     "role-rename-repointed": "Référence de rôle mise à jour dans {count} pipeline. | Référence de rôle mise à jour dans {count} pipelines.",
@@ -11305,6 +11306,14 @@
     }
   },
   "pipelineEditor": {
+    "recover": {
+      "title": "Récupérer",
+      "resume-desc": "Poursuit l’exécution arrêtée à sa première étape inachevée, avec ses panneaux et son contexte.",
+      "restart-desc": "Ferme les panneaux de cette exécution et relance la même tâche depuis la première étape.",
+      "reset-desc": "Efface l’exécution et ferme tous les panneaux de cette fenêtre, y compris ceux que vous avez ouverts vous-même.",
+      "older-run": "Ceci est une exécution antérieure. Récupérer agit toujours sur la dernière exécution de ce pipeline.",
+      "show-latest": "Afficher la dernière exécution"
+    },
     "error": {
       "subpipeline-none": "Un sous-pipeline a besoin d’un autre pipeline à exécuter ; créez-en un d’abord.",
       "pipeline-running": "Ce pipeline est en cours d’exécution, il ne peut donc pas être modifié pour l’instant. Interrompez ou terminez d’abord l’exécution.",
@@ -11339,7 +11348,7 @@
     },
     "exec": {
       "abort": "Interrompre l’exécution",
-      "empty-body": "Les exécutions apparaissent ici dès que ce pipeline est lancé, depuis la barre latérale, une commande ou une CLI via MCP.",
+      "empty-body": "Décrivez une tâche dans le champ en haut et lancez-la, ou démarrez ce pipeline depuis la barre latérale, une planification ou une CLI via MCP.",
       "empty-title": "Aucune exécution pour l’instant",
       "list": "Exécutions de ce pipeline",
       "live": "En cours maintenant",
@@ -11353,7 +11362,6 @@
       "outcome-unknown": "Inconnue",
       "outcome-idle": "Inactive",
       "failed-step": "{name} a échoué : {error}",
-      "pick": "Choisissez une exécution pour la rejouer sur le graphe.",
       "progress": "{done} étapes sur {total}",
       "restart": "Recommencer",
       "resume": "Reprendre",
@@ -11503,6 +11511,7 @@
       "pinned": "Sortie figée"
     },
     "toolbar": {
+      "more": "Plus d’actions",
       "canvas": "Canevas",
       "derived": "Ouvert depuis les étapes : votre première modification l’enregistre en tant que graphe",
       "executions": "Exécutions",
@@ -11530,6 +11539,13 @@
       "last-stage": "C’est la dernière étape. L’exécution se termine dès qu’elle signale avoir fini."
     },
     "link": {
+      "out-title": "Mène à",
+      "none": "Aucun lien ne part encore de cette étape.",
+      "to": "Destination",
+      "to-pick": "Choisir une étape",
+      "add": "Ajouter le lien",
+      "branch-help": "Navide ajoute une ligne à l’instruction de départ de cette étape pour demander à l’agent de terminer sa réponse par `---BRANCH:<code>: <value>---` sur une ligne à part. L’exécution suit le lien dont la valeur correspond, sans tenir compte de la casse. Si aucune ne correspond, le lien de valeur default est pris.",
+      "error-help": "Pris quand cette étape échoue après ses nouvelles tentatives — l’agent signale ---NODE-FAILED---, ou la tâche ne lui est jamais parvenue. L’exécution continue par ce lien au lieu de s’arrêter.",
       "title": "Lien",
       "desc": "{from} → {to}",
       "kind": "Type de lien",
@@ -11591,6 +11607,8 @@
       "problem-condition": "La règle de visibilité fait référence à « {field} », qui n’est pas un autre champ de ce rôle."
     },
     "run": {
+      "abort-title": "Interrompre cette exécution ?",
+      "abort-message": "L’exécution s’arrête là où elle en est. Ses panneaux restent ouverts, et vous pourrez la reprendre plus tard depuis Récupérer.",
       "running": "En cours : {names}",
       "gate": "En attente de votre approbation à {name}",
       "review": "Examiner",

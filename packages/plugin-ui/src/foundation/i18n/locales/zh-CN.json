@@ -8428,6 +8428,7 @@
     }
   },
   "label": {
+    "step-count": "{count} 个步骤",
     "imported-from-n8n": "来自 n8n",
     "resume-other-pipeline": "有一个未完成的运行属于“{name}”。切换到该流程即可继续。",
     "role-rename-repointed": "已更新 {count} 条流程中的角色引用。",
@@ -11305,6 +11306,14 @@
     }
   },
   "pipelineEditor": {
+    "recover": {
+      "title": "恢复",
+      "resume-desc": "从第一个未完成的阶段继续这次停止的运行，沿用它的窗格和上下文。",
+      "restart-desc": "关闭这次运行的窗格，从第一个阶段重新运行同一个任务。",
+      "reset-desc": "清除这次运行，并关闭这个窗口的所有窗格，包括你自己开的窗格。",
+      "older-run": "这是较早的一次运行。恢复动作一律作用在这个 Pipeline 最新的那次运行。",
+      "show-latest": "显示最新的运行"
+    },
     "error": {
       "subpipeline-none": "子 Pipeline 需要另一条 Pipeline 可运行，请先创建一条。",
       "pipeline-running": "这条 pipeline 正在运行，目前无法修改。请先中止或等运行结束。",
@@ -11339,7 +11348,7 @@
     },
     "exec": {
       "abort": "中止运行",
-      "empty-body": "从侧栏、指令或 CLI（通过 MCP）启动这条 pipeline 后，运行记录会出现在这里。",
+      "empty-body": "在上方的输入框写下任务后运行，或从侧栏、排程、CLI（通过 MCP）启动这条 pipeline。",
       "empty-title": "还没有运行记录",
       "list": "这条 pipeline 的运行记录",
       "live": "运行中",
@@ -11353,7 +11362,6 @@
       "outcome-unknown": "未知",
       "outcome-idle": "闲置",
       "failed-step": "{name} 失败：{error}",
-      "pick": "选一笔运行记录，在图上重播。",
       "progress": "{done}／{total} 个步骤",
       "restart": "重新开始",
       "resume": "继续",
@@ -11503,6 +11511,7 @@
       "pinned": "产出已冻结"
     },
     "toolbar": {
+      "more": "更多动作",
       "canvas": "画布",
       "derived": "由 stage 推导——第一次编辑时会存成图",
       "executions": "运行记录",
@@ -11530,6 +11539,13 @@
       "last-stage": "这是最后一个阶段，报告完成后这次运行就会结束。"
     },
     "link": {
+      "out-title": "连到",
+      "none": "这个步骤还没有连出去的连线。",
+      "to": "连到的步骤",
+      "to-pick": "选择步骤",
+      "add": "新增连线",
+      "branch-help": "Navide 会在这个步骤的开场提示里加一行，请 Agent 在回复最后单独一行输出 ---BRANCH:<code>: <value>---。运行会走值相符的那条连线（不分大小写）；都不相符时，走值为 default 的连线。",
+      "error-help": "这个步骤重试后仍失败时走这条连线（Agent 回报 ---NODE-FAILED---，或任务没有送达）。运行不会停下，而是沿这条连线继续。",
       "title": "连接",
       "desc": "{from} → {to}",
       "kind": "连接类型",
@@ -11591,6 +11607,8 @@
       "problem-condition": "显示条件指向“{field}”，但它不是这个角色的其他字段。"
     },
     "run": {
+      "abort-title": "中止这次运行？",
+      "abort-message": "运行会停在目前的位置。窗格保持打开，之后可以从“恢复”继续。",
       "running": "运行中：{names}",
       "gate": "等待你在“{name}”核准",
       "review": "前往核准",

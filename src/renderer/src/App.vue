@@ -11152,11 +11152,16 @@ registerCommand('ui.pipeline.start', async (args) => {
     state: started,
   }
 })
-registerCommand('ui.pipeline.abort', async () => {
+registerCommand('ui.pipeline.abort', async (args) => {
   // onPipelineAbort itself returns silently when nothing is running; say so
   // instead of answering ok for a no-op.
   if (pipeline.state !== 'running') {
     throw Object.assign(new Error(`ui.pipeline.abort: no pipeline is running in this workspace (state "${pipeline.state}")`), { code: 'not-running' })
+  }
+  // The editor's Abort asks first, like its Reset; a caller that sets no
+  // confirm flag (MCP pipeline_abort) aborts without a dialog.
+  if ((args as { confirm?: unknown } | undefined)?.confirm === true && !(await confirmPipelineAbort())) {
+    return { workspacePath: pipeline.workspacePath, state: pipeline.state, cancelled: true }
   }
   await onPipelineAbort()
   return { workspacePath: pipeline.workspacePath, state: pipeline.state }
@@ -15570,6 +15575,16 @@ async function onPipelineUserReset(): Promise<void> {
   if (!(await confirmPipelineReset())) return
   await onPipelineReset()
   await clearStoredPipelineRun(currentWorkspace.value)
+}
+
+/** The editor's Abort: a pause, not a teardown, and the dialog says so. */
+async function confirmPipelineAbort(): Promise<boolean> {
+  const t = i18n.global.t
+  return notifyRestore.confirm(t('pipelineEditor.run.abort-message'), {
+    title: t('pipelineEditor.run.abort-title'),
+    confirmText: t('pipelineEditor.exec.abort'),
+    danger: true,
+  })
 }
 
 // ─────────── Switch / close workspace (phase-7) ───────────

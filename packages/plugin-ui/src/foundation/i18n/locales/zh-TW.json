@@ -8428,6 +8428,7 @@
     }
   },
   "label": {
+    "step-count": "{count} 個步驟",
     "imported-from-n8n": "來自 n8n",
     "resume-other-pipeline": "有一個未完成的執行屬於「{name}」。切換到該流程即可繼續。",
     "role-rename-repointed": "已更新 {count} 條流程中的角色引用。",
@@ -11305,6 +11306,14 @@
     }
   },
   "pipelineEditor": {
+    "recover": {
+      "title": "復原",
+      "resume-desc": "從第一個未完成的階段繼續這次停下的執行，沿用它的窗格和上下文。",
+      "restart-desc": "關閉這次執行的窗格，從第一個階段重新執行同一個任務。",
+      "reset-desc": "清除這次執行，並關閉這個視窗的所有窗格，包括你自己開的窗格。",
+      "older-run": "這是較早的一次執行。復原動作一律作用在這條 Pipeline 最新的那次執行。",
+      "show-latest": "顯示最新的執行"
+    },
     "error": {
       "subpipeline-none": "子 Pipeline 需要另一條 Pipeline 可以執行，請先建立一條。",
       "pipeline-running": "這條 pipeline 正在執行，目前無法修改。請先中止或等執行結束。",
@@ -11339,7 +11348,7 @@
     },
     "exec": {
       "abort": "中止執行",
-      "empty-body": "從側欄、指令或 CLI（透過 MCP）啟動這條 pipeline 後，執行紀錄會出現在這裡。",
+      "empty-body": "在上方的輸入框寫下任務後執行，或從側欄、排程、CLI（透過 MCP）啟動這條 pipeline。",
       "empty-title": "還沒有執行紀錄",
       "list": "這條 pipeline 的執行紀錄",
       "live": "執行中",
@@ -11353,7 +11362,6 @@
       "outcome-unknown": "未知",
       "outcome-idle": "閒置",
       "failed-step": "{name} 失敗：{error}",
-      "pick": "選一筆執行紀錄，在圖上重播。",
       "progress": "{done}／{total} 個步驟",
       "restart": "重新開始",
       "resume": "繼續",
@@ -11503,6 +11511,7 @@
       "pinned": "產出已凍結"
     },
     "toolbar": {
+      "more": "更多動作",
       "canvas": "畫布",
       "derived": "由 stage 推導——第一次編輯時會存成圖",
       "executions": "執行紀錄",
@@ -11530,6 +11539,13 @@
       "last-stage": "這是最後一個階段，回報完成後這次執行就會結束。"
     },
     "link": {
+      "out-title": "連到",
+      "none": "這個步驟還沒有連出去的連線。",
+      "to": "連到的步驟",
+      "to-pick": "選擇步驟",
+      "add": "新增連線",
+      "branch-help": "Navide 會在這個步驟的開場提示裡加一行，請 Agent 在回覆最後單獨一行輸出 ---BRANCH:<code>: <value>---。執行會走值相符的那條連線（不分大小寫）；都不相符時，走值為 default 的連線。",
+      "error-help": "這個步驟重試後仍失敗時走這條連線（Agent 回報 ---NODE-FAILED---，或任務沒有送達）。執行不會停下，而是沿這條連線繼續。",
       "title": "連線",
       "desc": "{from} → {to}",
       "kind": "連線種類",
@@ -11591,6 +11607,8 @@
       "problem-condition": "顯示條件指向「{field}」，但它不是這個角色的其他欄位。"
     },
     "run": {
+      "abort-title": "中止這次執行？",
+      "abort-message": "執行會停在目前的位置。窗格保持開啟，之後可以從「復原」繼續。",
       "running": "執行中：{names}",
       "gate": "等待你在「{name}」核准",
       "review": "前往核准",

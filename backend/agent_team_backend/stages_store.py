@@ -527,6 +527,16 @@ def _evolve_landing_entry() -> dict[str, Any]:
     return {"id": EVOLVE_LANDING_ID, "name": EVOLVE_LANDING_NAME, "builtin": True, **seed}
 
 
+def _step_count(pipeline: dict[str, Any]) -> int:
+    """Steps as the editor counts them: every graph node but the trigger, or
+    every slot when the pipeline has no stored graph (its derived graph has
+    one node per slot). A stage is a layer and can hold several steps."""
+    graph = pipeline.get("graph")
+    if isinstance(graph, dict):
+        return sum(1 for n in graph.get("nodes", []) if n.get("kind") != "trigger")
+    return sum(len(s.get("slots") or []) for s in pipeline.get("stages", []))
+
+
 class StagesStore:
     # Pattern for safe stage IDs: alphanumeric, hyphens, underscores, dots.
     _ID_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,62})?$")
@@ -682,6 +692,7 @@ class StagesStore:
                 "name": p["name"],
                 "builtin": p.get("builtin", False),
                 "stage_count": len(p.get("stages", [])),
+                "step_count": _step_count(p),
                 "has_graph": "graph" in p,
                 **({"imported_from": p["importedFrom"]} if isinstance(p.get("importedFrom"), dict) else {}),
             }
