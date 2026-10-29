@@ -9788,6 +9788,41 @@ def _scheduler_actor(caller: _Caller) -> dict[str, Any]:
 
 _CROSS_WORKSPACE = "SCHEDULER_CROSS_WORKSPACE"
 
+#: What a pane caller still sees of a job in another workspace's state: timing
+#: and status only — never last_error, which can quote that workspace's output.
+_FOREIGN_STATE_KEYS = (
+    "next_run_at", "running_at", "last_run_at", "last_status", "last_skip_reason",
+    "consecutive_errors", "backoff_until", "disabled_reason",
+)
+
+
+def _foreign_job(caller: _Caller, job: dict[str, Any]) -> bool:
+    """True when a pane caller looks at a job aimed at another workspace. A
+    caller with no pane identity is the user's own access and sees every job."""
+    from agent_team_backend import agent_messaging
+
+    if caller.kind != "pane":
+        return False
+    own = agent_messaging._normalize_workspace(_caller_workspace(caller))
+    action = job.get("action") or {}
+    owner = job.get("owner") or {}
+    target = str(action.get("workspace") or owner.get("workspace") or "")
+    return agent_messaging._normalize_workspace(target) != own
+
+
+def _redact_foreign_job(job: dict[str, Any]) -> dict[str, Any]:
+    """Another workspace's job as a pane sees it: metadata only. The action
+    keeps its kind and workspace (owner already names that workspace); its
+    text, pane target and pipeline are dropped, and so is state's error text."""
+    action = job.get("action") or {}
+    state = job.get("state") or {}
+    return {
+        **job,
+        "action": {"kind": action.get("kind"), "workspace": action.get("workspace")},
+        "state": {key: state.get(key) for key in _FOREIGN_STATE_KEYS if key in state},
+        "redacted": True,
+    }
+
 
 @server.tool()
 async def scheduler_list(ctx: Context) -> dict[str, Any]:
@@ -9800,6 +9835,11 @@ async def scheduler_list(ctx: Context) -> dict[str, Any]:
     gone — such a job is the user's to change now. `limits` reports the agent
     limits (see scheduler_upsert, LIMITS) and how much of them is in use:
     yours_enabled, agent_enabled, agent_runs_today.
+
+    A pane sees a job aimed at another workspace as metadata only, marked
+    `redacted: true`: its action keeps just kind and workspace (no text, pane
+    or pipeline), and its state keeps timing and status but not last_error.
+    A caller with no pane identity sees every job in full.
 
     Jobs fire only while Navide is running; nothing wakes the machine or the
     app. See scheduler_upsert for the shape of a job.
@@ -9816,6 +9856,9 @@ async def scheduler_list(ctx: Context) -> dict[str, Any]:
     result["limits"]["yours_enabled"] = sum(
         1 for job in result["jobs"] if job["editable"] and job["enabled"]
     )
+    result["jobs"] = [
+        _redact_foreign_job(job) if _foreign_job(caller, job) else job for job in result["jobs"]
+    ]
     return result
 
 
@@ -10010,12 +10053,25 @@ async def scheduler_runs(id: str, ctx: Context, limit: int = 20) -> dict[str, An
 
     Each run is {id, job_id, started_at, ended_at, status: "ok" | "error" |
     "skipped", reason, detail}.
+
+    A pane may read only the runs of jobs aimed at its own workspace; another
+    workspace's job answers {ok: false, code: "SCHEDULER_CROSS_WORKSPACE"}.
+    A caller with no pane identity may read any job's runs.
     """
     try:
-        _resolve_caller(ctx)
+        caller = _resolve_caller(ctx)
     except CallerUnknown as err:
         return {"ok": False, "error": str(err)}
-    return await _scheduler_service().runs(str(id or ""), limit)
+    service = _scheduler_service()
+    job = await service.store.get_job(str(id or ""))
+    if job is not None and _foreign_job(caller, job):
+        return {
+            "ok": False,
+            "code": _CROSS_WORKSPACE,
+            "error": "this job belongs to another workspace; a pane may read only "
+            "its own workspace's run history — ask the user",
+        }
+    return await service.runs(str(id or ""), limit)
 
 
 @server.tool()
