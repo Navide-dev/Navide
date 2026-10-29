@@ -11482,7 +11482,7 @@
       "reset-title": "이 실행을 재설정할까요?",
       "reset-message": "재설정하면 이 실행이 지워지고, 직접 연 pane을 포함해 이 창의 모든 pane이 닫혀요. pane {count}개가 닫혀요.",
       "reset-message-none": "재설정하면 이 실행이 지워져요. 열린 pane이 없어서 닫히는 pane은 없어요.",
-      "reset-manual-mark": "직접 연 pane",
+      "reset-manual-mark": "이 실행이 열지 않음",
       "reset-confirm": "재설정하고 pane 닫기"
     }
   },

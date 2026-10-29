@@ -223,6 +223,7 @@ describe('reset clears the stored run, and only the user reset does', () => {
       panesInView: { value: [
         { id: 'a', origin: 'pipeline', agentLabel: 'Claude', customName: 'Planner' },
         { id: 'b', origin: 'manual', agentLabel: 'Codex', autoName: 'my shell' },
+        { id: 'c', origin: 'mcp', agentLabel: 'Gemini' },
       ] },
       sendQuiet,
       existingProject,
@@ -259,13 +260,13 @@ describe('reset clears the stored run, and only the user reset does', () => {
     expect(t.sendQuiet).toHaveBeenCalledWith('pipeline.reset', { workspace_path: '/tmp/ws' })
   })
 
-  it('the Reset button asks first, naming every pane it closes — the manual ones too', async () => {
+  it('the Reset button asks first, naming every pane it closes — the ones the run did not open too', async () => {
     const t = await loadReset({ project: { state: 'idle' } })
     await t.api.onPipelineUserReset()
     expect(t.confirm).toHaveBeenCalledTimes(1)
     const [, opts] = t.confirm.mock.calls[0]
     expect(opts.danger).toBe(true)
-    expect(opts.detail).toBe('• Planner\n• my shell (pipelineEditor.run.reset-manual-mark)')
+    expect(opts.detail).toBe('• Planner\n• my shell (pipelineEditor.run.reset-manual-mark)\n• Gemini (pipelineEditor.run.reset-manual-mark)')
     expect(t.onPipelineReset).toHaveBeenCalled()
   })
 

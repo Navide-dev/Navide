@@ -11482,7 +11482,7 @@
       "reset-title": "¿Restablecer esta ejecución?",
       "reset-message": "Restablecer borra esta ejecución y cierra todos los panes de esta ventana, incluidos los que abriste tú. Se cerrará {count} pane. | Restablecer borra esta ejecución y cierra todos los panes de esta ventana, incluidos los que abriste tú. Se cerrarán {count} panes.",
       "reset-message-none": "Restablecer borra esta ejecución. No hay ningún pane abierto, así que no se cerrará ninguno.",
-      "reset-manual-mark": "abierto por ti",
+      "reset-manual-mark": "no abierto por la ejecución",
       "reset-confirm": "Restablecer y cerrar panes"
     }
   },

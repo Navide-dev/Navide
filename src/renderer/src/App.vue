@@ -15512,7 +15512,7 @@ async function clearStoredPipelineRun(workspacePath: string): Promise<boolean> {
 async function confirmPipelineReset(): Promise<boolean> {
   const dialog = resetConfirmDialog(i18n.global.t, panesInView.value.map((p) => ({
     name: p.customName || p.autoName || p.agentLabel,
-    manual: p.origin === 'manual',
+    manual: p.origin !== 'pipeline',
   })))
   return notifyRestore.confirm(dialog.message, dialog)
 }

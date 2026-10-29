@@ -11482,7 +11482,7 @@
       "reset-title": "要重设这次运行吗？",
       "reset-message": "重设会清除这次运行，并关闭这个窗口里的所有 pane，包括你自己开的。将关闭 {count} 个 pane。",
       "reset-message-none": "重设会清除这次运行。目前没有打开的 pane，不会关闭任何 pane。",
-      "reset-manual-mark": "你自己开的",
+      "reset-manual-mark": "非这次运行开的",
       "reset-confirm": "重设并关闭 pane"
     }
   },

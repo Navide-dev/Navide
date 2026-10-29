@@ -11482,7 +11482,7 @@
       "reset-title": "Reset this run?",
       "reset-message": "Reset clears this run and closes every pane in this window, including panes you opened yourself. {count} pane will close. | Reset clears this run and closes every pane in this window, including panes you opened yourself. {count} panes will close.",
       "reset-message-none": "Reset clears this run. No pane is open, so none will close.",
-      "reset-manual-mark": "opened by you",
+      "reset-manual-mark": "not opened by the run",
       "reset-confirm": "Reset and Close Panes"
     }
   },

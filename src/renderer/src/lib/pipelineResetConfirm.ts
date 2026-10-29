@@ -7,7 +7,8 @@ type Translate = (key: string, values?: Record<string, unknown>, plural?: number
 
 export interface ResetPane {
   name: string
-  /** Opened by the user, not by a run: called out, since Reset closes it too. */
+  /** Not opened by the run (by hand or through MCP): called out, since Reset
+   *  closes it too. */
   manual: boolean
 }
 

@@ -11482,7 +11482,7 @@
       "reset-title": "要重設這次執行嗎？",
       "reset-message": "重設會清除這次執行，並關閉這個視窗裡的所有 pane，包括你自己開的。將關閉 {count} 個 pane。",
       "reset-message-none": "重設會清除這次執行。目前沒有開著的 pane，不會關閉任何 pane。",
-      "reset-manual-mark": "你自己開的",
+      "reset-manual-mark": "非這次執行開的",
       "reset-confirm": "重設並關閉 pane"
     }
   },

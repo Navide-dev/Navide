@@ -11482,7 +11482,7 @@
       "reset-title": "Réinitialiser cette exécution ?",
       "reset-message": "La réinitialisation efface cette exécution et ferme tous les panes de cette fenêtre, y compris ceux que vous avez ouverts vous-même. {count} pane sera fermé. | La réinitialisation efface cette exécution et ferme tous les panes de cette fenêtre, y compris ceux que vous avez ouverts vous-même. {count} panes seront fermés.",
       "reset-message-none": "La réinitialisation efface cette exécution. Aucun pane n’est ouvert, donc aucun ne sera fermé.",
-      "reset-manual-mark": "ouvert par vous",
+      "reset-manual-mark": "pas ouvert par l’exécution",
       "reset-confirm": "Réinitialiser et fermer les panes"
     }
   },

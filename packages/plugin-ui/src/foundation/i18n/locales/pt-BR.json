@@ -11482,7 +11482,7 @@
       "reset-title": "Redefinir esta execução?",
       "reset-message": "Redefinir limpa esta execução e fecha todos os panes desta janela, inclusive os que você abriu. {count} pane será fechado. | Redefinir limpa esta execução e fecha todos os panes desta janela, inclusive os que você abriu. {count} panes serão fechados.",
       "reset-message-none": "Redefinir limpa esta execução. Nenhum pane está aberto, então nenhum será fechado.",
-      "reset-manual-mark": "aberto por você",
+      "reset-manual-mark": "não aberto pela execução",
       "reset-confirm": "Redefinir e fechar panes"
     }
   },

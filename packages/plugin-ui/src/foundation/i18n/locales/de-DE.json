@@ -11482,7 +11482,7 @@
       "reset-title": "Diesen Lauf zurücksetzen?",
       "reset-message": "Zurücksetzen löscht diesen Lauf und schließt jeden Bereich in diesem Fenster, auch selbst geöffnete. {count} Bereich wird geschlossen. | Zurücksetzen löscht diesen Lauf und schließt jeden Bereich in diesem Fenster, auch selbst geöffnete. {count} Bereiche werden geschlossen.",
       "reset-message-none": "Zurücksetzen löscht diesen Lauf. Es ist kein Bereich geöffnet, also wird keiner geschlossen.",
-      "reset-manual-mark": "von Ihnen geöffnet",
+      "reset-manual-mark": "nicht vom Lauf geöffnet",
       "reset-confirm": "Zurücksetzen und Bereiche schließen"
     }
   },

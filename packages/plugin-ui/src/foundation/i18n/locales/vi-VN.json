@@ -11482,7 +11482,7 @@
       "reset-title": "Đặt lại lần chạy này?",
       "reset-message": "Đặt lại sẽ xóa lần chạy này và đóng mọi pane trong cửa sổ, kể cả pane bạn tự mở. {count} pane sẽ bị đóng.",
       "reset-message-none": "Đặt lại sẽ xóa lần chạy này. Không có pane nào đang mở nên sẽ không đóng pane nào.",
-      "reset-manual-mark": "do bạn mở",
+      "reset-manual-mark": "không do lần chạy mở",
       "reset-confirm": "Đặt lại và đóng pane"
     }
   },
