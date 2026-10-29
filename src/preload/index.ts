@@ -422,7 +422,7 @@ export interface NativeBackendStatusRow {
 export interface NativeBackendOverview {
   enabled: boolean
   plugins: NativeBackendStatusRow[]
-  agentTools?: { enabled: boolean; externalCallers: boolean }
+  agentTools?: { enabled: boolean; externalCallers: boolean; firstParty?: boolean }
   /** #642 review L2: off for this run, not saved; on again after a restart. */
   offUnsaved?: true
 }
@@ -1652,7 +1652,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
         ipcRenderer.invoke('plugins:nativeBackends:setDisabled', { id, disabled }),
       revokeWorkspaceWrite: (id: string, workspacePath: string): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:revokeWorkspaceWrite', { id, workspacePath }),
-      setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean }): Promise<NativeBackendOverview> =>
+      setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean } | { firstParty: boolean }): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:setAgentTools', change),
       /** Watchdog option C: unanswered resource notices (contract 5.2). */
       resourceNotices: (): Promise<BackendResourceNoticeView[]> =>

@@ -1968,6 +1968,8 @@
         "offUnsaved": "第三方原生后端目前已关闭，但 Navide 无法保存这个设置，重新启动 Navide 后会再变回开启。",
         "offUnsavedRetry": "再试一次",
         "agentTools": {
+          "firstParty": "允许 agent 调用官方 Navide 插件的工具",
+          "firstPartyDescription": "默认开启。让 pane 里的 agent 调用官方 Navide 插件（Navide 自己做的，例如 Navide Browser）的工具，不必每个版本都询问。结果仍会标记为外部内容，会改动东西的工具在每个工作区仍会询问一次。",
           "enable": "允许 agent 调用第三方 Navide 插件的工具",
           "description": "让 pane 里的 agent 调用你已允许的 Navide 插件所声明的工具；会改动文件的工具在每个工作区询问一次。",
           "externalCallers": "外部 MCP 客户端也能调用",

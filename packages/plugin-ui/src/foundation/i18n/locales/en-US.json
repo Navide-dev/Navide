@@ -1968,6 +1968,8 @@
         "offUnsaved": "Third-party native backends are off for now, but Navide could not save that, so they will be on again after Navide restarts.",
         "offUnsavedRetry": "Try Again",
         "agentTools": {
+          "firstParty": "Let agents call tools from first-party Navide plugins",
+          "firstPartyDescription": "On by default. Lets agents in your panes call the tools of first-party Navide plugins, the ones Navide makes such as Navide Browser, without asking for each version. Their results are still marked as external content, and a tool that changes something still asks once per workspace.",
           "enable": "Let agents call tools from third-party Navide plugins",
           "description": "Lets agents in your panes call tools declared by Navide plugins you allowed; a tool that changes files asks once per workspace.",
           "externalCallers": "Let external MCP clients call them too",
