@@ -12393,7 +12393,7 @@
       "plain-connection": "Eine {kind}-Verbindung aus „{node}“ wurde zu einer einfachen Verbindung: Nur Schritte können verzweigen oder fehlschlagen.",
       "outputs-same-step": "Mehrere Ausgänge von „{node}“ führen zum selben Schritt. Nur „{kept}“ wird behalten.",
       "retry-capped": "„{node}“ wiederholt in n8n {tries}-mal im Abstand von {waitMs} ms. Navide erlaubt höchstens {maxTries} Versuche im Abstand von {maxWaitMs} ms und verwendet daher {usedTries} Versuche im Abstand von {usedWaitMs} ms.",
-      "over-target": "{slots} Schritte sind mehr als das Ziel von etwa {target}. Jeder Schritt öffnet ein CLI-Pane.",
+      "over-target": "{slots} Schritte sind mehr als das Ziel von etwa {target}. Jeder Schritt öffnet einen CLI-Bereich.",
       "wait-in-loop": "Das Wait „{node}“ liegt in einer Schleife und wird in seinen Schritt zusammengeführt. Dort hält keine Genehmigungsschranke den Lauf an."
     },
     "error-reason": {
