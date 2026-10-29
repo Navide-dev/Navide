@@ -1243,7 +1243,7 @@
     "replace-in-file": "取代檔案中所有符合項",
     "replace-match": "取代此符合項",
     "open-in-finder": "用 Finder 開啟此資料夾",
-    "clear-pipeline": "清除流程狀態並關閉所有 Agent 面板",
+    "clear-pipeline": "清除流程狀態並關閉所有 agent pane",
     "remove-from-history": "從歷史記錄中移除",
     "double-click-rename": "雙擊重新命名",
     "close-workspace": "關閉工作區",
@@ -1369,7 +1369,7 @@
     "stall-force-advance": "強制推進",
       "prev-page": "上一頁",
       "next-page": "下一頁",
-      "manage-pipelines": "管理 pipeline",
+      "manage-pipelines": "流程管理",
       "reset-run-counter": "重設本次執行的計數",
       "wipe-workspace-history": "清除這個工作區的歷史統計",
       "wipe-global-tally": "清除全域總計",
@@ -8438,7 +8438,6 @@
     "stage-count": "{count} 個階段",
     "pipeline-count": "{count} 條流程",
     "builtin": "內建",
-    "pipeline-definition-file": "定義檔",
     "loading-pipelines": "流程載入中…",
     "pipelines-unreadable": "讀不到流程定義",
     "pipelines-empty": "還沒有任何流程",
@@ -9124,6 +9123,7 @@
     "merge-aborted": "合併已中止 — 衝突已取消。"
   },
   "hint": {
+    "pipelines-stored-locally": "存在這台電腦的 Navide 設定裡，不在工作區內。要搬到另一台電腦，請在設定匯出設定全集。",
     "imported-from-n8n": "這個流程的每次執行都會標示為外部內容。",
     "role-not-found-refresh": "「{key}」這個角色已經不存在了——可能是其他視窗把它刪掉了。左側清單已經自動更新，請重新選取角色。",
     "role-key-exists-recover": "已經有一個識別碼為「{key}」的角色。如果它是上一次沒改完的改名留下來的，請先在左側清單刪除「{key}」，然後再改名一次。",
@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "復原",
-      "resume-desc": "從第一個未完成的階段繼續這次停下的執行，沿用它的窗格和上下文。",
-      "restart-desc": "關閉這次執行的窗格，從第一個階段重新執行同一個任務。",
-      "reset-desc": "清除這次執行，並關閉這個視窗的所有窗格，包括你自己開的窗格。",
+      "resume-desc": "從第一個未完成的階段繼續這次停下的執行，沿用它的 pane 和上下文。",
+      "restart-desc": "關閉這次執行的 pane，從第一個階段重新執行同一個任務。",
+      "reset-desc": "清除這次執行，並關閉這個視窗的所有 pane，包括你自己開的 pane。",
       "older-run": "這是較早的一次執行。復原動作一律作用在這條 Pipeline 最新的那次執行。",
       "show-latest": "顯示最新的執行"
     },
@@ -11544,7 +11544,46 @@
       "open-in-canvas": "在 pipeline 畫布中開啟",
       "gate-toast": "pipeline 已暫停，等待你在「{name}」核准",
       "next-gated": "先核准或退回這個閘門，才能進入下一階段。",
-      "last-stage": "這是最後一個階段，回報完成後這次執行就會結束。"
+      "last-stage": "這是最後一個階段，回報完成後這次執行就會結束。",
+      "next-stage": "下一步 → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "準備：啟動 CLI",
+        "checking-dialog": "準備：檢查對話框",
+        "settling": "準備：等待提示字元",
+        "injecting-role": "準備：注入角色",
+        "waiting-agent": "準備：等待 agent",
+        "ready": "準備：就緒",
+        "failed": "準備：失敗"
+      },
+      "role": {
+        "pending": "角色：等待中",
+        "scheduled": "角色：注入中",
+        "sent": "角色：已注入",
+        "failed": "角色：注入失敗",
+        "skipped": "角色：已略過"
+      },
+      "kickoff": {
+        "pending": "· 啟動提示：排隊中",
+        "sent": "· 啟動提示：已送出",
+        "unverified": "· 啟動提示：未確認",
+        "failed": "· 啟動提示：失敗"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "預設流程",
+        "maintenance": "維護流程",
+        "evolve-landing": "提案落地流程"
+      },
+      "role": {
+        "pm": "PRD、user stories、UAT、KPI、優先序",
+        "backend": "API、資料庫、業務邏輯、安全性",
+        "frontend": "元件、狀態管理、RWD、效能",
+        "mobile": "iOS、Android、跨平台、離線優先",
+        "qa": "E2E、邊界情況、自動化測試矩陣"
+      }
     },
     "link": {
       "out-title": "連到",
@@ -11616,7 +11655,7 @@
     },
     "run": {
       "abort-title": "中止這次執行？",
-      "abort-message": "執行會停在目前的位置。窗格保持開啟，之後可以繼續。",
+      "abort-message": "執行會停在目前的位置。pane 保持開啟，之後可以繼續。",
       "running": "執行中：{names}",
       "gate": "等待你在「{name}」核准",
       "review": "前往核准",
@@ -12512,7 +12551,7 @@
       "unknown-type": "這個節點類型不在匯入對照表裡，由 agent 依它的參數執行。",
       "community-node": "社群節點，由 agent 依它的參數執行。",
       "merge-combine": "「{mode}」模式的 Merge 會合併資料，由 agent 依它的合併規則執行。",
-      "role-trigger-schedule": "在 n8n 裡依排程執行。在 Navide 能排程執行流程之前，請手動啟動。",
+      "role-trigger-schedule": "在 n8n 裡依排程執行。請手動啟動流程，或在每輪消耗 ▸ 排程新增動作為「啟動 Pipeline」的排程。",
       "role-trigger-webhook": "在 n8n 裡由 HTTP 請求啟動。Navide 還沒有 webhook 觸發。",
       "role-trigger-error": "n8n 的錯誤工作流在 Navide 還沒有對應的功能。",
       "role-trigger-app": "在 n8n 裡由應用程式事件啟動。Navide 還沒有應用程式觸發。",

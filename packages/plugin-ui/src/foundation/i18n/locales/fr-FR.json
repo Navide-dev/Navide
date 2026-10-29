@@ -8438,7 +8438,6 @@
     "stage-count": "{count} étape | {count} étapes",
     "pipeline-count": "{count} pipeline | {count} pipelines",
     "builtin": "Intégré",
-    "pipeline-definition-file": "Fichier de définition",
     "loading-pipelines": "Chargement des pipelines…",
     "pipelines-unreadable": "Impossible de lire les définitions des pipelines",
     "pipelines-empty": "Aucun pipeline pour l’instant",
@@ -9124,6 +9123,7 @@
     "merge-aborted": "Fusion abandonnée : conflits annulés."
   },
   "hint": {
+    "pipelines-stored-locally": "Enregistrés sur cet ordinateur avec les réglages de Navide, pas dans l’espace de travail. Exportez un paquet de réglages dans Réglages pour les copier sur un autre ordinateur.",
     "imported-from-n8n": "Les exécutions de ce pipeline sont marquées comme contenu externe.",
     "role-not-found-refresh": "Le rôle « {key} » n’existe plus : une autre fenêtre l’a peut-être supprimé. La liste de gauche est déjà à jour ; choisissez de nouveau un rôle.",
     "role-key-exists-recover": "Un rôle avec la clé « {key} » existe déjà. Si un renommage inachevé l’a laissé, supprimez d’abord « {key} » de la liste de gauche, puis renommez de nouveau.",
@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "Récupérer",
-      "resume-desc": "Poursuit l’exécution arrêtée à sa première étape inachevée, avec ses panneaux et son contexte.",
-      "restart-desc": "Ferme les panneaux de cette exécution et relance la même tâche depuis la première étape.",
-      "reset-desc": "Efface l’exécution et ferme tous les panneaux de cette fenêtre, y compris ceux que vous avez ouverts vous-même.",
+      "resume-desc": "Poursuit l’exécution arrêtée à sa première étape inachevée, avec ses panes et son contexte.",
+      "restart-desc": "Ferme les panes de cette exécution et relance la même tâche depuis la première étape.",
+      "reset-desc": "Efface l’exécution et ferme tous les panes de cette fenêtre, y compris ceux que vous avez ouverts vous-même.",
       "older-run": "Ceci est une exécution antérieure. Récupérer agit toujours sur la dernière exécution de ce pipeline.",
       "show-latest": "Afficher la dernière exécution"
     },
@@ -11544,7 +11544,46 @@
       "open-in-canvas": "Ouvrir dans le canevas du pipeline",
       "gate-toast": "Le pipeline attend votre approbation à {name}",
       "next-gated": "Approuvez ou renvoyez cette validation avant de passer à l’étape suivante.",
-      "last-stage": "C’est la dernière étape. L’exécution se termine dès qu’elle signale avoir fini."
+      "last-stage": "C’est la dernière étape. L’exécution se termine dès qu’elle signale avoir fini.",
+      "next-stage": "Suivant → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "préparation : démarrage de la CLI",
+        "checking-dialog": "préparation : vérification de la boîte de dialogue",
+        "settling": "préparation : attente de l’invite",
+        "injecting-role": "préparation : injection du rôle",
+        "waiting-agent": "préparation : attente de l’agent",
+        "ready": "préparation : prêt",
+        "failed": "préparation : échec"
+      },
+      "role": {
+        "pending": "rôle : en attente",
+        "scheduled": "rôle : injection en cours",
+        "sent": "rôle : injecté",
+        "failed": "rôle : échec de l’injection",
+        "skipped": "rôle : ignoré"
+      },
+      "kickoff": {
+        "pending": "· lancement : en file d’attente",
+        "sent": "· lancement : envoyé",
+        "unverified": "· lancement : non confirmé",
+        "failed": "· lancement : échec"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "Pipeline par défaut",
+        "maintenance": "Pipeline de maintenance",
+        "evolve-landing": "Pipeline de mise en œuvre des propositions"
+      },
+      "role": {
+        "pm": "PRD, user stories, UAT, KPI, priorités",
+        "backend": "API, bases de données, logique métier, sécurité",
+        "frontend": "Composants, gestion d’état, mise en page adaptative, performances",
+        "mobile": "iOS, Android, multiplateforme, hors ligne d’abord",
+        "qa": "E2E, cas limites, matrice de tests automatisés"
+      }
     },
     "link": {
       "out-title": "Mène à",
@@ -11616,7 +11655,7 @@
     },
     "run": {
       "abort-title": "Interrompre cette exécution ?",
-      "abort-message": "L’exécution s’arrête là où elle en est. Ses panneaux restent ouverts, et vous pourrez la reprendre plus tard.",
+      "abort-message": "L’exécution s’arrête là où elle en est. Ses panes restent ouverts, et vous pourrez la reprendre plus tard.",
       "running": "En cours : {names}",
       "gate": "En attente de votre approbation à {name}",
       "review": "Examiner",
@@ -12512,7 +12551,7 @@
       "unknown-type": "Ce type de nœud n’est pas dans la table d’import. Un agent l’exécute à partir de ses paramètres.",
       "community-node": "Nœud communautaire. Un agent l’exécute à partir de ses paramètres.",
       "merge-combine": "Merge en mode « {mode} » combine des données. Un agent l’exécute selon sa règle de fusion.",
-      "role-trigger-schedule": "S’exécute selon une planification dans n8n. Démarrez-le manuellement en attendant que Navide planifie les pipelines.",
+      "role-trigger-schedule": "S’exécute selon une planification dans n8n. Lancez le pipeline manuellement, ou planifiez-le dans Turn Stats ▸ Planification avec une tâche « Lancer un pipeline ».",
       "role-trigger-webhook": "Démarre sur une requête HTTP dans n8n. Navide n’a pas encore de déclencheur webhook.",
       "role-trigger-error": "Les workflows d’erreur n8n n’ont pas encore d’équivalent dans Navide.",
       "role-trigger-app": "Démarre sur un événement d’application dans n8n. Navide n’a pas encore de déclencheurs d’application.",

@@ -8438,7 +8438,6 @@
     "stage-count": "{count} Stufe | {count} Stufen",
     "pipeline-count": "{count} Pipeline | {count} Pipelines",
     "builtin": "Integriert",
-    "pipeline-definition-file": "Definitionsdatei",
     "loading-pipelines": "Pipelines werden geladen …",
     "pipelines-unreadable": "Die Pipeline-Definitionen konnten nicht gelesen werden",
     "pipelines-empty": "Noch keine Pipelines",
@@ -9124,6 +9123,7 @@
     "merge-aborted": "Merge abgebrochen – Konflikte verworfen."
   },
   "hint": {
+    "pipelines-stored-locally": "Gespeichert auf diesem Computer bei den Navide-Einstellungen, nicht im Arbeitsbereich. Exportiere in den Einstellungen ein Einstellungspaket, um sie auf einen anderen Computer zu übertragen.",
     "imported-from-n8n": "Läufe dieser Pipeline werden als externer Inhalt markiert.",
     "role-not-found-refresh": "Die Rolle „{key}“ existiert nicht mehr – möglicherweise hat ein anderes Fenster sie gelöscht. Die Liste links ist bereits aktuell; wählen Sie erneut eine Rolle.",
     "role-key-exists-recover": "Eine Rolle mit dem Schlüssel „{key}“ existiert bereits. Falls eine halb abgeschlossene Umbenennung sie hinterlassen hat, löschen Sie zuerst „{key}“ aus der Liste links und benennen Sie dann erneut um.",
@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "Wiederherstellen",
-      "resume-desc": "Setzt den angehaltenen Lauf bei seiner ersten unfertigen Phase fort, mit seinen Panes und seinem Kontext.",
-      "restart-desc": "Schließt die Panes dieses Laufs und führt dieselbe Aufgabe ab der ersten Phase erneut aus.",
-      "reset-desc": "Löscht den Lauf und schließt alle Panes in diesem Fenster, auch die, die du selbst geöffnet hast.",
+      "resume-desc": "Setzt den angehaltenen Lauf bei seiner ersten unfertigen Phase fort, mit seinen Bereichen und seinem Kontext.",
+      "restart-desc": "Schließt die Bereiche dieses Laufs und führt dieselbe Aufgabe ab der ersten Phase erneut aus.",
+      "reset-desc": "Löscht den Lauf und schließt alle Bereiche in diesem Fenster, auch die, die du selbst geöffnet hast.",
       "older-run": "Das ist ein früherer Lauf. Wiederherstellen wirkt immer auf den neuesten Lauf dieser Pipeline.",
       "show-latest": "Neuesten Lauf zeigen"
     },
@@ -11544,7 +11544,46 @@
       "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen",
       "gate-toast": "Die Pipeline wartet bei {name} auf Ihre Genehmigung",
       "next-gated": "Genehmigen Sie diese Schranke oder schicken Sie sie zurück, bevor es mit der nächsten Stufe weitergeht.",
-      "last-stage": "Das ist die letzte Stufe. Der Lauf endet, sobald sie den Abschluss meldet."
+      "last-stage": "Das ist die letzte Stufe. Der Lauf endet, sobald sie den Abschluss meldet.",
+      "next-stage": "Weiter → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "Vorbereitung: CLI wird gestartet",
+        "checking-dialog": "Vorbereitung: Dialog wird geprüft",
+        "settling": "Vorbereitung: warte auf Eingabeaufforderung",
+        "injecting-role": "Vorbereitung: Rolle wird übergeben",
+        "waiting-agent": "Vorbereitung: warte auf Agent",
+        "ready": "Vorbereitung: bereit",
+        "failed": "Vorbereitung: fehlgeschlagen"
+      },
+      "role": {
+        "pending": "Rolle: wartet",
+        "scheduled": "Rolle: wird übergeben",
+        "sent": "Rolle: übergeben",
+        "failed": "Rolle: Übergabe fehlgeschlagen",
+        "skipped": "Rolle: übersprungen"
+      },
+      "kickoff": {
+        "pending": "· Kickoff: in der Warteschlange",
+        "sent": "· Kickoff: gesendet",
+        "unverified": "· Kickoff: unbestätigt",
+        "failed": "· Kickoff: fehlgeschlagen"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "Standard-Pipeline",
+        "maintenance": "Wartungs-Pipeline",
+        "evolve-landing": "Pipeline zur Vorschlagsumsetzung"
+      },
+      "role": {
+        "pm": "PRD, User Stories, UAT, KPIs, Prioritäten",
+        "backend": "APIs, Datenbanken, Geschäftslogik, Sicherheit",
+        "frontend": "Komponenten, State-Management, responsives Layout, Performance",
+        "mobile": "iOS, Android, plattformübergreifend, Offline-First",
+        "qa": "E2E, Grenzfälle, automatisierte Testmatrix"
+      }
     },
     "link": {
       "out-title": "Führt zu",
@@ -11616,7 +11655,7 @@
     },
     "run": {
       "abort-title": "Diesen Lauf abbrechen?",
-      "abort-message": "Der Lauf hält an der aktuellen Stelle an. Seine Panes bleiben offen, und du kannst ihn später fortsetzen.",
+      "abort-message": "Der Lauf hält an der aktuellen Stelle an. Seine Bereiche bleiben offen, und du kannst ihn später fortsetzen.",
       "running": "Läuft: {names}",
       "gate": "Wartet bei {name} auf Ihre Genehmigung",
       "review": "Prüfen",
@@ -12512,7 +12551,7 @@
       "unknown-type": "Dieser Knotentyp steht nicht in der Importtabelle. Ein Agent führt ihn anhand seiner Parameter aus.",
       "community-node": "Community-Knoten. Ein Agent führt ihn anhand seiner Parameter aus.",
       "merge-combine": "Merge im Modus „{mode}“ kombiniert Daten. Ein Agent führt ihn nach seiner Merge-Regel aus.",
-      "role-trigger-schedule": "Läuft in n8n nach Zeitplan. Starten Sie ihn manuell, bis Navide Pipelines planen kann.",
+      "role-trigger-schedule": "Läuft in n8n nach Zeitplan. Starten Sie die Pipeline manuell oder planen Sie sie unter Turn Stats ▸ Zeitplan mit einem Auftrag „Eine Pipeline starten“.",
       "role-trigger-webhook": "Startet in n8n durch eine HTTP-Anfrage. Navide hat noch keinen Webhook-Auslöser.",
       "role-trigger-error": "Für n8n-Fehler-Workflows gibt es in Navide noch keine Entsprechung.",
       "role-trigger-app": "Startet in n8n durch ein App-Ereignis. Navide hat noch keine App-Auslöser.",

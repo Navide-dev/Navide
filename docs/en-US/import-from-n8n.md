@@ -8,14 +8,24 @@ back to n8n. An existing pipeline is never overwritten.
 ## Importing a workflow
 
 1. In n8n, export the workflow (Download, or copy its nodes) to get its JSON.
-2. In Navide, open the **Pipeline Manager** and choose **Import from n8n**.
-3. Paste the JSON, or use **Choose File…**.
-4. Pick the CLI that runs the agent steps (Claude by default). An AI Agent
+2. In Navide, open the **Pipeline Manager** and choose **Import from n8n**
+   (on the pipeline list, or in a pipeline's ⋯ menu).
+3. Paste the JSON, or use **Choose File…**. A workflow file can be at most
+   5 MB.
+4. Pick the **CLI for agent steps** (Claude by default). An AI Agent
    node picks its own CLI from its model: Anthropic → Claude, OpenAI →
    Codex, Gemini → Gemini.
 5. Choose **Preview**. Nothing is written yet. Read the preview (below).
-6. Choose **Import**. The new pipeline opens; a name that is already taken
-   gets " (2)", " (3)"….
+6. Choose **Import**. The preview says how many pipelines the import creates
+   (**Importing creates N pipelines**). The new pipeline opens and a message
+   says it was imported and how many steps need review; those steps carry a
+   review mark in the editor until you check them. A name that is already
+   taken gets " (2)", " (3)"…. An import is all or nothing: when one of
+   several workflows cannot be stored, none of them is kept.
+
+If an import takes so long that the dialog says it may still finish, press
+**Import** again: it opens the pipeline if it was made, and never makes a
+copy.
 
 An agent can do the same through the MCP tool `pipeline_import_n8n`, which
 defaults to a dry run and returns the same report (see
@@ -38,13 +48,15 @@ The canvas colors each step by how it was converted:
   n8n's. Runs of these steps with no branching become one step, so a
   workflow does not open one pane per node.
 - **Needs review** — imported, but it needs something Navide does not have yet:
-  Schedule, Webhook, Form and app triggers (start the pipeline by hand),
+  Schedule, Webhook, Form and app triggers (start the pipeline by hand, or
+  schedule it in **Turn Stats ▸ Schedule**),
   Respond to Webhook, Execute Workflow calling a workflow Navide does not
   have, Call n8n Workflow Tool (see below), and steps best left in n8n (see
   below), shown as **Not supported**.
 
 Below the canvas, the report lists every n8n node with what it became and
-what to do about it, every step's full kickoff and every gate's prompt —
+what to do about it (rows that need review come first; a step that took in
+several n8n nodes says how many), every step's full kickoff and every gate's prompt —
 the exact text each pane will receive — the credentials to set up, where
 secrets were removed, and how many steps need review. None of this blocks
 **Import**: it is there so you know before you run.
@@ -64,6 +76,10 @@ secrets were removed, and how many steps need review. None of this blocks
 - **Retry On Fail** becomes the step's retry: at most 5 tries in all and
   300000 ms between them. The report marks any node whose n8n settings were
   higher.
+- A loop (Loop Over Items, or an IF that leads back to an earlier node) is
+  merged into one step that processes the items one by one, or repeats until
+  the condition that leaves the loop holds. A Wait inside the loop pauses
+  that step between rounds; it is not an approval gate.
 - An expression that reads another node, such as `$('Lookup').item.json`,
   gets that step's result as `{{node.<step id>.output}}` in its kickoff, and
   that step is asked to end with its result as JSON.
@@ -81,7 +97,8 @@ array (the format `n8n export:workflow --all` writes) and import once: the
 called workflows become pipelines of their own first, and the workflow no
 other one calls is the one that opens. A workflow you imported before is
 reused instead: import the called workflow first, then the one that calls
-it. The report lists every called workflow and whether it was found.
+it. The preview's **Called workflows** list says for each one whether it is
+imported now, already in Navide, or missing.
 
 A call that would come back around (A calls B and B calls A, or a workflow
 calls itself) stays **Needs review**, because a sub-pipeline cannot run

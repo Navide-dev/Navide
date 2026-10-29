@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../../composables/useBackend'
 import type { Role } from '../../composables/useRoles'
 import type { Stage, StageSlot } from '../../data/stages'
+import { pipelineDisplayName } from '../../lib/builtinNames'
 import {
   edgeId,
   isPropertyVisible,
@@ -430,7 +431,7 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
           <select data-field="subpipeline-pipeline" :value="n.subpipeline?.pipelineId ?? ''" :disabled="locked" @change="editSubpipeline({ pipelineId: valueOf($event) })">
             <option value="" disabled>{{ t('pipelineEditor.inspector.subpipeline-pick') }}</option>
             <option v-if="n.subpipeline?.pipelineId && !callablePipelines.some((p) => p.id === n!.subpipeline!.pipelineId)" :value="n.subpipeline.pipelineId">{{ n.subpipeline.pipelineId }}</option>
-            <option v-for="p in callablePipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
+            <option v-for="p in callablePipelines" :key="p.id" :value="p.id">{{ pipelineDisplayName(p) }}</option>
           </select>
           <span class="pi-help">{{ t('pipelineEditor.inspector.subpipeline-help') }}</span>
         </label>

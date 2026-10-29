@@ -8438,7 +8438,6 @@
     "stage-count": "{count} ステージ",
     "pipeline-count": "{count} パイプライン",
     "builtin": "組み込み",
-    "pipeline-definition-file": "定義ファイル",
     "loading-pipelines": "パイプラインを読み込み中…",
     "pipelines-unreadable": "パイプライン定義を読み込めませんでした",
     "pipelines-empty": "パイプラインはまだありません",
@@ -9124,6 +9123,7 @@
     "merge-aborted": "マージを中止し、競合を取り消しました。"
   },
   "hint": {
+    "pipelines-stored-locally": "ワークスペースではなく、このコンピューターの Navide の設定に保存されます。別のコンピューターへ移すには、設定の「設定一式をエクスポート」を使ってください。",
     "imported-from-n8n": "このパイプラインの実行は外部コンテンツとして扱われます。",
     "role-not-found-refresh": "ロール \"{key}\" は存在しません。別のウィンドウで削除された可能性があります。左の一覧は更新済みです。ロールを選び直してください。",
     "role-key-exists-recover": "キー \"{key}\" のロールはすでに存在します。名前の変更が途中で止まって残った場合は、先に左の一覧から \"{key}\" を削除してから、名前を変更し直してください。",
@@ -11544,7 +11544,46 @@
       "open-in-canvas": "パイプラインキャンバスで開く",
       "gate-toast": "パイプラインは「{name}」で承認待ちです",
       "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。",
-      "last-stage": "これが最後のステージです。完了が報告されると実行は終了します。"
+      "last-stage": "これが最後のステージです。完了が報告されると実行は終了します。",
+      "next-stage": "次へ → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "準備：CLI を起動中",
+        "checking-dialog": "準備：ダイアログを確認中",
+        "settling": "準備：プロンプト待ち",
+        "injecting-role": "準備：ロールを注入中",
+        "waiting-agent": "準備：エージェント待ち",
+        "ready": "準備：準備完了",
+        "failed": "準備：失敗"
+      },
+      "role": {
+        "pending": "ロール：待機中",
+        "scheduled": "ロール：注入中",
+        "sent": "ロール：注入済み",
+        "failed": "ロール：注入に失敗",
+        "skipped": "ロール：スキップ"
+      },
+      "kickoff": {
+        "pending": "· 開始プロンプト：順番待ち",
+        "sent": "· 開始プロンプト：送信済み",
+        "unverified": "· 開始プロンプト：未確認",
+        "failed": "· 開始プロンプト：失敗"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "既定のパイプライン",
+        "maintenance": "メンテナンス用パイプライン",
+        "evolve-landing": "提案反映パイプライン"
+      },
+      "role": {
+        "pm": "PRD、ユーザーストーリー、UAT、KPI、優先順位",
+        "backend": "API、データベース、業務ロジック、セキュリティ",
+        "frontend": "コンポーネント、状態管理、レスポンシブ、パフォーマンス",
+        "mobile": "iOS、Android、クロスプラットフォーム、オフラインファースト",
+        "qa": "E2E、エッジケース、自動テストのマトリクス"
+      }
     },
     "link": {
       "out-title": "接続先",
@@ -12512,7 +12551,7 @@
       "unknown-type": "このノードの種類はインポート表にありません。エージェントがパラメーターに従って実行します。",
       "community-node": "コミュニティノードです。エージェントがパラメーターに従って実行します。",
       "merge-combine": "「{mode}」モードの Merge はデータを結合します。エージェントがその結合ルールに従って実行します。",
-      "role-trigger-schedule": "n8n ではスケジュールで実行されます。Navide がパイプラインをスケジュール実行できるようになるまでは手動で開始してください。",
+      "role-trigger-schedule": "n8n ではスケジュールで実行されます。手動でパイプラインを開始するか、ターン統計 ▸ スケジュールでアクションが「Pipeline を開始」のジョブを追加してください。",
       "role-trigger-webhook": "n8n では HTTP リクエストで開始します。Navide にはまだ Webhook トリガーがありません。",
       "role-trigger-error": "n8n のエラーワークフローに相当する機能は Navide にまだありません。",
       "role-trigger-app": "n8n ではアプリのイベントで開始します。Navide にはまだアプリのトリガーがありません。",
