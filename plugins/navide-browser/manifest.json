@@ -59,7 +59,7 @@
       "browser.wait",
       "browser.dialog",
       "browser.upload",
-      "browser.take_over",
+      "browser.takeover",
       "browser.cdp"
     ],
     "agentTools": [
@@ -542,7 +542,7 @@
       },
       {
         "name": "browser_take_over",
-        "method": "browser.take_over",
+        "method": "browser.takeover",
         "risk": "write",
         "title": "Ask the user for control back",
         "description": "After the user took over the Space, ask to continue: the Space shows Agent asks to continue (plus note) and this call waits, up to timeoutMs (at most 50000), until the user chooses Hand Back to Agent. It never takes control itself. If timedOut is true, call it again or tell the user what you are waiting for.",

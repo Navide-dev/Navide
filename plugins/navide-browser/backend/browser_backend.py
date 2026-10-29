@@ -1255,7 +1255,8 @@ def upload(bridge: Bridge, view_id: str, arguments: dict[str, Any], workspace: s
             absolute.append(item)
         elif workspace:
             # The Host checks every resolved path is inside this workspace.
-            absolute.append(os.path.join(workspace, item))
+            # normpath: one separator style on Windows (`a/b` joined to `C:\w`).
+            absolute.append(os.path.normpath(os.path.join(workspace, item)))
         else:
             raise ToolError("INVALID_ARGUMENT", "Relative paths need a call from a Navide pane; pass absolute paths.")
     try:
@@ -1378,7 +1379,7 @@ def run_tool(
         elif name == "browser.upload":
             view_id = _resolve_tab(bridge, arguments, pane)
             value = {"viewId": view_id, **upload(bridge, view_id, arguments, workspace)}
-        elif name == "browser.take_over":
+        elif name == "browser.takeover":
             view_id = _resolve_tab(bridge, arguments, pane)
             value = {"viewId": view_id, **take_over(bridge, view_id, arguments)}
         elif name == "browser.cdp":
@@ -1410,7 +1411,7 @@ TOOL_METHODS = frozenset(
         "browser.wait",
         "browser.dialog",
         "browser.upload",
-        "browser.take_over",
+        "browser.takeover",
         "browser.cdp",
     }
 )

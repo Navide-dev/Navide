@@ -257,7 +257,7 @@ def test_take_over_asks_then_waits_and_never_takes_control() -> None:
 
 def test_take_over_returns_at_once_when_the_agent_already_has_control() -> None:
     bridge = Bridge([_view("v1")])
-    result = browser.run_tool("browser.take_over", {}, bridge, PANE)
+    result = browser.run_tool("browser.takeover", {}, bridge, PANE)
     assert result["ok"] is True and result["asked"] is False and result["control"] == "agent"
     assert not bridge.ops("setState")
 
