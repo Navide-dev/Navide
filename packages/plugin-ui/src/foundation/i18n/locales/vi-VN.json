@@ -7803,6 +7803,7 @@
       "filter-all": "Tất cả",
       "filter-enabled": "Đã bật",
       "filter-attention": "Cần chú ý",
+      "attention-badge": "Cần chú ý",
       "count": "{visible} / {total} agent · {enabled} đã bật",
       "reorder-filtered": "Hãy xóa tìm kiếm và chọn Tất cả để sắp xếp lại",
       "enabled": "Hiện trong menu",

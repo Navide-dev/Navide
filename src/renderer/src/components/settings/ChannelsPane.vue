@@ -1016,7 +1016,8 @@ function formatTime(ts: number | null | undefined): string {
   padding: 5px 8px;
 }
 .ch-input:hover { border-color: var(--border-strong); }
-.ch-input:focus { outline: none; border-color: var(--accent-focus); }
+.ch-input:focus { border-color: var(--accent-focus); }
+.ch-input:focus:not(:focus-visible) { outline: none; }
 .ch-form-actions { display: flex; align-items: center; gap: 8px; }
 .ch-setup-link { align-self: flex-start; font-size: var(--font-row-desc); color: var(--accent-fg); }
 .ch-advanced > summary { cursor: pointer; font-size: var(--font-2xs); color: var(--text-secondary); }

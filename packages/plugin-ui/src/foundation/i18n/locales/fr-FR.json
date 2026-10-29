@@ -7803,6 +7803,7 @@
       "filter-all": "Tous",
       "filter-enabled": "Activés",
       "filter-attention": "À vérifier",
+      "attention-badge": "À vérifier",
       "count": "{visible} agents sur {total} · {enabled} activés",
       "reorder-filtered": "Effacez la recherche et choisissez « Tous » pour réordonner",
       "enabled": "Afficher dans le menu",

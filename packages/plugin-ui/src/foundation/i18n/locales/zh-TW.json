@@ -7803,6 +7803,7 @@
       "filter-all": "全部",
       "filter-enabled": "已啟用",
       "filter-attention": "需要注意",
+      "attention-badge": "需要注意",
       "count": "顯示 {visible} / {total} 個 agent · {enabled} 個已啟用",
       "reorder-filtered": "清除搜尋並選擇「全部」後即可排序",
       "enabled": "顯示在選單",

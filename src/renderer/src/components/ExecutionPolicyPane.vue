@@ -914,7 +914,8 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-checkbox-grid label { display: flex; gap: var(--space-2); align-items: center; min-height: var(--control-h-sm); cursor: pointer; }
 .ep-checkbox-grid code, .ep-chip code { font-family: var(--font-mono); font-size: var(--font-xs); }
 .ep-shell-add { display: flex; gap: var(--space-2); }
-.ep-shell-add input { flex: 0 1 240px; min-width: 0; }
+/* Wide enough for the longest placeholder (ru, about 36 characters). */
+.ep-shell-add input { flex: 0 1 340px; min-width: 0; }
 .ep-chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
 .ep-chip {
   display: inline-flex;

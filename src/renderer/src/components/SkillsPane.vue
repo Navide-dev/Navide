@@ -1622,7 +1622,7 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 .skill-drawer-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .skill-drawer-hint { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); line-height: 1.4; }
 .skill-drawer-path { display: block; font-size: var(--font-2xs); padding: 5px 8px; border-radius: var(--radius-control); background: var(--bg-muted); word-break: break-all; }
-.skill-drawer-prose { margin: 0; font-size: 11.5px; line-height: var(--lh-base); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; }
+.skill-drawer-prose { margin: 0; font-size: var(--font-xs); line-height: var(--lh-base); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; }
 .skill-drawer-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .skill-drawer-actions.secondary { justify-content: flex-start; margin-top: 0; }
 .skill-badge { border-radius: var(--radius-pill); padding: 2px 7px; font-size: var(--font-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }

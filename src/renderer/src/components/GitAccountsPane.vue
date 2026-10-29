@@ -206,7 +206,7 @@ async function remove(id: string): Promise<void> {
 .ga-head > div { flex: 1 1 16em; min-width: 0; }
 /* Section headings share SettingsSection's small uppercase label. */
 .ga-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
-.ga-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 60ch; line-height: 1.4; text-wrap: pretty; word-break: auto-phrase; }
+.ga-hint { margin: 0; font-size: var(--font-xs); color: var(--text-secondary); max-width: 60ch; line-height: 1.4; text-wrap: pretty; word-break: auto-phrase; }
 
 /* The Settings list grammar: one grouped card, rows split by hairlines. */
 .ga-list {

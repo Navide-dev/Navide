@@ -652,8 +652,10 @@ const visibleReference = computed(() => {
   border: 1px solid var(--border-default);
   border-radius: 6px;
 }
-.kse-search:focus {
+.kse-search:focus:not(:focus-visible) {
   outline: none;
+}
+.kse-search:focus {
   border-color: var(--accent-fg);
 }
 .kse-filters {
@@ -956,6 +958,15 @@ const visibleReference = computed(() => {
 .kse-mini:hover {
   color: var(--text-bright);
 }
+/* The remove "✕" reads at body size, and its 28px target shows on hover. */
+.kse-chip-remove {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+}
+.kse-chip-remove:hover {
+  background: var(--bg-muted);
+}
 .kse-mini:disabled {
   opacity: 0.35;
   cursor: default;
@@ -970,7 +981,7 @@ const visibleReference = computed(() => {
   border-radius: 5px;
   background: var(--bg-muted);
   color: var(--text-bright);
-  font-size: 11.5px;
+  font-size: var(--font-xs);
   font-weight: 600;
   font-family: monospace;
   line-height: 1.4;
