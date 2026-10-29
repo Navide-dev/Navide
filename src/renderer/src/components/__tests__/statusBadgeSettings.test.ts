@@ -68,8 +68,6 @@ describe('status badge settings strings', () => {
     'statusBadges.reset-one',
     'statusBadges.reset-all',
     'statusBadges.col.status',
-    'statusBadges.col.zh',
-    'statusBadges.col.en',
     'statusBadges.col.color',
     ...PANE_STATUS_ORDER.map((s) => `statusBadges.when.${s}`),
     ...STATUS_COLOR_KEYS.map((c) => `statusBadges.color.${c}`),

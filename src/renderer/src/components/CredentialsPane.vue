@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import SettingsNotice from './settings/SettingsNotice.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import type { useBackend } from '../composables/useBackend'
 
 type Backend = ReturnType<typeof useBackend>
@@ -158,6 +160,23 @@ function currentList(): Array<Finding | Item> {
   return view.value === 'findings' ? scan.value?.findings ?? [] : scan.value?.items ?? []
 }
 
+// The scan's keyring reason is a code (dump-keychain-failed, gdbus-not-found, …):
+// shown as a sentence, with the code kept in the status's title for bug reports.
+// Free text from an older backend is shown as it is.
+const KEYRING_REASON: Record<string, string> = {
+  'security-tool-not-found': 'tool-missing',
+  'cmdkey-not-found': 'tool-missing',
+  'gdbus-not-found': 'tool-missing',
+  'dump-keychain-failed': 'read-failed',
+  'cmdkey-failed': 'read-failed',
+  'secret-service-unavailable': 'no-service',
+}
+function keyringReasonText(reason: string): string {
+  if (!reason) return t('settings.credentials.keyring-reason-unknown')
+  const key = KEYRING_REASON[reason]
+  if (key) return t(`settings.credentials.keyring-reason.${key}`)
+  return /^[a-z0-9-]+$/.test(reason) ? t('settings.credentials.keyring-reason.read-failed') : reason
+}
 function kindLabel(kind: string): string {
   return KNOWN_KINDS.has(kind) ? t(`settings.credentials.kind.${kind}`) : kind
 }
@@ -326,17 +345,23 @@ async function saveRoots(): Promise<void> {
 <template>
   <div class="cred-pane" data-settings-section="credentials">
     <div class="cred-toolbar">
-      <!-- The page title above already names this page; no second heading. -->
+      <!-- The page title above already names this page and the page intro
+           under it (rendered by the settings modal) says what it is; this row
+           keeps the keyring facts and the actions. -->
       <div>
-        <p>{{ t('settings.credentials.intro') }}</p>
         <p class="cred-meta">
           <span>{{ t('settings.credentials.meta') }}</span>
-          <span v-if="scan" class="cred-keyring" :class="scan.keyring.available ? 'ok' : 'bad'">
+          <span
+            v-if="scan"
+            class="cred-keyring"
+            :class="scan.keyring.available ? 'ok' : 'bad'"
+            :title="!scan.keyring.available && scan.keyring.reason ? scan.keyring.reason : undefined"
+          >
             <template v-if="scan.keyring.available">
               {{ scan.keyring.backend ? t('settings.credentials.keyring-ok', { backend: scan.keyring.backend }) : t('settings.credentials.keyring-ok-plain') }}
             </template>
             <template v-else>
-              {{ t('settings.credentials.keyring-bad') }} · {{ scan.keyring.reason || t('settings.credentials.keyring-reason-unknown') }}
+              {{ t('settings.credentials.keyring-bad') }} · {{ keyringReasonText(scan.keyring.reason) }}
             </template>
           </span>
         </p>
@@ -352,8 +377,8 @@ async function saveRoots(): Promise<void> {
     </div>
 
     <p v-if="error" class="cred-error" role="alert">{{ error }}</p>
-    <p v-if="scan && !scan.keyring.available" class="cred-warn">{{ t('settings.credentials.keyring-bad-hint') }}</p>
-    <div v-if="scan && !scan.complete" class="cred-warn" role="status">
+    <SettingsNotice v-if="scan && !scan.keyring.available" class="cred-warn" tone="warning" :message="t('settings.credentials.keyring-bad-hint')" />
+    <SettingsNotice v-if="scan && !scan.complete" class="cred-warn" tone="warning" role="status">
       <p class="cred-incomplete">{{ t('settings.credentials.incomplete') }}</p>
       <ul class="cred-root-list">
         <li v-for="r in scan.roots.filter((x) => x.truncated)" :key="r.path">
@@ -361,11 +386,11 @@ async function saveRoots(): Promise<void> {
           <span class="cred-tag cred-root-truncated">{{ t('settings.credentials.roots.truncated') }}</span>
         </li>
       </ul>
-    </div>
-    <div v-if="scan && scan.high > 0" class="cred-banner" role="status">
+    </SettingsNotice>
+    <SettingsNotice v-if="scan && scan.high > 0" class="cred-banner" tone="danger" role="status">
       <strong>{{ t('settings.credentials.banner-high', { count: scan.high }, scan.high) }}</strong>
       <span>{{ t('settings.credentials.banner-high-hint') }}</span>
-    </div>
+    </SettingsNotice>
 
     <section v-if="rootsOpen" class="cred-roots">
       <h3>{{ t('settings.credentials.roots.title') }}</h3>
@@ -400,7 +425,7 @@ async function saveRoots(): Promise<void> {
     <!-- Scan time on the left, the Findings/Inventory switch on the right. -->
     <div class="cred-viewbar">
       <p class="cred-scanned">{{ scannedLabel }}</p>
-      <div class="cred-view-switch" role="group" :aria-label="t('settings.credentials.view-label')">
+      <div class="cred-view-switch settings-segmented" role="group" :aria-label="t('settings.credentials.view-label')">
         <button type="button" :class="{ on: view === 'findings' }" :aria-pressed="view === 'findings'" @click="view = 'findings'">{{ t('settings.credentials.view-findings') }}</button>
         <button type="button" :class="{ on: view === 'inventory' }" :aria-pressed="view === 'inventory'" @click="view = 'inventory'">{{ t('settings.credentials.view-inventory') }}</button>
       </div>
@@ -424,20 +449,17 @@ async function saveRoots(): Promise<void> {
     <div class="cred-body" :class="{ 'drawer-open': drawerOpen }">
       <div class="cred-main">
         <div v-if="loading && !scan" class="cred-state nv-loading">{{ t('settings.credentials.loading') }}</div>
-        <div v-else-if="!scan" class="cred-state nv-empty">{{ t('settings.credentials.not-scanned') }}</div>
+        <SettingsEmptyState v-else-if="!scan" class="cred-empty" :message="t('settings.credentials.not-scanned')" />
 
         <template v-else-if="view === 'findings'">
-          <div v-if="findingGroups.length === 0" class="cred-state nv-empty">
-            <strong>{{ t('settings.credentials.empty-findings-title') }}</strong>
-            <span>{{ t('settings.credentials.empty-findings-body') }}</span>
-          </div>
+          <SettingsEmptyState v-if="findingGroups.length === 0" class="cred-empty" :message="t('settings.credentials.empty-findings-body')" />
           <section v-for="g in findingGroups" :key="g.severity" class="cred-group" :data-severity="g.severity">
             <h3 class="cred-group-title">{{ t(`settings.credentials.severity.${g.severity}`) }}<span class="count">{{ g.rows.length }}</span></h3>
             <div class="cred-cards">
               <button v-for="f in g.rows" :key="f.id" type="button" class="cred-card" :class="{ active: selectedId === f.id, quiet: f.reminder.state !== 'active' }" @click="select(f.id)">
                 <span class="cred-card-head">
+                  <!-- The group heading already names the level: no chip per card. -->
                   <strong v-truncate>{{ findingTitle(f) }}</strong>
-                  <span class="cred-sev" :class="f.severity">{{ t(`settings.credentials.severity.${f.severity}`) }}</span>
                 </span>
                 <span class="cred-card-loc" v-truncate>{{ f.location }}</span>
                 <span class="cred-card-foot">
@@ -450,10 +472,7 @@ async function saveRoots(): Promise<void> {
         </template>
 
         <template v-else>
-          <div v-if="itemGroups.length === 0" class="cred-state nv-empty">
-            <strong>{{ t('settings.credentials.empty-inventory-title') }}</strong>
-            <span>{{ t('settings.credentials.empty-inventory-body') }}</span>
-          </div>
+          <SettingsEmptyState v-if="itemGroups.length === 0" class="cred-empty" :message="t('settings.credentials.empty-inventory-body')" />
           <section v-for="g in itemGroups" :key="g.kind" class="cred-group" :data-kind="g.kind">
             <h3 class="cred-group-title">{{ kindLabel(g.kind) }}<span class="count">{{ g.rows.length }}</span></h3>
             <div class="cred-cards">
@@ -478,7 +497,7 @@ async function saveRoots(): Promise<void> {
         <p>{{ findingBody(selectedFinding) }}</p>
         <template v-if="selectedFinding.manualFix">
           <h4>{{ t('settings.credentials.drawer.steps') }}</h4>
-          <p class="cred-warn cred-manual-fix">{{ t('settings.credentials.drawer.manual-fix') }}</p>
+          <SettingsNotice class="cred-warn cred-manual-fix" tone="warning" :message="t('settings.credentials.drawer.manual-fix')" />
         </template>
         <template v-else-if="selectedFinding.steps.length">
           <h4>{{ t('settings.credentials.drawer.steps') }}</h4>
@@ -531,8 +550,8 @@ async function saveRoots(): Promise<void> {
 .cred-toolbar > div:first-child { flex: 1; min-width: 0; }
 .cred-toolbar-actions { flex-shrink: 0; }
 .cred-toolbar-actions button { white-space: nowrap; }
-.cred-toolbar p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
-.cred-toolbar p:first-child { margin-top: 0; color: var(--text-primary); font-size: var(--font-xs); }
+.cred-toolbar p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
+.cred-toolbar p:first-child { margin-top: 0; }
 .cred-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .cred-keyring.ok { color: var(--success-fg); }
 .cred-keyring.bad { color: var(--attention-fg); }
@@ -544,10 +563,8 @@ button.primary { background: var(--accent-emphasis); border-color: var(--accent-
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-emphasis); outline-offset: 2px; }
 input { min-width: 0; border: 1px solid var(--border-default); border-radius: var(--radius-control); background: var(--bg-base); color: var(--text-primary); padding: 7px 8px; }
 .cred-error { margin: 0; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--danger-fg) 45%, var(--border-default)); border-radius: var(--radius-control); color: var(--danger-fg); background: color-mix(in srgb, var(--danger-fg) 8%, var(--bg-subtle)); font-size: var(--font-2xs); }
-.cred-warn { margin: 0; padding: 8px 10px; border-left: 3px solid var(--attention-fg); background: color-mix(in srgb, var(--attention-fg) 8%, var(--bg-subtle)); font-size: var(--font-2xs); }
-.cred-banner { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-left: 3px solid var(--danger-fg); background: color-mix(in srgb, var(--danger-fg) 8%, var(--bg-subtle)); font-size: var(--font-2xs); }
 .cred-banner strong { color: var(--danger-fg); }
-.cred-scanned, .cred-muted { margin: 0; color: var(--text-secondary); font-size: var(--font-3xs); }
+.cred-scanned, .cred-muted { margin: 0; color: var(--text-secondary); font-size: var(--font-xs); }
 .cred-roots { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border-default); border-radius: var(--radius-card); background: var(--bg-subtle); }
 .cred-roots h3, .cred-roots h4 { margin: 0; font-size: var(--font-xs); color: var(--text-bright); }
 .cred-roots p { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); }
@@ -557,53 +574,56 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-root-add input { flex: 1; }
 .cred-viewbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cred-filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.cred-chips, .cred-view-switch { display: flex; flex-wrap: wrap; gap: 4px; }
-.cred-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-pill); font-size: var(--font-2xs); }
-.cred-view-switch button.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
-.cred-chip.on { background: var(--accent-subtle, var(--bg-elevated)); border-color: var(--accent-muted, var(--accent-fg)); color: var(--accent-fg); font-weight: 600; }
-.cred-chip .count { font-size: var(--font-3xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
+.cred-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.cred-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-pill); font-size: var(--font-xs); }
+
+/* Neutral selected fill, like the shared filter chip: accent is for the primary button. */
+.cred-chip.on { background: var(--bg-hover-strong); border-color: var(--border-strong); color: var(--text-bright); font-weight: 600; }
+.cred-chip .count { font-size: var(--font-xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
 .cred-search { flex: 1; min-width: 220px; }
-/* Findings / Inventory is one control with two states, not two buttons. */
-.cred-view-switch { margin-left: auto; flex-wrap: nowrap; gap: 0; padding: 2px; border: 1px solid var(--border-default); border-radius: var(--radius-control); background: var(--bg-inset); }
-.cred-view-switch button { border-color: transparent; background: transparent; color: var(--text-secondary); padding: 3px 10px; font-size: var(--font-2xs); }
+/* Findings / Inventory is one control with two states: the modal's shared
+   .settings-segmented. */
+.cred-view-switch { margin-left: auto; }
 .cred-body { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; flex: 1; gap: 12px; }
 .cred-body.drawer-open { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
 .cred-main { min-width: 0; min-height: 0; overflow-y: auto; }
 .cred-state { display: flex; flex-direction: column; gap: 4px; padding: 18px 8px; color: var(--text-secondary); font-size: var(--font-2xs); text-align: center; }
-.cred-state strong { color: var(--text-bright); }
+
 .cred-group { margin-bottom: 16px; }
-.cred-group-title { display: flex; align-items: baseline; gap: 6px; margin: 0 2px 8px; font-size: var(--font-2xs); font-weight: 700; color: var(--text-secondary); }
-.cred-group-title .count { font-size: var(--font-3xs); font-weight: 500; opacity: 0.6; }
-.cred-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-.cred-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px 11px; text-align: left; border: 1px solid var(--border-muted); border-radius: var(--radius-card); background: var(--bg-subtle); min-width: 0; }
+.cred-group-title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: var(--font-row-desc); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.cred-group-title .count { font-size: var(--font-xs); font-weight: 500; opacity: 0.6; }
+.cred-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px; }
+.cred-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px 11px; text-align: left; border: 1px solid var(--settings-card-border, var(--border-muted)); border-radius: var(--radius-card); background: var(--bg-subtle); min-width: 0; }
 .cred-card:hover:not(:disabled) { background: var(--bg-muted); border-color: var(--border-default); }
 .cred-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
 /* Snoozed or dismissed: set back, but still readable. */
-.cred-card.quiet { border-style: dashed; background: transparent; }
+/* A snoozed or dismissed finding: no fill, its words quieter. Dashed frames
+   are kept for drop zones and add placeholders. */
+.cred-card.quiet { background: transparent; color: var(--text-secondary); }
 .cred-card.quiet .cred-card-head strong { color: var(--text-primary); }
 .cred-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; min-width: 0; }
 /* Titles are full sentences in en/ja: two lines before they clip. */
 .cred-card-head strong { font-size: var(--font-xs); line-height: 1.35; color: var(--text-bright); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: auto-phrase; }
-.cred-card-loc { font-family: Menlo, Monaco, monospace; font-size: var(--font-3xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cred-card-loc { font-family: Menlo, Monaco, monospace; font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cred-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.cred-kv { display: flex; gap: 6px; font-size: var(--font-3xs); color: var(--text-secondary); min-width: 0; }
+.cred-kv { display: flex; gap: 6px; font-size: var(--font-xs); color: var(--text-secondary); min-width: 0; }
 .cred-kv > span:first-child { flex: none; opacity: 0.7; }
 .cred-kv > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cred-tag { display: inline-block; padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid var(--border-muted); font-size: var(--font-3xs); color: var(--text-secondary); white-space: nowrap; flex: none; }
-.cred-sev { display: inline-block; align-self: flex-start; border-radius: var(--radius-pill); padding: 2px 7px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; flex: none; }
+.cred-tag { display: inline-block; padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid var(--border-muted); font-size: var(--font-xs); color: var(--text-secondary); white-space: nowrap; flex: none; }
+.cred-sev { display: inline-block; align-self: flex-start; border-radius: var(--radius-pill); padding: 2px 7px; font-size: var(--font-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; flex: none; }
 .cred-sev.high { color: var(--danger-fg); background: color-mix(in srgb, var(--danger-fg) 12%, transparent); }
 .cred-sev.medium { color: var(--attention-fg); background: color-mix(in srgb, var(--attention-fg) 12%, transparent); }
 .cred-sev.low { color: var(--text-secondary); background: color-mix(in srgb, var(--text-secondary) 12%, transparent); }
-.cred-reminder { font-size: var(--font-3xs); color: var(--text-secondary); }
+.cred-reminder { font-size: var(--font-xs); color: var(--text-secondary); }
 .cred-reminder.active { color: var(--text-primary); }
 .cred-drawer { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; padding: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-card); background: var(--bg-subtle); font-size: var(--font-2xs); }
 .cred-drawer-head { justify-content: space-between; }
 .cred-drawer h3 { margin: 0; font-size: var(--font-md); color: var(--text-bright); }
-.cred-drawer h4 { margin: 8px 0 0; font-size: var(--font-3xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+.cred-drawer h4 { margin: 8px 0 0; font-size: var(--font-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .cred-drawer p { margin: 0; line-height: 1.45; }
-.cred-loc { font-family: Menlo, Monaco, monospace; font-size: var(--font-3xs); word-break: break-all; }
+.cred-loc { font-family: Menlo, Monaco, monospace; font-size: var(--font-2xs); word-break: break-all; }
 .cred-step { align-items: flex-start; padding: 6px 8px; border: 1px solid var(--border-muted); border-radius: var(--radius-control); background: var(--bg-base); }
-.cred-step code { flex: 1; min-width: 0; font-family: Menlo, Monaco, monospace; font-size: var(--font-3xs); white-space: pre-wrap; word-break: break-all; }
+.cred-step code { flex: 1; min-width: 0; font-family: Menlo, Monaco, monospace; font-size: var(--font-2xs); white-space: pre-wrap; word-break: break-all; }
 .cred-links { margin: 0; padding-left: 18px; }
 .cred-link { color: var(--accent-fg, var(--text-bright)); }
 .cred-reminder-actions { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -756,7 +756,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
   flex-direction: column;
   gap: 22px;
   color: var(--text-primary);
-  max-width: 78ch;
+  max-width: var(--settings-page-max);
 }
 
 .cah-intro {

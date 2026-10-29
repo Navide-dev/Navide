@@ -42,6 +42,7 @@ async function loadFail(opts: { errorEdge?: boolean; retry?: boolean } = {}) {
       slotFailed: (index: number, label: string, reason: string) => failed.push([index, label, reason]),
       retryAfterFailure: (_index: number, _label: string, reason: string) =>
         opts.retry ? { attempt: 2, maxTries: 3, waitMs: 0, note: `[retry] ${reason}` } : null,
+      isChildRun: () => false,
       routeFailure: (index: number, label: string, reason: string) => {
         if (!opts.errorEdge) return false
         routed.push([index, label, reason])

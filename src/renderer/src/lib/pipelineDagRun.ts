@@ -53,6 +53,9 @@ export interface DagPlan {
   /** Slot nodes that may turn out untaken (downstream of a branch or error
    *  edge, or of a slot with an error edge): not pre-spawned ahead of time. */
   conditionalIds: Set<string>
+  /** Subpipeline nodes, in layer order: the run suspends at each one and
+   *  runs its child pipeline before the next stage. */
+  callIds: string[]
 }
 
 export type GateStatus = 'pending' | 'awaiting' | 'approved' | 'rejected'
@@ -107,13 +110,18 @@ function planFor(graph: PipelineGraph, stages: readonly Stage[]): DagPlan | null
     if (labels.length !== want.length || labels.some((l, i) => l !== want[i])) return null
   }
   const gateIds = graph.nodes.filter((n) => n.kind === 'gate' && n.id in nodeLayer).map((n) => n.id)
+  const callIds = graph.nodes
+    .filter((n) => n.kind === 'subpipeline' && n.id in nodeLayer)
+    .map((n) => n.id)
+    .sort((a, b) => nodeLayer[a] - nodeLayer[b])
   const hasBranching = hasBranchingEdges(graph)
   const hasControlFlow =
     gateIds.length > 0 ||
+    callIds.length > 0 ||
     graph.edges.some((e) => e.kind === 'reject') ||
     graph.nodes.some((n) => n.kind === 'slot' && n.pinned) ||
     hasBranching
-  return { graph, stageNodeIds, stageLayer, nodeLayer, gateIds, hasControlFlow, hasBranching, conditionalIds: conditionalNodes(graph) }
+  return { graph, stageNodeIds, stageLayer, nodeLayer, gateIds, hasControlFlow, hasBranching, conditionalIds: conditionalNodes(graph), callIds }
 }
 
 function conditionalNodes(graph: PipelineGraph): Set<string> {
@@ -152,6 +160,9 @@ export function createRunState(
       nodes[id] = s < startIndex || pinned ? { status: 'skipped', ...(pinned ? { pinned } : {}) } : { status: 'pending' }
     }
   })
+  // A call before the start was made by an earlier run: its output is reused
+  // (usePipelineDag.begin calls it again when no output was recorded).
+  for (const c of plan.callIds) nodes[c] = { status: plan.nodeLayer[c] < startLayer ? 'skipped' : 'pending' }
   const gates: Record<string, GateStatus> = {}
   for (const g of plan.gateIds) {
     const before = plan.nodeLayer[g] < startLayer
@@ -212,6 +223,12 @@ export function rejectGate(
       if (g !== gateId) state.nodes[g] = { status: 'pending' }
     }
   }
+  for (const c of plan.callIds) {
+    if (plan.nodeLayer[c] >= targetLayer) {
+      state.nodes[c] = { status: 'pending', attempts: state.nodes[c]?.attempts }
+      delete state.retries[c]
+    }
+  }
   plan.stageNodeIds.forEach((ids) => {
     for (const id of ids) {
       if (plan.nodeLayer[id] >= targetLayer && !node(plan, id)?.pinned) {
@@ -260,7 +277,8 @@ export function upstreamSlotNodes(plan: DagPlan, nodeId: string): string[] {
       if (!isForwardEdge(e) || e.to !== id || seen.has(e.from)) continue
       seen.add(e.from)
       const n = node(plan, e.from)
-      if (n?.kind === 'slot') out.push(n.id)
+      // A subpipeline node hands on its child run's output, as a slot does.
+      if (n?.kind === 'slot' || n?.kind === 'subpipeline') out.push(n.id)
       else visit(e.from)
     }
   }
@@ -462,31 +480,66 @@ export interface NodeSignals {
 
 // A signal line starts the line, after optional indentation or a TUI bullet.
 const LINE_HEAD = String.raw`^[ \t]*(?:[⏺●•][ \t]*)?`
-const BRANCH_RE = new RegExp(String.raw`${LINE_HEAD}---BRANCH:[ \t]*(.*?)[ \t]*---[ \t]*$`, 'gm')
-const FAILED_RE = new RegExp(String.raw`${LINE_HEAD}---NODE-FAILED(?::[ \t]*(.*?))?[ \t]*---[ \t]*$`, 'gm')
-const OUTPUT_RE = new RegExp(
-  String.raw`${LINE_HEAD}---OUTPUT-START---[ \t]*$([\s\S]*?)${LINE_HEAD}---OUTPUT-END---[ \t]*$`,
-  'gm',
-)
 /** `<value>`-style placeholders, as the kickoff hints write their examples. */
 const PLACEHOLDER_RE = /^<[^<>]*>$/
+const NONCE_RE = /^[0-9a-f]{16}$/
 
-/** Parse a slot's reply for branch / failure / output signals. The last real
- *  occurrence wins; placeholder examples (the kickoff hints' own `<值>`
- *  forms, should a TUI echo them into the buffer) are never taken as results.
- *  Callers pass the agent's turn text where the CLI has one (#733). */
-export function parseNodeSignals(text: string): NodeSignals {
+/** A fresh per-node signal code: 64 bits from the platform CSPRNG. A signal
+ *  counts only with the code of the kickoff it answers (see parseNodeSignals),
+ *  so text the agent merely shows (a file, a web page, an echoed template) or
+ *  an earlier try's output cannot steer the run. */
+export function newSignalNonce(): string {
+  const bytes = new Uint8Array(8)
+  globalThis.crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** The kickoff line that names the signal code. It is the kickoff's last
+ *  signal line, so whatever follows its last occurrence on screen is the
+ *  agent's own output (see signalsAfterKickoff). */
+export function signalCodeLine(nonce: string): string {
+  return `[訊號代碼] 本步驟的訊號代碼是 ${nonce}。只有帶這個代碼的訊號才算數。`
+}
+
+/** The part of a pane's screen text after the kickoff's signal-code line:
+ *  the agent's own output. A TUI that echoes the kickoff (or redraws it
+ *  later) moves the cut past the echo; a TUI that collapses the paste shows
+ *  no code line and the text is returned whole. */
+export function signalsAfterKickoff(text: string, nonce: string): string {
+  if (!NONCE_RE.test(nonce)) return ''
+  const at = text.lastIndexOf(`訊號代碼是 ${nonce}`)
+  if (at < 0) return text
+  const eol = text.indexOf('\n', at)
+  return eol < 0 ? '' : text.slice(eol + 1)
+}
+
+/** Parse a slot's reply for branch / failure / output signals carrying
+ *  `nonce`, the code its kickoff named: `---BRANCH:<nonce>: <value>---`,
+ *  `---NODE-FAILED:<nonce>[: <reason>]---` and an `---OUTPUT-START:<nonce>---`
+ *  … `---OUTPUT-END:<nonce>---` block. A signal without that code (no code, a
+ *  wrong one, the kickoff's own `代碼` wording) is ignored, and so is every
+ *  signal when `nonce` is not a code. The last real occurrence wins;
+ *  placeholder examples are never taken as results. Callers pass the
+ *  agent's turn text where the CLI has one (#733). */
+export function parseNodeSignals(text: string, nonce: string): NodeSignals {
   const out: NodeSignals = {}
-  for (const m of text.matchAll(BRANCH_RE)) {
+  if (!NONCE_RE.test(nonce)) return out
+  const branchRe = new RegExp(String.raw`${LINE_HEAD}---BRANCH:${nonce}:[ \t]*(.*?)[ \t]*---[ \t]*$`, 'gm')
+  const failedRe = new RegExp(String.raw`${LINE_HEAD}---NODE-FAILED:${nonce}(?::[ \t]*(.*?))?[ \t]*---[ \t]*$`, 'gm')
+  const outputRe = new RegExp(
+    String.raw`${LINE_HEAD}---OUTPUT-START:${nonce}---[ \t]*$([\s\S]*?)${LINE_HEAD}---OUTPUT-END:${nonce}---[ \t]*$`,
+    'gm',
+  )
+  for (const m of text.matchAll(branchRe)) {
     const v = m[1].trim()
     if (v && !PLACEHOLDER_RE.test(v)) out.branch = v
   }
-  for (const m of text.matchAll(FAILED_RE)) {
+  for (const m of text.matchAll(failedRe)) {
     const v = (m[1] ?? '').trim()
     if (!PLACEHOLDER_RE.test(v)) out.failed = v || 'the agent reported a failure'
   }
   let body: string | undefined
-  for (const m of text.matchAll(OUTPUT_RE)) {
+  for (const m of text.matchAll(outputRe)) {
     const v = m[1].trim()
     if (v && !PLACEHOLDER_RE.test(v)) body = v
   }
@@ -521,27 +574,31 @@ export function expandNodeOutputs(
 }
 
 /** Instructions appended to a slot's kickoff for the signals its outgoing
- *  edges need; '' for a node with no branch or error edge and no output
- *  contract (every legacy node), so its kickoff is unchanged. Examples use
- *  `<…>` placeholders, which parseNodeSignals never takes as a result. */
-export function kickoffHints(plan: DagPlan, nodeId: string): string {
+ *  edges need; '' for a node with no branch or error edge, no output
+ *  contract and no retry (every legacy node), so its kickoff is unchanged.
+ *  The formats are written with the word 代碼 where the code goes, and the
+ *  code itself only on the closing signal-code line, so the kickoff never
+ *  holds a signal parseNodeSignals takes — an echo of it on screen is inert. */
+export function kickoffHints(plan: DagPlan, nodeId: string, nonce: string): string {
   const lines: string[] = []
   if (hasBranchEdge(plan, nodeId)) {
     const values = [...new Set(plan.graph.edges
       .filter((e) => e.kind === 'branch' && e.from === nodeId && typeof e.when === 'string' && !isDefaultWhen(e.when))
       .map((e) => (e.when as string).trim()))]
     if (values.length) {
-      lines.push(`[分支回報] 完成時另起一行，從行首輸出 ---BRANCH: <值>---，<值> 只能是下列之一：${values.join('、')}。`)
+      lines.push(`[分支回報] 完成時另起一行，從行首輸出 ---BRANCH:代碼: 值---：「代碼」換成下面的訊號代碼，「值」只能是下列之一：${values.join('、')}。`)
     }
   }
   if (hasOutputContract(plan, nodeId)) {
-    lines.push('[結構化輸出] 結束前輸出一段 JSON：上一行單獨寫 ---OUTPUT-START---，下一行單獨寫 ---OUTPUT-END---，下游節點會讀取這段 JSON。')
+    lines.push('[結構化輸出] 結束前輸出一段 JSON：上一行單獨寫 ---OUTPUT-START:代碼---，下一行單獨寫 ---OUTPUT-END:代碼---（「代碼」換成下面的訊號代碼），下游節點會讀取這段 JSON。')
   }
   if (readsFailure(plan, nodeId)) {
     const then = hasErrorEdge(plan, nodeId) ? '流程會改走錯誤處理分支' : '這一步會重試'
-    lines.push(`[失敗回報] 如果這一步無法完成，另起一行，從行首輸出 ---NODE-FAILED: <原因>---，再照常輸出完成標記；${then}。`)
+    lines.push(`[失敗回報] 如果這一步無法完成，另起一行，從行首輸出 ---NODE-FAILED:代碼: 原因---（「代碼」換成下面的訊號代碼），再照常輸出完成標記；${then}。`)
   }
-  return lines.length ? `\n\n${lines.join('\n')}` : ''
+  if (!lines.length) return ''
+  lines.push(signalCodeLine(nonce))
+  return `\n\n${lines.join('\n')}`
 }
 
 /** Fail `nodeId` down its error edge(s). false (nothing changed) when it has
@@ -556,4 +613,41 @@ export function routeFailure(
   if (!hasErrorEdge(plan, nodeId)) return false
   state.nodes[nodeId] = { ...state.nodes[nodeId], status: 'failed', endedAt: at, error, errorRouted: true }
   return true
+}
+
+// ── Sub-pipelines ────────────────────────────────────────────────────────────
+
+/** The first subpipeline node the run must call before stage `nextIndex`
+ *  (nextIndex === stage count: before the run completes), or null. Only a
+ *  pending call counts: done, reused, untaken and error-routed ones are past. */
+export function callBefore(plan: DagPlan, state: DagRunState, nextIndex: number): string | null {
+  const limit = nextIndex < plan.stageLayer.length ? plan.stageLayer[nextIndex] : Infinity
+  return plan.callIds.find((c) => plan.nodeLayer[c] < limit && state.nodes[c]?.status === 'pending') ?? null
+}
+
+/** What a finished child run hands its parent's subpipeline node: the
+ *  summaries of its last steps (slot nodes no forward edge leaves that ran),
+ *  and their structured output — one step's as is, several as {label: output}. */
+export function childResultOf(
+  plan: DagPlan,
+  state: DagRunState,
+  summaryOf: (id: string) => string,
+  outputOf: (id: string) => unknown,
+): { summary: string; output: unknown } {
+  const sinks = plan.stageNodeIds.flat().filter((id) => {
+    const st = state.nodes[id]
+    if (!st || isUntaken(st) || (st.status !== 'done' && st.status !== 'skipped')) return false
+    return !plan.graph.edges.some((e) => isForwardEdge(e) && e.from === id)
+  })
+  const label = (id: string): string => node(plan, id)?.label || id
+  const summary = sinks.length === 1
+    ? summaryOf(sinks[0])
+    : sinks.map((id) => `[${label(id)}]\n${summaryOf(id)}`).join('\n\n')
+  const withOutput = sinks.filter((id) => outputOf(id) !== undefined)
+  const output = withOutput.length === 0
+    ? null
+    : withOutput.length === 1 && sinks.length === 1
+      ? outputOf(withOutput[0])
+      : Object.fromEntries(withOutput.map((id) => [label(id), outputOf(id)]))
+  return { summary, output }
 }

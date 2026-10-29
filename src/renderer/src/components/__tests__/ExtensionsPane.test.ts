@@ -983,11 +983,33 @@ describe('ExtensionsPane', () => {
       wrapper = mountExtensions()
       await flushPromises()
       await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(wrapper.get('.ext-error').text()).toBe('Could not reload the installed Navide plugins: backend gone')
+      // The first read failed: the list's place says why, with Retry.
+      expect(wrapper.get('.ext-inventory-state-text').text()).toBe('Could not reload the installed Navide plugins: backend gone')
+      expect(wrapper.find('.ext-inventory-retry').exists()).toBe(true)
       expect(unhandled).toEqual([])
     } finally {
       process.off('unhandledRejection', onUnhandled)
     }
+  })
+
+  it('says the list is loading, and offers Retry when the read gives no answer', async () => {
+    let answer: (value: unknown) => void = () => {}
+    const listInstalled = vi
+      .fn()
+      .mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+      .mockResolvedValue([])
+    mockPlugins({ listInstalled })
+    wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.find('.ext-inventory-state.nv-loading').exists()).toBe(true)
+
+    answer(undefined)
+    await flushPromises()
+    expect(wrapper.find('.ext-inventory-state.nv-loading').exists()).toBe(false)
+    await wrapper.get('.ext-inventory-retry').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.ext-inventory-state').exists()).toBe(false)
+    expect(wrapper.find('.ext-empty').exists()).toBe(true)
   })
 
   it('shows both the rollback failure and a failed redraw after it', async () => {

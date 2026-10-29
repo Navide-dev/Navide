@@ -10,21 +10,24 @@ const { t } = useI18n()
 const ranges = ref<SharedRange[]>([])
 const cidr = ref('')
 const label = ref('')
-const error = ref('')
+// A message keeps its i18n key and is translated when shown, so a language
+// change never leaves it in the previous language; backend text is shown as given.
+type PaneMessage = { key: string } | { text: string }
+const error = ref<PaneMessage | null>(null)
 const busy = ref(false)
 
 async function run(type: string, payload: Record<string, unknown>, fallback: string): Promise<boolean> {
   busy.value = true
-  error.value = ''
+  error.value = null
   try {
     const resp = await props.backend.send<{ ranges: SharedRange[] }>(type, payload)
     if (resp.ok && resp.payload) {
       ranges.value = resp.payload.ranges
       return true
     }
-    error.value = resp.error?.message || t(fallback)
+    error.value = resp.error?.message ? { text: resp.error.message } : { key: fallback }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : t(fallback)
+    error.value = err instanceof Error ? { text: err.message } : { key: fallback }
   } finally {
     busy.value = false
   }
@@ -33,11 +36,11 @@ async function run(type: string, payload: Record<string, unknown>, fallback: str
 
 async function add(): Promise<void> {
   if (!looksLikeCidr(cidr.value)) {
-    error.value = t('cli-risk.ranges-invalid-cidr')
+    error.value = { key: 'cli-risk.ranges-invalid-cidr' }
     return
   }
   if (!label.value.trim()) {
-    error.value = t('cli-risk.ranges-label-required')
+    error.value = { key: 'cli-risk.ranges-label-required' }
     return
   }
   if (await run('cli_risk.ranges.add', { cidr: cidr.value.trim(), label: label.value.trim() }, 'cli-risk.ranges-save-failed')) {
@@ -66,7 +69,7 @@ onMounted(() => { void run('cli_risk.ranges.list', {}, 'cli-risk.ranges-load-fai
       <input v-model="label" type="text" maxlength="64" :placeholder="t('cli-risk.ranges-label')" :aria-label="t('cli-risk.ranges-label')" />
       <button type="submit" :disabled="busy">{{ t('cli-risk.ranges-add') }}</button>
     </form>
-    <p v-if="error" role="alert" class="ranges-error">{{ error }}</p>
+    <p v-if="error" role="alert" class="ranges-error">{{ 'key' in error ? t(error.key) : error.text }}</p>
     <div class="ranges-table-wrap">
       <table class="ranges-table">
         <thead>

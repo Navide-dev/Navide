@@ -49,13 +49,15 @@ export const MAX_LOOPS_CEILING = 10
 /** Bounds of a slot node's retry policy (maxTries counts the first try). */
 export const MAX_TRIES_CEILING = 5
 export const MAX_RETRY_WAIT_MS = 300_000
+/** How deep sub-pipelines may nest at run time (the outermost run is depth 1). */
+export const MAX_SUBPIPELINE_DEPTH = 3
 
 export interface GraphPosition {
   x: number
   y: number
 }
 
-export type GraphNodeKind = 'trigger' | 'slot' | 'gate'
+export type GraphNodeKind = 'trigger' | 'slot' | 'gate' | 'subpipeline'
 
 /** A slot node's agent configuration — the same fields a stage slot has. */
 export type SlotConfig = StageSlot
@@ -63,6 +65,18 @@ export type SlotConfig = StageSlot
 export interface GateConfig {
   /** Shown to the approver ("check both implementations before review"). */
   prompt?: string
+}
+
+/** A subpipeline node runs another pipeline and waits for it: the parent run
+ *  suspends, the child runs in the same workspace, and its last layer's
+ *  summary and structured output become this node's output. */
+export interface SubpipelineConfig {
+  pipelineId: string
+  /** The child run's task; may use {{task}}, {{prev.summary}} and
+   *  {{node.<id>.output…}}. Empty or absent: the parent's task. */
+  task?: string
+  /** Only true is supported: the parent waits for the child. */
+  wait?: true
 }
 
 export interface GraphNode {
@@ -74,6 +88,8 @@ export interface GraphNode {
   slot?: SlotConfig
   /** Optional for kind 'gate'. */
   gate?: GateConfig
+  /** Required for kind 'subpipeline', absent otherwise. */
+  subpipeline?: SubpipelineConfig
   /** The stage this node came from; used to keep stage metadata (title,
    *  sentinel, question, …) when stages are re-derived from layers. */
   stageId?: string
@@ -101,7 +117,7 @@ export const FORWARD_EDGE_KINDS: readonly GraphEdgeKind[] = ['main', 'branch', '
 export const BRANCH_DEFAULT = 'default'
 
 /** A branch edge's condition: a string is matched (trimmed, case-insensitive)
- *  against the value the agent reported with ---BRANCH: <value>---; an object
+ *  against the value the agent reported with ---BRANCH:<code>: <value>---; an object
  *  compares one field of the source node's structured output. */
 export type BranchWhen = string | { path: string; equals: string | number | boolean | null }
 
@@ -131,7 +147,7 @@ export interface PipelineGraph {
 export type GraphOp =
   | { op: 'add_node'; node: GraphNode; after?: string[]; before?: string[] }
   | { op: 'remove_node'; id: string; reconnect?: boolean }
-  | { op: 'update_node'; id: string; label?: string; slot?: Partial<SlotConfig>; gate?: GateConfig }
+  | { op: 'update_node'; id: string; label?: string; slot?: Partial<SlotConfig>; gate?: GateConfig; subpipeline?: Partial<SubpipelineConfig> }
   | { op: 'move_node'; id: string; position: GraphPosition }
   | { op: 'add_edge'; edge: GraphEdge }
   | { op: 'remove_edge'; id: string }
@@ -178,7 +194,7 @@ export interface NodeRunState {
   skipReason?: 'untaken'
   /** A failed node whose failure went down its error edge(s): the run went on. */
   errorRouted?: boolean
-  /** The value the agent reported with ---BRANCH: <value>---. */
+  /** The value the agent reported with ---BRANCH:<code>: <value>---. */
   branch?: string
   /** The JSON the agent reported between ---OUTPUT-START/END--- (null when it
    *  did not parse), for {{node.<id>.output}} and object branch conditions. */
@@ -261,8 +277,71 @@ export function hasBranchingEdges(graph: PipelineGraph): boolean {
   return graph.edges.some((e) => e.kind === 'branch' || e.kind === 'error')
 }
 
+/** Nodes that run work and can fail: they may carry retry and start branch
+ *  and error edges. */
+function isWorkNode(n: GraphNode | undefined): boolean {
+  return n?.kind === 'slot' || n?.kind === 'subpipeline'
+}
+
+function subpipelineErrors(n: GraphNode): string[] {
+  const c = n.subpipeline as unknown
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return [`subpipeline node ${n.id} needs subpipeline.pipelineId`]
+  const o = c as Record<string, unknown>
+  const errors: string[] = []
+  if (typeof o.pipelineId !== 'string' || !o.pipelineId.trim()) errors.push(`subpipeline node ${n.id} needs subpipeline.pipelineId`)
+  if (o.task !== undefined && typeof o.task !== 'string') errors.push(`subpipeline node ${n.id}: task must be a string`)
+  if (o.wait !== undefined && o.wait !== true) errors.push(`subpipeline node ${n.id}: wait must be true (the parent always waits)`)
+  if (Object.keys(o).some((k) => k !== 'pipelineId' && k !== 'task' && k !== 'wait')) {
+    errors.push(`subpipeline node ${n.id}: subpipeline takes only pipelineId, task and wait`)
+  }
+  return errors
+}
+
+/** Sub-pipeline references that loop (A → B → A) across `graphs`, keyed by
+ *  pipeline id; each cycle is reported once, from its smallest id. A reference
+ *  to a pipeline not in `graphs` is reported too. The backend twin is
+ *  subpipeline_cycle_errors in pipeline_graph.py. */
+export function subpipelineCycleErrors(graphs: Readonly<Record<string, PipelineGraph>>): string[] {
+  const refs = new Map<string, string[]>()
+  const errors: string[] = []
+  for (const [pid, g] of Object.entries(graphs)) {
+    const out: string[] = []
+    for (const n of g.nodes) {
+      const child = n.kind === 'subpipeline' ? n.subpipeline?.pipelineId : undefined
+      if (!child) continue
+      if (!(child in graphs)) errors.push(`subpipeline node ${n.id} in ${pid} names unknown pipeline ${child}`)
+      else out.push(child)
+    }
+    refs.set(pid, out)
+  }
+  const seen = new Set<string>()
+  const ids = [...refs.keys()].sort()
+  for (const start of ids) {
+    const stack: string[] = []
+    const walk = (pid: string): void => {
+      const at = stack.indexOf(pid)
+      if (at >= 0) {
+        const loop = stack.slice(at)
+        const min = [...loop].sort()[0]
+        const rot = [...loop.slice(loop.indexOf(min)), ...loop.slice(0, loop.indexOf(min))]
+        const key = rot.join('\u0000')
+        if (!seen.has(key)) {
+          seen.add(key)
+          errors.push(`subpipeline cycle: ${[...rot, rot[0]].join(' → ')}`)
+        }
+        return
+      }
+      stack.push(pid)
+      for (const child of refs.get(pid) ?? []) walk(child)
+      stack.pop()
+    }
+    walk(start)
+  }
+  return errors
+}
+
 function retryErrors(n: GraphNode): string[] {
-  if (n.kind !== 'slot') return [`node ${n.id}: only slot nodes carry retry`]
+  if (!isWorkNode(n)) return [`node ${n.id}: only slot and subpipeline nodes carry retry`]
   const r = n.retry as unknown
   if (!r || typeof r !== 'object' || Array.isArray(r)) return [`node ${n.id}: retry must be {maxTries, waitMs?}`]
   const o = r as Record<string, unknown>
@@ -449,7 +528,9 @@ export function validateGraph(graph: PipelineGraph): string[] {
     if (!n?.id) { errors.push('node without id'); continue }
     if (nodes.has(n.id)) errors.push(`duplicate node id ${n.id}`)
     nodes.set(n.id, n)
-    if (!['trigger', 'slot', 'gate'].includes(n.kind)) errors.push(`node ${n.id}: unknown kind ${String(n.kind)}`)
+    if (!['trigger', 'slot', 'gate', 'subpipeline'].includes(n.kind)) errors.push(`node ${n.id}: unknown kind ${String(n.kind)}`)
+    if (n.kind === 'subpipeline') errors.push(...subpipelineErrors(n))
+    else if (n.subpipeline != null) errors.push(`node ${n.id}: only subpipeline nodes carry subpipeline config`)
     if (n.kind === 'slot' && (!n.slot || !n.slot.agentKey || !n.slot.label)) {
       errors.push(`slot node ${n.id} needs slot.agentKey and slot.label`)
     }
@@ -485,7 +566,7 @@ export function validateGraph(graph: PipelineGraph): string[] {
     } else if (known) {
       succ.get(e.from)!.push(e.to)
       if (e.maxLoops !== undefined) errors.push(`edge ${e.id}: maxLoops is only for reject edges`)
-      if (kind !== 'main' && nodes.get(e.from)!.kind !== 'slot') errors.push(`${kind} edge ${e.id} must start at a slot node`)
+      if (kind !== 'main' && !isWorkNode(nodes.get(e.from))) errors.push(`${kind} edge ${e.id} must start at a slot or subpipeline node`)
     }
     if (kind === 'branch') errors.push(...branchWhenErrors(e))
     else if (e.when != null) errors.push(`edge ${e.id}: when is only for branch edges`)
@@ -595,6 +676,10 @@ export function applyGraphOps(graph: PipelineGraph, ops: readonly GraphOp[]): Pi
           if (n.kind !== 'gate') throw new Error(`node ${op.id} is not a gate`)
           n.gate = { ...n.gate, ...op.gate }
         }
+        if (op.subpipeline) {
+          if (n.kind !== 'subpipeline') throw new Error(`node ${op.id} is not a subpipeline`)
+          n.subpipeline = { ...(n.subpipeline as SubpipelineConfig), ...op.subpipeline }
+        }
         break
       }
       case 'move_node':
@@ -626,7 +711,7 @@ export function applyGraphOps(graph: PipelineGraph, ops: readonly GraphOp[]): Pi
       }
       case 'set_retry': {
         const n = node(op.id)
-        if (n.kind !== 'slot') throw new Error(`only slot nodes can retry: ${op.id}`)
+        if (n.kind !== 'slot' && n.kind !== 'subpipeline') throw new Error(`only slot and subpipeline nodes can retry: ${op.id}`)
         if (op.retry) n.retry = { ...op.retry }
         else delete n.retry
         break

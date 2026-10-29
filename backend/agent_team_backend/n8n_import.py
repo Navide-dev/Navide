@@ -1249,3 +1249,46 @@ def _agent_section(root: str, by_name: dict[str, dict[str, Any]], cluster_of: di
             lines.append(f"Tool \"{s}\" (`{short}`): use your own equivalent.\n" + _fence(_dump(body), "json")
                          + ("\n" + _fence(code, "javascript") if code else ""))
     return "\n".join(lines)
+
+
+def import_detail(imported_from: dict[str, Any]) -> str:
+    """The Guard taint detail for runs of an imported pipeline."""
+    return f"imported from the n8n workflow \"{str(imported_from.get('workflow') or '')[:80]}\""
+
+
+def import_into_store(
+    store: Any,
+    workflow: str | bytes | dict[str, Any],
+    *,
+    dry_run: bool = True,
+    default_agent: str = DEFAULT_AGENT,
+    name: str = "",
+) -> dict[str, Any]:
+    """Convert, and unless dry_run store the result as a new pipeline.
+
+    Shared by the MCP tool and the ws handler. Returns {dry_run, graph,
+    report, credentials} plus `pipeline` (the new pipeline's summary) when
+    something was written. Raises N8nImportError; the store's GraphError
+    cannot happen for a converted graph but is not caught."""
+    result = convert_n8n_workflow(workflow, default_agent=default_agent)
+    out: dict[str, Any] = {
+        "dry_run": bool(dry_run),
+        "graph": result["graph"],
+        "report": result["report"],
+        "credentials": result["credentials"],
+    }
+    if dry_run:
+        return out
+    imported_from = {
+        "kind": "n8n",
+        "importedAt": result["source"]["importedAt"],
+        "workflow": result["report"]["workflow"],
+    }
+    out["pipeline"] = store.create_imported_pipeline(
+        name or result["report"]["workflow"],
+        result["graph"],
+        imported_from,
+        result["source"],
+        result["credentials"],
+    )
+    return out

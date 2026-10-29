@@ -184,6 +184,7 @@ Task description
   → skip the stage's slots none of whose inputs was taken (an unchosen branch, the error edge of a slot that did not fail)
   → activate current stage with prior-stage context
   → retry a slot whose try failed, on the same pane, as its retry policy allows
+  → at a subpipeline node, suspend the run (run_stack), run the child pipeline in the same workspace, then resume with its output
   → run slots in parallel
   → collect questions, analyzer signals, and completion sentinels
   → manager routes work when configured

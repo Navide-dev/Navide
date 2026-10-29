@@ -622,7 +622,7 @@ Renderer のものなので、それぞれ `ui.pipeline.next` / `.resume` / `.re
 
 #### テンプレートを編集する
 
-さらに四つの Tool が、実行の元になる定義そのものを書きます。上の八つと違い、これらは
+さらに五つの Tool が、実行の元になる定義そのものを書きます。上の八つと違い、これらは
 ウィンドウを**通りません**: Backend 自身の Store に書き、WS handler と同じ
 `pipelines.changed` / `stages.changed` / `roles.changed` イベントを Broadcast するので
 （`pipeline_graph` は先に `pipeline.graph_changed` を送り、続いて Stage と Pipeline の
@@ -635,6 +635,7 @@ Renderer のものなので、それぞれ `ui.pipeline.next` / `.resume` / `.re
 | `stage_define` | `op`, `pipeline_id`, `stage_id`, `stage`, `ids`, `workspace_path` | 一つの Pipeline の中の **Stage** を追加・編集・削除・並べ替え・再シードします。Stage は一つの工程で、Pane になる Slot を持ちます: 各 Slot は CLI（`agent_key`）と Role（`role_key`）を指名し、その Pane が起動時に受け取る Kickoff テキストを持ちます。`pipeline_id` を空にすると **Active な** Pipeline を意味します。それは Pipelines ウィンドウが選択しているもので、あなたが読んでいたものとは限りません — 明示してください。`{ok, op, stages, pipeline_id, pipelines, active_pipeline_id}` を返し、`upsert` はさらに `stage` を返します。Pipeline の最後に残った Stage は削除できません |
 | `role_define` | `op`, `key`, `new_key`, `label`, `one_line`, `system_prompt`, `properties` | Slot がキャスティングする **Role** を作成・編集・改名・削除・再シードします。Role は名前の付いた System Prompt で、Slot は `role_key` で一つを指名し、その Slot が開く Pane はその Prompt で起動します。Role はマシン全体でグローバルです — Pipeline ごとでも Workspace ごとでもありません — なのでここでの編集はその Role を指名するすべての Pipeline に届き、範囲を絞る `workspace_path` もありません。`{ok, op, roles}` を返し、`upsert` と `rename` はさらに `role`、`rename` は `repointed_pipeline_ids` も返します。最後に残った Role は削除できません。既に起動している Pane は与えられた Prompt を保ちます。変更が届くのはその Slot で次に開かれる Pane であって、画面にあるものではありません |
 | `pipeline_graph` | `op`, `pipeline_id`, `ops`, `graph`, `workspace_path` | Pipeline **テンプレート**をグラフとして読み書きします: Slot ノード（それぞれ一つの CLI Pane で、Stage Slot と同じ Agent・Role・Label・Kickoff・Commander のフィールドに加え、任意の `params` を持ちます）、Gate ノード（`pipeline_gate` が決めるまで実行はそこで止まります）、Trigger を、`main`・`reject`・`branch`・`error` のエッジでつなぎます。ノードは上流のすべてのノードを待ちます。グラフとして編集されたことの無い Pipeline は、`get` に対して Stage から導いたグラフ（`derived: true`）を返し、書き込むまで変わりません。`pipeline_id` を空にすると Active な Pipeline を意味します — 明示してください。`{ok, op, pipeline_id, graph, stages}` を返し、`get` はさらに `derived` を返します。不正なグラフは `error_code: "invalid"` で理由が `errors` に並び、何も書かれません |
+| `pipeline_import_n8n` | `json`, `dry_run`, `default_agent`, `name`, `workspace_path` | エクスポートした n8n のワークフローを**新しい** Pipeline テンプレートに変換します。`dry_run`（既定は `true`）は何も書かず、プレビュー用の `graph`、変換レポート `report`、認証情報のリスト `credentials` を返します。`dry_run: false` では新しい Pipeline を作ります — 既存のものは決して上書きせず、使用中の名前には ` (2)`、` (3)`… が付きます — グラフに加えて、マスク済みの元の JSON と認証情報のリストを保存し、後の二つはこのマシンにだけ残ります（設定バンドルのエクスポートには含まれません）。ほとんどのステップは CLI Agent が元のノードのパラメータから代行するため、結果は n8n と異なることがあります。`report.slots` は各 Slot の Kickoff 全文、`report.gates` は各 Gate のプロンプトを並べます。埋め込まれた秘密はすべて `<removed: add credential for …>` に置き換えられ、`report.secretsRemoved` にはノードとフィールドだけが載ります。インポートした Pipeline は、誰が開始しても実行のたびにその Pane に Navide Guard の外部コンテンツのマークが付きます。`{ok, dry_run, graph, report, credentials}` を返し、Pipeline を作ったときは `pipeline` と `pipelines` も返します。n8n のワークフローでない入力は `error_code: "invalid"` です |
 
 **各 `op` が必要とする引数。** これらの Tool を最も誤用しやすいのがここです: `op` が他の
 どの引数を必須にするかを決め、足りなければ `ok: false` と
@@ -658,7 +659,7 @@ Renderer のものなので、それぞれ `ui.pipeline.next` / `.resume` / `.re
 | `role_define` | `upsert` / `rename` | `properties`（任意） | この Role の Slot が表示する設定フォーム: `{name, type, label?, description?, default?, options?, required?, displayOptions?}` のリストで、`type` は `string`・`text`・`template`・`number`・`boolean`・`options` のいずれか（`options` には `{value, label?}` の `options` リストが必要）。`displayOptions` は `{show?, hide?}` で、別のプロパティ名を、このプロパティを表示または非表示にする値に対応させます。省略すると Role の既存の properties を保ち、`[]` で消します。Slot はその値を `params` に保存します |
 | `role_define` | `reset` | — | 破壊的: 独自のものも含めてすべての Role を捨て、組み込みの集合を戻します。シード集合に無い Role を指名していた Slot は、宙ぶらりんのままではなく空にされるので、Pipeline は生き残りますが、それらの Slot は Role を失い、キャスティングし直しになります。Undo はありません |
 | `pipeline_graph` | `get` | — | `{graph, derived, stages}` を返します |
-| `pipeline_graph` | `apply` | `ops` | 全か無かで適用される編集のリスト: `add_node`（`node` は `{id, kind: slot / gate / trigger, label?, position, slot?, gate?: {prompt?}}`、`after` / `before` のノード id で `main` エッジを張れます — 既存の `after`→`before` エッジは置き換えられ、つまりノードをそのエッジ上に挿入します）、`remove_node`（`id`、`reconnect?` で上流を下流につなぎ直す）、`update_node`、`move_node`、`add_edge`（`edge` は `{id?, from, to, kind?: main / reject / branch / error, maxLoops?, when?}`）、`remove_edge`、`set_gate`（`id`、`prompt?`）、`set_pin`（`id`、`pinned` — Pin された Slot は以降の実行で飛ばされ、最後の出力が再利用されます）、`set_retry`（`id`、`retry` は `{maxTries, waitMs?}` または `null` — Slot の失敗した試行（Kickoff が届かなかった、または Agent が `---NODE-FAILED---` を報告した）は同じ Pane で再実行され、`maxTries` は合計 1〜5 回、`waitMs` は 0〜300000 の間隔で、その後に error エッジか実行の失敗へ進みます）、`set_stage_meta`（`stageId` と、その層が導く Stage のメタデータ） |
+| `pipeline_graph` | `apply` | `ops` | 全か無かで適用される編集のリスト: `add_node`（`node` は `{id, kind: slot / gate / trigger / subpipeline, label?, position, slot?, gate?: {prompt?}}`、`after` / `before` のノード id で `main` エッジを張れます — 既存の `after`→`before` エッジは置き換えられ、つまりノードをそのエッジ上に挿入します）、`remove_node`（`id`、`reconnect?` で上流を下流につなぎ直す）、`update_node`、`move_node`、`add_edge`（`edge` は `{id?, from, to, kind?: main / reject / branch / error, maxLoops?, when?}`）、`remove_edge`、`set_gate`（`id`、`prompt?`）、`set_pin`（`id`、`pinned` — Pin された Slot は以降の実行で飛ばされ、最後の出力が再利用されます）、`set_retry`（`id`、`retry` は `{maxTries, waitMs?}` または `null` — Slot の失敗した試行（Kickoff が届かなかった、または Agent が `---NODE-FAILED---` を報告した）は同じ Pane で再実行され、`maxTries` は合計 1〜5 回、`waitMs` は 0〜300000 の間隔で、その後に error エッジか実行の失敗へ進みます）、`set_stage_meta`（`stageId` と、その層が導く Stage のメタデータ） |
 | `pipeline_graph` | `set` | `graph` | `{version: 1, nodes, edges}`。グラフ全体を置き換えます |
 
 **グラフの規則。** グラフの書き込みは `main`・`branch`・`error` エッジに閉路を作ってはいけません。唯一の
@@ -669,17 +670,22 @@ Stage リストとして表せないため、`stage_define` の `upsert`・`dele
 `error_code: "graph_nonlinear"` で拒否されます — `pipeline_graph` で編集してください。
 グラフがまだ線形の Pipeline ではそれらは動作し、グラフも追随します。
 
+**サブ Pipeline。** `subpipeline` ノード（`subpipeline: {pipelineId, task?, wait?: true}`）は別の Pipeline を実行し、その完了を待ちます。実行はこのノードで一時停止し、その Pane は開いたままになります。子 Pipeline は同じ Workspace で通常の実行として動きます。子が完了すると、その最後のステップの要約と構造化出力がこのノードの出力になり、親は次の Stage から再開します。`task` は子のタスクで、空なら親のタスクを使います。`{{task}}`、`{{prev.summary}}`、`{{node.<id>.output}}` を使えます。子は親の実行の Guard taint を引き継ぎます。子が失敗するとこのノードが失敗し、Slot と同じように、その後リトライ（`set_retry`）するか error エッジへ進みます。親が待っている間、その Workspace では他の実行を開始できません。開始は親の名前付きで拒否され、resume か reset するまで続きます。中止すると子と親の両方が一時停止し、resume すると子、次に親の順で続きます。reset すると両方が消えます。Pipeline をまたぐ呼び出しはループにできず（A → B → A は保存時に拒否され、指定した Pipeline は存在しなければなりません）、入れ子は最大 3 実行までです。子の実行中、`pipeline_status` は `run_stack`（待機中の親）、`parent`、`depth` を返します。開いている Pane は各階層の分を合計した数になり、最大で 3 実行分です。subpipeline ノードの無いグラフは、これまでとまったく同じに動きます。
+
 **branch エッジと error エッジ。** どちらも Slot から出ます。`branch` エッジは `when` を
-持ちます: 文字列なら、その Slot の Agent が独立した行に `---BRANCH: <value>---` と報告した値と
+持ちます: 文字列なら、その Slot の Agent が独立した行に `---BRANCH:<code>: <value>---` と報告した値と
 大文字小文字を区別せずに比べます（`"default"` は、その Slot の他の branch がどれも一致しなかったときに
-通ります）。`{path, equals}` なら、Agent が `---OUTPUT-START---` と `---OUTPUT-END---` の行で
+通ります）。`{path, equals}` なら、Agent が `---OUTPUT-START:<code>---` と `---OUTPUT-END:<code>---` の行で
 挟んで報告した JSON の一つのフィールドと比べます。`error` エッジは、その Slot が失敗したときだけ
-通ります: Kickoff が Agent に届かなかったか、Agent が `---NODE-FAILED: <reason>---` と報告した場合です。
+通ります: Kickoff が Agent に届かなかったか、Agent が `---NODE-FAILED:<code>: <reason>---` と報告した場合です。
 error エッジの無い Slot では、届かなかった Kickoff はこれまでどおり実行を失敗で終わらせます。
 ノードは、入力のうち少なくとも一つが通ったときに実行されます。どの入力も通らなかったノードは
 飛ばされ（`nodes` の値は `{status: "skipped", skipReason: "untaken"}`）、そのノードだけが
-つながる先も同様に飛ばされます。これらのシグナルは Agent 自身の返答からだけ読み、Kickoff からは
-読みません。Slot の Kickoff には、そのエッジに必要なシグナルの説明が付きます。Kickoff では
+つながる先も同様に飛ばされます。`<code>` は Kickoff ごとに最後の行で示されるランダムなシグナルコードです。
+これを含まないシグナルは数えないので、Kickoff のエコー、Agent が読んだファイルや Web ページ、取り込んだ
+テンプレートで分岐を選んだり、出力を書いたり、ステップを失敗させたりすることはできません。Claude Code と
+Codex のシグナルは CLI 自身のログにあるターンのテキストからだけ読み、画面は見ません。その他の CLI では
+Kickoff より後の画面だけを読みます。Slot の Kickoff には、そのエッジに必要なシグナルの説明が付きます。Kickoff では
 他のノードの出力を `{{node.<id>.output}}`（JSON 全体）や `{{node.<id>.output.<path>}}`
 （一つのフィールド）で読めます。値が無ければ空になります。Stage は引き続き層ごとに実行されるため、
 入力が揃ったノードでも、同じ層の無関係なノードを待つことがあります。branch エッジも error エッジも
@@ -688,7 +694,7 @@ error エッジの無い Slot では、届かなかった Kickoff はこれま�
 **実行中に編集した場合。** その Workspace の実行が `running` 状態の間、
 `pipeline_define` の `delete` と `set_active` は即座に拒否され、`reset_builtin` は
 進行中の実行がその Pipeline を使っている間は拒否されます。`stage_define` の四つの op と
-`pipeline_graph` の `apply`・`set` は**すべて**同じように拒否されます — 実行中に編集された Stage リストは、その実行の足元で
+`pipeline_graph` の `apply`・`set` は**すべて**同じように拒否されます（`pipeline_import_n8n` の `dry_run: false` は `delete` と同じく、そのワークスペースに `running` 状態の実行がある間は拒否されます） — 実行中に編集された Stage リストは、その実行の足元で
 流れを変えてしまうからです。拒否は `ok: false` と
 `error_code: "pipeline_running"` で、何も書かれていません。実行は開始時に記録した
 Pipeline と照合するため、その Pipeline を明示してもガードは抜けられません。他の
@@ -705,7 +711,7 @@ Slot を `usages` に並べるので、`stage_define` の `upsert` で張り替�
 られます。削除された Role を指す Slot は Role 注入に失敗し、その Stage の Pane は理由を
 示すものが画面に何も無いまま空の Prompt の前で止まります。この拒否はそのためにあります。
 
-この四つが返す他の `error_code` は `not_found` と `invalid`（Store が値を拒否した）です。
+この五つが返す他の `error_code` は `not_found` と `invalid`（Store が値を拒否した）です。
 どの失敗でも何も書き込まれません。
 
 ### スケジューラ

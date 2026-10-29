@@ -102,6 +102,24 @@ describe('PipelineCanvas', () => {
     w.unmount()
   })
 
+  it('draws a subpipeline node as a card with an input and an output', async () => {
+    const called: PipelineGraph = {
+      ...graph,
+      nodes: [...graph.nodes, { id: 'call', kind: 'subpipeline', label: 'Call', position: { x: 560, y: 200 }, subpipeline: { pipelineId: 'p2', wait: true } }],
+      edges: [...graph.edges, { id: 'e-a-call', from: 'a', to: 'call', kind: 'main' }],
+    }
+    const w = mount(PipelineCanvas, {
+      props: { graph: called, roleLabels: {}, agentLabels: {}, runNodes: {}, now: 0, selectedId: null, locked: false, flowId: `t-${Math.random()}` },
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const handles = w.find('.vue-flow__node[data-id="call"]').findAll('.vue-flow__handle').map((h) => h.attributes('data-handleid'))
+    expect(handles).toEqual(expect.arrayContaining(['in', 'out']))
+    expect(w.find('[data-node-id="call"]').text()).toContain('p2')
+    w.unmount()
+  })
+
   it('offers zoom controls with the current zoom level', async () => {
     const w = mountCanvas()
     await flushPromises()
@@ -109,6 +127,22 @@ describe('PipelineCanvas', () => {
     expect(zoom.findAll('button')).toHaveLength(3)
     expect(zoom.find('.pcv-zoom-level').text()).toMatch(/^\d+%$/)
     w.unmount()
+  })
+
+  it('adds the nodeClass result to each node, and nothing without it', async () => {
+    const w = mount(PipelineCanvas, {
+      props: { graph, roleLabels: {}, agentLabels: {}, runNodes: {}, now: 0, selectedId: null, locked: true, flowId: `t-${Math.random()}`, nodeClass: (n) => `cat-${n.kind}` },
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    expect(w.find('.vue-flow__node[data-id="a"]').classes()).toContain('cat-slot')
+    expect(w.find('.vue-flow__node[data-id="g"]').classes()).toContain('cat-gate')
+    w.unmount()
+    const plain = mountCanvas()
+    await flushPromises()
+    expect(plain.find('.vue-flow__node[data-id="a"]').classes().some((c) => c.startsWith('cat-'))).toBe(false)
+    plain.unmount()
   })
 
   it('colours minimap nodes by run state', async () => {

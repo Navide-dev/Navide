@@ -11,6 +11,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import PromptSkillIcon from './PromptSkillIcon.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import { usePromptSkills } from '../composables/usePromptSkills'
 import { reorderByIds } from '../lib/paneOrder'
 import {
@@ -198,11 +199,9 @@ function applyCustomIcon(): void {
 <template>
   <div class="prompts-pane" data-settings-section="prompts">
     <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
+    <!-- The page intro sits under the page title (the settings modal renders
+         it); the toolbar keeps the page's one primary action at the right. -->
     <div class="prompts-toolbar">
-      <div>
-        <h2>{{ t('settings.prompts.title') }}</h2>
-        <p>{{ t('settings.prompts.intro') }}</p>
-      </div>
       <button type="button" class="primary" @click="createSkill">
         {{ t('settings.prompts.new') }}
       </button>
@@ -213,7 +212,7 @@ function applyCustomIcon(): void {
       <div class="prompts-chips" role="group" :aria-label="t('settings.prompts.filter-label')">
         <button
           type="button"
-          class="prompts-chip"
+          class="prompts-chip settings-filter-chip"
           :class="{ on: categoryFilter === 'all' }"
           :aria-pressed="categoryFilter === 'all'"
           @click="categoryFilter = 'all'"
@@ -222,7 +221,7 @@ function applyCustomIcon(): void {
           v-for="c in categories"
           :key="c.key"
           type="button"
-          class="prompts-chip"
+          class="prompts-chip settings-filter-chip"
           :class="{ on: categoryFilter === c.key }"
           :aria-pressed="categoryFilter === c.key"
           @click="categoryFilter = c.key"
@@ -259,12 +258,13 @@ function applyCustomIcon(): void {
             <span class="prompt-card-head">
               <PromptSkillIcon :name="skill.icon" />
               <strong v-truncate>{{ skill.name }}</strong>
+            </span>
+            <span class="prompt-card-desc" v-truncate>{{ skill.description || skill.prompt }}</span>
+            <!-- The source badge sits on the meta line, so the name keeps the full width. -->
+            <span class="prompt-card-tags">
               <span v-if="skill.isDefault" class="prompt-badge default">{{
                 t('settings.prompts.default-badge')
               }}</span>
-            </span>
-            <span class="prompt-card-desc" v-truncate>{{ skill.description || skill.prompt }}</span>
-            <span class="prompt-card-tags">
               <span class="pchip">{{ skill.category }}</span>
               <span v-if="skill.isDefault" class="pchip">{{
                 skill.maxTurns > 0
@@ -276,9 +276,7 @@ function applyCustomIcon(): void {
             </span>
           </button>
         </div>
-        <div v-else class="prompts-state">
-          <strong>{{ t('settings.prompts.empty') }}</strong>
-        </div>
+        <SettingsEmptyState v-else class="prompts-empty" :message="t('settings.prompts.empty')" />
       </div>
 
       <!-- ── Drawer ─────────────────────────────────────────────────────── -->
@@ -476,20 +474,14 @@ textarea:focus {
 /* ── Toolbar ──────────────────────────────────────────────────────────── */
 .prompts-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
 }
-.prompts-toolbar h2 {
-  margin: 0;
-  font-size: 15px;
-  color: var(--text-bright);
-}
-.prompts-toolbar p {
-  margin: 3px 0 0;
-  max-width: 62ch;
-  color: var(--text-secondary);
-  font-size: var(--font-2xs);
+/* A narrow page wraps the toolbar, never the button's label. */
+.prompts-toolbar > button {
+  white-space: nowrap;
 }
 
 /* ── Filter bar ───────────────────────────────────────────────────────── */
@@ -504,24 +496,7 @@ textarea:focus {
   flex-wrap: wrap;
   gap: 4px;
 }
-.prompts-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-2xs);
-}
-.prompts-chip.on {
-  background: var(--bg-elevated);
-  color: var(--text-bright);
-  font-weight: 600;
-}
-.prompts-chip .count {
-  font-size: var(--font-3xs);
-  opacity: 0.6;
-  font-variant-numeric: tabular-nums;
-}
+/* The chips are the Settings window's shared .settings-filter-chip. */
 .prompts-search {
   flex: 1;
   min-width: 140px;
@@ -547,21 +522,10 @@ textarea:focus {
 }
 .prompts-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
   gap: 8px;
 }
-.prompts-state {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 18px 8px;
-  color: var(--text-secondary);
-  font-size: var(--font-2xs);
-  text-align: center;
-}
-.prompts-state strong {
-  color: var(--text-bright);
-}
+
 
 /* ── Card ─────────────────────────────────────────────────────────────── */
 .prompt-card {
@@ -571,7 +535,7 @@ textarea:focus {
   gap: 5px;
   padding: 9px 11px;
   text-align: left;
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
   min-width: 0;
@@ -605,12 +569,16 @@ textarea:focus {
   min-width: 0;
   font-size: var(--font-xs);
   color: var(--text-bright);
+  /* Up to two lines; a long name breaks anywhere rather than hiding. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .prompt-card-desc {
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   line-height: 1.35;
   display: -webkit-box;
@@ -629,7 +597,7 @@ textarea:focus {
   display: inline-block;
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   border: 1px solid var(--border-muted);
   color: var(--text-secondary);
@@ -641,7 +609,7 @@ textarea:focus {
 .prompt-badge {
   border-radius: var(--radius-pill);
   padding: 2px 7px;
-  font-size: 9px;
+  font-size: var(--font-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -701,7 +669,7 @@ textarea:focus {
 }
 .drawer-section h4 {
   margin: 0;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -715,7 +683,7 @@ textarea:focus {
 }
 .drawer-section label > span,
 .drawer-field > span {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -772,7 +740,7 @@ textarea:focus {
 }
 .drawer-hint {
   margin: 0;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   color: var(--text-secondary);
   line-height: 1.4;
 }

@@ -4,6 +4,8 @@ import type { NodeRunState, PipelineGraph } from '../lib/pipelineGraph'
 import {
   approveGate,
   buildDagPlan,
+  callBefore,
+  childResultOf,
   conditionalLabels as planConditionalLabels,
   createRunState,
   expandNodeOutputs,
@@ -14,11 +16,13 @@ import {
   hasOutputContract,
   isUntaken,
   kickoffHints,
+  newSignalNonce,
   parseNodeSignals,
   pinnedLabels as planPinnedLabels,
   readsFailure,
   rejectGate,
   restartPointFor,
+  retryPolicyOf,
   routeFailure as planRouteFailure,
   settleUntaken,
   slotNodeIdAt,
@@ -78,6 +82,15 @@ export function usePipelineDag(deps: PipelineDagDeps) {
   let run: DagRunState | null = null
   let outputs: Record<string, NodeOutput> = {}
   let pendingOutputs: Record<string, NodeOutput> = {}
+  /** The parent runs suspended under this run (project run_stack): this is
+   *  a sub-pipeline's child run while it is non-empty. */
+  const runStack = ref<Array<{ id?: string; pipeline_name?: string; run?: { pipeline_id?: string } }>>([])
+  /** Sub-pipeline results for the next begin (see expectCallResult). */
+  let pendingCallResults: Record<string, NodeRunState> = {}
+  let callOutputCandidates: Record<string, NodeOutput> = {}
+  /** Each node's signal code for its latest kickoff, in memory only: never
+   *  reported to the backend, so pipeline_status cannot hand it out. */
+  let nonces = new Map<string, string>()
   let reportChain: Promise<unknown> = Promise.resolve()
 
   const now = (): string => new Date().toISOString()
@@ -153,8 +166,39 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     }
     plan.value = built
     run = createRunState(built, startIndex, startLayer ?? built.stageLayer[startIndex] ?? Infinity)
+    settleCalls(built)
+    nonces = new Map()
     void report()
     return startIndex
+  }
+
+  /** Subpipeline nodes after a (re)start: a result the window was handed
+   *  (expectCallResult) wins; a call before the start point is reused only
+   *  when its output was recorded, and otherwise made again. A no-op for a
+   *  plan without subpipeline nodes. */
+  function settleCalls(p: DagPlan): void {
+    if (!run) return
+    for (const c of p.callIds) {
+      const recorded = callOutputCandidates[c]
+      if (recorded) outputs[c] = recorded
+      const given = pendingCallResults[c]
+      if (given) run.nodes[c] = { ...given }
+      else if (run.nodes[c]?.status === 'skipped' && !outputs[c]) run.nodes[c] = { status: 'pending' }
+    }
+    pendingCallResults = {}
+    callOutputCandidates = {}
+  }
+
+  /** The child run of subpipeline node `nodeId` ended with `state`: applied
+   *  by the next begin, which resumes the parent. */
+  function expectCallResult(nodeId: string, state: NodeRunState): void {
+    pendingCallResults[nodeId] = { ...state }
+  }
+
+  /** Recorded outputs (project.node_outputs) of subpipeline nodes, for the
+   *  next begin; entries for other nodes are ignored. */
+  function adoptCallOutputs(raw: unknown): void {
+    if (raw && typeof raw === 'object') callOutputCandidates = { ...(raw as Record<string, NodeOutput>) }
   }
 
   /** True when a run of this pipeline can restart at `nodeId`. Reads the
@@ -186,6 +230,8 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     }
     plan.value = built
     run = createRunState(built, nextIndex, built.nodeLayer[gateId])
+    settleCalls(built)
+    nonces = new Map()
     for (const [id, st] of Object.entries(restored)) {
       // Only finished work carries over; anything that was in flight is
       // what the gate is about to decide on, or runs again after it. A
@@ -262,14 +308,22 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     return p && p.hasBranching ? planConditionalLabels(p, index) : new Set()
   }
 
-  /** The failure a running slot reported with ---NODE-FAILED---, or '' —
-   *  always '' for a node with neither an error edge nor a retry policy,
-   *  which does not read the signal. */
-  function reportedFailure(index: number, label: string, tail: string): string {
+  /** The failure a running slot reported with ---NODE-FAILED--- carrying
+   *  its signal code, or '' — always '' for a node with neither an error edge
+   *  nor a retry policy, which does not read the signal. `text` is what the
+   *  caller trusts as the agent's own output (signalSource). */
+  function reportedFailure(index: number, label: string, text: string): string {
     const p = plan.value
     const id = nodeId(index, label)
     if (!p || !run || !id || run.nodes[id]?.status !== 'running' || !readsFailure(p, id)) return ''
-    return parseNodeSignals(tail).failed ?? ''
+    return parseNodeSignals(text, nonces.get(id) ?? '').failed ?? ''
+  }
+
+  /** The signal code of this slot's latest kickoff, or '' when its kickoff
+   *  asked for no signals. */
+  function signalNonce(index: number, label: string): string {
+    const id = nodeId(index, label)
+    return (id && nonces.get(id)) || ''
   }
 
   /** One more try of a failed slot, if its retry policy has one left: the
@@ -283,6 +337,73 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     deps.log(`DAG ↻ "${label}" failed (${reason}) — retrying, try ${turn.attempt}/${turn.maxTries}` + (turn.waitMs ? ` in ${turn.waitMs} ms` : ''))
     void report()
     return turn
+  }
+
+  type CallTurn =
+    | { kind: 'call'; nodeId: string; label: string; pipelineId: string; task: string; note: string }
+    | { kind: 'fail'; nodeId: string; label: string; reason: string }
+
+  /** The sub-pipeline the run must call before stage `nextIndex`, or why
+   *  the run fails there, or null. A call whose child failed is retried while
+   *  its retry policy has tries left, then goes down its error edge; with
+   *  neither, the run fails. `task` is the node's template expanded
+   *  ({{task}} is the caller's to fill). */
+  function nextCall(nextIndex: number): CallTurn | null {
+    const p = plan.value
+    if (!p || !run || !p.callIds.length) return null
+    settleUntaken(p, run, resultOf)
+    const limit = nextIndex < p.stageLayer.length ? p.stageLayer[nextIndex] : Infinity
+    let note = ''
+    for (const c of p.callIds) {
+      const st = run.nodes[c]
+      if (p.nodeLayer[c] >= limit || st?.status !== 'failed' || st.errorRouted) continue
+      const label = p.graph.nodes.find((n) => n.id === c)?.label || c
+      const policy = retryPolicyOf(p, c)
+      const tries = st.attempts ?? 1
+      if (policy && tries < policy.maxTries) {
+        run.nodes[c] = { ...st, status: 'pending' }
+        note = `[重試 第 ${tries + 1}/${policy.maxTries} 次 — 上次失敗：${st.error ?? ''}]`
+        deps.log(`DAG ↻ sub-pipeline "${label}" failed (${st.error ?? ''}) — calling it again, try ${tries + 1}/${policy.maxTries}`)
+        continue
+      }
+      if (planRouteFailure(p, run, c, st.error ?? 'the sub-pipeline run failed', now())) {
+        deps.log(`DAG ↯ sub-pipeline "${label}" failed — taking its error edge`)
+        settleUntaken(p, run, resultOf)
+        continue
+      }
+      void report()
+      return { kind: 'fail', nodeId: c, label, reason: st.error ?? 'the sub-pipeline run failed' }
+    }
+    void report()
+    const id = callBefore(p, run, nextIndex)
+    if (!id) return null
+    const n = p.graph.nodes.find((x) => x.id === id)!
+    const template = n.subpipeline?.task?.trim() ? n.subpipeline.task : '{{task}}'
+    return { kind: 'call', nodeId: id, label: n.label || id, pipelineId: n.subpipeline?.pipelineId ?? '', task: expandFor(id, template), note }
+  }
+
+  function setRunStack(frames: unknown): void {
+    runStack.value = Array.isArray(frames) ? (frames as typeof runStack.value) : []
+  }
+
+  /** True while this run is a sub-pipeline's child (a parent waits on it). */
+  function isChildRun(): boolean {
+    return runStack.value.length > 0
+  }
+
+  /** The subpipeline node's child run is starting. */
+  function callStarted(nodeId: string): void {
+    if (!run) return
+    const prev = run.nodes[nodeId]
+    run.nodes[nodeId] = { ...prev, status: 'running', startedAt: now(), endedAt: undefined, attempts: (prev?.attempts ?? 0) + 1 }
+    void report()
+  }
+
+  /** What this run, as a sub-pipeline's child, hands back to its parent. */
+  function childResult(): { summary: string; output: unknown } {
+    const p = plan.value
+    if (!p || !run) return { summary: '', output: null }
+    return childResultOf(p, run, summaryOf, (id) => resultOf(id).output)
   }
 
   /** True when this slot's failures go down an error edge. */
@@ -329,7 +450,10 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     void report()
   }
 
-  function slotFinished(index: number, label: string, tail: string): void {
+  /** `tail` becomes the node's summary; signals are read from `signals`
+   *  (what the caller trusts as the agent's own output), or from `tail` when
+   *  it is not given. Either way only signals with the node's code count. */
+  function slotFinished(index: number, label: string, tail: string, signals?: string): void {
     const id = nodeId(index, label)
     if (!run || !id) return
     const prev = run.nodes[id]
@@ -344,16 +468,16 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     const wantBranch = hasBranchEdge(p, id)
     const wantOutput = hasOutputContract(p, id)
     const wantFailure = hasErrorEdge(p, id)
-    const signals = wantBranch || wantOutput || wantFailure ? parseNodeSignals(tail) : {}
+    const found = wantBranch || wantOutput || wantFailure ? parseNodeSignals(signals ?? tail, nonces.get(id) ?? '') : {}
     const result: NodeResult = {}
-    if (wantBranch && signals.branch !== undefined) result.branch = signals.branch
-    if (wantOutput && signals.output) {
-      result.output = signals.output.value
-      if (signals.output.parseError) deps.log(`DAG ⚠ "${label}" output is not valid JSON (${signals.output.parseError}) — stored as null`)
+    if (wantBranch && found.branch !== undefined) result.branch = found.branch
+    if (wantOutput && found.output) {
+      result.output = found.output.value
+      if (found.output.parseError) deps.log(`DAG ⚠ "${label}" output is not valid JSON (${found.output.parseError}) — stored as null`)
     }
-    if (wantFailure && signals.failed !== undefined) {
-      run.nodes[id] = { ...prev, status: 'failed', endedAt: now(), summary, error: signals.failed, errorRouted: true }
-      deps.log(`DAG ↯ "${label}" reported a failure — taking its error edge (${signals.failed})`)
+    if (wantFailure && found.failed !== undefined) {
+      run.nodes[id] = { ...prev, status: 'failed', endedAt: now(), summary, error: found.failed, errorRouted: true }
+      deps.log(`DAG ↯ "${label}" reported a failure — taking its error edge (${found.failed})`)
     } else {
       run.nodes[id] = { ...prev, status: 'done', endedAt: now(), summary, ...result }
     }
@@ -399,14 +523,25 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     const p = plan.value
     const id = nodeId(index, label)
     if (!p || !id) return expandPrevSummary(text, [])
+    // A new code for every kickoff of the node: an earlier try's signals, or
+    // the screen of a previous run, can never answer this one.
+    const nonce = newSignalNonce()
+    const hints = kickoffHints(p, id, nonce)
+    if (hints) nonces.set(id, nonce)
+    else nonces.delete(id)
+    return expandFor(id, text) + hints
+  }
+
+  /** {{prev.summary}} and {{node.<id>.output}} as node `id` sees them. */
+  function expandFor(id: string, text: string): string {
+    const p = plan.value!
     const upstream = upstreamSlotNodes(p, id)
       .filter((up) => !isUntaken(run?.nodes[up]))
       .map((up) => ({
         label: p.graph.nodes.find((n) => n.id === up)?.label || up,
         summary: summaryOf(up) || '(no output recorded)',
       }))
-    const expanded = expandNodeOutputs(expandPrevSummary(text, upstream), p.graph, (up) => resultOf(up).output)
-    return expanded + kickoffHints(p, id)
+    return expandNodeOutputs(expandPrevSummary(text, upstream), p.graph, (up) => resultOf(up).output)
   }
 
   /** Context lines for earlier nodes this run did not execute (pinned or
@@ -461,8 +596,17 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     conditionalLabels,
     routeFailure,
     reportedFailure,
+    signalNonce,
     retryAfterFailure,
     routesFailure,
+    runStack,
+    setRunStack,
+    isChildRun,
+    expectCallResult,
+    adoptCallOutputs,
+    nextCall,
+    callStarted,
+    childResult,
     takeNote,
     looped,
     slotStarted,

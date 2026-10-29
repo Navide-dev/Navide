@@ -7692,6 +7692,13 @@ def _pipeline_status_of(workspace_path: str) -> dict[str, Any]:
         if isinstance(state, dict)
     }
     status["gate"] = stored.get("node_gate") or {}
+    if getattr(project, "run_stack", None):
+        # A sub-pipeline's child run: the parents waiting for it, outermost first.
+        from agent_team_backend.ws_handlers import run_frame_view
+
+        status["run_stack"] = [run_frame_view(f) for f in project.run_stack]
+        status["parent"] = status["run_stack"][-1]
+        status["depth"] = len(project.run_stack) + 1
     return status
 
 
@@ -7734,6 +7741,13 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     or {} when it is not paused). Node ids are the ones pipeline_graph op
     "get" returns; a pipeline without a stored graph uses n-<stage_id>-<slot
     index>. A paused gate is resolved with pipeline_gate.
+
+    While the run is a sub-pipeline's child run it also carries `run_stack`,
+    the parent runs suspended at their subpipeline nodes, outermost first
+    ({id, node_id, pipeline_id, pipeline_name, child_pipeline_id, next_index,
+    task_description, suspended_at} each), `parent` (the innermost of them)
+    and `depth` (2 or 3). state "suspended" is the moment between a parent
+    suspending and its child starting.
 
     workspace_path defaults to your own pane's workspace; pass it only to ask
     about another project.
@@ -8675,8 +8689,9 @@ async def pipeline_start(
 
     Returns the window's own reply — {ok, result, error}. `result` carries
     {pipelineId, stages, workspacePath, state} for a run that actually started.
-    ok false means nothing started: a run already going (abort it first), no
-    pipeline to run, or a first stage whose panes all failed to spawn. The
+    ok false means nothing started: a run already going (abort it first), a
+    parent run suspended at a sub-pipeline waiting here (resume or reset it
+    first), no pipeline to run, or a first stage whose panes all failed to spawn. The
     window reports the run's own state rather than the fact that the call
     returned, so "ok" here is not the "started but nothing happened" answer.
 
@@ -9347,13 +9362,15 @@ async def pipeline_graph(
     `op`:
     - "get"   — returns {graph, derived, stages}.
     - "apply" — needs `ops`, a list applied all-or-nothing:
-        {op:"add_node", node:{id, kind:"slot"|"gate"|"trigger", label?,
+        {op:"add_node", node:{id, kind:"slot"|"gate"|"trigger"|"subpipeline", label?,
            position:{x,y}, slot?:{agentKey, roleKey, label, kickoffBody,
-           isCommander?, params?}, gate?:{prompt?}}, after?:[ids], before?:[ids]}
+           isCommander?, params?}, gate?:{prompt?},
+           subpipeline?:{pipelineId, task?, wait?:true}}, after?:[ids], before?:[ids]}
            (after/before wire main edges; an edge after→before is replaced,
            i.e. inserting on an edge)
         {op:"remove_node", id, reconnect?:true}  (upstream rewired to downstream)
-        {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?}}
+        {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?},
+           subpipeline?:{...partial}}
         {op:"move_node", id, position:{x,y}}
         {op:"add_edge", edge:{id?, from, to,
            kind?:"main"|"reject"|"branch"|"error", maxLoops?, when?}}
@@ -9376,16 +9393,31 @@ async def pipeline_graph(
     from there at most that many times, then the run fails. "branch" and
     "error" edges start at a slot. A branch edge carries `when`: a string
     matched (case-insensitively) against the value the agent reports with
-    ---BRANCH: <value>--- ("default" is taken when no other branch of that
-    slot matched), or {path, equals} compared with a field of the JSON the
-    slot reports between ---OUTPUT-START--- and ---OUTPUT-END---. An error
-    edge is taken only when its slot fails (its kickoff never landed, or it
-    reported ---NODE-FAILED: <reason>---); on a slot without one, a kickoff
-    that never landed still fails the run.
+    ---BRANCH:<code>: <value>--- ("default" is taken when no other branch of
+    that slot matched), or {path, equals} compared with a field of the JSON
+    the slot reports between ---OUTPUT-START:<code>--- and
+    ---OUTPUT-END:<code>---. An error edge is taken only when its slot fails
+    (its kickoff never landed, or it reported
+    ---NODE-FAILED:<code>: <reason>---); on a slot without one, a kickoff
+    that never landed still fails the run. <code> is a random signal code
+    each kickoff names; a signal without it (an echoed kickoff, text the
+    agent read) is ignored, and claude / codex signals are read from their
+    turn text only, never from the screen.
     A node none of whose inputs was taken is skipped, and so are the nodes
     only it feeds. A kickoff may read {{node.<id>.output}} or
     {{node.<id>.output.<path>}}. A graph without branch or error edges runs
     exactly as before.
+
+    A "subpipeline" node runs another pipeline and waits for it: the run
+    suspends there (its panes stay open), the child pipeline runs in the same
+    workspace as an ordinary run, and when it completes its last steps'
+    summary and structured output become this node's output; the parent then
+    resumes. `task` is the child's task (empty: the parent's), and may use
+    {{task}}, {{prev.summary}} and {{node.<id>.output}}. A child that fails
+    fails the node, which then retries (set_retry) or takes its error edge
+    like a slot. Calls may not loop across pipelines (A → B → A is refused,
+    and every pipeline named must exist) and nest at most 3 runs deep. A
+    graph without subpipeline nodes runs exactly as before.
 
     Refused while the workspace's run is using this pipeline (error_code
     "pipeline_running"), like stage_define. `pipeline_id` empty means the
@@ -9429,6 +9461,80 @@ async def pipeline_graph(
 
     await _broadcast_graph_change(out, f"graph_{op}")
     return {"ok": True, "op": op, **out}
+
+
+@server.tool()
+async def pipeline_import_n8n(
+    ctx: Context,
+    json: str,
+    dry_run: bool = True,
+    default_agent: str = "",
+    name: str = "",
+    workspace_path: str = "",
+) -> dict[str, Any]:
+    """Convert an exported n8n workflow into a NEW pipeline template.
+
+    `json` is the workflow as n8n exports or copies it (nodes + connections).
+    With `dry_run` true (the default) nothing is written: you get the preview
+    graph and the conversion report to show the user first. With `dry_run`
+    false a new pipeline is created — an existing one is never overwritten, and
+    a name already in use gets " (2)", " (3)"… — holding the graph, the
+    redacted source JSON and the credential checklist. `name` defaults to the
+    workflow's name; `default_agent` (an agentKey, default "claude") is the CLI
+    for slots no AI Agent model decides.
+
+    What the user should know before importing (say it):
+    - CLI agents carry out most steps. HTTP Request, Code, Set, app nodes
+      (Google Sheets, Slack, Gmail…), unknown or community nodes are run by an
+      agent from the node's original parameters, so results can differ from
+      n8n's. Runs of steps with no branching, small IF/Switch regions and loop
+      bodies are folded into one slot each; an AI Agent and its model, memory,
+      tools and output parser become one slot. Wait and send-and-wait become
+      gates. report.slots lists every slot's full kickoff and report.gates every
+      gate prompt; report.stats.needsReview counts steps to confirm.
+    - Embedded secrets are removed. Authorization headers, API keys, bearer and
+      common token shapes found anywhere in the workflow are replaced with
+      "<removed: add credential for …>" — in the graph, the report and the
+      stored source alike. report.secretsRemoved names only the node and field
+      of each; the values are not kept anywhere. Credentials themselves are
+      listed by type and name (`credentials`) for the user to set up locally
+      (an MCP server or the service's CLI login); n8n credential ids are
+      dropped and nothing is put into an environment.
+    - Schedule, webhook and app triggers, sub-workflows and large branches are
+      imported but marked pending: start such a pipeline by hand.
+    - Everything imported is external content. Every run of an imported
+      pipeline marks its panes with Navide Guard's external-content taint,
+      whoever starts it; that cannot be turned off.
+
+    Refused while the workspace has a run in progress (error_code
+    "pipeline_running"), like pipeline_define's delete. Returns {ok, dry_run,
+    graph, report, credentials} plus `pipeline` (the new pipeline's summary)
+    and `pipelines` when one was created; ok false carries `error` and
+    `error_code` ("invalid" for input that is not an n8n workflow,
+    "pipeline_running").
+    """
+    caller = _resolve_caller(ctx)
+    from agent_team_backend import app as _app
+    from agent_team_backend.n8n_import import N8nImportError, import_into_store
+
+    if not dry_run:
+        workspace_path = await _definition_workspace(caller, workspace_path)
+        if await asyncio.to_thread(_run_is_active, workspace_path):
+            return _run_in_progress("import a pipeline")
+    try:
+        out = await asyncio.to_thread(
+            import_into_store,
+            _app.stages_store,
+            json,
+            dry_run=bool(dry_run),
+            default_agent=str(default_agent or "claude"),
+            name=str(name or ""),
+        )
+    except N8nImportError as exc:
+        return {"ok": False, "error": str(exc), "error_code": "invalid"}
+    if not dry_run:
+        out.update(await _publish_pipelines("import"))
+    return {"ok": True, **out}
 
 
 # ── Pipelines: driving a run that is already going ──────────────────────────
@@ -12008,3 +12114,5 @@ from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  #
 from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401
 # DESIGN-C S3: window_list / window_focus.
 from . import window_tools as _window_tools  # noqa: E402,F401
+# Self-evolution S5b: evolve_retro, the last core tool.
+from . import evolve_retro_tool as _evolve_retro_tool  # noqa: E402,F401

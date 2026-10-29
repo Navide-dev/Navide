@@ -23,6 +23,11 @@ const query = ref('')
 const searchEl = ref<HTMLInputElement | null>(null)
 const listEl = ref<HTMLElement | null>(null)
 
+const subpipeline = computed<PaletteItem>(() => ({
+  kind: 'subpipeline',
+  label: t('pipelineEditor.palette.subpipeline'),
+  description: t('pipelineEditor.palette.subpipeline-desc'),
+}))
 const gate = computed<PaletteItem>(() => ({
   kind: 'gate',
   label: t('pipelineEditor.palette.gate'),
@@ -41,7 +46,7 @@ const roleItems = computed<PaletteItem[]>(() =>
     .map((r) => ({ kind: 'role', roleKey: r.key, label: r.label, description: r.one_line }))
 )
 const flowItems = computed<PaletteItem[]>(() =>
-  matches(`${gate.value.label} ${gate.value.description}`) ? [gate.value] : []
+  [gate.value, subpipeline.value].filter((item) => matches(`${item.label} ${item.description}`))
 )
 const empty = computed(() => !roleItems.value.length && !flowItems.value.length)
 
@@ -108,7 +113,10 @@ onMounted(() => {
           type="button" role="listitem" class="pp-item" :draggable="!locked" :disabled="locked"
           @dragstart="onDragStart($event, item)" @click="pick(item)"
         >
-          <span class="pp-glyph pp-glyph--gate" aria-hidden="true">
+          <span v-if="item.kind === 'subpipeline'" class="pp-glyph pp-glyph--subpipeline" aria-hidden="true">
+            <svg viewBox="0 0 16 16"><path d="M2.5 3.5h7v4h-7zM6.5 8.5h7v4h-7zM4.5 7.5v3h2" /></svg>
+          </span>
+          <span v-else class="pp-glyph pp-glyph--gate" aria-hidden="true">
             <svg viewBox="0 0 16 16"><path d="M8 1.8 14.2 8 8 14.2 1.8 8z" /></svg>
           </span>
           <span class="pp-text">
@@ -188,6 +196,7 @@ onMounted(() => {
 }
 .pp-glyph--role { background: var(--bg-muted); color: var(--text-secondary); }
 .pp-glyph--gate { background: color-mix(in srgb, var(--attention-emphasis) 18%, transparent); color: var(--attention-fg); }
+.pp-glyph--subpipeline { background: color-mix(in srgb, var(--accent-emphasis) 18%, transparent); color: var(--accent-fg); }
 .pp-glyph svg { width: 12px; height: 12px; fill: currentColor; }
 .pp-text { display: grid; gap: 1px; min-width: 0; }
 .pp-label { font-size: var(--font-sm); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

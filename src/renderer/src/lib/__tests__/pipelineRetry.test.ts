@@ -40,12 +40,12 @@ describe('retry policy: validation (mirrors the backend)', () => {
   it('only slot nodes carry retry, and set_retry with null removes it', () => {
     const g = withRetry({ maxTries: 3 })
     g.nodes[0].retry = { maxTries: 2 }
-    expect(validateGraph(g)).toContain('node trigger: only slot nodes carry retry')
+    expect(validateGraph(g)).toContain('node trigger: only slot and subpipeline nodes carry retry')
     const set = applyGraphOps(deriveGraphFromStages(STAGES), [{ op: 'set_retry', id: 'n-01-0', retry: { maxTries: 3, waitMs: 10 } }])
     expect(set.nodes.find((n) => n.id === 'n-01-0')!.retry).toEqual({ maxTries: 3, waitMs: 10 })
     const cleared = applyGraphOps(set, [{ op: 'set_retry', id: 'n-01-0', retry: null }])
     expect(cleared.nodes.find((n) => n.id === 'n-01-0')!.retry).toBeUndefined()
-    expect(() => applyGraphOps(cleared, [{ op: 'set_retry', id: 'trigger', retry: { maxTries: 2 } }])).toThrow('only slot nodes can retry')
+    expect(() => applyGraphOps(cleared, [{ op: 'set_retry', id: 'trigger', retry: { maxTries: 2 } }])).toThrow('only slot and subpipeline nodes can retry')
   })
 })
 
@@ -83,8 +83,8 @@ describe('retry turns', () => {
   it('a retrying node is told how to report a failure; a legacy node is not', () => {
     const g = withRetry({ maxTries: 2 })
     const plan = buildDagPlan(g, deriveStagesFromGraph(g, STAGES))
-    expect(kickoffHints(plan, 'n-01-0')).toContain('這一步會重試')
-    expect(kickoffHints(plan, 'n-02-0')).toBe('')
+    expect(kickoffHints(plan, 'n-01-0', '0123456789abcdef')).toContain('這一步會重試')
+    expect(kickoffHints(plan, 'n-02-0', '0123456789abcdef')).toBe('')
   })
 })
 
@@ -101,6 +101,8 @@ describe('usePipelineDag reads ---NODE-FAILED--- only where it is asked for', ()
 
   it('a legacy node never reports a failure or retries (R8)', async () => {
     const dag = await dagFor(null)
+    dag.expandKickoff('a', 0, 'a')
+    expect(dag.signalNonce(0, 'a')).toBe('')
     dag.slotStarted(0, 'a', 'pane-a')
     expect(dag.reportedFailure(0, 'a', 'x\n---NODE-FAILED: broke---')).toBe('')
     expect(dag.retryAfterFailure(0, 'a', 'broke')).toBeNull()
@@ -109,13 +111,24 @@ describe('usePipelineDag reads ---NODE-FAILED--- only where it is asked for', ()
 
   it('a retrying node reports while running, retries, and is quiet while it waits', async () => {
     const dag = await dagFor(withRetry({ maxTries: 2 }))
-    expect(dag.reportedFailure(0, 'a', '---NODE-FAILED: broke---')).toBe('')
+    dag.expandKickoff('a', 0, 'a')
+    const first = dag.signalNonce(0, 'a')
+    const failed = `x\n---NODE-FAILED:${first}: broke---`
+    expect(dag.reportedFailure(0, 'a', failed)).toBe('')
     dag.slotStarted(0, 'a', 'pane-a')
-    expect(dag.reportedFailure(0, 'a', 'x\n---NODE-FAILED: broke---')).toBe('broke')
+    // Only with the kickoff's code: none, or a code-shaped wrong one, is ignored.
+    expect(dag.reportedFailure(0, 'a', 'x\n---NODE-FAILED: broke---')).toBe('')
+    expect(dag.reportedFailure(0, 'a', 'x\n---NODE-FAILED:ffffffffffffffff: broke---')).toBe('')
+    expect(dag.reportedFailure(0, 'a', failed)).toBe('broke')
     expect(dag.retryAfterFailure(0, 'a', 'broke')).toMatchObject({ attempt: 2 })
     // Pending until the retry's kickoff: a late signal from the failed try is ignored.
-    expect(dag.reportedFailure(0, 'a', '---NODE-FAILED: broke---')).toBe('')
+    expect(dag.reportedFailure(0, 'a', failed)).toBe('')
+    // The retry's kickoff names a new code: the failed try's signal, still on
+    // screen, cannot fail the new try.
+    dag.expandKickoff('a', 0, 'a')
+    expect(dag.signalNonce(0, 'a')).not.toBe(first)
     dag.slotStarted(0, 'a', 'pane-a')
+    expect(dag.reportedFailure(0, 'a', failed)).toBe('')
     expect(dag.nodeStates.value['n-01-0']).toMatchObject({ status: 'running', attempts: 2 })
     expect(dag.retryAfterFailure(0, 'a', 'broke twice')).toBeNull()
   })

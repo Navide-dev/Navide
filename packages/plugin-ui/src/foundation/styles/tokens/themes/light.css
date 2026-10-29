@@ -34,6 +34,14 @@
   --border-default: #d1d9e0;
   --border-muted: #eaeef2;
   --border-strong: #afb8c1;
+  /* Settings window only: one light frame for every settings card (rows,
+     skill, prompt, memory and credential cards alike), still visibly
+     separated from the white page; row dividers that show on the card fill,
+     and an inset one step below the card. Other themes fall back to their
+     border/inset tokens. */
+  --settings-card-border: #c8d1da;
+  --settings-card-divider: #d1d9e0;
+  --settings-inset: #eef1f4;
 
   /* Accent (blue) — link blue meets AA on white */
   --accent-fg: #0969da;      /* ~5.4:1 */
@@ -50,6 +58,7 @@
   --success-emphasis: #1f883d;
   --success-muted: #aceebb;
   --success-subtle: #dafbe1;
+  --success-on-subtle: #116329; /* ~6.6:1 on success-subtle */
 
   /* Toast variants */
   --toast-external-bg: #a40e26;
@@ -75,6 +84,7 @@
   --attention-emphasis: #bf8700;
   --attention-muted: #fae17d;
   --attention-subtle: #fff8c5;
+  --attention-on-subtle: #7d4e00; /* ~6.6:1 on attention-subtle */
   --warning-fg: #bc4c00;
   --manager-fg: #8a6d3b;     /* darker tan, AA on light bg */
 

@@ -71,6 +71,9 @@ const props = defineProps<{
   locked: boolean
   /** Instance id, so a second canvas (executions replay) keeps its own viewport. */
   flowId?: string
+  /** Extra class on a node's Vue Flow wrapper (the n8n import preview colors
+   *  nodes by how they were converted). */
+  nodeClass?: (node: GraphNode) => string
 }>()
 const emit = defineEmits<{
   (e: 'select', id: string | null): void
@@ -105,6 +108,7 @@ const flowNodes = computed<FlowNode[]>(() =>
     connectable: !props.locked,
     selected: props.selectedId === n.id,
     width: NODE_SIZE[n.kind].w,
+    class: props.nodeClass?.(n),
   }))
 )
 
@@ -322,6 +326,15 @@ function mainPath(p: EdgeProps): { path: string; labelX: number; labelY: number 
         />
         <Handle id="out" type="source" :position="Position.Right" class="pcv-handle" />
         <Handle id="reject-out" type="source" :position="Position.Bottom" class="pcv-handle pcv-handle--reject" :title="t('pipelineEditor.canvas.reject-handle')" />
+        <Handle id="reject-in" type="target" :position="Position.Left" class="pcv-handle pcv-handle--loop-in" />
+      </template>
+      <template #node-subpipeline="{ data }">
+        <Handle id="in" type="target" :position="Position.Left" class="pcv-handle" />
+        <PipelineNodeCard
+          :data-node-id="data.node.id" class="pcv-node pcv-node--subpipeline"
+          :node="data.node" :run="runNodes[data.node.id]" :now="now" :selected="selectedId === data.node.id"
+        />
+        <Handle id="out" type="source" :position="Position.Right" class="pcv-handle" />
         <Handle id="reject-in" type="target" :position="Position.Left" class="pcv-handle pcv-handle--loop-in" />
       </template>
       <template #node-gate="{ data }">

@@ -31,6 +31,7 @@ const subtitle = computed(() => {
   const n = props.node
   if (n.kind === 'trigger') return t('pipelineEditor.node.trigger-sub')
   if (n.kind === 'gate') return n.gate?.prompt || t('pipelineEditor.node.gate-sub')
+  if (n.kind === 'subpipeline') return t('pipelineEditor.node.subpipeline-sub', { pipeline: n.subpipeline?.pipelineId ?? '' })
   return props.roleLabel || t('label.unassigned')
 })
 /** The glyph is the role's initial — the same tile the palette shows, so a
