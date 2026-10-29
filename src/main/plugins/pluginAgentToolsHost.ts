@@ -19,12 +19,14 @@ import { consentedAgentMethods, type ThirdPartyLaunchSpec } from './pluginThirdP
  * `agentMethods` in step with it, and re-checks everything again on every
  * call (section 4.2), whatever the CLI or the backend has cached.
  *
- * With the master switch (DB8) off since start-up nothing is sent and every
- * third-party `agentMethods` stays `[]`, exactly as on main.
+ * The master switch (DB8) covers third-party packages: while it is off every
+ * third-party `agentMethods` stays `[]`, and with no first-party package
+ * either nothing is sent, exactly as on main.
  *
  * First-party packages (pluginFirstPartyBackends.ts, listed through
- * `listFirstPartyPackages`) follow the master switch too, but their tools need
- * no per-version consent and keep their names against a third-party package.
+ * `listFirstPartyPackages`) are served whatever the master switch says (their
+ * own Disabled switch turns them off), their tools need no per-version consent,
+ * and they keep their names against a third-party package.
  * Everything else still applies to them: the Disabled switch, quarantine and
  * revocation, the caller-kind switch, and, on the backend side, the
  * external-content wrapping and pane taint of every result. A package counts as first-party
@@ -74,7 +76,7 @@ export type AgentToolAdmission =
   | { ok: false; reason: AgentToolUnavailableReason }
 
 const UNAVAILABLE_MESSAGES: Record<AgentToolUnavailableReason, string> = {
-  'master-switch-off': 'Agent tools from Navide plugins are turned off.',
+  'master-switch-off': 'Agent tools from third-party Navide plugins are turned off.',
   'external-callers-off': 'External MCP clients may not call third-party Navide plugin tools.',
   'plugin-not-installed': 'The Navide plugin is not installed.',
   'plugin-disabled': 'The Navide plugin is disabled.',
@@ -184,8 +186,7 @@ export class PluginAgentToolsHost {
   }
 
   /** First-party entries, then the third-party packages with another id. */
-  private listAll(): ThirdPartyLaunchSpec[] {
-    const firstParty = this.firstPartyPackages()
+  private listAll(firstParty = this.firstPartyPackages()): ThirdPartyLaunchSpec[] {
     const ids = new Set(firstParty.map((spec) => spec.pluginId))
     return [...firstParty, ...this.options.listPackages().filter((spec) => !ids.has(spec.pluginId))]
   }
@@ -228,7 +229,9 @@ export class PluginAgentToolsHost {
     const present = registered.filter((spec) => declaredTools(spec).length > 0)
     this.updateKnown(present)
     const switches = this.options.switches()
-    if (!switches.enabled) {
+    // Third-party packages need the master switch; first-party ones do not.
+    const inScope = (pluginId: string): boolean => switches.enabled || this.firstPartyIds.has(pluginId)
+    if (!switches.enabled && ![...this.known.keys()].some(inScope)) {
       for (const spec of registered) this.options.setAgentMethods(spec.pluginId, spec.packageVersion, [])
       this.catalog = []
       this.collided = new Set()
@@ -238,7 +241,7 @@ export class PluginAgentToolsHost {
       return
     }
     const presentIds = new Set(present.map((spec) => spec.pluginId))
-    const specs = [...this.known.values()].sort((a, b) => (a.pluginId < b.pluginId ? -1 : a.pluginId > b.pluginId ? 1 : 0))
+    const specs = [...this.known.values()].filter((spec) => inScope(spec.pluginId)).sort((a, b) => (a.pluginId < b.pluginId ? -1 : a.pluginId > b.pluginId ? 1 : 0))
     const entries: AgentToolSyncEntry[] = []
     for (const spec of specs) {
       const state = await this.packageState(spec, presentIds.has(spec.pluginId))
@@ -280,8 +283,12 @@ export class PluginAgentToolsHost {
       }
     }
     // The switch may have been turned off while consent was being checked.
-    if (!this.options.switches().enabled) return this.refreshNow()
+    if (this.options.switches().enabled !== switches.enabled) return this.refreshNow()
     for (const spec of registered) {
+      if (!inScope(spec.pluginId)) {
+        this.options.setAgentMethods(spec.pluginId, spec.packageVersion, [])
+        continue
+      }
       // Only the tools actually served open their methods to agents.
       const served = new Set(entries
         .filter((entry) => entry.pluginId === spec.pluginId && entry.state === 'available')
@@ -340,8 +347,8 @@ export class PluginAgentToolsHost {
     expected?: ThirdPartyLaunchSpec,
   ): { ok: true; spec: ThirdPartyLaunchSpec } | { ok: false; reason: AgentToolUnavailableReason } {
     const switches = this.options.switches()
-    if (!switches.enabled) return { ok: false, reason: 'master-switch-off' }
     const firstParty = this.firstPartyPackages().find((candidate) => candidate.pluginId === pluginId)
+    if (!switches.enabled && !firstParty) return { ok: false, reason: 'master-switch-off' }
     if (caller.kind !== 'pane' && !switches.externalCallers) {
       return { ok: false, reason: 'external-callers-off' }
     }

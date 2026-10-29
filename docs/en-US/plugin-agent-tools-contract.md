@@ -764,10 +764,14 @@ A Host event carrying the complete catalog; each one replaces the previous one.
 - `revision` increases strictly within one Host process; the backend ignores
   a snapshot whose revision is not greater than the last one it applied, and
   starts again from the first snapshot after a Host reconnect.
-- `enabled` is the DB8 master switch. While it is off since start-up, the Host
-  sends **nothing** (no-regression guarantee: `tools/list` equals main). When
-  it is switched off, the Host sends one snapshot with `enabled: false` and
-  `tools: []`.
+- `enabled` is true while the Host serves any tool. The DB8 master switch
+  covers third-party packages only: while it is off, their tools are left out
+  of the snapshot. First-party packages (`navide.browser`) are served whatever
+  the master switch says, until the user disables the plugin. With the switch
+  off since start-up and no first-party package with tools, the Host sends
+  **nothing** (no-regression guarantee: `tools/list` equals main). When the
+  last served tool goes, the Host sends one snapshot with `enabled: false`
+  and `tools: []`.
 - `externalCallers` is the DB4 switch.
 - `state` is `available` | `consent-required` | `plugin-disabled` |
   `plugin-quarantined` | `plugin-revoked` | `name-collision`. Only `available`
@@ -821,7 +825,7 @@ result)` path:
 ```
 
 Host checks run on every call, in this order, regardless of what the CLI has
-cached: master switch → caller kind → package installed, enabled, not
+cached: master switch (third-party packages only) → caller kind → package installed, enabled, not
 quarantined, not revoked, not stopping → tool in the consented list →
 workspace grant → first-write confirmation (DB3) → execution policy →
 headless binding → `callBound`.

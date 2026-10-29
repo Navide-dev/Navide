@@ -8,13 +8,14 @@ answers a call to one of them by forwarding it to the Host as an
 
 What it guarantees on this side of the boundary:
 
-- Until a snapshot with ``enabled: true`` arrives (the DB8 master switch, off
-  by default, and the Host sends nothing while it is off), nothing here
-  changes the server: tools/list and every call behave exactly as without
-  this module. The master switch also governs first-party Navide plugin
-  tools (navide.browser), which the Host serves without per-version
-  consent. Every guarantee below applies to them unchanged: their results
-  are wrapped as external content and taint the caller pane.
+- Until a snapshot with ``enabled: true`` arrives, nothing here changes the
+  server: tools/list and every call behave exactly as without this module.
+  The Host sends nothing while the DB8 master switch (off by default) is off
+  and no first-party Navide plugin (navide.browser) has tools. The master
+  switch covers third-party tools only: first-party ones are served whatever
+  it says, without per-version consent, until the user disables that plugin.
+  Every guarantee below applies to them unchanged: their results are wrapped
+  as external content and taint the caller pane.
 - Third-party tools are listed after every core tool, sorted by name, so the
   list order does not depend on when snapshots or built-in tools arrived.
 - Each description starts with the D4 source label, and a schema whose
