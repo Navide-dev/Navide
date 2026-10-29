@@ -79,7 +79,7 @@ import {
 } from './plugins/pluginBackendSupervisor'
 import { bundledMiniIdeV2Dir, MINI_IDE_CONTRIBUTION, activateInstalledMiniIdeRecovery } from './plugins/miniIdePackage'
 import { MINI_IDE_PLUGIN_ID, MiniIdeStorageLifecycleSelector } from './plugins/miniIdeStorageLifecycle'
-import { OFFICIAL_PLUGIN_VERSIONS, officialPluginVersion } from './plugins/officialPluginVersions'
+import { officialPluginVersion, supersedingBundledVersions } from './plugins/officialPluginVersions'
 import { createMiniIdeStorageMigrationGate, type MiniIdeStorageAvailability } from './plugins/miniIdeStorageMigrationGate'
 import { createMiniIdeLegacyPreferences } from './plugins/miniIdeLegacyPreferences'
 import { recoverFailedGitV2Activation } from './plugins/gitV2ActivationRecovery'
@@ -1241,13 +1241,13 @@ function refuseDisabledBuiltin(pluginId: string, target?: BrowserWindow | null, 
 }
 // An installed Marketplace copy of a first-party plugin is superseded when the
 // App bundles a newer version. Only ids whose bundled copy is attempted below
-// take part: an opted-out factory copy or forced legacy Git recovery keeps the
-// installed package in charge.
-frontendPluginManager.setBundledPluginVersions(Object.fromEntries(
-  Object.entries(OFFICIAL_PLUGIN_VERSIONS).filter(([pluginId]) =>
-    !pluginFactoryOptOuts.has(pluginId) && !(pluginId === 'navide.git' && gitRecoveryForced)
-  ),
-))
+// take part: an opted-out factory copy or a forced legacy Git or Plans recovery
+// keeps the installed package in charge.
+frontendPluginManager.setBundledPluginVersions(supersedingBundledVersions({
+  optedOut: (pluginId) => pluginFactoryOptOuts.has(pluginId),
+  gitRecoveryForced,
+  plansRecoveryForced,
+}))
 const installedPluginLoad = frontendPluginManager.loadInstalledPlugins(pluginsRoot(), {
   provenance: 'official-registry',
   trust: installedPluginTrust,

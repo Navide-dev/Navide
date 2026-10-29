@@ -2084,7 +2084,9 @@ its own `manifest.json`, which changes only when that plugin changes, and the
 App records the versions it bundles in `src/main/plugins/officialPluginVersions.ts`
 to look the copies up at `official-artifacts/<id>/<version>/<target>`. When a
 verified Marketplace copy of the same id is also installed, the newer version
-by SemVer is loaded and the installed copy wins a tie. An older installed copy
+by SemVer is loaded and the installed copy wins a tie; an opted-out bundled
+copy and a forced legacy recovery (`NAVIDE_GIT_RECOVERY=legacy`,
+`NAVIDE_PLANS_RECOVERY=legacy`) leave the installed copy in charge. An older installed copy
 is left on disk with its lifecycle record untouched and is reconsidered on the
 next start, so a later App that bundles an older version hands the id back to
 it.
