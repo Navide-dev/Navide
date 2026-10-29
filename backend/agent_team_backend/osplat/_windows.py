@@ -698,6 +698,11 @@ _EXIT_WATCH_MS = 250
 _EXIT_DRAIN_S = 0.05
 #: How long `watch_writable` waits before retrying a drain (see module doc).
 _WRITE_RETRY_S = 0.05
+#: Output a pause may leave queued before the oldest chunks are dropped. A
+#: pause cannot throttle the CLI here (see `pause_reading`), so this is what
+#: bounds the backend's memory while a drain stalls. Equal to terminals'
+#: _BUF_CAP, the bound POSIX applies to the same stall one layer up.
+_PAUSED_QUEUE_CAP = 5 * 1024 * 1024
 
 
 class WindowsTerminalHandle:
@@ -716,6 +721,8 @@ class WindowsTerminalHandle:
         self._job = job
         self.proc = _WindowsChild(pid, process_handle)
         self._chunks: deque[bytes] = deque()
+        self._queued = 0
+        self._dropped = 0
         self._lock = threading.Lock()
         self._eof = False
         self._closed = False
@@ -742,9 +749,11 @@ class WindowsTerminalHandle:
             head = self._chunks[0]
             if len(head) <= max_bytes:
                 self._chunks.popleft()
-                return head
-            self._chunks[0] = head[max_bytes:]
-            return head[:max_bytes]
+            else:
+                self._chunks[0] = head[max_bytes:]
+                head = head[:max_bytes]
+            self._queued -= len(head)
+            return head
 
     def start_reading(
         self, loop: asyncio.AbstractEventLoop, callback: Callable[[], None]
@@ -790,6 +799,12 @@ class WindowsTerminalHandle:
     def resume_reading(self) -> None:
         with self._lock:
             self._paused = False
+            dropped, self._dropped = self._dropped, 0
+        if dropped:
+            log.warning(
+                "conpty output dropped pid=%s bytes=%d (paused queue over %d)",
+                self.pid, dropped, _PAUSED_QUEUE_CAP,
+            )
         self._notify()
 
     def stop_reading(self) -> None:
@@ -879,6 +894,13 @@ class WindowsTerminalHandle:
     def _enqueue(self, data: bytes) -> None:
         with self._lock:
             self._chunks.append(data)
+            self._queued += len(data)
+            # Only a pause lets the queue build up; drop the oldest, keeping
+            # at least the chunk that just arrived.
+            while self._paused and self._queued > _PAUSED_QUEUE_CAP and len(self._chunks) > 1:
+                old = self._chunks.popleft()
+                self._queued -= len(old)
+                self._dropped += len(old)
         self._notify()
 
     def _notify(self) -> None:
