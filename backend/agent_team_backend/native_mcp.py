@@ -646,8 +646,11 @@ def _home() -> Path:
     """The user's real home, immune to a shimmed ``$HOME``.
 
     Launching Navide from inside a pane whose HOME is a per-pane shim would
-    otherwise make every native config resolve into that shim.
+    otherwise make every native config resolve into that shim. An isolated
+    backend (``AGENT_TEAM_ISOLATED_HOME=1``) uses its scratch ``$HOME``.
     """
+    if os.environ.get("AGENT_TEAM_ISOLATED_HOME") == "1":
+        return Path.home()
     try:
         import pwd
 

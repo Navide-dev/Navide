@@ -153,8 +153,12 @@ def real_home() -> Path:
     ``$HOME``. Launching Navide from a terminal inside a shimmed pane makes the
     backend inherit that pane's ``$HOME``, and building a shim under it would
     mirror links to links; the passwd entry is immune to that for every kind of
-    shim, not just this module's.
+    shim, not just this module's. An isolated backend
+    (``AGENT_TEAM_ISOLATED_HOME=1``, dev web mode) uses its scratch ``$HOME``,
+    so no pane shim links the user's real CLI files.
     """
+    if os.environ.get("AGENT_TEAM_ISOLATED_HOME") == "1":
+        return Path.home()
     try:
         import pwd
 

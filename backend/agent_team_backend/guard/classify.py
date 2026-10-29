@@ -44,6 +44,57 @@ READ_TOOLS = {"read", "read_file", "view", "cat", "notebookread"}
 #: Qwen Code calls its grep `grep_search`; Copilot CLI offers `grep` or `rg`.
 GREP_TOOLS = {"grep", "grep_search", "rg"}
 GLOB_TOOLS = {"glob"}
+#: Third-party MCP tools that do what a built-in tool does, graded by the same
+#: rules. Vendors name them `mcp__<server>__<tool>`; only <tool> is looked up,
+#: exactly and case-folded, so a server's own name never decides anything and
+#: a tool that merely contains "shell" in its name is not caught. Values: a
+#: SHELL_TOOLS name (the call's `command` is graded as that shell), a
+#: WRITE_TOOLS / READ_TOOLS name (its path fields are graded as that tool's),
+#: "process-input" (`input` is graded as a shell command), "write-pdf" (`path`
+#: and `outputPath` are writes), or one of MCP_ACTIONS (see
+#: _classify_mcp_action). A "shell" row is graded in the dialect its `shell`
+#: argument names, or as both POSIX and PowerShell when it names none. Add a
+#: row for each server tool verified to take these arguments.
+MCP_TOOLS = {
+    # Windows-MCP (CursorTouch/Windows-MCP): PowerShell(command), FileSystem(mode,
+    # path, destination, recursive), Registry(mode, path), Process(mode, name, pid).
+    "powershell": "powershell",
+    "filesystem": "filesystem",
+    "registry": "registry",
+    "process": "process",
+    # Generic shell tools: `command` holds the command line.
+    "bash": "bash",
+    "shell": "shell",
+    "run_command": "run_command",
+    "run_shell_command": "run_shell_command",
+    "shell_command": "shell_command",
+    "exec_command": "exec_command",
+    "execute_command": "shell",
+    # Desktop Commander (wonderwhy-er/DesktopCommanderMCP, src/tools/schemas.ts):
+    # start_process(command), interact_with_process(pid, input) types into a
+    # running process (often a shell), kill_process / force_terminate(pid),
+    # file tools on `path` / `paths` / `file_path`, move_file(source, destination).
+    "start_process": "shell",
+    "interact_with_process": "process-input",
+    "kill_process": "process-kill",
+    "force_terminate": "process-kill",
+    "write_file": "write",
+    "write_pdf": "write-pdf",
+    "create_directory": "write",
+    "edit_block": "edit",
+    "read_file": "read",
+    "read_multiple_files": "read",
+    "move_file": "move-file",
+}
+#: MCP_TOOLS kinds that act through arguments rather than a command line.
+MCP_ACTIONS = {"filesystem", "registry", "process", "process-kill", "move-file"}
+#: The modes each mode-driven kind accepts; any other mode is not judged.
+_MCP_MODES = {
+    "filesystem": {"read", "write", "copy", "move", "delete", "list", "search", "info"},
+    "registry": {"get", "set", "delete", "list"},
+    "process": {"list", "kill"},
+}
+_FALSE_WORDS = {"", "0", "false", "f", "no", "n", "off", "none"}
 
 WRAPPERS_NO_ARG = {"nohup", "time", "command", "builtin", "exec", "caffeinate", "stdbuf"}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"}
@@ -1569,6 +1620,31 @@ def classify(
         # The rendered text of a permission prompt (chat relay).
         return classify_prompt_text(str(tool_input.get("text") or ""), workspace=workspace,
                                     protected_branches=protected_branches)
+    mcp = _mcp_tool(name)
+    if mcp == "process-input":
+        mcp, tool_input = "shell", {"command": tool_input.get("input")}
+    if mcp == "shell":
+        # The server picks the shell: a POSIX shell, or PowerShell / cmd on
+        # Windows. Unless the call names POSIX or PowerShell, grade both and
+        # keep the worse; cmd has no dialect of its own here, so it is also
+        # marked not statically judgeable.
+        dialect = _mcp_shell_dialect(tool_input.get("shell"))
+        if dialect in (None, "cmd"):
+            kw = {"cwd": cwd, "workspace": workspace, "protected_branches": protected_branches}
+            both = _worse(classify("shell", tool_input, **kw), classify("powershell", tool_input, **kw))
+            if dialect == "cmd" and _tool_command(tool_input):
+                opaque = _Acc()
+                opaque.opaque("untokenizable-shape", "cmd syntax is not modelled")
+                both = _worse(both, opaque.verdict())
+            return both
+        mcp = dialect
+    if mcp == "write-pdf":
+        mcp, tool_input = "write", {"paths": [p for p in (tool_input.get("path"), tool_input.get("outputPath")) if p]}
+    if mcp in MCP_ACTIONS:
+        _classify_mcp_action(mcp, tool_input, ctx, acc)
+        return acc.verdict()
+    if mcp is not None:
+        name = mcp
     if name in SHELL_TOOLS:
         command = _tool_command(tool_input)
         if command and name == "powershell":
@@ -1594,6 +1670,73 @@ def classify(
     elif name in GREP_TOOLS or name in GLOB_TOOLS:
         _check_search(acc, name, tool_input, ctx)
     return acc.verdict()
+
+
+def _mcp_tool(name: str) -> str | None:
+    """The MCP_TOOLS row for an `mcp__<server>__<tool>` name, else None."""
+    if not name.startswith("mcp__"):
+        return None
+    server, sep, tool = name[len("mcp__"):].rpartition("__")
+    return MCP_TOOLS.get(tool) if server and sep else None
+
+
+def _mcp_shell_dialect(shell: object) -> str | None:
+    """"powershell", "shell" or "cmd" for the shell an MCP call names, else None."""
+    if not isinstance(shell, str) or not shell.strip():
+        return None
+    base = re.split(r"[\\/]", shell.strip())[-1].lower().removesuffix(".exe")
+    if base in ("powershell", "pwsh"):
+        return "powershell"
+    if base == "cmd":
+        return "cmd"
+    return "shell" if base in SHELLS else None
+
+
+def _worse(a: Verdict, b: Verdict) -> Verdict:
+    """Both verdicts' rules, the higher level, and parseable only if both are."""
+    rules, reasons = list(a.rule_ids), list(a.reasons)
+    for rule, reason in zip(b.rule_ids, b.reasons):
+        if rule not in rules:
+            rules.append(rule)
+            reasons.append(reason)
+    level = a.level if LEVEL_ORDER[a.level] >= LEVEL_ORDER[b.level] else b.level
+    return Verdict(level, tuple(rules), tuple(reasons), a.parseable and b.parseable)
+
+
+def _classify_mcp_action(kind: str, tool_input: dict, ctx: _Ctx, acc: _Acc) -> None:
+    """MCP tools that act through arguments rather than a command line."""
+    mode = str(tool_input.get("mode") or "").strip().lower()
+    if kind in _MCP_MODES and mode not in _MCP_MODES[kind]:
+        acc.opaque("mcp-unknown-mode", f"MCP tool mode is not one Guard knows: {mode or '(none)'}")
+        return
+    if kind in ("filesystem", "move-file"):
+        path = tool_input.get("source" if kind == "move-file" else "path")
+        if not isinstance(path, str) or not path:
+            return
+        if mode == "delete":
+            # Graded as the rm it amounts to, so the rm rules decide. Any value
+            # the server could read as true counts as recursive.
+            recursive = str(tool_input.get("recursive")).strip().lower() not in _FALSE_WORDS
+            _classify_rm(["--", path], ctx, acc, from_stdin=False, recursive=recursive)
+            return
+        dest = tool_input.get("destination")
+        if kind == "move-file":
+            mode = "move"
+        writes = {"write": [path], "move": [path, dest], "copy": [dest]}.get(mode, [])
+        reads = [path] if mode in ("read", "copy") else []
+        for raw, write in [(r, True) for r in writes] + [(r, False) for r in reads]:
+            if not isinstance(raw, str) or not raw:
+                continue
+            resolved = _resolve(raw, ctx)
+            if resolved is None:
+                acc.opaque("dynamic-path", f"path is not static: {raw}")
+            else:
+                _check_path(acc, resolved, ctx, write=write)
+    elif kind == "registry":
+        if mode in ("set", "delete"):
+            acc.hit("high", "mcp-registry-write", f"MCP tool changes the Windows registry ({mode})")
+    elif kind == "process-kill" or mode == "kill":
+        acc.hit("high", "mcp-process-kill", "MCP tool kills a process")
 
 
 def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:

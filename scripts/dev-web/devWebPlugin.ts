@@ -234,6 +234,8 @@ function isolatedBackend(env: NodeJS.ProcessEnv, repoRoot: string): DevWebBacken
       USERPROFILE: home,
       TMPDIR: tmp,
       AGENT_TEAM_DATA_DIR: dataDir,
+      // Home lookups that bypass $HOME (the passwd entry) use HOME here instead.
+      AGENT_TEAM_ISOLATED_HOME: '1',
       AGENT_TEAM_PARENT_PID: String(process.pid),
       PYTHONPATH: join(repoRoot, 'backend'),
       PATH: [bin, venvBin, ...(isWin ? [env.PATH ?? ''] : ['/usr/bin', '/bin', '/usr/sbin', '/sbin'])].join(isWin ? ';' : ':'),

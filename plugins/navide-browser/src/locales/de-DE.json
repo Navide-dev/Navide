@@ -43,7 +43,7 @@
       "delegate": "Agent diesen Space verwenden lassen",
       "reclaim": "Diesen Space zurücknehmen",
       "close": "Space schließen",
-      "delegate-note": "Agents in jedem pane und jedem Arbeitsbereich können ihn verwenden"
+      "delegate-note": "Agents in jedem Bereich und jedem Arbeitsbereich können ihn verwenden"
     },
     "agent-script": {
       "warning": "Auf dieser Seite laufen möglicherweise noch Agent-Skripte. Laden Sie sie neu, bevor Sie ein Passwort oder einen Bestätigungscode eingeben.",
