@@ -10,8 +10,11 @@ from pathlib import Path
 import pytest
 
 from agent_team_backend import native_mcp, native_skills, skills_store
+from agent_team_backend.mcp_server import pane_home
+from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
 
-READERS = [native_skills._home, skills_store._real_home, native_mcp._home]
+READERS = [native_skills._home, skills_store._real_home, native_mcp._home,
+           pane_home.real_home, skills_wiring.real_home]
 
 
 @pytest.mark.parametrize("reader", READERS, ids=lambda f: f"{f.__module__}.{f.__name__}")
