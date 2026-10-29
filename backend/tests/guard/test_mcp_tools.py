@@ -7,7 +7,7 @@ import pytest
 
 from agent_team_backend import guard_hooks
 from agent_team_backend.guard import classify
-from agent_team_backend.guard.classify import MCP_TOOLS, SHELL_TOOLS
+from agent_team_backend.guard.classify import MCP_ACTIONS, MCP_TOOLS, READ_TOOLS, SHELL_TOOLS, WRITE_TOOLS
 
 HOME = "/home/tester"
 WS = "/home/tester/proj"
@@ -48,9 +48,52 @@ def test_mcp_shell_tools_grade_exactly_like_the_builtin_shell(command, mcp_name,
     assert grade(mcp_name, {"command": command}) == grade(builtin, {"command": command})
 
 
-def test_every_shell_row_names_a_builtin_shell():
-    actions = {"filesystem", "registry", "process", "process-kill"}
-    assert all(v in SHELL_TOOLS or v in actions for v in MCP_TOOLS.values())
+def test_every_row_names_a_builtin_tool_or_an_mcp_action():
+    known = SHELL_TOOLS | WRITE_TOOLS | READ_TOOLS | MCP_ACTIONS | {"process-input"}
+    assert all(v in known for v in MCP_TOOLS.values())
+
+
+@pytest.mark.parametrize("tool, tool_input, level, rule", [
+    ("mcp__desktop-commander__start_process", {"command": "rm -rf ~"}, "critical", "rm-root-or-home"),
+    ("mcp__desktop-commander__interact_with_process", {"pid": 7, "input": "cat ~/.ssh/id_rsa"},
+     "critical", "credential-access"),
+    ("mcp__desktop-commander__force_terminate", {"pid": 7}, "high", "mcp-process-kill"),
+    ("mcp__desktop-commander__read_file", {"path": "~/.ssh/id_rsa"}, "critical", "credential-access"),
+    ("mcp__desktop-commander__read_multiple_files", {"paths": [f"{WS}/a", "~/.aws/credentials"]},
+     "critical", "credential-access"),
+    ("mcp__desktop-commander__write_file", {"path": f"{WS}/.git/hooks/pre-push", "content": "x"},
+     "high", "git-hooks-write"),
+    ("mcp__desktop-commander__edit_block", {"file_path": f"{WS}/.github/workflows/ci.yml"},
+     "high", "ci-workflow-write"),
+    ("mcp__desktop-commander__move_file", {"source": f"{WS}/a", "destination": f"{WS}/.git/hooks/pre-commit"},
+     "high", "git-hooks-write"),
+])
+def test_desktop_commander_tools(tool, tool_input, level, rule):
+    v = grade(tool, tool_input)
+    assert v.level == level and rule in v.rule_ids
+
+
+@pytest.mark.parametrize("recursive", [True, "true", "TRUE", "1", 1, "yes", "on", "t"])
+def test_filesystem_delete_reads_any_true_spelling_as_recursive(recursive):
+    v = grade("mcp__windows-mcp__FileSystem", {"mode": "delete", "path": "~/Documents", "recursive": recursive})
+    assert v.level == "critical"
+
+
+@pytest.mark.parametrize("recursive", [False, "false", "0", 0, "no", None])
+def test_filesystem_delete_false_spellings_stay_non_recursive(recursive):
+    v = grade("mcp__windows-mcp__FileSystem", {"mode": "delete", "path": f"{WS}/dist", "recursive": recursive})
+    assert "rm-recursive-in-workspace" not in v.rule_ids
+
+
+@pytest.mark.parametrize("tool, mode", [
+    ("mcp__windows-mcp__FileSystem", "purge"),
+    ("mcp__windows-mcp__FileSystem", ""),
+    ("mcp__windows-mcp__Registry", "import"),
+    ("mcp__windows-mcp__Process", "suspend"),
+])
+def test_unknown_modes_are_not_judged(tool, mode):
+    v = grade(tool, {"mode": mode, "path": "~"})
+    assert not v.parseable and "mcp-unknown-mode" in v.rule_ids
 
 
 @pytest.mark.parametrize("tool, tool_input", [

@@ -15,7 +15,7 @@ export type McpRiskKind = 'desktop' | 'shell'
  *  a server runs commands. */
 const SHELL_TOOLS = new Set([
   'powershell', 'bash', 'shell', 'run_command', 'run_shell_command', 'shell_command', 'exec_command',
-  'execute_command',
+  'execute_command', 'start_process', 'interact_with_process',
 ])
 
 /** Packages verified from their source to offer these powers. */

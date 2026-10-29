@@ -93,6 +93,8 @@ BUILTIN_RULES: tuple[BuiltinRule, ...] = (
                 "echo $'x'"),
     BuiltinRule("unknown-script", "unanalyzable", "normal", "Runs a script Guard cannot see", "./deploy.sh"),
     BuiltinRule("dynamic-path", "unanalyzable", "normal", "File path is not static", "Write $OUT"),
+    BuiltinRule("mcp-unknown-mode", "unanalyzable", "normal", "An MCP tool is called with a mode Guard does not know",
+                "FileSystem(mode=purge, …)"),
 )
 
 RULES_BY_ID = {r.id: r for r in BUILTIN_RULES}

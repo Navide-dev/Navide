@@ -48,9 +48,11 @@ GLOB_TOOLS = {"glob"}
 #: rules. Vendors name them `mcp__<server>__<tool>`; only <tool> is looked up,
 #: exactly and case-folded, so a server's own name never decides anything and
 #: a tool that merely contains "shell" in its name is not caught. Values: a
-#: SHELL_TOOLS name (the call's `command` is graded as that shell), or one of
-#: "filesystem", "registry", "process" (see _classify_mcp_action). Add a row
-#: for each server tool verified to take these arguments.
+#: SHELL_TOOLS name (the call's `command` is graded as that shell), a
+#: WRITE_TOOLS / READ_TOOLS name (its path fields are graded as that tool's),
+#: "process-input" (`input` is graded as a shell command), or one of
+#: MCP_ACTIONS (see _classify_mcp_action). Add a row for each server tool
+#: verified to take these arguments.
 MCP_TOOLS = {
     # Windows-MCP (CursorTouch/Windows-MCP): PowerShell(command), FileSystem(mode,
     # path, destination, recursive), Registry(mode, path), Process(mode, name, pid).
@@ -66,9 +68,31 @@ MCP_TOOLS = {
     "shell_command": "shell_command",
     "exec_command": "exec_command",
     "execute_command": "shell",
-    # Desktop Commander: kill_process(pid).
+    # Desktop Commander (wonderwhy-er/DesktopCommanderMCP, src/tools/schemas.ts):
+    # start_process(command), interact_with_process(pid, input) types into a
+    # running process (often a shell), kill_process / force_terminate(pid),
+    # file tools on `path` / `paths` / `file_path`, move_file(source, destination).
+    "start_process": "shell",
+    "interact_with_process": "process-input",
     "kill_process": "process-kill",
+    "force_terminate": "process-kill",
+    "write_file": "write",
+    "write_pdf": "write",
+    "create_directory": "write",
+    "edit_block": "edit",
+    "read_file": "read",
+    "read_multiple_files": "read",
+    "move_file": "move-file",
 }
+#: MCP_TOOLS kinds that act through arguments rather than a command line.
+MCP_ACTIONS = {"filesystem", "registry", "process", "process-kill", "move-file"}
+#: The modes each mode-driven kind accepts; any other mode is not judged.
+_MCP_MODES = {
+    "filesystem": {"read", "write", "copy", "move", "delete", "list", "search", "info"},
+    "registry": {"get", "set", "delete", "list"},
+    "process": {"list", "kill"},
+}
+_FALSE_WORDS = {"", "0", "false", "f", "no", "n", "off", "none"}
 
 WRAPPERS_NO_ARG = {"nohup", "time", "command", "builtin", "exec", "caffeinate", "stdbuf"}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"}
@@ -1595,7 +1619,9 @@ def classify(
         return classify_prompt_text(str(tool_input.get("text") or ""), workspace=workspace,
                                     protected_branches=protected_branches)
     mcp = _mcp_tool(name)
-    if mcp in ("filesystem", "registry", "process", "process-kill"):
+    if mcp == "process-input":
+        mcp, tool_input = "shell", {"command": tool_input.get("input")}
+    if mcp in MCP_ACTIONS:
         _classify_mcp_action(mcp, tool_input, ctx, acc)
         return acc.verdict()
     if mcp is not None:
@@ -1638,16 +1664,22 @@ def _mcp_tool(name: str) -> str | None:
 def _classify_mcp_action(kind: str, tool_input: dict, ctx: _Ctx, acc: _Acc) -> None:
     """MCP tools that act through arguments rather than a command line."""
     mode = str(tool_input.get("mode") or "").strip().lower()
-    if kind == "filesystem":
-        path = tool_input.get("path")
+    if kind in _MCP_MODES and mode not in _MCP_MODES[kind]:
+        acc.opaque("mcp-unknown-mode", f"MCP tool mode is not one Guard knows: {mode or '(none)'}")
+        return
+    if kind in ("filesystem", "move-file"):
+        path = tool_input.get("source" if kind == "move-file" else "path")
         if not isinstance(path, str) or not path:
             return
         if mode == "delete":
-            # Graded as the rm it amounts to, so the rm rules decide.
-            recursive = tool_input.get("recursive") is True or str(tool_input.get("recursive")).lower() == "true"
+            # Graded as the rm it amounts to, so the rm rules decide. Any value
+            # the server could read as true counts as recursive.
+            recursive = str(tool_input.get("recursive")).strip().lower() not in _FALSE_WORDS
             _classify_rm(["--", path], ctx, acc, from_stdin=False, recursive=recursive)
             return
         dest = tool_input.get("destination")
+        if kind == "move-file":
+            mode = "move"
         writes = {"write": [path], "move": [path, dest], "copy": [dest]}.get(mode, [])
         reads = [path] if mode in ("read", "copy") else []
         for raw, write in [(r, True) for r in writes] + [(r, False) for r in reads]:
