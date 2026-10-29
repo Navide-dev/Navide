@@ -5,7 +5,7 @@ Navide 可以把從 n8n 匯出的 workflow 轉成一個新的 Pipeline。匯入�
 ## 匯入 workflow
 
 1. 在 n8n 匯出 workflow（Download，或複製它的節點），取得 JSON。
-2. 在 Navide 打開**流程管理**，選 **從 n8n 匯入**。
+2. 在 Navide 打開**流程管理**，選 **從 n8n 匯入**（在 pipeline 清單上，或某條 pipeline 的 ⋯ 選單裡）。
 3. 貼上 JSON，或用 **選擇檔案…**。workflow 檔案最大 5 MB。
 4. 選擇**需要 agent 的步驟使用的 CLI**（預設 Claude）。AI Agent 節點會依它的模型自己選 CLI：Anthropic → Claude、OpenAI → Codex、Gemini → Gemini。
 5. 選 **預覽**。這時還沒有寫入任何東西。先看預覽內容（見下文）。

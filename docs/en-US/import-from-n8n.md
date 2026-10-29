@@ -8,7 +8,8 @@ back to n8n. An existing pipeline is never overwritten.
 ## Importing a workflow
 
 1. In n8n, export the workflow (Download, or copy its nodes) to get its JSON.
-2. In Navide, open the **Pipeline Manager** and choose **Import from n8n**.
+2. In Navide, open the **Pipeline Manager** and choose **Import from n8n**
+   (on the pipeline list, or in a pipeline's ⋯ menu).
 3. Paste the JSON, or use **Choose File…**. A workflow file can be at most
    5 MB.
 4. Pick the **CLI for agent steps** (Claude by default). An AI Agent
