@@ -1467,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock 是隐私遮罩，不是访问控制。你离开时，它会盖住 Navide 的每个窗口；agent、终端、聊天室、MCP 工具和调度都照常运行，坐在这台电脑前又懂技术的人仍然可以绕过它。",
+      "section-lock": "锁定",
+      "enabled": "开启 App Lock",
+      "enabled-hint": "请先设置 PIN。即使开启了 Touch ID，PIN 也始终可以解锁。",
+      "lock-now": "立即锁定",
+      "lock-now-hint": "马上盖住所有窗口。快捷键 {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "已设置 PIN。",
+      "pin-none-hint": "尚未设置 PIN，请使用 4 到 12 位数字。",
+      "set-pin": "设置 PIN",
+      "change-pin": "更改 PIN",
+      "remove-pin": "移除 PIN",
+      "remove-pin-hint": "移除 PIN 会关闭 App Lock。",
+      "current-pin": "当前 PIN",
+      "new-pin": "新 PIN",
+      "confirm-pin": "确认 PIN",
+      "save": "保存",
+      "cancel": "取消",
+      "pin-saved": "PIN 已保存。",
+      "pin-removed": "PIN 已移除，App Lock 已关闭。",
+      "section-unlock": "解锁",
+      "method": "解锁方式",
+      "method-system": "Touch ID，PIN 作为备用",
+      "method-pin": "仅用 PIN",
+      "system-unavailable": "这台电脑无法使用 Touch ID，Navide 会用 PIN 解锁。",
+      "section-auto": "自动锁定",
+      "idle": "闲置后",
+      "idle-hint": "按整台电脑没有键盘或鼠标操作的时间计算。",
+      "idle-never": "从不",
+      "idle-minutes": "{n} 分钟",
+      "on-screen-lock": "屏幕锁定时",
+      "on-suspend": "电脑睡眠时",
+      "on-start": "Navide 启动时",
+      "section-forgot": "忘记 PIN？",
+      "reset-with-system": "用 Touch ID 重设 PIN",
+      "forgot-system": "先用 Touch ID 确认是你本人，再设置新的 PIN。",
+      "forgot-manual-title": "没有 Touch ID 时",
+      "forgot-manual": "退出 Navide，然后删除 Navide 数据文件夹中的 app-lock.json。这只会移除 App Lock 和它的 PIN，其他都不受影响。",
+      "error-invalid-pin": "请使用 4 到 12 位数字。",
+      "error-mismatch": "两次输入的 PIN 不一致。",
+      "error-wrong-pin": "当前 PIN 不正确。",
+      "error-cooldown": "尝试次数过多，请在 {seconds} 秒后重试。",
+      "error-system-failed": "Touch ID 未能确认是你本人。",
+      "error-generic": "没有成功，请再试一次。"
+    },
     "cliExtensions": {
       "tabInstalled": "已安装的 CLI 扩展",
       "tabConvenience": "Navide 做的修改",
@@ -1644,6 +1691,10 @@
         "status-badges": {
           "title": "状态徽章",
           "summary": "替九种面板状态各自重命名并选颜色，中文、英文与日文名称可分开填。"
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "用锁定画面盖住所有窗口，用 Touch ID 或 PIN 解锁"
         },
         "voice-input": {
           "title": "语音输入",
@@ -2651,6 +2702,7 @@
       "executionPolicy": "执行策略",
       "statusBadges": "状态徽章",
       "voice": "语音输入",
+      "appLock": "App Lock",
       "keybindings": "快捷键",
       "updates": "更新",
       "help": "说明"
@@ -2717,14 +2769,14 @@
         "intro": "设置窗口的十九个标签页分别管什么、Navide Cloud 怎么把几台机器接成一个私有网络，以及菜单、独立窗口、用量统计与资源维护这些散在主画面之外的系统面。",
         "s1": {
           "title": "设置总览",
-          "p1": "设置窗口用 <kbd class=\"syh-kbd\">⌘,</kbd> 打开，标题栏的齿轮钮是同一个入口。左侧侧栏分五组，共 <strong>24 个标签页</strong>。",
+          "p1": "设置窗口用 <kbd class=\"syh-kbd\">⌘,</kbd> 打开，标题栏的齿轮钮是同一个入口。左侧侧栏分五组，共 <strong>25 个标签页</strong>。",
           "h1": "搜索框",
           "p2": "侧栏标题底下有一个搜索框，提示字是 <code>搜索设置…</code>。它<strong>跨标签页</strong>比对设置项的标题、所属区块与关键字（使用目前界面语言与已收录的关键字），最多行 8 笔；点一笔会切到那个标签页并卷到对应区块（“保存空间”那笔例外：它会关掉设置、直接开“资源控管”），没命中时显示 <code>找不到相符设置</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜索索引不是全覆盖",
             "text": "索引是一份人工维护的清单，<strong>{layout}、{notifications}、{security}、{channels} 这四个标签页没有任何条目</strong>，搜索不到它们里面的东西，得自己点进去。CLI Agents 的条目点下去会直接打开某一家的设置抽屉（见“CLI Agent 与账号”标签页）。"
           },
-          "h2": "二十四个标签页",
+          "h2": "二十五个标签页",
           "tabTable": {
             "group": "分组",
             "tab": "标签页",
@@ -2759,6 +2811,10 @@
             "voice": {
               "what": "按住说话、本机转写的语音输入：快捷键、麦克风、录音方式、中文输出、模型与引擎",
               "more": "本面板的“{workspace}”标签页“语音输入”章"
+            },
+            "appLock": {
+              "what": "盖住所有窗口的隐私遮罩：PIN、Touch ID、闲置与睡眠时自动锁定",
+              "more": "App Lock 页最上方的说明"
             },
             "cloud": {
               "what": "跨设备连接状态、本机指纹、谁可以命令这台机器",
@@ -11191,10 +11247,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "详细",
+    "stage-not-found": "这个步骤已经不存在，可能在别处被修改了；请重新打开这条 pipeline。",
+    "refused": {
+      "last-pipeline": "这是唯一的一条 pipeline，不能删除。请先创建另一条。",
+      "last-stage": "pipeline 至少要有一个步骤，所以不能删除最后一个。",
+      "not-builtin": "只有内置的 pipeline 能还原成原本的步骤。",
+      "no-seed": "这条内置 pipeline 没有可还原的原始步骤。",
+      "stage-id-required": "这个步骤没有 ID，请设置后再试一次。",
+      "stage-id-invalid": "步骤 ID 只能使用英文字母、数字、连字符、下划线和句点。",
+      "stage-needs-slot": "每个步骤至少要有一个 agent。"
+    },
+    "run": {
+      "no-workspace": "请先打开一个工作区。",
+      "already-running": "这个工作区已经有 pipeline 在运行。请先中止它。",
+      "no-pipeline": "请先选择一条 pipeline。",
+      "not-started": "运行没有开始，原因记在 pipeline 日志里。",
+      "not-running": "这个工作区没有正在运行的 pipeline。",
+      "last-stage": "这是最后一个阶段（第 {stage} 个，共 {total} 个），报告完成后运行就会结束。",
+      "gate-waiting": "运行正在“{gate}”等待你核准。请先核准或退回。",
+      "not-advanced": "运行没有往下走，原因记在 pipeline 日志里。",
+      "no-run": "这个工作区没有可以继续的运行。",
+      "nothing-to-resume": "上一次运行的每个阶段都已完成（{done}/{total}）。",
+      "not-resumed": "运行没有继续，原因记在 pipeline 日志里。",
+      "not-cleared": "运行没有被清除，原因记在 pipeline 日志里。",
+      "stored-not-cleared": "pane 已经关闭，但保存的运行记录没有清除。",
+      "no-task": "没有可运行的任务，请先输入任务。",
+      "not-at-gate": "运行目前没有在等待核准。",
+      "wrong-gate": "运行正在“{gate}”等待，不是“{asked}”。",
+      "node-required": "请选择要从哪个步骤重新运行。"
+    },
+    "start": {
+      "parent-suspended": "“{name}”正在这里等它的子 Pipeline。请先继续或重置它。",
+      "switch-failed": "无法切换到这条 pipeline。",
+      "stages-load-failed": "无法加载这条 pipeline 的步骤。",
+      "no-stages": "这条 pipeline 还没有任何步骤，请先添加一个。",
+      "graph-failed": "无法准备这条 pipeline 的运行。",
+      "spawn-failed": "第一个步骤的 agent 都无法启动。请确认它们的 CLI 已安装。"
+    },
+    "graph": {
+      "slot-incomplete": "“{label}”需要设置 agent 和名称。",
+      "self-loop": "“{label}”不能连到自己。",
+      "edge-into-trigger": "任何连接都不能连进 pipeline 的起点。",
+      "reject-from-trigger": "退回连接不能从 pipeline 的起点拉出。",
+      "max-loops-range": "从“{label}”拉出的退回连接可重复 1 到 {max} 次。",
+      "edge-must-start-at-work": "分支和错误连接必须从步骤拉出（“{label}”不是步骤）。",
+      "branch-when": "从“{label}”拉出的分支连接需要一个匹配值。",
+      "retry-config": "“{label}”的重试设置超出范围：尝试 1 到 {maxTries} 次，间隔 0 到 {maxWaitMs} 毫秒。",
+      "subpipeline-links": "子 Pipeline 会互相调用形成循环，或调用了已不存在的 pipeline。",
+      "no-graph": "pipeline 还没加载完成，请稍后再试。",
+      "other": "这个修改会让 pipeline 无法运行。",
+      "other-at": "这个修改会让 pipeline 在“{label}”无法运行。"
+    },
+    "gate": {
+      "confirm-title": "要结束这次运行吗？",
+      "confirm-no-edge": "“{name}”没有退回连接，退回会让这次运行以失败结束。pane 会保留。",
+      "confirm-exhausted": "“{name}”的退回次数已达连接上限，再退回会让这次运行以失败结束。pane 会保留。",
+      "confirm-button": "结束运行",
+      "rejected-failed": "“{name}”已退回，这次运行以失败结束。",
+      "ends-run-hint": "在这里退回会结束这次运行。"
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "子 Pipeline 需要另一条 Pipeline 可运行，请先创建一条。",
-      "subpipeline-cycle": "子 Pipeline 会互相调用形成循环：{detail}",
       "pipeline-running": "这条 pipeline 正在运行，目前无法修改。请先中止或等运行结束。",
       "pipeline-not-found": "找不到这条 pipeline，可能已在别处被删除。请改选其他 pipeline。",
       "export-failed": "导出失败：{message}",
@@ -11202,7 +11319,6 @@
       "command-failed": "运行没有接受这个指令。",
       "cycle": "这条连接会让流程无限循环。请改用从闸门或步骤拉出的退回连接，它有重试上限。",
       "duplicate-edge": "这两个步骤已经连在一起了。",
-      "invalid": "这个修改会让 pipeline 失效：{detail}",
       "reject-upstream": "退回连接必须指向更早的步骤。",
       "transport": "无法连到后端：{message}",
       "unknown": "后端拒绝了这个修改，但没有说明原因。"

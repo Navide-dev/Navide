@@ -54,7 +54,8 @@ export default defineConfig({
           // Dedicated minimal preload for plugin WebContentsViews (Phase 2 M1).
           'plugin-preload': resolve(__dirname, 'src/preload/plugin-preload.ts'),
           'terminal-owner-preload': resolve(__dirname, 'src/preload/terminal-owner-preload.ts'),
-          'file-picker-preload': resolve(__dirname, 'src/preload/file-picker-preload.ts')
+          'file-picker-preload': resolve(__dirname, 'src/preload/file-picker-preload.ts'),
+          'app-lock-preload': resolve(__dirname, 'src/preload/app-lock-preload.ts')
         }
       }
     },

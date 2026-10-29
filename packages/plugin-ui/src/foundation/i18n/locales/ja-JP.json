@@ -1467,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock はプライバシー保護の画面で、アクセス制御ではありません。席を外している間、Navide のすべてのウィンドウを覆います。エージェント、ターミナル、チャット連携、MCP ツール、スケジュールは動作を続け、このコンピューターの前にいて知識のある人なら回避できます。",
+      "section-lock": "ロック",
+      "enabled": "App Lock をオンにする",
+      "enabled-hint": "先に PIN を設定してください。Touch ID がオンでも PIN でいつでもロックを解除できます。",
+      "lock-now": "今すぐロック",
+      "lock-now-hint": "すべてのウィンドウをすぐに覆います。ショートカット {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "PIN は設定済みです。",
+      "pin-none-hint": "PIN はまだありません。4〜12 桁の数字を使ってください。",
+      "set-pin": "PIN を設定",
+      "change-pin": "PIN を変更",
+      "remove-pin": "PIN を削除",
+      "remove-pin-hint": "PIN を削除すると App Lock はオフになります。",
+      "current-pin": "現在の PIN",
+      "new-pin": "新しい PIN",
+      "confirm-pin": "PIN を確認",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "pin-saved": "PIN を保存しました。",
+      "pin-removed": "PIN を削除しました。App Lock はオフです。",
+      "section-unlock": "ロック解除",
+      "method": "ロック解除の方法",
+      "method-system": "Touch ID（予備は PIN）",
+      "method-pin": "PIN のみ",
+      "system-unavailable": "このコンピューターでは Touch ID を使えないため、Navide は PIN でロックを解除します。",
+      "section-auto": "自動ロック",
+      "idle": "アイドル時間",
+      "idle-hint": "このコンピューター全体でキーボードやマウスの操作がない時間です。",
+      "idle-never": "しない",
+      "idle-minutes": "{n} 分",
+      "on-screen-lock": "画面のロック時",
+      "on-suspend": "スリープ時",
+      "on-start": "Navide の起動時",
+      "section-forgot": "PIN を忘れた場合",
+      "reset-with-system": "Touch ID で PIN をリセット",
+      "forgot-system": "Touch ID で本人確認してから、新しい PIN を設定します。",
+      "forgot-manual-title": "Touch ID がない場合",
+      "forgot-manual": "Navide を終了し、Navide のデータフォルダーにある app-lock.json を削除してください。App Lock とその PIN だけが消え、ほかには影響しません。",
+      "error-invalid-pin": "4〜12 桁の数字を使ってください。",
+      "error-mismatch": "2 つの PIN が一致しません。",
+      "error-wrong-pin": "現在の PIN が違います。",
+      "error-cooldown": "試行回数が多すぎます。{seconds} 秒後にもう一度お試しください。",
+      "error-system-failed": "Touch ID で本人確認できませんでした。",
+      "error-generic": "うまくいきませんでした。もう一度お試しください。"
+    },
     "cliExtensions": {
       "tabInstalled": "インストール済みの CLI 拡張",
       "tabConvenience": "Navide による変更",
@@ -1644,6 +1691,10 @@
         "status-badges": {
           "title": "ステータスバッジ",
           "summary": "ペインの各ステータスの名前と色を、言語ごとに設定します。"
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "ロック画面ですべてのウィンドウを隠し、Touch ID または PIN で解除します"
         },
         "voice-input": {
           "title": "音声入力",
@@ -2651,6 +2702,7 @@
       "executionPolicy": "実行ポリシー",
       "statusBadges": "ステータスバッジ",
       "voice": "音声入力",
+      "appLock": "App Lock",
       "keybindings": "ショートカット",
       "updates": "更新",
       "help": "ヘルプ"
@@ -2717,14 +2769,14 @@
         "intro": "19 個の設定タブで変更できる内容、Navide Cloud で複数のマシンを 1 つのプライベートネットワークに接続する方法、そしてメニュー、独立ウィンドウ、使用量の表示、リソースの管理など、メイン画面の外にあるシステム機能を紹介します。",
         "s1": {
           "title": "設定の概要",
-          "p1": "<kbd class=\"syh-kbd\">⌘,</kbd> で設定ウィンドウを開きます。タイトルバーの歯車ボタンからも開けます。左のサイドバーは 5 つのグループに分かれ、合計 <strong>24 個のタブ</strong>があります。",
+          "p1": "<kbd class=\"syh-kbd\">⌘,</kbd> で設定ウィンドウを開きます。タイトルバーの歯車ボタンからも開けます。左のサイドバーは 5 つのグループに分かれ、合計 <strong>25 個のタブ</strong>があります。",
           "h1": "検索欄",
           "p2": "サイドバーの見出しの下に、<code>設定を検索…</code> と表示された検索欄があります。設定項目のタイトル、所属セクション、キーワードを<strong>タブをまたいで</strong>現在の表示言語と登録済みのキーワードを使って検索し、最大 8 件を表示します。結果をクリックすると該当タブに切り替わり、そのセクションまでスクロールします。ただし「ストレージ」は例外で、設定を閉じてリソースマネージャーを直接開きます。一致する項目がなければ <code>一致する設定がありません</code> と表示されます。<kbd class=\"syh-kbd\">Esc</kbd> で検索欄をクリアします。",
           "callout": {
             "title": "すべての設定を検索できるわけではありません",
             "text": "検索インデックスは手作業で管理する一覧です。<strong>「{layout}」「{notifications}」「{security}」「{channels}」の各タブには登録項目がありません</strong>。そのため、これらのタブ内の設定は検索できず、タブを直接開く必要があります。CLI エージェントの項目をクリックすると、いずれかの CLI の設定ドロワーが直接開きます（「CLI エージェントとアカウント」を参照）。"
           },
-          "h2": "24 個のタブ",
+          "h2": "25 個のタブ",
           "tabTable": {
             "group": "グループ",
             "tab": "タブ",
@@ -2759,6 +2811,10 @@
             "voice": {
               "what": "押して話す、ローカルで文字起こしする音声入力：ショートカット、マイク、録音方式、中国語の出力、モデルとエンジン",
               "more": "このパネルの「{workspace}」の「音声入力」章"
+            },
+            "appLock": {
+              "what": "すべてのウィンドウを覆うプライバシー画面：PIN、Touch ID、アイドル時とスリープ時の自動ロック",
+              "more": "App Lock ページ冒頭の説明"
             },
             "cloud": {
               "what": "デバイス間の接続状態、このマシンのフィンガープリント、このマシンへの操作を許可する相手",
@@ -11191,10 +11247,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "詳細",
+    "stage-not-found": "このステップはもう存在しません。別の場所で変更された可能性があります。パイプラインを開き直してください。",
+    "refused": {
+      "last-pipeline": "これが唯一のパイプラインのため削除できません。先に別のパイプラインを作成してください。",
+      "last-stage": "パイプラインには少なくとも 1 つのステップが必要なため、最後のステップは削除できません。",
+      "not-builtin": "元のステップに戻せるのは組み込みのパイプラインだけです。",
+      "no-seed": "この組み込みパイプラインには戻せる元のステップがありません。",
+      "stage-id-required": "ステップに ID がありません。設定してからもう一度お試しください。",
+      "stage-id-invalid": "ステップ ID に使えるのは英字、数字、ハイフン、アンダースコア、ピリオドだけです。",
+      "stage-needs-slot": "ステップには少なくとも 1 つのエージェントが必要です。"
+    },
+    "run": {
+      "no-workspace": "先にワークスペースを開いてください。",
+      "already-running": "このワークスペースではすでにパイプラインが実行中です。先に中止してください。",
+      "no-pipeline": "先にパイプラインを選んでください。",
+      "not-started": "実行は開始されませんでした。理由はパイプラインのログにあります。",
+      "not-running": "このワークスペースで実行中のパイプラインはありません。",
+      "last-stage": "これが最後のステージです（{total} 中 {stage}）。完了が報告されると実行は終了します。",
+      "gate-waiting": "実行は「{gate}」で承認待ちです。先に承認するか差し戻してください。",
+      "not-advanced": "実行は先に進みませんでした。理由はパイプラインのログにあります。",
+      "no-run": "このワークスペースには再開できる実行がありません。",
+      "nothing-to-resume": "前回の実行のステージはすべて完了しています（{total} 中 {done}）。",
+      "not-resumed": "実行は再開されませんでした。理由はパイプラインのログにあります。",
+      "not-cleared": "実行はクリアされませんでした。理由はパイプラインのログにあります。",
+      "stored-not-cleared": "ペインは閉じましたが、保存された実行はクリアされませんでした。",
+      "no-task": "実行するタスクがありません。先にタスクを入力してください。",
+      "not-at-gate": "実行は承認待ちではありません。",
+      "wrong-gate": "実行が待っているのは「{gate}」で、「{asked}」ではありません。",
+      "node-required": "再実行を始めるステップを選んでください。"
+    },
+    "start": {
+      "parent-suspended": "「{name}」がここでサブ Pipeline を待っています。先に再開するかリセットしてください。",
+      "switch-failed": "このパイプラインに切り替えられませんでした。",
+      "stages-load-failed": "このパイプラインのステップを読み込めませんでした。",
+      "no-stages": "このパイプラインにはまだステップがありません。先に追加してください。",
+      "graph-failed": "パイプラインの実行を準備できませんでした。",
+      "spawn-failed": "最初のステップのエージェントを 1 つも起動できませんでした。CLI がインストールされているか確認してください。"
+    },
+    "graph": {
+      "slot-incomplete": "「{label}」にはエージェントと名前が必要です。",
+      "self-loop": "「{label}」は自分自身には接続できません。",
+      "edge-into-trigger": "パイプラインの開始点にはどの接続も入れられません。",
+      "reject-from-trigger": "差し戻し接続はパイプラインの開始点から引けません。",
+      "max-loops-range": "「{label}」からの差し戻し接続の繰り返しは 1〜{max} 回です。",
+      "edge-must-start-at-work": "分岐とエラーの接続はステップから引く必要があります（「{label}」はステップではありません）。",
+      "branch-when": "「{label}」からの分岐接続には照合する値が必要です。",
+      "retry-config": "「{label}」の再試行設定が範囲外です：試行 1〜{maxTries} 回、間隔 0〜{maxWaitMs} ミリ秒。",
+      "subpipeline-links": "サブ Pipeline 同士が循環して呼び出すか、存在しないパイプラインを呼び出しています。",
+      "no-graph": "パイプラインをまだ読み込んでいません。少ししてからもう一度お試しください。",
+      "other": "この変更を行うとパイプラインが壊れます。",
+      "other-at": "この変更を行うと「{label}」でパイプラインが壊れます。"
+    },
+    "gate": {
+      "confirm-title": "実行を終了しますか？",
+      "confirm-no-edge": "「{name}」には差し戻し接続がないため、差し戻すと実行は失敗として終了します。ペインは開いたままです。",
+      "confirm-exhausted": "「{name}」は接続で許された回数だけすでに差し戻しているため、もう一度差し戻すと実行は失敗として終了します。ペインは開いたままです。",
+      "confirm-button": "実行を終了",
+      "rejected-failed": "「{name}」が差し戻され、実行は失敗として終了しました。",
+      "ends-run-hint": "ここで差し戻すと実行は終了します。"
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "サブ Pipeline には実行する別の Pipeline が必要です。先に作成してください。",
-      "subpipeline-cycle": "サブ Pipeline が互いに呼び出すループになります: {detail}",
       "pipeline-running": "このパイプラインは実行中のため、今は変更できません。先に中止するか、実行の終了を待ってください。",
       "pipeline-not-found": "このパイプラインは見つかりません。別の場所で削除された可能性があります。ほかのパイプラインを選んでください。",
       "export-failed": "エクスポートに失敗しました：{message}",
@@ -11202,7 +11319,6 @@
       "command-failed": "実行がこのコマンドを受け付けませんでした。",
       "cycle": "この接続ではフローが無限ループになります。代わりにゲートやステップからの差し戻し接続を使ってください（再試行の上限があります）。",
       "duplicate-edge": "この 2 つのステップはすでに接続されています。",
-      "invalid": "この変更ではパイプラインが壊れます：{detail}",
       "reject-upstream": "差し戻し接続は前のステップを指す必要があります。",
       "transport": "バックエンドに接続できません：{message}",
       "unknown": "バックエンドが理由を示さずに変更を拒否しました。"

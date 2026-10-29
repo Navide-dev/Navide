@@ -66,6 +66,10 @@ export interface AppMenuHooks {
   onOpenSettings?: () => void
   /** App menu (macOS) / File menu (non-macOS): check for updates. */
   onCheckUpdates?: () => void
+  /** App menu (macOS) / File menu (non-macOS): put up the App Lock screen. */
+  onLockNow?: () => void
+  /** Whether Lock Now can run — App Lock is on and the screen is not up. */
+  lockNowEnabled?: () => boolean
   /** File menu: pick a workspace folder and open it. */
   onOpenWorkspace?: () => void
   /** File menu: open a recent workspace by absolute path. */
@@ -233,6 +237,14 @@ export function installApplicationMenu(
     label: s.checkUpdates,
     click: () => hooks.onCheckUpdates?.()
   }
+  // A modifier set nothing else binds: ⌘⇧L and ⌘L belong to the editor and
+  // terminal, and ⌃⌘Q is macOS's own Lock Screen.
+  const lockNowItem: MenuItemConstructorOptions = {
+    label: s.lockNow,
+    accelerator: 'CmdOrCtrl+Alt+L',
+    enabled: hooks.lockNowEnabled?.() ?? false,
+    click: () => hooks.onLockNow?.()
+  }
 
   const template: MenuItemConstructorOptions[] = [
     ...(mac
@@ -244,6 +256,7 @@ export function installApplicationMenu(
               { type: 'separator' },
               settingsItem,
               checkUpdatesItem,
+              lockNowItem,
               { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },
@@ -284,6 +297,7 @@ export function installApplicationMenu(
               { type: 'separator' } as MenuItemConstructorOptions,
               settingsItem,
               checkUpdatesItem,
+              lockNowItem,
               { type: 'separator' } as MenuItemConstructorOptions,
               { role: 'quit' } as MenuItemConstructorOptions
             ])

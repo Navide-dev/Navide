@@ -161,6 +161,29 @@ RUN_FIELDS = (
 )
 
 
+class StageOutOfRange(IndexError):
+    """A stage index the run does not have; the message names the range."""
+
+    def __init__(self, stage_index: int, total: int) -> None:
+        span = f"0..{total - 1}" if total else "none"
+        super().__init__(f"stage_index {stage_index} out of range — the run has {total} stage(s) ({span})")
+        self.stage_index = stage_index
+        self.total = total
+
+
+class SlotNotFound(LookupError):
+    """No pipeline slot with that label in that stage of the run."""
+
+    def __init__(self, stage_index: int, slot_label: str) -> None:
+        super().__init__(f"no slot {slot_label!r} in stage {stage_index} of the run")
+        self.stage_index = stage_index
+        self.slot_label = slot_label
+
+
+class NoRunToResume(ValueError):
+    """resume_pipeline on a workspace with no recorded run."""
+
+
 class ParentRunSuspended(ValueError):
     """A start refused because a parent run is suspended here, waiting for its
     child; the message names the parent pipeline."""
@@ -696,7 +719,7 @@ class ProjectStore:
         with self._save_lock:
             project = self.load_or_create(workspace_path)
             if stage_index < 0 or stage_index >= len(project.stages):
-                raise IndexError(f"stage_index {stage_index} out of range")
+                raise StageOutOfRange(stage_index, len(project.stages))
             # mark previous stage completed (if any) before bumping pointer
             if 0 <= project.current_stage_index < len(project.stages):
                 prev = project.stages[project.current_stage_index]
@@ -788,7 +811,7 @@ class ProjectStore:
         with self._save_lock:
             project = self.load_or_create(workspace_path)
             if stage_index < 0 or stage_index >= len(project.stages):
-                raise IndexError(f"stage_index {stage_index} out of range")
+                raise StageOutOfRange(stage_index, len(project.stages))
             stage = project.stages[stage_index]
             pane = self._find_slot_pane(project, stage_index, slot_label)
             if pane is None:
@@ -843,7 +866,7 @@ class ProjectStore:
         with self._save_lock:
             project = self.load_or_create(workspace_path)
             if stage_index < 0 or stage_index >= len(project.stages):
-                raise IndexError(f"stage_index {stage_index} out of range")
+                raise StageOutOfRange(stage_index, len(project.stages))
             stage = project.stages[stage_index]
             pane = self._find_slot_pane(project, stage_index, slot_label)
             if pane is None:
@@ -1743,9 +1766,12 @@ class ProjectStore:
         with self._save_lock:
             project = self.load_or_create(workspace_path)
             pane = self._find_slot_pane(project, stage_index, slot_label)
-            if pane:
-                pane.kickoff_status = kickoff_status
-                self.save(project)
+            if pane is None:
+                # Answering ok here told the window its kickoff was recorded
+                # against a slot the run does not have.
+                raise SlotNotFound(stage_index, slot_label)
+            pane.kickoff_status = kickoff_status
+            self.save(project)
         return project
 
     def record_node_states(
@@ -1798,7 +1824,7 @@ class ProjectStore:
                 kept = [p for p in project.panes if p.origin != "pipeline"]
                 project.panes = kept + [_pane_record(p) for p in frame["run"].get("panes", [])]
             if not project.stages:
-                raise ValueError("no pipeline to resume — start one first")
+                raise NoRunToResume("no pipeline to resume — start one first")
 
             next_idx = -1
             for i, s in enumerate(project.stages):

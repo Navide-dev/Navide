@@ -1467,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock es una pantalla de privacidad, no un control de acceso. Cubre todas las ventanas de Navide mientras no estás. Los agentes, los terminales, los canales de chat, las herramientas MCP y las programaciones siguen en marcha, y alguien frente a este ordenador que sepa cómo puede saltárselo.",
+      "section-lock": "Bloqueo",
+      "enabled": "Activar App Lock",
+      "enabled-hint": "Define primero un PIN. El PIN siempre desbloquea, aunque Touch ID esté activado.",
+      "lock-now": "Bloquear ahora",
+      "lock-now-hint": "Cubre todas las ventanas al instante. Atajo {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "Hay un PIN definido.",
+      "pin-none-hint": "Aún no hay PIN. Usa de 4 a 12 dígitos.",
+      "set-pin": "Definir PIN",
+      "change-pin": "Cambiar PIN",
+      "remove-pin": "Quitar PIN",
+      "remove-pin-hint": "Quitar el PIN desactiva App Lock.",
+      "current-pin": "PIN actual",
+      "new-pin": "PIN nuevo",
+      "confirm-pin": "Confirmar PIN",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "pin-saved": "PIN guardado.",
+      "pin-removed": "PIN quitado. App Lock está desactivado.",
+      "section-unlock": "Desbloqueo",
+      "method": "Desbloquear con",
+      "method-system": "Touch ID, con el PIN como alternativa",
+      "method-pin": "Solo PIN",
+      "system-unavailable": "Touch ID no está disponible en este ordenador, así que Navide se desbloquea con tu PIN.",
+      "section-auto": "Bloqueo automático",
+      "idle": "Tras inactividad",
+      "idle-hint": "Tiempo sin usar el teclado ni el ratón en todo este ordenador.",
+      "idle-never": "Nunca",
+      "idle-minutes": "{n} min",
+      "on-screen-lock": "Al bloquearse la pantalla",
+      "on-suspend": "Al entrar el ordenador en reposo",
+      "on-start": "Al iniciar Navide",
+      "section-forgot": "¿Has olvidado el PIN?",
+      "reset-with-system": "Restablecer PIN con Touch ID",
+      "forgot-system": "Touch ID confirma que eres tú y luego eliges un PIN nuevo.",
+      "forgot-manual-title": "Sin Touch ID",
+      "forgot-manual": "Cierra Navide y borra app-lock.json de la carpeta de datos de Navide. Así se quitan App Lock y su PIN, y nada más.",
+      "error-invalid-pin": "Usa de 4 a 12 dígitos.",
+      "error-mismatch": "Los dos PIN no coinciden.",
+      "error-wrong-pin": "El PIN actual es incorrecto.",
+      "error-cooldown": "Demasiados intentos. Vuelve a intentarlo en {seconds} s.",
+      "error-system-failed": "Touch ID no ha confirmado que seas tú.",
+      "error-generic": "No ha funcionado. Inténtalo de nuevo."
+    },
     "cliExtensions": {
       "tabInstalled": "Extensiones de CLI instaladas",
       "tabConvenience": "Qué cambia Navide",
@@ -1644,6 +1691,10 @@
         "status-badges": {
           "title": "Insignias de estado",
           "summary": "Cambia el nombre de cada estado de pane y elige su color, por idioma."
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "Oculta todas las ventanas tras una pantalla de bloqueo y desbloquea con Touch ID o un PIN"
         },
         "voice-input": {
           "title": "Entrada de voz",
@@ -2651,6 +2702,7 @@
       "executionPolicy": "Política de ejecución",
       "statusBadges": "Insignias de estado",
       "voice": "Entrada de voz",
+      "appLock": "App Lock",
       "keybindings": "Atajos",
       "updates": "Actualizaciones",
       "help": "Ayuda"
@@ -2717,14 +2769,14 @@
         "intro": "Qué controla cada una de las diecinueve pestañas de ajustes, cómo Navide Cloud une varias máquinas en una red privada y las superficies del sistema que viven fuera de la pantalla principal: los menús, las ventanas independientes, las vistas de uso y el mantenimiento de recursos.",
         "s1": {
           "title": "Resumen de los ajustes",
-          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>24 pestañas</strong> en total.",
+          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>25 pestañas</strong> en total.",
           "h1": "El campo de búsqueda",
           "p2": "Debajo del encabezado de la barra lateral hay un campo de búsqueda con el texto de ejemplo <code>Buscar en los ajustes…</code>. Busca en los títulos de los ajustes, su sección y sus palabras clave <strong>en todas las pestañas</strong> (con el idioma actual de la interfaz y las palabras clave indexadas) y muestra como máximo 8 resultados; al hacer clic en uno se cambia a esa pestaña y se desplaza hasta la sección (con una excepción: «Almacenamiento» cierra los ajustes y abre directamente el Administrador de recursos). Si no hay coincidencias, muestra <code>No hay ajustes que coincidan</code>. <kbd class=\"syh-kbd\">Esc</kbd> lo vacía.",
           "callout": {
             "title": "El índice de búsqueda no es exhaustivo",
             "text": "El índice es una lista mantenida a mano, y <strong>las pestañas {layout}, {notifications}, {security} y {channels} no tienen ninguna entrada</strong>, así que nada de su contenido se puede buscar: tienes que abrirlas tú. Una entrada de CLI Agents abre directamente el panel lateral de ajustes de una CLI (consulta el tema «Agents de CLI y cuentas»)."
           },
-          "h2": "Las veinticuatro pestañas",
+          "h2": "Las veinticinco pestañas",
           "tabTable": {
             "group": "Grupo",
             "tab": "Pestaña",
@@ -2759,6 +2811,10 @@
             "voice": {
               "what": "Entrada de voz manteniendo pulsado, transcrita en esta máquina: atajo, micrófono, modo de grabación, salida en chino, modelo y motor",
               "more": "El capítulo «Entrada de voz» del tema «{workspace}»"
+            },
+            "appLock": {
+              "what": "Una pantalla de privacidad sobre todas las ventanas: PIN, Touch ID, bloqueo por inactividad y reposo",
+              "more": "el aviso al principio de la página App Lock"
             },
             "cloud": {
               "what": "Estado de la conexión entre dispositivos, huella de esta máquina, quién puede dar órdenes a esta máquina",
@@ -11191,10 +11247,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "Detalles",
+    "stage-not-found": "Ese paso ya no existe. Puede que se haya cambiado en otro sitio; vuelve a abrir la pipeline.",
+    "refused": {
+      "last-pipeline": "Es la única pipeline, así que no se puede eliminar. Crea otra primero.",
+      "last-stage": "Una pipeline necesita al menos un paso, así que el último no se puede eliminar.",
+      "not-builtin": "Solo las pipelines integradas pueden recuperar sus pasos originales.",
+      "no-seed": "Esta pipeline integrada no tiene pasos originales que restaurar.",
+      "stage-id-required": "El paso no tiene ID. Asígnale uno y vuelve a intentarlo.",
+      "stage-id-invalid": "Un ID de paso solo puede usar letras, números, guiones, guiones bajos y puntos.",
+      "stage-needs-slot": "Un paso necesita al menos un agent."
+    },
+    "run": {
+      "no-workspace": "Abre primero un espacio de trabajo.",
+      "already-running": "Ya hay una pipeline en ejecución en este espacio de trabajo. Cancélala primero.",
+      "no-pipeline": "Elige primero una pipeline.",
+      "not-started": "La ejecución no se ha iniciado. El registro de la pipeline indica el motivo.",
+      "not-running": "No hay ninguna pipeline en ejecución en este espacio de trabajo.",
+      "last-stage": "Es la última etapa ({stage} de {total}). La ejecución termina cuando informa de que ha acabado.",
+      "gate-waiting": "La ejecución espera tu aprobación en {gate}. Apruébala o devuélvela primero.",
+      "not-advanced": "La ejecución no ha avanzado. El registro de la pipeline indica el motivo.",
+      "no-run": "Este espacio de trabajo no tiene ninguna ejecución que reanudar.",
+      "nothing-to-resume": "Todas las etapas de la última ejecución ya han terminado ({done} de {total}).",
+      "not-resumed": "La ejecución no se ha reanudado. El registro de la pipeline indica el motivo.",
+      "not-cleared": "La ejecución no se ha borrado. El registro de la pipeline indica el motivo.",
+      "stored-not-cleared": "Los paneles se han cerrado, pero la ejecución guardada no se ha borrado.",
+      "no-task": "No hay ninguna tarea que ejecutar. Escribe primero una tarea.",
+      "not-at-gate": "La ejecución no está esperando ninguna aprobación.",
+      "wrong-gate": "La ejecución espera en {gate}, no en {asked}.",
+      "node-required": "Elige el paso desde el que volver a ejecutar."
+    },
+    "start": {
+      "parent-suspended": "{name} está esperando aquí a su subpipeline. Reanúdala o restablécela primero.",
+      "switch-failed": "No se ha podido cambiar a esta pipeline.",
+      "stages-load-failed": "No se han podido cargar los pasos de esta pipeline.",
+      "no-stages": "Esta pipeline aún no tiene pasos. Añade uno primero.",
+      "graph-failed": "No se ha podido preparar la pipeline para ejecutarla.",
+      "spawn-failed": "No se ha podido iniciar ningún agent del primer paso. Comprueba que sus CLI estén instaladas."
+    },
+    "graph": {
+      "slot-incomplete": "{label} necesita un agent y un nombre.",
+      "self-loop": "{label} no puede enlazarse consigo mismo.",
+      "edge-into-trigger": "Ningún enlace puede entrar en el inicio de la pipeline.",
+      "reject-from-trigger": "Un enlace de rechazo no puede salir del inicio de la pipeline.",
+      "max-loops-range": "El enlace de rechazo que sale de {label} puede repetirse de 1 a {max} veces.",
+      "edge-must-start-at-work": "Los enlaces de rama y de error tienen que salir de un paso ({label} no lo es).",
+      "branch-when": "El enlace de rama que sale de {label} necesita un valor con el que comparar.",
+      "retry-config": "Los ajustes de reintento de {label} están fuera de rango: de 1 a {maxTries} intentos, de 0 a {maxWaitMs} ms entre ellos.",
+      "subpipeline-links": "Las subpipelines se llamarían entre sí en bucle o llamarían a una pipeline que ya no existe.",
+      "no-graph": "La pipeline aún no se ha cargado. Inténtalo de nuevo en un momento.",
+      "other": "Ese cambio rompería la pipeline.",
+      "other-at": "Ese cambio rompería la pipeline en {label}."
+    },
+    "gate": {
+      "confirm-title": "¿Terminar la ejecución?",
+      "confirm-no-edge": "{name} no tiene enlace de rechazo, así que devolverlo termina la ejecución como fallida. Los paneles siguen abiertos.",
+      "confirm-exhausted": "{name} ya ha devuelto el trabajo tantas veces como permite su enlace, así que devolverlo otra vez termina la ejecución como fallida. Los paneles siguen abiertos.",
+      "confirm-button": "Terminar la ejecución",
+      "rejected-failed": "{name} se ha devuelto y la ejecución ha terminado como fallida.",
+      "ends-run-hint": "Devolver aquí termina la ejecución."
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "Una subpipeline necesita otra pipeline que ejecutar; crea una primero.",
-      "subpipeline-cycle": "Las subpipelines se llamarían entre sí en bucle: {detail}",
       "pipeline-running": "Esta pipeline se está ejecutando, así que no se puede cambiar ahora. Cancela o termina primero la ejecución.",
       "pipeline-not-found": "Esta pipeline ya no existe. Puede que se haya eliminado en otro sitio; elige otra pipeline.",
       "export-failed": "Falló la exportación: {message}",
@@ -11202,7 +11319,6 @@
       "command-failed": "La ejecución no aceptó ese comando.",
       "cycle": "Ese enlace haría que el flujo diera vueltas para siempre. Usa en su lugar un enlace de rechazo desde la puerta o el paso: tiene un límite de reintentos.",
       "duplicate-edge": "Estos dos pasos ya están enlazados.",
-      "invalid": "Ese cambio rompería la pipeline: {detail}",
       "reject-upstream": "Un enlace de rechazo tiene que apuntar a un paso anterior.",
       "transport": "No se pudo conectar con el backend: {message}",
       "unknown": "El backend ha rechazado el cambio sin decir por qué."

@@ -1467,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock est un écran de confidentialité, pas un contrôle d’accès. Il couvre toutes les fenêtres de Navide pendant votre absence. Les agents, les terminaux, les canaux de discussion, les outils MCP et les planifications continuent de tourner, et une personne devant cet ordinateur qui sait s’y prendre peut le contourner.",
+      "section-lock": "Verrouillage",
+      "enabled": "Activer App Lock",
+      "enabled-hint": "Définissez d’abord un PIN. Le PIN déverrouille toujours, même avec Touch ID activé.",
+      "lock-now": "Verrouiller maintenant",
+      "lock-now-hint": "Couvre toutes les fenêtres immédiatement. Raccourci {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "Un PIN est défini.",
+      "pin-none-hint": "Aucun PIN pour l’instant. Utilisez 4 à 12 chiffres.",
+      "set-pin": "Définir le PIN",
+      "change-pin": "Modifier le PIN",
+      "remove-pin": "Supprimer le PIN",
+      "remove-pin-hint": "Supprimer le PIN désactive App Lock.",
+      "current-pin": "PIN actuel",
+      "new-pin": "Nouveau PIN",
+      "confirm-pin": "Confirmer le PIN",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "pin-saved": "PIN enregistré.",
+      "pin-removed": "PIN supprimé. App Lock est désactivé.",
+      "section-unlock": "Déverrouillage",
+      "method": "Déverrouiller avec",
+      "method-system": "Touch ID, avec le PIN en secours",
+      "method-pin": "PIN uniquement",
+      "system-unavailable": "Touch ID n’est pas disponible sur cet ordinateur, Navide se déverrouille donc avec votre PIN.",
+      "section-auto": "Verrouillage automatique",
+      "idle": "Après inactivité",
+      "idle-hint": "Durée sans clavier ni souris sur l’ensemble de cet ordinateur.",
+      "idle-never": "Jamais",
+      "idle-minutes": "{n} min",
+      "on-screen-lock": "Au verrouillage de l’écran",
+      "on-suspend": "À la mise en veille de l’ordinateur",
+      "on-start": "Au démarrage de Navide",
+      "section-forgot": "PIN oublié ?",
+      "reset-with-system": "Réinitialiser le PIN avec Touch ID",
+      "forgot-system": "Touch ID confirme que c’est bien vous, puis vous choisissez un nouveau PIN.",
+      "forgot-manual-title": "Sans Touch ID",
+      "forgot-manual": "Quittez Navide et supprimez app-lock.json du dossier de données de Navide. Cela supprime App Lock et son PIN, et rien d’autre.",
+      "error-invalid-pin": "Utilisez 4 à 12 chiffres.",
+      "error-mismatch": "Les deux PIN ne correspondent pas.",
+      "error-wrong-pin": "Le PIN actuel est incorrect.",
+      "error-cooldown": "Trop de tentatives. Réessayez dans {seconds} s.",
+      "error-system-failed": "Touch ID n’a pas confirmé votre identité.",
+      "error-generic": "Cela n’a pas fonctionné. Réessayez."
+    },
     "cliExtensions": {
       "tabInstalled": "Extensions CLI installées",
       "tabConvenience": "Ce que Navide modifie",
@@ -1644,6 +1691,10 @@
         "status-badges": {
           "title": "Badges d’état",
           "summary": "Renommer chaque état de pane et choisir sa couleur, par langue."
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "Masquer toutes les fenêtres derrière un écran de verrouillage et déverrouiller avec Touch ID ou un PIN"
         },
         "voice-input": {
           "title": "Saisie vocale",
@@ -2651,6 +2702,7 @@
       "executionPolicy": "Politique d’exécution",
       "statusBadges": "Badges d’état",
       "voice": "Saisie vocale",
+      "appLock": "App Lock",
       "keybindings": "Raccourcis",
       "updates": "Mises à jour",
       "help": "Aide"
@@ -2717,14 +2769,14 @@
         "intro": "Ce que contrôle chacun des dix-neuf onglets des paramètres, comment Navide Cloud relie plusieurs machines en un réseau privé, et les éléments du système situés hors de l’écran principal : les menus, les fenêtres autonomes, les vues d’utilisation et l’entretien des ressources.",
         "s1": {
           "title": "Vue d’ensemble des paramètres",
-          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>24 onglets</strong> au total.",
+          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>25 onglets</strong> au total.",
           "h1": "Le champ de recherche",
           "p2": "Sous l’en-tête de la barre latérale se trouve un champ de recherche dont le texte indicatif est <code>Rechercher dans les paramètres…</code>. Il recherche dans les titres des paramètres, leur section et leurs mots-clés <strong>dans tous les onglets</strong> (dans la langue actuelle de l’interface et avec les mots-clés indexés), et affiche au plus 8 résultats ; cliquer sur l’un d’eux ouvre l’onglet correspondant et fait défiler jusqu’à la section (à une exception près : « Stockage » ferme les paramètres et ouvre directement le Resource Manager). Sans résultat, il affiche <code>Aucun paramètre correspondant</code>. <kbd class=\"syh-kbd\">Esc</kbd> le vide.",
           "callout": {
             "title": "L’index de recherche n’est pas exhaustif",
             "text": "L’index est une liste tenue à la main, et <strong>les onglets {layout}, {notifications}, {security} et {channels} n’y ont aucune entrée</strong> : rien de ce qu’ils contiennent n’est donc trouvable, il faut les ouvrir vous-même. Une entrée CLI Agents ouvre directement le panneau de réglages d’une CLI (voir la rubrique « Agents CLI et comptes »)."
           },
-          "h2": "Les vingt-quatre onglets",
+          "h2": "Les vingt-cinq onglets",
           "tabTable": {
             "group": "Groupe",
             "tab": "Onglet",
@@ -2759,6 +2811,10 @@
             "voice": {
               "what": "Saisie vocale en maintenant une touche, transcrite sur cette machine : raccourci, micro, mode d’enregistrement, sortie en chinois, modèle et moteur",
               "more": "Le chapitre « Saisie vocale » de la rubrique « {workspace} »"
+            },
+            "appLock": {
+              "what": "Un écran de confidentialité sur toutes les fenêtres : PIN, Touch ID, verrouillage après inactivité et en veille",
+              "more": "l’avertissement en haut de la page App Lock"
             },
             "cloud": {
               "what": "État de la liaison entre appareils, empreinte de cette machine, qui peut donner des ordres à cette machine",
@@ -11191,10 +11247,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "Détails",
+    "stage-not-found": "Cette étape n’existe plus. Elle a peut-être été modifiée ailleurs. Rouvrez le pipeline.",
+    "refused": {
+      "last-pipeline": "C’est le seul pipeline, il ne peut donc pas être supprimé. Créez-en d’abord un autre.",
+      "last-stage": "Un pipeline doit avoir au moins une étape, la dernière ne peut donc pas être supprimée.",
+      "not-builtin": "Seuls les pipelines intégrés peuvent retrouver leurs étapes d’origine.",
+      "no-seed": "Ce pipeline intégré n’a pas d’étapes d’origine à restaurer.",
+      "stage-id-required": "L’étape n’a pas d’ID. Donnez-lui en un et réessayez.",
+      "stage-id-invalid": "Un ID d’étape ne peut contenir que des lettres, des chiffres, des tirets, des traits de soulignement et des points.",
+      "stage-needs-slot": "Une étape a besoin d’au moins un agent."
+    },
+    "run": {
+      "no-workspace": "Ouvrez d’abord un espace de travail.",
+      "already-running": "Un pipeline est déjà en cours dans cet espace de travail. Interrompez-le d’abord.",
+      "no-pipeline": "Choisissez d’abord un pipeline.",
+      "not-started": "L’exécution n’a pas démarré. Le journal du pipeline en donne la raison.",
+      "not-running": "Aucun pipeline n’est en cours dans cet espace de travail.",
+      "last-stage": "C’est la dernière étape ({stage} sur {total}). L’exécution se termine quand elle signale qu’elle a fini.",
+      "gate-waiting": "L’exécution attend votre approbation à {gate}. Approuvez-la ou renvoyez-la d’abord.",
+      "not-advanced": "L’exécution n’a pas avancé. Le journal du pipeline en donne la raison.",
+      "no-run": "Cet espace de travail n’a aucune exécution à reprendre.",
+      "nothing-to-resume": "Toutes les étapes de la dernière exécution sont déjà terminées ({done} sur {total}).",
+      "not-resumed": "L’exécution n’a pas repris. Le journal du pipeline en donne la raison.",
+      "not-cleared": "L’exécution n’a pas été effacée. Le journal du pipeline en donne la raison.",
+      "stored-not-cleared": "Les volets ont été fermés, mais l’exécution enregistrée n’a pas été effacée.",
+      "no-task": "Il n’y a aucune tâche à exécuter. Saisissez d’abord une tâche.",
+      "not-at-gate": "L’exécution n’attend aucune approbation.",
+      "wrong-gate": "L’exécution attend à {gate}, pas à {asked}.",
+      "node-required": "Choisissez l’étape à partir de laquelle relancer."
+    },
+    "start": {
+      "parent-suspended": "{name} attend ici son sous-pipeline. Reprenez-le ou réinitialisez-le d’abord.",
+      "switch-failed": "Impossible de passer à ce pipeline.",
+      "stages-load-failed": "Impossible de charger les étapes de ce pipeline.",
+      "no-stages": "Ce pipeline n’a encore aucune étape. Ajoutez-en une d’abord.",
+      "graph-failed": "Impossible de préparer l’exécution du pipeline.",
+      "spawn-failed": "Aucun agent de la première étape n’a pu démarrer. Vérifiez que leurs CLI sont installées."
+    },
+    "graph": {
+      "slot-incomplete": "{label} a besoin d’un agent et d’un nom.",
+      "self-loop": "{label} ne peut pas être lié à lui-même.",
+      "edge-into-trigger": "Aucun lien ne peut entrer dans le début du pipeline.",
+      "reject-from-trigger": "Un lien de renvoi ne peut pas partir du début du pipeline.",
+      "max-loops-range": "Le lien de renvoi partant de {label} peut se répéter de 1 à {max} fois.",
+      "edge-must-start-at-work": "Les liens de branche et d’erreur doivent partir d’une étape ({label} n’en est pas une).",
+      "branch-when": "Le lien de branche partant de {label} a besoin d’une valeur à comparer.",
+      "retry-config": "Les réglages de nouvelle tentative de {label} sont hors limites : 1 à {maxTries} tentatives, 0 à {maxWaitMs} ms entre elles.",
+      "subpipeline-links": "Des sous-pipelines s’appelleraient en boucle, ou appelleraient un pipeline qui n’existe plus.",
+      "no-graph": "Le pipeline n’est pas encore chargé. Réessayez dans un instant.",
+      "other": "Cette modification casserait le pipeline.",
+      "other-at": "Cette modification casserait le pipeline à {label}."
+    },
+    "gate": {
+      "confirm-title": "Terminer l’exécution ?",
+      "confirm-no-edge": "{name} n’a pas de lien de renvoi. Le renvoyer termine donc l’exécution en échec. Les volets restent ouverts.",
+      "confirm-exhausted": "{name} a déjà renvoyé le travail autant de fois que son lien le permet. Le renvoyer encore termine l’exécution en échec. Les volets restent ouverts.",
+      "confirm-button": "Terminer l’exécution",
+      "rejected-failed": "{name} a été renvoyé et l’exécution s’est terminée en échec.",
+      "ends-run-hint": "Renvoyer ici termine l’exécution."
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "Un sous-pipeline a besoin d’un autre pipeline à exécuter ; créez-en un d’abord.",
-      "subpipeline-cycle": "Des sous-pipelines s’appelleraient en boucle : {detail}",
       "pipeline-running": "Ce pipeline est en cours d’exécution, il ne peut donc pas être modifié pour l’instant. Interrompez ou terminez d’abord l’exécution.",
       "pipeline-not-found": "Ce pipeline n’existe plus. Il a peut-être été supprimé ailleurs ; choisissez un autre pipeline.",
       "export-failed": "Échec de l’export : {message}",
@@ -11202,7 +11319,6 @@
       "command-failed": "L’exécution n’a pas accepté cette commande.",
       "cycle": "Ce lien ferait boucler le flux indéfiniment. Utilisez plutôt un lien de renvoi depuis la validation ou l’étape : il a une limite de tentatives.",
       "duplicate-edge": "Ces deux étapes sont déjà liées.",
-      "invalid": "Cette modification casserait le pipeline : {detail}",
       "reject-upstream": "Un lien de renvoi doit pointer vers une étape antérieure.",
       "transport": "Impossible de joindre le backend : {message}",
       "unknown": "Le backend a refusé la modification sans dire pourquoi."

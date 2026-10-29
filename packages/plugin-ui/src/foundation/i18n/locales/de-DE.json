@@ -1467,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock ist ein Sichtschutz, keine Zugriffskontrolle. Es verdeckt alle Navide-Fenster, solange Sie weg sind. Agents, Terminals, Chat-Kanäle, MCP-Tools und Zeitpläne laufen weiter, und wer an diesem Computer sitzt und sich auskennt, kann es umgehen.",
+      "section-lock": "Sperre",
+      "enabled": "App Lock aktivieren",
+      "enabled-hint": "Legen Sie zuerst eine PIN fest. Die PIN entsperrt immer, auch wenn Touch ID aktiv ist.",
+      "lock-now": "Jetzt sperren",
+      "lock-now-hint": "Verdeckt sofort alle Fenster. Tastenkürzel {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "Eine PIN ist festgelegt.",
+      "pin-none-hint": "Noch keine PIN. Verwenden Sie 4 bis 12 Ziffern.",
+      "set-pin": "PIN festlegen",
+      "change-pin": "PIN ändern",
+      "remove-pin": "PIN entfernen",
+      "remove-pin-hint": "Wenn Sie die PIN entfernen, wird App Lock deaktiviert.",
+      "current-pin": "Aktuelle PIN",
+      "new-pin": "Neue PIN",
+      "confirm-pin": "PIN bestätigen",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "pin-saved": "PIN gespeichert.",
+      "pin-removed": "PIN entfernt. App Lock ist deaktiviert.",
+      "section-unlock": "Entsperren",
+      "method": "Entsperren mit",
+      "method-system": "Touch ID, PIN als Ersatz",
+      "method-pin": "Nur PIN",
+      "system-unavailable": "Touch ID ist auf diesem Computer nicht verfügbar, daher entsperrt Navide mit Ihrer PIN.",
+      "section-auto": "Automatisch sperren",
+      "idle": "Nach Inaktivität",
+      "idle-hint": "Zeit ohne Tastatur- oder Mauseingabe auf diesem Computer.",
+      "idle-never": "Nie",
+      "idle-minutes": "{n} Min.",
+      "on-screen-lock": "Wenn der Bildschirm gesperrt wird",
+      "on-suspend": "Wenn der Computer in den Ruhezustand geht",
+      "on-start": "Beim Start von Navide",
+      "section-forgot": "PIN vergessen?",
+      "reset-with-system": "PIN mit Touch ID zurücksetzen",
+      "forgot-system": "Touch ID bestätigt, dass Sie es sind, dann wählen Sie eine neue PIN.",
+      "forgot-manual-title": "Ohne Touch ID",
+      "forgot-manual": "Beenden Sie Navide und löschen Sie app-lock.json aus dem Datenordner von Navide. Das entfernt App Lock und seine PIN, sonst nichts.",
+      "error-invalid-pin": "Verwenden Sie 4 bis 12 Ziffern.",
+      "error-mismatch": "Die beiden PINs stimmen nicht überein.",
+      "error-wrong-pin": "Die aktuelle PIN ist falsch.",
+      "error-cooldown": "Zu viele Versuche. Versuchen Sie es in {seconds} s erneut.",
+      "error-system-failed": "Touch ID hat Ihre Identität nicht bestätigt.",
+      "error-generic": "Das hat nicht geklappt. Versuchen Sie es erneut."
+    },
     "cliExtensions": {
       "tabInstalled": "Installierte CLI-Erweiterungen",
       "tabConvenience": "Was Navide ändert",
@@ -1644,6 +1691,10 @@
         "status-badges": {
           "title": "Status-Badges",
           "summary": "Jeden Bereichsstatus umbenennen und seine Farbe wählen, pro Sprache."
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "Alle Fenster hinter einem Sperrbildschirm verbergen und mit Touch ID oder PIN entsperren"
         },
         "voice-input": {
           "title": "Spracheingabe",
@@ -2651,6 +2702,7 @@
       "executionPolicy": "Ausführungsrichtlinie",
       "statusBadges": "Status-Badges",
       "voice": "Spracheingabe",
+      "appLock": "App Lock",
       "keybindings": "Tastenkombinationen",
       "updates": "Aktualisierungen",
       "help": "Hilfe"
@@ -2717,14 +2769,14 @@
         "intro": "Was jeder der neunzehn Einstellungs-Tabs steuert, wie Navide Cloud mehrere Rechner zu einem privaten Netzwerk verbindet, und die Systemoberflächen außerhalb des Hauptbildschirms – die Menüs, die eigenständigen Fenster, die Nutzungsansichten und die Ressourcenpflege.",
         "s1": {
           "title": "Einstellungen im Überblick",
-          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>24 Tabs</strong>.",
+          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>25 Tabs</strong>.",
           "h1": "Das Suchfeld",
           "p2": "Unter der Überschrift der Seitenleiste befindet sich ein Suchfeld mit dem Platzhalter <code>Einstellungen durchsuchen …</code>. Es durchsucht Titel, Abschnitte und Stichwörter der Einstellungen <strong>über alle Tabs hinweg</strong> (in der aktuellen Oberflächensprache und mit den indizierten Stichwörtern) und listet höchstens 8 Ergebnisse auf; ein Klick auf ein Ergebnis wechselt zu dessen Tab und scrollt zum Abschnitt (mit einer Ausnahme: „Speicher“ schließt die Einstellungen und öffnet direkt die Ressourcenverwaltung). Ohne Treffer erscheint <code>Keine passenden Einstellungen</code>. <kbd class=\"syh-kbd\">Esc</kbd> leert das Feld.",
           "callout": {
             "title": "Der Suchindex ist nicht vollständig",
             "text": "Der Index ist eine von Hand gepflegte Liste, und <strong>die Tabs {layout}, {notifications}, {security} und {channels} haben überhaupt keine Einträge</strong>, sodass sich darin nichts suchen lässt – Sie müssen sie selbst öffnen. Ein Eintrag unter „CLI-Agents“ öffnet direkt die Einstellungsleiste einer CLI (siehe das Thema „CLI-Agents und Konten“)."
           },
-          "h2": "Die vierundzwanzig Tabs",
+          "h2": "Die fünfundzwanzig Tabs",
           "tabTable": {
             "group": "Gruppe",
             "tab": "Tab",
@@ -2759,6 +2811,10 @@
             "voice": {
               "what": "Spracheingabe per Gedrückthalten, auf diesem Rechner transkribiert: Tastenkürzel, Mikrofon, Aufnahmemodus, chinesische Ausgabe, Modell und Engine",
               "more": "Das Kapitel „Spracheingabe“ im Thema „{workspace}“"
+            },
+            "appLock": {
+              "what": "Ein Sichtschutz über allen Fenstern: PIN, Touch ID, Sperren bei Inaktivität und Ruhezustand",
+              "more": "der Hinweis oben auf der Seite App Lock"
             },
             "cloud": {
               "what": "Status der geräteübergreifenden Verbindung, Fingerabdruck dieses Rechners, wer diesem Rechner Befehle erteilen darf",
@@ -11191,10 +11247,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "Einzelheiten",
+    "stage-not-found": "Diesen Schritt gibt es nicht mehr. Er wurde vielleicht an anderer Stelle geändert; öffnen Sie die Pipeline erneut.",
+    "refused": {
+      "last-pipeline": "Das ist die einzige Pipeline, daher kann sie nicht gelöscht werden. Legen Sie zuerst eine weitere an.",
+      "last-stage": "Eine Pipeline braucht mindestens einen Schritt, daher kann der letzte nicht gelöscht werden.",
+      "not-builtin": "Nur integrierte Pipelines lassen sich auf ihre ursprünglichen Schritte zurücksetzen.",
+      "no-seed": "Für diese integrierte Pipeline gibt es keine ursprünglichen Schritte zum Wiederherstellen.",
+      "stage-id-required": "Der Schritt hat keine ID. Vergeben Sie eine und versuchen Sie es erneut.",
+      "stage-id-invalid": "Eine Schritt-ID darf nur Buchstaben, Ziffern, Bindestriche, Unterstriche und Punkte enthalten.",
+      "stage-needs-slot": "Ein Schritt braucht mindestens einen Agent."
+    },
+    "run": {
+      "no-workspace": "Öffnen Sie zuerst einen Workspace.",
+      "already-running": "In diesem Workspace läuft bereits eine Pipeline. Brechen Sie sie zuerst ab.",
+      "no-pipeline": "Wählen Sie zuerst eine Pipeline.",
+      "not-started": "Der Lauf wurde nicht gestartet. Den Grund finden Sie im Pipeline-Protokoll.",
+      "not-running": "In diesem Workspace läuft keine Pipeline.",
+      "last-stage": "Das ist die letzte Stufe ({stage} von {total}). Der Lauf endet, sobald sie fertig meldet.",
+      "gate-waiting": "Der Lauf wartet bei {gate} auf Ihre Genehmigung. Genehmigen Sie sie oder schicken Sie sie zuerst zurück.",
+      "not-advanced": "Der Lauf ist nicht weitergegangen. Den Grund finden Sie im Pipeline-Protokoll.",
+      "no-run": "In diesem Workspace gibt es keinen Lauf zum Fortsetzen.",
+      "nothing-to-resume": "Alle Stufen des letzten Laufs sind bereits fertig ({done} von {total}).",
+      "not-resumed": "Der Lauf wurde nicht fortgesetzt. Den Grund finden Sie im Pipeline-Protokoll.",
+      "not-cleared": "Der Lauf wurde nicht zurückgesetzt. Den Grund finden Sie im Pipeline-Protokoll.",
+      "stored-not-cleared": "Die Bereiche wurden geschlossen, aber der gespeicherte Lauf wurde nicht gelöscht.",
+      "no-task": "Es gibt keine Aufgabe zum Ausführen. Geben Sie zuerst eine Aufgabe ein.",
+      "not-at-gate": "Der Lauf wartet gerade auf keine Genehmigung.",
+      "wrong-gate": "Der Lauf wartet bei {gate}, nicht bei {asked}.",
+      "node-required": "Wählen Sie den Schritt, ab dem neu ausgeführt werden soll."
+    },
+    "start": {
+      "parent-suspended": "{name} wartet hier auf seine Unter-Pipeline. Setzen Sie sie zuerst fort oder zurück.",
+      "switch-failed": "Es konnte nicht zu dieser Pipeline gewechselt werden.",
+      "stages-load-failed": "Die Schritte dieser Pipeline konnten nicht geladen werden.",
+      "no-stages": "Diese Pipeline hat noch keine Schritte. Fügen Sie zuerst einen hinzu.",
+      "graph-failed": "Die Pipeline konnte nicht für den Lauf vorbereitet werden.",
+      "spawn-failed": "Keiner der Agents im ersten Schritt konnte gestartet werden. Prüfen Sie, ob ihre CLIs installiert sind."
+    },
+    "graph": {
+      "slot-incomplete": "{label} braucht einen Agent und einen Namen.",
+      "self-loop": "{label} kann nicht mit sich selbst verbunden werden.",
+      "edge-into-trigger": "Keine Verbindung darf in den Start der Pipeline führen.",
+      "reject-from-trigger": "Eine Rückweisungsverbindung kann nicht am Start der Pipeline beginnen.",
+      "max-loops-range": "Die Rückweisungsverbindung von {label} kann sich 1- bis {max}-mal wiederholen.",
+      "edge-must-start-at-work": "Verzweigungs- und Fehlerverbindungen müssen an einem Schritt beginnen ({label} ist keiner).",
+      "branch-when": "Die Verzweigungsverbindung von {label} braucht einen Vergleichswert.",
+      "retry-config": "Die Wiederholungseinstellungen von {label} liegen außerhalb des Bereichs: 1 bis {maxTries} Versuche, 0 bis {maxWaitMs} ms dazwischen.",
+      "subpipeline-links": "Unter-Pipelines würden sich gegenseitig in einer Schleife aufrufen oder eine Pipeline aufrufen, die es nicht mehr gibt.",
+      "no-graph": "Die Pipeline ist noch nicht geladen. Versuchen Sie es gleich noch einmal.",
+      "other": "Diese Änderung würde die Pipeline beschädigen.",
+      "other-at": "Diese Änderung würde die Pipeline bei {label} beschädigen."
+    },
+    "gate": {
+      "confirm-title": "Lauf beenden?",
+      "confirm-no-edge": "{name} hat keine Rückweisungsverbindung. Zurückschicken beendet den Lauf daher als fehlgeschlagen. Die Bereiche bleiben geöffnet.",
+      "confirm-exhausted": "{name} hat die Arbeit schon so oft zurückgeschickt, wie die Verbindung erlaubt. Erneutes Zurückschicken beendet den Lauf als fehlgeschlagen. Die Bereiche bleiben geöffnet.",
+      "confirm-button": "Lauf beenden",
+      "rejected-failed": "{name} wurde zurückgeschickt, und der Lauf endete als fehlgeschlagen.",
+      "ends-run-hint": "Zurückschicken beendet hier den Lauf."
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "Eine Unter-Pipeline braucht eine andere Pipeline zum Ausführen; lege zuerst eine an.",
-      "subpipeline-cycle": "Unter-Pipelines würden sich gegenseitig im Kreis aufrufen: {detail}",
       "pipeline-running": "Diese Pipeline läuft und kann daher gerade nicht geändert werden. Brechen Sie den Lauf zuerst ab oder lassen Sie ihn zu Ende laufen.",
       "pipeline-not-found": "Diese Pipeline existiert nicht mehr. Möglicherweise wurde sie an anderer Stelle gelöscht; wählen Sie eine andere Pipeline.",
       "export-failed": "Export fehlgeschlagen: {message}",
@@ -11202,7 +11319,6 @@
       "command-failed": "Der Lauf hat diesen Befehl nicht angenommen.",
       "cycle": "Diese Verbindung würde den Ablauf in eine Endlosschleife versetzen. Verwenden Sie stattdessen eine Rückweisungsverbindung von der Schranke oder vom Schritt – sie hat ein Wiederholungslimit.",
       "duplicate-edge": "Diese beiden Schritte sind bereits verbunden.",
-      "invalid": "Diese Änderung würde die Pipeline beschädigen: {detail}",
       "reject-upstream": "Eine Rückweisungsverbindung muss auf einen früheren Schritt zurückzeigen.",
       "transport": "Das Backend war nicht erreichbar: {message}",
       "unknown": "Das Backend hat die Änderung ohne Begründung abgelehnt."

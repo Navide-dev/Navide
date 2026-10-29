@@ -1467,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock은 개인정보 보호 화면이지 접근 제어가 아니에요. 자리를 비운 동안 Navide의 모든 창을 가려요. 에이전트, 터미널, 채널, MCP 도구, 일정은 계속 실행되고, 이 컴퓨터 앞에 있는 사람이 방법을 안다면 우회할 수 있어요.",
+      "section-lock": "잠금",
+      "enabled": "App Lock 켜기",
+      "enabled-hint": "먼저 PIN을 설정하세요. Touch ID를 켜도 PIN으로 언제든 잠금을 해제할 수 있어요.",
+      "lock-now": "지금 잠그기",
+      "lock-now-hint": "모든 창을 바로 가려요. 단축키 {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "PIN이 설정되어 있어요.",
+      "pin-none-hint": "아직 PIN이 없어요. 숫자 4~12자리를 사용하세요.",
+      "set-pin": "PIN 설정",
+      "change-pin": "PIN 변경",
+      "remove-pin": "PIN 삭제",
+      "remove-pin-hint": "PIN을 삭제하면 App Lock이 꺼져요.",
+      "current-pin": "현재 PIN",
+      "new-pin": "새 PIN",
+      "confirm-pin": "PIN 확인",
+      "save": "저장",
+      "cancel": "취소",
+      "pin-saved": "PIN을 저장했어요.",
+      "pin-removed": "PIN을 삭제했어요. App Lock이 꺼졌어요.",
+      "section-unlock": "잠금 해제",
+      "method": "잠금 해제 방법",
+      "method-system": "Touch ID(PIN을 예비로 사용)",
+      "method-pin": "PIN만 사용",
+      "system-unavailable": "이 컴퓨터에서는 Touch ID를 쓸 수 없어 Navide는 PIN으로 잠금을 해제해요.",
+      "section-auto": "자동 잠금",
+      "idle": "유휴 후",
+      "idle-hint": "이 컴퓨터 전체에서 키보드나 마우스 입력이 없는 시간이에요.",
+      "idle-never": "안 함",
+      "idle-minutes": "{n}분",
+      "on-screen-lock": "화면이 잠길 때",
+      "on-suspend": "컴퓨터가 잠자기에 들어갈 때",
+      "on-start": "Navide가 시작될 때",
+      "section-forgot": "PIN을 잊으셨나요?",
+      "reset-with-system": "Touch ID로 PIN 재설정",
+      "forgot-system": "Touch ID로 본인임을 확인한 뒤 새 PIN을 정해요.",
+      "forgot-manual-title": "Touch ID가 없을 때",
+      "forgot-manual": "Navide를 종료하고 Navide 데이터 폴더에서 app-lock.json을 삭제하세요. App Lock과 그 PIN만 사라지고 다른 것은 바뀌지 않아요.",
+      "error-invalid-pin": "숫자 4~12자리를 사용하세요.",
+      "error-mismatch": "두 PIN이 일치하지 않아요.",
+      "error-wrong-pin": "현재 PIN이 올바르지 않아요.",
+      "error-cooldown": "시도 횟수가 너무 많아요. {seconds}초 후에 다시 시도하세요.",
+      "error-system-failed": "Touch ID로 본인임을 확인하지 못했어요.",
+      "error-generic": "실패했어요. 다시 시도하세요."
+    },
     "cliExtensions": {
       "tabInstalled": "설치된 CLI 확장",
       "tabConvenience": "Navide가 변경하는 내용",
@@ -1644,6 +1691,10 @@
         "status-badges": {
           "title": "상태 배지",
           "summary": "언어별로 각 pane 상태의 이름을 바꾸고 색을 골라요."
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "잠금 화면으로 모든 창을 가리고 Touch ID나 PIN으로 해제해요"
         },
         "voice-input": {
           "title": "음성 입력",
@@ -2651,6 +2702,7 @@
       "executionPolicy": "Execution Policy",
       "statusBadges": "상태 배지",
       "voice": "음성 입력",
+      "appLock": "App Lock",
       "keybindings": "단축키",
       "updates": "업데이트",
       "help": "도움말"
@@ -2717,14 +2769,14 @@
         "intro": "열아홉 개 설정 탭이 각각 무엇을 제어하는지, Navide Cloud가 여러 컴퓨터를 하나의 비공개 네트워크로 연결하는 방법, 그리고 메인 화면 밖에 있는 시스템 화면(메뉴, 독립 창, 사용량 보기, 리소스 관리)을 설명해요.",
         "s1": {
           "title": "설정 개요",
-          "p1": "설정 창은 <kbd class=\"syh-kbd\">⌘,</kbd>로 열어요. 제목 표시줄의 톱니바퀴 버튼도 같은 입구예요. 왼쪽 사이드바는 다섯 그룹, 모두 <strong>24개 탭</strong>으로 나뉘어 있어요.",
+          "p1": "설정 창은 <kbd class=\"syh-kbd\">⌘,</kbd>로 열어요. 제목 표시줄의 톱니바퀴 버튼도 같은 입구예요. 왼쪽 사이드바는 다섯 그룹, 모두 <strong>25개 탭</strong>으로 나뉘어 있어요.",
           "h1": "검색 필드",
           "p2": "사이드바 제목 아래에 자리 표시자가 <code>Search settings…</code>인 검색 필드가 있어요. 설정 제목, 섹션, 키워드를 <strong>모든 탭에서</strong> 찾으며(현재 인터페이스 언어와 색인된 키워드 사용) 최대 8개 결과를 보여 줘요. 결과를 클릭하면 해당 탭으로 전환하고 그 섹션으로 스크롤해요(예외 하나: \"저장 공간\"은 설정을 닫고 Resource Manager를 바로 열어요). 일치하는 항목이 없으면 <code>No matching settings</code>를 표시해요. <kbd class=\"syh-kbd\">Esc</kbd> 키로 지워요.",
           "callout": {
             "title": "검색 색인이 모든 항목을 다루지는 않아요",
             "text": "색인은 직접 관리하는 목록이라 <strong>{layout}, {notifications}, {security}, {channels} 탭에는 항목이 전혀 없어서</strong> 그 안의 내용은 검색되지 않아요 — 직접 열어야 해요. CLI Agent 항목은 한 CLI의 설정 서랍을 바로 열어요(\"CLI Agent 및 계정\" 주제 참고)."
           },
-          "h2": "스물네 개 탭",
+          "h2": "스물다섯 개 탭",
           "tabTable": {
             "group": "그룹",
             "tab": "탭",
@@ -2759,6 +2811,10 @@
             "voice": {
               "what": "이 컴퓨터에서 받아쓰는 길게 눌러 말하기 음성 입력: 단축키, 마이크, 녹음 모드, 중국어 출력, 모델과 엔진",
               "more": "\"{workspace}\" 주제의 \"음성 입력\" 장"
+            },
+            "appLock": {
+              "what": "모든 창을 가리는 개인정보 보호 화면: PIN, Touch ID, 유휴와 잠자기 시 자동 잠금",
+              "more": "App Lock 페이지 맨 위의 안내"
             },
             "cloud": {
               "what": "기기 간 연결 상태, 이 컴퓨터의 지문, 이 컴퓨터에 명령할 수 있는 대상",
@@ -11191,10 +11247,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "자세히",
+    "stage-not-found": "이 단계는 더 이상 없어요. 다른 곳에서 변경되었을 수 있어요. pipeline을 다시 여세요.",
+    "refused": {
+      "last-pipeline": "유일한 pipeline이라 삭제할 수 없어요. 먼저 다른 pipeline을 만드세요.",
+      "last-stage": "pipeline에는 단계가 하나 이상 있어야 해서 마지막 단계는 삭제할 수 없어요.",
+      "not-builtin": "기본 제공 pipeline만 원래 단계로 되돌릴 수 있어요.",
+      "no-seed": "이 기본 제공 pipeline에는 되돌릴 원래 단계가 없어요.",
+      "stage-id-required": "단계에 ID가 없어요. ID를 지정한 뒤 다시 시도하세요.",
+      "stage-id-invalid": "단계 ID에는 영문자, 숫자, 하이픈, 밑줄, 마침표만 쓸 수 있어요.",
+      "stage-needs-slot": "단계에는 agent가 하나 이상 있어야 해요."
+    },
+    "run": {
+      "no-workspace": "먼저 워크스페이스를 여세요.",
+      "already-running": "이 워크스페이스에서 이미 pipeline이 실행 중이에요. 먼저 중단하세요.",
+      "no-pipeline": "먼저 pipeline을 선택하세요.",
+      "not-started": "실행이 시작되지 않았어요. 이유는 pipeline 로그에 있어요.",
+      "not-running": "이 워크스페이스에서 실행 중인 pipeline이 없어요.",
+      "last-stage": "마지막 단계예요({total}개 중 {stage}번째). 완료를 보고하면 실행이 끝나요.",
+      "gate-waiting": "실행이 {gate}에서 승인을 기다리고 있어요. 먼저 승인하거나 되돌려 보내세요.",
+      "not-advanced": "실행이 다음으로 넘어가지 않았어요. 이유는 pipeline 로그에 있어요.",
+      "no-run": "이 워크스페이스에는 이어서 할 실행이 없어요.",
+      "nothing-to-resume": "지난 실행의 모든 단계가 이미 끝났어요({total}개 중 {done}개).",
+      "not-resumed": "실행이 재개되지 않았어요. 이유는 pipeline 로그에 있어요.",
+      "not-cleared": "실행이 지워지지 않았어요. 이유는 pipeline 로그에 있어요.",
+      "stored-not-cleared": "pane은 닫혔지만 저장된 실행은 지워지지 않았어요.",
+      "no-task": "실행할 작업이 없어요. 먼저 작업을 입력하세요.",
+      "not-at-gate": "실행이 승인을 기다리고 있지 않아요.",
+      "wrong-gate": "실행이 기다리는 곳은 {gate}이고 {asked}가 아니에요.",
+      "node-required": "다시 실행할 시작 단계를 선택하세요."
+    },
+    "start": {
+      "parent-suspended": "{name}이(가) 여기서 하위 Pipeline을 기다리고 있어요. 먼저 재개하거나 초기화하세요.",
+      "switch-failed": "이 pipeline으로 전환할 수 없었어요.",
+      "stages-load-failed": "이 pipeline의 단계를 불러올 수 없었어요.",
+      "no-stages": "이 pipeline에는 아직 단계가 없어요. 먼저 하나 추가하세요.",
+      "graph-failed": "pipeline 실행을 준비할 수 없었어요.",
+      "spawn-failed": "첫 단계의 agent를 하나도 시작할 수 없었어요. CLI가 설치되어 있는지 확인하세요."
+    },
+    "graph": {
+      "slot-incomplete": "{label}에는 agent와 이름이 필요해요.",
+      "self-loop": "{label}은(는) 자기 자신에게 연결할 수 없어요.",
+      "edge-into-trigger": "pipeline 시작점으로 들어가는 연결은 만들 수 없어요.",
+      "reject-from-trigger": "반려 연결은 pipeline 시작점에서 시작할 수 없어요.",
+      "max-loops-range": "{label}에서 나가는 반려 연결은 1~{max}번 반복할 수 있어요.",
+      "edge-must-start-at-work": "분기 연결과 오류 연결은 단계에서 시작해야 해요({label}은(는) 단계가 아니에요).",
+      "branch-when": "{label}에서 나가는 분기 연결에는 비교할 값이 필요해요.",
+      "retry-config": "{label}의 재시도 설정이 범위를 벗어났어요: 시도 1~{maxTries}회, 간격 0~{maxWaitMs}ms.",
+      "subpipeline-links": "하위 Pipeline이 서로를 반복해서 호출하거나, 더 이상 없는 pipeline을 호출해요.",
+      "no-graph": "pipeline을 아직 불러오지 못했어요. 잠시 후 다시 시도하세요.",
+      "other": "이 변경은 pipeline을 망가뜨려요.",
+      "other-at": "이 변경은 {label}에서 pipeline을 망가뜨려요."
+    },
+    "gate": {
+      "confirm-title": "실행을 끝낼까요?",
+      "confirm-no-edge": "{name}에는 반려 연결이 없어서 되돌려 보내면 실행이 실패로 끝나요. pane은 열린 채로 남아요.",
+      "confirm-exhausted": "{name}은(는) 연결이 허용하는 횟수만큼 이미 되돌려 보냈어요. 다시 되돌려 보내면 실행이 실패로 끝나요. pane은 열린 채로 남아요.",
+      "confirm-button": "실행 끝내기",
+      "rejected-failed": "{name}을(를) 되돌려 보내서 실행이 실패로 끝났어요.",
+      "ends-run-hint": "여기서 되돌려 보내면 실행이 끝나요."
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "하위 Pipeline에는 실행할 다른 Pipeline이 필요합니다. 먼저 하나 만드세요.",
-      "subpipeline-cycle": "하위 Pipeline이 서로를 호출하는 루프가 됩니다: {detail}",
       "pipeline-running": "이 pipeline은 실행 중이라 지금은 변경할 수 없어요. 먼저 실행을 중단하거나 완료하세요.",
       "pipeline-not-found": "이 pipeline이 더 이상 없어요. 다른 곳에서 삭제되었을 수 있으니 다른 pipeline을 선택하세요.",
       "export-failed": "내보내기 실패: {message}",
@@ -11202,7 +11319,6 @@
       "command-failed": "실행에서 해당 명령을 받아들이지 않았어요.",
       "cycle": "이 연결은 흐름을 무한 반복시켜요. 대신 게이트나 단계의 반려 연결을 사용하세요. 반려 연결에는 재시도 한도가 있어요.",
       "duplicate-edge": "이 두 단계는 이미 연결되어 있어요.",
-      "invalid": "이 변경은 pipeline을 망가뜨려요: {detail}",
       "reject-upstream": "반려 연결은 이전 단계를 가리켜야 해요.",
       "transport": "백엔드에 연결할 수 없어요: {message}",
       "unknown": "백엔드가 이유 없이 변경을 거부했어요."

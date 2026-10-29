@@ -42,11 +42,13 @@ ROLE_PROPERTY_TYPES = ("string", "text", "template", "number", "boolean", "optio
 
 
 class GraphError(ValueError):
-    """Invalid graph or graph op; .errors lists every problem found."""
+    """Invalid graph or graph op; .errors lists every problem found. `code`
+    names the kind of problem for a window to translate ("" when unset)."""
 
-    def __init__(self, errors: list[str]) -> None:
+    def __init__(self, errors: list[str], code: str = "") -> None:
         super().__init__("; ".join(errors) or "invalid graph")
         self.errors = errors
+        self.code = code
 
 
 def slot_node_id(stage_id: str, slot_index: int) -> str:
@@ -499,7 +501,7 @@ def apply_graph_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[st
         except GraphError as exc:
             name = op.get("op") if isinstance(op, dict) else None
             where = f"ops[{index}] ({name})" if isinstance(name, str) and name else f"ops[{index}]"
-            indexed = GraphError([f"{where}: {e}" for e in exc.errors])
+            indexed = GraphError([f"{where}: {e}" for e in exc.errors], exc.code)
             indexed.op_index = index  # type: ignore[attr-defined]
             raise indexed from None
     return g

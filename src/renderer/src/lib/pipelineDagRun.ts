@@ -193,6 +193,15 @@ function firstStageAtOrAfter(plan: DagPlan, layer: number): number {
 }
 
 /** Reject a gate: follow its reject edge (the first one, in graph order). */
+/** What rejecting `gateId` now would do, without doing it: follow its
+ *  reject edge back ('loop'), or end the run as failed because it has none
+ *  ('no-edge') or its loop budget is spent ('exhausted'). Mirrors rejectGate. */
+export function rejectOutcome(plan: DagPlan, state: DagRunState, gateId: string): RejectResult['kind'] {
+  const edge = plan.graph.edges.find((e) => e.kind === 'reject' && e.from === gateId)
+  if (!edge) return 'no-edge'
+  return (state.loops[edge.id] ?? 0) + 1 > (edge.maxLoops ?? DEFAULT_MAX_LOOPS) ? 'exhausted' : 'loop'
+}
+
 export function rejectGate(
   plan: DagPlan,
   state: DagRunState,
