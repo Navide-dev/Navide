@@ -6875,6 +6875,12 @@
       "needs-node": "Needs Node.js",
       "needs-node-hint": "This server starts with {command}, which comes with Node.js. Node.js was not found on this computer, so the server cannot start until it is installed.",
       "install-node": "Install Node.js",
+      "risk": {
+        "tag": "High-risk access",
+        "shell": "This server can run shell commands on this computer with your user's permissions, including deleting files, changing settings and stopping programs.",
+        "desktop": "This server can read what other apps show on screen and control your mouse and keyboard, so it can act in any app you are signed in to.",
+        "guard": "Navide does not block it. Navide Guard grades its command, file, registry and process tools with the same rules as the built-in shell."
+      },
       "fill-locally": "Some values are empty. Fill them in on this machine — env and header values never sync between devices.",
       "fill-credentials-locally": "Some values in the URL or arguments are empty. If one held a credential, fill it in on this machine — credentials in the URL and arguments never sync between devices.",
       "headers": "Headers",

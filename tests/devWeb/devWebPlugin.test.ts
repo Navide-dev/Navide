@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createDevWebGate, devWebPlugins, DEV_WEB_PREFIX, ensurePrivateDir } from '../../scripts/dev-web/devWebPlugin'
@@ -177,5 +177,15 @@ describe('ensurePrivateDir', () => {
     } finally {
       rmSync(base, { recursive: true, force: true })
     }
+  })
+})
+
+// The isolated backend's passwd-based home lookups (native_skills, skills_store,
+// native_mcp) read its scratch HOME only when this flag reaches the child env;
+// backend/tests/test_isolated_home.py covers the backend side.
+describe('isolated backend env', () => {
+  it('flags the backend so every home lookup uses its scratch HOME', () => {
+    const src = readFileSync(new URL('../../scripts/dev-web/devWebPlugin.ts', import.meta.url), 'utf8')
+    expect(src).toMatch(/HOME: home,[\s\S]*AGENT_TEAM_ISOLATED_HOME: '1',[\s\S]*spawn\(cmd, argv, \{ cwd: runDir, env: childEnv/)
   })
 })

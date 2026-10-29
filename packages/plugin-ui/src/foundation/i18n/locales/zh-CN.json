@@ -6875,6 +6875,12 @@
       "needs-node": "需要 Node.js",
       "needs-node-hint": "这个服务器用 {command} 启动，而 {command} 是 Node.js 附带的。这台电脑找不到 Node.js，安装之前服务器无法启动。",
       "install-node": "安装 Node.js",
+      "risk": {
+        "tag": "高风险权限",
+        "shell": "这个服务器可以用你的用户权限在这台电脑上执行 shell 命令，包括删除文件、修改设置、结束程序。",
+        "desktop": "这个服务器可以读取其他 App 屏幕上的内容，并操控你的鼠标和键盘，所以能在任何你已登录的 App 里操作。",
+        "guard": "Navide 不会拦截它。Navide Guard 会用和内置 shell 相同的规则，判断它的命令、文件、注册表和进程工具。"
+      },
       "fill-locally": "有些值为空，请在这台电脑上填写。环境变量和标头的值不会在设备之间同步。",
       "fill-credentials-locally": "网址或参数中有空值。如果原本是凭证，请在这台电脑上填写。网址和参数中的凭证不会在设备之间同步。",
       "headers": "标头",

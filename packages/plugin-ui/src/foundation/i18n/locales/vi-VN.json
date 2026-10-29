@@ -6875,6 +6875,12 @@
       "needs-node": "Cần Node.js",
       "needs-node-hint": "Máy chủ này khởi động bằng {command}, đi kèm với Node.js. Không tìm thấy Node.js trên máy tính này nên máy chủ không thể khởi động cho đến khi cài đặt.",
       "install-node": "Cài đặt Node.js",
+      "risk": {
+        "tag": "Quyền rủi ro cao",
+        "shell": "Máy chủ này có thể chạy lệnh shell trên máy tính này bằng quyền của người dùng của bạn, kể cả xóa tệp, thay đổi cài đặt và tắt chương trình.",
+        "desktop": "Máy chủ này có thể đọc nội dung trên màn hình của các ứng dụng khác và điều khiển chuột, bàn phím, nên có thể thao tác trong bất kỳ ứng dụng nào bạn đã đăng nhập.",
+        "guard": "Navide không chặn máy chủ này. Navide Guard đánh giá các công cụ lệnh, tệp, registry và tiến trình của nó theo cùng quy tắc với shell tích hợp."
+      },
       "fill-locally": "Một số giá trị đang trống. Hãy điền trên máy này — giá trị biến môi trường và header không bao giờ được đồng bộ giữa các thiết bị.",
       "fill-credentials-locally": "Một số giá trị trong URL hoặc đối số đang trống. Nếu đó là thông tin xác thực, hãy điền trên máy này — thông tin xác thực trong URL và đối số không bao giờ được đồng bộ giữa các thiết bị.",
       "headers": "Header",

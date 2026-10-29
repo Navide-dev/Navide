@@ -6875,6 +6875,12 @@
       "needs-node": "需要 Node.js",
       "needs-node-hint": "這個伺服器用 {command} 啟動，而 {command} 是 Node.js 附帶的。這台電腦找不到 Node.js，安裝之前伺服器無法啟動。",
       "install-node": "安裝 Node.js",
+      "risk": {
+        "tag": "高風險權限",
+        "shell": "這個伺服器可以用你的使用者權限在這台電腦上執行 shell 指令，包括刪除檔案、修改設定、結束程式。",
+        "desktop": "這個伺服器可以讀取其他 App 畫面上的內容，並操控你的滑鼠和鍵盤，所以能在任何你已登入的 App 裡動作。",
+        "guard": "Navide 不會擋它。Navide Guard 會用和內建 shell 相同的規則，判讀它的指令、檔案、登錄檔和程序工具。"
+      },
       "fill-locally": "有些值是空的，請在這台電腦上填入。環境變數和標頭的值不會在裝置之間同步。",
       "fill-credentials-locally": "網址或參數裡有空值。若原本是憑證，請在這台電腦上填入。網址和參數裡的憑證不會在裝置之間同步。",
       "headers": "標頭",

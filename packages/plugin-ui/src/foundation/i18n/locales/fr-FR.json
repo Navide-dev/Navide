@@ -6875,6 +6875,12 @@
       "needs-node": "Nécessite Node.js",
       "needs-node-hint": "Ce serveur démarre avec {command}, fourni avec Node.js. Node.js est introuvable sur cet ordinateur, le serveur ne pourra donc pas démarrer tant qu’il n’est pas installé.",
       "install-node": "Installer Node.js",
+      "risk": {
+        "tag": "Accès à haut risque",
+        "shell": "Ce serveur peut exécuter des commandes shell sur cet ordinateur avec les droits de votre utilisateur, y compris supprimer des fichiers, modifier des réglages et arrêter des programmes.",
+        "desktop": "Ce serveur peut lire ce qui s’affiche à l’écran dans d’autres apps et piloter la souris et le clavier, donc agir dans toute app où vous êtes connecté.",
+        "guard": "Navide ne le bloque pas. Navide Guard évalue ses outils de commandes, de fichiers, de registre et de processus avec les mêmes règles que le shell intégré."
+      },
       "fill-locally": "Certaines valeurs sont vides. Renseignez-les sur cet appareil : les valeurs des variables d’environnement et des en-têtes ne sont jamais synchronisées entre appareils.",
       "fill-credentials-locally": "Certaines valeurs de l’URL ou des arguments sont vides. S’il s’agissait d’un identifiant, renseignez-le sur cet appareil : les identifiants dans l’URL et les arguments ne sont jamais synchronisés entre appareils.",
       "headers": "En-têtes",

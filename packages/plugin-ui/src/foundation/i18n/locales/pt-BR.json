@@ -6875,6 +6875,12 @@
       "needs-node": "Requer Node.js",
       "needs-node-hint": "Este servidor inicia com {command}, que vem com o Node.js. O Node.js não foi encontrado neste computador, então o servidor só poderá iniciar depois que ele for instalado.",
       "install-node": "Instalar Node.js",
+      "risk": {
+        "tag": "Acesso de alto risco",
+        "shell": "Este servidor pode executar comandos de shell neste computador com as permissões do seu usuário, incluindo apagar arquivos, alterar configurações e encerrar programas.",
+        "desktop": "Este servidor pode ler o que aparece na tela de outros apps e controlar o mouse e o teclado, então pode agir em qualquer app em que você esteja conectado.",
+        "guard": "O Navide não o bloqueia. O Navide Guard avalia as ferramentas de comandos, arquivos, registro e processos dele com as mesmas regras do shell integrado."
+      },
       "fill-locally": "Alguns valores estão vazios. Preencha-os neste computador — valores de variáveis de ambiente e cabeçalhos nunca são sincronizados entre dispositivos.",
       "fill-credentials-locally": "Alguns valores na URL ou nos argumentos estão vazios. Se era uma credencial, preencha-a neste computador — credenciais na URL e nos argumentos nunca são sincronizadas entre dispositivos.",
       "headers": "Cabeçalhos",
