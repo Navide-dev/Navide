@@ -113,6 +113,7 @@ import {
 import { useStages } from './composables/useStages'
 import { usePipelines } from './composables/usePipelines'
 import { usePipelineDag } from './composables/usePipelineDag'
+import { signalsAfterKickoff } from './lib/pipelineDagRun'
 import type { NodeRunState } from './lib/pipelineGraph'
 import { useRecentWorkspaces } from './composables/useRecentWorkspaces'
 import { useWorkspaceAliases } from './composables/useWorkspaceAliases'
@@ -384,7 +385,7 @@ import type {
   PaneRebuildAnnouncementAction,
   PluginAgentAnnouncementAction,
 } from './composables/useAnnouncements'
-import { useEvolve } from './composables/useEvolve'
+import { retroBeforeReclaim, useEvolve, type ReclaimRetroSource } from './composables/useEvolve'
 import { useShareNotices } from './composables/useShareNotices'
 import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
@@ -10787,7 +10788,7 @@ registerCommand('ui.pane.reclaim', async (args) => {
   const ids = reclaimRequestPaneIds(args)
   if (!ids.length) throw new Error(`ui.pane.reclaim requires ${PANE_ID_HINT} (or an array of them)`)
   const outcome: ReclaimOutcome = { reclaimed: [], refused: [] }
-  await reclaimPanesNow(ids, false, outcome)
+  await reclaimPanesNow(ids, false, outcome, 'agent')
   return {
     reclaimed: outcome.reclaimed,
     refused: outcome.refused.map((r) => ({
@@ -15600,6 +15601,14 @@ const paneArmedAt = new Map<string, number>()
  *  the CLI's own time for it. A finished slot's {{prev.summary}} is taken from
  *  here — see slotSummarySource. */
 const paneLastReply = new Map<string, { text: string; at: number }>()
+/** Each pane's latest turn text, recorded BEFORE that turn is judged, so a
+ *  slot the turn completes reads its signals from that turn itself (see
+ *  slotSignalSource). paneLastReply is set only after judging and keeps the
+ *  {{prev.summary}} source as it was. */
+const paneSignalTurn = new Map<string, { text: string; at: number }>()
+/** Where each pane's kickoff began on screen when its watcher armed, with the
+ *  buffer observation to re-base it after a trim. Outlives cancelWatcher(). */
+const paneSignalMark = new Map<string, { from: number; anchor: BufferObservation }>()
 
 // ── Background system notifications (CLI done / needs input) ─────────────────
 // Native OS notification when a pane's turn completes or it needs the user's
@@ -15793,11 +15802,14 @@ backend.on('agent.activity', (raw) => {
     // Judge THIS turn's own text (not a retained map): an empty-text
     // turn_complete (Claude Stop hook, thinking-only record, Codex cross-batch)
     // must never be judged against a previous turn's text.
-    judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    let ownTurn: { text: string; at: number } | null = null
     if (ev.text && !markerReply && !isInjectedMessageText(ev.text)) {
       const at = ev.timestamp ? Date.parse(ev.timestamp) : NaN
-      paneLastReply.set(ev.pane_id, { text: ev.text, at: Number.isNaN(at) ? Date.now() : at })
+      ownTurn = { text: ev.text, at: Number.isNaN(at) ? Date.now() : at }
+      paneSignalTurn.set(ev.pane_id, ownTurn)
     }
+    judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    if (ownTurn) paneLastReply.set(ev.pane_id, ownTurn)
     if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
@@ -16007,6 +16019,28 @@ function slotSummarySource(paneId: string, stageIndex: number): string {
   const armedAt = Math.max(paneArmedAt.get(paneId) ?? 0, stageRouters.get(stageIndex)?.armedAt ?? 0)
   if (reply && armedAt > 0 && reply.at >= armedAt) return reply.text
   return (paneRefs[paneId]?.cleanBuffer as unknown as string) ?? ''
+}
+
+/** The text a finished slot's ---BRANCH--- / ---OUTPUT--- / ---NODE-FAILED---
+ *  signals are read from. Turn-text vendors (claude/codex): only the turn
+ *  text their reader reported since the slot was armed, never the screen —
+ *  with none, no signal counts. Other vendors have only the screen: the part
+ *  after the kickoff began and after its echoed signal-code line. Either way
+ *  the engine then takes only signals carrying the kickoff's code. */
+function slotSignalSource(paneId: string, stageIndex: number, slotLabel: string): string {
+  const armedAt = Math.max(paneArmedAt.get(paneId) ?? 0, stageRouters.get(stageIndex)?.armedAt ?? 0)
+  if (TURN_TEXT_VENDORS.has(panes.value.find((p) => p.id === paneId)?.agentKey ?? '')) {
+    const turn = paneSignalTurn.get(paneId)
+    return turn && armedAt > 0 && turn.at >= armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS ? turn.text : ''
+  }
+  const buf = (paneRefs[paneId]?.cleanBuffer as unknown as string) ?? ''
+  const mark = paneSignalMark.get(paneId)
+  let from = 0
+  if (mark) {
+    const dropped = droppedPrefix(mark.anchor, { len: buf.length, bytesSeen: paneCleanBytes(paneId) })
+    from = Math.min(remapCursor(mark.from, dropped), buf.length)
+  }
+  return signalsAfterKickoff(buf.slice(from), pipelineDag.signalNonce(stageIndex, slotLabel))
 }
 
 function judgeTurnText(paneId: string, text: string, timestamp: string): void {
@@ -18119,7 +18153,7 @@ function onStageSlotCompleted(
     ? undefined
     : panes.value.find((p) => p.id === paneId)
   const reported = failedPane
-    ? pipelineDag.reportedFailure(stageIndex, failedPane.slotLabel, slotSummarySource(paneId, stageIndex))
+    ? pipelineDag.reportedFailure(stageIndex, failedPane.slotLabel, slotSignalSource(paneId, stageIndex, failedPane.slotLabel))
     : ''
   if (failedPane && reported) {
     const retry = pipelineDag.retryAfterFailure(stageIndex, failedPane.slotLabel, reported)
@@ -18157,6 +18191,7 @@ function onStageSlotCompleted(
       stageIndex,
       completedPane.slotLabel,
       slotSummarySource(paneId, stageIndex),
+      slotSignalSource(paneId, stageIndex, completedPane.slotLabel),
     )
   }
   // Audit trail (→ history.jsonl): every slot finish records its reason so a
@@ -18370,6 +18405,7 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
   }
   watchers.set(paneId, watcher)
   paneArmedAt.set(paneId, watcher.armedAt)
+  paneSignalMark.set(paneId, { from: scanFrom, anchor: watcher.bufferAnchor })
   pipelineLog(
     `Stage ${stage.id} watcher armed · sentinel / turn_complete / question / analyzer`
   )
@@ -19131,6 +19167,17 @@ async function reclaimCompletedStagePanes(stageIndex: number): Promise<void> {
       pipelineLog(`Stage ${stage.id} ♻ kept ${label} — ${blocked}`)
       continue
     }
+    // A long-running dispatched pane may write three lines first (S5b; off by
+    // default, and nothing is sent then). Its turn made it busy: judge it again.
+    if (await retroBeforeReclaim(backend, pane.workspacePath, paneId, 'pipeline')) {
+      const after = panes.value.find((p) => p.id === paneId)
+      const again = after ? reclaimBlockedBy(reclaimCandidate(after), RECLAIM_NOW_THRESHOLD_MS, Date.now()) : null
+      if (!after) continue
+      if (again) {
+        pipelineLog(`Stage ${stage.id} ♻ kept ${label} — ${again}`)
+        continue
+      }
+    }
     if (await reclaimIdlePane(paneId)) {
       pipelineLog(`Stage ${stage.id} ♻ reclaimed ${label} — CLI stopped, conversation kept`)
     }
@@ -19154,6 +19201,12 @@ async function sweepIdlePanes(): Promise<void> {
     // user can focus or type into the next one while it runs.
     const pane = panes.value.find((p) => p.id === paneId)
     if (!pane || !paneReclaimable(pane, Date.now())) continue
+    // S5b, as in reclaimCompletedStagePanes. Judged again on the "reclaim now"
+    // terms: the retrospective turn has just reset this pane's idle clock.
+    if (await retroBeforeReclaim(backend, pane.workspacePath, paneId, 'idle-sweep')) {
+      const after = panes.value.find((p) => p.id === paneId)
+      if (!after || reclaimBlockedBy(reclaimCandidate(after), RECLAIM_NOW_THRESHOLD_MS, Date.now()) !== null) continue
+    }
     if (await reclaimIdlePane(paneId)) reclaimed++
   }
   if (reclaimed === 0) return
@@ -19192,8 +19245,11 @@ interface ReclaimOutcome {
  *
  *  `named` marks panes the user picked out one by one, which may include the
  *  focused one (see namedReclaimBlockedBy). `outcome`, when given, is filled
- *  with what happened to each pane; it changes nothing about the decision. */
-async function reclaimPanesNow(paneIds?: string[], named = false, outcome?: ReclaimOutcome): Promise<number> {
+ *  with what happened to each pane; it changes nothing about the decision.
+ *  `source`, set only by an agent's request (ui.pane.reclaim), lets a
+ *  long-running dispatched pane write three lines first (S5b); a reclaim the
+ *  user clicked passes none and never waits. */
+async function reclaimPanesNow(paneIds?: string[], named = false, outcome?: ReclaimOutcome, source?: ReclaimRetroSource): Promise<number> {
   const targets = paneIds ?? reclaimableNowIds.value
   let reclaimed = 0
   for (const paneId of targets) {
@@ -19211,6 +19267,22 @@ async function reclaimPanesNow(paneIds?: string[], named = false, outcome?: Recl
     if (blocked !== null) {
       outcome?.refused.push({ paneId, reason: blocked })
       continue
+    }
+    if (await retroBeforeReclaim(backend, pane.workspacePath, paneId, source)) {
+      // Its retrospective turn made it busy for a while: judge it again. Still
+      // busy after the wait is refused as not-idle, as before; nothing is forced.
+      const after = panes.value.find((p) => p.id === paneId)
+      if (!after) {
+        outcome?.refused.push({ paneId, reason: 'not-found' })
+        continue
+      }
+      const again = named
+        ? namedReclaimBlockedBy(reclaimCandidate(after), Date.now())
+        : reclaimBlockedBy(reclaimCandidate(after), RECLAIM_NOW_THRESHOLD_MS, Date.now())
+      if (again !== null) {
+        outcome?.refused.push({ paneId, reason: again })
+        continue
+      }
     }
     // A caller collecting per-pane results keeps the ones already gathered
     // when a later kill throws; every other caller sees the throw as before.

@@ -28,6 +28,7 @@ import { usePackInstallFlow } from '../composables/usePackInstallFlow'
 import { useConfirmedExternalLink } from '../composables/useConfirmedExternalLink'
 import { marketplaceDetailRequest, takeMarketplaceDetailRequest } from '../marketplaceDeepLink'
 import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 
 type Sort = 'downloads' | 'updated' | 'rating'
 
@@ -69,14 +70,16 @@ const detailState = ref<'loading' | 'ready' | 'error'>('loading')
 const detailError = ref('')
 // A page-level failure that is not about the listing or the detail itself
 // (the installed inventory, the pre-release switch), shown in the top banner.
-const pageError = ref('')
+// It keeps its i18n key and is translated when shown, so a language change
+// never leaves it in the previous language.
+const pageError = ref<{ key: string; params: Record<string, unknown> } | null>(null)
 
 // The page keeps working on the last inventory it read; say that it is stale.
 async function refreshInventory(): Promise<void> {
   try {
     await inventory.refresh()
   } catch (err) {
-    pageError.value = t('settings.extensions.inventoryRefreshFailed', { error: ipcErrorMessage(err) })
+    pageError.value = { key: 'settings.extensions.inventoryRefreshFailed', params: { error: ipcErrorMessage(err) } }
   }
 }
 
@@ -137,6 +140,8 @@ async function search(): Promise<void> {
   loadMoreError.value = ''
   try {
     const res = await api.marketplaceSearch(query.value || undefined, sort.value, searchOptions(0))
+    // No answer is a failed load, shown with Retry, never a blank page.
+    if (!res || !Array.isArray(res.items)) throw new Error('no answer from the main process')
     results.value = res.items
     total.value = res.total
     listState.value = 'ready'
@@ -174,7 +179,8 @@ async function loadCategories(): Promise<void> {
   const api = pluginsApi()
   if (!api?.marketplaceCategories) return
   try {
-    categories.value = await api.marketplaceCategories()
+    const next = await api.marketplaceCategories()
+    categories.value = Array.isArray(next) ? next : []
   } catch {
     categories.value = []
   }
@@ -338,7 +344,7 @@ async function setPrerelease(enabled: boolean, input?: HTMLInputElement): Promis
   const d = detail.value
   if (!api?.setPrerelease || !current || !d) return
   prereleaseBusy.value = true
-  pageError.value = ''
+  pageError.value = null
   try {
     await api.setPrerelease(idOf(d), enabled)
     const next = await api.marketplaceDetail({ namespace: d.namespace, name: d.name })
@@ -346,7 +352,7 @@ async function setPrerelease(enabled: boolean, input?: HTMLInputElement): Promis
     void refreshInventory()
     void pluginUpdates.refresh()
   } catch (err) {
-    pageError.value = t('settings.extensions.getPrereleasesFailed', { error: ipcErrorMessage(err) })
+    pageError.value = { key: 'settings.extensions.getPrereleasesFailed', params: { error: ipcErrorMessage(err) } }
     // The bound value did not change, so Vue will not redraw the box the user
     // just clicked: put it back to the state the page still shows.
     if (input) input.checked = d.gets_prereleases === true
@@ -503,7 +509,7 @@ watch(
   <div class="marketplace-pane">
     <p v-if="flow.error.value" class="ext-error" role="alert">{{ flow.error.value }}</p>
     <p v-if="packFlow.error.value" class="ext-error mkt-pack-error" role="alert">{{ packFlow.error.value }}</p>
-    <p v-if="pageError" class="ext-error mkt-page-error" role="alert">{{ pageError }}</p>
+    <p v-if="pageError" class="ext-error mkt-page-error" role="alert">{{ $t(pageError.key, pageError.params) }}</p>
 
     <!-- Detail view -->
     <section v-if="selected" class="mkt-detail" :data-detail-id="idOf(selected)">
@@ -1071,34 +1077,25 @@ watch(
           <code>{{ $t('settings.extensions.marketplace.loadFailed', { error: listError }) }}</code>
         </details>
       </div>
-      <div v-else-if="!results.length" class="mkt-empty nv-empty mkt-state">
-        <span class="mkt-sigil" aria-hidden="true">
-          <svg v-if="query" viewBox="0 0 16 16"><circle cx="7.2" cy="7.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8" /><path d="m9.8 9.8 2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
-          <svg v-else viewBox="0 0 16 16"><path d="M5 8h6M8 5v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
-        </span>
-        <strong class="mkt-state-title">
-          {{
-            query
-              ? $t('settings.extensions.marketplace.noResults', { query })
-              : $t('settings.extensions.marketplace.noExtensions')
-          }}
-        </strong>
-        <span class="mkt-state-body">
-          {{
-            query || category
-              ? $t('settings.extensions.marketplace.noResultsHint')
-              : $t('settings.extensions.marketplace.noExtensionsHint')
-          }}
-        </span>
-        <span v-if="query || category" class="mkt-state-actions">
+      <SettingsEmptyState
+        v-else-if="!results.length"
+        class="mkt-empty"
+        :message="query
+          ? $t('settings.extensions.marketplace.noResults', { query })
+          : $t('settings.extensions.marketplace.noExtensions')"
+      >
+        <template v-if="query" #icon>
+          <svg viewBox="0 0 16 16"><circle cx="7.2" cy="7.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8" /><path d="m9.8 9.8 2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+        </template>
+        <template v-if="query || category" #default>
           <button v-if="query" class="nv-btn nv-btn--sm" @click="clearQuery">
             {{ $t('settings.extensions.marketplace.clearSearch') }}
           </button>
           <button v-if="category" class="nv-btn nv-btn--ghost nv-btn--sm" @click="selectCategory('')">
             {{ $t('settings.extensions.marketplace.showAllCategories') }}
           </button>
-        </span>
-      </div>
+        </template>
+      </SettingsEmptyState>
       <template v-else>
         <section v-if="featured.length" class="mkt-featured" :aria-label="$t('settings.extensions.marketplace.featured')">
           <h2 class="mkt-section-label">{{ $t('settings.extensions.marketplace.featured') }}</h2>
@@ -1303,7 +1300,7 @@ watch(
   color: var(--danger-bright);
   font-size: var(--font-xs);
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .ext-error > span {
   flex: 1;
@@ -1567,10 +1564,8 @@ watch(
 .mkt-state-body {
   max-width: 36em;
 }
-.mkt-state-actions {
-  display: inline-flex;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
+.mkt-empty {
+  margin-top: var(--space-4);
 }
 .mkt-state .mkt-retry {
   margin-top: var(--space-2);

@@ -142,6 +142,11 @@ const errors = computed(() => {
   range('max_runs_per_day')
   range('max_fixes')
   range('max_minutes')
+  if (d.reclaim_retro) {
+    const [min, max] = EVOLVE_BOUNDS.reclaim_retro_max_per_day
+    const v = d.reclaim_retro_max_per_day
+    if (!Number.isInteger(v) || (v as number) < min || (v as number) > max) out.reclaim_retro_max_per_day = t('evolve.error.range', { min, max })
+  }
   if (d.trigger_burst) {
     for (const key of ['burst_minutes', 'burst_count', 'burst_max_per_day'] as const) {
       const [min, max] = EVOLVE_BOUNDS[key]
@@ -594,6 +599,24 @@ async function openProposal(rel: string): Promise<void> {
                 </span>
               </div>
               <span class="ev-muted">{{ t('evolve.field.burst-hint') }}</span>
+            </div>
+          </div>
+
+          <!-- Retrospective before a reclaim (S5b) -->
+          <div v-if="draft.reclaim_retro !== undefined" class="ev-row" data-test="reclaim-retro">
+            <span class="ev-k">{{ t('evolve.field.reclaim-retro') }}</span>
+            <div class="ev-v ev-col">
+              <label class="ev-radio">
+                <input v-model="draft.reclaim_retro" type="checkbox" data-field="reclaim_retro" />
+                <span>{{ t('evolve.field.reclaim-retro-on') }}</span>
+              </label>
+              <label>
+                <input v-model.number="draft.reclaim_retro_max_per_day" class="nv-input ev-num-s" data-field="reclaim_retro_max_per_day" type="number"
+                  :min="EVOLVE_BOUNDS.reclaim_retro_max_per_day[0]" :max="EVOLVE_BOUNDS.reclaim_retro_max_per_day[1]" />
+                <span class="ev-unit">{{ t('evolve.field.reclaim-retro-per-day') }}</span>
+              </label>
+              <span v-show="errors.reclaim_retro_max_per_day" class="ev-err" data-error="reclaim_retro_max_per_day">{{ errors.reclaim_retro_max_per_day }}</span>
+              <span class="ev-muted">{{ t('evolve.field.reclaim-retro-hint', { seconds: 90 }) }}</span>
             </div>
           </div>
 

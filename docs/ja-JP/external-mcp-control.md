@@ -671,16 +671,19 @@ Stage リストとして表せないため、`stage_define` の `upsert`・`dele
 グラフがまだ線形の Pipeline ではそれらは動作し、グラフも追随します。
 
 **branch エッジと error エッジ。** どちらも Slot から出ます。`branch` エッジは `when` を
-持ちます: 文字列なら、その Slot の Agent が独立した行に `---BRANCH: <value>---` と報告した値と
+持ちます: 文字列なら、その Slot の Agent が独立した行に `---BRANCH:<code>: <value>---` と報告した値と
 大文字小文字を区別せずに比べます（`"default"` は、その Slot の他の branch がどれも一致しなかったときに
-通ります）。`{path, equals}` なら、Agent が `---OUTPUT-START---` と `---OUTPUT-END---` の行で
+通ります）。`{path, equals}` なら、Agent が `---OUTPUT-START:<code>---` と `---OUTPUT-END:<code>---` の行で
 挟んで報告した JSON の一つのフィールドと比べます。`error` エッジは、その Slot が失敗したときだけ
-通ります: Kickoff が Agent に届かなかったか、Agent が `---NODE-FAILED: <reason>---` と報告した場合です。
+通ります: Kickoff が Agent に届かなかったか、Agent が `---NODE-FAILED:<code>: <reason>---` と報告した場合です。
 error エッジの無い Slot では、届かなかった Kickoff はこれまでどおり実行を失敗で終わらせます。
 ノードは、入力のうち少なくとも一つが通ったときに実行されます。どの入力も通らなかったノードは
 飛ばされ（`nodes` の値は `{status: "skipped", skipReason: "untaken"}`）、そのノードだけが
-つながる先も同様に飛ばされます。これらのシグナルは Agent 自身の返答からだけ読み、Kickoff からは
-読みません。Slot の Kickoff には、そのエッジに必要なシグナルの説明が付きます。Kickoff では
+つながる先も同様に飛ばされます。`<code>` は Kickoff ごとに最後の行で示されるランダムなシグナルコードです。
+これを含まないシグナルは数えないので、Kickoff のエコー、Agent が読んだファイルや Web ページ、取り込んだ
+テンプレートで分岐を選んだり、出力を書いたり、ステップを失敗させたりすることはできません。Claude Code と
+Codex のシグナルは CLI 自身のログにあるターンのテキストからだけ読み、画面は見ません。その他の CLI では
+Kickoff より後の画面だけを読みます。Slot の Kickoff には、そのエッジに必要なシグナルの説明が付きます。Kickoff では
 他のノードの出力を `{{node.<id>.output}}`（JSON 全体）や `{{node.<id>.output.<path>}}`
 （一つのフィールド）で読めます。値が無ければ空になります。Stage は引き続き層ごとに実行されるため、
 入力が揃ったノードでも、同じ層の無関係なノードを待つことがあります。branch エッジも error エッジも

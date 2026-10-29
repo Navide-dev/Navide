@@ -1201,7 +1201,7 @@
     "go-to-commit": "Ir al commit",
     "install-missing": "Instalar lo que falta",
     "fix": "Corregir",
-    "add-mcp": "Añadir MCP +",
+    "add-mcp": "+ Añadir MCP",
     "open-mcp-config": "Abrir configuración de MCP",
     "accept-ours": "Aceptar la nuestra",
     "accept-theirs": "Aceptar la suya",
@@ -1265,6 +1265,7 @@
     "toggle-replace": "Alternar reemplazar (⌘H)",
     "delete-pipeline": "Eliminar esta pipeline",
     "open": "Abrir",
+    "learn-more": "Más información",
     "view-as-list": "Ver como lista",
     "view-as-tree": "Ver como árbol",
     "show-ignored-files": "Mostrar archivos ignorados",
@@ -1471,7 +1472,7 @@
       "tabInstalled": "Extensiones de CLI instaladas",
       "tabConvenience": "Qué cambia Navide",
       "intro": "Lo que cada CLI de AI ha instalado por su cuenta —Claude plugins y Claude mods, Codex hooks, Pi extensions y más— y a qué puede acceder cada cosa. Solo lectura: nada de aquí instala, activa ni cambia nada. Los complementos de Navide tienen su propia página.",
-      "summary": "{total} extensiones de CLI · {l3} ejecutan código dentro de su CLI",
+      "summary": "{total} extensiones de CLI · {l3} se ejecutan dentro de su CLI · {l2} ejecutan programas aparte",
       "machineWide": "Un conjunto por CLI para todo el equipo: todos los panes de Navide y todas las cuentas de esa CLI cargan las mismas.",
       "rescan": "Volver a analizar",
       "loading": "Analizando…",
@@ -1486,17 +1487,17 @@
       "inferred": "deducido",
       "inferredHint": "Deducido del texto fuente; el manifiesto de la CLI no lo indica.",
       "tier": {
-        "L1": "L1: recursos de texto",
-        "L2": "L2: subproceso",
-        "L3": "L3: código en el proceso"
+        "L1": "Solo texto",
+        "L2": "Ejecuta programas aparte",
+        "L3": "Se ejecuta dentro de la CLI"
       },
       "tierHint": {
         "L1": "Solo instrucciones y otro texto; nada se ejecuta por sí solo.",
-        "L2": "Ejecuta comandos como subproceso (hooks, MCP, LSP) con los permisos de tu usuario.",
+        "L2": "Inicia un programa aparte (un comando de hook o un servidor MCP o LSP) con los permisos de tu usuario.",
         "L3": "Se ejecuta dentro del propio proceso de la CLI, con los permisos de la CLI y sin solicitud de permiso."
       },
       "capability": {
-        "exec": "Ejecuta comandos",
+        "exec": "Ejecuta comandos de shell",
         "network": "Red",
         "fs": "Archivos",
         "intercept-tools": "Intercepta llamadas a herramientas",
@@ -1603,7 +1604,7 @@
         },
         "analyzer-backend": {
           "title": "Backend de inferencia",
-          "summary": "Cambia entre Ollama REST y llama.cpp, y define la URL base, la ruta de llama-cli y la ruta del modelo GGUF."
+          "summary": "Cambia entre Ollama y llama.cpp, y define la URL base, la ruta de llama-cli y la ruta del modelo GGUF."
         },
         "analyzer-models": {
           "title": "Modelos y pruebas de rendimiento",
@@ -1745,7 +1746,7 @@
       "title": "Gestión de ajustes",
       "export-bundle": "Exportar paquete de ajustes",
       "import-bundle": "Importar paquete de ajustes",
-      "bundle-hint": "Exporta roles, pipelines, MCP, Analizador, los ajustes no sensibles del chat de AI y las preferencias de apariencia. Las claves de API y los tokens se ocultan y no se sobrescriben al importar.",
+      "bundle-hint": "Exporta los ajustes de Roles, Pipelines, MCP, Analizador, AI Chat y apariencia, con las claves de API y los tokens ocultos.",
       "export-dialog-title": "Exportar paquete de ajustes",
       "exported": "Paquete de ajustes exportado",
       "export-failed": "No se pudo exportar",
@@ -1757,7 +1758,7 @@
     "executionPolicy": {
       "unavailable": "La política de ejecución no está disponible. Comprueba el host de Navide y vuelve a intentarlo.",
       "errors": {
-        "invalid-policy": "La política de ejecución no es válida. Usa modos admitidos, espacios de nombres del sistema y nombres de ejecutables.",
+        "invalid-policy": "La política de ejecución no es válida. Usa modos admitidos, funciones de Navide y nombres de ejecutables.",
         "high-risk-confirmation-required": "El modo completo requiere confirmar explícitamente que se pueden ejecutar ejecutables arbitrarios.",
         "recovery-confirmation-required": "Para reconstruir la política de ejecución se requiere una confirmación explícita.",
         "source-reset-confirmation-required": "Para restablecer todas las selecciones de fuente de política se requiere una confirmación explícita.",
@@ -1773,7 +1774,7 @@
         "recommendation-unavailable": "La recomendación de política del repositorio no está disponible.",
         "recommendation-invalid": "La recomendación de política del repositorio no es válida.",
         "recommendation-stale": "La recomendación de política del repositorio ha cambiado. Inspecciónala de nuevo antes de aceptarla.",
-        "user-policy-unavailable": "No hay ninguna política de usuario global utilizable. Crea una o elige la predeterminada del host.",
+        "user-policy-unavailable": "No hay ninguna política de usuario global utilizable. Crea una o elige la predeterminada de Navide.",
         "global-policy-corrupt": "La política de ejecución global está dañada. Reconstrúyela antes de cambiar a esta fuente.",
         "recovery-blocked-by-global-policy": "La recuperación de fuentes está bloqueada mientras la política de ejecución global no esté en buen estado.",
         "commit-uncertain": "No se pudo confirmar el cambio de política. La política sigue en modo de bloqueo; inspecciónala de nuevo.",
@@ -1781,12 +1782,12 @@
       },
       "loading": "Cargando la política de ejecución…",
       "saved": "Política de ejecución guardada.",
-      "rebuilt": "Política de ejecución reconstruida a partir de la predeterminada del host.",
+      "rebuilt": "Política de ejecución reconstruida a partir de la predeterminada de Navide.",
       "notice": {
         "save": "Política de ejecución guardada.",
-        "resetUser": "La política de usuario se ha restablecido a la predeterminada del host.",
+        "resetUser": "La política de usuario se ha restablecido a la predeterminada de Navide.",
         "source": "Fuente de política cambiada.",
-        "rebuild": "Política de ejecución reconstruida a partir de la predeterminada del host.",
+        "rebuild": "Política de ejecución reconstruida a partir de la predeterminada de Navide.",
         "resetSources": "Se han restablecido todas las selecciones de fuente de política."
       },
       "externalUpdate": "La política ha cambiado en otro lugar. Tu borrador se conserva hasta que cargues la versión más reciente.",
@@ -1807,7 +1808,7 @@
         "unavailable": "La fuente de política seleccionada no está disponible. Navide bloquea todo hasta que elijas una fuente disponible.",
         "corrupt": "La política seleccionada está dañada. Navide bloquea todo hasta que se repare."
       },
-      "hostDefaultTitle": "Predeterminada del host",
+      "hostDefaultTitle": "Predeterminada de Navide",
       "readOnly": "Solo lectura",
       "hostDefaultHint": "La base integrada de mínimo privilegio. Sigue disponible aunque falte el almacenamiento de la política de usuario.",
       "userTitle": "Política de usuario",
@@ -1815,7 +1816,7 @@
       "userHint": "Edita la política global que se usa cuando un área de trabajo selecciona la fuente «Usuario». Al guardar se sustituye la política de usuario actual.",
       "mode": {
         "full": "Completo",
-        "allowlist": "Lista de permitidos",
+        "allowlist": "Solo comandos permitidos",
         "denylist": "Lista de denegados"
       },
       "fullWarning": "El modo completo permite ejecutables arbitrarios, incluidas herramientas de alto riesgo, y capacidades del sistema. Revisa esta opción de alto riesgo antes de guardar.",
@@ -1823,12 +1824,20 @@
       "denylistWarning": "El modo de lista de denegados concede por defecto: enumerar nombres no limita lo que concede, así que Navide trata toda lista de denegados como una opción de alto riesgo. Revísala antes de guardar.",
       "denylistConfirmation": "Entiendo que el modo de lista de denegados concede por defecto y que los nombres que enumero no lo restringen.",
       "shellDenylistScope": "En el modo de lista de denegados, un agent solo puede ejecutar los comandos que admite este host ({executables}), menos los que deniegues aquí. Denegar un nombre que no esté en esa lista no tiene efecto.",
-      "systemLabel": "Espacios de nombres del sistema",
-      "systemHint": "Selecciona los espacios de nombres del sistema V2 disponibles para el agent.",
-      "systemAllowlistLabel": "Espacios de nombres del sistema permitidos",
-      "systemAllowlistHint": "Selecciona los espacios de nombres del sistema V2 disponibles para el agent.",
-      "systemDenylistLabel": "Espacios de nombres del sistema denegados",
-      "systemDenylistHint": "Selecciona los espacios de nombres del sistema V2 que el agent no debe usar.",
+      "systemLabel": "Funciones de Navide",
+      "systemHint": "Elige qué funciones de Navide pueden usar los agentes.",
+      "systemAllowlistLabel": "Funciones de Navide permitidas",
+      "systemAllowlistHint": "Elige qué funciones de Navide pueden usar los agentes.",
+      "systemDenylistLabel": "Funciones de Navide denegadas",
+      "systemDenylistHint": "Elige qué funciones de Navide no deben usar los agentes.",
+      "namespace": {
+        "fs": "Archivos del espacio de trabajo",
+        "ui": "Vistas propias",
+        "aiCli": "Sesiones de AI CLI",
+        "web": "Navegación web",
+        "agents": "Panes de agentes",
+        "agentMessages": "Mensajes entre agentes"
+      },
       "shellLabel": "Ejecutables de shell",
       "shellHint": "Permite solo nombres de ejecutables de nivel superior. No se aceptan rutas ni expresiones de shell.",
       "shellAllowlistLabel": "Ejecutables de shell permitidos",
@@ -1844,13 +1853,14 @@
       "save": "Guardar política",
       "resetUser": "Restablecer política de usuario",
       "sourceTitle": "Fuente de política del área de trabajo",
-      "sourceHint": "Una recomendación del repositorio no es de confianza hasta que la inspecciones y la aceptes explícitamente. Los cambios de fuente requieren la huella digital actual exacta.",
+      "sourceHint": "Una recomendación del repositorio no es de confianza hasta que la inspecciones y la aceptes explícitamente. Un cambio de fuente solo se aplica a la política tal como la viste por última vez; si ha cambiado desde entonces, revísala de nuevo.",
       "source": {
-        "default": "Predeterminada del host",
+        "default": "Predeterminada de Navide",
         "user": "Política de usuario",
         "repository": "Política del repositorio"
       },
       "sourceNeedsWorkspace": "La selección de fuente del área de trabajo está disponible cuando hay un área de trabajo abierta.",
+      "sourceImplicit": "Automático",
       "recommendationTitle": "Recomendación del repositorio",
       "untrusted": "No es de confianza",
       "recommendationHint": "Esta política procede del repositorio del área de trabajo y nunca sustituye a la fuente activa sin una aceptación explícita.",
@@ -1878,10 +1888,10 @@
         "directory-unsafe": "Directorio no seguro",
         "directory-unavailable": "Directorio no disponible"
       },
-      "corruptHint": "La política de usuario guardada está dañada. La reconstrucción escribe un estado nuevo con la predeterminada del host y conserva las selecciones de fuente de las áreas de trabajo.",
+      "corruptHint": "La política de usuario guardada está dañada. La reconstrucción escribe un estado nuevo con la predeterminada de Navide y conserva las selecciones de fuente de las áreas de trabajo.",
       "manualRecoveryHint": "El almacenamiento de políticas no es seguro o no está disponible. Corrige los permisos o la ruta del directorio de la política de ejecución y vuelve a abrir los ajustes; la reconstrucción automática está desactivada.",
       "rebuild": "Reconstruir política global",
-      "rebuildConfirmBody": "Reconstruye solo los archivos de la política global y de revisión a partir de la predeterminada del host. Se conservan las selecciones de fuente de las áreas de trabajo y los archivos de política de los repositorios.",
+      "rebuildConfirmBody": "Reconstruye solo los archivos de la política global y de revisión a partir de la predeterminada de Navide. Se conservan las selecciones de fuente de las áreas de trabajo y los archivos de política de los repositorios.",
       "rebuildConfirmCheck": "Entiendo que se sustituirá la política global dañada.",
       "rebuildConfirm": "Confirmar reconstrucción",
       "cancel": "Cancelar"
@@ -1901,18 +1911,19 @@
         "total": "{count} herramientas; su texto y sus esquemas de entrada suman {size}."
       },
       "nativeBackends": {
-        "title": "Backends nativos",
+        "title": "Programas en complementos de Navide",
+        "summary": "El código nativo se ejecuta en un entorno aislado, pero un complemento de Navide que también ejecuta git, gh y glab (marcado abajo como de alto riesgo) puede usarlos para contactar con hosts de red, enviar datos del espacio de trabajo y cambiar sus archivos.",
         "description": "Algunos complementos de Navide incluyen código nativo. Navide lo ejecuta en un entorno aislado sin acceso propio a la red; solo puede leer las áreas de trabajo que abras con él y modificar archivos solo donde lo permitas. Un complemento de Navide que además ejecuta comandos git, gh y glab (marcado abajo como de alto riesgo) puede, a través de ellos, contactar con servidores de la red y enviar datos del área de trabajo, y leer y modificar archivos del área de trabajo sin ese permiso. Mientras el interruptor de abajo esté activado, instalar un complemento de Navide con código nativo permite que se ejecute; al desactivarlo se detienen todos.",
-        "enable": "Permitir que los complementos de Navide de terceros ejecuten backends nativos",
+        "enable": "Permitir que los complementos de Navide de terceros ejecuten sus propios programas",
         "offUnsaved": "Los backends nativos de terceros están desactivados por ahora, pero Navide no pudo guardarlo, así que volverán a estar activados al reiniciar Navide.",
         "offUnsavedRetry": "Reintentar",
         "agentTools": {
           "enable": "Permitir que los agents llamen a herramientas de complementos de Navide de terceros",
-          "description": "Desactivado de forma predeterminada. Si está activado, los agents de tus panes pueden llamar a las herramientas que declara un complemento de Navide de terceros, una vez que hayas permitido ese complemento de Navide. Una herramienta que modifica archivos te pregunta una vez por área de trabajo. Si está desactivado, Navide se comporta como si ningún complemento de Navide tuviera herramientas.",
+          "description": "Permite que los agentes de tus panes llamen a las herramientas que declaran los complementos de Navide que permitiste; una herramienta que cambia archivos pregunta una vez por espacio de trabajo.",
           "externalCallers": "Permitir que también las llamen clientes MCP externos",
           "externalCallersDisclosure": "Los programas externos comparten un único token, así que el registro de una llamada solo puede indicar «un cliente externo», no qué programa fue. La credencial del host se trata de la misma forma."
         },
-        "empty": "Ningún complemento de Navide instalado tiene un backend nativo.",
+        "empty": "Ningún complemento de Navide instalado incluye un programa propio.",
         "windowWithout": "{name} se abrió sin su backend nativo: {reason}. Las funciones que necesitan el backend no funcionarán. {next}",
         "windowWithoutAllow": "Para permitir el backend, ve a «Ajustes → Complementos de Navide → {page}» y vuelve a abrir la ventana.",
         "windowWithoutDetails": "En «Ajustes → Complementos de Navide → {page}» se explica el motivo.",
@@ -1943,12 +1954,17 @@
           "shellNotAllowed": "Bloqueado: solicita acceso completo a la shell",
           "stoppedAfterCrashes": "Detenido tras fallos repetidos",
           "unavailable": "No disponible"
-        }
+        },
+        "loadFailed": "No se pudo leer la configuración de los backends nativos."
       },
       "bundled": "Integrados",
-      "listTitle": "Complementos de Navide",
+      "listTitle": "Instalados",
+      "installedTitle": "Complementos de Navide instalados",
       "developerNative": "Desarrollador y código nativo",
       "pageOn": "Activado",
+      "developerOnMarker": "Desarr.",
+      "nativeOnMarker": "Nativo activo",
+      "browseMarketplace": "Explorar Navide Marketplace",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Activo",
@@ -2062,8 +2078,6 @@
         "featured": "Destacados",
         "clearSearch": "Borrar búsqueda",
         "showAllCategories": "Mostrar todas las categorías",
-        "noResultsHint": "Prueba con otra palabra o explora todas las categorías.",
-        "noExtensionsHint": "Los complementos de Navide aparecen aquí en cuanto sus editores los publican.",
         "loadFailedTitle": "No se puede acceder a Navide Marketplace",
         "loadFailedHint": "Comprueba la conexión y vuelve a intentarlo. Los complementos de Navide instalados siguen funcionando.",
         "errorDetails": "Detalles",
@@ -2132,7 +2146,7 @@
         },
         "title": "Modo de desarrollador",
         "switch": "Activar el modo de desarrollador",
-        "hint": "Te permite cargar un complemento de Navide desde una carpeta que elijas, para desarrollarlo y probarlo, y aplica un ajuste de Registry autoalojado (AGENT_TEAM_MARKETPLACE_URL). Solo se puede cambiar en esta página y cada cambio queda registrado. Al desactivarlo se descargan todos los complementos de Navide cargados desde una carpeta y se descarta cualquier carpeta que hayas elegido sin dar tu consentimiento; las carpetas a las que diste tu consentimiento siguen en la lista, se vuelven a cargar al activarlo de nuevo y se pueden quitar aquí.",
+        "hint": "Te permite cargar un complemento de Navide desde una carpeta para desarrollarlo y probarlo, e instalar complementos de Navide desde tu propio servidor en lugar de Navide Marketplace; al desactivarlo se descargan esos complementos de Navide.",
         "banner": "El modo de desarrollador está activado. Los complementos de Navide cargados desde una carpeta no se han revisado.",
         "reminder": "El modo de desarrollador está activado: los complementos de Navide cargados desde una carpeta no se han revisado. Desactívalo en «Ajustes → Complementos de Navide» cuando ya no lo necesites.",
         "reminderClose": "Entendido",
@@ -2206,7 +2220,7 @@
       },
       "localInstall": {
         "agentRequest": "Solicitado por {requester}. Navide no ha revisado este paquete; instalarlo es decisión tuya.",
-        "button": "Instalar desde archivo .vsix…",
+        "button": "Instalar desde archivo…",
         "backToMarketplace": "Volver a la versión de Navide Marketplace",
         "warning": "Este complemento de Navide procede de un archivo de este equipo. Navide no lo ha revisado y no está firmado: no se puede confirmar su autoría y el archivo puede haberse modificado. Instala solo archivos de personas de confianza.",
         "signatureLabel": "Firma",
@@ -2337,12 +2351,12 @@
       "user": "Usuario",
       "userWorkspace": "Usuario / área de trabajo",
       "accountServer": "Cuenta / servidor",
-      "userWorkspaceBindings": "Vinculaciones de usuario / área de trabajo"
+      "userWorkspaceBindings": "Usuario, más la cuenta elegida en cada área de trabajo"
     },
     "storage": {
       "localStorage": "ui_settings.json (datos de la app) + copia en el área de trabajo",
-      "mainProcess": "userData del proceso principal de Electron",
-      "safeStorage": "Registro local cifrado de safeStorage",
+      "mainProcess": "Se guarda con los datos de la app de Navide en este equipo",
+      "safeStorage": "Se guarda cifrado en este equipo",
       "cliFiles": "Los archivos de instrucciones propios de cada CLI"
     },
     "voice": {
@@ -2367,7 +2381,6 @@
       "readback-rate": "Velocidad",
       "readback-preview": "Escuchar",
       "readback-stop-hint": "Pulsa Esc o el atajo de entrada de voz para detener la lectura al instante.",
-      "section": "Entrada de voz",
       "enabled": "Entrada de voz (mantener pulsado para hablar)",
       "enabled-hint": "Mantén pulsado Ctrl+Alt+M (se puede reasignar en Atajos) para dictar en el pane de CLI enfocado. El texto va a su cuadro de entrada como si lo hubieras escrito; no se envía nada hasta que pulses Enter tú. La voz se transcribe en este equipo con un modelo Whisper local; el audio nunca sale del equipo.",
       "device": "Micrófono",
@@ -2470,7 +2483,7 @@
       "download-retry": "Reintentar descarga"
     },
     "general": {
-      "auto-resume-reconnect": "Reanudar las sessions tras reiniciarse el backend",
+      "auto-resume-reconnect": "Reanudar las sessions tras reiniciarse el servicio en segundo plano de Navide",
       "resume-interrupted-on-launch": "Reanudar los panes que estaban trabajando tras reiniciar Navide",
       "system-notify": "Notificaciones del sistema",
       "system-notify-hint": "Muestra una notificación de escritorio cuando una CLI termina su turno o necesita tu intervención mientras Navide está en segundo plano. La insignia del Dock sigue contando en cualquier caso.",
@@ -2485,14 +2498,14 @@
         "unknown": "Aún no se ha probado.",
         "not-applicable": "No disponible en esta plataforma."
       },
-      "auto-resume-reconnect-hint": "Cuando el backend falla o se reinicia, arrastra consigo todos los procesos de CLI. Activa esta opción para reanudar automáticamente, cuando vuelva, las conversaciones de los paneles en pantalla y de hasta seis paneles fuera de pantalla que estaban trabajando, en lugar de reconstruir cada uno a mano. Los paneles reanudados no siguen por su cuenta, se avisa a los paneles que los abrieron y los avisos muestran lo que pasó. Si el backend vuelve a fallar poco después, no se reanuda nada más.",
-      "resume-interrupted-on-launch-hint": "Cuando Navide se reinicia, los panes que estaban ejecutando un turno o esperando una solicitud de permiso o una pregunta, además de los panes padre que esperan sus informes, se reanudan automáticamente (hasta 6; el resto se marca como «Trabajando al reiniciar»). Nada continúa por sí solo: pulsa «Continuar» o deja que el padre se lo indique. Al padre se le informa de cuáles de sus panes se interrumpieron.",
+      "auto-resume-reconnect-hint": "Reanuda las conversaciones de tus paneles cuando el servicio en segundo plano vuelve tras reiniciarse. Un reinicio cierra todos los procesos de CLI; los paneles en pantalla y hasta seis paneles fuera de pantalla que estaban trabajando vuelven sin seguir por su cuenta, se avisa a los paneles que los abrieron y los avisos muestran lo que pasó. Si vuelve a fallar poco después, no se reanuda nada más.",
+      "resume-interrupted-on-launch-hint": "Cuando Navide se reinicia, los panes que estaban trabajando vuelven y esperan a que continúes. Incluye los panes que ejecutaban un turno o esperaban una solicitud de permiso o una pregunta, y los panes padre que esperan sus informes, hasta 6 (el resto se marca como «Trabajando al reiniciar»). Pulsa «Continuar» o deja que el padre se lo indique; al padre se le informa de cuáles de sus panes se interrumpieron.",
       "confirm-close-pane": "Confirmar antes de cerrar un pane",
       "confirm-close-pane-hint": "Pregunta antes de que el atajo de cerrar pane cierre un pane de CLI. Un pane con un turno en curso siempre pregunta, independientemente de este ajuste.",
       "confirm-close-workspace": "Confirmar antes de cerrar un área de trabajo",
-      "confirm-close-workspace-hint": "Pregunta antes de que la barra lateral cierre un área de trabajo y sus panes. Esa fila finaliza todos los panes de CLI del área de trabajo; sus registros se conservan, así que al volver a abrirla cada uno vuelve como una tarjeta en la que haces clic para reanudar. La opción simple «Cerrar área de trabajo» deja las CLI en ejecución y nunca pregunta.",
+      "confirm-close-workspace-hint": "Preguntar antes de que la barra lateral cierre un espacio de trabajo y termine sus panes de CLI.",
       "idle-reclaim": "Liberar las CLI inactivas",
-      "idle-reclaim-hint": "Una CLI inactiva sigue ocupando la memoria que reservó, a menudo 200–300 MB cada una. La liberación finaliza el proceso y deja el pane como un marcador que se reanuda con un clic; la conversación se reanuda a partir de la propia transcripción de la CLI. Nunca se aplica al pane enfocado, a un pane que espera tu respuesta ni a uno con texto sin enviar.",
+      "idle-reclaim-hint": "Termina las CLI inactivas para liberar memoria y deja cada pane como un marcador que se reanuda con un clic (nunca el pane enfocado, uno que espera tu respuesta o uno con texto sin enviar).",
       "idle-reclaim-after": "Liberar tras",
       "idle-reclaim-after-hint": "Cuánto tiempo debe pasar un pane sin salida del agent ni pulsaciones de teclas antes de liberarlo.",
       "idle-reclaim-15m": "15 minutos",
@@ -2502,8 +2515,8 @@
       "idle-reclaim-8h": "8 horas",
       "idle-reclaim-never": "Nunca",
       "idle-reclaim-now": "Liberar ahora",
-      "idle-reclaim-now-hint": "Finalízala ahora en lugar de esperar al umbral. {count} pane cumple los requisitos y ocupa aproximadamente {size}. Se convierte en un marcador que se reanuda con un clic. | Finaliza esas CLI ahora en lugar de esperar al umbral. {count} panes cumplen los requisitos y ocupan aproximadamente {size}. Cada uno se convierte en un marcador que se reanuda con un clic.",
-      "idle-reclaim-now-empty": "Ahora mismo ningún pane cumple los requisitos: nunca se liberan el pane enfocado, uno que espera tu respuesta, uno con texto sin enviar ni uno que no se pueda reanudar.",
+      "idle-reclaim-now-hint": "Termínalo ahora en lugar de esperar: {count} pane cumple los requisitos y ocupa unos {size}. | Termínalos ahora en lugar de esperar: {count} panes cumplen los requisitos y ocupan unos {size}.",
+      "idle-reclaim-now-empty": "Ahora mismo ningún pane cumple los requisitos. Nunca se liberan el pane enfocado, uno que espera tu respuesta, uno con texto sin enviar ni uno que no se pueda reanudar.",
       "idle-reclaim-now-action": "Liberar {count} ahora",
       "idle-reclaim-now-action-empty": "Nada que liberar",
       "default-editor": "Editor predeterminado",
@@ -2556,15 +2569,22 @@
       "resume-behavior-never": "Empezar siempre desde cero",
       "resume-behavior-ask": "Preguntar cada vez",
       "restore-scope": "Alcance de la reanudación",
-      "restore-scope-hint": "Si siempre se reanuda, elige una CLI, la página de cuadrícula actual, la pestaña activa, todas las CLI o «Automático»: solo las CLI que se estaban ejecutando cuando Navide se cerró por última vez (todas las CLI y «Automático» se inician de dos en dos, por orden).",
+      "restore-scope-hint": "Qué CLI se vuelven a abrir cuando Navide siempre reanuda. Elige una CLI, la página actual de la cuadrícula, la pestaña activa, todas las CLI o Automático (las que se ejecutaban al cerrar).",
       "restore-scope-single": "Una CLI",
       "restore-scope-page": "Página de cuadrícula actual",
       "restore-scope-tab": "Pestaña activa",
       "restore-scope-all": "Todas las CLI",
       "restore-scope-auto": "Automático",
       "resume-concurrency": "Límite de reanudaciones simultáneas",
-      "resume-concurrency-hint": "Cuántos panes de CLI pueden reanudarse a la vez al abrir un área de trabajo o restaurar una disposición; el resto espera en cola. Reduce este valor si reanudar muchos panes a la vez provoca errores «terminal.create timeout» (1–10).",
-      "resume-concurrency-label": "Máximo de reanudaciones simultáneas"
+      "resume-concurrency-hint": "Cuántos panes de CLI se reanudan a la vez (1–10); bájalo si los panes agotan el tiempo de espera al reanudarse.",
+      "resume-concurrency-label": "Máximo de reanudaciones simultáneas",
+      "theme-name": {
+        "dark-github": "Oscuro (GitHub)",
+        "dark-midnight": "Medianoche",
+        "dark-forest": "Bosque",
+        "light": "Claro",
+        "high-contrast": "Alto contraste"
+      }
     },
     "roles": {
       "title": "Roles",
@@ -3063,7 +3083,7 @@
           "h3": "Analyzer",
           "p5": "Lo que configuras aquí es un <strong>pequeño modelo local</strong> que Navide usa para interpretar la intención en las pipelines; no tiene nada que ver con los agents de CLI que usas en los panes. Tres partes:",
           "analyzer": {
-            "backend": "<strong>Backend de inferencia</strong>: primero elige uno de dos backends, <em>Ollama REST</em> o <em>llama.cpp</em>. llama.cpp necesita la ruta de <code>llama-cli</code> (con un botón de detección automática y un selector de archivos) y, opcionalmente, la ruta de un modelo GGUF; Ollama necesita la URL de inferencia (<code>http://localhost:11434</code> de forma predeterminada). Ambos tienen un indicador de estado al lado.",
+            "backend": "<strong>Backend de inferencia</strong>: primero elige uno de dos backends, <em>Ollama</em> o <em>llama.cpp</em>. llama.cpp necesita la ruta de <code>llama-cli</code> (con un botón de detección automática y un selector de archivos) y, opcionalmente, la ruta de un modelo GGUF; Ollama necesita la URL de inferencia (<code>http://localhost:11434</code> de forma predeterminada). Ambos tienen un indicador de estado al lado.",
             "models": "<strong>Gestor de modelos</strong> (modo Ollama): escribe el nombre de un modelo y pulsa <em>⬇ Descargar</em>, con una barra de progreso; debajo se muestran los modelos instalados (nombre, número de parámetros, tamaño) y se pueden eliminar uno a uno.",
             "benchmark": "<strong>Prueba de rendimiento de modelos</strong>: ejecuta cuatro tareas con cada modelo local: detección del stack tecnológico (salida JSON), un resumen del área de trabajo en una frase, elegir la entrada más relevante de una lista de documentos y descomponer la salida de una CLI en una pregunta y sus opciones. La tabla de resultados marca cada elemento con su duración, y hay que superar <strong>al menos tres de las cuatro (≥75 %)</strong>; los modelos que no las superan se ocultan en el desplegable de modelos."
           },
@@ -3077,10 +3097,10 @@
           "mirror": "<strong>El espejo de descargas</strong>: los archivos de cada versión se publican dos veces, en la GitHub Release y en <code>dl.navide.dev</code>: los mismos bytes, con sumas sha256 para comprobarlos. <strong>El espejo es el origen de actualizaciones predeterminado</strong>: la aplicación apunta su feed a <code>dl.navide.dev</code> al iniciarse, y GitHub es la alternativa. Solo recurre a ella ante un <strong>fallo de red</strong> (host inaccesible, tiempo de espera agotado, 5xx/429) y, una vez que lo ha hecho, <strong>se queda en GitHub el resto de la session</strong>: solo un reinicio vuelve al espejo. <strong>Un 404 o un error de firma o de suma de comprobación nunca activa la alternativa</strong>: ambos hosts tienen los mismos archivos, así que fallaría igual, y notificar el fallo tal cual ayuda más que ocultarlo.",
           "policyIntro": "La <strong>política de ejecución</strong> decide qué puede ejecutar el backend de un complemento de Navide. <strong>No es una pestaña propia</strong>: es el bloque de la parte superior de la página Complementos de Navide, con su propia insignia de ámbito (por usuario y por área de trabajo) y la ruta del archivo de política. Arriba muestra la <em>política vigente</em>: su origen, su modo y su estado: <em>activa</em>, <em>desactualizada</em>, <em>no disponible</em> o <em>dañada</em>.",
           "policy": {
-            "hostDefault": "<strong>Predeterminada del host</strong>: la base integrada de privilegios mínimos, marcada como <strong>de solo lectura</strong>. Sigue siendo utilizable aunque desaparezca por completo el almacén de políticas de usuario, así que siempre hay una forma de volver.",
+            "hostDefault": "<strong>Predeterminada de Navide</strong>: la base integrada de privilegios mínimos, marcada como <strong>de solo lectura</strong>. Sigue siendo utilizable aunque desaparezca por completo el almacén de políticas de usuario, así que siempre hay una forma de volver.",
             "user": "<strong>Política de usuario</strong>: la global, que se usa en cualquier área de trabajo que elija el origen Usuario; muestra «no creada» hasta que la crees. Tres modos: <em>Completo</em>, <em>Lista de permitidos</em> y <em>Lista de denegados</em>. Puedes definir los espacios de nombres del sistema y los ejecutables del shell, y estos últimos solo admiten <strong>nombres de ejecutables de primer nivel</strong>: ni rutas ni expresiones del shell.",
             "highRisk": "<strong>Full y denylist necesitan una casilla explícita antes de guardarse</strong>, y la pantalla explica por qué: el modo full permite ejecutables arbitrarios (incluidas herramientas de alto riesgo) y capacidades del sistema, mientras que el modo denylist <strong>permite todo de forma predeterminada</strong>: enumerar nombres no reduce lo que realmente concede, y por eso Navide también lo trata como una opción de alto riesgo.",
-            "source": "<strong>Fuente de política del área de trabajo</strong>: cada área de trabajo elige Predeterminada del host, Política de usuario o Política del repositorio. <strong>Una recomendación del repositorio aparece como «no fiable» hasta que la hayas leído y pulsado «Aceptar política del repositorio»</strong>, y cambiar de origen exige que la huella coincida exactamente; si cambia después de revisarla, pasa a «cambiada desde la revisión» y hay que volver a comprobarla. Sin ningún área de trabajo abierta, este bloque no se puede usar.",
+            "source": "<strong>Fuente de política del área de trabajo</strong>: cada área de trabajo elige Predeterminada de Navide, Política de usuario o Política del repositorio. <strong>Una recomendación del repositorio aparece como «no fiable» hasta que la hayas leído y pulsado «Aceptar política del repositorio»</strong>, y cambiar de origen exige que la huella coincida exactamente; si cambia después de revisarla, pasa a «cambiada desde la revisión» y hay que volver a comprobarla. Sin ningún área de trabajo abierta, este bloque no se puede usar.",
             "recovery": "<strong>Almacén global de políticas</strong>: su estado puede ser correcto, ausente, dañado, entrada no segura o carpeta no segura o no disponible. Un almacén dañado se puede <strong>reconstruir</strong> tras marcar una casilla de confirmación; la reconstrucción solo sustituye la política global y los archivos de revisión, y conserva la selección de origen de cada área de trabajo y todos los archivos de política del repositorio. Cuando el almacén se considera <strong>no seguro</strong>, la reconstrucción automática se desactiva y la pantalla te pide que corrijas tú mismo las rutas propiedad del host que indica.",
             "failClosed": "Todo estado incorrecto es <strong>de cierre ante fallos</strong>: no se permite nada hasta que elijas un origen utilizable o repares el dañado. Esto incluye un guardado dudoso: el mensaje dice «no se pudo confirmar el resultado del cambio de política; la política sigue cerrada ante fallos, vuelve a comprobarlo»."
           },
@@ -3324,7 +3344,7 @@
           "h3": "Procesos huérfanos y el backend",
           "orphans": {
             "leftover": "<strong>Procesos de CLI sobrantes</strong>: cuando aparece <code>⚠ N restantes</code> en la barra de estado, al hacer clic se pregunta «Se han encontrado N procesos de CLI restantes de una ejecución anterior; pueden agotar la memoria. ¿Limpiarlos?», con <em>Limpiar</em> para eliminarlos y <em>Descartar</em> para omitirlo. Son procesos que la ejecución anterior no limpió.",
-            "backend": "<strong>Backend</strong>: al hacer clic en la píldora Backend de la barra de estado se muestran la dirección y el PID, además de dos botones: <em>Reiniciar</em> (<em>Iniciar</em> sin conexión) y <em>Detener</em> (solo con conexión). <strong>Reiniciar el backend se lleva por delante todos los procesos de CLI</strong>; para que las conversaciones se reanuden automáticamente cuando vuelva, activa <em>Reanudar las sessions tras reiniciarse el backend</em> en la pestaña General.",
+            "backend": "<strong>Backend</strong>: al hacer clic en la píldora Backend de la barra de estado se muestran la dirección y el PID, además de dos botones: <em>Reiniciar</em> (<em>Iniciar</em> sin conexión) y <em>Detener</em> (solo con conexión). <strong>Reiniciar el backend se lleva por delante todos los procesos de CLI</strong>; para que las conversaciones se reanuden automáticamente cuando vuelva, activa <em>Reanudar las sessions tras reiniciarse el servicio en segundo plano de Navide</em> en la pestaña General.",
             "timeout": "Si el backend da error porque tarda demasiado en arrancar, sube <em>Tiempo de espera de inicio del backend</em> (15–120 segundos) en la pestaña Apariencia."
           },
           "h4": "Mantenimiento de un vistazo",
@@ -6862,7 +6882,7 @@
       "no-headers": "Sin cabeceras",
       "show": "Mostrar",
       "hide": "Ocultar",
-      "conflict": "Este archivo ha cambiado fuera de Agent-Team. Vuelve a cargarlo antes de guardar de nuevo.",
+      "conflict": "Este archivo ha cambiado fuera de Navide. Vuelve a cargarlo antes de guardar de nuevo.",
       "reload": "Recargar desde el disco",
       "custom-title": "Añadir servidor MCP personalizado",
       "custom-hint": "Elige ahora un transporte y luego rellena sus datos de conexión desde la lista de servidores instalados.",
@@ -6902,6 +6922,9 @@
       "state-on": "Activado",
       "state-off": "Desactivado",
       "status": "Estado: {status}",
+      "transport-local": "Local",
+      "transport-remote": "Remoto",
+      "status-failed": "No se pudo iniciar",
       "starting-note": "Sigue iniciándose tras {seconds} s. Si se ejecuta con npx o uvx, puede que la primera ejecución esté descargando el paquete.",
       "error-reason": "No se pudo iniciar: {reason}",
       "tools-error": "No se pudo obtener la lista de herramientas: {reason}",
@@ -6933,6 +6956,11 @@
       "keyring-bad-hint": "Sin un llavero del sistema, las credenciales suelen acabar en archivos sin cifrar.",
       "incomplete": "Este análisis está incompleto: alcanzó un límite de tiempo o de carpetas, u omitió un repositorio que no podía leer de forma segura, así que pueden faltar hallazgos en las carpetas de abajo.",
       "keyring-reason-unknown": "No se indicó ningún motivo.",
+      "keyring-reason": {
+        "tool-missing": "Falta la herramienta del sistema que lo lee.",
+        "read-failed": "Navide no pudo leerlo.",
+        "no-service": "No hay ningún Secret Service en ejecución."
+      },
       "scan": "Analizar",
       "scanning": "Analizando…",
       "scan-roots": "Raíces de análisis…",
@@ -6947,9 +6975,7 @@
       "all": "Todo",
       "loading": "Analizando este equipo…",
       "error-load": "El análisis falló.",
-      "empty-findings-title": "Sin hallazgos",
       "empty-findings-body": "Nada de riesgo coincide con el filtro actual.",
-      "empty-inventory-title": "Nada inventariado",
       "empty-inventory-body": "Ninguna credencial coincide con el filtro actual.",
       "not-scanned": "Pulsa «Analizar» para buscar credenciales en este equipo.",
       "severity": {
@@ -6969,7 +6995,7 @@
       },
       "reminder": {
         "title": "Recordatorio",
-        "active": "Activo",
+        "active": "Por revisar",
         "snoozed": "Pospuesto",
         "dismissed": "Descartado",
         "until": "hasta {date}",
@@ -7158,7 +7184,7 @@
       "group-native": "Propias de {agent}",
       "delivery-title": "Entregada a",
       "delivery-hint": "● la lee por su cuenta · ✓ entregada por Navide (haz clic para cambiar) · en gris: no entregada",
-      "delivery-auto": "{n} la leen por su cuenta",
+      "delivery-auto": "Lo carga {n} CLI por su cuenta | Lo cargan {n} CLI por su cuenta",
       "delivery-none": "no se entrega a ningún sitio",
       "location": "Ubicación",
       "also-linked-from": "También enlazada desde: {roots}",
@@ -7199,7 +7225,7 @@
       },
       "share": {
         "title": "Enlaces para compartir",
-        "hint": "Enlaces de solo lectura a un plan o informe, cifrados en este equipo. La clave solo viaja dentro del enlace; el servidor guarda un texto cifrado que no puede abrir.",
+        "hint": "Enlaces de solo lectura a un plan o informe, cifrados en este equipo. La clave solo viaja dentro del enlace, así que el servidor no puede leer lo que guarda.",
         "col-item": "Elemento",
         "col-creator": "Creado por",
         "col-created": "Creado",
@@ -7232,7 +7258,7 @@
     },
     "sync": {
       "title": "Sincronización",
-      "hint": "Activa una sección para mantenerla igual en todos los dispositivos con sesión iniciada en esta cuenta. Los registros se cifran en este equipo; el servidor guarda un texto cifrado para el que no tiene clave.",
+      "hint": "Activa una sección para mantenerla igual en todos los dispositivos con sesión iniciada en esta cuenta. Los registros se cifran en este equipo, así que el servidor no puede leerlos.",
       "not-yet": "Aún no se puede sincronizar.",
       "retired-memory": "La memoria ya no se sincroniza. Desactívala; tus archivos de instrucciones de aquí y las copias de la nube se quedan como están.",
       "not-connected": "No conectado: las secciones sincronizadas se ponen al día cuando vuelva la conexión.",
@@ -7255,7 +7281,7 @@
       "approval-cut": "… la vista previa se corta aquí; el archivo continúa",
       "approval-expand": "Mostrarlo completo",
       "approval-deletes": "Eliminaría aquí el prompt {name}.",
-      "approval-new-loop": "{name} pasaría a ser el prompt del loop.",
+      "approval-new-loop": "{name} pasaría a ser el prompt predeterminado.",
       "approval-text": "Texto entrante, completo",
       "approval-diff": "Cambios respecto a este dispositivo",
       "approval-changes": "Campos cambiados",
@@ -7280,7 +7306,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "Skills",
       "scope-memory": "Memoria",
-      "scope-hint-prompts": "Skills de prompt y el prompt del loop.",
+      "scope-hint-prompts": "Prompts guardados y cuál es el predeterminado.",
       "error-load": "No se pudieron leer los ajustes de sincronización.",
       "scope-hint-mcp": "Servidores MCP que añadiste en Navide. Sus secretos se cifran antes de salir.",
       "scope-hint-skills": "Qué skills están activadas y a qué CLI va cada una, además de los archivos de las skills creadas en Navide (las grandes viajan como blobs cifrados). Las skills que pusiste tú en la carpeta solo sincronizan sus ajustes.",
@@ -7466,15 +7492,14 @@
       "error-save": "No se pudo guardar este archivo. Tu borrador sigue en el editor."
     },
     "prompts": {
-      "title": "Prompts",
-      "intro": "Instrucciones completas reutilizables que un pane de CLI puede lanzar desde su botón ∞. Una skill es un prompt completo: elegir una skill sustituye el prompt, nunca se añade a otro. Solo la skill predeterminada se ejecuta como loop; todas las demás se envían una vez.",
-      "new": "Nueva skill",
-      "new-name": "Nueva skill",
+      "intro": "Prompts guardados que un pane de CLI envía desde el botón de repetir (∞) de su barra de título. Elegir uno sustituye el prompt entero; solo el prompt predeterminado se repite tras cada turno, los demás se envían una vez.",
+      "new": "Nuevo prompt",
+      "new-name": "Nuevo prompt",
       "copy-name": "Copia de {name}",
       "filter-label": "Filtrar por categoría",
       "all": "Todas",
-      "search": "Buscar skills…",
-      "empty": "Ninguna skill coincide con este filtro.",
+      "search": "Buscar prompts…",
+      "empty": "Ningún prompt coincide con este filtro.",
       "default-badge": "★ Predeterminada",
       "turns": "×{n}",
       "turns-unlimited": "Sin límite de turnos",
@@ -7482,7 +7507,7 @@
       "name": "Nombre",
       "icon": "Icono",
       "icon-custom": "Icono personalizado",
-      "icon-custom-hint": "Escribe o pega cualquier emoji para usarlo como icono de esta skill.",
+      "icon-custom-hint": "Escribe o pega cualquier emoji para usarlo como icono de este prompt.",
       "description": "Resumen",
       "prompt": "Prompt enviado al lanzar",
       "resume": "Texto de reanudación",
@@ -7494,22 +7519,20 @@
       "disable": "Desactivar",
       "duplicate": "Duplicar",
       "delete": "Eliminar",
-      "hint": "La skill predeterminada es la que se lanza con un clic simple en ∞ y la única que se ejecuta en loop; las skills desactivadas se quedan aquí, pero salen del selector.",
+      "hint": "Un clic simple en el botón de repetir envía el prompt predeterminado, el único que se repite; los prompts desactivados se quedan aquí, pero salen del selector.",
       "advanced": "Avanzado",
       "send-once": "Se envía una vez",
-      "send-once-hint": "Solo la skill predeterminada se ejecuta como loop; esta se envía una vez, sin reanudación ni límite de turnos.",
-      "untitled-name": "Skill sin título",
-      "prompt-empty": "Un prompt no puede quedar vacío: se conservó el texto anterior. Para quitar esta skill, usa Eliminar.",
+      "send-once-hint": "Solo el prompt predeterminado se repite tras cada turno; este se envía una vez, sin reanudación ni límite de turnos.",
+      "untitled-name": "Prompt sin título",
+      "prompt-empty": "Un prompt no puede quedar vacío: se conservó el texto anterior. Para quitar este prompt, usa Eliminar.",
       "delete-confirm": "¿Eliminar «{name}»? No se puede deshacer, y los equipos que sincronizan prompts también la eliminarán."
     },
     "section": {
       "general-behavior": "Comportamiento general",
       "resource-limits": "Límites de recursos",
-      "notifications": "Notificaciones",
       "settings-management": "Gestión de ajustes",
       "theme": "Tema",
-      "other": "Otros",
-      "updates": "Actualizaciones"
+      "other": "Otros"
     },
     "p2p": {
       "title": "Conexión",
@@ -7767,7 +7790,7 @@
     },
     "cliAgents": {
       "title": "Agents de CLI",
-      "hint": "Activa y reordena los agents CLI en el desplegable de creación manual. Abre una tarjeta para gestionar ese agent. Al menos uno debe seguir activado.",
+      "hint": "Activa y reordena los agents CLI en el menú de panes nuevos. Abre una tarjeta para gestionar ese agent. Al menos uno debe seguir activado.",
       "drag-hint": "Arrastra para reordenar",
       "search": "Buscar un agent…",
       "filter-label": "Filtrar agents CLI",
@@ -7776,8 +7799,8 @@
       "filter-attention": "Requieren atención",
       "count": "{visible} de {total} agents · {enabled} activados",
       "reorder-filtered": "Borra la búsqueda y elige «Todos» para reordenar",
-      "enabled": "Activado",
-      "enable-agent": "Activar {agent}",
+      "enabled": "Mostrar en el menú",
+      "enable-agent": "Mostrar {agent} en el menú",
       "manage": "Gestionar",
       "manage-agent": "Gestionar {agent}",
       "move-up": "Mover {agent} antes",
@@ -7810,7 +7833,7 @@
         "perm-force-off": "Omisión de permisos bloqueada",
         "push": "Envío directo activado",
         "push-off": "Envío directo desactivado",
-        "no-push": "Sin canal de envío directo",
+        "no-push": "Mensajes tecleados",
         "accounts": "{count} cuentas | {count} cuenta | {count} cuentas",
         "signed-out": "Sesión cerrada",
         "custom-binary": "Binario personalizado",
@@ -7857,12 +7880,13 @@
       "restart-note": "La opción queda fijada en el comando de un pane al iniciarse. Cambiar algo aquí afecta a los panes que se creen después; un pane que ya está en ejecución conserva lo que tenía al iniciarse hasta que se reconstruya o restaure."
     },
     "keybindings": {
-      "intro": "Reasigna cualquier atajo de abajo. Haz clic en una tecla para grabar una combinación nueva, usa + para añadir una segunda asignación y ✕ para quitar una. Los cambios se guardan en keybindings.json al instante y se aplican a todas las ventanas abiertas.",
+      "intro": "Reasigna cualquier atajo de abajo. Haz clic en una tecla para grabar una combinación nueva, usa + para añadir una segunda asignación y ✕ para quitar una. Los cambios se guardan en tu archivo de atajos al instante y se aplican a todas las ventanas abiertas.",
+      "file-tooltip": "keybindings.json en la carpeta de datos de la app de Navide",
       "search-placeholder": "Buscar comando, tecla o contexto…",
       "filter": {
         "all": "Todos",
         "customized": "Personalizados",
-        "conflicts": "Conflictos"
+        "conflicts": "Teclas compartidas"
       },
       "export": "Exportar",
       "import": "Importar",
@@ -8082,6 +8106,12 @@
         "workbench_action_zoomUiOut": "Reducir interfaz",
         "workbench_action_zoomUiReset": "Restablecer zoom de la interfaz"
       },
+      "cmdWhen": {
+        "workbench_action_closeModal": {
+          "notTerminal": "Cerrar cuadro de diálogo fuera de un terminal",
+          "planWindow": "Cerrar superposición de la ventana de planes"
+        }
+      },
       "col": {
         "command": "Comando",
         "keys": "Atajo",
@@ -8148,12 +8178,19 @@
       "conflict-hard": "conflicto",
       "conflict-soft": "tecla compartida",
       "when-any": "siempre",
+      "when-limited": "Solo en algunos contextos",
       "no-results": "Ningún comando coincide con esta búsqueda.",
-      "footnote": "Se admiten combinaciones de dos pasos: graba una combinación y luego pulsa la segunda. Las teclas que esta tabla no gestiona aparecen en solo lectura al final de esta página."
+      "footnote": "Se admiten combinaciones de dos pasos: graba una combinación y luego pulsa la segunda. Las teclas que esta tabla no gestiona aparecen en solo lectura al final de esta página.",
+      "category": {
+        "workbench": "Área de trabajo",
+        "editor": "Editor",
+        "controlPane": "Paneles de CLI",
+        "ui": "Control externo"
+      }
     },
     "accounts": {
       "title": "Cuentas de Git",
-      "encrypted-note": "Los tokens se cifran en reposo con el llavero del sistema operativo (safeStorage) y se guardan localmente en este equipo.",
+      "encrypted-note": "Los tokens se cifran con el llavero del sistema y solo se guardan en este equipo.",
       "unavailable": "El cifrado no está disponible en este sistema, así que no se pueden añadir cuentas. Normalmente significa que no se puede acceder al llavero del sistema operativo.",
       "empty": "Aún no hay cuentas.",
       "new-account": "+ Nueva cuenta",
@@ -8165,7 +8202,7 @@
       "host": "Servidor",
       "username": "Nombre de usuario",
       "token": "Token",
-      "token-hint": "Pega un token de acceso personal. Se cifra con safeStorage y se guarda localmente, nunca en texto sin cifrar.",
+      "token-hint": "Pega un token de acceso personal. Se cifra y solo se guarda en este equipo, nunca en texto sin cifrar.",
       "token-keep": "Déjalo vacío para conservar el token actual",
       "delete-confirm": "¿Eliminar esta cuenta?",
       "cli": {
@@ -8292,7 +8329,7 @@
       "testing": "Probando:",
       "preparing": "Preparando…",
       "benchmark-hint": "Ejecuta 4 tareas estándar con todos los modelos locales para determinar cuáles sirven para detectar la intención en la pipeline:",
-      "task-t1": "Detección de la pila tecnológica: genera JSON",
+      "task-t1": "Detección de la pila tecnológica: nombra las bibliotecas que usa el espacio de trabajo",
       "task-t2": "Resumen del área de trabajo: resumen de una frase",
       "task-t3": "Selección por relevancia: elige el elemento más relevante de una lista de documentos",
       "task-t4": "Análisis de la intención de la CLI: analiza la salida del agent y extrae preguntas y opciones",
@@ -9082,8 +9119,7 @@
     "attention-body": "{label} está esperando tu respuesta"
   },
   "updater": {
-    "section-title": "Actualizaciones",
-    "section-hint": "Mantén Agent-Team actualizado. Las actualizaciones se aplican a todas las áreas de trabajo.",
+    "section-hint": "Mantén Navide actualizado. Las actualizaciones se aplican a todas las áreas de trabajo.",
     "current-version": "Versión actual",
     "check": "Buscar actualizaciones",
     "checking": "Buscando actualizaciones…",
@@ -9370,9 +9406,6 @@
     "intro": "Cambia el nombre de cualquier estado de pane y elige su color. Los cambios se aplican en todos los sitios donde se muestra un estado —la insignia del pane, la barra lateral, la franja de reuniones y el panel de recursos— y se guardan en tu cuenta, no en un proyecto.",
     "col": {
       "status": "Estado",
-      "zh": "Chino tradicional",
-      "en": "Inglés",
-      "ja": "Japonés",
       "color": "Color"
     },
     "row-only": "solo en la lista",
@@ -9860,6 +9893,7 @@
     "reading-short": "leyendo",
     "reading-tooltip": "Esta cuenta acaba de activarse. Leer su cuota inicia un Claude Code, así que las cifras de abajo son de la lectura anterior hasta que termine: hasta 3 minutos.",
     "refresh-status": "Actualización: {status}",
+    "refresh-not-signed-in": "No se puede actualizar: no has iniciado sesión",
     "refresh-error": "Motivo: {reason}",
     "refresh-status-ok": "al día",
     "refresh-status-not-refreshed": "aún no actualizada",
@@ -9909,13 +9943,13 @@
     "settings-title": "Insignia de cuota de las CLI",
     "settings-enabled": "Mostrar la cuota restante en la cabecera de los panes de CLI",
     "settings-refresh": "Intervalo de actualización",
-    "settings-hint": "Muestra la cuota de 11 proveedores: claude, codex, kimi, grok, antigravity, opencode, qwen, kilo, pi, copilot y cursor. La mayoría leen las credenciales locales de la CLI para consultar la API de uso del propio proveedor, en solo lectura: las credenciales nunca se escriben. Claude es distinto: controla el panel /usage integrado de la CLI de Claude en lugar de leer credenciales.",
+    "settings-hint": "Muestra la cuota de 11 proveedores de CLI, solo lectura, desde la API de uso de cada proveedor (en Claude, desde su panel /usage integrado).",
     "failover-title": "Cambio de cuenta cuando se agota la cuota",
-    "failover-hint": "Qué hace Navide cuando una cuenta de CLI llega a su cuota: nada, listar las cuentas a las que podría cambiar (predeterminado) o cambiar automáticamente, con un máximo de 3 cambios automáticos cada 5 horas por CLI y sin volver nunca por su cuenta a la cuenta agotada. La tabla muestra lo que puede hacer cada CLI; el cambio en sí lo decide el backend.",
+    "failover-hint": "Qué hace Navide cuando una cuenta de CLI agota su cuota: nada, mostrar las cuentas a las que cambiar (predeterminado) o cambiar automáticamente, como máximo 3 veces cada 5 horas por CLI.",
     "failover-loop-title": "Reanudar un loop justo después de cambiar cuando se agota la cuota",
-    "failover-loop-hint": "Cuando un pane que ejecuta un loop se queda sin cuota, cambiar a una cuenta que aún tenga cuota y enviar continue al momento en lugar de esperar al restablecimiento. Requiere «Cambiar automáticamente» arriba.",
+    "failover-loop-hint": "Cuando un pane en loop agota la cuota, cambia a una cuenta con cuota y continúa de inmediato; requiere «Cambiar automáticamente».",
     "follow-switch-title": "Mover los panes fijados al cambiar de cuenta de Claude",
-    "follow-switch-hint": "Los panes de Claude que funcionan con la carpeta de inicio de sesión propia de una cuenta no siguen un cambio de cuenta. Con esto activado, un cambio los lista para que puedas moverlos, y un pane sin cuota muestra un botón «Cambiar de cuenta». Cada pane se vuelve a abrir en la cuenta nueva y reanuda su conversación. Desactivado de forma predeterminada.",
+    "follow-switch-hint": "Al cambiar de cuenta, mueve a la nueva cuenta los panes de Claude que usan la carpeta de inicio de sesión propia de una cuenta y reanuda sus conversaciones.",
     "failover-mode-off": "Desactivado",
     "failover-mode-notify": "Avisarme",
     "failover-mode-auto": "Cambiar automáticamente",
@@ -10677,7 +10711,7 @@
     "desc": {
       "telegram": "Bot creado con {'@'}BotFather",
       "discord": "Aplicación de bot en tu servidor",
-      "slack": "App en Socket Mode en tu espacio de trabajo",
+      "slack": "App de Slack que se conecta desde este equipo (activa Socket Mode en Slack)",
       "feishu": "App personalizada en Feishu o Lark",
       "dingtalk": "Robot interno en modo Stream",
       "matrix": "Usuario bot en cualquier homeserver",
@@ -10884,7 +10918,7 @@
     "unavailable": "Navide Guard aún no está disponible en este backend. Reinicia Navide después de actualizar.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Evaluar cada acción de la CLI según lo peligrosa que sea y quién la pidió; detener o preguntar antes de las peligrosas. Las reglas son código fijo, nunca una AI. Aprobar una acción de riesgo alto desde un canal de chat sigue rechazándose aunque esto esté desactivado. La protección de comandos del terminal y la comprobación de un agent que responde a una solicitud mediante MCP tampoco dependen de este interruptor."
+      "desc": "Detiene o pregunta antes de las acciones peligrosas de la CLI, con reglas fijas (nunca una AI) que miran lo arriesgada que es cada una y quién la pidió. Aunque esto esté desactivado, las aprobaciones de riesgo alto desde un canal de chat siguen rechazándose, y la protección de comandos del terminal y la comprobación de respuestas a solicitudes mediante MCP siguen activas."
     },
     "counts": {
       "critical": "Críticas {n}",
@@ -10924,7 +10958,7 @@
     },
     "vendors": {
       "title": "Qué CLI puede bloquear Guard",
-      "hint": "Guard detiene una acción a través del propio hook de la CLI. Las CLI que no lo tienen solo se pueden proteger con el rechazo de aprobaciones desde el chat y no ejecutándolas en modo YOLO.",
+      "hint": "Guard solo puede detener una acción en las CLI que permiten a Navide revisar cada acción antes de ejecutarla. Las demás solo se pueden proteger rechazando las solicitudes de aprobación que llegan desde el chat y manteniendo activadas sus solicitudes de permiso.",
       "block": "Se puede bloquear",
       "none": "No se puede bloquear",
       "unknown": "Desconocido"
@@ -11514,6 +11548,10 @@
       "burst-minutes": "minutos",
       "burst-per-day": "ejecuciones anticipadas al día como máximo",
       "burst-hint": "Solo lee el registro de errores de este workspace. Desactivado por defecto; siguen valiendo el límite diario de ejecuciones y una a la vez, y el mismo error adelanta como máximo una ejecución cada 24 horas.",
+      "reclaim-retro": "Retrospectiva al recuperar",
+      "reclaim-retro-on": "Antes de recuperar un pane delegado de larga duración, de forma automática o por su pane padre, pedirle tres líneas",
+      "reclaim-retro-per-day": "retrospectivas al día como máximo",
+      "reclaim-retro-hint": "Solo panes abiertos por otro pane (cli_open_agent) que lleven más de 30 minutos, y solo en la recuperación automática por inactividad, la de su pane padre y los relevos de pipeline; una recuperación que tú pulsas nunca espera. Cada una cuesta a ese pane un turno de tokens, espera como máximo {seconds} segundos y solo guarda las tres líneas que escribe el pane, enmascaradas, en este equipo.",
       "rules": "Reglas",
       "rules-builtin": "Integradas v{version}",
       "rules-view": "Ver texto completo",
@@ -11611,9 +11649,8 @@
     "no-match": "Ningún área de trabajo coincide con «{query}».",
     "trimmed": "El límite del historial ha quitado {count} entradas antiguas. Puedes cambiarlo en Ajustes → General.",
     "limit-title": "Límite de áreas de trabajo recientes",
+    "limit-count": "Máximo de entradas",
     "limit-hint": "Recientes conserva todas las áreas de trabajo que abres hasta que las quitas. Es solo un límite de seguridad del almacenamiento: al alcanzarlo se van primero las entradas más antiguas, y nunca se quitan las áreas de trabajo abiertas o fijadas.",
-    "limit-off": "Sin límite",
-    "limit-on": "Conservar hasta",
     "state-completed": "completada",
     "state-running": "en ejecución",
     "state-aborted": "cancelada",
@@ -11765,7 +11802,7 @@
     "overview": {
       "title": "Vista general de declaraciones",
       "intro": "Todos los complementos de Navide instalados desde el Navide Marketplace: lo que declaran, su nivel de riesgo, la actividad reciente y cualquier cosa inusual, en una sola página. Solo registros; nada de aquí cambia lo que puede hacer un complemento de Navide.",
-      "empty": "No hay ningún complemento de Navide del Navide Marketplace instalado.",
+      "empty": "Todavía no hay nada instalado del Navide Marketplace.",
       "installedScan": "Análisis verificado al instalar",
       "noScanRecord": "No se registró ningún análisis al instalar.",
       "activity": "Actividad reciente",

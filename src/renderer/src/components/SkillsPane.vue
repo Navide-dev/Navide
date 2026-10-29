@@ -577,7 +577,12 @@ const matrixRows = computed<MatrixRow[]>(() => {
 })
 
 /** Rows grouped by source, for the matrix's group rows and the browse view's sections. */
-const groupedRows = computed<Array<{ source: string; label: string; rows: MatrixRow[] }>>(() => {
+/** A CLI's name as the backend labels it ("Claude Code"), its id otherwise. */
+function agentDisplayName(key: string): string {
+  return agents.value.find((agent) => agent.key === key)?.label || key
+}
+
+const groupedRows = computed<Array<{ source: string; label: string; keypath: string; param: string; value: string; rows: MatrixRow[] }>>(() => {
   const groups = new Map<string, MatrixRow[]>()
   for (const row of matrixRows.value) {
     const source = row.kind === 'shared' ? 'shared' : row.skill.source
@@ -589,7 +594,12 @@ const groupedRows = computed<Array<{ source: string; label: string; rows: Matrix
     source,
     label: source === 'shared'
       ? t('settings.skills.group-shared', { root: '~/.agents/skills' })
-      : t('settings.skills.group-native', { agent: source }),
+      : t('settings.skills.group-native', { agent: agentDisplayName(source) }),
+    // The heading renders the path or agent id in its own element, so the
+    // label's uppercase never reaches it ("~/.AGENTS/SKILLS").
+    keypath: source === 'shared' ? 'settings.skills.group-shared' : 'settings.skills.group-native',
+    param: source === 'shared' ? 'root' : 'agent',
+    value: source === 'shared' ? '~/.agents/skills' : agentDisplayName(source),
     rows,
   }))
 })
@@ -837,7 +847,7 @@ function rowSourceLabel(row: MatrixRow): string {
       ? t('settings.skills.source-shared')
       : t('settings.skills.source-shared-user')
   }
-  return t('settings.skills.source-native', { agent: row.skill.source })
+  return t('settings.skills.source-native', { agent: agentDisplayName(row.skill.source) })
 }
 
 /**
@@ -889,9 +899,10 @@ watch(
   <div class="skills-pane" data-settings-section="skills">
     <!-- ── Toolbar: title, filter chips, view switch, actions ─────────── -->
     <div class="skills-toolbar">
+      <!-- The page intro sits under the page title (the settings modal
+           renders it); this row is the list's label and its actions. -->
       <div>
         <h2>{{ t('settings.skills.title') }}</h2>
-        <p>{{ t('settings.skills.intro') }}</p>
       </div>
       <div class="skills-toolbar-actions">
         <button type="button" :disabled="loading || busy" @click="loadSkills()">
@@ -938,7 +949,7 @@ watch(
           v-for="chip in sourceChips"
           :key="chip.key"
           type="button"
-          class="skills-chip"
+          class="skills-chip settings-filter-chip"
           :class="{ on: sourceFilter === chip.key }"
           :aria-pressed="sourceFilter === chip.key"
           @click="sourceFilter = chip.key"
@@ -950,7 +961,7 @@ watch(
         type="search"
         :placeholder="t('settings.skills.search')"
       />
-      <div class="skills-view-switch" role="group" :aria-label="t('settings.skills.view-label')">
+      <div class="skills-view-switch settings-segmented" role="group" :aria-label="t('settings.skills.view-label')">
         <button
           type="button"
           :class="{ on: view === 'browse' }"
@@ -981,7 +992,7 @@ watch(
         <template v-else-if="view === 'browse'">
           <section v-for="group in groupedRows" :key="group.source" class="skills-group">
             <h3 class="skills-group-title">
-              {{ group.label }}<span class="count">{{ group.rows.length }}</span>
+              <i18n-t :keypath="group.keypath" tag="span" scope="global"><template #[group.param]><span class="skills-group-id" :class="{ 'skills-group-id--path': group.param === 'root' }">{{ group.value }}</span></template></i18n-t><span class="count">{{ group.rows.length }}</span>
             </h3>
             <div class="skills-cards">
               <button
@@ -998,7 +1009,13 @@ watch(
               >
                 <span class="skill-card-head">
                   <strong v-truncate>{{ row.skill.name }}</strong>
-                  <span class="skill-source-tag" :class="row.kind">{{ rowSourceLabel(row) }}</span>
+                </span>
+                <span class="skill-card-desc" v-truncate>
+                  {{ row.skill.description || (row.kind === 'native' ? row.skill.error : '') || t('settings.skills.no-description') }}
+                </span>
+                <!-- The source and sync badges lead the meta line, so the name keeps the full width. -->
+                <span class="skill-card-delivery">
+                  <span v-truncate class="skill-source-tag" :class="row.kind">{{ rowSourceLabel(row) }}</span>
                   <span
                     v-if="row.kind === 'shared' && row.skill.syncTooLarge"
                     class="skill-badge warning"
@@ -1011,19 +1028,16 @@ watch(
                     data-testid="skill-sync-via-blobs"
                     :title="t('settings.skills.sync-via-blobs-hint')"
                   >{{ blobSyncBadge(row.skill) }}</span>
-                </span>
-                <span class="skill-card-desc" v-truncate>
-                  {{ row.skill.description || (row.kind === 'native' ? row.skill.error : '') || t('settings.skills.no-description') }}
-                </span>
-                <span class="skill-card-delivery" aria-hidden="true">
-                  <span v-if="deliverySummary(row).auto.length" class="dchip auto">
-                    {{ t('settings.skills.delivery-auto', { n: deliverySummary(row).auto.length }) }}
+                  <span class="skill-card-delivery-chips" aria-hidden="true">
+                    <span v-if="deliverySummary(row).auto.length" class="dchip auto">
+                      {{ t('settings.skills.delivery-auto', { n: deliverySummary(row).auto.length }) }}
+                    </span>
+                    <span v-for="key in deliverySummary(row).on" :key="key" class="dchip on">{{ key }}</span>
+                    <span
+                      v-if="!deliverySummary(row).auto.length && !deliverySummary(row).on.length"
+                      class="dchip none"
+                    >{{ t('settings.skills.delivery-none') }}</span>
                   </span>
-                  <span v-for="key in deliverySummary(row).on" :key="key" class="dchip on">{{ key }}</span>
-                  <span
-                    v-if="!deliverySummary(row).auto.length && !deliverySummary(row).on.length"
-                    class="dchip none"
-                  >{{ t('settings.skills.delivery-none') }}</span>
                 </span>
               </button>
             </div>
@@ -1050,7 +1064,7 @@ watch(
               </thead>
               <tbody v-for="group in groupedRows" :key="group.source">
                 <tr class="group">
-                  <th scope="rowgroup" :colspan="agents.length + 2">{{ group.label }}</th>
+                  <th scope="rowgroup" :colspan="agents.length + 2"><i18n-t :keypath="group.keypath" tag="span" scope="global"><template #[group.param]><span class="skills-group-id">{{ group.value }}</span></template></i18n-t></th>
                 </tr>
                 <tr
                   v-for="row in group.rows"
@@ -1114,7 +1128,7 @@ watch(
         <header class="skill-drawer-head">
           <div class="skill-drawer-title">
             <h3>{{ selectedRow.skill.name }}</h3>
-            <span class="skill-source-tag" :class="selectedRow.kind">{{ rowSourceLabel(selectedRow) }}</span>
+            <span v-truncate class="skill-source-tag" :class="selectedRow.kind">{{ rowSourceLabel(selectedRow) }}</span>
             <span
               v-if="selectedRow.kind === 'shared' && selectedRow.skill.valid === false"
               class="skill-badge danger"
@@ -1330,11 +1344,23 @@ watch(
   justify-content: space-between;
   gap: 10px;
 }
-.skills-toolbar h2,
+/* Narrow widths: the actions wrap below the heading instead of squeezing it. */
+.skills-toolbar,
+.skills-toolbar-actions { flex-wrap: wrap; }
+/* The text keeps a ~480px basis, so under ~700px of width the buttons drop
+   below it instead of squeezing it into a narrow column. */
+.skills-toolbar > div:first-child { flex: 1 1 480px; min-width: 0; }
 .skill-editor-head h3 { margin: 0; color: var(--text-bright); }
-.skills-toolbar h2 { font-size: 15px; }
+/* The section heading is SettingsSection's label. */
+.skills-toolbar h2 {
+  margin: 0;
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
 .skill-editor-head h3 { font-size: var(--font-md); }
-.skills-toolbar p,
 .skill-editor-head p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); }
 button,
 input,
@@ -1393,7 +1419,7 @@ summary:focus-visible { outline: 2px solid var(--accent-emphasis); outline-offse
 .skills-create label > span,
 .skill-form > label > span,
 .skill-advanced-grid label > span {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1416,7 +1442,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
 .skills-state { display: flex; flex-direction: column; gap: 4px; padding: 18px 8px; color: var(--text-secondary); font-size: var(--font-2xs); text-align: center; }
 .skills-state strong { color: var(--text-bright); }
 .skill-editor-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
-.skill-badge { border-radius: var(--radius-pill); padding: 2px 7px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.skill-badge { border-radius: var(--radius-pill); padding: 2px 7px; font-size: var(--font-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
 .skill-badge.danger { color: var(--danger-fg); background: color-mix(in srgb, var(--danger-fg) 12%, transparent); }
 .skill-badge.warning { color: var(--attention-fg); background: color-mix(in srgb, var(--attention-fg) 12%, transparent); }
 .skill-form { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
@@ -1425,7 +1451,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
 .skill-switches label + label { border-left: 1px solid var(--border-muted); }
 .skill-switches label > span { display: flex; flex-direction: column; gap: 2px; }
 .skill-switches strong { color: var(--text-bright); font-size: var(--font-2xs); }
-.skill-switches small { color: var(--text-secondary); font-size: var(--font-3xs); }
+.skill-switches small { color: var(--text-secondary); font-size: var(--font-2xs); }
 .skill-body { min-height: 210px; font-family: Menlo, Monaco, monospace; font-size: var(--font-2xs); }
 .skill-advanced { border: 1px solid var(--border-default); border-radius: var(--radius-card); background: var(--bg-muted); }
 .skill-advanced summary { padding: 9px 10px; cursor: pointer; color: var(--text-bright); font-size: var(--font-2xs); font-weight: 600; }
@@ -1435,7 +1461,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
 .skill-attachments strong { color: var(--text-bright); font-size: var(--font-2xs); }
 .skill-attachments span,
 .skill-attachments p,
-.skill-attachments li { color: var(--text-secondary); font-size: var(--font-3xs); }
+.skill-attachments li { color: var(--text-secondary); font-size: var(--font-2xs); }
 .skill-attachments p,
 .skill-attachments ul { margin: 0; }
 .skill-attachments ul { padding-left: 18px; font-family: Menlo, Monaco, monospace; }
@@ -1449,16 +1475,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   flex-wrap: wrap;
 }
 .skills-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.skills-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-2xs);
-}
-.skills-chip.on { background: var(--bg-elevated); color: var(--text-bright); border-color: var(--border-emphasis, var(--border-default)); font-weight: 600; }
-.skills-chip .count { font-size: var(--font-3xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
+/* The chips are the Settings window's shared .settings-filter-chip. */
 .skills-filterbar .skills-search { flex: 1; min-width: 140px; max-width: 260px; }
 .skills-filterbar .skills-view-switch { margin-left: auto; }
 
@@ -1487,7 +1504,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   letter-spacing: 0.02em;
   color: var(--text-secondary);
 }
-.skills-group-title .count { font-size: var(--font-3xs); font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.skills-group-title .count { font-size: var(--font-2xs); font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
 .skills-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -1500,7 +1517,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   gap: 5px;
   padding: 9px 11px;
   text-align: left;
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
   min-width: 0;
@@ -1509,7 +1526,7 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
 .skill-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
 .skill-card.off { opacity: 0.55; }
 .skill-card-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
-.skill-card-head strong { font-size: var(--font-xs); color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-card-head strong { font-size: var(--font-xs); color: var(--text-bright); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .skill-card-desc {
   font-size: var(--font-2xs);
   color: var(--text-secondary);
@@ -1519,14 +1536,36 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.skill-card-delivery { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.skill-card-delivery { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 2px; }
+/* The receivers read as one line of text that wraps between items: each item
+   but the last ends in "·" plus a breakable space, so a wrapped line never
+   starts with a separator. */
+.skill-card-delivery-chips { display: inline; min-width: 0; }
+/* On a card the delivery state repeats on every row, so it reads as neutral
+   text; colour stays on the drawer's toggles, where it marks what you change. */
+.skill-card-delivery-chips .dchip,
+.skill-card-delivery-chips .dchip.on,
+.skill-card-delivery-chips .dchip.auto {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 500;
+}
+.skill-card-delivery-chips .dchip:not(:last-child)::after {
+  content: '\00a0\00b7\0020\0020';
+  white-space: pre-wrap;
+  color: var(--text-muted);
+}
 
 /* delivery chips — cards (read-only) and drawer (interactive) share the look */
 .dchip {
   display: inline-block;
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   border: 1px solid var(--border-muted);
   color: var(--text-secondary);
@@ -1534,8 +1573,8 @@ input:disabled { color: var(--text-muted); background: var(--bg-muted); }
   white-space: nowrap;
   line-height: var(--lh-base);
 }
-.dchip.on { color: var(--success-fg); border-color: color-mix(in srgb, var(--success-fg) 40%, transparent); }
-.dchip.auto { color: var(--success-fg); background: color-mix(in srgb, var(--success-fg) 14%, transparent); border-color: transparent; }
+.dchip.on { color: var(--success-on-subtle); border-color: color-mix(in srgb, var(--success-fg) 40%, transparent); }
+.dchip.auto { color: var(--success-on-subtle); background: color-mix(in srgb, var(--success-fg) 14%, transparent); border-color: transparent; }
 .dchip.none { font-style: italic; opacity: 0.8; }
 .dchip.planned, .dchip.off { opacity: 0.7; }
 button.dchip { cursor: pointer; }
@@ -1549,7 +1588,7 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-muted);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   color: var(--text-secondary);
   white-space: nowrap;
   flex: none;
@@ -1574,17 +1613,17 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 .skill-drawer-title h3 { margin: 0; font-size: var(--font-md); color: var(--text-bright); }
 .skill-drawer-close { padding: 2px 7px; font-size: var(--font-xs); line-height: 1; }
 .skill-drawer-section { display: flex; flex-direction: column; gap: 6px; }
-.skill-drawer-section h4 { margin: 0; font-size: var(--font-3xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.skill-drawer-section h4 { margin: 0; font-size: var(--font-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .skill-drawer-toggle { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
 .skill-drawer-toggle strong { display: block; font-size: var(--font-xs); color: var(--text-bright); }
-.skill-drawer-toggle small { display: block; font-size: 10.5px; color: var(--text-secondary); }
+.skill-drawer-toggle small { display: block; font-size: var(--font-2xs); color: var(--text-secondary); }
 .skill-drawer-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.skill-drawer-hint { margin: 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; }
-.skill-drawer-path { display: block; font-size: 10.5px; padding: 5px 8px; border-radius: var(--radius-control); background: var(--bg-muted); word-break: break-all; }
-.skill-drawer-prose { margin: 0; font-size: 11.5px; line-height: var(--lh-base); color: var(--text-primary); white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto; }
+.skill-drawer-hint { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); line-height: 1.4; }
+.skill-drawer-path { display: block; font-size: var(--font-2xs); padding: 5px 8px; border-radius: var(--radius-control); background: var(--bg-muted); word-break: break-all; }
+.skill-drawer-prose { margin: 0; font-size: 11.5px; line-height: var(--lh-base); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; }
 .skill-drawer-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .skill-drawer-actions.secondary { justify-content: flex-start; margin-top: 0; }
-.skill-badge { border-radius: var(--radius-pill); padding: 2px 7px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.skill-badge { border-radius: var(--radius-pill); padding: 2px 7px; font-size: var(--font-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
 .skill-badge.danger { color: var(--danger-fg); background: color-mix(in srgb, var(--danger-fg) 12%, transparent); }
 .skill-badge.warning { color: var(--attention-fg); background: color-mix(in srgb, var(--attention-fg) 12%, transparent); }
 
@@ -1601,20 +1640,7 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 }
 
 /* ── Capability matrix ─────────────────────────────────────────────────── */
-.skills-view-switch {
-  display: inline-flex;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-  overflow: hidden;
-}
-.skills-view-switch button {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 5px 11px;
-  font-size: var(--font-2xs);
-}
-.skills-view-switch button.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
+/* The view switch is the modal's shared .settings-segmented control. */
 .skills-matrix {
   display: flex;
   flex: 1;
@@ -1669,7 +1695,7 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
   text-align: left;
 }
 .skills-matrix .matrix-name:hover { text-decoration: underline; background: transparent; }
-.skills-matrix .matrix-note { display: block; color: var(--text-secondary); font-size: var(--font-3xs); }
+.skills-matrix .matrix-note { display: block; color: var(--text-secondary); font-size: var(--font-2xs); }
 .skills-matrix tbody tr.off th,
 .skills-matrix tbody tr.off td { opacity: 0.5; }
 .skills-matrix td > button {
@@ -1688,7 +1714,7 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 .skills-matrix td.unsupported > button { color: var(--text-secondary); opacity: 0.6; }
 .skills-matrix td.unsupported { background: var(--bg-muted); }
 .skills-matrix td.bulk { padding: 3px 7px; display: flex; gap: 5px; }
-.skills-matrix td.bulk button { padding: 2px 7px; font-size: var(--font-3xs); }
+.skills-matrix td.bulk button { padding: 2px 7px; font-size: var(--font-2xs); }
 .skills-matrix-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1697,7 +1723,7 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
   padding: 0;
   list-style: none;
   color: var(--text-secondary);
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
 }
 .skills-matrix-legend li { display: flex; align-items: center; gap: 5px; }
 .skills-matrix-legend .swatch {
@@ -1713,21 +1739,27 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 .skills-matrix-legend .swatch.unsupported { background: var(--bg-muted); }
 /* ── Two sources ─────────────────────────────────────────────────────── */
 .skills-group-title {
-  margin: 10px 4px 4px;
-  font-size: var(--font-3xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  /* SettingsSection's label, on the page's left content line. Sentence case,
+     not caps: each heading names a CLI or a path ("Claude Code's own",
+     "~/.agents/skills"), and caps around a name that keeps its own case
+     read as "claude'S OWN". */
+  margin: 10px 0 8px;
+  font-size: var(--font-row-desc);
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .skill-migrate { padding: 3px 8px; font-size: var(--font-2xs); white-space: nowrap; }
+/* Paths and ids keep their own case in every locale. */
+.skills-group-id { text-transform: none; letter-spacing: normal; }
+/* A folder in a heading is a path, not part of the label: muted mono. */
+.skills-group-id--path { font-family: var(--font-mono); font-weight: 400; color: var(--text-muted, var(--text-secondary)); }
 .skill-source-tag,
 .skills-matrix .matrix-source {
   display: inline-block;
   padding: 1px 6px;
   border-radius: 999px;
   border: 1px solid var(--border-muted);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -1737,10 +1769,8 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
   z-index: 1;
   background: var(--bg-muted);
   text-align: left;
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--text-secondary);
   padding: 5px 9px 4px 7px;
 }

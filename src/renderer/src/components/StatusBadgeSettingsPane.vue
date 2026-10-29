@@ -10,6 +10,7 @@
 // has to stay legible across five themes, which a free hex cannot promise. The
 // swatches render their real resolved colour under the current theme by binding
 // the palette's token expressions straight into the button.
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AVAILABLE_UI_LOCALES, vTruncate, type UiLocale } from '@navide/plugin-ui/foundation'
 
@@ -42,6 +43,12 @@ function defaultLabel(status: PaneStatusValue, locale: string): string {
   return t(paneStatusLabelKey(status), {}, { locale })
 }
 
+/** The internal key is worth showing only when it reads differently from
+ *  the localized name ("starting" beside "Starting" just repeats it). */
+function showsKey(status: PaneStatusValue): boolean {
+  return status.toLowerCase() !== defaultLabel(status, locale.value).trim().toLowerCase()
+}
+
 function colorOf(status: PaneStatusValue): StatusColorKey {
   return prefs.value[status]?.color ?? DEFAULT_STATUS_COLORS[status]
 }
@@ -54,6 +61,11 @@ function swatchStyle(color: StatusColorKey): Record<string, string> {
 }
 
 function previewStyle(status: PaneStatusValue): Record<string, string> {
+  // An unchanged 'starting' paints through its role tokens on every pane, so
+  // the preview uses the same ones (a theme may move them off the yellow).
+  if (status === 'starting' && !prefs.value[status]?.color) {
+    return { background: 'var(--status-starting-subtle)', color: 'var(--status-starting-fg)' }
+  }
   const spec = STATUS_COLOR_PALETTE[colorOf(status)]
   return { background: spec.bg, color: spec.fg }
 }
@@ -67,17 +79,15 @@ function isCustomized(status: PaneStatusValue): boolean {
   return !!prefs.value[status]
 }
 
-/** One label column per UI language that has a catalog. The original three
- *  keep their column headings; a later language is headed by its own name. */
-const LEGACY_COLUMN_KEYS: Partial<Record<UiLocale, string>> = {
-  'zh-TW': 'statusBadges.col.zh',
-  'en-US': 'statusBadges.col.en',
-  'ja-JP': 'statusBadges.col.ja',
-}
-const LABEL_COLUMNS = AVAILABLE_UI_LOCALES.map((code) => ({
-  code,
-  headingKey: LEGACY_COLUMN_KEYS[code] ?? `settings.appearance.language-${code}`,
-}))
+/** One label column per UI language that has a catalog, each headed by the
+ *  language's own name ("日本語", "Deutsch") read from that language's catalog,
+ *  so every column is named the same way in every UI language. */
+const LABEL_COLUMNS = computed(() =>
+  AVAILABLE_UI_LOCALES.map((code) => ({
+    code,
+    heading: t(`settings.appearance.language-${code}`, {}, { locale: code }),
+  }))
+)
 
 function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void {
   setStatusBadgePref(status, { labels: { [locale]: value } })
@@ -85,12 +95,12 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
 </script>
 
 <template>
+  <div class="sb-wrap">
   <div class="sb" :style="{ '--sb-label-cols': LABEL_COLUMNS.length }">
-    <p class="sb-intro">{{ $t('statusBadges.intro') }}</p>
 
     <div class="sb-head">
       <span class="sb-h-status">{{ $t('statusBadges.col.status') }}</span>
-      <span v-for="column in LABEL_COLUMNS" :key="column.code" class="sb-h-label">{{ $t(column.headingKey) }}</span>
+      <span v-for="column in LABEL_COLUMNS" :key="column.code" class="sb-h-label">{{ column.heading }}</span>
       <span class="sb-h-color">{{ $t('statusBadges.col.color') }}</span>
       <span class="sb-h-reset"></span>
     </div>
@@ -106,7 +116,10 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
           {{ previewLabel(status, locale) }}
         </span>
         <span class="sb-key">
-          <span class="sb-key-name" v-truncate>{{ status }}</span>
+          <!-- The localized status name titles the card; the internal key
+               stays beside it as muted secondary text when it differs. -->
+          <span class="sb-key-name" v-truncate>{{ defaultLabel(status, locale) }}</span>
+          <code v-if="showsKey(status)" class="sb-key-id">{{ status }}</code>
           <em v-if="ROW_ONLY.includes(status)" class="sb-rowonly">
             {{ $t('statusBadges.row-only') }}
           </em>
@@ -115,7 +128,9 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
       </div>
 
       <label v-for="column in LABEL_COLUMNS" :key="column.code" class="sb-field">
-        <span class="sb-sr">{{ $t(column.headingKey) }} — {{ status }}</span>
+        <span class="sb-sr">{{ column.heading }} — {{ status }}</span>
+        <!-- Stacked (narrow) rows have no column heading above them, so each input names its language. -->
+        <span class="sb-field-label" aria-hidden="true">{{ column.heading }}</span>
         <input
           type="text"
           maxlength="24"
@@ -137,7 +152,11 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
           :style="swatchStyle(color)"
           :title="$t(`statusBadges.color.${color}`)"
           @click="setStatusBadgePref(status, { color })"
-        />
+        >
+          <!-- The pick carries a check in the swatch's own text colour, not
+               only the ring around it. -->
+          <svg v-if="colorOf(status) === color" class="sb-swatch-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>
+        </button>
       </div>
 
       <button
@@ -163,25 +182,26 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
       </button>
     </div>
   </div>
+  </div>
 </template>
 
 <style scoped>
+/* The wrapper is the query container: the grid below switches to stacked cards
+ * from the width it actually gets, not from the window width. */
+.sb-wrap {
+  container: sb / inline-size;
+}
+/* The description and label columns may shrink below their text so the grid's
+ * minimum stays inside the content gutter at the modal's widest; under that
+ * minimum the container query below stacks the rows instead. */
 .sb {
   display: grid;
-  grid-template-columns: max-content minmax(120px, 2fr) repeat(var(--sb-label-cols, 3), minmax(108px, 1fr)) max-content max-content;
+  grid-template-columns: max-content minmax(0, 2fr) repeat(var(--sb-label-cols, 3), minmax(72px, 1fr)) max-content max-content;
   column-gap: 12px;
   row-gap: 2px;
 }
-.sb-intro,
 .sb-foot {
   grid-column: 1 / -1;
-}
-.sb-intro {
-  margin: 0 0 14px;
-  font-size: var(--font-row-desc);
-  color: var(--text-secondary);
-  line-height: 1.6;
-  max-width: 68ch;
 }
 
 /* The header and every row are subgrids of .sb, so the auto-sized colour and
@@ -235,7 +255,8 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   grid-area: preview;
   align-self: center;
   justify-self: start;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
+  font-weight: 600;
   text-transform: uppercase;
   padding: 2px 8px;
   border-radius: 999px;
@@ -250,8 +271,8 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   align-items: center;
   gap: 2px 6px;
   min-width: 0;
-  font-family: var(--font-mono, monospace);
   font-size: var(--font-row-desc);
+  font-weight: 600;
   color: var(--text-primary);
 }
 .sb-key-name {
@@ -260,10 +281,17 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.sb-key-id {
+  font-family: var(--font-mono);
+  font-size: var(--font-2xs);
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 .sb-rowonly {
   font-family: inherit;
   font-style: normal;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -286,6 +314,9 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
 .sb-field {
   display: block;
   min-width: 0;
+}
+.sb-field-label {
+  display: none;
 }
 .sb-field input {
   width: 100%;
@@ -335,6 +366,9 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   height: 24px;
   border-radius: 50%;
   border: 1px solid var(--border-muted);
+  /* A 1px muted outline outside the swatch's own border, so a white or pale
+   * swatch stays visible on a white page. */
+  box-shadow: 0 0 0 1px var(--border-muted);
   padding: 0;
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -347,6 +381,11 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
 .sb-swatch.is-on {
   box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent-focus);
 }
+.sb-swatch {
+  display: inline-grid;
+  place-items: center;
+}
+.sb-swatch-check { display: block; }
 .sb-swatch:focus-visible {
   outline: 2px solid var(--accent-focus);
   outline-offset: 2px;
@@ -394,9 +433,10 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   line-height: 1.6;
 }
 
-/* Below the three-input width the grid stops being a table and becomes stacked
- * cards, which is the only way nine rows of six columns stay usable. */
-@media (max-width: 920px) {
+/* Below the width the table needs the grid becomes stacked cards. With one
+ * label column per UI locale (eleven) the table needs about 1340px, more than
+ * the modal's content area ever gets, so in practice the rows always stack. */
+@container sb (max-width: 1360px) {
   .sb {
     display: flex;
     flex-direction: column;
@@ -409,14 +449,27 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
     grid-template-columns: auto 1fr;
     column-gap: 10px;
   }
+  /* The language inputs flow into as many columns as fit; the status, the
+   * swatches and the reset button each take a full line. */
   .sb-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px 12px;
     border-color: var(--border-muted);
     margin-bottom: 8px;
   }
+  .sb-row > .sb-status,
+  .sb-row > .sb-colors,
+  .sb-row > .sb-reset {
+    grid-column: 1 / -1;
+  }
   .sb-reset {
     justify-self: start;
+  }
+  .sb-field-label {
+    display: block;
+    margin-bottom: 2px;
+    font-size: var(--font-2xs);
+    color: var(--text-secondary);
   }
 }
 </style>

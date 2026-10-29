@@ -155,6 +155,7 @@ import SettingsSection from './settings/SettingsSection.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingRow from './settings/SettingRow.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import PathText from './settings/PathText.vue'
 import RecentWorkspacesLimitRow from './settings/RecentWorkspacesLimitRow.vue'
 import ResourceLimitsSection from './settings/ResourceLimitsSection.vue'
 import VoiceSettingsSection from './settings/VoiceSettingsSection.vue'
@@ -294,14 +295,19 @@ const visitedCliExtensions = ref(activeTab.value === 'cliExtensions')
 // Navide Plugins is four pages under its sidebar entry: the plugins, the
 // execution policy, developer and native settings, and the disclosure records.
 type PluginsPage = 'plugins' | 'policy' | 'developer' | 'disclosure'
+// `title` is the page heading where the sidebar label alone ("Installed")
+// would lose its parent.
 const pluginsPages = [
-  { id: 'plugins', label: 'settings.extensions.listTitle' },
+  { id: 'plugins', label: 'settings.extensions.listTitle', title: 'settings.extensions.installedTitle' },
   { id: 'policy', label: 'settings.nav.executionPolicy' },
   { id: 'developer', label: 'settings.extensions.developerNative' },
   { id: 'disclosure', label: 'settings.nav.disclosureOverview' },
-] as const satisfies ReadonlyArray<{ id: PluginsPage; label: string }>
+] as const satisfies ReadonlyArray<{ id: PluginsPage; label: string; title?: string }>
 const pluginsPage = ref<PluginsPage>('plugins')
-const pluginsPageLabel = computed(() => pluginsPages.find((page) => page.id === pluginsPage.value)!.label)
+const pluginsPageTitle = computed(() => {
+  const page: { label: string; title?: string } = pluginsPages.find((entry) => entry.id === pluginsPage.value)!
+  return page.title ?? page.label
+})
 // The pages split what used to be one scrolling page, so each page's state shows
 // on its row before it is opened: ⚠ on Execution Policy while that page shows a
 // warning, "On" on Developer while Developer Mode or a native-backend switch is on.
@@ -313,13 +319,32 @@ function pluginsPageMarker(page: PluginsPage): { text: string; tone: 'risk' | 'o
   }
   if (page === 'developer' && developerSwitchesOn.value.length) {
     const on = t('settings.extensions.pageOn')
-    return { text: on, tone: 'on', label: t('settings.extensionsPolicy.labeledValue', { label: on, value: developerSwitchesOn.value.join(', ') }) }
+    return { text: developerMarkerText.value, tone: 'on', label: t('settings.extensionsPolicy.labeledValue', { label: on, value: developerSwitchesOn.value.join(', ') }) }
   }
   return null
 }
+// One marker text on the page row and the folded parent row, naming the switch
+// that is on: "Dev" while Developer Mode is on, "Native" while only a
+// native-code switch is.
+const developerMarkerText = computed(() =>
+  developerSwitchesOn.value.includes(t('settings.extensions.developerMode.switch'))
+    ? t('settings.extensions.developerOnMarker')
+    : t('settings.extensions.nativeOnMarker'),
+)
 // The pages fold away while another entry is open, so the Navide Plugins row
-// carries their state instead: a warning first, otherwise "On".
-const pluginsFoldedMarker = computed(() => activeTab.value === 'extensions' ? null : pluginsPageMarker('policy') ?? pluginsPageMarker('developer'))
+// carries their state instead: a warning first, otherwise "Developer on" (a
+// bare "On" next to the entry's name would read as the plugins being on).
+const pluginsFoldedMarker = computed(() => {
+  if (activeTab.value === 'extensions') return null
+  const warning = pluginsPageMarker('policy')
+  if (warning) return warning
+  if (!developerSwitchesOn.value.length) return null
+  return {
+    text: developerMarkerText.value,
+    tone: 'on' as const,
+    label: t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.developerNative'), value: developerSwitchesOn.value.join(', ') }),
+  }
+})
 /** The page each section of the former single Navide Plugins page lives on. */
 const PLUGINS_SECTION_PAGE: Readonly<Record<string, PluginsPage>> = {
   'extensions-bundled': 'plugins',
@@ -346,6 +371,39 @@ watch(activeTab, (tab, previous) => {
   if (tab === 'extensions' && previous !== 'extensions' && previous !== 'disclosureOverview') pluginsPage.value = 'plugins'
 }, { immediate: true, flush: 'sync' })
 watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.value = true })
+// Keep the active sidebar row visible when the tab changes (or Settings opens
+// on a tab near the bottom of the list). Only the sidebar scrolls.
+const navRef = ref<HTMLElement | null>(null)
+// The Navide Plugins page counts too: picking one of its rows (or a search hit
+// opening one) can land on a row below the fold. `navRef` is inside
+// `.s-sidebar`, the element that actually scrolls.
+// The sticky title and search sit over the top of that scroller: their
+// height feeds its scroll-padding-top, so a revealed row lands below them.
+const sidebarHeadRef = ref<HTMLElement | null>(null)
+let sidebarHeadObserver: ResizeObserver | null = null
+function measureSidebarHead(): void {
+  const head = sidebarHeadRef.value
+  if (!head) return
+  head.parentElement?.style.setProperty('--s-sidebar-head-h', `${head.offsetHeight}px`)
+}
+function revealActiveNavRow(): void {
+  const nav = navRef.value
+  const row = nav?.querySelector<HTMLElement>('.settings-nav-subitem.active')
+    ?? nav?.querySelector<HTMLElement>('.settings-nav-item.active')
+  row?.scrollIntoView?.({ block: 'nearest' })
+}
+watch([activeTab, pluginsPage], revealActiveNavRow, { flush: 'post' })
+// Opening Settings (on any page) reveals its row too: an immediate watcher
+// would run before the sidebar exists.
+onMounted(() => {
+  measureSidebarHead()
+  if (typeof ResizeObserver !== 'undefined' && sidebarHeadRef.value) {
+    sidebarHeadObserver = new ResizeObserver(measureSidebarHead)
+    sidebarHeadObserver.observe(sidebarHeadRef.value)
+  }
+  void nextTick(revealActiveNavRow)
+})
+onBeforeUnmount(() => { sidebarHeadObserver?.disconnect() })
 // D-f: the disclosure overview reads every plugin's activity, so it mounts the
 // first time its page is shown (opening Settings, or another page, reads
 // nothing), and it polls only while that page is shown.
@@ -578,9 +636,17 @@ const cliAgentRows = computed(() => {
         label: spec.label,
         hint: spec.hint ?? '',
         version: dep?.version ?? '',
-        needsAttention: dep?.status === 'missing' || dep?.status === 'outdated'
+        // A CLI that is not installed has nothing to fix yet: no warning glyph,
+        // and it is not counted under "Needs attention" at all, signed-out
+        // state and health findings included (an empty machine would
+        // otherwise show every agent there). Only problems the user can act
+        // on for an installed CLI count.
+        installed: dep?.status !== 'missing',
+        needsAttention: dep?.status !== 'missing' && (
+          dep?.status === 'outdated'
           || identity?.signedIn === false
-          || !!onboarding.cliHealth.value?.findings.some((finding) => finding.agent_key === spec.agentKey),
+          || !!onboarding.cliHealth.value?.findings.some((finding) => finding.agent_key === spec.agentKey)
+        ),
         chips: cliAgentRowChips(
           {
             install: dep ? { status: dep.status, version: dep.version } : null,
@@ -834,7 +900,7 @@ function onCliDrop(k: string): void {
   cliOrder.value = keys
 }
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 interface SettingsSearchItem {
   id: string
@@ -1383,6 +1449,11 @@ const {
   setCustomOverrides,
   resetCustom,
 } = useTheme()
+/** A built-in theme's name in the UI language; its catalog label otherwise. */
+function themeLabel(theme: { id: string; label: string }): string {
+  const key = `settings.appearance.theme-name.${theme.id}`
+  return te(key) ? t(key) : theme.label
+}
 
 // ── Language ──────────────────────────────────────────────────────────────────
 const { language: currentLanguage, setLanguage, healthCheckTimeoutSec, setHealthCheckTimeoutSec } = useSettings()
@@ -1662,8 +1733,14 @@ interface SettingsPaths {
 }
 const settingsPaths = ref<SettingsPaths>({})
 const settingsBundleBusy = ref(false)
-const settingsBundleSummary = ref('')
-const settingsBundleError = ref('')
+// Bundle messages keep their i18n keys and are translated when shown, so a
+// language change on the Language page never leaves them in the old language.
+type BundleMessage = { key: string; params?: Record<string, unknown> } | { text: string }
+const settingsBundleSummary = ref<BundleMessage[]>([])
+const settingsBundleError = ref<BundleMessage | null>(null)
+function bundleMessageText(message: BundleMessage): string {
+  return 'key' in message ? t(message.key, message.params ?? {}) : message.text
+}
 
 /** Tabs that actually hold settings. `help` is read-only reference material, so
  *  it has no scope badge and no settings file to reveal. `disclosureOverview`
@@ -1718,6 +1795,13 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
 
 // Two letters per CLI card: the first letter and the first consonant after
 // it, so names that share a prefix (Kimi, Kilo) still read apart.
+/** "Kimi Code CLI (Moonshot AI)" → name and vendor, so a card shows the
+ *  vendor as its own muted line instead of wrapping "AI)" onto one. */
+function cardNameParts(label: string): { name: string; vendor: string } {
+  const match = /^(.*\S)\s*\(([^()]+)\)$/.exec(label)
+  return match ? { name: match[1], vendor: match[2] } : { name: label, vendor: '' }
+}
+
 function cardInitials(label: string): string {
   const second = label.slice(1).match(/[b-df-hj-np-tv-z]/i)?.[0] ?? label.slice(1, 2)
   return (label.slice(0, 1) + second).toUpperCase()
@@ -1750,6 +1834,12 @@ function pathForStorage(storage: SettingsStorage): string {
   return settingsPaths.value[storage] ?? ''
 }
 
+/** True when the storage is described in words ("Stored encrypted on this
+ *  computer") rather than by a file path, so it is set in the body font. */
+function storageIsProse(storage: SettingsStorage): boolean {
+  return storage === 'localStorage' || storage === 'mainProcess' || storage === 'safeStorage' || storage === 'cliFiles'
+}
+
 function pathForTab(tab: SettingsTab): string {
   return pathForStorage(settingsScopeNotes[tab].storage)
 }
@@ -1766,11 +1856,11 @@ function stampForFile(): string {
 async function exportSettingsBundle(): Promise<void> {
   if (!window.agentTeam?.saveJson) return
   settingsBundleBusy.value = true
-  settingsBundleError.value = ''
+  settingsBundleError.value = null
   try {
     const resp = await props.backend.send<{ bundle: Record<string, unknown> }>('settings.bundle.export', {})
     if (!resp.ok || !resp.payload?.bundle) {
-      settingsBundleError.value = resp.error?.message ?? t('settings.management.export-failed')
+      settingsBundleError.value = resp.error?.message != null ? { text: resp.error.message } : { key: 'settings.management.export-failed' }
       return
     }
     const bundle = {
@@ -1788,9 +1878,9 @@ async function exportSettingsBundle(): Promise<void> {
       defaultName: `agent-team-settings-${stampForFile()}.json`,
       content: JSON.stringify(bundle, null, 2),
     })
-    if (result.ok) settingsBundleSummary.value = t('settings.management.exported')
+    if (result.ok) settingsBundleSummary.value = [{ key: 'settings.management.exported' }]
   } catch (err) {
-    settingsBundleError.value = err instanceof Error ? err.message : t('settings.management.export-failed')
+    settingsBundleError.value = err instanceof Error ? { text: err.message } : { key: 'settings.management.export-failed' }
   } finally {
     settingsBundleBusy.value = false
   }
@@ -1799,14 +1889,14 @@ async function exportSettingsBundle(): Promise<void> {
 async function importSettingsBundle(): Promise<void> {
   if (!window.agentTeam?.openJson) return
   settingsBundleBusy.value = true
-  settingsBundleError.value = ''
+  settingsBundleError.value = null
   try {
     const result = await window.agentTeam.openJson({ title: t('settings.management.import-dialog-title') })
     if (!result.ok || !result.content) return
     const bundle = JSON.parse(result.content) as Record<string, unknown>
     const resp = await props.backend.send<{ applied: string[]; mcp_needs_secrets?: string[]; paths: SettingsPaths }>('settings.bundle.import', { bundle })
     if (!resp.ok) {
-      settingsBundleError.value = resp.error?.message ?? t('settings.management.import-failed')
+      settingsBundleError.value = resp.error?.message != null ? { text: resp.error.message } : { key: 'settings.management.import-failed' }
       return
     }
     const appearance = bundle.appearance as Record<string, unknown> | undefined
@@ -1831,13 +1921,13 @@ async function importSettingsBundle(): Promise<void> {
     ])
     const applied = resp.payload?.applied ?? []
     if (shouldReloadMcpAfterBundleImport(applied)) await mLoad(true)
-    settingsBundleSummary.value = t('settings.management.imported', { items: applied.join(', ') || 'appearance' })
+    settingsBundleSummary.value = [{ key: 'settings.management.imported', params: { items: applied.join(', ') || 'appearance' } }]
     const needsSecrets = resp.payload?.mcp_needs_secrets ?? []
     if (needsSecrets.length) {
-      settingsBundleSummary.value += ` ${t('settings.management.mcp-needs-secrets', { items: needsSecrets.join(', ') })}`
+      settingsBundleSummary.value.push({ key: 'settings.management.mcp-needs-secrets', params: { items: needsSecrets.join(', ') } })
     }
   } catch (err) {
-    settingsBundleError.value = err instanceof Error ? err.message : t('settings.management.import-failed')
+    settingsBundleError.value = err instanceof Error ? { text: err.message } : { key: 'settings.management.import-failed' }
   } finally {
     settingsBundleBusy.value = false
   }
@@ -2663,6 +2753,8 @@ watch(activeTab, (tab) => {
 
         <!-- ── Sidebar (title + search + grouped nav) ────────────────────── -->
         <aside class="s-sidebar" :inert="!!selectedCliKey">
+          <!-- Title and search stay put; only the list below them scrolls. -->
+          <div ref="sidebarHeadRef" class="s-sidebar-head">
           <div class="s-ws-header">
             <div class="s-ws-avatar" aria-hidden="true">
               <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7 3.4 3.4"/></svg>
@@ -2699,8 +2791,9 @@ watch(activeTab, (tab) => {
               </div>
             </div>
           </div>
+          </div>
 
-          <nav class="s-nav" :aria-label="$t('settings.nav.sections-label')">
+          <nav class="s-nav" ref="navRef" :aria-label="$t('settings.nav.sections-label')">
             <div class="s-nav-group">
               <div class="s-nav-group-title">{{ $t('settings.nav.group.general') }}</div>
               <SettingsNavItem :label="$t('settings.nav.general')" :active="activeTab === 'general'" @select="activeTab = 'general'">
@@ -2812,7 +2905,7 @@ watch(activeTab, (tab) => {
                   <NavideCloudMark variant="solid" class="nvc-nav-mark" />
                 </template>
               </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :badge="pluginUpdates.count.value" :marker="pluginsFoldedMarker" @select="activeTab = 'extensions'">
+              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :expanded="activeTab === 'extensions'" foldable :badge="pluginUpdates.count.value" :marker="pluginsFoldedMarker" @select="activeTab = 'extensions'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
                 </template>
@@ -2862,25 +2955,25 @@ watch(activeTab, (tab) => {
           <button class="s-close" :inert="!!selectedCliKey" @click="requestCloseSettings" :title="$t('action.close-esc')">✕</button>
 
         <!-- ── MCP TAB ───────────────────────────────────────────────────── -->
-        <div v-show="activeTab === 'mcp'" class="s-body s-body--bleed mcp-body">
+        <div v-show="activeTab === 'mcp'" class="s-body s-body--bleed s-body--wide mcp-body">
           <h1 class="s-page-title">{{ $t('settings.nav.mcp') }}</h1>
+          <p v-if="mView === 'list'" class="s-page-intro">{{ $t('settings.mcp.agent-intro') }}</p>
 
           <!-- ── LIST VIEW ──────────────────────────────────────────────── -->
           <template v-if="mView === 'list'">
-            <div class="mcp-topbar" data-settings-section="mcp-installed">
-              <span class="mcp-page-title">{{ $t('settings.mcp.all-title') }}</span>
-              <div class="mcp-topbar-actions">
-                <button class="mcp-action-btn" @click="mView = 'catalog'">{{ $t('action.add-mcp') }}</button>
-                <button class="mcp-action-btn" @click="mView = 'custom'">{{ $t('settings.mcp.add-custom') }}</button>
-                <button class="mcp-action-btn" @click="mLoad()" :disabled="mLoading">{{ $t('action.refresh') }}</button>
-                <button class="mcp-action-btn" @click="mOpenConfig" :disabled="!mConfigPath">{{ $t('action.open-mcp-config') }}</button>
-              </div>
-            </div>
-            <div class="settings-meta-row">
-              <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-              <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
-              <span class="settings-path" v-truncate>{{ pathForTab('mcp') }}</span>
-              <button class="settings-path-btn" :disabled="!settingsPaths.mcp" @click="openSettingsPath(settingsPaths.mcp)">{{ $t('action.open') }}</button>
+            <!-- Page title, the scope strip, then one toolbar row: the list's
+                 own header carries these actions next to its one Refresh. -->
+            <div class="settings-meta-row settings-meta-row--paths" data-settings-section="mcp-installed">
+              <span class="settings-meta-scope">
+                <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
+                <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
+              </span>
+              <span class="settings-meta-paths">
+                <span class="settings-meta-path">
+                  <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.mcp.storage) }" v-truncate>{{ pathForTab('mcp') }}</span>
+                  <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.mcp" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.mcp)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+                </span>
+              </span>
             </div>
             <p v-if="mError" class="err-msg" style="margin:6px 22px 0">{{ mError }}</p>
             <div v-if="mConflict" class="mcp-conflict">
@@ -2903,7 +2996,17 @@ watch(activeTab, (tab) => {
               @refresh="mLoad(true)"
               @select-consumed="mSelectName = ''"
               @install-node="mcpNodeInstallOpen = true"
-            />
+            >
+              <template #actions>
+                <button class="mcp-action-btn" @click="mView = 'custom'">{{ $t('settings.mcp.add-custom') }}</button>
+                <button class="mcp-action-btn" @click="mOpenConfig" :disabled="!mConfigPath">{{ $t('action.open-mcp-config') }}</button>
+              </template>
+              <!-- The page's one filled primary action, at the right of the
+                   toolbar like Skills' and Prompts' create buttons. -->
+              <template #primary>
+                <button class="mcp-action-btn mcp-action-btn--primary" @click="mView = 'catalog'">{{ $t('action.add-mcp') }}</button>
+              </template>
+            </McpPane>
             <!-- The same guided install the spawn dropdown uses for a CLI's
                  Node prerequisite (Homebrew first where it is missing). -->
             <CliInstallDialog
@@ -3041,13 +3144,20 @@ watch(activeTab, (tab) => {
         </div>
 
         <!-- ── SKILLS TAB ───────────────────────────────────────────────── -->
-        <div v-show="activeTab === 'skills'" class="s-body s-body--bleed" data-settings-section="skills">
+        <div v-show="activeTab === 'skills'" class="s-body s-body--bleed s-body--wide" data-settings-section="skills">
           <h1 class="s-page-title">{{ $t('settings.nav.skills') }}</h1>
-          <div class="settings-meta-row">
-            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
-            <span class="settings-path" v-truncate>{{ pathForTab('skills') }}</span>
-            <button class="settings-path-btn" :disabled="!settingsPaths.skills" @click="openSettingsPath(settingsPaths.skills)">{{ $t('action.open') }}</button>
+          <p class="s-page-intro">{{ $t('settings.skills.intro') }}</p>
+          <div class="settings-meta-row settings-meta-row--paths">
+            <span class="settings-meta-scope">
+              <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
+              <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
+            </span>
+            <span class="settings-meta-paths">
+              <span class="settings-meta-path">
+                <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.skills.storage) }" v-truncate>{{ pathForTab('skills') }}</span>
+                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.skills" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.skills)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+              </span>
+            </span>
           </div>
           <SkillsPane :backend="props.backend" />
         </div>
@@ -3055,19 +3165,21 @@ watch(activeTab, (tab) => {
         <!-- ── CREDENTIALS TAB ──────────────────────────────────────────── -->
         <div v-show="activeTab === 'credentials'" class="s-body s-body--bleed" data-settings-section="credentials">
           <h1 class="s-page-title">{{ $t('settings.nav.credentials') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.credentials.intro') }}</p>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.credentials.scope) }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.credentials.scope) }}</span>
           </div>
           <CredentialsPane :backend="props.backend" :active="activeTab === 'credentials'" @high-count="credentialsHighCount = $event" />
         </div>
 
         <!-- ── PROMPTS TAB ──────────────────────────────────────────────── -->
-        <div v-show="activeTab === 'prompts'" class="s-body s-body--bleed" data-settings-section="prompts">
+        <div v-show="activeTab === 'prompts'" class="s-body s-body--bleed s-body--wide" data-settings-section="prompts">
           <h1 class="s-page-title">{{ $t('settings.nav.prompts') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.prompts.intro') }}</p>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.prompts.scope) }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.prompts.scope) }}</span>
           </div>
           <PromptSkillsPane />
         </div>
@@ -3075,9 +3187,10 @@ watch(activeTab, (tab) => {
         <!-- ── MEMORY TAB ───────────────────────────────────────────────── -->
         <div v-show="activeTab === 'memory'" class="s-body s-body--bleed" data-settings-section="memory">
           <h1 class="s-page-title">{{ $t('settings.nav.memory') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.memory.intro') }}</p>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.memory.scope) }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.memory.scope) }}</span>
           </div>
           <!-- Project files belong to the folder that is actually open; the
                first known workspace is the current one whenever there is one. -->
@@ -3091,33 +3204,45 @@ watch(activeTab, (tab) => {
         <!-- ── ANALYZER TAB ─────────────────────────────────────────────── -->
         <div v-show="activeTab === 'analyzer'" class="s-body s-body--bleed analyzer-body">
           <h1 class="s-page-title">{{ $t('settings.nav.analyzer') }}</h1>
-          <div class="settings-meta-row">
-            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
-            <span class="settings-path" v-truncate>{{ settingsPaths.analyzer }}</span>
-            <button class="settings-path-btn" :disabled="!settingsPaths.analyzer" @click="openSettingsPath(settingsPaths.analyzer)">{{ $t('action.open') }}</button>
-            <span class="settings-path-divider">·</span>
-            <span class="settings-path" v-truncate>{{ $t('settings.analyzer.ai-keys-label') }} {{ settingsPaths.ai_chat }}</span>
-            <button class="settings-path-btn" :disabled="!settingsPaths.ai_chat" @click="openSettingsPath(settingsPaths.ai_chat)">{{ $t('action.open') }}</button>
+          <!-- Scope on the left; each file on a line of its own, shortened in
+               the middle, with its open button at the end. -->
+          <div class="settings-meta-row settings-meta-row--paths">
+            <span class="settings-meta-scope">
+              <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
+              <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
+            </span>
+            <span class="settings-meta-paths">
+              <span class="settings-meta-path">
+                <PathText class="settings-path" :path="settingsPaths.analyzer ?? ''" />
+                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.analyzer" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.analyzer)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+              </span>
+              <span class="settings-meta-path">
+                <span class="settings-meta-label">{{ $t('settings.analyzer.ai-keys-label') }}</span>
+                <PathText class="settings-path" :path="settingsPaths.ai_chat ?? ''" :max="48" />
+                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.ai_chat" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.ai_chat)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+              </span>
+            </span>
           </div>
 
           <!-- ① Inference backend -->
-          <div class="az-section" data-settings-section="analyzer-backend">
-            <div class="az-section-title">{{ $t('settings.analyzer.inference-backend') }}</div>
-            <div class="az-backend-toggle">
+          <SettingsSection class="az-section" data-settings-section="analyzer-backend" :label="$t('settings.analyzer.inference-backend')">
+            <SettingsCard>
+            <div class="az-row">
+            <div class="az-backend-toggle settings-segmented">
               <button
                 :class="['az-backend-btn', { active: props.analyzerApi.analyzerSettings.value.backend === 'ollama' }]"
                 @click="props.analyzerApi.saveSettings({ backend: 'ollama' })"
-              >Ollama REST</button>
+              >Ollama</button>
               <button
                 :class="['az-backend-btn', { active: props.analyzerApi.analyzerSettings.value.backend === 'llama_cpp' }]"
                 @click="props.analyzerApi.saveSettings({ backend: 'llama_cpp' })"
               >llama.cpp</button>
             </div>
+            </div>
 
             <!-- llama.cpp-specific settings -->
             <template v-if="props.analyzerApi.analyzerSettings.value.backend === 'llama_cpp'">
-              <div class="az-subsection">
+              <div class="az-subsection az-row">
                 <label class="az-label">{{ $t('settings.analyzer.llama-cli-path') }}
                   <span class="az-hint-inline">{{ $t('settings.analyzer.llama-cli-path-hint') }}</span>
                 </label>
@@ -3146,7 +3271,7 @@ watch(activeTab, (tab) => {
                 </div>
               </div>
 
-              <div class="az-subsection">
+              <div class="az-subsection az-row">
                 <label class="az-label">{{ $t('settings.analyzer.gguf-path') }}
                   <span class="az-hint-inline">{{ $t('settings.analyzer.gguf-path-hint') }}</span>
                 </label>
@@ -3179,9 +3304,9 @@ watch(activeTab, (tab) => {
               </div>
             </template>
 
-            <!-- Ollama REST-specific settings -->
+            <!-- Ollama-specific settings -->
             <template v-if="props.analyzerApi.analyzerSettings.value.backend === 'ollama'">
-              <div class="az-subsection">
+              <div class="az-subsection az-row">
                 <label class="az-label">{{ $t('settings.analyzer.inference-url') }}</label>
                 <div class="az-url-row">
                   <input
@@ -3215,16 +3340,17 @@ watch(activeTab, (tab) => {
                 />
               </div>
             </template>
-          </div>
+            </SettingsCard>
+          </SettingsSection>
 
           <!-- ② Model manager (Ollama mode only) -->
-          <div v-if="props.analyzerApi.analyzerSettings.value.backend === 'ollama'" class="az-section az-models-section" data-settings-section="analyzer-models">
-            <div class="az-section-header">
-              <div class="az-section-title">{{ $t('settings.analyzer.model-manager') }}</div>
-              <span class="az-section-note">{{ $t('settings.analyzer.model-manager-note') }}</span>
-            </div>
-
+          <SettingsSection v-if="props.analyzerApi.analyzerSettings.value.backend === 'ollama'" class="az-section az-models-section" data-settings-section="analyzer-models" :label="$t('settings.analyzer.model-manager')">
+            <!-- The standard label → description spacing, so the note never
+                 runs into the heading at narrow widths. -->
+            <p class="az-section-desc">{{ $t('settings.analyzer.model-manager-note') }}</p>
+            <SettingsCard>
             <!-- Pull a new model -->
+            <div class="az-row">
             <div class="az-pull-row">
               <input
                 class="az-input az-pull-input"
@@ -3267,6 +3393,7 @@ watch(activeTab, (tab) => {
             <div v-if="props.analyzerApi.pullError.value" class="az-pull-error">
               ⚠ {{ props.analyzerApi.pullError.value }}
             </div>
+            </div>
 
             <!-- Installed models list -->
             <div class="az-model-list">
@@ -3288,12 +3415,24 @@ watch(activeTab, (tab) => {
                 <button class="az-del-btn nv-btn nv-btn--danger" @click="azDoDelete(m.name)" :title="$t('settings.analyzer.delete-local-title')">✕</button>
               </div>
             </div>
-          </div>
+            </SettingsCard>
+          </SettingsSection>
 
           <!-- ③ Model benchmark -->
-          <div class="az-section az-benchmark-section" data-settings-section="analyzer-models">
-            <div class="az-section-header">
-              <div class="az-section-title">{{ $t('settings.analyzer.model-benchmark') }}</div>
+          <SettingsSection class="az-section az-benchmark-section" data-settings-section="analyzer-models" :label="$t('settings.analyzer.model-benchmark')">
+            <SettingsCard>
+            <!-- First row: what the benchmark does (or its result), Run on the right. -->
+            <div class="az-row az-run-row">
+              <div class="az-run-text">
+                <div v-if="props.analyzerApi.benchmarkResults.value.length > 0" class="az-results-summary">
+                  {{ $t('settings.analyzer.passed') }}
+                  <strong>{{ props.analyzerApi.benchmarkResults.value.filter(r => r.passed).length }}</strong>
+                  /
+                  {{ props.analyzerApi.benchmarkResults.value.length }}
+                  {{ $t('settings.analyzer.models', props.analyzerApi.benchmarkResults.value.length) }}
+                </div>
+                <p v-else class="az-run-desc">{{ $t('settings.analyzer.benchmark-hint') }}</p>
+              </div>
               <button
                 class="az-run-btn nv-btn nv-btn--primary"
                 :disabled="props.analyzerApi.benchmarking.value || !props.analyzerApi.health.value?.ok"
@@ -3312,10 +3451,9 @@ watch(activeTab, (tab) => {
               <div v-else class="az-progress-label">{{ $t('settings.analyzer.preparing') }}</div>
             </div>
 
-            <div v-if="!props.analyzerApi.benchmarking.value && props.analyzerApi.benchmarkResults.value.length === 0" class="az-hint">
-              <p>{{ $t('settings.analyzer.benchmark-hint') }}</p>
+            <div v-if="!props.analyzerApi.benchmarking.value && props.analyzerApi.benchmarkResults.value.length === 0" class="az-hint az-row">
               <ul>
-                <li><strong>T1</strong> {{ $t('settings.analyzer.task-t1') }} <code>{libraries, doc_query}</code></li>
+                <li><strong>T1</strong> {{ $t('settings.analyzer.task-t1') }}</li>
                 <li><strong>T2</strong> {{ $t('settings.analyzer.task-t2') }}</li>
                 <li><strong>T3</strong> {{ $t('settings.analyzer.task-t3') }}</li>
                 <li><strong>T4</strong> {{ $t('settings.analyzer.task-t4') }}</li>
@@ -3324,13 +3462,6 @@ watch(activeTab, (tab) => {
             </div>
 
             <div v-if="props.analyzerApi.benchmarkResults.value.length > 0" class="az-results">
-              <div class="az-results-summary">
-                {{ $t('settings.analyzer.passed') }}
-                <strong>{{ props.analyzerApi.benchmarkResults.value.filter(r => r.passed).length }}</strong>
-                /
-                {{ props.analyzerApi.benchmarkResults.value.length }}
-                {{ $t('settings.analyzer.models', props.analyzerApi.benchmarkResults.value.length) }}
-              </div>
               <table class="az-table">
                 <thead>
                   <tr>
@@ -3369,7 +3500,8 @@ watch(activeTab, (tab) => {
                 </tbody>
               </table>
             </div>
-          </div>
+            </SettingsCard>
+          </SettingsSection>
 
         </div>
 
@@ -3378,24 +3510,28 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.cliExtensions') }}</h1>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.cliExtensions.scope) }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.cliExtensions.scope) }}</span>
           </div>
           <!-- Mounted on first visit only: the scan reads every CLI's files. -->
           <CliExtensionsPane v-if="visitedCliExtensions" :backend="props.backend" />
         </div>
 
         <!-- ══ CLI AGENTS TAB ══ -->
-        <div v-show="activeTab === 'cliAgents'" class="s-body cli-agents-body">
+        <div v-show="activeTab === 'cliAgents'" class="s-body s-body--wide cli-agents-body">
           <div ref="cliGridRef" class="cli-agent-roster" :inert="!!selectedCliKey">
           <h1 class="s-page-title">{{ $t('settings.nav.cliAgents') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.cliAgents.hint') }}</p>
           <section class="ap-section" data-settings-section="cli-agents-list">
-            <p class="ap-hint">{{ $t('settings.cliAgents.hint') }}</p>
             <div class="cli-agent-toolbar">
               <input v-model="cliFilterQuery" type="search" class="cli-agent-filter-search" :placeholder="$t('settings.cliAgents.search')" :aria-label="$t('settings.cliAgents.search')" />
-              <div class="cli-agent-filters" :aria-label="$t('settings.cliAgents.filter-label')">
-                <button v-for="filter in (['all', 'enabled', 'attention'] as const)" :key="filter" type="button" :data-cli-filter="filter" :aria-pressed="cliFilter === filter" @click="cliFilter = filter">{{ $t(`settings.cliAgents.filter-${filter}`) }}</button>
+              <!-- Filters and Redetect wrap as one group, right-aligned, so the
+                   action never lands alone on a line of its own. -->
+              <div class="cli-agent-toolbar-controls">
+                <div class="cli-agent-filters" :aria-label="$t('settings.cliAgents.filter-label')">
+                  <button v-for="filter in (['all', 'enabled', 'attention'] as const)" :key="filter" type="button" class="cli-filter-chip settings-filter-chip" :data-cli-filter="filter" :aria-pressed="cliFilter === filter" @click="cliFilter = filter">{{ $t(`settings.cliAgents.filter-${filter}`) }}<span class="count">{{ filter === 'all' ? cliAgentRows.length : filter === 'enabled' ? cliEnabledCount : cliAgentRows.filter((row) => row.needsAttention).length }}</span></button>
+                </div>
+                <button type="button" :disabled="onboarding.loading.value" @click="onboarding.refresh({ fresh: true })">{{ $t('cli-manage.redetect') }}</button>
               </div>
-              <button type="button" :disabled="onboarding.loading.value" @click="onboarding.refresh({ fresh: true })">{{ $t('cli-manage.redetect') }}</button>
             </div>
             <p class="ap-hint cli-agent-count">{{ $t('settings.cliAgents.count', { visible: filteredCliRows.length, total: cliAgentRows.length, enabled: cliEnabledCount }) }} · {{ $t(cliCanReorder ? 'settings.cliAgents.drag-hint' : 'settings.cliAgents.reorder-filtered') }}</p>
             <ul class="cli-agent-grid">
@@ -3417,13 +3553,20 @@ watch(activeTab, (tab) => {
                 <div class="cli-card-heading">
                   <span class="cli-agent-grip" :title="$t('settings.cliAgents.drag-hint')" aria-hidden="true">⠿</span>
                   <span class="cli-card-icon" aria-hidden="true">{{ cardInitials(row.label) }}</span>
-                  <span class="cli-agent-label">{{ row.label }}</span>
-                  <span v-if="row.needsAttention" class="cli-card-attention" :title="$t('settings.cliAgents.filter-attention')" :aria-label="$t('settings.cliAgents.filter-attention')">!</span>
+                  <span class="cli-agent-label" :title="row.label">
+                    <span class="cli-agent-name">{{ cardNameParts(row.label).name }}</span>
+                    <span v-if="cardNameParts(row.label).vendor" class="cli-agent-vendor">{{ cardNameParts(row.label).vendor }}</span>
+                  </span>
+                  <!-- An installed CLI needs attention when it is outdated: the mark names
+                       what (the install chip's "Update available …"), not just that. -->
+                  <span v-if="row.needsAttention && row.installed" class="cli-card-attention" role="img" :title="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')" :aria-label="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')">!</span>
                 </div>
-                <div class="cli-card-status">
-                  <span v-for="chip in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id" v-truncate class="cli-chip" :class="`cli-chip--${chip.tone}`">{{ chip.label }}</span>
-                  <span v-if="!row.chips.some((chip) => chip.id === 'install')" class="cli-agent-hint">{{ $t('settings.cliAgents.not-detected') }}</span>
-                </div>
+                <!-- One line of short facts joined by "·"; only a label that
+                     needs attention (amber / red) keeps a colour. -->
+                <p class="cli-card-status">
+                  <template v-for="(chip, index) in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id"><span v-if="index" class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact" :class="`cli-card-fact--${chip.tone}`">{{ chip.label }}</span></template>
+                  <template v-if="!row.chips.some((chip) => chip.id === 'install')"><span class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact">{{ $t('settings.cliAgents.not-detected') }}</span></template>
+                </p>
                 <div class="cli-card-footer">
                   <label class="cli-agent-toggle" @click.stop>
                     <input type="checkbox" :checked="cliAgentEnabled(row.agentKey)" :disabled="cliAgentEnabled(row.agentKey) && cliEnabledCount <= 1" :aria-label="$t('settings.cliAgents.enable-agent', { agent: row.label })" @change="toggleCliAgent(row.agentKey)" />
@@ -3754,6 +3897,7 @@ watch(activeTab, (tab) => {
                 :description="reclaimNowCount > 0
                   ? $t('settings.general.idle-reclaim-now-hint', { count: reclaimNowCount, size: reclaimNowSize })
                   : $t('settings.general.idle-reclaim-now-empty')"
+                fold-description
               >
                 <template #control>
                   <button
@@ -3787,6 +3931,7 @@ watch(activeTab, (tab) => {
                 data-settings-section="general-restore-scope"
                 :title="$t('settings.appearance.restore-scope')"
                 :description="$t('settings.appearance.restore-scope-hint')"
+                fold-description
               >
                 <template #control>
                   <select :value="restoreScopeModel" @change="onRestoreScopeChange(($event.target as HTMLSelectElement).value)">
@@ -3803,6 +3948,7 @@ watch(activeTab, (tab) => {
                 data-settings-section="general-auto-resume-reconnect"
                 :title="$t('settings.general.auto-resume-reconnect')"
                 :description="$t('settings.general.auto-resume-reconnect-hint')"
+                fold-description
               >
                 <template #control>
                   <ToggleSwitch
@@ -3817,6 +3963,7 @@ watch(activeTab, (tab) => {
                 data-settings-section="general-resume-interrupted-launch"
                 :title="$t('settings.general.resume-interrupted-on-launch')"
                 :description="$t('settings.general.resume-interrupted-on-launch-hint')"
+                fold-description
               >
                 <template #control>
                   <ToggleSwitch
@@ -4077,11 +4224,11 @@ watch(activeTab, (tab) => {
               <div class="s-fullrow">
                 <div class="settings-meta-row inline">
                   <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-                  <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.general.scope) }}</span>
-                  <span class="settings-path" v-truncate>{{ pathForTab('general') }}</span>
+                  <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.general.scope) }}</span>
+                  <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.general.storage) }" v-truncate>{{ pathForTab('general') }}</span>
                 </div>
-                <p v-if="settingsBundleSummary" class="summary-ok">{{ settingsBundleSummary }}</p>
-                <p v-if="settingsBundleError" class="err-msg">{{ settingsBundleError }}</p>
+                <p v-if="settingsBundleSummary.length" class="summary-ok">{{ settingsBundleSummary.map(bundleMessageText).join(' ') }}</p>
+                <p v-if="settingsBundleError" class="err-msg">{{ bundleMessageText(settingsBundleError) }}</p>
               </div>
             </SettingsCard>
           </SettingsSection>
@@ -4092,10 +4239,9 @@ watch(activeTab, (tab) => {
              of the longest page in this window, which is where somebody
              told "open the rules" went looking and did not find them. -->
         <div v-show="activeTab === 'cross-device'" class="s-body cross-device-body">
-          <h1 class="s-page-title nvc-page-title">
-            <span class="nvc-page-mark" aria-hidden="true"><NavideCloudMark /></span>
-            {{ $t('settings.nav.crossDevice') }}
-          </h1>
+          <!-- A plain title like every other page; the mark stays on its sidebar row. -->
+          <h1 class="s-page-title">{{ $t('settings.nav.crossDevice') }}</h1>
+          <p v-show="cloudSubtab === 'sync'" class="s-page-intro">{{ $t('settings.sync.hint') }}</p>
           <CloudSubtabs v-model="cloudSubtab" :enabled="cloudSubtabsShown" :tabs="cloudTabs">
           <template #sync>
           <SyncSettings v-show="cloudSubtab === 'sync'" :backend="props.backend" />
@@ -4289,72 +4435,68 @@ watch(activeTab, (tab) => {
         <!-- ══ UPDATES TAB ══ -->
         <div v-show="activeTab === 'updates'" class="s-body updates-body">
           <h1 class="s-page-title">{{ $t('settings.nav.updates') }}</h1>
+          <p class="s-page-intro">{{ $t('updater.section-hint') }}</p>
 
-          <SettingsSection :label="$t('settings.section.updates')">
-            <SettingsCard data-settings-section="updates">
-              <SettingRow :title="$t('updater.section-title')" :description="$t('updater.section-hint')">
-                <template #control>
-                  <button class="ap-reset" :disabled="updIsBusy || updateState.status === 'unsupported'" @click="checkForUpdates">{{ $t('updater.check') }}</button>
-                </template>
-              </SettingRow>
-              <div class="s-fullrow">
-                <div class="settings-meta-row inline">
-                  <span class="scope-badge">{{ $t('updater.current-version') }}</span>
-                  <span class="settings-path" v-truncate>v{{ updateState.currentVersion }}</span>
-                </div>
+          <SettingsCard data-settings-section="updates">
+            <!-- No row title: the page title already says Updates, and the
+                 intro above it says what the page is for. -->
+            <SettingRow :description="$t('settings.extensionsPolicy.labeledValue', { label: $t('updater.current-version'), value: 'v' + updateState.currentVersion })">
+              <template #control>
+                <button class="ap-reset" :disabled="updIsBusy || updateState.status === 'unsupported'" @click="checkForUpdates">{{ $t('updater.check') }}</button>
+              </template>
+            </SettingRow>
+            <div class="s-fullrow">
+              <!-- Where the update actually is. Each stage below owns the
+                   settings group of the same name. -->
+              <ol v-if="updStages.length" class="upd-rail">
+                <li
+                  v-for="(stage, stageIndex) in updStages"
+                  :key="stage.id"
+                  :class="['upd-stage', stage.state]"
+                >
+                  <span class="upd-stage-mark" aria-hidden="true">
+                    {{ stage.state === 'done' ? '✓' : stage.state === 'failed' ? '!' : stageIndex + 1 }}
+                  </span>
+                  <span class="upd-stage-label">{{ $t(`updater.stage.${stage.id}`) }}</span>
+                  <span v-if="stage.percent !== undefined" class="upd-stage-pct">{{ stage.percent }}%</span>
+                </li>
+              </ol>
 
-                <!-- Where the update actually is. Each stage below owns the
-                     settings group of the same name. -->
-                <ol v-if="updStages.length" class="upd-rail">
-                  <li
-                    v-for="(stage, stageIndex) in updStages"
-                    :key="stage.id"
-                    :class="['upd-stage', stage.state]"
-                  >
-                    <span class="upd-stage-mark" aria-hidden="true">
-                      {{ stage.state === 'done' ? '✓' : stage.state === 'failed' ? '!' : stageIndex + 1 }}
-                    </span>
-                    <span class="upd-stage-label">{{ $t(`updater.stage.${stage.id}`) }}</span>
-                    <span v-if="stage.percent !== undefined" class="upd-stage-pct">{{ stage.percent }}%</span>
-                  </li>
-                </ol>
+              <p v-if="updateState.status === 'checking'" class="ap-hint">{{ $t('updater.checking') }}</p>
+              <p v-else-if="updateState.status === 'not-available'" class="summary-ok">{{ $t('updater.up-to-date') }}</p>
+              <p v-else-if="updateState.status === 'error'" class="err-msg">{{ $t('updater.error', { message: updateState.message }) }}</p>
+              <p v-else-if="updateState.status === 'unsupported'" class="ap-hint">{{ $t('updater.unsupported') }}</p>
 
-                <p v-if="updateState.status === 'checking'" class="ap-hint">{{ $t('updater.checking') }}</p>
-                <p v-else-if="updateState.status === 'not-available'" class="summary-ok">{{ $t('updater.up-to-date') }}</p>
-                <p v-else-if="updateState.status === 'error'" class="err-msg">{{ $t('updater.error', { message: updateState.message }) }}</p>
-                <p v-else-if="updateState.status === 'unsupported'" class="ap-hint">{{ $t('updater.unsupported') }}</p>
+              <!-- Diagnostics: a run of failed background checks always shows
+                   here. notifyOnCheckFailure only gates the status bar. -->
+              <p v-if="updateState.lastCheckFailure" class="err-msg">
+                {{ $t('updater.check-failure', {
+                  count: updateState.lastCheckFailure.count,
+                  message: updateState.lastCheckFailure.message,
+                }) }}
+                {{ updateState.checkedAt
+                  ? $t('updater.last-successful-check', { at: updLastSuccessfulCheck })
+                  : $t('updater.last-successful-check-never') }}
+              </p>
 
-                <!-- Diagnostics: a run of failed background checks always shows
-                     here. notifyOnCheckFailure only gates the status bar. -->
-                <p v-if="updateState.lastCheckFailure" class="err-msg">
-                  {{ $t('updater.check-failure', {
-                    count: updateState.lastCheckFailure.count,
-                    message: updateState.lastCheckFailure.message,
-                  }) }}
-                  {{ updateState.checkedAt
-                    ? $t('updater.last-successful-check', { at: updLastSuccessfulCheck })
-                    : $t('updater.last-successful-check-never') }}
+              <div v-if="['available', 'downloading', 'downloaded', 'installing'].includes(updateState.status)" class="upd-available">
+                <p class="summary-ok">{{ $t('updater.available', { version: updateState.availableVersion }) }}</p>
+                <p v-if="updateState.status === 'downloading'" class="ap-hint">{{ $t('updater.downloading', { percent: updateState.percent ?? 0 }) }}</p>
+                <p v-else-if="updateState.status === 'downloaded'" class="ap-hint">
+                  {{ updateState.quitInstallArmed ? $t('updater.downloaded-on-quit') : $t('updater.downloaded') }}
                 </p>
-
-                <div v-if="['available', 'downloading', 'downloaded', 'installing'].includes(updateState.status)" class="upd-available">
-                  <p class="summary-ok">{{ $t('updater.available', { version: updateState.availableVersion }) }}</p>
-                  <p v-if="updateState.status === 'downloading'" class="ap-hint">{{ $t('updater.downloading', { percent: updateState.percent ?? 0 }) }}</p>
-                  <p v-else-if="updateState.status === 'downloaded'" class="ap-hint">
-                    {{ updateState.quitInstallArmed ? $t('updater.downloaded-on-quit') : $t('updater.downloaded') }}
-                  </p>
-                  <p v-else-if="updateState.status === 'installing'" class="ap-hint">{{ $t('updater.restarting') }}</p>
-                  <div v-if="updateState.releaseNotes" class="upd-notes">
-                    <div class="ap-hint">{{ $t('updater.release-notes') }}</div>
-                    <pre class="upd-notes-body">{{ updateState.releaseNotes }}</pre>
-                  </div>
-                  <div class="row-g gap">
-                    <button v-if="updateState.status === 'available'" class="ap-reset" @click="startDownload">{{ $t('updater.download') }}</button>
-                    <button v-else-if="updateState.status === 'downloaded'" class="ap-reset" @click="installUpdate">{{ $t('updater.install') }}</button>
-                  </div>
+                <p v-else-if="updateState.status === 'installing'" class="ap-hint">{{ $t('updater.restarting') }}</p>
+                <div v-if="updateState.releaseNotes" class="upd-notes">
+                  <div class="ap-hint">{{ $t('updater.release-notes') }}</div>
+                  <pre class="upd-notes-body">{{ updateState.releaseNotes }}</pre>
+                </div>
+                <div class="row-g gap">
+                  <button v-if="updateState.status === 'available'" class="ap-reset" @click="startDownload">{{ $t('updater.download') }}</button>
+                  <button v-else-if="updateState.status === 'downloaded'" class="ap-reset" @click="installUpdate">{{ $t('updater.install') }}</button>
                 </div>
               </div>
-            </SettingsCard>
-          </SettingsSection>
+            </div>
+          </SettingsCard>
 
           <!-- One group per stage of the rail above: every setting sits under
                the step of the update it actually governs, instead of nine
@@ -4384,6 +4526,7 @@ watch(activeTab, (tab) => {
               <SettingRow
                 :title="$t('updater.notify-check-failure')"
                 :description="$t('updater.notify-check-failure-hint')"
+                fold-description
               >
                 <template #control>
                   <ToggleSwitch
@@ -4459,6 +4602,7 @@ watch(activeTab, (tab) => {
               <SettingRow
                 :title="$t('updater.auto-install')"
                 :description="$t('updater.auto-install-hint')"
+                fold-description
               >
                 <template #control>
                   <ToggleSwitch
@@ -4514,7 +4658,7 @@ watch(activeTab, (tab) => {
                       :style="{ background: c }"
                     />
                   </div>
-                  <span class="ap-theme-label">{{ t.label }}</span>
+                  <span class="ap-theme-label">{{ themeLabel(t) }}</span>
                   <span v-if="currentTheme === t.id" class="ap-check">✓</span>
                 </button>
               </div>
@@ -4534,10 +4678,12 @@ watch(activeTab, (tab) => {
               </div>
               <p class="ap-hint">{{ $t('settings.appearance.tweaks-hint') }}</p>
               <div class="ap-color-list">
+                <!-- The human name is the label; the CSS token stays on hover. -->
                 <label
                   v-for="tok in CUSTOMIZABLE_TOKENS"
                   :key="tok.id"
                   class="ap-color-row"
+                  :title="tok.id"
                 >
                   <input
                     type="color"
@@ -4546,7 +4692,8 @@ watch(activeTab, (tab) => {
                     @input="onPickColor(tok.id, ($event.target as HTMLInputElement).value)"
                   />
                   <span class="ap-color-name">{{ $t('settings.color.' + tok.id.slice(2)) }}</span>
-                  <span class="ap-color-token">{{ tok.id }}</span>
+                  <!-- The value as text, so a pale swatch on a pale card still reads. -->
+                  <span class="ap-color-hex">{{ resolvedTokenValue(tok.id) }}</span>
                   <button
                     v-if="customOverrides[tok.id]"
                     class="ap-color-clear"
@@ -4593,12 +4740,14 @@ watch(activeTab, (tab) => {
         <!-- ══ LANGUAGE TAB ══ -->
         <div v-show="activeTab === 'language'" class="s-body appearance-body">
           <h1 class="s-page-title">{{ $t('settings.nav.language') }}</h1>
+          <p class="s-page-intro">{{ $t('settings.appearance.language-hint') }}</p>
 
+          <!-- The one heading style: a section label over the card, not a
+               bold row title standing in for a heading. -->
+          <SettingsSection :label="$t('settings.appearance.language-display')">
           <SettingsCard>
             <SettingRow
               data-settings-section="appearance-language"
-              :title="$t('settings.appearance.language-display')"
-              :description="$t('settings.appearance.language-hint')"
             >
               <template #control>
                 <div class="ap-lang-row">
@@ -4611,6 +4760,7 @@ watch(activeTab, (tab) => {
                     {{ $t(lang.labelKey) }}
                     <span
                       v-if="lang.beta"
+                      v-truncate
                       class="scope-badge"
                       :title="$t('settings.appearance.language-beta-hint')"
                     >{{ $t('settings.appearance.language-beta') }}</span>
@@ -4620,14 +4770,15 @@ watch(activeTab, (tab) => {
               </template>
             </SettingRow>
           </SettingsCard>
+          </SettingsSection>
         </div>
 
-        <div v-show="activeTab === 'accounts'" class="s-body s-body--bleed accounts-body" data-settings-section="accounts">
+        <div v-show="activeTab === 'accounts'" class="s-body s-body--bleed s-body--wide accounts-body" data-settings-section="accounts">
           <h1 class="s-page-title">{{ $t('settings.nav.accounts') }}</h1>
           <div class="settings-meta-row">
             <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.accounts.scope) }}</span>
-            <span class="settings-path" v-truncate>{{ pathForTab('accounts') }}</span>
+            <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.accounts.scope) }}</span>
+            <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.accounts.storage) }" v-truncate>{{ pathForTab('accounts') }}</span>
           </div>
           <GitAccountsPane :api="accountsApi" />
           <div data-settings-section="cli-accounts" style="margin: 4px 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
@@ -4642,6 +4793,8 @@ watch(activeTab, (tab) => {
              central rule table does not own) ─────────────────────────────── -->
         <div v-show="activeTab === 'keybindings'" class="s-body keybindings-body" data-settings-section="keybindings">
           <h1 class="s-page-title">{{ $t('settings.nav.keybindings') }}</h1>
+          <!-- The shortcuts file's name and place only in the tooltip. -->
+          <p class="s-page-intro" :title="$t('settings.keybindings.file-tooltip')">{{ $t('settings.keybindings.intro') }}</p>
           <KeyboardShortcutsEditor v-if="activeTab === 'keybindings'" :initial-query="shortcutsQuery" />
         </div>
 
@@ -4658,6 +4811,11 @@ watch(activeTab, (tab) => {
               @click="helpTopic = topic"
             >{{ $t(`settings.help.topic.${topic}`) }}</button>
           </div>
+          <!-- Narrow page: the same chapters as one dropdown instead of tabs
+               wrapping into three or four rows. CSS shows one or the other. -->
+          <select v-model="helpTopic" class="help-topic-select" :aria-label="$t('settings.nav.help')">
+            <option v-for="topic in helpTopicOrder" :key="topic" :value="topic">{{ $t(`settings.help.topic.${topic}`) }}</option>
+          </select>
           <component :is="helpTopicComponents[helpTopic]" v-if="activeTab === 'help'" />
         </div>
 
@@ -4667,7 +4825,8 @@ watch(activeTab, (tab) => {
              the disclosure records. The scope badge sits on the policy page,
              because the policy is the part that is per user and per workspace. -->
         <div v-show="activeTab === 'extensions'" class="s-body s-body--bleed extensions-body" data-settings-section="extensions">
-          <h1 class="s-page-title">{{ $t(pluginsPageLabel) }}</h1>
+          <h1 class="s-page-title">{{ $t(pluginsPageTitle) }}</h1>
+          <p v-if="pluginsPage === 'disclosure'" class="s-page-intro">{{ $t('pluginActivity.overview.intro') }}</p>
           <!-- In the icon-only sidebar the pages have no rows of their own there. -->
           <div class="ext-pages" role="tablist" :aria-label="$t('settings.nav.extensions')">
             <button
@@ -4694,8 +4853,8 @@ watch(activeTab, (tab) => {
             <section v-show="pluginsPage === 'policy'" class="ext-policy-block" data-settings-section="execution-policy">
               <div class="settings-meta-row inline">
                 <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
-                <span class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
-                <span class="settings-path" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
+                <span v-truncate class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
+                <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(executionPolicyScopeNote.storage) }" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" @attention="(reasons) => (policyAttention = reasons)" />
             </section>
@@ -4703,6 +4862,7 @@ watch(activeTab, (tab) => {
               v-show="pluginsPage === 'plugins' || pluginsPage === 'developer'"
               :page="pluginsPage === 'developer' ? 'developer' : 'plugins'"
               @open-disclosure-overview="openDisclosureOverview"
+              @open-marketplace="activeTab = 'marketplace'"
               @developer-on="(switches) => (developerSwitchesOn = switches)"
             />
             <!-- Plan B D5, D-f: records only, it changes nothing a Navide plugin may do. -->
@@ -4748,12 +4908,14 @@ watch(activeTab, (tab) => {
         <!-- ── STATUS BADGES TAB ─────────────────────────────────────────── -->
         <div v-show="activeTab === 'statusBadges'" class="s-body status-badges-body" data-settings-section="statusBadges">
           <h1 class="s-page-title">{{ $t('settings.nav.statusBadges') }}</h1>
+          <p class="s-page-intro">{{ $t('statusBadges.intro') }}</p>
           <StatusBadgeSettingsPane />
         </div>
 
         <!-- ── LAYOUT TAB ────────────────────────────────────────────────── -->
         <div v-show="activeTab === 'layout'" class="s-body layout-body" data-settings-section="layout">
           <h1 class="s-page-title">{{ $t('settings.nav.layout') }}</h1>
+          <p class="s-page-intro">{{ $t('layout.settings-intro') }}</p>
           <LayoutSettingsPane />
         </div>
 
@@ -4777,7 +4939,8 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'notifications'" class="s-body notifications-body" data-settings-section="notifications">
           <h1 class="s-page-title">{{ $t('settings.nav.notifications') }}</h1>
 
-          <SettingsSection :label="$t('settings.section.notifications')">
+          <!-- No label: the page title already says Notifications. -->
+          <SettingsSection>
             <SettingsCard>
               <SettingRow
                 data-settings-section="general-system-notify"
@@ -4812,6 +4975,7 @@ watch(activeTab, (tab) => {
                 data-settings-section="general-notify-permission"
                 :title="$t('settings.general.notify-permission')"
                 :description="$t(`settings.general.notify-permission-status.${notifyPermissionStatus}`) + ' ' + $t('settings.general.notify-permission-hint')"
+                fold-description
               >
                 <template #control>
                   <button
@@ -4874,10 +5038,32 @@ watch(activeTab, (tab) => {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  background: var(--bg-inset);
+  background: var(--settings-inset, var(--bg-inset));
   border-right: 1px solid var(--border-default);
-  padding: var(--space-3, 12px) var(--space-2, 8px);
+  /* No top padding: the sticky head carries it, so nothing scrolls into a
+     gap above the head. scroll-padding-top keeps a row revealed by
+     scrollIntoView below the head (its height is measured into the
+     variable). */
+  padding: 0 var(--space-2, 8px) var(--space-3, 12px);
   gap: var(--space-2, 8px);
+  scroll-padding-top: calc(var(--s-sidebar-head-h, 96px) + var(--space-1, 4px));
+  scroll-padding-bottom: var(--space-2, 8px);
+}
+/* The title and search stick to the top of the scrolling sidebar on an
+   opaque copy of its background, across its full width (the sidebar's side
+   padding included), with a hairline under it, so only the nav list scrolls
+   and no row shows above, beside or through it. */
+.s-sidebar-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  margin: 0 calc(-1 * var(--space-2, 8px));
+  padding: var(--space-3, 12px) var(--space-2, 8px) var(--space-2, 8px);
+  background: var(--settings-inset, var(--bg-inset));
+  border-bottom: 1px solid var(--border-muted);
 }
 .s-ws-header {
   display: flex;
@@ -4930,7 +5116,7 @@ watch(activeTab, (tab) => {
 }
 .s-nav-group-title {
   padding: 4px var(--space-row-x) 6px;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -4960,7 +5146,11 @@ watch(activeTab, (tab) => {
     grid-template-columns: 56px minmax(0, 1fr);
   }
   .s-sidebar {
-    padding: var(--space-2, 8px) 4px;
+    padding: 0 4px var(--space-2, 8px);
+  }
+  .s-sidebar-head {
+    margin: 0 -4px;
+    padding: var(--space-2, 8px) 4px var(--space-1, 4px);
   }
   .s-ws-header {
     justify-content: center;
@@ -5037,7 +5227,7 @@ watch(activeTab, (tab) => {
 }
 .s-search-result-group {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   color: var(--text-muted);
 }
 .s-search-result-summary {
@@ -5056,14 +5246,23 @@ watch(activeTab, (tab) => {
 /* ── Appearance tab ─────────────────────────────────────────────────────────── */
 .appearance-body { overflow-y: auto; padding: 18px 22px; }
 .ap-section { margin-bottom: 26px; }
+/* The section after the last block brings its own top spacing; the block's
+   bottom margin on top of it left a gap twice the size above "Other". */
+.ap-section:last-child { margin-bottom: 0; }
 .ap-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ap-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
+/* Section headings share SettingsSection's small uppercase label. */
+.ap-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .ap-hint { margin: 0 0 14px; font-size: 11.5px; color: var(--text-secondary); text-wrap: pretty; }
 .ap-hint-warn { color: var(--danger-fg); }
 
 /* ── Two-column settings layout (page title / full-width rows / control labels) ── */
+/* One page header on every page: title → intro (8px) → scope strip → toolbar
+   → content, each later step --settings-head-gap below the one before. The
+   first thing under the header drops its own top margin/padding so no page
+   adds a gap of its own. */
+.s-content { --settings-head-gap: var(--space-4, 16px); }
 .s-page-title {
-  margin: 0 0 var(--space-group);
+  margin: 0 0 var(--settings-head-gap);
   font-size: var(--font-page-title);
   font-weight: 700;
   color: var(--text-bright);
@@ -5071,6 +5270,31 @@ watch(activeTab, (tab) => {
 /* The title already reserves --space-group below it; the section's own top
    margin would double the gap on the tabs that open with a SettingsSection. */
 .s-page-title + .settings-section { margin-top: 0; }
+/* One page intro: directly under the title, outside any card, one measure. */
+.s-page-title:has(+ .s-page-intro) { margin-bottom: var(--space-2, 8px); }
+.s-page-intro {
+  margin: 0 0 var(--settings-head-gap);
+  max-width: 70ch;
+  font-size: var(--font-row-desc);
+  line-height: var(--lh-base);
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+.s-page-intro + .settings-section { margin-top: 0; }
+/* Full-bleed pages: the intro takes the title's 22px gutter. */
+.s-body--bleed > .s-page-intro { margin: 0 22px var(--settings-head-gap); flex-shrink: 0; }
+/* The scope strip right under the header, then the toolbar one gap below. */
+:is(.s-page-title, .s-page-intro) + .settings-meta-row { margin-top: 0; margin-bottom: var(--settings-head-gap); }
+.s-body :deep(.settings-meta-row + :is(.skills-pane, .prompts-pane, .memory-pane, .cred-pane, .ga-pane, .mcp-agent-pane)) { padding-top: 0; }
+.s-body :deep(.settings-meta-row + .cli-ext-tabs) { margin-top: 0; }
+.settings-meta-row + .settings-section { margin-top: 0; }
+.ext-policy-block > .settings-meta-row.inline:first-child { margin-bottom: var(--settings-head-gap); }
+.extensions-scroll :deep(.nv-overview) { padding-top: 0; }
+/* The CLI extensions pane writes its intro inside its tab; it takes the
+   same measure. */
+.s-body :deep(.cli-ext-intro) {
+  max-width: 70ch;
+}
 .s-fullrow {
   padding: var(--space-row-y) var(--space-row-x);
 }
@@ -5082,18 +5306,31 @@ watch(activeTab, (tab) => {
 .setting-row-control input[type='number'] { width: 96px; }
 
 /* CLI Agents cards and the selected agent's contained drawer. */
-.cli-agent-roster { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 22px; }
+.cli-agent-roster { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 18px 22px; }
 .cli-agent-toolbar, .cli-agent-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.cli-agent-toolbar { container: cli-agent-toolbar / inline-size; }
 .cli-agent-toolbar input { flex: 1; min-width: 130px; }
+.cli-agent-toolbar-controls { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto; }
+/* Narrow page: the search takes a full row; under it the chips start at the
+   content edge and Redetect sits at the right of the same row while it fits
+   (it drops below them as a whole otherwise). */
+@container cli-agent-toolbar (max-width: 720px) {
+  .cli-agent-toolbar input { flex: 1 1 100%; }
+  .cli-agent-toolbar-controls { flex: 1 1 100%; justify-content: space-between; margin-left: 0; }
+}
 .cli-agent-toolbar button, .cli-agent-manage {
   border: 1px solid var(--border-default); border-radius: var(--radius-sm);
   background: var(--bg-elevated); color: var(--text-primary); padding: 5px 9px; font: inherit; font-size: var(--font-xs); cursor: pointer;
+  /* The toolbar wraps; a label never breaks across two lines. */
+  white-space: nowrap;
 }
-.cli-agent-toolbar button[aria-pressed='true'] { color: var(--accent-fg); background: var(--accent-subtle); border-color: var(--accent-focus); }
-.cli-agent-toolbar button:disabled { opacity: .4; cursor: default; }
+/* List filters are the shared .settings-filter-chip (Skills, Prompts,
+   Shortcuts use it too). */
+.cli-agent-filters { gap: 4px; }
 .cli-agent-count { margin: 10px 0 14px; }
-.cli-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 12px; list-style: none; padding: 0; margin: 0; }
-.cli-agent-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer; }
+.cli-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 12px; list-style: none; padding: 0; margin: 0; max-width: 100%; }
+/* border-box: a card's padding and border stay inside its grid column. */
+.cli-agent-card { box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--settings-card-border, var(--border-default)); border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer; }
 .cli-agent-card:hover { border-color: var(--border-strong); }
 .cli-agent-card.drag-over { box-shadow: inset 0 0 0 2px var(--accent-focus); }
 .cli-agent-card.is-disabled { background: var(--bg-muted); }
@@ -5101,12 +5338,18 @@ watch(activeTab, (tab) => {
 /* Two lines tall either way, so a wrapped name does not push its card's
    status rows below the neighbours'. */
 .cli-card-heading { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 38px; }
-.cli-card-heading .cli-agent-label { overflow-wrap: anywhere; }
+.cli-card-heading .cli-agent-label { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.cli-card-heading .cli-agent-vendor { font-size: var(--font-xs); font-weight: 400; color: var(--text-secondary); }
 .cli-card-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px; background: var(--bg-muted); color: var(--text-secondary); font-size: var(--font-xs); font-weight: 700; }
 .cli-card-attention { margin-left: auto; color: var(--warning-fg, #c77400); font-weight: 700; }
-.cli-card-status { display: flex; align-items: flex-start; flex-direction: column; gap: 4px; min-height: 42px; }
-.cli-card-status .cli-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
-.cli-card-footer { display: flex; align-items: center; gap: 8px; margin-top: auto; font-size: var(--font-xs); }
+.cli-card-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; min-width: 0; min-height: 20px; margin: 0; font-size: var(--font-xs); line-height: 1.5; color: var(--text-secondary); }
+.cli-card-fact { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cli-card-sep { color: var(--text-muted); }
+/* Colour only where something needs attention; installed, signed in and a
+   channel that is on read as plain facts. */
+.cli-card-fact--warn { color: var(--attention-on-subtle, #c77400); font-weight: 600; }
+.cli-card-fact--bad { color: var(--danger-fg, #c0392b); font-weight: 600; }
+.cli-card-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; margin-top: auto; font-size: var(--font-xs); }
 .cli-agent-empty { color: var(--text-secondary); text-align: center; padding: 30px 10px; }
 .cli-drawer-layer { position: absolute; inset: 0; z-index: 20; }
 .cli-drawer-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / .25); }
@@ -5132,9 +5375,10 @@ watch(activeTab, (tab) => {
 .cli-agent-drawer .env-name { display: table-cell; overflow-wrap: anywhere; }
 .cli-drawer-enter-active .cli-agent-drawer, .cli-drawer-leave-active .cli-agent-drawer { transition: transform .18s ease; }
 .cli-drawer-enter-from .cli-agent-drawer, .cli-drawer-leave-to .cli-agent-drawer { transform: translateX(100%); }
+/* The roster keeps the shared 18px/22px page gutter at every width, so its
+   title lines up with every other page's. */
 @media (max-width: 960px) {
   .cli-agent-drawer { width: 100%; border-left: 0; }
-  .cli-agent-roster { padding: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cli-drawer-enter-active .cli-agent-drawer, .cli-drawer-leave-active .cli-agent-drawer { transition: none; }
@@ -5146,19 +5390,29 @@ watch(activeTab, (tab) => {
   background: var(--bg-elevated);
 }
 .cli-agent-grip { color: var(--text-secondary); cursor: grab; user-select: none; font-size: var(--font-md); }
-.cli-agent-toggle { display: flex; align-items: center; gap: 8px; flex: 1; cursor: pointer; margin: 0; }
+/* The whole label is the hit area: at least 24px tall around the box. */
+.cli-agent-toggle { display: flex; align-items: center; gap: 8px; flex: 1; min-height: 24px; cursor: pointer; margin: 0; }
 .cli-agent-label { font-size: var(--font-sm); font-weight: 600; }
-.cli-agent-hint { font-size: var(--font-2xs); color: var(--text-secondary); }
+.cli-agent-hint { font-size: var(--font-xs); color: var(--text-secondary); }
 .cli-agent-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .cli-chip {
-  font-size: var(--font-2xs); font-weight: 600; line-height: 1.6;
+  font-size: var(--font-xs); font-weight: 600; line-height: 1.6;
   padding: 0 8px; border-radius: 99px; white-space: nowrap;
   border: 1px solid var(--border-default); background: var(--bg-muted); color: var(--text-secondary);
 }
-.cli-chip--ok { color: var(--success-fg, #2b8a3e); border-color: transparent; }
-.cli-chip--warn { color: var(--attention-fg, #c77400); border-color: transparent; }
-.cli-chip--bad { color: var(--danger-fg, #c0392b); border-color: transparent; }
-.cli-chip--info { color: var(--accent-fg, #3b5bdb); border-color: transparent; }
+/* Status chips are tinted pills like their neutral siblings, never bare
+   coloured text; text on a subtle tint uses the tone's on-subtle colour. */
+.cli-chip--ok { color: var(--success-on-subtle, #2b8a3e); background: var(--success-subtle); border-color: var(--success-muted); }
+.cli-chip--warn { color: var(--attention-on-subtle, #c77400); background: var(--attention-subtle); border-color: var(--attention-muted); }
+.cli-chip--bad { color: var(--danger-fg, #c0392b); background: var(--danger-subtle); border-color: var(--danger-muted); }
+/* Neutral chips ("Signed out", "Not installed") read in the primary text
+   colour: secondary grey on the muted fill sits too close to 4.5:1 in dark
+   themes. */
+.cli-chip--neutral { color: var(--text-primary); }
+/* A positive configured fact ("Direct delivery on", a chosen model) is
+   neutral text with a small dot, not an accent pill that reads as selected. */
+.cli-chip--info { color: var(--text-primary); background: transparent; border-color: transparent; padding-left: 2px; }
+.cli-chip--info::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 5px; vertical-align: 1px; border-radius: 50%; background: var(--success-emphasis, var(--text-secondary)); }
 /* Launch overrides for the selected agent. */
 .launch-row { flex-direction: column; align-items: stretch; padding: 0; }
 .launch-row.launch-open { border-color: var(--accent-focus); }
@@ -5192,7 +5446,7 @@ watch(activeTab, (tab) => {
   border: 1px solid var(--border-default); background: var(--bg-elevated);
   color: var(--text-secondary); cursor: pointer; white-space: nowrap;
 }
-.env-add:disabled { opacity: 0.45; cursor: default; }
+.env-add:disabled { opacity: 0.6; cursor: default; }
 /* Push channels: what switching every one of them off actually costs. */
 .push-all-off {
   margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-md);
@@ -5229,11 +5483,27 @@ watch(activeTab, (tab) => {
   text-align: left;
 }
 .ap-theme-card:hover { border-color: var(--border-strong); background: var(--bg-muted); }
-.ap-theme-card.active { border-color: var(--accent-emphasis); box-shadow: 0 0 0 1px var(--accent-emphasis); }
+/* Selected: one cue, a 2px accent ring (the 1px border plus a 1px inset
+   shadow, no gap and no second ring) with a small check badge in its corner.
+   The focus ring stays :focus-visible only, offset outside the card. */
+.ap-theme-card.active { border-color: var(--accent-emphasis); box-shadow: inset 0 0 0 1px var(--accent-emphasis); }
 .ap-swatches { display: flex; gap: 4px; }
 .ap-swatch { width: 24px; height: 24px; border-radius: var(--radius-sm); border: 1px solid var(--border-muted); }
 .ap-theme-label { font-size: var(--font-xs); font-weight: 500; color: var(--text-primary); }
 .ap-check { position: absolute; top: 10px; right: 11px; font-size: var(--font-xs); color: var(--accent-fg); }
+.ap-theme-card .ap-check {
+  top: 8px;
+  right: 8px;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-emphasis);
+  color: var(--text-on-emphasis);
+  font-size: var(--font-2xs);
+  line-height: 1;
+}
 /* Asks for the full viewport so the row wraps it under the text, then fills
    the row width with aligned columns. */
 .ap-lang-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 10px; width: 100vw; max-width: 100%; }
@@ -5256,7 +5526,11 @@ watch(activeTab, (tab) => {
 .ap-lang-btn.active { border-color: var(--accent-emphasis); box-shadow: 0 0 0 1px var(--accent-emphasis); }
 .ap-timeout-field { max-width: 140px; }
 .ap-reset {
-  font-size: var(--font-2xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-h-md);
+  font-size: var(--font-xs);
   padding: 4px 10px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
@@ -5265,16 +5539,23 @@ watch(activeTab, (tab) => {
   cursor: pointer;
 }
 .ap-reset:hover { color: var(--danger-fg); border-color: var(--danger-fg); }
-.ap-color-list { display: flex; flex-direction: column; gap: 8px; }
+/* One card, one row per colour, hairlines between. */
+.ap-color-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--settings-card-border, var(--border-default));
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
 .ap-color-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 7px 10px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  min-height: 40px;
+  padding: 6px var(--space-row-x);
 }
+.ap-color-row + .ap-color-row { border-top: 1px solid var(--border-muted); }
 .ap-color-input {
   width: 34px;
   height: 26px;
@@ -5285,8 +5566,8 @@ watch(activeTab, (tab) => {
   cursor: pointer;
   flex-shrink: 0;
 }
-.ap-color-name { font-size: var(--font-xs); color: var(--text-primary); min-width: 92px; }
-.ap-color-token { font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); flex: 1; }
+.ap-color-name { font-size: var(--font-xs); color: var(--text-primary); min-width: 92px; flex: 1; }
+.ap-color-hex { flex-shrink: 0; font-family: var(--font-mono); font-size: var(--font-xs); color: var(--text-secondary); text-transform: lowercase; }
 .ap-color-clear {
   width: 20px;
   height: 20px;
@@ -5330,6 +5611,14 @@ watch(activeTab, (tab) => {
 /* A stack of region cards needs the gutter and its own scroll, which the bare
    .s-body (overflow:hidden, no padding) does not give. */
 .layout-body { overflow-y: auto; padding: 18px 22px; }
+/* One content width: every page stops at --settings-page-max, the card-grid
+   and list pages (.s-body--wide) at --settings-page-max-wide, so each page's
+   right edge is one of two values. The plugin and marketplace pages scroll
+   inside a wrapper, so the cap goes one level further down there. */
+.s-body > *,
+.extensions-scroll > *,
+.marketplace-scroll > * { max-width: var(--settings-page-max); }
+.s-body--wide > * { max-width: var(--settings-page-max-wide); }
 .notifications-body { overflow-y: auto; padding: 18px 22px; }
 .voice-body { overflow-y: auto; padding: 18px 22px; }
 .channels-body { overflow-y: auto; padding: 18px 22px; }
@@ -5357,26 +5646,27 @@ watch(activeTab, (tab) => {
 }
 .marketplace-view-switch {
   display: flex;
-  gap: var(--space-2);
-  padding: 0 var(--space-5) var(--space-2);
+  gap: 2px;
+  margin: 0 var(--space-5) var(--space-2);
+  border-bottom: 1px solid var(--border-muted);
 }
+/* The same underline tab as the Navide Plugins pages and Help topics. */
 .marketplace-view-tab {
+  min-height: var(--control-h-lg);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  padding: var(--space-1, 4px) var(--space-2);
+  padding: 0 12px;
   color: var(--text-secondary);
-  font-size: var(--font-xs);
+  margin-bottom: -1px;
+  font-size: var(--font-sm);
   cursor: pointer;
 }
+.marketplace-view-tab:hover { color: var(--text-primary); }
 .marketplace-view-tab--active {
   color: var(--text-bright);
-  border-bottom-color: var(--accent-fg);
-}
-/* With one of its pages selected under it, the Navide Plugins row is the
-   group's heading: the selected page carries the fill, not both rows. */
-.s-nav-group :deep(.settings-nav-item.active:has(+ .settings-nav-subitem)) {
-  background: transparent;
+  border-bottom-color: var(--accent-emphasis);
+  font-weight: 600;
 }
 /* The Navide Plugins pages as a tab row, only where the sidebar is the
    icon-only rail and has no rows for them. */
@@ -5422,33 +5712,42 @@ watch(activeTab, (tab) => {
   outline: 2px solid var(--accent-focus);
   outline-offset: -2px;
 }
-.extensions-scroll { padding-top: var(--space-2); }
-.ext-policy-block > .settings-meta-row.inline { margin: 0 22px 14px; background: var(--bg-subtle); }
+/* The page tabs only show on the narrow rail; without them the content
+   starts right at the header gap. */
+.extensions-scroll { padding-top: 0; }
+@media (max-width: 720px) {
+  .extensions-scroll { padding-top: var(--space-2); }
+}
+/* The "Applies to" strip: one inset strip inside the page gutter on every page
+   that has one — never a full-bleed band. Inside a card (General) the card
+   already supplies the gutter, so `.inline` only drops the side margins. */
 .settings-meta-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 8px 22px;
-  border-bottom: 1px solid var(--border-muted);
-  background: var(--bg-inset);
+  gap: 6px 8px;
+  margin: 10px 22px 14px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
   color: var(--text-secondary);
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   min-width: 0;
   flex-shrink: 0;
 }
 .settings-meta-row.inline {
-  padding: 7px 9px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  margin-top: 10px;
+  margin: 10px 0 0;
 }
+.ext-policy-block > .settings-meta-row.inline { margin: 0 22px 14px; }
 .settings-meta-label { flex-shrink: 0; color: var(--text-secondary); }
 .scope-badge {
   flex-shrink: 0;
   border: 1px solid var(--border-default);
   border-radius: 999px;
   padding: 2px 7px;
-  color: var(--accent-fg);
+  /* Neutral: accent is reserved for selection, the primary action and focus. */
+  color: var(--text-primary);
   background: var(--bg-muted);
   font-weight: 600;
 }
@@ -5459,27 +5758,69 @@ watch(activeTab, (tab) => {
   white-space: nowrap;
   font-family: var(--font-mono);
 }
-.settings-path-divider { color: var(--text-muted); }
+.settings-path--prose { font-family: var(--font-ui); }
+/* With paths: the scope (label + chip) on the left, then one line per file —
+   an optional "label:", the path shortened in the middle (ellipsis as the
+   last resort), and an icon button to open it at the end. No separator ever
+   starts a line, and a narrow page stacks the paths under the scope. */
+.settings-meta-row--paths { align-items: flex-start; }
+.settings-meta-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-height: var(--control-h-sm, 24px);
+}
+.settings-meta-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.settings-meta-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.settings-meta-path > .settings-path {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 24px square hit target with its frame visible, enabled or not. */
+.settings-path-btn.settings-path-btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h-sm, 24px);
+  min-height: var(--control-h-sm, 24px);
+  height: var(--control-h-sm, 24px);
+  padding: 0;
+}
 .settings-path-btn {
   flex-shrink: 0;
   border: 1px solid var(--border-default);
   background: var(--bg-subtle);
   color: var(--text-primary);
   border-radius: var(--radius-sm);
-  padding: 3px 7px;
-  font-size: 10.5px;
+  padding: 3px 9px;
+  min-height: var(--control-h-md);
+  font-size: var(--font-xs);
   cursor: pointer;
 }
 .settings-path-btn:hover:not(:disabled) {
   color: var(--text-bright);
   background: var(--bg-muted);
 }
-/* Disabled drops the fill instead of fading, so the label stays readable. */
-.settings-path-btn:disabled { opacity: 1; background: transparent; border-color: var(--border-muted); color: var(--text-secondary); cursor: not-allowed; }
+/* Disabled follows the modal's one disabled rule (solid frame, 0.6). */
 
 button.tiny {
-  padding: 3px 7px;
-  font-size: 10.5px;
+  min-height: var(--control-h-md);
+  padding: 3px 9px;
+  font-size: var(--font-xs);
   line-height: 1.2;
 }
 .summary-ok { font-size: var(--font-2xs); color: var(--success-fg); margin-left: 6px; }
@@ -5516,7 +5857,7 @@ button.tiny {
   height: 18px;
   border: 1px solid var(--border-default);
   border-radius: 50%;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   line-height: 1;
 }
 .upd-stage.active { color: var(--text-bright); }
@@ -5532,7 +5873,7 @@ button.tiny {
 
 .upd-notes-body {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   max-height: 160px;
   overflow: auto;
   margin: 4px 0 10px;
@@ -5545,7 +5886,7 @@ button.tiny {
 
 /* ── Fields ───────────────────────────────────────────────────────────────── */
 .field { display: flex; flex-direction: column; gap: 4px; }
-.lbl { font-size: var(--font-3xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+.lbl { font-size: var(--font-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 input[type='text'], input[type='email'], input[type='number'], input[type='password'], textarea, select {
   background: var(--bg-subtle);
   border: 1px solid var(--border-default);
@@ -5564,7 +5905,7 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 /* ── List items ───────────────────────────────────────────────────────────── */
 .row-g { display: flex; align-items: center; gap: 6px; }
 .row-g.gap { gap: 8px; }
-.badge { background: var(--bg-muted); color: var(--text-secondary); font-size: 9px; padding: 1px 5px; border-radius: var(--radius-xs); }
+.badge { background: var(--bg-muted); color: var(--text-secondary); font-size: var(--font-2xs); padding: 1px 5px; border-radius: var(--radius-xs); }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 button {
@@ -5581,7 +5922,8 @@ button {
     color var(--motion-fast) var(--ease-out),
     opacity var(--motion-fast) var(--ease-out);
 }
-button:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Disabled text stays readable: 0.6 keeps small labels near 4.5:1. */
+button:disabled { opacity: 0.6; cursor: not-allowed; }
 button.primary { background: var(--success-emphasis); border-color: var(--success-strong); color: var(--text-on-emphasis); font-weight: 600; }
 button.primary:not(:disabled):hover { background: var(--success-strong); }
 button.danger { background: var(--danger-deep); border-color: var(--danger-muted); color: var(--text-on-emphasis); }
@@ -5628,31 +5970,12 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 /* Same shape as the account window's footer: one muted row, no underline until
    hover. Two stacked lines with an underlined link read as a web page. */
 /* The transport's own words, quieter than the sentence explaining them. */
-.link-detail { display: block; margin-top: 2px; color: var(--text-secondary); word-break: break-word; }
+.link-detail { display: block; margin-top: 2px; color: var(--text-secondary); overflow-wrap: anywhere; }
 /* Its own container class, with the same box the other tab bodies have. It
    borrowed the appearance tab's, which is a name that says nothing about this
    page and a rule anybody editing that tab would reasonably assume they
    owned. */
 .cross-device-body { overflow-y: auto; padding: 18px 22px; }
-/* Navide Cloud is the one settings page that names a product rather than a
-   group of controls, so it is the one page title that carries the mark. */
-.nvc-page-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.nvc-page-mark {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--accent-muted);
-  background: var(--accent-subtle);
-  color: var(--accent-fg);
-  --nv-cloud-node-fill: var(--accent-subtle);
-}
-.nvc-page-mark :deep(.nv-cloud-mark) { width: 21px; height: 16px; }
 .nvc-nav-mark { width: 17px; height: 13px; }
 .legal-row {
   display: flex; align-items: center; gap: 6px;
@@ -5684,7 +6007,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
    claiming to be a rule. */
 .policy-rule-head {
   border: 0; background: none; padding: 2px 8px;
-  font-size: var(--font-3xs); text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: var(--font-2xs); text-transform: uppercase; letter-spacing: 0.06em;
 }
 .policy-rule-head span { color: var(--text-secondary); }
 .policy-any { color: var(--text-secondary); }
@@ -5702,33 +6025,46 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 
 /* ── Appearance tab ─────────────────────────────────────────────────────────── */
 .appearance-body { overflow-y: auto; }
-.help-body { overflow-y: auto; padding: 18px 22px; }
+.help-body { overflow-y: auto; padding: 18px 22px; container: help-body / inline-size; }
+/* Help topics are page tabs, so they use the one underline tab style of the
+   Navide Plugins pages and Marketplace views. At narrow widths the topics
+   wrap onto a second row instead of scrolling sideways with the last ones
+   hidden past the edge. */
 .help-topics {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px;
+  max-width: 100%;
+  flex-shrink: 0;
   margin-bottom: 18px;
-  padding: 3px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-md);
-  background: var(--bg-inset);
-  align-self: flex-start;
+  border-bottom: 1px solid var(--border-muted);
+}
+/* Exactly one chapter control at a time: tabs on a wide page, the dropdown
+   below 700px. It sits after the .help-topics rule so the query wins. */
+.help-topic-select { display: none; }
+@container help-body (max-width: 700px) {
+  .help-topics { display: none; }
+  .help-topic-select { display: block; width: 100%; max-width: 360px; margin-bottom: 18px; }
 }
 .help-topic {
+  flex: none;
+  white-space: nowrap;
+  min-height: var(--control-h-lg);
+  margin-bottom: -1px;
+  padding: 0 12px;
   border: none;
-  background: transparent;
+  border-bottom: 2px solid transparent;
+  background: none;
   color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 5px 14px;
-  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  font-weight: 400;
   cursor: pointer;
 }
 .help-topic:hover { color: var(--text-primary); }
 .help-topic.active {
-  background: var(--bg-base);
+  border-bottom-color: var(--accent-emphasis);
   color: var(--text-bright);
-  box-shadow: 0 1px 2px var(--shadow-overlay);
+  font-weight: 600;
 }
 
 /* ── MCP tab ──────────────────────────────────────────────────────────────── */
@@ -5739,18 +6075,23 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .mcp-body { overflow-y: auto; display: flex; flex-direction: column; }
 
 /* Top bar */
+/* Catalog / custom views: a toolbar row inside the page gutter, not a band. */
 .mcp-topbar {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 12px 22px; border-bottom: 1px solid var(--border-muted);
-  flex-shrink: 0; background: var(--bg-inset);
+  padding: 12px 22px 0;
+  flex-shrink: 0;
 }
-.mcp-page-title { font-size: var(--font-sm); font-weight: 700; color: var(--text-bright); flex: 1; min-width: 0; }
-.mcp-topbar-actions { display: flex; gap: 8px; }
+/* The title keeps a readable width; the actions drop below it instead of squeezing it. */
+.mcp-page-title { font-size: var(--font-sm); font-weight: 700; color: var(--text-bright); flex: 1; min-width: 12em; }
+.mcp-topbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .mcp-action-btn {
-  font-size: var(--font-2xs); padding: 5px 11px; border-radius: var(--radius-sm);
+  display: inline-flex; align-items: center; min-height: var(--control-h-md);
+  font-size: var(--font-xs); padding: 0 11px; border-radius: var(--radius-control);
   background: var(--bg-muted); border: 1px solid var(--border-default); color: var(--text-bright); cursor: pointer;
 }
 .mcp-action-btn:hover:not(:disabled) { background: var(--border-default); }
+.mcp-action-btn--primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
+.mcp-action-btn--primary:hover:not(:disabled) { background: var(--accent-emphasis); filter: brightness(1.08); }
 .mcp-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .mcp-back-btn {
   font-size: var(--font-xs); padding: 4px 10px; border-radius: var(--radius-sm);
@@ -5817,13 +6158,13 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .mcp-catalog-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .mcp-catalog-name { font-size: var(--font-sm); font-weight: 700; color: var(--text-bright); }
 .mcp-catalog-desc { font-size: var(--font-2xs); color: var(--text-secondary); line-height: var(--lh-base); }
-.mcp-catalog-note { font-size: var(--font-3xs); color: var(--attention-fg); margin-top: 2px; }
+.mcp-catalog-note { font-size: var(--font-2xs); color: var(--attention-fg); margin-top: 2px; }
 .mcp-add-btn {
   font-size: var(--font-2xs); padding: 6px 14px; border-radius: var(--radius-sm); white-space: nowrap; flex-shrink: 0;
   background: var(--accent-emphasis); border: 1px solid var(--accent-focus); color: var(--text-on-emphasis); font-weight: 600; cursor: pointer;
 }
 .mcp-add-btn:hover:not(:disabled) { background: var(--accent-focus); }
-.mcp-add-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.mcp-add-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .mcp-installed-badge {
   font-size: var(--font-2xs); padding: 6px 14px; border-radius: var(--radius-sm); white-space: nowrap; flex-shrink: 0;
   background: var(--bg-muted); border: 1px solid var(--border-default); color: var(--text-muted); cursor: not-allowed;
@@ -5846,16 +6187,18 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 /* ── Analyzer tab ─────────────────────────────────────────────────────────── */
 .analyzer-body { display: flex; flex-direction: column; gap: 0; overflow-y: auto; padding: 0; }
 
+/* Each part is a SettingsSection (the one heading style) over a card of rows,
+   inset to the page gutter: no full-bleed dividers. */
 .az-section {
-  padding: 14px 22px;
-  border-bottom: 1px solid var(--border-muted);
+  padding: 0 22px;
   flex-shrink: 0;
 }
-.az-section-title { font-size: var(--font-2xs); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
-.az-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.az-section-header .az-section-title { margin-bottom: 0; }
-.az-section-note { font-size: var(--font-3xs); color: var(--text-muted); }
-.az-subsection { margin-top: 12px; }
+.az-section:last-child { padding-bottom: 22px; }
+.az-section-desc { margin: 0 0 8px; max-width: 75ch; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: var(--lh-base); }
+.az-row { padding: var(--space-row-y) var(--space-row-x); }
+.az-run-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px var(--space-row-x); }
+.az-run-text { flex: 1 1 260px; min-width: 0; }
+.az-run-desc { margin: 0; max-width: 75ch; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: var(--lh-base); }
 .az-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
 .az-status-dot.ok { background: var(--success-fg); }
 .az-status-dot.err { background: var(--danger-fg); }
@@ -5889,13 +6232,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 .az-browse-btn:hover { background: var(--border-default); color: var(--text-bright); }
 
-.az-backend-toggle { display: flex; gap: 0; border: 1px solid var(--border-default); border-radius: var(--radius-sm); overflow: hidden; width: fit-content; }
-.az-backend-btn {
-  background: var(--bg-subtle); border: none; color: var(--text-secondary); font-size: var(--font-xs);
-  padding: 6px 16px; cursor: pointer; transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
-}
-.az-backend-btn:hover { background: var(--bg-muted); color: var(--text-bright); }
-.az-backend-btn.active { background: var(--accent-emphasis); color: var(--text-on-emphasis); font-weight: 600; }
+/* The backend switch is the shared .settings-segmented control. */
 
 .az-label { display: block; font-size: var(--font-2xs); color: var(--text-secondary); margin-bottom: 5px; }
 .az-hint-inline { color: var(--text-muted); font-style: italic; }
@@ -5908,7 +6245,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-input:focus { border-color: var(--accent-focus); }
 .az-status-row { margin-top: 8px; }
 
-.az-pull-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.az-pull-row { display: flex; gap: 8px; align-items: center; }
 .az-pull-input { flex: 1; margin-bottom: 0; }
 /* Secondary on purpose: "run benchmark" is the page's one primary action. */
 .az-pull-btn { font-size: var(--font-xs); font-weight: 600; padding: 7px 16px; }
@@ -5919,17 +6256,20 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 .az-progress-bar { height: 100%; background: var(--accent-emphasis); border-radius: var(--radius-xs); transition: width var(--motion-base) var(--ease-out); }
 
-.az-model-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
-.az-no-models { font-size: var(--font-xs); color: var(--text-muted); padding: 8px 0; }
+/* Installed models are rows of the card, hairlines between. */
+.az-model-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+.az-no-models { font-size: var(--font-row-desc); color: var(--text-secondary); padding: var(--space-row-y) var(--space-row-x); }
 .az-model-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 7px 10px; background: var(--bg-base); border: 1px solid var(--border-muted); border-radius: var(--radius-sm);
+  padding: 8px var(--space-row-x);
 }
+.az-model-row + .az-model-row { border-top: 1px solid var(--border-muted); }
 .az-model-info { display: flex; flex-direction: column; gap: 2px; }
 .az-model-name { font-size: var(--font-xs); color: var(--text-bright); font-family: var(--font-mono); }
-.az-model-meta { font-size: var(--font-3xs); color: var(--text-secondary); }
+.az-model-meta { font-size: var(--font-xs); color: var(--text-secondary); }
 .az-del-btn {
   background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: var(--font-xs);
+  min-width: 24px; min-height: 24px;
   padding: 2px 6px; border-radius: var(--radius-xs); transition: color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
 .az-del-btn:hover { color: var(--danger-fg); background: var(--bg-muted); }
@@ -5950,14 +6290,13 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   transition: background var(--motion-fast) var(--ease-out);
 }
 .az-run-btn:hover:not(:disabled) { background: var(--accent-focus); }
-.az-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.az-run-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .az-progress-wrap {
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--border-muted);
-  background: var(--bg-base);
+  padding: 10px 0 0;
   flex-shrink: 0;
 }
+.az-benchmark-section .az-progress-wrap { padding: 10px var(--space-row-x); }
 .az-progress-label { font-size: var(--font-xs); color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
 .az-spin {
   display: inline-block;
@@ -5972,9 +6311,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 @media (prefers-reduced-motion: reduce) { .az-spin { animation: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* No side padding: the hint lines up with its section title above it. */
 .az-hint {
-  padding: 8px 0 4px;
   color: var(--text-secondary);
   font-size: var(--font-xs);
   line-height: 1.7;
@@ -5985,11 +6322,10 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-hint code { background: var(--bg-subtle); padding: 1px 5px; border-radius: var(--radius-xs); font-size: var(--font-2xs); color: var(--text-bright); }
 .az-pass-rule { color: var(--text-secondary); font-size: var(--font-2xs); }
 
-.az-results { padding: 16px 20px; flex: 1; overflow-y: auto; min-height: 0; }
+.az-results { padding: 8px var(--space-row-x) 12px; flex: 1; overflow-x: auto; min-height: 0; }
 .az-results-summary {
-  font-size: var(--font-xs);
+  font-size: var(--font-row-desc);
   color: var(--text-secondary);
-  margin-bottom: 12px;
 }
 .az-results-summary strong { color: var(--success-fg); }
 
@@ -6008,7 +6344,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-td-task { text-align: center; white-space: nowrap; }
 .az-td-score { text-align: center; color: var(--text-secondary); }
 .az-td-verdict { text-align: center; }
-.az-elapsed { font-size: var(--font-3xs); color: var(--text-secondary); margin-left: 3px; }
+.az-elapsed { font-size: var(--font-2xs); color: var(--text-secondary); margin-left: 3px; }
 .az-pass,
 .az-fail { display: inline-flex; vertical-align: -2px; }
 .az-pass { color: var(--success-fg); }
@@ -6018,14 +6354,14 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .failover-table td { font-size: var(--font-2xs); }
 .failover-notes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .failover-tag {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   border-radius: 99px;
   padding: 0 6px;
   background: var(--bg-hover);
   color: var(--text-muted);
   white-space: nowrap;
 }
-.failover-todo { font-size: var(--font-3xs); color: var(--text-muted); }
+.failover-todo { font-size: var(--font-2xs); color: var(--text-muted); }
 .failover-warn { margin: 0 0 6px; font-size: var(--font-2xs); color: var(--attention-fg); }
 .az-row-fail td { color: var(--text-secondary); }
 .az-row-fail .az-td-model { color: var(--text-muted); }
@@ -6060,7 +6396,6 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-gguf-hint,
 .az-section-note,
 .cli-agent-hint,
-.help-topic,
 .hint-msg,
 .mcp-catalog-desc,
 .mcp-catalog-hint,
@@ -6124,7 +6459,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   background: var(--bg-base);
 }
 .s-sidebar {
-  background: var(--bg-inset);
+  background: var(--settings-inset, var(--bg-inset));
 }
 .s-nav-group-title { color: var(--text-secondary); }
 .s-search-input:hover:not(:disabled) { border-color: var(--border-strong); }
@@ -6139,9 +6474,251 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   outline: 2px solid var(--accent-fg);
   outline-offset: 2px;
 }
+/* The same ring for the panes mounted inside a page, at the lowest
+   specificity so a control that draws its own focus keeps it. */
+.s-body :deep(:where(button, a[href], input, textarea, select, summary, [role='tab'], [tabindex]:not([tabindex='-1'])):focus-visible) {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: 2px;
+}
+
+/* One checkbox for every settings page: a 16px box in the theme's colours,
+   filled with the accent and a check mark when on, the shared focus ring.
+   Labels around it give the 24px hit area. */
+.s-body :deep(input[type='checkbox']) {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-base) center / 12px 12px no-repeat;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+.s-body :deep(input[type='checkbox']:hover:not(:disabled)) { border-color: var(--accent-fg); }
+.s-body :deep(input[type='checkbox']:checked),
+.s-body :deep(input[type='checkbox']:indeterminate) {
+  border-color: var(--accent-emphasis);
+  background-color: var(--accent-emphasis);
+}
+.s-body :deep(input[type='checkbox']:checked) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3.5 8.5 3 3 6-7'/%3E%3C/svg%3E");
+}
+.s-body :deep(input[type='checkbox']:indeterminate) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+}
+.s-body :deep(input[type='checkbox']:focus-visible) {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: 2px;
+}
+.s-body :deep(input[type='checkbox']:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .ap-theme-card:focus-visible,
 .ap-lang-btn:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: 2px; }
-.ap-theme-card.active,
 .ap-lang-btn.active { background: var(--accent-subtle); }
 .settings-meta-row { color: var(--text-secondary); }
+
+/* One disabled look for every button on a settings page, the panes mounted
+   inside it included: no fill, the button's own solid frame, primary text
+   and the whole button at 0.6 opacity (text stays at or above 3:1 on the
+   page and card fills in light and dark themes), and no hover
+   or press feedback. Dashed frames are reserved for drop zones and add
+   placeholders, never for a disabled or secondary button. Switches keep
+   their own track. */
+.s-body :deep(button:disabled:not([role='switch'])),
+.s-body :deep(button[aria-disabled='true']:not([role='switch'])) {
+  opacity: 0.6;
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  box-shadow: none;
+  transform: none;
+  cursor: default;
+}
+
+/* Chinese, Japanese and Korean have no letter case: an uppercase eyebrow
+   only shouts the Latin words inside it ("GUARD の動作", "ANTIGRAVITY CLI
+   (GOOGLE)") and the tracking pulls the characters apart. In those locales
+   the section labels and eyebrows (and only those) drop the transform and
+   the letter-spacing, and take one size and weight step up so they still
+   read as labels without the caps. !important because each pane sets its
+   own eyebrow rule at a higher specificity. */
+.s-modal:is(:lang(ja), :lang(zh), :lang(ko)) :deep(:is(
+  .settings-section-label, .ap-title,
+  .policy-section-label, .policy-rule-head, .cli-title, .ga-title,
+  .ep-section h2, .ext-section-title, .native-backends-title,
+  .mcp-group-title, .skills-group-title, .memory-group-title,
+  .cred-group-title, .kse-group-title, .su-group-head, .sb-head,
+  .mkt-section-label, .cli-group-label
+)) {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-size: var(--font-md) !important;
+  font-weight: 600 !important;
+  color: var(--text-secondary);
+}
+/* Smaller eyebrows (table heads, drawer sub-headings, field labels, badges)
+   only drop the caps and tracking. */
+.s-modal:is(:lang(ja), :lang(zh), :lang(ko)) :deep(:is(
+  .s-nav-group-title, .lbl,
+  .skills-matrix tbody tr.group th, .skill-drawer-section h4, .cred-drawer h4,
+  .drawer-section h4, .drawer-section label > span, .drawer-field > span,
+  .skills-create label > span, .skill-advanced-grid label > span,
+  .skills-toolbar h2, .kse-table th, .mkt-versions th, .mkt-side-card h4,
+  .sb-preview, .sb-rowonly, .skill-badge, .prompt-badge, .cred-sev
+)) {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+/* The one "Learn more" disclosure under a description that would otherwise
+   run past two lines: a quiet accent summary, the folded text in the
+   description's own size and colour. Each place keeps its own margins. */
+.s-body :deep(.settings-more) {
+  font-size: var(--font-row-desc);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.s-body :deep(.settings-more > summary) {
+  /* A 24px target: the summary is a control, not a line of text. It keeps
+     its list-item display, so the disclosure triangle stays. */
+  box-sizing: border-box;
+  min-height: 24px;
+  padding: 2px 4px;
+  margin-left: -4px;
+  border-radius: var(--radius-xs, 4px);
+  width: fit-content;
+  cursor: pointer;
+  color: var(--accent-fg);
+}
+.s-body :deep(.settings-more > p) {
+  margin: 4px 0 0;
+  max-width: 72ch;
+  text-wrap: pretty;
+}
+
+/* The one list filter chip (CLI Agents, Skills, Prompts, Shortcuts): a pill
+   with its count, the chosen one on a neutral selected fill. Accent stays for
+   the page's primary button and the sidebar selection, so a toolbar has one
+   accent focus. Page tabs are underline tabs and view switches are
+   .settings-segmented. */
+.s-body :deep(.settings-filter-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-h-md);
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-xs);
+  font-weight: 400;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.s-body :deep(.settings-filter-chip:hover:not(:disabled)) { background: var(--bg-hover); }
+.s-body :deep(.settings-filter-chip .count) {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  opacity: 1;
+}
+.s-body :deep(.settings-filter-chip[aria-pressed='true']),
+.s-body :deep(.settings-filter-chip.on),
+.s-body :deep(.settings-filter-chip.active) {
+  border-color: var(--border-strong);
+  background: var(--bg-hover-strong);
+  color: var(--text-bright);
+  font-weight: 600;
+}
+.s-body :deep(.settings-filter-chip[aria-pressed='true'] .count),
+.s-body :deep(.settings-filter-chip.on .count),
+.s-body :deep(.settings-filter-chip.active .count) { color: inherit; }
+
+/* Every status pill and tag ends in an ellipsis inside its card instead of
+   being cut mid-letter; the ones that can run long carry v-truncate, which
+   shows the full text on hover. */
+.s-body :deep(:is(
+  .scope-badge, .cli-chip, .skill-source-tag, .skill-badge, .prompt-badge,
+  .memory-tag, .cred-sev, .dchip, .rchip
+)) {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The one segmented control for every in-page view switch and mode picker
+   (Execution Policy, Analyzer, MCP, Skills, Credentials): one outlined strip
+   on no fill of its own, a segment per choice, the chosen one filled. A
+   segment is a button (.on / .active / aria-pressed) or a label around a
+   visually hidden radio. Page-level tabs stay underline tabs. */
+.s-body :deep(.settings-segmented) {
+  display: inline-flex;
+  flex-wrap: wrap;
+  flex: none;
+  max-width: 100%;
+  width: fit-content;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: transparent;
+  overflow: hidden;
+}
+.s-body :deep(.settings-segmented > button),
+.s-body :deep(.settings-segmented > label) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--control-h-md);
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-left: 1px solid var(--border-default);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  font-weight: 400;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+.s-body :deep(.settings-segmented > :first-child) { border-left: 0; }
+.s-body :deep(.settings-segmented > button:hover:not(:disabled)),
+.s-body :deep(.settings-segmented > label:hover:not(:has(input:disabled))) { background: var(--bg-hover); }
+.s-body :deep(.settings-segmented > button.on),
+.s-body :deep(.settings-segmented > button.active),
+.s-body :deep(.settings-segmented > button[aria-pressed='true']),
+.s-body :deep(.settings-segmented > button[aria-selected='true']),
+.s-body :deep(.settings-segmented > label:has(input:checked)) {
+  /* A neutral filled segment, not just a coloured label; accent is kept for
+     the primary button and the sidebar selection. */
+  background: var(--bg-hover-strong);
+  color: var(--text-bright);
+  font-weight: 600;
+}
+.s-body :deep(.settings-segmented > button:focus-visible),
+.s-body :deep(.settings-segmented > label:has(input:focus-visible)) {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: -2px;
+}
+.s-body :deep(.settings-segmented > label:has(input:disabled)) { cursor: not-allowed; opacity: 0.55; }
+.s-body :deep(.settings-segmented > label > input[type='radio']) {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
 </style>

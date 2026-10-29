@@ -654,7 +654,8 @@ describe('CliAccountsPane', () => {
     const row = section(w, 0).findAll('.cli-card')[0]
     expect(row.classes()).not.toContain('cli-card-collapsed')
     expect(row.get('.cli-card-id').text()).toBe('Original login')
-    expect(row.get('.cli-badge').text()).toBe('Active')
+    // Not signed in, so it carries no "Active" pill at all.
+    expect(row.find('.cli-badge').exists()).toBe(false)
     expect(buttonByText(row, 'Sign In')).toBeDefined()
   })
 
@@ -1004,9 +1005,9 @@ describe('CliAccountsPane', () => {
     expect(cards[1].get('.cli-card-big').text()).toContain('80%')
   })
 
-  it('shows an expired snapshot when display identity reports signed out', () => {
+  it('says a signed-out card is signed out once, with Sign In and no quota placeholder or refresh', () => {
     usage.accountUsageFor.mockImplementation((key) =>
-      key === 'claude' ? usageSnapshot({ status: 'expired', windows: [] }) : undefined,
+      key === 'claude' ? usageSnapshot({ status: 'expired', refreshStatus: 'no-credentials', windows: [] }) : undefined,
     )
     const w = mountPane(
       makeApi({
@@ -1014,8 +1015,12 @@ describe('CliAccountsPane', () => {
       }),
     )
 
-    expect(section(w, 0).get('.cli-card-expired').text()).toContain('⚠')
-    expect(section(w, 0).get('.cli-card-none').text()).toContain('No quota data yet')
+    const card = section(w, 0).findAll('.cli-card')[0]
+    expect(card.text().match(/not signed in/gi)).toHaveLength(1)
+    expect(card.text()).not.toContain('No quota data yet')
+    expect(card.text()).not.toContain("Can't refresh")
+    expect(card.find('.cli-card-refresh-btn').exists()).toBe(false)
+    expect(buttonByText(card, 'Sign In')).toBeDefined()
   })
 
   it('shows cached quota, last success and refresh state on a non-active card', () => {

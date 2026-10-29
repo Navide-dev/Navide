@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
 import { consumeConvenienceOverviewRequest, useConvenienceState } from '../composables/useConvenience'
 import ConvenienceOverview from './ConvenienceOverview.vue'
+import PathText from './settings/PathText.vue'
 import { convenienceText } from '../lib/convenienceText'
 
 // Settings → Extensions: what each AI CLI installed for itself, as the
@@ -60,6 +61,13 @@ function isNavideChange(item: CliExtension): boolean {
   return item.kind === 'navide-change'
 }
 
+// Every L2 row has `exec` (it starts a hook command or an MCP/LSP server), and
+// its tier chip already says "Runs separate programs"; an `exec` chip beside
+// it would say the same thing twice.
+function shownCapabilities(item: CliExtension): string[] {
+  return item.exec_tier === 'L2' ? item.capabilities.filter((cap) => cap !== 'exec') : item.capabilities
+}
+
 function openFeature(id: string): void {
   focusFeature.value = id
   tab.value = 'convenience'
@@ -89,6 +97,7 @@ async function load(): Promise<void> {
 
 const valid = computed(() => items.value.filter((item) => item.valid))
 const inProcess = computed(() => valid.value.filter((item) => item.exec_tier === 'L3').length)
+const separatePrograms = computed(() => valid.value.filter((item) => item.exec_tier === 'L2').length)
 
 // L3 first inside each CLI: code running in the CLI's own process is what a
 // reader should see before hooks and text assets.
@@ -121,7 +130,7 @@ onMounted(() => { void load() })
     <header class="cli-ext-header">
       <p class="cli-ext-intro">{{ t('settings.cliExtensions.intro') }}</p>
       <div class="cli-ext-summary">
-        <span class="cli-ext-counts">{{ t('settings.cliExtensions.summary', { total: valid.length, l3: inProcess }) }}</span>
+        <span class="cli-ext-counts">{{ t('settings.cliExtensions.summary', { total: valid.length, l3: inProcess, l2: separatePrograms }) }}</span>
         <button type="button" class="cli-ext-rescan" :disabled="loading" @click="load">
           {{ loading ? t('settings.cliExtensions.loading') : t('settings.cliExtensions.rescan') }}
         </button>
@@ -178,13 +187,15 @@ onMounted(() => { void load() })
             <p v-if="!item.valid" class="cli-ext-error">{{ t('settings.cliExtensions.invalid', { error: item.error }) }}</p>
             <template v-else>
               <p v-if="item.enabled_error" class="cli-ext-warning">{{ t('settings.cliExtensions.enabledUnknownReason', { error: item.enabled_error }) }}</p>
-              <div v-if="item.capabilities.length" class="cli-ext-caps">
-                <span v-for="cap in item.capabilities" :key="cap" v-truncate class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
+              <div v-if="shownCapabilities(item).length" class="cli-ext-caps">
+                <span v-for="cap in shownCapabilities(item)" :key="cap" v-truncate class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
                 <span v-if="item.evidence === 'inferred'" v-truncate class="cli-ext-inferred" :title="t('settings.cliExtensions.inferredHint')">{{ t('settings.cliExtensions.inferred') }}</span>
               </div>
               <p v-if="!isNavideChange(item)" class="cli-ext-consent">{{ t(`settings.cliExtensions.consent.${item.native_consent}`) }}</p>
               <code v-if="item.detail" v-truncate class="cli-ext-detail">{{ item.detail }}</code>
-              <code v-if="item.path" v-truncate class="cli-ext-path">{{ item.path }}</code>
+              <!-- Shortened in the middle and wrapped after a separator, so a
+                   narrow window never hard-clips the folder that matters. -->
+              <code v-if="item.path" class="cli-ext-path"><PathText :path="item.path" /></code>
             </template>
           </li>
         </ul>
@@ -196,9 +207,11 @@ onMounted(() => { void load() })
 <style scoped>
 /* The two tabs and the overview sit outside the scrolling list, so they
    carry the same page gutter; the overview scrolls on its own. */
-.cli-ext-tabs { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: 4px; margin: 12px 22px 0; border-bottom: 1px solid var(--border-muted); }
-.cli-ext-tab { font: inherit; font-size: var(--font-xs); color: var(--text-secondary); background: none; border: none; border-bottom: 2px solid transparent; padding: 4px 8px; cursor: pointer; }
-.cli-ext-tab[aria-selected='true'] { color: var(--text-bright); border-bottom-color: var(--accent-fg, var(--text-bright)); }
+/* The Settings page tab: the same underline tab as Navide Plugins, Marketplace and Help. */
+.cli-ext-tabs { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: 2px; margin: 12px 22px 0; border-bottom: 1px solid var(--border-muted); }
+.cli-ext-tab { font: inherit; font-size: var(--font-sm); min-height: var(--control-h-lg); margin-bottom: -1px; color: var(--text-secondary); background: none; border: none; border-bottom: 2px solid transparent; padding: 0 12px; cursor: pointer; }
+.cli-ext-tab:hover { color: var(--text-primary); }
+.cli-ext-tab[aria-selected='true'] { color: var(--text-bright); font-weight: 600; border-bottom-color: var(--accent-emphasis, var(--text-bright)); }
 .cli-ext-convenience { flex: 1; min-height: 0; padding: 12px 22px 18px; overflow-y: auto; overflow-x: hidden; }
 /* The Settings tab body is full-bleed and overflow:hidden (see .s-body--bleed
    in SettingsModal), so like the other bleed panes this one carries the page
@@ -242,7 +255,7 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
 .cli-ext-empty { margin-left: auto; min-width: 0; font-size: var(--font-2xs); color: var(--text-muted); text-align: right; }
 
 .cli-ext-list { list-style: none; margin: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.cli-ext-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 9px 12px; border: 1px solid var(--border-muted); border-radius: var(--radius-sm); background: var(--bg-elevated); }
+.cli-ext-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 9px 12px; border: 1px solid var(--settings-card-border, var(--border-muted)); border-radius: var(--radius-sm); background: var(--bg-elevated); }
 .cli-ext-card.off { opacity: 0.7; }
 .cli-ext-card.broken { border-color: var(--danger-muted); }
 .cli-ext-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
@@ -253,12 +266,16 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
   color: var(--text-bright);
   overflow-wrap: anywhere;
 }
-.cli-ext-version { min-width: 0; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.cli-ext-version { min-width: 0; font-family: var(--font-mono); font-size: var(--font-xs); color: var(--text-secondary); overflow-wrap: anywhere; }
 .cli-ext-badges, .cli-ext-caps { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.cli-ext-type, .cli-ext-tier, .cli-ext-owner, .cli-ext-disabled, .cli-ext-unknown, .cli-ext-cap, .cli-ext-inferred { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; font-size: 10.5px; line-height: 16px; border-radius: var(--radius-pill); padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
+.cli-ext-type, .cli-ext-tier, .cli-ext-owner, .cli-ext-disabled, .cli-ext-unknown, .cli-ext-cap, .cli-ext-inferred { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; font-size: var(--font-2xs); line-height: 16px; border-radius: var(--radius-pill); padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
 .cli-ext-type { color: var(--text-primary); background: var(--bg-muted); }
 .cli-ext-tier.tier-L3 { color: var(--danger-fg); border-color: var(--danger-muted); background: var(--danger-subtle); }
-.cli-ext-tier.tier-L2 { color: var(--warning-fg, var(--text-primary)); border-color: var(--attention-muted); background: var(--attention-subtle); }
+/* Most hooks and servers run a separate program, so an amber pill on every
+   row would be noise: a neutral chip with a small "program" mark keeps the
+   information, and colour stays for the in-process tier. */
+.cli-ext-tier.tier-L2 { color: var(--text-primary); border-color: var(--border-default); background: var(--bg-muted); }
+.cli-ext-tier.tier-L2::before { content: '▸'; margin-right: 4px; color: var(--text-secondary); }
 .cli-ext-owner { color: var(--accent-fg, var(--text-primary)); border-color: var(--accent-muted); background: var(--accent-subtle); }
 .cli-ext-disabled { border-style: dashed; }
 .cli-ext-unknown { border-style: dashed; color: var(--warning-fg, var(--text-primary)); border-color: var(--attention-muted); }
@@ -266,5 +283,7 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
 .cli-ext-feature-link { font: inherit; font-weight: 600; background: none; border: none; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; }
 .cli-ext-inferred { border-style: dashed; }
 .cli-ext-consent { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); }
-.cli-ext-detail, .cli-ext-path { display: block; min-width: 0; padding: 3px 6px; border-radius: var(--radius-xs); background: var(--bg-inset); font-size: 10.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cli-ext-detail { display: block; min-width: 0; padding: 3px 6px; border-radius: var(--radius-xs); background: var(--bg-inset); font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Same box as .cli-ext-detail; the PathText inside does its own clipping. */
+.cli-ext-path { display: block; min-width: 0; padding: 3px 6px; border-radius: var(--radius-xs); background: var(--bg-inset); font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; }
 </style>

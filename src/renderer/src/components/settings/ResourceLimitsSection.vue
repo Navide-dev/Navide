@@ -141,6 +141,7 @@ function onEvolveReclaimValue(event: Event): void {
         data-settings-section="limits-test-workers"
         :title="t('settings.limits.test-workers')"
         :description="t('settings.limits.test-workers-hint')"
+        fold-description
         new-panes-only
       >
         <template #control>
@@ -172,6 +173,7 @@ function onEvolveReclaimValue(event: Event): void {
         data-settings-section="limits-focused-reclaim"
         :title="t('settings.limits.focused-reclaim')"
         :description="t('settings.limits.focused-reclaim-hint')"
+        fold-description
       >
         <template #control>
           <ToggleSwitch
@@ -202,6 +204,7 @@ function onEvolveReclaimValue(event: Event): void {
         data-settings-section="limits-evolve-reclaim"
         :title="t('settings.limits.evolve-reclaim')"
         :description="t('settings.limits.evolve-reclaim-hint')"
+        fold-description
       >
         <template #control>
           <ToggleSwitch
@@ -233,6 +236,7 @@ function onEvolveReclaimValue(event: Event): void {
         data-settings-section="limits-spotlight"
         :title="t('settings.limits.spotlight')"
         :description="t('settings.limits.spotlight-hint')"
+        fold-description
       >
         <template #control>
           <button type="button" data-testid="limit-spotlight-open" @click="openSpotlightSettings">
@@ -245,6 +249,7 @@ function onEvolveReclaimValue(event: Event): void {
         data-settings-section="limits-detached"
         :title="t('settings.limits.detached')"
         :description="t('settings.limits.detached-hint')"
+        fold-description
         new-panes-only
       >
         <template #control>

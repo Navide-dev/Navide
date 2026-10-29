@@ -115,10 +115,14 @@ pytestmark = pytest.mark.asyncio
 #: f50fb86a…): scheduler_upsert documents the pipeline_start action,
 #: pipeline_status the interrupted state and pipeline_graph the set_retry op.
 #: No other tool changed.
-#: Re-pinned for 0.2.34 n8n import on top of p2-triggers (previous pin
-#: 879e4cb6…, #742): adds the core tool pipeline_import_n8n. No other tool
-#: changed.
-MAIN_TOOLS_LIST_SHA256 = "ad2591ece46c4a84b4f3c3b7b05db4ab4272bdd97418180113b0cb3394c45736"
+#: Re-pinned for the pipeline signal-spoofing fix (previous pin 879e4cb6…):
+#: the pipeline_graph description documents the per-kickoff signal code in
+#: ---BRANCH--- / ---OUTPUT--- / ---NODE-FAILED--- and that claude / codex
+#: signals come from turn text only. No other tool changed.
+#: Re-pinned for 0.2.34 n8n import on top of the signal-spoofing fix
+#: (previous pin 421fe173…, #752): adds the core tool pipeline_import_n8n.
+#: No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "39886aa6e8d2ad0aca3e25a4ff83730b3bdbbf56d7a391cd794d1e0b5ca92f31"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -146,6 +150,8 @@ W1_CORE_TOOLS = frozenset({
 })
 #: Core tools added after that digest by DESIGN-C S3 (mcp_server/window_tools.py).
 DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", "workspace_close", "window_move_pane"})
+#: Self-evolution S5b: the reclaim retrospective tool.
+EVOLVE_RETRO_CORE_TOOLS = frozenset({"evolve_retro"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server). Re-pinned in 0.2.32 when
 #: skills_set_delivery's description gained the approval for widening.
@@ -321,7 +327,8 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     pristine = await _tools_list_text()
     builtin = await _builtin_package_tool_names()
     module_only = [t for t in json.loads(pristine) if t["name"] not in builtin]
-    added = B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS | DESIGN_C_CORE_TOOLS
+    added = (B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS
+             | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS)
     assert added <= {t["name"] for t in module_only}
     existing = [t for t in module_only if t["name"] not in added]
     module_text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)

@@ -1201,7 +1201,7 @@
     "go-to-commit": "Go to Commit",
     "install-missing": "Install Missing",
     "fix": "Fix",
-    "add-mcp": "Add MCP +",
+    "add-mcp": "+ Add MCP",
     "open-mcp-config": "Open MCP Config",
     "accept-ours": "Accept Ours",
     "accept-theirs": "Accept Theirs",
@@ -1265,6 +1265,7 @@
     "toggle-replace": "Toggle Replace (⌘H)",
     "delete-pipeline": "Delete This Pipeline",
     "open": "Open",
+    "learn-more": "Learn more",
     "view-as-list": "View as List",
     "view-as-tree": "View as Tree",
     "show-ignored-files": "Show Ignored Files",
@@ -1471,7 +1472,7 @@
       "tabInstalled": "Installed CLI Extensions",
       "tabConvenience": "What Navide Changes",
       "intro": "What each AI CLI installed for itself — Claude plugins and mods, Codex hooks, Pi extensions and more — and what each one can reach. Read-only: nothing here installs, enables or changes anything. Navide plugins have their own page.",
-      "summary": "{total} CLI extensions · {l3} run code inside their CLI",
+      "summary": "{total} CLI extensions · {l3} run inside their CLI · {l2} run separate programs",
       "machineWide": "One set per CLI for the whole machine: every Navide pane and account of that CLI loads the same ones.",
       "rescan": "Rescan",
       "loading": "Scanning…",
@@ -1486,17 +1487,17 @@
       "inferred": "inferred",
       "inferredHint": "Read off the source text; the CLI's manifest does not state these.",
       "tier": {
-        "L1": "L1 text assets",
-        "L2": "L2 subprocess",
-        "L3": "L3 in-process code"
+        "L1": "Text only",
+        "L2": "Runs separate programs",
+        "L3": "Runs inside the CLI"
       },
       "tierHint": {
         "L1": "Instructions and other text only; nothing runs on its own.",
-        "L2": "Runs commands as a subprocess (hooks, MCP, LSP) with your user's permissions.",
+        "L2": "Starts a separate program (a hook command, or an MCP or LSP server) with your user's permissions.",
         "L3": "Runs inside the CLI's own process with the CLI's permissions, and no permission prompt."
       },
       "capability": {
-        "exec": "Runs commands",
+        "exec": "Runs shell commands",
         "network": "Network",
         "fs": "Files",
         "intercept-tools": "Intercepts tool calls",
@@ -1558,27 +1559,27 @@
           "summary": "Enable, disable and reorder the CLI agents, and read each one's install, permission, push and account state off its row."
         },
         "cli-agents-launch": {
-          "title": "Launch Overrides",
+          "title": "Launch overrides",
           "summary": "Per-CLI default model and effort, a launch command you write yourself, and extra environment variables."
         },
         "cli-agents-permissions": {
-          "title": "Permission Bypass",
+          "title": "Permission bypass",
           "summary": "The global switch for skipping a CLI's permission prompts, and the per-CLI override of it."
         },
         "cli-agents-push": {
-          "title": "Push Channels",
+          "title": "Push channels",
           "summary": "Per-CLI switches for handing a message straight to a pane instead of typing it in."
         },
         "cli-agents-maintenance": {
-          "title": "CLI Installation",
+          "title": "CLI installation",
           "summary": "Detect, install and update each CLI, and point one at a specific executable when several are installed."
         },
         "mcp-installed": {
-          "title": "Installed MCP Servers",
+          "title": "Installed MCP servers",
           "summary": "Refresh, open config, enable/disable, remove, inspect tools, edit command, args, and env vars."
         },
         "mcp-catalog": {
-          "title": "MCP Catalog",
+          "title": "MCP catalog",
           "summary": "Search and add context-reading MCP servers from the catalog."
         },
         "mcp-agents": {
@@ -1602,23 +1603,23 @@
           "summary": "View and edit the instruction files each CLI reads: CLAUDE.md, AGENTS.md, QWEN.md, .cursor rules."
         },
         "analyzer-backend": {
-          "title": "Inference Backend",
-          "summary": "Switch Ollama REST or llama.cpp, set base URL, llama-cli path, and GGUF model path."
+          "title": "Inference backend",
+          "summary": "Switch Ollama or llama.cpp, set base URL, llama-cli path, and GGUF model path."
         },
         "analyzer-models": {
-          "title": "Models & Benchmark",
+          "title": "Models & benchmark",
           "summary": "Download/delete Ollama models and run model benchmark tasks."
         },
         "appearance-theme": {
-          "title": "Theme & Custom Colors",
+          "title": "Theme & custom colors",
           "summary": "Built-in themes and semantic color overrides."
         },
         "general-default-editor": {
-          "title": "Default Editor",
+          "title": "Default editor",
           "summary": "Choose where files and folders open: Mini-IDE, the system default app, VS Code, Cursor, or a custom command."
         },
         "settings-management": {
-          "title": "Settings Management",
+          "title": "Settings management",
           "summary": "Export/import the full settings bundle and inspect where settings are stored."
         },
         "general-p2p": {
@@ -1626,7 +1627,7 @@
           "summary": "Join this machine to Navide Cloud so agents here can message agents on your other devices."
         },
         "general-p2p-policy": {
-          "title": "Navide Cloud Authorization",
+          "title": "Navide Cloud authorization",
           "summary": "Choose which remote devices may send instructions to panes on this machine. Everything is refused until a rule allows it."
         },
         "appearance-language": {
@@ -1634,11 +1635,11 @@
           "summary": "Switch between Traditional Chinese, English, and Japanese."
         },
         "appearance-ui-scale": {
-          "title": "Interface Scale",
+          "title": "Interface scale",
           "summary": "Scale the whole interface — text, icons, and spacing — in every window."
         },
         "appearance-runtime": {
-          "title": "Restore Windows",
+          "title": "Restore windows",
           "summary": "Reopen the workspace windows you had open when you last quit."
         },
         "status-badges": {
@@ -1654,7 +1655,7 @@
           "summary": "Rerun the environment check (onboarding)."
         },
         "general-backend-timeout": {
-          "title": "Backend Timeout",
+          "title": "Backend timeout",
           "summary": "Set the backend startup health-check timeout."
         },
         "updates": {
@@ -1662,11 +1663,11 @@
           "summary": "Check for updates, auto-check/auto-download, and release channel."
         },
         "general-resume-behavior": {
-          "title": "Resume on Open",
+          "title": "Resume on open",
           "summary": "Whether opening a workspace resumes its previous CLI panes, starts them fresh, or asks each time."
         },
         "general-usage-badge": {
-          "title": "CLI Quota Badge",
+          "title": "CLI quota badge",
           "summary": "Show remaining CLI quota in pane headers (claude/codex/kimi/grok) and pick the refresh interval."
         },
         "general-quota-failover": {
@@ -1682,19 +1683,19 @@
           "summary": "Offer to resume panes on another account's own folder after a switch or when quota runs out"
         },
         "accounts": {
-          "title": "Git Accounts",
+          "title": "Git accounts",
           "summary": "Add, edit, and remove encrypted Git host credentials and tokens."
         },
         "cli-accounts": {
-          "title": "CLI Accounts",
+          "title": "CLI accounts",
           "summary": "Manage per-agent CLI login profiles (claude, codex, kimi, grok)."
         },
         "shortcuts": {
-          "title": "Keyboard Shortcuts Reference",
+          "title": "Keyboard shortcuts reference",
           "summary": "Every shortcut in one place: the editable rule table, plus read-only sections for terminal and native-menu keys."
         },
         "keybindings": {
-          "title": "Customize Shortcuts",
+          "title": "Customize shortcuts",
           "summary": "Rebind, add or remove keyboard shortcuts. Records the keys you press, flags conflicts, and resets to defaults per row."
         },
         "storage": {
@@ -1742,10 +1743,10 @@
       "no-results": "No matching settings"
     },
     "management": {
-      "title": "Settings Management",
+      "title": "Settings management",
       "export-bundle": "Export Settings Bundle",
       "import-bundle": "Import Settings Bundle",
-      "bundle-hint": "Exports Roles, Pipelines, MCP, Analyzer, non-sensitive AI Chat settings, and appearance preferences. API keys and tokens are redacted and are not overwritten on import.",
+      "bundle-hint": "Exports Roles, Pipelines, MCP, Analyzer, AI Chat and appearance settings, with API keys and tokens redacted.",
       "export-dialog-title": "Export Settings Bundle",
       "exported": "Settings bundle exported",
       "export-failed": "Export failed",
@@ -1757,7 +1758,7 @@
     "executionPolicy": {
       "unavailable": "Execution Policy is unavailable. Check the Navide host and try again.",
       "errors": {
-        "invalid-policy": "The execution policy is invalid. Use supported modes, system namespaces, and executable names.",
+        "invalid-policy": "The execution policy is invalid. Use supported modes, Navide features, and executable names.",
         "high-risk-confirmation-required": "Full mode requires explicit confirmation that arbitrary executables may run.",
         "recovery-confirmation-required": "Rebuilding the execution policy requires explicit confirmation.",
         "source-reset-confirmation-required": "Resetting all Policy Source selections requires explicit confirmation.",
@@ -1773,7 +1774,7 @@
         "recommendation-unavailable": "The repository policy recommendation is unavailable.",
         "recommendation-invalid": "The repository policy recommendation is invalid.",
         "recommendation-stale": "The repository policy recommendation changed. Inspect it again before accepting it.",
-        "user-policy-unavailable": "No usable global user policy exists. Create one or choose the Host default.",
+        "user-policy-unavailable": "No usable global user policy exists. Create one or choose the Navide default.",
         "global-policy-corrupt": "The global execution policy is corrupt. Rebuild it before changing to this source.",
         "recovery-blocked-by-global-policy": "Source recovery is blocked while the global execution policy is unhealthy.",
         "commit-uncertain": "The policy change could not be confirmed. The policy remains fail-closed; inspect it again.",
@@ -1781,12 +1782,12 @@
       },
       "loading": "Loading Execution Policy…",
       "saved": "Execution Policy saved.",
-      "rebuilt": "Execution Policy rebuilt from the Host default.",
+      "rebuilt": "Execution Policy rebuilt from the Navide default.",
       "notice": {
         "save": "Execution Policy saved.",
-        "resetUser": "User policy reset to the Host default.",
+        "resetUser": "User policy reset to the Navide default.",
         "source": "Policy source changed.",
-        "rebuild": "Execution Policy rebuilt from the Host default.",
+        "rebuild": "Execution Policy rebuilt from the Navide default.",
         "resetSources": "All Policy Source selections were reset."
       },
       "externalUpdate": "The policy changed elsewhere. Your draft is preserved until you reload the latest version.",
@@ -1807,7 +1808,7 @@
         "unavailable": "The selected policy source is unavailable. Navide fails closed until you choose an available source.",
         "corrupt": "The selected policy is corrupt. Navide fails closed until it is repaired."
       },
-      "hostDefaultTitle": "Host default",
+      "hostDefaultTitle": "Navide default",
       "readOnly": "Read-only",
       "hostDefaultHint": "The built-in least-privilege baseline. It remains available even when user policy storage is missing.",
       "userTitle": "User policy",
@@ -1815,7 +1816,7 @@
       "userHint": "Edit the global policy used when a workspace selects the User source. Saving replaces the current user policy.",
       "mode": {
         "full": "Full",
-        "allowlist": "Allowlist",
+        "allowlist": "Only allowed commands",
         "denylist": "Denylist"
       },
       "fullWarning": "Full mode allows arbitrary executables, including high-risk tools, and system capabilities. Review this high-risk choice before saving.",
@@ -1823,12 +1824,20 @@
       "denylistWarning": "Denylist mode grants by default: listing names does not bound what it grants, so Navide treats every denylist as a high-risk choice. Review it before saving.",
       "denylistConfirmation": "I understand that Denylist mode grants by default and is not narrowed by the names I list.",
       "shellDenylistScope": "In Denylist mode an agent can run only the commands this Host supports ({executables}), minus the ones you deny here. Denying a name outside that list has no effect.",
-      "systemLabel": "System namespaces",
-      "systemHint": "Select the V2 system namespaces available to the agent.",
-      "systemAllowlistLabel": "System namespaces to allow",
-      "systemAllowlistHint": "Select the V2 system namespaces available to the agent.",
-      "systemDenylistLabel": "System namespaces to deny",
-      "systemDenylistHint": "Select the V2 system namespaces that the agent must not use.",
+      "systemLabel": "Navide features",
+      "systemHint": "Choose which Navide features agents can use.",
+      "systemAllowlistLabel": "Navide features to allow",
+      "systemAllowlistHint": "Choose which Navide features agents can use.",
+      "systemDenylistLabel": "Navide features to deny",
+      "systemDenylistHint": "Choose which Navide features agents must not use.",
+      "namespace": {
+        "fs": "Workspace files",
+        "ui": "Own views",
+        "aiCli": "AI CLI sessions",
+        "web": "Web browsing",
+        "agents": "Agent panes",
+        "agentMessages": "Agent messages"
+      },
       "shellLabel": "Shell executables",
       "shellHint": "Allow only top-level executable names. Paths and shell expressions are not accepted.",
       "shellAllowlistLabel": "Shell executables to allow",
@@ -1844,13 +1853,14 @@
       "save": "Save Policy",
       "resetUser": "Reset User Policy",
       "sourceTitle": "Workspace policy source",
-      "sourceHint": "A repository recommendation is untrusted until you inspect it and explicitly accept it. Source changes require an exact current fingerprint.",
+      "sourceHint": "A repository recommendation is untrusted until you inspect it and explicitly accept it. A source switch only applies to the policy as you last saw it; if it has changed since, review it again.",
       "source": {
-        "default": "Host default",
+        "default": "Navide default",
         "user": "User policy",
         "repository": "Repository policy"
       },
       "sourceNeedsWorkspace": "Workspace source selection is available after a workspace is open.",
+      "sourceImplicit": "Automatic",
       "recommendationTitle": "Repository recommendation",
       "untrusted": "Untrusted",
       "recommendationHint": "This policy comes from the workspace repository and never overrides the active source without explicit acceptance.",
@@ -1881,7 +1891,7 @@
       "corruptHint": "The stored user policy is corrupt. Rebuild writes a fresh Host-default state and preserves workspace source selections.",
       "manualRecoveryHint": "Policy storage is unsafe or unavailable. Fix the execution-policy directory permissions or path, then reopen Settings; automatic rebuild is disabled.",
       "rebuild": "Rebuild Global Policy",
-      "rebuildConfirmBody": "Rebuild only the global policy and revision files from the Host default. Existing workspace source selections and repository policy files are preserved.",
+      "rebuildConfirmBody": "Rebuild only the global policy and revision files from the Navide default. Existing workspace source selections and repository policy files are preserved.",
       "rebuildConfirmCheck": "I understand that the corrupt global policy will be replaced.",
       "rebuildConfirm": "Confirm Rebuild",
       "cancel": "Cancel"
@@ -1901,18 +1911,19 @@
         "total": "{count} tools; their text and input schemas total {size}."
       },
       "nativeBackends": {
-        "title": "Native backends",
+        "title": "Programs in Navide plugins",
+        "summary": "Native code runs in a sandbox, but a Navide plugin that also runs git, gh and glab (marked high risk below) can use them to contact network hosts, send workspace data and change workspace files.",
         "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. While the switch below is on, installing a Navide plugin that has native code allows it to run; turning the switch off stops all of them.",
-        "enable": "Allow third-party Navide plugins to run native backends",
+        "enable": "Let third-party Navide plugins run their own programs",
         "offUnsaved": "Third-party native backends are off for now, but Navide could not save that, so they will be on again after Navide restarts.",
         "offUnsavedRetry": "Try Again",
         "agentTools": {
           "enable": "Let agents call tools from third-party Navide plugins",
-          "description": "Off by default. When on, agents in your panes can call the tools a third-party Navide plugin declares, once you have allowed that Navide plugin. A tool that changes files asks you once per workspace. With this off, Navide behaves as if no Navide plugin had tools.",
+          "description": "Lets agents in your panes call tools declared by Navide plugins you allowed; a tool that changes files asks once per workspace.",
           "externalCallers": "Let external MCP clients call them too",
           "externalCallersDisclosure": "External programs share a single token, so the record of a call can only say \"an external client\", not which program it was. The Host credential is treated the same way."
         },
-        "empty": "No installed Navide plugin has a native backend.",
+        "empty": "No installed Navide plugin includes its own program.",
         "windowWithout": "{name} opened without its native backend: {reason}. The parts of it that need the backend will not work. {next}",
         "windowWithoutAllow": "To allow the backend, go to Settings → Navide Plugins → {page}, then reopen the window.",
         "windowWithoutDetails": "Settings → Navide Plugins → {page} shows why.",
@@ -1943,12 +1954,17 @@
           "shellNotAllowed": "Blocked: requests full shell access",
           "stoppedAfterCrashes": "Stopped after repeated failures",
           "unavailable": "Unavailable"
-        }
+        },
+        "loadFailed": "Could not read the native backend settings."
       },
       "bundled": "Bundled",
-      "listTitle": "Navide plugins",
+      "listTitle": "Installed",
+      "installedTitle": "Installed Navide plugins",
       "developerNative": "Developer and native code",
       "pageOn": "On",
+      "developerOnMarker": "Dev",
+      "nativeOnMarker": "Native on",
+      "browseMarketplace": "Browse Navide Marketplace",
       "bundledGit": "Bundled Git",
       "state": {
         "active": "Active",
@@ -2062,8 +2078,6 @@
         "featured": "Featured",
         "clearSearch": "Clear Search",
         "showAllCategories": "Show All Categories",
-        "noResultsHint": "Try another word, or browse all categories.",
-        "noExtensionsHint": "Navide plugins appear here as soon as publishers release them.",
         "loadFailedTitle": "Can't reach the Navide Marketplace",
         "loadFailedHint": "Check your connection and try again. Installed Navide plugins keep working.",
         "errorDetails": "Details",
@@ -2132,7 +2146,7 @@
         },
         "title": "Developer Mode",
         "switch": "Turn on Developer Mode",
-        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded. Turning it off unloads every Navide plugin loaded from a folder and drops a folder you picked but did not consent to; the folders you consented to stay listed, load again when you turn it back on, and can be removed here.",
+        "hint": "Load a Navide plugin from a folder to develop and test it, and install Navide plugins from your own server instead of the Navide Marketplace. Turning it off unloads them.",
         "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
         "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
         "reminderClose": "Got It",
@@ -2206,7 +2220,7 @@
       },
       "localInstall": {
         "agentRequest": "Requested by {requester}. Navide has not reviewed this package; installing it is your decision.",
-        "button": "Install from .vsix File…",
+        "button": "Install from File…",
         "backToMarketplace": "Switch Back to the Navide Marketplace Version",
         "warning": "This Navide plugin comes from a file on this computer. Navide has not reviewed it and it is not signed: its author cannot be confirmed and the file may have been changed. Only install files from people you trust.",
         "signatureLabel": "Signature",
@@ -2322,27 +2336,27 @@
       "storage": "storage",
       "yes": "yes",
       "no": "no",
-      "manifestPermissions": "Manifest Permissions",
+      "manifestPermissions": "Manifest permissions",
       "fileScopes": "File scope",
       "fileScopesRepository": "File scope (from the Git repository root)",
       "scopeReadWrite": "read and write",
       "scopeReadOnly": "read only",
       "scopeWriteOnly": "write only",
-      "packageVersionGrant": "Package-version Grant",
+      "packageVersionGrant": "Package-version grant",
       "noMatchingGrant": "No matching grant",
       "labeledValue": "{label}: {value}"
     },
     "scope": {
       "label": "Applies to",
       "user": "User",
-      "userWorkspace": "User / Workspace",
-      "accountServer": "Account / Server",
-      "userWorkspaceBindings": "User / Workspace bindings"
+      "userWorkspace": "User / workspace",
+      "accountServer": "Account / server",
+      "userWorkspaceBindings": "User, plus each workspace's account choice"
     },
     "storage": {
       "localStorage": "ui_settings.json (app data) + workspace backup",
-      "mainProcess": "Electron main process userData",
-      "safeStorage": "Encrypted local safeStorage registry",
+      "mainProcess": "Saved with Navide's app data on this computer",
+      "safeStorage": "Stored encrypted on this computer",
       "cliFiles": "Each CLI's own instruction files"
     },
     "voice": {
@@ -2367,7 +2381,6 @@
       "readback-rate": "Speed",
       "readback-preview": "Preview",
       "readback-stop-hint": "Press Esc or the voice input shortcut to stop reading at once.",
-      "section": "Voice input",
       "enabled": "Voice input (hold to talk)",
       "enabled-hint": "Hold Ctrl+Alt+M (rebindable under Shortcuts) to dictate into the focused CLI pane. The text goes into its input box as if you typed it — nothing is sent until you press Enter yourself. Speech is transcribed on this computer by a local Whisper model; audio never leaves the machine.",
       "device": "Microphone",
@@ -2470,7 +2483,7 @@
       "download-retry": "Retry Download"
     },
     "general": {
-      "auto-resume-reconnect": "Resume sessions after a backend restart",
+      "auto-resume-reconnect": "Resume sessions after Navide's background service restarts",
       "resume-interrupted-on-launch": "Resume working panes after restarting Navide",
       "system-notify": "System notifications",
       "system-notify-hint": "Show a desktop notification when a CLI finishes its turn or needs your input while Navide is in the background. The Dock badge keeps counting either way.",
@@ -2485,14 +2498,14 @@
         "unknown": "Not tested yet.",
         "not-applicable": "Not available on this platform."
       },
-      "auto-resume-reconnect-hint": "When the backend crashes or restarts it takes every CLI process with it. Turn this on to resume, once it is back, the conversations of the panes on screen and of up to six panes off screen that were working, instead of rebuilding each one by hand. Resumed panes do not continue on their own, the panes that spawned them are told, and the announcements list what happened. If the backend crashes again soon after, nothing is resumed again.",
-      "resume-interrupted-on-launch-hint": "When Navide restarts, panes that were running a turn or waiting on a permission prompt or a question, plus the parent panes waiting on their reports, resume automatically (up to 6; the rest are marked \"Working at restart\"). Nothing continues on its own: press Continue, or let the parent tell it to. The parent is told which of its panes were interrupted.",
+      "auto-resume-reconnect-hint": "Resumes your panes' conversations once the background service is back after a restart. A restart ends every CLI process; the panes on screen and up to six working panes off screen come back without continuing on their own, the panes that spawned them are told, and the announcements list what happened. If it crashes again soon after, nothing is resumed.",
+      "resume-interrupted-on-launch-hint": "When Navide restarts, panes that were working come back and wait for you to continue. That covers panes running a turn or waiting on a permission prompt or a question, and the parent panes waiting on their reports, up to 6 (the rest are marked \"Working at restart\"). Press Continue or let the parent tell it to; the parent is told which of its panes were interrupted.",
       "confirm-close-pane": "Confirm before closing a pane",
       "confirm-close-pane-hint": "Ask before the close-pane shortcut closes a CLI pane. A pane with a turn in progress always asks, regardless of this setting.",
       "confirm-close-workspace": "Confirm before closing a workspace",
-      "confirm-close-workspace-hint": "Ask before the sidebar closes a workspace and its panes. That row ends every CLI pane in the workspace; their records are kept, so reopening it brings each one back as a card you click to resume. Plain \u201cClose workspace\u201d leaves the CLIs running and never asks.",
+      "confirm-close-workspace-hint": "Ask before the sidebar closes a workspace and ends its CLI panes.",
       "idle-reclaim": "Reclaim idle CLIs",
-      "idle-reclaim-hint": "An idle CLI keeps holding the memory it allocated — often 200–300 MB each. Reclaiming ends the process and leaves the pane as a click-to-resume placeholder; the conversation is resumed from the CLI's own transcript. Never applies to the focused pane, a pane awaiting your answer, or one with unsent text.",
+      "idle-reclaim-hint": "Ends idle CLIs to free memory, leaving each pane as a click-to-resume placeholder (never the focused pane, one awaiting your answer, or one with unsent text).",
       "idle-reclaim-after": "Reclaim after",
       "idle-reclaim-after-hint": "How long a pane must go without agent output or a keystroke before it is reclaimed.",
       "idle-reclaim-15m": "15 minutes",
@@ -2502,8 +2515,8 @@
       "idle-reclaim-8h": "8 hours",
       "idle-reclaim-never": "Never",
       "idle-reclaim-now": "Reclaim now",
-      "idle-reclaim-now-hint": "End it now instead of waiting for the threshold. {count} pane qualifies, holding roughly {size}. It becomes a click-to-resume placeholder. | End those CLIs now instead of waiting for the threshold. {count} panes qualify, holding roughly {size}. Each one becomes a click-to-resume placeholder.",
-      "idle-reclaim-now-empty": "No pane qualifies right now — the focused pane, one awaiting your answer, one with unsent text and one that cannot be resumed are never reclaimed.",
+      "idle-reclaim-now-hint": "End it now instead of waiting: {count} pane qualifies, holding roughly {size}. | End them now instead of waiting: {count} panes qualify, holding roughly {size}.",
+      "idle-reclaim-now-empty": "No pane qualifies right now. The focused pane, one awaiting your answer, one with unsent text and one that cannot be resumed are never reclaimed.",
       "idle-reclaim-now-action": "Reclaim {count} Now",
       "idle-reclaim-now-action-empty": "Nothing to Reclaim",
       "default-editor": "Default editor",
@@ -2535,18 +2548,18 @@
       "language-beta-hint": "Machine-translated. Native-speaker review pending.",
       "language-hint": "Language is a user-level preference applied across all workspaces.",
       "language-display": "Display language",
-      "ui-scale": "Interface Scale",
+      "ui-scale": "Interface scale",
       "ui-scale-hint": "Scale the whole interface — text, icons, and spacing — in every window. Separate from the terminal and editor font sizes, which keep their own ⌘= / ⌘- shortcuts.",
-      "restore-windows": "Restore Windows",
+      "restore-windows": "Restore windows",
       "restore-windows-hint": "Reopen the workspace windows you had open when you last quit.",
       "restore-windows-label": "Reopen windows on next launch",
-      "custom-colors": "Custom Colors",
+      "custom-colors": "Custom colors",
       "reset-to-defaults": "↺ Reset to Defaults",
       "tweaks-hint": "Tweaks are layered on top of the current theme and preserved when switching themes.",
       "environment": "Environment",
       "environment-hint": "Re-run the first-launch environment detection wizard (checks Homebrew / Node / CLI / Ollama, etc.).",
       "rerun-env-check": "↻ Re-run Environment Check",
-      "backend-timeout": "Backend Startup Timeout",
+      "backend-timeout": "Backend startup timeout",
       "backend-timeout-hint": "How long to wait for the backend to become healthy on startup or restart before giving up. Raise this on slower machines (15–120 seconds).",
       "backend-timeout-label": "Timeout (seconds)",
       "resume-behavior": "Resume conversations on open",
@@ -2556,15 +2569,22 @@
       "resume-behavior-never": "Always start fresh",
       "resume-behavior-ask": "Ask each time",
       "restore-scope": "Resume scope",
-      "restore-scope-hint": "When always resuming, choose one CLI, the current Grid page, the active tab, all CLIs, or Auto — only the CLIs that were running when Navide last closed (all CLIs and Auto start two at a time, in order).",
+      "restore-scope-hint": "Which CLIs reopen when Navide always resumes. Choose one CLI, the current Grid page, the active tab, all CLIs, or Auto (the ones running at last close).",
       "restore-scope-single": "One CLI",
       "restore-scope-page": "Current Grid page",
       "restore-scope-tab": "Active tab",
       "restore-scope-all": "All CLIs",
       "restore-scope-auto": "Auto",
       "resume-concurrency": "Concurrent resume limit",
-      "resume-concurrency-hint": "How many CLI panes may resume at the same time when opening a workspace or restoring a layout; the rest queue. Lower this if resuming many panes at once causes 'terminal.create timeout' errors (1–10).",
-      "resume-concurrency-label": "Max concurrent resumes"
+      "resume-concurrency-hint": "How many CLI panes resume at the same time (1–10); lower it if panes time out while resuming.",
+      "resume-concurrency-label": "Max concurrent resumes",
+      "theme-name": {
+        "dark-github": "Dark (GitHub)",
+        "dark-midnight": "Midnight",
+        "dark-forest": "Forest",
+        "light": "Light",
+        "high-contrast": "High contrast"
+      }
     },
     "roles": {
       "title": "Roles",
@@ -2887,7 +2907,7 @@
             "theme": "<strong>Theme</strong> — five built in: Dark (GitHub), Midnight, Forest, Light and High Contrast, with Dark (GitHub) as the default.",
             "colors": "<strong>Custom Colors</strong> — eight overridable color tokens (background, surface, text, secondary text, border, accent, success, danger). Overrides sit on top of the current theme and are <strong>kept when you switch themes</strong>; <em>↺ Reset to Defaults</em> restores them.",
             "uiScale": "<strong>Interface Scale</strong> — the first row of the <strong>Appearance ▸ Other</strong> block, and a <strong>dropdown</strong> rather than a slider: six steps (80%, 90%, 100%, 110%, 125%, 150%; 100% by default), on <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>. It drives Electron's page zoom rather than a CSS variable, so text, icons, borders and spacing all move together, and the main process applies it to <strong>every window</strong>, Navide plugin windows included. It is a <strong>separate axis</strong> from pane font size: <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> change only the terminal <strong>content</strong> font size (one value shared by every CLI pane in the window), while Interface Scale changes the shell around it — and the two <strong>multiply</strong>, the way a browser's page zoom multiplies with a site's own font size.",
-            "restore": "<strong>Restore Windows</strong> — reopen the workspace windows that were open when you last quit."
+            "restore": "<strong>Restore windows</strong> — reopen the workspace windows that were open when you last quit."
           },
           "callout": {
             "title": "Notifications and sound live on the Notifications tab",
@@ -3063,7 +3083,7 @@
           "h3": "Analyzer",
           "p5": "What you configure here is a <strong>small local model</strong> that Navide uses to read intent for pipelines; it has nothing to do with the CLI agents you use in panes. Three parts:",
           "analyzer": {
-            "backend": "<strong>Inference backend</strong> — first pick one of two backends, <em>Ollama REST</em> or <em>llama.cpp</em>. llama.cpp needs the <code>llama-cli</code> path (with an auto-detect button and a file browser) and an optional GGUF model path; Ollama needs the inference URL (<code>http://localhost:11434</code> by default). Both have a health indicator next to them.",
+            "backend": "<strong>Inference backend</strong> — first pick one of two backends, <em>Ollama</em> or <em>llama.cpp</em>. llama.cpp needs the <code>llama-cli</code> path (with an auto-detect button and a file browser) and an optional GGUF model path; Ollama needs the inference URL (<code>http://localhost:11434</code> by default). Both have a health indicator next to them.",
             "models": "<strong>Model manager</strong> (Ollama mode) — type a model name and press <em>⬇ Download</em>, with a progress bar; below it the installed models are listed (name, parameter count, size) and can be deleted one by one.",
             "benchmark": "<strong>Model benchmark</strong> — runs four tasks against every local model: tech-stack detection (JSON output), a one-sentence workspace summary, picking the most relevant entry from a document list, and parsing CLI output into a question and its options. The results table ticks each item off with its duration, and <strong>at least three of the four (≥75%)</strong> must pass; models that do not pass are hidden from the model dropdown."
           },
@@ -3077,14 +3097,14 @@
           "mirror": "<strong>The download mirror</strong>: every release's files are published twice, on the GitHub Release and on <code>dl.navide.dev</code> — the same bytes, with sha256 sums to check them against. <strong>The mirror is the default update source</strong>: the app points its feed at <code>dl.navide.dev</code> on startup, and GitHub is the fallback. It falls back only on a <strong>network-shaped failure</strong> (unreachable host, timeout, 5xx/429), and once it has, it <strong>stays on GitHub for the rest of the session</strong> — only a restart goes back to the mirror. <strong>A 404 or a signature/checksum error never triggers the fallback</strong> — both hosts carry the same files, so it would fail the same way, and reporting the failure as it is helps more than hiding it.",
           "policyIntro": "The <strong>execution policy</strong> decides what a Navide plugin's backend may execute. It is <strong>not a tab of its own</strong>: it is the block at the top of the Navide Plugins page, with its own scope badge (per user and per workspace) and policy file path. The top of it shows the <em>effective policy</em> — its source, its mode, and its status: <em>active</em>, <em>stale</em>, <em>unavailable</em> or <em>corrupt</em>.",
           "policy": {
-            "hostDefault": "<strong>Host default</strong> — the built-in least-privilege baseline, marked <strong>read-only</strong>. It stays usable even if the user policy store is gone entirely, so there is always a way back.",
+            "hostDefault": "<strong>Navide default</strong> — the built-in least-privilege baseline, marked <strong>read-only</strong>. It stays usable even if the user policy store is gone entirely, so there is always a way back.",
             "user": "<strong>User policy</strong> — the global one, used wherever a workspace selects the User source; it reads \"not created\" until you make it. Three modes: <em>full</em>, <em>allowlist</em>, <em>denylist</em>. You can set the system namespaces and the shell executables, and the latter takes <strong>top-level executable names only</strong> — no paths, no shell expressions.",
             "highRisk": "<strong>Full and denylist both need an explicit checkbox before they save</strong>, and the screen says why: full mode allows arbitrary executables (high-risk tools included) and system capabilities, while denylist mode is <strong>allow-by-default</strong> — listing names does not narrow what it actually grants, which is why Navide treats it as a high-risk choice too.",
-            "source": "<strong>Workspace policy source</strong> — each workspace picks Host default, User policy or Repository policy. <strong>A repository recommendation is labelled \"untrusted\" until you have read it and pressed \"Accept Repository Policy\"</strong>, and switching sources requires an exact fingerprint match; if it changes after you reviewed it, it becomes \"changed since review\" and has to be re-checked. With no workspace open, this block cannot be used.",
+            "source": "<strong>Workspace policy source</strong> — each workspace picks Navide default, User policy or Repository policy. <strong>A repository recommendation is labelled \"untrusted\" until you have read it and pressed \"Accept Repository Policy\"</strong>, and switching sources requires an exact fingerprint match; if it changes after you reviewed it, it becomes \"changed since review\" and has to be re-checked. With no workspace open, this block cannot be used.",
             "recovery": "<strong>Global policy store</strong> — its state is healthy, missing, corrupt, unsafe entry, or an unsafe/unavailable directory. A corrupt store can be <strong>rebuilt</strong> behind a confirmation checkbox; a rebuild replaces only the global policy and revision files and keeps every workspace source selection and repository policy file. When the store is judged <strong>unsafe</strong>, automatic rebuilding is disabled and the screen asks you to fix the host-owned paths it lists yourself.",
             "failClosed": "Every unhealthy state is <strong>fail-closed</strong>: nothing is permitted until you pick a usable source or repair the broken one. That includes an uncertain save — the message reads \"the result of the policy change could not be confirmed; the policy stays fail-closed, please re-check\"."
           },
-          "policyNote": "To clear every repository source pin at once, use \"Reset all policy source selections\", also behind a confirmation checkbox. It <strong>does not</strong> modify or delete any repository policy file; it only makes each workspace resolve against the global host default or user policy again.",
+          "policyNote": "To clear every repository source pin at once, use \"Reset all policy source selections\", also behind a confirmation checkbox. It <strong>does not</strong> modify or delete any repository policy file; it only makes each workspace resolve against the global Navide default or user policy again.",
           "extNote": "Where a misbehaving Navide plugin backend stops: <strong>only an overflow of protocol frames (request / response / cancel) is fatal to that backend</strong>. An overflow of host notifications is dropped and counted instead, so one noisy backend no longer takes the whole Navide plugin down, and a backend that exits cleanly records why rather than vanishing silently."
         },
         "s5": {
@@ -3324,7 +3344,7 @@
           "h3": "Orphaned processes and the backend",
           "orphans": {
             "leftover": "<strong>Leftover CLI processes</strong> — when <code>⚠ N leftover</code> appears in the status bar, clicking it asks \"Found N leftover CLI process(es) from a previous run — they can exhaust memory. Clean them up?\", with <em>Clean Up</em> to clear them and <em>Dismiss</em> to skip. These are processes the previous run did not clean up.",
-            "backend": "<strong>Backend</strong> — clicking the Backend pill in the status bar shows the address and PID plus two buttons: <em>Restart</em> (<em>Start</em> while disconnected) and <em>Stop</em> (only while connected). <strong>Restarting the backend takes every CLI process with it</strong>; to have conversations resume automatically once it is back, turn on <em>Resume sessions after a backend restart</em> on the General tab.",
+            "backend": "<strong>Backend</strong> — clicking the Backend pill in the status bar shows the address and PID plus two buttons: <em>Restart</em> (<em>Start</em> while disconnected) and <em>Stop</em> (only while connected). <strong>Restarting the backend takes every CLI process with it</strong>; to have conversations resume automatically once it is back, turn on <em>Resume sessions after Navide's background service restarts</em> on the General tab.",
             "timeout": "When the backend errors out because it starts too slowly, raise <em>Backend Startup Timeout</em> (15–120 seconds) on the Appearance tab."
           },
           "h4": "Upkeep at a glance",
@@ -6862,7 +6882,7 @@
       "no-headers": "No headers",
       "show": "Show",
       "hide": "Hide",
-      "conflict": "This file changed outside Agent-Team. Reload before saving again.",
+      "conflict": "This file changed outside Navide. Reload before saving again.",
       "reload": "Reload from Disk",
       "custom-title": "Add custom MCP server",
       "custom-hint": "Choose a transport now, then fill in its connection details from the installed-server list.",
@@ -6902,6 +6922,9 @@
       "state-on": "Enabled",
       "state-off": "Disabled",
       "status": "Status: {status}",
+      "transport-local": "Local",
+      "transport-remote": "Remote",
+      "status-failed": "Failed to start",
       "starting-note": "Still starting after {seconds} s. If it runs through npx or uvx, the first run may be downloading the package.",
       "error-reason": "Failed to start: {reason}",
       "tools-error": "Could not list its tools: {reason}",
@@ -6916,7 +6939,7 @@
       "catalog-filesystem": "Read the workspace's existing code, README and config files so the orchestrator can inject the current state into the kickoff and correct the agent's starting assumptions.",
       "catalog-brave-search": "Live web search, so the orchestrator can look up the latest technical decisions or API changes and inject them into the agent. Needs a Brave API key.",
       "catalog-sentry": "Read production errors and stack traces so the orchestrator can inject the bug background into the debug stage.",
-      "catalog-title": "Add MCP Servers",
+      "catalog-title": "Add MCP servers",
       "catalog-search": "Search MCP servers by name",
       "catalog-hint": "This catalog lists only <strong>\"Orchestrator context-reading\"</strong> MCPs — tools that read workspace / docs / external service data and inject it into kickoff prompts to ground agent knowledge. Execution actions (tests, browser automation, etc.) are handled by the CLI agents themselves.",
       "catalog-requires-env": "Requires env vars: {vars}",
@@ -6933,6 +6956,11 @@
       "keyring-bad-hint": "Without a system keyring, credentials tend to end up in plain files.",
       "incomplete": "This scan is incomplete: it hit a time or folder limit, or skipped a repository it could not read safely, so findings in the folders below may be missing.",
       "keyring-reason-unknown": "No reason was reported.",
+      "keyring-reason": {
+        "tool-missing": "The system tool that reads it is missing.",
+        "read-failed": "Navide could not read it.",
+        "no-service": "No Secret Service is running."
+      },
       "scan": "Scan",
       "scanning": "Scanning…",
       "scan-roots": "Scan Roots…",
@@ -6947,9 +6975,7 @@
       "all": "All",
       "loading": "Scanning this machine…",
       "error-load": "The scan failed.",
-      "empty-findings-title": "No findings",
       "empty-findings-body": "Nothing risky matched the current filter.",
-      "empty-inventory-title": "Nothing inventoried",
       "empty-inventory-body": "No credentials matched the current filter.",
       "not-scanned": "Press Scan to look for credentials on this machine.",
       "severity": {
@@ -6969,7 +6995,7 @@
       },
       "reminder": {
         "title": "Reminder",
-        "active": "Active",
+        "active": "Needs review",
         "snoozed": "Snoozed",
         "dismissed": "Dismissed",
         "until": "until {date}",
@@ -7071,7 +7097,7 @@
       }
     },
     "skills": {
-      "title": "Managed Skills",
+      "title": "Managed skills",
       "intro": "One place to see every skill your CLIs have, decide who receives which, and create new ones in ~/.agents/skills. A skill in a CLI's own folder moves only when you choose “Move into Shared Library”, which leaves a link in its old place; “Restore” moves it back.",
       "new": "New Skill",
       "search": "Search skills",
@@ -7158,7 +7184,7 @@
       "group-native": "{agent}'s own",
       "delivery-title": "Delivered to",
       "delivery-hint": "● reads it on its own · ✓ delivered by Navide (click to toggle) · greyed: not delivered",
-      "delivery-auto": "{n} read it themselves",
+      "delivery-auto": "Loaded by {n} CLI | Loaded by {n} CLIs",
       "delivery-none": "not delivered anywhere",
       "location": "Location",
       "also-linked-from": "Also linked from: {roots}",
@@ -7199,7 +7225,7 @@
       },
       "share": {
         "title": "Share links",
-        "hint": "Read-only links to a plan or report, encrypted on this machine. The key travels only inside the link; the server stores ciphertext it cannot open.",
+        "hint": "Read-only links to a plan or report, encrypted on this machine. The key travels only inside the link, so the server cannot read what it stores.",
         "col-item": "Item",
         "col-creator": "Created by",
         "col-created": "Created",
@@ -7232,7 +7258,7 @@
     },
     "sync": {
       "title": "Sync",
-      "hint": "Turn on a section to keep it the same on every device signed in to this account. Records are encrypted on this machine; the server stores ciphertext it has no key for.",
+      "hint": "Turn on a section to keep it the same on every device signed in to this account. Records are encrypted on this machine, so the server cannot read them.",
       "not-yet": "Not syncable yet.",
       "retired-memory": "Memory is not synced any more. Switch it off; your instruction files here and the copies in the cloud are left as they are.",
       "not-connected": "Not connected — synced sections catch up when the link is back.",
@@ -7255,7 +7281,7 @@
       "approval-cut": "… preview cut here; the file goes on",
       "approval-expand": "Show It Whole",
       "approval-deletes": "Would delete the prompt {name} here.",
-      "approval-new-loop": "{name} would become the loop prompt.",
+      "approval-new-loop": "{name} would become the default prompt.",
       "approval-text": "Incoming text, whole",
       "approval-diff": "Changes against this device",
       "approval-changes": "Changed fields",
@@ -7280,7 +7306,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "Skills",
       "scope-memory": "Memory",
-      "scope-hint-prompts": "Prompt skills and the loop prompt.",
+      "scope-hint-prompts": "Saved prompts and which one is the default.",
       "error-load": "Sync settings could not be read.",
       "scope-hint-mcp": "MCP servers you added in Navide. Their secrets are encrypted before they leave.",
       "scope-hint-skills": "Which skills are on and which CLIs each one goes to, plus the files of skills created in Navide (large ones travel as encrypted blobs). Skills you put in the folder yourself sync their settings only.",
@@ -7314,7 +7340,7 @@
       "secret-differs": "differs",
       "secret-local-only": "only on this device",
       "secret-remote-only": "only on the other device",
-      "history-title": "Version History",
+      "history-title": "Version history",
       "history-hint": "The cloud keeps each synced item's last 10 versions or 30 days of them, whichever ends first.",
       "history-scope": "Section",
       "history-item": "Item",
@@ -7466,15 +7492,14 @@
       "error-save": "Could not save this file. Your draft remains in the editor."
     },
     "prompts": {
-      "title": "Prompts",
-      "intro": "Reusable whole instructions a CLI pane can cast from its ∞ button. One skill is one complete prompt — picking a skill replaces the prompt, it never appends to another. Only the default skill runs as a loop; every other skill is sent once.",
-      "new": "New Skill",
-      "new-name": "New skill",
+      "intro": "Saved prompts a CLI pane sends from the repeat button (∞) in its title bar. Picking one replaces the whole prompt; only the default prompt repeats after each turn, the others are sent once.",
+      "new": "New Prompt",
+      "new-name": "New prompt",
       "copy-name": "{name} copy",
       "filter-label": "Filter by category",
       "all": "All",
-      "search": "Search skills…",
-      "empty": "No skill matches this filter.",
+      "search": "Search prompts…",
+      "empty": "No prompt matches this filter.",
       "default-badge": "★ Default",
       "turns": "×{n}",
       "turns-unlimited": "No turn cap",
@@ -7482,7 +7507,7 @@
       "name": "Name",
       "icon": "Icon",
       "icon-custom": "Custom icon",
-      "icon-custom-hint": "Type or paste any emoji to use it as this skill's icon.",
+      "icon-custom-hint": "Type or paste any emoji to use it as this prompt’s icon.",
       "description": "Summary",
       "prompt": "Prompt sent on cast",
       "resume": "Resume text",
@@ -7494,22 +7519,20 @@
       "disable": "Disable",
       "duplicate": "Duplicate",
       "delete": "Delete",
-      "hint": "The default skill is what a plain click on ∞ casts, and the only one that loops; disabled skills stay here but leave the picker.",
+      "hint": "A plain click on the repeat button sends the default prompt, the only one that repeats; disabled prompts stay here but leave the picker.",
       "advanced": "Advanced",
       "send-once": "Sends once",
-      "send-once-hint": "Only the default skill runs as a loop; this one is sent once, with no resume or turn cap.",
-      "untitled-name": "Untitled skill",
-      "prompt-empty": "A prompt can't be empty — the previous text was kept. To remove this skill, use Delete.",
+      "send-once-hint": "Only the default prompt repeats after each turn; this one is sent once, with no resume or turn cap.",
+      "untitled-name": "Untitled prompt",
+      "prompt-empty": "A prompt can’t be empty — the previous text was kept. To remove this prompt, use Delete.",
       "delete-confirm": "Delete \"{name}\"? This can't be undone, and machines that sync prompts will remove it too."
     },
     "section": {
       "general-behavior": "General behavior",
       "resource-limits": "Resource limits",
-      "notifications": "Notifications",
       "settings-management": "Settings management",
       "theme": "Theme",
-      "other": "Other",
-      "updates": "Updates"
+      "other": "Other"
     },
     "p2p": {
       "title": "Connection",
@@ -7767,17 +7790,17 @@
     },
     "cliAgents": {
       "title": "CLI Agents",
-      "hint": "Enable and reorder the CLI agents in the manual spawn dropdown. Open a card to manage that agent. At least one must stay enabled.",
+      "hint": "Enable and reorder the CLI agents in the new-pane menu. Open a card to manage that agent. At least one must stay enabled.",
       "drag-hint": "Drag to reorder",
       "search": "Find an agent…",
       "filter-label": "Filter CLI agents",
       "filter-all": "All",
       "filter-enabled": "Enabled",
-      "filter-attention": "Needs Attention",
+      "filter-attention": "Needs attention",
       "count": "{visible} of {total} agents · {enabled} enabled",
       "reorder-filtered": "Clear search and choose All to reorder",
-      "enabled": "Enabled",
-      "enable-agent": "Enable {agent}",
+      "enabled": "Show in menu",
+      "enable-agent": "Show {agent} in the menu",
       "manage": "Manage",
       "manage-agent": "Manage {agent}",
       "move-up": "Move {agent} earlier",
@@ -7808,9 +7831,9 @@
         "perm-inherit": "Permissions inherited",
         "perm-force-on": "Permissions forced on",
         "perm-force-off": "Permissions forced off",
-        "push": "Push on",
-        "push-off": "Push off",
-        "no-push": "No push channel",
+        "push": "Direct delivery on",
+        "push-off": "Direct delivery off",
+        "no-push": "Messages typed in",
         "accounts": "{count} accounts | {count} account | {count} accounts",
         "signed-out": "Signed out",
         "custom-binary": "Custom binary",
@@ -7857,12 +7880,13 @@
       "restart-note": "The flag is fixed into a pane's command when it starts. Changing anything here affects panes spawned afterwards; a pane already running keeps whatever it started with until it is rebuilt or restored."
     },
     "keybindings": {
-      "intro": "Rebind any shortcut below. Click a key cap to record a new combination, use + to add a second binding, and ✕ to remove one. Changes are saved to keybindings.json immediately and apply to every open window.",
+      "intro": "Rebind any shortcut below. Click a key cap to record a new combination, use + to add a second binding, and ✕ to remove one. Changes are saved to your shortcuts file immediately and apply to every open window.",
+      "file-tooltip": "keybindings.json in Navide's app data folder",
       "search-placeholder": "Search command, key or context…",
       "filter": {
         "all": "All",
         "customized": "Customized",
-        "conflicts": "Conflicts"
+        "conflicts": "Shared keys"
       },
       "export": "Export",
       "import": "Import",
@@ -8015,7 +8039,7 @@
         "workbench_action_closeAllEditors": "Close All Editors",
         "workbench_action_closeEditorsToTheLeft": "Close Editors to the Left",
         "workbench_action_closeEditorsToTheRight": "Close Editors to the Right",
-        "workbench_action_closeModal": "Close Modal",
+        "workbench_action_closeModal": "Close Dialog",
         "workbench_action_closeOtherEditors": "Close Other Editors",
         "workbench_action_closeActivePane": "Close Active Pane",
         "workbench_action_closeWindow": "Close Window",
@@ -8081,6 +8105,12 @@
         "workbench_action_zoomUiIn": "Interface Zoom In",
         "workbench_action_zoomUiOut": "Interface Zoom Out",
         "workbench_action_zoomUiReset": "Interface Zoom Reset"
+      },
+      "cmdWhen": {
+        "workbench_action_closeModal": {
+          "notTerminal": "Close Dialog Outside a Terminal",
+          "planWindow": "Close Plan Window Overlay"
+        }
       },
       "col": {
         "command": "Command",
@@ -8148,12 +8178,19 @@
       "conflict-hard": "conflict",
       "conflict-soft": "shared key",
       "when-any": "always",
+      "when-limited": "Only in some contexts",
       "no-results": "No command matches this search.",
-      "footnote": "Two-key chords are supported: record one combination, then press the second. Keys this table does not own are listed read-only at the bottom of this page."
+      "footnote": "Two-key chords are supported: record one combination, then press the second. Keys this table does not own are listed read-only at the bottom of this page.",
+      "category": {
+        "workbench": "Workbench",
+        "editor": "Editor",
+        "controlPane": "CLI panes",
+        "ui": "External control"
+      }
     },
     "accounts": {
-      "title": "Git Accounts",
-      "encrypted-note": "Tokens are encrypted at rest with your OS keychain (safeStorage) and stored locally on this machine.",
+      "title": "Git accounts",
+      "encrypted-note": "Tokens are encrypted with your system keychain and stored only on this computer.",
       "unavailable": "Encryption is unavailable on this system, so accounts cannot be added. This usually means the OS keychain is not accessible.",
       "empty": "No accounts yet.",
       "new-account": "+ New Account",
@@ -8165,11 +8202,11 @@
       "host": "Host",
       "username": "Username",
       "token": "Token",
-      "token-hint": "Paste a Personal Access Token. It is encrypted with safeStorage and stored locally — never in plain text.",
+      "token-hint": "Paste a personal access token. It is encrypted and stored only on this computer, never as plain text.",
       "token-keep": "Leave blank to keep the current token",
       "delete-confirm": "Delete this account?",
       "cli": {
-        "title": "CLI Accounts",
+        "title": "CLI accounts",
         "hint": "Click \"Sign In\" or \"+ New Account\" to open a temporary login pane; it closes once you authorize in the browser. \"Set as Default\" picks the account new panes use, and open panes keep theirs until reopened.",
         "hint-detail": "All accounts share your home directory, so sessions and history carry over; switching swaps the stored credentials in place, and signing in never touches the active account.",
         "hint-more": "Details",
@@ -8255,7 +8292,7 @@
       "bg-base": "Background",
       "bg-subtle": "Surface",
       "text-primary": "Text",
-      "text-secondary": "Muted Text",
+      "text-secondary": "Muted text",
       "border-default": "Border",
       "accent-fg": "Accent",
       "success-fg": "Success",
@@ -8264,7 +8301,7 @@
     "analyzer": {
       "select-llama-cli": "Select llama-cli executable",
       "select-gguf-model": "Select GGUF model file",
-      "inference-backend": "Inference Backend",
+      "inference-backend": "Inference backend",
       "llama-cli-path": "llama-cli executable path",
       "llama-cli-path-hint": "(leave blank to use the default from PATH)",
       "auto-detect": "Auto-detect",
@@ -8278,7 +8315,7 @@
       "ollama-missing": "Ollama is not installed on this computer.",
       "install-ollama": "Install Ollama",
       "not-connected": "Not connected · run",
-      "model-manager": "Model Manager",
+      "model-manager": "Model manager",
       "model-manager-note": "Pull a model from Ollama by name, or delete one you no longer need",
       "model-placeholder": "Model name, e.g. qwen2.5-coder, llama3.2, gemma3",
       "downloading": "Downloading…",
@@ -8286,13 +8323,13 @@
       "connecting": "Connecting…",
       "no-local-models": "No local models detected. Run ollama pull <model-name> or use the download field above.",
       "delete-local-title": "Delete Locally",
-      "model-benchmark": "Model Benchmark",
+      "model-benchmark": "Model benchmark",
       "running": "Running…",
       "run-benchmark": "Run Benchmark",
       "testing": "Testing:",
       "preparing": "Preparing…",
       "benchmark-hint": "Runs 4 standard tasks against all local models to determine which ones are suitable for pipeline intent detection:",
-      "task-t1": "Tech stack detection — outputs JSON",
+      "task-t1": "Tech stack detection — names the libraries the workspace uses",
       "task-t2": "Workspace summary — one-sentence summary",
       "task-t3": "Relevance selection — picks the most relevant item from a doc list",
       "task-t4": "CLI intent parsing — parses agent output and extracts questions and options",
@@ -8944,7 +8981,7 @@
       "down": "Bottom strip",
       "main": "Main area"
     },
-    "settings-intro": "Every region of the main window. Views are singletons — moving one takes it out of where it is now. The main area always holds the CLI stage and cannot be changed.",
+    "settings-intro": "Every region of the main window. Each view can be in only one place, so moving it takes it out of where it is now. The main area always holds the CLI stage and cannot be changed.",
     "width": "Width",
     "height": "Height",
     "collapsed": "Collapsed",
@@ -8965,7 +9002,7 @@
     "preset": {
       "default": "Default",
       "focus": "Focus",
-      "bottom-panel": "Bottom Panel"
+      "bottom-panel": "Bottom panel"
     },
     "presets": "Presets",
     "statusbar-note": "its popovers go with it"
@@ -9082,8 +9119,7 @@
     "attention-body": "{label} is waiting for your reply"
   },
   "updater": {
-    "section-title": "Updates",
-    "section-hint": "Keep Agent-Team up to date. Updates apply to all workspaces.",
+    "section-hint": "Keep Navide up to date. Updates apply to all workspaces.",
     "current-version": "Current version",
     "check": "Check for Updates",
     "checking": "Checking for updates…",
@@ -9370,9 +9406,6 @@
     "intro": "Rename any pane status and pick its colour. Changes apply everywhere a status is shown — the pane badge, the sidebar, the meeting strip and the resource panel — and are saved to your account, not to a project.",
     "col": {
       "status": "Status",
-      "zh": "Traditional Chinese",
-      "en": "English",
-      "ja": "Japanese",
       "color": "Color"
     },
     "row-only": "list only",
@@ -9860,6 +9893,7 @@
     "reading-short": "reading",
     "reading-tooltip": "This account just became active. Reading its quota starts a Claude Code, so the numbers below are the previous reading until that finishes — up to 3 minutes.",
     "refresh-status": "Refresh: {status}",
+    "refresh-not-signed-in": "Can't refresh — not signed in",
     "refresh-error": "Reason: {reason}",
     "refresh-status-ok": "up to date",
     "refresh-status-not-refreshed": "not refreshed yet",
@@ -9909,13 +9943,13 @@
     "settings-title": "CLI quota badge",
     "settings-enabled": "Show remaining quota in CLI pane headers",
     "settings-refresh": "Refresh interval",
-    "settings-hint": "Shows CLI quota for 11 providers: claude, codex, kimi, grok, antigravity, opencode, qwen, kilo, pi, copilot and cursor. Most read local CLI credentials to query that provider's own usage API — read-only, credentials are never written. Claude is different: it drives the Claude CLI's built-in /usage panel instead of reading credentials.",
+    "settings-hint": "Shows quota for 11 CLI providers, read-only, from each provider’s usage API (for Claude, from its built-in /usage panel).",
     "failover-title": "Account switch when quota runs out",
-    "failover-hint": "What Navide does when a CLI account hits its quota: do nothing, list the accounts it could switch to (default), or switch automatically — at most 3 automatic switches per 5 hours per CLI, never back to the exhausted account on its own. The table shows what each CLI can do; the switch itself is decided by the backend.",
+    "failover-hint": "What Navide does when a CLI account runs out of quota: nothing, list accounts to switch to (default), or switch automatically, at most 3 times per 5 hours per CLI.",
     "failover-loop-title": "Resume a loop right after switching when quota runs out",
-    "failover-loop-hint": "When a pane running a loop runs out of quota, switch to an account that still has quota and send continue right away instead of waiting for the reset. Requires \"Switch automatically\" above.",
+    "failover-loop-hint": "When a looping pane runs out of quota, switches to an account with quota and continues right away; requires \"Switch automatically\".",
     "follow-switch-title": "Move pinned panes along when switching Claude accounts",
-    "follow-switch-hint": "Claude panes running on an account's own sign-in folder do not follow an account switch. With this on, a switch lists them so you can move them along, and an out-of-quota pane gets a \"Switch Account\" button. Each pane reopens on the new account and resumes its conversation. Off by default.",
+    "follow-switch-hint": "Moves Claude panes that use an account’s own sign-in folder to the new account when you switch, resuming their conversations.",
     "failover-mode-off": "Off",
     "failover-mode-notify": "Notify me",
     "failover-mode-auto": "Switch automatically",
@@ -10677,7 +10711,7 @@
     "desc": {
       "telegram": "Bot created with {'@'}BotFather",
       "discord": "Bot application in your server",
-      "slack": "Socket Mode app in your workspace",
+      "slack": "Slack app that connects out from this computer (turn on Socket Mode in Slack)",
       "feishu": "Custom app on Feishu or Lark",
       "dingtalk": "Internal robot in Stream mode",
       "matrix": "Bot user on any homeserver",
@@ -10768,9 +10802,9 @@
       "app_token": "App-level token",
       "bot_token": "Bot token",
       "app_id": "App ID",
-      "app_secret": "App Secret",
+      "app_secret": "App secret",
       "client_id": "Client ID",
-      "client_secret": "Client Secret",
+      "client_secret": "Client secret",
       "access_token": "Access token",
       "server_url": "Server URL",
       "homeserver": "Homeserver URL",
@@ -10864,7 +10898,7 @@
       "count-failed": "Could not load the chats this bot knows: {error}"
     },
     "monitor": {
-      "title": "Channel Connections",
+      "title": "Channel connections",
       "tagline": "Every pane linked to a chat. The status is the bot's: Connected means the bot is online, not that every chat can be reached.",
       "open": "Channel Connections",
       "close": "Close",
@@ -10884,7 +10918,7 @@
     "unavailable": "Navide Guard is not available from this backend yet. Restart Navide after updating.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off. Terminal command protection, and the check on an agent answering a prompt through MCP, are not affected by this switch either."
+      "desc": "Stops or asks before dangerous CLI actions, judged by fixed rules (never an AI) on how risky each one is and who asked for it. Even when this is off, high-risk approvals from a chat channel stay refused, and terminal command protection and the check on prompts answered through MCP keep working."
     },
     "counts": {
       "critical": "Critical {n}",
@@ -10924,7 +10958,7 @@
     },
     "vendors": {
       "title": "Which CLIs Guard can block",
-      "hint": "Guard stops an action through the CLI's own hook. CLIs without one can only be protected by chat-approval refusal and by not running them in YOLO mode.",
+      "hint": "Guard can stop an action only in CLIs that let Navide check each action before it runs. For the others, the only protection is to refuse approval requests that come from chat and to keep their permission prompts on.",
       "block": "Can be blocked",
       "none": "Cannot be blocked",
       "unknown": "Unknown"
@@ -11514,6 +11548,10 @@
       "burst-minutes": "minutes",
       "burst-per-day": "early runs a day at most",
       "burst-hint": "Reads only this workspace's error ledger. Off by default; still limited by the daily run count, one run at a time, and the same error starts at most one early run in 24 hours.",
+      "reclaim-retro": "Retrospective at reclaim",
+      "reclaim-retro-on": "Before a long-running dispatched pane is reclaimed automatically or by its parent, ask it for three lines",
+      "reclaim-retro-per-day": "retrospectives a day at most",
+      "reclaim-retro-hint": "Only panes opened by another pane (cli_open_agent) that have run for over 30 minutes, and only for the idle sweep, a parent's reclaim and pipeline hand-offs; a reclaim you click never waits. Each costs that pane one turn of tokens, waits at most {seconds} seconds, and keeps only the three lines the pane writes, masked, on this machine.",
       "rules": "Rules",
       "rules-builtin": "Built-in v{version}",
       "rules-view": "View full text",
@@ -11611,9 +11649,8 @@
     "no-match": "No workspace matches “{query}”.",
     "trimmed": "{count} older entries were removed by the history limit. You can change it in Settings → General.",
     "limit-title": "Recent workspaces limit",
+    "limit-count": "Maximum entries",
     "limit-hint": "Recent keeps every workspace you open until you remove it. This is only a storage safety bound: when it is reached the oldest entries go first, and open or pinned workspaces are never removed.",
-    "limit-off": "No limit",
-    "limit-on": "Keep up to",
     "state-completed": "completed",
     "state-running": "running",
     "state-aborted": "aborted",
@@ -11765,7 +11802,7 @@
     "overview": {
       "title": "Disclosure overview",
       "intro": "Every Navide plugin installed from the Navide Marketplace: what it declares, its risk level, recent activity and anything unusual, on one page. Records only; nothing here changes what a Navide plugin may do.",
-      "empty": "No Navide plugin from the Navide Marketplace is installed.",
+      "empty": "Nothing from the Navide Marketplace is installed yet.",
       "installedScan": "Scan verified at install",
       "noScanRecord": "No scan was recorded at install.",
       "activity": "Recent activity",

@@ -111,6 +111,10 @@ DEFAULTS: dict[str, Any] = {
     "burst_minutes": 30,
     "burst_count": 10,
     "burst_max_per_day": 1,
+    #: S5b: a long-running dispatched pane writes three lines before it is
+    #: reclaimed (off by default), at most this many a day.
+    "reclaim_retro": False,
+    "reclaim_retro_max_per_day": 3,
 }
 _INT_BOUNDS = {
     "token_budget": (1_000, 10_000_000),
@@ -120,6 +124,7 @@ _INT_BOUNDS = {
     "burst_minutes": (5, 1440),
     "burst_count": (3, 1000),
     "burst_max_per_day": (1, 10),
+    "reclaim_retro_max_per_day": (1, 10),
 }
 _AT_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 _PANE_ID_RE = re.compile(r"^[A-Za-z0-9._:\-]{1,128}$")
@@ -160,10 +165,26 @@ EFFECT_DAYS = 7
 EFFECT_MIN = 3
 _CADENCE_KEY = "evolve_cadence"
 _BURST_KEY = "evolve_burst"
+_RETRO_ASKS_KEY = "evolve_retro_asks"
 #: A signature that started an early run does not start another for this long.
 BURST_QUIET_MS = 24 * 3_600_000
 #: The error ledger is read for bursts at most this often per workspace.
 BURST_CHECK_MS = 120_000
+#: S5b: how long a reclaim waits for a pane's retrospective and its turn end.
+RETRO_WAIT_S = 90.0
+RETRO_POLL_S = 0.5
+#: A pane counts as long-running once it has existed this long.
+RETRO_MIN_AGE_MS = 30 * 60_000
+RETRO_LINES = 3
+RETRO_LINE_CHARS = 200
+#: Retrospectives the next repeated-work records carry.
+RETRO_IN_TASK = 10
+RETRO_PROMPT = (
+    "[Navide] This pane is about to be reclaimed (its conversation is kept). Before it is, call the "
+    "Navide MCP tool evolve_retro once, with token=\"{token}\" and lines=[three short lines]: what you "
+    "did, where you got stuck, and which step you repeated by hand. Write only those three lines, "
+    "mask anything secret, and then stop: do nothing else this turn."
+)
 _PATH_RE = re.compile(r"(?:[A-Za-z]:)?(?:[\\/][^\s\\/'\"()]+)+[\\/]?")
 _STAGE_STATUS = {
     "draft": "proposed", "in-review": "proposed", "approved": "approved",
@@ -226,7 +247,7 @@ def _local_tz() -> str:
 
 def _field(key: str, value: Any) -> Any:
     """One settings field, validated; raises :class:`SettingsInvalid`."""
-    if key in ("enabled", "retro_tools", "retro_corrections", "trigger_burst"):
+    if key in ("enabled", "retro_tools", "retro_corrections", "trigger_burst", "reclaim_retro"):
         if not isinstance(value, bool):
             raise SettingsInvalid(f"{key} must be true or false")
     elif key == "at":
@@ -404,6 +425,19 @@ def _create_proposals(cur: sqlite3.Cursor) -> None:
     cur.execute("CREATE INDEX evolve_proposals_created ON evolve_proposals (created_at)")
 
 
+def _create_retros(cur: sqlite3.Cursor) -> None:
+    # S5b: the three lines a dispatched pane wrote before it was reclaimed.
+    cur.execute(
+        "CREATE TABLE evolve_retros ("
+        " id TEXT PRIMARY KEY,"
+        " pane_id TEXT NOT NULL,"
+        " pane_name TEXT,"
+        " lines TEXT NOT NULL,"
+        " created_at INTEGER NOT NULL)"
+    )
+    cur.execute("CREATE INDEX evolve_retros_created ON evolve_retros (created_at)")
+
+
 def _proposal_row(row: sqlite3.Row) -> dict[str, Any]:
     proposal = dict(row)
     try:
@@ -454,6 +488,7 @@ class _Store:
             db.migrate(_COMPONENT, 2, _add_token_hash)
             db.migrate(_COMPONENT, 3, _create_proposals)
             db.migrate(_COMPONENT, 4, _add_effect)
+            db.migrate(_COMPONENT, 5, _create_retros)
             self._ready.add(key)
         return db
 
@@ -595,6 +630,47 @@ class _Store:
         db = self.db(workspace, create=True)
         if db is not None:
             db.kv_set(_BURST_KEY, {"fired": fired}, now=int(time.time()))
+
+    def add_retro(self, workspace: str, pane_id: str, pane_name: str, lines: list[str], now: int) -> None:
+        db = self.db(workspace, create=True)
+        if db is None:
+            return
+        with db.transaction() as cur:
+            cur.execute(
+                "INSERT INTO evolve_retros (id, pane_id, pane_name, lines, created_at) VALUES (?, ?, ?, ?, ?)",
+                (uuid.uuid4().hex[:12], pane_id, pane_name, json.dumps(lines, ensure_ascii=False), now),
+            )
+
+    def retro_asks(self, workspace: str) -> list[dict[str, Any]]:
+        """Each retrospective Navide asked for (pane id, when): the daily limit
+        counts asks, since every ask costs the pane a turn, answered or not."""
+        db = self.db(workspace, create=False)
+        stored = db.kv_get(_RETRO_ASKS_KEY) if db is not None else None
+        asks = stored.get("asks") if isinstance(stored, dict) else None
+        return [a for a in asks if isinstance(a, dict) and isinstance(a.get("at"), int)] if isinstance(asks, list) else []
+
+    def save_retro_asks(self, workspace: str, asks: list[dict[str, Any]]) -> None:
+        db = self.db(workspace, create=True)
+        if db is not None:
+            db.kv_set(_RETRO_ASKS_KEY, {"asks": asks}, now=int(time.time()))
+
+    def retros(self, workspace: str, since_ms: int) -> list[dict[str, Any]]:
+        db = self.db(workspace, create=False)
+        if db is None:
+            return []
+        with db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT * FROM evolve_retros WHERE created_at >= ? ORDER BY created_at DESC", (since_ms,)
+            ).fetchall()
+        out = []
+        for row in rows:
+            entry = dict(row)
+            try:
+                entry["lines"] = [str(x) for x in json.loads(entry["lines"])]
+            except (json.JSONDecodeError, TypeError):
+                entry["lines"] = []
+            out.append(entry)
+        return out
 
     def proposals(self, workspace: str, since_ms: int = 0) -> list[dict[str, Any]]:
         db = self.db(workspace, create=False)
@@ -782,6 +858,16 @@ class LiveHost:
         tests = data.get("tests") if isinstance(data, dict) else None
         return [t for t in tests if isinstance(t, dict)] if isinstance(tests, list) else []
 
+    def pane_record(self, workspace: str, pane_id: str) -> dict[str, Any] | None:
+        """The pane's restore record: how it was opened and when it first spawned."""
+        from . import app
+
+        project = app.project_store.peek(workspace)
+        for pane in (project.panes if project is not None else []):
+            if pane.pane_id == pane_id:
+                return {"origin": pane.origin, "spawned_at": pane.spawned_at}
+        return None
+
     def message_rows(self) -> list[dict[str, Any]]:
         """The persisted message log (every workspace); the retro pass scopes it."""
         from . import app
@@ -819,6 +905,8 @@ class EvolveService:
         #: run id → (ms the run's pane was first seen idle, nudges sent). In
         #: memory only: a restart at worst grants a run another round of nudges.
         self._idle: dict[str, tuple[int | None, int]] = {}
+        #: retro token → (workspace, pane id, set once the pane wrote its lines) (S5b).
+        self._retro_tokens: dict[str, tuple[str, str, asyncio.Event]] = {}
         #: workspace → when its error ledger was last read for a burst (S5a).
         self._burst_checked: dict[str, int] = {}
         #: run id → its task, for a run whose kickoff could not be confirmed and
@@ -971,6 +1059,9 @@ class EvolveService:
             # Panes Navide opened or used for this workspace's runs, so the
             # sidebar can mark them without opening the panel first.
             "pane_ids": list(dict.fromkeys(r["pane_id"] for r in runs if r["pane_id"])),
+            # S5b: the renderer asks for a retrospective before a reclaim only
+            # when this is true, and sends nothing at all otherwise.
+            "reclaim_retro": bool(stored and stored.get("enabled") and stored.get("reclaim_retro")),
         }
 
     async def badges(self, workspaces: list[str]) -> dict[str, Any]:
@@ -1155,7 +1246,9 @@ class EvolveService:
             if render["retro_tools"]:
                 render["retro_tools_data"] = _tools_records(
                     workspace, await asyncio.to_thread(self.host.message_rows),
-                    await self.host.schedule_records(), since)
+                    await self.host.schedule_records(), since) + [
+                    f'retro from pane "{_label(r["pane_name"], 40)}" at reclaim: ' + " | ".join(r["lines"])
+                    for r in (await asyncio.to_thread(self.store.retros, workspace, since))[:RETRO_IN_TASK]]
             if render["retro_corrections"]:
                 render["retro_corrections_data"] = await asyncio.to_thread(
                     _corrections_records, workspace, self.store.proposals(workspace, since), since)
@@ -1218,6 +1311,83 @@ class EvolveService:
         settings = await asyncio.to_thread(self.store.settings, workspace)
         if settings is not None and settings.get("catch_up") == "once":
             await asyncio.to_thread(self.store.save_settings, workspace, {**settings, "pending_catch_up": True})
+
+    # ── a retrospective before a reclaim (S5b) ───────────────────────────
+
+    async def retro_request(self, workspace: str, pane_id: str) -> dict[str, Any]:
+        """Ask a long-running dispatched pane for three lines before it is
+        reclaimed, then wait for them and its turn end, at most RETRO_WAIT_S.
+        Answers whether it asked; never raises, so a reclaim always goes on."""
+        try:
+            workspace = _canonical(workspace)
+            why = await self._retro_refusal(workspace, pane_id)
+            if why is not None:
+                return {"ok": True, "asked": False, "reason": why}
+            asks = [a for a in await asyncio.to_thread(self.store.retro_asks, workspace)
+                    if a["at"] >= self.now_ms() - 2 * 86_400_000]
+            await asyncio.to_thread(self.store.save_retro_asks, workspace,
+                                    asks + [{"pane_id": pane_id, "at": self.now_ms()}])
+            token = secrets.token_hex(16)
+            written = asyncio.Event()
+            self._retro_tokens[token] = (workspace, pane_id, written)
+            try:
+                await self.host.send(pane_id, RETRO_PROMPT.format(token=token))
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + RETRO_WAIT_S
+                idle = False
+                while loop.time() < deadline:
+                    entry = self.host.pane(pane_id)
+                    idle = entry is None or not getattr(entry, "busy", False)
+                    if written.is_set() and idle:
+                        break
+                    await asyncio.sleep(RETRO_POLL_S)
+                return {"ok": True, "asked": True, "collected": written.is_set(), "idle": idle}
+            finally:
+                self._retro_tokens.pop(token, None)
+        except Exception as err:  # noqa: BLE001 — the reclaim goes on whatever happened here
+            log.warning("evolve: reclaim retrospective failed: %s", err)
+            return {"ok": False, "asked": False, "reason": "error"}
+
+    async def _retro_refusal(self, workspace: str, pane_id: str) -> str | None:
+        settings = await asyncio.to_thread(self.store.settings, workspace)
+        if not settings or not settings.get("enabled") or not settings.get("reclaim_retro"):
+            return "off"
+        entry = self.host.pane(pane_id)
+        if entry is None or _canonical(getattr(entry, "workspace_path", "")) != workspace:
+            return "not_this_workspace"
+        record = await asyncio.to_thread(self.host.pane_record, workspace, pane_id) or {}
+        spawned = _ts_ms(record.get("spawned_at"))
+        if record.get("origin") != "mcp" or spawned is None or self.now_ms() - spawned < RETRO_MIN_AGE_MS:
+            return "not_long_running"
+        runs = await asyncio.to_thread(self.store.runs, workspace)
+        if any(r["pane_id"] == pane_id for r in runs):
+            return "evolve_pane"  # a run's own pane reports through evolve_report
+        start = self._day_start_ms(settings)
+        today = [a for a in await asyncio.to_thread(self.store.retro_asks, workspace) if a["at"] >= start]
+        if any(a.get("pane_id") == pane_id for a in today):
+            return "already_today"
+        if len(today) >= int(settings["reclaim_retro_max_per_day"]):
+            return "daily_limit"
+        if any(p == pane_id for _ws, p, _e in self._retro_tokens.values()):
+            return "already_asked"
+        return None
+
+    async def retro_submit(self, caller_pane_id: str, token: str, lines: Any) -> dict[str, Any]:
+        """evolve_retro: the asked pane's three lines, masked, into the ledger."""
+        held = self._retro_tokens.get(str(token or ""))
+        if held is None or held[1] != caller_pane_id or held[2].is_set():
+            return {"ok": False, "error": "no retrospective was asked of this pane with that token"}
+        workspace, pane_id, written = held
+        clean = [mask(re.sub(r"\s+", " ", str(x))).strip()[:RETRO_LINE_CHARS]
+                 for x in (lines if isinstance(lines, list) else [])]
+        clean = [x for x in clean if x][:RETRO_LINES]
+        if not clean:
+            return {"ok": False, "error": "lines must hold up to three short lines of text"}
+        entry = self.host.pane(pane_id)
+        await asyncio.to_thread(self.store.add_retro, workspace, pane_id,
+                                mask(str(getattr(entry, "name", "") or ""))[:80], clean, self.now_ms())
+        written.set()
+        return {"ok": True, "lines": len(clean)}
 
     async def report(self, caller_pane_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         """The agent's evolve_report: record the outcome, then reclaim its pane."""

@@ -93,12 +93,12 @@ describe('SettingsModal Navide Plugins pages', () => {
   it('lists the four pages under Navide Plugins and switches between them', async () => {
     await mountModal('extensions')
     expect(wrapper!.findAllComponents(SettingsNavSubItem).map((n) => n.props('label'))).toEqual([
-      'Navide plugins',
+      'Installed',
       'Execution Policy',
       'Developer and native code',
       'Disclosure overview',
     ])
-    expect(body('extensions').get('h1').text()).toBe('Navide plugins')
+    expect(body('extensions').get('h1').text()).toBe('Installed Navide plugins')
     expect(wrapper!.findComponent(ExtensionsPane).props('page')).toBe('plugins')
     expect(partShown('execution-policy')).toBe(false)
 
@@ -134,7 +134,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     await vi.advanceTimersByTimeAsync(5_000)
     expect(plugins.backendResourceUsage).toHaveBeenCalledTimes(2)
 
-    await openPage('Navide plugins')
+    await openPage('Installed')
     await vi.advanceTimersByTimeAsync(15_000)
     expect(plugins.backendResourceUsage).toHaveBeenCalledTimes(2)
 
@@ -213,7 +213,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     await flushPromises()
     vm().setTab('extensions')
     await flushPromises()
-    expect(body('extensions').get('h1').text()).toBe('Navide plugins')
+    expect(body('extensions').get('h1').text()).toBe('Installed Navide plugins')
     expect(wrapper!.findComponent(ExtensionsPane).props('page')).toBe('plugins')
   })
 
@@ -227,7 +227,7 @@ describe('SettingsModal Navide Plugins pages', () => {
   })
 
   // The pages split one scrolling page, so each page's state shows on its row and
-  // in the narrow tab strip: ⚠ while Execution Policy warns, "On" for Developer.
+  // in the narrow tab strip: ⚠ while Execution Policy warns, "Dev" or "Native" for Developer.
   const marker = (label: string) => wrapper!.findAllComponents(SettingsNavSubItem).find((n) => n.props('label') === label)!.props('marker')
   const tabMarker = (label: string) => body('extensions').findAll('.ext-pages-tab').find((tab) => tab.text().startsWith(label))!.find('.ext-pages-marker')
 
@@ -244,7 +244,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(tab.attributes('role')).toBe('img')
     expect(tab.attributes('aria-label')).toBe('Repository recommendation: Untrusted\nEffective policy: Stale')
     // Only that page carries it.
-    expect(marker('Navide plugins')).toBeNull()
+    expect(marker('Installed')).toBeNull()
     expect(marker('Developer and native code')).toBeNull()
 
     wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', [])
@@ -252,15 +252,20 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(marker('Execution Policy')).toBeNull()
   })
 
-  it('marks Developer and native code "On" with the switches that are on', async () => {
+  it('marks Developer and native code with the switch that is on', async () => {
     await mountModal('extensions')
     expect(marker('Developer and native code')).toBeNull()
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode', 'Allow native backends'])
     await flushPromises()
-    expect(marker('Developer and native code')).toEqual({ text: 'On', tone: 'on', label: 'On: Turn on Developer Mode, Allow native backends' })
+    expect(marker('Developer and native code')).toEqual({ text: 'Dev', tone: 'on', label: 'On: Turn on Developer Mode, Allow native backends' })
     expect(tabMarker('Developer and native code').attributes('aria-label')).toBe('On: Turn on Developer Mode, Allow native backends')
     expect(marker('Execution Policy')).toBeNull()
+
+    // Developer Mode off, a native-code switch on: the marker names that switch.
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Allow native backends'])
+    await flushPromises()
+    expect(marker('Developer and native code')).toMatchObject({ text: 'Native on' })
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', [])
     await flushPromises()
@@ -295,13 +300,13 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(wrapper!.findAllComponents(SettingsNavSubItem).filter((n) => n.props('active')).map((n) => n.props('label'))).toEqual(['Disclosure overview'])
   })
 
-  it('puts the folded pages\' marker on the Navide Plugins row, a warning before "On"', async () => {
+  it('puts the folded pages\' marker on the Navide Plugins row, a warning before the "Dev" pill', async () => {
     await mountModal('general')
     expect(pluginsRow().props('marker')).toBeNull()
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
     await flushPromises()
-    expect(pluginsRow().props('marker')).toMatchObject({ text: 'On', tone: 'on' })
+    expect(pluginsRow().props('marker')).toEqual({ text: 'Dev', tone: 'on', label: 'Developer and native code: Turn on Developer Mode' })
 
     wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', ['Effective policy: Stale'])
     await flushPromises()
@@ -312,5 +317,25 @@ describe('SettingsModal Navide Plugins pages', () => {
     await flushPromises()
     expect(pluginsRow().props('marker')).toBeNull()
     expect(marker('Execution Policy')).toMatchObject({ text: '⚠' })
+  })
+
+  it('shows the "Dev" marker in exactly one place: the folded parent, or the page row once unfolded', async () => {
+    await mountModal('general')
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toMatchObject({ text: 'Dev' })
+    expect(pluginsRow().props('foldable')).toBe(true)
+    expect(pluginsRow().props('expanded')).toBe(false)
+
+    vm().setTab('extensions')
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toBeNull()
+    expect(pluginsRow().props('expanded')).toBe(true)
+    expect(marker('Developer and native code')).toMatchObject({ text: 'Dev' })
+
+    // Moving between the unfolded pages keeps the marker on its own row.
+    await openPage('Developer and native code')
+    expect(pluginsRow().props('marker')).toBeNull()
+    expect(marker('Developer and native code')).toMatchObject({ text: 'Dev' })
   })
 })
