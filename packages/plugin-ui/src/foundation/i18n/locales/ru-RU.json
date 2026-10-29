@@ -1962,8 +1962,8 @@
       "installedTitle": "Установленные плагины Navide",
       "developerNative": "Разработчик и нативный код",
       "pageOn": "Вкл.",
-      "developerOnMarker": "Разраб.",
-      "nativeOnMarker": "Натив. вкл.",
+      "developerOnMarker": "Режим разработчика включён",
+      "nativeOnMarker": "Нативный код включён",
       "browseMarketplace": "Открыть Navide Marketplace",
       "bundledGit": "Встроенный Git",
       "state": {

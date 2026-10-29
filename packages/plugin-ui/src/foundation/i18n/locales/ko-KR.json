@@ -1962,8 +1962,8 @@
       "installedTitle": "설치된 Navide 플러그인",
       "developerNative": "개발자 및 네이티브 코드",
       "pageOn": "켜짐",
-      "developerOnMarker": "개발",
-      "nativeOnMarker": "네이티브 켜짐",
+      "developerOnMarker": "Developer Mode 켜짐",
+      "nativeOnMarker": "네이티브 코드 켜짐",
       "browseMarketplace": "Navide 마켓플레이스 둘러보기",
       "bundledGit": "기본 포함 Git",
       "state": {

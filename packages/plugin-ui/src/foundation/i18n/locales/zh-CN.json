@@ -1962,8 +1962,8 @@
       "installedTitle": "已安装的 Navide 插件",
       "developerNative": "开发者与原生代码",
       "pageOn": "已开启",
-      "developerOnMarker": "开发",
-      "nativeOnMarker": "原生已开",
+      "developerOnMarker": "开发者模式已开启",
+      "nativeOnMarker": "原生代码已开启",
       "browseMarketplace": "浏览 Navide 市场",
       "bundledGit": "内置 Git",
       "state": {

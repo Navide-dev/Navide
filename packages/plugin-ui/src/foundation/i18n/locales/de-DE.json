@@ -1962,8 +1962,8 @@
       "installedTitle": "Installierte Navide-Plug-ins",
       "developerNative": "Entwickler und nativer Code",
       "pageOn": "An",
-      "developerOnMarker": "Entw.",
-      "nativeOnMarker": "Nativ an",
+      "developerOnMarker": "Entwicklermodus an",
+      "nativeOnMarker": "Nativer Code an",
       "browseMarketplace": "Navide Marketplace durchsuchen",
       "bundledGit": "Mitgeliefertes Git",
       "state": {

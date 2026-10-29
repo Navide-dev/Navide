@@ -22,6 +22,7 @@ import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import { formatBytes } from '../lib/formatBytes'
 import PathText from './settings/PathText.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 
 type Backend = ReturnType<typeof useBackend>
 
@@ -464,14 +465,14 @@ defineExpose({ reload, confirmDiscard })
             <h3 class="memory-group-title">
               {{ group.label }}<span class="count">{{ group.files.length }}</span>
             </h3>
-            <p
+            <SettingsEmptyState
               v-if="group.scope === 'project' && !props.workspacePath"
-              class="memory-group-note"
-            >{{ t('settings.memory.no-workspace') }}</p>
-            <p
+              :message="t('settings.memory.no-workspace')"
+            />
+            <SettingsEmptyState
               v-else-if="group.files.length === 0"
-              class="memory-group-note"
-            >{{ t('settings.memory.empty') }}</p>
+              :message="t('settings.memory.empty')"
+            />
             <ul v-else class="memory-list">
               <li
                 v-for="file in group.files"
@@ -520,9 +521,7 @@ defineExpose({ reload, confirmDiscard })
             </h3>
             <p class="memory-group-note">{{ t('settings.memory.auto-intro') }}</p>
             <PathText v-if="autoMemoryDir" class="memory-auto-dir" :path="autoMemoryDir" />
-            <p v-if="autoMemoryFiles.length === 0" class="memory-group-note">
-              {{ t('settings.memory.auto-empty') }}
-            </p>
+            <SettingsEmptyState v-if="autoMemoryFiles.length === 0" :message="t('settings.memory.auto-empty')" />
             <ul v-else class="memory-list">
               <li
                 v-for="file in autoMemoryFiles"
@@ -717,22 +716,30 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   font-size: var(--font-xs);
   color: var(--text-secondary);
 }
-.memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* The Settings list grammar: one grouped card, rows split by hairlines
+   (the same look as SettingsCard). */
+.memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--settings-card-border, var(--border-default));
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
 .memory-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--settings-card-border, var(--border-muted));
-  border-radius: var(--radius-card);
-  background: var(--bg-subtle);
-  padding: 4px 9px 4px 4px;
+  padding: 6px 12px 6px 6px;
   min-width: 0;
 }
-/* A file not created yet is still a real row (open it to create the file):
-   solid like the others, set apart by its tag and no fill. Dashed borders
-   are for empty states only. */
-.memory-row.missing { background: transparent; }
-.memory-row.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
+.memory-row + .memory-row { border-top: 1px solid var(--settings-card-divider, var(--border-muted)); }
+/* A file not created yet is still a real row (open it to create the file),
+   set apart by its tag. Dashed borders are for empty states only. */
+.memory-row.active { background: var(--bg-muted); box-shadow: inset 2px 0 0 var(--accent-fg, var(--border-emphasis)); }
 .memory-open {
   flex: 1;
   min-width: 0;

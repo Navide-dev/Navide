@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import StaleConfigNotice from './StaleConfigNotice.vue'
 
 type Backend = ReturnType<typeof useBackend>
@@ -981,10 +982,11 @@ watch(
       <!-- ── Main region: browse (cards) or route (matrix) ──────────── -->
       <div class="skills-main">
         <div v-if="loading" class="skills-state nv-loading">{{ t('label.loading') }}</div>
-        <div v-else-if="matrixRows.length === 0" class="skills-state nv-empty">
-          <strong>{{ t('settings.skills.empty-title') }}</strong>
-          <span>{{ t('settings.skills.empty-body') }}</span>
-        </div>
+        <SettingsEmptyState
+          v-else-if="matrixRows.length === 0"
+          :title="t('settings.skills.empty-title')"
+          :message="t('settings.skills.empty-body')"
+        />
 
         <!-- Browse: cards grouped by source. Each card carries one source
              badge and a compact "who receives it" line — enough to scan,

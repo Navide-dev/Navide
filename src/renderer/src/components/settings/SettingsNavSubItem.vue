@@ -51,7 +51,7 @@ const emit = defineEmits<{
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-sm);
+  font-size: var(--font-row-title);
   text-align: left;
   cursor: pointer;
 }
