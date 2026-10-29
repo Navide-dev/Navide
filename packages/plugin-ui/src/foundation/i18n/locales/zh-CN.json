@@ -12283,7 +12283,7 @@
     },
     "needs-review": "有 {n} 个步骤需要确认",
     "needs-review-hint": "仍然可以导入；运行流程前，请先在编辑器里确认这些步骤。",
-    "subworkflow": "这个工作流会调用另一个 n8n 工作流。请把那个工作流的 JSON 也粘贴到这里，单独导入。",
+    "subworkflow": "这个工作流会调用另一个 Navide 还没有的 n8n 工作流。请把被调用的工作流一起粘贴到这里（放在同一个 JSON 数组里），或先导入它们，这个调用就会作为子 Pipeline 运行。",
     "external": "导入的流程每次运行都会标记为外部内容，因为它的步骤来自 Navide 之外制作的文件。",
     "warnings": "警告",
     "canvas-title": "转换后的流程图",
@@ -12302,6 +12302,7 @@
       "trigger": "触发",
       "slot": "步骤",
       "gate": "核准闸门",
+      "subpipeline": "子 Pipeline",
       "folded": "并入步骤",
       "removed": "已移除"
     },

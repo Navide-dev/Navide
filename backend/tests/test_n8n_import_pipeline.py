@@ -13,6 +13,7 @@ import pytest
 
 from agent_team_backend import agent_messaging, app, ws_handlers
 from agent_team_backend import n8n_import as ni
+from agent_team_backend import pipeline_graph as pg
 from agent_team_backend.guard import taint
 from agent_team_backend.mcp_server import auth as plan_mcp_auth
 from agent_team_backend.mcp_server import server as plan_mcp
@@ -310,3 +311,116 @@ def test_the_forged_signal_fixture_is_the_converters_output_and_its_report_lists
     slots = {n["id"]: n["slot"]["kickoffBody"] for n in result["graph"]["nodes"] if n["kind"] == "slot"}
     assert {s["id"]: s["kickoffBody"] for s in result["report"]["slots"]} == slots
     assert "---BRANCH: true---" in slots["n8n-shape"]
+
+
+# ── sub-workflows ────────────────────────────────────────────────────────
+def _calling(wid: str, name: str, calls: str = "", tool: str = "") -> dict[str, Any]:
+    """Workflow `wid`: Start → Work (→ Execute Workflow `calls`); an AI Agent
+    with a workflow tool calling `tool` instead when given."""
+    nodes: list[dict[str, Any]] = [
+        {"id": "1", "name": "Start", "type": ni.BASE + "manualTrigger", "typeVersion": 1, "position": [0, 0],
+         "parameters": {}},
+        {"id": "2", "name": "Work", "type": ni.BASE + "set", "typeVersion": 3.4, "position": [200, 0],
+         "parameters": {"value": "x"}},
+    ]
+    conns: dict[str, Any] = {"Start": {"main": [[{"node": "Work", "type": "main", "index": 0}]]}}
+    if calls:
+        nodes.append({"id": "3", "name": f"Run {calls}", "type": ni.BASE + "executeWorkflow", "typeVersion": 1.2,
+                      "position": [400, 0], "parameters": {
+                          "source": "database", "workflowId": {"__rl": True, "mode": "list", "value": calls}}})
+        conns["Work"] = {"main": [[{"node": f"Run {calls}", "type": "main", "index": 0}]]}
+    if tool:
+        nodes += [
+            {"id": "4", "name": "Agent", "type": ni.LANGCHAIN + "agent", "typeVersion": 1.7, "position": [400, 200],
+             "parameters": {"text": "help"}},
+            {"id": "5", "name": "Tool", "type": ni.LANGCHAIN + "toolWorkflow", "typeVersion": 2,
+             "position": [400, 400], "parameters": {
+                 "source": "database", "workflowId": {"__rl": True, "mode": "id", "value": tool}}},
+        ]
+        conns["Work"] = {"main": [[{"node": "Agent", "type": "main", "index": 0}]]}
+        conns["Tool"] = {"ai_tool": [[{"node": "Agent", "type": "ai_tool", "index": 0}]]}
+    return {"id": wid, "name": name, "nodes": nodes, "connections": conns}
+
+
+def _sub_nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
+    return [n for n in graph["nodes"] if n["kind"] == "subpipeline"]
+
+
+def test_a_list_import_creates_the_called_workflow_first(wired: SimpleNamespace) -> None:
+    parent, child = _calling("wf-a", "Parent", calls="wf-b"), _calling("wf-b", "Child")
+    out = ni.import_into_store(wired.store, json.dumps([child, parent]), dry_run=False)
+    assert out["pipeline"]["name"] == "Parent"  # the one nobody calls, wherever it is in the list
+    names = _names(wired.store)
+    assert names.index("Child") < names.index("Parent")
+    child_id = next(p["id"] for p in wired.store.list_pipelines() if p["name"] == "Child")
+    stored = wired.store.get_graph(out["pipeline"]["id"])["graph"]
+    assert [n["subpipeline"]["pipelineId"] for n in _sub_nodes(stored)] == [child_id]
+    assert pg.validate_graph(stored) == []
+    assert out["report"]["subworkflows"] == [
+        {"workflowId": "wf-b", "name": "Child", "status": "imported", "pipelineId": child_id}]
+    assert wired.store.imported_from(child_id)["workflowId"] == "wf-b"
+
+
+def test_a_list_dry_run_writes_nothing_and_previews_the_call(wired: SimpleNamespace) -> None:
+    before = wired.store.export_document()
+    out = ni.import_into_store(wired.store, [_calling("wf-a", "Parent", calls="wf-b"), _calling("wf-b", "Child")])
+    assert wired.store.export_document() == before and "pipeline" not in out
+    (sub,) = _sub_nodes(out["graph"])
+    assert sub["subpipeline"]["pipelineId"] == "n8n:wf-b"
+    assert pg.validate_graph(out["graph"]) == []
+    assert out["report"]["subworkflows"] == [{"workflowId": "wf-b", "name": "Child", "status": "will-import"}]
+
+
+def test_a_workflow_imported_before_is_reused(wired: SimpleNamespace) -> None:
+    first = ni.import_into_store(wired.store, _calling("wf-b", "Child"), dry_run=False)
+    out = ni.import_into_store(wired.store, _calling("wf-a", "Parent", calls="wf-b"), dry_run=False)
+    stored = wired.store.get_graph(out["pipeline"]["id"])["graph"]
+    assert [n["subpipeline"]["pipelineId"] for n in _sub_nodes(stored)] == [first["pipeline"]["id"]]
+    assert out["report"]["subworkflows"] == [
+        {"workflowId": "wf-b", "name": "Child", "status": "existing", "pipelineId": first["pipeline"]["id"]}]
+    assert _names(wired.store).count("Child") == 1
+
+
+def test_a_call_to_a_workflow_navide_does_not_have_is_missing(wired: SimpleNamespace) -> None:
+    out = ni.import_into_store(wired.store, _calling("wf-a", "Parent", calls="wf-z"), dry_run=False)
+    assert _sub_nodes(out["graph"]) == []
+    assert out["report"]["subworkflows"] == [{"workflowId": "wf-z", "name": "", "status": "missing"}]
+    assert "paste-subworkflow" in next(e for e in out["report"]["nodes"] if e["name"] == "Run wf-z")["actions"]
+
+
+@pytest.mark.parametrize("pair", [
+    [("wf-x", "X", "wf-y"), ("wf-y", "Y", "wf-x")],  # X → Y → X
+    [("wf-s", "Self", "wf-s")],  # a workflow that calls itself
+])
+def test_recursive_calls_import_without_a_cycle(wired: SimpleNamespace, pair: list[tuple[str, str, str]]) -> None:
+    out = ni.import_into_store(wired.store, [_calling(*p) for p in pair], dry_run=False)
+    for p in wired.store.list_pipelines():
+        if p["name"] in {name for _, name, _ in pair}:
+            graph = wired.store.get_graph(p["id"])["graph"]
+            assert _sub_nodes(graph) == [] and pg.validate_graph(graph) == []
+    assert {s["status"] for s in out["report"]["subworkflows"]} == {"recursive"}
+    e = next(e for e in out["report"]["nodes"] if e["type"].endswith("executeWorkflow"))
+    assert e["reason"] == "recursive-subworkflow" and "paste-subworkflow" not in e["actions"]
+
+
+def test_a_workflow_tool_is_disclosed_not_converted(wired: SimpleNamespace) -> None:
+    out = ni.import_into_store(wired.store, [_calling("wf-a", "Parent", tool="wf-t"), _calling("wf-t", "Lookup")],
+                               dry_run=False)
+    lookup_id = next(p["id"] for p in wired.store.list_pipelines() if p["name"] == "Lookup")
+    assert _sub_nodes(out["graph"]) == []
+    tool = next(e for e in out["report"]["nodes"] if e["name"] == "Tool")
+    assert (tool["category"], tool["result"]) == ("pending", "folded") and lookup_id in tool["detail"]
+    assert any(f"imported here as the pipeline {lookup_id}" in s["kickoffBody"] for s in out["report"]["slots"])
+    assert out["report"]["subworkflows"] == [
+        {"workflowId": "wf-t", "name": "Lookup", "status": "imported", "pipelineId": lookup_id}]
+
+
+async def test_mcp_and_ws_take_a_list_too(wired: SimpleNamespace) -> None:
+    text = json.dumps([_calling("wf-a", "Parent", calls="wf-b"), _calling("wf-b", "Child")])
+    out = await plan_mcp.pipeline_import_n8n(_ctx(), text)
+    assert out["ok"] is True and out["report"]["subworkflows"][0]["status"] == "will-import"
+    session = _Session()
+    await ws_handlers.pipelines_import_n8n(session, "m1", "pipelines.import_n8n", {"json": text, "dry_run": True})
+    assert session.last["payload"]["report"]["subworkflows"][0]["workflowId"] == "wf-b"
+    bad = await plan_mcp.pipeline_import_n8n(_ctx(), json.dumps([_calling("wf-a", "A"), {"nodes": "x"}]))
+    assert bad["ok"] is False and bad["error_code"] == "invalid" and bad["error"].startswith("workflow 2:")

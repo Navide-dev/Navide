@@ -12283,7 +12283,7 @@
     },
     "needs-review": "{n} bước cần xem lại",
     "needs-review-hint": "Vẫn có thể nhập. Hãy kiểm tra các bước này trong trình chỉnh sửa trước khi chạy pipeline.",
-    "subworkflow": "Workflow này gọi một workflow n8n khác. Hãy dán cả JSON của workflow đó vào đây và nhập riêng.",
+    "subworkflow": "Workflow này gọi một workflow n8n khác mà Navide chưa có. Hãy dán cả các workflow được gọi vào đây, chung trong một mảng JSON, hoặc nhập chúng trước; khi đó lệnh gọi sẽ chạy như một Pipeline con.",
     "external": "Mọi lần chạy của pipeline đã nhập đều được đánh dấu là nội dung bên ngoài, vì các bước của nó đến từ một tệp tạo bên ngoài Navide.",
     "warnings": "Cảnh báo",
     "canvas-title": "Đồ thị đã chuyển đổi",
@@ -12302,6 +12302,7 @@
       "trigger": "Trình kích hoạt",
       "slot": "Bước",
       "gate": "Điểm phê duyệt",
+      "subpipeline": "Pipeline con",
       "folded": "Gộp vào một bước",
       "removed": "Đã xóa"
     },

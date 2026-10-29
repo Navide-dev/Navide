@@ -12283,7 +12283,7 @@
     },
     "needs-review": "{n} paso requiere revisión | {n} pasos requieren revisión",
     "needs-review-hint": "Aun así puedes importar. Revisa estos pasos en el editor antes de ejecutar la pipeline.",
-    "subworkflow": "Este flujo de trabajo llama a otro flujo de trabajo de n8n. Pega aquí también el JSON de ese flujo e impórtalo por separado.",
+    "subworkflow": "Este flujo de trabajo llama a otro flujo de trabajo de n8n que Navide aún no tiene. Pega aquí también los flujos llamados, juntos en un array JSON, o impórtalos antes; así la llamada se ejecuta como subpipeline.",
     "external": "Cada ejecución de la pipeline importada se marca como contenido externo, porque sus pasos vienen de un archivo creado fuera de Navide.",
     "warnings": "Advertencias",
     "canvas-title": "Grafo convertido",
@@ -12302,6 +12302,7 @@
       "trigger": "Disparador",
       "slot": "Paso",
       "gate": "Puerta de aprobación",
+      "subpipeline": "Subpipeline",
       "folded": "Fusionado en un paso",
       "removed": "Eliminado"
     },

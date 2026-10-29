@@ -12283,7 +12283,7 @@
     },
     "needs-review": "{n} Schritt muss geprüft werden | {n} Schritte müssen geprüft werden",
     "needs-review-hint": "Der Import ist trotzdem möglich. Prüfen Sie diese Schritte im Editor, bevor Sie die Pipeline ausführen.",
-    "subworkflow": "Dieser Workflow ruft einen anderen n8n-Workflow auf. Fügen Sie auch dessen JSON hier ein und importieren Sie ihn separat.",
+    "subworkflow": "Dieser Workflow ruft einen anderen n8n-Workflow auf, den Navide noch nicht hat. Fügen Sie die aufgerufenen Workflows hier zusammen in einem JSON-Array ein oder importieren Sie sie zuerst; dann läuft der Aufruf als Unter-Pipeline.",
     "external": "Jede Ausführung der importierten Pipeline wird als externer Inhalt markiert, weil ihre Schritte aus einer außerhalb von Navide erstellten Datei stammen.",
     "warnings": "Warnungen",
     "canvas-title": "Umgewandelter Graph",
@@ -12302,6 +12302,7 @@
       "trigger": "Auslöser",
       "slot": "Schritt",
       "gate": "Genehmigungsschranke",
+      "subpipeline": "Unter-Pipeline",
       "folded": "In einen Schritt zusammengeführt",
       "removed": "Entfernt"
     },

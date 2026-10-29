@@ -9474,7 +9474,9 @@ async def pipeline_import_n8n(
 ) -> dict[str, Any]:
     """Convert an exported n8n workflow into a NEW pipeline template.
 
-    `json` is the workflow as n8n exports or copies it (nodes + connections).
+    `json` is the workflow as n8n exports or copies it (nodes + connections),
+    or a list of workflows as `n8n export:workflow --all` writes: the first one
+    no other listed one calls is the main one, and the others are imported too.
     With `dry_run` true (the default) nothing is written: you get the preview
     graph and the conversion report to show the user first. With `dry_run`
     false a new pipeline is created — an existing one is never overwritten, and
@@ -9500,8 +9502,14 @@ async def pipeline_import_n8n(
       listed by type and name (`credentials`) for the user to set up locally
       (an MCP server or the service's CLI login); n8n credential ids are
       dropped and nothing is put into an environment.
-    - Schedule, webhook and app triggers, sub-workflows and large branches are
-      imported but marked pending: start such a pipeline by hand.
+    - Execute Workflow becomes a sub-pipeline node when the workflow it calls
+      is listed too or was imported before; report.subworkflows says which
+      (status existing, imported, will-import, recursive or missing). A call
+      that would loop back, and one to a workflow Navide does not have, stay
+      pending. A workflow used as an AI Agent tool is named in the kickoff,
+      never converted: a pipeline cannot be called as a tool.
+    - Schedule, webhook and app triggers are imported but marked pending:
+      start such a pipeline by hand.
     - Everything imported is external content. Every run of an imported
       pipeline marks its panes with Navide Guard's external-content taint,
       whoever starts it; that cannot be turned off.

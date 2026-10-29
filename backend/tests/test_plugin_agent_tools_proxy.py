@@ -126,7 +126,11 @@ pytestmark = pytest.mark.asyncio
 #: 39886aa6…, #741): pipeline_graph documents subpipeline nodes,
 #: pipeline_status the run_stack / parent / depth of a child run, and
 #: pipeline_start the refusal while a parent run waits. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "3be2ca9d6b72ec0414c077104cefd41b0f5bdbfed9224c190a7de6a5e1058e56"
+#: Re-pinned for 0.2.34 n8n native flow on top of sub-pipelines (previous pin
+#: 3be2ca9d…, #754): pipeline_import_n8n documents a list of workflows,
+#: sub-pipeline nodes for Execute Workflow, report.subworkflows and that large
+#: branches are native. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "bffa7b33192f2fae3a53f6667474a76cf7f467b78ad305b84a4cb17631e8204c"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

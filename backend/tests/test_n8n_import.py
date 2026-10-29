@@ -8,6 +8,7 @@ the source.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -212,27 +213,204 @@ def test_ai_agent_cluster_folds_into_one_slot(model, agent):
     assert "{{prev.summary}}" in slot(out, "n8n-notify")["slot"]["kickoffBody"]
 
 
-def test_small_if_and_merge_collapse_into_one_agent_slot():
+def edges(out: dict) -> list:
+    return sorted((e["kind"], e["from"], e["to"], e.get("when")) for e in out["graph"]["edges"])
+
+
+def test_if_becomes_branch_edges_and_the_merge_is_native():
     out = convert(if_merge())
-    assert shape(out) == {
-        "nodes": [("trigger", "trigger", "Start"), ("n8n-check", "slot", "Check (+4)")],
-        "edges": [("trigger", "n8n-check")],
-    }
+    assert shape(out)["nodes"] == [("trigger", "trigger", "Start"), ("n8n-check", "slot", "Check"),
+                                   ("n8n-yes", "slot", "Yes"), ("n8n-no", "slot", "No"), ("n8n-join", "slot", "Join (+1)")]
+    assert edges(out) == [
+        ("branch", "n8n-check", "n8n-no", "false"), ("branch", "n8n-check", "n8n-yes", "true"),
+        ("main", "n8n-no", "n8n-join", None), ("main", "n8n-yes", "n8n-join", None),
+        ("main", "trigger", "n8n-check", None),
+    ]
     kick = slot(out, "n8n-check")["slot"]["kickoffBody"]
-    assert "taking only the branch whose condition holds" in kick
-    assert "Next: true → \"Yes\"; false → \"No\"" in kick
-    assert entry(out, "Check")["category"] == "agent"
+    assert "report the branch you take, one of: true, false" in kick
+    assert "---" + "BRANCH" not in kick  # the engine adds the signal format, with its code
+    assert '"combinator": "and"' in kick  # the condition, verbatim
+    assert (entry(out, "Check")["category"], entry(out, "Check")["reason"]) == ("native", "branch")
+    assert entry(out, "Check")["branches"] == ["true", "false"]
+    assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("native", "merge")
 
 
-def test_large_branch_is_pending_and_the_merge_after_it_too():
+@pytest.mark.parametrize("mode", ["append", "chooseBranch", None])
+def test_a_merge_that_waits_for_its_inputs_is_native(mode):
+    w = if_merge()
+    if mode:
+        w["nodes"][4]["parameters"] = {"mode": mode}
+    out = convert(w)
+    assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("native", "merge")
+
+
+def test_a_combine_by_sql_merge_is_an_agent_step_folded_downstream():
+    w = if_merge()
+    sql = "SELECT * FROM input1 LEFT JOIN input2 ON input1.id = input2.id"
+    w["nodes"][4]["parameters"] = {"mode": "combineBySql", "query": sql}
+    out = convert(w)
+    e = entry(out, "Join")
+    assert (e["category"], e["reason"], e["node"]) == ("agent", "merge-combine", "n8n-join")
+    assert slot(out, "n8n-join")["label"] == "Join (+1)"  # After folds in behind it
+    kick = slot(out, "n8n-join")["slot"]["kickoffBody"]
+    assert "Merge rule" in kick and '"combineBySql" mode' in kick and sql in kick
+    assert ("main", "n8n-yes", "n8n-join", None) in edges(out)
+
+
+def test_a_combine_merge_is_an_agent_step():
+    w = if_merge()
+    w["nodes"][4]["parameters"] = {"mode": "combine", "combineBy": "combineByFields",
+                                   "fieldsToMatchString": "id"}
+    out = convert(w)
+    assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("agent", "merge-combine")
+
+
+def test_a_large_branch_is_native_too():
     out = convert(if_merge(big=True))
-    ids = [n[0] for n in shape(out)["nodes"]]
-    assert ids == ["trigger", "n8n-check", "n8n-yes", "n8n-no", "n8n-think", "n8n-join"]
-    assert ("n8n-check", "n8n-yes") in shape(out)["edges"] and ("n8n-check", "n8n-no") in shape(out)["edges"]
-    assert entry(out, "Check")["category"] == "pending" and entry(out, "Check")["reason"] == "branch-too-large"
-    assert entry(out, "Join")["category"] == "pending" and entry(out, "Join")["reason"] == "merge-after-branch"
-    assert out["report"]["nodeCategories"]["n8n-join"] == "pending"
-    assert entry(out, "Think")["result"] == "slot"
+    assert [n[0] for n in shape(out)["nodes"]] == ["trigger", "n8n-check", "n8n-yes", "n8n-no", "n8n-think", "n8n-join"]
+    assert ("branch", "n8n-check", "n8n-yes", "true") in edges(out)
+    assert entry(out, "Check")["category"] == "native" and entry(out, "Join")["category"] == "native"
+    assert out["report"]["stats"]["byCategory"]["pending"] == 0
+
+
+def test_steps_before_an_if_fold_into_its_slot_but_nothing_after_it():
+    w = if_merge()
+    w["nodes"].insert(1, node("Load", "httpRequest", 4.2, 100))
+    w["connections"] = {**link(("Start", "Load"), ("Load", "Check")),
+                        **{k: v for k, v in w["connections"].items() if k != "Start"}}
+    out = convert(w)
+    assert slot(out, "n8n-load")["label"] == "Load (+1)"
+    assert ("branch", "n8n-load", "n8n-yes", "true") in edges(out)
+
+
+def test_switch_rules_map_one_by_one_and_the_fallback_to_default():
+    rules = {"values": [{"outputKey": "Refund", "renameOutput": True}, {}]}
+    w = wf([node("Start", "manualTrigger"),
+            node("Route", "switch", 3.2, 200, parameters={"rules": rules, "options": {"fallbackOutput": "extra"}}),
+            node("A", "set", 3.4, 400, -100), node("B", "set", 3.4, 400), node("C", "set", 3.4, 400, 100)],
+           link(("Start", "Route"), ("Route", "A", 0), ("Route", "B", 1), ("Route", "C", 2)))
+    out = convert(w)
+    assert [e for e in edges(out) if e[0] == "branch"] == [
+        ("branch", "n8n-route", "n8n-a", "Refund"), ("branch", "n8n-route", "n8n-b", "1"),
+        ("branch", "n8n-route", "n8n-c", "default"),
+    ]
+    assert "one of: Refund, 1, default" in slot(out, "n8n-route")["slot"]["kickoffBody"]
+
+
+def test_two_outputs_into_one_step_keep_one_branch_and_warn():
+    w = wf([node("Start", "manualTrigger"),
+            node("Route", "switch", 3.2, 200, parameters={"rules": {"values": [{}, {}, {}]}}),
+            node("A", "set", 3.4, 400), node("B", "set", 3.4, 400, 100)],
+           link(("Start", "Route"), ("Route", "A", 0), ("Route", "A", 1), ("Route", "B", 2)))
+    out = convert(w)
+    assert ("branch", "n8n-route", "n8n-a", "0") in edges(out)
+    assert any("only \"0\" is kept" in x for x in out["report"]["warnings"])
+
+
+def test_both_if_outputs_into_one_step_is_a_plain_edge():
+    w = wf([node("Start", "manualTrigger"), node("Check", "if", 2, 200), node("A", "set", 3.4, 400)],
+           link(("Start", "Check"), ("Check", "A", 0), ("Check", "A", 1)))
+    out = convert(w)
+    assert ("main", "n8n-check", "n8n-a", None) in edges(out)
+
+
+def test_an_error_output_becomes_an_error_edge():
+    w = wf([node("Start", "manualTrigger"),
+            node("Call", "httpRequest", 4.2, 200, onError="continueErrorOutput"),
+            node("Ok", "set", 3.4, 400), node("Alert", "slack", 2.3, 400, 100)],
+           link(("Start", "Call"), ("Call", "Ok", 0), ("Call", "Alert", 1)))
+    out = convert(w)
+    assert ("error", "n8n-call", "n8n-alert", None) in edges(out)
+    assert slot(out, "n8n-call")["label"] == "Call (+1)"  # the regular output still chains
+    assert entry(out, "Call")["errorOutput"] is True
+    assert "error → \"Alert\"" in slot(out, "n8n-call")["slot"]["kickoffBody"]
+
+
+def test_an_if_with_an_error_output():
+    w = wf([node("Start", "manualTrigger"), node("Check", "if", 2, 200, onError="continueErrorOutput"),
+            node("Y", "set", 3.4, 400), node("N", "set", 3.4, 400, 100), node("E", "set", 3.4, 400, 200)],
+           link(("Start", "Check"), ("Check", "Y", 0), ("Check", "N", 1), ("Check", "E", 2)))
+    out = convert(w)
+    assert {e for e in edges(out) if e[1] == "n8n-check"} == {
+        ("branch", "n8n-check", "n8n-y", "true"), ("branch", "n8n-check", "n8n-n", "false"),
+        ("error", "n8n-check", "n8n-e", None)}
+
+
+def test_its_own_error_workflow_becomes_error_edges():
+    w = wf([node("Start", "manualTrigger"), node("Work", "httpRequest", 4.2, 200),
+            node("Think", ni.LANGCHAIN + "chainLlm", 1.5, 400),
+            node("On error", "errorTrigger", 1, 0, 300), node("Page", "slack", 2.3, 200, 300)],
+           link(("Start", "Work"), ("Work", "Think"), ("On error", "Page")),
+           id="wf-7", settings={"errorWorkflow": "wf-7"})
+    out = convert(w)
+    assert shape(out)["nodes"][0] == ("trigger", "trigger", "Start")
+    assert edges(out) == [
+        ("error", "n8n-think", "n8n-page", None), ("error", "n8n-work", "n8n-page", None),
+        ("main", "n8n-work", "n8n-think", None), ("main", "trigger", "n8n-work", None),
+    ]
+    e = entry(out, "On error")
+    assert (e["result"], e["category"], e["reason"]) == ("folded", "native", "error-workflow")
+
+
+def test_another_error_workflow_is_only_a_warning():
+    w = wf([node("Start", "manualTrigger"), node("Work", "set", 3.4, 200)], link(("Start", "Work")),
+           id="wf-7", settings={"errorWorkflow": "wf-9"})
+    out = convert(w)
+    assert any("errorWorkflow names another" in x for x in out["report"]["warnings"])
+    assert all(e[0] == "main" for e in edges(out))
+
+
+def test_retry_settings_map_to_the_slot_and_are_capped_at_five():
+    w = wf([node("Start", "manualTrigger"),
+            node("Call", "httpRequest", 4.2, 200, retryOnFail=True, maxTries=8, waitBetweenTries=500_000),
+            node("Think", ni.LANGCHAIN + "chainLlm", 1.5, 400, retryOnFail=True)],
+           link(("Start", "Call"), ("Call", "Think")))
+    out = convert(w)
+    assert slot(out, "n8n-call")["retry"] == {"maxTries": 5, "waitMs": 300_000}
+    assert slot(out, "n8n-think")["retry"] == {"maxTries": 3, "waitMs": 1000}
+    note = entry(out, "Call")["retry"]
+    assert note["capped"] is True and note["requested"] == {"maxTries": 8, "waitMs": 500_000}
+    assert entry(out, "Think")["retry"]["capped"] is False
+    assert any("Navide allows at most 5 tries" in x for x in out["report"]["warnings"])
+    assert "retried 5 times in all" in slot(out, "n8n-call")["slot"]["kickoffBody"]
+
+
+def test_a_cross_node_read_becomes_a_node_output_reference():
+    w = wf([node("Start", "manualTrigger"),
+            node("Lookup", ni.LANGCHAIN + "chainLlm", 1.5, 200),
+            node("Mid", ni.LANGCHAIN + "chainLlm", 1.5, 400),
+            node("Use", "set", 3.4, 600, parameters={"value": "={{ $('Lookup').item.json.email }}",
+                                                      "old": "={{ $node[\"Mid\"].json.x }}"})],
+           link(("Start", "Lookup"), ("Lookup", "Mid"), ("Mid", "Use")))
+    out = convert(w)
+    kick = slot(out, "n8n-use")["slot"]["kickoffBody"]
+    assert "{{node.n8n-lookup.output}}" in kick and "{{node.n8n-mid.output}}" in kick
+    assert "result as JSON" in slot(out, "n8n-lookup")["slot"]["kickoffBody"]
+    assert "result as JSON" not in slot(out, "n8n-use")["slot"]["kickoffBody"]
+
+
+def test_a_read_of_a_step_that_does_not_run_first_is_disclosed():
+    w = wf([node("Start", "manualTrigger"), node("Check", "if", 2, 200),
+            node("Y", ni.LANGCHAIN + "chainLlm", 1.5, 400), node("N", "set", 3.4, 400, 100,
+                                                              parameters={"v": "={{ $('Y').item.json.a }}"})],
+           link(("Start", "Check"), ("Check", "Y", 0), ("Check", "N", 1)))
+    out = convert(w)
+    kick = slot(out, "n8n-n")["slot"]["kickoffBody"]
+    assert "does not run before this step" in kick and "{{node." not in kick
+
+
+def test_steps_left_in_n8n_carry_the_n8n_mcp_hint():
+    lc = ni.LANGCHAIN
+    w = wf([node("Start", "manualTrigger"), node("Index", lc + "vectorStoreInMemory", 1, 200)],
+           link(("Start", "Index")))
+    out = convert(w)
+    e = entry(out, "Index")
+    assert "keep-in-n8n" in e["actions"] and e["n8nMcp"] == list(ni.N8N_MCP_STEPS)
+    assert out["report"]["n8nMcp"]["nodes"] == ["Index"]
+    steps = " ".join(ni.N8N_MCP_STEPS)
+    assert "Settings → MCP" in steps and "Available in MCP" in steps and "does not wait" in steps
+    assert "n8n's MCP server" in slot(out, "n8n-index")["slot"]["kickoffBody"]
+    assert convert(linear())["report"]["n8nMcp"] is None
 
 
 def test_split_in_batches_back_edge_becomes_one_loop_slot():
@@ -395,6 +573,7 @@ def test_rejects_input_that_is_not_a_workflow(bad):
 def test_every_fixture_passes_validate_graph_and_is_tainted():
     for w in (linear(), ai_cluster(), if_merge(), if_merge(True), loop(), webhook(), schedule(), subworkflow(),
               removals()):
+        assert ni.pg.validate_graph(ni.convert_n8n_workflow(w)["graph"]) == []
         out = convert(w)
         assert out["report"]["taint"]["source"] == ni.TAINT_SOURCE
         assert "Fixture" in out["report"]["taint"]["detail"]
@@ -504,3 +683,123 @@ def test_input_is_not_mutated():
     before = json.dumps(w, sort_keys=True)
     convert(w)
     assert json.dumps(w, sort_keys=True) == before
+
+
+# ── sub-pipelines ────────────────────────────────────────────────────────
+def subpipeline_call(**extra: Any) -> dict:
+    """Execute Workflow wf-42 between two steps, failing into Alert."""
+    return wf(
+        [node("Start", "manualTrigger"),
+         node("Prepare", "set", 3.4, 200),
+         node("Run child", "executeWorkflow", 1.2, 400, onError="continueErrorOutput", retryOnFail=True,
+              maxTries=2, waitBetweenTries=500, parameters={
+                  "source": "database", "workflowId": {"__rl": True, "mode": "list", "value": "wf-42"},
+                  "workflowInputs": {"value": {"email": "={{ $json.email }}"}}, **extra}),
+         node("Report", "slack", 2.3, 600), node("Alert", "slack", 2.3, 600, 100)],
+        link(("Start", "Prepare"), ("Prepare", "Run child"), ("Run child", "Report", 0), ("Run child", "Alert", 1)),
+    )
+
+
+def test_execute_workflow_of_a_known_pipeline_becomes_a_subpipeline_node():
+    out = convert(subpipeline_call(), subpipelines={"wf-42": "pl-child"})
+    assert shape(out) == {
+        "nodes": [("trigger", "trigger", "Start"), ("n8n-prepare", "slot", "Prepare"),
+                  ("n8n-run-child", "subpipeline", "Run child"), ("n8n-report", "slot", "Report"),
+                  ("n8n-alert", "slot", "Alert")],
+        "edges": [("n8n-prepare", "n8n-run-child"), ("n8n-run-child", "n8n-alert"),
+                  ("n8n-run-child", "n8n-report"), ("trigger", "n8n-prepare")],
+    }
+    sub = slot(out, "n8n-run-child")
+    assert sub["retry"] == {"maxTries": 2, "waitMs": 500}
+    assert sub["subpipeline"]["pipelineId"] == "pl-child" and sub["subpipeline"]["wait"] is True
+    task = sub["subpipeline"]["task"]
+    assert task.startswith("[External content: imported from the n8n workflow")
+    assert '"email": "={{ $json.email }}"' in task and "{{task}}" in task and "{{prev.summary}}" in task
+    assert "wf-42" not in task  # the call itself is the node, not part of its task
+    assert ("error", "n8n-run-child", "n8n-alert", None) in edges(out)
+    e = entry(out, "Run child")
+    assert (e["category"], e["reason"], e["result"], e["node"]) == ("native", "subpipeline", "subpipeline", "n8n-run-child")
+    assert "paste-subworkflow" not in e["actions"] and "pl-child" in e["detail"]
+    assert out["report"]["stats"]["subpipelines"] == 1
+    assert out["report"]["subpipelines"][0] == {"id": "n8n-run-child", "label": "Run child", "pipelineId": "pl-child",
+                                               "task": task, "tainted": True, "retry": {"maxTries": 2, "waitMs": 500}}
+
+
+def test_a_sub_workflow_n8n_does_not_wait_for_still_waits():
+    out = convert(subpipeline_call(options={"waitForSubWorkflow": False}), subpipelines={"wf-42": "pl-child"})
+    assert "Navide always waits" in entry(out, "Run child")["detail"]
+
+
+@pytest.mark.parametrize("params", [
+    {"source": "database", "workflowId": "={{ $json.next }}"},  # chosen by an expression
+    {"source": "parameter", "workflowJson": "{}"},  # passed as JSON
+    {"source": "database", "workflowId": {"__rl": True, "mode": "id", "value": "wf-other"}},  # not imported
+])
+def test_a_call_navide_cannot_resolve_stays_pending(params):
+    w = subworkflow()
+    w["nodes"][1]["parameters"] = params
+    out = convert(w, subpipelines={"wf-42": "pl-child"})
+    e = entry(out, "Run child")
+    assert (e["category"], e["result"]) == ("pending", "slot") and "paste-subworkflow" in e["actions"]
+    assert not any(n["kind"] == "subpipeline" for n in out["graph"]["nodes"])
+
+
+def test_a_recursive_call_stays_pending_without_asking_for_a_paste():
+    out = convert(subworkflow(), subpipelines={"wf-42": "pl-self"}, recursive_workflows={"wf-42"})
+    e = entry(out, "Run child")
+    assert (e["category"], e["reason"], e["result"]) == ("pending", "recursive-subworkflow", "slot")
+    assert "paste-subworkflow" not in e["actions"] and "calls this workflow back" in e["detail"]
+    assert not any(n["kind"] == "subpipeline" for n in out["graph"]["nodes"])
+
+
+def test_a_workflow_tool_is_named_in_the_kickoff_never_converted():
+    w = ai_cluster()
+    w["nodes"].append(node("Lookup tool", ni.LANGCHAIN + "toolWorkflow", 2, 300, 200, parameters={
+        "source": "database", "workflowId": {"__rl": True, "mode": "id", "value": "wf-7"}}))
+    w["connections"]["Lookup tool"] = {"ai_tool": [[{"node": "Agent", "type": "ai_tool", "index": 0}]]}
+    unresolved = convert(w)
+    e = entry(unresolved, "Lookup tool")
+    assert (e["category"], e["result"]) == ("pending", "folded") and "paste-subworkflow" in e["actions"]
+    out = convert(w, subpipelines={"wf-7": "pl-lookup"})
+    e = entry(out, "Lookup tool")
+    assert (e["category"], e["result"]) == ("pending", "folded") and "paste-subworkflow" not in e["actions"]
+    assert "pl-lookup" in e["detail"]
+    assert not any(n["kind"] == "subpipeline" for n in out["graph"]["nodes"])
+    kick = next(s["kickoffBody"] for s in out["report"]["slots"])
+    assert "imported here as the pipeline pl-lookup" in kick
+
+
+def test_no_kickoff_or_sub_pipeline_task_writes_a_signal_format():
+    # The engine appends the signal instructions with their per-kickoff code
+    # (#752); a converted kickoff must never hold a format of its own.
+    needles = ["---" + "BRANCH", "---" + "OUTPUT-", "---" + "NODE-FAILED"]
+    cross = wf([node("Start", "manualTrigger"), node("Lookup", "httpRequest", 4.2, 200),
+                node("Mid", "if", 2.2, 400), node("Use", "set", 3.4, 600,
+                                                  parameters={"value": "={{ $('Lookup').item.json.email }}"})],
+               link(("Start", "Lookup"), ("Lookup", "Mid"), ("Mid", "Use", 0)))
+    outs = [convert(w) for w in (linear(), ai_cluster(), if_merge(), if_merge(True), loop(), webhook(), schedule(),
+                                 subworkflow(), removals(), cross)]
+    outs.append(convert(subpipeline_call(), subpipelines={"wf-42": "pl-child"}))
+    texts = [s["kickoffBody"] for o in outs for s in o["report"]["slots"]]
+    texts += [s["task"] for o in outs for s in o["report"]["subpipelines"]]
+    assert texts and any("report the branch you take" in t for t in texts)
+    for t in texts:
+        assert not any(n in t for n in needles), t[:200]
+
+
+NATIVE_FLOW_SIGNALS_FIXTURE = (
+    Path(__file__).resolve().parents[2] / "src" / "renderer" / "src" / "lib" / "__tests__" / "fixtures"
+    / "n8n-native-flow-signals.json"
+)
+
+
+def test_the_native_flow_signal_fixture_is_the_converters_output():
+    # pipelineSignalN8nNativeFlow.test.ts runs this graph through the pipeline
+    # engine: forged signals and the kickoff's echo steer nothing, signals
+    # with the kickoff's code do.
+    fixture = json.loads(NATIVE_FLOW_SIGNALS_FIXTURE.read_text(encoding="utf-8"))
+    out = convert(fixture["workflow"])
+    assert out["graph"] == fixture["graph"]
+    kinds = {(e["from"], e["kind"]) for e in out["graph"]["edges"]}
+    assert {("n8n-plan", "branch"), ("n8n-route", "branch"), ("n8n-plan", "error")} <= kinds
+    assert "{{node.n8n-plan.output}}" in slot(out, "n8n-fast")["slot"]["kickoffBody"]
