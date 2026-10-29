@@ -1,14 +1,17 @@
 {
-  "navide.git": {
-    "version": "1.0.0",
-    "fingerprint": "50eb06172c3c17592d374aff1e5f17d34ac9f0fab479ee8bcfd21b4a2b6b1d59"
-  },
-  "navide.mini-ide": {
-    "version": "1.0.0",
-    "fingerprint": "8e1e771ef9d80d10c82cabcddd419ee0833ae031309b3a45b46bf032747c54e9"
-  },
-  "navide.plans": {
-    "version": "1.0.0",
-    "fingerprint": "50384b1a3e877962f72937d7887872609c92ad7294b9e0336fbfbccb2e99283d"
+  "baseline": "v0.2.34",
+  "plugins": {
+    "navide.git": {
+      "version": "0.2.34",
+      "fingerprint": "00384b57b0bd21426c90146f2f347c2b7da079f1860061de09ef0c8e5a59fad5"
+    },
+    "navide.mini-ide": {
+      "version": "0.2.34",
+      "fingerprint": "f09b33328a69c562efce9955663b59632f66896ae0b30f1a01dbe31fcee94898"
+    },
+    "navide.plans": {
+      "version": "0.2.34",
+      "fingerprint": "2d84ce30945c6a3b2b60eb7a7aaf3c8d9e62d8b172fd5da68f18d16f6e9f5d34"
+    }
   }
 }

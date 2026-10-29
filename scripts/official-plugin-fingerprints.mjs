@@ -1,17 +1,24 @@
-// Content fingerprints of the App-bundled first-party plugins, recorded with
-// the version they were taken at in plugins/official-plugin-fingerprints.json.
+// Release baseline of the App-bundled first-party plugins:
+// plugins/official-plugin-fingerprints.json records, per plugin, the version
+// and a content fingerprint as of the last App release (`baseline`, its tag).
 // A first-party plugin versions independently of the App, and a Marketplace
 // copy of the same version wins a tie with the bundled one, so content that
-// changes without a version bump would leave those users on the old content.
-// tests/infrastructure/officialPluginFingerprints.test.ts fails when a
-// fingerprint changes while the version stays; after bumping the version run
-//   node scripts/official-plugin-fingerprints.mjs --write
-// to record the new pair. --write refuses changed content at the old version.
+// differs from the released content must ship under a newer version.
 //
-// The fingerprint hashes git index blob ids (line-ending normalized, the same
-// on every platform) of the tracked sources a plugin's package is built from:
+// Rule (tests/infrastructure/officialPluginFingerprints.test.ts):
+//   - content differs from the baseline -> the manifest version must be
+//     greater than the baseline version. One bump per release cycle is
+//     enough: later changes in the same cycle need no further bump.
+//   - a version lower than the baseline is always refused.
+// release.sh rewrites the file for the tag it creates:
+//   node scripts/official-plugin-fingerprints.mjs --write --baseline vX.Y.Z
+// and nothing else should. The first baseline is v0.2.34, before the plugins
+// had their own versions: they shipped stamped with the App version 0.2.34.
+//
+// The fingerprint hashes git blob ids (line-ending normalized, the same on
+// every platform) of the tracked sources a plugin's package is built from:
 // the plugin directory and the workspace packages it bundles, without tests,
-// fixtures or Markdown. Stage edits (git add) before checking them.
+// fixtures or Markdown. The check reads the git index, so stage edits first.
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -46,19 +53,27 @@ function excluded(path) {
     path.endsWith('.md')
 }
 
+/** Tracked files with blob ids: the git index, or the tree of `ref`. */
+function trackedBlobs(root, paths, ref) {
+  const args = ref
+    ? ['ls-tree', '-r', '-z', ref, '--', ...paths]
+    : ['ls-files', '-s', '-z', '--', ...paths]
+  const listing = execFileSync('git', args, { cwd: root, encoding: 'utf8' })
+  return listing.split('\0').filter(Boolean).map((line) => {
+    const [meta, path] = line.split('\t')
+    // ls-tree: "<mode> <type> <blob>"; ls-files -s: "<mode> <blob> <stage>".
+    const fields = meta.split(' ')
+    return { path, blob: ref ? fields[2] : fields[1] }
+  })
+}
+
 /** sha256 over `path\0blob\n` of every included tracked file, sorted by path. */
-export function fingerprint(root, pluginId) {
+export function fingerprint(root, pluginId, ref) {
   const source = OFFICIAL_PLUGIN_SOURCES[pluginId]
   if (!source) throw new Error(`'${pluginId}' is not an App-bundled plugin`)
-  const listing = execFileSync(
-    'git',
-    ['ls-files', '-s', '-z', '--', source.directory, ...SHARED_SOURCES, ...source.extra],
-    { cwd: root, encoding: 'utf8' },
-  )
-  const entries = listing.split('\0').filter(Boolean).map((line) => {
-    const [meta, path] = line.split('\t')
-    return { path, blob: meta.split(' ')[1] }
-  }).filter(({ path }) => !excluded(path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+  const entries = trackedBlobs(root, [source.directory, ...SHARED_SOURCES, ...source.extra], ref)
+    .filter(({ path }) => !excluded(path))
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
   for (const extra of source.extra) {
     if (!entries.some(({ path }) => path === extra)) throw new Error(`${pluginId} input is not tracked: ${extra}`)
   }
@@ -74,7 +89,7 @@ export function manifestVersion(root, pluginId) {
 
 export function readRecord(root) {
   const path = join(root, RECORD_PATH)
-  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {}
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : { baseline: null, plugins: {} }
 }
 
 function semverParts(version) {
@@ -82,70 +97,71 @@ function semverParts(version) {
   return match ? match.slice(1).map(Number) : null
 }
 
-function isNewer(version, than) {
-  const a = semverParts(version)
-  const b = semverParts(than)
-  if (!a || !b) return false
-  for (let i = 0; i < 3; i += 1) if (a[i] !== b[i]) return a[i] > b[i]
-  return false
+/** -1, 0 or 1; null when either is not plain MAJOR.MINOR.PATCH. */
+function compareVersions(a, b) {
+  const left = semverParts(a)
+  const right = semverParts(b)
+  if (!left || !right) return null
+  for (let i = 0; i < 3; i += 1) if (left[i] !== right[i]) return left[i] < right[i] ? -1 : 1
+  return 0
 }
 
-/** One problem string per plugin whose record no longer matches. */
+/** One problem string per plugin that breaks the rule against the baseline. */
 export function checkRecord(root, record = readRecord(root)) {
   const problems = []
+  const baseline = record.baseline ?? 'the recorded baseline'
   for (const pluginId of Object.keys(OFFICIAL_PLUGIN_SOURCES)) {
-    const recorded = record[pluginId]
+    const recorded = record.plugins?.[pluginId]
     const version = manifestVersion(root, pluginId)
-    const current = fingerprint(root, pluginId)
     if (!recorded) {
-      problems.push(`${pluginId}: no recorded fingerprint; run node scripts/official-plugin-fingerprints.mjs --write`)
-    } else if (recorded.version === version && recorded.fingerprint !== current) {
+      problems.push(`${pluginId}: no baseline in ${RECORD_PATH}; release.sh records one`)
+      continue
+    }
+    const order = compareVersions(version, recorded.version)
+    if (order === null) {
+      problems.push(`${pluginId}: ${version} or the baseline ${recorded.version} is not MAJOR.MINOR.PATCH`)
+    } else if (order < 0) {
+      problems.push(`${pluginId}: ${version} is lower than ${recorded.version} released in ${baseline}`)
+    } else if (order === 0 && fingerprint(root, pluginId) !== recorded.fingerprint) {
       problems.push(
-        `${pluginId}: content changed but the version is still ${version}; bump the version in ` +
+        `${pluginId}: content changed since ${baseline} but the version is still ${version}; bump it in ` +
           `${OFFICIAL_PLUGIN_SOURCES[pluginId].directory}/manifest.json, its package.json and ` +
-          'src/main/plugins/officialPluginVersions.ts, then run node scripts/official-plugin-fingerprints.mjs --write',
-      )
-    } else if (recorded.version !== version || recorded.fingerprint !== current) {
-      problems.push(
-        `${pluginId}: version ${version} is not recorded (recorded ${recorded.version}); ` +
-          'run node scripts/official-plugin-fingerprints.mjs --write',
+          'src/main/plugins/officialPluginVersions.ts (once per release cycle is enough)',
       )
     }
   }
-  for (const pluginId of Object.keys(record)) {
+  for (const pluginId of Object.keys(record.plugins ?? {})) {
     if (!OFFICIAL_PLUGIN_SOURCES[pluginId]) problems.push(`${pluginId}: recorded but not an App-bundled plugin`)
   }
   return problems
 }
 
-/** The record to write, or problems when a bump is missing or goes backwards. */
-export function nextRecord(root, record = readRecord(root)) {
-  const next = {}
-  const problems = []
+/** The new baseline for a release, or the problems that block it. */
+export function nextRecord(root, baseline, record = readRecord(root)) {
+  const problems = checkRecord(root, record)
+  const plugins = {}
   for (const pluginId of Object.keys(OFFICIAL_PLUGIN_SOURCES)) {
-    const recorded = record[pluginId]
-    const version = manifestVersion(root, pluginId)
-    const current = fingerprint(root, pluginId)
-    if (recorded && recorded.fingerprint !== current && recorded.version === version) {
-      problems.push(`${pluginId}: content changed but the version is still ${version}; bump it first`)
-    } else if (recorded && recorded.version !== version && !isNewer(version, recorded.version)) {
-      problems.push(`${pluginId}: ${version} is not newer than the recorded ${recorded.version}`)
-    }
-    next[pluginId] = { version, fingerprint: current }
+    plugins[pluginId] = { version: manifestVersion(root, pluginId), fingerprint: fingerprint(root, pluginId) }
   }
-  return { record: next, problems }
+  return { record: { baseline, plugins }, problems }
 }
 
 function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-  if (process.argv.includes('--write')) {
-    const { record, problems } = nextRecord(root)
+  const args = process.argv.slice(2)
+  if (args.includes('--write')) {
+    const baseline = args[args.indexOf('--baseline') + 1]
+    if (!args.includes('--baseline') || !baseline) {
+      console.error('--write needs --baseline <release tag>')
+      process.exit(2)
+    }
+    const { record, problems } = nextRecord(root, baseline)
     if (problems.length) {
       for (const problem of problems) console.error(problem)
       process.exit(1)
     }
     writeFileSync(join(root, RECORD_PATH), `${JSON.stringify(record, null, 2)}\n`)
-    console.log(`wrote ${RECORD_PATH}`)
+    console.log(`recorded ${baseline} in ${RECORD_PATH}`)
     return
   }
   const problems = checkRecord(root)

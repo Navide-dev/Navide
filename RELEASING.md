@@ -89,6 +89,18 @@ stall (#102). Walk this list before `./release.sh`; nothing here is automated.
    with the user's go-ahead. To see what is live,
    `curl -s https://server.navide.dev/registry/api/extensions/navide/<name>`
    and read `latest_version` and `latest_targets`.
+8. **First-party plugin versions** — `plugins/official-plugin-fingerprints.json`
+   is the release baseline: each bundled plugin's version and content
+   fingerprint as of the last release tag. A plugin whose content differs from
+   it must carry a higher version than the baseline (one bump per release
+   cycle; a lower version is always refused), which
+   `tests/infrastructure/officialPluginFingerprints.test.ts` checks on every
+   PR. `release.sh` rewrites the file for the new tag
+   (`node scripts/official-plugin-fingerprints.mjs --write --baseline vX.Y.Z`)
+   and commits it with the version files; it stops if the rule does not hold.
+   Never rewrite the file outside a release. The first baseline is `v0.2.34`,
+   recorded at version 0.2.34: before 0.2.35 the plugins shipped stamped with
+   the App version, and their own versions start at 1.0.0.
 
 ### After the tag push
 
