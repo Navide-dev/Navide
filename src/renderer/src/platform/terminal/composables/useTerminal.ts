@@ -842,6 +842,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // When Claude's PermissionRequest hook raised a wait, 0 when none: the box
   // stays open until answered, so output cannot end it. See holdNeedsInput.
   const awaitingHeldAt = ref<number>(0)
+  // The screen watcher sees the vendor's box on screen right now. A state, not
+  // an event: it holds while the box is there and ends when the box leaves,
+  // with no settle window to absorb what the CLI prints after the answer.
+  // Kept apart from awaitingInputAt so a box leaving never ends a wait the
+  // Notification hook raised. See markBoxOnScreen.
+  const boxOnScreen = ref(false)
   // The tool that box is for, as the backend keyed it. Not reactive: only
   // App.vue's release decision reads it.
   let awaitingHeldKey = ''
@@ -1129,6 +1135,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // A turn that ended is not waiting on anyone: clear the flag so a stale
     // notification can't hold the badge on AWAITING past the turn.
     awaitingInputAt.value = 0
+    boxOnScreen.value = false
     releaseNeedsInputHold()
   }
 
@@ -1148,6 +1155,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     awaitingInputAt.value = 0
   }
 
+  /** The screen watcher's view of the box: on screen (true) or not. Only that
+   *  watcher calls this, once per poll. It never touches the hook's wait. */
+  function markBoxOnScreen(onScreen: boolean): void {
+    boxOnScreen.value = onScreen
+  }
+
   /** A permission wait is on right now: held, or raised by the Notification hook
    *  or the screen watcher and not yet settled. App.vue asks before raising one
    *  so a box two signals report chimes once. Edge: a Notification wait older
@@ -1156,6 +1169,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   function permissionWaitLive(): boolean {
     return (
       awaitingHeldAt.value > 0 ||
+      boxOnScreen.value ||
       (awaitingInputAt.value > 0 &&
         lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS)
     )
@@ -3065,6 +3079,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // timestamp here would show the fresh pane as parked on a question that
     // no longer exists.
     awaitingInputAt.value = 0
+    boxOnScreen.value = false
     releaseNeedsInputHold()
     questionAt.value = 0
     deliveredPendingCount.value = 0
@@ -3549,6 +3564,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     markTurnComplete,
     markNeedsInput,
     clearNeedsInput,
+    markBoxOnScreen,
     holdNeedsInput,
     releaseNeedsInputHold,
     awaitingHeld: (): { since: number; key: string } => ({ since: awaitingHeldAt.value, key: awaitingHeldKey }),
