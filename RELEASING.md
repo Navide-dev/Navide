@@ -98,9 +98,10 @@ stall (#102). Walk this list before `./release.sh`; nothing here is automated.
    PR. `release.sh` rewrites the file for the new tag
    (`node scripts/official-plugin-fingerprints.mjs --write --baseline vX.Y.Z`)
    and commits it with the version files; it stops if the rule does not hold.
-   Never rewrite the file outside a release. The first baseline is `v0.2.34`,
-   recorded at version 0.2.34: before 0.2.35 the plugins shipped stamped with
-   the App version, and their own versions start at 1.0.0.
+   Never rewrite the file outside a release. The first baseline is `v0.2.34`:
+   Git, Mini-IDE and Plans are recorded at 0.2.34, the App version they shipped
+   stamped with, and Browser, bundled from 0.2.35, at its 0.1.0 manifest
+   version from that tag; their own versions start at 1.0.0.
 
 ### After the tag push
 

@@ -94,6 +94,7 @@ describe('official plugin release baseline', () => {
     expect(checkRecord(root, record)).toEqual([])
     file('plugins/navide-git/src/index.ts', 'export const second = true')
     file('packages/plugin-ui/src/index.ts', 'export const shared = true')
+    setVersion('navide.browser', '1.0.1')
     setVersion('navide.mini-ide', '1.1.0')
     setVersion('navide.plans', '1.0.1')
     expect(checkRecord(root, record)).toEqual([])

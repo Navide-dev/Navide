@@ -13,7 +13,9 @@
 // release.sh rewrites the file for the tag it creates:
 //   node scripts/official-plugin-fingerprints.mjs --write --baseline vX.Y.Z
 // and nothing else should. The first baseline is v0.2.34, before the plugins
-// had their own versions: they shipped stamped with the App version 0.2.34.
+// had their own versions: Git, Mini-IDE and Plans shipped stamped with the App
+// version 0.2.34, and Browser, not yet bundled, is recorded at its 0.1.0
+// manifest version from that tag.
 //
 // The fingerprint hashes git blob ids (line-ending normalized, the same on
 // every platform) of the tracked sources a plugin's package is built from:
@@ -31,6 +33,7 @@ export const RECORD_PATH = 'plugins/official-plugin-fingerprints.json'
 const SHARED_SOURCES = ['packages/plugin-contracts', 'packages/plugin-sdk', 'packages/plugin-ui']
 
 export const OFFICIAL_PLUGIN_SOURCES = {
+  'navide.browser': { directory: 'plugins/navide-browser', extra: [] },
   'navide.git': { directory: 'plugins/navide-git', extra: [] },
   'navide.mini-ide': { directory: 'plugins/navide-mini-ide', extra: [] },
   // The core modules scripts/build-plans-v2-backend.mjs bundles into the

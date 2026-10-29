@@ -1,6 +1,10 @@
 {
   "baseline": "v0.2.34",
   "plugins": {
+    "navide.browser": {
+      "version": "0.1.0",
+      "fingerprint": "6f7ee8dac9940c4a6e6ecc60bd58cfa0a64a36fa3630ea002784cb90e50ed34e"
+    },
     "navide.git": {
       "version": "0.2.34",
       "fingerprint": "00384b57b0bd21426c90146f2f347c2b7da079f1860061de09ef0c8e5a59fad5"
