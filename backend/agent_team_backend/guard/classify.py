@@ -44,6 +44,31 @@ READ_TOOLS = {"read", "read_file", "view", "cat", "notebookread"}
 #: Qwen Code calls its grep `grep_search`; Copilot CLI offers `grep` or `rg`.
 GREP_TOOLS = {"grep", "grep_search", "rg"}
 GLOB_TOOLS = {"glob"}
+#: Third-party MCP tools that do what a built-in tool does, graded by the same
+#: rules. Vendors name them `mcp__<server>__<tool>`; only <tool> is looked up,
+#: exactly and case-folded, so a server's own name never decides anything and
+#: a tool that merely contains "shell" in its name is not caught. Values: a
+#: SHELL_TOOLS name (the call's `command` is graded as that shell), or one of
+#: "filesystem", "registry", "process" (see _classify_mcp_action). Add a row
+#: for each server tool verified to take these arguments.
+MCP_TOOLS = {
+    # Windows-MCP (CursorTouch/Windows-MCP): PowerShell(command), FileSystem(mode,
+    # path, destination, recursive), Registry(mode, path), Process(mode, name, pid).
+    "powershell": "powershell",
+    "filesystem": "filesystem",
+    "registry": "registry",
+    "process": "process",
+    # Generic shell tools: `command` holds the command line.
+    "bash": "bash",
+    "shell": "shell",
+    "run_command": "run_command",
+    "run_shell_command": "run_shell_command",
+    "shell_command": "shell_command",
+    "exec_command": "exec_command",
+    "execute_command": "shell",
+    # Desktop Commander: kill_process(pid).
+    "kill_process": "process-kill",
+}
 
 WRAPPERS_NO_ARG = {"nohup", "time", "command", "builtin", "exec", "caffeinate", "stdbuf"}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"}
@@ -1569,6 +1594,12 @@ def classify(
         # The rendered text of a permission prompt (chat relay).
         return classify_prompt_text(str(tool_input.get("text") or ""), workspace=workspace,
                                     protected_branches=protected_branches)
+    mcp = _mcp_tool(name)
+    if mcp in ("filesystem", "registry", "process", "process-kill"):
+        _classify_mcp_action(mcp, tool_input, ctx, acc)
+        return acc.verdict()
+    if mcp is not None:
+        name = mcp
     if name in SHELL_TOOLS:
         command = _tool_command(tool_input)
         if command and name == "powershell":
@@ -1594,6 +1625,44 @@ def classify(
     elif name in GREP_TOOLS or name in GLOB_TOOLS:
         _check_search(acc, name, tool_input, ctx)
     return acc.verdict()
+
+
+def _mcp_tool(name: str) -> str | None:
+    """The MCP_TOOLS row for an `mcp__<server>__<tool>` name, else None."""
+    if not name.startswith("mcp__"):
+        return None
+    server, sep, tool = name[len("mcp__"):].rpartition("__")
+    return MCP_TOOLS.get(tool) if server and sep else None
+
+
+def _classify_mcp_action(kind: str, tool_input: dict, ctx: _Ctx, acc: _Acc) -> None:
+    """MCP tools that act through arguments rather than a command line."""
+    mode = str(tool_input.get("mode") or "").strip().lower()
+    if kind == "filesystem":
+        path = tool_input.get("path")
+        if not isinstance(path, str) or not path:
+            return
+        if mode == "delete":
+            # Graded as the rm it amounts to, so the rm rules decide.
+            recursive = tool_input.get("recursive") is True or str(tool_input.get("recursive")).lower() == "true"
+            _classify_rm(["--", path], ctx, acc, from_stdin=False, recursive=recursive)
+            return
+        dest = tool_input.get("destination")
+        writes = {"write": [path], "move": [path, dest], "copy": [dest]}.get(mode, [])
+        reads = [path] if mode in ("read", "copy") else []
+        for raw, write in [(r, True) for r in writes] + [(r, False) for r in reads]:
+            if not isinstance(raw, str) or not raw:
+                continue
+            resolved = _resolve(raw, ctx)
+            if resolved is None:
+                acc.opaque("dynamic-path", f"path is not static: {raw}")
+            else:
+                _check_path(acc, resolved, ctx, write=write)
+    elif kind == "registry":
+        if mode in ("set", "delete"):
+            acc.hit("high", "mcp-registry-write", f"MCP tool changes the Windows registry ({mode})")
+    elif kind == "process-kill" or mode == "kill":
+        acc.hit("high", "mcp-process-kill", "MCP tool kills a process")
 
 
 def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:

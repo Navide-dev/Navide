@@ -75,6 +75,9 @@ BUILTIN_RULES: tuple[BuiltinRule, ...] = (
     BuiltinRule("too-long", "high", "high", "Command too long to analyse", "(over 64,000 characters)"),
     BuiltinRule("dynamic-stdin-script", "high", "high", "Shell runs a here-string computed at run time",
                 "bash <<< \"$(…)\""),
+    BuiltinRule("mcp-registry-write", "high", "high", "An MCP tool changes or deletes a Windows registry entry",
+                "Registry(mode=delete, path=HKCU:\\…)"),
+    BuiltinRule("mcp-process-kill", "high", "high", "An MCP tool kills a process", "Process(mode=kill, name=…)"),
     # unanalyzable: normal by default
     BuiltinRule("dynamic-command", "unanalyzable", "normal", "Command name is computed at run time", "$CMD -rf /"),
     BuiltinRule("eval", "unanalyzable", "normal", "eval / source of dynamic text", "eval \"$X\""),

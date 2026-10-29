@@ -25,6 +25,8 @@ import ToggleSwitch from './settings/ToggleSwitch.vue'
 import SettingsOverflowActions from './settings/SettingsOverflowActions.vue'
 import { shortenMiddle } from '../lib/shortenPath'
 import StaleConfigNotice from './StaleConfigNotice.vue'
+import SettingsNotice from './settings/SettingsNotice.vue'
+import { mcpRiskKinds, type McpRiskKind } from '../lib/mcpRisk'
 import {
   isSecretSettingKey,
   nextRecordKey,
@@ -111,6 +113,12 @@ function needsNode(server: McpServer | null | undefined): boolean {
   if (!props.nodeMissing || !server || server.transport !== 'stdio' || !server.command) return false
   const base = (server.command.split(/[\\/]/).pop() ?? '').toLowerCase().replace(/\.(cmd|exe)$/, '')
   return NODE_LAUNCHERS.has(base)
+}
+
+/** What the row's server can do beyond answering questions: run commands or
+ *  drive the desktop. Shown, never enforced (disclose, don't restrict). */
+function rowRisks(row: McpRow): McpRiskKind[] {
+  return mcpRiskKinds([...(row.navide ? [row.navide] : []), ...row.natives])
 }
 
 const query = ref('')
@@ -591,6 +599,11 @@ function cardDetail(row: McpRow): string {
                     class="mcp-tag mcp-tag-warn"
                     data-testid="mcp-needs-node"
                   >{{ t('settings.mcp.needs-node') }}</span>
+                  <span
+                    v-if="rowRisks(row).length"
+                    class="mcp-tag mcp-tag-warn"
+                    data-testid="mcp-risk-tag"
+                  >{{ t('settings.mcp.risk.tag') }}</span>
                   <span class="mcp-card-places-chips" aria-hidden="true">
                   <span
                     v-for="chip in placeChips(row)"
@@ -681,6 +694,11 @@ function cardDetail(row: McpRow): string {
             @click="closeDrawer"
           >✕</button>
         </header>
+
+        <SettingsNotice v-if="rowRisks(selectedRow).length" class="mcp-risk-card" tone="warning" role="note" data-testid="mcp-risk-card">
+          <p v-for="kind in rowRisks(selectedRow)" :key="kind" class="mcp-risk-line">{{ t(`settings.mcp.risk.${kind}`) }}</p>
+          <p class="mcp-risk-line">{{ t('settings.mcp.risk.guard') }}</p>
+        </SettingsNotice>
 
         <!-- Navide's own: the editor -->
         <section v-if="draft" class="mcp-drawer-section mcp-editor">
@@ -1024,6 +1042,9 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   font-size: var(--font-2xs);
   color: var(--text-secondary);
 }
+.mcp-risk-card { margin: 0 0 12px; }
+.mcp-risk-line { margin: 0 0 4px; }
+.mcp-risk-line:last-child { margin-bottom: 0; }
 .mcp-stderr pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
 .mcp-status-dot.disabled { background: var(--border-default); }
 .mcp-card-detail {

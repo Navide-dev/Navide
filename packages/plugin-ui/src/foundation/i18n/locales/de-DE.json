@@ -6876,6 +6876,12 @@
       "needs-node": "Benötigt Node.js",
       "needs-node-hint": "Dieser Server startet mit {command}, das zu Node.js gehört. Node.js wurde auf diesem Computer nicht gefunden, daher kann der Server erst nach der Installation starten.",
       "install-node": "Node.js installieren",
+      "risk": {
+        "tag": "Weitreichender Zugriff",
+        "shell": "Dieser Server kann mit Ihren Benutzerrechten Shell-Befehle auf diesem Computer ausführen, einschließlich Dateien löschen, Einstellungen ändern und Programme beenden.",
+        "desktop": "Dieser Server kann Bildschirminhalte anderer Apps lesen und Maus und Tastatur steuern, also in jeder App handeln, in der Sie angemeldet sind.",
+        "guard": "Navide blockiert ihn nicht. Navide Guard bewertet seine Befehls-, Datei-, Registry- und Prozesswerkzeuge mit denselben Regeln wie die eingebaute Shell."
+      },
       "fill-locally": "Einige Werte sind leer. Tragen Sie sie auf diesem Gerät ein – Werte von Umgebungsvariablen und Headern werden nie zwischen Geräten synchronisiert.",
       "fill-credentials-locally": "Einige Werte in der URL oder den Argumenten sind leer. War es ein Zugangsdatum, tragen Sie es auf diesem Gerät ein – Zugangsdaten in URL und Argumenten werden nie zwischen Geräten synchronisiert.",
       "headers": "Header",
