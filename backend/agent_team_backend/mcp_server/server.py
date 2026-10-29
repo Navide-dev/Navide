@@ -52,6 +52,7 @@ from starlette.types import Receive, Scope, Send
 from agent_team_backend import login_panes
 from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
+from agent_team_backend import pipeline_liveness
 from agent_team_backend.fs_service import FsError
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
 # Workspace normalisation, not a plan dependency: preview_* resolves a
@@ -1122,6 +1123,7 @@ async def cli_open_agent(
     run_group_id: str | None = None,
     window: str = "",
     window_id: str = "",
+    account: str = "",
 ) -> dict[str, Any]:
     """Open a new CLI pane and give it a task.
 
@@ -1229,6 +1231,28 @@ async def cli_open_agent(
     here — an unknown one is the CLI's own error to report — but effort is
     checked against that CLI's vocabulary before the pane opens.
 
+    `account` says which account the new pane runs on, and by DEFAULT it is
+    the account YOU run on ("" = "inherit"). Only a claude pane can run on an
+    account other than its vendor's live login: one opened inside that
+    account's own folder, as the 📌 pin and "switch only this pane" do. So
+    "inherit" from such a pane opens the child in the same folder (it then
+    spends that account's quota and, like its parent, stays put when the live
+    login is switched); in every other case — you follow the live login, you
+    are another CLI, or you have no pane — the child opens exactly as before,
+    on the live login. "active" always asks for that old behaviour. An
+    account id (from cli_accounts_list) opens a claude pane in that
+    account's folder; the account must exist ("unknown-profile"), belong to
+    `agent` ("vendor-mismatch"), be a claude account other than the built-in
+    Default ("unsupported" — other CLIs run every pane on their live login)
+    and have signed in inside its own folder ("needs-user": the user signs it
+    in through cli_account_sign_in with mode "folder"). Naming the live
+    account is the same as "active". This never switches the live login and
+    never moves another pane. When you passed `account`, or the pane opened
+    on an account other than the live login, the answer carries `account`:
+    {mode, profile_id, runs_on: "account-dir"|"live", fixed}, for a CLI
+    Navide keeps accounts for. Ignored with `pane_id`, which reopens a pane
+    on its own.
+
     Use the returned name, not the one you asked for: a concurrent request may
     have taken that name, in which case yours gets a suffix.
 
@@ -1241,8 +1265,8 @@ async def cli_open_agent(
     `ui.pane.focus` and `ui.pane.getStatus` take through ui_invoke, all of which
     refuse a pane NAME. Keep it if you may want to close or focus what you
     opened; `address` remains the right thing to send to.
-    Returns {ok, name, address, pane_id, kickoff, hint?, advisories?} or
-    {ok: false, error}.
+    Returns {ok, name, address, pane_id, kickoff, hint?, account?, advisories?}
+    or {ok: false, error}.
 
     Passing `pane_id` REOPENS an existing pane instead of creating one: the
     one whose cli_list_targets row says `realized: false` — a restore
@@ -1346,6 +1370,20 @@ async def cli_open_agent(
             "error": 'window_id goes with window "existing"',
             "error_code": "invalid-window",
         }
+    # Checked before anything is prepared or opened: a refused account leaves
+    # no pane and no adopted workspace behind.
+    from agent_team_backend.mcp_server import open_agent_account
+
+    caller_entry = agent_messaging.get(caller.pane_id) if caller.kind == "pane" else None
+    account_choice = await asyncio.to_thread(
+        open_agent_account.resolve,
+        agent_key,
+        account,
+        caller.pane_id if caller.kind == "pane" else "",
+        caller_entry.agent_key if caller_entry else "",
+    )
+    if isinstance(account_choice, dict):
+        return account_choice
     target_workspace = ""
     # A pane caller naming another project: the child goes there, still
     # parented on the caller. Empty when omitted or naming its own workspace,
@@ -1468,6 +1506,11 @@ async def cli_open_agent(
             spawn_payload["effort"] = effort.strip()
         if run_group_id is not None:
             spawn_payload["run_group_id"] = run_group_id
+        # The explicit pin the window hands to spawnPane, the same pin a 📌
+        # pinned pane is spawned with. Absent when the pane runs on the live
+        # login: the payload is then exactly what it was before `account`.
+        if account_choice.pin:
+            spawn_payload["profile_id"] = account_choice.pin
         # The window turns this into the vendor's own resume command; absent
         # means a fresh conversation, which is what every older build does with
         # a key it does not know.
@@ -1605,6 +1648,16 @@ async def cli_open_agent(
         reason = str(kickoff_verdict.get("reason") or "")
         if reason:
             advisories.append(f"kickoff: {reason}")
+    from agent_team_backend.profiles_store import SUPPORTED_AGENT_KEYS
+
+    # Only when an account was asked for or the pane got one: a default call
+    # that opened on the live login answers exactly what it did before.
+    if agent_key in SUPPORTED_AGENT_KEYS and ((account or "").strip() or account_choice.pin):
+        result["account"] = await asyncio.to_thread(
+            open_agent_account.report, account_choice, new_pane_id, agent_key
+        )
+    if account_choice.advisory:
+        advisories.append(account_choice.advisory)
     if advisories:
         result["advisories"] = advisories
     return result
@@ -7617,6 +7670,12 @@ def _pipeline_status_of(workspace_path: str) -> dict[str, Any]:
     status: dict[str, Any] = {"workspace_path": workspace_path}
     status["active"] = stored.get("state") == "running"
     status.update(_pick(stored, _PROJECT_FIELDS))
+    if pipeline_liveness.is_interrupted(project):
+        # Left at running by a crashed app: no window drives it. Its record
+        # is untouched, so opening the workspace still offers resume.
+        status["active"] = False
+        status["state"] = "interrupted"
+        status["resumable"] = True
     status["stages"] = [
         _pick(stage, _STAGE_RECORD_FIELDS) for stage in stored.get("stages") or []
     ]
@@ -7633,6 +7692,13 @@ def _pipeline_status_of(workspace_path: str) -> dict[str, Any]:
         if isinstance(state, dict)
     }
     status["gate"] = stored.get("node_gate") or {}
+    if getattr(project, "run_stack", None):
+        # A sub-pipeline's child run: the parents waiting for it, outermost first.
+        from agent_team_backend.ws_handlers import run_frame_view
+
+        status["run_stack"] = [run_frame_view(f) for f in project.run_stack]
+        status["parent"] = status["run_stack"][-1]
+        status["depth"] = len(project.run_stack) + 1
     return status
 
 
@@ -7651,7 +7717,7 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     not an error.
 
     When a project exists it also carries: state (idle / running / completed /
-    aborted), task_description (what the run was started for), pipeline_id
+    aborted / interrupted), task_description (what the run was started for), pipeline_id
     (which template from pipeline_list), current_stage_index and total_stages,
     run_count, log_file_name, updated_at, plus `stages` — {stage_id, title,
     agent, role, pane_id, status, started_at, ended_at} each — and `panes`,
@@ -7659,6 +7725,12 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     slot_label, spawn_status, kickoff_status}. Panes the user or an agent
     opened by hand are not pipeline slots and are left out; cli_list_targets is
     where every pane is listed.
+
+    state "interrupted" (with active false and resumable true) is a run whose
+    record was left at running by a closed or crashed app: no Navide window
+    drives it any more. It no longer blocks definition edits, and its record
+    is kept, so opening the workspace offers to resume it (or pipeline_resume
+    does, once a window holds the workspace).
 
     Per graph node it also carries `nodes` — {node_id: {status, startedAt,
     endedAt, tokens, paneId, attempts, pinned, error}}, status one of pending /
@@ -7669,6 +7741,13 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     or {} when it is not paused). Node ids are the ones pipeline_graph op
     "get" returns; a pipeline without a stored graph uses n-<stage_id>-<slot
     index>. A paused gate is resolved with pipeline_gate.
+
+    While the run is a sub-pipeline's child run it also carries `run_stack`,
+    the parent runs suspended at their subpipeline nodes, outermost first
+    ({id, node_id, pipeline_id, pipeline_name, child_pipeline_id, next_index,
+    task_description, suspended_at} each), `parent` (the innermost of them)
+    and `depth` (2 or 3). state "suspended" is the moment between a parent
+    suspending and its child starting.
 
     workspace_path defaults to your own pane's workspace; pass it only to ask
     about another project.
@@ -8610,8 +8689,9 @@ async def pipeline_start(
 
     Returns the window's own reply — {ok, result, error}. `result` carries
     {pipelineId, stages, workspacePath, state} for a run that actually started.
-    ok false means nothing started: a run already going (abort it first), no
-    pipeline to run, or a first stage whose panes all failed to spawn. The
+    ok false means nothing started: a run already going (abort it first), a
+    parent run suspended at a sub-pipeline waiting here (resume or reset it
+    first), no pipeline to run, or a first stage whose panes all failed to spawn. The
     window reports the run's own state rather than the fact that the call
     returned, so "ok" here is not the "started but nothing happened" answer.
 
@@ -8620,6 +8700,17 @@ async def pipeline_start(
     """
     caller = _resolve_caller(ctx)
     workspace_path = await _run_workspace(caller, workspace_path)
+    return await _start_pipeline_run(
+        caller, workspace_path, task, pipeline_id, taint_detail=_inherited_taint(caller, "pipeline started")
+    )
+
+
+async def _start_pipeline_run(
+    caller: _Caller, workspace_path: str, task: str, pipeline_id: str, *, taint_detail: str = ""
+) -> dict[str, Any]:
+    """pipeline_start's path, shared with the scheduler's pipeline_start jobs:
+    ui.pipeline.start in the window holding the workspace, with the caller's
+    Guard taint carried into the run."""
     args: dict[str, Any] = {"task": str(task or "")}
     pipeline_id = str(pipeline_id or "").strip()
     if pipeline_id:
@@ -8628,7 +8719,7 @@ async def pipeline_start(
     # the caller's taint travels with the run (guard.taint arm/adopt).
     from agent_team_backend.guard import taint as guard_taint
 
-    detail = _inherited_taint(caller, "pipeline started")
+    detail = taint_detail
     if detail:
         guard_taint.arm_pipeline_run(workspace_path, detail)
     result: dict[str, Any] = {}
@@ -8742,7 +8833,7 @@ def _run_is_active(workspace_path: str) -> bool:
     if not workspace_path:
         return False
     project = _app.project_store.peek(workspace_path)
-    return bool(project is not None and project.state == "running")
+    return pipeline_liveness.run_is_live(project)
 
 
 def _stage_edit_blocked(workspace_path: str, pipeline_id: str) -> bool:
@@ -9262,36 +9353,71 @@ async def pipeline_graph(
     has, plus optional `params`), gate nodes (the run pauses there until
     pipeline_gate passes or rejects it) and a trigger — joined by edges keyed
     by id. Its stages (what stage_define and pipeline_list show) are derived
-    from it: each longest-path layer of slot nodes is one stage, run in order,
-    so a node waits for every node upstream of it. A pipeline that has never
+    from it: each longest-path layer of slot nodes (over main, branch and error
+    edges) is one stage, run in order, so a node waits for every node upstream
+    of it. A pipeline that has never
     been edited as a graph answers "get" with the graph its stages imply
     (derived: true) and is unchanged until you write one.
 
     `op`:
     - "get"   — returns {graph, derived, stages}.
     - "apply" — needs `ops`, a list applied all-or-nothing:
-        {op:"add_node", node:{id, kind:"slot"|"gate"|"trigger", label?,
+        {op:"add_node", node:{id, kind:"slot"|"gate"|"trigger"|"subpipeline", label?,
            position:{x,y}, slot?:{agentKey, roleKey, label, kickoffBody,
-           isCommander?, params?}, gate?:{prompt?}}, after?:[ids], before?:[ids]}
+           isCommander?, params?}, gate?:{prompt?},
+           subpipeline?:{pipelineId, task?, wait?:true}}, after?:[ids], before?:[ids]}
            (after/before wire main edges; an edge after→before is replaced,
            i.e. inserting on an edge)
         {op:"remove_node", id, reconnect?:true}  (upstream rewired to downstream)
-        {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?}}
+        {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?},
+           subpipeline?:{...partial}}
         {op:"move_node", id, position:{x,y}}
-        {op:"add_edge", edge:{id?, from, to, kind?:"main"|"reject", maxLoops?}}
+        {op:"add_edge", edge:{id?, from, to,
+           kind?:"main"|"reject"|"branch"|"error", maxLoops?, when?}}
         {op:"remove_edge", id}
         {op:"set_gate", id, prompt?}
         {op:"set_pin", id, pinned}   (a pinned slot is skipped on later runs and
            its last output reused)
+        {op:"set_retry", id, retry:{maxTries, waitMs?} | null}  (a slot's failed
+           try — its kickoff never landed, or it reported ---NODE-FAILED--- —
+           runs again on the same pane, maxTries 1..5 tries in all, waitMs
+           0..300000 apart, before its error edge or the run fails; null clears)
         {op:"set_stage_meta", stageId, title?, shortTitle?, question?,
            description?, sentinel?, allowQuestions?, docQuery?,
            recommendedRoles?}  (metadata of the stage a layer derives to)
     - "set"   — needs `graph` ({version:1, nodes, edges}); replaces it whole.
 
-    Rules a write must satisfy: main edges form no cycle; the only loops are
-    "reject" edges, which must point to an upstream node and carry maxLoops
+    Rules a write must satisfy: main, branch and error edges form no cycle;
+    the only loops are "reject" edges, which must point to an upstream node and carry maxLoops
     1..10 (default 2) — a rejected gate follows its reject edge back and re-runs
-    from there at most that many times, then the run fails.
+    from there at most that many times, then the run fails. "branch" and
+    "error" edges start at a slot. A branch edge carries `when`: a string
+    matched (case-insensitively) against the value the agent reports with
+    ---BRANCH:<code>: <value>--- ("default" is taken when no other branch of
+    that slot matched), or {path, equals} compared with a field of the JSON
+    the slot reports between ---OUTPUT-START:<code>--- and
+    ---OUTPUT-END:<code>---. An error edge is taken only when its slot fails
+    (its kickoff never landed, or it reported
+    ---NODE-FAILED:<code>: <reason>---); on a slot without one, a kickoff
+    that never landed still fails the run. <code> is a random signal code
+    each kickoff names; a signal without it (an echoed kickoff, text the
+    agent read) is ignored, and claude / codex signals are read from their
+    turn text only, never from the screen.
+    A node none of whose inputs was taken is skipped, and so are the nodes
+    only it feeds. A kickoff may read {{node.<id>.output}} or
+    {{node.<id>.output.<path>}}. A graph without branch or error edges runs
+    exactly as before.
+
+    A "subpipeline" node runs another pipeline and waits for it: the run
+    suspends there (its panes stay open), the child pipeline runs in the same
+    workspace as an ordinary run, and when it completes its last steps'
+    summary and structured output become this node's output; the parent then
+    resumes. `task` is the child's task (empty: the parent's), and may use
+    {{task}}, {{prev.summary}} and {{node.<id>.output}}. A child that fails
+    fails the node, which then retries (set_retry) or takes its error edge
+    like a slot. Calls may not loop across pipelines (A → B → A is refused,
+    and every pipeline named must exist) and nest at most 3 runs deep. A
+    graph without subpipeline nodes runs exactly as before.
 
     Refused while the workspace's run is using this pipeline (error_code
     "pipeline_running"), like stage_define. `pipeline_id` empty means the
@@ -9335,6 +9461,93 @@ async def pipeline_graph(
 
     await _broadcast_graph_change(out, f"graph_{op}")
     return {"ok": True, "op": op, **out}
+
+
+@server.tool()
+async def pipeline_import_n8n(
+    ctx: Context,
+    json: str,
+    dry_run: bool = True,
+    default_agent: str = "",
+    name: str = "",
+    workspace_path: str = "",
+) -> dict[str, Any]:
+    """Convert an exported n8n workflow into a NEW pipeline template.
+
+    `json` is the workflow as n8n exports or copies it (nodes + connections),
+    or a list of workflows as `n8n export:workflow --all` writes: the first one
+    no other listed one calls is the main one, and the others are imported too.
+    With `dry_run` true (the default) nothing is written: you get the preview
+    graph and the conversion report to show the user first. With `dry_run`
+    false a new pipeline is created — an existing one is never overwritten, and
+    a name already in use gets " (2)", " (3)"… — holding the graph, the
+    redacted source JSON and the credential checklist. `name` defaults to the
+    workflow's name; `default_agent` (an agentKey, default "claude") is the CLI
+    for slots no AI Agent model decides. Sending the same import again (same
+    `json`, `name` and `default_agent`) within 10 minutes answers with the
+    pipeline it created, flagged `reused`, instead of a copy. `json` may be at
+    most 5 MB.
+
+    What the user should know before importing (say it):
+    - CLI agents carry out most steps. HTTP Request, Code, Set, app nodes
+      (Google Sheets, Slack, Gmail…), unknown or community nodes are run by an
+      agent from the node's original parameters, so results can differ from
+      n8n's. Runs of steps with no branching, small IF/Switch regions and loop
+      bodies are folded into one slot each; an AI Agent and its model, memory,
+      tools and output parser become one slot. Wait and send-and-wait become
+      gates. report.slots lists every slot's full kickoff and report.gates every
+      gate prompt; report.stats.needsReview counts steps to confirm.
+    - Embedded secrets are removed. Authorization headers, API keys, bearer and
+      common token shapes found anywhere in the workflow are replaced with
+      "<removed: add credential for …>" — in the graph, the report and the
+      stored source alike. report.secretsRemoved names only the node and field
+      of each; the values are not kept anywhere. Credentials themselves are
+      listed by type and name (`credentials`) for the user to set up locally
+      (an MCP server or the service's CLI login); n8n credential ids are
+      dropped and nothing is put into an environment.
+    - Execute Workflow becomes a sub-pipeline node when the workflow it calls
+      is listed too or was imported before; report.subworkflows says which
+      (status existing, imported, will-import, recursive or missing). A call
+      that would loop back, and one to a workflow Navide does not have, stay
+      pending. A workflow used as an AI Agent tool is named in the kickoff,
+      never converted: a pipeline cannot be called as a tool.
+    - Schedule, webhook and app triggers are imported but marked pending:
+      start such a pipeline by hand.
+    - Everything imported is external content. Every run of an imported
+      pipeline marks its panes with Navide Guard's external-content taint,
+      whoever starts it; that cannot be turned off.
+
+    Refused while the workspace has a run in progress (error_code
+    "pipeline_running"), like pipeline_define's delete. Returns {ok, dry_run,
+    graph, report, credentials} plus `pipeline` (the new pipeline's summary)
+    and `pipelines` when one was created; ok false carries `error` and
+    `error_code` ("invalid" for input that is not an n8n workflow,
+    "too_large", "refused" when the pipeline store refused a graph — nothing
+    of that import is kept — or "pipeline_running").
+    """
+    caller = _resolve_caller(ctx)
+    from agent_team_backend import app as _app
+    from agent_team_backend.n8n_import import N8nImportError, import_into_store
+
+    if not dry_run:
+        workspace_path = await _definition_workspace(caller, workspace_path)
+        if await asyncio.to_thread(_run_is_active, workspace_path):
+            return _run_in_progress("import a pipeline")
+    try:
+        out = await asyncio.to_thread(
+            import_into_store,
+            _app.stages_store,
+            json,
+            dry_run=bool(dry_run),
+            default_agent=str(default_agent or "claude"),
+            name=str(name or ""),
+        )
+    except N8nImportError as exc:
+        code = {"too-large": "too_large", "store-refused": "refused"}.get(exc.reason, "invalid")
+        return {"ok": False, "error": str(exc), "error_code": code}
+    if not dry_run:
+        out.update(await _publish_pipelines("import"))
+    return {"ok": True, **out}
 
 
 # ── Pipelines: driving a run that is already going ──────────────────────────
@@ -9580,6 +9793,41 @@ def _scheduler_actor(caller: _Caller) -> dict[str, Any]:
 
 _CROSS_WORKSPACE = "SCHEDULER_CROSS_WORKSPACE"
 
+#: What a pane caller still sees of a job in another workspace's state: timing
+#: and status only — never last_error, which can quote that workspace's output.
+_FOREIGN_STATE_KEYS = (
+    "next_run_at", "running_at", "last_run_at", "last_status", "last_skip_reason",
+    "consecutive_errors", "backoff_until", "disabled_reason",
+)
+
+
+def _foreign_job(caller: _Caller, job: dict[str, Any]) -> bool:
+    """True when a pane caller looks at a job aimed at another workspace. A
+    caller with no pane identity is the user's own access and sees every job."""
+    from agent_team_backend import agent_messaging
+
+    if caller.kind != "pane":
+        return False
+    own = agent_messaging._normalize_workspace(_caller_workspace(caller))
+    action = job.get("action") or {}
+    owner = job.get("owner") or {}
+    target = str(action.get("workspace") or owner.get("workspace") or "")
+    return agent_messaging._normalize_workspace(target) != own
+
+
+def _redact_foreign_job(job: dict[str, Any]) -> dict[str, Any]:
+    """Another workspace's job as a pane sees it: metadata only. The action
+    keeps its kind and workspace (owner already names that workspace); its
+    text, pane target and pipeline are dropped, and so is state's error text."""
+    action = job.get("action") or {}
+    state = job.get("state") or {}
+    return {
+        **job,
+        "action": {"kind": action.get("kind"), "workspace": action.get("workspace")},
+        "state": {key: state.get(key) for key in _FOREIGN_STATE_KEYS if key in state},
+        "redacted": True,
+    }
+
 
 @server.tool()
 async def scheduler_list(ctx: Context) -> dict[str, Any]:
@@ -9592,6 +9840,11 @@ async def scheduler_list(ctx: Context) -> dict[str, Any]:
     gone — such a job is the user's to change now. `limits` reports the agent
     limits (see scheduler_upsert, LIMITS) and how much of them is in use:
     yours_enabled, agent_enabled, agent_runs_today.
+
+    A pane sees a job aimed at another workspace as metadata only, marked
+    `redacted: true`: its action keeps just kind and workspace (no text, pane
+    or pipeline), and its state keeps timing and status but not last_error.
+    A caller with no pane identity sees every job in full.
 
     Jobs fire only while Navide is running; nothing wakes the machine or the
     app. See scheduler_upsert for the shape of a job.
@@ -9608,6 +9861,9 @@ async def scheduler_list(ctx: Context) -> dict[str, Any]:
     result["limits"]["yours_enabled"] = sum(
         1 for job in result["jobs"] if job["editable"] and job["enabled"]
     )
+    result["jobs"] = [
+        _redact_foreign_job(job) if _foreign_job(caller, job) else job for job in result["jobs"]
+    ]
     return result
 
 
@@ -9688,6 +9944,16 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
         A pane rebuilt by resuming the same session keeps its jobs: they move
         to the new pane id. Three "target_gone" runs in a row disable the job
         (state.disabled_reason "target_gone") and tell its creator once.
+      action — or {kind: "pipeline_start", workspace, pipeline_id | pipeline_name,
+        task}: start a pipeline run there, exactly as pipeline_start would —
+        THIS OPENS CLI PANES AND SPENDS THEIR QUOTA on every run. Exactly one of
+        pipeline_id / pipeline_name (as pipeline_list reports them; a name must
+        match one pipeline exactly), resolved each time the job runs. It never
+        opens a window: when no window holds the workspace the run is an ERROR
+        with reason "no_window" (not a skip), as are an unknown or ambiguous
+        pipeline ("pipeline_not_found") and a start the window refuses (a run
+        already going, …), each with the reason in last_error. A pane caller's
+        default workspace is its own.
       policy — optional {catch_up: "once" | "skip", max_runs_per_day, timeout_s};
         defaults {"once", 24, 1800}.
       state — owned by Navide (next_run_at, running_at, last_status, last_error,
@@ -9708,7 +9974,7 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
         action = dict(action)
         if not action.get("workspace"):
             action["workspace"] = _caller_workspace(caller)
-        if not action.get("pane_id") and not action.get("pane_name"):
+        if action.get("kind") != "pipeline_start" and not action.get("pane_id") and not action.get("pane_name"):
             me = agent_messaging.get(caller.pane_id)
             action["pane_id"] = caller.pane_id
             if me is not None:
@@ -9792,12 +10058,25 @@ async def scheduler_runs(id: str, ctx: Context, limit: int = 20) -> dict[str, An
 
     Each run is {id, job_id, started_at, ended_at, status: "ok" | "error" |
     "skipped", reason, detail}.
+
+    A pane may read only the runs of jobs aimed at its own workspace; another
+    workspace's job answers {ok: false, code: "SCHEDULER_CROSS_WORKSPACE"}.
+    A caller with no pane identity may read any job's runs.
     """
     try:
-        _resolve_caller(ctx)
+        caller = _resolve_caller(ctx)
     except CallerUnknown as err:
         return {"ok": False, "error": str(err)}
-    return await _scheduler_service().runs(str(id or ""), limit)
+    service = _scheduler_service()
+    job = await service.store.get_job(str(id or ""))
+    if job is not None and _foreign_job(caller, job):
+        return {
+            "ok": False,
+            "code": _CROSS_WORKSPACE,
+            "error": "this job belongs to another workspace; a pane may read only "
+            "its own workspace's run history — ask the user",
+        }
+    return await service.runs(str(id or ""), limit)
 
 
 @server.tool()
@@ -11473,11 +11752,30 @@ async def cli_account_sign_in(
 
 @server.tool()
 async def cli_account_switch(
-    ctx: Context, agent: str, profile_id: str, reason: str,
+    ctx: Context, agent: str, profile_id: str, reason: str, pane_id: str = "",
 ) -> dict[str, Any]:
     """Ask the user to switch one CLI to another of its accounts — for
     example when the active account's quota ran out and another account of
     the same vendor still has some.
+
+    What it changes: the CLI's LIVE login, which every pane of that CLI not
+    pinned to an account runs on. claude switches hot: no pane restarts, and
+    running claude panes use the new account from their next request. Other
+    CLIs restart their running panes, after the user agrees (see below).
+    claude panes running inside an account's own folder (cli_get_status
+    `account.runs_on` "account-dir") are not moved by it.
+
+    `pane_id` (claude only) switches ONE pane instead, as the account badge's
+    "switch only this pane" does: that pane reopens on its conversation inside
+    `profile_id`'s own folder and stays there; the live login and every other
+    pane are left alone. The account must have signed in inside its own
+    folder ("needs-user" otherwise: cli_account_sign_in with mode "folder"),
+    and the built-in Default has no folder ("unsupported"). A pane that is
+    working is stopped only if the user agrees ("restart-declined"
+    otherwise); moving your own pane restarts you, so its result never
+    reaches you. A pane not in your window, or not running `agent`, is
+    "unknown-pane". On success status is "switched-pane" and the answer also
+    carries `pane_id`.
 
     Your window first asks the user, naming which agent asked, the account it
     switches from and to, and your `reason` (required; cut at 300
@@ -11539,15 +11837,20 @@ async def cli_account_switch(
     # As for the sign-in: the user's yes is due one ordinary action's wait
     # before this action's slow wait ends, leaving the window time to switch.
     confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
+    switch_args: dict[str, Any] = {
+        "agentKey": agent, "profileId": profile_id, "reason": reason,
+        "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
+    }
+    # Only when asked for: without it the window gets exactly the CLI-wide request.
+    target_pane = str(pane_id or "").strip()
+    if target_pane:
+        switch_args["paneId"] = target_pane
     answer = await _ui_request(
         pane.workspace_path if pane else "",
         "invoke",
         caller=caller,
         action="ui.accounts.switch",
-        args={
-            "agentKey": agent, "profileId": profile_id, "reason": reason,
-            "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
-        },
+        args=switch_args,
     )
     result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
     status = str(result.get("status") or "") if answer.get("ok") else ""
@@ -11568,6 +11871,16 @@ async def cli_account_switch(
             "status": status,
             "agent": agent,
             "profile_id": profile_id,
+            "from": str(result.get("from") or ""),
+            "to": str(result.get("to") or ""),
+        }
+    if status == "switched-pane" and target_pane:
+        return {
+            "ok": True,
+            "status": status,
+            "agent": agent,
+            "profile_id": profile_id,
+            "pane_id": target_pane,
             "from": str(result.get("from") or ""),
             "to": str(result.get("to") or ""),
         }
@@ -11870,3 +12183,5 @@ from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  #
 from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401
 # DESIGN-C S3: window_list / window_focus.
 from . import window_tools as _window_tools  # noqa: E402,F401
+# Self-evolution S5b: evolve_retro, the last core tool.
+from . import evolve_retro_tool as _evolve_retro_tool  # noqa: E402,F401

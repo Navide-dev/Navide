@@ -75,33 +75,33 @@ watch(
 </template>
 
 <style scoped>
-/* Same segmented control as the Help tab's topics. */
+/* The one Settings tab strip: underline tabs, as on Extensions, Navide
+   Marketplace and Help. */
 .nvc-subtabs {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px;
   margin-bottom: 4px;
-  padding: 3px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-md);
-  background: var(--bg-inset);
+  border-bottom: 1px solid var(--border-muted);
 }
 .nvc-subtab {
+  font: inherit;
+  font-size: var(--font-sm);
+  min-height: var(--control-h-lg);
+  margin-bottom: -1px;
+  padding: 0 12px;
   border: none;
-  background: transparent;
+  border-bottom: 2px solid transparent;
+  background: none;
   color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 5px 14px;
-  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .nvc-subtab:hover {
   color: var(--text-primary);
 }
 .nvc-subtab.active {
-  background: var(--bg-base);
   color: var(--text-bright);
-  box-shadow: 0 1px 2px var(--shadow-overlay);
+  font-weight: 600;
+  border-bottom-color: var(--accent-emphasis, var(--text-bright));
 }
 </style>

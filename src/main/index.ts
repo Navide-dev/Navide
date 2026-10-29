@@ -2025,6 +2025,14 @@ const pluginTrustRefresh = registerPluginIpc(
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
     onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
+    // H1: a switch drains the plugin's views now, or has settled; only
+    // Navide's own main windows hear it, never a plugin guest or window.
+    onPackageSwitching: (notice) => {
+      for (const hostWindow of mainWindows) {
+        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+        hostWindow.webContents.send('plugins:switching', notice)
+      }
+    },
     onPackageSwitchFailed: (failure) => {
       console.warn(`[main] switching ${failure.pluginId} to ${failure.stagedVersion} failed: ${failure.reason}`)
       pluginStagedCandidateRelay.notifyStagedUpdates([failure])
@@ -2065,6 +2073,8 @@ const pluginTrustRefresh = registerPluginIpc(
     noteInstallConsent: (pluginId, packageVersion) => nativeBackendStore.noteInstallConsent(pluginId, packageVersion),
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),
+    carryPluginViewState: (pluginId, fromVersion, toVersion) =>
+      pluginStorageStore.carryViewState(pluginId, fromVersion, toVersion),
     cleanupPluginStorage: async (pluginId) => {
       await pluginStorageStore.cleanupPlugin(pluginId)
       nativeBackendStore.forget(pluginId)

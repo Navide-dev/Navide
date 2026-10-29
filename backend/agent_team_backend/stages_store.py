@@ -25,6 +25,8 @@ log = logging.getLogger("agent_team_backend.stages")
 PIPELINES_FILE = "pipelines.json"
 STAGES_FILE = "stages.json"  # legacy — only used for migration detection
 _KV_KEY = "pipelines"
+# Pipeline keys that never leave this machine (settings bundle export).
+LOCAL_ONLY_PIPELINE_KEYS = ("source", "credentials")
 
 # Persisted-store schema version. Bumped when the on-disk shape changes in a way
 # that needs a forward migration (see store_migrations.py). Distinct from the
@@ -405,6 +407,126 @@ sentinel 輸出規則：最後一行只有 ---VERIFY-DONE---
     return [_stage_to_dict(s) for s in stages]
 
 
+#: The "proposal landing" built-in (evolve S3): implement → read-only review →
+#: CI check → the user's gate. A definition only; nothing starts it.
+EVOLVE_LANDING_ID = "evolve-landing"
+EVOLVE_LANDING_NAME = "提案落地流程"
+#: Built-ins added to a document after it was first written. Each is added
+#: once and recorded under this key, so one the user deleted stays deleted.
+_SEEDED_KEY = "seeded_builtins"
+_LATER_BUILTINS = (EVOLVE_LANDING_ID,)
+
+
+def default_evolve_landing_pipeline() -> dict[str, Any]:
+    """Seed set of the proposal-landing pipeline: its stages and its graph,
+    which ends at a gate only the user passes."""
+    stages = [
+        StageDef(
+            id="e01",
+            title="E01 實作",
+            short_title="實作",
+            question="照落地路徑做了嗎？",
+            description="照已核准提案 plan 的「落地路徑」實作；只建立、不啟用。",
+            recommended_roles=["backend", "frontend"],
+            allow_questions=True,
+            doc_query="implementation, failing test first, draft pull request",
+            sentinel="---LAND-IMPL-DONE---",
+            slots=[
+                SlotDef(
+                    agent_key="claude",
+                    role_key="backend",
+                    label="Implement",
+                    is_commander=True,
+                    kickoff_body="""[提案落地 E01 · 實作]
+任務：{{task}}
+
+這是使用者已核准的 evolve 提案。先讀它的 plan，照「落地路徑」那一段做：
+1. 程式修正：開 worktree → 先寫會紅的測試 → 修到綠 → 推分支、開 draft PR。
+2. 外掛、skill、Prompt、pipeline、角色、排程：只建立定義或送出核准請求，不載入、不啟用、不啟動。
+3. 規則／記憶：只把 diff 寫進 plan，不改 Navide 資料夾以外的檔案。
+不要合併、不要上架、不要發版。
+
+sentinel 輸出規則：最後一行只有 ---LAND-IMPL-DONE---
+完成後，最後一行只輸出 ---LAND-IMPL-DONE---。""",
+                ),
+            ],
+        ),
+        StageDef(
+            id="e02",
+            title="E02 唯讀審查",
+            short_title="審查",
+            question="改得對嗎？",
+            description="另一個 pane 唯讀審查實作，只回報，不修改。",
+            recommended_roles=["qa"],
+            allow_questions=False,
+            doc_query="code review, regression risk, deleted functions, credential paths",
+            sentinel="---LAND-REVIEW-DONE---",
+            slots=[
+                SlotDef(
+                    agent_key="claude",
+                    role_key="qa",
+                    label="Review",
+                    kickoff_body="""[提案落地 E02 · 唯讀審查]
+任務脈絡：{{task}}
+
+你是唯讀審查者（前置階段產出已附在最前面，請先閱讀）。只讀、不改任何檔案、不 commit、不 push。
+1. 對照 plan 的落地路徑，檢查實作有沒有做到、有沒有超出範圍。
+2. 檢查有沒有刪掉函式、改了既有簽名、動到憑證或額度相關檔案。
+3. 列出問題與建議，標明嚴重度。
+
+sentinel 輸出規則：最後一行只有 ---LAND-REVIEW-DONE---
+完成後，最後一行只輸出 ---LAND-REVIEW-DONE---。""",
+                ),
+            ],
+        ),
+        StageDef(
+            id="e03",
+            title="E03 CI 檢查",
+            short_title="CI",
+            question="CI 全綠嗎？",
+            description="用 gh 唯讀查 CI，只回報結果。",
+            recommended_roles=["qa"],
+            allow_questions=False,
+            doc_query="continuous integration, workflow run, job conclusions",
+            sentinel="---LAND-CI-DONE---",
+            slots=[
+                SlotDef(
+                    agent_key="claude",
+                    role_key="qa",
+                    label="CI check",
+                    kickoff_body="""[提案落地 E03 · CI 檢查]
+任務脈絡：{{task}}
+
+用 gh 唯讀查這個 draft PR 最新 head 的 CI：整個 workflow run 要 completed，而且每個 job 都 success，才算全綠。
+只看 gh pr checks 不算數，要逐一列出各 job 的結果。有紅的或被取消的，查出原因後回報。
+不要 rerun。不要合併。
+沒有 PR 的落地類型（外掛、skill、Prompt、pipeline、角色、排程、規則／記憶），回報「這一類沒有 CI」。
+
+sentinel 輸出規則：最後一行只有 ---LAND-CI-DONE---
+完成後，最後一行只輸出 ---LAND-CI-DONE---。""",
+                ),
+            ],
+        ),
+    ]
+    stage_dicts = [_stage_to_dict(s) for s in stages]
+    graph = pg.derive_graph_from_stages(stage_dicts)
+    last = graph["nodes"][-1]["id"]
+    graph["nodes"].append({
+        "id": "gate-user",
+        "kind": "gate",
+        "label": "使用者核准",
+        "position": {"x": (len(stage_dicts) + 1) * pg._LAYER_DX, "y": 0},
+        "gate": {"prompt": "合併、載入、上架或啟用都由使用者決定；這個 pipeline 不做任何一項。"},
+    })
+    graph["edges"].append({"id": pg.edge_id(last, "gate-user"), "from": last, "to": "gate-user", "kind": "main"})
+    return {"stages": stage_dicts, "graph": graph}
+
+
+def _evolve_landing_entry() -> dict[str, Any]:
+    seed = default_evolve_landing_pipeline()
+    return {"id": EVOLVE_LANDING_ID, "name": EVOLVE_LANDING_NAME, "builtin": True, **seed}
+
+
 class StagesStore:
     # Pattern for safe stage IDs: alphanumeric, hyphens, underscores, dots.
     _ID_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,62})?$")
@@ -412,7 +534,9 @@ class StagesStore:
     def __init__(self, path: Path | None = None, db: Database | None = None) -> None:
         self._path = path or (app_data_dir() / PIPELINES_FILE)
         self._db = db or Database(self._path.parent / DB_FILENAME)
-        self._lock = threading.Lock()
+        # Reentrant: _read_doc takes it to add a later built-in, and most
+        # writers already hold it when they call _read_doc.
+        self._lock = threading.RLock()
 
     @property
     def path(self) -> Path:
@@ -483,7 +607,8 @@ class StagesStore:
                     schema,
                     SCHEMA_VERSION,
                 )
-            return data
+                return data
+            return self._add_later_builtins(data)
         log.warning("pipelines document has unknown format; regenerating defaults")
         doc = self._seed_doc()
         self._write_doc(doc)
@@ -507,8 +632,29 @@ class StagesStore:
                     "builtin": True,
                     "stages": default_maintenance_stages(),
                 },
+                _evolve_landing_entry(),
             ],
+            _SEEDED_KEY: list(_LATER_BUILTINS),
         }
+
+    def _add_later_builtins(self, doc: dict[str, Any]) -> dict[str, Any]:
+        """Add a built-in this document has never had, once. Writes only when
+        one is missing from the seeded record, and changes nothing else."""
+        seeded = doc.get(_SEEDED_KEY)
+        seeded = [s for s in seeded if isinstance(s, str)] if isinstance(seeded, list) else []
+        missing = [b for b in _LATER_BUILTINS if b not in seeded]
+        if not missing:
+            return doc
+        with self._lock:
+            fresh = self._db.kv_get(_KV_KEY)
+            if isinstance(fresh, dict) and fresh is not doc and fresh != doc:
+                return self._read_doc()
+            ids = {p.get("id") for p in doc.get("pipelines", []) if isinstance(p, dict)}
+            if EVOLVE_LANDING_ID in missing and EVOLVE_LANDING_ID not in ids:
+                doc.setdefault("pipelines", []).append(_evolve_landing_entry())
+            doc[_SEEDED_KEY] = seeded + missing
+            self._write_doc(doc)
+        return doc
 
     def _write_doc(self, doc: dict[str, Any]) -> None:
         self._db.kv_set(_KV_KEY, doc, now=int(time.time()))
@@ -537,6 +683,7 @@ class StagesStore:
                 "builtin": p.get("builtin", False),
                 "stage_count": len(p.get("stages", [])),
                 "has_graph": "graph" in p,
+                **({"imported_from": p["importedFrom"]} if isinstance(p.get("importedFrom"), dict) else {}),
             }
             for p in doc.get("pipelines", [])
         ]
@@ -545,8 +692,29 @@ class StagesStore:
         doc = self._read_doc()
         return doc.get("active_pipeline_id", "default")
 
-    def export_document(self) -> dict[str, Any]:
-        return self._read_doc()
+    def export_document(self, *, include_local: bool = False) -> dict[str, Any]:
+        """The document for the settings bundle file, without the keys that
+        stay on this machine (an import's source JSON and credential list)
+        unless `include_local`."""
+        doc = self._read_doc()
+        if include_local:
+            return doc
+        return {
+            **doc,
+            "pipelines": [
+                {k: v for k, v in p.items() if k not in LOCAL_ONLY_PIPELINE_KEYS} for p in doc.get("pipelines", [])
+            ],
+        }
+
+    def imported_from(self, pipeline_id: str | None) -> dict[str, Any] | None:
+        """The import record of a pipeline ({kind, importedAt, workflow}), or
+        None for one made in Navide or not found."""
+        doc = self._read_doc()
+        try:
+            record = self._get_pipeline(doc, pipeline_id).get("importedFrom")
+        except KeyError:
+            return None
+        return record if isinstance(record, dict) else None
 
     def replace_document(self, incoming: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(incoming, dict):
@@ -580,6 +748,8 @@ class StagesStore:
                 "builtin": bool(raw.get("builtin", False)),
                 "stages": migrated_stages,
             }
+            if isinstance(raw.get("importedFrom"), dict):
+                clean["importedFrom"] = raw["importedFrom"]
             graph = raw.get("graph")
             if graph is not None:
                 errors = pg.validate_graph(graph)
@@ -597,9 +767,58 @@ class StagesStore:
             "active_pipeline_id": active_pipeline_id,
             "pipelines": clean_pipelines,
         }
+        seeded = incoming.get(_SEEDED_KEY)
+        if isinstance(seeded, list):
+            # Built-ins the source already had (or had deleted) stay that way here.
+            doc[_SEEDED_KEY] = [s for s in seeded if isinstance(s, str)]
         with self._lock:
             self._write_doc(doc)
         return doc
+
+    def create_imported_pipeline(
+        self,
+        name: str,
+        graph: dict[str, Any],
+        imported_from: dict[str, Any],
+        source: dict[str, Any],
+        credentials: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """A new pipeline holding an imported graph; never overwrites one. A
+        name already in use gets " (2)", " (3)"…. `source` and `credentials`
+        stay on this machine (export_document leaves them out)."""
+        errors = pg.validate_graph(graph)
+        if errors:
+            raise pg.GraphError(errors)
+        base = name.strip() or "新流程"
+        with self._lock:
+            doc = self._read_doc()
+            taken = {p.get("name") for p in doc["pipelines"]}
+            unique, n = base, 2
+            while unique in taken:
+                unique, n = f"{base} ({n})", n + 1
+            ids = {p.get("id") for p in doc["pipelines"]}
+            pid = uuid.uuid4().hex[:8]
+            while pid in ids:
+                pid = uuid.uuid4().hex[:8]
+            pipeline: dict[str, Any] = {
+                "id": pid,
+                "name": unique,
+                "builtin": False,
+                "stages": [],
+                "importedFrom": dict(imported_from),
+                "source": source,
+                "credentials": list(credentials),
+            }
+            self._store_graph(doc, pipeline, graph, write=False)
+            doc["pipelines"].append(pipeline)
+            self._write_doc(doc)
+        return {
+            "id": pid,
+            "name": unique,
+            "builtin": False,
+            "stage_count": len(pipeline["stages"]),
+            "imported_from": pipeline["importedFrom"],
+        }
 
     def create_pipeline(self, name: str) -> dict[str, Any]:
         pid = uuid.uuid4().hex[:8]
@@ -684,10 +903,14 @@ class StagesStore:
                 pipeline["stages"] = default_stages()
             elif pipeline_id == "maintenance":
                 pipeline["stages"] = default_maintenance_stages()
+            elif pipeline_id == EVOLVE_LANDING_ID:
+                pipeline.update(default_evolve_landing_pipeline())
             else:
                 raise ValueError(f"no seed data for builtin pipeline: {pipeline_id!r}")
-            # Restoring the seed restores its shape too: the seeds are linear.
-            pipeline.pop("graph", None)
+            # Restoring the seed restores its shape too: the seeds are linear,
+            # except the landing pipeline's, whose seed carries its graph.
+            if pipeline_id != EVOLVE_LANDING_ID:
+                pipeline.pop("graph", None)
             self._write_doc(doc)
         return {
             "id": pipeline["id"],
@@ -943,6 +1166,19 @@ class StagesStore:
         self, doc: dict[str, Any], pipeline: dict[str, Any], graph: dict[str, Any], *, write: bool = True
     ) -> dict[str, Any]:
         graph = {**graph, "nodes": [dict(n) for n in graph["nodes"]]}
+        if any(n.get("kind") == "subpipeline" for n in graph["nodes"]):
+            # Sub-pipeline references are checked across every pipeline: a
+            # write may close a loop through pipelines it does not touch.
+            graphs = {
+                str(p["id"]): p["graph"] for p in doc.get("pipelines", [])
+                if isinstance(p.get("graph"), dict) and p is not pipeline
+            }
+            for p in doc.get("pipelines", []):
+                graphs.setdefault(str(p["id"]), {"nodes": [], "edges": []})
+            graphs[str(pipeline["id"])] = graph
+            errors = pg.subpipeline_cycle_errors(graphs)
+            if errors:
+                raise pg.GraphError(errors)
         stages = pg.derive_stages_from_graph(graph, [_migrate(s) for s in pipeline.get("stages", [])], stamp=True)
         for stage in stages:
             if not self._ID_RE.match(str(stage.get("id", ""))):

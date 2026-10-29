@@ -21,6 +21,7 @@ Root [繁體中文 README](../../README.zh-TW.md) 負責介紹產品與目前發
 |---|---|
 | [開始使用](getting-started.md) | 下載已簽章的 macOS 版本或 Windows／Linux 安裝檔，或從原始碼安裝，並完成首次啟動 |
 | [使用指南](user-guide.md) | 學習 Workspace、Pane、Pipeline、協調、Git、History 與 Editor 工作流 |
+| [從 n8n 匯入](import-from-n8n.md) | 把匯出的 n8n workflow 轉成 Pipeline：預覽、憑證、外部內容標記、n8n MCP |
 | [疑難排解](troubleshooting.md) | 解決啟動、權限、Agent Session、Analyzer 與 Token Tracking 問題 |
 
 ## 信任與安全

@@ -6,7 +6,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { GraphNode, NodeRunState } from '../../lib/pipelineGraph'
 import type { LaneBadge } from '../../lib/pipelineGraphEdits'
-import { elapsedOf, formatElapsed, formatTokens, nodeTitle } from './pipelineEditorModel'
+import { elapsedOf, formatElapsed, formatTokens, nodeTitle, runStatusKey } from './pipelineEditorModel'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{
@@ -24,13 +24,14 @@ const emit = defineEmits<{ (e: 'badge', badge: LaneBadge): void }>()
 const { t } = useI18n()
 
 const title = computed(() => nodeTitle(props.node))
-const status = computed(() => props.run?.status ?? (props.node.pinned ? 'pinned' : 'idle'))
+const status = computed(() => (props.run ? runStatusKey(props.run) : props.node.pinned ? 'pinned' : 'idle'))
 const elapsed = computed(() => formatElapsed(elapsedOf(props.run, props.now ?? Date.now())))
 const tokens = computed(() => formatTokens(props.run?.tokens))
 const subtitle = computed(() => {
   const n = props.node
   if (n.kind === 'trigger') return t('pipelineEditor.node.trigger-sub')
   if (n.kind === 'gate') return n.gate?.prompt || t('pipelineEditor.node.gate-sub')
+  if (n.kind === 'subpipeline') return t('pipelineEditor.node.subpipeline-sub', { pipeline: n.subpipeline?.pipelineId ?? '' })
   return props.roleLabel || t('label.unassigned')
 })
 /** The glyph is the role's initial — the same tile the palette shows, so a
@@ -75,6 +76,10 @@ function badgeText(b: LaneBadge): string {
         <svg v-if="node.pinned" class="pnc-mark pnc-mark--pin" viewBox="0 0 16 16" :aria-label="t('pipelineEditor.node.pinned')">
           <title>{{ t('pipelineEditor.node.pinned') }}</title>
           <path d="M6 1.5h4l-.6 4.2L12 8.5H8.7V14L8 15l-.7-1V8.5H4l2.6-2.8z" />
+        </svg>
+        <svg v-if="node.needsReview" class="pnc-mark pnc-mark--review" viewBox="0 0 16 16" :aria-label="t('pipelineEditor.node.needs-review')">
+          <title>{{ t('pipelineEditor.node.needs-review') }}</title>
+          <path d="M8 1.5 15 14.5H1zM7.25 6v4.5h1.5V6zm0 5.75v1.5h1.5v-1.5z" fill-rule="evenodd" />
         </svg>
       </span>
       <!-- Title > role > CLI: when space runs out the role yields first, the
@@ -150,6 +155,7 @@ function badgeText(b: LaneBadge): string {
 .pnc.is-awaiting { --pnc-tone: var(--attention-emphasis); }
 .pnc.is-failed, .pnc.is-rejected, .pnc.is-aborted { --pnc-tone: var(--danger-emphasis); }
 .pnc.is-skipped, .pnc.is-pinned { --pnc-tone: var(--done-emphasis); }
+.pnc.is-untaken { opacity: 0.55; }
 .pnc.is-pending { --pnc-tone: var(--border-muted); }
 
 .pnc-glyph {
@@ -182,6 +188,7 @@ function badgeText(b: LaneBadge): string {
 .pnc-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pnc-mark { flex: none; width: 12px; height: 12px; fill: var(--manager-fg); color: var(--manager-fg); }
 .pnc-mark--pin { fill: var(--done-fg); }
+.pnc-mark--review { fill: var(--attention-fg); }
 .pnc-meta { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .pnc-sub {
   flex: 0 1 auto;

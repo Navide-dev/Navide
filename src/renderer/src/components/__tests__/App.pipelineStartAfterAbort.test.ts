@@ -161,7 +161,7 @@ describe('a refused start says why, durably', () => {
   })
 
   it('a run graph that cannot be prepared, restoring the state it had', async () => {
-    const dag = { begin: vi.fn(async () => null) }
+    const dag = { begin: vi.fn(async () => null), runStack: { value: [] } }
     const t = await loadStart({ dag })
     const reason = await t.onPipelineStart(START)
     expect(reason).toMatch(/run graph/)

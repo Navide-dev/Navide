@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
+import SettingsNotice from './settings/SettingsNotice.vue'
 import type { useGitAccounts, GitAccountPublic } from '../composables/useGitAccounts'
 
 const props = defineProps<{
@@ -104,12 +106,10 @@ async function remove(id: string): Promise<void> {
       </div>
 
       <!-- safeStorage unavailable -->
-      <div v-if="!available" class="ga-banner warn">
-        {{ $t('settings.accounts.unavailable') }}
-      </div>
+      <SettingsNotice v-if="!available" class="ga-unavailable" tone="warning" :message="$t('settings.accounts.unavailable')" />
 
       <!-- Error surface -->
-      <div v-if="error" class="ga-banner danger">{{ error }}</div>
+      <SettingsNotice v-if="error" class="ga-error" tone="danger" role="alert" :message="error" />
 
       <!-- Account list -->
       <div v-if="accounts.length" class="ga-list">
@@ -143,7 +143,7 @@ async function remove(id: string): Promise<void> {
           </div>
         </div>
       </div>
-      <p v-else class="ga-empty nv-empty nv-empty--inline">{{ $t('settings.accounts.empty') }}</p>
+      <SettingsEmptyState v-else class="ga-empty" :message="$t('settings.accounts.empty')" />
 
       <!-- Add / edit form -->
       <div v-if="formOpen" class="ga-form">
@@ -197,50 +197,41 @@ async function remove(id: string): Promise<void> {
 .ga-section { margin-bottom: 0; }
 .ga-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   margin-bottom: 14px;
 }
-.ga-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
-.ga-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 60ch; line-height: 1.4; text-wrap: pretty; word-break: auto-phrase; }
+.ga-head > div { flex: 1 1 16em; min-width: 0; }
+/* Section headings share SettingsSection's small uppercase label. */
+.ga-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+.ga-hint { margin: 0; font-size: var(--font-xs); color: var(--text-secondary); max-width: 60ch; line-height: 1.4; text-wrap: pretty; word-break: auto-phrase; }
 
-.ga-banner {
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 11.5px;
-  line-height: 1.4;
-  margin-bottom: 12px;
+/* The Settings list grammar: one grouped card, rows split by hairlines. */
+.ga-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--settings-card-border, var(--border-default));
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+  overflow: hidden;
 }
-.ga-banner.warn {
-  background: var(--attention-subtle, var(--bg-muted));
-  border: 1px solid var(--attention-muted, var(--border-default));
-  color: var(--attention-fg, var(--text-primary));
-}
-.ga-banner.danger {
-  background: var(--danger-subtle, var(--bg-muted));
-  border: 1px solid var(--danger-muted, var(--border-default));
-  color: var(--danger-fg, var(--text-primary));
-}
-
-.ga-list { display: flex; flex-direction: column; gap: 6px; }
 .ga-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  background: var(--bg-subtle);
+  padding: 8px 12px;
 }
+.ga-row + .ga-row { border-top: 1px solid var(--settings-card-divider, var(--border-muted)); }
 .ga-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ga-row-label { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
 .ga-row-meta { font-size: var(--font-2xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ga-row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .ga-confirm-text { font-size: var(--font-2xs); color: var(--text-secondary); }
 
-.ga-empty { font-size: 11.5px; color: var(--text-muted); margin: 0; }
+.ga-empty { margin: 0; }
 
 .ga-form {
   margin-top: 14px;
@@ -255,7 +246,7 @@ async function remove(id: string): Promise<void> {
 .ga-form-title { font-size: var(--font-xs); font-weight: 600; color: var(--text-bright); }
 .ga-field { display: flex; flex-direction: column; gap: 4px; }
 .ga-label { font-size: var(--font-2xs); color: var(--text-secondary); }
-.ga-field-hint { margin: 2px 0 0; font-size: 10.5px; color: var(--text-muted); line-height: 1.4; }
+.ga-field-hint { margin: 2px 0 0; font-size: var(--font-xs); color: var(--text-muted); line-height: 1.4; }
 .ga-input {
   background: var(--bg-base);
   border: 1px solid var(--border-default);
@@ -268,6 +259,7 @@ async function remove(id: string): Promise<void> {
 .ga-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
 
 .ga-btn {
+  white-space: nowrap;
   border-radius: 5px;
   font-size: var(--font-xs);
   padding: 5px 10px;

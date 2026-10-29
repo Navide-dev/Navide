@@ -6,6 +6,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isMacPlatform } from '@navide/plugin-ui/shared'
+import SettingsNotice from './SettingsNotice.vue'
 import SettingsSection from './SettingsSection.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingRow from './SettingRow.vue'
@@ -117,7 +118,7 @@ function idleLabel(minutes: number): string {
 
 <template>
   <div v-if="api && settings" class="app-lock" data-testid="app-lock-pane">
-    <p class="al-notice" data-testid="app-lock-notice">{{ t('settings.app-lock.notice') }}</p>
+    <SettingsNotice tone="info" data-testid="app-lock-notice" :message="t('settings.app-lock.notice')" />
 
     <SettingsSection :label="t('settings.app-lock.section-lock')">
       <SettingsCard>
@@ -134,7 +135,7 @@ function idleLabel(minutes: number): string {
         </SettingRow>
         <SettingRow :title="t('settings.app-lock.lock-now')" :description="t('settings.app-lock.lock-now-hint', { shortcut })">
           <template #control>
-            <button type="button" class="al-btn" data-testid="app-lock-lock-now" :disabled="!settings.enabled" @click="api.lockNow()">
+            <button type="button" class="al-btn ghost" data-testid="app-lock-lock-now" :disabled="!settings.enabled" @click="api.lockNow()">
               {{ t('settings.app-lock.lock-now') }}
             </button>
           </template>
@@ -147,10 +148,10 @@ function idleLabel(minutes: number): string {
         <SettingRow :title="t('settings.app-lock.pin')" :description="hasPin ? t('settings.app-lock.pin-set-hint') : t('settings.app-lock.pin-none-hint')">
           <template #control>
             <div class="al-actions">
-              <button v-if="!hasPin" type="button" class="al-btn" data-testid="app-lock-set-pin" @click="openForm('set')">{{ t('settings.app-lock.set-pin') }}</button>
+              <button v-if="!hasPin" type="button" class="al-btn ghost" data-testid="app-lock-set-pin" @click="openForm('set')">{{ t('settings.app-lock.set-pin') }}</button>
               <template v-else>
-                <button type="button" class="al-btn" data-testid="app-lock-change-pin" @click="openForm('change')">{{ t('settings.app-lock.change-pin') }}</button>
-                <button type="button" class="al-btn" data-testid="app-lock-remove-pin" @click="openForm('remove')">{{ t('settings.app-lock.remove-pin') }}</button>
+                <button type="button" class="al-btn ghost" data-testid="app-lock-change-pin" @click="openForm('change')">{{ t('settings.app-lock.change-pin') }}</button>
+                <button type="button" class="al-btn ghost" data-testid="app-lock-remove-pin" @click="openForm('remove')">{{ t('settings.app-lock.remove-pin') }}</button>
               </template>
             </div>
           </template>
@@ -175,7 +176,7 @@ function idleLabel(minutes: number): string {
             <button type="submit" class="al-btn primary" data-testid="app-lock-pin-save" :disabled="busy">
               {{ form === 'remove' ? t('settings.app-lock.remove-pin') : t('settings.app-lock.save') }}
             </button>
-            <button type="button" class="al-btn" @click="form = null">{{ t('settings.app-lock.cancel') }}</button>
+            <button type="button" class="al-btn ghost" @click="form = null">{{ t('settings.app-lock.cancel') }}</button>
           </div>
         </form>
       </SettingsCard>
@@ -242,7 +243,7 @@ function idleLabel(minutes: number): string {
           :description="t('settings.app-lock.forgot-system')"
         >
           <template #control>
-            <button type="button" class="al-btn" data-testid="app-lock-reset-pin" @click="openForm('reset')">{{ t('settings.app-lock.reset-with-system') }}</button>
+            <button type="button" class="al-btn ghost" data-testid="app-lock-reset-pin" @click="openForm('reset')">{{ t('settings.app-lock.reset-with-system') }}</button>
           </template>
         </SettingRow>
         <SettingRow v-else :title="t('settings.app-lock.forgot-manual-title')" :description="t('settings.app-lock.forgot-manual')" />
@@ -252,37 +253,40 @@ function idleLabel(minutes: number): string {
 </template>
 
 <style scoped>
-.al-notice {
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-card);
-  background: var(--bg-subtle);
-  font-size: var(--font-row-desc);
-  color: var(--text-secondary);
-}
-.al-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.app-lock > .settings-notice { margin-bottom: var(--space-group); }
+.al-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .al-btn {
-  font-size: var(--font-2xs);
-  padding: 5px 12px;
+  border-radius: 5px;
+  font-size: var(--font-xs);
+  padding: 5px 10px;
+  cursor: pointer;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
-  cursor: pointer;
+  white-space: nowrap;
 }
-.al-btn:hover:not(:disabled) { border-color: var(--accent-emphasis); }
-.al-btn:disabled { opacity: 0.5; cursor: default; }
-.al-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis, #fff); }
-.al-select {
-  font-size: var(--font-2xs);
-  padding: 4px 8px;
+.al-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.al-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
+.al-btn.primary:hover:not(:disabled) { background: var(--accent-fg); border-color: var(--accent-fg); }
+.al-btn.primary:disabled { opacity: 1; background: transparent; border-color: var(--border-default); color: var(--text-secondary); }
+.al-btn.ghost { color: var(--text-secondary); }
+.al-btn.ghost:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text-primary); }
+.al-select,
+.al-form input {
+  background: var(--bg-base);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  background: var(--bg-inset);
   color: var(--text-primary);
+  font-size: var(--font-xs);
+  padding: 4px 8px;
   max-width: 100%;
 }
+.al-select:hover,
+.al-form input:hover { border-color: var(--border-strong); }
+.al-select:focus,
+.al-form input:focus { border-color: var(--accent-focus); }
+.al-select:focus:not(:focus-visible),
+.al-form input:focus:not(:focus-visible) { outline: none; }
 .al-form {
   display: flex;
   flex-direction: column;
@@ -291,18 +295,8 @@ function idleLabel(minutes: number): string {
 }
 .al-form label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: var(--font-row-desc); color: var(--text-secondary); }
 .al-form label span { min-width: 120px; }
-.al-form input {
-  width: 160px;
-  max-width: 100%;
-  font-size: var(--font-row-title);
-  letter-spacing: 0.15em;
-  padding: 5px 8px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-inset);
-  color: var(--text-primary);
-}
-.al-hint, .al-error { margin: 8px 0 0; font-size: var(--font-row-desc); color: var(--text-secondary); }
+.al-form input { width: 160px; letter-spacing: 0.15em; }
+.al-hint, .al-error { margin: 8px 0 0; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: 1.5; }
 .al-form .al-hint { margin: 0; }
-.al-error { color: var(--danger-fg); }
+.al-error { color: var(--danger-fg); overflow-wrap: anywhere; }
 </style>

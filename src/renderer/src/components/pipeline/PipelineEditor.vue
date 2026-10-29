@@ -14,8 +14,10 @@ import type { useBackend } from '../../composables/useBackend'
 import type { Role } from '../../composables/useRoles'
 import { usePipelineGraphEditor, type EditorError, type EditResult } from '../../composables/usePipelineGraphEditor'
 import {
+  edgeId,
   layerGraph,
   type GraphEdge,
+  type GraphEdgeKind,
   type GraphNode,
   type GraphOp,
   type GraphPosition,
@@ -153,6 +155,8 @@ function explain(err: EditorError): string {
   if (err.code === 'PIPELINE_RUNNING') return t('pipelineEditor.error.pipeline-running')
   if (err.code === 'GRAPH_INVALID') {
     const first = err.details?.[0] ?? err.message
+    if (/subpipeline cycle/.test(first)) return t('pipelineEditor.error.subpipeline-cycle', { detail: first })
+    if (/needs subpipeline\.pipelineId/.test(first)) return t('pipelineEditor.error.subpipeline-none')
     if (/cycle/.test(first)) return t('pipelineEditor.error.cycle')
     if (/upstream node/.test(first)) return t('pipelineEditor.error.reject-upstream')
     if (/duplicate edge/.test(first)) return t('pipelineEditor.error.duplicate-edge')
@@ -172,8 +176,27 @@ watch(() => editor.externalEdits.value, () => {
 
 // ── Building nodes ───────────────────────────────────────────────────────────
 let lastAgent = 'claude'
+/** Pipelines a new subpipeline node may call (every one but this), so it is
+ *  placed already pointing at one; the Inspector changes it. */
+const callable = ref<string[]>([])
+watch(() => props.pipelineId, async (self) => {
+  try {
+    const resp = await props.backend.send<{ pipelines?: Array<{ id: string }> }>('pipelines.list', {})
+    callable.value = (resp.payload?.pipelines ?? []).map((p) => p.id).filter((id) => id !== self)
+  } catch {
+    callable.value = []
+  }
+}, { immediate: true })
 function nodeFor(item: PaletteItem): GraphNode {
   const g = graph.value!
+  if (item.kind === 'subpipeline') {
+    // Placed calling the first other pipeline; the Inspector picks another.
+    // With no other pipeline the add is refused (error.subpipeline-none).
+    return {
+      id: freshNodeId(g, 'call'), kind: 'subpipeline', label: uniqueLabel(g, t('pipelineEditor.palette.subpipeline')),
+      position: { x: 0, y: 0 }, subpipeline: { pipelineId: callable.value[0] ?? '', task: '{{task}}', wait: true },
+    }
+  }
   if (item.kind === 'gate') {
     return { id: freshNodeId(g, 'gate'), kind: 'gate', label: uniqueLabel(g, t('pipelineEditor.palette.gate')), position: { x: 0, y: 0 }, gate: {} }
   }
@@ -285,6 +308,27 @@ const selectedRejectEdge = computed(() => {
   const e = graph.value?.edges.find((x) => x.id === selectedEdgeId.value)
   return e && e.kind === 'reject' ? e : null
 })
+/** A selected forward link out of a step: its kind (always / branch / on
+ *  error) and a branch's condition are edited in the same panel. */
+const selectedLinkEdge = computed(() => {
+  const e = graph.value?.edges.find((x) => x.id === selectedEdgeId.value)
+  return e && e.kind !== 'reject' && byId.value.get(e.from)?.kind === 'slot' ? e : null
+})
+const whenText = (e: GraphEdge): string =>
+  typeof e.when === 'string' ? e.when : e.when ? `${e.when.path} = ${JSON.stringify(e.when.equals)}` : ''
+/** Like setLoops: no edge update op, so the link is removed and re-added. */
+async function setLinkKind(e: GraphEdge, kind: GraphEdgeKind): Promise<void> {
+  if (kind === (e.kind ?? 'main')) return
+  const next: GraphEdge = { id: edgeId(e.from, e.to, kind), from: e.from, to: e.to, kind, ...(kind === 'branch' ? { when: 'default' } : {}) }
+  if (await apply(t('pipelineEditor.history.link-kind'), [{ op: 'remove_edge', id: e.id }, { op: 'add_edge', edge: next }])) {
+    selectedEdgeId.value = next.id
+  }
+}
+async function setLinkWhen(e: GraphEdge, text: string): Promise<void> {
+  const when = text.trim()
+  if (!when || when === whenText(e)) return
+  await apply(t('pipelineEditor.history.link-when'), [{ op: 'remove_edge', id: e.id }, { op: 'add_edge', edge: { ...e, when } }])
+}
 const loopsOf = (e: GraphEdge): number => e.maxLoops ?? DEFAULT_MAX_LOOPS
 const edgeEndName = (id: string): string => { const n = byId.value.get(id); return n ? nodeTitle(n) : id }
 /** The contract has no edge update, so a new budget is the same link removed
@@ -351,6 +395,18 @@ async function startRun(): Promise<void> {
 const decideGate = (nodeId: string, decision: 'approve' | 'reject', comment: string): Promise<void> =>
   command(decision === 'approve' ? 'ui.pipeline.gate_pass' : 'ui.pipeline.gate_reject', decision === 'reject' ? { nodeId, comment } : { nodeId })
 const restartFrom = (nodeId: string): Promise<void> => command('ui.pipeline.restart_from', { nodeId })
+/** Retry a failed step of a stopped run: a resume when it sits in the first
+ *  unfinished layer (the stage the run resumes at, panes and context kept),
+ *  otherwise a restart from it (earlier outputs reused). */
+function retryNode(nodeId: string): Promise<void> {
+  const g = graph.value
+  if (!g) return Promise.resolve()
+  const { layers } = layerGraph(g)
+  const at = layers.findIndex((l) => l.includes(nodeId))
+  const finished = (id: string): boolean => byId.value.get(id)?.kind !== 'slot' || ['done', 'skipped'].includes(props.run.nodes[id]?.status ?? '')
+  const firstOpen = layers.findIndex((l) => !l.every(finished))
+  return at >= 0 && at === firstOpen ? control('resume') : restartFrom(nodeId)
+}
 async function openPane(paneId: string): Promise<void> {
   await command('ui.pane.focus', { paneId })
   emit('leave')
@@ -627,6 +683,25 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
           </span>
           <button type="button" class="pe-text-btn" :disabled="locked" @click="removeEdge(selectedRejectEdge.id)">{{ t('pipelineEditor.edge.remove') }}</button>
         </div>
+        <div v-if="view === 'canvas' && selectedLinkEdge" class="pe-edge-panel" role="group" :aria-label="t('pipelineEditor.link.title')">
+          <span class="pe-edge-title">{{ t('pipelineEditor.link.title') }}</span>
+          <span class="pe-edge-desc" v-truncate>{{ t('pipelineEditor.link.desc', { from: edgeEndName(selectedLinkEdge.from), to: edgeEndName(selectedLinkEdge.to) }) }}</span>
+          <select
+            class="pe-link-input" :value="selectedLinkEdge.kind ?? 'main'" :disabled="locked" :aria-label="t('pipelineEditor.link.kind')"
+            @change="setLinkKind(selectedLinkEdge, ($event.target as HTMLSelectElement).value as GraphEdgeKind)"
+          >
+            <option value="main">{{ t('pipelineEditor.link.kind-main') }}</option>
+            <option value="branch">{{ t('pipelineEditor.link.kind-branch') }}</option>
+            <option value="error">{{ t('pipelineEditor.link.kind-error') }}</option>
+          </select>
+          <input
+            v-if="selectedLinkEdge.kind === 'branch'" :key="selectedLinkEdge.id" class="pe-link-input" type="text"
+            :value="whenText(selectedLinkEdge)" :readonly="typeof selectedLinkEdge.when === 'object'" :disabled="locked"
+            :placeholder="t('pipelineEditor.link.when-placeholder')" :aria-label="t('pipelineEditor.link.when')"
+            @change="setLinkWhen(selectedLinkEdge, ($event.target as HTMLInputElement).value)"
+          />
+          <button type="button" class="pe-text-btn" :disabled="locked" @click="removeEdge(selectedLinkEdge.id)">{{ t('pipelineEditor.link.remove') }}</button>
+        </div>
         <div v-if="stepCount === 0 && !locked && view === 'canvas'" class="pe-empty" aria-live="polite">
           <p class="pe-empty-title">{{ t('pipelineEditor.state.empty-title') }}</p>
           <p>{{ t('pipelineEditor.state.empty-body') }}</p>
@@ -642,7 +717,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
           :workspace-path="workspacePath"
           @edit="editFromInspector" @stage-meta="editStageMeta" @remove="removeNode"
           @close="select(null); selectedLayer = null"
-          @open-pane="openPane" @restart-from="restartFrom" @gate="decideGate"
+          @open-pane="openPane" @restart-from="restartFrom" @retry-node="retryNode" @gate="decideGate"
         />
       </Transition>
     </div>
@@ -884,6 +959,16 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
 }
 .pe-edge-title { font-weight: 600; color: var(--done-fg); white-space: nowrap; }
 .pe-edge-desc { color: var(--text-secondary); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pe-link-input {
+  font: inherit;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  max-width: 200px;
+}
+.pe-link-input:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: -1px; }
 .pe-stepper { display: inline-flex; align-items: center; border: 1px solid var(--border-default); border-radius: var(--radius-control); overflow: hidden; }
 .pe-stepper button {
   width: 24px;

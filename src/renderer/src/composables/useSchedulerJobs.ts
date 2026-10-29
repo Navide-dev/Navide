@@ -90,6 +90,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   function targetLabel(job: SchedulerJob): string {
     if (isSystem(job)) return t('scheduler.system.managed-by')
     const a = job.action
+    if (a.kind === 'pipeline_start') return t('scheduler.pipeline-target', { name: a.pipeline_name || a.pipeline_id || '' })
     const name = a.pane_name || shortId(a.pane_id)
     return a.pane_id
       ? t('scheduler.target-with-id', { name, id: shortId(a.pane_id) })
@@ -119,6 +120,13 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     if (!isAgent(job.owner)) return ''
     const owner = job.owner as JobOwner
     return owner.kind === 'pane' ? t('scheduler.owner.agent', { name: whoLabel(owner) }) : whoLabel(owner)
+  }
+
+  /** Who created the job, for a job that starts a pipeline even when it is
+   *  the user's own (it spends quota unattended); ownerLabel otherwise. */
+  function creatorLabel(job: SchedulerJob): string {
+    if (job.action.kind !== 'pipeline_start') return ownerLabel(job)
+    return ownerLabel(job) || t('scheduler.owner.user')
   }
 
   function ownerTitle(job: SchedulerJob): string {
@@ -313,6 +321,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     systemWorkspace,
     backoffLabel,
     ownerLabel,
+    creatorLabel,
     ownerTitle,
     updatedByLabel,
     expiryLabel,

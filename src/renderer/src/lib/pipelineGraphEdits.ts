@@ -24,6 +24,7 @@ export const NODE_SIZE: Record<GraphNode['kind'], { w: number; h: number }> = {
   trigger: { w: 168, h: 56 },
   slot: { w: 232, h: 76 },
   gate: { w: 196, h: 68 },
+  subpipeline: { w: 232, h: 76 },
 }
 
 const LAYER_DX = 300

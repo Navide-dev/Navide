@@ -150,8 +150,15 @@ ordinary words: Resource Manager is de-DE "Ressourcenverwaltung", ja-JP
 "リソースマネージャー"; Memory (the CLI instruction files) is de-DE
 "Gedächtnis", ja-JP "メモリ".
 
-**Kept in English in de-DE:** turn (an agent's turn, as in Turn Stats; the
-Turn Stats table's "Turns" column too), plus the words zh-TW and zh-CN keep.
+**de-DE renderings (the user's call, 2026-10-29):** pane "Bereich" (der
+Bereich; "Claude-Bereich", "Terminalbereich"), turn "Runde" ("Rundenerkennung",
+"Rundenende"). The feature name Turn Stats and its table's columns stay
+English. Otherwise de-DE keeps in English the words zh-TW and zh-CN keep.
+
+**ru-RU renderings (the user's call, 2026-10-29):** agent "агент", pane
+"панель", session "сеанс" (never "сессия"), skill "навык", workspace "рабочая
+область", turn "ход", declined like any Russian noun. hook, token,
+worktree, prompt and the feature names above stay English.
 
 ## What stays as it is
 

@@ -1047,7 +1047,7 @@ const resourceRows = computed(() => [
   flex-direction: column;
   gap: 26px;
   color: var(--text-primary);
-  max-width: 78ch;
+  max-width: var(--settings-page-max);
 }
 
 .syh-intro {

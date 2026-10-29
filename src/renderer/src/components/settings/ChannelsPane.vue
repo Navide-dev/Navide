@@ -26,6 +26,7 @@ import ChannelChatBindings from './ChannelChatBindings.vue'
 import SettingsSection from './SettingsSection.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingRow from './SettingRow.vue'
+import SettingsNotice from './SettingsNotice.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 
 /**
@@ -596,7 +597,15 @@ function formatTime(ts: number | null | undefined): string {
               <div class="ch-row-desc">{{ t(`channels.desc.${spec.id}`) }}</div>
               <div v-if="isConfigured(spec.id) && store.overviewLoaded.value" class="ch-row-summary" data-testid="channel-platform-summary">{{ platformSummary(spec.id) }}</div>
             </div>
+            <!-- A platform with no bot yet: its status and Connect sit on the
+                 platform's own line, right of the name and description. -->
             <div class="ch-row-actions">
+              <template v-for="bot in botsOf(spec.id).filter((b) => !b.isNew && !b.configured)" :key="`head-${bot.key}`">
+                <span class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
+                <button type="button" class="ch-btn ghost sm" data-testid="channel-manage" @click="toggleExpanded(spec, bot)">
+                  {{ t('channels.connect') }}
+                </button>
+              </template>
               <button
                 v-if="isConfigured(spec.id) && !adding[spec.id]"
                 type="button"
@@ -608,20 +617,33 @@ function formatTime(ts: number | null | undefined): string {
             </div>
           </div>
 
-          <p v-if="botsWithoutManageMode(spec.id) && !managedHintDismissed" class="ch-platform-hint" data-testid="channel-managed-enable">
-            <span aria-hidden="true">ⓘ</span>
-            <span>{{ t('channels.managed.enable-hint', { n: botsWithoutManageMode(spec.id) }) }}</span>
-            <a
-              class="ch-setup-link"
-              :href="BOTFATHER_APP_URL"
-              data-testid="channel-managed-botfather"
-              @click.prevent="openSetupLink(BOTFATHER_APP_URL)"
-            >{{ t('channels.managed.open-botfather') }}</a>
-            <button type="button" class="ch-link-btn" data-testid="channel-managed-dismiss" @click="dismissManagedHint">{{ t('channels.managed.dismiss') }}</button>
-          </p>
+          <SettingsNotice
+            v-if="botsWithoutManageMode(spec.id) && !managedHintDismissed"
+            class="ch-platform-hint"
+            tone="info"
+            data-testid="channel-managed-enable"
+            :message="t('channels.managed.enable-hint', { n: botsWithoutManageMode(spec.id) })"
+          >
+            <template #action>
+              <a
+                class="ch-setup-link"
+                :href="BOTFATHER_APP_URL"
+                data-testid="channel-managed-botfather"
+                @click.prevent="openSetupLink(BOTFATHER_APP_URL)"
+              >{{ t('channels.managed.open-botfather') }}</a>
+              <button type="button" class="ch-link-btn" data-testid="channel-managed-dismiss" @click="dismissManagedHint">{{ t('channels.managed.dismiss') }}</button>
+            </template>
+          </SettingsNotice>
 
-          <div v-for="bot in botsOf(spec.id)" :key="bot.key" class="ch-bot" :data-account="bot.account" data-testid="channel-bot">
-            <div class="ch-bot-head">
+          <div
+            v-for="bot in botsOf(spec.id)"
+            :key="bot.key"
+            class="ch-bot"
+            :class="{ 'ch-bot--bare': !bot.isNew && !bot.configured }"
+            :data-account="bot.account"
+            data-testid="channel-bot"
+          >
+            <div v-if="bot.isNew || bot.configured" class="ch-bot-head">
               <div class="ch-row-text">
                 <div class="ch-row-title">
                   <template v-if="bot.configured">
@@ -641,7 +663,7 @@ function formatTime(ts: number | null | undefined): string {
                     <span v-else class="ch-bot-name" data-testid="channel-bot-name">{{ botLabel(bot) }}</span>
                   </template>
                   <span v-else-if="bot.isNew" class="ch-bot-name">{{ t('channels.bot.new') }}</span>
-                  <span class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
+                  <span v-if="bot.isNew || bot.configured" class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
                 </div>
                 <div
                   v-if="bot.status.last_error"
@@ -659,9 +681,6 @@ function formatTime(ts: number | null | undefined): string {
                   :aria-label="t('channels.enable-platform', { platform: `${platformName(spec.id)} ${botLabel(bot)}` })"
                   @update:model-value="(v: boolean) => run(bot.key, () => store.setEnabled(spec.id, v, bot.account))"
                 />
-                <button v-if="!bot.isNew && !bot.configured" type="button" class="ch-btn ghost sm" data-testid="channel-manage" @click="toggleExpanded(spec, bot)">
-                  {{ t('channels.connect') }}
-                </button>
                 <div v-if="bot.configured" class="ch-menu-wrap">
                   <button
                     type="button"
@@ -716,7 +735,7 @@ function formatTime(ts: number | null | undefined): string {
               <p v-if="managedWaiting[bot.key]" class="ch-form-hint" data-testid="channel-managed-waiting">{{ t('channels.managed.waiting') }}</p>
               <template v-else-if="managedAsk === bot.key && bot.status.can_manage_bots">
                 <p class="ch-managed-title" data-testid="channel-managed-title">{{ t('channels.managed.title', { manager: bot.status.identity }) }}</p>
-                <p class="ch-managed-warn" role="note" data-testid="channel-managed-disclose">{{ t('channels.managed.disclose', { manager: bot.status.identity }) }}</p>
+                <SettingsNotice class="ch-managed-warn" tone="warning" role="note" data-testid="channel-managed-disclose" :message="t('channels.managed.disclose', { manager: bot.status.identity })" />
                 <div class="ch-form-actions">
                   <button type="button" class="ch-btn ghost sm" data-testid="channel-managed-cancel" @click="managedAsk = null">{{ t('channels.cancel') }}</button>
                   <button type="button" class="ch-btn primary sm" :disabled="busy" data-testid="channel-managed-confirm" @click="createManaged(bot)">{{ t('channels.managed.confirm') }}</button>
@@ -865,7 +884,7 @@ function formatTime(ts: number | null | undefined): string {
 <style scoped>
 .channels-pane { display: flex; flex-direction: column; }
 .ch-list-error { margin-top: 8px; }
-.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); word-break: break-word; }
+.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 
 /* Platform rows: same inset and type scale as SettingRow. */
 .ch-row { padding: var(--space-row-y) var(--space-row-x); }
@@ -882,7 +901,7 @@ function formatTime(ts: number | null | undefined): string {
   border: 1px solid var(--border-default);
   background: var(--bg-muted);
   color: var(--text-secondary);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -893,19 +912,8 @@ function formatTime(ts: number | null | undefined): string {
 .ch-row-name { font-size: var(--font-row-title); font-weight: 600; color: var(--text-bright); }
 .ch-row-desc { font-size: var(--font-row-desc); color: var(--text-secondary); }
 .ch-row-summary { font-size: var(--font-2xs); color: var(--text-muted); }
-.ch-platform-hint {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 0 40px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  background: var(--bg-muted);
-  font-size: var(--font-row-desc);
-  color: var(--text-secondary);
-}
+/* The managed-bots hint is SettingsNotice, indented under the platform name. */
+.ch-platform-hint { margin: 10px 0 0 40px; }
 .ch-platform-hint .ch-setup-link { align-self: auto; }
 
 /* A bot's ⋯ menu: the actions used less often than its switch. */
@@ -943,7 +951,7 @@ function formatTime(ts: number | null | undefined): string {
 .ch-menu > button:hover:not(:disabled) { background: var(--bg-muted); }
 .ch-menu > button:disabled { opacity: 0.55; cursor: not-allowed; }
 .ch-menu > button.danger { color: var(--danger-fg); }
-.ch-menu-note { font-size: var(--font-3xs); color: var(--text-secondary); }
+.ch-menu-note { font-size: var(--font-2xs); color: var(--text-secondary); }
 .ch-row-error {
   font-size: var(--font-row-desc);
   color: var(--text-secondary);
@@ -951,7 +959,7 @@ function formatTime(ts: number | null | undefined): string {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .ch-row-error.warn { color: var(--attention-fg); }
 .ch-row-error.bad { color: var(--danger-fg); }
@@ -959,6 +967,9 @@ function formatTime(ts: number | null | undefined): string {
 
 /* Bots under a platform, aligned with the platform's text. */
 .ch-bot { margin: 8px 0 0 40px; }
+/* A bot not set up yet has no line of its own (its status and Connect are on
+   the platform line); only its connection form, once opened, shows here. */
+.ch-bot--bare { margin-top: 0; }
 .ch-bot + .ch-bot { padding-top: 8px; border-top: 1px solid var(--border-muted); }
 .ch-bot-head { display: flex; align-items: center; gap: 12px; }
 .ch-bot-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
@@ -968,19 +979,24 @@ function formatTime(ts: number | null | undefined): string {
 .ch-remove-ask { color: var(--danger-fg); }
 
 /* Status pill: same shape as the account badges on the Accounts page. */
+/* As tall as the Connect button beside it (28px), so the two read as one row. */
 .ch-pill {
   flex-shrink: 0;
-  font-size: var(--font-3xs);
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--control-h-md);
+  font-size: var(--font-xs);
   font-weight: 600;
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 0 10px;
   color: var(--text-secondary);
   background: var(--bg-muted);
   border: 1px solid var(--border-default);
   white-space: nowrap;
 }
 .ch-pill.ok { color: var(--success-fg); background: var(--success-subtle); border-color: var(--success-muted); }
-.ch-pill.warn { color: var(--attention-fg); background: var(--attention-subtle); border-color: var(--attention-muted); }
+.ch-pill.warn { color: var(--attention-on-subtle); background: var(--attention-subtle); border-color: var(--attention-muted); }
 .ch-pill.bad { color: var(--danger-fg); background: var(--danger-subtle); border-color: var(--danger-muted); }
 .ch-pill.pending { color: var(--accent-fg); background: var(--accent-subtle); border-color: var(--accent-muted); }
 
@@ -1000,7 +1016,8 @@ function formatTime(ts: number | null | undefined): string {
   padding: 5px 8px;
 }
 .ch-input:hover { border-color: var(--border-strong); }
-.ch-input:focus { outline: none; border-color: var(--accent-focus); }
+.ch-input:focus { border-color: var(--accent-focus); }
+.ch-input:focus:not(:focus-visible) { outline: none; }
 .ch-form-actions { display: flex; align-items: center; gap: 8px; }
 .ch-setup-link { align-self: flex-start; font-size: var(--font-row-desc); color: var(--accent-fg); }
 .ch-advanced > summary { cursor: pointer; font-size: var(--font-2xs); color: var(--text-secondary); }
@@ -1015,16 +1032,7 @@ function formatTime(ts: number | null | undefined): string {
 /* Creating a bot through a managing Telegram bot. */
 .ch-managed { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 8px 0 0; }
 .ch-managed-title { margin: 0; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
-.ch-managed-warn {
-  margin: 0;
-  padding: 6px 10px;
-  font-size: var(--font-row-desc);
-  line-height: 1.4;
-  color: var(--text-primary);
-  background: var(--attention-subtle);
-  border: 1px solid var(--attention-muted);
-  border-radius: var(--radius-sm);
-}
+.ch-managed-warn { margin: 0; }
 
 /* Buttons: the Accounts page's button set. */
 .ch-btn {
@@ -1037,7 +1045,8 @@ function formatTime(ts: number | null | undefined): string {
   color: var(--text-primary);
   white-space: nowrap;
 }
-.ch-btn.sm { font-size: var(--font-2xs); padding: 3px 8px; }
+/* Small in type, not in reach: Connect and the row actions keep a 28px target. */
+.ch-btn.sm { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: var(--control-h-md); font-size: var(--font-xs); padding: 0 10px; }
 .ch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ch-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
 .ch-btn.primary:hover:not(:disabled) { background: var(--accent-fg); border-color: var(--accent-fg); }
@@ -1052,7 +1061,7 @@ function formatTime(ts: number | null | undefined): string {
 .ch-link-title { font-size: var(--font-row-desc); font-weight: 600; color: var(--text-bright); }
 .ch-link-desc { margin: 0; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: 1.4; }
 .ch-link-summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--font-row-desc); color: var(--text-secondary); }
-.ch-link-error { color: var(--danger-fg); word-break: break-word; }
+.ch-link-error { color: var(--danger-fg); overflow-wrap: anywhere; }
 
 /* Pairing / allowlist rows. */
 .ch-section-hint { margin: 0 0 8px; font-size: var(--font-row-desc); color: var(--text-secondary); }

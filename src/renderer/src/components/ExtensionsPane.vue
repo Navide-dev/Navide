@@ -36,6 +36,7 @@ import { disclosureClauses } from '../lib/disclosureText'
 import { leadSentence } from '../lib/leadSentence'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { DisclosureRiskLevel } from '../../../shared/pluginDisclosure'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 
 const { t, locale } = useI18n()
 
@@ -144,14 +145,20 @@ function factoryWarnings(p: FactoryRow): string[] {
 const busy = ref(false)
 const error = ref('')
 // A failed inventory read, shown apart from the action error it may follow.
-const inventoryError = ref('')
+// It keeps its i18n key and is translated when shown, so a language change
+// never leaves it in the previous language.
+const inventoryError = ref<{ key: string; params: Record<string, unknown> } | null>(null)
+// Until the first read answers, the list says it is loading (or why it is not
+// there) instead of showing an empty page.
+const inventoryLoaded = ref(false)
 
 async function reloadInventory(): Promise<void> {
   try {
     await refreshInstalled()
-    inventoryError.value = ''
+    inventoryError.value = null
+    inventoryLoaded.value = true
   } catch (err) {
-    inventoryError.value = t('settings.extensions.inventoryRefreshFailed', { error: ipcErrorMessage(err) })
+    inventoryError.value = { key: 'settings.extensions.inventoryRefreshFailed', params: { error: ipcErrorMessage(err) } }
   }
 }
 // Updates for installed Registry packages; the Update button reuses the
@@ -164,7 +171,7 @@ const updateFlow = usePluginInstallFlow()
 const notify = useNotify()
 // D-f: rows whose permissions section is open; the activity panel (and its
 // reads) exists only then.
-const emit = defineEmits<{ openDisclosureOverview: [id?: string]; developerOn: [switches: string[]] }>()
+const emit = defineEmits<{ openDisclosureOverview: [id?: string]; developerOn: [switches: string[]]; openMarketplace: [] }>()
 // Settings shows this pane on two of the Navide Plugins pages: the plugins
 // themselves, and Developer Mode with native backends. Everything stays
 // mounted; the page only decides what is shown.
@@ -710,7 +717,7 @@ watch(installed, () => {
 <template>
   <div class="extensions-pane">
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
-    <p v-if="inventoryError" class="ext-error" role="alert">{{ inventoryError }}</p>
+    <p v-if="inventoryError && inventoryLoaded" class="ext-error" role="alert">{{ $t(inventoryError.key, inventoryError.params) }}</p>
     <p v-if="updateFlow.error.value" class="ext-error" role="alert">{{ updateFlow.error.value }}</p>
     <!-- Card K4: shown above the lists for as long as Developer Mode is on. -->
     <p v-if="developerMode.enabled" class="ext-devmode-banner ext-risk-banner" role="status">
@@ -759,7 +766,7 @@ watch(installed, () => {
          with its permissions and disclosure, on the right. All cards stay in
          the page (only the selected one is shown), so nothing a card offers
          depends on the selection. -->
-    <div v-show="props.page === 'plugins'" class="ext-md-toolbar">
+    <div v-show="props.page === 'plugins' && !(inventoryLoaded && factoryRows.length + packs.length + nonFactoryInstalled.length === 0)" class="ext-md-toolbar">
       <!-- Updates are for installed packages; with none installed the line
            would contradict the empty list. -->
       <span v-if="pluginUpdates.count.value && nonFactoryInstalled.length" class="ext-updates-summary" role="status">
@@ -775,7 +782,35 @@ watch(installed, () => {
         {{ $t('settings.extensions.localInstall.button') }}
       </button>
     </div>
-    <div v-show="props.page === 'plugins'" class="ext-md">
+    <p v-if="!inventoryLoaded && !inventoryError" v-show="props.page === 'plugins'" class="ext-inventory-state nv-loading" role="status">
+      {{ $t('label.loading') }}
+    </p>
+    <div v-else-if="!inventoryLoaded && inventoryError" v-show="props.page === 'plugins'" class="ext-inventory-state nv-empty" role="alert">
+      <p class="ext-inventory-state-text">{{ $t(inventoryError.key, inventoryError.params) }}</p>
+      <button type="button" class="ext-inventory-retry nv-btn nv-btn--sm" @click="reloadInventory">
+        {{ $t('settings.extensions.marketplace.retry') }}
+      </button>
+    </div>
+    <!-- Nothing bundled and nothing installed: one full-width empty state with
+         the page's actions, not a list beside a blank detail pane. -->
+    <SettingsEmptyState
+      v-if="inventoryLoaded && factoryRows.length + packs.length + nonFactoryInstalled.length === 0"
+      v-show="props.page === 'plugins'"
+      class="ext-inventory-empty"
+      :message="$t('settings.extensions.empty')"
+    >
+      <button
+        class="ext-install-file nv-btn nv-btn--primary nv-btn--sm"
+        :disabled="busy || updateFlow.busy.value"
+        @click="updateFlow.installFromFile()"
+      >
+        {{ $t('settings.extensions.localInstall.button') }}
+      </button>
+      <button type="button" class="ext-browse-marketplace nv-btn nv-btn--sm" @click="emit('openMarketplace')">
+        {{ $t('settings.extensions.browseMarketplace') }}
+      </button>
+    </SettingsEmptyState>
+    <div v-show="props.page === 'plugins' && inventoryLoaded && factoryRows.length + packs.length + nonFactoryInstalled.length > 0" class="ext-md">
       <div class="ext-md-list">
         <section class="ext-section" data-settings-section="extensions-bundled">
           <h3 class="ext-section-title">
@@ -894,7 +929,7 @@ watch(installed, () => {
               </button>
             </li>
           </ul>
-          <p v-if="!nonFactoryInstalled.length" class="ext-empty nv-empty">{{ $t('settings.extensions.empty') }}</p>
+          <SettingsEmptyState v-if="!nonFactoryInstalled.length" class="ext-empty" :message="$t('settings.extensions.empty')" />
         </section>
       </div>
       <div class="ext-md-detail">
@@ -1354,7 +1389,7 @@ watch(installed, () => {
       </ul>
     </section>
 
-    <div v-show="props.page === 'developer'">
+    <div v-show="props.page === 'developer'" class="ext-devmode-native">
       <NativeBackendPanel @on="(switches) => (nativeSwitchesOn = switches)" />
     </div>
 
@@ -1433,10 +1468,6 @@ watch(installed, () => {
 /* In the list the group names are labels, a tier below the page blocks. */
 .ext-md-list .ext-section-title {
   margin: 0 var(--space-2) var(--space-1);
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  letter-spacing: 0;
 }
 .ext-md-rows {
   display: grid;
@@ -1576,7 +1607,7 @@ watch(installed, () => {
 }
 .ext-badge.ext-md-risk--medium {
   background: var(--attention-subtle);
-  color: var(--attention-fg);
+  color: var(--attention-on-subtle);
 }
 .ext-badge.ext-md-risk--high {
   background: var(--warning-fg);
@@ -1588,9 +1619,6 @@ watch(installed, () => {
 }
 .ext-md-list .ext-empty {
   margin: 0 var(--space-2);
-  padding: var(--space-3);
-  font-size: var(--font-xs);
-  text-align: center;
 }
 .ext-md-detail {
   align-self: stretch;
@@ -1679,7 +1707,7 @@ watch(installed, () => {
   color: var(--danger-bright);
   font-size: var(--font-xs);
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .ext-section {
   margin-bottom: var(--space-6);
@@ -1692,10 +1720,12 @@ watch(installed, () => {
   align-items: center;
   gap: var(--space-2);
   margin: 0 0 var(--space-3);
-  color: var(--text-bright);
-  font-size: var(--font-lg);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  /* Section headings share SettingsSection's small uppercase label. */
+  color: var(--text-secondary);
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 /* Row actions get the regular control height: they are the main targets here. */
 .extensions-pane .nv-btn {
@@ -1719,6 +1749,11 @@ watch(installed, () => {
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: var(--risk-subtle);
   color: var(--risk-fg);
+}
+/* The Developer page is prose and switches: it takes the shared measure. */
+.ext-devmode,
+.ext-devmode-native {
+  max-width: var(--settings-page-max);
 }
 .ext-devmode .ext-load-folder {
   margin-top: var(--space-3);
@@ -1756,7 +1791,7 @@ watch(installed, () => {
 }
 .ext-installed {
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
   transition: border-color var(--motion-fast) var(--ease-out);
@@ -2253,10 +2288,15 @@ watch(installed, () => {
   font-size: var(--font-xs);
   cursor: pointer;
 }
-.ext-empty {
-  color: var(--text-secondary);
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
+/* The first inventory read is out or failed: one line, and Retry under it. */
+.ext-inventory-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ext-inventory-state-text {
+  margin: 0;
 }
 /* Long setting descriptions keep a readable line length. */
 :deep(.setting-row-desc) {

@@ -33,7 +33,7 @@ describe('SettingsModal nav groups', () => {
   })
 
   it('keeps the update badge on Navide Plugins', () => {
-    expect(source).toMatch(/:active="activeTab === 'extensions'" :badge="pluginUpdates\.count\.value"/)
+    expect(source).toMatch(/:active="activeTab === 'extensions'" :expanded="activeTab === 'extensions'" foldable :badge="pluginUpdates\.count\.value"/)
   })
 
   it('files the search hits of the moved pages under the new group', () => {

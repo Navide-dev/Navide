@@ -180,6 +180,21 @@ function isPluginSwitchNotice(payload: unknown): payload is PluginSwitchNotice {
       nullableString(agent.paneId) && nullableString(agent.paneName) && nullableString(agent.workspace)))
 }
 
+/** H1: a switch between installed versions drains the plugin's views now
+ *  ('start') or has settled, switched or not ('end'). */
+export interface PluginSwitchingNotice {
+  pluginId: string
+  toVersion: string
+  phase: 'start' | 'end'
+}
+
+function isPluginSwitchingNotice(payload: unknown): payload is PluginSwitchingNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  return typeof record.pluginId === 'string' && typeof record.toVersion === 'string' &&
+    (record.phase === 'start' || record.phase === 'end')
+}
+
 function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[] {
   return Array.isArray(payload) && payload.every((item) => {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) return false
@@ -724,6 +739,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }
     ipcRenderer.on('plugins:switched', listener)
     return () => ipcRenderer.removeListener('plugins:switched', listener)
+  },
+  // H1: a switch between installed versions drains the plugin's views, then settles.
+  onPluginSwitching: (cb: (notice: PluginSwitchingNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginSwitchingNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:switching', listener)
+    return () => ipcRenderer.removeListener('plugins:switching', listener)
   },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))

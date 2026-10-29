@@ -38,7 +38,9 @@ from . import (
     native_mcp,
     native_memory,
     osplat,
+    pane_config_fingerprint,
     pane_policy,
+    pipeline_liveness,
     quota_failover,
     remote_roster,
     server_link,
@@ -6791,6 +6793,47 @@ async def pipelines_create(session: "Session", msg_id: str, msg_type: str, paylo
     }))
 
 
+@handler("pipelines.import_n8n")
+async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Convert an n8n workflow (dry_run: report only) or import it as a new
+    pipeline. Same conversion and storage as the MCP tool pipeline_import_n8n."""
+    from . import app
+    from .n8n_import import N8nImportError, import_into_store
+
+    dry_run = payload.get("dry_run", True) is not False
+    ws_path = payload.get("workspace_path", "") or ""
+    if not dry_run and ws_path:
+        proj = app.project_store.peek(ws_path)
+        if proj and proj.state == "running":
+            await session.send_json(
+                make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot import a pipeline while a project is running")
+            )
+            return
+    try:
+        out = await asyncio.to_thread(
+            import_into_store,
+            app.stages_store,
+            payload.get("json", ""),
+            dry_run=dry_run,
+            default_agent=str(payload.get("default_agent") or "claude"),
+            name=str(payload.get("name") or ""),
+        )
+    except N8nImportError as exc:
+        code = {"too-large": "N8N_TOO_LARGE", "store-refused": "N8N_REFUSED"}.get(exc.reason, "N8N_INVALID")
+        await session.send_json(make_error(msg_id, msg_type, code, str(exc),
+                                           {"reason": exc.reason, "params": exc.params}))
+        return
+    if not dry_run:
+        out["pipelines"] = app.stages_store.list_pipelines()
+    await session.send_json(make_response(msg_id, msg_type, out))
+    if not dry_run:
+        await app.broadcast(make_event("pipelines.changed", {
+            "pipelines": out["pipelines"],
+            "active_pipeline_id": app.stages_store.get_active_pipeline_id(),
+            "reason": "import",
+        }))
+
+
 @handler("pipelines.rename")
 async def pipelines_rename(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -6817,7 +6860,7 @@ async def pipelines_delete(session: "Session", msg_id: str, msg_type: str, paylo
     ws_path = payload.get("workspace_path", "") or ""
     if ws_path:
         proj = app.project_store.peek(ws_path)
-        if proj and proj.state == "running":
+        if pipeline_liveness.run_is_live(proj):
             await session.send_json(
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot delete pipeline while a project is running")
             )
@@ -6841,7 +6884,7 @@ async def pipelines_set_active(session: "Session", msg_id: str, msg_type: str, p
     ws_path = payload.get("workspace_path", "") or ""
     if ws_path:
         proj = app.project_store.peek(ws_path)
-        if proj and proj.state == "running":
+        if pipeline_liveness.run_is_live(proj):
             await session.send_json(
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot switch pipeline while a project is running")
             )
@@ -6907,12 +6950,15 @@ def _stage_edit_hits_running_pipeline(ws_path: str, pipeline_id: str | None) -> 
     if not ws_path:
         return False
     proj = app.project_store.peek(ws_path)
-    if not proj or proj.state != "running":
+    if not pipeline_liveness.run_is_live(proj):
         return False
     if not pipeline_id:
         # No id means "the active pipeline", which is what the run uses.
         return True
-    return pipeline_id == (proj.pipeline_id or app.stages_store.get_active_pipeline_id())
+    # A parent suspended at a sub-pipeline resumes on its own definition, so
+    # it is as much in use as the child's.
+    parents = {str((f.get("run") or {}).get("pipeline_id") or "") for f in getattr(proj, "run_stack", None) or []}
+    return pipeline_id == (proj.pipeline_id or app.stages_store.get_active_pipeline_id()) or pipeline_id in parents
 
 
 async def _broadcast_pipeline_summaries(reason: str) -> None:
@@ -8436,7 +8482,8 @@ async def _terminal_create_impl(
     for key in ("quota_transaction_id", "quota_original_pane_id", "credential_epoch",
                 "credential_store_verified", "credential_store_id", "credential_store_error",
                 "credential_launch_term_id", "guard_pane_token",
-                ACCOUNT_DIR_METADATA_KEY, "account_dir_login"):
+                ACCOUNT_DIR_METADATA_KEY, "account_dir_login",
+                pane_config_fingerprint.METADATA_KEY):
         metadata.pop(key, None)
     agent_key = payload.get("agent_key") or ""
     # The window's per-vendor env settings, first in the chain on purpose: the
@@ -8792,6 +8839,12 @@ async def _terminal_create_impl(
         from .plugins.builtin.navide_skills import skills_wiring
 
         wiring_warnings.extend(skills_wiring.take_spawn_warnings(str(payload.get("pane_id") or "")))
+        # What this pane loaded, so a later MCP or skills change can name it
+        # stale (terminal.config_status). Read-only; the command is untouched.
+        if agent_key:
+            metadata[pane_config_fingerprint.METADATA_KEY] = await asyncio.to_thread(
+                pane_config_fingerprint.fingerprint, agent_key
+            )
     # Give the pane whatever its push channel needs (a port to serve on, a file
     # to watch) so a message can later reach it without being typed in. Last,
     # so the flags it adds cannot be displaced by MCP or skills wiring; a CLI
@@ -9874,6 +9927,41 @@ async def terminal_dock_retire(session: "Session", msg_id: str, msg_type: str, p
     await session.send_json(make_response(msg_id, msg_type, {}))
 
 
+@handler("terminal.config_status")
+async def terminal_config_status(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Which of this window's panes started before an MCP or skills change.
+
+    Disclosure only: the answer lists stale parts per terminal and the window
+    offers the user a rebuild; nothing is restarted here.
+    """
+    from . import app
+
+    ids = payload.get("terminal_session_ids") if isinstance(payload, dict) else None
+    if not isinstance(ids, list):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "terminal_session_ids must be a list")
+        )
+        return
+    stored_sessions = session.terminals._sessions  # noqa: SLF001
+    current: dict[str, dict[str, str | None]] = {}
+    stale: list[dict[str, Any]] = []
+    for tid in (str(x) for x in ids):
+        stored = stored_sessions.get(tid)
+        if stored is None or stored.closed or app._PTY_OWNERS.get(tid) is not session:
+            continue
+        recorded = stored.metadata.get(pane_config_fingerprint.METADATA_KEY)
+        if not isinstance(recorded, dict) or not stored.agent_key:
+            continue
+        if stored.agent_key not in current:
+            current[stored.agent_key] = await asyncio.to_thread(
+                pane_config_fingerprint.fingerprint, stored.agent_key
+            )
+        parts = pane_config_fingerprint.stale_parts(recorded, current[stored.agent_key])
+        if parts:
+            stale.append({"terminal_session_id": tid, "pane_id": stored.pane_id, "parts": parts})
+    await session.send_json(make_response(msg_id, msg_type, {"stale": stale}))
+
+
 @handler("terminal.reattach")
 async def terminal_reattach(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -10893,33 +10981,172 @@ def _mirror_pipeline_state(project: "Project") -> None:
     )
 
 
+@handler("pipeline.suspend")
+async def pipeline_suspend(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The run reached a subpipeline node: suspend it (run_stack) so the
+    window can start the child run in this workspace."""
+    from . import app
+    from .guard.taint import pipeline_run_taint
+
+    ws = payload["workspace_path"]
+    try:
+        project, frame = app.project_store.suspend_for_child(
+            ws,
+            node_id=str(payload.get("node_id") or ""),
+            next_index=int(payload.get("next_index", 0) or 0),
+            pipeline_name=str(payload.get("pipeline_name") or ""),
+            child_pipeline_id=str(payload.get("child_pipeline_id") or ""),
+            taint=pipeline_run_taint(ws),
+        )
+    except ValueError as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    app.tokens_store.suspend_run(ws)
+    _mirror_pipeline_state(project)
+    resp = app._project_payload(project)
+    resp["frame_id"] = frame["id"]
+    await session.send_json(make_response(msg_id, msg_type, resp))
+
+
+@handler("pipeline.child_finished")
+async def pipeline_child_finished(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The child run ended: restore its parent (run_stack pop) with the
+    subpipeline node done or failed. {popped: false} when no parent waits."""
+    from . import app
+    from .guard.taint import pipeline_run_resumed, pipeline_run_taint, restore_pipeline_run_taint
+
+    ws = payload["workspace_path"]
+    child = app.project_store.peek(ws)
+    child_run_id = _token_run_id(child.log_file_name, child.id) if child is not None else ""
+    outcome = "completed" if payload.get("outcome") == "completed" else "failed"
+    popped = app.project_store.finish_child(
+        ws, outcome=outcome, summary=str(payload.get("summary") or ""),
+        output=payload.get("output"), error=str(payload.get("error") or ""),
+    )
+    if popped is None:
+        await session.send_json(make_response(msg_id, msg_type, {"popped": False}))
+        return
+    project, frame = popped
+    app.tokens_store.resume_suspended_run(ws, child_run_id=child_run_id)
+    # Merged, never cleared: the child's output flows into the parent, so a
+    # taint the child run carries stays on the parent too.
+    restore_pipeline_run_taint(ws, str(frame.get("taint") or "") or pipeline_run_taint(ws))
+    # The parent itself imported: tainted even after a restart emptied the table.
+    pipeline_run_resumed(ws, _imported_taint_detail(getattr(project, "pipeline_id", "")))
+    _mirror_pipeline_state(project)
+    resp = app._project_payload(project)
+    resp.update({"popped": True, "node_id": frame["node_id"], "next_index": frame["next_index"]})
+    await session.send_json(make_response(msg_id, msg_type, resp))
+
+
+@handler("pipeline.stack")
+async def pipeline_stack(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The parent runs suspended in a workspace, outermost first, without
+    their saved run fields."""
+    from . import app
+
+    project = app.project_store.peek(payload.get("workspace_path") or "")
+    frames = [run_frame_view(f) for f in (project.run_stack if project is not None else [])]
+    await session.send_json(make_response(msg_id, msg_type, {"frames": frames, "state": project.state if project else ""}))
+
+
+def run_frame_view(frame: dict) -> dict:
+    """A run_stack frame as status surfaces show it."""
+    run = frame.get("run") or {}
+    return {
+        "id": frame.get("id", ""), "node_id": frame.get("node_id", ""),
+        "pipeline_id": run.get("pipeline_id", ""), "pipeline_name": frame.get("pipeline_name", ""),
+        "child_pipeline_id": frame.get("child_pipeline_id", ""), "next_index": frame.get("next_index", 0),
+        "task_description": run.get("task_description", ""), "suspended_at": frame.get("suspended_at", ""),
+    }
+
+
+def _imported_taint_detail(pipeline_id: str) -> str:
+    """Guard taint detail for a run of a pipeline imported from n8n, else ""."""
+    from . import app
+    from .n8n_import import import_detail
+
+    if not pipeline_id:
+        return ""
+    record = app.stages_store.imported_from(pipeline_id)
+    return import_detail(record) if record else ""
+
+
+@handler("pipeline.claim")
+async def pipeline_claim(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """A window's claim of the pipeline runs it drives, sent on every
+    (re)connect — an empty list when it drives none. See pipeline_liveness."""
+    workspaces = payload.get("workspaces")
+    if not isinstance(workspaces, list):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "workspaces must be a list"))
+        return
+    pipeline_liveness.record_claim(session, [w for w in workspaces if isinstance(w, str)])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
 @handler("pipeline.resume")
 async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
+    # Resuming a parent suspended at its sub-pipeline pops its frame: keep the
+    # taint the frame recorded (merged, never cleared).
+    peek = getattr(app.project_store, "peek", None)
+    before = peek(payload["workspace_path"]) if peek else None
+    stack = getattr(before, "run_stack", None) if before is not None else None
+    frame_taint = str(stack[-1].get("taint") or "") if before is not None and before.state == "suspended" and stack else ""
     project, resume_index = app.project_store.resume_pipeline(payload["workspace_path"])
+    from .guard.taint import pipeline_run_resumed, restore_pipeline_run_taint
+
+    restore_pipeline_run_taint(payload["workspace_path"], frame_taint)
+    pipeline_run_resumed(payload["workspace_path"], _imported_taint_detail(getattr(project, "pipeline_id", "")))
+    pipeline_liveness.claim_run(session, project.workspace_path)
     _mirror_pipeline_state(project)
     resp = app._project_payload(project)
     resp["resume_index"] = resume_index
     await session.send_json(make_response(msg_id, msg_type, resp))
 
 
+def _token_run_id(log_file_name: str, project_id: str) -> str:
+    """The tokens_store run id pipeline.start gives a run: its run directory."""
+    log_name = log_file_name or ""
+    return (log_name.rsplit("/", 1)[0] if "/" in log_name else "") or project_id
+
+
 @handler("pipeline.start")
 async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .projects import ParentRunSuspended
 
-    project = app.project_store.start_pipeline(
-        payload["workspace_path"],
-        task_description=payload.get("task_description", ""),
-        total_stages=int(payload.get("total_stages", 4)),
-        stage_blueprint=payload.get("stage_blueprint", []),
-        backend_version=app.__version__,
-        pipeline_id=payload.get("pipeline_id", "") or app.stages_store.get_active_pipeline_id(),
-        start_index=int(payload.get("start_index", 0) or 0),
-    )
-    from .guard.taint import pipeline_run_started
+    child_of = str(payload.get("child_of") or "")
+    frame = None
+    if child_of:
+        before = app.project_store.peek(payload["workspace_path"])
+        stack = getattr(before, "run_stack", None) or []
+        frame = stack[-1] if stack else None
+    try:
+        project = app.project_store.start_pipeline(
+            payload["workspace_path"],
+            task_description=payload.get("task_description", ""),
+            total_stages=int(payload.get("total_stages", 4)),
+            stage_blueprint=payload.get("stage_blueprint", []),
+            backend_version=app.__version__,
+            pipeline_id=payload.get("pipeline_id", "") or app.stages_store.get_active_pipeline_id(),
+            start_index=int(payload.get("start_index", 0) or 0),
+            child_of=child_of,
+        )
+    except ParentRunSuspended as err:
+        await session.send_json(make_error(msg_id, msg_type, "PIPELINE_SUSPENDED", str(err)))
+        return
+    except ValueError as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    from .guard.taint import arm_pipeline_run, pipeline_run_started
 
-    pipeline_run_started(payload["workspace_path"])
+    if child_of and frame is not None and frame.get("taint"):
+        # A child run carries its parent's taint, task text included.
+        arm_pipeline_run(payload["workspace_path"], str(frame["taint"]))
+    pipeline_run_started(payload["workspace_path"], _imported_taint_detail(getattr(project, "pipeline_id", "")))
+    pipeline_liveness.claim_run(session, project.workspace_path)
     app._register_workspace_and_backfill(project.workspace_path)
     _mirror_pipeline_state(project)
     # Start a fresh token-stats run for this workspace.
@@ -10931,6 +11158,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
         task=project.task_description,
         run_dir=run_dir,
         pipeline_id=getattr(project, "pipeline_id", ""),
+        parent_run_id=_token_run_id(frame["run"].get("log_file_name", ""), project.id) if child_of and frame else "",
     )
     asyncio.create_task(
         app.broadcast(make_event("tokens.changed", app.tokens_store.snapshot(project.workspace_path)))
@@ -10954,6 +11182,7 @@ async def pipeline_stage_spawn(session: "Session", msg_id: str, msg_type: str, p
     from .guard.taint import pipeline_pane_spawned
 
     pipeline_pane_spawned(payload["workspace_path"], str(payload["pane_id"]))
+    pipeline_liveness.claim_run(session, project.workspace_path)
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )
@@ -12860,6 +13089,25 @@ async def evolve_get(session: "Session", msg_id: str, msg_type: str, payload: di
         return
     await session.send_json(
         make_response(msg_id, msg_type, await evolve_service.get_service().get(workspace))
+    )
+
+
+@handler("evolve.retro_request")
+async def evolve_retro_request(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    # S5b: before an automatic or agent-requested reclaim. Waits at most
+    # evolve_service.RETRO_WAIT_S; handlers run as their own tasks, so this
+    # holds up nothing else.
+    from . import evolve_service
+
+    workspace = _evolve_workspace(payload)
+    pane_id = str(payload.get("pane_id") or "")
+    if workspace is None or not pane_id:
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "evolve.retro_request needs a workspace and a pane_id")
+        )
+        return
+    await session.send_json(
+        make_response(msg_id, msg_type, await evolve_service.get_service().retro_request(workspace, pane_id))
     )
 
 
