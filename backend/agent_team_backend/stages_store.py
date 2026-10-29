@@ -1166,6 +1166,19 @@ class StagesStore:
         self, doc: dict[str, Any], pipeline: dict[str, Any], graph: dict[str, Any], *, write: bool = True
     ) -> dict[str, Any]:
         graph = {**graph, "nodes": [dict(n) for n in graph["nodes"]]}
+        if any(n.get("kind") == "subpipeline" for n in graph["nodes"]):
+            # Sub-pipeline references are checked across every pipeline: a
+            # write may close a loop through pipelines it does not touch.
+            graphs = {
+                str(p["id"]): p["graph"] for p in doc.get("pipelines", [])
+                if isinstance(p.get("graph"), dict) and p is not pipeline
+            }
+            for p in doc.get("pipelines", []):
+                graphs.setdefault(str(p["id"]), {"nodes": [], "edges": []})
+            graphs[str(pipeline["id"])] = graph
+            errors = pg.subpipeline_cycle_errors(graphs)
+            if errors:
+                raise pg.GraphError(errors)
         stages = pg.derive_stages_from_graph(graph, [_migrate(s) for s in pipeline.get("stages", [])], stamp=True)
         for stage in stages:
             if not self._ID_RE.match(str(stage.get("id", ""))):

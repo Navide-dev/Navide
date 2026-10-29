@@ -9,6 +9,7 @@ import type { AgentKey, Stage } from '../../data/stages'
 export type PaletteItem =
   | { kind: 'role'; roleKey: string; label: string; description: string }
   | { kind: 'gate'; label: string; description: string }
+  | { kind: 'subpipeline'; label: string; description: string }
 
 /** MIME types for the editor's HTML5 drag-and-drop, so a drop target can tell
  *  a palette item from a card being moved — and ignore anything else. */

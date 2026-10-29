@@ -9008,6 +9008,8 @@
     "statusbar-note": "関連するポップオーバーも一緒に非表示になります"
   },
   "error": {
+    "pipeline-call-failed": "サブ Pipeline {node} が失敗しました（{reason}）。実行は停止しました。",
+    "pipeline-parent-suspended": "一時停止中の親 run（{name}）がここで待機しています。先に resume または reset してください。",
     "pipeline-node-failed": "ステージ {stage}: ステップ {slot} が失敗を報告しました（{reason}）。試行回数を使い切ったため、実行は停止しました。resume で再試行できます。",
     "pipeline-start-refused": "パイプラインは開始されませんでした：{reason}",
     "pipeline-kickoff-failed": "パイプラインが失敗しました：ステージ {stage}、スロット {slot} — {reason}。ペインは開いたままです。",
@@ -11181,6 +11183,8 @@
   },
   "pipelineEditor": {
     "error": {
+      "subpipeline-none": "サブ Pipeline には実行する別の Pipeline が必要です。先に作成してください。",
+      "subpipeline-cycle": "サブ Pipeline が互いに呼び出すループになります: {detail}",
       "pipeline-running": "このパイプラインは実行中のため、今は変更できません。先に中止するか、実行の終了を待ってください。",
       "pipeline-not-found": "このパイプラインは見つかりません。別の場所で削除された可能性があります。ほかのパイプラインを選んでください。",
       "export-failed": "エクスポートに失敗しました：{message}",
@@ -11242,6 +11246,7 @@
       "reject": "差し戻す"
     },
     "history": {
+      "subpipeline": "サブ Pipeline を編集",
       "retry": "リトライを変更",
       "add": "{name} を追加",
       "edit-cli": "CLI を変更",
@@ -11267,6 +11272,11 @@
       "loop-budget": "再試行上限を変更"
     },
     "inspector": {
+      "subpipeline-task-help": "空欄ならこの実行のタスクを使います。前のステップの要約や他のステップの出力を、Kickoff と同じように使えます。",
+      "subpipeline-task": "その実行のタスク",
+      "subpipeline-help": "この実行はここで一時停止し、同じ workspace でその Pipeline を実行してから、結果を持って続行します。その間、この実行の Pane は開いたままです。",
+      "subpipeline-pick": "Pipeline を選択",
+      "subpipeline-pipeline": "実行する Pipeline",
       "retry-blocked-not-failed": "リトライできるのは失敗したステップだけです",
       "retry-blocked-no-run": "使用できません: この Pipeline の実行がありません",
       "retry-blocked-running": "実行中は使用できません",
@@ -11324,6 +11334,7 @@
       "more": "あと {n} 層"
     },
     "node": {
+      "subpipeline-sub": "Pipeline {pipeline} を実行",
       "commander": "パイプラインマネージャー",
       "gate-sub": "承認待ち",
       "pinned": "出力固定済み",
@@ -11335,6 +11346,8 @@
       "reorder-on-canvas": "このパイプラインにはゲート・ループ・独自の接続があるため、順序は接続で決まります。キャンバスで変更してください。"
     },
     "palette": {
+      "subpipeline-desc": "別の Pipeline を実行し、その結果を待つ",
+      "subpipeline": "サブ Pipeline",
       "agents": "エージェント",
       "branch-tip": "分岐するにはキャンバスで 1 つのステップから 2 本の線を引き、合流するには 1 つのステップへ 2 本の線を引きます。",
       "flow": "フロー制御",
@@ -11382,6 +11395,8 @@
       "task": "この実行のタスク"
     },
     "controlPane": {
+      "open-parent": "呼び出し元の Pipeline を開く",
+      "parents": "呼び出し元",
       "open-in-canvas": "パイプラインキャンバスで開く",
       "gate-toast": "パイプラインは「{name}」で承認待ちです",
       "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。"

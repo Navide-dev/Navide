@@ -328,6 +328,15 @@ function mainPath(p: EdgeProps): { path: string; labelX: number; labelY: number 
         <Handle id="reject-out" type="source" :position="Position.Bottom" class="pcv-handle pcv-handle--reject" :title="t('pipelineEditor.canvas.reject-handle')" />
         <Handle id="reject-in" type="target" :position="Position.Left" class="pcv-handle pcv-handle--loop-in" />
       </template>
+      <template #node-subpipeline="{ data }">
+        <Handle id="in" type="target" :position="Position.Left" class="pcv-handle" />
+        <PipelineNodeCard
+          :data-node-id="data.node.id" class="pcv-node pcv-node--subpipeline"
+          :node="data.node" :run="runNodes[data.node.id]" :now="now" :selected="selectedId === data.node.id"
+        />
+        <Handle id="out" type="source" :position="Position.Right" class="pcv-handle" />
+        <Handle id="reject-in" type="target" :position="Position.Left" class="pcv-handle pcv-handle--loop-in" />
+      </template>
       <template #node-gate="{ data }">
         <Handle id="in" type="target" :position="Position.Left" class="pcv-handle" />
         <PipelineNodeCard

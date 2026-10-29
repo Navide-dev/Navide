@@ -7692,6 +7692,13 @@ def _pipeline_status_of(workspace_path: str) -> dict[str, Any]:
         if isinstance(state, dict)
     }
     status["gate"] = stored.get("node_gate") or {}
+    if getattr(project, "run_stack", None):
+        # A sub-pipeline's child run: the parents waiting for it, outermost first.
+        from agent_team_backend.ws_handlers import run_frame_view
+
+        status["run_stack"] = [run_frame_view(f) for f in project.run_stack]
+        status["parent"] = status["run_stack"][-1]
+        status["depth"] = len(project.run_stack) + 1
     return status
 
 
@@ -7734,6 +7741,13 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     or {} when it is not paused). Node ids are the ones pipeline_graph op
     "get" returns; a pipeline without a stored graph uses n-<stage_id>-<slot
     index>. A paused gate is resolved with pipeline_gate.
+
+    While the run is a sub-pipeline's child run it also carries `run_stack`,
+    the parent runs suspended at their subpipeline nodes, outermost first
+    ({id, node_id, pipeline_id, pipeline_name, child_pipeline_id, next_index,
+    task_description, suspended_at} each), `parent` (the innermost of them)
+    and `depth` (2 or 3). state "suspended" is the moment between a parent
+    suspending and its child starting.
 
     workspace_path defaults to your own pane's workspace; pass it only to ask
     about another project.
@@ -8675,8 +8689,9 @@ async def pipeline_start(
 
     Returns the window's own reply — {ok, result, error}. `result` carries
     {pipelineId, stages, workspacePath, state} for a run that actually started.
-    ok false means nothing started: a run already going (abort it first), no
-    pipeline to run, or a first stage whose panes all failed to spawn. The
+    ok false means nothing started: a run already going (abort it first), a
+    parent run suspended at a sub-pipeline waiting here (resume or reset it
+    first), no pipeline to run, or a first stage whose panes all failed to spawn. The
     window reports the run's own state rather than the fact that the call
     returned, so "ok" here is not the "started but nothing happened" answer.
 
@@ -9347,13 +9362,15 @@ async def pipeline_graph(
     `op`:
     - "get"   — returns {graph, derived, stages}.
     - "apply" — needs `ops`, a list applied all-or-nothing:
-        {op:"add_node", node:{id, kind:"slot"|"gate"|"trigger", label?,
+        {op:"add_node", node:{id, kind:"slot"|"gate"|"trigger"|"subpipeline", label?,
            position:{x,y}, slot?:{agentKey, roleKey, label, kickoffBody,
-           isCommander?, params?}, gate?:{prompt?}}, after?:[ids], before?:[ids]}
+           isCommander?, params?}, gate?:{prompt?},
+           subpipeline?:{pipelineId, task?, wait?:true}}, after?:[ids], before?:[ids]}
            (after/before wire main edges; an edge after→before is replaced,
            i.e. inserting on an edge)
         {op:"remove_node", id, reconnect?:true}  (upstream rewired to downstream)
-        {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?}}
+        {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?},
+           subpipeline?:{...partial}}
         {op:"move_node", id, position:{x,y}}
         {op:"add_edge", edge:{id?, from, to,
            kind?:"main"|"reject"|"branch"|"error", maxLoops?, when?}}
@@ -9390,6 +9407,17 @@ async def pipeline_graph(
     only it feeds. A kickoff may read {{node.<id>.output}} or
     {{node.<id>.output.<path>}}. A graph without branch or error edges runs
     exactly as before.
+
+    A "subpipeline" node runs another pipeline and waits for it: the run
+    suspends there (its panes stay open), the child pipeline runs in the same
+    workspace as an ordinary run, and when it completes its last steps'
+    summary and structured output become this node's output; the parent then
+    resumes. `task` is the child's task (empty: the parent's), and may use
+    {{task}}, {{prev.summary}} and {{node.<id>.output}}. A child that fails
+    fails the node, which then retries (set_retry) or takes its error edge
+    like a slot. Calls may not loop across pipelines (A → B → A is refused,
+    and every pipeline named must exist) and nest at most 3 runs deep. A
+    graph without subpipeline nodes runs exactly as before.
 
     Refused while the workspace's run is using this pipeline (error_code
     "pipeline_running"), like stage_define. `pipeline_id` empty means the

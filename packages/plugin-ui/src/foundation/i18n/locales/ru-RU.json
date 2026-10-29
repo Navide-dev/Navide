@@ -9008,6 +9008,8 @@
     "statusbar-note": "вместе с ней пропадут её всплывающие окна"
   },
   "error": {
+    "pipeline-call-failed": "Вложенный pipeline {node} завершился с ошибкой ({reason}); запуск остановлен.",
+    "pipeline-parent-suspended": "Здесь ждёт приостановленный родительский запуск ({name}). Сначала продолжите или сбросьте его.",
     "pipeline-node-failed": "Этап {stage}: шаг {slot} сообщил об ошибке ({reason}), попытки закончились. Запуск остановлен; продолжите его, чтобы попробовать снова.",
     "pipeline-start-refused": "Pipeline не запустился: {reason}",
     "pipeline-kickoff-failed": "Сбой pipeline: этап {stage}, слот {slot} — {reason}. Его pane по-прежнему открыты.",
@@ -11181,6 +11183,8 @@
   },
   "pipelineEditor": {
     "error": {
+      "subpipeline-none": "Вложенному pipeline нужен другой pipeline для запуска; сначала создайте его.",
+      "subpipeline-cycle": "Вложенные pipeline вызывали бы друг друга по кругу: {detail}",
       "pipeline-running": "Этот pipeline выполняется, поэтому сейчас его нельзя изменить. Сначала прервите или завершите запуск.",
       "pipeline-not-found": "Этого pipeline больше нет. Возможно, его удалили в другом месте; выберите другой pipeline.",
       "export-failed": "Не удалось экспортировать: {message}",
@@ -11242,6 +11246,7 @@
       "reject": "Вернуть"
     },
     "history": {
+      "subpipeline": "Изменить вложенный pipeline",
       "retry": "Изменить повторы",
       "add": "Добавить {name}",
       "edit-cli": "Сменить CLI",
@@ -11267,6 +11272,11 @@
       "loop-budget": "Изменить лимит повторов"
     },
     "inspector": {
+      "subpipeline-task-help": "Пусто: задача этого запуска. Сводку предыдущего шага и результаты других шагов можно использовать так же, как в kickoff.",
+      "subpipeline-task": "Задача того запуска",
+      "subpipeline-help": "Этот запуск здесь приостанавливается, запускает тот pipeline в том же workspace и продолжает с его результатом. Его панели тем временем остаются открытыми.",
+      "subpipeline-pick": "Выберите pipeline",
+      "subpipeline-pipeline": "Какой pipeline запустить",
       "retry-blocked-not-failed": "Повторить можно только неудачный шаг",
       "retry-blocked-no-run": "Недоступно: у этого pipeline нет запусков",
       "retry-blocked-running": "Недоступно, пока идёт запуск",
@@ -11324,6 +11334,7 @@
       "more": "ещё {n} слой | ещё {n} слоя | ещё {n} слоёв"
     },
     "node": {
+      "subpipeline-sub": "Запускает pipeline {pipeline}",
       "commander": "Менеджер pipeline",
       "gate-sub": "Ждёт утверждения",
       "pinned": "Вывод заморожен",
@@ -11335,6 +11346,8 @@
       "reorder-on-canvas": "В этом pipeline есть точка утверждения, цикл или пользовательская связь, поэтому порядок определяется связями. Измените его на холсте."
     },
     "palette": {
+      "subpipeline-desc": "Запустить другой pipeline и дождаться результата",
+      "subpipeline": "Вложенный pipeline",
       "agents": "Agents",
       "branch-tip": "Чтобы разветвить поток, проведите на холсте две связи из одного шага; чтобы объединить — две связи в один шаг.",
       "flow": "Управление потоком",
@@ -11382,6 +11395,8 @@
       "task": "Задача для этого запуска"
     },
     "controlPane": {
+      "open-parent": "Открыть вызывающий pipeline",
+      "parents": "Вызван из",
       "open-in-canvas": "Открыть на холсте pipeline",
       "gate-toast": "Pipeline ожидает вашего утверждения в {name}",
       "next-gated": "Утвердите или верните эту точку утверждения, прежде чем переходить к следующему этапу."

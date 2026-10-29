@@ -9008,6 +9008,8 @@
     "statusbar-note": "ihre Pop-ups verschwinden mit ihr"
   },
   "error": {
+    "pipeline-call-failed": "Unter-Pipeline {node} ist fehlgeschlagen ({reason}); der Lauf wurde angehalten.",
+    "pipeline-parent-suspended": "Ein angehaltener übergeordneter Lauf ({name}) wartet hier. Setze ihn zuerst fort oder setze ihn zurück.",
     "pipeline-node-failed": "Stufe {stage}: Schritt {slot} hat einen Fehler gemeldet ({reason}) und hat keine Versuche mehr. Der Lauf wurde angehalten; setze ihn fort, um es erneut zu versuchen.",
     "pipeline-start-refused": "Die Pipeline wurde nicht gestartet: {reason}",
     "pipeline-kickoff-failed": "Pipeline fehlgeschlagen: Stufe {stage}, Slot {slot} – {reason}. Ihre Panes sind noch geöffnet.",
@@ -11181,6 +11183,8 @@
   },
   "pipelineEditor": {
     "error": {
+      "subpipeline-none": "Eine Unter-Pipeline braucht eine andere Pipeline zum Ausführen; lege zuerst eine an.",
+      "subpipeline-cycle": "Unter-Pipelines würden sich gegenseitig im Kreis aufrufen: {detail}",
       "pipeline-running": "Diese Pipeline läuft und kann daher gerade nicht geändert werden. Brechen Sie den Lauf zuerst ab oder lassen Sie ihn zu Ende laufen.",
       "pipeline-not-found": "Diese Pipeline existiert nicht mehr. Möglicherweise wurde sie an anderer Stelle gelöscht; wählen Sie eine andere Pipeline.",
       "export-failed": "Export fehlgeschlagen: {message}",
@@ -11242,6 +11246,7 @@
       "reject": "Zurückschicken"
     },
     "history": {
+      "subpipeline": "Unter-Pipeline bearbeiten",
       "retry": "Wiederholungen ändern",
       "add": "{name} hinzufügen",
       "edit-cli": "CLI ändern",
@@ -11267,6 +11272,11 @@
       "loop-budget": "Wiederholungslimit ändern"
     },
     "inspector": {
+      "subpipeline-task-help": "Leer: die Aufgabe dieses Laufs. Die Zusammenfassung des vorigen Schritts und Ausgaben anderer Schritte lassen sich wie in einem Kickoff verwenden.",
+      "subpipeline-task": "Aufgabe für diesen Lauf",
+      "subpipeline-help": "Dieser Lauf pausiert hier, führt die Pipeline im selben Workspace aus und macht mit ihrem Ergebnis weiter. Die Panes dieses Laufs bleiben so lange offen.",
+      "subpipeline-pick": "Pipeline wählen",
+      "subpipeline-pipeline": "Auszuführende Pipeline",
       "retry-blocked-not-failed": "Nur ein fehlgeschlagener Schritt kann wiederholt werden",
       "retry-blocked-no-run": "Nicht verfügbar: kein Lauf dieser Pipeline",
       "retry-blocked-running": "Nicht verfügbar, solange ein Lauf aktiv ist",
@@ -11324,6 +11334,7 @@
       "more": "{n} weitere Ebene | {n} weitere Ebenen"
     },
     "node": {
+      "subpipeline-sub": "Führt Pipeline {pipeline} aus",
       "commander": "Pipeline-Manager",
       "gate-sub": "Wartet auf Genehmigung",
       "pinned": "Ausgabe eingefroren",
@@ -11335,6 +11346,8 @@
       "reorder-on-canvas": "Diese Pipeline hat eine Schranke, eine Schleife oder eine eigene Verbindung, daher ergibt sich ihre Reihenfolge aus den Verbindungen. Ändern Sie sie auf der Arbeitsfläche."
     },
     "palette": {
+      "subpipeline-desc": "Eine andere Pipeline ausführen und auf ihr Ergebnis warten",
+      "subpipeline": "Unter-Pipeline",
       "agents": "Agents",
       "branch-tip": "Zum Verzweigen ziehen Sie auf der Arbeitsfläche zwei Verbindungen aus einem Schritt heraus; zum Zusammenführen zwei Verbindungen in einen hinein.",
       "flow": "Ablaufsteuerung",
@@ -11382,6 +11395,8 @@
       "task": "Aufgabe für diesen Lauf"
     },
     "controlPane": {
+      "open-parent": "Aufrufende Pipeline öffnen",
+      "parents": "Aufgerufen von",
       "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen",
       "gate-toast": "Die Pipeline wartet bei {name} auf Ihre Genehmigung",
       "next-gated": "Genehmigen Sie diese Schranke oder schicken Sie sie zurück, bevor es mit der nächsten Stufe weitergeht."

@@ -82,8 +82,8 @@ describe('branch and error edges: validation (mirrors the backend)', () => {
     g.edges.push({ id: 'b-trigger-fix', from: 'trigger', to: 'fix', kind: 'branch', when: 'x' })
     g.edges.push({ id: 'x-trigger-alert', from: 'trigger', to: 'alert', kind: 'error' })
     const errs = validateGraph(g)
-    expect(errs).toContain('branch edge b-trigger-fix must start at a slot node')
-    expect(errs).toContain('error edge x-trigger-alert must start at a slot node')
+    expect(errs).toContain('branch edge b-trigger-fix must start at a slot or subpipeline node')
+    expect(errs).toContain('error edge x-trigger-alert must start at a slot or subpipeline node')
   })
 
   it('a cycle through an error edge is rejected; a reject edge back over a branch is fine', () => {

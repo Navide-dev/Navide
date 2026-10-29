@@ -9008,6 +9008,8 @@
     "statusbar-note": "its popovers go with it"
   },
   "error": {
+    "pipeline-call-failed": "Sub-pipeline {node} failed ({reason}); the run stopped.",
+    "pipeline-parent-suspended": "A suspended parent run ({name}) is waiting here. Resume or reset it first.",
     "pipeline-node-failed": "Stage {stage}: step {slot} reported a failure ({reason}) and has no tries left. The run stopped; resume it to try again.",
     "pipeline-start-refused": "The pipeline did not start: {reason}",
     "pipeline-kickoff-failed": "Pipeline failed: stage {stage}, slot {slot} — {reason}. Its panes are still open.",
@@ -11181,6 +11183,8 @@
   },
   "pipelineEditor": {
     "error": {
+      "subpipeline-none": "A sub-pipeline needs another pipeline to run; create one first.",
+      "subpipeline-cycle": "Sub-pipelines would call each other in a loop: {detail}",
       "pipeline-running": "This pipeline is running, so it cannot be changed right now. Abort or finish the run first.",
       "pipeline-not-found": "This pipeline no longer exists. It may have been deleted elsewhere; pick another pipeline.",
       "export-failed": "Export failed: {message}",
@@ -11242,6 +11246,7 @@
       "reject": "Send Back"
     },
     "history": {
+      "subpipeline": "Edit Sub-pipeline",
       "retry": "Change Retries",
       "add": "Add {name}",
       "edit-cli": "Change CLI",
@@ -11267,6 +11272,11 @@
       "loop-budget": "Change Retry Limit"
     },
     "inspector": {
+      "subpipeline-task-help": "Empty: this run's task. The previous step's summary and other steps' outputs can be used here, as in a kickoff.",
+      "subpipeline-task": "Task for that run",
+      "subpipeline-help": "This run pauses here, runs that pipeline in the same workspace and carries on with its result. This run's panes stay open meanwhile.",
+      "subpipeline-pick": "Choose a pipeline",
+      "subpipeline-pipeline": "Pipeline to run",
       "retry-blocked-not-failed": "Only a failed step can be retried",
       "retry-blocked-no-run": "Not available: no run of this pipeline",
       "retry-blocked-running": "Not available while a run is in progress",
@@ -11324,6 +11334,7 @@
       "more": "{n} more layer | {n} more layers"
     },
     "node": {
+      "subpipeline-sub": "Runs pipeline {pipeline}",
       "commander": "Pipeline manager",
       "gate-sub": "Waits for approval",
       "pinned": "Output frozen",
@@ -11335,6 +11346,8 @@
       "reorder-on-canvas": "This pipeline has a gate, a loop or a custom link, so its order comes from the links. Change it on the canvas."
     },
     "palette": {
+      "subpipeline-desc": "Run another pipeline and wait for its result",
+      "subpipeline": "Sub-pipeline",
       "agents": "Agents",
       "branch-tip": "To branch, draw two links out of one step on the canvas; to join, draw two links into one.",
       "flow": "Flow control",
@@ -11382,6 +11395,8 @@
       "task": "Task for this run"
     },
     "controlPane": {
+      "open-parent": "Open the calling pipeline",
+      "parents": "Called from",
       "open-in-canvas": "Open in the Pipeline Canvas",
       "gate-toast": "The pipeline is waiting for your approval at {name}",
       "next-gated": "Approve or send back this gate before moving on to the next stage."

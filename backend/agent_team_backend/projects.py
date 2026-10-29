@@ -10,6 +10,7 @@ renamed `project.json.migrated-v1`.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
@@ -153,6 +154,39 @@ class StageRecord:
     slots: list[SlotRecord] = field(default_factory=list)
 
 
+#: A run's own fields: what a subpipeline call saves on run_stack and puts back.
+RUN_FIELDS = (
+    "task_description", "state", "current_stage_index", "total_stages", "agents_spawned",
+    "log_file_name", "pipeline_id", "node_states", "node_gate", "node_outputs",
+)
+
+
+class ParentRunSuspended(ValueError):
+    """A start refused because a parent run is suspended here, waiting for its
+    child; the message names the parent pipeline."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            f"a suspended parent run ({name or 'unnamed'}) is waiting for its sub-pipeline here; "
+            "resume or reset it first"
+        )
+        self.pipeline_name = name
+
+
+def _stage_record(s: dict[str, Any]) -> "StageRecord":
+    """A StageRecord back from asdict() (a run_stack frame), slots included."""
+    known = {f for f in StageRecord.__dataclass_fields__} - {"slots"}
+    slot_known = {f for f in SlotRecord.__dataclass_fields__}
+    record = StageRecord(**{k: v for k, v in s.items() if k in known})
+    record.slots = [SlotRecord(**{k: v for k, v in sl.items() if k in slot_known}) for sl in s.get("slots") or []]
+    return record
+
+
+def _pane_record(p: dict[str, Any]) -> "PaneRecord":
+    known = {f for f in PaneRecord.__dataclass_fields__}
+    return PaneRecord(**{k: v for k, v in p.items() if k in known})
+
+
 @dataclass
 class Project:
     id: str
@@ -218,6 +252,12 @@ class Project:
     # Last output summary per graph node, kept ACROSS runs so a pinned node
     # can hand its frozen output to downstream nodes ({{prev.summary}}).
     node_outputs: dict[str, Any] = field(default_factory=dict)
+    # Sub-pipeline calls: one frame per parent run suspended at a subpipeline
+    # node while its child runs here (innermost last). A frame holds the
+    # parent's run fields (RUN_FIELDS) as they were when it suspended, plus
+    # {id, node_id, next_index, pipeline_name, child_pipeline_id, taint,
+    # suspended_at}. Empty for every run that calls no sub-pipeline.
+    run_stack: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -555,12 +595,23 @@ class ProjectStore:
         backend_version: str = "",
         pipeline_id: str = "",
         start_index: int = 0,
+        child_of: str = "",
     ) -> Project:
         """start_index > 0 is a restart-from-node run: the stages before it
         are not run again (their last output is reused) and are recorded as
-        completed, so a later resume does not walk back into them."""
+        completed, so a later resume does not walk back into them.
+
+        While a parent run is suspended here (run_stack), the only run that
+        may start is the child it is waiting for: ``child_of`` naming the top
+        frame's id. Anything else raises :class:`ParentRunSuspended`."""
         with self._save_lock:
             project = self.load_or_create(workspace_path, backend_version=backend_version)
+            if project.run_stack:
+                top = project.run_stack[-1]
+                if child_of != top.get("id") or project.state != "suspended":
+                    raise ParentRunSuspended(str(top.get("pipeline_name") or top.get("run", {}).get("pipeline_id") or ""))
+            elif child_of:
+                raise ValueError("no parent run is waiting for a child run")
             project.task_description = task_description
             project.total_stages = total_stages
             if pipeline_id:
@@ -1700,6 +1751,17 @@ class ProjectStore:
         """
         with self._save_lock:
             project = self.load_or_create(workspace_path)
+            if project.state == "suspended" and project.run_stack:
+                # Stopped after the parent suspended but before its child
+                # started: put the parent back as it was; the window calls the
+                # sub-pipeline again when it reaches the node.
+                frame = project.run_stack.pop()
+                for key in RUN_FIELDS:
+                    if key in frame["run"]:
+                        setattr(project, key, copy.deepcopy(frame["run"][key]))
+                project.stages = [_stage_record(s) for s in frame["run"].get("stages", [])]
+                kept = [p for p in project.panes if p.origin != "pipeline"]
+                project.panes = kept + [_pane_record(p) for p in frame["run"].get("panes", [])]
             if not project.stages:
                 raise ValueError("no pipeline to resume — start one first")
 
@@ -1770,6 +1832,106 @@ class ProjectStore:
         )
         return project
 
+    def suspend_for_child(
+        self,
+        workspace_path: str,
+        *,
+        node_id: str,
+        next_index: int,
+        pipeline_name: str,
+        child_pipeline_id: str,
+        taint: str = "",
+    ) -> tuple[Project, dict[str, Any]]:
+        """Suspend the running run at subpipeline node ``node_id``: its run
+        fields go onto run_stack (stages before ``next_index`` recorded as
+        completed, so the resume after the child continues at next_index) and
+        the project waits for the child (state "suspended"). Raises ValueError
+        when no run is going or the nesting limit is reached."""
+        from .pipeline_graph import MAX_SUBPIPELINE_DEPTH
+
+        with self._save_lock:
+            project = self.load_or_create(workspace_path)
+            if project.state != "running":
+                raise ValueError("only a running run can call a sub-pipeline")
+            if len(project.run_stack) + 1 >= MAX_SUBPIPELINE_DEPTH:
+                raise ValueError(
+                    f"sub-pipelines nest at most {MAX_SUBPIPELINE_DEPTH} deep; "
+                    f"this run is already at depth {len(project.run_stack) + 1}"
+                )
+            now = _now_iso()
+            for stage in project.stages[: max(0, next_index)]:
+                if stage.status != "completed":
+                    stage.status = "completed"
+                    stage.ended_at = stage.ended_at or now
+            snapshot = {key: copy.deepcopy(getattr(project, key)) for key in RUN_FIELDS}
+            snapshot["stages"] = [asdict(s) for s in project.stages]
+            snapshot["panes"] = [asdict(p) for p in project.panes if p.origin == "pipeline"]
+            frame = {
+                "id": f"call-{int(time.time() * 1000)}-{len(project.run_stack)}",
+                "node_id": node_id,
+                "next_index": next_index,
+                "pipeline_name": pipeline_name,
+                "child_pipeline_id": child_pipeline_id,
+                "taint": taint,
+                "suspended_at": now,
+                "run": snapshot,
+            }
+            project.run_stack.append(frame)
+            project.state = "suspended"
+            self.save(project)
+        self.append_event(
+            workspace_path,
+            {"event": "pipeline_suspend", "node_id": node_id, "child_pipeline_id": child_pipeline_id,
+             "depth": len(project.run_stack)},
+            log_file_name=project.log_file_name,
+        )
+        return project, frame
+
+    def finish_child(
+        self,
+        workspace_path: str,
+        *,
+        outcome: str,
+        summary: str = "",
+        output: Any = None,
+        error: str = "",
+    ) -> tuple[Project, dict[str, Any]] | None:
+        """The child run ended (``outcome`` "completed" or "failed"): pop the
+        top frame and restore its parent's run fields, with the subpipeline
+        node recorded done (its output = the child's summary and output) or
+        failed. The parent stays stopped ("aborted") until the window resumes
+        or fails it. None when no parent is waiting."""
+        with self._save_lock:
+            project = self.load_or_create(workspace_path)
+            if not project.run_stack:
+                return None
+            frame = project.run_stack.pop()
+            child_run = {"pipeline_id": project.pipeline_id, "log_file_name": project.log_file_name, "outcome": outcome}
+            run = frame["run"]
+            for key in RUN_FIELDS:
+                if key in run:
+                    setattr(project, key, copy.deepcopy(run[key]))
+            project.stages = [_stage_record(s) for s in run.get("stages", [])]
+            kept = [p for p in project.panes if p.origin != "pipeline"]
+            project.panes = kept + [_pane_record(p) for p in run.get("panes", [])]
+            node_id = frame["node_id"]
+            now = _now_iso()
+            prev = dict(project.node_states.get(node_id) or {})
+            if outcome == "completed":
+                project.node_states[node_id] = {**prev, "status": "done", "endedAt": now, "summary": summary, "output": output}
+                project.node_outputs[node_id] = {"summary": summary, "at": now, "output": output}
+            else:
+                project.node_states[node_id] = {**prev, "status": "failed", "endedAt": now,
+                                                "error": error or "the sub-pipeline run failed"}
+            project.state = "aborted"
+            self.save(project)
+        self.append_event(
+            workspace_path,
+            {"event": "pipeline_child_finished", "node_id": node_id, "outcome": outcome, "child": child_run},
+            log_file_name=project.log_file_name,
+        )
+        return project, frame
+
     def reset_pipeline(self, workspace_path: str) -> Project | None:
         """Return the workspace's last run to idle (pipeline_reset).
 
@@ -1783,6 +1945,8 @@ class ProjectStore:
             project = self.load_or_create(workspace_path)
             previous = project.state
             project.state = "idle"
+            # A reset ends every suspended parent too: nothing waits any more.
+            project.run_stack = []
             self.save(project)
         self.append_event(
             workspace_path,

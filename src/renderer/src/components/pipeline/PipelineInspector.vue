@@ -102,7 +102,7 @@ function editParam(name: string, value: ParamValue): void {
 /** maxTries 1 (or less) clears the policy: one try is the default. */
 function editRetry(field: 'maxTries' | 'waitS', value: number): void {
   const node = n.value
-  if (!node || node.kind !== 'slot' || props.locked || !Number.isFinite(value)) return
+  if (!node || (node.kind !== 'slot' && node.kind !== 'subpipeline') || props.locked || !Number.isFinite(value)) return
   const tries = Math.round(field === 'maxTries' ? value : (node.retry?.maxTries ?? 1))
   const waitMs = Math.round(field === 'waitS' ? value * 1000 : (node.retry?.waitMs ?? 0))
   const maxTries = Math.min(MAX_TRIES_CEILING, Math.max(1, tries))
@@ -118,6 +118,26 @@ const retryBlocked = computed(() => {
   if (runState.value?.status !== 'failed') return t('pipelineEditor.inspector.retry-blocked-not-failed')
   return ''
 })
+
+/** Pipelines a subpipeline node can call: every one but this pipeline. */
+const callablePipelines = ref<Array<{ id: string; name: string }>>([])
+async function loadCallable(): Promise<void> {
+  try {
+    const resp = await props.backend.send<{ pipelines?: Array<{ id: string; name: string }> }>('pipelines.list', {})
+    callablePipelines.value = (resp.payload?.pipelines ?? []).filter((p) => p.id !== props.run.pipelineId || !props.run.pipelineId)
+  } catch {
+    // Keep the last list.
+  }
+}
+watch(() => n.value?.kind === 'subpipeline', (isCall) => { if (isCall) void loadCallable() }, { immediate: true })
+
+function editSubpipeline(patch: { pipelineId?: string; task?: string }): void {
+  const node = n.value
+  if (!node || node.kind !== 'subpipeline' || props.locked) return
+  const current = node.subpipeline ?? { pipelineId: '' }
+  if ((patch.pipelineId ?? current.pipelineId) === current.pipelineId && (patch.task ?? current.task) === current.task) return
+  emit('edit', t('pipelineEditor.history.subpipeline'), [{ op: 'update_node', id: node.id, subpipeline: patch }])
+}
 
 function editGate(prompt: string): void {
   const node = n.value
@@ -310,6 +330,39 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
       </template>
 
       <!-- ── Gate ───────────────────────────────────────────────────────── -->
+      <template v-else-if="n?.kind === 'subpipeline'">
+        <label class="pi-field">
+          <span class="pi-label">{{ t('label.label') }}</span>
+          <input :value="n.label ?? ''" type="text" spellcheck="false" :disabled="locked" @change="editLabel(valueOf($event))" />
+        </label>
+        <label class="pi-field">
+          <span class="pi-label">{{ t('pipelineEditor.inspector.subpipeline-pipeline') }}</span>
+          <select data-field="subpipeline-pipeline" :value="n.subpipeline?.pipelineId ?? ''" :disabled="locked" @change="editSubpipeline({ pipelineId: valueOf($event) })">
+            <option value="" disabled>{{ t('pipelineEditor.inspector.subpipeline-pick') }}</option>
+            <option v-if="n.subpipeline?.pipelineId && !callablePipelines.some((p) => p.id === n!.subpipeline!.pipelineId)" :value="n.subpipeline.pipelineId">{{ n.subpipeline.pipelineId }}</option>
+            <option v-for="p in callablePipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+          <span class="pi-help">{{ t('pipelineEditor.inspector.subpipeline-help') }}</span>
+        </label>
+        <label class="pi-field">
+          <span class="pi-label">{{ t('pipelineEditor.inspector.subpipeline-task') }}</span>
+          <textarea
+            data-field="subpipeline-task" rows="3" spellcheck="false" class="pi-mono"
+            :value="n.subpipeline?.task ?? ''" :disabled="locked" @change="editSubpipeline({ task: valueOf($event) })"
+          ></textarea>
+          <span class="pi-help">{{ t('pipelineEditor.inspector.subpipeline-task-help') }}</span>
+        </label>
+        <section class="pi-props" data-test="retry-policy">
+          <h3 class="pi-section">{{ t('pipelineEditor.inspector.retry-title') }}</h3>
+          <label class="pi-field">
+            <span class="pi-label">{{ t('pipelineEditor.inspector.retry-tries') }}</span>
+            <input
+              type="number" min="1" :max="MAX_TRIES_CEILING" step="1" data-field="retry-tries"
+              :value="n.retry?.maxTries ?? 1" :disabled="locked" @change="editRetry('maxTries', Number(valueOf($event)))"
+            />
+          </label>
+        </section>
+      </template>
       <template v-else-if="n?.kind === 'gate'">
         <section v-if="isAwaitingGate" class="pi-decision">
           <h3>{{ t('pipelineEditor.gate.awaiting') }}</h3>
@@ -492,10 +545,10 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
         :title="t('pipelineEditor.inspector.restart-help')" @click="emit('restart-from', n.id)"
       >{{ t('pipelineEditor.inspector.restart-from') }}</button>
       <button
-        v-if="n.kind === 'slot'" type="button" class="pi-btn" data-test="retry-node" :disabled="!!retryBlocked"
+        v-if="n.kind === 'slot' || n.kind === 'subpipeline'" type="button" class="pi-btn" data-test="retry-node" :disabled="!!retryBlocked"
         :title="retryBlocked || t('pipelineEditor.inspector.retry-node-help')" @click="emit('retry-node', n.id)"
       >{{ t('pipelineEditor.inspector.retry-node') }}</button>
-      <span v-if="n.kind === 'slot' && retryBlocked" class="pi-help" data-test="retry-blocked">{{ retryBlocked }}</span>
+      <span v-if="(n.kind === 'slot' || n.kind === 'subpipeline') && retryBlocked" class="pi-help" data-test="retry-blocked">{{ retryBlocked }}</span>
       <span class="pi-spacer"></span>
       <button type="button" class="pi-btn pi-btn--danger" :disabled="locked" @click="emit('remove', n.id)">{{ t('action.delete') }}</button>
     </footer>

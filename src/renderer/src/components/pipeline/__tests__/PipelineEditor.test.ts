@@ -78,6 +78,7 @@ function graphServer(initial = seedGraph()) {
     }
     if (type === 'pipelines.graph.set') { stored = payload.graph as PipelineGraph; return ok({ pipeline_id: 'p1', graph: stored, stages: [] }) }
     if (type === 'tokens.snapshot') return ok(tokens)
+    if (type === 'pipelines.list') return ok({ pipelines: [{ id: 'p1', name: 'This one' }, { id: 'p2', name: 'Reporter' }], active_pipeline_id: 'p1', path: '' })
     return ok(null)
   }
   return { mock, stored: () => stored, lastOps: () => mock.sent.filter((s) => s.type === 'pipelines.graph.apply').at(-1)?.payload.ops as GraphOp[] | undefined }
@@ -309,6 +310,18 @@ describe('PipelineEditor', () => {
     expect(resumed).toHaveLength(1)
   })
 
+  it('adds a sub-pipeline from the palette, calling another pipeline', async () => {
+    const { w, server } = await mountEditor()
+    await w.find('.lane-card[data-node-id="review"]').trigger('click')
+    const item = w.findAll('.pe-palette .pp-item').find((b) => b.text().includes('Sub-pipeline'))!
+    await item.trigger('click')
+    await flushPromises()
+    const add = server.lastOps()![0] as { op: string; node: { kind: string; subpipeline: unknown } }
+    expect(add.op).toBe('add_node')
+    expect(add.node.kind).toBe('subpipeline')
+    expect(add.node.subpipeline).toEqual({ pipelineId: 'p2', task: '{{task}}', wait: true })
+  })
+
   it('starts a run from the toolbar through ui.pipeline.start, with this pipeline and the task', async () => {
     const calls: unknown[] = []
     registerCommand('ui.pipeline.start', (args) => { calls.push(args) })
@@ -439,6 +452,33 @@ describe('PipelineInspector', () => {
       global: { plugins: [i18n] },
     }))!
   }
+
+  it('edits a sub-pipeline\'s pipeline and task template', async () => {
+    const node: GraphNode = { id: 'call', kind: 'subpipeline', label: 'Call', position: { x: 0, y: 0 }, subpipeline: { pipelineId: 'p2', task: '{{task}}', wait: true } }
+    const mock = createMockBackend('connected')
+    ;(mock.backend as { send: unknown }).send = async (type: string) => ({
+      id: 't', type, ok: true, error: null, timestamp: '',
+      payload: type === 'pipelines.list' ? { pipelines: [{ id: 'p1', name: 'This' }, { id: 'p2', name: 'Reporter' }, { id: 'p3', name: 'Fixer' }] } : null,
+    })
+    scope = effectScope()
+    const w = scope.run(() => mount(PipelineInspector, {
+      props: {
+        backend: mock.backend, graph: seedGraph(), node, stage: null, roles, agentOptions: [],
+        run: { ...EMPTY_RUN, pipelineId: 'p1' }, now: Date.now(), locked: false, workspacePath: '/ws',
+      },
+      global: { plugins: [i18n] },
+    }))!
+    await flushPromises()
+    const options = w.findAll('[data-field="subpipeline-pipeline"] option').map((o) => o.text())
+    expect(options).toContain('Fixer')
+    expect(options).not.toContain('This')
+    await w.find('[data-field="subpipeline-pipeline"]').setValue('p3')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'update_node', id: 'call', subpipeline: { pipelineId: 'p3' } }])
+    await w.find('[data-field="subpipeline-task"]').setValue('summarise: {{prev.summary}}')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'update_node', id: 'call', subpipeline: { task: 'summarise: {{prev.summary}}' } }])
+    await w.find('[data-field="retry-tries"]').setValue('2')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'call', retry: { maxTries: 2, waitMs: 0 } }])
+  })
 
   it('edits the retry policy as one op, and one try clears it', async () => {
     const w = mountInspector(slot('fe', 'Frontend'))

@@ -122,7 +122,11 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.34 n8n import on top of the signal-spoofing fix
 #: (previous pin 421fe173…, #752): adds the core tool pipeline_import_n8n.
 #: No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "39886aa6e8d2ad0aca3e25a4ff83730b3bdbbf56d7a391cd794d1e0b5ca92f31"
+#: Re-pinned for 0.2.34 sub-pipelines on top of the n8n import (previous pin
+#: 39886aa6…, #741): pipeline_graph documents subpipeline nodes,
+#: pipeline_status the run_stack / parent / depth of a child run, and
+#: pipeline_start the refusal while a parent run waits. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "3be2ca9d6b72ec0414c077104cefd41b0f5bdbfed9224c190a7de6a5e1058e56"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
