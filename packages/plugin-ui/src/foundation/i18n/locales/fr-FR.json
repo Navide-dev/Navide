@@ -11608,7 +11608,7 @@
     },
     "run": {
       "abort-title": "Interrompre cette exécution ?",
-      "abort-message": "L’exécution s’arrête là où elle en est. Ses panneaux restent ouverts, et vous pourrez la reprendre plus tard depuis Récupérer.",
+      "abort-message": "L’exécution s’arrête là où elle en est. Ses panneaux restent ouverts, et vous pourrez la reprendre plus tard.",
       "running": "En cours : {names}",
       "gate": "En attente de votre approbation à {name}",
       "review": "Examiner",

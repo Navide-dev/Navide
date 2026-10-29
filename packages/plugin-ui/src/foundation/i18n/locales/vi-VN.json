@@ -11608,7 +11608,7 @@
     },
     "run": {
       "abort-title": "Hủy lần chạy này?",
-      "abort-message": "Lần chạy dừng ngay tại chỗ. Các pane vẫn mở, và bạn có thể tiếp tục sau trong Khôi phục.",
+      "abort-message": "Lần chạy dừng ngay tại chỗ. Các pane vẫn mở, và bạn có thể tiếp tục sau.",
       "running": "Đang chạy: {names}",
       "gate": "Đang chờ bạn phê duyệt tại {name}",
       "review": "Xem xét",

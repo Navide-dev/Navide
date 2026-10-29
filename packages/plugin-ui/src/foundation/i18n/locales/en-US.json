@@ -11608,7 +11608,7 @@
     },
     "run": {
       "abort-title": "Abort this run?",
-      "abort-message": "The run stops where it is. Its panes stay open, and you can resume it later from Recover.",
+      "abort-message": "The run stops where it is. Its panes stay open, and you can resume it later.",
       "running": "Running: {names}",
       "gate": "Waiting for your approval at {name}",
       "review": "Review",

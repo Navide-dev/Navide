@@ -243,6 +243,51 @@ describe('the Run button shows the refusal', () => {
   })
 })
 
+describe('the sidebar Abort asks first (Pipeline UX D4)', () => {
+  async function loadAbort(confirmed: boolean) {
+    const src = block('async function clearStoredPipelineRun(', '\n// ─────────── Switch / close workspace')
+    const { code } = await transformWithEsbuild(`${src}\nreturn { onPipelineUserAbort }`, 'AppAbort.ts', { loader: 'ts' })
+    const confirm = vi.fn(async (_message: string, _opts: { title?: string; danger?: boolean }) => confirmed)
+    const onPipelineAbort = vi.fn(async () => {})
+    const deps: Record<string, unknown> = {
+      notifyRestore: { confirm },
+      i18n: { global: { t: (key: string) => key } },
+      resetConfirmDialog,
+      panesInView: { value: [] },
+      sendQuiet: vi.fn(),
+      existingProject: { value: null },
+      currentWorkspace: { value: '/tmp/ws' },
+      buildExistingProjectInfo: () => null,
+      pipelineLog: () => {},
+      onPipelineReset: vi.fn(),
+      onPipelineAbort,
+    }
+    const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as { onPipelineUserAbort: () => Promise<void> }
+    return { api, confirm, onPipelineAbort }
+  }
+
+  it('confirms before aborting, saying the run pauses and can be resumed', async () => {
+    const t = await loadAbort(true)
+    await t.api.onPipelineUserAbort()
+    expect(t.confirm).toHaveBeenCalledTimes(1)
+    const [message, opts] = t.confirm.mock.calls[0]
+    expect(message).toBe('pipelineEditor.run.abort-message')
+    expect(opts).toMatchObject({ title: 'pipelineEditor.run.abort-title', danger: true })
+    expect(t.onPipelineAbort).toHaveBeenCalledTimes(1)
+  })
+
+  it('a cancelled confirm leaves the run going', async () => {
+    const t = await loadAbort(false)
+    await t.api.onPipelineUserAbort()
+    expect(t.onPipelineAbort).not.toHaveBeenCalled()
+  })
+
+  it('is wired to the sidebar Abort buttons; MCP (ui.pipeline.abort without confirm) is unchanged', () => {
+    expect(appSource).toContain('@pipeline-abort="onPipelineUserAbort"')
+    expect(appSource).not.toContain('@pipeline-abort="onPipelineAbort"')
+  })
+})
+
 describe('reset clears the stored run, and only the user reset does', () => {
   async function loadReset(resp: unknown, confirmed = true) {
     const resetSource = block('async function clearStoredPipelineRun(', '\n// ─────────── Switch / close workspace')

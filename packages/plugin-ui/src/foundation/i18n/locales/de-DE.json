@@ -11608,7 +11608,7 @@
     },
     "run": {
       "abort-title": "Diesen Lauf abbrechen?",
-      "abort-message": "Der Lauf hält an der aktuellen Stelle an. Seine Panes bleiben offen, und du kannst ihn später über „Wiederherstellen“ fortsetzen.",
+      "abort-message": "Der Lauf hält an der aktuellen Stelle an. Seine Panes bleiben offen, und du kannst ihn später fortsetzen.",
       "running": "Läuft: {names}",
       "gate": "Wartet bei {name} auf Ihre Genehmigung",
       "review": "Prüfen",

@@ -15577,7 +15577,8 @@ async function onPipelineUserReset(): Promise<void> {
   await clearStoredPipelineRun(currentWorkspace.value)
 }
 
-/** The editor's Abort: a pause, not a teardown, and the dialog says so. */
+/** The user's Abort (sidebar or editor): a pause, not a teardown, and the
+ *  dialog says so. */
 async function confirmPipelineAbort(): Promise<boolean> {
   const t = i18n.global.t
   return notifyRestore.confirm(t('pipelineEditor.run.abort-message'), {
@@ -15585,6 +15586,13 @@ async function confirmPipelineAbort(): Promise<boolean> {
     confirmText: t('pipelineEditor.exec.abort'),
     danger: true,
   })
+}
+
+/** ControlPane's Abort buttons. Other aborts (closing or switching the
+ *  workspace, MCP) keep calling onPipelineAbort without a dialog. */
+async function onPipelineUserAbort(): Promise<void> {
+  if (!(await confirmPipelineAbort())) return
+  await onPipelineAbort()
 }
 
 // ─────────── Switch / close workspace (phase-7) ───────────
@@ -23499,7 +23507,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @pipeline-next="onPipelineNext"
       @pipeline-gate-approve="onPipelineGateApprove"
       @pipeline-gate-reject="onPipelineGateRejectFromPanel"
-      @pipeline-abort="onPipelineAbort"
+      @pipeline-abort="onPipelineUserAbort"
       @pipeline-reset="onPipelineUserReset"
       @workspace-check="onWorkspaceCheck"
       @pipeline-resume="onPipelineResume"

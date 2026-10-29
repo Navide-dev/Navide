@@ -11608,7 +11608,7 @@
     },
     "run": {
       "abort-title": "¿Cancelar esta ejecución?",
-      "abort-message": "La ejecución se detiene donde está. Sus paneles siguen abiertos y puedes reanudarla más tarde desde Recuperar.",
+      "abort-message": "La ejecución se detiene donde está. Sus paneles siguen abiertos y puedes reanudarla más tarde.",
       "running": "En ejecución: {names}",
       "gate": "Esperando tu aprobación en {name}",
       "review": "Revisar",
