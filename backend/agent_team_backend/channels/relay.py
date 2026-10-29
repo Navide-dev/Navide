@@ -45,6 +45,10 @@ _BARE_ANSWER_RE = re.compile(rf"^\s*({_CHOICE})(?:\s+(.+?))?\s*$", re.IGNORECASE
 # LINE_PROMPT_VENDORS and HOTKEY_VENDORS in src/renderer/src/lib/paneAnswerKeys.ts.
 ANSWERABLE_AGENTS = frozenset({"claude", "codex", "aider", "grok"})
 
+# Vendors that ask only through a numbered menu, so a screen with no menu on it
+# holds nothing to answer. Keep in sync with MENU_VENDORS in paneAnswerKeys.ts.
+MENU_AGENTS = frozenset({"claude", "codex"})
+
 # Vendors whose one answerable prompt grants for good: Grok Build keeps a
 # trusted folder in its trust store, which grok.folder-trust shares with every
 # Grok pane. Its "allow" is a permanent allow, only the user's to give (#442's
