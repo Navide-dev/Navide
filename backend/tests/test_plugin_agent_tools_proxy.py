@@ -134,7 +134,11 @@ pytestmark = pytest.mark.asyncio
 #: flow (previous pin bffa7b33…, #755): scheduler_list documents that a pane
 #: sees another workspace's job redacted, scheduler_runs that it is refused
 #: with SCHEDULER_CROSS_WORKSPACE. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "8134eb175b054411d6a95b74a5d5f85f8d8b743ea042939ca76ee33c8b77ac79"
+#: Re-pinned for 0.2.34 n8n import fixes on top of the scheduler workspace
+#: scope (previous pin 8134eb17…, #757): pipeline_import_n8n documents that a
+#: resend within 10 minutes answers with the pipeline it made (`reused`), the
+#: 5 MB limit and the error codes too_large and refused. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "a1735e0d4d8d46c2b98ccc8d34fd0920b8a684f8e3335af903333de32f7741ea"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

@@ -11345,7 +11345,8 @@
       "gate-sub": "Waits for approval",
       "pinned": "Output frozen",
       "tokens": "{n} tok",
-      "trigger-sub": "Manual, command or MCP"
+      "trigger-sub": "Manual, command or MCP",
+      "needs-review": "Imported from n8n: check this step before running the pipeline"
     },
     "notice": {
       "external-edit": "This pipeline was changed elsewhere. Showing the latest version; undo history was cleared.",
@@ -12334,6 +12335,78 @@
       "invalid": "This is not an n8n workflow Navide can read.",
       "preview-failed": "Preview failed.",
       "import-failed": "Import failed."
+    },
+    "imported": "Imported “{name}”",
+    "imported-review": "Imported “{name}” · {n} step needs review | Imported “{name}” · {n} steps need review",
+    "imported-reused": "“{name}” was already imported a moment ago. Opened that pipeline; no copy was made.",
+    "merged-nodes": "{n} n8n node in this step | {n} n8n nodes in this step",
+    "subworkflows-title": "Called workflows",
+    "will-create": "Importing creates {n} pipeline. | Importing creates {n} pipelines.",
+    "subworkflow-status": {
+      "imported": "Imported",
+      "will-import": "Imported with this one",
+      "existing": "Uses the pipeline imported before",
+      "missing": "Not in Navide yet",
+      "recursive": "Calls back: stays for review"
+    },
+    "error-in-workflow": "Workflow {n}: {message}",
+    "import-timeout": "The import is taking long and may still finish. Press Import again: it opens the pipeline if it was made, and never makes a copy.",
+    "detail": {
+      "unknown-version": "typeVersion {version} is outside the known range {lo}–{hi}. An agent carries it out from its parameters.",
+      "unknown-type": "This node type is not in the import table. An agent carries it out from its parameters.",
+      "community-node": "Community node. An agent carries it out from its parameters.",
+      "merge-combine": "Merge in “{mode}” mode combines data. An agent carries it out by its merge rule.",
+      "role-trigger-schedule": "Runs on a schedule in n8n. Start it manually until Navide schedules pipelines.",
+      "role-trigger-webhook": "Starts from an HTTP request in n8n. Navide has no webhook trigger yet.",
+      "role-trigger-error": "n8n error workflows have no Navide equivalent yet.",
+      "role-trigger-app": "Starts from an app event in n8n. Navide has no app triggers yet.",
+      "role-subworkflow": "Calls another n8n workflow that is not imported. Paste that workflow too, or import it first.",
+      "role-respond": "Answers an n8n webhook. Navide has no webhook trigger yet.",
+      "error-workflow": "This workflow is its own error workflow. The steps after it run through error edges when a step fails.",
+      "recursive-subworkflow": "Calls the n8n workflow {workflowId}, which calls this workflow back. A sub-pipeline cannot run itself, so this call stays for review.",
+      "tool-pipeline": "An agent tool that calls the n8n workflow {workflowId}, imported as the pipeline {pipelineId}. A pipeline cannot be called as a tool, so the step's instructions name it instead.",
+      "subpipeline": "Runs the pipeline {pipelineId} (the n8n workflow {workflowId}) as a sub-pipeline and waits for it.",
+      "subpipeline-nowait": "Runs the pipeline {pipelineId} (the n8n workflow {workflowId}) as a sub-pipeline and waits for it. n8n did not wait for it; Navide always waits for a sub-pipeline.",
+      "loop-batch": "The loop is merged into one step that processes the items one by one.",
+      "loop-repeat": "The loop is merged into one step that repeats until the condition that leaves the loop holds.",
+      "loop-wait": "An n8n Wait inside a loop. The step pauses here between rounds; no approval gate stops the run.",
+      "loop-subworkflow": "Calls another n8n workflow inside a loop. An agent carries the loop out as one step.",
+      "removed-sticky": "Sticky note. Its text is in the description and in the nearest step's instructions.",
+      "removed-disabled": "Disabled in n8n. Left out; its connections pass through.",
+      "removed-noop": "No Operation node. Removed, and its connections joined.",
+      "cluster-model": "The step runs on a CLI agent instead of this model.",
+      "cluster-memory": "Dropped. The CLI session keeps its own context.",
+      "cluster-tool": "The agent uses its own equivalent of this tool.",
+      "cluster-mcp-tool": "Set up the same MCP server in Settings → MCP.",
+      "cluster-tool-workflow": "An agent tool that calls another n8n workflow, which is not imported. A pipeline cannot be called as a tool, so the step's instructions describe it.",
+      "cluster-parser": "The output format is part of the step's instructions.",
+      "cluster-vector": "Vector store clusters are not supported. Keep this part in n8n.",
+      "cluster-other": "Merged into the agent's step.",
+      "branch-if": "Branch edges: the agent reports which way the condition went, and only that branch runs.",
+      "branch-switch": "Branch edges, one per rule: the agent reports which rule matched, and only that branch runs.",
+      "merge-join": "Waits for the inputs that run. An input whose branch was not taken is skipped.",
+      "agent-step": "An agent carries it out from the original parameters."
+    },
+    "warning": {
+      "error-workflow-other": "The workflow's settings name another n8n workflow for errors. That error handling is not imported.",
+      "into-trigger": "A connection into the trigger “{node}” was dropped.",
+      "plain-connection": "A {kind} connection out of “{node}” became a plain one: only steps can branch or fail.",
+      "outputs-same-step": "Several outputs of “{node}” lead to the same step. Only “{kept}” is kept.",
+      "retry-capped": "“{node}” retries {tries} times, {waitMs} ms apart, in n8n. Navide allows at most {maxTries} tries {maxWaitMs} ms apart, so it uses {usedTries} tries {usedWaitMs} ms apart.",
+      "over-target": "{slots} steps is more than the target of about {target}. Each step opens a CLI pane.",
+      "wait-in-loop": "The Wait “{node}” is inside a loop and is merged into its step. No approval gate stops the run there."
+    },
+    "error-reason": {
+      "invalid": "This is not an n8n workflow Navide can read.",
+      "invalid-json": "The text is not valid JSON.",
+      "not-object": "An n8n workflow is a JSON object.",
+      "no-nodes": "An n8n workflow needs nodes and connections.",
+      "node-shape": "Node {index} needs a name and a type.",
+      "duplicate-name": "Node {index} has the same name as an earlier node.",
+      "empty-list": "The list holds no n8n workflow.",
+      "internal": "The converted graph is invalid. This is a bug in the importer.",
+      "too-large": "The workflow is {sizeMb} MB. An import takes at most {limitMb} MB.",
+      "store-refused": "The workflow “{workflow}” could not be stored, so nothing was imported: {problems}"
     }
   }
 }

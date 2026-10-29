@@ -95,6 +95,8 @@ export interface GraphNode {
   stageId?: string
   /** Frozen output: reruns skip this node and reuse its last result. */
   pinned?: boolean
+  /** Set by the n8n import on a step the user should check before running. */
+  needsReview?: boolean
   /** Slot nodes only: a failed try (kickoff never landed, or the agent
    *  reported ---NODE-FAILED---) is retried on the same node, up to maxTries
    *  tries in all, waitMs apart, before its error edge or the run fails. */
