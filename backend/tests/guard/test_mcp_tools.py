@@ -152,7 +152,7 @@ def test_claude_hook_payload_reaches_the_mcp_rules():
 
 def test_a_shell_named_by_the_call_picks_the_dialect():
     for shell, builtin in [("bash", "shell"), ("/bin/zsh", "shell"), ("powershell.exe", "powershell"),
-                           ("C:\\Windows\\System32\\cmd.exe", "powershell"), ("pwsh", "powershell")]:
+                           ("pwsh", "powershell")]:
         for command in ["rm -rf ~", "Remove-Item C:\\x", "git status"]:
             got = grade("mcp__desktop-commander__start_process", {"command": command, "shell": shell})
             assert got == grade(builtin, {"command": command}), (shell, command)
@@ -172,3 +172,18 @@ def test_write_pdf_grades_its_output_path_too():
     v = grade("mcp__desktop-commander__write_pdf",
               {"path": f"{WS}/in.pdf", "content": "x", "outputPath": f"{WS}/.git/hooks/pre-commit"})
     assert v.level == "high" and "git-hooks-write" in v.rule_ids
+
+
+@pytest.mark.parametrize("command", ["rm -rf ~", "del /s /q C:\\Users", "git status"])
+def test_cmd_is_graded_as_both_dialects_and_never_parseable(command):
+    got = grade("mcp__desktop-commander__start_process", {"command": command, "shell": "C:\\Windows\\cmd.exe"})
+    unnamed = grade("mcp__desktop-commander__start_process", {"command": command})
+    order = {"normal": 0, "high": 1, "critical": 2}
+    assert order[got.level] >= order[unnamed.level]
+    assert not got.parseable and "untokenizable-shape" in got.rule_ids
+
+
+@pytest.mark.parametrize("tool", ["mcp__desktop-commander__start_process", "mcp__some-server__bash",
+                                  "mcp__windows-mcp__PowerShell"])
+def test_a_cmd_keyed_command_is_graded_too(tool):
+    assert grade(tool, {"cmd": "rm -rf ~"}).level == "critical"

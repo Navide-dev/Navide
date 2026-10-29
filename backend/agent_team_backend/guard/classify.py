@@ -1625,12 +1625,18 @@ def classify(
         mcp, tool_input = "shell", {"command": tool_input.get("input")}
     if mcp == "shell":
         # The server picks the shell: a POSIX shell, or PowerShell / cmd on
-        # Windows. Unless the call names one, grade both and keep the worse.
+        # Windows. Unless the call names POSIX or PowerShell, grade both and
+        # keep the worse; cmd has no dialect of its own here, so it is also
+        # marked not statically judgeable.
         dialect = _mcp_shell_dialect(tool_input.get("shell"))
-        if dialect is None:
+        if dialect in (None, "cmd"):
             kw = {"cwd": cwd, "workspace": workspace, "protected_branches": protected_branches}
-            command = {"command": tool_input.get("command")}
-            return _worse(classify("shell", command, **kw), classify("powershell", command, **kw))
+            both = _worse(classify("shell", tool_input, **kw), classify("powershell", tool_input, **kw))
+            if dialect == "cmd" and _tool_command(tool_input):
+                opaque = _Acc()
+                opaque.opaque("untokenizable-shape", "cmd syntax is not modelled")
+                both = _worse(both, opaque.verdict())
+            return both
         mcp = dialect
     if mcp == "write-pdf":
         mcp, tool_input = "write", {"paths": [p for p in (tool_input.get("path"), tool_input.get("outputPath")) if p]}
@@ -1675,12 +1681,14 @@ def _mcp_tool(name: str) -> str | None:
 
 
 def _mcp_shell_dialect(shell: object) -> str | None:
-    """"powershell" or "shell" for the shell an MCP call names, else None."""
+    """"powershell", "shell" or "cmd" for the shell an MCP call names, else None."""
     if not isinstance(shell, str) or not shell.strip():
         return None
     base = re.split(r"[\\/]", shell.strip())[-1].lower().removesuffix(".exe")
-    if base in ("powershell", "pwsh", "cmd"):
+    if base in ("powershell", "pwsh"):
         return "powershell"
+    if base == "cmd":
+        return "cmd"
     return "shell" if base in SHELLS else None
 
 
