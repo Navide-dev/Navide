@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { backendEntryOnDisk } from './installedPlugins'
 
 vi.mock('electron', () => ({
   app: { isPackaged: false, getVersion: () => '0.2.35' },
@@ -69,7 +70,8 @@ function writePackage(id: string, system: string[] = ['ui', 'web']): PluginActiv
   const entry = `backend/${id.replace('.', '-')}`
   mkdirSync(join(packageDir, 'backend'), { recursive: true })
   writeFileSync(join(packageDir, 'manifest.json'), JSON.stringify(manifest(id, system)))
-  writeFileSync(join(packageDir, entry), 'binary', { mode: 0o700 })
+  // On Windows a bare manifest entry names the `.exe` beside it.
+  writeFileSync(join(packageDir, backendEntryOnDisk(entry)), 'binary', { mode: 0o700 })
   return {
     pluginId: id,
     packageVersion: '1.0.0',
