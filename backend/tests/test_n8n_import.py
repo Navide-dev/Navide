@@ -226,7 +226,8 @@ def test_if_becomes_branch_edges_and_the_merge_is_native():
         ("main", "trigger", "n8n-check", None),
     ]
     kick = slot(out, "n8n-check")["slot"]["kickoffBody"]
-    assert "---BRANCH: <value>--- with <value> one of: true, false" in kick
+    assert "report the branch you take, one of: true, false" in kick
+    assert "---" + "BRANCH" not in kick  # the engine adds the signal format, with its code
     assert '"combinator": "and"' in kick  # the condition, verbatim
     assert (entry(out, "Check")["category"], entry(out, "Check")["reason"]) == ("native", "branch")
     assert entry(out, "Check")["branches"] == ["true", "false"]
@@ -383,8 +384,8 @@ def test_a_cross_node_read_becomes_a_node_output_reference():
     out = convert(w)
     kick = slot(out, "n8n-use")["slot"]["kickoffBody"]
     assert "{{node.n8n-lookup.output}}" in kick and "{{node.n8n-mid.output}}" in kick
-    assert "---OUTPUT-START---" in slot(out, "n8n-lookup")["slot"]["kickoffBody"]
-    assert "---OUTPUT-START---" not in slot(out, "n8n-use")["slot"]["kickoffBody"]
+    assert "result as JSON" in slot(out, "n8n-lookup")["slot"]["kickoffBody"]
+    assert "result as JSON" not in slot(out, "n8n-use")["slot"]["kickoffBody"]
 
 
 def test_a_read_of_a_step_that_does_not_run_first_is_disclosed():

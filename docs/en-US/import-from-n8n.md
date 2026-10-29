@@ -52,8 +52,9 @@ secrets were removed, and how many steps need review. None of this blocks
 
 - **IF** becomes branch edges `true` / `false`; **Switch** one branch per
   rule (its output name when renamed, else its number) and `default` for
-  the fallback output. The step's agent reports the branch it took
-  (`---BRANCH: <value>---`) and only that branch runs; an Append or Choose Branch
+  the fallback output. The step's agent reports the branch it took, the
+  way Navide's signal instructions at the end of its kickoff say, and only
+  that branch runs; an Append or Choose Branch
   Merge after it runs on the inputs that arrived.
 - A node with **On Error → Continue (using error output)** gets an error
   edge: the next step runs only when it fails. A workflow that is its own

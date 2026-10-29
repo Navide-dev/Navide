@@ -25,7 +25,7 @@ Agent は MCP ツール `pipeline_import_n8n` で同じことができます。�
 
 ### 分岐、エラー、リトライ、ステップ間のデータ
 
-- **IF** は `true` / `false` の分岐エッジになります。**Switch** はルールごとに一つの分岐（名前を変えた出力はその名前、それ以外は番号）になり、fallback 出力は `default` になります。そのステップの Agent が選んだ分岐を報告し（`---BRANCH: <値>---`）、その分岐だけが実行されます。後ろの Append または Choose Branch モードの Merge は実際に届いた入力で実行されます。
+- **IF** は `true` / `false` の分岐エッジになります。**Switch** はルールごとに一つの分岐（名前を変えた出力はその名前、それ以外は番号）になり、fallback 出力は `default` になります。そのステップの Agent は、Kickoff の末尾に Navide が付ける信号の説明に従って選んだ分岐を報告し、その分岐だけが実行されます。後ろの Append または Choose Branch モードの Merge は実際に届いた入力で実行されます。
 - **On Error → Continue (using error output)** のノードにはエラーエッジが付き、失敗したときだけ次のステップが実行されます。自分自身をエラーワークフローにしているワークフロー（Settings → Error Workflow）では、Error Trigger の後のステップがすべてのステップからのエラーエッジとしてつながります。
 - **Retry On Fail** はそのステップのリトライになります：合計で最大 5 回、間隔は最大 300000 ms です。n8n の設定がこれを超えるノードは、レポートに示されます。
 - `$('Lookup').item.json` のように他のノードを読む expression は、Kickoff でそのステップの結果を `{{node.<ステップ id>.output}}` として受け取ります。読まれる側のステップには、最後に結果を JSON で出力するよう指示されます。

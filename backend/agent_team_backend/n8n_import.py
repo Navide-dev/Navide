@@ -1145,8 +1145,8 @@ def _kickoff_extras(
             kind = "IF" if info[b]["role"] == "if" else "Switch"
             values = ", ".join(branch_src[b]) or "the output you take"
             out.append(f"This step ends at the n8n {kind} node \"{b}\". Evaluate its condition (its parameters above, "
-                       "verbatim) and, when you are done, report the branch on a line of its own as "
-                       f"---BRANCH: <value>--- with <value> one of: {values}. Only that branch runs next.")
+                       f"verbatim) and report the branch you take, one of: {values}, the way the branch instructions "
+                       "at the end of this kickoff say. Only that branch runs next.")
     for reader, read, owner in refs:
         if owner:
             out.append(f"\"{reader}\" reads data from the n8n node \"{read}\" ($('{read}').item.json). That node ran in "
@@ -1155,8 +1155,8 @@ def _kickoff_extras(
             out.append(f"\"{reader}\" reads data from the n8n node \"{read}\", which does not run before this step; "
                        "work without it or say what is missing.")
     if contract:
-        out.append("Later steps read this step's result as JSON: end your reply with that JSON between a line "
-                   "---OUTPUT-START--- and a line ---OUTPUT-END---.")
+        out.append("Later steps read this step's result as JSON: give it the way the structured-output "
+                   "instructions at the end of this kickoff say.")
     for m, note in retries.items():
         if note["capped"]:
             out.append(f"In n8n \"{m}\" retried {note['requested']['maxTries']} times; here this step is retried "
