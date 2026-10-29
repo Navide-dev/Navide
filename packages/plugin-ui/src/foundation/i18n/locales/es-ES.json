@@ -1467,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock es una pantalla de privacidad, no un control de acceso. Cubre todas las ventanas de Navide mientras no estás. Los agentes, los terminales, los canales de chat, las herramientas MCP y las programaciones siguen en marcha, y alguien frente a este ordenador que sepa cómo puede saltárselo.",
+      "section-lock": "Bloqueo",
+      "enabled": "Activar App Lock",
+      "enabled-hint": "Define primero un PIN. El PIN siempre desbloquea, aunque Touch ID esté activado.",
+      "lock-now": "Bloquear ahora",
+      "lock-now-hint": "Cubre todas las ventanas al instante. Atajo {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "Hay un PIN definido.",
+      "pin-none-hint": "Aún no hay PIN. Usa de 4 a 12 dígitos.",
+      "set-pin": "Definir PIN",
+      "change-pin": "Cambiar PIN",
+      "remove-pin": "Quitar PIN",
+      "remove-pin-hint": "Quitar el PIN desactiva App Lock.",
+      "current-pin": "PIN actual",
+      "new-pin": "PIN nuevo",
+      "confirm-pin": "Confirmar PIN",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "pin-saved": "PIN guardado.",
+      "pin-removed": "PIN quitado. App Lock está desactivado.",
+      "section-unlock": "Desbloqueo",
+      "method": "Desbloquear con",
+      "method-system": "Touch ID, con el PIN como alternativa",
+      "method-pin": "Solo PIN",
+      "system-unavailable": "Touch ID no está disponible en este ordenador, así que Navide se desbloquea con tu PIN.",
+      "section-auto": "Bloqueo automático",
+      "idle": "Tras inactividad",
+      "idle-hint": "Tiempo sin usar el teclado ni el ratón en todo este ordenador.",
+      "idle-never": "Nunca",
+      "idle-minutes": "{n} min",
+      "on-screen-lock": "Al bloquearse la pantalla",
+      "on-suspend": "Al entrar el ordenador en reposo",
+      "on-start": "Al iniciar Navide",
+      "section-forgot": "¿Has olvidado el PIN?",
+      "reset-with-system": "Restablecer PIN con Touch ID",
+      "forgot-system": "Touch ID confirma que eres tú y luego eliges un PIN nuevo.",
+      "forgot-manual-title": "Sin Touch ID",
+      "forgot-manual": "Cierra Navide y borra app-lock.json de la carpeta de datos de Navide. Así se quitan App Lock y su PIN, y nada más.",
+      "error-invalid-pin": "Usa de 4 a 12 dígitos.",
+      "error-mismatch": "Los dos PIN no coinciden.",
+      "error-wrong-pin": "El PIN actual es incorrecto.",
+      "error-cooldown": "Demasiados intentos. Vuelve a intentarlo en {seconds} s.",
+      "error-system-failed": "Touch ID no ha confirmado que seas tú.",
+      "error-generic": "No ha funcionado. Inténtalo de nuevo."
+    },
     "cliExtensions": {
       "tabInstalled": "Extensiones de CLI instaladas",
       "tabConvenience": "Qué cambia Navide",
@@ -1644,6 +1691,10 @@
         "status-badges": {
           "title": "Insignias de estado",
           "summary": "Cambia el nombre de cada estado de pane y elige su color, por idioma."
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "Oculta todas las ventanas tras una pantalla de bloqueo y desbloquea con Touch ID o un PIN"
         },
         "voice-input": {
           "title": "Entrada de voz",
@@ -2651,6 +2702,7 @@
       "executionPolicy": "Política de ejecución",
       "statusBadges": "Insignias de estado",
       "voice": "Entrada de voz",
+      "appLock": "App Lock",
       "keybindings": "Atajos",
       "updates": "Actualizaciones",
       "help": "Ayuda"
@@ -2717,14 +2769,14 @@
         "intro": "Qué controla cada una de las diecinueve pestañas de ajustes, cómo Navide Cloud une varias máquinas en una red privada y las superficies del sistema que viven fuera de la pantalla principal: los menús, las ventanas independientes, las vistas de uso y el mantenimiento de recursos.",
         "s1": {
           "title": "Resumen de los ajustes",
-          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>24 pestañas</strong> en total.",
+          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>25 pestañas</strong> en total.",
           "h1": "El campo de búsqueda",
           "p2": "Debajo del encabezado de la barra lateral hay un campo de búsqueda con el texto de ejemplo <code>Buscar en los ajustes…</code>. Busca en los títulos de los ajustes, su sección y sus palabras clave <strong>en todas las pestañas</strong> (con el idioma actual de la interfaz y las palabras clave indexadas) y muestra como máximo 8 resultados; al hacer clic en uno se cambia a esa pestaña y se desplaza hasta la sección (con una excepción: «Almacenamiento» cierra los ajustes y abre directamente el Administrador de recursos). Si no hay coincidencias, muestra <code>No hay ajustes que coincidan</code>. <kbd class=\"syh-kbd\">Esc</kbd> lo vacía.",
           "callout": {
             "title": "El índice de búsqueda no es exhaustivo",
             "text": "El índice es una lista mantenida a mano, y <strong>las pestañas {layout}, {notifications}, {security} y {channels} no tienen ninguna entrada</strong>, así que nada de su contenido se puede buscar: tienes que abrirlas tú. Una entrada de CLI Agents abre directamente el panel lateral de ajustes de una CLI (consulta el tema «Agents de CLI y cuentas»)."
           },
-          "h2": "Las veinticuatro pestañas",
+          "h2": "Las veinticinco pestañas",
           "tabTable": {
             "group": "Grupo",
             "tab": "Pestaña",
@@ -2759,6 +2811,10 @@
             "voice": {
               "what": "Entrada de voz manteniendo pulsado, transcrita en esta máquina: atajo, micrófono, modo de grabación, salida en chino, modelo y motor",
               "more": "El capítulo «Entrada de voz» del tema «{workspace}»"
+            },
+            "appLock": {
+              "what": "Una pantalla de privacidad sobre todas las ventanas: PIN, Touch ID, bloqueo por inactividad y reposo",
+              "more": "el aviso al principio de la página App Lock"
             },
             "cloud": {
               "what": "Estado de la conexión entre dispositivos, huella de esta máquina, quién puede dar órdenes a esta máquina",

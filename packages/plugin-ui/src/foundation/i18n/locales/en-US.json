@@ -1467,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock is a privacy screen, not access control. It covers every Navide window while you are away. Agents, terminals, chat channels, MCP tools and schedules keep running, and someone at this computer who knows how can still get past it.",
+      "section-lock": "Lock",
+      "enabled": "Turn on App Lock",
+      "enabled-hint": "Set a PIN first. The PIN always unlocks, even when Touch ID is on.",
+      "lock-now": "Lock Now",
+      "lock-now-hint": "Covers every window right away. Shortcut {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "A PIN is set.",
+      "pin-none-hint": "No PIN yet. Use 4 to 12 digits.",
+      "set-pin": "Set PIN",
+      "change-pin": "Change PIN",
+      "remove-pin": "Remove PIN",
+      "remove-pin-hint": "Removing the PIN turns App Lock off.",
+      "current-pin": "Current PIN",
+      "new-pin": "New PIN",
+      "confirm-pin": "Confirm PIN",
+      "save": "Save",
+      "cancel": "Cancel",
+      "pin-saved": "PIN saved.",
+      "pin-removed": "PIN removed. App Lock is off.",
+      "section-unlock": "Unlock",
+      "method": "Unlock with",
+      "method-system": "Touch ID, with PIN as a fallback",
+      "method-pin": "PIN only",
+      "system-unavailable": "Touch ID isn't available on this computer, so Navide unlocks with your PIN.",
+      "section-auto": "Lock automatically",
+      "idle": "After idle",
+      "idle-hint": "Time without keyboard or mouse input anywhere on this computer.",
+      "idle-never": "Never",
+      "idle-minutes": "{n} min",
+      "on-screen-lock": "When the screen locks",
+      "on-suspend": "When the computer sleeps",
+      "on-start": "When Navide starts",
+      "section-forgot": "Forgot your PIN?",
+      "reset-with-system": "Reset PIN with Touch ID",
+      "forgot-system": "Touch ID confirms it's you, then you choose a new PIN.",
+      "forgot-manual-title": "Without Touch ID",
+      "forgot-manual": "Quit Navide and delete app-lock.json from Navide's data folder. That removes App Lock and its PIN, and nothing else.",
+      "error-invalid-pin": "Use 4 to 12 digits.",
+      "error-mismatch": "The two PINs don't match.",
+      "error-wrong-pin": "The current PIN is wrong.",
+      "error-cooldown": "Too many attempts. Try again in {seconds} s.",
+      "error-system-failed": "Touch ID didn't confirm it's you.",
+      "error-generic": "That didn't work. Try again."
+    },
     "cliExtensions": {
       "tabInstalled": "Installed CLI Extensions",
       "tabConvenience": "What Navide Changes",
@@ -1644,6 +1691,10 @@
         "status-badges": {
           "title": "Status Badges",
           "summary": "Rename each pane status and pick its colour, per language."
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "Hide every window behind a lock screen and unlock with Touch ID or a PIN"
         },
         "voice-input": {
           "title": "Voice Input",
@@ -2651,6 +2702,7 @@
       "executionPolicy": "Execution Policy",
       "statusBadges": "Status Badges",
       "voice": "Voice Input",
+      "appLock": "App Lock",
       "keybindings": "Shortcuts",
       "updates": "Updates",
       "help": "Help"
@@ -2717,14 +2769,14 @@
         "intro": "What each of the nineteen settings tabs controls, how Navide Cloud links several machines into one private network, and the system surfaces that live outside the main screen — the menus, the standalone windows, the usage views and resource upkeep.",
         "s1": {
           "title": "Settings overview",
-          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>24 tabs</strong> in total.",
+          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>25 tabs</strong> in total.",
           "h1": "The search field",
           "p2": "Below the sidebar heading is a search field with the placeholder <code>Search settings…</code>. It matches setting titles, their section and their keywords <strong>across tabs</strong> (using the current interface language and indexed keywords), listing at most 8 results; clicking one switches to that tab and scrolls to the section (with one exception: \"Storage\" closes settings and opens the Resource Manager directly). With no match it shows <code>No matching settings</code>. <kbd class=\"syh-kbd\">Esc</kbd> clears it.",
           "callout": {
             "title": "The search index is not exhaustive",
             "text": "The index is a hand-maintained list, and <strong>the {layout}, {notifications}, {security} and {channels} tabs have no entries at all</strong>, so nothing inside them is searchable — you have to open them yourself. A CLI Agents entry opens one CLI's settings drawer directly (see the \"CLI Agents & Accounts\" topic)."
           },
-          "h2": "The twenty-four tabs",
+          "h2": "The twenty-five tabs",
           "tabTable": {
             "group": "Group",
             "tab": "Tab",
@@ -2759,6 +2811,10 @@
             "voice": {
               "what": "Hold-to-talk voice input transcribed on this machine: shortcut, microphone, recording mode, Chinese output, model and engine",
               "more": "The \"Voice input\" chapter of the \"{workspace}\" topic"
+            },
+            "appLock": {
+              "what": "A privacy screen over every window: PIN, Touch ID, locking on idle and sleep",
+              "more": "the notice at the top of the App Lock page"
             },
             "cloud": {
               "what": "Cross-device link status, this machine's fingerprint, who may command this machine",

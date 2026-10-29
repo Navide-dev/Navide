@@ -189,6 +189,11 @@ import { isLinux, isMac } from '../shared/osplat'
 import { installMediaPermissionHandlers } from './media-permissions'
 import { registerFnKeyIpc } from './fn-key-ipc'
 import { registerSpotlightSettingsIpc } from './spotlight-settings-ipc'
+import { AppLockController } from './appLock'
+import { AppLockOverlay } from './appLockOverlay'
+import { APP_LOCK_FILE } from './appLockStore'
+import { appLockStrings } from './appLockStrings'
+import { registerAppLockIpc } from './app-lock-ipc'
 import { registerSpokenContentSettingsIpc } from './spoken-content-settings-ipc'
 import { createDeepLinkRouter, registerDeepLinkIpc } from './deep-link'
 import { DEEP_LINK_SCHEME, deepLinkFromArgv } from '../shared/deepLink'
@@ -1738,6 +1743,31 @@ const terminalStorageOwnerService = new TerminalStorageOwnerService({
 frontendPluginManager.setTerminalStorageHandler((origin, request, canDispatch) =>
   terminalStorageOwnerService.execute(origin, request, canDispatch)
 )
+// App Lock: a privacy screen over every window. Main owns it end to end and
+// nothing else reads it — the backend, terminals, chat channels, MCP and
+// schedules carry on while it is up.
+const appLockOverlay = new AppLockOverlay({
+  preloadPath: join(__dirname, '../preload/app-lock-preload.js'),
+  entry: process.env['ELECTRON_RENDERER_URL']
+    ? { url: process.env['ELECTRON_RENDERER_URL'] }
+    : { filePath: join(__dirname, '../renderer/index.html') },
+})
+const appLock = new AppLockController({
+  filePath: join(app.getPath('userData'), APP_LOCK_FILE),
+  now: () => Date.now(),
+  systemIdleSeconds: () => powerMonitor.getSystemIdleTime(),
+  canPromptSystem: () => isMac() && systemPreferences.canPromptTouchID(),
+  promptSystem: () => systemPreferences.promptTouchID(appLockStrings(currentUiLocale()).systemReason),
+  onChange: (status) => {
+    if (status.locked) appLockOverlay.show()
+    else appLockOverlay.hide()
+    rebuildAppMenu()
+    for (const win of mainWindows) {
+      if (!win.isDestroyed()) win.webContents.send('app-lock:status-changed', status)
+    }
+  },
+})
+app.on('browser-window-created', (_event, win) => appLockOverlay.watch(win))
 const filePickerHostService = new FilePickerHostService({
   preloadPath: join(__dirname, '../preload/file-picker-preload.js'),
   entry: process.env['ELECTRON_RENDERER_URL']
@@ -5984,6 +6014,24 @@ app.whenReady().then(async () => {
     isTrusted: (event) => isAppWindowSender(event),
     isMac,
   })
+  // Settings → App Lock, plus the lock screens themselves (see app-lock-ipc.ts).
+  registerAppLockIpc(ipcMain, {
+    controller: appLock,
+    isAppWindow: (event) => isAppWindowSender(event),
+    isLockScreen: (event) => appLockOverlay.isLockScreen(event.sender.id),
+    screenInit: () => {
+      const status = appLock.status()
+      return {
+        strings: appLockStrings(currentUiLocale()).screen,
+        systemUnlockAvailable: status.systemUnlockAvailable,
+        preferSystem: status.settings.unlockMethod === 'system',
+      }
+    },
+  })
+  powerMonitor.on('lock-screen', () => appLock.handleScreenLock())
+  powerMonitor.on('suspend', () => appLock.handleSuspend())
+  const appLockIdleTimer = setInterval(() => appLock.tick(), 15_000)
+  app.on('will-quit', () => clearInterval(appLockIdleTimer))
   // Settings → Voice → Read aloud: Spoken Content, to download a better voice.
   registerSpokenContentSettingsIpc(ipcMain, {
     openExternal: (url) => shell.openExternal(url),
@@ -6089,6 +6137,8 @@ app.whenReady().then(async () => {
     onShowWhatsNew: () => sendMenuAction('show-whats-new'),
     onShowWelcomeTour: () => sendMenuAction('show-welcome-tour'),
     onOpenLegal: (route) => void shell.openExternal(LEGAL_LINKS[route]),
+    onLockNow: () => void appLock.lock(),
+    lockNowEnabled: () => appLock.status().settings.enabled && !appLock.isLocked(),
     onReloadWindow: (target) => {
       void windowCloseCoordinator.prepareAndReload(target)
       // Handled synchronously from the menu's point of view whenever the target
@@ -6126,6 +6176,8 @@ app.whenReady().then(async () => {
       : {})
   }
   rebuildAppMenu()
+  // After the menu has its hooks: locking rebuilds it (Lock Now greys out).
+  appLock.handleStart()
   // Fill the native About panel (⌘ About Navide) with Navide branding.
   app.setAboutPanelOptions({
     applicationName: 'Navide',

@@ -67,13 +67,14 @@ export const NATIVE_MENU_KEYS: ExternalKeyRow[] = [
  *
  * Pinned here rather than derived, because they are the entries with nothing
  * else pointing at them: Copy (the app re-implements `role: 'copy'` to read a
- * terminal selection), Settings…, New Window and Open Workspace….
+ * terminal selection), Settings…, New Window, Open Workspace… and Lock Now.
  */
 export const MENU_LITERAL_ACCELERATORS = [
   'CmdOrCtrl+C',
   'CmdOrCtrl+,',
   'CmdOrCtrl+N',
   'CmdOrCtrl+O',
+  'CmdOrCtrl+Alt+L',
 ] as const
 
 /**

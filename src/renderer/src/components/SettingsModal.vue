@@ -148,6 +148,7 @@ import MemoryPane from './MemoryPane.vue'
 import StatusBadgeSettingsPane from './StatusBadgeSettingsPane.vue'
 import ChannelsPane from './settings/ChannelsPane.vue'
 import SecurityPane from './settings/SecurityPane.vue'
+import AppLockPane from './settings/AppLockPane.vue'
 import NavideCloudMark from './NavideCloudMark.vue'
 import SettingsNavItem from './settings/SettingsNavItem.vue'
 import SettingsNavSubItem from './settings/SettingsNavSubItem.vue'
@@ -251,7 +252,7 @@ const reclaimNowSize = computed(() => formatBytes(props.reclaimableNowBytes ?? 0
 /** Active high-risk credential findings, shown as the nav badge. */
 const credentialsHighCount = ref(0)
 
-type Tab = 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help'
+type Tab = 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'appLock' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help'
 
 /** Topics inside the Help tab — read-only reference material, no settings. */
 type HelpTopic =
@@ -1144,6 +1145,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     keywords: 'status badge badges colour color rename label idle running awaiting starting stopped exited error 狀態 徽章 顏色 名稱 重新命名 閒置 執行中 等待回應 啟動中 已停止 已結束 錯誤',
   },
   {
+    id: 'app-lock',
+    tab: 'appLock',
+    section: 'appLock',
+    title: t('settings.search.item.app-lock.title'),
+    group: t('settings.nav.group.general'),
+    summary: t('settings.search.item.app-lock.summary'),
+    keywords: 'app lock privacy screen touch id pin password idle sleep 上鎖 鎖定 隱私 指紋 密碼 閒置 休眠',
+  },
+  {
     id: 'voice-input',
     tab: 'voice',
     section: 'voice-input',
@@ -1788,6 +1798,8 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
   notifications: { scope: 'user', storage: 'localStorage' },
   // Both switches are localStorage flags; the model file is the backend's.
   voice: { scope: 'user', storage: 'localStorage' },
+  // Settings and the PIN's scrypt hash are one owner-only file main keeps.
+  appLock: { scope: 'user', storage: 'mainProcess' },
   accounts: { scope: 'userWorkspaceBindings', storage: 'safeStorage' },
   extensions: { scope: 'user', storage: 'mainProcess' },
   // Browsing the registry reads nothing of the user's, so this page has no
@@ -2836,6 +2848,11 @@ watch(activeTab, (tab) => {
               <SettingsNavItem :label="$t('settings.nav.voice')" :active="activeTab === 'voice'" @select="activeTab = 'voice'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5.8" y="1.8" width="4.4" height="7.6" rx="2.2"/><path d="M3.5 7.6a4.5 4.5 0 0 0 9 0M8 12.1v2.1"/></svg>
+                </template>
+              </SettingsNavItem>
+              <SettingsNavItem :label="$t('settings.nav.appLock')" :active="activeTab === 'appLock'" @select="activeTab = 'appLock'">
+                <template #icon>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.3 7V5.2a2.7 2.7 0 0 1 5.4 0V7"/></svg>
                 </template>
               </SettingsNavItem>
             </div>
@@ -4942,6 +4959,11 @@ watch(activeTab, (tab) => {
           <SecurityPane v-if="activeTab === 'security'" :backend="props.backend" />
         </div>
 
+        <div v-show="activeTab === 'appLock'" class="s-body app-lock-body" data-settings-section="appLock">
+          <h1 class="s-page-title">{{ $t('settings.nav.appLock') }}</h1>
+          <AppLockPane v-if="activeTab === 'appLock'" />
+        </div>
+
         <!-- ── VOICE TAB ─────────────────────────────────────────────────── -->
         <div v-show="activeTab === 'voice'" class="s-body voice-body" data-settings-section="voice">
           <h1 class="s-page-title">{{ $t('settings.nav.voice') }}</h1>
@@ -5665,6 +5687,7 @@ watch(activeTab, (tab) => {
 /* Same reason: a scrolling list of status rows needs the gutter and its own
    scroll, which the bare .s-body does not give. */
 .status-badges-body { overflow-y: auto; padding: 18px 22px; }
+.app-lock-body { overflow-y: auto; padding: 18px 22px; }
 /* Same as the other padded tabs: without a modifier the bare .s-body is
    overflow:hidden with no gutter, which clips the shortcut list instead of
    scrolling it. */
