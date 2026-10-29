@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createDevWebGate, devWebPlugins, DEV_WEB_PREFIX, ensurePrivateDir } from '../../scripts/dev-web/devWebPlugin'
+import { createDevWebGate, devTokenFile, devWebPlugins, DEV_WEB_PREFIX, ensurePrivateDir } from '../../scripts/dev-web/devWebPlugin'
 
 const TOKEN = 'a'.repeat(64)
 const HOST = '127.0.0.1:5274'
@@ -82,6 +82,21 @@ describe('devWebPlugins', () => {
     const cfg = (plugins[0].config as () => { server: { host: string; strictPort: boolean } })()
     expect(cfg.server.host).toBe('127.0.0.1')
     expect(cfg.server.strictPort).toBe(true)
+  })
+})
+
+describe('devTokenFile', () => {
+  it('keeps the shared $TMPDIR/agent-team-dev-token for the Electron dev server and the default dev web port', () => {
+    expect(devTokenFile({}, '/t')).toBe(join('/t', 'agent-team-dev-token'))
+    expect(devTokenFile({ NAVIDE_DEV_WEB: '1' }, '/t')).toBe(join('/t', 'agent-team-dev-token'))
+    expect(devTokenFile({ NAVIDE_DEV_WEB: '1', NAVIDE_DEV_WEB_PORT: '5274' }, '/t')).toBe(join('/t', 'agent-team-dev-token'))
+  })
+
+  it('gives two dev web instances on different ports different token files', () => {
+    const a = devTokenFile({ NAVIDE_DEV_WEB: '1', NAVIDE_DEV_WEB_PORT: '5274' }, '/t')
+    const b = devTokenFile({ NAVIDE_DEV_WEB: '1', NAVIDE_DEV_WEB_PORT: '5275' }, '/t')
+    expect(a).not.toBe(b)
+    expect(b).toBe(join('/t', 'agent-team-dev-token-5275'))
   })
 })
 
