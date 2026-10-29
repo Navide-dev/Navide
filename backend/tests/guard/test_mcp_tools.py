@@ -41,7 +41,6 @@ def test_windows_mcp_powershell_with_a_dangerous_command(command, level, rule):
 @pytest.mark.parametrize("mcp_name, builtin", [
     ("mcp__windows-mcp__PowerShell", "powershell"),
     ("mcp__some-server__bash", "Bash"),
-    ("mcp__desktop-commander__execute_command", "shell"),
     ("mcp__x__run_command", "run_command"),
 ])
 def test_mcp_shell_tools_grade_exactly_like_the_builtin_shell(command, mcp_name, builtin):
@@ -49,7 +48,7 @@ def test_mcp_shell_tools_grade_exactly_like_the_builtin_shell(command, mcp_name,
 
 
 def test_every_row_names_a_builtin_tool_or_an_mcp_action():
-    known = SHELL_TOOLS | WRITE_TOOLS | READ_TOOLS | MCP_ACTIONS | {"process-input"}
+    known = SHELL_TOOLS | WRITE_TOOLS | READ_TOOLS | MCP_ACTIONS | {"process-input", "write-pdf"}
     assert all(v in known for v in MCP_TOOLS.values())
 
 
@@ -149,3 +148,27 @@ def test_claude_hook_payload_reaches_the_mcp_rules():
     payload = {"tool_name": "mcp__windows-mcp__PowerShell", "tool_input": {"command": "rm -rf ~"}}
     [(tool, tool_input)] = guard_hooks.normalise("claude", payload)
     assert grade(tool, tool_input).level == "critical"
+
+
+def test_a_shell_named_by_the_call_picks_the_dialect():
+    for shell, builtin in [("bash", "shell"), ("/bin/zsh", "shell"), ("powershell.exe", "powershell"),
+                           ("C:\\Windows\\System32\\cmd.exe", "powershell"), ("pwsh", "powershell")]:
+        for command in ["rm -rf ~", "Remove-Item C:\\x", "git status"]:
+            got = grade("mcp__desktop-commander__start_process", {"command": command, "shell": shell})
+            assert got == grade(builtin, {"command": command}), (shell, command)
+
+
+@pytest.mark.parametrize("command", ["rm -rf ~", "cat ~/.ssh/id_rsa", "git status", "echo $'x'"])
+def test_no_named_shell_grades_both_dialects_and_keeps_the_worse(command):
+    got = grade("mcp__desktop-commander__start_process", {"command": command})
+    posix, ps = grade("shell", {"command": command}), grade("powershell", {"command": command})
+    order = {"normal": 0, "high": 1, "critical": 2}
+    assert order[got.level] == max(order[posix.level], order[ps.level])
+    assert set(got.rule_ids) == set(posix.rule_ids) | set(ps.rule_ids)
+    assert got.parseable == (posix.parseable and ps.parseable)
+
+
+def test_write_pdf_grades_its_output_path_too():
+    v = grade("mcp__desktop-commander__write_pdf",
+              {"path": f"{WS}/in.pdf", "content": "x", "outputPath": f"{WS}/.git/hooks/pre-commit"})
+    assert v.level == "high" and "git-hooks-write" in v.rule_ids

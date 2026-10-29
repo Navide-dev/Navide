@@ -50,9 +50,11 @@ GLOB_TOOLS = {"glob"}
 #: a tool that merely contains "shell" in its name is not caught. Values: a
 #: SHELL_TOOLS name (the call's `command` is graded as that shell), a
 #: WRITE_TOOLS / READ_TOOLS name (its path fields are graded as that tool's),
-#: "process-input" (`input` is graded as a shell command), or one of
-#: MCP_ACTIONS (see _classify_mcp_action). Add a row for each server tool
-#: verified to take these arguments.
+#: "process-input" (`input` is graded as a shell command), "write-pdf" (`path`
+#: and `outputPath` are writes), or one of MCP_ACTIONS (see
+#: _classify_mcp_action). A "shell" row is graded in the dialect its `shell`
+#: argument names, or as both POSIX and PowerShell when it names none. Add a
+#: row for each server tool verified to take these arguments.
 MCP_TOOLS = {
     # Windows-MCP (CursorTouch/Windows-MCP): PowerShell(command), FileSystem(mode,
     # path, destination, recursive), Registry(mode, path), Process(mode, name, pid).
@@ -77,7 +79,7 @@ MCP_TOOLS = {
     "kill_process": "process-kill",
     "force_terminate": "process-kill",
     "write_file": "write",
-    "write_pdf": "write",
+    "write_pdf": "write-pdf",
     "create_directory": "write",
     "edit_block": "edit",
     "read_file": "read",
@@ -1621,6 +1623,17 @@ def classify(
     mcp = _mcp_tool(name)
     if mcp == "process-input":
         mcp, tool_input = "shell", {"command": tool_input.get("input")}
+    if mcp == "shell":
+        # The server picks the shell: a POSIX shell, or PowerShell / cmd on
+        # Windows. Unless the call names one, grade both and keep the worse.
+        dialect = _mcp_shell_dialect(tool_input.get("shell"))
+        if dialect is None:
+            kw = {"cwd": cwd, "workspace": workspace, "protected_branches": protected_branches}
+            command = {"command": tool_input.get("command")}
+            return _worse(classify("shell", command, **kw), classify("powershell", command, **kw))
+        mcp = dialect
+    if mcp == "write-pdf":
+        mcp, tool_input = "write", {"paths": [p for p in (tool_input.get("path"), tool_input.get("outputPath")) if p]}
     if mcp in MCP_ACTIONS:
         _classify_mcp_action(mcp, tool_input, ctx, acc)
         return acc.verdict()
@@ -1659,6 +1672,27 @@ def _mcp_tool(name: str) -> str | None:
         return None
     server, sep, tool = name[len("mcp__"):].rpartition("__")
     return MCP_TOOLS.get(tool) if server and sep else None
+
+
+def _mcp_shell_dialect(shell: object) -> str | None:
+    """"powershell" or "shell" for the shell an MCP call names, else None."""
+    if not isinstance(shell, str) or not shell.strip():
+        return None
+    base = re.split(r"[\\/]", shell.strip())[-1].lower().removesuffix(".exe")
+    if base in ("powershell", "pwsh", "cmd"):
+        return "powershell"
+    return "shell" if base in SHELLS else None
+
+
+def _worse(a: Verdict, b: Verdict) -> Verdict:
+    """Both verdicts' rules, the higher level, and parseable only if both are."""
+    rules, reasons = list(a.rule_ids), list(a.reasons)
+    for rule, reason in zip(b.rule_ids, b.reasons):
+        if rule not in rules:
+            rules.append(rule)
+            reasons.append(reason)
+    level = a.level if LEVEL_ORDER[a.level] >= LEVEL_ORDER[b.level] else b.level
+    return Verdict(level, tuple(rules), tuple(reasons), a.parseable and b.parseable)
 
 
 def _classify_mcp_action(kind: str, tool_input: dict, ctx: _Ctx, acc: _Acc) -> None:
