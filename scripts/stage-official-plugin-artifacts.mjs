@@ -13,10 +13,10 @@ const archivesRoot = join(outputRoot, 'archives')
 const hostTarget = `${process.platform}-${process.arch}`
 
 const sources = [
-  { id: 'navide.mini-ide', directory: 'dist-plugins/navide-mini-ide', target: 'universal' },
-  { id: 'navide.git', directory: 'dist-plugins/navide-git', target: 'universal' },
-  { id: 'navide.plans', directory: 'dist-plugins/navide-plans', target: hostTarget },
-  { id: 'navide.browser', directory: 'dist-plugins/navide-browser', target: hostTarget },
+  { id: 'navide.mini-ide', directory: 'dist-plugins/navide-mini-ide', source: 'plugins/navide-mini-ide', target: 'universal' },
+  { id: 'navide.git', directory: 'dist-plugins/navide-git', source: 'plugins/navide-git', target: 'universal' },
+  { id: 'navide.plans', directory: 'dist-plugins/navide-plans', source: 'plugins/navide-plans', target: hostTarget },
+  { id: 'navide.browser', directory: 'dist-plugins/navide-browser', source: 'plugins/navide-browser', target: hostTarget },
 ]
 
 function runCli(args) {
@@ -37,6 +37,16 @@ for (const source of sources) {
   const manifest = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8'))
   if (manifest.id !== source.id || typeof manifest.version !== 'string') {
     throw new Error(`artifact source identity is invalid: ${directory}`)
+  }
+  // The App looks a bundled plugin up by the plugin's own version
+  // (src/main/plugins/officialPluginVersions.ts), so an App build must not
+  // carry a package stamped with any other version.
+  const sourceManifest = JSON.parse(readFileSync(join(repositoryRoot, source.source, 'manifest.json'), 'utf8'))
+  if (manifest.version !== sourceManifest.version) {
+    throw new Error(
+      `${source.id} was built as ${manifest.version}, but its source manifest is ${sourceManifest.version}; ` +
+        'unset NAVIDE_PLUGIN_ARTIFACT_VERSION for an App build',
+    )
   }
   const files = JSON.parse(readFileSync(join(directory, 'artifact-files.json'), 'utf8'))
   if (!Array.isArray(files.files) || files.files.some((file) => typeof file !== 'string')) {

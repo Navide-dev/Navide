@@ -174,6 +174,7 @@ import type { AgentToolCallErrorCode, AgentToolUnavailableReason } from '../../s
 import type { MiniIdeLegacyPreferences } from './miniIdeLegacyPreferences'
 import type { FilePickerHost, FilePickerInvocation } from '../filePicker'
 import { PluginActivationSelector } from './pluginActivationSelector'
+import { compareSemver } from './pluginManifestV2'
 import {
   PluginFrameBindingRegistry,
   type PluginFrameBinding,
@@ -1698,6 +1699,12 @@ export class FrontendPluginManager {
     | ((pluginId: string, packageVersion: string) => HostCapabilityGrant | null)
     | null = null
   private disabledPluginResolver: ((pluginId: string) => boolean) | null = null
+  /** The version of each first-party plugin whose App-bundled copy this
+   *  session will attempt to load (see setBundledPluginVersions). */
+  private bundledPluginVersions: Readonly<Record<string, string>> = {}
+  /** Installed Registry packages left inactive because the App bundles a newer
+   *  copy of the same id, keyed by plugin id with the installed version. */
+  private readonly supersededInstalledPackages = new Map<string, string>()
   /** Previous Plans snapshot selected by the Host lifecycle record. It is
    *  intentionally absent until the lifecycle has found a real prior active
    *  package; current candidate/active identities are never reused as a fake
@@ -2476,6 +2483,19 @@ export class FrontendPluginManager {
     this.disabledPluginResolver = resolver
   }
 
+  /** The bundled version of each first-party plugin whose factory copy will be
+   *  attempted. An installed Registry copy of one of these ids older by semver
+   *  is superseded by the bundled copy; a tie or a newer one still wins. Set it
+   *  before loadInstalledPlugins. */
+  setBundledPluginVersions(versions: Readonly<Record<string, string>>): void {
+    this.bundledPluginVersions = { ...versions }
+  }
+
+  /** The installed version the bundled copy superseded at load, if any. */
+  supersededInstalledPackageVersion(pluginId: string): string | undefined {
+    return this.supersededInstalledPackages.get(pluginId)
+  }
+
   /** A disabled package stays in the installed inventory, but the Host
    *  registers neither its views nor its backend. First-party ids are not
    *  governed by this switch. */
@@ -2600,6 +2620,10 @@ export class FrontendPluginManager {
     const lifecycleSelector = new PluginActivationSelector(root)
     for (const record of lifecycleSelector.list()) {
       if (!record.active) continue
+      // The bundled copy owns a superseded id this session. Its durable record
+      // stays as it is, so the installed copy is selected again whenever it is
+      // no longer older than the bundled one.
+      if (this.supersededInstalledPackages.has(record.pluginId)) continue
       this.setPluginStorageSnapshotSelection(record.pluginId, {
         activeVersion: record.active.packageVersion,
         ...(record.previous ? { previousVersion: record.previous.packageVersion } : {}),
@@ -13304,6 +13328,19 @@ export class FrontendPluginManager {
             scanned.activation.artifactDigest = decision.artifactDigest
           }
         }
+        // Newer wins between this copy and the App-bundled one; a tie keeps
+        // the installed copy. A version that does not compare is not
+        // superseded. Nothing durable changes: this is decided every load.
+        const bundledVersion = this.bundledPluginVersions[pluginId]
+        const installedVersion = scanned.packageSummary.packageVersion
+        if (
+          bundledVersion !== undefined &&
+          installedVersion !== undefined &&
+          (compareSemver(installedVersion, bundledVersion) ?? 0) < 0
+        ) {
+          this.supersededInstalledPackages.set(pluginId, installedVersion)
+          continue
+        }
       } else if (source?.provenance === 'developer-local-unpacked') {
         if (isReservedPluginId(pluginId)) {
           errors.push(
@@ -13341,6 +13378,7 @@ export class FrontendPluginManager {
           opts = { official: true }
         }
       }
+      this.supersededInstalledPackages.delete(pluginId)
       approved.push({ scanned, pluginId, packageSummary: scanned.packageSummary, opts })
     }
 
@@ -13409,6 +13447,9 @@ export class FrontendPluginManager {
       const pluginId = scanned.activation?.pluginId ?? scanned.descriptor?.id
       if (!pluginId) continue
       if (includePluginIds && !includePluginIds.has(pluginId)) continue
+      // An inactive superseded copy owns nothing: quarantining it must not
+      // unregister the bundled copy that now serves this id.
+      if (this.supersededInstalledPackages.has(pluginId)) continue
       const decision = verifyLocalInstalledPackage(root, scanned.dir, pluginId, trust) ??
         verifyInstalledRegistryPackage(scanned.dir, pluginId, trust)
       if (
@@ -13878,7 +13919,8 @@ export interface BundledMiniIdeSource {
   isPackaged: boolean
   /** `process.resourcesPath` (packaged builds only). */
   resourcesPath: string
-  /** Version selected by the running App for every bundled artifact lookup. */
+  /** The plugin's own bundled version (see officialPluginVersions.ts), used
+   *  for the bundled artifact lookup. */
   artifactVersion: string
   /** Repo root holding `dist-plugins/` when unpackaged. Defaults to the
    *  built main bundle's `../..` (`out/main` → repo root). */
@@ -13886,7 +13928,8 @@ export interface BundledMiniIdeSource {
 }
 
 /** Explicit coordinates for an App-bundled Manifest v2 artifact. The version
- * comes from the running App, never from a directory scan or package manifest.
+ * is the plugin's own bundled version (see officialPluginVersions.ts), never
+ * discovered by a directory scan or read from a package manifest.
  * Legacy recovery helpers accept the same coordinates but continue selecting
  * their retained, unversioned paths. */
 export interface OfficialPluginArtifactSource extends BundledMiniIdeSource {}
@@ -14425,9 +14468,9 @@ export function devPlansPluginDescriptor(): PluginLaunchDescriptor {
   }
 }
 
-/** Dev descriptor for the combined package selected by an explicit App
- * version. The legacy descriptor above is intentionally preserved for
- * rollback tests and manual fallback checks. */
+/** Dev descriptor for the combined package selected by the plugin's explicit
+ * bundled version (see officialPluginVersions.ts). The legacy descriptor above
+ * is intentionally preserved for rollback tests and manual fallback checks. */
 export function devPlansV2PluginBundle(
   artifactVersion: string,
   devRoot?: string,

@@ -164,7 +164,7 @@ jobs:
           test ! -e "${app_path}/Contents/Resources/plugins/plans/backend/navide-plans"
           test ! -e "${app_path}/Contents/Resources/plugins/plans/backend/navide-plans-go"
           # …and the exact selected v2 factory package carries its arm64 backend.
-          artifact_version="$(node -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
           test -x "${app_path}/Contents/Resources/official-artifacts/navide.plans/${artifact_version}/darwin-arm64/package/backend/navide-plans"
           test -x "${app_path}/Contents/Resources/official-artifacts/navide.browser/${artifact_version}/darwin-arm64/package/backend/navide-browser"
           # The voice sidecar is a loose Mach-O in Resources/bin; it must carry
@@ -368,7 +368,7 @@ jobs:
           test -n "${backend}"
           file "${backend}" | grep -q 'ELF 64-bit'
           # …and the exact selected v2 factory package carries its Linux backend.
-          artifact_version="$(node -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-x64/package/backend/navide-plans"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${artifact_version}/linux-x64/package/backend/navide-browser"
           rm -rf "${work}"
@@ -575,7 +575,7 @@ jobs:
           test -n "${backend}"
           file "${backend}" | grep -q 'ELF 64-bit.*aarch64'
           # …and the selected v2 Plans package carries its Linux backend.
-          artifact_version="$(node -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-arm64/package/backend/navide-plans"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${artifact_version}/linux-arm64/package/backend/navide-browser"
           rm -rf "${work}"
@@ -778,7 +778,7 @@ jobs:
           # and the v2 Plans package must carry its Windows backend. `test -f`
           # rather than `-x`: the executable bit means nothing on NTFS.
           test -f dist-release/win-unpacked/resources/bin/agent_team_backend.exe
-          artifact_version="$(node -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
           test -f "dist-release/win-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-x64/package/backend/navide-plans.exe"
           test -f "dist-release/win-unpacked/resources/official-artifacts/navide.browser/${artifact_version}/win32-x64/package/backend/navide-browser.exe"
 
@@ -937,7 +937,7 @@ jobs:
           test -f dist-release/latest.yml
           test "$(find dist-release -maxdepth 1 -name 'Navide-*-win-arm64.exe' | wc -l | tr -d ' ')" -eq 1
           test -f dist-release/win-arm64-unpacked/resources/bin/agent_team_backend.exe
-          artifact_version="$(node -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
           plans_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-arm64/package/backend/navide-plans.exe"
           test -f "${plans_backend}"
           browser_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.browser/${artifact_version}/win32-arm64/package/backend/navide-browser.exe"
