@@ -806,6 +806,29 @@ describe('ChannelsPane', () => {
       expect(managerRow(w).find('[data-testid="channel-managed-enable"]').exists()).toBe(false)
     })
 
+    it('keeps a visible entry on the bot itself, not only in its ⋯ menu', async () => {
+      seedManager(true)
+      const w = await render()
+      const start = managerRow(w).get('[data-testid="channel-managed-start"]')
+      expect(start.element.closest('[data-testid="channel-bot-menu-list"]')).toBeNull()
+      expect(start.text()).toBe('Create a New Bot')
+      // The ⋯ menu keeps its entry too.
+      expect(managerRow(w).get('[data-testid="channel-bot-menu-list"]').find('[data-testid="channel-managed-create"]').exists()).toBe(true)
+      // The same disclosure as from the menu takes its place; Cancel brings it back.
+      await start.trigger('click')
+      expect(managerRow(w).get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @navide_bot')
+      expect(managerRow(w).find('[data-testid="channel-managed-start"]').exists()).toBe(false)
+      expect(mock.sent.some((m) => m.type === 'channels.managed_create')).toBe(false)
+      await managerRow(w).get('[data-testid="channel-managed-cancel"]').trigger('click')
+      expect(managerRow(w).find('[data-testid="channel-managed-start"]').exists()).toBe(true)
+    })
+
+    it('shows no visible entry on a bot that cannot manage bots', async () => {
+      seedManager(false)
+      const w = await render()
+      expect(managerRow(w).find('[data-testid="channel-managed-start"]').exists()).toBe(false)
+    })
+
     it('explains how to turn on Bot Management Mode otherwise, once for the platform, with a BotFather link', async () => {
       for (const flag of [false, undefined]) {
         wrapper?.unmount()
