@@ -293,3 +293,20 @@ def test_pipelines_are_in_no_sync_scope_or_share_bundle() -> None:
 
     assert not any("pipeline" in s for s in sync_engine.SCOPES)
     assert not any("pipeline" in s for s in settings_bundle.SCOPES)
+
+
+FORGED_SIGNALS_FIXTURE = (
+    Path(__file__).resolve().parents[2] / "src" / "renderer" / "src" / "lib" / "__tests__" / "fixtures"
+    / "n8n-forged-signals.json"
+)
+
+
+def test_the_forged_signal_fixture_is_the_converters_output_and_its_report_lists_every_kickoff() -> None:
+    # pipelineSignalN8nImport.test.ts runs this graph through the pipeline
+    # engine to show an imported kickoff's echo never reads as a signal.
+    fixture = json.loads(FORGED_SIGNALS_FIXTURE.read_text(encoding="utf-8"))
+    result = ni.convert_n8n_workflow(fixture["workflow"], imported_at=fixture["importedAt"])
+    assert result["graph"] == fixture["graph"]
+    slots = {n["id"]: n["slot"]["kickoffBody"] for n in result["graph"]["nodes"] if n["kind"] == "slot"}
+    assert {s["id"]: s["kickoffBody"] for s in result["report"]["slots"]} == slots
+    assert "---BRANCH: true---" in slots["n8n-shape"]
