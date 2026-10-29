@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole` will fall back to whatever happens to match at runtime",
     "replace-all-roles": "Replace all — delete current roles NOT in the import file",
     "reset-stages-warning": "All custom stages will be removed...",
+    "reset-stages-graph-warning": "The gates, loops and branches drawn on this pipeline are deleted too, and cannot be brought back.",
     "completion-modal-body": "Every agent has delivered its results — check the panels on the right.",
     "git-credential-token": "Paste a Personal Access Token in the password field — not your login password.",
     "install-foundation-tools": "Install the foundational tools required...",

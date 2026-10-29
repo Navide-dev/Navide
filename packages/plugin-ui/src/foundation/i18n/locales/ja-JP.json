@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole` は実行時に一致したロールにフォールバックします",
     "replace-all-roles": "すべて置き換える — インポートファイルに含まれない既存のロールを削除します",
     "reset-stages-warning": "すべてのカスタムステージが削除されます...",
+    "reset-stages-graph-warning": "このパイプラインに手で描いたゲート、ループ、分岐も削除され、元に戻せません。",
     "completion-modal-body": "すべてのエージェントが結果を提出しました。右側のパネルを確認してください。",
     "git-credential-token": "パスワード欄には、ログインパスワードではなく Personal Access Token を貼り付けてください。",
     "install-foundation-tools": "必要な基本ツールをインストールしてください...",

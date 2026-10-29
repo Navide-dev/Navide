@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole`은 런타임에 우연히 일치하는 역할로 대체돼요",
     "replace-all-roles": "모두 바꾸기 — 가져올 파일에 없는 현재 역할 삭제",
     "reset-stages-warning": "모든 사용자 지정 단계가 제거돼요...",
+    "reset-stages-graph-warning": "이 파이프라인에 직접 그린 게이트, 루프, 분기도 함께 삭제되며 되돌릴 수 없어요.",
     "completion-modal-body": "모든 agent가 결과를 전달했어요 — 오른쪽 패널을 확인하세요.",
     "git-credential-token": "비밀번호 입력란에 로그인 비밀번호가 아닌 Personal Access Token을 붙여넣으세요.",
     "install-foundation-tools": "필요한 기본 도구를 설치하세요...",

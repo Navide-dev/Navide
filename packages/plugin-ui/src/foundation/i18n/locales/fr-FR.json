@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole` se rabattra sur ce qui correspond à l’exécution",
     "replace-all-roles": "Tout remplacer : supprimer les rôles actuels ABSENTS du fichier importé",
     "reset-stages-warning": "Toutes les étapes personnalisées seront supprimées…",
+    "reset-stages-graph-warning": "Les portes, boucles et branches dessinées sur ce pipeline sont aussi supprimées, sans retour possible.",
     "completion-modal-body": "Tous les agents ont livré leurs résultats : consultez les panneaux de droite.",
     "git-credential-token": "Collez un token d’accès personnel dans le champ du mot de passe, pas votre mot de passe de connexion.",
     "install-foundation-tools": "Installez les outils de base nécessaires…",

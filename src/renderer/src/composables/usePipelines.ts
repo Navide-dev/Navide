@@ -6,6 +6,8 @@ export interface PipelineSummary {
   name: string
   builtin: boolean
   stage_count: number
+  /** The pipeline has a stored graph (drawn or edited as a graph). */
+  has_graph?: boolean
   /** Set on pipelines made by importing an n8n workflow. */
   imported_from?: { kind: string; importedAt: string; workflow: string }
 }

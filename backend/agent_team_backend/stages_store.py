@@ -1101,7 +1101,7 @@ class StagesStore:
                 pid not in ("default", "maintenance") and not discard_graph
                 and graph is not None and not pg.is_linear_graph(graph)
             ):
-                raise GraphNonLinearError(
+                raise GraphResetNeedsConsent(
                     "resetting this pipeline would delete its graph (gates, loops or branches) "
                     "with no way back; pass discard_graph to confirm"
                 )
@@ -1225,6 +1225,14 @@ class StagesStore:
 
 class GraphNonLinearError(ValueError):
     """A stage-level edit on a pipeline whose graph stages cannot express."""
+
+
+class GraphResetNeedsConsent(GraphNonLinearError):
+    """A reset that would delete a drawn graph, asked for without
+    discard_graph. Coded, so the ws handlers answer it as GRAPH_NONLINEAR
+    rather than as a fault."""
+
+    error_code = "graph_nonlinear"
 
 
 class StoreRefused(ValueError):

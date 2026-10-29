@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole` sẽ rơi về bất cứ vai trò nào tình cờ khớp lúc chạy",
     "replace-all-roles": "Thay thế tất cả — xóa các vai trò hiện có KHÔNG nằm trong tệp nhập",
     "reset-stages-warning": "Mọi giai đoạn tùy chỉnh sẽ bị gỡ...",
+    "reset-stages-graph-warning": "Các cổng, vòng lặp và nhánh đã vẽ trên pipeline này cũng bị xóa và không thể khôi phục.",
     "completion-modal-body": "Mọi agent đã giao kết quả — hãy xem các bảng bên phải.",
     "git-credential-token": "Dán Personal Access Token vào ô mật khẩu — không phải mật khẩu đăng nhập của bạn.",
     "install-foundation-tools": "Cài các công cụ nền tảng cần thiết...",

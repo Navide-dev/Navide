@@ -323,3 +323,33 @@ async def test_a_window_refusal_with_a_code_answers_error_code_and_params(monkey
         "error_code": "last-stage", "params": {"stage": 3, "stages": 3},
     }
     assert resolved[1] == {"ok": False, "result": None, "error": "plain"}
+
+
+# ── E2 over the wire: stages.reset clears a drawn graph only when told to ──
+
+
+async def test_ws_stage_reset_of_a_drawn_graph_needs_discard_graph_true(tmp_path, monkeypatch) -> None:
+    store, pid = _custom_with_stages(tmp_path)
+    store.apply_graph_ops(pid, _gate_between_a_and_b())
+
+    async def quiet(*_a, **_k) -> None:
+        pass
+
+    monkeypatch.setattr(app_module, "stages_store", store, raising=False)
+    monkeypatch.setattr(app_module, "broadcast", quiet, raising=False)
+    monkeypatch.setattr(ws_handlers, "_broadcast_pipeline_summaries", quiet)
+    monkeypatch.setattr(ws_handlers, "_stage_edit_hits_running_pipeline", lambda ws, pid: False)
+    window = _Session()
+
+    for flag in (None, "true", 1):
+        payload = {"pipeline_id": pid} if flag is None else {"pipeline_id": pid, "discard_graph": flag}
+        await ws_handlers.stages_reset(window, "1", "stages.reset", payload)
+        assert window.sent[-1]["ok"] is False, flag
+        assert window.sent[-1]["error"]["code"] == "GRAPH_NONLINEAR"
+    assert store.get_graph(pid)["derived"] is False
+
+    await ws_handlers.stages_reset(window, "2", "stages.reset", {"pipeline_id": pid, "discard_graph": True})
+
+    assert window.sent[-1]["ok"] is True
+    assert window.sent[-1]["payload"] == {"stages": []}
+    assert store.get_graph(pid)["derived"] is True

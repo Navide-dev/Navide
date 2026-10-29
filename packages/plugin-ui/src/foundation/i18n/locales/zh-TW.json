@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole` 將在執行時自動比對",
     "replace-all-roles": "全部取代 — 刪除不在匯入檔案中的目前角色",
     "reset-stages-warning": "所有自訂階段將被移除…",
+    "reset-stages-graph-warning": "這條流程上手畫的閘門、迴圈、分支也會一併清除，無法復原。",
     "completion-modal-body": "每個 Agent 都已完成任務 — 請查看右側各面板。",
     "git-credential-token": "密碼欄位請貼 Personal Access Token（非登入密碼）。",
     "install-foundation-tools": "安裝所有 Agent 運作所需的基礎工具…",

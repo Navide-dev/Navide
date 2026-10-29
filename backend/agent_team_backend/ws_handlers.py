@@ -7169,7 +7169,9 @@ async def stages_reset(session: "Session", msg_id: str, msg_type: str, payload: 
         )
         return
     try:
-        updated_stages = app.stages_store.reset(pipeline_id)
+        # Only an explicit true deletes a drawn graph (the editor sends it
+        # once the user confirmed); anything else is refused by the store.
+        updated_stages = app.stages_store.reset(pipeline_id, discard_graph=payload.get("discard_graph") is True)
     except (KeyError, ValueError) as err:
         if not _is_store_refusal(err):
             raise
