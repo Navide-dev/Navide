@@ -44,6 +44,16 @@ export interface WebViewDialog {
   message: string
   defaultPrompt?: string
 }
+/** One file the agent uploaded into the page (DOM.setFileInputFiles), as the
+ *  Host checked it: its path relative to the pane's workspace, the origin of
+ *  the page it went to, and whether its name looks like a secret. */
+export interface WebViewUpload {
+  file: string
+  origin: string
+  sensitive: boolean
+  /** ISO 8601 time of the upload. */
+  at: string
+}
 export interface WebViewInfo {
   viewId: string
   space: string
@@ -61,6 +71,8 @@ export interface WebViewInfo {
   openerViewId?: string
   /** A JS dialog open in the page, seen while the agent's debugger is attached. */
   dialog?: WebViewDialog
+  /** The agent's uploads into this view, oldest first (at most 20). */
+  uploads?: WebViewUpload[]
 }
 
 export const WEB_BRIDGE_OPERATIONS = ['list', 'create', 'close', 'cdp', 'setState'] as const
@@ -167,7 +179,7 @@ export function validateWebRequest(address: string, value: unknown): value is Re
 
 function isWebViewInfo(value: unknown): value is WebViewInfo {
   return isRecord(value) &&
-    hasOnlyKeys(value, ['viewId', 'space', 'owner', 'control', 'state', 'note', 'url', 'title', 'loading', 'attached', 'agentScriptSinceLoad', 'openerViewId', 'dialog']) &&
+    hasOnlyKeys(value, ['viewId', 'space', 'owner', 'control', 'state', 'note', 'url', 'title', 'loading', 'attached', 'agentScriptSinceLoad', 'openerViewId', 'dialog', 'uploads']) &&
     isId(value.viewId) && isId(value.space) &&
     OWNERS.includes(value.owner as string) && OWNERS.includes(value.control as string) &&
     STATES.includes(value.state as string) &&
@@ -176,7 +188,17 @@ function isWebViewInfo(value: unknown): value is WebViewInfo {
     typeof value.loading === 'boolean' && typeof value.attached === 'boolean' &&
     typeof value.agentScriptSinceLoad === 'boolean' &&
     (value.openerViewId === undefined || isId(value.openerViewId)) &&
-    (value.dialog === undefined || isDialog(value.dialog))
+    (value.dialog === undefined || isDialog(value.dialog)) &&
+    (value.uploads === undefined || (Array.isArray(value.uploads) && value.uploads.length <= 20 &&
+      value.uploads.every(isUpload)))
+}
+
+function isUpload(value: unknown): boolean {
+  return isRecord(value) && hasOnlyKeys(value, ['file', 'origin', 'sensitive', 'at']) &&
+    typeof value.file === 'string' && value.file.length > 0 && value.file.length <= 1024 &&
+    typeof value.origin === 'string' && value.origin.length <= MAX_URL_LENGTH &&
+    typeof value.sensitive === 'boolean' &&
+    typeof value.at === 'string' && value.at.length <= 64
 }
 
 function isDialog(value: unknown): boolean {

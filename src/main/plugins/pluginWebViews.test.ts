@@ -4,6 +4,7 @@ import { basename, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   isPluginWebGuest,
+  looksSecret,
   MAX_ATTACHED_VIEWS,
   MAX_VIEWS_PER_PLUGIN,
   PluginWebViewRegistry,
@@ -877,6 +878,56 @@ describe('file upload', () => {
     // Closing the view removes its copies.
     registry.close('navide.browser', viewId, true, caller)
     for (const file of files) expect(existsSync(file)).toBe(false)
+  })
+
+  it('discloses every upload on the view and in the result, and flags names that look like secrets', async () => {
+    const { registry, views, workspace, caller, viewId } = fixture()
+    writeFileSync(join(workspace, '.env'), 'K=V')
+    mkdirSync(join(workspace, 'keys'))
+    writeFileSync(join(workspace, 'keys', 'server.pem'), 'pem')
+    await views[0].webContents.loadURL('https://upload.example.com/form?x=1')
+    const result = await registry.cdp('navide.browser', viewId, 'DOM.setFileInputFiles',
+      upload([join(workspace, 'sub', 'b.txt'), join(workspace, '.env'), join(workspace, 'keys', 'server.pem')]), caller)
+    expect(result).toMatchObject({
+      ok: 'DOM.setFileInputFiles',
+      uploaded: [
+        { file: 'sub/b.txt', origin: 'https://upload.example.com', sensitive: false },
+        { file: '.env', origin: 'https://upload.example.com', sensitive: true },
+        { file: 'keys/server.pem', origin: 'https://upload.example.com', sensitive: true },
+      ],
+    })
+    expect((result as { warning: string }).warning).toContain('.env, keys/server.pem')
+    const info = registry.list('navide.browser').find(view => view.viewId === viewId)!
+    expect(info.uploads?.map(({ file, origin, sensitive }) => [file, origin, sensitive])).toEqual([
+      ['sub/b.txt', 'https://upload.example.com', false],
+      ['.env', 'https://upload.example.com', true],
+      ['keys/server.pem', 'https://upload.example.com', true],
+    ])
+    expect(Number.isNaN(Date.parse(info.uploads![0].at))).toBe(false)
+    // A plain upload has no warning; the records keep only the newest 20.
+    for (let index = 0; index < 20; index++) {
+      const plain = await registry.cdp('navide.browser', viewId, 'DOM.setFileInputFiles', upload([join(workspace, 'a.txt')]), caller)
+      expect(plain).not.toHaveProperty('warning')
+    }
+    const uploads = registry.list('navide.browser').find(view => view.viewId === viewId)!.uploads!
+    expect(uploads).toHaveLength(20)
+    expect(uploads.every(record => record.file === 'a.txt')).toBe(true)
+  })
+
+  it('records nothing for a refused upload or a failed command', async () => {
+    const { registry, views, outside, workspace, caller, viewId } = fixture()
+    await rejectionOf(registry.cdp('navide.browser', viewId, 'DOM.setFileInputFiles', upload([join(outside, 'secret.txt')]), caller))
+    views[0].webContents.debugger.sendCommand = async () => { throw new Error('No node with given id') }
+    await rejectionOf(registry.cdp('navide.browser', viewId, 'DOM.setFileInputFiles', upload([join(workspace, 'a.txt')]), caller))
+    expect(registry.list('navide.browser').find(view => view.viewId === viewId)).not.toHaveProperty('uploads')
+  })
+
+  it.each([
+    ['.env', true], ['.env.local', true], ['server.pem', true], ['id_ed25519', true], ['id_rsa.pub', true],
+    ['aws-credentials.json', true], ['client_secret.json', true], ['github-token.txt', true], ['TOKEN', true],
+    ['report.pdf', false], ['environment.md', false], ['photo.png', false], ['identity.txt', false],
+  ])('flags %s as secret-looking: %s', (name, expected) => {
+    expect(looksSecret(name)).toBe(expected)
   })
 
   it('refuses files outside the workspace, through a symlink, relative, missing, or not a file', async () => {

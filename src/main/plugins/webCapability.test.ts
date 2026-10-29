@@ -160,6 +160,7 @@ describe('web.changed event payload', () => {
     expect(validateWebChangedEvent({ views: [view, { ...view, note: 'Sign In', state: 'need-action', control: 'user' }] })).toBe(true)
     expect(validateWebChangedEvent({ views: [{ ...view, openerViewId: 'view-0', dialog: { type: 'prompt', message: 'Name?', defaultPrompt: 'me' } }] })).toBe(true)
     expect(validateWebChangedEvent({ views: [{ ...view, dialog: { type: 'beforeunload', message: '' } }] })).toBe(true)
+    expect(validateWebChangedEvent({ views: [{ ...view, uploads: [{ file: '.env', origin: 'https://a.example', sensitive: true, at: '2026-10-30T00:00:00.000Z' }] }] })).toBe(true)
   })
 
   it.each([
@@ -177,6 +178,10 @@ describe('web.changed event payload', () => {
     { views: [{ ...view, dialog: { type: 'alert', message: 'x'.repeat(501) } }] },
     { views: [{ ...view, dialog: { type: 'alert', message: 'x', extra: 1 } }] },
     { views: [{ ...view, dialog: null }] },
+    { views: [{ ...view, uploads: [{ file: '', origin: '', sensitive: false, at: '' }] }] },
+    { views: [{ ...view, uploads: [{ file: 'a', origin: '', sensitive: 'no', at: '' }] }] },
+    { views: [{ ...view, uploads: [{ file: 'a', origin: '', sensitive: false, at: '', path: '/x' }] }] },
+    { views: [{ ...view, uploads: Array(21).fill({ file: 'a', origin: '', sensitive: false, at: '' }) }] },
     { views: [{ ...view, viewId: '' }] },
     { views: [{ ...view, title: 1 }] },
     { views: [{ ...view, note: 2 }] },

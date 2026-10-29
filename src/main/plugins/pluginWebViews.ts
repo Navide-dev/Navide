@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { closeSync, constants, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, isAbsolute, join, parse, sep } from 'node:path'
+import { basename, isAbsolute, join, parse, relative, sep } from 'node:path'
 import {
   isAllowedWebUrl,
+  type WebViewUpload,
   type WebAgentCaller,
   type WebControlReason,
   type WebViewControl,
@@ -196,6 +197,8 @@ interface WebViewEntry {
   dialogListener: boolean
   /** Host-private directory holding this view's checked upload copies. */
   uploadDir: string | null
+  /** Disclosed in the view info: what the agent uploaded, and where to. */
+  uploads: WebViewUpload[]
 }
 
 export class PluginWebViewRegistry {
@@ -257,6 +260,7 @@ export class PluginWebViewRegistry {
       dialog: null,
       dialogListener: false,
       uploadDir: null,
+      uploads: [],
     }
     this.views.set(entry.viewId, entry)
     this.wireGuest(entry)
@@ -386,7 +390,12 @@ export class PluginWebViewRegistry {
     this.assertAgentInControl(entry)
     if (!CDP_ALLOWED_METHODS.has(method)) throw new WebViewError('CAPABILITY_DENIED')
     if (method === 'Page.navigate' && !isAllowedWebUrl(params?.url)) throw new WebViewError('INVALID_ARGUMENT')
-    if (method === 'DOM.setFileInputFiles') params = { ...params, files: this.stageUploads(entry, params?.files, caller) }
+    let uploaded: WebViewUpload[] | null = null
+    if (method === 'DOM.setFileInputFiles') {
+      const staged = this.stageUploads(entry, params?.files, caller)
+      params = { ...params, files: staged.copies }
+      uploaded = staged.records
+    }
     const contents = entry.view.webContents
     if (contents.isDestroyed()) throw new WebViewError('INVALID_ARGUMENT')
     if (!contents.debugger.isAttached()) {
@@ -409,7 +418,21 @@ export class PluginWebViewRegistry {
     const input = method.startsWith('Input.')
     if (input) entry.agentInput += 1
     try {
-      return await contents.debugger.sendCommand(method, params)
+      const result = await contents.debugger.sendCommand(method, params)
+      if (uploaded === null) return result
+      // Disclose, don't restrict: the view info and the agent's own result
+      // both say what went where, and flag names that look like secrets.
+      entry.uploads.push(...uploaded)
+      entry.uploads.splice(0, Math.max(0, entry.uploads.length - MAX_UPLOAD_RECORDS))
+      this.changed(entry.pluginId)
+      const secret = uploaded.filter(upload => upload.sensitive).map(upload => upload.file)
+      return {
+        ...(isRecord(result) ? result : {}),
+        uploaded: uploaded.map(({ file, origin, sensitive }) => ({ file, origin, sensitive })),
+        ...(secret.length === 0 ? {} : {
+          warning: `Uploaded files whose names look like secrets: ${secret.join(', ')}. The user sees this on the Space.`,
+        }),
+      }
     } catch (error) {
       throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
     } finally {
@@ -506,6 +529,7 @@ export class PluginWebViewRegistry {
       agentScriptSinceLoad: entry.agentScriptSinceLoad,
       ...(entry.openerViewId === undefined ? {} : { openerViewId: entry.openerViewId }),
       ...(entry.dialog === null ? {} : { dialog: { ...entry.dialog } }),
+      ...(entry.uploads.length === 0 ? {} : { uploads: entry.uploads.map(upload => ({ ...upload })) }),
     }
   }
 
@@ -601,11 +625,25 @@ export class PluginWebViewRegistry {
   /** Check each file, then copy it into a Host-private directory and give the
    *  page the copy: the path Chromium reads later can no longer be swapped
    *  for a link to a file outside the workspace. */
-  private stageUploads(entry: WebViewEntry, files: unknown, caller: WebAgentCaller | undefined): string[] {
+  private stageUploads(
+    entry: WebViewEntry,
+    files: unknown,
+    caller: WebAgentCaller | undefined,
+  ): { copies: string[]; records: WebViewUpload[] } {
     const checked = workspaceFiles(files, caller)
+    const root = realpathSync(caller!.workspace as string)
     entry.uploadDir ??= mkdtempSync(join(tmpdir(), 'navide-web-upload-'))
     const batch = mkdtempSync(join(entry.uploadDir, 'u-'))
-    return checked.map((file, index) => copyChecked(file, join(batch, String(index)), caller!.workspace as string))
+    const copies = checked.map((file, index) => copyChecked(file, join(batch, String(index)), caller!.workspace as string))
+    const at = new Date().toISOString()
+    const origin = pageOrigin(entry.view.webContents)
+    const records = checked.map((file): WebViewUpload => ({
+      file: relative(root, file).split(sep).join('/'),
+      origin,
+      sensitive: looksSecret(basename(file)),
+      at,
+    }))
+    return { copies, records }
   }
 
   private removeUploads(entry: WebViewEntry): void {
@@ -799,6 +837,28 @@ function copyChecked(file: string, directory: string, workspace: string): string
   } finally {
     closeSync(fd)
   }
+}
+
+/** Upload records kept per view (oldest dropped first). */
+const MAX_UPLOAD_RECORDS = 20
+
+/** Names that look like credentials: flagged, never refused. */
+const SECRET_NAME = /^\.env(\..*)?$|\.pem$|^id_|credentials|secret|token/i
+
+export function looksSecret(name: string): boolean {
+  return SECRET_NAME.test(name)
+}
+
+function pageOrigin(contents: WebGuestContents): string {
+  try {
+    return contents.isDestroyed() ? '' : new URL(contents.getURL()).origin
+  } catch {
+    return ''
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function cdpMessage(error: unknown): string {

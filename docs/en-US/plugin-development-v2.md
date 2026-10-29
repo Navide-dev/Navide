@@ -1699,10 +1699,19 @@ someone it is not.
   passed on only when `params.files` is 1 to 16 absolute paths and each one,
   with symbolic links resolved, is an existing regular file strictly inside
   the workspace of the pane behind the call (also resolved; a workspace at
-  the file system root contains nothing). The page receives the resolved
-  paths; the other params pass unchanged. No pane, no workspace, a relative
-  path, a missing file, a directory or any path outside is
-  `CAPABILITY_DENIED`.
+  the file system root contains nothing). Each file is then opened without
+  following a final link, must still be the same file and at most 64 MiB,
+  and is copied owner-only into a Host-private directory; the page receives
+  the copy (deleted when the view closes), and the other params pass
+  unchanged. No pane, no workspace, a relative path, a missing file, a
+  directory or any path outside is `CAPABILITY_DENIED`.
+- **Uploads are disclosed, not restricted.** Every upload is recorded on the
+  view as `uploads` (newest 20: the path relative to the workspace, the
+  origin of the page it went to, the time, and `sensitive` when the file
+  name looks like a secret: `.env`, `*.pem`, `id_*`, or a name containing
+  `credentials`, `secret` or `token`). The `cdp` result carries the same
+  `uploaded` list, and a `warning` naming any secret-looking file. The
+  plugin shows them on the Space; nothing is refused for its name.
 - **Dialogs are visible.** When the Host attaches the debugger for an agent
   `cdp` call it enables the Page domain once and records an
   `alert`/`confirm`/`prompt`/`beforeunload` dialog the page opens as
