@@ -86,6 +86,7 @@ vi.mock('@xterm/addon-fit', () => ({
 }))
 
 import { useTerminal } from '../useTerminal'
+import { applyScreenWatch } from '../../../../lib/cliAwaitingInput'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -324,6 +325,75 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     await chunkThenWait(mock, 1, 100)
     expect(result.displayStatus.value).not.toBe('awaiting')
     expect(result.permissionWaitLive()).toBe(false)
+    scope.stop()
+  })
+
+  // The screen watcher (App.vue's pollAwaitingPanes) sees Claude's box once a
+  // second. 10-29: after Submit on an AskUserQuestion the box was gone, but the
+  // answer's echo landed inside the settle window of the last poll's wait and
+  // Claude then thought with only a spinner, so the pane read AWAITING (and the
+  // chat relay re-posted the input box) until its next real output.
+  async function watch(result: Parameters<typeof applyScreenWatch>[0], agentKey: string, box: boolean, polls: number) {
+    for (let i = 0; i < polls; i++) {
+      applyScreenWatch(result, agentKey, box)
+      await vi.advanceTimersByTimeAsync(1_000)
+    }
+  }
+
+  it("is not AWAITING while Claude thinks after the box it was watching left the screen", async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    await watch(result, 'claude', true, 5)
+    expect(result.displayStatus.value).toBe('awaiting')
+    // Submit: the box is gone, the answer is echoed, then only the spinner.
+    applyScreenWatch(result, 'claude', false)
+    await chunkThenWait(mock, 1, 200)
+    await watch(result, 'claude', false, 20)
+    expect(result.displayStatus.value).not.toBe('awaiting')
+    expect(result.awaitingKind.value).toBeNull()
+    scope.stop()
+  })
+
+  it("keeps a hook-raised wait when the screen watcher sees no box", async () => {
+    // An MCP elicitation draws no box: the Notification hook's wait is not the
+    // screen watcher's to end.
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.markNeedsInput()
+    await watch(result, 'claude', false, 10)
+    expect(result.displayStatus.value).toBe('awaiting')
+    expect(result.awaitingKind.value).toBe('permission')
+    scope.stop()
+  })
+
+  it('stays AWAITING while the box is on screen, its repaints included', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    for (let i = 1; i <= 10; i++) {
+      applyScreenWatch(result, 'claude', true)
+      await chunkThenWait(mock, i, 1_000)
+    }
+    expect(result.displayStatus.value).toBe('awaiting')
+    expect(result.awaitingKind.value).toBe('permission')
+    scope.stop()
+  })
+
+  it("keeps an AskUserQuestion's question wait when the screen watcher sees no box", async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.markQuestion()
+    await watch(result, 'claude', false, 10)
+    expect(result.displayStatus.value).toBe('awaiting')
+    scope.stop()
+  })
+
+  it("still clears a pattern-only vendor's wait when its box leaves the screen", async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    await watch(result, 'codex', true, 3)
+    expect(result.displayStatus.value).toBe('awaiting')
+    await watch(result, 'codex', false, 1)
+    expect(result.displayStatus.value).not.toBe('awaiting')
     scope.stop()
   })
 

@@ -19,6 +19,7 @@ import { backendErrorText } from '../lib/pipelineErrors'
 import { usePipelineRunState, type HostRun } from '../composables/usePipelineRunState'
 import PipelineEditor from './pipeline/PipelineEditor.vue'
 import N8nImportDialog from './pipeline/N8nImportDialog.vue'
+import PipelineActionMenu, { type ActionMenuItem } from './pipeline/PipelineActionMenu.vue'
 import RolePropertiesEditor, { rolePropertyProblems } from './pipeline/RolePropertiesEditor.vue'
 import type { RoleProperty } from '../lib/pipelineGraph'
 import { pipelineDisplayName, roleDisplayOneLine } from '../lib/builtinNames'
@@ -158,8 +159,13 @@ async function plCreate(): Promise<void> {
   plBusy.value = true
   try {
     const p = await pipelinesApi.createPipeline(plNewName.value.trim())
-    if (p) { plNewName.value = ''; plCreating.value = false; plSummary.value = t('label.created-name', { name: p.name }) }
-    else notify.toast(plFail('error.create-failed'), { type: 'error' })
+    if (p) {
+      plNewName.value = ''
+      plCreating.value = false
+      plSummary.value = t('label.created-name', { name: p.name })
+      // Straight into the new pipeline: an empty one has nothing to do on the list.
+      await plEnterDetail(p.id)
+    } else notify.toast(plFail('error.create-failed'), { type: 'error' })
   } finally {
     plBusy.value = false
   }
@@ -231,6 +237,33 @@ async function plResetBuiltin(p: PipelineSummary): Promise<void> {
   } finally {
     plBusy.value = false
   }
+}
+
+/** The editor toolbar's ⋯ menu: the pipeline actions that used to sit in the
+ *  toolbar as five buttons and push the name and Delete out of the window. */
+const plMenuItems = computed<ActionMenuItem[]>(() => {
+  const locked = plLocked.value ? t('pipelineEditor.toolbar.locked') : ''
+  return [
+    ...(plEditingId.value !== pipelinesApi.activePipelineId.value
+      ? [{ id: 'set-default', label: t('action.set-as-default') }]
+      : []),
+    { id: 'export', label: t('settings.roles.export-json') },
+    { id: 'import', label: t('settings.roles.import-json'), blocked: locked },
+    { id: 'import-n8n', label: t('action.import-from-n8n') },
+    { id: 'reset', label: t('action.reset-defaults'), blocked: locked, danger: true },
+    {
+      id: 'delete', label: t('action.delete-pipeline'), danger: true,
+      blocked: pipelinesApi.pipelines.value.length <= 1 ? t('hint.at-least-one-pipeline') : '',
+    },
+  ]
+})
+function plMenuSelect(id: string): void {
+  if (id === 'set-default') void plSetActive(plEditingId.value)
+  else if (id === 'export') void sExport()
+  else if (id === 'import') void sImport()
+  else if (id === 'import-n8n') plN8nImportOpen.value = true
+  else if (id === 'reset') sConfirmReset.value = true
+  else if (id === 'delete') void plDelete(plEditingId.value, plCurrentPipeline.value?.name ?? '')
 }
 
 // Deep link into a pipeline's detail view. Used by the host's
@@ -682,7 +715,7 @@ function buildAiContext(): string {
                 v-if="p.imported_from?.kind === 'n8n'" class="pl-badge pl-badge--imported"
                 :title="$t('hint.imported-from-n8n')">{{ $t('label.imported-from-n8n') }}</span>
             </span>
-            <span class="pl-meta">{{ $t('label.stage-count', { count: p.stage_count }) }}</span>
+            <span class="pl-meta">{{ p.step_count === undefined ? $t('label.stage-count', { count: p.stage_count }) : $t('label.step-count', { count: p.step_count }) }}</span>
             <span class="pl-actions">
               <button
                 v-if="p.builtin" class="icon-btn" :disabled="plBusy"
@@ -755,22 +788,11 @@ function buildAiContext(): string {
               :title="$t('hint.imported-from-n8n')">{{ $t('label.imported-from-n8n') }}</span>
           </template>
           <template #trail>
-            <div class="toolbar">
-              <button class="ghost" :disabled="sExportBusy" @click="sExport">{{ sExportBusy ? '…' : $t('settings.roles.export-json') }}</button>
-              <button class="ghost" :disabled="sImporting || plLocked" @click="sImport">{{ sImporting ? '…' : $t('settings.roles.import-json') }}</button>
-              <button class="ghost danger-link" :disabled="plLocked" @click="sConfirmReset = true">↺ {{ $t('action.reset-defaults') }}</button>
-              <span v-if="sSummary" class="summary-ok">{{ sSummary }}</span>
-            </div>
-            <div class="pl-detail-actions">
-              <button
-                v-if="plEditingId !== pipelinesApi.activePipelineId.value" class="ghost" :disabled="plBusy"
-                @click="plSetActive(plEditingId)">{{ $t('action.set-as-default') }}</button>
-              <button
-                class="icon-btn danger-icon"
-                :disabled="plBusy || pipelinesApi.pipelines.value.length <= 1"
-                :title="pipelinesApi.pipelines.value.length <= 1 ? $t('hint.at-least-one-pipeline') : $t('action.delete-pipeline')"
-                @click="plDelete(plEditingId, plCurrentPipeline?.name ?? '')">🗑</button>
-            </div>
+            <span v-if="sSummary" class="summary-ok pl-trail-summary" v-truncate>{{ sSummary }}</span>
+            <PipelineActionMenu
+              label="⋯" :title="$t('pipelineEditor.toolbar.more')" :items="plMenuItems"
+              :disabled="plBusy || sExportBusy || sImporting" @select="plMenuSelect"
+            />
           </template>
         </PipelineEditor>
       </template>
@@ -1240,23 +1262,18 @@ function buildAiContext(): string {
   white-space: nowrap;
 }
 .pl-detail-name {
-  min-width: 0;
+  min-width: 6em;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Inside the editor's single toolbar row the stage actions sit inline. */
-.pl-editor .toolbar {
-  padding: 0;
+.pl-trail-summary {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pl-rename {
   flex: 0 1 260px;
-}
-.pl-detail-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
 }
 .tiny {
   font-size: var(--font-2xs);
@@ -1488,9 +1505,6 @@ button.ghost:hover:not(:disabled) {
 .icon-btn:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 2px var(--accent-focus);
-}
-.danger-icon {
-  color: var(--danger-fg);
 }
 .danger-link {
   color: var(--danger-fg);

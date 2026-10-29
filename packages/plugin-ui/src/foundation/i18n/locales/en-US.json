@@ -8428,6 +8428,7 @@
     }
   },
   "label": {
+    "step-count": "{count} step | {count} steps",
     "imported-from-n8n": "Imported from n8n",
     "resume-other-pipeline": "An unfinished run belongs to \"{name}\". Switch to that pipeline to continue it.",
     "role-rename-repointed": "Updated the role reference in {count} pipeline. | Updated the role reference in {count} pipelines.",
@@ -11313,6 +11314,14 @@
     }
   },
   "pipelineEditor": {
+    "recover": {
+      "title": "Recover",
+      "resume-desc": "Continues the stopped run at its first unfinished stage, with its panes and context.",
+      "restart-desc": "Closes this run's panes and runs the same task again from the first stage.",
+      "reset-desc": "Clears the run and closes every pane in this window, including panes you opened yourself.",
+      "older-run": "This is an earlier run. Recovery always acts on the latest run of this pipeline.",
+      "show-latest": "Show Latest Run"
+    },
     "error": {
       "subpipeline-none": "A sub-pipeline needs another pipeline to run; create one first.",
       "pipeline-running": "This pipeline is running, so it cannot be changed right now. Abort or finish the run first.",
@@ -11347,7 +11356,7 @@
     },
     "exec": {
       "abort": "Abort Run",
-      "empty-body": "Runs appear here once this pipeline is started — from the sidebar, a command, or a CLI through MCP.",
+      "empty-body": "Describe a task in the box at the top and run it, or start this pipeline from the sidebar, a schedule, or a CLI through MCP.",
       "empty-title": "No runs yet",
       "list": "Runs of this pipeline",
       "live": "Running now",
@@ -11361,7 +11370,6 @@
       "outcome-unknown": "Unknown",
       "outcome-idle": "Idle",
       "failed-step": "{name} failed: {error}",
-      "pick": "Pick a run to replay it on the graph.",
       "progress": "{done} of {total} steps",
       "restart": "Start Over",
       "resume": "Resume",
@@ -11511,6 +11519,7 @@
       "pinned": "Output frozen"
     },
     "toolbar": {
+      "more": "More Actions",
       "canvas": "Canvas",
       "derived": "Opened from stages — your first edit saves it as a graph",
       "executions": "Executions",
@@ -11577,6 +11586,13 @@
       }
     },
     "link": {
+      "out-title": "Leads to",
+      "none": "No links out of this step yet.",
+      "to": "Go to",
+      "to-pick": "Choose a step",
+      "add": "Add Link",
+      "branch-help": "Navide adds a line to this step's kickoff asking the agent to end its reply with ---BRANCH:<code>: <value>--- on a line of its own. The run follows the link whose value matches, ignoring case; a link with the value default is taken when none matches.",
+      "error-help": "Taken when this step fails after its retries — the agent reports ---NODE-FAILED---, or its task never reached it. The run carries on down this link instead of stopping.",
       "title": "Link",
       "desc": "{from} → {to}",
       "kind": "Link type",
@@ -11638,6 +11654,8 @@
       "problem-condition": "The visibility rule refers to “{field}”, which is not another field of this role."
     },
     "run": {
+      "abort-title": "Abort this run?",
+      "abort-message": "The run stops where it is. Its panes stay open, and you can resume it later.",
       "running": "Running: {names}",
       "gate": "Waiting for your approval at {name}",
       "review": "Review",

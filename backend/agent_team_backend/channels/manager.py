@@ -3098,6 +3098,14 @@ class ChannelManager:
         prompt = str(info.get("prompt") or "")
         kind = str(info.get("kind") or "") or "permission"
         options = [str(o) for o in (info.get("options") or [])]
+        if not options and str(info.get("agent") or "") in relay.MENU_AGENTS:
+            # No menu on screen, nothing to answer: the input box and footer an
+            # answered question leaves while the pane's AWAITING badge settles.
+            # A prompt relayed earlier stays up; leaving awaiting settles it.
+            shown = self._awaiting_shown.get(pane_id)
+            self._awaiting_failures.pop(pane_id, None)
+            self._awaiting_shown[pane_id] = _Shown(prompt, shown.request_id if shown else "")
+            return
         if kind == "question" and not options:
             # A plain-text question at turn end: the turn's text already reached the
             # chat, and a typed reply goes in like any message.

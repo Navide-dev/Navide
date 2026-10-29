@@ -390,9 +390,10 @@ async function command(id: string, args?: unknown): Promise<void> {
   const result = await invokeCommand(id, args)
   if (!result.ok) toastRefusal(result)
 }
-// Reset closes every pane in the window, so the host asks first (confirm).
+// Reset closes every pane in the window and Abort stops the run, so the host
+// asks first (confirm); MCP callers send no flag and are never asked.
 const control = (action: 'next' | 'abort' | 'resume' | 'restart' | 'reset'): Promise<void> =>
-  command(`ui.pipeline.${action}`, action === 'reset' ? { confirm: true } : undefined)
+  command(`ui.pipeline.${action}`, action === 'reset' || action === 'abort' ? { confirm: true } : undefined)
 /** Task for a run started from here; ui.pipeline.start runs the same
  *  onPipelineStart as the sidebar's Run. */
 const runTask = ref('')
@@ -406,6 +407,12 @@ const startBlocked = computed(() => {
   if (!runTask.value.trim()) return t('pipelineEditor.run.blocked-task')
   return ''
 })
+/** Executions' empty state: back to the editor, cursor in the task box. */
+async function focusRunTask(): Promise<void> {
+  tab.value = 'editor'
+  await nextTick()
+  root.value?.querySelector<HTMLInputElement>('.pe-start-input')?.focus()
+}
 async function startRun(): Promise<void> {
   if (!canStart.value) return
   const result = await invokeCommand('ui.pipeline.start', { pipelineId: props.pipelineId, task: runTask.value.trim() })
@@ -550,6 +557,11 @@ watch(inspectorOpen, () => {
 })
 
 const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
+/** Save state; the long "derived" sentence is cut to the room left (v-truncate shows it whole). */
+const saveText = computed(() => {
+  if (editor.pending.value) return t('pipelineEditor.toolbar.saving')
+  return editor.derived.value ? t('pipelineEditor.toolbar.derived') : t('pipelineEditor.toolbar.saved')
+})
 </script>
 
 <template>
@@ -596,9 +608,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
         <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg>
         {{ t('pipelineEditor.toolbar.locked') }}
       </span>
-      <span v-else-if="graph" class="pe-save" role="status" aria-live="polite">
-        {{ editor.pending.value ? t('pipelineEditor.toolbar.saving') : (editor.derived.value ? t('pipelineEditor.toolbar.derived') : t('pipelineEditor.toolbar.saved')) }}
-      </span>
+      <span v-else-if="graph" v-truncate class="pe-save" role="status" aria-live="polite">{{ saveText }}</span>
 
       <span class="pe-spacer"></span>
 
@@ -718,6 +728,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
             v-if="selectedLinkEdge.kind === 'branch'" :key="selectedLinkEdge.id" class="pe-link-input" type="text"
             :value="whenText(selectedLinkEdge)" :readonly="typeof selectedLinkEdge.when === 'object'" :disabled="locked"
             :placeholder="t('pipelineEditor.link.when-placeholder')" :aria-label="t('pipelineEditor.link.when')"
+            :title="t('pipelineEditor.link.branch-help')"
             @change="setLinkWhen(selectedLinkEdge, ($event.target as HTMLInputElement).value)"
           />
           <button type="button" class="pe-text-btn" :disabled="locked" @click="removeEdge(selectedLinkEdge.id)">{{ t('pipelineEditor.link.remove') }}</button>
@@ -738,6 +749,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
           @edit="editFromInspector" @stage-meta="editStageMeta" @remove="removeNode"
           @close="select(null); selectedLayer = null"
           @open-pane="openPane" @restart-from="restartFrom" @retry-node="retryNode" @gate="decideGate"
+          @control="control"
         />
       </Transition>
     </div>
@@ -748,6 +760,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
       :backend="backend" :workspace-path="workspacePath" :pipeline-id="pipelineId"
       :graph="graph" :run="run" :role-labels="roleLabels" :agent-labels="agentLabels" :now="now"
       @control="control" @gate="decideGate" @select-node="(id) => { tab = 'editor'; select(id) }"
+      @start="focusRunTask"
     />
 
     <div
@@ -819,13 +832,12 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-width: 0;
   max-width: 34%;
   padding-right: var(--space-3);
   margin-right: var(--space-1);
   border-right: 1px solid var(--border-default);
 }
-.pe-trail { display: flex; align-items: center; gap: var(--space-1); }
+.pe-trail { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 .pe-seg {
   display: inline-flex;
   padding: 2px;
@@ -847,6 +859,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--font-xs);
+  white-space: nowrap;
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
 }
@@ -868,8 +881,8 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
   font-size: var(--font-xs);
 }
 .pe-lock svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; }
-.pe-save { font-size: var(--font-xs); color: var(--text-muted); }
-.pe-spacer { flex: 1; }
+.pe-save { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-xs); color: var(--text-muted); }
+.pe-spacer { flex: 1 0 0; }
 .pe-divider { width: 1px; height: 18px; background: var(--border-default); }
 .pe-icon {
   display: grid;
@@ -895,13 +908,16 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
   color: var(--text-primary);
   font: inherit;
   font-size: var(--font-xs);
+  white-space: nowrap;
   cursor: pointer;
 }
 .pe-text-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .pe-text-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.pe-start { display: flex; align-items: center; gap: var(--space-2); }
+.pe-start { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 0 1 auto; }
 .pe-start-input {
   width: 220px;
+  min-width: 96px;
+  flex: 0 1 auto;
   height: var(--control-h-sm);
   padding: 0 var(--space-3);
   border: 1px solid var(--border-default);

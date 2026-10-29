@@ -401,6 +401,7 @@ defineExpose({
   markTurnComplete: terminal.markTurnComplete,
   markNeedsInput: terminal.markNeedsInput,
   clearNeedsInput: terminal.clearNeedsInput,
+  markBoxOnScreen: terminal.markBoxOnScreen,
   holdNeedsInput: terminal.holdNeedsInput,
   releaseNeedsInputHold: terminal.releaseNeedsInputHold,
   awaitingHeld: terminal.awaitingHeld,
