@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { realpathSync, statSync } from 'node:fs'
-import { isAbsolute, parse, sep } from 'node:path'
+import { closeSync, constants, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, isAbsolute, join, parse, sep } from 'node:path'
 import {
   isAllowedWebUrl,
   type WebAgentCaller,
@@ -115,6 +116,8 @@ export const MAX_VIEWS_PER_PLUGIN = 32
 export const MAX_ATTACHED_VIEWS = 9
 const MAX_DIALOG_TEXT = 500
 const MAX_UPLOAD_FILES = 16
+/** Each uploaded file is copied before the page gets it; this bounds a copy. */
+const MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 const DIALOG_TYPES: readonly string[] = ['alert', 'confirm', 'prompt', 'beforeunload']
 
 /** The only CDP methods the plugin may send: exactly what the Navide Browser
@@ -191,6 +194,8 @@ interface WebViewEntry {
   dialog: WebViewDialog | null
   /** The debugger 'message' listener is installed (once per contents). */
   dialogListener: boolean
+  /** Host-private directory holding this view's checked upload copies. */
+  uploadDir: string | null
 }
 
 export class PluginWebViewRegistry {
@@ -251,6 +256,7 @@ export class PluginWebViewRegistry {
       openerViewId,
       dialog: null,
       dialogListener: false,
+      uploadDir: null,
     }
     this.views.set(entry.viewId, entry)
     this.wireGuest(entry)
@@ -380,7 +386,7 @@ export class PluginWebViewRegistry {
     this.assertAgentInControl(entry)
     if (!CDP_ALLOWED_METHODS.has(method)) throw new WebViewError('CAPABILITY_DENIED')
     if (method === 'Page.navigate' && !isAllowedWebUrl(params?.url)) throw new WebViewError('INVALID_ARGUMENT')
-    if (method === 'DOM.setFileInputFiles') params = { ...params, files: workspaceFiles(params?.files, caller) }
+    if (method === 'DOM.setFileInputFiles') params = { ...params, files: this.stageUploads(entry, params?.files, caller) }
     const contents = entry.view.webContents
     if (contents.isDestroyed()) throw new WebViewError('INVALID_ARGUMENT')
     if (!contents.debugger.isAttached()) {
@@ -543,8 +549,15 @@ export class PluginWebViewRegistry {
   private openPopup(opener: WebViewEntry, url: string): void {
     if (this.views.get(opener.viewId) !== opener) return
     try {
-      this.spawn(opener.pluginId, { space: opener.space, url }, opener.owner,
+      const { viewId } = this.spawn(opener.pluginId, { space: opener.space, url }, opener.owner,
         opener.agentPane === null ? null : { ...opener.agentPane }, opener.viewId)
+      // A popup of a page the user has taken over stays with the user: the
+      // agent must not drive the new view while it may not drive its opener.
+      const popup = this.views.get(viewId)!
+      if (opener.control === 'user' && popup.control !== 'user') {
+        popup.control = 'user'
+        popup.reason = opener.reason ?? 'manual_takeover'
+      }
     } catch (error) {
       // Only the cap falls back; nothing else may turn a popup into a window.
       if (error instanceof WebViewError && error.code === 'LIMIT_REACHED') {
@@ -585,9 +598,26 @@ export class PluginWebViewRegistry {
     }
   }
 
+  /** Check each file, then copy it into a Host-private directory and give the
+   *  page the copy: the path Chromium reads later can no longer be swapped
+   *  for a link to a file outside the workspace. */
+  private stageUploads(entry: WebViewEntry, files: unknown, caller: WebAgentCaller | undefined): string[] {
+    const checked = workspaceFiles(files, caller)
+    entry.uploadDir ??= mkdtempSync(join(tmpdir(), 'navide-web-upload-'))
+    const batch = mkdtempSync(join(entry.uploadDir, 'u-'))
+    return checked.map((file, index) => copyChecked(file, join(batch, String(index)), caller!.workspace as string))
+  }
+
+  private removeUploads(entry: WebViewEntry): void {
+    if (entry.uploadDir === null) return
+    rmSync(entry.uploadDir, { recursive: true, force: true })
+    entry.uploadDir = null
+  }
+
   private destroyEntry(entry: WebViewEntry): void {
     this.detachEntry(entry)
     this.views.delete(entry.viewId)
+    this.removeUploads(entry)
     const contents = entry.view.webContents
     if (contents.isDestroyed()) return
     try {
@@ -698,6 +728,7 @@ export class PluginWebViewRegistry {
       if (this.views.get(entry.viewId) !== entry) return
       this.detachEntry(entry)
       this.views.delete(entry.viewId)
+      this.removeUploads(entry)
       this.changed(entry.pluginId)
     })
   }
@@ -738,6 +769,36 @@ function workspaceFiles(files: unknown, caller: WebAgentCaller | undefined): str
     if (!real.startsWith(prefix)) deny()
     return real
   })
+}
+
+/** Copy one checked file into `directory` (created owner-only) under its own
+ *  name. The source is opened without following a final link, must still be a
+ *  regular file of at most MAX_UPLOAD_BYTES, and must still be the file its
+ *  resolved path inside the workspace names; otherwise CAPABILITY_DENIED. */
+function copyChecked(file: string, directory: string, workspace: string): string {
+  const deny = (): never => { throw new WebViewError('CAPABILITY_DENIED') }
+  let fd: number
+  try {
+    fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW)
+  } catch {
+    return deny()
+  }
+  try {
+    const opened = fstatSync(fd)
+    if (!opened.isFile() || opened.size > MAX_UPLOAD_BYTES) deny()
+    // The descriptor must be the file the workspace check approved.
+    const [again] = workspaceFiles([file], { paneId: null, workspace })
+    const named = statSync(again)
+    if (named.dev !== opened.dev || named.ino !== opened.ino) deny()
+    const data = readFileSync(fd)
+    if (data.length > MAX_UPLOAD_BYTES) deny()
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
+    const copy = join(directory, basename(file))
+    writeFileSync(copy, data, { mode: 0o600, flag: 'wx' })
+    return copy
+  } finally {
+    closeSync(fd)
+  }
 }
 
 function cdpMessage(error: unknown): string {

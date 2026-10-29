@@ -1,6 +1,6 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   isPluginWebGuest,
@@ -248,6 +248,20 @@ describe('navigation allowlist', () => {
     // The popup belongs to the opener's pane: another pane cannot see it.
     expect(registry.list('navide.browser', pane).map(view => view.viewId)).toContain(info.viewId)
     expect(registry.list('navide.browser', { paneId: 'p-b', workspace: '/w' })).toEqual([])
+  })
+
+  it('keeps a popup with the user when the user has taken over its agent opener', async () => {
+    const { registry, views } = setup()
+    const pane = { paneId: 'p-a', workspace: '/w' }
+    const opener = registry.create('navide.browser', { space: 'task' }, 'agent', pane)
+    registry.takeControl('navide.browser', opener.viewId)
+    views[0].webContents.windowOpenHandler?.({ url: 'https://example.com/popup' })
+    const popup = registry.list('navide.browser').find(view => view.viewId !== opener.viewId)!
+    expect(popup).toMatchObject({ space: 'task', owner: 'agent', control: 'user', openerViewId: opener.viewId })
+    await expect(registry.cdp('navide.browser', popup.viewId, 'Accessibility.getFullAXTree', {}, pane))
+      .rejects.toMatchObject({ code: 'USER_IN_CONTROL', reason: 'manual_takeover' })
+    registry.returnControl('navide.browser', popup.viewId)
+    expect(registry.list('navide.browser').find(view => view.viewId === popup.viewId)).toMatchObject({ control: 'agent' })
   })
 
   it('gives a popup of a user Space to the user, in the same Space', () => {
@@ -845,13 +859,24 @@ describe('file upload', () => {
 
   const upload = (files: unknown) => ({ backendNodeId: 7, files })
 
-  it('passes files inside the calling pane workspace on, resolved, with the other params as they were', async () => {
+  it('passes Host-private copies of files inside the calling pane workspace, with the other params as they were', async () => {
     const { registry, views, workspace, outside, caller, viewId } = fixture()
     await registry.cdp('navide.browser', viewId, 'DOM.setFileInputFiles', upload([join(workspace, 'a.txt'), join(workspace, 'sub', 'b.txt'), join(outside, 'into.txt')]), caller)
-    expect(views[0].webContents.sent.at(-1)).toEqual({
-      method: 'DOM.setFileInputFiles',
-      params: { backendNodeId: 7, files: [join(workspace, 'a.txt'), join(workspace, 'sub', 'b.txt'), join(workspace, 'a.txt')] },
-    })
+    const sent = views[0].webContents.sent.at(-1)!
+    expect(sent.method).toBe('DOM.setFileInputFiles')
+    const files = (sent.params as { backendNodeId: number; files: string[] }).files
+    expect((sent.params as { backendNodeId: number }).backendNodeId).toBe(7)
+    // The page gets copies, never a workspace path it could later read through a swapped link.
+    expect(files.map((file) => basename(file))).toEqual(['a.txt', 'b.txt', 'a.txt'])
+    for (const file of files) expect(file.startsWith(workspace)).toBe(false)
+    expect(files.map((file) => readFileSync(file, 'utf8'))).toEqual(['a', 'b', 'a'])
+    expect(statSync(files[0]).mode & 0o077).toBe(0)
+    // A later change to the source does not reach the copy the page holds.
+    writeFileSync(join(workspace, 'a.txt'), 'changed')
+    expect(readFileSync(files[0], 'utf8')).toBe('a')
+    // Closing the view removes its copies.
+    registry.close('navide.browser', viewId, true, caller)
+    for (const file of files) expect(existsSync(file)).toBe(false)
   })
 
   it('refuses files outside the workspace, through a symlink, relative, missing, or not a file', async () => {
