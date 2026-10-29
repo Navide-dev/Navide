@@ -29,9 +29,9 @@ const roles: Role[] = [
   { key: 'pm', label: 'Project Manager', one_line: 'plans', system_prompt: '# PM' },
 ]
 const pipelines: PipelineSummary[] = [
-  { id: 'default', name: 'Default', builtin: true, stage_count: 2 },
-  { id: 'custom', name: 'Custom', builtin: false, stage_count: 1 },
-  { id: 'drawn', name: 'Drawn', builtin: false, stage_count: 2, has_graph: true },
+  { id: 'default', name: 'Default', builtin: true, stage_count: 2, step_count: 3 },
+  { id: 'custom', name: 'Custom', builtin: false, stage_count: 1, step_count: 1 },
+  { id: 'drawn', name: 'Drawn', builtin: false, stage_count: 2, step_count: 2, has_graph: true },
 ]
 const secondStage = {
   id: '02',
@@ -172,7 +172,7 @@ describe('PipelineManagerModal — pipelines tab', () => {
 
     expect(w.find('.title').text()).toBe(i18n.global.t('label.pipeline-manager'))
     expect(tab(w).text()).toContain(i18n.global.t('action.new-pipeline'))
-    expect(tab(w).text()).toContain(i18n.global.t('label.stage-count', { count: 2 }))
+    expect(tab(w).text()).toContain(i18n.global.t('label.step-count', { count: 3 }))
     for (const literal of HARD_CODED_ENGLISH) {
       expect(w.find('.app').text()).not.toContain(literal)
     }
@@ -238,11 +238,9 @@ describe('PipelineManagerModal — pipelines tab', () => {
       pipelines,
     })
 
-    const setDefault = tab(w)
-      .findAll('.pl-detail-actions button')
-      .find((b) => b.text().includes(i18n.global.t('action.set-as-default')))
-    expect(setDefault).toBeDefined()
-    await setDefault!.trigger('click')
+    const setDefault = await menuItem(w, 'set-default')
+    expect(setDefault.text()).toContain(i18n.global.t('action.set-as-default'))
+    await setDefault.trigger('click')
     await flushPromises()
 
     expect(mock.sent.find((s) => s.type === 'pipelines.set_active')?.payload).toEqual({
@@ -255,7 +253,7 @@ describe('PipelineManagerModal — pipelines tab', () => {
     const { wrapper: w, mock } = await open({ initialPipelineId: 'custom' })
     mock.setResponse('pipelines.delete', { pipelines: [pipelines[0]] })
 
-    await tab(w).find('.pl-detail-actions .danger-icon').trigger('click')
+    await (await menuItem(w, 'delete')).trigger('click')
     await flushPromises()
     // notify.confirm() parks on a host-rendered dialog; say yes for the user.
     expect(useNotify().dialog.value?.kind).toBe('confirm')
@@ -273,7 +271,7 @@ describe('PipelineManagerModal — pipelines tab', () => {
     })
 
     const before = useNotify().toasts.value.length
-    await tab(w).find('.pl-detail-actions .danger-icon').trigger('click')
+    await (await menuItem(w, 'delete')).trigger('click')
     await flushPromises()
     useNotify().resolveDialog(true)
     await flushPromises()
@@ -316,6 +314,69 @@ describe('PipelineManagerModal — pipelines tab', () => {
 
   /** The swimlane card for a node id. */
   const card = (w: VueWrapper, id: string) => tab(w).find(`.lane-card[data-node-id="${id}"]`)
+
+  it('opens a new pipeline as soon as it is created (D5)', async () => {
+    const { wrapper: w, mock } = await open()
+    const fresh = { id: 'fresh', name: 'Fresh', builtin: false, stage_count: 0, step_count: 0 }
+    mock.setResponse('pipelines.create', { pipeline: fresh, pipelines: [...pipelines, fresh] })
+    await tab(w).find('.toolbar .ghost').trigger('click')
+    await tab(w).find('.pl-create-row input').setValue('Fresh')
+    await tab(w).find('.pl-create-row input').trigger('keyup', { key: 'Enter' })
+    await flushPromises()
+    expect(tab(w).find('.pl-detail-name').text()).toBe('Fresh')
+  })
+
+  it('imports from n8n inside the editor too, and opens what it imported (D5)', async () => {
+    const { wrapper: w } = await open({ initialPipelineId: 'default' })
+    await (await menuItem(w, 'import-n8n')).trigger('click')
+    expect(w.find('.n8n-import').exists()).toBe(true)
+    w.findComponent({ name: 'N8nImportDialog' }).vm.$emit('imported', 'custom')
+    await flushPromises()
+    expect(tab(w).find('.pl-detail-name').text()).toBe('Custom')
+  })
+
+  /** The editor toolbar's ⋯ menu, opened, and one of its items. */
+  async function menuItem(w: VueWrapper, action: string) {
+    if (!w.find('.pam-list').exists()) await tab(w).find('.pe-trail .pam-trigger').trigger('click')
+    await flushPromises()
+    return w.find(`.pam-list [data-action="${action}"]`)
+  }
+
+  it('keeps the editor toolbar to one row: the pipeline actions sit behind one ⋯ button', async () => {
+    const { wrapper: w } = await open({ initialPipelineId: 'custom' })
+
+    // Five labelled buttons used to sit here and push the name and Delete out
+    // of a 1600px window; now there is one.
+    const trail = tab(w).find('.pe-trail')
+    expect(trail.findAll('button')).toHaveLength(1)
+    const more = trail.find('.pam-trigger')
+    expect(more.attributes('aria-label')).toBe(i18n.global.t('pipelineEditor.toolbar.more'))
+    expect(more.attributes('aria-haspopup')).toBe('menu')
+
+    await more.trigger('click')
+    await flushPromises()
+    const items = w.findAll('.pam-list [role="menuitem"]')
+    expect(items.map((b) => b.attributes('data-action'))).toEqual(['set-default', 'export', 'import', 'import-n8n', 'reset', 'delete'])
+    expect(items.map((b) => b.find('.pam-label').text())).toEqual([
+      i18n.global.t('action.set-as-default'),
+      i18n.global.t('settings.roles.export-json'),
+      i18n.global.t('settings.roles.import-json'),
+      i18n.global.t('action.import-from-n8n'),
+      i18n.global.t('action.reset-defaults'),
+      i18n.global.t('action.delete-pipeline'),
+    ])
+  })
+
+  it('leaves Set as Default out of the menu for the default pipeline, and says why Delete is off for the last one', async () => {
+    const { wrapper: w, mock, pipelinesApi } = await open({ initialPipelineId: 'default' })
+    expect((await menuItem(w, 'set-default')).exists()).toBe(false)
+    mock.setResponse('pipelines.list', { pipelines: [pipelines[0]], active_pipeline_id: 'default', path: '/data/pipelines.json' })
+    await pipelinesApi.refresh()
+    await flushPromises()
+    const del = await menuItem(w, 'delete')
+    expect(del.attributes('disabled')).toBeDefined()
+    expect(del.text()).toContain(i18n.global.t('hint.at-least-one-pipeline'))
+  })
 
   it('opens the pipeline as a graph and draws one column per stage', async () => {
     const { wrapper: w, mock } = await detail()
@@ -391,7 +452,7 @@ describe('PipelineManagerModal — pipelines tab', () => {
     const { wrapper: w, mock } = await detail()
     mock.setResponse('stages.reset', { stages: [twoSlotStage] })
 
-    await tab(w).find('.toolbar .danger-link').trigger('click')
+    await (await menuItem(w, 'reset')).trigger('click')
     await flushPromises()
     await w.find('.modal .modal-card .danger').trigger('click')
     await flushPromises()
@@ -408,7 +469,7 @@ describe('PipelineManagerModal — pipelines tab', () => {
     const { wrapper: w, mock } = await open({ initialPipelineId: 'drawn' })
     mock.setResponse('stages.reset', { stages: [] })
 
-    await tab(w).find('.toolbar .danger-link').trigger('click')
+    await (await menuItem(w, 'reset')).trigger('click')
     await flushPromises()
     expect(w.find('.modal .modal-card [data-test="reset-graph-warning"]').text()).toBe(
       i18n.global.t('hint.reset-stages-graph-warning'),
@@ -428,7 +489,7 @@ describe('PipelineManagerModal — pipelines tab', () => {
     const { wrapper: w, mock } = await detail()
     mock.setResponse('stages.reset', { stages: [twoSlotStage] })
 
-    await tab(w).find('.toolbar .danger-link').trigger('click')
+    await (await menuItem(w, 'reset')).trigger('click')
     await flushPromises()
     expect(w.find('.modal .modal-card [data-test="reset-graph-warning"]').exists()).toBe(false)
   })
@@ -442,8 +503,7 @@ describe('PipelineManagerModal — pipelines tab', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).agentTeam = { openJson }
 
-    const importBtn = tab(w).findAll('.toolbar .ghost')[1]
-    await importBtn.trigger('click')
+    await (await menuItem(w, 'import')).trigger('click')
     await flushPromises()
 
     const imports = mock.sent.filter((s) => s.type === 'stages.upsert')
@@ -482,7 +542,7 @@ describe('PipelineManagerModal — pipelines tab', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).agentTeam = { openJson }
 
-    await tab(w).findAll('.toolbar .ghost')[1].trigger('click')
+    await (await menuItem(w, 'import')).trigger('click')
     await flushPromises()
 
     expect(tab(w).find('.err-msg').text()).toContain('This pipeline is running, so it cannot be changed right now')
@@ -496,10 +556,10 @@ describe('PipelineManagerModal — pipelines tab', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).agentTeam = { saveJson }
 
-    await tab(w).findAll('.toolbar .ghost')[0].trigger('click')
+    await (await menuItem(w, 'export')).trigger('click')
     await flushPromises()
 
-    expect(tab(w).findAll('.toolbar .ghost')[0].attributes('disabled')).toBeUndefined()
+    expect(tab(w).find('.pe-trail .pam-trigger').attributes('disabled')).toBeUndefined()
     expect(tab(w).find('.err-msg').text()).toContain('disk full')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).agentTeam
@@ -515,8 +575,10 @@ describe('PipelineManagerModal — pipelines tab', () => {
     await flushPromises()
     expect(mock.sent.some((s) => s.type === 'pipelines.graph.apply')).toBe(false)
     expect(card(w, 'n-02-0').exists()).toBe(true)
-    // Stage-level writes are disabled up front too.
-    expect(tab(w).find('.toolbar .danger-link').attributes('disabled')).toBeDefined()
+    // Stage-level writes are disabled up front too, and say why.
+    const reset = await menuItem(w, 'reset')
+    expect(reset.attributes('disabled')).toBeDefined()
+    expect(reset.text()).toContain(i18n.global.t('pipelineEditor.toolbar.locked'))
   })
 
   it('does not lock for a run of a different pipeline', async () => {
@@ -546,7 +608,8 @@ describe('PipelineManagerModal — pipelines tab', () => {
     // Executions offers Resume for the stopped run of this pipeline.
     await tab(w).findAll('.pe-seg-btn')[2].trigger('click')
     await flushPromises()
-    expect(tab(w).find('.px-bar').text()).toContain('Resume')
+    await tab(w).find('.px-bar .pam-trigger').trigger('click')
+    expect(w.find('.pam-list').text()).toContain('Resume')
     expect(tab(w).find('.px-gate').exists()).toBe(false)
 
     // Resume: the host run is live again and the engine reports the gate.

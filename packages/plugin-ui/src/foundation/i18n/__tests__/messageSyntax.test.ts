@@ -78,6 +78,7 @@ const PLURAL_KEYS = [
   'settings.analyzer.models',
   'label.role-rename-repointed',
   'label.stage-count',
+  'label.step-count',
   'label.pipeline-count',
   'label.exported-stages',
   'label.imported-stages',

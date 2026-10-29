@@ -292,6 +292,8 @@ export interface PipelineSummary {
   name: string
   builtin: boolean
   stage_count: number
+  /** Steps as the editor counts them; absent from an older backend. */
+  step_count?: number
 }
 
 export type PipelineState = 'idle' | 'running' | 'completed' | 'aborted'
@@ -2010,6 +2012,14 @@ function openPipelineManager(pipelineId?: string): void {
   emit('open-pipeline-manager', pipelineId)
 }
 
+/** A pipeline's size in steps, as the editor and Executions count it; stages
+ *  only when an older backend sends no step count. */
+function sizeLabel(p: PipelineSummary): string {
+  return p.step_count === undefined
+    ? i18n.global.t('label.stage-count', { count: p.stage_count })
+    : i18n.global.t('label.step-count', { count: p.step_count })
+}
+
 function interruptTooltip(p: ActivePaneView): string {
   if (p.status !== 'running') return i18n.global.t('action.interrupt-not-running')
   return i18n.global.t('action.interrupt')
@@ -3452,7 +3462,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
     <section class="block panel-section">
       <div class="row between">
         <label class="lbl">{{ $t('label.pipelines') }}</label>
-        <button class="ghost manage-btn" :title="$t('action.manage-pipelines')" @click="openPipelineManager()">⚙</button>
+        <button class="ghost manage-btn" @click="openPipelineManager()">{{ $t('action.manage-pipelines') }}</button>
       </div>
       <ul v-if="pipelines && pipelines.length && pipeline.state !== 'running' && pipeline.state !== 'aborted'" class="pipeline-list">
         <li
@@ -3463,7 +3473,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           @click="openPipelineDetail(p.id)"
         >
           <span class="pipeline-item-name" v-truncate>{{ p.name }}</span>
-          <span class="pipeline-item-meta">{{ $t('label.stage-count', { count: p.stage_count }) }}</span>
+          <span class="pipeline-item-meta">{{ sizeLabel(p) }}</span>
           <span
             class="pipeline-item-badge"
             :class="isPipelineRunning(p.id) ? 'running'
@@ -4533,12 +4543,12 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <button class="ghost back-btn" @click="backToList">← {{ $t('action.back') }}</button>
           <span class="pipeline-detail-name" v-truncate>{{ openedPipeline?.name ?? openedPipelineId }}</span>
           <span v-if="openedPipelineId === activePipelineId" class="active-tag">{{ $t('label.default') }}</span>
-          <button class="ghost manage-btn" :title="$t('action.manage-pipelines')" @click="openPipelineManager(openedPipelineId || undefined)">⚙</button>
+          <button class="ghost manage-btn" @click="openPipelineManager(openedPipelineId || undefined)">{{ $t('action.manage-pipelines') }}</button>
         </div>
       </section>
       <section class="block" :class="{ pipeline: pipelineOpen }">
         <button class="lbl collapsible-header" @click="pipelineOpen = !pipelineOpen">
-          {{ pipelineOpen ? '▾' : '▸' }} {{ openedPipeline?.name ?? $t('label.pipelines') }} · {{ $t('label.stage-count', { count: effectiveStageCount }) }}
+          {{ pipelineOpen ? '▾' : '▸' }} {{ openedPipeline?.name ?? $t('label.pipelines') }} · {{ openedPipeline ? sizeLabel(openedPipeline) : $t('label.stage-count', { count: effectiveStageCount }) }}
         </button>
         <template v-if="pipelineOpen">
         <div
@@ -5488,6 +5498,8 @@ button.icon-btn.muted:hover {
   color: var(--text-bright);
 }
 .manage-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: var(--font-2xs);
   padding: 2px 6px;
   color: var(--text-secondary);

@@ -8428,6 +8428,7 @@
     }
   },
   "label": {
+    "step-count": "{count} Schritt | {count} Schritte",
     "imported-from-n8n": "Aus n8n importiert",
     "resume-other-pipeline": "Ein nicht abgeschlossener Lauf gehört zu „{name}“. Wechseln Sie zu dieser Pipeline, um ihn fortzusetzen.",
     "role-rename-repointed": "Der Rollenverweis wurde in {count} Pipeline aktualisiert. | Der Rollenverweis wurde in {count} Pipelines aktualisiert.",
@@ -11313,6 +11314,14 @@
     }
   },
   "pipelineEditor": {
+    "recover": {
+      "title": "Wiederherstellen",
+      "resume-desc": "Setzt den angehaltenen Lauf bei seiner ersten unfertigen Phase fort, mit seinen Panes und seinem Kontext.",
+      "restart-desc": "Schließt die Panes dieses Laufs und führt dieselbe Aufgabe ab der ersten Phase erneut aus.",
+      "reset-desc": "Löscht den Lauf und schließt alle Panes in diesem Fenster, auch die, die du selbst geöffnet hast.",
+      "older-run": "Das ist ein früherer Lauf. Wiederherstellen wirkt immer auf den neuesten Lauf dieser Pipeline.",
+      "show-latest": "Neuesten Lauf zeigen"
+    },
     "error": {
       "subpipeline-none": "Eine Unter-Pipeline braucht eine andere Pipeline zum Ausführen; lege zuerst eine an.",
       "pipeline-running": "Diese Pipeline läuft und kann daher gerade nicht geändert werden. Brechen Sie den Lauf zuerst ab oder lassen Sie ihn zu Ende laufen.",
@@ -11347,7 +11356,7 @@
     },
     "exec": {
       "abort": "Lauf abbrechen",
-      "empty-body": "Läufe erscheinen hier, sobald diese Pipeline gestartet wird – über die Seitenleiste, einen Befehl oder eine CLI über MCP.",
+      "empty-body": "Beschreibe oben im Feld eine Aufgabe und führe sie aus – oder starte diese Pipeline über die Seitenleiste, einen Zeitplan oder eine CLI über MCP.",
       "empty-title": "Noch keine Läufe",
       "list": "Läufe dieser Pipeline",
       "live": "Läuft gerade",
@@ -11361,7 +11370,6 @@
       "outcome-unknown": "Unbekannt",
       "outcome-idle": "Leerlauf",
       "failed-step": "{name} fehlgeschlagen: {error}",
-      "pick": "Wählen Sie einen Lauf, um ihn im Graphen nachzuverfolgen.",
       "progress": "{done} von {total} Schritten",
       "restart": "Von vorn beginnen",
       "resume": "Fortsetzen",
@@ -11511,6 +11519,7 @@
       "pinned": "Ausgabe eingefroren"
     },
     "toolbar": {
+      "more": "Weitere Aktionen",
       "canvas": "Arbeitsfläche",
       "derived": "Aus Stufen geöffnet – Ihre erste Bearbeitung speichert es als Graphen",
       "executions": "Ausführungen",
@@ -11538,6 +11547,13 @@
       "last-stage": "Das ist die letzte Stufe. Der Lauf endet, sobald sie den Abschluss meldet."
     },
     "link": {
+      "out-title": "Führt zu",
+      "none": "Von diesem Schritt geht noch keine Verbindung aus.",
+      "to": "Ziel",
+      "to-pick": "Schritt wählen",
+      "add": "Verbindung hinzufügen",
+      "branch-help": "Navide ergänzt die Startanweisung dieses Schritts um eine Zeile, die den Agent bittet, seine Antwort mit ---BRANCH:<code>: <value>--- in einer eigenen Zeile zu beenden. Der Lauf folgt der Verbindung, deren Wert passt (Groß-/Kleinschreibung egal); eine Verbindung mit dem Wert default wird genommen, wenn keine passt.",
+      "error-help": "Wird genommen, wenn dieser Schritt nach seinen Wiederholungen fehlschlägt – der Agent meldet ---NODE-FAILED---, oder die Aufgabe hat ihn nie erreicht. Der Lauf geht dann über diese Verbindung weiter, statt anzuhalten.",
       "title": "Verbindung",
       "desc": "{from} → {to}",
       "kind": "Verbindungstyp",
@@ -11599,6 +11615,8 @@
       "problem-condition": "Die Sichtbarkeitsregel verweist auf „{field}“, das kein anderes Feld dieser Rolle ist."
     },
     "run": {
+      "abort-title": "Diesen Lauf abbrechen?",
+      "abort-message": "Der Lauf hält an der aktuellen Stelle an. Seine Panes bleiben offen, und du kannst ihn später fortsetzen.",
       "running": "Läuft: {names}",
       "gate": "Wartet bei {name} auf Ihre Genehmigung",
       "review": "Prüfen",

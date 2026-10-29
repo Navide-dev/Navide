@@ -68,6 +68,7 @@ interface Stubs {
   onPipelineRestart: ReturnType<typeof vi.fn>
   clearStoredPipelineRun: ReturnType<typeof vi.fn>
   confirmPipelineReset: ReturnType<typeof vi.fn>
+  confirmPipelineAbort: ReturnType<typeof vi.fn>
 }
 
 interface StubOverrides {
@@ -133,6 +134,7 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
     }),
     clearStoredPipelineRun: vi.fn(async () => true),
     confirmPipelineReset: vi.fn(async () => true),
+    confirmPipelineAbort: vi.fn(async () => true),
   }
 }
 
@@ -160,6 +162,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     'onPipelineGateReject',
     'clearStoredPipelineRun',
     'confirmPipelineReset',
+    'confirmPipelineAbort',
     code,
   )
   factory(
@@ -183,6 +186,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     vi.fn(async () => true),
     stubs.clearStoredPipelineRun,
     stubs.confirmPipelineReset,
+    stubs.confirmPipelineAbort,
   )
   return handlers
 }
@@ -348,6 +352,33 @@ describe('ui.pipeline.abort', () => {
     const handlers = await loadActions(stubs)
     await expect(handlers['ui.pipeline.abort']()).rejects.toThrow(/state "aborted"/)
     expect(stubs.onPipelineAbort).not.toHaveBeenCalled()
+  })
+
+  it('never asks a caller that sets no confirm flag (MCP pipeline_abort)', async () => {
+    const stubs = makeStubs({ state: 'running' })
+    const handlers = await loadActions(stubs)
+    await handlers['ui.pipeline.abort']()
+    expect(stubs.confirmPipelineAbort).not.toHaveBeenCalled()
+    expect(stubs.onPipelineAbort).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks first when the editor Abort sets confirm, and changes nothing on cancel', async () => {
+    const stubs = makeStubs({ state: 'running' })
+    stubs.confirmPipelineAbort.mockImplementation(async () => false)
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.abort']({ confirm: true })
+    expect(stubs.confirmPipelineAbort).toHaveBeenCalledTimes(1)
+    expect(stubs.onPipelineAbort).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ state: 'running', cancelled: true })
+  })
+
+  it('aborts as before once the confirm is accepted', async () => {
+    const stubs = makeStubs({ state: 'running' })
+    stubs.pipeline.workspacePath = '/tmp/ws'
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.abort']({ confirm: true })
+    expect(stubs.confirmPipelineAbort).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'aborted' })
   })
 })
 

@@ -6,6 +6,9 @@ export interface PipelineSummary {
   name: string
   builtin: boolean
   stage_count: number
+  /** Steps as the editor counts them (graph nodes but the trigger); absent
+   *  from an older backend. */
+  step_count?: number
   /** The pipeline has a stored graph (drawn or edited as a graph). */
   has_graph?: boolean
   /** Set on pipelines made by importing an n8n workflow. */

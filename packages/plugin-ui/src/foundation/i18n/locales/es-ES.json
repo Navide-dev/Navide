@@ -8428,6 +8428,7 @@
     }
   },
   "label": {
+    "step-count": "{count} paso | {count} pasos",
     "imported-from-n8n": "Importado de n8n",
     "resume-other-pipeline": "Una ejecución sin terminar pertenece a «{name}». Cambia a esa pipeline para continuarla.",
     "role-rename-repointed": "Se actualizó la referencia al rol en {count} pipeline. | Se actualizó la referencia al rol en {count} pipelines.",
@@ -11313,6 +11314,14 @@
     }
   },
   "pipelineEditor": {
+    "recover": {
+      "title": "Recuperar",
+      "resume-desc": "Continúa la ejecución detenida en su primera etapa sin terminar, con sus paneles y su contexto.",
+      "restart-desc": "Cierra los paneles de esta ejecución y vuelve a ejecutar la misma tarea desde la primera etapa.",
+      "reset-desc": "Borra la ejecución y cierra todos los paneles de esta ventana, incluidos los que abriste tú.",
+      "older-run": "Esta es una ejecución anterior. Recuperar siempre actúa sobre la ejecución más reciente de esta pipeline.",
+      "show-latest": "Mostrar la ejecución más reciente"
+    },
     "error": {
       "subpipeline-none": "Una subpipeline necesita otra pipeline que ejecutar; crea una primero.",
       "pipeline-running": "Esta pipeline se está ejecutando, así que no se puede cambiar ahora. Cancela o termina primero la ejecución.",
@@ -11347,7 +11356,7 @@
     },
     "exec": {
       "abort": "Cancelar ejecución",
-      "empty-body": "Las ejecuciones aparecen aquí cuando se inicia esta pipeline: desde la barra lateral, un comando o una CLI mediante MCP.",
+      "empty-body": "Describe una tarea en el cuadro de arriba y ejecútala, o inicia esta pipeline desde la barra lateral, una programación o una CLI mediante MCP.",
       "empty-title": "Aún no hay ejecuciones",
       "list": "Ejecuciones de esta pipeline",
       "live": "En ejecución ahora",
@@ -11361,7 +11370,6 @@
       "outcome-unknown": "Desconocida",
       "outcome-idle": "Inactiva",
       "failed-step": "{name} falló: {error}",
-      "pick": "Elige una ejecución para reproducirla en el grafo.",
       "progress": "{done} de {total} pasos",
       "restart": "Empezar de nuevo",
       "resume": "Reanudar",
@@ -11511,6 +11519,7 @@
       "pinned": "Salida congelada"
     },
     "toolbar": {
+      "more": "Más acciones",
       "canvas": "Lienzo",
       "derived": "Abierta desde las etapas: tu primera edición la guarda como grafo",
       "executions": "Ejecuciones",
@@ -11538,6 +11547,13 @@
       "last-stage": "Es la última etapa. La ejecución termina en cuanto informe que ha terminado."
     },
     "link": {
+      "out-title": "Lleva a",
+      "none": "Este paso todavía no tiene enlaces de salida.",
+      "to": "Destino",
+      "to-pick": "Elige un paso",
+      "add": "Añadir enlace",
+      "branch-help": "Navide añade una línea a la instrucción inicial de este paso que pide al agente terminar su respuesta con ---BRANCH:<code>: <value>--- en una línea propia. La ejecución sigue el enlace cuyo valor coincide, sin distinguir mayúsculas; si ninguno coincide, se toma el enlace con el valor default.",
+      "error-help": "Se toma cuando este paso falla tras sus reintentos: el agente informa ---NODE-FAILED---, o la tarea nunca le llegó. La ejecución sigue por este enlace en lugar de detenerse.",
       "title": "Enlace",
       "desc": "{from} → {to}",
       "kind": "Tipo de enlace",
@@ -11599,6 +11615,8 @@
       "problem-condition": "La regla de visibilidad hace referencia a «{field}», que no es otro campo de este rol."
     },
     "run": {
+      "abort-title": "¿Cancelar esta ejecución?",
+      "abort-message": "La ejecución se detiene donde está. Sus paneles siguen abiertos y puedes reanudarla más tarde.",
       "running": "En ejecución: {names}",
       "gate": "Esperando tu aprobación en {name}",
       "review": "Revisar",

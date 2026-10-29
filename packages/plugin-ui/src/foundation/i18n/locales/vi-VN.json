@@ -8428,6 +8428,7 @@
     }
   },
   "label": {
+    "step-count": "{count} bước",
     "imported-from-n8n": "Đã nhập từ n8n",
     "resume-other-pipeline": "Một lượt chạy chưa xong thuộc về “{name}”. Hãy chuyển sang pipeline đó để tiếp tục.",
     "role-rename-repointed": "Đã cập nhật tham chiếu vai trò trong {count} pipeline.",
@@ -11313,6 +11314,14 @@
     }
   },
   "pipelineEditor": {
+    "recover": {
+      "title": "Khôi phục",
+      "resume-desc": "Tiếp tục lần chạy đã dừng từ giai đoạn chưa xong đầu tiên, giữ nguyên các pane và ngữ cảnh.",
+      "restart-desc": "Đóng các pane của lần chạy này và chạy lại cùng nhiệm vụ từ giai đoạn đầu tiên.",
+      "reset-desc": "Xóa lần chạy và đóng mọi pane trong cửa sổ này, kể cả các pane bạn tự mở.",
+      "older-run": "Đây là một lần chạy trước. Khôi phục luôn áp dụng cho lần chạy mới nhất của pipeline này.",
+      "show-latest": "Xem lần chạy mới nhất"
+    },
     "error": {
       "subpipeline-none": "Pipeline con cần một pipeline khác để chạy; hãy tạo một cái trước.",
       "pipeline-running": "Pipeline này đang chạy, nên hiện không thay đổi được. Hãy hủy hoặc chờ lần chạy kết thúc trước.",
@@ -11347,7 +11356,7 @@
     },
     "exec": {
       "abort": "Hủy lần chạy",
-      "empty-body": "Các lần chạy sẽ hiện ở đây khi pipeline này được khởi động — từ thanh bên, một lệnh, hoặc một CLI qua MCP.",
+      "empty-body": "Mô tả nhiệm vụ trong ô ở trên cùng rồi chạy, hoặc khởi động pipeline này từ thanh bên, một lịch hẹn, hoặc một CLI qua MCP.",
       "empty-title": "Chưa có lần chạy nào",
       "list": "Các lần chạy của pipeline này",
       "live": "Đang chạy",
@@ -11361,7 +11370,6 @@
       "outcome-unknown": "Không rõ",
       "outcome-idle": "Rảnh",
       "failed-step": "{name} thất bại: {error}",
-      "pick": "Chọn một lần chạy để phát lại trên đồ thị.",
       "progress": "{done} trên {total} bước",
       "restart": "Bắt đầu lại",
       "resume": "Tiếp tục",
@@ -11511,6 +11519,7 @@
       "pinned": "Đầu ra đã cố định"
     },
     "toolbar": {
+      "more": "Thao tác khác",
       "canvas": "Canvas",
       "derived": "Mở từ các giai đoạn — lần sửa đầu tiên sẽ lưu nó thành đồ thị",
       "executions": "Lần chạy",
@@ -11538,6 +11547,13 @@
       "last-stage": "Đây là giai đoạn cuối. Lần chạy sẽ kết thúc khi giai đoạn này báo hoàn tất."
     },
     "link": {
+      "out-title": "Dẫn đến",
+      "none": "Bước này chưa có liên kết đi ra.",
+      "to": "Đến bước",
+      "to-pick": "Chọn một bước",
+      "add": "Thêm liên kết",
+      "branch-help": "Navide thêm một dòng vào lời giao việc của bước này, yêu cầu agent kết thúc câu trả lời bằng ---BRANCH:<code>: <value>--- trên một dòng riêng. Lần chạy đi theo liên kết có giá trị khớp, không phân biệt hoa thường; nếu không có liên kết nào khớp, liên kết có giá trị default sẽ được chọn.",
+      "error-help": "Được chọn khi bước này thất bại sau các lần thử lại — agent báo ---NODE-FAILED---, hoặc nhiệm vụ không đến được agent. Lần chạy tiếp tục theo liên kết này thay vì dừng lại.",
       "title": "Liên kết",
       "desc": "{from} → {to}",
       "kind": "Loại liên kết",
@@ -11599,6 +11615,8 @@
       "problem-condition": "Quy tắc hiển thị tham chiếu tới “{field}”, vốn không phải một trường khác của vai trò này."
     },
     "run": {
+      "abort-title": "Hủy lần chạy này?",
+      "abort-message": "Lần chạy dừng ngay tại chỗ. Các pane vẫn mở, và bạn có thể tiếp tục sau.",
       "running": "Đang chạy: {names}",
       "gate": "Đang chờ bạn phê duyệt tại {name}",
       "review": "Xem xét",
