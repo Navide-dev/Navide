@@ -13,8 +13,8 @@ export class PluginDisabledStore extends PluginFactoryOptOutStore {
     super(root, DISABLED_PLUGINS_FILE)
   }
 
-  /** Neither the store nor its backup can be read: the built-in Plans, Git
-   *  and Mini-IDE count as disabled (fail closed) until the user resets the
+  /** Neither the store nor its backup can be read: the built-in Plans, Git,
+   *  Mini-IDE and Browser count as disabled (fail closed) until the user resets the
    *  store in Settings → Extensions. Marketplace packages keep reading as
    *  enabled, as before. */
   protected override unreadableAnswer(pluginId: string): boolean {
@@ -23,7 +23,7 @@ export class PluginDisabledStore extends PluginFactoryOptOutStore {
 }
 
 /** The built-ins whose switch fails closed (same ids as the Host's list). */
-const BUILTIN_SWITCH_IDS: ReadonlySet<string> = new Set(['navide.plans', 'navide.git', 'navide.mini-ide'])
+const BUILTIN_SWITCH_IDS: ReadonlySet<string> = new Set(['navide.plans', 'navide.git', 'navide.mini-ide', 'navide.browser'])
 
 export const BUILTIN_REMOVED_EARLIER_FILE = '.navide-builtin-removed-earlier.json'
 

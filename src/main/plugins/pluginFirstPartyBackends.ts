@@ -11,7 +11,7 @@ import type { PlansBridgePort } from './plansBridge'
  * (isReservedPluginId), so only App-bundled or official-registry packages can
  * carry one. Any other id, including a look-alike such as `acme.browser`,
  * stays third-party. A first-party backend other than Plans also needs the
- * package itself to come from the Official Registry
+ * package itself to come from the Official Registry or the App bundle
  * ({@link isFirstPartyAgentToolActivation}).
  */
 export const FIRST_PARTY_BACKEND_PLUGINS: ReadonlyMap<string, { readonly bridgePorts: readonly PlansBridgePort[] }> =
@@ -41,9 +41,10 @@ export function isFirstPartyAgentToolPlugin(pluginId: string): boolean {
   return pluginId !== FIRST_PARTY_PLANS_PLUGIN_ID && isFirstPartyBackendPlugin(pluginId)
 }
 
-/** One installed package of a first-party backend other than Plans: its id is
- *  on the list and the Official Registry installed it. The id alone is not
- *  enough: a package with any other provenance or a local source never gets
+/** One package of a first-party backend other than Plans: its id is on the
+ *  list and the Official Registry installed it or the Host loaded it from the
+ *  App's factory resources. The id alone is not enough: a package with any
+ *  other provenance (a developer folder included) or a local source never gets
  *  the first-party exemption, whatever the install-time checks did. */
 export function isFirstPartyAgentToolActivation(activation: {
   pluginId: string
@@ -51,7 +52,7 @@ export function isFirstPartyAgentToolActivation(activation: {
   source?: string
 }): boolean {
   return isFirstPartyAgentToolPlugin(activation.pluginId) &&
-    activation.provenance === 'official-registry' &&
+    (activation.provenance === 'official-registry' || activation.provenance === 'factory-bundled') &&
     activation.source !== 'local-unsigned' &&
     activation.source !== 'local-signed'
 }

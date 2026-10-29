@@ -196,7 +196,8 @@ export function preInstallConsentCandidates(
  * its manifest; its bridge ports are the ones the first-party list gives it,
  * each only when the manifest declares the matching system permission. Agents
  * reach it only through agent tools: `agentMethods` stays empty. Only a
- * package the Official Registry installed is projected; any other yields null.
+ * package the Official Registry installed or the App bundle carries is
+ * projected; any other yields null.
  */
 export function firstPartyBackendLaunchSpec(
   activation: PluginActivationCatalogEntry,
