@@ -108,7 +108,7 @@ export function registerNativeBackendIpc(
   handle('plugins:nativeBackends:setAgentTools', async (event, args) => {
     assertAuthorized(event)
     if (!agentTools) throw new Error('agent tools are unavailable')
-    const { enabled, externalCallers } = record(args)
+    const { enabled, externalCallers, firstParty } = record(args)
     const change: Partial<AgentToolSwitches> = {}
     if (enabled !== undefined) {
       if (typeof enabled !== 'boolean') throw new Error('invalid agent tool setting')
@@ -117,6 +117,10 @@ export function registerNativeBackendIpc(
     if (externalCallers !== undefined) {
       if (typeof externalCallers !== 'boolean') throw new Error('invalid agent tool setting')
       change.externalCallers = externalCallers
+    }
+    if (firstParty !== undefined) {
+      if (typeof firstParty !== 'boolean') throw new Error('invalid agent tool setting')
+      change.firstParty = firstParty
     }
     if (Object.keys(change).length !== 1) throw new Error('invalid agent tool setting')
     await agentTools.setSwitches(change)

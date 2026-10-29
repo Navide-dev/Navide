@@ -463,7 +463,31 @@ describe('PluginAgentToolsHost first-party agent tools (navide.browser)', () => 
     await expect(h.host.admit(browserCall, notStopping)).resolves.toMatchObject({ ok: true, tool: { name: 'browser_list' } })
     await expect(h.host.admit(call, notStopping)).resolves.toEqual({ ok: false, reason: 'master-switch-off' })
     // The switch covers third-party tools only, and the agent is told so.
-    expect(agentToolUnavailableMessage('master-switch-off')).toBe('Agent tools from third-party Navide plugins are turned off.')
+    expect(agentToolUnavailableMessage('master-switch-off')).toBe('Agent tools from this kind of Navide plugin (first-party or third-party) are turned off in Settings.')
+  })
+
+  it('serves no first-party tool with the first-party switch off, whatever the master switch says', async () => {
+    const { h } = withBrowser({}, { firstParty: false })
+    await h.host.refresh()
+    expect(h.sent).toEqual([])
+    expect(h.methods.get('navide.browser@1.0.0') ?? []).toEqual([])
+    await expect(h.host.admit(browserCall, notStopping)).resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+    await h.host.setSwitches({ enabled: true })
+    expect(h.sent.at(-1)!.tools.map((entry) => entry.pluginId)).toEqual(['nerdtechnic.devmap', 'nerdtechnic.devmap'])
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual([])
+    await expect(h.host.admit(browserCall, notStopping)).resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+    await expect(h.host.admit(call, notStopping)).resolves.toMatchObject({ ok: true })
+  })
+
+  it('sends one disabled snapshot when the first-party switch goes off and nothing else is served', async () => {
+    const { h } = withBrowser({ listPackages: () => [] })
+    await h.host.refresh()
+    await h.host.setSwitches({ firstParty: false })
+    expect(h.sent.map((payload) => [payload.enabled, payload.tools.length])).toEqual([[true, 2], [false, 0]])
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual([])
+    await h.host.setSwitches({ firstParty: true })
+    expect(h.sent.at(-1)).toMatchObject({ enabled: true })
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual(['browser.act', 'browser.list'])
   })
 
   it('still refuses first-party calls without a pane while the master switch is off', async () => {

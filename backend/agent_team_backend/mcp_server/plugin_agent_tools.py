@@ -10,10 +10,10 @@ What it guarantees on this side of the boundary:
 
 - Until a snapshot with ``enabled: true`` arrives, nothing here changes the
   server: tools/list and every call behave exactly as without this module.
-  The Host sends nothing while the DB8 master switch (off by default) is off
-  and no first-party Navide plugin (navide.browser) has tools. The master
-  switch covers third-party tools only: first-party ones are served whatever
-  it says, without per-version consent, until the user disables that plugin.
+  The Host sends nothing while the DB8 master switch (third-party tools, off
+  by default) is off and nothing else is served. First-party Navide plugin
+  tools (navide.browser) have their own switch, on by default, and are
+  served without per-version consent while it is on.
   Every guarantee below applies to them unchanged: their results are wrapped
   as external content and taint the caller pane.
 - Third-party tools are listed after every core tool, sorted by name, so the

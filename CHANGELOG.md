@@ -6,7 +6,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Changed
 
-- Navide plugin agent tools (0.2.35): tools from Navide's own first-party plugins (Navide Browser) are available to agents without turning on **Let agents call tools from third-party Navide plugins**, which now covers third-party plugins only, as its label says. Disabling the plugin turns its tools off. Everything else stays as it was: external MCP clients still need both switches, the first write in each workspace still asks, and every result is still wrapped as external content and marks the calling pane. With no first-party plugin installed, nothing changes.
+- Navide plugin agent tools (0.2.35): a new switch in Settings → Navide Plugins, **Let agents call tools from first-party Navide plugins**, on by default, turns the tools of Navide's own plugins (Navide Browser) on or off at once. **Let agents call tools from third-party Navide plugins** now covers third-party plugins only, as its label says, and stays off by default. Everything else stays as it was: external MCP clients still need the third-party switch and their own, the first write in each workspace still asks, and every result is still wrapped as external content and marks the calling pane. With no first-party plugin installed, nothing changes. Two new strings in all 11 interface languages.
 
 ## [0.2.34] — unreleased
 

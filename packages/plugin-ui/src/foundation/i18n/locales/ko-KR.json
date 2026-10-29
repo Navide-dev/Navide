@@ -1968,6 +1968,8 @@
         "offUnsaved": "서드파티 네이티브 백엔드는 지금은 꺼져 있지만 Navide가 이 설정을 저장하지 못해서, Navide를 다시 시작하면 다시 켜져요.",
         "offUnsavedRetry": "다시 시도",
         "agentTools": {
+          "firstParty": "agent가 공식 Navide 플러그인의 도구를 호출하도록 허용",
+          "firstPartyDescription": "기본으로 켜져 있어요. Navide Browser처럼 Navide가 만든 공식 Navide 플러그인의 도구를 pane의 에이전트가 버전마다 묻지 않고 호출할 수 있게 해요. 결과는 계속 외부 콘텐츠로 표시되고, 무언가를 바꾸는 도구는 작업 공간마다 한 번 물어봐요.",
           "enable": "agent가 타사 Navide 플러그인의 도구를 호출하도록 허용",
           "description": "허용한 Navide 플러그인이 선언한 도구를 pane의 에이전트가 호출할 수 있게 해요. 파일을 바꾸는 도구는 작업 공간마다 한 번 물어봐요.",
           "externalCallers": "외부 MCP 클라이언트도 호출하도록 허용",

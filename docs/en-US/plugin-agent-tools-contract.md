@@ -764,14 +764,16 @@ A Host event carrying the complete catalog; each one replaces the previous one.
 - `revision` increases strictly within one Host process; the backend ignores
   a snapshot whose revision is not greater than the last one it applied, and
   starts again from the first snapshot after a Host reconnect.
-- `enabled` is true while the Host serves any tool. The DB8 master switch
-  covers third-party packages only: while it is off, their tools are left out
-  of the snapshot. First-party packages (`navide.browser`) are served whatever
-  the master switch says, until the user disables the plugin. With the switch
-  off since start-up and no first-party package with tools, the Host sends
-  **nothing** (no-regression guarantee: `tools/list` equals main). When the
-  last served tool goes, the Host sends one snapshot with `enabled: false`
-  and `tools: []`.
+- `enabled` is true while the Host serves any tool. Two switches decide which
+  packages are in the snapshot: the DB8 master switch (off by default) covers
+  third-party packages, and the first-party switch (on by default; Settings →
+  Navide Plugins → **Let agents call tools from first-party Navide plugins**) covers
+  first-party packages (`navide.browser`). A package whose switch is off is
+  left out and its `agentMethods` stay `[]`. With the master switch off since
+  start-up and no first-party package served, the Host sends **nothing**
+  (no-regression guarantee: `tools/list` equals main). When the last served
+  package goes, the Host sends one snapshot with `enabled: false` and
+  `tools: []`.
 - `externalCallers` is the DB4 switch.
 - `state` is `available` | `consent-required` | `plugin-disabled` |
   `plugin-quarantined` | `plugin-revoked` | `name-collision`. Only `available`
@@ -825,7 +827,7 @@ result)` path:
 ```
 
 Host checks run on every call, in this order, regardless of what the CLI has
-cached: master switch (third-party packages only) → caller kind → package installed, enabled, not
+cached: the package's switch (DB8 for third-party, the first-party switch for first-party) → caller kind → package installed, enabled, not
 quarantined, not revoked, not stopping → tool in the consented list →
 workspace grant → first-write confirmation (DB3) → execution policy →
 headless binding → `callBound`.
