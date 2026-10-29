@@ -8437,7 +8437,6 @@
     "stage-count": "{count} etapa | {count} etapas",
     "pipeline-count": "{count} pipeline | {count} pipelines",
     "builtin": "Integrado",
-    "pipeline-definition-file": "Archivo de definición",
     "loading-pipelines": "Cargando pipelines…",
     "pipelines-unreadable": "No se pudieron leer las definiciones de pipelines",
     "pipelines-empty": "Aún no hay pipelines",
@@ -9123,6 +9122,7 @@
     "merge-aborted": "Fusión cancelada: conflictos anulados."
   },
   "hint": {
+    "pipelines-stored-locally": "Se guardan en este equipo con los ajustes de Navide, no en el espacio de trabajo. Exporta un paquete de ajustes en Ajustes para llevarlos a otro equipo.",
     "imported-from-n8n": "Las ejecuciones de esta pipeline se marcan como contenido externo.",
     "role-not-found-refresh": "El rol «{key}» ya no existe; puede que otra ventana lo haya eliminado. La lista de la izquierda ya está actualizada; vuelve a elegir un rol.",
     "role-key-exists-recover": "Ya existe un rol con la clave «{key}». Si lo dejó atrás un cambio de nombre a medias, elimina primero «{key}» de la lista de la izquierda y vuelve a renombrar.",
@@ -11535,7 +11535,46 @@
       "open-in-canvas": "Abrir en el lienzo de pipelines",
       "gate-toast": "La pipeline está esperando tu aprobación en {name}",
       "next-gated": "Aprueba o devuelve esta puerta antes de pasar a la siguiente etapa.",
-      "last-stage": "Es la última etapa. La ejecución termina en cuanto informe que ha terminado."
+      "last-stage": "Es la última etapa. La ejecución termina en cuanto informe que ha terminado.",
+      "next-stage": "Siguiente → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "preparación: iniciando la CLI",
+        "checking-dialog": "preparación: revisando el diálogo",
+        "settling": "preparación: esperando el indicador",
+        "injecting-role": "preparación: inyectando el rol",
+        "waiting-agent": "preparación: esperando al agente",
+        "ready": "preparación: listo",
+        "failed": "preparación: error"
+      },
+      "role": {
+        "pending": "rol: en espera",
+        "scheduled": "rol: inyectando",
+        "sent": "rol: inyectado",
+        "failed": "rol: error al inyectar",
+        "skipped": "rol: omitido"
+      },
+      "kickoff": {
+        "pending": "· arranque: en cola",
+        "sent": "· arranque: enviado",
+        "unverified": "· arranque: sin confirmar",
+        "failed": "· arranque: error"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "Pipeline predeterminada",
+        "maintenance": "Pipeline de mantenimiento",
+        "evolve-landing": "Pipeline de aplicación de propuestas"
+      },
+      "role": {
+        "pm": "PRD, historias de usuario, UAT, KPI, prioridades",
+        "backend": "API, bases de datos, lógica de negocio, seguridad",
+        "frontend": "Componentes, gestión de estado, diseño adaptable, rendimiento",
+        "mobile": "iOS, Android, multiplataforma, sin conexión primero",
+        "qa": "E2E, casos límite, matriz de pruebas automatizadas"
+      }
     },
     "link": {
       "title": "Enlace",

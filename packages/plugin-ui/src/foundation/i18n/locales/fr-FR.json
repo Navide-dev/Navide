@@ -8437,7 +8437,6 @@
     "stage-count": "{count} étape | {count} étapes",
     "pipeline-count": "{count} pipeline | {count} pipelines",
     "builtin": "Intégré",
-    "pipeline-definition-file": "Fichier de définition",
     "loading-pipelines": "Chargement des pipelines…",
     "pipelines-unreadable": "Impossible de lire les définitions des pipelines",
     "pipelines-empty": "Aucun pipeline pour l’instant",
@@ -9123,6 +9122,7 @@
     "merge-aborted": "Fusion abandonnée : conflits annulés."
   },
   "hint": {
+    "pipelines-stored-locally": "Enregistrés sur cet ordinateur avec les réglages de Navide, pas dans l’espace de travail. Exportez un paquet de réglages dans Réglages pour les copier sur un autre ordinateur.",
     "imported-from-n8n": "Les exécutions de ce pipeline sont marquées comme contenu externe.",
     "role-not-found-refresh": "Le rôle « {key} » n’existe plus : une autre fenêtre l’a peut-être supprimé. La liste de gauche est déjà à jour ; choisissez de nouveau un rôle.",
     "role-key-exists-recover": "Un rôle avec la clé « {key} » existe déjà. Si un renommage inachevé l’a laissé, supprimez d’abord « {key} » de la liste de gauche, puis renommez de nouveau.",
@@ -11535,7 +11535,46 @@
       "open-in-canvas": "Ouvrir dans le canevas du pipeline",
       "gate-toast": "Le pipeline attend votre approbation à {name}",
       "next-gated": "Approuvez ou renvoyez cette validation avant de passer à l’étape suivante.",
-      "last-stage": "C’est la dernière étape. L’exécution se termine dès qu’elle signale avoir fini."
+      "last-stage": "C’est la dernière étape. L’exécution se termine dès qu’elle signale avoir fini.",
+      "next-stage": "Suivant → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "préparation : démarrage de la CLI",
+        "checking-dialog": "préparation : vérification de la boîte de dialogue",
+        "settling": "préparation : attente de l’invite",
+        "injecting-role": "préparation : injection du rôle",
+        "waiting-agent": "préparation : attente de l’agent",
+        "ready": "préparation : prêt",
+        "failed": "préparation : échec"
+      },
+      "role": {
+        "pending": "rôle : en attente",
+        "scheduled": "rôle : injection en cours",
+        "sent": "rôle : injecté",
+        "failed": "rôle : échec de l’injection",
+        "skipped": "rôle : ignoré"
+      },
+      "kickoff": {
+        "pending": "· lancement : en file d’attente",
+        "sent": "· lancement : envoyé",
+        "unverified": "· lancement : non confirmé",
+        "failed": "· lancement : échec"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "Pipeline par défaut",
+        "maintenance": "Pipeline de maintenance",
+        "evolve-landing": "Pipeline de mise en œuvre des propositions"
+      },
+      "role": {
+        "pm": "PRD, user stories, UAT, KPI, priorités",
+        "backend": "API, bases de données, logique métier, sécurité",
+        "frontend": "Composants, gestion d’état, mise en page adaptative, performances",
+        "mobile": "iOS, Android, multiplateforme, hors ligne d’abord",
+        "qa": "E2E, cas limites, matrice de tests automatisés"
+      }
     },
     "link": {
       "title": "Lien",

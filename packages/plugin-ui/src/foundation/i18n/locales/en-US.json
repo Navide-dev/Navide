@@ -8437,7 +8437,6 @@
     "stage-count": "{count} stage | {count} stages",
     "pipeline-count": "{count} pipeline | {count} pipelines",
     "builtin": "Built-in",
-    "pipeline-definition-file": "Definition file",
     "loading-pipelines": "Loading pipelines…",
     "pipelines-unreadable": "Could not read the pipeline definitions",
     "pipelines-empty": "No pipelines yet",
@@ -9123,6 +9122,7 @@
     "merge-aborted": "Merge aborted — conflicts cancelled."
   },
   "hint": {
+    "pipelines-stored-locally": "Saved on this computer with Navide's settings, not in the workspace. To copy them to another computer, use Export Settings Bundle in Settings.",
     "imported-from-n8n": "Runs of this pipeline are marked as external content.",
     "role-not-found-refresh": "The role \"{key}\" no longer exists — another window may have deleted it. The list on the left is already up to date; pick a role again.",
     "role-key-exists-recover": "A role with the key \"{key}\" already exists. If a half-finished rename left it behind, delete \"{key}\" from the list on the left first, then rename again.",
@@ -11535,7 +11535,46 @@
       "open-in-canvas": "Open in the Pipeline Canvas",
       "gate-toast": "The pipeline is waiting for your approval at {name}",
       "next-gated": "Approve or send back this gate before moving on to the next stage.",
-      "last-stage": "This is the last stage. The run finishes once it reports done."
+      "last-stage": "This is the last stage. The run finishes once it reports done.",
+      "next-stage": "Next → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "setup: starting CLI",
+        "checking-dialog": "setup: checking dialog",
+        "settling": "setup: waiting prompt",
+        "injecting-role": "setup: injecting role",
+        "waiting-agent": "setup: waiting agent",
+        "ready": "setup: ready",
+        "failed": "setup: failed"
+      },
+      "role": {
+        "pending": "role: waiting",
+        "scheduled": "role: injecting",
+        "sent": "role: injected",
+        "failed": "role: inject failed",
+        "skipped": "role: skipped"
+      },
+      "kickoff": {
+        "pending": "· kickoff: queued",
+        "sent": "· kickoff: sent",
+        "unverified": "· kickoff: unverified",
+        "failed": "· kickoff: failed"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "Default Pipeline",
+        "maintenance": "Maintenance Pipeline",
+        "evolve-landing": "Proposal Landing Pipeline"
+      },
+      "role": {
+        "pm": "PRD, user stories, UAT, KPIs, priorities",
+        "backend": "APIs, databases, business logic, security",
+        "frontend": "Components, state management, responsive layout, performance",
+        "mobile": "iOS, Android, cross-platform, offline-first",
+        "qa": "E2E, edge cases, automated test matrix"
+      }
     },
     "link": {
       "title": "Link",

@@ -1369,7 +1369,7 @@
     "stall-force-advance": "強制推進",
       "prev-page": "上一頁",
       "next-page": "下一頁",
-      "manage-pipelines": "管理 pipeline",
+      "manage-pipelines": "流程管理",
       "reset-run-counter": "重設本次執行的計數",
       "wipe-workspace-history": "清除這個工作區的歷史統計",
       "wipe-global-tally": "清除全域總計",
@@ -8437,7 +8437,6 @@
     "stage-count": "{count} 個階段",
     "pipeline-count": "{count} 條流程",
     "builtin": "內建",
-    "pipeline-definition-file": "定義檔",
     "loading-pipelines": "流程載入中…",
     "pipelines-unreadable": "讀不到流程定義",
     "pipelines-empty": "還沒有任何流程",
@@ -9123,6 +9122,7 @@
     "merge-aborted": "合併已中止 — 衝突已取消。"
   },
   "hint": {
+    "pipelines-stored-locally": "存在這台電腦的 Navide 設定裡，不在工作區內。要搬到另一台電腦，請在設定匯出設定全集。",
     "imported-from-n8n": "這個流程的每次執行都會標示為外部內容。",
     "role-not-found-refresh": "「{key}」這個角色已經不存在了——可能是其他視窗把它刪掉了。左側清單已經自動更新，請重新選取角色。",
     "role-key-exists-recover": "已經有一個識別碼為「{key}」的角色。如果它是上一次沒改完的改名留下來的，請先在左側清單刪除「{key}」，然後再改名一次。",
@@ -11535,7 +11535,46 @@
       "open-in-canvas": "在 pipeline 畫布中開啟",
       "gate-toast": "pipeline 已暫停，等待你在「{name}」核准",
       "next-gated": "先核准或退回這個閘門，才能進入下一階段。",
-      "last-stage": "這是最後一個階段，回報完成後這次執行就會結束。"
+      "last-stage": "這是最後一個階段，回報完成後這次執行就會結束。",
+      "next-stage": "下一步 → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "準備：啟動 CLI",
+        "checking-dialog": "準備：檢查對話框",
+        "settling": "準備：等待提示字元",
+        "injecting-role": "準備：注入角色",
+        "waiting-agent": "準備：等待 agent",
+        "ready": "準備：就緒",
+        "failed": "準備：失敗"
+      },
+      "role": {
+        "pending": "角色：等待中",
+        "scheduled": "角色：注入中",
+        "sent": "角色：已注入",
+        "failed": "角色：注入失敗",
+        "skipped": "角色：已略過"
+      },
+      "kickoff": {
+        "pending": "· 啟動提示：排隊中",
+        "sent": "· 啟動提示：已送出",
+        "unverified": "· 啟動提示：未確認",
+        "failed": "· 啟動提示：失敗"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "預設流程",
+        "maintenance": "維護流程",
+        "evolve-landing": "提案落地流程"
+      },
+      "role": {
+        "pm": "PRD、user stories、UAT、KPI、優先序",
+        "backend": "API、資料庫、業務邏輯、安全性",
+        "frontend": "元件、狀態管理、RWD、效能",
+        "mobile": "iOS、Android、跨平台、離線優先",
+        "qa": "E2E、邊界情況、自動化測試矩陣"
+      }
     },
     "link": {
       "title": "連線",

@@ -8,6 +8,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Role } from '../../composables/useRoles'
 import { DND_PALETTE, type PaletteItem } from './pipelineEditorModel'
+import { roleDisplayOneLine } from '../../lib/builtinNames'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{
@@ -44,8 +45,8 @@ function matches(text: string): boolean {
 const roleItems = computed<PaletteItem[]>(() =>
   [...props.roles]
     .sort((a, b) => a.label.localeCompare(b.label))
-    .filter((r) => matches(`${r.label} ${r.key} ${r.one_line}`))
-    .map((r) => ({ kind: 'role', roleKey: r.key, label: r.label, description: r.one_line }))
+    .filter((r) => matches(`${r.label} ${r.key} ${roleDisplayOneLine(r)}`))
+    .map((r) => ({ kind: 'role', roleKey: r.key, label: r.label, description: roleDisplayOneLine(r) }))
 )
 const flowItems = computed<PaletteItem[]>(() =>
   [gate.value, subpipeline.value].filter((item) => matches(`${item.label} ${item.description}`))

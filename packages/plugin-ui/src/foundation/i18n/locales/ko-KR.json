@@ -8437,7 +8437,6 @@
     "stage-count": "{count}개 단계",
     "pipeline-count": "pipeline {count}개",
     "builtin": "기본 제공",
-    "pipeline-definition-file": "정의 파일",
     "loading-pipelines": "pipeline 불러오는 중…",
     "pipelines-unreadable": "pipeline 정의를 읽지 못했어요",
     "pipelines-empty": "아직 pipeline이 없어요",
@@ -9123,6 +9122,7 @@
     "merge-aborted": "병합 중단됨 — 충돌이 취소되었어요."
   },
   "hint": {
+    "pipelines-stored-locally": "작업 공간이 아니라 이 컴퓨터의 Navide 설정에 저장돼요. 다른 컴퓨터로 옮기려면 설정에서 설정 번들을 내보내세요.",
     "imported-from-n8n": "이 pipeline의 실행은 외부 콘텐츠로 표시돼요.",
     "role-not-found-refresh": "역할 \"{key}\"이(가) 더 이상 없어요. 다른 창에서 삭제했을 수 있어요. 왼쪽 목록은 이미 최신 상태이니 역할을 다시 선택하세요.",
     "role-key-exists-recover": "키가 \"{key}\"인 역할이 이미 있어요. 이름 바꾸기가 중간에 멈춰서 남은 것이라면 먼저 왼쪽 목록에서 \"{key}\"을(를) 삭제한 뒤 다시 이름을 바꾸세요.",
@@ -11535,7 +11535,46 @@
       "open-in-canvas": "pipeline 캔버스에서 열기",
       "gate-toast": "pipeline이 {name}에서 승인을 기다리고 있어요",
       "next-gated": "다음 단계로 넘어가기 전에 이 게이트를 승인하거나 되돌려 보내세요.",
-      "last-stage": "마지막 단계예요. 완료를 보고하면 실행이 끝나요."
+      "last-stage": "마지막 단계예요. 완료를 보고하면 실행이 끝나요.",
+      "next-stage": "다음 → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "준비: CLI 시작 중",
+        "checking-dialog": "준비: 대화 상자 확인 중",
+        "settling": "준비: 프롬프트 대기 중",
+        "injecting-role": "준비: 역할 주입 중",
+        "waiting-agent": "준비: agent 대기 중",
+        "ready": "준비: 준비됨",
+        "failed": "준비: 실패"
+      },
+      "role": {
+        "pending": "역할: 대기 중",
+        "scheduled": "역할: 주입 중",
+        "sent": "역할: 주입됨",
+        "failed": "역할: 주입 실패",
+        "skipped": "역할: 건너뜀"
+      },
+      "kickoff": {
+        "pending": "· 시작: 대기열",
+        "sent": "· 시작: 전송됨",
+        "unverified": "· 시작: 확인 안 됨",
+        "failed": "· 시작: 실패"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "기본 pipeline",
+        "maintenance": "유지보수 pipeline",
+        "evolve-landing": "제안 반영 pipeline"
+      },
+      "role": {
+        "pm": "PRD, 사용자 스토리, UAT, KPI, 우선순위",
+        "backend": "API, 데이터베이스, 비즈니스 로직, 보안",
+        "frontend": "컴포넌트, 상태 관리, 반응형 레이아웃, 성능",
+        "mobile": "iOS, Android, 크로스 플랫폼, 오프라인 우선",
+        "qa": "E2E, 엣지 케이스, 자동화 테스트 매트릭스"
+      }
     },
     "link": {
       "title": "연결",

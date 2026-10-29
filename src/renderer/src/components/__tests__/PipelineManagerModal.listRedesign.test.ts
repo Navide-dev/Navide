@@ -61,6 +61,7 @@ describe('PipelineManagerModal — list view redesign', () => {
       locale?: 'en-US' | 'zh-TW'
       listOk?: boolean
       listError?: { code: string; message: string }
+      list?: PipelineSummary[]
     } = {}
   ) {
     i18n.global.locale.value = options.locale ?? 'en-US'
@@ -73,7 +74,7 @@ describe('PipelineManagerModal — list view redesign', () => {
       })
     } else {
       mock.setResponse('pipelines.list', {
-        pipelines,
+        pipelines: options.list ?? pipelines,
         active_pipeline_id: 'default',
         path: PIPELINES_PATH,
       })
@@ -170,12 +171,25 @@ describe('PipelineManagerModal — list view redesign', () => {
     expect(tab(w).find('.pl-count').text()).toBe(t('label.pipeline-count', { count: 2 }))
   })
 
-  it('shows where the pipeline definitions live', async () => {
+  it('says where pipelines are kept in words, with the database path only on hover', async () => {
     const { wrapper: w } = await open()
     const source = tab(w).find('.pl-source')
     expect(source.exists()).toBe(true)
-    expect(source.text()).toContain(t('label.pipeline-definition-file'))
-    expect(source.find('.pl-source-path').text()).toBe(PIPELINES_PATH)
+    expect(source.text()).toBe(t('hint.pipelines-stored-locally'))
+    expect(source.text()).not.toContain(PIPELINES_PATH)
+    expect(source.attributes('title')).toBe(PIPELINES_PATH)
+  })
+
+  it('shows a builtin pipeline under its name in the UI language until it is renamed', async () => {
+    const { wrapper: w } = await open({
+      list: [
+        { id: 'default', name: '預設流程', builtin: true, stage_count: 5 },
+        { id: 'maintenance', name: 'Nightly chores', builtin: true, stage_count: 2 },
+      ],
+    })
+    const names = tab(w).findAll('.pl-name').map((n) => n.text())
+    expect(names).toEqual([t('pipelineEditor.builtin.pipeline.default'), 'Nightly chores'])
+    expect(names[0]).toBe('Default Pipeline')
   })
 
   // ── phase-shell / i18n: the header status word ─────────────────────────────
@@ -307,7 +321,7 @@ describe('PipelineManagerModal — list view redesign', () => {
       'action.open-pipeline-named',
       'label.pipeline-count',
       'label.builtin',
-      'label.pipeline-definition-file',
+      'hint.pipelines-stored-locally',
       'label.loading-pipelines',
       'label.pipelines-unreadable',
       'label.pipelines-empty',

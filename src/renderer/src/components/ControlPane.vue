@@ -9,6 +9,7 @@ import { withDescendants } from '../lib/paneLineage'
 import { setBatchDragImage } from '../lib/batchDragImage'
 import { paneStatusLabelText, type PaneStatusValue } from '../lib/paneStatusLabel'
 import { rollupPaneStatus } from '../lib/paneStatusRollup'
+import { pipelineDisplayName, roleDisplayOneLine } from '../lib/builtinNames'
 import { subtreeSignals } from '../lib/paneSubtreeStatus'
 import { workspaceAliasKey, workspaceAliasOf, workspaceBasename, workspaceDisplayName } from '../lib/workspaceAlias'
 import type { SidebarMode } from '../lib/sidebarMode'
@@ -1788,6 +1789,12 @@ const openedPipeline = computed(
   () => props.pipelines?.find((p) => p.id === openedPipelineId.value) ?? null
 )
 
+/** A listed pipeline's name as shown (a builtin in the UI language); undefined when not listed. */
+function pipelineNameById(id: string | null | undefined): string | undefined {
+  const p = props.pipelines?.find((x) => x.id === id)
+  return p ? pipelineDisplayName(p) : undefined
+}
+
 function openPipelineDetail(id: string): void {
   openedPipelineId.value = id
   sidebarView.value = 'pipeline'
@@ -1890,7 +1897,7 @@ const resumeMatchesActivePipeline = computed<boolean>(() => {
 // been deleted, and the id is still more use than an empty string.
 const resumeOwnerPipelineName = computed<string>(() => {
   const owner = props.existingProject?.pipelineId ?? ''
-  return props.pipelines?.find((p) => p.id === owner)?.name ?? owner
+  return pipelineNameById(owner) ?? owner
 })
 
 // ── Pipeline list pagination ───────────────────────────────────────────────
@@ -2931,34 +2938,34 @@ watch(() => pipelineGate.value?.gateId, () => { gateComment.value = '' })
 function injectionLabel(status: ActivePaneView['injectionStatus']): string {
   switch (status) {
     case 'pending':
-      return 'role: waiting'
+      return i18n.global.t('pipelineEditor.paneStatus.role.pending')
     case 'scheduled':
-      return 'role: injecting'
+      return i18n.global.t('pipelineEditor.paneStatus.role.scheduled')
     case 'sent':
-      return 'role: injected'
+      return i18n.global.t('pipelineEditor.paneStatus.role.sent')
     case 'failed':
-      return 'role: inject failed'
+      return i18n.global.t('pipelineEditor.paneStatus.role.failed')
     case 'skipped':
-      return 'role: skipped'
+      return i18n.global.t('pipelineEditor.paneStatus.role.skipped')
   }
 }
 
 function preparationLabel(status: ActivePaneView['preparationStatus']): string {
   switch (status) {
     case 'starting':
-      return 'setup: starting CLI'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.starting')
     case 'checking-dialog':
-      return 'setup: checking dialog'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.checking-dialog')
     case 'settling':
-      return 'setup: waiting prompt'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.settling')
     case 'injecting-role':
-      return 'setup: injecting role'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.injecting-role')
     case 'waiting-agent':
-      return 'setup: waiting agent'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.waiting-agent')
     case 'ready':
-      return 'setup: ready'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.ready')
     case 'failed':
-      return 'setup: failed'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.failed')
     default:
       return ''
   }
@@ -2968,15 +2975,15 @@ function kickoffLabel(status?: ActivePaneView['kickoffStatus']): string {
   if (!status || status === 'none') return ''
   switch (status) {
     case 'pending':
-      return '· kickoff: queued'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.pending')
     case 'sent':
-      return '· kickoff: sent'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.sent')
     // Written, but the only echo we got was the buffer growing — which a
     // booting CLI does regardless. Say so rather than claiming it was sent.
     case 'unverified':
-      return '· kickoff: unverified'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.unverified')
     case 'failed':
-      return '· kickoff: failed'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.failed')
   }
 }
 
@@ -3462,7 +3469,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :class="{ 'pipeline-active': p.id === activePipelineId }"
           @click="openPipelineDetail(p.id)"
         >
-          <span class="pipeline-item-name" v-truncate>{{ p.name }}</span>
+          <span class="pipeline-item-name" v-truncate>{{ pipelineDisplayName(p) }}</span>
           <span class="pipeline-item-meta">{{ $t('label.stage-count', { count: p.stage_count }) }}</span>
           <span
             class="pipeline-item-badge"
@@ -3534,7 +3541,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <div class="pipeline-running-divider"></div>
         <div class="pipeline-running-name">
           <div class="prn-title">
-            ▶ {{ pipelines?.find(p => p.id === runId)?.name ?? $t('label.pipelines') }}
+            ▶ {{ pipelineNameById(runId) ?? $t('label.pipelines') }}
           </div>
           <!-- A sub-pipeline's child run: where it was called from, and a way
                back to the parent's runs. -->
@@ -3543,7 +3550,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               <button class="ghost prn-crumb" :title="$t('pipelineEditor.controlPane.open-parent')" @click="openPipelineManager(p.pipelineId || undefined)">{{ p.name }}</button>
               <span class="prn-crumb-sep" aria-hidden="true">›</span>
             </template>
-            <span class="prn-crumb-here">{{ pipelines?.find(p => p.id === runId)?.name ?? '' }}</span>
+            <span class="prn-crumb-here">{{ pipelineNameById(runId) ?? '' }}</span>
           </div>
           <div v-if="pipeline.task" class="prn-task" v-truncate>{{ pipeline.task }}</div>
           <div class="prn-meta">
@@ -3590,7 +3597,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ `Next → ${pipelineNextStage.shortTitle}` }}
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: pipelineNextStage.shortTitle }) }}
             </button>
             <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
@@ -4506,7 +4513,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
                 ⚙ {{ $t('action.settings') }}
               </button>
             </div>
-            <p class="role-line" v-truncate>{{ currentRole.one_line }}</p>
+            <p class="role-line" v-truncate>{{ roleDisplayOneLine(currentRole) }}</p>
             <pre v-if="previewOpen" class="prompt-preview">{{ currentRole.system_prompt }}</pre>
           </div>
           <div v-else class="prompt-block warn-block">
@@ -4531,14 +4538,14 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
       <section class="block pipeline-detail-header">
         <div class="pipeline-detail-nav">
           <button class="ghost back-btn" @click="backToList">← {{ $t('action.back') }}</button>
-          <span class="pipeline-detail-name" v-truncate>{{ openedPipeline?.name ?? openedPipelineId }}</span>
+          <span class="pipeline-detail-name" v-truncate>{{ openedPipeline ? pipelineDisplayName(openedPipeline) : openedPipelineId }}</span>
           <span v-if="openedPipelineId === activePipelineId" class="active-tag">{{ $t('label.default') }}</span>
           <button class="ghost manage-btn" :title="$t('action.manage-pipelines')" @click="openPipelineManager(openedPipelineId || undefined)">⚙</button>
         </div>
       </section>
       <section class="block" :class="{ pipeline: pipelineOpen }">
         <button class="lbl collapsible-header" @click="pipelineOpen = !pipelineOpen">
-          {{ pipelineOpen ? '▾' : '▸' }} {{ openedPipeline?.name ?? $t('label.pipelines') }} · {{ $t('label.stage-count', { count: effectiveStageCount }) }}
+          {{ pipelineOpen ? '▾' : '▸' }} {{ openedPipeline ? pipelineDisplayName(openedPipeline) : $t('label.pipelines') }} · {{ $t('label.stage-count', { count: effectiveStageCount }) }}
         </button>
         <template v-if="pipelineOpen">
         <div
@@ -4695,7 +4702,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ `Next → ${pipelineNextStage.shortTitle}` }}
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: pipelineNextStage.shortTitle }) }}
             </button>
             <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>

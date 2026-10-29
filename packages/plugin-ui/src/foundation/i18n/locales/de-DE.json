@@ -8437,7 +8437,6 @@
     "stage-count": "{count} Stufe | {count} Stufen",
     "pipeline-count": "{count} Pipeline | {count} Pipelines",
     "builtin": "Integriert",
-    "pipeline-definition-file": "Definitionsdatei",
     "loading-pipelines": "Pipelines werden geladen …",
     "pipelines-unreadable": "Die Pipeline-Definitionen konnten nicht gelesen werden",
     "pipelines-empty": "Noch keine Pipelines",
@@ -9123,6 +9122,7 @@
     "merge-aborted": "Merge abgebrochen – Konflikte verworfen."
   },
   "hint": {
+    "pipelines-stored-locally": "Gespeichert auf diesem Computer bei den Navide-Einstellungen, nicht im Arbeitsbereich. Exportiere in den Einstellungen ein Einstellungspaket, um sie auf einen anderen Computer zu übertragen.",
     "imported-from-n8n": "Läufe dieser Pipeline werden als externer Inhalt markiert.",
     "role-not-found-refresh": "Die Rolle „{key}“ existiert nicht mehr – möglicherweise hat ein anderes Fenster sie gelöscht. Die Liste links ist bereits aktuell; wählen Sie erneut eine Rolle.",
     "role-key-exists-recover": "Eine Rolle mit dem Schlüssel „{key}“ existiert bereits. Falls eine halb abgeschlossene Umbenennung sie hinterlassen hat, löschen Sie zuerst „{key}“ aus der Liste links und benennen Sie dann erneut um.",
@@ -11535,7 +11535,46 @@
       "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen",
       "gate-toast": "Die Pipeline wartet bei {name} auf Ihre Genehmigung",
       "next-gated": "Genehmigen Sie diese Schranke oder schicken Sie sie zurück, bevor es mit der nächsten Stufe weitergeht.",
-      "last-stage": "Das ist die letzte Stufe. Der Lauf endet, sobald sie den Abschluss meldet."
+      "last-stage": "Das ist die letzte Stufe. Der Lauf endet, sobald sie den Abschluss meldet.",
+      "next-stage": "Weiter → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "Vorbereitung: CLI wird gestartet",
+        "checking-dialog": "Vorbereitung: Dialog wird geprüft",
+        "settling": "Vorbereitung: warte auf Eingabeaufforderung",
+        "injecting-role": "Vorbereitung: Rolle wird übergeben",
+        "waiting-agent": "Vorbereitung: warte auf Agent",
+        "ready": "Vorbereitung: bereit",
+        "failed": "Vorbereitung: fehlgeschlagen"
+      },
+      "role": {
+        "pending": "Rolle: wartet",
+        "scheduled": "Rolle: wird übergeben",
+        "sent": "Rolle: übergeben",
+        "failed": "Rolle: Übergabe fehlgeschlagen",
+        "skipped": "Rolle: übersprungen"
+      },
+      "kickoff": {
+        "pending": "· Kickoff: in der Warteschlange",
+        "sent": "· Kickoff: gesendet",
+        "unverified": "· Kickoff: unbestätigt",
+        "failed": "· Kickoff: fehlgeschlagen"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "Standard-Pipeline",
+        "maintenance": "Wartungs-Pipeline",
+        "evolve-landing": "Pipeline zur Vorschlagsumsetzung"
+      },
+      "role": {
+        "pm": "PRD, User Stories, UAT, KPIs, Prioritäten",
+        "backend": "APIs, Datenbanken, Geschäftslogik, Sicherheit",
+        "frontend": "Komponenten, State-Management, responsives Layout, Performance",
+        "mobile": "iOS, Android, plattformübergreifend, Offline-First",
+        "qa": "E2E, Grenzfälle, automatisierte Testmatrix"
+      }
     },
     "link": {
       "title": "Verbindung",

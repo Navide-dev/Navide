@@ -28,6 +28,7 @@ import {
   type SchedulerJob,
 } from '../lib/schedulerJobs'
 import { weekdayKey, type Translate } from '../lib/cronDescribe'
+import { pipelineDisplayName } from '../lib/builtinNames'
 import { blockTourWhile } from '../composables/useTourBlockers'
 
 const props = defineProps<{
@@ -482,7 +483,7 @@ async function remove(): Promise<void> {
             <select v-model="pipelineSel" class="nv-select" data-field="pipeline">
               <option value="" disabled>{{ t('scheduler.editor.pick-pipeline') }}</option>
               <option v-if="missingPipeline" :value="missingPipeline.value" data-missing="true">{{ missingPipeline.label }}</option>
-              <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
+              <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ pipelineDisplayName(p) }}</option>
             </select>
             <span v-if="shownErrors.target" class="je-err" data-error="target">{{ shownErrors.target }}</span>
             <span class="je-preview" data-test="pipeline-cost">{{ t('scheduler.editor.pipeline-cost') }}</span>

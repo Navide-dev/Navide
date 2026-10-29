@@ -8437,7 +8437,6 @@
     "stage-count": "{count} giai đoạn",
     "pipeline-count": "{count} pipeline",
     "builtin": "Có sẵn",
-    "pipeline-definition-file": "Tệp định nghĩa",
     "loading-pipelines": "Đang tải pipeline…",
     "pipelines-unreadable": "Không đọc được định nghĩa pipeline",
     "pipelines-empty": "Chưa có pipeline nào",
@@ -9123,6 +9122,7 @@
     "merge-aborted": "Đã hủy merge — các xung đột đã được bỏ."
   },
   "hint": {
+    "pipelines-stored-locally": "Được lưu trên máy này cùng cài đặt của Navide, không nằm trong không gian làm việc. Để chuyển sang máy khác, hãy xuất gói cài đặt trong Cài đặt.",
     "imported-from-n8n": "Các lần chạy của pipeline này được đánh dấu là nội dung bên ngoài.",
     "role-not-found-refresh": "Vai trò “{key}” không còn tồn tại — có thể cửa sổ khác đã xóa nó. Danh sách bên trái đã được cập nhật; hãy chọn lại vai trò.",
     "role-key-exists-recover": "Đã có vai trò với khóa “{key}”. Nếu đó là phần sót lại của lần đổi tên dang dở, hãy xóa “{key}” khỏi danh sách bên trái trước, rồi đổi tên lại.",
@@ -11535,7 +11535,46 @@
       "open-in-canvas": "Mở trong canvas pipeline",
       "gate-toast": "Pipeline đang chờ bạn phê duyệt tại {name}",
       "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo.",
-      "last-stage": "Đây là giai đoạn cuối. Lần chạy sẽ kết thúc khi giai đoạn này báo hoàn tất."
+      "last-stage": "Đây là giai đoạn cuối. Lần chạy sẽ kết thúc khi giai đoạn này báo hoàn tất.",
+      "next-stage": "Tiếp → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "chuẩn bị: đang khởi động CLI",
+        "checking-dialog": "chuẩn bị: đang kiểm tra hộp thoại",
+        "settling": "chuẩn bị: đang chờ dấu nhắc",
+        "injecting-role": "chuẩn bị: đang nạp vai trò",
+        "waiting-agent": "chuẩn bị: đang chờ agent",
+        "ready": "chuẩn bị: sẵn sàng",
+        "failed": "chuẩn bị: thất bại"
+      },
+      "role": {
+        "pending": "vai trò: đang chờ",
+        "scheduled": "vai trò: đang nạp",
+        "sent": "vai trò: đã nạp",
+        "failed": "vai trò: nạp thất bại",
+        "skipped": "vai trò: đã bỏ qua"
+      },
+      "kickoff": {
+        "pending": "· khởi động: đang xếp hàng",
+        "sent": "· khởi động: đã gửi",
+        "unverified": "· khởi động: chưa xác nhận",
+        "failed": "· khởi động: thất bại"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "Pipeline mặc định",
+        "maintenance": "Pipeline bảo trì",
+        "evolve-landing": "Pipeline triển khai đề xuất"
+      },
+      "role": {
+        "pm": "PRD, user story, UAT, KPI, mức ưu tiên",
+        "backend": "API, cơ sở dữ liệu, logic nghiệp vụ, bảo mật",
+        "frontend": "Component, quản lý trạng thái, bố cục đáp ứng, hiệu năng",
+        "mobile": "iOS, Android, đa nền tảng, ưu tiên ngoại tuyến",
+        "qa": "E2E, trường hợp biên, ma trận kiểm thử tự động"
+      }
     },
     "link": {
       "title": "Liên kết",

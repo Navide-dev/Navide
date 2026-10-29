@@ -21,6 +21,7 @@ import PipelineEditor from './pipeline/PipelineEditor.vue'
 import N8nImportDialog from './pipeline/N8nImportDialog.vue'
 import RolePropertiesEditor, { rolePropertyProblems } from './pipeline/RolePropertiesEditor.vue'
 import type { RoleProperty } from '../lib/pipelineGraph'
+import { pipelineDisplayName, roleDisplayOneLine } from '../lib/builtinNames'
 
 const props = defineProps<{
   backend: ReturnType<typeof useBackend>
@@ -673,7 +674,7 @@ function buildAiContext(): string {
             @click="plEnterDetail(p.id)"
             @keydown.enter.prevent="plEnterDetail(p.id)"
             @keydown.space.prevent="plEnterDetail(p.id)">
-            <span class="pl-name" v-truncate>{{ p.name }}</span>
+            <span class="pl-name" v-truncate>{{ pipelineDisplayName(p) }}</span>
             <span class="pl-tags">
               <span v-if="p.id === pipelinesApi.activePipelineId.value" class="pl-badge">{{ $t('label.default') }}</span>
               <span v-if="p.builtin" class="pl-badge pl-badge--builtin">{{ $t('label.builtin') }}</span>
@@ -714,9 +715,8 @@ function buildAiContext(): string {
             </button>
           </div>
         </div>
-        <div v-if="pipelinesApi.pipelinesPath.value" class="pl-source">
-          <span>{{ $t('label.pipeline-definition-file') }}</span>
-          <span class="pl-source-path" v-truncate>{{ pipelinesApi.pipelinesPath.value }}</span>
+        <div v-if="pipelinesApi.pipelinesPath.value" class="pl-source" :title="pipelinesApi.pipelinesPath.value">
+          <span>{{ $t('hint.pipelines-stored-locally') }}</span>
         </div>
       </template>
 
@@ -744,7 +744,7 @@ function buildAiContext(): string {
               <button class="ghost tiny" @click="plRenamingId = ''">✕</button>
             </template>
             <h2 v-else class="pl-detail-title">
-              <span class="pl-detail-name" v-truncate>{{ plCurrentPipeline?.name ?? plEditingId }}</span>
+              <span class="pl-detail-name" v-truncate>{{ plCurrentPipeline ? pipelineDisplayName(plCurrentPipeline) : plEditingId }}</span>
               <button
                 class="icon-btn" :disabled="plBusy" :title="$t('action.rename')"
                 @click="plStartRename(plEditingId, plCurrentPipeline?.name ?? '')">✎</button>
@@ -797,7 +797,7 @@ function buildAiContext(): string {
               @click="rSelectKey(r.key)">
               <div class="row-g"><span class="mono-key">{{ r.key }}</span><span v-if="r.is_default" class="badge">{{ $t('label.default') }}</span></div>
               <div class="item-label">{{ r.label }}</div>
-              <div class="item-sub" v-truncate>{{ r.one_line }}</div>
+              <div class="item-sub" v-truncate>{{ roleDisplayOneLine(r) }}</div>
             </li>
           </ul>
         </aside>
@@ -1195,8 +1195,8 @@ function buildAiContext(): string {
   gap: 8px;
   margin-top: 6px;
 }
-/* "Show where the data lives", the same affordance SettingsModal's meta row
-   gives every tab. pipelinesPath was already fetched and never displayed. */
+/* Says where the pipelines are kept, in words; the database path is the
+   tooltip, for whoever needs to find the file. */
 .pl-source {
   display: flex;
   align-items: center;
@@ -1207,13 +1207,6 @@ function buildAiContext(): string {
   padding: 6px 0 8px;
   font-size: var(--font-2xs);
   color: var(--text-secondary);
-}
-.pl-source-path {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
 }
 
 /* ── Pipeline detail header ───────────────────────────────────────────────── */

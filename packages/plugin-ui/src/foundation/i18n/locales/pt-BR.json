@@ -8437,7 +8437,6 @@
     "stage-count": "{count} etapa | {count} etapas",
     "pipeline-count": "{count} pipeline | {count} pipelines",
     "builtin": "Integrado",
-    "pipeline-definition-file": "Arquivo de definição",
     "loading-pipelines": "Carregando pipelines…",
     "pipelines-unreadable": "Não foi possível ler as definições de pipeline",
     "pipelines-empty": "Nenhum pipeline ainda",
@@ -9123,6 +9122,7 @@
     "merge-aborted": "Merge cancelado – conflitos descartados."
   },
   "hint": {
+    "pipelines-stored-locally": "Salvos neste computador com as configurações do Navide, não no espaço de trabalho. Exporte um pacote de configurações em Configurações para levá-los a outro computador.",
     "imported-from-n8n": "As execuções deste pipeline são marcadas como conteúdo externo.",
     "role-not-found-refresh": "O papel “{key}” não existe mais – outra janela pode tê-lo excluído. A lista à esquerda já está atualizada; escolha um papel novamente.",
     "role-key-exists-recover": "Já existe um papel com a chave “{key}”. Se uma renomeação incompleta o deixou para trás, exclua “{key}” da lista à esquerda primeiro e renomeie de novo.",
@@ -11535,7 +11535,46 @@
       "open-in-canvas": "Abrir na tela do pipeline",
       "gate-toast": "O pipeline está aguardando sua aprovação em {name}",
       "next-gated": "Aprove ou devolva este ponto de aprovação antes de seguir para a próxima etapa.",
-      "last-stage": "Esta é a última etapa. A execução termina assim que ela informar que concluiu."
+      "last-stage": "Esta é a última etapa. A execução termina assim que ela informar que concluiu.",
+      "next-stage": "Avançar → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "preparação: iniciando a CLI",
+        "checking-dialog": "preparação: verificando a caixa de diálogo",
+        "settling": "preparação: aguardando o prompt",
+        "injecting-role": "preparação: injetando o papel",
+        "waiting-agent": "preparação: aguardando o agente",
+        "ready": "preparação: pronto",
+        "failed": "preparação: falhou"
+      },
+      "role": {
+        "pending": "papel: aguardando",
+        "scheduled": "papel: injetando",
+        "sent": "papel: injetado",
+        "failed": "papel: falha ao injetar",
+        "skipped": "papel: ignorado"
+      },
+      "kickoff": {
+        "pending": "· início: na fila",
+        "sent": "· início: enviado",
+        "unverified": "· início: não confirmado",
+        "failed": "· início: falhou"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "Pipeline padrão",
+        "maintenance": "Pipeline de manutenção",
+        "evolve-landing": "Pipeline de aplicação de propostas"
+      },
+      "role": {
+        "pm": "PRD, histórias de usuário, UAT, KPIs, prioridades",
+        "backend": "APIs, bancos de dados, lógica de negócio, segurança",
+        "frontend": "Componentes, gerenciamento de estado, layout responsivo, desempenho",
+        "mobile": "iOS, Android, multiplataforma, offline primeiro",
+        "qa": "E2E, casos extremos, matriz de testes automatizados"
+      }
     },
     "link": {
       "title": "Vínculo",

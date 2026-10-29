@@ -4,6 +4,7 @@ import { formatKeySpec, settingsKeySpec } from '@navide/plugin-ui/shared'
 import type { AgentSpec } from './ControlPane.vue'
 import type { Role, RoleKey } from '../data/roles'
 import type { BackendStatus } from '../composables/useBackend'
+import { roleDisplayOneLine } from '../lib/builtinNames'
 
 const props = defineProps<{
   /** Whether the spawn card is expanded. */
@@ -93,7 +94,7 @@ const datalistId = useId()
             ⚙ {{ $t('action.settings') }}
           </button>
         </div>
-        <p class="role-line">{{ currentRole.one_line }}</p>
+        <p class="role-line">{{ roleDisplayOneLine(currentRole) }}</p>
         <pre v-if="previewOpen" class="prompt-preview">{{ currentRole.system_prompt }}</pre>
       </div>
       <div v-else class="prompt-block warn-block">

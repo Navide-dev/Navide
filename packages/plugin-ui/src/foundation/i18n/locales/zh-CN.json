@@ -8437,7 +8437,6 @@
     "stage-count": "{count} 个阶段",
     "pipeline-count": "{count} 条流程",
     "builtin": "内置",
-    "pipeline-definition-file": "定义档",
     "loading-pipelines": "流程加载中…",
     "pipelines-unreadable": "读不到流程定义",
     "pipelines-empty": "还没有任何流程",
@@ -9123,6 +9122,7 @@
     "merge-aborted": "合并已中止 — 冲突已取消。"
   },
   "hint": {
+    "pipelines-stored-locally": "保存在这台电脑的 Navide 设置中，不在工作区内。要迁移到另一台电脑，请在设置中导出设置包。",
     "imported-from-n8n": "这个流程的每次运行都会标记为外部内容。",
     "role-not-found-refresh": "“{key}”这个角色已经不存在了——可能是其他窗口把它删掉了。左侧清单已经自动更新，请重新选取角色。",
     "role-key-exists-recover": "已经有一个识别码为“{key}”的角色。如果它是上一次没改完的改名留下来的，请先在左侧清单删除“{key}”，然后再改名一次。",
@@ -11535,7 +11535,46 @@
       "open-in-canvas": "在 pipeline 画布中打开",
       "gate-toast": "pipeline 已暂停，等待你在“{name}”核准",
       "next-gated": "先核准或退回这个闸门，才能进入下一阶段。",
-      "last-stage": "这是最后一个阶段，报告完成后这次运行就会结束。"
+      "last-stage": "这是最后一个阶段，报告完成后这次运行就会结束。",
+      "next-stage": "下一步 → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "准备：启动 CLI",
+        "checking-dialog": "准备：检查对话框",
+        "settling": "准备：等待提示符",
+        "injecting-role": "准备：注入角色",
+        "waiting-agent": "准备：等待 agent",
+        "ready": "准备：就绪",
+        "failed": "准备：失败"
+      },
+      "role": {
+        "pending": "角色：等待中",
+        "scheduled": "角色：注入中",
+        "sent": "角色：已注入",
+        "failed": "角色：注入失败",
+        "skipped": "角色：已跳过"
+      },
+      "kickoff": {
+        "pending": "· 启动提示：排队中",
+        "sent": "· 启动提示：已发送",
+        "unverified": "· 启动提示：未确认",
+        "failed": "· 启动提示：失败"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "默认流程",
+        "maintenance": "维护流程",
+        "evolve-landing": "提案落地流程"
+      },
+      "role": {
+        "pm": "PRD、用户故事、UAT、KPI、优先级",
+        "backend": "API、数据库、业务逻辑、安全性",
+        "frontend": "组件、状态管理、响应式布局、性能",
+        "mobile": "iOS、Android、跨平台、离线优先",
+        "qa": "E2E、边界情况、自动化测试矩阵"
+      }
     },
     "link": {
       "title": "连接",
