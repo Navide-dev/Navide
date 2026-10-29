@@ -38,6 +38,12 @@ export type WebViewState = 'idle' | 'running' | 'need-action' | 'done'
 /** Why a bridge `cdp` call was refused with USER_IN_CONTROL. */
 export type WebControlReason = 'user-owned' | 'manual_takeover' | 'permission'
 export interface WebViewRect { x: number; y: number; width: number; height: number }
+/** A JavaScript dialog open in the page (message at most 500 characters). */
+export interface WebViewDialog {
+  type: 'alert' | 'confirm' | 'prompt' | 'beforeunload'
+  message: string
+  defaultPrompt?: string
+}
 export interface WebViewInfo {
   viewId: string
   space: string
@@ -51,6 +57,10 @@ export interface WebViewInfo {
   attached: boolean
   /** The agent ran script in the page since it last loaded a new document. */
   agentScriptSinceLoad: boolean
+  /** The view whose window.open created this one. */
+  openerViewId?: string
+  /** A JS dialog open in the page, seen while the agent's debugger is attached. */
+  dialog?: WebViewDialog
 }
 
 export const WEB_BRIDGE_OPERATIONS = ['list', 'create', 'close', 'cdp', 'setState'] as const
@@ -63,6 +73,7 @@ const MAX_RECT_EXTENT = 16384
 const OWNERS: readonly string[] = ['agent', 'user']
 const STATES: readonly string[] = ['idle', 'running', 'need-action', 'done']
 const NAVIGATE_ACTIONS: readonly string[] = ['back', 'forward', 'reload', 'stop']
+const DIALOG_TYPES: readonly string[] = ['alert', 'confirm', 'prompt', 'beforeunload']
 const CDP_METHOD = /^[A-Z][A-Za-z]*\.[a-zA-Z]+$/
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -156,14 +167,24 @@ export function validateWebRequest(address: string, value: unknown): value is Re
 
 function isWebViewInfo(value: unknown): value is WebViewInfo {
   return isRecord(value) &&
-    hasOnlyKeys(value, ['viewId', 'space', 'owner', 'control', 'state', 'note', 'url', 'title', 'loading', 'attached', 'agentScriptSinceLoad']) &&
+    hasOnlyKeys(value, ['viewId', 'space', 'owner', 'control', 'state', 'note', 'url', 'title', 'loading', 'attached', 'agentScriptSinceLoad', 'openerViewId', 'dialog']) &&
     isId(value.viewId) && isId(value.space) &&
     OWNERS.includes(value.owner as string) && OWNERS.includes(value.control as string) &&
     STATES.includes(value.state as string) &&
     (value.note === undefined || typeof value.note === 'string') &&
     typeof value.url === 'string' && typeof value.title === 'string' &&
     typeof value.loading === 'boolean' && typeof value.attached === 'boolean' &&
-    typeof value.agentScriptSinceLoad === 'boolean'
+    typeof value.agentScriptSinceLoad === 'boolean' &&
+    (value.openerViewId === undefined || isId(value.openerViewId)) &&
+    (value.dialog === undefined || isDialog(value.dialog))
+}
+
+function isDialog(value: unknown): boolean {
+  return isRecord(value) && hasOnlyKeys(value, ['type', 'message', 'defaultPrompt']) &&
+    DIALOG_TYPES.includes(value.type as string) &&
+    typeof value.message === 'string' && value.message.length <= MAX_NOTE_LENGTH &&
+    (value.defaultPrompt === undefined ||
+      (typeof value.defaultPrompt === 'string' && value.defaultPrompt.length <= MAX_NOTE_LENGTH))
 }
 
 /** Validate the `web.changed` payload: `{ views: WebViewInfo[] }`. */

@@ -158,6 +158,8 @@ describe('web.changed event payload', () => {
   it('accepts a list of WebViewInfo', () => {
     expect(validateWebChangedEvent({ views: [] })).toBe(true)
     expect(validateWebChangedEvent({ views: [view, { ...view, note: 'Sign In', state: 'need-action', control: 'user' }] })).toBe(true)
+    expect(validateWebChangedEvent({ views: [{ ...view, openerViewId: 'view-0', dialog: { type: 'prompt', message: 'Name?', defaultPrompt: 'me' } }] })).toBe(true)
+    expect(validateWebChangedEvent({ views: [{ ...view, dialog: { type: 'beforeunload', message: '' } }] })).toBe(true)
   })
 
   it.each([
@@ -170,6 +172,11 @@ describe('web.changed event payload', () => {
     { views: [{ ...view, state: 'paused' }] },
     { views: [{ ...view, loading: 'no' }] },
     { views: [{ ...view, attached: undefined }] },
+    { views: [{ ...view, openerViewId: '' }] },
+    { views: [{ ...view, dialog: { type: 'print', message: 'x' } }] },
+    { views: [{ ...view, dialog: { type: 'alert', message: 'x'.repeat(501) } }] },
+    { views: [{ ...view, dialog: { type: 'alert', message: 'x', extra: 1 } }] },
+    { views: [{ ...view, dialog: null }] },
     { views: [{ ...view, viewId: '' }] },
     { views: [{ ...view, title: 1 }] },
     { views: [{ ...view, note: 2 }] },

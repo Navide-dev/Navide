@@ -1092,12 +1092,15 @@ export const BUILTIN_PLUGIN_NAMES: ReadonlyMap<string, string> = new Map([
 ])
 
 /** A web view refusal as a capability error. The view-side contract has no
- *  USER_IN_CONTROL code, so it is CAPABILITY_DENIED with the reason in the
- *  message; the registry's messages are Host-authored. */
+ *  USER_IN_CONTROL or LIMIT_REACHED code, so the first is CAPABILITY_DENIED
+ *  with the reason in the message and the second RESOURCE_LIMIT; the
+ *  registry's messages are Host-authored. */
 function webViewCapabilityError(reqId: string, error: WebViewError): CapabilityResponse {
   switch (error.code) {
     case 'INVALID_ARGUMENT':
       return buildError(reqId, 'INVALID_ARGUMENT', 'invalid web view request')
+    case 'LIMIT_REACHED':
+      return buildError(reqId, 'RESOURCE_LIMIT', 'web view limit reached (LIMIT_REACHED)')
     case 'USER_IN_CONTROL':
       return buildError(reqId, 'CAPABILITY_DENIED', `the user is in control of this web view (${error.reason ?? 'user-owned'})`)
     default:
