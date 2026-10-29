@@ -8129,6 +8129,7 @@
         "workbench_action_navigateForward": "Вперёд",
         "workbench_action_newFile": "Новый файл",
         "workbench_action_newWindow": "Новое окно",
+        "workbench_action_openBrowser": "Открыть Navide Browser",
         "workbench_action_openDebug": "Открыть отладку",
         "workbench_action_openEditorAtIndex1": "Открыть редактор 1",
         "workbench_action_openEditorAtIndex2": "Открыть редактор 2",

@@ -8129,6 +8129,7 @@
         "workbench_action_navigateForward": "前往下一个位置",
         "workbench_action_newFile": "添加文件",
         "workbench_action_newWindow": "开新窗口",
+        "workbench_action_openBrowser": "打开 Navide Browser",
         "workbench_action_openDebug": "打开 Debug 窗口",
         "workbench_action_openEditorAtIndex1": "打开第 1 个编辑器标签页",
         "workbench_action_openEditorAtIndex2": "打开第 2 个编辑器标签页",

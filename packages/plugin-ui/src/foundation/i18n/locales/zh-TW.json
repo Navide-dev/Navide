@@ -8129,6 +8129,7 @@
         "workbench_action_navigateForward": "前往下一個位置",
         "workbench_action_newFile": "新增檔案",
         "workbench_action_newWindow": "開新視窗",
+        "workbench_action_openBrowser": "開啟 Navide Browser",
         "workbench_action_openDebug": "開啟 Debug 視窗",
         "workbench_action_openEditorAtIndex1": "開啟第 1 個編輯器分頁",
         "workbench_action_openEditorAtIndex2": "開啟第 2 個編輯器分頁",

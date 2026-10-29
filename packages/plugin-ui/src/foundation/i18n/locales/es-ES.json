@@ -8129,6 +8129,7 @@
         "workbench_action_navigateForward": "Ir adelante",
         "workbench_action_newFile": "Nuevo archivo",
         "workbench_action_newWindow": "Nueva ventana",
+        "workbench_action_openBrowser": "Abrir Navide Browser",
         "workbench_action_openDebug": "Abrir depuración",
         "workbench_action_openEditorAtIndex1": "Abrir editor en la posición 1",
         "workbench_action_openEditorAtIndex2": "Abrir editor en la posición 2",

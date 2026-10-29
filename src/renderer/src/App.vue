@@ -10548,6 +10548,16 @@ registerCommand('workbench.action.openGitWindow', () => {
     }
   })()
 })
+// Navide Browser opens like its title-bar button. Not installed, or disabled
+// (it then contributes no window view), the key passes through.
+registerCommand('workbench.action.openBrowser', () => {
+  if (disabledBuiltins.isDisabled('navide.browser')) return false
+  const contribution = pluginContributionsByLocation.value.window.find(
+    (entry) => entry.pluginId === 'navide.browser'
+  )
+  if (!contribution) return false
+  return openPluginContributionWindow(contribution)
+})
 registerCommand('workbench.action.openPlans', (args) => {
   if (disabledBuiltins.isDisabled('navide.plans')) return false
   return openPlansTarget(args)

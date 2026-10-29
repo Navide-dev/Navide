@@ -8129,6 +8129,7 @@
         "workbench_action_navigateForward": "앞으로 이동",
         "workbench_action_newFile": "새 파일",
         "workbench_action_newWindow": "새 창",
+        "workbench_action_openBrowser": "Navide Browser 열기",
         "workbench_action_openDebug": "디버그 열기",
         "workbench_action_openEditorAtIndex1": "인덱스 1의 편집기 열기",
         "workbench_action_openEditorAtIndex2": "인덱스 2의 편집기 열기",

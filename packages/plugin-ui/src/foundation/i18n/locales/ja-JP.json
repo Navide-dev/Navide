@@ -8129,6 +8129,7 @@
         "workbench_action_navigateForward": "進む",
         "workbench_action_newFile": "新しいファイル",
         "workbench_action_newWindow": "新しいウィンドウ",
+        "workbench_action_openBrowser": "Navide Browser を開く",
         "workbench_action_openDebug": "デバッグを開く",
         "workbench_action_openEditorAtIndex1": "1 番目のエディターを開く",
         "workbench_action_openEditorAtIndex2": "2 番目のエディターを開く",
