@@ -113,6 +113,7 @@ import {
 import { useStages } from './composables/useStages'
 import { usePipelines } from './composables/usePipelines'
 import { usePipelineDag } from './composables/usePipelineDag'
+import { signalsAfterKickoff } from './lib/pipelineDagRun'
 import type { NodeRunState } from './lib/pipelineGraph'
 import { useRecentWorkspaces } from './composables/useRecentWorkspaces'
 import { useWorkspaceAliases } from './composables/useWorkspaceAliases'
@@ -15600,6 +15601,14 @@ const paneArmedAt = new Map<string, number>()
  *  the CLI's own time for it. A finished slot's {{prev.summary}} is taken from
  *  here — see slotSummarySource. */
 const paneLastReply = new Map<string, { text: string; at: number }>()
+/** Each pane's latest turn text, recorded BEFORE that turn is judged, so a
+ *  slot the turn completes reads its signals from that turn itself (see
+ *  slotSignalSource). paneLastReply is set only after judging and keeps the
+ *  {{prev.summary}} source as it was. */
+const paneSignalTurn = new Map<string, { text: string; at: number }>()
+/** Where each pane's kickoff began on screen when its watcher armed, with the
+ *  buffer observation to re-base it after a trim. Outlives cancelWatcher(). */
+const paneSignalMark = new Map<string, { from: number; anchor: BufferObservation }>()
 
 // ── Background system notifications (CLI done / needs input) ─────────────────
 // Native OS notification when a pane's turn completes or it needs the user's
@@ -15793,11 +15802,14 @@ backend.on('agent.activity', (raw) => {
     // Judge THIS turn's own text (not a retained map): an empty-text
     // turn_complete (Claude Stop hook, thinking-only record, Codex cross-batch)
     // must never be judged against a previous turn's text.
-    judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    let ownTurn: { text: string; at: number } | null = null
     if (ev.text && !markerReply && !isInjectedMessageText(ev.text)) {
       const at = ev.timestamp ? Date.parse(ev.timestamp) : NaN
-      paneLastReply.set(ev.pane_id, { text: ev.text, at: Number.isNaN(at) ? Date.now() : at })
+      ownTurn = { text: ev.text, at: Number.isNaN(at) ? Date.now() : at }
+      paneSignalTurn.set(ev.pane_id, ownTurn)
     }
+    judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    if (ownTurn) paneLastReply.set(ev.pane_id, ownTurn)
     if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
@@ -16007,6 +16019,28 @@ function slotSummarySource(paneId: string, stageIndex: number): string {
   const armedAt = Math.max(paneArmedAt.get(paneId) ?? 0, stageRouters.get(stageIndex)?.armedAt ?? 0)
   if (reply && armedAt > 0 && reply.at >= armedAt) return reply.text
   return (paneRefs[paneId]?.cleanBuffer as unknown as string) ?? ''
+}
+
+/** The text a finished slot's ---BRANCH--- / ---OUTPUT--- / ---NODE-FAILED---
+ *  signals are read from. Turn-text vendors (claude/codex): only the turn
+ *  text their reader reported since the slot was armed, never the screen —
+ *  with none, no signal counts. Other vendors have only the screen: the part
+ *  after the kickoff began and after its echoed signal-code line. Either way
+ *  the engine then takes only signals carrying the kickoff's code. */
+function slotSignalSource(paneId: string, stageIndex: number, slotLabel: string): string {
+  const armedAt = Math.max(paneArmedAt.get(paneId) ?? 0, stageRouters.get(stageIndex)?.armedAt ?? 0)
+  if (TURN_TEXT_VENDORS.has(panes.value.find((p) => p.id === paneId)?.agentKey ?? '')) {
+    const turn = paneSignalTurn.get(paneId)
+    return turn && armedAt > 0 && turn.at >= armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS ? turn.text : ''
+  }
+  const buf = (paneRefs[paneId]?.cleanBuffer as unknown as string) ?? ''
+  const mark = paneSignalMark.get(paneId)
+  let from = 0
+  if (mark) {
+    const dropped = droppedPrefix(mark.anchor, { len: buf.length, bytesSeen: paneCleanBytes(paneId) })
+    from = Math.min(remapCursor(mark.from, dropped), buf.length)
+  }
+  return signalsAfterKickoff(buf.slice(from), pipelineDag.signalNonce(stageIndex, slotLabel))
 }
 
 function judgeTurnText(paneId: string, text: string, timestamp: string): void {
@@ -18119,7 +18153,7 @@ function onStageSlotCompleted(
     ? undefined
     : panes.value.find((p) => p.id === paneId)
   const reported = failedPane
-    ? pipelineDag.reportedFailure(stageIndex, failedPane.slotLabel, slotSummarySource(paneId, stageIndex))
+    ? pipelineDag.reportedFailure(stageIndex, failedPane.slotLabel, slotSignalSource(paneId, stageIndex, failedPane.slotLabel))
     : ''
   if (failedPane && reported) {
     const retry = pipelineDag.retryAfterFailure(stageIndex, failedPane.slotLabel, reported)
@@ -18157,6 +18191,7 @@ function onStageSlotCompleted(
       stageIndex,
       completedPane.slotLabel,
       slotSummarySource(paneId, stageIndex),
+      slotSignalSource(paneId, stageIndex, completedPane.slotLabel),
     )
   }
   // Audit trail (→ history.jsonl): every slot finish records its reason so a
@@ -18370,6 +18405,7 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
   }
   watchers.set(paneId, watcher)
   paneArmedAt.set(paneId, watcher.armedAt)
+  paneSignalMark.set(paneId, { from: scanFrom, anchor: watcher.bufferAnchor })
   pipelineLog(
     `Stage ${stage.id} watcher armed · sentinel / turn_complete / question / analyzer`
   )

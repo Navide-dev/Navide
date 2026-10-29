@@ -101,7 +101,7 @@ export const FORWARD_EDGE_KINDS: readonly GraphEdgeKind[] = ['main', 'branch', '
 export const BRANCH_DEFAULT = 'default'
 
 /** A branch edge's condition: a string is matched (trimmed, case-insensitive)
- *  against the value the agent reported with ---BRANCH: <value>---; an object
+ *  against the value the agent reported with ---BRANCH:<code>: <value>---; an object
  *  compares one field of the source node's structured output. */
 export type BranchWhen = string | { path: string; equals: string | number | boolean | null }
 
@@ -178,7 +178,7 @@ export interface NodeRunState {
   skipReason?: 'untaken'
   /** A failed node whose failure went down its error edge(s): the run went on. */
   errorRouted?: boolean
-  /** The value the agent reported with ---BRANCH: <value>---. */
+  /** The value the agent reported with ---BRANCH:<code>: <value>---. */
   branch?: string
   /** The JSON the agent reported between ---OUTPUT-START/END--- (null when it
    *  did not parse), for {{node.<id>.output}} and object branch conditions. */

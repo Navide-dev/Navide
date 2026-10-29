@@ -9,7 +9,7 @@ import {
   type GraphNode,
   type PipelineGraph,
 } from '../pipelineGraph'
-import { buildDagPlan, expandNodeOutputs, kickoffHints, parseNodeSignals } from '../pipelineDagRun'
+import { buildDagPlan, expandNodeOutputs, kickoffHints, parseNodeSignals, signalCodeLine } from '../pipelineDagRun'
 
 function slot(id: string, kickoffBody = ''): GraphNode {
   return { id, kind: 'slot', label: id, position: { x: 0, y: 0 }, slot: { agentKey: 'claude', roleKey: '', label: id, kickoffBody } }
@@ -101,11 +101,13 @@ describe('branch and error edges: validation (mirrors the backend)', () => {
   })
 })
 
+const N = '0123456789abcdef'
+
 describe('signals come from the agent reply, never from the kickoff (#733)', () => {
-  it('reads the last real branch, failure and output', () => {
-    const s = parseNodeSignals('work\n---BRANCH: no---\n⏺ ---BRANCH: ok---\n---OUTPUT-START---\n{"a": [1, {"b": 2}]}\n---OUTPUT-END---\n---NODE-FAILED: disk full---')
+  it('reads the last real branch, failure and output that carry the code', () => {
+    const s = parseNodeSignals(`work\n---BRANCH:${N}: no---\n⏺ ---BRANCH:${N}: ok---\n---OUTPUT-START:${N}---\n{"a": [1, {"b": 2}]}\n---OUTPUT-END:${N}---\n---NODE-FAILED:${N}: disk full---`, N)
     expect(s).toEqual({ branch: 'ok', failed: 'disk full', output: { value: { a: [1, { b: 2 }] } } })
-    expect(parseNodeSignals('---NODE-FAILED---').failed).toBe('the agent reported a failure')
+    expect(parseNodeSignals(`---NODE-FAILED:${N}---`, N).failed).toBe('the agent reported a failure')
   })
 
   it('a kickoff with example signals is not taken as a result', () => {
@@ -113,16 +115,17 @@ describe('signals come from the agent reply, never from the kickoff (#733)', () 
     g.edges[1].when = { path: 'status', equals: 'ok' }
     g.edges.push({ id: 'b-check-report', from: 'check', to: 'report', kind: 'branch', when: 'later' })
     const plan = buildDagPlan(g, deriveStagesFromGraph(g))
-    const hints = kickoffHints(plan, 'check')
-    expect(hints).toContain('---BRANCH: <值>---')
-    expect(hints).toContain('---OUTPUT-START---')
-    expect(hints).toContain('---NODE-FAILED: <原因>---')
+    const hints = kickoffHints(plan, 'check', N)
+    expect(hints).toContain('---BRANCH:代碼: 值---')
+    expect(hints).toContain('---OUTPUT-START:代碼---')
+    expect(hints).toContain('---NODE-FAILED:代碼: 原因---')
+    expect(hints.endsWith(signalCodeLine(N))).toBe(true)
     // The kickoff as typed, as a TUI echoes it (indented, every line), and
     // with its examples on lines of their own: none of it is a result.
     const kickoff = `do the check${hints}`
     const echo = kickoff.split('\n').map((l) => `  ${l}`).join('\n')
-    const examples = '---BRANCH: <值>---\n---NODE-FAILED: <原因>---\n---OUTPUT-START---\n<JSON>\n---OUTPUT-END---'
-    expect(parseNodeSignals(`${kickoff}\n${echo}\n${examples}\nI checked it.\n---STAGE-DONE---`)).toEqual({})
+    const examples = '---BRANCH:代碼: 值---\n---NODE-FAILED:代碼: 原因---\n---OUTPUT-START:代碼---\n<JSON>\n---OUTPUT-END:代碼---'
+    expect(parseNodeSignals(`${kickoff}\n${echo}\n${examples}\nI checked it.\n---STAGE-DONE---`, N)).toEqual({})
   })
 })
 
@@ -144,7 +147,8 @@ describe('structured output between nodes', () => {
 })
 
 /** Drive a run of the branching graph through the composable, the way App.vue
- *  does: per stage, skip the untaken slots and finish the others. */
+ *  does: per stage, skip the untaken slots and finish the others. `{N}` in a
+ *  reply stands for the code that slot's kickoff named. */
 async function run(graph: PipelineGraph, replies: Record<string, string>, failOnKickoff: string[] = []) {
   const stages = deriveStagesFromGraph(graph)
   const log: string[] = []
@@ -167,7 +171,7 @@ async function run(graph: PipelineGraph, replies: Record<string, string>, failOn
         if (!dag.routeFailure(i, s.label, 'kickoff never reached the agent')) dag.slotFailed(i, s.label, 'kickoff never reached the agent')
         continue
       }
-      dag.slotFinished(i, s.label, replies[s.label] ?? `${s.label} done`)
+      dag.slotFinished(i, s.label, (replies[s.label] ?? `${s.label} done`).replaceAll('{N}', dag.signalNonce(i, s.label)))
     }
   }
   return { dag, stages, kickoffs, skipped, log, states: dag.nodeStates.value }
@@ -175,7 +179,7 @@ async function run(graph: PipelineGraph, replies: Record<string, string>, failOn
 
 describe('readiness and skip propagation', () => {
   it('only the chosen branch runs; the join runs on one taken input', async () => {
-    const r = await run(branching(), { check: 'looks fine\n---BRANCH: OK---\n---STAGE-DONE---' })
+    const r = await run(branching(), { check: 'looks fine\n---BRANCH:{N}: OK---\n---STAGE-DONE---' })
     expect(r.skipped).toEqual(['fix', 'alert'])
     expect(Object.keys(r.kickoffs)).toEqual(['check', 'ship', 'report'])
     expect(r.states.fix).toEqual({ status: 'skipped', skipReason: 'untaken' })
@@ -184,7 +188,7 @@ describe('readiness and skip propagation', () => {
   })
 
   it('an unmatched or missing branch value takes the default edge', async () => {
-    for (const reply of ['---BRANCH: maybe---', 'no signal at all']) {
+    for (const reply of ['---BRANCH:{N}: maybe---', 'no signal at all']) {
       const r = await run(branching(), { check: reply })
       expect(r.skipped).toEqual(['ship', 'alert'])
       expect(r.states.report.status).toBe('done')
@@ -192,7 +196,7 @@ describe('readiness and skip propagation', () => {
   })
 
   it('a reported failure takes the error edge and the skip propagates through the join', async () => {
-    const r = await run(branching(), { check: 'cannot\n---NODE-FAILED: repo is locked---\n---STAGE-DONE---' })
+    const r = await run(branching(), { check: 'cannot\n---NODE-FAILED:{N}: repo is locked---\n---STAGE-DONE---' })
     expect(r.states.check).toMatchObject({ status: 'failed', errorRouted: true, error: 'repo is locked' })
     expect(r.skipped).toEqual(['ship', 'fix', 'report'])
     expect(r.states.alert.status).toBe('done')
@@ -207,7 +211,7 @@ describe('readiness and skip propagation', () => {
   })
 
   it('a node without an error edge ignores ---NODE-FAILED--- (no hint was given)', async () => {
-    const r = await run(branching(), { check: '---BRANCH: ok---', ship: '---NODE-FAILED: x---' })
+    const r = await run(branching(), { check: '---BRANCH:{N}: ok---', ship: '---NODE-FAILED:{N}: x---' })
     expect(r.states.ship.status).toBe('done')
     expect(r.states.report.status).toBe('done')
   })
@@ -215,10 +219,10 @@ describe('readiness and skip propagation', () => {
   it('an object when reads the structured output; bad JSON stores null and logs', async () => {
     const g = branching()
     g.edges[1].when = { path: 'status', equals: 'ok' }
-    const ok = await run(g, { check: '---OUTPUT-START---\n{"status": "ok", "version": "2.0"}\n---OUTPUT-END---' })
+    const ok = await run(g, { check: '---OUTPUT-START:{N}---\n{"status": "ok", "version": "2.0"}\n---OUTPUT-END:{N}---' })
     expect(ok.skipped).toEqual(['fix', 'alert'])
     expect(ok.kickoffs.ship).toBe('ship 2.0')
-    const bad = await run(g, { check: '---OUTPUT-START---\n{status: ok}\n---OUTPUT-END---' })
+    const bad = await run(g, { check: '---OUTPUT-START:{N}---\n{status: ok}\n---OUTPUT-END:{N}---' })
     expect(bad.states.check).toMatchObject({ status: 'done', output: null })
     expect(bad.log.some((l) => l.includes('not valid JSON'))).toBe(true)
     expect(bad.skipped).toEqual(['ship', 'alert'])
@@ -226,7 +230,7 @@ describe('readiness and skip propagation', () => {
   })
 
   it('kickoffs carry the hints their edges need, and only those', async () => {
-    const r = await run(branching(), { check: '---BRANCH: ok---' })
+    const r = await run(branching(), { check: '---BRANCH:{N}: ok---' })
     expect(r.kickoffs.check).toContain('[分支回報]')
     expect(r.kickoffs.check).toContain('ok')
     expect(r.kickoffs.check).toContain('[結構化輸出]')
@@ -236,7 +240,7 @@ describe('readiness and skip propagation', () => {
   })
 
   it('slots behind a branch are not pre-spawned; a legacy plan has none', async () => {
-    const r = await run(branching(), { check: '---BRANCH: ok---' })
+    const r = await run(branching(), { check: '---BRANCH:{N}: ok---' })
     expect([...r.dag.conditionalLabels(1)].sort()).toEqual(['alert', 'fix', 'ship'])
     expect([...r.dag.conditionalLabels(2)]).toEqual(['report'])
     expect([...r.dag.conditionalLabels(0)]).toEqual([])
@@ -248,7 +252,7 @@ describe('readiness and skip propagation', () => {
       { op: 'add_node', node: slot('after-gate'), after: ['gate'] },
     ])
     expect(validateGraph(g)).toEqual([])
-    const r = await run(g, { check: '---BRANCH: ok---' })
+    const r = await run(g, { check: '---BRANCH:{N}: ok---' })
     expect(r.states.gate).toEqual({ status: 'skipped', skipReason: 'untaken' })
     expect(r.skipped).toContain('after-gate')
   })
@@ -265,7 +269,8 @@ describe('readiness and skip propagation', () => {
       workspacePath: () => '/ws',
     })
     await dag.begin('p', stages)
-    dag.slotFinished(0, 'check', '---BRANCH: ok---')
+    dag.expandKickoff('check', 0, 'check')
+    dag.slotFinished(0, 'check', `---BRANCH:${dag.signalNonce(0, 'check')}: ok---`)
     expect([...dag.untakenLabels(1)].sort()).toEqual(['alert', 'fix'])
     dag.slotFinished(1, 'ship', 'shipped')
     dag.slotFinished(2, 'report', 'reported')

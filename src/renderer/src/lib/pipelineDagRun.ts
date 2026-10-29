@@ -462,31 +462,66 @@ export interface NodeSignals {
 
 // A signal line starts the line, after optional indentation or a TUI bullet.
 const LINE_HEAD = String.raw`^[ \t]*(?:[⏺●•][ \t]*)?`
-const BRANCH_RE = new RegExp(String.raw`${LINE_HEAD}---BRANCH:[ \t]*(.*?)[ \t]*---[ \t]*$`, 'gm')
-const FAILED_RE = new RegExp(String.raw`${LINE_HEAD}---NODE-FAILED(?::[ \t]*(.*?))?[ \t]*---[ \t]*$`, 'gm')
-const OUTPUT_RE = new RegExp(
-  String.raw`${LINE_HEAD}---OUTPUT-START---[ \t]*$([\s\S]*?)${LINE_HEAD}---OUTPUT-END---[ \t]*$`,
-  'gm',
-)
 /** `<value>`-style placeholders, as the kickoff hints write their examples. */
 const PLACEHOLDER_RE = /^<[^<>]*>$/
+const NONCE_RE = /^[0-9a-f]{16}$/
 
-/** Parse a slot's reply for branch / failure / output signals. The last real
- *  occurrence wins; placeholder examples (the kickoff hints' own `<值>`
- *  forms, should a TUI echo them into the buffer) are never taken as results.
- *  Callers pass the agent's turn text where the CLI has one (#733). */
-export function parseNodeSignals(text: string): NodeSignals {
+/** A fresh per-node signal code: 64 bits from the platform CSPRNG. A signal
+ *  counts only with the code of the kickoff it answers (see parseNodeSignals),
+ *  so text the agent merely shows (a file, a web page, an echoed template) or
+ *  an earlier try's output cannot steer the run. */
+export function newSignalNonce(): string {
+  const bytes = new Uint8Array(8)
+  globalThis.crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** The kickoff line that names the signal code. It is the kickoff's last
+ *  signal line, so whatever follows its last occurrence on screen is the
+ *  agent's own output (see signalsAfterKickoff). */
+export function signalCodeLine(nonce: string): string {
+  return `[訊號代碼] 本步驟的訊號代碼是 ${nonce}。只有帶這個代碼的訊號才算數。`
+}
+
+/** The part of a pane's screen text after the kickoff's signal-code line:
+ *  the agent's own output. A TUI that echoes the kickoff (or redraws it
+ *  later) moves the cut past the echo; a TUI that collapses the paste shows
+ *  no code line and the text is returned whole. */
+export function signalsAfterKickoff(text: string, nonce: string): string {
+  if (!NONCE_RE.test(nonce)) return ''
+  const at = text.lastIndexOf(`訊號代碼是 ${nonce}`)
+  if (at < 0) return text
+  const eol = text.indexOf('\n', at)
+  return eol < 0 ? '' : text.slice(eol + 1)
+}
+
+/** Parse a slot's reply for branch / failure / output signals carrying
+ *  `nonce`, the code its kickoff named: `---BRANCH:<nonce>: <value>---`,
+ *  `---NODE-FAILED:<nonce>[: <reason>]---` and an `---OUTPUT-START:<nonce>---`
+ *  … `---OUTPUT-END:<nonce>---` block. A signal without that code (no code, a
+ *  wrong one, the kickoff's own `代碼` wording) is ignored, and so is every
+ *  signal when `nonce` is not a code. The last real occurrence wins;
+ *  placeholder examples are never taken as results. Callers pass the
+ *  agent's turn text where the CLI has one (#733). */
+export function parseNodeSignals(text: string, nonce: string): NodeSignals {
   const out: NodeSignals = {}
-  for (const m of text.matchAll(BRANCH_RE)) {
+  if (!NONCE_RE.test(nonce)) return out
+  const branchRe = new RegExp(String.raw`${LINE_HEAD}---BRANCH:${nonce}:[ \t]*(.*?)[ \t]*---[ \t]*$`, 'gm')
+  const failedRe = new RegExp(String.raw`${LINE_HEAD}---NODE-FAILED:${nonce}(?::[ \t]*(.*?))?[ \t]*---[ \t]*$`, 'gm')
+  const outputRe = new RegExp(
+    String.raw`${LINE_HEAD}---OUTPUT-START:${nonce}---[ \t]*$([\s\S]*?)${LINE_HEAD}---OUTPUT-END:${nonce}---[ \t]*$`,
+    'gm',
+  )
+  for (const m of text.matchAll(branchRe)) {
     const v = m[1].trim()
     if (v && !PLACEHOLDER_RE.test(v)) out.branch = v
   }
-  for (const m of text.matchAll(FAILED_RE)) {
+  for (const m of text.matchAll(failedRe)) {
     const v = (m[1] ?? '').trim()
     if (!PLACEHOLDER_RE.test(v)) out.failed = v || 'the agent reported a failure'
   }
   let body: string | undefined
-  for (const m of text.matchAll(OUTPUT_RE)) {
+  for (const m of text.matchAll(outputRe)) {
     const v = m[1].trim()
     if (v && !PLACEHOLDER_RE.test(v)) body = v
   }
@@ -521,27 +556,31 @@ export function expandNodeOutputs(
 }
 
 /** Instructions appended to a slot's kickoff for the signals its outgoing
- *  edges need; '' for a node with no branch or error edge and no output
- *  contract (every legacy node), so its kickoff is unchanged. Examples use
- *  `<…>` placeholders, which parseNodeSignals never takes as a result. */
-export function kickoffHints(plan: DagPlan, nodeId: string): string {
+ *  edges need; '' for a node with no branch or error edge, no output
+ *  contract and no retry (every legacy node), so its kickoff is unchanged.
+ *  The formats are written with the word 代碼 where the code goes, and the
+ *  code itself only on the closing signal-code line, so the kickoff never
+ *  holds a signal parseNodeSignals takes — an echo of it on screen is inert. */
+export function kickoffHints(plan: DagPlan, nodeId: string, nonce: string): string {
   const lines: string[] = []
   if (hasBranchEdge(plan, nodeId)) {
     const values = [...new Set(plan.graph.edges
       .filter((e) => e.kind === 'branch' && e.from === nodeId && typeof e.when === 'string' && !isDefaultWhen(e.when))
       .map((e) => (e.when as string).trim()))]
     if (values.length) {
-      lines.push(`[分支回報] 完成時另起一行，從行首輸出 ---BRANCH: <值>---，<值> 只能是下列之一：${values.join('、')}。`)
+      lines.push(`[分支回報] 完成時另起一行，從行首輸出 ---BRANCH:代碼: 值---：「代碼」換成下面的訊號代碼，「值」只能是下列之一：${values.join('、')}。`)
     }
   }
   if (hasOutputContract(plan, nodeId)) {
-    lines.push('[結構化輸出] 結束前輸出一段 JSON：上一行單獨寫 ---OUTPUT-START---，下一行單獨寫 ---OUTPUT-END---，下游節點會讀取這段 JSON。')
+    lines.push('[結構化輸出] 結束前輸出一段 JSON：上一行單獨寫 ---OUTPUT-START:代碼---，下一行單獨寫 ---OUTPUT-END:代碼---（「代碼」換成下面的訊號代碼），下游節點會讀取這段 JSON。')
   }
   if (readsFailure(plan, nodeId)) {
     const then = hasErrorEdge(plan, nodeId) ? '流程會改走錯誤處理分支' : '這一步會重試'
-    lines.push(`[失敗回報] 如果這一步無法完成，另起一行，從行首輸出 ---NODE-FAILED: <原因>---，再照常輸出完成標記；${then}。`)
+    lines.push(`[失敗回報] 如果這一步無法完成，另起一行，從行首輸出 ---NODE-FAILED:代碼: 原因---（「代碼」換成下面的訊號代碼），再照常輸出完成標記；${then}。`)
   }
-  return lines.length ? `\n\n${lines.join('\n')}` : ''
+  if (!lines.length) return ''
+  lines.push(signalCodeLine(nonce))
+  return `\n\n${lines.join('\n')}`
 }
 
 /** Fail `nodeId` down its error edge(s). false (nothing changed) when it has

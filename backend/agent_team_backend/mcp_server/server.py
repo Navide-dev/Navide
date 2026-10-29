@@ -9376,12 +9376,16 @@ async def pipeline_graph(
     from there at most that many times, then the run fails. "branch" and
     "error" edges start at a slot. A branch edge carries `when`: a string
     matched (case-insensitively) against the value the agent reports with
-    ---BRANCH: <value>--- ("default" is taken when no other branch of that
-    slot matched), or {path, equals} compared with a field of the JSON the
-    slot reports between ---OUTPUT-START--- and ---OUTPUT-END---. An error
-    edge is taken only when its slot fails (its kickoff never landed, or it
-    reported ---NODE-FAILED: <reason>---); on a slot without one, a kickoff
-    that never landed still fails the run.
+    ---BRANCH:<code>: <value>--- ("default" is taken when no other branch of
+    that slot matched), or {path, equals} compared with a field of the JSON
+    the slot reports between ---OUTPUT-START:<code>--- and
+    ---OUTPUT-END:<code>---. An error edge is taken only when its slot fails
+    (its kickoff never landed, or it reported
+    ---NODE-FAILED:<code>: <reason>---); on a slot without one, a kickoff
+    that never landed still fails the run. <code> is a random signal code
+    each kickoff names; a signal without it (an echoed kickoff, text the
+    agent read) is ignored, and claude / codex signals are read from their
+    turn text only, never from the screen.
     A node none of whose inputs was taken is skipped, and so are the nodes
     only it feeds. A kickoff may read {{node.<id>.output}} or
     {{node.<id>.output.<path>}}. A graph without branch or error edges runs
