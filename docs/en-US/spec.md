@@ -146,7 +146,7 @@ Legend: ✅ shipped & stable · 🟡 in working tree but not yet released · �
 **Status**: ✅ Done · files: `App.vue` (`preSpawnStage` · `activateStage` · `StageRouter` · `parseDispatchBlocks` · `injectManagerPane`) · `stages.ts` (manager/worker protocols)
 
 - **This is the team-preconfig plan's core, already shipped & live as the default execution model** (the plan frontmatter still said "pending" — stale; this spec wins per §8)
-- `onPipelineStart` → `Promise.all(preSpawnStage)` spawns every stage's slots up front (role prompt only) → `activateStage(N)` injects kickoff at activation time
+- `onPipelineStart` → `preSpawnStage` spawns only the first stage's slots (role prompt only); `activateStage(N)` injects the kickoff at activation time and warms stage N+1 in the background (`prewarmNextStage`), so at most two stages of CLIs are alive at once; a finished stage's panes are demoted to cold-restore placeholders on handoff (5cf510945)
 - Manager pattern: a slot flagged `isManager` runs the Manager protocol; `StageRouter` watches its pane for `---DISPATCH-START---` / `---ASK-START---` / `---STAGE-DONE---` and routes to worker panes
 - Cross-stage context handoff via `buildStageContext(forManager)` + `injectManagerPane`
 - **Dropped as out-of-scope**: per-workspace `team-config.json` overlay + ControlPane Team-preview/editor (plan phases 1-4). The global Stages registry (`is_manager` slot flag in Settings → Stages) already covers team setup; per-workspace overrides judged unnecessary. Plan retired.

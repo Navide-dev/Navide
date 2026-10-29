@@ -9,6 +9,7 @@ import type { AgentKey, Stage } from '../../data/stages'
 export type PaletteItem =
   | { kind: 'role'; roleKey: string; label: string; description: string }
   | { kind: 'gate'; label: string; description: string }
+  | { kind: 'subpipeline'; label: string; description: string }
 
 /** MIME types for the editor's HTML5 drag-and-drop, so a drop target can tell
  *  a palette item from a card being moved — and ignore anything else. */
@@ -23,6 +24,8 @@ export interface RunSnapshot {
   nodes: Record<string, NodeRunState>
   /** Node id of the gate awaiting a decision, if any. */
   gate: string | null
+  /** Known only for the window driving the run: it is on its last stage. */
+  lastStage?: boolean
 }
 
 export const EMPTY_RUN: RunSnapshot = { pipelineId: '', state: 'idle', nodes: {}, gate: null }
@@ -64,6 +67,12 @@ export function agentMonogram(agentKey: AgentKey | string | undefined): string {
 
 export function nodeTitle(node: GraphNode): string {
   return node.slot?.label || node.label || node.id
+}
+
+/** The pipelineEditor.status.* key for a node's run state: a skip because no
+ *  input was taken reads differently from reusing a frozen output. */
+export function runStatusKey(run: NodeRunState): string {
+  return run.status === 'skipped' && run.skipReason === 'untaken' ? 'untaken' : run.status
 }
 
 /** The derived stage behind each layer (undefined for gate-only layers, which

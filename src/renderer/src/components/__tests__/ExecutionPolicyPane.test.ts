@@ -84,7 +84,7 @@ describe('ExecutionPolicyPane', () => {
     })
     await flushPromises()
 
-    expect(wrapper.get('[data-section="host-default"]').text()).toContain('fs, ui, aiCli')
+    expect(wrapper.get('[data-section="host-default"]').text()).toContain('Workspace files, Own views, AI CLI sessions')
     expect(wrapper.get('[data-section="repository-recommendation"]').text()).toContain('Untrusted')
     expect(wrapper.get('.ep-recommendation-policy').text()).toContain('Denylist')
     expect(api.selectSource).not.toHaveBeenCalled()
@@ -480,12 +480,12 @@ describe('ExecutionPolicyPane', () => {
     await flushPromises()
 
     const editorBlocks = wrapper.findAll('.ep-editor-block')
-    expect(editorBlocks[0].get('h3').text()).toBe('System namespaces to allow')
-    expect(editorBlocks[0].text()).toContain('available to the agent')
+    expect(editorBlocks[0].get('h3').text()).toBe('Navide features to allow')
+    expect(editorBlocks[0].text()).toContain('agents can use')
     expect(editorBlocks[1].get('h3').text()).toBe('Shell executables to allow')
 
     await wrapper.get('[data-mode="denylist"] input').setValue(true)
-    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('System namespaces to deny')
+    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('Navide features to deny')
     expect(wrapper.findAll('.ep-editor-block')[0].text()).toContain('must not use')
     expect(wrapper.findAll('.ep-editor-block')[1].get('h3').text()).toBe('Shell executables to deny')
     expect(api.setUser).not.toHaveBeenCalled()
@@ -588,19 +588,19 @@ describe('ExecutionPolicyPane', () => {
     await flushPromises()
 
     await wrapper.get('[data-mode="denylist"] input').setValue(true)
-    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('System namespaces to deny')
+    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('Navide features to deny')
     expect(changedHandler).toBeDefined()
     changedHandler?.()
     await flushPromises()
 
     expect(wrapper.find('.ep-conflict').exists()).toBe(true)
-    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('System namespaces to deny')
+    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('Navide features to deny')
     expect(wrapper.get('.ep-conflict').text()).toContain('draft is preserved')
 
     await wrapper.get('.ep-conflict button').trigger('click')
     await flushPromises()
     expect(wrapper.find('.ep-conflict').exists()).toBe(false)
-    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('System namespaces to allow')
+    expect(wrapper.findAll('.ep-editor-block')[0].get('h3').text()).toBe('Navide features to allow')
     expect(wrapper.get('.ep-chip code').text()).toBe('gh')
   })
 
@@ -683,7 +683,7 @@ describe('ExecutionPolicyPane page', () => {
   it('leads with what is in effect for the workspace, then the user policy, the default and storage', async () => {
     await mountPane(quietSnapshot())
     expect(order(wrapper!)).toEqual(['effective-policy', 'policy-source', 'repository-recommendation', 'user-policy', 'host-default', 'recovery'])
-    expect(wrapper!.findAll('.ep-effective-policy .ep-v').map((value) => value.text())).toEqual(['fs, ui, aiCli', 'git, gh, glab'])
+    expect(wrapper!.findAll('.ep-effective-policy .ep-v').map((value) => value.text())).toEqual(['Workspace files, Own views, AI CLI sessions', 'git, gh, glab'])
     // The editor is the page: nothing to open first.
     expect(wrapper!.find('#ep-editor').exists()).toBe(false)
     expect(wrapper!.find('[data-mode="allowlist"] input').exists()).toBe(true)

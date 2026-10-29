@@ -19,9 +19,21 @@ from typing import Any
 GRAPH_VERSION = 1
 DEFAULT_MAX_LOOPS = 2
 MAX_LOOPS_CEILING = 10
+# Bounds of a slot node's retry policy (maxTries counts the first try).
+MAX_TRIES_CEILING = 5
+MAX_RETRY_WAIT_MS = 300_000
+# How deep sub-pipelines may nest at run time (the outermost run is depth 1).
+MAX_SUBPIPELINE_DEPTH = 3
 TRIGGER_NODE_ID = "trigger"
-NODE_KINDS = ("trigger", "slot", "gate")
-EDGE_KINDS = ("main", "reject")
+NODE_KINDS = ("trigger", "slot", "gate", "subpipeline")
+# Nodes that run work and can fail: they may carry retry and start branch and
+# error edges.
+WORK_NODE_KINDS = ("slot", "subpipeline")
+EDGE_KINDS = ("main", "reject", "branch", "error")
+# Edge kinds that carry flow forward (layering, cycle check, readiness).
+FORWARD_EDGE_KINDS = ("main", "branch", "error")
+# Reserved branch value: taken when no other branch edge of the source matched.
+BRANCH_DEFAULT = "default"
 _LAYER_DX = 280
 _LANE_DY = 140
 
@@ -30,11 +42,13 @@ ROLE_PROPERTY_TYPES = ("string", "text", "template", "number", "boolean", "optio
 
 
 class GraphError(ValueError):
-    """Invalid graph or graph op; .errors lists every problem found."""
+    """Invalid graph or graph op; .errors lists every problem found. `code`
+    names the kind of problem for a window to translate ("" when unset)."""
 
-    def __init__(self, errors: list[str]) -> None:
+    def __init__(self, errors: list[str], code: str = "") -> None:
         super().__init__("; ".join(errors) or "invalid graph")
         self.errors = errors
+        self.code = code
 
 
 def slot_node_id(stage_id: str, slot_index: int) -> str:
@@ -42,11 +56,112 @@ def slot_node_id(stage_id: str, slot_index: int) -> str:
 
 
 def edge_id(src: str, dst: str, kind: str = "main") -> str:
-    return f"r-{src}-{dst}" if kind == "reject" else f"e-{src}-{dst}"
+    prefix = {"reject": "r", "branch": "b", "error": "x"}.get(kind, "e")
+    return f"{prefix}-{src}-{dst}"
 
 
 def _is_main(e: dict[str, Any]) -> bool:
     return (e.get("kind") or "main") == "main"
+
+
+def _is_forward(e: dict[str, Any]) -> bool:
+    return (e.get("kind") or "main") in FORWARD_EDGE_KINDS
+
+
+def has_branching_edges(graph: dict[str, Any]) -> bool:
+    """True for a graph with any branch or error edge (see the TS twin)."""
+    return any(e.get("kind") in ("branch", "error") for e in graph.get("edges", []))
+
+
+def _subpipeline_errors(nid: str, config: Any) -> list[str]:
+    """A subpipeline node's {pipelineId, task?, wait?} (see the TS twin)."""
+    if not isinstance(config, dict):
+        return [f"subpipeline node {nid} needs subpipeline.pipelineId"]
+    errors: list[str] = []
+    pid = config.get("pipelineId")
+    if not isinstance(pid, str) or not pid.strip():
+        errors.append(f"subpipeline node {nid} needs subpipeline.pipelineId")
+    if "task" in config and not isinstance(config["task"], str):
+        errors.append(f"subpipeline node {nid}: task must be a string")
+    if "wait" in config and config["wait"] is not True:
+        errors.append(f"subpipeline node {nid}: wait must be true (the parent always waits)")
+    if set(config) - {"pipelineId", "task", "wait"}:
+        errors.append(f"subpipeline node {nid}: subpipeline takes only pipelineId, task and wait")
+    return errors
+
+
+def subpipeline_cycle_errors(graphs: dict[str, dict[str, Any]]) -> list[str]:
+    """Sub-pipeline references that loop (A → B → A) across ``graphs``, keyed
+    by pipeline id; each cycle reported once, from its smallest id, plus any
+    reference to a pipeline not in ``graphs`` (see the TS twin)."""
+    refs: dict[str, list[str]] = {}
+    errors: list[str] = []
+    for pid, g in graphs.items():
+        out: list[str] = []
+        for n in g.get("nodes", []):
+            child = (n.get("subpipeline") or {}).get("pipelineId") if n.get("kind") == "subpipeline" else None
+            if not child:
+                continue
+            if child not in graphs:
+                errors.append(f"subpipeline node {n.get('id')} in {pid} names unknown pipeline {child}")
+            else:
+                out.append(child)
+        refs[pid] = out
+    seen: set[tuple[str, ...]] = set()
+    for start in sorted(refs):
+        stack: list[str] = []
+
+        def walk(pid: str) -> None:
+            if pid in stack:
+                loop = stack[stack.index(pid):]
+                i = loop.index(min(loop))
+                rot = loop[i:] + loop[:i]
+                if tuple(rot) not in seen:
+                    seen.add(tuple(rot))
+                    errors.append("subpipeline cycle: " + " → ".join([*rot, rot[0]]))
+                return
+            stack.append(pid)
+            for child in refs.get(pid, []):
+                walk(child)
+            stack.pop()
+
+        walk(start)
+    return errors
+
+
+def _retry_errors(nid: str, kind: Any, retry: Any) -> list[str]:
+    """A slot or subpipeline node's retry policy {maxTries, waitMs?} (see the TS twin)."""
+    if kind not in WORK_NODE_KINDS:
+        return [f"node {nid}: only slot and subpipeline nodes carry retry"]
+    if not isinstance(retry, dict):
+        return [f"node {nid}: retry must be {{maxTries, waitMs?}}"]
+    errors: list[str] = []
+    if set(retry) - {"maxTries", "waitMs"}:
+        errors.append(f"node {nid}: retry takes only maxTries and waitMs")
+
+    def is_int(v: Any) -> bool:
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    tries = retry.get("maxTries")
+    if not is_int(tries) or tries < 1 or tries > MAX_TRIES_CEILING:
+        errors.append(f"node {nid}: retry.maxTries must be an integer 1..{MAX_TRIES_CEILING}")
+    wait = retry.get("waitMs")
+    if "waitMs" in retry and (not is_int(wait) or wait < 0 or wait > MAX_RETRY_WAIT_MS):
+        errors.append(f"node {nid}: retry.waitMs must be an integer 0..{MAX_RETRY_WAIT_MS}")
+    return errors
+
+
+def _branch_when_errors(e: dict[str, Any]) -> list[str]:
+    w = e.get("when")
+    if isinstance(w, str):
+        return [] if w.strip() else [f"branch edge {e.get('id')}: when must not be empty"]
+    if isinstance(w, dict):
+        eq = w.get("equals")
+        ok_eq = eq is None or isinstance(eq, (str, bool, int, float))
+        path = w.get("path")
+        if isinstance(path, str) and path.strip() and "equals" in w and ok_eq and not set(w) - {"path", "equals"}:
+            return []
+    return [f"branch edge {e.get('id')}: when must be a non-empty string or {{path, equals}}"]
 
 
 def _slot_to_graph(slot: dict[str, Any]) -> dict[str, Any]:
@@ -117,11 +232,11 @@ def derive_graph_from_stages(stages: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def layer_graph(graph: dict[str, Any]) -> tuple[list[list[str]], list[str]]:
-    """Longest-path layering over main edges → (layers, triggers)."""
+    """Longest-path layering over forward (main, branch, error) edges → (layers, triggers)."""
     kind = {n["id"]: n.get("kind") for n in graph.get("nodes", [])}
     preds: dict[str, list[str]] = {nid: [] for nid in kind}
     for e in graph.get("edges", []):
-        if _is_main(e) and e.get("from") in kind and e.get("to") in kind:
+        if _is_forward(e) and e.get("from") in kind and e.get("to") in kind:
             preds[e["to"]].append(e["from"])
     depth: dict[str, float] = {}
     visiting: set[str] = set()
@@ -252,9 +367,15 @@ def validate_graph(graph: Any) -> list[str]:
             errors.append(f"slot node {nid} needs slot.agentKey and slot.label")
         if k != "slot" and slot is not None:
             errors.append(f"node {nid}: only slot nodes carry slot config")
+        if k == "subpipeline":
+            errors.extend(_subpipeline_errors(nid, n.get("subpipeline")))
+        elif n.get("subpipeline") is not None:
+            errors.append(f"node {nid}: only subpipeline nodes carry subpipeline config")
         pos = n.get("position")
         if not isinstance(pos, dict) or not _finite(pos.get("x")) or not _finite(pos.get("y")):
             errors.append(f"node {nid} needs a numeric position")
+        if n.get("retry") is not None:
+            errors.extend(_retry_errors(nid, k, n["retry"]))
     edge_ids: set[str] = set()
     pairs: set[tuple[str, str, str]] = set()
     succ: dict[str, list[str]] = {nid: [] for nid in nodes}
@@ -268,7 +389,8 @@ def validate_graph(graph: Any) -> list[str]:
             errors.append(f"duplicate edge id {eid}")
         edge_ids.add(eid)
         kind = e.get("kind") or "main"
-        if kind not in EDGE_KINDS:
+        known = kind in EDGE_KINDS
+        if not known:
             errors.append(f"edge {eid}: unknown kind {kind}")
         src, dst = e.get("from"), e.get("to")
         if src not in nodes or dst not in nodes:
@@ -282,18 +404,24 @@ def validate_graph(graph: Any) -> list[str]:
         pairs.add(pair)
         if nodes[dst].get("kind") == "trigger":
             errors.append(f"edge {eid} points into a trigger")
-        if kind == "main":
-            succ[src].append(dst)
-            if e.get("maxLoops") is not None:
-                errors.append(f"edge {eid}: maxLoops is only for reject edges")
-        else:
+        if kind == "reject":
             if nodes[src].get("kind") == "trigger":
                 errors.append(f"reject edge {eid} cannot start at a trigger")
             m = e.get("maxLoops", DEFAULT_MAX_LOOPS)
             if not isinstance(m, int) or isinstance(m, bool) or m < 1 or m > MAX_LOOPS_CEILING:
                 errors.append(f"reject edge {eid}: maxLoops must be an integer 1..{MAX_LOOPS_CEILING}")
             rejects.append(e)
-    # Main-edge cycle check.
+        elif known:
+            succ[src].append(dst)
+            if e.get("maxLoops") is not None:
+                errors.append(f"edge {eid}: maxLoops is only for reject edges")
+            if kind != "main" and nodes[src].get("kind") not in WORK_NODE_KINDS:
+                errors.append(f"{kind} edge {eid} must start at a slot or subpipeline node")
+        if kind == "branch":
+            errors.extend(_branch_when_errors(e))
+        elif e.get("when") is not None:
+            errors.append(f"edge {eid}: when is only for branch edges")
+    # Forward-edge cycle check.
     colour: dict[str, int] = {}
     cyclic = False
     for start in nodes:
@@ -349,8 +477,50 @@ def downstream_of(graph: dict[str, Any], nid: str) -> list[str]:
     return [e["to"] for e in graph.get("edges", []) if _is_main(e) and e.get("from") == nid]
 
 
+#: The ops apply_graph_ops takes, in the order pipeline_graph documents them.
+GRAPH_OPS = (
+    "add_node", "remove_node", "update_node", "move_node", "add_edge", "remove_edge",
+    "set_gate", "set_pin", "set_retry", "set_stage_meta",
+)
+
+
 def apply_graph_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[str, Any]:
-    """Apply edit ops to a copy (see the TS twin). Raises GraphError."""
+    """Apply edit ops to a copy (see the TS twin). Raises GraphError.
+
+    Ops apply one at a time, so a refusal names the op it came from: its
+    errors start with "ops[<i>] (<op>)" and the error carries ``op_index``.
+    A node or edge kind outside the known ones is refused at its op, with the
+    kinds there are, rather than only by the whole-graph check after."""
+    if not isinstance(ops, list):
+        raise GraphError(["ops must be a list"])
+    g = _apply_ops(graph, [])
+    for index, op in enumerate(ops):
+        try:
+            _check_op_kinds(op)
+            g = _apply_ops(g, [op])
+        except GraphError as exc:
+            name = op.get("op") if isinstance(op, dict) else None
+            where = f"ops[{index}] ({name})" if isinstance(name, str) and name else f"ops[{index}]"
+            indexed = GraphError([f"{where}: {e}" for e in exc.errors], exc.code)
+            indexed.op_index = index  # type: ignore[attr-defined]
+            raise indexed from None
+    return g
+
+
+def _check_op_kinds(op: Any) -> None:
+    if not isinstance(op, dict):
+        return
+    if op.get("op") == "add_node" and isinstance(op.get("node"), dict):
+        kind = op["node"].get("kind")
+        if kind not in NODE_KINDS:
+            raise GraphError([f"unknown node kind {kind}; one of {', '.join(NODE_KINDS)}"])
+    if op.get("op") == "add_edge" and isinstance(op.get("edge"), dict):
+        kind = op["edge"].get("kind") or "main"
+        if kind not in EDGE_KINDS:
+            raise GraphError([f"unknown edge kind {kind}; one of {', '.join(EDGE_KINDS)}"])
+
+
+def _apply_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[str, Any]:
     g = {
         "version": graph.get("version", GRAPH_VERSION),
         "nodes": copy.deepcopy(graph.get("nodes", [])),
@@ -422,6 +592,10 @@ def apply_graph_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[st
                 if n.get("kind") != "gate":
                     raise GraphError([f"node {n['id']} is not a gate"])
                 n["gate"] = {**(n.get("gate") or {}), **op["gate"]}
+            if op.get("subpipeline"):
+                if n.get("kind") != "subpipeline":
+                    raise GraphError([f"node {n['id']} is not a subpipeline"])
+                n["subpipeline"] = {**(n.get("subpipeline") or {}), **op["subpipeline"]}
         elif kind == "move_node":
             pos = op.get("position") or {}
             node(op.get("id"))["position"] = {"x": pos.get("x"), "y": pos.get("y")}
@@ -453,11 +627,19 @@ def apply_graph_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[st
                 n["pinned"] = True
             else:
                 n.pop("pinned", None)
+        elif kind == "set_retry":
+            n = node(op.get("id"))
+            if n.get("kind") not in WORK_NODE_KINDS:
+                raise GraphError([f"only slot and subpipeline nodes can retry: {n['id']}"])
+            if op.get("retry"):
+                n["retry"] = copy.deepcopy(op["retry"])
+            else:
+                n.pop("retry", None)
         elif kind == "set_stage_meta":
             # Stage metadata is not part of the graph; StagesStore applies it.
             pass
         else:
-            raise GraphError([f"unknown graph op: {kind}"])
+            raise GraphError([f"unknown graph op: {kind}; one of {', '.join(GRAPH_OPS)}"])
     return g
 
 

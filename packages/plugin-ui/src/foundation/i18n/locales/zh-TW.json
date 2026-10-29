@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI 以結束代碼 {code} 結束，可能是當掉了；這個代碼也記錄在錯誤帳本裡。",
       "stuck-badge": "⏳ 超過 {minutes} 分鐘沒有動靜",
       "stuck-tooltip": "這個回合已超過 {minutes} 分鐘沒有任何紀錄或輸出，CLI 可能卡住了；Navide 沒有中斷它。",
+      "stale-config-badge": "設定已更新",
+      "stale-config-tooltip-mcp": "這個 pane 開啟後，此 CLI 的 MCP server 有變動。重建前它會沿用舊清單。點一下重建（接續對話）。",
+      "stale-config-tooltip-skills": "這個 pane 開啟後，送給此 CLI 的 skills 有變動。重建前它可能沿用舊的。點一下重建（接續對話）。",
+      "stale-config-tooltip-both": "這個 pane 開啟後，此 CLI 的 MCP server 與 skills 都有變動。重建前它會沿用舊的。點一下重建（接續對話）。",
       "usage-limit-badge": "⛔ {time} 恢復",
       "usage-limit-badge-unknown": "⛔ 額度用完",
       "usage-limit-tooltip": "此 CLI 的額度已用完 — 預計 {time} 恢復。點擊可清除",
@@ -1033,6 +1037,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "從 n8n 匯入",
     "switch-and-resume": "↻ 切換並繼續",
     "go-to-stage": "開啟這個 stage",
     "new-pipeline": "＋ 新增流程",
@@ -1187,7 +1192,6 @@
     "collapse": "收合",
     "restore": "↑ 還原",
     "retry": "↻ 重試",
-    "finish": "完成",
     "connect-to-remote": "連接到遠端",
     "scan-repos-anyway": "仍要掃描儲存庫",
     "amend-commit": "修改提交",
@@ -1196,7 +1200,7 @@
     "go-to-commit": "前往提交",
     "install-missing": "安裝缺少的項目",
     "fix": "修復",
-    "add-mcp": "新增 MCP +",
+    "add-mcp": "+ 新增 MCP",
     "open-mcp-config": "開啟 MCP 設定",
     "accept-ours": "採用我們的版本",
     "accept-theirs": "採用他們的版本",
@@ -1239,7 +1243,7 @@
     "replace-in-file": "取代檔案中所有符合項",
     "replace-match": "取代此符合項",
     "open-in-finder": "用 Finder 開啟此資料夾",
-    "clear-pipeline": "清除流程狀態並關閉所有 Agent 面板",
+    "clear-pipeline": "清除流程狀態並關閉所有 agent pane",
     "remove-from-history": "從歷史記錄中移除",
     "double-click-rename": "雙擊重新命名",
     "close-workspace": "關閉工作區",
@@ -1260,6 +1264,7 @@
     "toggle-replace": "切換取代（⌘H）",
     "delete-pipeline": "刪除此管線",
     "open": "開啟",
+    "learn-more": "了解更多",
     "view-as-list": "檢視為清單",
     "view-as-tree": "檢視為樹狀",
     "show-ignored-files": "顯示忽略的檔案",
@@ -1364,7 +1369,7 @@
     "stall-force-advance": "強制推進",
       "prev-page": "上一頁",
       "next-page": "下一頁",
-      "manage-pipelines": "管理 pipeline",
+      "manage-pipelines": "流程管理",
       "reset-run-counter": "重設本次執行的計數",
       "wipe-workspace-history": "清除這個工作區的歷史統計",
       "wipe-global-tally": "清除全域總計",
@@ -1462,11 +1467,58 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock 是隱私遮罩，不是存取控制。你離開時，它會蓋住 Navide 的每個視窗；agent、終端機、聊天室、MCP 工具與排程都照常執行，坐在這台電腦前又懂技術的人仍然可以繞過它。",
+      "section-lock": "鎖定",
+      "enabled": "開啟 App Lock",
+      "enabled-hint": "請先設定 PIN。即使開了 Touch ID，PIN 也一律可以解鎖。",
+      "lock-now": "立即鎖定",
+      "lock-now-hint": "馬上蓋住所有視窗。快捷鍵 {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "已設定 PIN。",
+      "pin-none-hint": "尚未設定 PIN，請用 4 到 12 位數字。",
+      "set-pin": "設定 PIN",
+      "change-pin": "變更 PIN",
+      "remove-pin": "移除 PIN",
+      "remove-pin-hint": "移除 PIN 會關閉 App Lock。",
+      "current-pin": "目前的 PIN",
+      "new-pin": "新的 PIN",
+      "confirm-pin": "確認 PIN",
+      "save": "儲存",
+      "cancel": "取消",
+      "pin-saved": "PIN 已儲存。",
+      "pin-removed": "PIN 已移除，App Lock 已關閉。",
+      "section-unlock": "解鎖",
+      "method": "解鎖方式",
+      "method-system": "Touch ID，PIN 作為備用",
+      "method-pin": "只用 PIN",
+      "system-unavailable": "這台電腦無法使用 Touch ID，Navide 會用 PIN 解鎖。",
+      "section-auto": "自動鎖定",
+      "idle": "閒置後",
+      "idle-hint": "以整台電腦沒有鍵盤或滑鼠操作的時間計算。",
+      "idle-never": "永不",
+      "idle-minutes": "{n} 分鐘",
+      "on-screen-lock": "螢幕鎖定時",
+      "on-suspend": "電腦休眠時",
+      "on-start": "Navide 啟動時",
+      "section-forgot": "忘記 PIN？",
+      "reset-with-system": "用 Touch ID 重設 PIN",
+      "forgot-system": "先用 Touch ID 確認是你本人，再設定新的 PIN。",
+      "forgot-manual-title": "沒有 Touch ID 時",
+      "forgot-manual": "結束 Navide，然後刪除 Navide 資料資料夾裡的 app-lock.json。這只會移除 App Lock 與它的 PIN，其他都不受影響。",
+      "error-invalid-pin": "請用 4 到 12 位數字。",
+      "error-mismatch": "兩次輸入的 PIN 不一致。",
+      "error-wrong-pin": "目前的 PIN 不正確。",
+      "error-cooldown": "嘗試次數過多，請在 {seconds} 秒後再試。",
+      "error-system-failed": "Touch ID 未能確認是你本人。",
+      "error-generic": "沒有成功，請再試一次。"
+    },
     "cliExtensions": {
       "tabInstalled": "已安裝的 CLI 擴充",
       "tabConvenience": "Navide 做的修改",
       "intro": "每個 AI CLI 為自己安裝的 CLI 擴充（Claude plugin 與 mod、Codex hook、Pi extension 等），以及各自能碰到什麼。這裡只讀取，不會安裝、啟用或修改任何東西。Navide 外掛另有專頁。",
-      "summary": "{total} 個 CLI 擴充 · 其中 {l3} 個在 CLI 程序內執行程式碼",
+      "summary": "{total} 個 CLI 擴充 · 其中 {l3} 個在 CLI 內執行，{l2} 個執行獨立程式",
       "machineWide": "每家 CLI 整台機器只有一份：Navide 裡這家 CLI 的每個 pane、每個帳號，都會載入同一套。",
       "rescan": "重新掃描",
       "loading": "掃描中…",
@@ -1481,17 +1533,17 @@
       "inferred": "推定",
       "inferredHint": "這些能力是從原始碼文字推定的，CLI 的 manifest 沒有宣告。",
       "tier": {
-        "L1": "L1 文字資產",
-        "L2": "L2 子程序",
-        "L3": "L3 程序內程式碼"
+        "L1": "僅文字",
+        "L2": "執行獨立程式",
+        "L3": "在 CLI 內執行"
       },
       "tierHint": {
         "L1": "只有指令、說明之類的文字，不會自己執行。",
-        "L2": "會以子程序執行命令（hook、MCP、LSP），權限跟你的使用者帳號一樣。",
+        "L2": "會啟動一個獨立程式（hook 命令，或 MCP、LSP 伺服器），權限跟你的使用者帳號一樣。",
         "L3": "在 CLI 自己的程序裡執行，權限跟 CLI 一樣，而且不會跳出權限提示。"
       },
       "capability": {
-        "exec": "執行指令",
+        "exec": "執行 shell 指令",
         "network": "連網",
         "fs": "讀寫檔案",
         "intercept-tools": "攔截工具呼叫",
@@ -1505,6 +1557,19 @@
         "capability-approve": "CLI 會先要求你核准它的能力",
         "hot-reload": "熱重載前，每個 session 會詢問一次"
       }
+    },
+    "applies": {
+      "new-panes-only": "新開的 pane 才生效",
+      "new-panes-only-tooltip": "CLI 啟動時才讀這項設定。已開著的 pane 會沿用舊值，重建後才套用。"
+    },
+    "stale-config": {
+      "title": "在這次變更前就開著的 pane：{count} 個",
+      "body-mcp": "CLI 啟動時才讀自己的 MCP server，所以這些 pane 仍在用舊清單。重建會接續對話，但會中斷進行中的回合並重印對話。",
+      "body-skills": "CLI 啟動時才讀 skills，所以這些 pane 可能仍在用舊的。重建會接續對話，但會中斷進行中的回合並重印對話。",
+      "rebuild-all-idle": "重建所有閒置的（{count}）",
+      "busy": "執行中——「重建所有閒置的」會跳過",
+      "cannot-rebuild": "沒有可接續的對話",
+      "rebuild": "重建"
     },
     "limits": {
       "hint": "選用的限制，避免 Navide 與它啟動的 agent 把這台電腦壓垮。每一項在你調整之前都是關閉，或維持 Navide 原本的行為。",
@@ -1585,7 +1650,7 @@
         },
         "analyzer-backend": {
           "title": "推論後端",
-          "summary": "切換 Ollama REST 或 llama.cpp，並設定推論網址、llama-cli 路徑與 GGUF 模型路徑。"
+          "summary": "切換 Ollama 或 llama.cpp，並設定推論網址、llama-cli 路徑與 GGUF 模型路徑。"
         },
         "analyzer-models": {
           "title": "模型與基準測試",
@@ -1626,6 +1691,10 @@
         "status-badges": {
           "title": "狀態徽章",
           "summary": "替九種面板狀態各自重新命名並選顏色，中文、英文與日文名稱可分開填。"
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "用鎖定畫面蓋住所有視窗，以 Touch ID 或 PIN 解鎖"
         },
         "voice-input": {
           "title": "語音輸入",
@@ -1727,7 +1796,7 @@
       "title": "設定管理",
       "export-bundle": "匯出設定全集",
       "import-bundle": "匯入設定全集",
-      "bundle-hint": "匯出內容包含 Roles、Pipelines、MCP、Analyzer、AI Chat 非敏感設定與外觀偏好；API key 和 token 會被遮蔽，匯入時不會覆蓋。",
+      "bundle-hint": "匯出角色、Pipeline、MCP、分析器、AI 聊天與外觀設定，API 金鑰與 token 會被遮蔽。",
       "export-dialog-title": "匯出設定全集",
       "exported": "設定全集已匯出",
       "export-failed": "匯出失敗",
@@ -1739,7 +1808,7 @@
     "executionPolicy": {
       "unavailable": "執行政策目前無法使用。請檢查 Navide 主程式後再試。",
       "errors": {
-        "invalid-policy": "執行政策無效。請使用支援的模式、系統命名空間與可執行檔名稱。",
+        "invalid-policy": "執行政策無效。請使用支援的模式、Navide 功能與可執行檔名稱。",
         "high-risk-confirmation-required": "完整模式需要明確確認允許任意可執行檔執行。",
         "recovery-confirmation-required": "重建執行政策需要明確確認。",
         "source-reset-confirmation-required": "重設所有政策來源選擇需要明確確認。",
@@ -1755,7 +1824,7 @@
         "recommendation-unavailable": "Repository 政策建議無法使用。",
         "recommendation-invalid": "Repository 政策建議無效。",
         "recommendation-stale": "Repository 政策建議已變更。請重新檢查後再接受。",
-        "user-policy-unavailable": "沒有可用的全域使用者政策。請建立政策或選擇 Host 預設值。",
+        "user-policy-unavailable": "沒有可用的全域使用者政策。請建立政策或選擇 Navide 預設值。",
         "global-policy-corrupt": "全域執行政策已損壞。請先重建後再切換到這個來源。",
         "recovery-blocked-by-global-policy": "全域執行政策不健康時，無法復原來源。",
         "commit-uncertain": "無法確認政策變更結果。政策仍維持失敗關閉，請重新檢查。",
@@ -1763,12 +1832,12 @@
       },
       "loading": "正在載入執行政策…",
       "saved": "執行政策已儲存。",
-      "rebuilt": "已從 Host 預設值重建執行政策。",
+      "rebuilt": "已從 Navide 預設值重建執行政策。",
       "notice": {
         "save": "執行政策已儲存。",
-        "resetUser": "使用者政策已重設為 Host 預設值。",
+        "resetUser": "使用者政策已重設為 Navide 預設值。",
         "source": "政策來源已變更。",
-        "rebuild": "已從 Host 預設值重建執行政策。",
+        "rebuild": "已從 Navide 預設值重建執行政策。",
         "resetSources": "所有政策來源選擇已重設。"
       },
       "externalUpdate": "政策已在其他地方變更。你的草稿會保留，直到重新載入最新版本。",
@@ -1789,7 +1858,7 @@
         "unavailable": "選用的政策來源無法使用。Navide 會在你選擇可用來源前維持失敗關閉。",
         "corrupt": "選用的政策已損壞。修復前 Navide 會維持失敗關閉。"
       },
-      "hostDefaultTitle": "Host 預設值",
+      "hostDefaultTitle": "Navide 預設值",
       "readOnly": "唯讀",
       "hostDefaultHint": "內建的最小權限基準。即使使用者政策儲存區遺失，仍然可以使用。",
       "userTitle": "使用者政策",
@@ -1797,7 +1866,7 @@
       "userHint": "編輯工作區選用 User 來源時使用的全域政策。儲存會取代目前的使用者政策。",
       "mode": {
         "full": "完整",
-        "allowlist": "允許清單",
+        "allowlist": "僅允許的指令",
         "denylist": "拒絕清單"
       },
       "fullWarning": "完整模式允許任意可執行檔（包括高風險工具）與系統能力。儲存前請再次確認這項高風險選擇。",
@@ -1805,12 +1874,20 @@
       "denylistWarning": "拒絕清單模式是預設放行：列出名稱並不會限制它實際授予的範圍，因此 Navide 一律將拒絕清單視為高風險選擇，儲存前請再次確認。",
       "denylistConfirmation": "我了解拒絕清單模式預設放行，不會因為我列出的名稱而縮小授予範圍。",
       "shellDenylistScope": "在拒絕清單模式下，Agent 只能執行這台主機支援的指令（{executables}），再扣掉你在這裡拒絕的項目；拒絕清單外的名稱不會有任何作用。",
-      "systemLabel": "系統命名空間",
-      "systemHint": "選擇 Agent 可使用的 V2 系統命名空間。",
-      "systemAllowlistLabel": "要允許的系統命名空間",
-      "systemAllowlistHint": "選擇 Agent 可使用的 V2 系統命名空間。",
-      "systemDenylistLabel": "要拒絕的系統命名空間",
-      "systemDenylistHint": "選擇 Agent 不得使用的 V2 系統命名空間。",
+      "systemLabel": "Navide 功能",
+      "systemHint": "選擇 agent 可以使用的 Navide 功能。",
+      "systemAllowlistLabel": "要允許的 Navide 功能",
+      "systemAllowlistHint": "選擇 agent 可以使用的 Navide 功能。",
+      "systemDenylistLabel": "要拒絕的 Navide 功能",
+      "systemDenylistHint": "選擇 agent 不得使用的 Navide 功能。",
+      "namespace": {
+        "fs": "工作區檔案",
+        "ui": "自有檢視",
+        "aiCli": "AI CLI 工作階段",
+        "web": "瀏覽網頁",
+        "agents": "agent pane",
+        "agentMessages": "agent 訊息"
+      },
       "shellLabel": "Shell 可執行檔",
       "shellHint": "只允許最上層可執行檔名稱，不接受路徑或 shell 運算式。",
       "shellAllowlistLabel": "要允許的 Shell 可執行檔",
@@ -1826,13 +1903,14 @@
       "save": "儲存政策",
       "resetUser": "重設使用者政策",
       "sourceTitle": "工作區政策來源",
-      "sourceHint": "Repository 建議在你檢視並明確接受前都不受信任。切換來源需要精確符合目前指紋。",
+      "sourceHint": "Repository 建議在你檢視並明確接受前都不受信任。切換來源只對你最後看到的那一版政策生效；若之後有變動，請重新檢視。",
       "source": {
-        "default": "Host 預設值",
+        "default": "Navide 預設值",
         "user": "使用者政策",
         "repository": "Repository 政策"
       },
       "sourceNeedsWorkspace": "開啟工作區後才能選擇工作區政策來源。",
+      "sourceImplicit": "自動",
       "recommendationTitle": "Repository 建議",
       "untrusted": "不受信任",
       "recommendationHint": "這項政策來自工作區 repository；除非明確接受，否則不會取代目前生效的來源。",
@@ -1847,7 +1925,7 @@
       "sourceCorruptHint": "政策來源狀態已損壞。重設所有政策來源選擇即可清除 Host-owned pin，不會修改 repository 政策檔案。",
       "sourceManualRecoveryHint": "政策來源狀態不安全或無法使用。請人工修正列出的 Host-owned 路徑；Navide 不會自動刪除它。",
       "resetSourceSelections": "重設所有政策來源選擇",
-      "resetSourceSelectionsBody": "這會清除所有 repository 來源 pin，不會修改或刪除 repository 政策檔案。所有工作區之後會再次依照全域 Host 預設值或使用者政策解析。",
+      "resetSourceSelectionsBody": "這會清除所有 repository 來源 pin，不會修改或刪除 repository 政策檔案。所有工作區之後會再次依照全域 Navide 預設值或使用者政策解析。",
       "resetSourceSelectionsCheck": "我了解所有 repository 來源 pin 都會被清除。",
       "resetSourceSelectionsConfirm": "確認重設",
       "recheck": "再次檢查",
@@ -1863,7 +1941,7 @@
       "corruptHint": "儲存的使用者政策已損壞。重建會寫入全新的 Host 預設狀態，並保留工作區來源選擇。",
       "manualRecoveryHint": "政策儲存區不安全或無法使用。請修正 execution-policy 資料夾的權限或路徑，再重新開啟設定；目前停用自動重建。",
       "rebuild": "重建全域政策",
-      "rebuildConfirmBody": "只會依 Host 預設值重建全域政策與 revision 檔案。現有工作區來源選擇與 repository 政策檔案都會保留。",
+      "rebuildConfirmBody": "只會依 Navide 預設值重建全域政策與 revision 檔案。現有工作區來源選擇與 repository 政策檔案都會保留。",
       "rebuildConfirmCheck": "我了解損壞的全域政策會被取代。",
       "rebuildConfirm": "確認重建",
       "cancel": "取消"
@@ -1883,18 +1961,19 @@
         "total": "共 {count} 個工具，文字與輸入結構合計 {size}。"
       },
       "nativeBackends": {
-        "title": "原生後端",
+        "title": "Navide 外掛內含的程式",
+        "summary": "原生程式碼在沙箱中執行，但同時會執行 git、gh、glab 的 Navide 外掛（下方標為高風險）能透過它們連線到網路主機、送出工作區資料並修改工作區檔案。",
         "description": "部分 Navide 外掛內含原生程式。Navide 會把它放在沙盒裡執行，它本身沒有網路：只能讀取你一起開啟的工作區，也只能在你允許的地方修改檔案。但同時會執行 git、gh、glab 指令的 Navide 外掛（下方標示為高風險）可以透過這些指令連到網路主機、送出工作區資料，也可以不經上述允許就讀取與修改工作區檔案。下方開關開啟時，安裝含原生程式碼的 Navide 外掛即代表允許它執行；關閉開關可停用全部。",
-        "enable": "允許第三方 Navide 外掛執行原生後端",
+        "enable": "允許第三方 Navide 外掛執行自帶的程式",
         "offUnsaved": "第三方原生後端目前已關閉，但 Navide 無法儲存這個設定，重新啟動 Navide 後會再變回開啟。",
         "offUnsavedRetry": "再試一次",
         "agentTools": {
           "enable": "允許 agent 呼叫第三方 Navide 外掛的工具",
-          "description": "預設關閉。開啟後，你允許過的第三方 Navide 外掛所宣告的工具，pane 裡的 agent 就能呼叫；會修改檔案的工具在每個工作區第一次使用時會先問你。關閉時，Navide 的行為就像沒有任何 Navide 外掛提供工具。",
+          "description": "讓 pane 裡的 agent 呼叫你已允許的 Navide 外掛所宣告的工具；會改動檔案的工具在每個工作區詢問一次。",
           "externalCallers": "外部 MCP 客戶端也能呼叫",
           "externalCallersDisclosure": "外部程式只共用一組 token，稽核紀錄分不出是哪個程式，只能記成「外部客戶端」。Host 憑證也比照處理。"
         },
-        "empty": "目前沒有安裝任何含原生後端的 Navide 外掛。",
+        "empty": "目前沒有安裝任何自帶程式的 Navide 外掛。",
         "windowWithout": "{name} 已開啟，但沒有原生後端：{reason}。需要後端的功能將無法使用。{next}",
         "windowWithoutAllow": "要允許後端，請到「設定 → Navide 外掛 → {page}」，然後重新開啟視窗。",
         "windowWithoutDetails": "原因可在「設定 → Navide 外掛 → {page}」查看。",
@@ -1925,12 +2004,17 @@
           "shellNotAllowed": "已封鎖：要求完整 shell 權限",
           "stoppedAfterCrashes": "多次失敗後已停止",
           "unavailable": "無法使用"
-        }
+        },
+        "loadFailed": "無法讀取原生後端設定。"
       },
       "bundled": "內建",
-      "listTitle": "Navide 外掛",
+      "listTitle": "已安裝",
+      "installedTitle": "已安裝的 Navide 外掛",
       "developerNative": "開發者與原生程式碼",
       "pageOn": "已開啟",
+      "developerOnMarker": "開發者模式已開啟",
+      "nativeOnMarker": "原生程式碼已開啟",
+      "browseMarketplace": "瀏覽 Navide 市集",
       "bundledGit": "內建 Git",
       "state": {
         "active": "啟用中",
@@ -1940,7 +2024,7 @@
       "restore": "還原",
       "candidateReady": "更新 {version} 已就緒",
       "activationFailed": "{plugin} 已安裝，但無法啟用：{reason}。請在下方清單重新啟動或捨棄它。",
-      "switchNow": "核准後，{id} 會立即切換到 {version}。開著的畫面會重新載入，畫面裡沒存的內容會遺失。這次切換會記錄在公告中心，可以一鍵退回。",
+      "switchNow": "核准後，{id} 會立即切換到 {version}。開著的畫面會重新載入：用 Navide SDK 保存狀態的畫面會回到原來的位置，其他沒存的內容會遺失。這次切換會記錄在公告中心，可以一鍵退回。",
       "restartPlugin": "重新啟動 Navide 外掛",
       "disable": "停用",
       "enable": "啟用",
@@ -2044,8 +2128,6 @@
         "featured": "精選",
         "clearSearch": "清除搜尋",
         "showAllCategories": "顯示所有分類",
-        "noResultsHint": "換個關鍵字，或瀏覽所有分類。",
-        "noExtensionsHint": "發布者上架 Navide 外掛後，就會出現在這裡。",
         "loadFailedTitle": "無法連上 Navide 市集",
         "loadFailedHint": "請檢查網路連線後重試；已安裝的 Navide 外掛不受影響。",
         "errorDetails": "詳細資訊",
@@ -2114,7 +2196,7 @@
         },
         "title": "開發者模式",
         "switch": "開啟開發者模式",
-        "hint": "開啟後可以從你選的資料夾載入 Navide 外掛來開發與測試，也會套用自架 Registry 的設定（AGENT_TEAM_MARKETPLACE_URL）。只有在這個設定頁可以切換，每次變更都會記錄。關閉時會卸下所有從資料夾載入的 Navide 外掛，選了但還沒同意的資料夾也會清掉；你同意過的資料夾清單會保留，再開啟時自動接回，也可以在這裡移除。",
+        "hint": "可從資料夾載入 Navide 外掛來開發與測試，也能從你自己的伺服器、而非 Navide 市集安裝 Navide 外掛；關閉時會卸下這些 Navide 外掛。",
         "banner": "開發者模式已開啟，從資料夾載入的 Navide 外掛沒有經過審核。",
         "reminder": "開發者模式已開啟：從資料夾載入的 Navide 外掛沒有經過審核。不用時請到「設定 → Navide 外掛」關閉。",
         "reminderClose": "知道了",
@@ -2188,7 +2270,7 @@
       },
       "localInstall": {
         "agentRequest": "由 {requester} 提出。Navide 沒有審核過這個 Navide 外掛，要不要安裝由你決定。",
-        "button": "從檔案安裝 .vsix…",
+        "button": "從檔案安裝…",
         "backToMarketplace": "換回 Navide 市集版本",
         "warning": "這個 Navide 外掛來自你選的本機檔案，沒有經過 Navide 審核，也沒有簽章：無法確認作者，檔案也可能被改過。只安裝你信任的人給你的檔案。",
         "signatureLabel": "簽章",
@@ -2319,12 +2401,12 @@
       "user": "使用者",
       "userWorkspace": "使用者／工作區",
       "accountServer": "帳號／伺服器",
-      "userWorkspaceBindings": "使用者／工作區綁定"
+      "userWorkspaceBindings": "使用者，以及各工作區選用的帳號"
     },
     "storage": {
       "localStorage": "ui_settings.json（App 資料）＋工作區備份",
-      "mainProcess": "Electron 主行程 userData",
-      "safeStorage": "本機加密的 safeStorage 登錄",
+      "mainProcess": "與 Navide 的 App 資料一起存在這台電腦上",
+      "safeStorage": "加密儲存在這台電腦上",
       "cliFiles": "各 CLI 自己的指示檔"
     },
     "voice": {
@@ -2349,7 +2431,6 @@
       "readback-rate": "語速",
       "readback-preview": "試聽",
       "readback-stop-hint": "朗讀中按 Esc 或語音輸入快捷鍵即可立刻停止。",
-      "section": "語音輸入",
       "enabled": "語音輸入（按住說話）",
       "enabled-hint": "按住 Ctrl+Alt+M（可在快捷鍵設定中更改）即可對目前聚焦的 CLI pane 聽寫。文字會像手動輸入一樣填進輸入框，不會自動送出，確認後請自己按 Enter。語音由本機的 Whisper 模型轉成文字，音訊不會離開這台電腦。",
       "device": "麥克風",
@@ -2452,7 +2533,7 @@
       "download-retry": "重新下載"
     },
     "general": {
-      "auto-resume-reconnect": "後端重啟後自動接回工作階段",
+      "auto-resume-reconnect": "Navide 背景服務重啟後自動接回工作階段",
       "resume-interrupted-on-launch": "重開 Navide 後自動接回工作中的 pane",
       "system-notify": "系統通知",
       "system-notify-hint": "Navide 在背景時，CLI 完成回合或需要你輸入會送出桌面通知。Dock 徽章的計數不受此開關影響。",
@@ -2467,14 +2548,14 @@
         "unknown": "尚未測試。",
         "not-applicable": "此平台不提供。"
       },
-      "auto-resume-reconnect-hint": "後端崩潰時會一併帶走所有 CLI 行程。開啟後，後端恢復時會自動接回目前看得見的 pane 的對話，不必逐一手動重建。",
-      "resume-interrupted-on-launch-hint": "重開 Navide 時，正在跑回合、停在權限詢問或快選等待的 pane，以及等它們回報的母 pane，會自動接回（最多 6 個，其餘標記「重開時工作中」）。接回後不會自動續跑，按「繼續」或由母 pane 下令才會繼續；母 pane 會收到哪些子 pane 被中斷的通知。",
+      "auto-resume-reconnect-hint": "背景服務重啟回來後，自動接回 pane 的對話。重啟會一併結束所有 CLI 行程；畫面上的 pane 以及畫面外最多六個正在工作的 pane 會接回但不自己繼續，派出它的 pane 會收到通知，公告中心會列出經過。如果很快又崩潰，就不會再自動接回。",
+      "resume-interrupted-on-launch-hint": "重開 Navide 時，自動接回工作中的 pane，等你下令再繼續。範圍是正在跑回合、停在權限詢問或快選等待的 pane，以及等它們回報的母 pane（最多 6 個，其餘標記「重開時工作中」）。按「繼續」或由母 pane 下令才會繼續；母 pane 會收到哪些子 pane 被中斷的通知。",
       "confirm-close-pane": "關閉 pane 前確認",
       "confirm-close-pane-hint": "用關閉 pane 快捷鍵關閉 CLI pane 前先跳出確認。執行中的 pane 一律會確認，不受此設定影響。",
       "confirm-close-workspace": "關閉工作區前確認",
-      "confirm-close-workspace-hint": "從側欄「關閉工作區與 CLI 視窗」前先跳出確認。這一列會結束該工作區的所有 CLI pane；紀錄會保留，重新開啟時會留成可點擊接續的卡片。單純的「關閉工作區」不會結束 CLI，也不會詢問。",
+      "confirm-close-workspace-hint": "側欄關閉工作區並結束其中的 CLI pane 前先詢問。",
       "idle-reclaim": "回收閒置的 CLI",
-      "idle-reclaim-hint": "閒置的 CLI 仍然佔著它配置過的記憶體，每個常是 200–300 MB。回收會結束該程序，pane 留在原位變成點一下就繼續的預留位置，對話會從 CLI 自己的紀錄接回。目前聚焦中的 pane、正在等你回答的 pane、以及有未送出文字的 pane 都不會被回收。",
+      "idle-reclaim-hint": "結束閒置的 CLI 以釋放記憶體，pane 保留為點一下就能接續的預留位置（不含焦點所在、等你回答或有未送出文字的 pane）。",
       "idle-reclaim-after": "閒置多久後回收",
       "idle-reclaim-after-hint": "一個 pane 要多久沒有 agent 輸出、也沒有按鍵，才會被回收。",
       "idle-reclaim-15m": "15 分鐘",
@@ -2484,8 +2565,8 @@
       "idle-reclaim-8h": "8 小時",
       "idle-reclaim-never": "永不回收",
       "idle-reclaim-now": "立即回收",
-      "idle-reclaim-now-hint": "現在就結束這些 CLI，不等門檻。目前有 {count} 個 pane 符合條件，約佔用 {size}。每一個都會變成點一下就繼續的預留位置。",
-      "idle-reclaim-now-empty": "目前沒有符合條件的 pane — 聚焦中、正在等你回答、有未送出文字、以及無法接回對話的 pane 一律不會被回收。",
+      "idle-reclaim-now-hint": "現在就結束，不必等待：有 {count} 個 pane 符合條件，約佔用 {size}。",
+      "idle-reclaim-now-empty": "目前沒有符合條件的 pane。聚焦中、正在等你回答、有未送出文字、以及無法接回對話的 pane 一律不會被回收。",
       "idle-reclaim-now-action": "立即回收 {count} 個",
       "idle-reclaim-now-action-empty": "沒有可回收的",
       "default-editor": "預設編輯器",
@@ -2516,6 +2597,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "機器翻譯，尚待母語者審閱。",
       "language-hint": "語言是使用者層級的偏好設定，對所有工作區生效。",
+      "language-display": "介面語言",
       "ui-scale": "介面縮放",
       "ui-scale-hint": "整體放大或縮小介面——文字、圖示與間距——並套用到所有視窗。與終端機、編輯器的字級無關，那兩者仍各自使用 ⌘= / ⌘- 快捷鍵。",
       "restore-windows": "還原視窗",
@@ -2537,15 +2619,22 @@
       "resume-behavior-never": "一律開新對話",
       "resume-behavior-ask": "每次詢問",
       "restore-scope": "恢復範圍",
-      "restore-scope-hint": "選擇「總是恢復」時，可自動開啟單一 CLI、目前的 Grid 頁面、目前分頁、全部 CLI，或「自動」：只恢復上次關閉 Navide 時仍在執行的 CLI（全部 CLI 與自動都一次兩個依序啟動）。",
+      "restore-scope-hint": "一律接續時要重新開啟哪些 CLI。可選一個 CLI、目前的 Grid 頁、目前的分頁、所有 CLI，或自動（上次關閉時正在執行的 CLI）。",
       "restore-scope-single": "單一 CLI",
       "restore-scope-page": "目前 Grid 頁面",
       "restore-scope-tab": "目前分頁",
       "restore-scope-all": "全部 CLI",
       "restore-scope-auto": "自動",
       "resume-concurrency": "同時恢復上限",
-      "resume-concurrency-hint": "開啟工作區或還原版面時，最多可同時恢復幾個 CLI pane，其餘依序排隊。若一次恢復太多 pane 導致「terminal.create timeout」錯誤，就把這個值調小（1–10）。",
-      "resume-concurrency-label": "同時恢復數上限"
+      "resume-concurrency-hint": "同時接續的 CLI pane 數量（1–10）；接續時 pane 逾時就調低。",
+      "resume-concurrency-label": "同時恢復數上限",
+      "theme-name": {
+        "dark-github": "深色（GitHub）",
+        "dark-midnight": "午夜",
+        "dark-forest": "森林",
+        "light": "淺色",
+        "high-contrast": "高對比"
+      }
     },
     "roles": {
       "title": "角色",
@@ -2613,6 +2702,7 @@
       "executionPolicy": "執行政策",
       "statusBadges": "狀態徽章",
       "voice": "語音輸入",
+      "appLock": "App Lock",
       "keybindings": "快捷鍵",
       "updates": "更新",
       "help": "說明"
@@ -2679,14 +2769,14 @@
         "intro": "設定視窗的十九個分頁分別管什麼、Navide Cloud 怎麼把幾台機器接成一個私有網路，以及選單、獨立視窗、用量統計與資源維護這些散在主畫面之外的系統面。",
         "s1": {
           "title": "設定總覽",
-          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>24 個分頁</strong>。",
+          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>25 個分頁</strong>。",
           "h1": "搜尋框",
           "p2": "側欄標題底下有一個搜尋框，提示字是 <code>搜尋設定…</code>。它<strong>跨分頁</strong>比對設定項的標題、所屬區塊與關鍵字（使用目前介面語言與已收錄的關鍵字），最多列 8 筆；點一筆會切到那個分頁並捲到對應區塊（「儲存空間」那筆例外：它會關掉設定、直接開「資源控管」），沒命中時顯示 <code>找不到相符設定</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜尋索引不是全覆蓋",
             "text": "索引是一份人工維護的清單，<strong>{layout}、{notifications}、{security}、{channels} 這四個分頁沒有任何條目</strong>，搜尋不到它們裡面的東西，得自己點進去。CLI Agents 的條目點下去會直接開啟某一家的設定抽屜（見「CLI Agent 與帳號」分頁）。"
           },
-          "h2": "二十四個分頁",
+          "h2": "二十五個分頁",
           "tabTable": {
             "group": "分組",
             "tab": "分頁",
@@ -2721,6 +2811,10 @@
             "voice": {
               "what": "按住說話、本機轉寫的語音輸入：快捷鍵、麥克風、錄音方式、中文輸出、模型與引擎",
               "more": "本面板的「{workspace}」分頁「語音輸入」章"
+            },
+            "appLock": {
+              "what": "蓋住所有視窗的隱私遮罩：PIN、Touch ID、閒置與休眠時自動鎖定",
+              "more": "App Lock 頁最上方的說明"
             },
             "cloud": {
               "what": "跨裝置連線狀態、本機指紋、誰可以命令這台機器",
@@ -2831,7 +2925,7 @@
               "fallback": "單一 CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Backend 掛掉會帶走所有 CLI 行程；開著的話它回來後自動接續畫面上的面板。",
+              "desc": "後端崩潰或重新啟動時會帶走所有 CLI 行程；開啟後，後端恢復時會自動接回畫面上的 pane，以及畫面外最多六個正在工作的 pane。公告中心會列出哪些回合被中斷。",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -3044,7 +3138,7 @@
           "h3": "分析器",
           "p5": "這裡設定的是<strong>本機小模型</strong>，Navide 拿它做 pipeline 的意圖判讀，跟你在面板裡用的 CLI agent 無關。三段：",
           "analyzer": {
-            "backend": "<strong>Inference backend</strong> — 先選 <em>Ollama REST</em> 或 <em>llama.cpp</em> 兩種後端。選 llama.cpp 要填 <code>llama-cli</code> 路徑（有自動偵測鈕與檔案瀏覽器）與選用的 GGUF 模型路徑；選 Ollama 則填推論網址（預設 <code>http://localhost:11434</code>）。兩者旁邊都有健康指示燈。",
+            "backend": "<strong>Inference backend</strong> — 先選 <em>Ollama</em> 或 <em>llama.cpp</em> 兩種後端。選 llama.cpp 要填 <code>llama-cli</code> 路徑（有自動偵測鈕與檔案瀏覽器）與選用的 GGUF 模型路徑；選 Ollama 則填推論網址（預設 <code>http://localhost:11434</code>）。兩者旁邊都有健康指示燈。",
             "models": "<strong>Model manager</strong>（Ollama 模式） — 輸入模型名稱按 <em>⬇ 下載</em> 下載，有進度條；下方列出已安裝的模型（名稱、參數量、大小），可逐一刪除。",
             "benchmark": "<strong>Model benchmark</strong> — 對所有本機模型跑四項任務：技術棧偵測（輸出 JSON）、工作區一句話摘要、從文件清單挑最相關的一筆、解析 CLI 輸出並抽出問題與選項。結果表逐項打勾並附耗時，<strong>四題至少過三題（≥75%）</strong>才算通過；沒過的模型會從模型下拉選單裡藏起來。"
           },
@@ -3058,14 +3152,14 @@
           "mirror": "<strong>下載鏡像</strong>：每個版本的檔案同時放在 GitHub Release 與 <code>dl.navide.dev</code>（同樣的位元，附 sha256 可比對）。<strong>更新來源預設就是鏡像</strong>——app 一啟動就把 feed 指到 <code>dl.navide.dev</code>，GitHub 是備援。只有遇到<strong>網路層失敗</strong>（連不上、逾時、5xx／429）才會退回 GitHub，退過之後<strong>這個 session 就一直用 GitHub</strong>，重開 app 才會回到鏡像。<strong>404 與簽章／checksum 錯誤不會退回</strong>——兩邊放的是同一份檔，換過去只會同樣失敗，照原樣回報才有用。",
           "policyIntro": "<strong>執行政策</strong>決定 Navide 外掛的後端可以執行什麼。它<strong>不是獨立分頁</strong>，而是 Navide 外掛分頁最上面那一塊，帶自己的層級徽章（使用者＋工作區）與政策檔路徑。最上面先顯示<em>目前生效的政策</em>：來源、模式，以及狀態 <em>生效中</em>／<em>已過期</em>／<em>無法使用</em>／<em>損壞</em>。",
           "policy": {
-            "hostDefault": "<strong>Host 預設值</strong> — 內建的最小權限基準，標著<strong>唯讀</strong>。即使使用者政策的儲存區整個不見了它仍然可用，所以永遠有一條退路。",
+            "hostDefault": "<strong>Navide 預設值</strong> — 內建的最小權限基準，標著<strong>唯讀</strong>。即使使用者政策的儲存區整個不見了它仍然可用，所以永遠有一條退路。",
             "user": "<strong>使用者政策</strong> — 全域那一份，工作區選 User 來源時用的就是它，沒建過會寫「尚未建立」。三種模式：<em>完整</em>、<em>允許清單</em>、<em>拒絕清單</em>；可設「系統命名空間」與「Shell 可執行檔」，後者<strong>只收最上層可執行檔名稱</strong>，不接受路徑或 shell 運算式。",
             "highRisk": "<strong>完整與拒絕清單都要勾一個確認框才能存</strong>，而且畫面把理由寫出來：完整模式允許任意可執行檔（包含高風險工具）與系統能力；拒絕清單模式是<strong>預設放行</strong>——列出名稱並不會縮小它實際授予的範圍，所以 Navide 一律把它當高風險選擇。",
-            "source": "<strong>工作區政策來源</strong> — 每個工作區各自選 Host 預設值／使用者政策／Repository 政策。<strong>Repository 建議在你親自檢視並按下「接受 Repository 政策」之前都標成「不受信任」</strong>，切換來源還要指紋精確相符；你看過之後它又被改動就變成「檢視後已變更」，得再按一次「再次檢查」。沒開工作區時這一塊不能選。",
+            "source": "<strong>工作區政策來源</strong> — 每個工作區各自選 Navide 預設值／使用者政策／Repository 政策。<strong>Repository 建議在你親自檢視並按下「接受 Repository 政策」之前都標成「不受信任」</strong>，切換來源還要指紋精確相符；你看過之後它又被改動就變成「檢視後已變更」，得再按一次「再次檢查」。沒開工作區時這一塊不能選。",
             "recovery": "<strong>全域政策儲存區</strong> — 狀態有正常／遺失／損壞／不安全的項目／不安全或無法使用的資料夾。損壞時可以<strong>重建全域政策</strong>，但要勾確認；重建只換全域政策與 revision 檔，工作區的來源選擇與 repository 政策檔案都保留。儲存區被判定為<strong>不安全</strong>時自動重建會停用，畫面要你自己去修它列出來的那幾個 Host-owned 路徑。",
             "failClosed": "任何一種不健康狀態都是<strong>失敗關閉</strong>：在你明確選一個可用來源或修好它之前，什麼都不會被放行。連「存不確定」也一樣——訊息是「無法確認政策變更結果。政策仍維持失敗關閉，請重新檢查」。"
           },
-          "policyNote": "要一次清掉所有 repository 來源 pin，用「重設所有政策來源選擇」，同樣要勾確認。它<strong>不會</strong>修改或刪除任何 repository 政策檔案，只是讓每個工作區之後重新依全域 Host 預設值或使用者政策解析。",
+          "policyNote": "要一次清掉所有 repository 來源 pin，用「重設所有政策來源選擇」，同樣要勾確認。它<strong>不會</strong>修改或刪除任何 repository 政策檔案，只是讓每個工作區之後重新依全域 Navide 預設值或使用者政策解析。",
           "extNote": "Navide 外掛後端出狀況時的分界：<strong>只有協定訊框（request／response／cancel）滿了才會終止那個後端</strong>；Host 通知滿了只是丟棄並計數，不會把整個 Navide 外掛拖垮。乾淨結束的後端會把原因記下來，不再無聲消失。"
         },
         "s5": {
@@ -3305,7 +3399,7 @@
           "h3": "孤兒行程與 Backend",
           "orphans": {
             "leftover": "<strong>殘留的 CLI 行程</strong> — 狀態列出現 <code>⚠ N 殘留</code> 時點開，會問「偵測到 N 個先前殘留的 CLI 程序 — 可能耗盡記憶體。要清理嗎？」，按 <em>清理</em> 清掉、<em>關閉</em> 略過。這些是上一輪執行沒收乾淨的行程。",
-            "backend": "<strong>Backend</strong> — 狀態列的 Backend 藥丸點開有位址、PID，以及兩顆鈕：<em>Restart</em>（沒連上時顯示 <em>Start</em>）與 <em>Stop</em>（只有連上時能按）。<strong>重啟 Backend 會一併帶走所有 CLI 行程</strong>；想讓它回來之後自動接續對話，就把一般分頁的 <em>後端重啟後自動接回工作階段</em> 開啟。",
+            "backend": "<strong>Backend</strong> — 狀態列的 Backend 藥丸點開有位址、PID，以及兩顆鈕：<em>Restart</em>（沒連上時顯示 <em>Start</em>）與 <em>Stop</em>（只有連上時能按）。<strong>重啟 Backend 會一併帶走所有 CLI 行程</strong>；想讓它回來之後自動接續對話，就把一般分頁的 <em>Navide 背景服務重啟後自動接回工作階段</em> 開啟。",
             "timeout": "Backend 起太慢而報錯時，調一般分頁的 <em>後端啟動逾時</em>（15–120 秒）。"
           },
           "h4": "維護動作速查",
@@ -6834,13 +6928,22 @@
       "env": "環境變數",
       "no-env": "沒有環境變數",
       "needs-setup": "需要設定",
+      "needs-node": "需要 Node.js",
+      "needs-node-hint": "這個伺服器用 {command} 啟動，而 {command} 是 Node.js 附帶的。這台電腦找不到 Node.js，安裝之前伺服器無法啟動。",
+      "install-node": "安裝 Node.js",
+      "risk": {
+        "tag": "高風險權限",
+        "shell": "這個伺服器可以用你的使用者權限在這台電腦上執行 shell 指令，包括刪除檔案、修改設定、結束程式。",
+        "desktop": "這個伺服器可以讀取其他 App 畫面上的內容，並操控你的滑鼠和鍵盤，所以能在任何你已登入的 App 裡動作。",
+        "guard": "Navide 不會擋它。Navide Guard 會用和內建 shell 相同的規則，判讀它的指令、檔案、登錄檔和程序工具。"
+      },
       "fill-locally": "有些值是空的，請在這台電腦上填入。環境變數和標頭的值不會在裝置之間同步。",
       "fill-credentials-locally": "網址或參數裡有空值。若原本是憑證，請在這台電腦上填入。網址和參數裡的憑證不會在裝置之間同步。",
       "headers": "標頭",
       "no-headers": "沒有標頭",
       "show": "顯示",
       "hide": "隱藏",
-      "conflict": "此檔案已在 Agent-Team 外部變更，請重新載入後再儲存。",
+      "conflict": "此檔案已在 Navide 外部變更，請重新載入後再儲存。",
       "reload": "從磁碟重新載入",
       "custom-title": "新增自訂 MCP server",
       "custom-hint": "先選擇傳輸方式，建立後再到已安裝清單填寫連線資訊。",
@@ -6880,6 +6983,9 @@
       "state-on": "已啟用",
       "state-off": "已停用",
       "status": "狀態：{status}",
+      "transport-local": "本機",
+      "transport-remote": "遠端",
+      "status-failed": "啟動失敗",
       "starting-note": "啟動中，已等 {seconds} 秒。若是透過 npx 或 uvx 執行，第一次可能正在下載套件。",
       "error-reason": "啟動失敗：{reason}",
       "tools-error": "無法讀取工具清單：{reason}",
@@ -6911,6 +7017,11 @@
       "keyring-bad-hint": "沒有系統鑰匙圈時，憑證容易被存成明文檔案。",
       "incomplete": "這次掃描不完整：達到時間或資料夾數量上限，或略過了無法安全讀取的 repo，下列位置的發現項目可能有遺漏。",
       "keyring-reason-unknown": "未回報原因。",
+      "keyring-reason": {
+        "tool-missing": "缺少讀取它的系統工具。",
+        "read-failed": "Navide 讀取失敗。",
+        "no-service": "沒有正在執行的 Secret Service。"
+      },
       "scan": "掃描",
       "scanning": "掃描中…",
       "scan-roots": "掃描範圍…",
@@ -6925,9 +7036,7 @@
       "all": "全部",
       "loading": "正在掃描這台機器…",
       "error-load": "掃描失敗。",
-      "empty-findings-title": "沒有發現項目",
       "empty-findings-body": "目前的篩選條件下沒有風險項目。",
-      "empty-inventory-title": "沒有清單項目",
       "empty-inventory-body": "目前的篩選條件下沒有憑證。",
       "not-scanned": "按「掃描」開始檢查這台機器上的憑證。",
       "severity": {
@@ -7136,7 +7245,7 @@
       "group-native": "{agent} 自己的",
       "delivery-title": "投遞給",
       "delivery-hint": "● 自己就讀得到 · ✓ 由 Navide 投遞（點擊切換）· 灰色：未投遞",
-      "delivery-auto": "{n} 家自己讀得到",
+      "delivery-auto": "{n} 個 CLI 自行讀取",
       "delivery-none": "尚未投遞給任何一家",
       "location": "位置",
       "also-linked-from": "也連結自：{roots}",
@@ -7177,7 +7286,7 @@
       },
       "share": {
         "title": "分享連結",
-        "hint": "在這台機器上加密的 plan 或報告唯讀連結。鑰匙只存在連結裡，伺服器只儲存它打不開的密文。",
+        "hint": "在這台機器上加密的 plan 或報告唯讀連結。鑰匙只存在連結裡，所以伺服器讀不到它儲存的內容。",
         "col-item": "項目",
         "col-creator": "建立者",
         "col-created": "建立時間",
@@ -7210,7 +7319,7 @@
     },
     "sync": {
       "title": "同步",
-      "hint": "開啟一個區塊，它就會在登入同一個帳號的每台裝置上保持一致。內容在本機加密，伺服器只存它沒有金鑰的密文。",
+      "hint": "開啟一個區塊，它就會在登入同一個帳號的每台裝置上保持一致。內容在本機加密，所以伺服器讀不到。",
       "not-yet": "尚未支援同步。",
       "retired-memory": "記憶已不再同步。請關閉這個開關；這台的指示檔和雲端上的副本都會維持原樣，不會被改動或刪除。",
       "not-connected": "未連線——已開啟的區塊會在連線恢復後自動補上。",
@@ -7233,7 +7342,7 @@
       "approval-cut": "……預覽到此為止，檔案還有後續內容",
       "approval-expand": "顯示完整內容",
       "approval-deletes": "會刪除這台的提示詞 {name}。",
-      "approval-new-loop": "{name} 會變成 loop 提示詞。",
+      "approval-new-loop": "{name} 會變成預設技能。",
       "approval-text": "收到的完整內容",
       "approval-diff": "與這台的差異",
       "approval-changes": "有變動的欄位",
@@ -7258,7 +7367,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "技能",
       "scope-memory": "記憶",
-      "scope-hint-prompts": "提示詞技能與 Loop 提示詞。",
+      "scope-hint-prompts": "已存指令，以及哪一個是預設技能。",
       "error-load": "讀不到同步設定。",
       "scope-hint-mcp": "你在 Navide 加的 MCP。其中的秘密會加密後才離開這台機器。",
       "scope-hint-skills": "哪些技能開著、各自送給哪幾家 CLI，以及在 Navide 建立的技能的檔案（大型技能以加密 blob 傳送）。你自己放進資料夾的技能只同步設定。",
@@ -7444,15 +7553,14 @@
       "error-save": "無法儲存這個檔案，草稿仍留在編輯器中。"
     },
     "prompts": {
-      "title": "Prompt 技能",
-      "intro": "CLI pane 的 ∞ 按鈕可施放的整段指令。一個技能就是一整段 prompt —— 選技能是「換一段」，不會跟別的技能疊加。只有預設技能會以 loop 執行，其他技能都只送出一次。",
-      "new": "新增技能",
-      "new-name": "新技能",
+      "intro": "CLI pane 標題列的重複按鈕（∞）送出的已存指令。選一個技能就是整段替換；只有預設技能會在每輪結束後重複送出，其他只送出一次。",
+      "new": "新增 Prompt",
+      "new-name": "新 Prompt",
       "copy-name": "{name} 副本",
       "filter-label": "依分類篩選",
       "all": "全部",
-      "search": "搜尋技能…",
-      "empty": "沒有符合這個篩選的技能。",
+      "search": "搜尋 Prompt…",
+      "empty": "沒有符合這個篩選的 Prompt。",
       "default-badge": "★ 預設",
       "turns": "×{n}",
       "turns-unlimited": "無輪次上限",
@@ -7472,10 +7580,10 @@
       "disable": "停用",
       "duplicate": "複製",
       "delete": "刪除",
-      "hint": "預設技能就是單擊 ∞ 會送出的那一段，也是唯一會 loop 的技能；停用的技能留在這裡，但不會出現在選單上。",
+      "hint": "單擊重複按鈕會送出預設技能，也是唯一會重複的技能；停用的技能留在這裡，但不會出現在選單上。",
       "advanced": "進階",
       "send-once": "單次送出",
-      "send-once-hint": "只有預設技能會以 loop 方式執行；這個技能只送出一次，沒有續跑詞與輪次上限。",
+      "send-once-hint": "只有預設技能會在每輪結束後重複送出；這個技能只送出一次，沒有續跑詞與輪次上限。",
       "untitled-name": "未命名技能",
       "prompt-empty": "Prompt 不能為空，已保留原本的內容。要移除這個技能，請使用「刪除」。",
       "delete-confirm": "刪除「{name}」？此操作無法復原，同步 prompt 的其他機器也會一併刪除。"
@@ -7483,12 +7591,9 @@
     "section": {
       "general-behavior": "一般行為",
       "resource-limits": "資源限制",
-      "notifications": "通知",
       "settings-management": "設定管理",
       "theme": "主題",
-      "language": "語言",
-      "other": "其他",
-      "updates": "更新"
+      "other": "其他"
     },
     "p2p": {
       "title": "連線",
@@ -7746,17 +7851,18 @@
     },
     "cliAgents": {
       "title": "CLI Agents",
-      "hint": "啟用並排序手動生成選單中的 CLI agent；順序也會套用到 Ctrl+數字快捷鍵。開啟卡片即可管理該 agent，至少須保留一個啟用。",
+      "hint": "啟用並排序新增 pane 選單中的 CLI agent；順序也會套用到 Ctrl+數字快捷鍵。開啟卡片即可管理該 agent，至少須保留一個啟用。",
       "drag-hint": "拖曳以排序",
       "search": "搜尋 agent…",
       "filter-label": "篩選 CLI agent",
       "filter-all": "全部",
       "filter-enabled": "已啟用",
       "filter-attention": "需要注意",
+      "attention-badge": "需要注意",
       "count": "顯示 {visible} / {total} 個 agent · {enabled} 個已啟用",
       "reorder-filtered": "清除搜尋並選擇「全部」後即可排序",
-      "enabled": "已啟用",
-      "enable-agent": "啟用 {agent}",
+      "enabled": "顯示在選單",
+      "enable-agent": "在選單中顯示 {agent}",
       "manage": "管理",
       "manage-agent": "管理 {agent}",
       "move-up": "將 {agent} 向前移",
@@ -7787,9 +7893,9 @@
         "perm-inherit": "權限 繼承",
         "perm-force-on": "權限 強制開",
         "perm-force-off": "權限 強制關",
-        "push": "推送開啟",
-        "push-off": "推送已關",
-        "no-push": "無推送通道",
+        "push": "直接送達開啟",
+        "push-off": "直接送達已關",
+        "no-push": "以輸入方式送達",
         "accounts": "{count} 帳號",
         "signed-out": "未登入",
         "custom-binary": "自訂執行檔",
@@ -7836,12 +7942,13 @@
       "restart-note": "旗標在 pane 啟動時就寫進它的命令。這裡的變更只影響之後生成的 pane；已經在跑的 pane 會保留啟動時的設定，直到重建或還原。"
     },
     "keybindings": {
-      "intro": "下方任何快捷鍵都可以重新設定。點擊鍵帽即可錄製新組合，用 + 新增第二組綁定，用 ✕ 移除。變更會立即寫入 keybindings.json，並套用到所有開啟中的視窗。",
+      "intro": "下方任何快捷鍵都可以重新設定。點擊鍵帽即可錄製新組合，用 + 新增第二組綁定，用 ✕ 移除。變更會立即寫入快捷鍵檔案，並套用到所有開啟中的視窗。",
+      "file-tooltip": "Navide 應用程式資料夾中的 keybindings.json",
       "search-placeholder": "搜尋命令、按鍵或情境…",
       "filter": {
         "all": "全部",
         "customized": "已自訂",
-        "conflicts": "衝突"
+        "conflicts": "共用按鍵"
       },
       "export": "匯出",
       "import": "匯入",
@@ -8061,6 +8168,12 @@
         "workbench_action_zoomUiOut": "介面縮小",
         "workbench_action_zoomUiReset": "介面縮放重設"
       },
+      "cmdWhen": {
+        "workbench_action_closeModal": {
+          "notTerminal": "在終端機外關閉對話框",
+          "planWindow": "關閉計畫視窗的浮層"
+        }
+      },
       "col": {
         "command": "命令",
         "keys": "快捷鍵",
@@ -8127,12 +8240,19 @@
       "conflict-hard": "衝突",
       "conflict-soft": "共用按鍵",
       "when-any": "總是生效",
+      "when-limited": "僅在特定情況下",
       "no-results": "沒有符合搜尋條件的命令。",
-      "footnote": "支援兩段式和弦：先錄一組組合鍵，再按第二組。不歸此表管轄的按鍵，已列在本頁下方的唯讀區塊。"
+      "footnote": "支援兩段式和弦：先錄一組組合鍵，再按第二組。不歸此表管轄的按鍵，已列在本頁下方的唯讀區塊。",
+      "category": {
+        "workbench": "工作台",
+        "editor": "編輯器",
+        "controlPane": "CLI pane",
+        "ui": "外部控制"
+      }
     },
     "accounts": {
       "title": "Git 帳號",
-      "encrypted-note": "Token 會透過作業系統金鑰鏈（safeStorage）加密後儲存在本機。",
+      "encrypted-note": "Token 會透過作業系統金鑰鏈加密，只儲存在本機。",
       "unavailable": "此系統無法使用加密功能，因此無法新增帳號。通常代表作業系統金鑰鏈無法存取。",
       "empty": "尚未新增任何帳號。",
       "new-account": "＋ 新增帳號",
@@ -8144,7 +8264,7 @@
       "host": "主機",
       "username": "使用者名稱",
       "token": "Token",
-      "token-hint": "貼上 Personal Access Token。會以 safeStorage 加密並儲存在本機，不會以明文儲存。",
+      "token-hint": "貼上 Personal Access Token。會加密並只儲存在本機，不會以明文儲存。",
       "token-keep": "留空則沿用現有 Token",
       "delete-confirm": "確定刪除此帳號？",
       "cli": {
@@ -8173,11 +8293,14 @@
         "agent-switch-confirm-to": "切換後帳號",
         "agent-switch-confirm-caller": "提出要求的 pane",
         "agent-switch-confirm-workspace": "pane 所在的 workspace",
+        "agent-switch-confirm-pane": "要移動的 pane",
+        "agent-switch-confirm-pane-body": "你同意之前什麼都不會切換。只有這個 pane 會移動：它會在另一個帳號自己的資料夾裡接著原本的對話重新開啟。CLI 目前登入的帳號和其他 pane 都維持不變。如果這個 pane 正在工作，停止它之前會再問你一次。沒有回答的話，這個要求會自動關閉。",
         "agent-switch-confirm-reason": "理由（由 agent 提供）",
         "agent-switch-confirm-reason-truncated": "agent 的理由超過 300 字，只顯示前 300 字。",
         "agent-switch-confirm-cancel": "取消",
         "agent-switch-confirm-ok": "切換帳號",
         "agent-switch-done": "{agent} 把 {vendor} 從 {from} 切換到 {to}。agent 給的理由：{reason}",
+        "agent-switch-pane-done": "{agent} 把一個 pane 從 {from} 移到 {to}。目前登入的帳號和其他 pane 都沒有改變。agent 給的理由：{reason}",
         "login-complete": "已登入 {email}，帳號已儲存。",
         "login-complete-no-email": "登入完成，帳號已儲存。",
         "login-step2": "第 1 步完成：{email} 已儲存。還要再授權一次，讓這個帳號登入到自己的資料夾，請在新開的登入 pane 裡完成瀏覽器授權。",
@@ -8204,8 +8327,12 @@
         "dir-sign-in-hint": "在這個帳號自己的資料夾登入一次，停放時也能即時讀取額度。瀏覽器會再請你授權一次，請使用同一個 email。",
         "dir-email-mismatch": "帳號資料夾登入的是 {dirEmail}，不是 {expected}。這張卡片上的額度屬於 {dirEmail}。",
         "default-hint": "你原本的登入憑證",
-        "is-default": "預設",
-        "set-default": "設為預設",
+        "default-collapsed": "原始登入（Navide 外）：尚未登入",
+        "default-sign-in-title": "切換到原始登入？",
+        "default-sign-in-body": "在這裡登入會先把 {agent} 切換到原始登入。原始登入沒有儲存任何登入，所以目前的線上登入（{current}）會被清除；那個帳號仍保存在它自己的卡片上，之後可以再切換回去。這次登入完成前，新開的 {agent} pane 都不會是登入狀態。",
+        "default-sign-in-confirm": "切換並登入",
+        "is-default": "使用中",
+        "set-default": "切換到此帳號",
         "switching": "切換中…",
         "not-signed-in": "尚未登入",
         "rename": "重新命名",
@@ -8247,6 +8374,8 @@
       "inference-url": "推論伺服器 URL",
       "recheck-title": "重新檢查連線",
       "ollama-connected": "Ollama {version} 已連線",
+      "ollama-missing": "這台電腦尚未安裝 Ollama。",
+      "install-ollama": "安裝 Ollama",
       "not-connected": "未連線 · 請執行",
       "model-manager": "模型管理員",
       "model-manager-note": "輸入名稱從 Ollama 下載模型，或刪除不再需要的模型",
@@ -8262,7 +8391,7 @@
       "testing": "測試中：",
       "preparing": "準備中…",
       "benchmark-hint": "對所有本地模型執行 4 項標準任務，以判斷哪些模型適合用於流程意圖偵測：",
-      "task-t1": "技術堆疊偵測 — 輸出 JSON",
+      "task-t1": "技術堆疊偵測 — 列出工作區使用的函式庫",
       "task-t2": "工作區摘要 — 單句摘要",
       "task-t3": "相關性選擇 — 從文件清單中挑選最相關的項目",
       "task-t4": "CLI 意圖解析 — 解析 Agent 輸出並提取問題與選項",
@@ -8299,6 +8428,8 @@
     }
   },
   "label": {
+    "step-count": "{count} 個步驟",
+    "imported-from-n8n": "來自 n8n",
     "resume-other-pipeline": "有一個未完成的執行屬於「{name}」。切換到該流程即可繼續。",
     "role-rename-repointed": "已更新 {count} 條流程中的角色引用。",
     "pipeline-manager": "流程管理",
@@ -8307,7 +8438,6 @@
     "stage-count": "{count} 個階段",
     "pipeline-count": "{count} 條流程",
     "builtin": "內建",
-    "pipeline-definition-file": "定義檔",
     "loading-pipelines": "流程載入中…",
     "pipelines-unreadable": "讀不到流程定義",
     "pipelines-empty": "還沒有任何流程",
@@ -8488,7 +8618,6 @@
     "pipeline-aborted": "流程已中止。Agent 保留 — 繼續以恢復，或重設以清除。",
     "pipeline-aborted-paused": "流程已中止（暫停）。Agent 保留 — 繼續以恢復，或重設以清除。",
     "pipeline-completed": "✓ 流程完成所有 {count} 個階段。請查看右側各面板。",
-    "provide-task": "請提供任務描述 + 工作區，然後開始。",
     "missing": "⚠ 遺失",
     "already-open": "● 已開啟",
     "tagline": "同時驅動 Claude Code · Codex · Antigravity CLI",
@@ -8900,6 +9029,7 @@
     "drag-resize-log": "拖曳以調整記錄面板高度",
     "filter-by-type": "依類型篩選",
     "all-stages-finished": "{count} 個階段全部順利完成",
+    "region-switching": "正在把 {title} 切換到 {version}…",
     "region-unavailable": "{title} 無法使用"
   },
   "layout": {
@@ -8912,7 +9042,7 @@
       "down": "下方橫列",
       "main": "主要區域"
     },
-    "settings-intro": "主視窗的每一個區域。每個 view 全程只有一份，搬移就是把它從現在的位置移走。主要區域固定放 CLI 舞台，不可更動。",
+    "settings-intro": "主視窗的每一個區域。每個 view 只能放在一個位置，移到別處就會從原來的位置移走。主要區域固定放 CLI 舞台，不可更動。",
     "width": "寬度",
     "height": "高度",
     "collapsed": "收合",
@@ -8939,6 +9069,9 @@
     "statusbar-note": "狀態列上的資訊窗會一起消失"
   },
   "error": {
+    "pipeline-call-failed": "子 Pipeline {node} 失敗（{reason}），這一輪已停止。",
+    "pipeline-parent-suspended": "有一條掛起中的父 run（{name}），請先 resume 或 reset。",
+    "pipeline-node-failed": "階段 {stage}：步驟 {slot} 回報失敗（{reason}），重試次數已用完。這一輪已停止，可以 resume 再試一次。",
     "pipeline-start-refused": "流程沒有啟動：{reason}",
     "pipeline-kickoff-failed": "流程失敗：階段 {stage}、slot {slot} — {reason}。它的 pane 仍保持開啟。",
     "pipeline-kickoff-held": "流程失敗：階段 {stage}、slot {slot} — 它的 kickoff 停在輸入框。保持不動，resume 會幫你送出；或者把它清掉。它的 pane 仍保持開啟。",
@@ -8990,6 +9123,8 @@
     "merge-aborted": "合併已中止 — 衝突已取消。"
   },
   "hint": {
+    "pipelines-stored-locally": "存在這台電腦的 Navide 設定裡，不在工作區內。要搬到另一台電腦，請在設定匯出設定全集。",
+    "imported-from-n8n": "這個流程的每次執行都會標示為外部內容。",
     "role-not-found-refresh": "「{key}」這個角色已經不存在了——可能是其他視窗把它刪掉了。左側清單已經自動更新，請重新選取角色。",
     "role-key-exists-recover": "已經有一個識別碼為「{key}」的角色。如果它是上一次沒改完的改名留下來的，請先在左側清單刪除「{key}」，然後再改名一次。",
     "role-in-use-list": "請先把下列 stage 插槽改指到別的角色或移除：",
@@ -9006,6 +9141,7 @@
     "default-role-fallback": "`defaultRole` 將在執行時自動比對",
     "replace-all-roles": "全部取代 — 刪除不在匯入檔案中的目前角色",
     "reset-stages-warning": "所有自訂階段將被移除…",
+    "reset-stages-graph-warning": "這條流程上手畫的閘門、迴圈、分支也會一併清除，無法復原。",
     "completion-modal-body": "每個 Agent 都已完成任務 — 請查看右側各面板。",
     "git-credential-token": "密碼欄位請貼 Personal Access Token（非登入密碼）。",
     "install-foundation-tools": "安裝所有 Agent 運作所需的基礎工具…",
@@ -9048,8 +9184,7 @@
     "attention-body": "{label} 正在等待你的輸入"
   },
   "updater": {
-    "section-title": "更新",
-    "section-hint": "讓 Agent-Team 保持在最新版本。更新會套用到所有工作區。",
+    "section-hint": "讓 Navide 保持在最新版本。更新會套用到所有工作區。",
     "current-version": "目前版本",
     "check": "檢查更新",
     "checking": "正在檢查更新…",
@@ -9124,6 +9259,21 @@
     "load-more": "載入更多（還有 {count} 則）",
     "mcp-tools-changed": "MCP 工具可能已變更",
     "mcp-tools-changed-note": "CLI agent 只在啟動時讀一次 Navide 的 MCP 工具清單。從上一個版本（{from}）就連著的對象 — CLI pane 或外部 MCP client — 拿到的還是當時那份清單；重開 pane 或重新連線才會拿到新的工具。",
+    "backend-restart": {
+      "title": "後端在 {time} 重新啟動",
+      "note": "接回的 pane 會停在提示字元，不會自己繼續；已結束的 pane 維持原狀，要你按「重建」才會重開。",
+      "crash-loop": "後端重啟後很快又崩潰，所以這次不再自動接回任何 pane。需要的請自己重建。",
+      "resumed": "已接回：{names}",
+      "interrupted": "回合被中斷：{names}",
+      "rebuild": "重建 {name}",
+      "not-resumed": {
+        "crash-loop": "{name}：未接回，因為後端短時間內反覆崩潰",
+        "over-limit": "{name}：未接回，因為畫面外正在工作的 pane 超過六個",
+        "idle-off-screen": "{name}：未接回，因為它在畫面外而且是閒置的",
+        "no-session": "{name}：未接回，因為沒有可接續的對話",
+        "failed": "{name}：接回失敗"
+      }
+    },
     "scheduler-disabled": "排程「{name}」已停用：目標 pane 不存在",
     "scheduler-disabled-note": "連續 {n} 次到點都找不到目標 pane，所以自動停用。到排程面板按「重新綁定」指向現有的 pane，再重新啟用。",
     "quota": {
@@ -9321,9 +9471,6 @@
     "intro": "自訂每個 pane 狀態的名稱與顏色。變更會套用到所有顯示狀態的地方——pane 徽章、側欄、會議列與資源面板——並儲存於你的帳號，不隨專案切換。",
     "col": {
       "status": "狀態",
-      "zh": "繁體中文",
-      "en": "英文",
-      "ja": "日文",
       "color": "顏色"
     },
     "row-only": "僅清單",
@@ -9501,7 +9648,7 @@
     "failed": "無法接回這段對話，其歷史紀錄可能已不存在"
   },
   "cli-account": {
-    "default": "預設",
+    "default": "原始登入",
     "switch-title": "切換帳號",
     "swap-failed": "帳號切換失敗，仍使用原本的帳號。",
     "panes-running": "有 {count} 個執行中的 CLI pane 正在使用此帳號，請先關閉再切換。",
@@ -9811,6 +9958,7 @@
     "reading-short": "讀取中",
     "reading-tooltip": "這個帳號剛切換為使用中。讀取額度需要啟動一次 Claude Code，因此在完成前下方顯示的是上一次的數字，最多約 3 分鐘。",
     "refresh-status": "重新整理：{status}",
+    "refresh-not-signed-in": "無法重新整理——尚未登入",
     "refresh-error": "原因：{reason}",
     "refresh-status-ok": "已是最新",
     "refresh-status-not-refreshed": "尚未重新整理",
@@ -9860,13 +10008,13 @@
     "settings-title": "CLI 額度徽章",
     "settings-enabled": "在 CLI pane 標題列顯示剩餘額度",
     "settings-refresh": "重新整理間隔",
-    "settings-hint": "顯示 11 家 CLI 的額度：claude、codex、kimi、grok、antigravity、opencode、qwen、kilo、pi、copilot、cursor。多數是讀取本機 CLI 憑證查詢該供應商的官方用量 API，僅讀取、不寫入憑證。claude 則不同，改為驅動 Claude CLI 內建的 /usage 面板，不讀取憑證。",
+    "settings-hint": "以唯讀方式顯示 11 家 CLI 提供者的額度，來自各家的用量 API（Claude 則來自內建的 /usage 面板）。",
     "failover-title": "額度耗盡時的帳號切換",
-    "failover-hint": "CLI 帳號額度用完時 Navide 的做法：不處理、列出可切換的帳號（預設），或自動切換——每個 CLI 每 5 小時最多自動切換 3 次，且不會自動切回耗盡的帳號。表格列出各 CLI 的能力；是否切換由後端決定。",
+    "failover-hint": "CLI 帳號額度用完時 Navide 的做法：不處理、列出可切換的帳號（預設），或自動切換（每個 CLI 每 5 小時最多 3 次）。",
     "failover-loop-title": "迴圈遇到額度耗盡時，切換後立即繼續",
-    "failover-loop-hint": "正在跑迴圈的 pane 額度用完時，自動切換到還有額度的帳號並立刻送出繼續，不等額度重置。需要上方選「自動切換」。",
+    "failover-loop-hint": "跑 loop 的 pane 額度用完時，切到還有額度的帳號並立刻繼續；需要選「自動切換」。",
     "follow-switch-title": "切換 Claude 帳號時，固定帳號的 pane 一起換",
-    "follow-switch-hint": "在帳號自己的登入資料夾裡執行的 Claude pane，不會跟著帳號切換。開啟後，切換時會列出這些 pane 讓你選擇一起換；額度用完的 pane 也會出現「換帳號」按鈕。換過去的 pane 會用新帳號重新開啟並接回原本的對話。預設關閉。",
+    "follow-switch-hint": "切換帳號時，把使用帳號專屬登入資料夾的 Claude pane 一併移到新帳號並接續對話。",
     "failover-mode-off": "關閉",
     "failover-mode-notify": "通知我",
     "failover-mode-auto": "自動切換",
@@ -9955,6 +10103,7 @@
       }
     },
     "blocked-by": "需要先安裝 {names}，才能從這裡安裝。",
+    "installs-first": "安裝時會先一併安裝 {names}。",
     "go-install": "先安裝 {name}",
     "complete-failed": "無法儲存設定進度：{error}。請再試一次。",
     "ollama-start-failed": "無法啟動 Ollama 服務。詳情請見記錄，或在終端機執行 `ollama serve`。",
@@ -10086,6 +10235,9 @@
     "weekday-6": "週六"
   },
   "scheduler": {
+    "pipeline-title": "這個排程每次執行都會啟動一輪 Pipeline，會開啟 CLI Pane 並消耗額度",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "啟動 Pipeline {name}",
     "system": {
       "tag": "系統",
       "manage": "到 workspace 管理 →",
@@ -10126,7 +10278,22 @@
       "expired": "已過期：agent job 7 天未更新",
       "unknown": "略過"
     },
+    "fail-reason": {
+      "no_window": "沒有 Navide 視窗開著這個 job 的 workspace。請先開啟 workspace，再執行一次。",
+      "pipeline_not_found": "這個 job 要啟動的 Pipeline 不存在，或名稱對到不只一條。請編輯 job，重新選擇 Pipeline。",
+      "pipeline_already_running": "那個 workspace 已有 Pipeline 正在執行，所以這次沒有啟動。"
+    },
     "editor": {
+      "err-task": "請輸入任務",
+      "err-pipeline": "請選擇 Pipeline",
+      "task-placeholder": "每一輪 Pipeline 要做什麼…",
+      "task": "任務",
+      "pipeline-cost": "每次執行都會開啟這個 Pipeline 的 CLI Pane 並消耗額度。排程不會自動開視窗：如果這個 workspace 沒有開著，這一輪會失敗並說明原因。",
+      "pick-pipeline": "選擇 Pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "啟動 Pipeline",
+      "action-message": "傳送指令給 Pane",
+      "action": "動作",
       "title-new": "新增排程工作",
       "title-edit": "編輯排程工作",
       "name": "名稱",
@@ -10166,6 +10333,7 @@
       "save": "儲存"
     },
     "owner": {
+      "user": "由你建立",
       "agent": "agent · {name}",
       "external": "外部 agent",
       "agent-title": "由 agent「{name}」建立；只有它和你可以修改",
@@ -10613,7 +10781,7 @@
     "desc": {
       "telegram": "用 {'@'}BotFather 建立的 bot",
       "discord": "伺服器裡的 bot 應用程式",
-      "slack": "工作區裡的 Socket Mode 應用程式",
+      "slack": "從這台電腦主動連線的 Slack 應用程式（請在 Slack 開啟 Socket Mode）",
       "feishu": "飛書或 Lark 的自建應用",
       "dingtalk": "Stream 模式的企業內部機器人",
       "matrix": "任一 homeserver 上的 bot 使用者",
@@ -10820,7 +10988,7 @@
     "unavailable": "目前的後端還沒有 Navide Guard，更新後請重新啟動 Navide。",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "依動作的危險程度與要求來源判斷每個 CLI 動作，危險的先擋下或要求確認。判斷是固定規則的程式碼，不經過 AI。即使關閉，從聊天頻道核准高風險動作仍會被拒絕。終端機指令防護，以及 agent 透過 MCP 回答提示時的檢查，也不受這個開關影響。"
+      "desc": "依危險程度與要求來源，用固定規則（不經過 AI）擋下危險的 CLI 動作或先要求確認。即使關閉，從聊天頻道核准高風險動作仍會被拒絕，終端機指令防護與透過 MCP 回答提示時的檢查也照常運作。"
     },
     "counts": {
       "critical": "嚴重 {n}",
@@ -10860,7 +11028,7 @@
     },
     "vendors": {
       "title": "Guard 能擋哪些 CLI",
-      "hint": "Guard 透過 CLI 自己的 hook 擋下動作。沒有 hook 的 CLI 只能靠拒絕聊天室核准、以及不用 YOLO 模式執行來保護。",
+      "hint": "只有能讓 Navide 在每個動作執行前先檢查的 CLI，Guard 才擋得下。其他 CLI 只能靠拒絕來自聊天室的核准請求、並保持權限提示開啟來保護。",
       "block": "可阻擋",
       "none": "無法阻擋",
       "unknown": "未知"
@@ -11081,8 +11249,81 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "詳細",
+    "stage-not-found": "這個步驟已經不存在，可能在別處被修改了；請重新開啟這條 pipeline。",
+    "refused": {
+      "last-pipeline": "這是唯一的一條 pipeline，不能刪除。請先建立另一條。",
+      "last-stage": "pipeline 至少要有一個步驟，所以不能刪除最後一個。",
+      "not-builtin": "只有內建的 pipeline 能還原成原本的步驟。",
+      "no-seed": "這條內建 pipeline 沒有可還原的原始步驟。",
+      "stage-id-required": "這個步驟沒有 ID，請設定後再試一次。",
+      "stage-id-invalid": "步驟 ID 只能使用英文字母、數字、連字號、底線和句點。",
+      "stage-needs-slot": "每個步驟至少要有一個 agent。"
+    },
+    "run": {
+      "no-workspace": "請先開啟一個工作區。",
+      "already-running": "這個工作區已經有 pipeline 在執行。請先中止它。",
+      "no-pipeline": "請先選擇一條 pipeline。",
+      "not-started": "執行沒有開始，原因記在 pipeline 紀錄裡。",
+      "not-running": "這個工作區沒有正在執行的 pipeline。",
+      "last-stage": "這是最後一個階段（第 {stage} 個，共 {total} 個），回報完成後執行就會結束。",
+      "gate-waiting": "執行正在「{gate}」等待你核准。請先核准或退回。",
+      "not-advanced": "執行沒有往下走，原因記在 pipeline 紀錄裡。",
+      "no-run": "這個工作區沒有可以繼續的執行。",
+      "nothing-to-resume": "上一次執行的每個階段都已完成（{done}／{total}）。",
+      "not-resumed": "執行沒有繼續，原因記在 pipeline 紀錄裡。",
+      "not-cleared": "執行沒有被清除，原因記在 pipeline 紀錄裡。",
+      "stored-not-cleared": "pane 已經關閉，但儲存的執行紀錄沒有清除。",
+      "no-task": "沒有可執行的任務，請先輸入任務。",
+      "not-at-gate": "執行目前沒有在等待核准。",
+      "wrong-gate": "執行正在「{gate}」等待，不是「{asked}」。",
+      "node-required": "請選擇要從哪個步驟重新執行。"
+    },
+    "start": {
+      "parent-suspended": "「{name}」正在這裡等它的子 Pipeline。請先繼續或重設它。",
+      "switch-failed": "無法切換到這條 pipeline。",
+      "stages-load-failed": "無法載入這條 pipeline 的步驟。",
+      "no-stages": "這條 pipeline 還沒有任何步驟，請先新增一個。",
+      "graph-failed": "無法準備這條 pipeline 的執行。",
+      "spawn-failed": "第一個步驟的 agent 都無法啟動。請確認它們的 CLI 已安裝。",
+      "already-running": "這個 workspace 已有 pipeline 正在執行，請先中止它。",
+      "not-recorded": "這次執行沒有被記錄下來，所以沒有啟動。原因請看 pipeline 紀錄。"
+    },
+    "graph": {
+      "slot-incomplete": "「{label}」需要設定 agent 和名稱。",
+      "self-loop": "「{label}」不能連到自己。",
+      "edge-into-trigger": "任何連線都不能連進 pipeline 的起點。",
+      "reject-from-trigger": "退回連線不能從 pipeline 的起點拉出。",
+      "max-loops-range": "從「{label}」拉出的退回連線可重複 1 到 {max} 次。",
+      "edge-must-start-at-work": "分支和錯誤連線必須從步驟拉出（「{label}」不是步驟）。",
+      "branch-when": "從「{label}」拉出的分支連線需要一個比對值。",
+      "retry-config": "「{label}」的重試設定超出範圍：嘗試 1 到 {maxTries} 次，間隔 0 到 {maxWaitMs} 毫秒。",
+      "subpipeline-links": "子 Pipeline 會互相呼叫形成循環，或呼叫了已不存在的 pipeline。",
+      "no-graph": "pipeline 還沒載入完成，請稍後再試。",
+      "other": "這個修改會讓 pipeline 無法執行。",
+      "other-at": "這個修改會讓 pipeline 在「{label}」無法執行。"
+    },
+    "gate": {
+      "confirm-title": "要結束這次執行嗎？",
+      "confirm-no-edge": "「{name}」沒有退回連線，退回會讓這次執行以失敗結束。pane 會保留。",
+      "confirm-exhausted": "「{name}」的退回次數已達連線上限，再退回會讓這次執行以失敗結束。pane 會保留。",
+      "confirm-button": "結束執行",
+      "rejected-failed": "「{name}」已退回，這次執行以失敗結束。",
+      "ends-run-hint": "在這裡退回會結束這次執行。"
+    }
+  },
   "pipelineEditor": {
+    "recover": {
+      "title": "復原",
+      "resume-desc": "從第一個未完成的階段繼續這次停下的執行，沿用它的 pane 和上下文。",
+      "restart-desc": "關閉這次執行的 pane，從第一個階段重新執行同一個任務。",
+      "reset-desc": "清除這次執行，並關閉這個視窗的所有 pane，包括你自己開的 pane。",
+      "older-run": "這是較早的一次執行。復原動作一律作用在這條 Pipeline 最新的那次執行。",
+      "show-latest": "顯示最新的執行"
+    },
     "error": {
+      "subpipeline-none": "子 Pipeline 需要另一條 Pipeline 可以執行，請先建立一條。",
       "pipeline-running": "這條 pipeline 正在執行，目前無法修改。請先中止或等執行結束。",
       "pipeline-not-found": "找不到這條 pipeline，可能已在別處被刪除。請改選其他 pipeline。",
       "export-failed": "匯出失敗：{message}",
@@ -11090,7 +11331,6 @@
       "command-failed": "執行沒有接受這個指令。",
       "cycle": "這條連線會讓流程無限循環。請改用從閘門或步驟拉出的退回連線，它有重試上限。",
       "duplicate-edge": "這兩個步驟已經連在一起了。",
-      "invalid": "這個修改會讓 pipeline 失效：{detail}",
       "reject-upstream": "退回連線必須指向更早的步驟。",
       "transport": "無法連到後端：{message}",
       "unknown": "後端拒絕了這個修改，但沒有說明原因。"
@@ -11098,10 +11338,14 @@
     "badge": {
       "open-canvas": "在畫布上顯示這條連線",
       "reject": "↺ 退回第 {layer} 層（最多 {max} 次）",
-      "skip": "⤳ 跳到第 {layer} 層"
+      "skip": "⤳ 跳到第 {layer} 層",
+      "branch": "⑂ 若為 {when} → 第 {layer} 層",
+      "error": "⚠ 失敗時 → 第 {layer} 層"
     },
     "canvas": {
       "insert-on-edge": "在這裡插入步驟",
+      "branch-label": "若 {when}",
+      "error-label": "失敗時",
       "loop-label": "↺ 最多 {max} 次",
       "minimap": "整條 pipeline 的縮圖",
       "pass": "核准後繼續",
@@ -11112,7 +11356,7 @@
     },
     "exec": {
       "abort": "中止執行",
-      "empty-body": "從側欄、指令或 CLI（透過 MCP）啟動這條 pipeline 後，執行紀錄會出現在這裡。",
+      "empty-body": "在上方的輸入框寫下任務後執行，或從側欄、排程、CLI（透過 MCP）啟動這條 pipeline。",
       "empty-title": "還沒有執行紀錄",
       "list": "這條 pipeline 的執行紀錄",
       "live": "執行中",
@@ -11125,7 +11369,7 @@
       "outcome-ended": "已結束",
       "outcome-unknown": "未知",
       "outcome-idle": "閒置",
-      "pick": "選一筆執行紀錄，在圖上重播。",
+      "failed-step": "{name} 失敗：{error}",
       "progress": "{done}／{total} 個步驟",
       "restart": "重新開始",
       "resume": "繼續",
@@ -11142,6 +11386,8 @@
       "reject": "退回修改"
     },
     "history": {
+      "subpipeline": "編輯子 Pipeline",
+      "retry": "變更重試",
       "add": "新增 {name}",
       "edit-cli": "更換 CLI",
       "edit-field": "修改 {field}",
@@ -11161,9 +11407,25 @@
       "tidy": "整理排版",
       "unlink": "移除連線",
       "unpin": "取消凍結",
+      "link-kind": "變更連線種類",
+      "link-when": "變更分支值",
       "loop-budget": "修改重試上限"
     },
     "inspector": {
+      "subpipeline-task-help": "留空時用這一輪的任務。可以使用上一步的摘要和其他步驟的產出，用法和 Kickoff 一樣。",
+      "subpipeline-task": "那一輪的任務",
+      "subpipeline-help": "這一輪會在這裡暫停，在同一個 workspace 執行那條 Pipeline，再帶著它的結果繼續。這段期間，這一輪的 Pane 會保留。",
+      "subpipeline-pick": "選擇 Pipeline",
+      "subpipeline-pipeline": "要執行的 Pipeline",
+      "retry-blocked-not-failed": "只有失敗的步驟可以重試",
+      "retry-blocked-no-run": "無法使用：這個 Pipeline 沒有執行紀錄",
+      "retry-blocked-running": "執行進行中，無法使用",
+      "retry-node-help": "重跑這個失敗的步驟：從它這裡 resume，後面的步驟已經跑過時則從它重新開始",
+      "retry-node": "重試此步驟",
+      "retry-wait": "每次重試前等待（秒）",
+      "retry-help": "失敗的一次（任務沒送到 agent，或 agent 回報失敗）會在同一個步驟再跑一次，總共最多 {max} 次。",
+      "retry-tries": "總共嘗試次數",
+      "retry-title": "失敗時重試",
       "aria": "{name} 的設定",
       "attempts": "嘗試次數",
       "elapsed": "耗時",
@@ -11173,6 +11435,7 @@
       "kind-gate": "核准閘門",
       "kind-slot": "步驟",
       "kind-trigger": "啟動",
+      "kind-subpipeline": "子 Pipeline",
       "layer": "層設定",
       "live-empty": "這個步驟執行時才會有即時畫面。啟動 pipeline 後再回來看。",
       "live-unavailable": "目前讀不到這個 pane 的逐字稿。",
@@ -11181,6 +11444,7 @@
       "not-run": "尚未執行",
       "open-pane": "開啟 pane",
       "output-empty": "還沒有產出。這個步驟執行後，摘要會顯示在這裡。",
+      "failure": "失敗原因",
       "pin": "凍結產出",
       "pin-help": "重跑時會跳過凍結的步驟，沿用它上次的產出。",
       "required": "必填",
@@ -11212,17 +11476,21 @@
       "more": "還有 {n} 層"
     },
     "node": {
+      "subpipeline-sub": "執行 Pipeline {pipeline}",
       "commander": "pipeline 總指揮",
       "gate-sub": "等待核准",
       "pinned": "產出已凍結",
       "tokens": "{n} tok",
-      "trigger-sub": "手動、指令或 MCP"
+      "trigger-sub": "手動、指令或 MCP",
+      "needs-review": "從 n8n 匯入：執行流程前，請先確認這個步驟"
     },
     "notice": {
       "external-edit": "這條 pipeline 在別處被修改了。已顯示最新版本，undo 紀錄已清除。",
       "reorder-on-canvas": "這條 pipeline 有閘門、迴圈或自訂連線，順序由連線決定，請到畫布上調整。"
     },
     "palette": {
+      "subpipeline-desc": "執行另一條 Pipeline，等它的結果",
+      "subpipeline": "子 Pipeline",
       "agents": "Agent",
       "branch-tip": "要分支，就在畫布上從一個步驟拉出兩條線；要匯合，就把兩條線拉進同一個步驟。",
       "flow": "流程控制",
@@ -11245,11 +11513,13 @@
       "awaiting": "等待核准",
       "rejected": "已退回",
       "failed": "失敗",
+      "untaken": "已略過（不在走過的路徑上）",
       "skipped": "沿用凍結產出",
       "aborted": "已中止",
       "pinned": "產出已凍結"
     },
     "toolbar": {
+      "more": "更多動作",
       "canvas": "畫布",
       "derived": "由 stage 推導——第一次編輯時會存成圖",
       "executions": "執行紀錄",
@@ -11265,10 +11535,73 @@
       "undo-none": "沒有可復原的操作",
       "view": "檢視",
       "show-palette": "顯示節點面板",
-      "hide-palette": "隱藏節點面板"
+      "hide-palette": "隱藏節點面板",
+      "task": "這次要執行的任務"
     },
     "controlPane": {
-      "open-in-canvas": "在 pipeline 畫布中開啟"
+      "open-parent": "開啟呼叫它的 Pipeline",
+      "parents": "呼叫自",
+      "open-in-canvas": "在 pipeline 畫布中開啟",
+      "gate-toast": "pipeline 已暫停，等待你在「{name}」核准",
+      "next-gated": "先核准或退回這個閘門，才能進入下一階段。",
+      "last-stage": "這是最後一個階段，回報完成後這次執行就會結束。",
+      "next-stage": "下一步 → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "準備：啟動 CLI",
+        "checking-dialog": "準備：檢查對話框",
+        "settling": "準備：等待提示字元",
+        "injecting-role": "準備：注入角色",
+        "waiting-agent": "準備：等待 agent",
+        "ready": "準備：就緒",
+        "failed": "準備：失敗"
+      },
+      "role": {
+        "pending": "角色：等待中",
+        "scheduled": "角色：注入中",
+        "sent": "角色：已注入",
+        "failed": "角色：注入失敗",
+        "skipped": "角色：已略過"
+      },
+      "kickoff": {
+        "pending": "· 啟動提示：排隊中",
+        "sent": "· 啟動提示：已送出",
+        "unverified": "· 啟動提示：未確認",
+        "failed": "· 啟動提示：失敗"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "預設流程",
+        "maintenance": "維護流程",
+        "evolve-landing": "提案落地流程"
+      },
+      "role": {
+        "pm": "PRD、user stories、UAT、KPI、優先序",
+        "backend": "API、資料庫、業務邏輯、安全性",
+        "frontend": "元件、狀態管理、RWD、效能",
+        "mobile": "iOS、Android、跨平台、離線優先",
+        "qa": "E2E、邊界情況、自動化測試矩陣"
+      }
+    },
+    "link": {
+      "out-title": "連到",
+      "none": "這個步驟還沒有連出去的連線。",
+      "to": "連到的步驟",
+      "to-pick": "選擇步驟",
+      "add": "新增連線",
+      "branch-help": "Navide 會在這個步驟的開場提示裡加一行，請 Agent 在回覆最後單獨一行輸出 ---BRANCH:<code>: <value>---。執行會走值相符的那條連線（不分大小寫）；都不相符時，走值為 default 的連線。",
+      "error-help": "這個步驟重試後仍失敗時走這條連線（Agent 回報 ---NODE-FAILED---，或任務沒有送達）。執行不會停下，而是沿這條連線繼續。",
+      "title": "連線",
+      "desc": "{from} → {to}",
+      "kind": "連線種類",
+      "kind-main": "一律",
+      "kind-branch": "分支（條件）",
+      "kind-error": "失敗時",
+      "when": "分支值",
+      "when-placeholder": "步驟回報的值，或 default",
+      "remove": "移除連線"
     },
     "edge": {
       "title": "退回迴圈",
@@ -11321,9 +11654,19 @@
       "problem-condition": "顯示條件指向「{field}」，但它不是這個角色的其他欄位。"
     },
     "run": {
+      "abort-title": "中止這次執行？",
+      "abort-message": "執行會停在目前的位置。pane 保持開啟，之後可以繼續。",
       "running": "執行中：{names}",
       "gate": "等待你在「{name}」核准",
-      "review": "前往核准"
+      "review": "前往核准",
+      "blocked-backend": "尚未連上後端。",
+      "blocked-workspace": "請先開啟工作區。",
+      "blocked-task": "請先描述任務。",
+      "reset-title": "要重設這次執行嗎？",
+      "reset-message": "重設會清除這次執行，並關閉這個視窗裡的所有 pane，包括你自己開的。將關閉 {count} 個 pane。",
+      "reset-message-none": "重設會清除這次執行。目前沒有開著的 pane，不會關閉任何 pane。",
+      "reset-manual-mark": "非這次執行開的",
+      "reset-confirm": "重設並關閉 pane"
     }
   },
   "evolve": {
@@ -11365,6 +11708,14 @@
       "not-reclaimed": "（未回收）",
       "fix": "修正",
       "proposal": "提案",
+      "proposal-reason": "理由：{reason}",
+      "effect-title": "成效與頻率",
+      "adoption": "採用 {adopted} / {resolved}",
+      "adoption-none": "尚無已有結果的提案",
+      "lowered": "{date} 起自動降為每週：連續 {n} 份提案都沒被採用",
+      "landed-title": "已落地的提案",
+      "landed-none": "尚無已落地的提案",
+      "effect-counts": "{before} → {after}（落地前／後 7 天）",
       "history": "歷史（最近 30 次）",
       "unsaved": "有未儲存的變更",
       "save": "儲存",
@@ -11402,6 +11753,21 @@
       "scope-propose": "只提案（不改程式）",
       "scope-fix-no-git": "這個 workspace 不是 git repo，沒有 worktree 與主分支可用，只能「只提案」。",
       "scope-always-propose": "新功能、設計取捨、刪資料／migration、push、發版一律寫提案（內建規則）。",
+      "retro": "回顧",
+      "retro-tools": "重複手動的事",
+      "retro-tools-hint": "每次最多 {tokens} token。讀這個 workspace 近 7 天的訊息紀錄與排程執行紀錄，只取次數；同一件事做了 3 次以上，就提案做成 pipeline、skill、Prompt 等。",
+      "retro-corrections": "你的糾正",
+      "retro-corrections-hint": "每次最多 {tokens} token。讀你在這個 workspace 的 plan 上留的 review note 與提案退回理由，近 7 天、只取次數；同一個糾正出現 2 次以上，就提案改規則。",
+      "burst": "提早執行",
+      "burst-on": "同一個錯誤短時間內大量出現時，提早跑一輪",
+      "burst-count": "次",
+      "burst-minutes": "分鐘內",
+      "burst-per-day": "次／天上限",
+      "burst-hint": "只讀這個 workspace 的錯誤帳本。預設關閉；仍受每天次數上限與同時只跑一輪限制，同一個錯誤 24 小時內最多觸發一次。",
+      "reclaim-retro": "回收前回顧",
+      "reclaim-retro-on": "長時間派工的 pane 被自動回收或被父 pane 回收前，請它寫三行回顧",
+      "reclaim-retro-per-day": "則／天上限",
+      "reclaim-retro-hint": "只限由別的 pane 開出（cli_open_agent）、跑了 30 分鐘以上的 pane，而且只在閒置自動回收、父 pane 回收、pipeline 交接時才問；你自己點的回收不會等。每次會花那個 pane 一個回合的 token，最多等 {seconds} 秒，只保留 pane 自己寫的三行（先遮罩），只存在這台電腦。",
       "rules": "規則範本",
       "rules-builtin": "內建 v{version}",
       "rules-view": "檢視全文",
@@ -11426,6 +11792,29 @@
       "error": "失敗",
       "timeout": "逾時",
       "skipped": "未執行"
+    },
+    "source": {
+      "failures": "錯誤分診",
+      "tools": "重複手動的事",
+      "corrections": "你的糾正"
+    },
+    "freq": {
+      "daily": "每天",
+      "weekly": "每週"
+    },
+    "effect": {
+      "effective": "見效",
+      "not-effective": "未見效",
+      "insufficient": "樣本不足",
+      "pending": "待判定"
+    },
+    "proposal-status": {
+      "proposed": "提案中",
+      "approved": "已核准",
+      "rejected": "已退回",
+      "in-progress": "進行中",
+      "landed": "已落地",
+      "abandoned": "已放棄"
     },
     "history": {
       "date": "日期",
@@ -11476,9 +11865,8 @@
     "no-match": "沒有符合「{query}」的工作區。",
     "trimmed": "有 {count} 筆較舊的紀錄因歷史上限被移除，可在「設定 → 一般」調整。",
     "limit-title": "最近工作區保留上限",
+    "limit-count": "最多保留筆數",
     "limit-hint": "「最近」會保留每個開過的工作區，直到你手動移除。這只是儲存安全上限：達到上限時先移除最舊的紀錄，已開啟與已釘選的工作區永遠不會被移除。",
-    "limit-off": "不設上限",
-    "limit-on": "最多保留",
     "state-completed": "已完成",
     "state-running": "執行中",
     "state-aborted": "已中止",
@@ -11630,7 +12018,7 @@
     "overview": {
       "title": "揭露總覽",
       "intro": "所有從 Navide 市集安裝的 Navide 外掛：宣告了什麼、風險等級、最近活動和異常，集中在這一頁。只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。",
-      "empty": "沒有安裝任何來自 Navide 市集的 Navide 外掛。",
+      "empty": "尚未安裝任何來自 Navide 市集的內容。",
       "installedScan": "安裝時驗證過的掃描",
       "noScanRecord": "安裝時沒有記錄掃描。",
       "activity": "最近活動",
@@ -12065,6 +12453,155 @@
       "not-signed-in": "請先在「開發者帳號」登入。",
       "qualification": "開發者申請需要先通過審核。",
       "registry": "Navide 市集拒絕了這個動作（{status} {code}）：{message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "從 n8n 匯入",
+    "subtitle": "貼上從 n8n 匯出的工作流，先預覽轉換結果，再匯入成新的流程。",
+    "default-agent": "需要 agent 的步驟使用的 CLI",
+    "default-agent-hint": "需要 agent 的步驟會在這個 CLI 的 pane 裡執行；匯入後仍可逐一調整。",
+    "json-label": "工作流 JSON",
+    "json-placeholder": "貼上從 n8n 匯出的工作流 JSON",
+    "choose-file": "選擇檔案…",
+    "choose-file-title": "選擇 n8n 工作流",
+    "preview": "預覽",
+    "previewing": "預覽中…",
+    "import": "匯入",
+    "importing": "匯入中…",
+    "preview-stale": "JSON 在預覽後有變動，請重新預覽再匯入。",
+    "import-blocked-preview": "請先預覽工作流。",
+    "stats": {
+      "workflow": "工作流",
+      "nodes": "n8n 節點",
+      "slots": "步驟",
+      "gates": "核准閘門",
+      "triggers": "觸發"
+    },
+    "category": {
+      "native": "直接轉換",
+      "agent": "由 agent 執行",
+      "pending": "需要確認",
+      "unsupported": "不支援"
+    },
+    "needs-review": "有 {n} 個步驟需要確認",
+    "needs-review-hint": "仍然可以匯入；執行流程前，請先在編輯器裡確認這些步驟。",
+    "subworkflow": "這個工作流會呼叫另一個 Navide 還沒有的 n8n 工作流。請把被呼叫的工作流一起貼到這裡（放在同一個 JSON 陣列裡），或先匯入它們，這個呼叫就會以子 Pipeline 執行。",
+    "external": "匯入的流程每次執行都會標示為外部內容，因為它的步驟來自 Navide 以外製作的檔案。",
+    "warnings": "警告",
+    "canvas-title": "轉換後的流程圖",
+    "legend": "顏色說明",
+    "report-title": "轉換報告",
+    "col": {
+      "node": "節點",
+      "type": "節點類型",
+      "result": "轉成",
+      "category": "類別",
+      "detail": "說明",
+      "actions": "待辦",
+      "field": "欄位"
+    },
+    "result": {
+      "trigger": "觸發",
+      "slot": "步驟",
+      "gate": "核准閘門",
+      "subpipeline": "子 Pipeline",
+      "folded": "併入步驟",
+      "removed": "已移除"
+    },
+    "review-mark": "需要確認",
+    "action-code": {
+      "add-credential": "新增憑證",
+      "confirm-step": "確認步驟",
+      "choose-mcp": "選擇 MCP 伺服器",
+      "start-manually": "手動啟動",
+      "paste-subworkflow": "貼上子工作流",
+      "keep-in-n8n": "留在 n8n"
+    },
+    "kickoffs-title": "步驟指示",
+    "kickoffs-hint": "這就是每個 pane 在步驟開始時收到的完整文字。",
+    "gates-title": "核准閘門",
+    "gates-hint": "這就是執行到每個閘門時顯示的完整問題。",
+    "credentials-title": "憑證",
+    "credentials-hint": "憑證設定在這台電腦上：在「設定 → MCP」加一個 MCP 伺服器，或用該服務自己的 CLI 登入。憑證絕不會存進流程。",
+    "credentials-used-by": "用於：{nodes}",
+    "secrets-title": "已移除的機密",
+    "secrets-hint": "這些值沒有保留在流程裡，請在這台電腦上重新設定。",
+    "error": {
+      "invalid": "這不是 Navide 能讀取的 n8n 工作流。",
+      "preview-failed": "預覽失敗。",
+      "import-failed": "匯入失敗。"
+    },
+    "imported": "已匯入「{name}」",
+    "imported-review": "已匯入「{name}」· 有 {n} 個步驟需要確認",
+    "imported-reused": "「{name}」剛剛已經匯入過。已開啟那個流程，沒有另外建立副本。",
+    "merged-nodes": "這個步驟包含 {n} 個 n8n 節點",
+    "subworkflows-title": "被呼叫的工作流",
+    "will-create": "匯入會建立 {n} 個流程。",
+    "subworkflow-status": {
+      "imported": "已匯入",
+      "will-import": "與這個工作流一起匯入",
+      "existing": "使用先前匯入的流程",
+      "missing": "Navide 裡還沒有",
+      "recursive": "會回頭呼叫：保留待確認"
+    },
+    "error-in-workflow": "工作流 {n}：{message}",
+    "import-timeout": "匯入花的時間較長，仍可能完成。請再按一次「匯入」：流程若已建立就會直接開啟，絕不會建立副本。",
+    "detail": {
+      "unknown-version": "typeVersion {version} 超出已知範圍 {lo}–{hi}，由 agent 依它的參數執行。",
+      "unknown-type": "這個節點類型不在匯入對照表裡，由 agent 依它的參數執行。",
+      "community-node": "社群節點，由 agent 依它的參數執行。",
+      "merge-combine": "「{mode}」模式的 Merge 會合併資料，由 agent 依它的合併規則執行。",
+      "role-trigger-schedule": "在 n8n 裡依排程執行。請手動啟動流程，或在每輪消耗 ▸ 排程新增動作為「啟動 Pipeline」的排程。",
+      "role-trigger-webhook": "在 n8n 裡由 HTTP 請求啟動。Navide 還沒有 webhook 觸發。",
+      "role-trigger-error": "n8n 的錯誤工作流在 Navide 還沒有對應的功能。",
+      "role-trigger-app": "在 n8n 裡由應用程式事件啟動。Navide 還沒有應用程式觸發。",
+      "role-subworkflow": "會呼叫另一個尚未匯入的 n8n 工作流。請把那個工作流也一起貼上，或先匯入它。",
+      "role-respond": "回應 n8n 的 webhook。Navide 還沒有 webhook 觸發。",
+      "error-workflow": "這個工作流就是它自己的錯誤工作流。某個步驟失敗時，後面的步驟會經由錯誤連線執行。",
+      "recursive-subworkflow": "會呼叫 n8n 工作流 {workflowId}，而它又會回頭呼叫這個工作流。子 Pipeline 不能執行自己，所以這個呼叫保留待確認。",
+      "tool-pipeline": "這是會呼叫 n8n 工作流 {workflowId} 的 agent 工具，該工作流已匯入為流程 {pipelineId}。流程不能當成工具呼叫，所以改在步驟指示裡寫明它。",
+      "subpipeline": "以子 Pipeline 執行流程 {pipelineId}（即 n8n 工作流 {workflowId}），並等待它完成。",
+      "subpipeline-nowait": "以子 Pipeline 執行流程 {pipelineId}（即 n8n 工作流 {workflowId}），並等待它完成。n8n 原本不會等它；Navide 一律等待子 Pipeline。",
+      "loop-batch": "這個迴圈已併入一個步驟，逐一處理每個項目。",
+      "loop-repeat": "這個迴圈已併入一個步驟，會一直重複，直到離開迴圈的條件成立。",
+      "loop-wait": "迴圈裡的 n8n Wait。步驟會在每一輪之間於此暫停；不會有核准閘門讓執行停下。",
+      "loop-subworkflow": "在迴圈裡呼叫另一個 n8n 工作流。由 agent 把整個迴圈當成一個步驟執行。",
+      "removed-sticky": "便利貼。它的文字已放進說明，以及最近一個步驟的指示裡。",
+      "removed-disabled": "在 n8n 裡已停用。已略過，它的連線直接接通。",
+      "removed-noop": "No Operation 節點。已移除，並把它的連線接起來。",
+      "cluster-model": "這個步驟改由 CLI agent 執行，不使用這個模型。",
+      "cluster-memory": "已捨棄。CLI 工作階段會自己保留上下文。",
+      "cluster-tool": "agent 會使用它自己相當於這個工具的功能。",
+      "cluster-mcp-tool": "請在「設定 → MCP」設定同一個 MCP 伺服器。",
+      "cluster-tool-workflow": "這是會呼叫另一個 n8n 工作流的 agent 工具，而那個工作流尚未匯入。流程不能當成工具呼叫，所以改在步驟指示裡描述它。",
+      "cluster-parser": "輸出格式已寫進步驟指示。",
+      "cluster-vector": "不支援向量資料庫叢集。請把這部分留在 n8n。",
+      "cluster-other": "已併入 agent 的步驟。",
+      "branch-if": "分支連線：agent 會回報條件走向哪一邊，只有那個分支會執行。",
+      "branch-switch": "分支連線，每條規則一條：agent 會回報符合哪條規則，只有那個分支會執行。",
+      "merge-join": "等待實際會執行的輸入。所屬分支沒有被走到的輸入會略過。",
+      "agent-step": "由 agent 依原本的參數執行。"
+    },
+    "warning": {
+      "error-workflow-other": "這個工作流的設定指定了另一個 n8n 工作流來處理錯誤。這部分的錯誤處理不會匯入。",
+      "into-trigger": "已捨棄一條連進觸發「{node}」的連線。",
+      "plain-connection": "從「{node}」出去的一條 {kind} 連線已改成一般連線：只有步驟能分支或失敗。",
+      "outputs-same-step": "「{node}」有多個輸出接到同一個步驟，只保留「{kept}」。",
+      "retry-capped": "「{node}」在 n8n 裡會重試 {tries} 次，每次間隔 {waitMs} ms。Navide 最多允許 {maxTries} 次、間隔 {maxWaitMs} ms，所以改用 {usedTries} 次、間隔 {usedWaitMs} ms。",
+      "over-target": "{slots} 個步驟超過約 {target} 個的目標。每個步驟都會開一個 CLI pane。",
+      "wait-in-loop": "Wait「{node}」位於迴圈裡，已併入它所在的步驟。執行不會在那裡被核准閘門停下。"
+    },
+    "error-reason": {
+      "invalid": "這不是 Navide 能讀取的 n8n 工作流。",
+      "invalid-json": "這段文字不是有效的 JSON。",
+      "not-object": "n8n 工作流必須是 JSON 物件。",
+      "no-nodes": "n8n 工作流需要有節點和連線。",
+      "node-shape": "節點 {index} 需要名稱和類型。",
+      "duplicate-name": "節點 {index} 的名稱和前面的節點重複。",
+      "empty-list": "這個清單裡沒有任何 n8n 工作流。",
+      "internal": "轉換後的流程圖無效。這是匯入器的錯誤。",
+      "too-large": "這個工作流有 {sizeMb} MB，一次匯入最多 {limitMb} MB。",
+      "store-refused": "無法儲存工作流「{workflow}」，所以沒有匯入任何內容：{problems}"
     }
   }
 }

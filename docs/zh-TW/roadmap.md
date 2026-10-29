@@ -39,7 +39,7 @@ Navide 的長期方向是成為 **Agent 時代的工程利器**：一套讓一�
 
 | 領域 | 現在 | 目的地 |
 |---|---|---|
-| Genesis | 可設定的線性 SDLC Pipeline | 產生經驗證初始系統與長期專案智慧的適應式建立工作流 |
+| Genesis | 可設定的 SDLC Pipeline 圖：平行 Stage、核准 Gate、有上限的退回迴圈、釘選節點與從節點重跑 | 產生經驗證初始系統與長期專案智慧的適應式建立工作流 |
 | Evolution | 手動 Pane 與維護任務 | 協調多個有所有權與依賴關係 Session 的意圖驅動日常 Workspace |
 | Intervention | Monaco、Diff、Terminal、Git、Diagnostics、Review | 完整的瀏覽、編輯、執行、除錯、測試、審查、版本控制與交付環境 |
 | 協調 | Manager Protocol、Handoff、History、Session Attribution | 結構化共用狀態、所有權、依賴、衝突與進度同步 |

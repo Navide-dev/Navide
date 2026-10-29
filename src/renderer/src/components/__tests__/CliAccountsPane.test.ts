@@ -230,8 +230,8 @@ describe('CliAccountsPane', () => {
     const names = section(w, 0)
       .findAll('.cli-card-id')
       .map((n) => n.text())
-    // Row 0 is the built-in Default (no identity -> "Default" label).
-    expect(names).toEqual(['Default', 'me@example.com', 'Account 3', 'Not signed in'])
+    // Row 0 is the built-in Default (no identity -> "Original login" label).
+    expect(names).toEqual(['Original login', 'me@example.com', 'Account 3', 'Not signed in'])
   })
 
   // ── renaming a card ────────────────────────────────────────────────────────
@@ -539,6 +539,24 @@ describe('CliAccountsPane', () => {
     expect(w.emitted('login')).toEqual([['claude', 'p1']])
   })
 
+  it('with an empty Default, signIn on another non-active profile asks nothing and switches nothing', async () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2'), profile('p2', 'claude', 'Account 3')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { p1: { email: 'me@example.com', signedIn: true } } },
+    })
+    const w = mountPane(api)
+
+    // Row 0 is the collapsed empty Default, row 1 the active p1, row 2 p2.
+    const row = section(w, 0).findAll('.cli-card')[2]
+    await row.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
+    await flushPromises()
+
+    expect(notify.confirm).not.toHaveBeenCalled()
+    expect(api.setDefault).not.toHaveBeenCalled()
+    expect(w.emitted('login')).toEqual([['claude', 'p2']])
+  })
+
   it('signIn on the ACTIVE profile stays a live login (no profile id)', async () => {
     const api = makeApi({
       profiles: [profile('p1', 'claude', 'Account 2')],
@@ -565,8 +583,94 @@ describe('CliAccountsPane', () => {
     await defaultRow.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
     await flushPromises()
 
+    // The Default is empty, so the switch clears the live login: asked first.
+    expect(notify.confirm).toHaveBeenCalledTimes(1)
+    const [body, opts] = notify.confirm.mock.calls[0] as [string, { title?: string; confirmText?: string }]
+    expect(opts.title).toBe('Switch to the Original Login?')
+    expect(opts.confirmText).toBe('Switch and Sign In')
+    expect(body).toContain('the live login (Not signed in) is cleared')
     expect(api.setDefault).toHaveBeenCalledWith('claude', null)
     expect(w.emitted('login')).toEqual([['claude']])
+  })
+
+  it('a declined confirm on the empty Default neither switches nor signs in', async () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { p1: { email: 'me@example.com', signedIn: true } } },
+    })
+    notify.confirm.mockResolvedValueOnce(false)
+    const w = mountPane(api)
+
+    const defaultRow = section(w, 0).findAll('.cli-card')[0]
+    await defaultRow.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
+    await flushPromises()
+
+    expect((notify.confirm.mock.calls[0] as [string])[0]).toContain('(me@example.com)')
+    expect(api.setDefault).not.toHaveBeenCalled()
+    expect(w.emitted('login')).toBeUndefined()
+  })
+
+  it('Sign In on a signed-in (expired) Default switches without the empty-slot confirm', async () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { __default__: { email: 'a@b.c', signedIn: true } } },
+    })
+    usage.accountUsageFor.mockImplementation((_key, profileId) =>
+      profileId === null ? usageSnapshot({ status: 'expired' }) : undefined,
+    )
+    const w = mountPane(api)
+
+    const defaultRow = section(w, 0).findAll('.cli-card')[0]
+    await defaultRow.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
+    await flushPromises()
+
+    expect(notify.confirm).not.toHaveBeenCalled()
+    expect(api.setDefault).toHaveBeenCalledWith('claude', null)
+  })
+
+  // ── the built-in Default card ──────────────────────────────────────────────
+
+  it('collapses an empty, inactive Default to one line with only Sign In', () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { p1: { email: 'me@example.com', signedIn: true } } },
+    })
+    const w = mountPane(api)
+
+    const row = section(w, 0).findAll('.cli-card')[0]
+    expect(row.classes()).toContain('cli-card-collapsed')
+    expect(row.text()).toContain('Original login (outside Navide): not signed in')
+    expect(row.findAll('button').map((b) => b.text())).toEqual(['Sign In'])
+    // The active profile carries the "Active" badge.
+    expect(section(w, 0).findAll('.cli-card')[1].get('.cli-badge').text()).toBe('Active')
+  })
+
+  it('keeps an empty Default as a full card while it is the active account', () => {
+    const w = mountPane(makeApi({ profiles: [profile('p1', 'claude', 'Account 2')] }))
+
+    const row = section(w, 0).findAll('.cli-card')[0]
+    expect(row.classes()).not.toContain('cli-card-collapsed')
+    expect(row.get('.cli-card-id').text()).toBe('Original login')
+    // Not signed in, so it carries no "Active" pill at all.
+    expect(row.find('.cli-badge').exists()).toBe(false)
+    expect(buttonByText(row, 'Sign In')).toBeDefined()
+  })
+
+  it('a signed-in, inactive Default is a full card that can be switched to', () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { __default__: { email: 'a@b.c', signedIn: true } } },
+    })
+    const w = mountPane(api)
+
+    const row = section(w, 0).findAll('.cli-card')[0]
+    expect(row.classes()).not.toContain('cli-card-collapsed')
+    expect(row.text()).toContain('Your original login credentials')
+    expect(buttonByText(row, 'Switch to This Account')).toBeDefined()
   })
 
   it('sets a profile as default via the Set as default button', async () => {
@@ -574,8 +678,8 @@ describe('CliAccountsPane', () => {
     const setDefault = api.setDefault as ReturnType<typeof vi.fn>
     const w = mountPane(api)
 
-    // Default is null, so the profile row shows "Set as Default".
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    // Default is null, so the profile row shows "Switch to This Account".
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -591,13 +695,13 @@ describe('CliAccountsPane', () => {
     )
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     const busy = buttonByText(section(w, 0), 'Switching…')
     expect(busy).toBeDefined()
     expect(busy!.attributes('disabled')).toBeDefined()
-    expect(buttonByText(section(w, 0), 'Set as Default')).toBeUndefined()
+    expect(buttonByText(section(w, 0), 'Switch to This Account')).toBeUndefined()
 
     release({ ok: true })
     await flushPromises()
@@ -612,7 +716,7 @@ describe('CliAccountsPane', () => {
     const handler = vi.fn(async () => ({ ok: true as const }))
     const w = mountPane(api, { switchHandler: handler })
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(handler).toHaveBeenCalledWith('claude', 'p1')
@@ -634,7 +738,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api, { switchHandler: handler })
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(notify.confirm).toHaveBeenCalledTimes(1)
@@ -656,7 +760,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api, { switchHandler: handler })
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -670,7 +774,7 @@ describe('CliAccountsPane', () => {
     setDefault.mockResolvedValue({ ok: false, code: 'PANES_RUNNING', count: 1, message: 'panes running' })
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -694,7 +798,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -901,9 +1005,9 @@ describe('CliAccountsPane', () => {
     expect(cards[1].get('.cli-card-big').text()).toContain('80%')
   })
 
-  it('shows an expired snapshot when display identity reports signed out', () => {
+  it('says a signed-out card is signed out once, with Sign In and no quota placeholder or refresh', () => {
     usage.accountUsageFor.mockImplementation((key) =>
-      key === 'claude' ? usageSnapshot({ status: 'expired', windows: [] }) : undefined,
+      key === 'claude' ? usageSnapshot({ status: 'expired', refreshStatus: 'no-credentials', windows: [] }) : undefined,
     )
     const w = mountPane(
       makeApi({
@@ -911,8 +1015,12 @@ describe('CliAccountsPane', () => {
       }),
     )
 
-    expect(section(w, 0).get('.cli-card-expired').text()).toContain('⚠')
-    expect(section(w, 0).get('.cli-card-none').text()).toContain('No quota data yet')
+    const card = section(w, 0).findAll('.cli-card')[0]
+    expect(card.text().match(/not signed in/gi)).toHaveLength(1)
+    expect(card.text()).not.toContain('No quota data yet')
+    expect(card.text()).not.toContain("Can't refresh")
+    expect(card.find('.cli-card-refresh-btn').exists()).toBe(false)
+    expect(buttonByText(card, 'Sign In')).toBeDefined()
   })
 
   it('shows cached quota, last success and refresh state on a non-active card', () => {
@@ -1038,7 +1146,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
     expect(usage.refreshUsage).toHaveBeenCalledTimes(1)
 
-    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Switch to This Account')!.trigger('click')
     await flushPromises()
     expect(usage.refreshUsage).toHaveBeenCalledTimes(2)
   })
@@ -1237,12 +1345,15 @@ describe('CliAccountsPane', () => {
   })
 
   it('stamps a current reading with when it was taken', () => {
-    usage.accountUsageFor.mockReturnValue(usageSnapshot({ fetchedAt: '2026-07-26T04:00:00Z' }))
+    // The stamp is shown in local time, so build the reading from a local
+    // wall-clock time; a fixed UTC instant lands on 7/25 west of UTC-4.
+    const fetchedAt = new Date(2026, 6, 26, 4, 0).toISOString()
+    usage.accountUsageFor.mockReturnValue(usageSnapshot({ fetchedAt }))
     const w = mountPane(
       makeApi({ identities: { claude: { __default__: { email: 'me@x.com', signedIn: true } } } }),
     )
     const updated = section(w, 0).findAll('.cli-card')[0].get('.cli-card-updated').text()
-    expect(updated).toMatch(/^updated 7\/26 \d\d:\d\d$/)
+    expect(updated).toBe('updated 7/26 04:00')
   })
 
   it('stops promising a read once the backend is gone', () => {

@@ -26,10 +26,12 @@ const busy = computed(() => props.api.pendingId.value !== null)
 const backoff = computed(() => props.api.backoffLabel(props.job))
 const target = computed(() => props.api.targetLabel(props.job))
 const desc = computed(() => describeSchedule(props.job.schedule, tr, props.job.state))
-const owner = computed(() => props.api.ownerLabel(props.job))
+const owner = computed(() => props.api.creatorLabel(props.job))
+const startsPipeline = computed(() => props.job.action.kind === 'pipeline_start')
 const expiry = computed(() => props.api.expiryLabel(props.job))
 const updatedBy = computed(() => props.api.updatedByLabel(props.job))
 const system = computed(() => props.api.isSystem(props.job))
+const failReason = computed(() => props.api.failReason(props.job))
 
 function manage(): void {
   openEvolvePanel(props.api.systemWorkspace(props.job))
@@ -46,6 +48,7 @@ function manage(): void {
         <span class="sj-tag sj-system" data-test="system-tag">{{ t('scheduler.system.tag') }}</span>
       </template>
       <button v-else class="sj-name" v-truncate :title="t('scheduler.edit')" @click="$emit('edit', job)">{{ job.name }}</button>
+      <span v-if="startsPipeline" class="sj-tag sj-pipeline" data-test="pipeline-tag" :title="t('scheduler.pipeline-title')">{{ t('scheduler.pipeline-tag') }}</span>
       <span v-if="system && light === 'err'" class="sj-fail" data-test="fail-pill">
         <span class="sj-fail-count">{{ t('scheduler.failed', { n: job.state?.consecutive_errors ?? 0 }) }}</span>
       </span>
@@ -55,7 +58,7 @@ function manage(): void {
           class="sj-fail-repair"
           data-test="repair"
           :disabled="busy"
-          :title="job.state?.last_error ?? ''"
+          :title="failReason"
           @click="api.runNow(job)"
         >
           {{ t('scheduler.repair') }}
@@ -112,6 +115,13 @@ function manage(): void {
         <span class="sj-updated" data-test="updated-by">{{ updatedBy }}</span>
       </template>
     </div>
+    <div
+      v-if="light === 'err' && !gone && !system && failReason"
+      class="sj-fail-reason"
+      v-truncate
+      data-test="fail-reason"
+      :title="failReason"
+    >{{ failReason }}</div>
     <div v-if="gone && !system" class="sj-gone" data-test="target-gone">
       <span>{{ t('scheduler.skip.target_gone') }}</span>
       <span v-if="job.state?.disabled_reason === 'target_gone'" data-test="gone-disabled">
@@ -189,6 +199,10 @@ function manage(): void {
 .sj-tag.sj-system {
   border-color: var(--border-default);
   background: var(--bg-hover);
+}
+.sj-tag.sj-pipeline {
+  border-color: color-mix(in srgb, var(--accent-emphasis) 45%, transparent);
+  color: var(--accent-fg);
 }
 .sj-manage {
   flex: none;
@@ -347,6 +361,15 @@ function manage(): void {
   padding-left: 11px;
   font-size: var(--font-3xs);
   color: var(--text-secondary);
+}
+.sj-fail-reason {
+  margin-top: 2px;
+  padding-left: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-3xs);
+  color: var(--danger-fg);
 }
 .sj-gone {
   display: flex;

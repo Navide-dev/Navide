@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI đã kết thúc với mã thoát {code}. Có thể nó đã gặp sự cố; mã này cũng được ghi vào sổ lỗi.",
       "stuck-badge": "⏳ Không hoạt động {minutes}+ phút",
       "stuck-tooltip": "Lượt này không có hoạt động nhật ký và không có đầu ra trong hơn {minutes} phút. CLI có thể đã bị treo; không có gì bị ngắt.",
+      "stale-config-badge": "Cài đặt đã đổi",
+      "stale-config-tooltip-mcp": "Các máy chủ MCP của CLI này đã đổi sau khi pane khởi động. Nó vẫn dùng danh sách cũ cho đến khi được dựng lại. Bấm để dựng lại (tiếp tục cuộc trò chuyện).",
+      "stale-config-tooltip-skills": "Các skills gửi cho CLI này đã đổi sau khi pane khởi động. Nó có thể vẫn dùng bản cũ cho đến khi được dựng lại. Bấm để dựng lại (tiếp tục cuộc trò chuyện).",
+      "stale-config-tooltip-both": "Các máy chủ MCP và skills của CLI này đã đổi sau khi pane khởi động. Nó vẫn dùng bản cũ cho đến khi được dựng lại. Bấm để dựng lại (tiếp tục cuộc trò chuyện).",
       "usage-limit-badge": "⛔ trở lại lúc {time}",
       "usage-limit-badge-unknown": "⛔ hết hạn mức",
       "usage-limit-tooltip": "CLI này đã hết hạn mức — dự kiến dùng lại được lúc {time}. Nhấp để bỏ qua",
@@ -1033,6 +1037,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "Nhập từ n8n",
     "switch-and-resume": "↻ Chuyển và tiếp tục",
     "go-to-stage": "Mở giai đoạn này",
     "new-pipeline": "＋ Pipeline mới",
@@ -1187,7 +1192,6 @@
     "collapse": "Thu gọn",
     "restore": "↑ Khôi phục",
     "retry": "↻ Thử lại",
-    "finish": "Hoàn tất",
     "connect-to-remote": "Kết nối với remote",
     "scan-repos-anyway": "Vẫn quét tìm kho",
     "amend-commit": "Sửa commit",
@@ -1196,7 +1200,7 @@
     "go-to-commit": "Đến commit",
     "install-missing": "Cài phần còn thiếu",
     "fix": "Sửa",
-    "add-mcp": "Thêm MCP +",
+    "add-mcp": "+ Thêm MCP",
     "open-mcp-config": "Mở cấu hình MCP",
     "accept-ours": "Chấp nhận của mình",
     "accept-theirs": "Chấp nhận của họ",
@@ -1260,6 +1264,7 @@
     "toggle-replace": "Bật/tắt thay thế (⌘H)",
     "delete-pipeline": "Xóa pipeline này",
     "open": "Mở",
+    "learn-more": "Tìm hiểu thêm",
     "view-as-list": "Xem dạng danh sách",
     "view-as-tree": "Xem dạng cây",
     "show-ignored-files": "Hiện tệp bị bỏ qua",
@@ -1462,11 +1467,58 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock là màn che riêng tư, không phải kiểm soát truy cập. Khi bạn rời đi, nó che mọi cửa sổ của Navide. Agent, terminal, kênh chat, công cụ MCP và lịch chạy vẫn tiếp tục hoạt động, và người ngồi trước máy này nếu biết cách vẫn có thể vượt qua nó.",
+      "section-lock": "Khóa",
+      "enabled": "Bật App Lock",
+      "enabled-hint": "Hãy đặt PIN trước. PIN luôn mở khóa được, kể cả khi bật Touch ID.",
+      "lock-now": "Khóa ngay",
+      "lock-now-hint": "Che mọi cửa sổ ngay lập tức. Phím tắt {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "Đã đặt PIN.",
+      "pin-none-hint": "Chưa có PIN. Dùng từ 4 đến 12 chữ số.",
+      "set-pin": "Đặt PIN",
+      "change-pin": "Đổi PIN",
+      "remove-pin": "Xóa PIN",
+      "remove-pin-hint": "Xóa PIN sẽ tắt App Lock.",
+      "current-pin": "PIN hiện tại",
+      "new-pin": "PIN mới",
+      "confirm-pin": "Xác nhận PIN",
+      "save": "Lưu",
+      "cancel": "Hủy",
+      "pin-saved": "Đã lưu PIN.",
+      "pin-removed": "Đã xóa PIN. App Lock đã tắt.",
+      "section-unlock": "Mở khóa",
+      "method": "Mở khóa bằng",
+      "method-system": "Touch ID, PIN làm dự phòng",
+      "method-pin": "Chỉ PIN",
+      "system-unavailable": "Máy này không dùng được Touch ID nên Navide mở khóa bằng PIN của bạn.",
+      "section-auto": "Tự động khóa",
+      "idle": "Sau khi không dùng",
+      "idle-hint": "Thời gian không có thao tác bàn phím hay chuột trên toàn bộ máy này.",
+      "idle-never": "Không bao giờ",
+      "idle-minutes": "{n} phút",
+      "on-screen-lock": "Khi màn hình khóa",
+      "on-suspend": "Khi máy ngủ",
+      "on-start": "Khi Navide khởi động",
+      "section-forgot": "Quên PIN?",
+      "reset-with-system": "Đặt lại PIN bằng Touch ID",
+      "forgot-system": "Touch ID xác nhận đúng là bạn, rồi bạn chọn PIN mới.",
+      "forgot-manual-title": "Khi không có Touch ID",
+      "forgot-manual": "Thoát Navide rồi xóa app-lock.json trong thư mục dữ liệu của Navide. Việc này chỉ xóa App Lock và PIN của nó, không ảnh hưởng gì khác.",
+      "error-invalid-pin": "Dùng từ 4 đến 12 chữ số.",
+      "error-mismatch": "Hai PIN không khớp.",
+      "error-wrong-pin": "PIN hiện tại không đúng.",
+      "error-cooldown": "Quá nhiều lần thử. Hãy thử lại sau {seconds} giây.",
+      "error-system-failed": "Touch ID không xác nhận được đó là bạn.",
+      "error-generic": "Không thành công. Hãy thử lại."
+    },
     "cliExtensions": {
       "tabInstalled": "Tiện ích mở rộng CLI đã cài",
       "tabConvenience": "Những gì Navide thay đổi",
       "intro": "Những gì mỗi CLI AI tự cài cho mình — Claude plugins và mods, Codex hooks, Pi extensions và nhiều thứ khác — cùng những gì mỗi thứ có thể truy cập. Chỉ đọc: không có gì ở đây cài đặt, bật hay thay đổi bất cứ thứ gì. Plugin Navide có trang riêng.",
-      "summary": "{total} tiện ích mở rộng CLI · {l3} chạy mã bên trong CLI của chúng",
+      "summary": "{total} tiện ích mở rộng CLI · {l3} chạy bên trong CLI · {l2} chạy chương trình riêng",
       "machineWide": "Mỗi CLI có một bộ dùng chung cho cả máy: mọi pane và tài khoản Navide của CLI đó đều tải cùng một bộ.",
       "rescan": "Quét lại",
       "loading": "Đang quét…",
@@ -1481,17 +1533,17 @@
       "inferred": "suy ra",
       "inferredHint": "Đọc từ mã nguồn; manifest của CLI không nêu những điều này.",
       "tier": {
-        "L1": "L1 tài nguyên văn bản",
-        "L2": "L2 tiến trình con",
-        "L3": "L3 mã trong tiến trình"
+        "L1": "Chỉ văn bản",
+        "L2": "Chạy chương trình riêng",
+        "L3": "Chạy bên trong CLI"
       },
       "tierHint": {
         "L1": "Chỉ có hướng dẫn và văn bản khác; không có gì tự chạy.",
-        "L2": "Chạy lệnh dưới dạng tiến trình con (hook, MCP, LSP) với quyền của người dùng của bạn.",
+        "L2": "Khởi chạy một chương trình riêng (lệnh hook, hoặc máy chủ MCP hay LSP) với quyền của người dùng của bạn.",
         "L3": "Chạy bên trong tiến trình của chính CLI với quyền của CLI và không có lời nhắc cấp quyền."
       },
       "capability": {
-        "exec": "Chạy lệnh",
+        "exec": "Chạy lệnh shell",
         "network": "Mạng",
         "fs": "Tệp",
         "intercept-tools": "Chặn lệnh gọi công cụ",
@@ -1505,6 +1557,19 @@
         "capability-approve": "CLI yêu cầu bạn phê duyệt khả năng của nó trước",
         "hot-reload": "Hỏi một lần mỗi session trước khi tải lại nóng"
       }
+    },
+    "applies": {
+      "new-panes-only": "Chỉ pane mới",
+      "new-panes-only-tooltip": "CLI đọc mục này khi khởi động. Các pane đang mở giữ giá trị cũ cho đến khi bạn dựng lại."
+    },
+    "stale-config": {
+      "title": "Pane đang mở đã khởi động trước thay đổi này: {count}",
+      "body-mcp": "CLI đọc máy chủ MCP của chính nó khi khởi động, nên các pane này vẫn dùng danh sách cũ. Dựng lại sẽ tiếp tục cuộc trò chuyện, nhưng làm gián đoạn lượt đang chạy và in lại cuộc trò chuyện.",
+      "body-skills": "CLI đọc skills khi khởi động, nên các pane này có thể vẫn dùng bản cũ. Dựng lại sẽ tiếp tục cuộc trò chuyện, nhưng làm gián đoạn lượt đang chạy và in lại cuộc trò chuyện.",
+      "rebuild-all-idle": "Dựng lại mọi pane rảnh ({count})",
+      "busy": "Đang chạy — “Dựng lại mọi pane rảnh” sẽ bỏ qua",
+      "cannot-rebuild": "Không có cuộc trò chuyện đã lưu để tiếp tục",
+      "rebuild": "Dựng lại"
     },
     "limits": {
       "hint": "Các giới hạn tùy chọn giúp Navide và các agent nó chạy không làm quá tải máy này. Mỗi giới hạn đều tắt hoặc giữ hành vi trước đây của Navide, cho đến khi bạn thay đổi.",
@@ -1585,7 +1650,7 @@
         },
         "analyzer-backend": {
           "title": "Backend suy luận",
-          "summary": "Chuyển giữa Ollama REST và llama.cpp, đặt URL gốc, đường dẫn llama-cli và đường dẫn model GGUF."
+          "summary": "Chuyển giữa Ollama và llama.cpp, đặt URL gốc, đường dẫn llama-cli và đường dẫn model GGUF."
         },
         "analyzer-models": {
           "title": "Model và đánh giá hiệu năng",
@@ -1626,6 +1691,10 @@
         "status-badges": {
           "title": "Huy hiệu trạng thái",
           "summary": "Đổi tên từng trạng thái pane và chọn màu cho nó, theo từng ngôn ngữ."
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "Ẩn mọi cửa sổ sau màn hình khóa và mở khóa bằng Touch ID hoặc PIN"
         },
         "voice-input": {
           "title": "Nhập bằng giọng nói",
@@ -1727,7 +1796,7 @@
       "title": "Quản lý cài đặt",
       "export-bundle": "Xuất gói cài đặt",
       "import-bundle": "Nhập gói cài đặt",
-      "bundle-hint": "Xuất vai trò, pipeline, MCP, trình phân tích, các cài đặt AI Chat không nhạy cảm và tùy chọn giao diện. Khóa API và token được che đi và không bị ghi đè khi nhập.",
+      "bundle-hint": "Xuất cài đặt Vai trò, Pipeline, MCP, Bộ phân tích, AI Chat và giao diện, đã ẩn khóa API và token.",
       "export-dialog-title": "Xuất gói cài đặt",
       "exported": "Đã xuất gói cài đặt",
       "export-failed": "Không xuất được",
@@ -1739,7 +1808,7 @@
     "executionPolicy": {
       "unavailable": "Chính sách thực thi không khả dụng. Hãy kiểm tra Navide host rồi thử lại.",
       "errors": {
-        "invalid-policy": "Chính sách thực thi không hợp lệ. Hãy dùng các chế độ, không gian tên hệ thống và tên tệp thực thi được hỗ trợ.",
+        "invalid-policy": "Chính sách thực thi không hợp lệ. Hãy dùng các chế độ, tính năng của Navide và tên tệp thực thi được hỗ trợ.",
         "high-risk-confirmation-required": "Chế độ Toàn quyền cần xác nhận rõ ràng rằng mọi tệp thực thi đều có thể chạy.",
         "recovery-confirmation-required": "Dựng lại chính sách thực thi cần xác nhận rõ ràng.",
         "source-reset-confirmation-required": "Đặt lại mọi lựa chọn nguồn chính sách cần xác nhận rõ ràng.",
@@ -1755,7 +1824,7 @@
         "recommendation-unavailable": "Đề xuất chính sách của kho không khả dụng.",
         "recommendation-invalid": "Đề xuất chính sách của kho không hợp lệ.",
         "recommendation-stale": "Đề xuất chính sách của kho đã thay đổi. Hãy xem lại trước khi chấp nhận.",
-        "user-policy-unavailable": "Không có chính sách người dùng chung nào dùng được. Hãy tạo một chính sách hoặc chọn mặc định của Host.",
+        "user-policy-unavailable": "Không có chính sách người dùng chung nào dùng được. Hãy tạo một chính sách hoặc chọn mặc định của Navide.",
         "global-policy-corrupt": "Chính sách thực thi chung bị hỏng. Hãy dựng lại trước khi chuyển sang nguồn này.",
         "recovery-blocked-by-global-policy": "Không khôi phục nguồn được khi chính sách thực thi chung đang có vấn đề.",
         "commit-uncertain": "Không xác nhận được thay đổi chính sách. Chính sách vẫn ở trạng thái chặn mặc định; hãy xem lại.",
@@ -1763,12 +1832,12 @@
       },
       "loading": "Đang tải chính sách thực thi…",
       "saved": "Đã lưu chính sách thực thi.",
-      "rebuilt": "Đã dựng lại chính sách thực thi từ mặc định của Host.",
+      "rebuilt": "Đã dựng lại chính sách thực thi từ mặc định của Navide.",
       "notice": {
         "save": "Đã lưu chính sách thực thi.",
-        "resetUser": "Đã đặt lại chính sách người dùng về mặc định của Host.",
+        "resetUser": "Đã đặt lại chính sách người dùng về mặc định của Navide.",
         "source": "Đã thay đổi nguồn chính sách.",
-        "rebuild": "Đã dựng lại chính sách thực thi từ mặc định của Host.",
+        "rebuild": "Đã dựng lại chính sách thực thi từ mặc định của Navide.",
         "resetSources": "Đã đặt lại mọi lựa chọn nguồn chính sách."
       },
       "externalUpdate": "Chính sách đã thay đổi ở nơi khác. Bản nháp của bạn được giữ cho đến khi bạn tải lại phiên bản mới nhất.",
@@ -1789,7 +1858,7 @@
         "unavailable": "Nguồn chính sách đã chọn không khả dụng. Navide chặn mặc định cho đến khi bạn chọn một nguồn khả dụng.",
         "corrupt": "Chính sách đã chọn bị hỏng. Navide chặn mặc định cho đến khi chính sách được sửa."
       },
-      "hostDefaultTitle": "Mặc định của Host",
+      "hostDefaultTitle": "Mặc định của Navide",
       "readOnly": "Chỉ đọc",
       "hostDefaultHint": "Mức cơ sở đặc quyền tối thiểu có sẵn. Mức này vẫn khả dụng ngay cả khi thiếu bộ lưu chính sách người dùng.",
       "userTitle": "Chính sách người dùng",
@@ -1797,7 +1866,7 @@
       "userHint": "Sửa chính sách chung được dùng khi workspace chọn nguồn Người dùng. Khi lưu sẽ thay thế chính sách người dùng hiện tại.",
       "mode": {
         "full": "Toàn quyền",
-        "allowlist": "Danh sách cho phép",
+        "allowlist": "Chỉ các lệnh được cho phép",
         "denylist": "Danh sách chặn"
       },
       "fullWarning": "Chế độ Toàn quyền cho phép mọi tệp thực thi, kể cả công cụ rủi ro cao và các khả năng hệ thống. Hãy xem kỹ lựa chọn rủi ro cao này trước khi lưu.",
@@ -1805,12 +1874,20 @@
       "denylistWarning": "Chế độ Danh sách chặn cấp quyền theo mặc định: liệt kê tên không giới hạn được những gì nó cấp, nên Navide coi mọi danh sách chặn là lựa chọn rủi ro cao. Hãy xem kỹ trước khi lưu.",
       "denylistConfirmation": "Tôi hiểu rằng chế độ Danh sách chặn cấp quyền theo mặc định và không bị thu hẹp bởi các tên tôi liệt kê.",
       "shellDenylistScope": "Ở chế độ Danh sách chặn, agent chỉ chạy được các lệnh mà Host này hỗ trợ ({executables}), trừ những lệnh bạn chặn ở đây. Chặn một tên nằm ngoài danh sách đó không có tác dụng.",
-      "systemLabel": "Không gian tên hệ thống",
-      "systemHint": "Chọn các không gian tên hệ thống V2 mà agent được dùng.",
-      "systemAllowlistLabel": "Không gian tên hệ thống được cho phép",
-      "systemAllowlistHint": "Chọn các không gian tên hệ thống V2 mà agent được dùng.",
-      "systemDenylistLabel": "Không gian tên hệ thống bị chặn",
-      "systemDenylistHint": "Chọn các không gian tên hệ thống V2 mà agent không được dùng.",
+      "systemLabel": "Tính năng của Navide",
+      "systemHint": "Chọn những tính năng Navide mà agent được dùng.",
+      "systemAllowlistLabel": "Tính năng của Navide được cho phép",
+      "systemAllowlistHint": "Chọn những tính năng Navide mà agent được dùng.",
+      "systemDenylistLabel": "Tính năng của Navide bị chặn",
+      "systemDenylistHint": "Chọn những tính năng Navide mà agent không được dùng.",
+      "namespace": {
+        "fs": "Tệp trong không gian làm việc",
+        "ui": "Giao diện riêng",
+        "aiCli": "Phiên AI CLI",
+        "web": "Duyệt web",
+        "agents": "Pane của agent",
+        "agentMessages": "Tin nhắn giữa các agent"
+      },
       "shellLabel": "Tệp thực thi shell",
       "shellHint": "Chỉ cho phép tên tệp thực thi cấp cao nhất. Không chấp nhận đường dẫn và biểu thức shell.",
       "shellAllowlistLabel": "Tệp thực thi shell được cho phép",
@@ -1826,13 +1903,14 @@
       "save": "Lưu chính sách",
       "resetUser": "Đặt lại chính sách người dùng",
       "sourceTitle": "Nguồn chính sách của workspace",
-      "sourceHint": "Đề xuất của kho chưa được tin cậy cho đến khi bạn xem và chấp nhận rõ ràng. Việc đổi nguồn cần đúng dấu vân tay hiện tại.",
+      "sourceHint": "Đề xuất của kho chưa được tin cậy cho đến khi bạn xem và chấp nhận rõ ràng. Việc đổi nguồn chỉ áp dụng cho chính sách đúng như lần cuối bạn xem; nếu nó đã thay đổi kể từ đó, hãy xem lại.",
       "source": {
-        "default": "Mặc định của Host",
+        "default": "Mặc định của Navide",
         "user": "Chính sách người dùng",
         "repository": "Chính sách của kho"
       },
       "sourceNeedsWorkspace": "Có thể chọn nguồn cho workspace sau khi mở một workspace.",
+      "sourceImplicit": "Tự động",
       "recommendationTitle": "Đề xuất của kho",
       "untrusted": "Chưa tin cậy",
       "recommendationHint": "Chính sách này đến từ kho của workspace và không bao giờ ghi đè nguồn đang hoạt động khi chưa được chấp nhận rõ ràng.",
@@ -1860,10 +1938,10 @@
         "directory-unsafe": "Thư mục không an toàn",
         "directory-unavailable": "Thư mục không khả dụng"
       },
-      "corruptHint": "Chính sách người dùng đã lưu bị hỏng. Dựng lại sẽ ghi trạng thái mặc định của Host mới và giữ nguyên các lựa chọn nguồn của workspace.",
+      "corruptHint": "Chính sách người dùng đã lưu bị hỏng. Dựng lại sẽ ghi trạng thái mặc định của Navide mới và giữ nguyên các lựa chọn nguồn của workspace.",
       "manualRecoveryHint": "Bộ lưu chính sách không an toàn hoặc không khả dụng. Hãy sửa quyền hoặc đường dẫn của thư mục execution-policy, rồi mở lại Cài đặt; tính năng tự dựng lại đã bị tắt.",
       "rebuild": "Dựng lại chính sách chung",
-      "rebuildConfirmBody": "Chỉ dựng lại tệp chính sách chung và tệp phiên bản từ mặc định của Host. Các lựa chọn nguồn hiện có của workspace và tệp chính sách của kho được giữ nguyên.",
+      "rebuildConfirmBody": "Chỉ dựng lại tệp chính sách chung và tệp phiên bản từ mặc định của Navide. Các lựa chọn nguồn hiện có của workspace và tệp chính sách của kho được giữ nguyên.",
       "rebuildConfirmCheck": "Tôi hiểu rằng chính sách chung bị hỏng sẽ được thay thế.",
       "rebuildConfirm": "Xác nhận dựng lại",
       "cancel": "Hủy"
@@ -1883,18 +1961,19 @@
         "total": "{count} công cụ; văn bản và lược đồ đầu vào của chúng tổng cộng {size}."
       },
       "nativeBackends": {
-        "title": "Backend gốc",
+        "title": "Chương trình trong plugin Navide",
+        "summary": "Mã gốc chạy trong sandbox, nhưng plugin Navide cũng chạy git, gh và glab (được đánh dấu rủi ro cao bên dưới) có thể dùng chúng để kết nối máy chủ mạng, gửi dữ liệu workspace và thay đổi tệp trong workspace.",
         "description": "Một số plugin Navide có chứa mã gốc. Navide chạy mã đó trong sandbox không có quyền truy cập mạng riêng; nó chỉ đọc được các workspace bạn mở cùng nó và chỉ thay đổi tệp ở nơi bạn cho phép. Plugin Navide nào còn chạy lệnh git, gh và glab (được đánh dấu rủi ro cao bên dưới) thì qua các lệnh đó có thể liên lạc với máy chủ mạng và gửi dữ liệu workspace, cũng như đọc và thay đổi tệp workspace mà không cần quyền đó. Khi công tắc bên dưới đang bật, cài một plugin Navide có mã gốc nghĩa là cho phép nó chạy; tắt công tắc để dừng tất cả.",
-        "enable": "Cho phép plugin Navide của bên thứ ba chạy backend gốc",
+        "enable": "Cho phép plugin Navide của bên thứ ba chạy chương trình riêng",
         "offUnsaved": "Backend gốc của bên thứ ba hiện đang tắt, nhưng Navide không lưu được thiết lập này, nên chúng sẽ bật lại sau khi Navide khởi động lại.",
         "offUnsavedRetry": "Thử lại",
         "agentTools": {
           "enable": "Cho phép agent gọi công cụ từ plugin Navide của bên thứ ba",
-          "description": "Mặc định tắt. Khi bật, agent trong các pane của bạn có thể gọi công cụ mà một plugin Navide của bên thứ ba khai báo, sau khi bạn đã cho phép plugin Navide đó. Công cụ nào thay đổi tệp sẽ hỏi bạn một lần cho mỗi workspace. Khi tắt, Navide hoạt động như thể không plugin Navide nào có công cụ.",
+          "description": "Cho phép agent trong pane gọi công cụ do plugin Navide bạn đã cho phép khai báo; công cụ thay đổi tệp sẽ hỏi một lần cho mỗi không gian làm việc.",
           "externalCallers": "Cho phép cả client MCP bên ngoài gọi chúng",
           "externalCallersDisclosure": "Các chương trình bên ngoài dùng chung một token, nên bản ghi một lệnh gọi chỉ có thể ghi là “một client bên ngoài”, không biết là chương trình nào. Thông tin xác thực của Host cũng được xử lý như vậy."
         },
-        "empty": "Không plugin Navide nào đã cài có backend gốc.",
+        "empty": "Không plugin Navide nào đã cài có chương trình riêng.",
         "windowWithout": "{name} đã mở mà không có backend gốc: {reason}. Các phần cần backend sẽ không hoạt động. {next}",
         "windowWithoutAllow": "Để cho phép backend, hãy vào Cài đặt → Plugin Navide → {page}, rồi mở lại cửa sổ.",
         "windowWithoutDetails": "Lý do được nêu trong Cài đặt → Plugin Navide → {page}.",
@@ -1925,12 +2004,17 @@
           "shellNotAllowed": "Bị chặn: yêu cầu toàn quyền shell",
           "stoppedAfterCrashes": "Đã dừng sau nhiều lần lỗi liên tiếp",
           "unavailable": "Không khả dụng"
-        }
+        },
+        "loadFailed": "Không thể đọc cài đặt backend gốc."
       },
       "bundled": "Đi kèm",
-      "listTitle": "Plugin Navide",
+      "listTitle": "Đã cài",
+      "installedTitle": "Plugin Navide đã cài",
       "developerNative": "Nhà phát triển và mã gốc",
       "pageOn": "Bật",
+      "developerOnMarker": "Chế độ nhà phát triển đang bật",
+      "nativeOnMarker": "Mã gốc đang bật",
+      "browseMarketplace": "Duyệt Navide Marketplace",
       "bundledGit": "Git đi kèm",
       "state": {
         "active": "Đang hoạt động",
@@ -1940,7 +2024,7 @@
       "restore": "Khôi phục",
       "candidateReady": "Bản cập nhật {version} đã sẵn sàng",
       "activationFailed": "{plugin} đã được cài nhưng không kích hoạt được: {reason}. Hãy khởi động lại hoặc loại bỏ nó trong danh sách bên dưới.",
-      "switchNow": "Khi phê duyệt, {id} sẽ chuyển sang {version} ngay lập tức. Các khung xem đang mở của nó sẽ tải lại và mọi thứ chưa lưu trong đó sẽ bị mất. Việc chuyển được ghi trong thông báo, nơi bạn có thể quay lại chỉ với một cú nhấp.",
+      "switchNow": "Khi phê duyệt, {id} sẽ chuyển sang {version} ngay lập tức. Các khung xem đang mở của nó sẽ tải lại: khung xem lưu trạng thái qua Navide SDK sẽ trở lại đúng chỗ cũ, còn mọi thứ khác chưa lưu trong đó sẽ bị mất. Việc chuyển được ghi trong thông báo, nơi bạn có thể quay lại chỉ với một cú nhấp.",
       "restartPlugin": "Khởi động lại plugin Navide",
       "disable": "Tắt",
       "enable": "Bật",
@@ -2044,8 +2128,6 @@
         "featured": "Nổi bật",
         "clearSearch": "Xóa tìm kiếm",
         "showAllCategories": "Hiện mọi danh mục",
-        "noResultsHint": "Hãy thử từ khác hoặc duyệt mọi danh mục.",
-        "noExtensionsHint": "Plugin Navide sẽ xuất hiện ở đây ngay khi nhà phát hành phát hành chúng.",
         "loadFailedTitle": "Không kết nối được Navide Marketplace",
         "loadFailedHint": "Hãy kiểm tra kết nối rồi thử lại. Plugin Navide đã cài vẫn hoạt động bình thường.",
         "errorDetails": "Chi tiết",
@@ -2114,7 +2196,7 @@
         },
         "title": "Chế độ nhà phát triển",
         "switch": "Bật Chế độ nhà phát triển",
-        "hint": "Cho phép tải plugin Navide từ thư mục bạn chọn để phát triển và thử nghiệm, đồng thời áp dụng cài đặt Registry tự lưu trữ (AGENT_TEAM_MARKETPLACE_URL). Chỉ thay đổi được trên trang này và mọi thay đổi đều được ghi lại. Khi tắt, mọi plugin Navide tải từ thư mục đều bị gỡ tải, và thư mục bạn đã chọn nhưng chưa đồng ý sẽ bị bỏ; các thư mục bạn đã đồng ý vẫn nằm trong danh sách, được tải lại khi bạn bật lại và có thể gỡ ở đây.",
+        "hint": "Cho phép tải plugin Navide từ một thư mục để phát triển và kiểm thử, và cài plugin Navide từ máy chủ của riêng bạn thay vì Navide Marketplace; khi tắt, các plugin Navide đó sẽ bị gỡ.",
         "banner": "Chế độ nhà phát triển đang bật. Plugin Navide tải từ thư mục chưa được duyệt.",
         "reminder": "Chế độ nhà phát triển đang bật: plugin Navide tải từ thư mục chưa được duyệt. Hãy tắt nó trong Cài đặt → Plugin Navide khi không còn cần.",
         "reminderClose": "Đã hiểu",
@@ -2188,7 +2270,7 @@
       },
       "localInstall": {
         "agentRequest": "Do {requester} yêu cầu. Navide chưa duyệt gói này; cài đặt hay không là quyết định của bạn.",
-        "button": "Cài từ tệp .vsix…",
+        "button": "Cài từ tệp…",
         "backToMarketplace": "Chuyển lại phiên bản trên Navide Marketplace",
         "warning": "Plugin Navide này đến từ một tệp trên máy tính này. Navide chưa duyệt và nó không được ký: không xác nhận được tác giả và tệp có thể đã bị thay đổi. Chỉ cài tệp từ người bạn tin cậy.",
         "signatureLabel": "Chữ ký",
@@ -2319,12 +2401,12 @@
       "user": "Người dùng",
       "userWorkspace": "Người dùng / Workspace",
       "accountServer": "Tài khoản / Máy chủ",
-      "userWorkspaceBindings": "Liên kết Người dùng / Workspace"
+      "userWorkspaceBindings": "Người dùng, cùng tài khoản đã chọn cho từng Workspace"
     },
     "storage": {
       "localStorage": "ui_settings.json (dữ liệu ứng dụng) + bản sao lưu workspace",
-      "mainProcess": "userData của tiến trình chính Electron",
-      "safeStorage": "Registry safeStorage cục bộ được mã hóa",
+      "mainProcess": "Được lưu cùng dữ liệu ứng dụng Navide trên máy tính này",
+      "safeStorage": "Được lưu mã hóa trên máy tính này",
       "cliFiles": "Tệp hướng dẫn riêng của từng CLI"
     },
     "voice": {
@@ -2349,7 +2431,6 @@
       "readback-rate": "Tốc độ",
       "readback-preview": "Nghe thử",
       "readback-stop-hint": "Nhấn Esc hoặc phím tắt nhập bằng giọng nói để dừng đọc ngay.",
-      "section": "Nhập bằng giọng nói",
       "enabled": "Nhập bằng giọng nói (nhấn giữ để nói)",
       "enabled-hint": "Nhấn giữ Ctrl+Alt+M (có thể gán lại trong Phím tắt) để đọc chính tả vào pane CLI đang được chọn. Văn bản được đưa vào ô nhập như thể bạn tự gõ — không gửi gì cho đến khi bạn tự nhấn Enter. Giọng nói được chuyển thành văn bản trên máy tính này bằng model Whisper cục bộ; âm thanh không bao giờ rời khỏi máy.",
       "device": "Micrô",
@@ -2452,7 +2533,7 @@
       "download-retry": "Thử tải lại"
     },
     "general": {
-      "auto-resume-reconnect": "Tiếp tục session sau khi backend khởi động lại",
+      "auto-resume-reconnect": "Tiếp tục session sau khi dịch vụ nền của Navide khởi động lại",
       "resume-interrupted-on-launch": "Tiếp tục các pane đang làm việc sau khi khởi động lại Navide",
       "system-notify": "Thông báo hệ thống",
       "system-notify-hint": "Hiện thông báo trên màn hình khi một CLI kết thúc lượt hoặc cần bạn nhập trong lúc Navide chạy nền. Huy hiệu trên Dock vẫn tiếp tục đếm trong mọi trường hợp.",
@@ -2467,14 +2548,14 @@
         "unknown": "Chưa thử.",
         "not-applicable": "Không có trên nền tảng này."
       },
-      "auto-resume-reconnect-hint": "Khi backend gặp sự cố, mọi tiến trình CLI cũng dừng theo. Bật mục này để tự động tiếp tục cuộc hội thoại của các pane đang hiển thị khi backend hoạt động trở lại, thay vì dựng lại từng pane thủ công.",
-      "resume-interrupted-on-launch-hint": "Khi Navide khởi động lại, các pane đang chạy một lượt hoặc đang chờ lời nhắc cấp quyền hay câu hỏi, cùng các pane cha đang chờ báo cáo của chúng, sẽ tự động tiếp tục (tối đa 6; số còn lại được đánh dấu “Đang làm việc lúc khởi động lại”). Không có gì tự chạy tiếp: hãy nhấn Tiếp tục hoặc để pane cha bảo nó tiếp tục. Pane cha được cho biết pane nào của nó bị gián đoạn.",
+      "auto-resume-reconnect-hint": "Nối lại cuộc trò chuyện của các pane khi dịch vụ nền trở lại sau khi khởi động lại. Khởi động lại sẽ kết thúc mọi tiến trình CLI; các pane trên màn hình và tối đa sáu pane ngoài màn hình đang làm việc sẽ trở lại mà không tự tiếp tục, pane đã mở chúng sẽ được báo, và thông báo sẽ ghi lại những gì đã xảy ra. Nếu dịch vụ lại gặp sự cố ngay sau đó, sẽ không tự nối lại nữa.",
+      "resume-interrupted-on-launch-hint": "Khi Navide khởi động lại, các pane đang làm việc sẽ trở lại và chờ bạn cho tiếp tục. Gồm các pane đang chạy một lượt hoặc đang chờ lời nhắc cấp quyền hay câu hỏi, cùng các pane cha đang chờ báo cáo của chúng, tối đa 6 (số còn lại được đánh dấu “Đang làm việc lúc khởi động lại”). Hãy nhấn Tiếp tục hoặc để pane cha bảo nó tiếp tục; pane cha được cho biết pane nào của nó bị gián đoạn.",
       "confirm-close-pane": "Xác nhận trước khi đóng pane",
       "confirm-close-pane-hint": "Hỏi trước khi phím tắt đóng pane đóng một pane CLI. Pane đang có lượt chạy dở luôn hỏi, bất kể cài đặt này.",
       "confirm-close-workspace": "Xác nhận trước khi đóng workspace",
-      "confirm-close-workspace-hint": "Hỏi trước khi thanh bên đóng một workspace cùng các pane của nó. Thao tác đó kết thúc mọi pane CLI trong workspace; bản ghi của chúng được giữ, nên khi mở lại, mỗi pane trở lại dưới dạng thẻ nhấp để tiếp tục. “Đóng workspace” thông thường để các CLI tiếp tục chạy và không bao giờ hỏi.",
+      "confirm-close-workspace-hint": "Hỏi trước khi thanh bên đóng một không gian làm việc và kết thúc các pane CLI của nó.",
       "idle-reclaim": "Thu hồi CLI đang rảnh",
-      "idle-reclaim-hint": "CLI đang rảnh vẫn giữ bộ nhớ đã cấp phát — thường 200–300 MB mỗi CLI. Thu hồi sẽ kết thúc tiến trình và để pane thành thẻ giữ chỗ nhấp để tiếp tục; cuộc hội thoại được tiếp tục từ bản ghi riêng của CLI. Không bao giờ áp dụng cho pane đang được chọn, pane đang chờ bạn trả lời hoặc pane còn văn bản chưa gửi.",
+      "idle-reclaim-hint": "Kết thúc các CLI đang rảnh để giải phóng bộ nhớ, giữ mỗi pane thành chỗ giữ chỗ bấm để tiếp tục (trừ pane đang được chọn, pane chờ bạn trả lời, hoặc pane có văn bản chưa gửi).",
       "idle-reclaim-after": "Thu hồi sau",
       "idle-reclaim-after-hint": "Thời gian một pane không có đầu ra của agent hay lần gõ phím nào trước khi bị thu hồi.",
       "idle-reclaim-15m": "15 phút",
@@ -2484,8 +2565,8 @@
       "idle-reclaim-8h": "8 giờ",
       "idle-reclaim-never": "Không bao giờ",
       "idle-reclaim-now": "Thu hồi ngay",
-      "idle-reclaim-now-hint": "Kết thúc các CLI đó ngay thay vì chờ đến ngưỡng. {count} pane đủ điều kiện, đang giữ khoảng {size}. Mỗi pane sẽ thành thẻ giữ chỗ nhấp để tiếp tục.",
-      "idle-reclaim-now-empty": "Hiện không có pane nào đủ điều kiện — pane đang được chọn, pane đang chờ bạn trả lời, pane còn văn bản chưa gửi và pane không thể tiếp tục không bao giờ bị thu hồi.",
+      "idle-reclaim-now-hint": "Kết thúc ngay thay vì chờ: {count} pane đủ điều kiện, chiếm khoảng {size}.",
+      "idle-reclaim-now-empty": "Hiện không có pane nào đủ điều kiện. Pane đang được chọn, pane đang chờ bạn trả lời, pane còn văn bản chưa gửi và pane không thể tiếp tục không bao giờ bị thu hồi.",
       "idle-reclaim-now-action": "Thu hồi {count} ngay",
       "idle-reclaim-now-action-empty": "Không có gì để thu hồi",
       "default-editor": "Trình soạn thảo mặc định",
@@ -2516,6 +2597,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "Dịch bằng máy. Đang chờ người bản ngữ duyệt.",
       "language-hint": "Ngôn ngữ là tùy chọn cấp người dùng, áp dụng cho mọi workspace.",
+      "language-display": "Ngôn ngữ hiển thị",
       "ui-scale": "Tỷ lệ giao diện",
       "ui-scale-hint": "Thu phóng toàn bộ giao diện — chữ, biểu tượng và khoảng cách — trong mọi cửa sổ. Tách biệt với cỡ chữ của terminal và trình soạn thảo, vốn có phím tắt ⌘= / ⌘- riêng.",
       "restore-windows": "Khôi phục cửa sổ",
@@ -2537,15 +2619,22 @@
       "resume-behavior-never": "Luôn bắt đầu mới",
       "resume-behavior-ask": "Hỏi mỗi lần",
       "restore-scope": "Phạm vi tiếp tục",
-      "restore-scope-hint": "Khi luôn tiếp tục, hãy chọn một CLI, trang Lưới hiện tại, tab đang mở, mọi CLI hoặc Tự động — chỉ các CLI đang chạy khi Navide đóng lần trước (mọi CLI và Tự động khởi động hai CLI một lúc, theo thứ tự).",
+      "restore-scope-hint": "Những CLI được mở lại khi Navide luôn tiếp tục. Chọn một CLI, trang Grid hiện tại, tab đang mở, mọi CLI, hoặc Tự động (các CLI đang chạy lúc đóng lần trước).",
       "restore-scope-single": "Một CLI",
       "restore-scope-page": "Trang Lưới hiện tại",
       "restore-scope-tab": "Tab đang mở",
       "restore-scope-all": "Mọi CLI",
       "restore-scope-auto": "Tự động",
       "resume-concurrency": "Giới hạn tiếp tục đồng thời",
-      "resume-concurrency-hint": "Số pane CLI được tiếp tục cùng lúc khi mở workspace hoặc khôi phục bố cục; số còn lại xếp hàng. Hãy giảm giá trị này nếu tiếp tục nhiều pane cùng lúc gây lỗi 'terminal.create timeout' (1–10).",
-      "resume-concurrency-label": "Số lần tiếp tục đồng thời tối đa"
+      "resume-concurrency-hint": "Số pane CLI tiếp tục cùng lúc (1–10); hãy giảm nếu pane bị quá thời gian khi tiếp tục.",
+      "resume-concurrency-label": "Số lần tiếp tục đồng thời tối đa",
+      "theme-name": {
+        "dark-github": "Tối (GitHub)",
+        "dark-midnight": "Nửa đêm",
+        "dark-forest": "Rừng",
+        "light": "Sáng",
+        "high-contrast": "Tương phản cao"
+      }
     },
     "roles": {
       "title": "Vai trò",
@@ -2613,6 +2702,7 @@
       "executionPolicy": "Chính sách thực thi",
       "statusBadges": "Huy hiệu trạng thái",
       "voice": "Nhập bằng giọng nói",
+      "appLock": "App Lock",
       "keybindings": "Phím tắt",
       "updates": "Cập nhật",
       "help": "Trợ giúp"
@@ -2679,14 +2769,14 @@
         "intro": "Mỗi tab trong mười chín tab cài đặt điều khiển gì, Navide Cloud nối nhiều máy thành một mạng riêng như thế nào, và các thành phần hệ thống nằm ngoài màn hình chính — các menu, các cửa sổ độc lập, các chế độ xem mức sử dụng và việc bảo trì tài nguyên.",
         "s1": {
           "title": "Tổng quan về cài đặt",
-          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>24 tab</strong>.",
+          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>25 tab</strong>.",
           "h1": "Ô tìm kiếm",
           "p2": "Dưới tiêu đề thanh bên có một ô tìm kiếm với chữ gợi ý <code>Tìm cài đặt…</code>. Ô này tìm theo tên cài đặt, mục chứa cài đặt và từ khóa <strong>trên mọi tab</strong> (theo ngôn ngữ giao diện hiện tại và các từ khóa đã lập chỉ mục), hiển thị tối đa 8 kết quả; nhấp vào một kết quả sẽ chuyển sang tab đó và cuộn tới mục tương ứng (có một ngoại lệ: “Lưu trữ” đóng cài đặt và mở thẳng Resource Manager). Khi không có kết quả, ô hiển thị <code>Không có cài đặt phù hợp</code>. <kbd class=\"syh-kbd\">Esc</kbd> xóa nội dung ô.",
           "callout": {
             "title": "Chỉ mục tìm kiếm chưa đầy đủ",
             "text": "Chỉ mục là một danh sách được duy trì thủ công, và <strong>các tab {layout}, {notifications}, {security} và {channels} hoàn toàn không có mục nào</strong>, nên không tìm được gì bên trong các tab này — bạn phải tự mở. Một mục CLI agent sẽ mở thẳng ngăn cài đặt của một CLI (xem chủ đề “CLI agent và tài khoản”)."
           },
-          "h2": "Hai mươi bốn tab",
+          "h2": "Hai mươi lăm tab",
           "tabTable": {
             "group": "Nhóm",
             "tab": "Tab",
@@ -2721,6 +2811,10 @@
             "voice": {
               "what": "Nhập bằng giọng nói kiểu nhấn giữ, chuyển thành văn bản ngay trên máy này: phím tắt, micrô, chế độ ghi âm, đầu ra tiếng Trung, model và bộ xử lý",
               "more": "Chương “Nhập bằng giọng nói” của chủ đề “{workspace}”"
+            },
+            "appLock": {
+              "what": "Màn che riêng tư phủ mọi cửa sổ: PIN, Touch ID, tự khóa khi không dùng và khi ngủ",
+              "more": "ghi chú ở đầu trang App Lock"
             },
             "cloud": {
               "what": "Trạng thái liên kết giữa các thiết bị, dấu vân tay của máy này, ai được phép ra lệnh cho máy này",
@@ -2831,7 +2925,7 @@
               "fallback": "Một CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Backend gặp sự cố sẽ kéo theo mọi tiến trình CLI; khi bật tùy chọn này, các pane trên màn hình sẽ tự tiếp tục ngay khi backend chạy lại.",
+              "desc": "Khi backend gặp sự cố hoặc khởi động lại, mọi tiến trình CLI đều kết thúc; khi bật mục này, các pane trên màn hình và tối đa sáu pane đang làm việc ngoài màn hình sẽ tự động được nối lại khi backend trở lại. Thông báo cho biết lượt nào bị gián đoạn.",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -3044,7 +3138,7 @@
           "h3": "Analyzer",
           "p5": "Thứ bạn cấu hình ở đây là một <strong>model cục bộ nhỏ</strong> mà Navide dùng để hiểu ý định cho pipeline; nó không liên quan gì đến các CLI agent bạn dùng trong pane. Gồm ba phần:",
           "analyzer": {
-            "backend": "<strong>Backend suy luận</strong> — trước tiên chọn một trong hai backend, <em>Ollama REST</em> hoặc <em>llama.cpp</em>. llama.cpp cần đường dẫn <code>llama-cli</code> (có nút tự phát hiện và trình chọn tệp) và đường dẫn model GGUF (tùy chọn); Ollama cần URL suy luận (mặc định <code>http://localhost:11434</code>). Bên cạnh cả hai đều có chỉ báo tình trạng.",
+            "backend": "<strong>Backend suy luận</strong> — trước tiên chọn một trong hai backend, <em>Ollama</em> hoặc <em>llama.cpp</em>. llama.cpp cần đường dẫn <code>llama-cli</code> (có nút tự phát hiện và trình chọn tệp) và đường dẫn model GGUF (tùy chọn); Ollama cần URL suy luận (mặc định <code>http://localhost:11434</code>). Bên cạnh cả hai đều có chỉ báo tình trạng.",
             "models": "<strong>Trình quản lý model</strong> (chế độ Ollama) — nhập tên model rồi nhấp <em>⬇ Tải về</em>, kèm thanh tiến trình; bên dưới liệt kê các model đã cài (tên, số tham số, dung lượng) và có thể xóa từng cái.",
             "benchmark": "<strong>Đánh giá hiệu năng model</strong> — chạy bốn tác vụ trên mỗi model cục bộ: nhận diện bộ công nghệ (đầu ra JSON), tóm tắt workspace trong một câu, chọn mục liên quan nhất từ danh sách tài liệu và tách đầu ra của CLI thành câu hỏi kèm các lựa chọn. Bảng kết quả đánh dấu từng mục kèm thời gian, và phải đạt <strong>ít nhất ba trên bốn (≥75%)</strong>; model không đạt sẽ bị ẩn khỏi danh sách chọn model."
           },
@@ -3058,7 +3152,7 @@
           "mirror": "<strong>Máy chủ tải xuống dự phòng</strong>: tệp của mỗi bản phát hành được công bố hai lần, trên GitHub Release và trên <code>dl.navide.dev</code> — giống nhau từng byte, kèm tổng sha256 để đối chiếu. <strong>Máy chủ dự phòng là nguồn cập nhật mặc định</strong>: khi khởi động, ứng dụng trỏ nguồn cập nhật tới <code>dl.navide.dev</code>, còn GitHub là phương án thay thế. Ứng dụng chỉ chuyển sang GitHub khi gặp <strong>lỗi kiểu mạng</strong> (không kết nối được máy chủ, hết thời gian chờ, 5xx/429), và một khi đã chuyển thì <strong>ở lại GitHub cho đến hết session</strong> — chỉ khởi động lại mới quay về máy chủ dự phòng. <strong>Lỗi 404 hoặc lỗi chữ ký/tổng kiểm tra không bao giờ kích hoạt việc chuyển</strong> — cả hai máy chủ có cùng tệp, nên kết quả sẽ lỗi y như vậy, và báo đúng lỗi như nó vốn có thì hữu ích hơn là che giấu.",
           "policyIntro": "<strong>Chính sách thực thi</strong> quyết định backend của plugin Navide được phép chạy những gì. Nó <strong>không phải một tab riêng</strong>: đó là khối ở đầu trang Plugin Navide, có huy hiệu phạm vi riêng (theo người dùng và theo workspace) và đường dẫn tệp chính sách. Phần đầu hiển thị <em>Chính sách đang áp dụng</em> — nguồn, chế độ và tình trạng: <em>đang hoạt động</em>, <em>đã cũ</em>, <em>không khả dụng</em> hoặc <em>bị hỏng</em>.",
           "policy": {
-            "hostDefault": "<strong>Mặc định của Host</strong> — nền tảng tối thiểu quyền dựng sẵn, được đánh dấu <strong>chỉ đọc</strong>. Nó vẫn dùng được ngay cả khi kho chính sách người dùng biến mất hoàn toàn, nên lúc nào cũng có đường lui.",
+            "hostDefault": "<strong>Mặc định của Navide</strong> — nền tảng tối thiểu quyền dựng sẵn, được đánh dấu <strong>chỉ đọc</strong>. Nó vẫn dùng được ngay cả khi kho chính sách người dùng biến mất hoàn toàn, nên lúc nào cũng có đường lui.",
             "user": "<strong>Chính sách người dùng</strong> — chính sách chung, dùng ở bất kỳ workspace nào chọn nguồn Người dùng; nó hiển thị “chưa tạo” cho đến khi bạn tạo. Có ba chế độ: <em>Toàn quyền</em>, <em>Danh sách cho phép</em>, <em>Danh sách chặn</em>. Bạn có thể đặt các không gian tên hệ thống và các tệp thực thi shell, trong đó tệp thực thi chỉ nhận <strong>tên tệp thực thi cấp cao nhất</strong> — không đường dẫn, không biểu thức shell.",
             "highRisk": "<strong>Full và denylist đều cần đánh dấu một ô rõ ràng trước khi lưu</strong>, và màn hình giải thích lý do: chế độ full cho phép chạy tệp thực thi tùy ý (kể cả công cụ rủi ro cao) và các khả năng hệ thống, còn chế độ denylist <strong>mặc định là cho phép</strong> — liệt kê tên không làm hẹp những gì nó thực sự cấp, vì vậy Navide cũng coi đây là lựa chọn rủi ro cao.",
             "source": "<strong>Nguồn chính sách của workspace</strong> — mỗi workspace chọn Mặc định của host, Chính sách người dùng hoặc Chính sách của kho. <strong>Đề xuất từ kho được gắn nhãn “chưa tin cậy” cho đến khi bạn đọc và nhấp “Chấp nhận chính sách của kho”</strong>, và việc đổi nguồn đòi hỏi dấu vân tay khớp chính xác; nếu chính sách thay đổi sau khi bạn đã xem xét, nó sẽ chuyển thành “đã thay đổi kể từ lần xem xét” và phải kiểm tra lại. Khi không mở workspace nào, khối này không dùng được.",
@@ -3305,7 +3399,7 @@
           "h3": "Tiến trình mồ côi và backend",
           "orphans": {
             "leftover": "<strong>Tiến trình CLI còn sót</strong> — khi <code>⚠ N còn sót</code> xuất hiện trên thanh trạng thái, nhấp vào sẽ hỏi “Tìm thấy N tiến trình CLI còn sót từ lần chạy trước — chúng có thể làm cạn bộ nhớ. Dọn dẹp?”, với <em>Dọn dẹp</em> để xóa và <em>Bỏ qua</em> để bỏ qua. Đây là các tiến trình mà lần chạy trước chưa dọn.",
-            "backend": "<strong>Backend</strong> — nhấp vào nhãn Backend trên thanh trạng thái sẽ hiện địa chỉ và PID cùng hai nút: <em>Khởi động lại</em> (<em>Khởi động</em> khi mất kết nối) và <em>Dừng</em> (chỉ khi đang kết nối). <strong>Khởi động lại backend sẽ kéo theo mọi tiến trình CLI</strong>; để cuộc hội thoại tự tiếp tục khi backend chạy lại, hãy bật <em>Tiếp tục session sau khi backend khởi động lại</em> ở tab Chung.",
+            "backend": "<strong>Backend</strong> — nhấp vào nhãn Backend trên thanh trạng thái sẽ hiện địa chỉ và PID cùng hai nút: <em>Khởi động lại</em> (<em>Khởi động</em> khi mất kết nối) và <em>Dừng</em> (chỉ khi đang kết nối). <strong>Khởi động lại backend sẽ kéo theo mọi tiến trình CLI</strong>; để cuộc hội thoại tự tiếp tục khi backend chạy lại, hãy bật <em>Tiếp tục session sau khi dịch vụ nền của Navide khởi động lại</em> ở tab Chung.",
             "timeout": "Khi backend báo lỗi vì khởi động quá chậm, hãy tăng <em>Thời gian chờ khởi động backend</em> (15–120 giây) ở tab Giao diện."
           },
           "h4": "Bảo trì tóm tắt",
@@ -6834,13 +6928,22 @@
       "env": "Biến môi trường",
       "no-env": "Không có biến môi trường",
       "needs-setup": "Cần thiết lập",
+      "needs-node": "Cần Node.js",
+      "needs-node-hint": "Máy chủ này khởi động bằng {command}, đi kèm với Node.js. Không tìm thấy Node.js trên máy tính này nên máy chủ không thể khởi động cho đến khi cài đặt.",
+      "install-node": "Cài đặt Node.js",
+      "risk": {
+        "tag": "Quyền rủi ro cao",
+        "shell": "Máy chủ này có thể chạy lệnh shell trên máy tính này bằng quyền của người dùng của bạn, kể cả xóa tệp, thay đổi cài đặt và tắt chương trình.",
+        "desktop": "Máy chủ này có thể đọc nội dung trên màn hình của các ứng dụng khác và điều khiển chuột, bàn phím, nên có thể thao tác trong bất kỳ ứng dụng nào bạn đã đăng nhập.",
+        "guard": "Navide không chặn máy chủ này. Navide Guard đánh giá các công cụ lệnh, tệp, registry và tiến trình của nó theo cùng quy tắc với shell tích hợp."
+      },
       "fill-locally": "Một số giá trị đang trống. Hãy điền trên máy này — giá trị biến môi trường và header không bao giờ được đồng bộ giữa các thiết bị.",
       "fill-credentials-locally": "Một số giá trị trong URL hoặc đối số đang trống. Nếu đó là thông tin xác thực, hãy điền trên máy này — thông tin xác thực trong URL và đối số không bao giờ được đồng bộ giữa các thiết bị.",
       "headers": "Header",
       "no-headers": "Không có header",
       "show": "Hiện",
       "hide": "Ẩn",
-      "conflict": "Tệp này đã thay đổi bên ngoài Agent-Team. Hãy tải lại trước khi lưu lần nữa.",
+      "conflict": "Tệp này đã thay đổi bên ngoài Navide. Hãy tải lại trước khi lưu lần nữa.",
       "reload": "Tải lại từ đĩa",
       "custom-title": "Thêm máy chủ MCP tùy chỉnh",
       "custom-hint": "Chọn giao thức truyền ngay bây giờ, rồi điền thông tin kết nối trong danh sách máy chủ đã cài.",
@@ -6880,6 +6983,9 @@
       "state-on": "Đã bật",
       "state-off": "Đã tắt",
       "status": "Trạng thái: {status}",
+      "transport-local": "Cục bộ",
+      "transport-remote": "Từ xa",
+      "status-failed": "Không khởi động được",
       "starting-note": "Vẫn đang khởi động sau {seconds} giây. Nếu máy chủ chạy qua npx hoặc uvx, lần chạy đầu có thể đang tải gói về.",
       "error-reason": "Không khởi động được: {reason}",
       "tools-error": "Không thể liệt kê công cụ: {reason}",
@@ -6911,6 +7017,11 @@
       "keyring-bad-hint": "Không có keyring hệ thống, thông tin xác thực thường bị lưu trong tệp văn bản thường.",
       "incomplete": "Lần quét này chưa đầy đủ: nó chạm giới hạn thời gian hoặc thư mục hoặc bỏ qua một kho không đọc an toàn được, nên có thể thiếu các phát hiện trong các thư mục bên dưới.",
       "keyring-reason-unknown": "Không có lý do nào được báo cáo.",
+      "keyring-reason": {
+        "tool-missing": "Thiếu công cụ hệ thống dùng để đọc nó.",
+        "read-failed": "Navide không đọc được nó.",
+        "no-service": "Không có Secret Service nào đang chạy."
+      },
       "scan": "Quét",
       "scanning": "Đang quét…",
       "scan-roots": "Thư mục gốc để quét…",
@@ -6925,9 +7036,7 @@
       "all": "Tất cả",
       "loading": "Đang quét máy này…",
       "error-load": "Không quét được.",
-      "empty-findings-title": "Không có phát hiện",
       "empty-findings-body": "Không có mục rủi ro nào khớp với bộ lọc hiện tại.",
-      "empty-inventory-title": "Chưa kiểm kê được gì",
       "empty-inventory-body": "Không có thông tin xác thực nào khớp với bộ lọc hiện tại.",
       "not-scanned": "Nhấn Quét để tìm thông tin xác thực trên máy này.",
       "severity": {
@@ -6947,7 +7056,7 @@
       },
       "reminder": {
         "title": "Lời nhắc",
-        "active": "Đang bật",
+        "active": "Cần xem xét",
         "snoozed": "Tạm hoãn",
         "dismissed": "Đã bỏ qua",
         "until": "đến {date}",
@@ -7136,7 +7245,7 @@
       "group-native": "Của riêng {agent}",
       "delivery-title": "Phân phối tới",
       "delivery-hint": "● tự đọc · ✓ do Navide phân phối (nhấp để bật/tắt) · màu xám: chưa phân phối",
-      "delivery-auto": "{n} tự đọc",
+      "delivery-auto": "{n} CLI tự tải",
       "delivery-none": "chưa phân phối tới đâu",
       "location": "Vị trí",
       "also-linked-from": "Cũng được liên kết từ: {roots}",
@@ -7177,7 +7286,7 @@
       },
       "share": {
         "title": "Liên kết chia sẻ",
-        "hint": "Liên kết chỉ đọc tới một Plan hoặc báo cáo, được mã hóa trên máy này. Khóa chỉ nằm trong liên kết; máy chủ lưu bản mã mà nó không mở được.",
+        "hint": "Liên kết chỉ đọc tới một Plan hoặc báo cáo, được mã hóa trên máy này. Khóa chỉ nằm trong liên kết, nên máy chủ không đọc được nội dung nó lưu.",
         "col-item": "Mục",
         "col-creator": "Người tạo",
         "col-created": "Ngày tạo",
@@ -7210,7 +7319,7 @@
     },
     "sync": {
       "title": "Đồng bộ",
-      "hint": "Bật một phần để giữ nó giống nhau trên mọi thiết bị đăng nhập tài khoản này. Bản ghi được mã hóa trên máy này; máy chủ lưu bản mã mà nó không có khóa.",
+      "hint": "Bật một phần để giữ nó giống nhau trên mọi thiết bị đăng nhập tài khoản này. Bản ghi được mã hóa trên máy này, nên máy chủ không đọc được.",
       "not-yet": "Chưa đồng bộ được.",
       "retired-memory": "Bộ nhớ không còn được đồng bộ. Hãy tắt nó; các tệp hướng dẫn ở đây và bản sao trên đám mây được giữ nguyên.",
       "not-connected": "Chưa kết nối — các phần được đồng bộ sẽ bắt kịp khi có kết nối trở lại.",
@@ -7233,7 +7342,7 @@
       "approval-cut": "… bản xem trước dừng ở đây; tệp còn tiếp",
       "approval-expand": "Hiện toàn bộ",
       "approval-deletes": "Sẽ xóa prompt {name} ở đây.",
-      "approval-new-loop": "{name} sẽ trở thành prompt loop.",
+      "approval-new-loop": "{name} sẽ trở thành prompt mặc định.",
       "approval-text": "Văn bản nhận được, toàn bộ",
       "approval-diff": "Thay đổi so với thiết bị này",
       "approval-changes": "Các trường đã thay đổi",
@@ -7258,7 +7367,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "Skill",
       "scope-memory": "Bộ nhớ",
-      "scope-hint-prompts": "Skill prompt và prompt loop.",
+      "scope-hint-prompts": "Các prompt đã lưu và prompt nào là mặc định.",
       "error-load": "Không đọc được cài đặt đồng bộ.",
       "scope-hint-mcp": "Máy chủ MCP bạn đã thêm trong Navide. Bí mật của chúng được mã hóa trước khi rời máy.",
       "scope-hint-skills": "Skill nào đang bật và mỗi skill đi tới CLI nào, cùng các tệp của skill tạo trong Navide (skill lớn được chuyển dưới dạng blob mã hóa). Skill bạn tự đặt vào thư mục chỉ đồng bộ cài đặt.",
@@ -7444,15 +7553,14 @@
       "error-save": "Không lưu được tệp này. Bản nháp của bạn vẫn còn trong trình soạn thảo."
     },
     "prompts": {
-      "title": "Prompt",
-      "intro": "Các chỉ thị hoàn chỉnh dùng lại được mà pane CLI có thể dùng từ nút ∞ của nó. Một skill là một prompt hoàn chỉnh — chọn skill sẽ thay thế prompt, không bao giờ nối thêm vào prompt khác. Chỉ skill mặc định chạy dạng loop; mọi skill khác chỉ được gửi một lần.",
-      "new": "Skill mới",
-      "new-name": "Skill mới",
+      "intro": "Các prompt đã lưu mà pane CLI gửi từ nút lặp lại (∞) trên thanh tiêu đề. Chọn một prompt sẽ thay toàn bộ prompt; chỉ prompt mặc định được gửi lại sau mỗi lượt, các prompt khác gửi một lần.",
+      "new": "Prompt mới",
+      "new-name": "Prompt mới",
       "copy-name": "Bản sao của {name}",
       "filter-label": "Lọc theo danh mục",
       "all": "Tất cả",
-      "search": "Tìm skill…",
-      "empty": "Không có skill nào khớp với bộ lọc này.",
+      "search": "Tìm prompt…",
+      "empty": "Không có prompt nào khớp với bộ lọc này.",
       "default-badge": "★ Mặc định",
       "turns": "×{n}",
       "turns-unlimited": "Không giới hạn lượt",
@@ -7460,7 +7568,7 @@
       "name": "Tên",
       "icon": "Biểu tượng",
       "icon-custom": "Biểu tượng tùy chỉnh",
-      "icon-custom-hint": "Gõ hoặc dán bất kỳ emoji nào để dùng làm biểu tượng của skill này.",
+      "icon-custom-hint": "Gõ hoặc dán bất kỳ emoji nào để dùng làm biểu tượng của prompt này.",
       "description": "Tóm tắt",
       "prompt": "Prompt gửi khi dùng",
       "resume": "Văn bản tiếp tục",
@@ -7472,23 +7580,20 @@
       "disable": "Tắt",
       "duplicate": "Nhân bản",
       "delete": "Xóa",
-      "hint": "Skill mặc định là skill được dùng khi nhấp thường vào ∞ và là skill duy nhất chạy loop; skill đã tắt vẫn ở đây nhưng không có trong bảng chọn.",
+      "hint": "Nhấp thường vào nút lặp lại sẽ gửi prompt mặc định, prompt duy nhất được lặp lại; prompt đã tắt vẫn ở đây nhưng không có trong bảng chọn.",
       "advanced": "Nâng cao",
       "send-once": "Gửi một lần",
-      "send-once-hint": "Chỉ skill mặc định chạy dạng loop; skill này được gửi một lần, không có văn bản tiếp tục hay giới hạn lượt.",
-      "untitled-name": "Skill chưa đặt tên",
-      "prompt-empty": "Prompt không được để trống — đã giữ lại nội dung trước đó. Để gỡ skill này, hãy dùng Xóa.",
+      "send-once-hint": "Chỉ prompt mặc định được gửi lại sau mỗi lượt; prompt này được gửi một lần, không có văn bản tiếp tục hay giới hạn lượt.",
+      "untitled-name": "Prompt chưa đặt tên",
+      "prompt-empty": "Prompt không được để trống — đã giữ lại nội dung trước đó. Để gỡ prompt này, hãy dùng Xóa.",
       "delete-confirm": "Xóa “{name}”? Không thể hoàn tác, và các máy đồng bộ prompt cũng sẽ xóa nó."
     },
     "section": {
       "general-behavior": "Hành vi chung",
       "resource-limits": "Giới hạn tài nguyên",
-      "notifications": "Thông báo",
       "settings-management": "Quản lý cài đặt",
       "theme": "Chủ đề",
-      "language": "Ngôn ngữ",
-      "other": "Khác",
-      "updates": "Cập nhật"
+      "other": "Khác"
     },
     "p2p": {
       "title": "Kết nối",
@@ -7746,17 +7851,18 @@
     },
     "cliAgents": {
       "title": "CLI agent",
-      "hint": "Bật và sắp xếp lại các CLI agent trong danh sách khởi chạy thủ công. Mở một thẻ để quản lý agent đó. Phải luôn có ít nhất một agent được bật.",
+      "hint": "Bật và sắp xếp lại các CLI agent trong menu pane mới. Mở một thẻ để quản lý agent đó. Phải luôn có ít nhất một agent được bật.",
       "drag-hint": "Kéo để sắp xếp lại",
       "search": "Tìm agent…",
       "filter-label": "Lọc CLI agent",
       "filter-all": "Tất cả",
       "filter-enabled": "Đã bật",
       "filter-attention": "Cần chú ý",
+      "attention-badge": "Cần chú ý",
       "count": "{visible} / {total} agent · {enabled} đã bật",
       "reorder-filtered": "Hãy xóa tìm kiếm và chọn Tất cả để sắp xếp lại",
-      "enabled": "Đã bật",
-      "enable-agent": "Bật {agent}",
+      "enabled": "Hiện trong menu",
+      "enable-agent": "Hiện {agent} trong menu",
       "manage": "Quản lý",
       "manage-agent": "Quản lý {agent}",
       "move-up": "Chuyển {agent} lên trước",
@@ -7789,7 +7895,7 @@
         "perm-force-off": "Buộc không bỏ qua quyền",
         "push": "Đẩy trực tiếp đang bật",
         "push-off": "Đẩy trực tiếp đang tắt",
-        "no-push": "Không có kênh đẩy trực tiếp",
+        "no-push": "Tin nhắn được gõ vào",
         "accounts": "{count} tài khoản",
         "signed-out": "Đã đăng xuất",
         "custom-binary": "Tệp thực thi tùy chỉnh",
@@ -7836,12 +7942,13 @@
       "restart-note": "Cờ được cố định vào lệnh của pane khi nó khởi động. Thay đổi ở đây ảnh hưởng tới các pane tạo sau đó; pane đang chạy giữ nguyên thiết lập ban đầu cho đến khi được dựng lại hoặc khôi phục."
     },
     "keybindings": {
-      "intro": "Gán lại bất kỳ phím tắt nào bên dưới. Nhấp vào một phím để ghi tổ hợp mới, dùng + để thêm phím tắt thứ hai và ✕ để gỡ một phím tắt. Thay đổi được lưu vào keybindings.json ngay lập tức và áp dụng cho mọi cửa sổ đang mở.",
+      "intro": "Gán lại bất kỳ phím tắt nào bên dưới. Nhấp vào một phím để ghi tổ hợp mới, dùng + để thêm phím tắt thứ hai và ✕ để gỡ một phím tắt. Thay đổi được lưu vào tệp phím tắt của bạn ngay lập tức và áp dụng cho mọi cửa sổ đang mở.",
+      "file-tooltip": "keybindings.json trong thư mục dữ liệu ứng dụng của Navide",
       "search-placeholder": "Tìm lệnh, phím hoặc ngữ cảnh…",
       "filter": {
         "all": "Tất cả",
         "customized": "Đã tùy chỉnh",
-        "conflicts": "Xung đột"
+        "conflicts": "Phím dùng chung"
       },
       "export": "Xuất",
       "import": "Nhập",
@@ -8061,6 +8168,12 @@
         "workbench_action_zoomUiOut": "Thu nhỏ giao diện",
         "workbench_action_zoomUiReset": "Đặt lại thu phóng giao diện"
       },
+      "cmdWhen": {
+        "workbench_action_closeModal": {
+          "notTerminal": "Đóng hộp thoại ngoài terminal",
+          "planWindow": "Đóng lớp phủ của cửa sổ kế hoạch"
+        }
+      },
       "col": {
         "command": "Lệnh",
         "keys": "Phím tắt",
@@ -8127,12 +8240,19 @@
       "conflict-hard": "xung đột",
       "conflict-soft": "phím dùng chung",
       "when-any": "luôn luôn",
+      "when-limited": "Chỉ trong một số ngữ cảnh",
       "no-results": "Không có lệnh nào khớp với tìm kiếm này.",
-      "footnote": "Hỗ trợ tổ hợp hai bước: ghi một tổ hợp, rồi nhấn tổ hợp thứ hai. Các phím mà bảng này không quản lý được liệt kê ở dạng chỉ đọc ở cuối trang."
+      "footnote": "Hỗ trợ tổ hợp hai bước: ghi một tổ hợp, rồi nhấn tổ hợp thứ hai. Các phím mà bảng này không quản lý được liệt kê ở dạng chỉ đọc ở cuối trang.",
+      "category": {
+        "workbench": "Bàn làm việc",
+        "editor": "Trình soạn thảo",
+        "controlPane": "Khung CLI",
+        "ui": "Điều khiển bên ngoài"
+      }
     },
     "accounts": {
       "title": "Tài khoản Git",
-      "encrypted-note": "Token được mã hóa khi lưu bằng keychain của hệ điều hành (safeStorage) và lưu cục bộ trên máy này.",
+      "encrypted-note": "Token được mã hóa bằng keychain của hệ điều hành và chỉ lưu trên máy này.",
       "unavailable": "Hệ thống này không hỗ trợ mã hóa, nên không thêm được tài khoản. Thường là do không truy cập được keychain của hệ điều hành.",
       "empty": "Chưa có tài khoản nào.",
       "new-account": "+ Tài khoản mới",
@@ -8144,7 +8264,7 @@
       "host": "Máy chủ",
       "username": "Tên người dùng",
       "token": "Token",
-      "token-hint": "Dán Personal Access Token. Token được mã hóa bằng safeStorage và lưu cục bộ — không bao giờ ở dạng văn bản thường.",
+      "token-hint": "Dán Personal Access Token. Token được mã hóa và chỉ lưu trên máy này — không bao giờ ở dạng văn bản thường.",
       "token-keep": "Để trống để giữ token hiện tại",
       "delete-confirm": "Xóa tài khoản này?",
       "cli": {
@@ -8173,11 +8293,14 @@
         "agent-switch-confirm-to": "Sang tài khoản",
         "agent-switch-confirm-caller": "Pane yêu cầu",
         "agent-switch-confirm-workspace": "Workspace của pane",
+        "agent-switch-confirm-pane": "Pane được chuyển",
+        "agent-switch-confirm-pane-body": "Không có gì thay đổi nếu bạn chưa đồng ý. Chỉ pane này được chuyển: nó mở lại cuộc trò chuyện trong thư mục riêng của tài khoản kia. Đăng nhập đang dùng của CLI và mọi pane khác giữ nguyên. Nếu pane đang làm việc, Navide sẽ hỏi lại bạn trước khi dừng nó. Nếu bạn không trả lời, yêu cầu sẽ tự đóng.",
         "agent-switch-confirm-reason": "Lý do do agent viết",
         "agent-switch-confirm-reason-truncated": "Lý do của agent dài hơn 300 ký tự; chỉ hiển thị 300 ký tự đầu.",
         "agent-switch-confirm-cancel": "Hủy",
         "agent-switch-confirm-ok": "Chuyển tài khoản",
         "agent-switch-done": "{agent} đã chuyển {vendor} từ {from} sang {to}. Lý do của agent: {reason}",
+        "agent-switch-pane-done": "{agent} đã chuyển một pane từ {from} sang {to}. Đăng nhập đang dùng và các pane khác không thay đổi. Lý do của agent: {reason}",
         "login-complete": "Đã đăng nhập với {email}. Đã lưu tài khoản.",
         "login-complete-no-email": "Đã đăng nhập xong. Đã lưu tài khoản.",
         "login-step2": "Xong bước 1: đã lưu {email}. Thêm một lần ủy quyền nữa để đăng nhập tài khoản này vào thư mục riêng của nó. Hãy hoàn tất trong trình duyệt từ pane đăng nhập vừa mở.",
@@ -8204,8 +8327,12 @@
         "dir-sign-in-hint": "Đăng nhập tài khoản này một lần trong thư mục riêng của nó để có thể đọc hạn mức trực tiếp khi nó đang tạm gác. Trình duyệt sẽ yêu cầu ủy quyền lại; hãy dùng cùng email.",
         "dir-email-mismatch": "Thư mục riêng của nó đang đăng nhập với {dirEmail}, không phải {expected}. Hạn mức trên thẻ này là của {dirEmail}.",
         "default-hint": "Thông tin đăng nhập ban đầu của bạn",
-        "is-default": "Mặc định",
-        "set-default": "Đặt làm mặc định",
+        "default-collapsed": "Đăng nhập ban đầu (ngoài Navide): chưa đăng nhập",
+        "default-sign-in-title": "Chuyển sang đăng nhập ban đầu?",
+        "default-sign-in-body": "Đăng nhập tại đây sẽ chuyển {agent} sang đăng nhập ban đầu trước. Đăng nhập ban đầu không lưu thông tin đăng nhập nào, nên đăng nhập đang dùng ({current}) sẽ bị xóa: tài khoản đó vẫn được lưu trên thẻ của nó và bạn có thể chuyển lại. Các pane {agent} mới sẽ chưa đăng nhập cho đến khi lần đăng nhập này hoàn tất.",
+        "default-sign-in-confirm": "Chuyển và đăng nhập",
+        "is-default": "Đang dùng",
+        "set-default": "Chuyển sang tài khoản này",
         "switching": "Đang chuyển…",
         "not-signed-in": "Chưa đăng nhập",
         "rename": "Đổi tên",
@@ -8247,6 +8374,8 @@
       "inference-url": "URL máy chủ suy luận",
       "recheck-title": "Kiểm tra lại kết nối",
       "ollama-connected": "Đã kết nối Ollama {version}",
+      "ollama-missing": "Ollama chưa được cài đặt trên máy tính này.",
+      "install-ollama": "Cài đặt Ollama",
       "not-connected": "Chưa kết nối · hãy chạy",
       "model-manager": "Trình quản lý model",
       "model-manager-note": "Tải một model từ Ollama theo tên hoặc xóa model không còn cần",
@@ -8262,7 +8391,7 @@
       "testing": "Đang thử:",
       "preparing": "Đang chuẩn bị…",
       "benchmark-hint": "Chạy 4 tác vụ chuẩn trên mọi model cục bộ để xác định model nào phù hợp cho việc phát hiện ý định trong pipeline:",
-      "task-t1": "Phát hiện công nghệ sử dụng — xuất JSON",
+      "task-t1": "Phát hiện công nghệ sử dụng — liệt kê các thư viện mà không gian làm việc dùng",
       "task-t2": "Tóm tắt workspace — tóm tắt trong một câu",
       "task-t3": "Chọn theo mức liên quan — chọn mục liên quan nhất trong danh sách tài liệu",
       "task-t4": "Phân tích ý định CLI — phân tích đầu ra của agent và trích xuất câu hỏi cùng lựa chọn",
@@ -8299,6 +8428,8 @@
     }
   },
   "label": {
+    "step-count": "{count} bước",
+    "imported-from-n8n": "Đã nhập từ n8n",
     "resume-other-pipeline": "Một lượt chạy chưa xong thuộc về “{name}”. Hãy chuyển sang pipeline đó để tiếp tục.",
     "role-rename-repointed": "Đã cập nhật tham chiếu vai trò trong {count} pipeline.",
     "pipeline-manager": "Pipeline Manager",
@@ -8307,7 +8438,6 @@
     "stage-count": "{count} giai đoạn",
     "pipeline-count": "{count} pipeline",
     "builtin": "Có sẵn",
-    "pipeline-definition-file": "Tệp định nghĩa",
     "loading-pipelines": "Đang tải pipeline…",
     "pipelines-unreadable": "Không đọc được định nghĩa pipeline",
     "pipelines-empty": "Chưa có pipeline nào",
@@ -8488,7 +8618,6 @@
     "pipeline-aborted": "Pipeline đã bị hủy giữa chừng. Các agent được giữ lại — nhấn Tiếp tục để chạy tiếp hoặc Đặt lại để xóa.",
     "pipeline-aborted-paused": "Pipeline đã bị hủy giữa chừng (tạm dừng). Các agent được giữ lại — nhấn Tiếp tục để chạy tiếp hoặc Đặt lại để xóa.",
     "pipeline-completed": "✓ Pipeline đã hoàn tất cả {count} giai đoạn. Hãy xem lại từng pane ở bên phải.",
-    "provide-task": "Hãy nhập mô tả tác vụ + workspace, rồi bắt đầu.",
     "missing": "⚠ bị thiếu",
     "already-open": "● đang mở",
     "tagline": "Điều khiển Claude Code · Codex · Antigravity CLI cùng lúc",
@@ -8900,6 +9029,7 @@
     "drag-resize-log": "Kéo để đổi kích thước bảng nhật ký",
     "filter-by-type": "Lọc theo loại",
     "all-stages-finished": "Đã hoàn tất thành công cả {count} giai đoạn",
+    "region-switching": "Đang chuyển {title} sang {version}…",
     "region-unavailable": "{title} không khả dụng"
   },
   "layout": {
@@ -8939,6 +9069,9 @@
     "statusbar-note": "các cửa sổ bật lên của nó cũng ẩn theo"
   },
   "error": {
+    "pipeline-call-failed": "Pipeline con {node} thất bại ({reason}); lượt chạy đã dừng.",
+    "pipeline-parent-suspended": "Một lượt chạy cha đang tạm dừng ({name}) đang chờ ở đây. Hãy tiếp tục hoặc đặt lại nó trước.",
+    "pipeline-node-failed": "Giai đoạn {stage}: bước {slot} báo lỗi ({reason}) và đã hết lượt thử. Lượt chạy đã dừng; hãy tiếp tục để thử lại.",
     "pipeline-start-refused": "Pipeline không khởi động: {reason}",
     "pipeline-kickoff-failed": "Pipeline không khởi động được: giai đoạn {stage}, vị trí {slot} — {reason}. Các pane của nó vẫn đang mở.",
     "pipeline-kickoff-held": "Pipeline không khởi động được: giai đoạn {stage}, vị trí {slot} — lời khởi động của nó đang chờ trong ô nhập. Cứ để đó thì khi tiếp tục sẽ gửi đi, hoặc xóa nó. Các pane của nó vẫn đang mở.",
@@ -8990,6 +9123,8 @@
     "merge-aborted": "Đã hủy merge — các xung đột đã được bỏ."
   },
   "hint": {
+    "pipelines-stored-locally": "Được lưu trên máy này cùng cài đặt của Navide, không nằm trong không gian làm việc. Để chuyển sang máy khác, hãy xuất gói cài đặt trong Cài đặt.",
+    "imported-from-n8n": "Các lần chạy của pipeline này được đánh dấu là nội dung bên ngoài.",
     "role-not-found-refresh": "Vai trò “{key}” không còn tồn tại — có thể cửa sổ khác đã xóa nó. Danh sách bên trái đã được cập nhật; hãy chọn lại vai trò.",
     "role-key-exists-recover": "Đã có vai trò với khóa “{key}”. Nếu đó là phần sót lại của lần đổi tên dang dở, hãy xóa “{key}” khỏi danh sách bên trái trước, rồi đổi tên lại.",
     "role-in-use-list": "Hãy trỏ lại hoặc gỡ các vị trí giai đoạn sau trước:",
@@ -9006,6 +9141,7 @@
     "default-role-fallback": "`defaultRole` sẽ rơi về bất cứ vai trò nào tình cờ khớp lúc chạy",
     "replace-all-roles": "Thay thế tất cả — xóa các vai trò hiện có KHÔNG nằm trong tệp nhập",
     "reset-stages-warning": "Mọi giai đoạn tùy chỉnh sẽ bị gỡ...",
+    "reset-stages-graph-warning": "Các cổng, vòng lặp và nhánh đã vẽ trên pipeline này cũng bị xóa và không thể khôi phục.",
     "completion-modal-body": "Mọi agent đã giao kết quả — hãy xem các bảng bên phải.",
     "git-credential-token": "Dán Personal Access Token vào ô mật khẩu — không phải mật khẩu đăng nhập của bạn.",
     "install-foundation-tools": "Cài các công cụ nền tảng cần thiết...",
@@ -9048,8 +9184,7 @@
     "attention-body": "{label} đang chờ bạn trả lời"
   },
   "updater": {
-    "section-title": "Cập nhật",
-    "section-hint": "Giữ Agent-Team luôn mới nhất. Bản cập nhật áp dụng cho mọi workspace.",
+    "section-hint": "Giữ Navide luôn mới nhất. Bản cập nhật áp dụng cho mọi workspace.",
     "current-version": "Phiên bản hiện tại",
     "check": "Kiểm tra cập nhật",
     "checking": "Đang kiểm tra cập nhật…",
@@ -9124,6 +9259,21 @@
     "load-more": "Tải thêm (còn {count})",
     "mcp-tools-changed": "Công cụ MCP có thể đã thay đổi",
     "mcp-tools-changed-note": "CLI agent đọc danh sách công cụ MCP của Navide một lần, lúc khởi động. Những gì vẫn còn kết nối từ phiên bản trước ({from}) — một pane CLI, hoặc một client MCP bên ngoài — vẫn giữ các công cụ đã thấy lúc đó; hãy mở lại pane hoặc kết nối lại client để nhận công cụ mới.",
+    "backend-restart": {
+      "title": "Backend đã khởi động lại lúc {time}",
+      "note": "Các pane được nối lại dừng ở dấu nhắc và không tự tiếp tục; các pane đã kết thúc giữ nguyên cho đến khi bạn dựng lại.",
+      "crash-loop": "Backend lại gặp sự cố ngay sau khi khởi động lại, nên lần này không pane nào được tự động nối lại. Hãy dựng lại những pane bạn cần.",
+      "resumed": "Đã nối lại: {names}",
+      "interrupted": "Lượt bị gián đoạn: {names}",
+      "rebuild": "Dựng lại {name}",
+      "not-resumed": {
+        "crash-loop": "{name}: không nối lại, vì backend gặp sự cố liên tục trong thời gian ngắn",
+        "over-limit": "{name}: không nối lại, vì có hơn sáu pane ngoài màn hình đang làm việc",
+        "idle-off-screen": "{name}: không nối lại, vì nó ở ngoài màn hình và đang rảnh",
+        "no-session": "{name}: không nối lại, vì không có cuộc trò chuyện đã lưu để tiếp tục",
+        "failed": "{name}: không nối lại được"
+      }
+    },
     "scheduler-disabled": "Tác vụ theo lịch “{name}” đã bị tắt: pane đích không còn",
     "scheduler-disabled-note": "Không tìm thấy pane đích {n} lần chạy liên tiếp, nên tác vụ đã bị tắt. Trong bảng Lịch chạy, hãy dùng “Gắn lại” để trỏ nó tới một pane đang chạy, rồi bật lại.",
     "quota": {
@@ -9321,9 +9471,6 @@
     "intro": "Đổi tên bất kỳ trạng thái pane nào và chọn màu cho nó. Thay đổi áp dụng ở mọi nơi hiển thị trạng thái — huy hiệu pane, thanh bên, dải họp và bảng tài nguyên — và được lưu vào tài khoản của bạn, không phải vào dự án.",
     "col": {
       "status": "Trạng thái",
-      "zh": "Tiếng Trung phồn thể",
-      "en": "Tiếng Anh",
-      "ja": "Tiếng Nhật",
       "color": "Màu"
     },
     "row-only": "chỉ trong danh sách",
@@ -9501,7 +9648,7 @@
     "failed": "Không kết nối lại được cuộc hội thoại đó — bản ghi của nó có thể không còn"
   },
   "cli-account": {
-    "default": "Mặc định",
+    "default": "Đăng nhập ban đầu",
     "switch-title": "Chuyển tài khoản",
     "swap-failed": "Không chuyển tài khoản được — tài khoản trước vẫn đang dùng.",
     "panes-running": "Có {count} pane CLI đang chạy dùng tài khoản này — hãy đóng chúng trước khi chuyển.",
@@ -9811,6 +9958,7 @@
     "reading-short": "đang đọc",
     "reading-tooltip": "Tài khoản này vừa được kích hoạt. Việc đọc hạn mức sẽ khởi chạy một Claude Code, nên các số bên dưới là của lần đọc trước cho đến khi xong — tối đa 3 phút.",
     "refresh-status": "Làm mới: {status}",
+    "refresh-not-signed-in": "Không thể làm mới — chưa đăng nhập",
     "refresh-error": "Lý do: {reason}",
     "refresh-status-ok": "đã cập nhật",
     "refresh-status-not-refreshed": "chưa làm mới",
@@ -9860,13 +10008,13 @@
     "settings-title": "Huy hiệu hạn mức CLI",
     "settings-enabled": "Hiện hạn mức còn lại trên thanh tiêu đề pane CLI",
     "settings-refresh": "Khoảng làm mới",
-    "settings-hint": "Hiện hạn mức CLI cho 11 nhà cung cấp: claude, codex, kimi, grok, antigravity, opencode, qwen, kilo, pi, copilot và cursor. Phần lớn đọc thông tin xác thực CLI cục bộ để truy vấn API mức sử dụng của chính nhà cung cấp — chỉ đọc, không bao giờ ghi thông tin xác thực. Claude thì khác: Navide điều khiển bảng /usage có sẵn của Claude CLI thay vì đọc thông tin xác thực.",
+    "settings-hint": "Hiển thị hạn mức của 11 nhà cung cấp CLI, chỉ đọc, từ API sử dụng của từng nhà cung cấp (với Claude là từ bảng /usage tích hợp).",
     "failover-title": "Chuyển tài khoản khi hết hạn mức",
-    "failover-hint": "Navide làm gì khi một tài khoản CLI chạm hạn mức: không làm gì, liệt kê các tài khoản có thể chuyển sang (mặc định), hoặc tự động chuyển — tối đa 3 lần tự động chuyển mỗi 5 giờ cho mỗi CLI, không bao giờ tự quay lại tài khoản đã hết. Bảng cho biết mỗi CLI làm được gì; việc chuyển do backend quyết định.",
+    "failover-hint": "Navide làm gì khi tài khoản CLI hết hạn mức: không làm gì, liệt kê tài khoản có thể chuyển (mặc định), hoặc tự chuyển, tối đa 3 lần mỗi 5 giờ cho mỗi CLI.",
     "failover-loop-title": "Tiếp tục loop ngay sau khi chuyển do hết hạn mức",
-    "failover-loop-hint": "Khi một pane đang chạy loop hết hạn mức, chuyển sang tài khoản còn hạn mức và gửi continue ngay thay vì chờ đặt lại. Cần bật “Tự động chuyển” ở trên.",
+    "failover-loop-hint": "Khi pane đang chạy loop hết hạn mức, chuyển sang tài khoản còn hạn mức và tiếp tục ngay; cần bật \"Tự động chuyển\".",
     "follow-switch-title": "Kéo theo các pane đã ghim khi chuyển tài khoản Claude",
-    "follow-switch-hint": "Các pane Claude chạy trên thư mục đăng nhập riêng của một tài khoản không đi theo khi chuyển tài khoản. Khi bật, mỗi lần chuyển sẽ liệt kê chúng để bạn kéo theo, và pane hết hạn mức sẽ có nút “Chuyển tài khoản”. Mỗi pane mở lại trên tài khoản mới và tiếp tục cuộc hội thoại. Mặc định tắt.",
+    "follow-switch-hint": "Khi chuyển tài khoản, đưa các pane Claude dùng thư mục đăng nhập riêng của tài khoản sang tài khoản mới và tiếp tục hội thoại của chúng.",
     "failover-mode-off": "Tắt",
     "failover-mode-notify": "Báo cho tôi",
     "failover-mode-auto": "Tự động chuyển",
@@ -9955,6 +10103,7 @@
       }
     },
     "blocked-by": "Hãy cài {names} trước — nó là điều kiện để cài mục này ở đây.",
+    "installs-first": "Khi cài đặt, {names} cũng sẽ được thiết lập trước.",
     "go-install": "Cài {name} trước",
     "complete-failed": "Không lưu được tiến độ thiết lập: {error}. Hãy thử lại.",
     "ollama-start-failed": "Không khởi động được dịch vụ Ollama. Xem nhật ký để biết chi tiết, hoặc chạy `ollama serve` trong terminal.",
@@ -10086,6 +10235,9 @@
     "weekday-6": "Thứ bảy"
   },
   "scheduler": {
+    "pipeline-title": "Mỗi lần chạy công việc này sẽ khởi động một lượt pipeline, mở các pane CLI và tiêu tốn hạn mức của chúng",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "khởi động pipeline {name}",
     "system": {
       "tag": "Hệ thống",
       "manage": "Quản lý trong workspace →",
@@ -10126,7 +10278,22 @@
       "expired": "Đã hết hạn: tác vụ của agent không được gia hạn trong 7 ngày",
       "unknown": "Đã bỏ qua"
     },
+    "fail-reason": {
+      "no_window": "Không có cửa sổ Navide nào đang mở workspace của tác vụ này. Hãy mở workspace rồi chạy lại.",
+      "pipeline_not_found": "Pipeline mà tác vụ này khởi động không tồn tại hoặc tên trùng với nhiều pipeline. Hãy sửa tác vụ và chọn pipeline.",
+      "pipeline_already_running": "Workspace đó đang có một pipeline chạy, nên lần này không khởi động."
+    },
     "editor": {
+      "err-task": "Hãy nhập tác vụ",
+      "err-pipeline": "Hãy chọn pipeline",
+      "task-placeholder": "Mỗi lượt pipeline dùng để làm gì…",
+      "task": "Tác vụ",
+      "pipeline-cost": "Mỗi lần chạy sẽ mở các pane CLI của pipeline này và tiêu tốn hạn mức. Không bao giờ tự mở cửa sổ: nếu workspace chưa mở, lần chạy sẽ thất bại và nêu lý do.",
+      "pick-pipeline": "Chọn pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "Khởi động pipeline",
+      "action-message": "Gửi chỉ dẫn tới một pane",
+      "action": "Hành động",
       "title-new": "Tác vụ theo lịch mới",
       "title-edit": "Sửa tác vụ theo lịch",
       "name": "Tên",
@@ -10166,6 +10333,7 @@
       "save": "Lưu"
     },
     "owner": {
+      "user": "do bạn tạo",
       "agent": "agent · {name}",
       "external": "agent bên ngoài",
       "agent-title": "Do agent “{name}” tạo; chỉ nó và bạn mới thay đổi được",
@@ -10613,7 +10781,7 @@
     "desc": {
       "telegram": "Bot tạo bằng {'@'}BotFather",
       "discord": "Ứng dụng bot trong máy chủ của bạn",
-      "slack": "Ứng dụng Socket Mode trong workspace của bạn",
+      "slack": "Ứng dụng Slack kết nối từ máy tính này (bật Socket Mode trong Slack)",
       "feishu": "Ứng dụng tùy chỉnh trên Feishu hoặc Lark",
       "dingtalk": "Robot nội bộ ở chế độ Stream",
       "matrix": "Người dùng bot trên bất kỳ homeserver nào",
@@ -10820,7 +10988,7 @@
     "unavailable": "Backend này chưa có Navide Guard. Hãy khởi động lại Navide sau khi cập nhật.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Đánh giá mỗi hành động của CLI theo mức nguy hiểm và theo ai đã yêu cầu; dừng lại hoặc hỏi trước các hành động nguy hiểm. Quy tắc là mã cố định, không bao giờ là AI. Việc phê duyệt một hành động rủi ro cao từ kênh trò chuyện vẫn bị từ chối kể cả khi mục này tắt. Bảo vệ lệnh terminal, và việc kiểm tra agent trả lời lời nhắc qua MCP, cũng không bị công tắc này ảnh hưởng."
+      "desc": "Dừng hoặc hỏi trước các hành động nguy hiểm của CLI, theo quy tắc cố định (không bao giờ là AI) dựa trên mức rủi ro và ai đã yêu cầu. Kể cả khi mục này tắt, việc phê duyệt hành động rủi ro cao từ kênh trò chuyện vẫn bị từ chối, còn bảo vệ lệnh terminal và việc kiểm tra câu trả lời lời nhắc qua MCP vẫn hoạt động."
     },
     "counts": {
       "critical": "Nghiêm trọng {n}",
@@ -10860,7 +11028,7 @@
     },
     "vendors": {
       "title": "Guard chặn được những CLI nào",
-      "hint": "Guard dừng một hành động thông qua hook riêng của CLI. CLI không có hook chỉ được bảo vệ bằng việc từ chối phê duyệt qua trò chuyện và bằng cách không chạy chúng ở chế độ YOLO.",
+      "hint": "Guard chỉ dừng được hành động trong các CLI cho phép Navide kiểm tra từng hành động trước khi chạy. Các CLI khác chỉ được bảo vệ bằng cách từ chối yêu cầu phê duyệt gửi từ trò chuyện và giữ bật lời nhắc cấp quyền của chúng.",
       "block": "Chặn được",
       "none": "Không chặn được",
       "unknown": "Không rõ"
@@ -11081,8 +11249,81 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "Chi tiết",
+    "stage-not-found": "Bước đó không còn nữa. Có thể nó đã được sửa ở nơi khác; hãy mở lại pipeline.",
+    "refused": {
+      "last-pipeline": "Đây là pipeline duy nhất nên không xóa được. Hãy tạo một pipeline khác trước.",
+      "last-stage": "Pipeline cần ít nhất một bước nên không xóa được bước cuối cùng.",
+      "not-builtin": "Chỉ pipeline có sẵn mới khôi phục được về các bước ban đầu.",
+      "no-seed": "Pipeline có sẵn này không có bước ban đầu nào để khôi phục.",
+      "stage-id-required": "Bước này chưa có ID. Hãy đặt ID rồi thử lại.",
+      "stage-id-invalid": "ID của bước chỉ được dùng chữ cái, chữ số, dấu gạch ngang, dấu gạch dưới và dấu chấm.",
+      "stage-needs-slot": "Mỗi bước cần ít nhất một agent."
+    },
+    "run": {
+      "no-workspace": "Hãy mở một không gian làm việc trước.",
+      "already-running": "Không gian làm việc này đã có pipeline đang chạy. Hãy hủy nó trước.",
+      "no-pipeline": "Hãy chọn một pipeline trước.",
+      "not-started": "Lần chạy chưa bắt đầu. Lý do có trong nhật ký pipeline.",
+      "not-running": "Không có pipeline nào đang chạy trong không gian làm việc này.",
+      "last-stage": "Đây là giai đoạn cuối ({stage}/{total}). Lần chạy kết thúc khi nó báo đã xong.",
+      "gate-waiting": "Lần chạy đang chờ bạn phê duyệt tại {gate}. Hãy phê duyệt hoặc trả về trước.",
+      "not-advanced": "Lần chạy không đi tiếp. Lý do có trong nhật ký pipeline.",
+      "no-run": "Không gian làm việc này không có lần chạy nào để tiếp tục.",
+      "nothing-to-resume": "Mọi giai đoạn của lần chạy trước đều đã xong ({done}/{total}).",
+      "not-resumed": "Lần chạy không tiếp tục. Lý do có trong nhật ký pipeline.",
+      "not-cleared": "Lần chạy chưa được xóa. Lý do có trong nhật ký pipeline.",
+      "stored-not-cleared": "Các pane đã đóng, nhưng lần chạy đã lưu chưa được xóa.",
+      "no-task": "Không có tác vụ nào để chạy. Hãy nhập tác vụ trước.",
+      "not-at-gate": "Lần chạy hiện không chờ phê duyệt.",
+      "wrong-gate": "Lần chạy đang chờ tại {gate}, không phải tại {asked}.",
+      "node-required": "Hãy chọn bước để chạy lại từ đó."
+    },
+    "start": {
+      "parent-suspended": "{name} đang chờ pipeline con của nó ở đây. Hãy tiếp tục hoặc đặt lại nó trước.",
+      "switch-failed": "Không chuyển sang pipeline này được.",
+      "stages-load-failed": "Không tải được các bước của pipeline này.",
+      "no-stages": "Pipeline này chưa có bước nào. Hãy thêm một bước trước.",
+      "graph-failed": "Không chuẩn bị được pipeline để chạy.",
+      "spawn-failed": "Không khởi động được agent nào của bước đầu tiên. Hãy kiểm tra CLI của chúng đã được cài đặt chưa.",
+      "already-running": "Workspace này đang có một pipeline chạy. Hãy dừng nó trước.",
+      "not-recorded": "Lần chạy không được ghi lại nên không có gì được khởi động. Xem log của pipeline để biết lý do."
+    },
+    "graph": {
+      "slot-incomplete": "{label} cần một agent và một tên.",
+      "self-loop": "{label} không thể liên kết với chính nó.",
+      "edge-into-trigger": "Không liên kết nào được đi vào điểm bắt đầu của pipeline.",
+      "reject-from-trigger": "Liên kết trả về không thể bắt đầu từ điểm bắt đầu của pipeline.",
+      "max-loops-range": "Liên kết trả về đi ra từ {label} có thể lặp lại từ 1 đến {max} lần.",
+      "edge-must-start-at-work": "Liên kết rẽ nhánh và liên kết lỗi phải bắt đầu từ một bước ({label} không phải là bước).",
+      "branch-when": "Liên kết rẽ nhánh đi ra từ {label} cần một giá trị để so khớp.",
+      "retry-config": "Thiết lập thử lại của {label} nằm ngoài phạm vi: từ 1 đến {maxTries} lần thử, cách nhau từ 0 đến {maxWaitMs} ms.",
+      "subpipeline-links": "Các pipeline con sẽ gọi nhau thành vòng lặp, hoặc gọi một pipeline không còn tồn tại.",
+      "no-graph": "Pipeline chưa tải xong. Hãy thử lại sau giây lát.",
+      "other": "Thay đổi đó sẽ làm hỏng pipeline.",
+      "other-at": "Thay đổi đó sẽ làm hỏng pipeline tại {label}."
+    },
+    "gate": {
+      "confirm-title": "Kết thúc lần chạy?",
+      "confirm-no-edge": "{name} không có liên kết trả về, nên trả về sẽ kết thúc lần chạy là thất bại. Các pane vẫn mở.",
+      "confirm-exhausted": "{name} đã trả về công việc nhiều lần nhất mà liên kết cho phép, nên trả về lần nữa sẽ kết thúc lần chạy là thất bại. Các pane vẫn mở.",
+      "confirm-button": "Kết thúc lần chạy",
+      "rejected-failed": "{name} đã bị trả về và lần chạy kết thúc là thất bại.",
+      "ends-run-hint": "Trả về ở đây sẽ kết thúc lần chạy."
+    }
+  },
   "pipelineEditor": {
+    "recover": {
+      "title": "Khôi phục",
+      "resume-desc": "Tiếp tục lần chạy đã dừng từ giai đoạn chưa xong đầu tiên, giữ nguyên các pane và ngữ cảnh.",
+      "restart-desc": "Đóng các pane của lần chạy này và chạy lại cùng nhiệm vụ từ giai đoạn đầu tiên.",
+      "reset-desc": "Xóa lần chạy và đóng mọi pane trong cửa sổ này, kể cả các pane bạn tự mở.",
+      "older-run": "Đây là một lần chạy trước. Khôi phục luôn áp dụng cho lần chạy mới nhất của pipeline này.",
+      "show-latest": "Xem lần chạy mới nhất"
+    },
     "error": {
+      "subpipeline-none": "Pipeline con cần một pipeline khác để chạy; hãy tạo một cái trước.",
       "pipeline-running": "Pipeline này đang chạy, nên hiện không thay đổi được. Hãy hủy hoặc chờ lần chạy kết thúc trước.",
       "pipeline-not-found": "Pipeline này không còn tồn tại. Có thể nó đã bị xóa ở nơi khác; hãy chọn pipeline khác.",
       "export-failed": "Không xuất được: {message}",
@@ -11090,7 +11331,6 @@
       "command-failed": "Lần chạy không chấp nhận lệnh đó.",
       "cycle": "Liên kết đó sẽ khiến luồng lặp mãi. Hãy dùng liên kết trả về từ một điểm phê duyệt hoặc một bước thay cho liên kết này — liên kết trả về có giới hạn số lần thử lại.",
       "duplicate-edge": "Hai bước này đã được liên kết.",
-      "invalid": "Thay đổi đó sẽ làm hỏng pipeline: {detail}",
       "reject-upstream": "Liên kết trả về phải trỏ ngược về một bước trước đó.",
       "transport": "Không kết nối được tới backend: {message}",
       "unknown": "Backend từ chối thay đổi mà không nói lý do."
@@ -11098,10 +11338,14 @@
     "badge": {
       "open-canvas": "Hiện liên kết này trên canvas",
       "reject": "↺ Quay về tầng {layer} (tối đa {max})",
-      "skip": "⤳ Nhảy tới tầng {layer}"
+      "skip": "⤳ Nhảy tới tầng {layer}",
+      "branch": "⑂ Nếu {when} → tầng {layer}",
+      "error": "⚠ Khi thất bại → tầng {layer}"
     },
     "canvas": {
       "insert-on-edge": "Chèn một bước vào đây",
+      "branch-label": "nếu {when}",
+      "error-label": "khi lỗi",
       "loop-label": "↺ tối đa {max}",
       "minimap": "Tổng quan toàn bộ pipeline",
       "pass": "Tiếp tục khi được phê duyệt",
@@ -11112,7 +11356,7 @@
     },
     "exec": {
       "abort": "Hủy lần chạy",
-      "empty-body": "Các lần chạy sẽ hiện ở đây khi pipeline này được khởi động — từ thanh bên, một lệnh, hoặc một CLI qua MCP.",
+      "empty-body": "Mô tả nhiệm vụ trong ô ở trên cùng rồi chạy, hoặc khởi động pipeline này từ thanh bên, một lịch hẹn, hoặc một CLI qua MCP.",
       "empty-title": "Chưa có lần chạy nào",
       "list": "Các lần chạy của pipeline này",
       "live": "Đang chạy",
@@ -11125,7 +11369,7 @@
       "outcome-ended": "Đã kết thúc",
       "outcome-unknown": "Không rõ",
       "outcome-idle": "Rảnh",
-      "pick": "Chọn một lần chạy để phát lại trên đồ thị.",
+      "failed-step": "{name} thất bại: {error}",
       "progress": "{done} trên {total} bước",
       "restart": "Bắt đầu lại",
       "resume": "Tiếp tục",
@@ -11142,6 +11386,8 @@
       "reject": "Trả về"
     },
     "history": {
+      "subpipeline": "Sửa pipeline con",
+      "retry": "Đổi số lần thử lại",
       "add": "Thêm {name}",
       "edit-cli": "Đổi CLI",
       "edit-field": "Sửa {field}",
@@ -11161,9 +11407,25 @@
       "tidy": "Sắp gọn",
       "unlink": "Gỡ liên kết",
       "unpin": "Bỏ cố định đầu ra",
+      "link-kind": "Đổi loại liên kết",
+      "link-when": "Đổi giá trị nhánh",
       "loop-budget": "Đổi giới hạn thử lại"
     },
     "inspector": {
+      "subpipeline-task-help": "Để trống: dùng tác vụ của lượt chạy này. Có thể dùng tóm tắt của bước trước và đầu ra của các bước khác, như trong kickoff.",
+      "subpipeline-task": "Tác vụ cho lượt chạy đó",
+      "subpipeline-help": "Lượt chạy này dừng tại đây, chạy pipeline đó trong cùng workspace rồi tiếp tục với kết quả của nó. Trong lúc đó các pane của lượt chạy này vẫn mở.",
+      "subpipeline-pick": "Chọn pipeline",
+      "subpipeline-pipeline": "Pipeline cần chạy",
+      "retry-blocked-not-failed": "Chỉ có thể thử lại bước bị lỗi",
+      "retry-blocked-no-run": "Không dùng được: pipeline này chưa có lượt chạy",
+      "retry-blocked-running": "Không dùng được khi đang có lượt chạy",
+      "retry-node-help": "Chạy lại bước bị lỗi này: lượt chạy tiếp tục từ bước này, hoặc khởi động lại từ bước này nếu các bước sau đã chạy",
+      "retry-node": "Thử lại bước này",
+      "retry-wait": "Chờ trước mỗi lần thử lại (giây)",
+      "retry-help": "Một lần thử lỗi (tác vụ không tới được agent, hoặc agent báo lỗi) sẽ chạy lại ở cùng bước, tối đa {max} lần thử.",
+      "retry-tries": "Tổng số lần thử",
+      "retry-title": "Thử lại khi lỗi",
       "aria": "Cài đặt cho {name}",
       "attempts": "Số lần thử",
       "elapsed": "Thời gian",
@@ -11173,6 +11435,7 @@
       "kind-gate": "Điểm phê duyệt",
       "kind-slot": "Bước",
       "kind-trigger": "Bắt đầu",
+      "kind-subpipeline": "Pipeline con",
       "layer": "Cài đặt tầng",
       "live-empty": "Chế độ xem trực tiếp mở khi bước này đang chạy. Hãy khởi động pipeline, rồi quay lại đây.",
       "live-unavailable": "Hiện không đọc được bản ghi của pane.",
@@ -11181,6 +11444,7 @@
       "not-run": "Chưa chạy",
       "open-pane": "Mở pane",
       "output-empty": "Chưa có đầu ra. Sau khi bước này chạy, bản tóm tắt sẽ hiện ở đây.",
+      "failure": "Lý do thất bại",
       "pin": "Cố định đầu ra",
       "pin-help": "Các lần chạy lại bỏ qua bước đã cố định và dùng lại đầu ra gần nhất của nó.",
       "required": "Bắt buộc",
@@ -11212,17 +11476,21 @@
       "more": "thêm {n} tầng"
     },
     "node": {
+      "subpipeline-sub": "Chạy pipeline {pipeline}",
       "commander": "Người quản lý pipeline",
       "gate-sub": "Chờ phê duyệt",
       "pinned": "Đầu ra đã cố định",
       "tokens": "{n} token",
-      "trigger-sub": "Thủ công, lệnh hoặc MCP"
+      "trigger-sub": "Thủ công, lệnh hoặc MCP",
+      "needs-review": "Đã nhập từ n8n: hãy kiểm tra bước này trước khi chạy pipeline"
     },
     "notice": {
       "external-edit": "Pipeline này đã được thay đổi ở nơi khác. Đang hiện phiên bản mới nhất; lịch sử hoàn tác đã bị xóa.",
       "reorder-on-canvas": "Pipeline này có điểm phê duyệt, vòng lặp hoặc liên kết tùy chỉnh, nên thứ tự của nó do các liên kết quyết định. Hãy thay đổi trên canvas."
     },
     "palette": {
+      "subpipeline-desc": "Chạy một pipeline khác và chờ kết quả",
+      "subpipeline": "Pipeline con",
       "agents": "Agent",
       "branch-tip": "Để rẽ nhánh, hãy vẽ hai liên kết đi ra từ một bước trên canvas; để hợp nhất, vẽ hai liên kết đi vào một bước.",
       "flow": "Điều khiển luồng",
@@ -11245,11 +11513,13 @@
       "awaiting": "Cần phê duyệt",
       "rejected": "Đã trả về",
       "failed": "Thất bại",
+      "untaken": "Đã bỏ qua (không nằm trên nhánh đã chọn)",
       "skipped": "Dùng lại đầu ra đã cố định",
       "aborted": "Đã hủy",
       "pinned": "Đầu ra đã cố định"
     },
     "toolbar": {
+      "more": "Thao tác khác",
       "canvas": "Canvas",
       "derived": "Mở từ các giai đoạn — lần sửa đầu tiên sẽ lưu nó thành đồ thị",
       "executions": "Lần chạy",
@@ -11265,10 +11535,73 @@
       "undo-none": "Không có gì để hoàn tác",
       "view": "Chế độ xem",
       "show-palette": "Hiện bảng nút",
-      "hide-palette": "Ẩn bảng nút"
+      "hide-palette": "Ẩn bảng nút",
+      "task": "Nhiệm vụ cho lần chạy này"
     },
     "controlPane": {
-      "open-in-canvas": "Mở trong canvas pipeline"
+      "open-parent": "Mở pipeline gọi nó",
+      "parents": "Được gọi từ",
+      "open-in-canvas": "Mở trong canvas pipeline",
+      "gate-toast": "Pipeline đang chờ bạn phê duyệt tại {name}",
+      "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo.",
+      "last-stage": "Đây là giai đoạn cuối. Lần chạy sẽ kết thúc khi giai đoạn này báo hoàn tất.",
+      "next-stage": "Tiếp → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "chuẩn bị: đang khởi động CLI",
+        "checking-dialog": "chuẩn bị: đang kiểm tra hộp thoại",
+        "settling": "chuẩn bị: đang chờ dấu nhắc",
+        "injecting-role": "chuẩn bị: đang nạp vai trò",
+        "waiting-agent": "chuẩn bị: đang chờ agent",
+        "ready": "chuẩn bị: sẵn sàng",
+        "failed": "chuẩn bị: thất bại"
+      },
+      "role": {
+        "pending": "vai trò: đang chờ",
+        "scheduled": "vai trò: đang nạp",
+        "sent": "vai trò: đã nạp",
+        "failed": "vai trò: nạp thất bại",
+        "skipped": "vai trò: đã bỏ qua"
+      },
+      "kickoff": {
+        "pending": "· khởi động: đang xếp hàng",
+        "sent": "· khởi động: đã gửi",
+        "unverified": "· khởi động: chưa xác nhận",
+        "failed": "· khởi động: thất bại"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "Pipeline mặc định",
+        "maintenance": "Pipeline bảo trì",
+        "evolve-landing": "Pipeline triển khai đề xuất"
+      },
+      "role": {
+        "pm": "PRD, user story, UAT, KPI, mức ưu tiên",
+        "backend": "API, cơ sở dữ liệu, logic nghiệp vụ, bảo mật",
+        "frontend": "Component, quản lý trạng thái, bố cục đáp ứng, hiệu năng",
+        "mobile": "iOS, Android, đa nền tảng, ưu tiên ngoại tuyến",
+        "qa": "E2E, trường hợp biên, ma trận kiểm thử tự động"
+      }
+    },
+    "link": {
+      "out-title": "Dẫn đến",
+      "none": "Bước này chưa có liên kết đi ra.",
+      "to": "Đến bước",
+      "to-pick": "Chọn một bước",
+      "add": "Thêm liên kết",
+      "branch-help": "Navide thêm một dòng vào lời giao việc của bước này, yêu cầu agent kết thúc câu trả lời bằng ---BRANCH:<code>: <value>--- trên một dòng riêng. Lần chạy đi theo liên kết có giá trị khớp, không phân biệt hoa thường; nếu không có liên kết nào khớp, liên kết có giá trị default sẽ được chọn.",
+      "error-help": "Được chọn khi bước này thất bại sau các lần thử lại — agent báo ---NODE-FAILED---, hoặc nhiệm vụ không đến được agent. Lần chạy tiếp tục theo liên kết này thay vì dừng lại.",
+      "title": "Liên kết",
+      "desc": "{from} → {to}",
+      "kind": "Loại liên kết",
+      "kind-main": "Luôn luôn",
+      "kind-branch": "Rẽ nhánh (nếu…)",
+      "kind-error": "Khi lỗi",
+      "when": "Giá trị nhánh",
+      "when-placeholder": "Giá trị bước báo về, hoặc default",
+      "remove": "Gỡ liên kết"
     },
     "edge": {
       "title": "Vòng trả về",
@@ -11321,9 +11654,19 @@
       "problem-condition": "Quy tắc hiển thị tham chiếu tới “{field}”, vốn không phải một trường khác của vai trò này."
     },
     "run": {
+      "abort-title": "Hủy lần chạy này?",
+      "abort-message": "Lần chạy dừng ngay tại chỗ. Các pane vẫn mở, và bạn có thể tiếp tục sau.",
       "running": "Đang chạy: {names}",
       "gate": "Đang chờ bạn phê duyệt tại {name}",
-      "review": "Xem xét"
+      "review": "Xem xét",
+      "blocked-backend": "Chưa kết nối tới backend.",
+      "blocked-workspace": "Hãy mở một workspace trước.",
+      "blocked-task": "Hãy mô tả nhiệm vụ trước.",
+      "reset-title": "Đặt lại lần chạy này?",
+      "reset-message": "Đặt lại sẽ xóa lần chạy này và đóng mọi pane trong cửa sổ, kể cả pane bạn tự mở. {count} pane sẽ bị đóng.",
+      "reset-message-none": "Đặt lại sẽ xóa lần chạy này. Không có pane nào đang mở nên sẽ không đóng pane nào.",
+      "reset-manual-mark": "không do lần chạy mở",
+      "reset-confirm": "Đặt lại và đóng pane"
     }
   },
   "evolve": {
@@ -11365,6 +11708,14 @@
       "not-reclaimed": "(chưa thu hồi)",
       "fix": "Bản sửa",
       "proposal": "Đề xuất",
+      "proposal-reason": "Lý do: {reason}",
+      "effect-title": "Hiệu quả và tần suất",
+      "adoption": "Đã nhận {adopted} / {resolved}",
+      "adoption-none": "Chưa có đề xuất nào có kết quả",
+      "lowered": "Tự hạ xuống hằng tuần từ {date}: {n} đề xuất gần nhất liên tiếp không được nhận",
+      "landed-title": "Đề xuất đã áp dụng",
+      "landed-none": "Chưa có đề xuất nào đã áp dụng",
+      "effect-counts": "{before} → {after} (7 ngày trước / sau)",
       "history": "Lịch sử (30 lần gần nhất)",
       "unsaved": "Có thay đổi chưa lưu",
       "save": "Lưu",
@@ -11402,6 +11753,21 @@
       "scope-propose": "Chỉ đề xuất (không sửa mã)",
       "scope-fix-no-git": "Workspace này không phải kho git: không có worktree hay nhánh chính để làm việc, nên chỉ đề xuất được.",
       "scope-always-propose": "Tính năng mới, đánh đổi thiết kế, xóa dữ liệu / migration, push và phát hành luôn chỉ là đề xuất (quy tắc tích hợp sẵn).",
+      "retro": "Nhìn lại",
+      "retro-tools": "Việc thủ công lặp lại",
+      "retro-tools-hint": "Tối đa {tokens} token mỗi lần chạy. Đọc nhật ký tin nhắn và các lần chạy tác vụ đã lên lịch của workspace này trong 7 ngày gần nhất, chỉ lấy số lần; việc làm từ 3 lần trở lên sẽ được đề xuất làm thành pipeline, skill, Prompt, v.v.",
+      "retro-corrections": "Các góp ý của bạn",
+      "retro-corrections-hint": "Tối đa {tokens} token mỗi lần chạy. Đọc các review note bạn để trên plan của workspace này và lý do các đề xuất bị từ chối trong 7 ngày gần nhất, chỉ lấy số lần; góp ý lặp lại từ 2 lần trở lên sẽ thành đề xuất đổi quy tắc.",
+      "burst": "Chạy sớm",
+      "burst-on": "Chạy sớm một lần khi cùng một lỗi xuất hiện dồn dập",
+      "burst-count": "lần",
+      "burst-minutes": "phút",
+      "burst-per-day": "lần chạy sớm mỗi ngày tối đa",
+      "burst-hint": "Chỉ đọc nhật ký lỗi của workspace này. Mặc định tắt; vẫn theo giới hạn số lần chạy mỗi ngày và chỉ chạy một lần một lúc, cùng một lỗi chỉ kích hoạt chạy sớm tối đa một lần trong 24 giờ.",
+      "reclaim-retro": "Nhìn lại khi thu hồi",
+      "reclaim-retro-on": "Trước khi một pane được giao việc chạy lâu bị thu hồi tự động hoặc bởi pane cha, nhờ nó viết ba dòng",
+      "reclaim-retro-per-day": "lần nhìn lại mỗi ngày tối đa",
+      "reclaim-retro-hint": "Chỉ áp dụng cho pane do pane khác mở (cli_open_agent) đã chạy hơn 30 phút, và chỉ khi tự thu hồi lúc rảnh, khi pane cha thu hồi, khi chuyển giai đoạn pipeline; thu hồi do bạn bấm không bao giờ phải chờ. Mỗi lần tốn của pane đó một lượt token, chờ tối đa {seconds} giây và chỉ giữ ba dòng pane tự viết (đã che thông tin nhạy cảm) trên máy này.",
       "rules": "Quy tắc",
       "rules-builtin": "Tích hợp sẵn v{version}",
       "rules-view": "Xem toàn văn",
@@ -11426,6 +11792,29 @@
       "error": "Thất bại",
       "timeout": "Hết thời gian",
       "skipped": "Đã bỏ qua"
+    },
+    "source": {
+      "failures": "Phân loại lỗi",
+      "tools": "Việc thủ công lặp lại",
+      "corrections": "Các góp ý của bạn"
+    },
+    "freq": {
+      "daily": "Hằng ngày",
+      "weekly": "Hằng tuần"
+    },
+    "effect": {
+      "effective": "Có hiệu quả",
+      "not-effective": "Không hiệu quả",
+      "insufficient": "Quá ít để đánh giá",
+      "pending": "Chưa đánh giá"
+    },
+    "proposal-status": {
+      "proposed": "Đã đề xuất",
+      "approved": "Đã duyệt",
+      "rejected": "Bị từ chối",
+      "in-progress": "Đang làm",
+      "landed": "Đã áp dụng",
+      "abandoned": "Đã bỏ"
     },
     "history": {
       "date": "Ngày",
@@ -11476,9 +11865,8 @@
     "no-match": "Không có workspace nào khớp “{query}”.",
     "trimmed": "{count} mục cũ hơn đã bị gỡ do giới hạn lịch sử. Bạn có thể đổi giới hạn trong Cài đặt → Chung.",
     "limit-title": "Giới hạn workspace gần đây",
+    "limit-count": "Số mục tối đa",
     "limit-hint": "Mục Gần đây giữ mọi workspace bạn mở cho đến khi bạn gỡ nó. Đây chỉ là giới hạn an toàn về lưu trữ: khi chạm giới hạn, các mục cũ nhất bị gỡ trước, và workspace đang mở hoặc đã ghim không bao giờ bị gỡ.",
-    "limit-off": "Không giới hạn",
-    "limit-on": "Giữ tối đa",
     "state-completed": "đã hoàn tất",
     "state-running": "đang chạy",
     "state-aborted": "đã hủy",
@@ -11630,7 +12018,7 @@
     "overview": {
       "title": "Tổng quan công khai thông tin",
       "intro": "Mọi plugin Navide cài từ Navide Marketplace: những gì nó khai báo, mức rủi ro, hoạt động gần đây và mọi điều bất thường, trên một trang. Chỉ là bản ghi; không có gì ở đây thay đổi những gì một plugin Navide được làm.",
-      "empty": "Chưa cài plugin Navide nào từ Navide Marketplace.",
+      "empty": "Chưa cài gì từ Navide Marketplace.",
       "installedScan": "Lần quét đã xác minh lúc cài",
       "noScanRecord": "Không có lần quét nào được ghi nhận lúc cài.",
       "activity": "Hoạt động gần đây",
@@ -12065,6 +12453,155 @@
       "not-signed-in": "Hãy đăng nhập trong mục Tài khoản nhà phát triển trước.",
       "qualification": "Đơn đăng ký nhà phát triển của bạn phải được duyệt trước.",
       "registry": "Navide Marketplace đã từ chối ({status} {code}): {message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "Nhập từ n8n",
+    "subtitle": "Dán workflow đã xuất từ n8n, xem trước kết quả chuyển đổi rồi nhập thành pipeline mới.",
+    "default-agent": "CLI cho các bước cần agent",
+    "default-agent-hint": "Các bước cần agent sẽ chạy trong một pane của CLI này. Bạn có thể đổi từng bước sau khi nhập.",
+    "json-label": "JSON của workflow",
+    "json-placeholder": "Dán JSON của workflow đã xuất từ n8n",
+    "choose-file": "Chọn tệp…",
+    "choose-file-title": "Chọn workflow n8n",
+    "preview": "Xem trước",
+    "previewing": "Đang xem trước…",
+    "import": "Nhập",
+    "importing": "Đang nhập…",
+    "preview-stale": "JSON đã thay đổi sau khi xem trước. Hãy xem trước lại trước khi nhập.",
+    "import-blocked-preview": "Hãy xem trước workflow trước.",
+    "stats": {
+      "workflow": "Tên workflow",
+      "nodes": "Nút n8n",
+      "slots": "Bước",
+      "gates": "Điểm phê duyệt",
+      "triggers": "Trình kích hoạt"
+    },
+    "category": {
+      "native": "Chuyển trực tiếp",
+      "agent": "Do agent chạy",
+      "pending": "Cần xem lại",
+      "unsupported": "Không hỗ trợ"
+    },
+    "needs-review": "{n} bước cần xem lại",
+    "needs-review-hint": "Vẫn có thể nhập. Hãy kiểm tra các bước này trong trình chỉnh sửa trước khi chạy pipeline.",
+    "subworkflow": "Workflow này gọi một workflow n8n khác mà Navide chưa có. Hãy dán cả các workflow được gọi vào đây, chung trong một mảng JSON, hoặc nhập chúng trước; khi đó lệnh gọi sẽ chạy như một Pipeline con.",
+    "external": "Mọi lần chạy của pipeline đã nhập đều được đánh dấu là nội dung bên ngoài, vì các bước của nó đến từ một tệp tạo bên ngoài Navide.",
+    "warnings": "Cảnh báo",
+    "canvas-title": "Đồ thị đã chuyển đổi",
+    "legend": "Chú thích màu",
+    "report-title": "Báo cáo chuyển đổi",
+    "col": {
+      "node": "Nút",
+      "type": "Loại nút",
+      "result": "Trở thành",
+      "category": "Phân loại",
+      "detail": "Chi tiết",
+      "actions": "Cần làm",
+      "field": "Trường"
+    },
+    "result": {
+      "trigger": "Trình kích hoạt",
+      "slot": "Bước",
+      "gate": "Điểm phê duyệt",
+      "subpipeline": "Pipeline con",
+      "folded": "Gộp vào một bước",
+      "removed": "Đã xóa"
+    },
+    "review-mark": "Cần xem lại",
+    "action-code": {
+      "add-credential": "Thêm thông tin xác thực",
+      "confirm-step": "Xác nhận bước",
+      "choose-mcp": "Chọn máy chủ MCP",
+      "start-manually": "Khởi động thủ công",
+      "paste-subworkflow": "Dán workflow con",
+      "keep-in-n8n": "Giữ lại trong n8n"
+    },
+    "kickoffs-title": "Hướng dẫn của các bước",
+    "kickoffs-hint": "Đây đúng là văn bản mỗi pane nhận được khi bước của nó bắt đầu.",
+    "gates-title": "Điểm phê duyệt",
+    "gates-hint": "Đây đúng là câu hỏi hiển thị khi lần chạy đến từng điểm phê duyệt.",
+    "credentials-title": "Thông tin xác thực",
+    "credentials-hint": "Thông tin xác thực được thiết lập trên máy này, dưới dạng máy chủ MCP trong Cài đặt → MCP hoặc qua đăng nhập CLI của chính dịch vụ. Chúng không bao giờ được lưu trong pipeline.",
+    "credentials-used-by": "Dùng bởi {nodes}",
+    "secrets-title": "Bí mật đã xóa",
+    "secrets-hint": "Các giá trị này không được giữ trong pipeline. Hãy thiết lập lại trên máy này.",
+    "error": {
+      "invalid": "Đây không phải workflow n8n mà Navide đọc được.",
+      "preview-failed": "Xem trước thất bại.",
+      "import-failed": "Nhập thất bại."
+    },
+    "imported": "Đã nhập “{name}”",
+    "imported-review": "Đã nhập “{name}” · {n} bước cần xem lại",
+    "imported-reused": "“{name}” vừa được nhập cách đây ít phút. Đã mở pipeline đó; không tạo bản sao nào.",
+    "merged-nodes": "{n} nút n8n trong bước này",
+    "subworkflows-title": "Workflow được gọi",
+    "will-create": "Khi nhập sẽ tạo {n} pipeline.",
+    "subworkflow-status": {
+      "imported": "Đã nhập",
+      "will-import": "Nhập cùng với workflow này",
+      "existing": "Dùng pipeline đã nhập trước đó",
+      "missing": "Chưa có trong Navide",
+      "recursive": "Gọi ngược lại: giữ lại để xem lại"
+    },
+    "error-in-workflow": "Workflow số {n}: {message}",
+    "import-timeout": "Quá trình nhập đang mất nhiều thời gian và có thể vẫn hoàn tất. Hãy bấm Nhập lần nữa: nếu pipeline đã được tạo thì nó sẽ được mở, và không bao giờ tạo bản sao.",
+    "detail": {
+      "unknown-version": "typeVersion {version} nằm ngoài phạm vi đã biết {lo}–{hi}. Một agent thực hiện nó theo các tham số của nó.",
+      "unknown-type": "Loại nút này không có trong bảng nhập. Một agent thực hiện nó theo các tham số của nó.",
+      "community-node": "Nút cộng đồng. Một agent thực hiện nó theo các tham số của nó.",
+      "merge-combine": "Merge ở chế độ “{mode}” kết hợp dữ liệu. Một agent thực hiện nó theo quy tắc gộp của nó.",
+      "role-trigger-schedule": "Trong n8n, nút này chạy theo lịch. Hãy khởi động pipeline thủ công, hoặc lên lịch trong Turn Stats ▸ Lịch bằng một tác vụ “Khởi động pipeline”.",
+      "role-trigger-webhook": "Trong n8n, nút này bắt đầu từ một yêu cầu HTTP. Navide chưa có trình kích hoạt webhook.",
+      "role-trigger-error": "Workflow lỗi của n8n chưa có tính năng tương đương trong Navide.",
+      "role-trigger-app": "Trong n8n, nút này bắt đầu từ một sự kiện ứng dụng. Navide chưa có trình kích hoạt ứng dụng.",
+      "role-subworkflow": "Gọi một workflow n8n khác chưa được nhập. Hãy dán cả workflow đó, hoặc nhập nó trước.",
+      "role-respond": "Trả lời một webhook của n8n. Navide chưa có trình kích hoạt webhook.",
+      "error-workflow": "Workflow này là workflow lỗi của chính nó. Khi một bước thất bại, các bước sau sẽ chạy qua các cạnh lỗi.",
+      "recursive-subworkflow": "Gọi workflow n8n {workflowId}, và workflow đó lại gọi ngược workflow này. Pipeline con không thể tự chạy chính nó, nên lệnh gọi này được giữ lại để xem lại.",
+      "tool-pipeline": "Một công cụ của agent gọi workflow n8n {workflowId}, đã được nhập thành pipeline {pipelineId}. Pipeline không thể được gọi như một công cụ, nên hướng dẫn của bước sẽ nêu tên nó thay vào đó.",
+      "subpipeline": "Chạy pipeline {pipelineId} (workflow n8n {workflowId}) như một Pipeline con và chờ nó hoàn tất.",
+      "subpipeline-nowait": "Chạy pipeline {pipelineId} (workflow n8n {workflowId}) như một Pipeline con và chờ nó hoàn tất. n8n không chờ nó; Navide luôn chờ Pipeline con.",
+      "loop-batch": "Vòng lặp được gộp vào một bước xử lý lần lượt từng mục.",
+      "loop-repeat": "Vòng lặp được gộp vào một bước lặp lại cho đến khi điều kiện thoát vòng lặp được thỏa.",
+      "loop-wait": "Một nút Wait của n8n bên trong vòng lặp. Bước sẽ tạm dừng ở đây giữa các vòng; không có điểm phê duyệt nào dừng lần chạy.",
+      "loop-subworkflow": "Gọi một workflow n8n khác bên trong vòng lặp. Một agent thực hiện cả vòng lặp như một bước.",
+      "removed-sticky": "Ghi chú dán. Nội dung của nó nằm trong phần mô tả và trong hướng dẫn của bước gần nhất.",
+      "removed-disabled": "Đã bị tắt trong n8n. Đã bỏ qua; các kết nối của nó được nối thẳng.",
+      "removed-noop": "Nút No Operation. Đã xóa và nối các kết nối của nó lại.",
+      "cluster-model": "Bước này chạy trên một CLI agent thay vì mô hình này.",
+      "cluster-memory": "Đã bỏ. Phiên CLI tự giữ ngữ cảnh của nó.",
+      "cluster-tool": "Agent dùng công cụ tương đương của chính nó.",
+      "cluster-mcp-tool": "Hãy thiết lập cùng máy chủ MCP đó trong Cài đặt → MCP.",
+      "cluster-tool-workflow": "Một công cụ của agent gọi một workflow n8n khác chưa được nhập. Pipeline không thể được gọi như một công cụ, nên hướng dẫn của bước sẽ mô tả nó.",
+      "cluster-parser": "Định dạng đầu ra là một phần trong hướng dẫn của bước.",
+      "cluster-vector": "Không hỗ trợ cụm kho vector. Hãy giữ phần này trong n8n.",
+      "cluster-other": "Đã gộp vào bước của agent.",
+      "branch-if": "Cạnh rẽ nhánh: agent báo điều kiện đi theo hướng nào, và chỉ nhánh đó chạy.",
+      "branch-switch": "Cạnh rẽ nhánh, mỗi quy tắc một cạnh: agent báo quy tắc nào khớp, và chỉ nhánh đó chạy.",
+      "merge-join": "Chờ các đầu vào có chạy. Đầu vào thuộc nhánh không được chọn sẽ bị bỏ qua.",
+      "agent-step": "Một agent thực hiện nó theo các tham số gốc."
+    },
+    "warning": {
+      "error-workflow-other": "Phần cài đặt của workflow chỉ định một workflow n8n khác để xử lý lỗi. Phần xử lý lỗi đó không được nhập.",
+      "into-trigger": "Đã bỏ một kết nối đi vào trình kích hoạt “{node}”.",
+      "plain-connection": "Một kết nối {kind} đi ra từ “{node}” đã thành kết nối thường: chỉ các bước mới có thể rẽ nhánh hoặc thất bại.",
+      "outputs-same-step": "Nhiều đầu ra của “{node}” dẫn đến cùng một bước. Chỉ giữ “{kept}”.",
+      "retry-capped": "Trong n8n, “{node}” thử lại {tries} lần, cách nhau {waitMs} ms. Navide cho phép tối đa {maxTries} lần thử cách nhau {maxWaitMs} ms, nên sẽ dùng {usedTries} lần thử cách nhau {usedWaitMs} ms.",
+      "over-target": "{slots} bước là nhiều hơn mục tiêu khoảng {target}. Mỗi bước sẽ mở một pane CLI.",
+      "wait-in-loop": "Nút Wait “{node}” nằm trong vòng lặp nên được gộp vào bước của nó. Không có điểm phê duyệt nào dừng lần chạy tại đó."
+    },
+    "error-reason": {
+      "invalid": "Đây không phải workflow n8n mà Navide đọc được.",
+      "invalid-json": "Văn bản này không phải JSON hợp lệ.",
+      "not-object": "Workflow n8n phải là một đối tượng JSON.",
+      "no-nodes": "Workflow n8n cần có nút và kết nối.",
+      "node-shape": "Nút {index} cần có tên và loại.",
+      "duplicate-name": "Nút {index} trùng tên với một nút trước đó.",
+      "empty-list": "Danh sách không chứa workflow n8n nào.",
+      "internal": "Đồ thị đã chuyển đổi không hợp lệ. Đây là lỗi của trình nhập.",
+      "too-large": "Workflow có dung lượng {sizeMb} MB. Mỗi lần nhập tối đa {limitMb} MB.",
+      "store-refused": "Không thể lưu workflow “{workflow}”, nên không có gì được nhập: {problems}"
     }
   }
 }

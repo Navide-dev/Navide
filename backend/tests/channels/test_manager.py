@@ -116,6 +116,7 @@ class FakeSeams:
         self.kind = "permission"
         self.prompt = "Allow Bash(npm run build)?"
         self.options: list[str] = []
+        self.agent = ""  # "" keeps the window-reports-no-vendor behaviour
         self.gone: set[str] = set()
         self.answers: list[tuple[str, dict[str, Any]]] = []
         self.answer_result: dict[str, Any] = {"ok": True}
@@ -159,7 +160,7 @@ class FakeSeams:
         return self.states.get(pane_id, {"exists": True, "busy": False, "display_status": "idle"})
 
     async def awaiting_info(self, pane_id: str) -> dict[str, Any]:
-        return {"kind": self.kind, "prompt": self.prompt, "options": self.options}
+        return {"kind": self.kind, "prompt": self.prompt, "options": self.options, "agent": self.agent}
 
     async def limit_info(self, pane_id: str) -> dict[str, Any]:
         self.limit_probes += 1
@@ -2082,3 +2083,123 @@ async def test_a_late_hook_does_not_close_the_next_messages_run(env: Env) -> Non
     _log_end(env, "reply two")
     await _until(lambda: _said(env, "reply two"))
     assert not _said(env, mgr_mod.MSG_LATE_PREFIX)
+
+
+# Claude Code 2.1.31x screens (awaitingPromptText's last lines). The idle input box
+# with only its footer is what an answered AskUserQuestion leaves behind while the
+# pane's AWAITING badge is still settling (see the renderer's AWAITING_SETTLE_MS).
+_RULE = "─" * 60
+_CLAUDE_INPUT_BOX = "\n".join([
+    "◐ medium · /effort", _RULE, "›", _RULE,
+    "  ▸▸ bypass permissions on (shift+tab to cycle) · esc to interrupt",
+])
+_CLAUDE_QUESTION = "\n".join([
+    "☐ Scope", "", "Which tests should run?", "",
+    "❯ 1. Only the changed ones", "     Fast smoke check",
+    "  2. The whole suite", "     Slow", "  3. Type something.", "",
+    "Enter to select · ↑/↓ to navigate · Esc to cancel",
+])
+_CLAUDE_PERMISSION = "\n".join([
+    "Bash command", "", "   npm run build", "", "Do you want to proceed?",
+    "❯ 1. Yes", "  2. Yes, and don't ask again for npm run build commands in this project",
+    "  3. No, and tell Claude what to do differently (esc)",
+])
+
+
+async def _claude_awaiting(env: Env, prompt: str, options: list[str]) -> None:
+    env.fake.agent = "claude"
+    env.fake.kind = "permission"  # claude's AskUserQuestion reports "permission" too
+    env.fake.prompt = prompt
+    env.fake.options = options
+    await _awaiting(env)
+
+
+async def test_answered_question_leaves_no_second_prompt_in_the_chat(clocked) -> None:
+    # 10-29 user report: after Submit on an AskUserQuestion, the chat got a second
+    # "⏸" prompt that was only the input box and footer (answer: yes/no), then
+    # "✔ 已在電腦上處理" on it. The pane was still AWAITING while its screen had
+    # already gone back to the input box.
+    env, clock = clocked
+    await _claude_awaiting(env, _CLAUDE_QUESTION,
+                           ["Only the changed ones", "The whole suite", "Type something."])
+    clock.t += 1
+    await _until_relay_prompt(env)
+    mid, text = _prompt_message(env)
+    env.fake.prompt = _CLAUDE_INPUT_BOX
+    env.fake.options = []
+    for _ in range(3):
+        clock.t += mgr_mod.AWAITING_PROBE_EVERY_S + 1
+        await asyncio.sleep(0.05)
+    assert sum(t.startswith("⏸") for t in env.tg.texts()) == 1
+    assert not any("esc to interrupt" in t for t in env.tg.texts())
+    assert not any(m == mid for m, _ in env.tg.edits)  # the question's prompt is not superseded
+    env.fake.states["pane-1"] = {"exists": True, "busy": True, "display_status": "running"}
+    clock.t += 1
+    await _until(lambda: any(m == mid for m, _ in env.tg.edits))
+    assert (mid, f"{text}\n\n{mgr_mod.MSG_RELAY_DONE_LOCALLY}") in env.tg.edits
+
+
+async def test_input_box_alone_is_not_relayed_as_a_prompt(clocked) -> None:
+    env, clock = clocked
+    await _claude_awaiting(env, _CLAUDE_INPUT_BOX, [])
+    for _ in range(3):
+        clock.t += mgr_mod.AWAITING_PROBE_EVERY_S + 1
+        await asyncio.sleep(0.05)
+    assert not any(t.startswith("⏸") for t in env.tg.texts())
+    assert env.m.relay._by_id == {}
+    # The menu that paints next is relayed.
+    env.fake.prompt = _CLAUDE_PERMISSION
+    env.fake.options = ["Yes", "Yes, and don't ask again for npm run build commands in this project",
+                        "No, and tell Claude what to do differently (esc)"]
+    clock.t += mgr_mod.AWAITING_PROBE_EVERY_S + 1
+    await _until_relay_prompt(env)
+    assert next(iter(env.m.relay._by_id.values())).kind == "permission"
+
+
+async def test_claude_permission_menu_is_still_relayed(clocked) -> None:
+    env, clock = clocked
+    await _claude_awaiting(env, _CLAUDE_PERMISSION,
+                           ["Yes", "Yes, and don't ask again for npm run build commands in this project",
+                            "No, and tell Claude what to do differently (esc)"])
+    clock.t += 1
+    await _until_relay_prompt(env)
+    request = next(iter(env.m.relay._by_id.values()))
+    assert request.kind == "permission" and "Do you want to proceed?" in request.prompt
+    await env.inbound(f"yes {request.id}")
+    assert env.fake.answers == [("pane-1", {"kind": "permission", "choice": "allow"})]
+
+
+async def test_claude_ask_user_question_is_still_relayed(clocked) -> None:
+    env, clock = clocked
+    await _claude_awaiting(env, _CLAUDE_QUESTION,
+                           ["Only the changed ones", "The whole suite", "Type something."])
+    clock.t += 1
+    await _until_relay_prompt(env)
+    request = next(iter(env.m.relay._by_id.values()))
+    assert request.kind == "question" and request.options[0] == "Only the changed ones"
+    await env.inbound(f"2 {request.id}")
+    assert env.fake.answers == [("pane-1", {"kind": "question", "option": 2})]
+
+
+async def test_claude_multi_select_menu_is_still_relayed(clocked) -> None:
+    env, clock = clocked
+    await _claude_awaiting(env, "\n".join([
+        "Which platforms?", "❯ 1. [ ] macOS", "  2. [ ] Windows", "  3. [ ] Linux", "",
+        "Enter to select · ↑/↓ to navigate · Esc to cancel",
+    ]), ["[ ] macOS", "[ ] Windows", "[ ] Linux"])
+    clock.t += 1
+    await _until_relay_prompt(env)
+    request = next(iter(env.m.relay._by_id.values()))
+    assert request.kind == "question" and request.multi
+
+
+async def test_line_prompt_vendor_without_a_menu_is_still_relayed(clocked) -> None:
+    # aider asks with "(Y)es/(N)o … [Yes]:" and never draws a menu: no options is normal.
+    env, clock = clocked
+    env.fake.agent = "aider"
+    env.fake.prompt = "Add file to the chat? (Y)es/(N)o/(D)on't ask again [Yes]:"
+    env.fake.options = []
+    await _awaiting(env)
+    clock.t += 1
+    await _until_relay_prompt(env)
+    assert next(iter(env.m.relay._by_id.values())).kind == "permission"

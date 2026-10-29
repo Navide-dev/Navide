@@ -8,7 +8,8 @@ import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../../composables/useBackend'
 import type { NodeRunState, PipelineGraph } from '../../lib/pipelineGraph'
 import PipelineCanvas from './PipelineCanvas.vue'
-import { formatElapsed, formatTokens, type RunSnapshot } from './pipelineEditorModel'
+import { formatElapsed, formatTokens, nodeTitle, type RunSnapshot } from './pipelineEditorModel'
+import PipelineActionMenu, { type ActionMenuItem } from './PipelineActionMenu.vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 
 interface RunRecord {
@@ -37,9 +38,10 @@ const props = defineProps<{
   now: number
 }>()
 const emit = defineEmits<{
-  (e: 'control', action: 'next' | 'abort' | 'resume' | 'restart'): void
+  (e: 'control', action: 'next' | 'abort' | 'resume' | 'restart' | 'reset'): void
   (e: 'gate', nodeId: string, decision: 'approve' | 'reject', comment: string): void
   (e: 'select-node', id: string): void
+  (e: 'start'): void
 }>()
 const { t, d } = useI18n()
 
@@ -122,7 +124,34 @@ const progress = computed(() => {
   return { done, total: ids.length }
 })
 const awaitingGate = computed(() => (isLiveSelected.value ? props.run.gate : null))
+/** Why the selected run failed: each failed step with its reason, which
+ *  otherwise only shows in that card's tooltip. */
+const failures = computed(() =>
+  props.graph.nodes.flatMap((n) => {
+    const s = replayNodes.value[n.id]
+    return s?.status === 'failed' && s.error ? [t('pipelineEditor.exec.failed-step', { name: nodeTitle(n), error: s.error })] : []
+  })
+)
+/** Why Next cannot advance now ('' when it can) — the sidebar's rule. */
+const nextBlocked = computed(() => {
+  if (props.run.gate) return t('pipelineEditor.controlPane.next-gated')
+  if (props.run.lastStage) return t('pipelineEditor.controlPane.last-stage')
+  return ''
+})
 const gateComment = ref('')
+
+/** Recovery acts on the latest run of this pipeline, whatever is on screen;
+ *  with an earlier run selected it is off, and the notice says why. */
+const latest = computed<RunRecord | null>(() => liveRun.value ?? runs.value[0] ?? null)
+const viewingOlder = computed(() => !!selected.value && selected.value !== latest.value)
+const recoverItems = computed<ActionMenuItem[]>(() => [
+  { id: 'resume', label: t('pipelineEditor.exec.resume'), desc: t('pipelineEditor.recover.resume-desc') },
+  { id: 'restart', label: t('pipelineEditor.exec.restart'), desc: t('pipelineEditor.recover.restart-desc') },
+  { id: 'reset', label: t('action.reset'), desc: t('pipelineEditor.recover.reset-desc'), danger: true },
+])
+function onRecover(id: string): void {
+  if (id === 'resume' || id === 'restart' || id === 'reset') emit('control', id)
+}
 </script>
 
 <template>
@@ -160,10 +189,6 @@ const gateComment = ref('')
           </button>
         </li>
       </ol>
-      <div v-if="!liveRun && !runs.length && !loading" class="px-empty">
-        <p class="px-empty-title">{{ t('pipelineEditor.exec.empty-title') }}</p>
-        <p>{{ t('pipelineEditor.exec.empty-body') }}</p>
-      </div>
       <p v-if="unattributed" class="px-note">{{ t('pipelineEditor.exec.unattributed', { count: unattributed }) }}</p>
     </aside>
 
@@ -184,8 +209,13 @@ const gateComment = ref('')
         <span class="px-head-text">
           <strong v-truncate>{{ selected.task || t('pipelineEditor.exec.no-task') }}</strong>
           <span>{{ t(`pipelineEditor.exec.outcome-${outcomeOf(selected)}`) }} · {{ when(selected) }} · {{ duration(selected) }}</span>
+          <span v-for="(f, i) in failures" :key="i" class="px-head-error" role="alert" data-test="run-error">{{ f }}</span>
         </span>
       </header>
+      <div v-if="viewingOlder" class="px-older" role="note">
+        <span>{{ t('pipelineEditor.recover.older-run') }}</span>
+        <button type="button" class="px-btn" @click="selectedId = latest?.run_id ?? ''">{{ t('pipelineEditor.recover.show-latest') }}</button>
+      </div>
       <div class="px-canvas">
         <PipelineCanvas
           v-if="selected" flow-id="pipeline-executions"
@@ -193,8 +223,11 @@ const gateComment = ref('')
           :run-nodes="replayNodes" :now="now" :selected-id="null" :locked="true"
           @select="(id) => id && emit('select-node', id)"
         />
-        <div v-else class="px-placeholder">
-          <p>{{ t('pipelineEditor.exec.pick') }}</p>
+        <!-- No run yet: say so where the eye lands, with the way to start one. -->
+        <div v-else-if="!loading" class="px-placeholder px-empty">
+          <p class="px-empty-title">{{ t('pipelineEditor.exec.empty-title') }}</p>
+          <p>{{ t('pipelineEditor.exec.empty-body') }}</p>
+          <button type="button" class="px-btn px-btn--primary" data-test="exec-run" @click="emit('start')">{{ t('action.run-pipeline') }}</button>
         </div>
       </div>
 
@@ -205,13 +238,16 @@ const gateComment = ref('')
         </span>
         <span class="px-spacer"></span>
         <template v-if="isLiveSelected && run.state === 'running'">
-          <button type="button" class="px-btn" @click="emit('control', 'next')">{{ t('pipelineEditor.exec.next') }}</button>
+          <button
+            type="button" class="px-btn" data-test="exec-next" :disabled="!!nextBlocked" :title="nextBlocked || undefined"
+            @click="emit('control', 'next')"
+          >{{ t('pipelineEditor.exec.next') }}</button>
           <button type="button" class="px-btn px-btn--danger" @click="emit('control', 'abort')">{{ t('pipelineEditor.exec.abort') }}</button>
         </template>
-        <template v-else-if="run.pipelineId === pipelineId && run.state !== 'running' && run.state !== 'idle'">
-          <button type="button" class="px-btn" @click="emit('control', 'resume')">{{ t('pipelineEditor.exec.resume') }}</button>
-          <button type="button" class="px-btn" @click="emit('control', 'restart')">{{ t('pipelineEditor.exec.restart') }}</button>
-        </template>
+        <PipelineActionMenu
+          v-else-if="run.pipelineId === pipelineId && run.state !== 'running' && run.state !== 'idle'" up
+          :label="t('pipelineEditor.recover.title')" :items="recoverItems" :disabled="viewingOlder" @select="onRecover"
+        />
       </footer>
     </section>
   </div>
@@ -274,8 +310,9 @@ const gateComment = ref('')
 .px-run-task { font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .px-run-meta { grid-area: meta; display: flex; gap: var(--space-3); font-size: var(--font-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .px-note { margin: var(--space-2) var(--space-4); font-size: var(--font-2xs); line-height: var(--lh-base); color: var(--text-muted); }
-.px-empty { padding: var(--space-6) var(--space-5); }
-.px-empty p { margin: 0 0 var(--space-2); font-size: var(--font-xs); line-height: var(--lh-base); color: var(--text-muted); }
+.px-empty { align-content: center; gap: var(--space-2); padding: var(--space-6) var(--space-5); text-align: center; }
+.px-empty p { max-width: 420px; margin: 0; font-size: var(--font-xs); line-height: var(--lh-base); color: var(--text-muted); }
+.px-empty .px-btn { margin-top: var(--space-2); }
 .px-empty .px-empty-title { font-size: var(--font-sm); font-weight: 600; color: var(--text-primary); }
 
 .px-stage { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -292,6 +329,18 @@ const gateComment = ref('')
 .px-head-text { display: grid; gap: 2px; min-width: 0; }
 .px-head-text strong { font-size: var(--font-md); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .px-head-text span { font-size: var(--font-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.px-head-text .px-head-error { color: var(--danger-fg); overflow-wrap: anywhere; }
+.px-older {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-subtle);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+.px-older span { flex: 1; min-width: 0; }
 .px-placeholder { display: grid; place-items: center; height: 100%; color: var(--text-muted); font-size: var(--font-sm); }
 .px-gate {
   display: flex;
@@ -342,6 +391,8 @@ const gateComment = ref('')
   cursor: pointer;
 }
 .px-btn:hover { background: var(--bg-hover); }
+.px-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.px-btn:disabled:hover { background: var(--bg-elevated); }
 .px-btn:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: 1px; }
 .px-btn--primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
 .px-btn--primary:hover { background: var(--accent-bright); }

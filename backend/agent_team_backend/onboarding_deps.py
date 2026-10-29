@@ -960,9 +960,13 @@ def compute_gate(
     analyzer_ready = ollama_service_ready and len(models) > 0
 
     # Analyzer (ollama + a multi-GB local model) is optional — it must not
-    # hard-block first use. analyzer_ready is still reported so the wizard
-    # can surface it as a recommended extra.
-    all_required_ready = foundation_ready and has_any_cli
+    # hard-block first use. analyzer_ready is still reported so Settings can
+    # surface it as a recommended extra.
+    # Foundation is not required either: the packaged app never runs
+    # python/uv/pnpm itself, and a CLI that needs brew or node pulls it in
+    # through the install prompt's prerequisite chain. foundation_ready is
+    # still reported for CLI management.
+    all_required_ready = has_any_cli
     return {
         "foundation_ready": foundation_ready,
         "has_any_cli": has_any_cli,

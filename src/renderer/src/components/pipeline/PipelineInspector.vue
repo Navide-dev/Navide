@@ -11,16 +11,23 @@ import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../../composables/useBackend'
 import type { Role } from '../../composables/useRoles'
 import type { Stage, StageSlot } from '../../data/stages'
+import { pipelineDisplayName } from '../../lib/builtinNames'
 import {
+  edgeId,
   isPropertyVisible,
+  MAX_RETRY_WAIT_MS,
+  MAX_TRIES_CEILING,
   upstreamOf,
+  type GraphEdge,
+  type GraphEdgeKind,
   type GraphNode,
   type GraphOp,
   type PipelineGraph,
   type RoleProperty,
   type StageMetaPatch,
 } from '../../lib/pipelineGraph'
-import { elapsedOf, formatElapsed, formatTokens, nodeTitle, type RunSnapshot } from './pipelineEditorModel'
+import { elapsedOf, formatElapsed, formatTokens, nodeTitle, runStatusKey, type RunSnapshot } from './pipelineEditorModel'
+import PipelineActionMenu, { type ActionMenuItem } from './PipelineActionMenu.vue'
 
 type ParamValue = string | number | boolean
 
@@ -37,6 +44,8 @@ const props = defineProps<{
   now: number
   locked: boolean
   workspacePath: string
+  /** The pipeline being edited: a sub-pipeline node may not call it. */
+  pipelineId?: string
 }>()
 const emit = defineEmits<{
   (e: 'edit', label: string, ops: GraphOp[]): void
@@ -45,6 +54,8 @@ const emit = defineEmits<{
   (e: 'close'): void
   (e: 'open-pane', paneId: string): void
   (e: 'restart-from', nodeId: string): void
+  (e: 'retry-node', nodeId: string): void
+  (e: 'control', action: 'resume' | 'restart' | 'reset'): void
   (e: 'gate', nodeId: string, decision: 'approve' | 'reject', comment: string): void
 }>()
 const { t } = useI18n()
@@ -96,6 +107,129 @@ function editParam(name: string, value: ParamValue): void {
     { op: 'update_node', id: node.id, slot: { params: { ...params.value, [name]: value } } },
   ])
 }
+/** maxTries 1 (or less) clears the policy: one try is the default. */
+function editRetry(field: 'maxTries' | 'waitS', value: number): void {
+  const node = n.value
+  if (!node || (node.kind !== 'slot' && node.kind !== 'subpipeline') || props.locked || !Number.isFinite(value)) return
+  const tries = Math.round(field === 'maxTries' ? value : (node.retry?.maxTries ?? 1))
+  const waitMs = Math.round(field === 'waitS' ? value * 1000 : (node.retry?.waitMs ?? 0))
+  const maxTries = Math.min(MAX_TRIES_CEILING, Math.max(1, tries))
+  const retry = maxTries > 1 ? { maxTries, waitMs: Math.min(MAX_RETRY_WAIT_MS, Math.max(0, waitMs)) } : null
+  if (JSON.stringify(retry) === JSON.stringify(node.retry ?? null)) return
+  emit('edit', t('pipelineEditor.history.retry'), [{ op: 'set_retry', id: node.id, retry }])
+}
+
+/** Why "Retry This Step" cannot run now ('' when it can). */
+const retryBlocked = computed(() => {
+  if (props.run.state === 'running') return t('pipelineEditor.inspector.retry-blocked-running')
+  if (!props.run.pipelineId) return t('pipelineEditor.inspector.retry-blocked-no-run')
+  if (runState.value?.status !== 'failed') return t('pipelineEditor.inspector.retry-blocked-not-failed')
+  return ''
+})
+
+/** Why the run-wide recovery cannot act now ('' when it can): it works on
+ *  the stopped run of this pipeline, and only once that run has stopped. */
+const runBlocked = computed(() => {
+  if (props.run.state === 'running') return t('pipelineEditor.inspector.retry-blocked-running')
+  if (!props.run.pipelineId || (props.pipelineId && props.run.pipelineId !== props.pipelineId) || props.run.state === 'idle') {
+    return t('pipelineEditor.inspector.retry-blocked-no-run')
+  }
+  return ''
+})
+/** The five ways to recover a run, in one menu, each saying what it does. */
+const recoverItems = computed<ActionMenuItem[]>(() => {
+  const node = n.value
+  if (!node) return []
+  return [
+    { id: 'retry', label: t('pipelineEditor.inspector.retry-node'), desc: t('pipelineEditor.inspector.retry-node-help'), blocked: retryBlocked.value },
+    ...(node.kind === 'slot'
+      ? [{ id: 'rerun', label: t('pipelineEditor.inspector.restart-from'), desc: t('pipelineEditor.inspector.restart-help'), blocked: runBlocked.value }]
+      : []),
+    { id: 'resume', label: t('pipelineEditor.exec.resume'), desc: t('pipelineEditor.recover.resume-desc'), blocked: runBlocked.value },
+    { id: 'restart', label: t('pipelineEditor.exec.restart'), desc: t('pipelineEditor.recover.restart-desc'), blocked: runBlocked.value },
+    { id: 'reset', label: t('action.reset'), desc: t('pipelineEditor.recover.reset-desc'), blocked: runBlocked.value, danger: true },
+  ]
+})
+function onRecover(id: string): void {
+  const node = n.value
+  if (!node) return
+  if (id === 'retry') emit('retry-node', node.id)
+  else if (id === 'rerun') emit('restart-from', node.id)
+  else if (id === 'resume' || id === 'restart' || id === 'reset') emit('control', id)
+}
+
+// ── Links out: the branch / on-error entry that needs no canvas hover ───────
+const outLinks = computed<GraphEdge[]>(() => {
+  const id = n.value?.id
+  return id ? props.graph.edges.filter((e) => e.from === id && e.kind !== 'reject') : []
+})
+const nameOf = (id: string): string => {
+  const x = props.graph.nodes.find((m) => m.id === id)
+  return x ? nodeTitle(x) : id
+}
+const linkTargets = computed(() => props.graph.nodes.filter((m) => m.kind !== 'trigger' && m.id !== n.value?.id))
+const hasBranch = computed(() => outLinks.value.some((e) => e.kind === 'branch'))
+const hasError = computed(() => outLinks.value.some((e) => e.kind === 'error'))
+const newKind = ref<GraphEdgeKind>('branch')
+const newTo = ref('')
+const newWhen = ref('')
+watch(() => n.value?.id, () => { newTo.value = ''; newWhen.value = '' })
+const canAddLink = computed(() => {
+  const node = n.value
+  if (!node || props.locked || !newTo.value) return false
+  if (newKind.value === 'branch' && !newWhen.value.trim()) return false
+  return !props.graph.edges.some((e) => e.id === edgeId(node.id, newTo.value, newKind.value))
+})
+function addLink(): void {
+  const node = n.value
+  if (!node || !canAddLink.value) return
+  const kind = newKind.value
+  emit('edit', t('pipelineEditor.history.link'), [{
+    op: 'add_edge',
+    edge: { id: edgeId(node.id, newTo.value, kind), from: node.id, to: newTo.value, kind, ...(kind === 'branch' ? { when: newWhen.value.trim() } : {}) },
+  }])
+  newTo.value = ''
+  newWhen.value = ''
+}
+const whenText = (e: GraphEdge): string =>
+  typeof e.when === 'string' ? e.when : e.when ? `${e.when.path} = ${JSON.stringify(e.when.equals)}` : ''
+/** No edge update op: a changed link is removed and re-added, one command. */
+function setLinkKind(e: GraphEdge, kind: GraphEdgeKind): void {
+  if (props.locked || kind === (e.kind ?? 'main')) return
+  const next: GraphEdge = { id: edgeId(e.from, e.to, kind), from: e.from, to: e.to, kind, ...(kind === 'branch' ? { when: 'default' } : {}) }
+  emit('edit', t('pipelineEditor.history.link-kind'), [{ op: 'remove_edge', id: e.id }, { op: 'add_edge', edge: next }])
+}
+function setLinkWhen(e: GraphEdge, text: string): void {
+  const when = text.trim()
+  if (props.locked || !when || when === whenText(e)) return
+  emit('edit', t('pipelineEditor.history.link-when'), [{ op: 'remove_edge', id: e.id }, { op: 'add_edge', edge: { ...e, when } }])
+}
+function removeLink(e: GraphEdge): void {
+  if (props.locked) return
+  emit('edit', t('pipelineEditor.history.unlink'), [{ op: 'remove_edge', id: e.id }])
+}
+
+/** Pipelines a subpipeline node can call: every one but the pipeline being
+ *  edited (whichever pipeline happens to be running is beside the point). */
+const callablePipelines = ref<Array<{ id: string; name: string }>>([])
+async function loadCallable(): Promise<void> {
+  try {
+    const resp = await props.backend.send<{ pipelines?: Array<{ id: string; name: string }> }>('pipelines.list', {})
+    callablePipelines.value = (resp.payload?.pipelines ?? []).filter((p) => p.id !== props.pipelineId)
+  } catch {
+    // Keep the last list.
+  }
+}
+watch(() => n.value?.kind === 'subpipeline', (isCall) => { if (isCall) void loadCallable() }, { immediate: true })
+
+function editSubpipeline(patch: { pipelineId?: string; task?: string }): void {
+  const node = n.value
+  if (!node || node.kind !== 'subpipeline' || props.locked) return
+  const current = node.subpipeline ?? { pipelineId: '' }
+  if ((patch.pipelineId ?? current.pipelineId) === current.pipelineId && (patch.task ?? current.task) === current.task) return
+  emit('edit', t('pipelineEditor.history.subpipeline'), [{ op: 'update_node', id: node.id, subpipeline: patch }])
+}
+
 function editGate(prompt: string): void {
   const node = n.value
   if (!node || node.kind !== 'gate' || props.locked) return
@@ -229,7 +363,7 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
         <span class="pi-kind">
           {{ kindLabel }}
           <span v-if="runState" class="pi-status" :class="`is-${runState.status}`">
-            <span class="pi-status-dot" aria-hidden="true"></span>{{ t(`pipelineEditor.status.${runState.status}`) }}
+            <span class="pi-status-dot" aria-hidden="true"></span>{{ t(`pipelineEditor.status.${runStatusKey(runState)}`) }}
           </span>
         </span>
         <h2 class="pi-title">{{ title }}</h2>
@@ -287,6 +421,39 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
       </template>
 
       <!-- ── Gate ───────────────────────────────────────────────────────── -->
+      <template v-else-if="n?.kind === 'subpipeline'">
+        <label class="pi-field">
+          <span class="pi-label">{{ t('label.label') }}</span>
+          <input :value="n.label ?? ''" type="text" spellcheck="false" :disabled="locked" @change="editLabel(valueOf($event))" />
+        </label>
+        <label class="pi-field">
+          <span class="pi-label">{{ t('pipelineEditor.inspector.subpipeline-pipeline') }}</span>
+          <select data-field="subpipeline-pipeline" :value="n.subpipeline?.pipelineId ?? ''" :disabled="locked" @change="editSubpipeline({ pipelineId: valueOf($event) })">
+            <option value="" disabled>{{ t('pipelineEditor.inspector.subpipeline-pick') }}</option>
+            <option v-if="n.subpipeline?.pipelineId && !callablePipelines.some((p) => p.id === n!.subpipeline!.pipelineId)" :value="n.subpipeline.pipelineId">{{ n.subpipeline.pipelineId }}</option>
+            <option v-for="p in callablePipelines" :key="p.id" :value="p.id">{{ pipelineDisplayName(p) }}</option>
+          </select>
+          <span class="pi-help">{{ t('pipelineEditor.inspector.subpipeline-help') }}</span>
+        </label>
+        <label class="pi-field">
+          <span class="pi-label">{{ t('pipelineEditor.inspector.subpipeline-task') }}</span>
+          <textarea
+            data-field="subpipeline-task" rows="3" spellcheck="false" class="pi-mono"
+            :value="n.subpipeline?.task ?? ''" :disabled="locked" @change="editSubpipeline({ task: valueOf($event) })"
+          ></textarea>
+          <span class="pi-help">{{ t('pipelineEditor.inspector.subpipeline-task-help') }}</span>
+        </label>
+        <section class="pi-props" data-test="retry-policy">
+          <h3 class="pi-section">{{ t('pipelineEditor.inspector.retry-title') }}</h3>
+          <label class="pi-field">
+            <span class="pi-label">{{ t('pipelineEditor.inspector.retry-tries') }}</span>
+            <input
+              type="number" min="1" :max="MAX_TRIES_CEILING" step="1" data-field="retry-tries"
+              :value="n.retry?.maxTries ?? 1" :disabled="locked" @change="editRetry('maxTries', Number(valueOf($event)))"
+            />
+          </label>
+        </section>
+      </template>
       <template v-else-if="n?.kind === 'gate'">
         <section v-if="isAwaitingGate" class="pi-decision">
           <h3>{{ t('pipelineEditor.gate.awaiting') }}</h3>
@@ -317,7 +484,7 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
               <span class="pi-input-glyph" aria-hidden="true">{{ glyphOf(u) }}</span>
               <span class="pi-input-name">{{ nodeTitle(u) }}</span>
               <span class="pi-input-state" :class="`is-${run.nodes[u.id]?.status ?? 'idle'}`">
-                {{ run.nodes[u.id] ? t(`pipelineEditor.status.${run.nodes[u.id].status}`) : t('pipelineEditor.inspector.not-run') }}
+                {{ run.nodes[u.id] ? t(`pipelineEditor.status.${runStatusKey(run.nodes[u.id])}`) : t('pipelineEditor.inspector.not-run') }}
               </span>
               <p v-if="run.nodes[u.id]?.summary" class="pi-input-summary">{{ run.nodes[u.id].summary }}</p>
             </li>
@@ -412,6 +579,24 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
           </template>
         </section>
         <p v-else-if="n.slot.roleKey" class="pi-help pi-help--block">{{ t('pipelineEditor.inspector.no-role-fields') }}</p>
+        <section class="pi-props" data-test="retry-policy">
+          <h3 class="pi-section">{{ t('pipelineEditor.inspector.retry-title') }}</h3>
+          <label class="pi-field">
+            <span class="pi-label">{{ t('pipelineEditor.inspector.retry-tries') }}</span>
+            <input
+              type="number" min="1" :max="MAX_TRIES_CEILING" step="1" data-field="retry-tries"
+              :value="n.retry?.maxTries ?? 1" :disabled="locked" @change="editRetry('maxTries', Number(valueOf($event)))"
+            />
+            <span class="pi-help">{{ t('pipelineEditor.inspector.retry-help', { max: MAX_TRIES_CEILING }) }}</span>
+          </label>
+          <label v-if="(n.retry?.maxTries ?? 1) > 1" class="pi-field">
+            <span class="pi-label">{{ t('pipelineEditor.inspector.retry-wait') }}</span>
+            <input
+              type="number" min="0" :max="MAX_RETRY_WAIT_MS / 1000" step="1" data-field="retry-wait"
+              :value="(n.retry?.waitMs ?? 0) / 1000" :disabled="locked" @change="editRetry('waitS', Number(valueOf($event)))"
+            />
+          </label>
+        </section>
       </template>
 
       <!-- ── Slot: live view ────────────────────────────────────────────── -->
@@ -431,14 +616,66 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
       <!-- ── Slot: output ───────────────────────────────────────────────── -->
       <template v-else-if="n?.kind === 'slot' && tab === 'output'">
         <dl v-if="runState" class="pi-stats">
-          <div><dt>{{ t('pipelineEditor.inspector.status') }}</dt><dd>{{ t(`pipelineEditor.status.${runState.status}`) }}</dd></div>
+          <div><dt>{{ t('pipelineEditor.inspector.status') }}</dt><dd>{{ t(`pipelineEditor.status.${runStatusKey(runState)}`) }}</dd></div>
           <div v-if="elapsed"><dt>{{ t('pipelineEditor.inspector.elapsed') }}</dt><dd>{{ elapsed }}</dd></div>
           <div v-if="tokens"><dt>{{ t('pipelineEditor.inspector.tokens') }}</dt><dd>{{ tokens }}</dd></div>
           <div v-if="(runState.attempts ?? 0) > 1"><dt>{{ t('pipelineEditor.inspector.attempts') }}</dt><dd>{{ runState.attempts }}</dd></div>
         </dl>
+        <div v-if="runState?.status === 'failed' && runState.error" class="pi-failure" role="alert" data-test="output-error">
+          <strong>{{ t('pipelineEditor.inspector.failure') }}</strong>
+          <p>{{ runState.error }}</p>
+        </div>
         <p v-if="runState?.summary" class="pi-summary">{{ runState.summary }}</p>
-        <div v-else class="pi-empty"><p>{{ t('pipelineEditor.inspector.output-empty') }}</p></div>
+        <div v-else-if="!(runState?.status === 'failed' && runState.error)" class="pi-empty"><p>{{ t('pipelineEditor.inspector.output-empty') }}</p></div>
       </template>
+
+      <!-- ── Links out (slot settings, sub-pipeline) ───────────────────── -->
+      <section
+        v-if="n && (n.kind === 'subpipeline' || (n.kind === 'slot' && tab === 'settings'))"
+        class="pi-props pi-links" :aria-label="t('pipelineEditor.link.out-title')"
+      >
+        <h3 class="pi-section">{{ t('pipelineEditor.link.out-title') }}</h3>
+        <p v-if="!outLinks.length" class="pi-help pi-help--block">{{ t('pipelineEditor.link.none') }}</p>
+        <ul v-else class="pi-link-list">
+          <li v-for="e in outLinks" :key="e.id" class="pi-link" data-test="link-row">
+            <span class="pi-link-to">{{ nameOf(e.to) }}</span>
+            <select :value="e.kind ?? 'main'" :disabled="locked" :aria-label="t('pipelineEditor.link.kind')" @change="setLinkKind(e, valueOf($event) as GraphEdgeKind)">
+              <option value="main">{{ t('pipelineEditor.link.kind-main') }}</option>
+              <option value="branch">{{ t('pipelineEditor.link.kind-branch') }}</option>
+              <option value="error">{{ t('pipelineEditor.link.kind-error') }}</option>
+            </select>
+            <input
+              v-if="e.kind === 'branch'" :key="`${e.id}-when`" type="text" spellcheck="false" data-field="link-when"
+              :value="whenText(e)" :readonly="typeof e.when === 'object'" :disabled="locked"
+              :placeholder="t('pipelineEditor.link.when-placeholder')" :aria-label="t('pipelineEditor.link.when')"
+              @change="setLinkWhen(e, valueOf($event))"
+            />
+            <button
+              type="button" class="pi-icon" data-test="link-remove" :disabled="locked"
+              :aria-label="t('pipelineEditor.link.remove')" :title="t('pipelineEditor.link.remove')" @click="removeLink(e)"
+            ><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
+          </li>
+        </ul>
+        <div class="pi-link pi-link--add" data-test="link-add">
+          <select v-model="newKind" data-field="link-kind" :disabled="locked" :aria-label="t('pipelineEditor.link.kind')">
+            <option value="branch">{{ t('pipelineEditor.link.kind-branch') }}</option>
+            <option value="error">{{ t('pipelineEditor.link.kind-error') }}</option>
+            <option value="main">{{ t('pipelineEditor.link.kind-main') }}</option>
+          </select>
+          <select v-model="newTo" data-field="link-to" :disabled="locked" :aria-label="t('pipelineEditor.link.to')">
+            <option value="" disabled>{{ t('pipelineEditor.link.to-pick') }}</option>
+            <option v-for="m in linkTargets" :key="m.id" :value="m.id">{{ nodeTitle(m) }}</option>
+          </select>
+          <input
+            v-if="newKind === 'branch'" v-model="newWhen" type="text" spellcheck="false" data-field="link-when" :disabled="locked"
+            :placeholder="t('pipelineEditor.link.when-placeholder')" :aria-label="t('pipelineEditor.link.when')"
+            @keydown.enter.prevent="addLink"
+          />
+          <button type="button" class="pi-btn" :disabled="!canAddLink" @click="addLink">{{ t('pipelineEditor.link.add') }}</button>
+        </div>
+        <p v-if="hasBranch || newKind === 'branch'" class="pi-help pi-help--block" data-test="branch-help">{{ t('pipelineEditor.link.branch-help') }}</p>
+        <p v-if="hasError || newKind === 'error'" class="pi-help pi-help--block" data-test="error-help">{{ t('pipelineEditor.link.error-help') }}</p>
+      </section>
     </div>
 
     <footer v-if="n && n.kind !== 'trigger'" class="pi-foot">
@@ -446,10 +683,10 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
         v-if="n.kind === 'slot'" type="button" class="pi-btn" :class="{ 'is-on': n.pinned }" :disabled="locked"
         :aria-pressed="!!n.pinned" :title="t('pipelineEditor.inspector.pin-help')" @click="togglePin"
       >{{ n.pinned ? t('pipelineEditor.inspector.unpin') : t('pipelineEditor.inspector.pin') }}</button>
-      <button
-        v-if="n.kind === 'slot' && run.state !== 'running' && run.pipelineId" type="button" class="pi-btn"
-        :title="t('pipelineEditor.inspector.restart-help')" @click="emit('restart-from', n.id)"
-      >{{ t('pipelineEditor.inspector.restart-from') }}</button>
+      <PipelineActionMenu
+        v-if="n.kind === 'slot' || n.kind === 'subpipeline'" up
+        :label="t('pipelineEditor.recover.title')" :items="recoverItems" @select="onRecover"
+      />
       <span class="pi-spacer"></span>
       <button type="button" class="pi-btn pi-btn--danger" :disabled="locked" @click="emit('remove', n.id)">{{ t('action.delete') }}</button>
     </footer>
@@ -751,12 +988,29 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
 .pi-stats div { display: grid; gap: 2px; }
 .pi-stats dt { font-size: var(--font-2xs); color: var(--text-muted); }
 .pi-stats dd { margin: 0; font-size: var(--font-md); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.pi-failure {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger-emphasis) 40%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--danger-subtle);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+}
+.pi-failure strong { display: block; color: var(--danger-fg); font-size: var(--font-xs); }
+.pi-failure p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pi-summary { margin: 0; font-size: var(--font-sm); line-height: var(--lh-loose); color: var(--text-primary); white-space: pre-wrap; }
 .pi-empty { display: grid; place-items: center; min-height: 160px; text-align: center; }
 .pi-empty p { margin: 0; max-width: 260px; font-size: var(--font-xs); line-height: var(--lh-base); color: var(--text-muted); }
 
+.pi-link-list { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: grid; gap: var(--space-2); }
+.pi-link { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.pi-link select, .pi-link input { flex: 1 1 96px; min-width: 0; }
+.pi-link-to { flex: 1 1 100%; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
+.pi-link--add { padding-top: var(--space-2); border-top: 1px dashed var(--border-muted); }
 .pi-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
@@ -773,6 +1027,7 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
   color: var(--text-primary);
   font: inherit;
   font-size: var(--font-xs);
+  white-space: nowrap;
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
 }

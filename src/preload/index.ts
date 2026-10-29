@@ -23,6 +23,7 @@ import type { PluginActivityReport } from '../shared/pluginActivity'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
+import type { AppLockApi, AppLockStatus } from '../shared/appLock'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
 import type { LocalInstallDetails, PluginSource } from '../shared/pluginSource'
 import type { DeveloperApi, DeveloperCallResult } from '../shared/marketplaceDeveloper'
@@ -177,6 +178,21 @@ function isPluginSwitchNotice(payload: unknown): payload is PluginSwitchNotice {
     (agent === undefined || (typeof agent === 'object' && agent !== null &&
       ['pane', 'external', 'host'].includes(String(agent.callerKind)) &&
       nullableString(agent.paneId) && nullableString(agent.paneName) && nullableString(agent.workspace)))
+}
+
+/** H1: a switch between installed versions drains the plugin's views now
+ *  ('start') or has settled, switched or not ('end'). */
+export interface PluginSwitchingNotice {
+  pluginId: string
+  toVersion: string
+  phase: 'start' | 'end'
+}
+
+function isPluginSwitchingNotice(payload: unknown): payload is PluginSwitchingNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  return typeof record.pluginId === 'string' && typeof record.toVersion === 'string' &&
+    (record.phase === 'start' || record.phase === 'end')
 }
 
 function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[] {
@@ -723,6 +739,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }
     ipcRenderer.on('plugins:switched', listener)
     return () => ipcRenderer.removeListener('plugins:switched', listener)
+  },
+  // H1: a switch between installed versions drains the plugin's views, then settles.
+  onPluginSwitching: (cb: (notice: PluginSwitchingNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginSwitchingNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:switching', listener)
+    return () => ipcRenderer.removeListener('plugins:switching', listener)
   },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))
@@ -1295,6 +1319,20 @@ contextBridge.exposeInMainWorld('agentTeam', {
     askMicrophone: (): Promise<{ granted: boolean; status: string; prompted?: boolean }> =>
       ipcRenderer.invoke('media:ask-microphone'),
   },
+  /** Settings → App Lock; main owns the lock state and the PIN. */
+  appLock: {
+    status: () => ipcRenderer.invoke('app-lock:status'),
+    updateSettings: (patch) => ipcRenderer.invoke('app-lock:update-settings', patch),
+    setPin: (newPin, currentPin) => ipcRenderer.invoke('app-lock:set-pin', newPin, currentPin),
+    resetPinWithSystem: (newPin) => ipcRenderer.invoke('app-lock:reset-pin-with-system', newPin),
+    removePin: (currentPin) => ipcRenderer.invoke('app-lock:remove-pin', currentPin),
+    lockNow: () => ipcRenderer.invoke('app-lock:lock-now'),
+    onStatus: (handler) => {
+      const listener = (_e: unknown, status: AppLockStatus): void => handler(status)
+      ipcRenderer.on('app-lock:status-changed', listener)
+      return () => ipcRenderer.removeListener('app-lock:status-changed', listener)
+    },
+  } satisfies AppLockApi,
   // The fn (🌐) key for voice input (macOS); see src/main/fn-key-helper.ts.
   fnKey: {
     subscribe: () => ipcRenderer.invoke('voice:fn-key-subscribe'),

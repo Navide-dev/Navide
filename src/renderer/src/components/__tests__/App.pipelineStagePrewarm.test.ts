@@ -41,7 +41,7 @@ const prewarmSource = block(
 )
 
 const activateSource = block(
-  'async function activateStage(index: number): Promise<void> {',
+  'async function activateStage(index: number, opts: { only?: string; note?: string } = {}): Promise<void> {',
   '\nasync function spawnPipelineStage(',
 )
 
@@ -100,6 +100,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
   const factory = new Function(
     'pipeline',
     'pipelinesApi',
+    'runPipelineId',
     'stagesApi',
     'panes',
     'stageCompletions',
@@ -123,6 +124,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
   const api = factory(
     pipeline,
     { activePipelineId: { value: 'pl-1' }, setActivePipeline: vi.fn(), error: { value: '' } },
+    { value: '' },
     { isLoaded: { value: true }, stages: { value: stageList }, refresh: vi.fn(), error: { value: '' } },
     { value: [] as unknown[] },
     new Map(),

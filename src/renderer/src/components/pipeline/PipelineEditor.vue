@@ -14,8 +14,10 @@ import type { useBackend } from '../../composables/useBackend'
 import type { Role } from '../../composables/useRoles'
 import { usePipelineGraphEditor, type EditorError, type EditResult } from '../../composables/usePipelineGraphEditor'
 import {
+  edgeId,
   layerGraph,
   type GraphEdge,
+  type GraphEdgeKind,
   type GraphNode,
   type GraphOp,
   type GraphPosition,
@@ -37,7 +39,7 @@ import {
   type LaneBadge,
 } from '../../lib/pipelineGraphEdits'
 import { applyGraphOps, DEFAULT_MAX_LOOPS, MAX_LOOPS_CEILING } from '../../lib/pipelineGraph'
-import { backendErrorText } from '../../lib/pipelineErrors'
+import { backendErrorText, detailsAction, graphProblemText, runErrorText } from '../../lib/pipelineErrors'
 import PipelineSwimlane, { type LaneTarget } from './PipelineSwimlane.vue'
 import PipelineCanvas from './PipelineCanvas.vue'
 import PipelinePalette from './PipelinePalette.vue'
@@ -149,21 +151,25 @@ function reviewGate(): void {
 }
 
 // ── Errors ───────────────────────────────────────────────────────────────────
+// Problems carry a code and the step's label (graphProblems); the English
+// sentence they replace stays behind the toast's Details.
 function explain(err: EditorError): string {
   if (err.code === 'PIPELINE_RUNNING') return t('pipelineEditor.error.pipeline-running')
+  if (err.code === 'NO_GRAPH') return graphProblemText(t, { code: 'no-graph' })
   if (err.code === 'GRAPH_INVALID') {
-    const first = err.details?.[0] ?? err.message
-    if (/cycle/.test(first)) return t('pipelineEditor.error.cycle')
-    if (/upstream node/.test(first)) return t('pipelineEditor.error.reject-upstream')
-    if (/duplicate edge/.test(first)) return t('pipelineEditor.error.duplicate-edge')
-    return t('pipelineEditor.error.invalid', { detail: first })
+    const first = err.problems?.[0]
+    if (first) return graphProblemText(t, first)
+    return graphProblemText(t, { code: err.problemCode ?? '' })
   }
   if (err.code === 'TRANSPORT') return t('pipelineEditor.error.transport', { message: err.message })
-  return backendErrorText(t, err, 'pipelineEditor.error.unknown')
+  return backendErrorText(t, { code: err.code, message: err.message }, 'pipelineEditor.error.unknown')
+}
+function rawOf(err: EditorError): string {
+  return err.details?.length ? err.details.join('\n') : err.message
 }
 async function apply(label: string, ops: GraphOp[], undoOps?: GraphOp[]): Promise<boolean> {
   const result = await editor.execute(label, ops, undoOps)
-  if (!result.ok) notify.toast(explain(result.error), { type: 'error' })
+  if (!result.ok) notify.toast(explain(result.error), { type: 'error', action: detailsAction(t, notify, rawOf(result.error)) })
   return result.ok
 }
 watch(() => editor.externalEdits.value, () => {
@@ -172,8 +178,29 @@ watch(() => editor.externalEdits.value, () => {
 
 // ── Building nodes ───────────────────────────────────────────────────────────
 let lastAgent = 'claude'
+/** Pipelines a new subpipeline node may call (every one but this), so it is
+ *  placed already pointing at one; the Inspector changes it. */
+const callable = ref<string[]>([])
+watch(() => props.pipelineId, async (self) => {
+  try {
+    const resp = await props.backend.send<{ pipelines?: Array<{ id: string }> }>('pipelines.list', {})
+    callable.value = (resp.payload?.pipelines ?? []).map((p) => p.id).filter((id) => id !== self)
+  } catch {
+    callable.value = []
+  }
+}, { immediate: true })
+/** Why the palette's Sub-pipeline cannot be added ('' when it can). */
+const subpipelineBlocked = computed(() => (callable.value.length ? '' : t('pipelineEditor.error.subpipeline-none')))
 function nodeFor(item: PaletteItem): GraphNode {
   const g = graph.value!
+  if (item.kind === 'subpipeline') {
+    // Placed calling the first other pipeline; the Inspector picks another.
+    // With no other pipeline the add is refused (error.subpipeline-none).
+    return {
+      id: freshNodeId(g, 'call'), kind: 'subpipeline', label: uniqueLabel(g, t('pipelineEditor.palette.subpipeline')),
+      position: { x: 0, y: 0 }, subpipeline: { pipelineId: callable.value[0] ?? '', task: '{{task}}', wait: true },
+    }
+  }
   if (item.kind === 'gate') {
     return { id: freshNodeId(g, 'gate'), kind: 'gate', label: uniqueLabel(g, t('pipelineEditor.palette.gate')), position: { x: 0, y: 0 }, gate: {} }
   }
@@ -285,6 +312,28 @@ const selectedRejectEdge = computed(() => {
   const e = graph.value?.edges.find((x) => x.id === selectedEdgeId.value)
   return e && e.kind === 'reject' ? e : null
 })
+/** A selected forward link out of a step: its kind (always / branch / on
+ *  error) and a branch's condition are edited in the same panel. */
+const selectedLinkEdge = computed(() => {
+  const e = graph.value?.edges.find((x) => x.id === selectedEdgeId.value)
+  const from = byId.value.get(e?.from ?? '')?.kind
+  return e && e.kind !== 'reject' && (from === 'slot' || from === 'subpipeline') ? e : null
+})
+const whenText = (e: GraphEdge): string =>
+  typeof e.when === 'string' ? e.when : e.when ? `${e.when.path} = ${JSON.stringify(e.when.equals)}` : ''
+/** Like setLoops: no edge update op, so the link is removed and re-added. */
+async function setLinkKind(e: GraphEdge, kind: GraphEdgeKind): Promise<void> {
+  if (kind === (e.kind ?? 'main')) return
+  const next: GraphEdge = { id: edgeId(e.from, e.to, kind), from: e.from, to: e.to, kind, ...(kind === 'branch' ? { when: 'default' } : {}) }
+  if (await apply(t('pipelineEditor.history.link-kind'), [{ op: 'remove_edge', id: e.id }, { op: 'add_edge', edge: next }])) {
+    selectedEdgeId.value = next.id
+  }
+}
+async function setLinkWhen(e: GraphEdge, text: string): Promise<void> {
+  const when = text.trim()
+  if (!when || when === whenText(e)) return
+  await apply(t('pipelineEditor.history.link-when'), [{ op: 'remove_edge', id: e.id }, { op: 'add_edge', edge: { ...e, when } }])
+}
 const loopsOf = (e: GraphEdge): number => e.maxLoops ?? DEFAULT_MAX_LOOPS
 const edgeEndName = (id: string): string => { const n = byId.value.get(id); return n ? nodeTitle(n) : id }
 /** The contract has no edge update, so a new budget is the same link removed
@@ -331,14 +380,60 @@ async function openOnCanvas(b: LaneBadge): Promise<void> {
 }
 
 // ── Run control (engine lives in the host; reached as UI commands) ───────────
+/** A refused command in the UI language (its code); the developer sentence
+ *  ("ui.pipeline.next: …", meant for MCP callers) is behind Details. */
+function toastRefusal(result: { error?: string; code?: string; params?: Record<string, unknown> }): void {
+  const label = (id: string): string => byId.value.get(id)?.label || id
+  notify.toast(runErrorText(t, result, label), { type: 'error', action: detailsAction(t, notify, result.error ?? '') })
+}
 async function command(id: string, args?: unknown): Promise<void> {
   const result = await invokeCommand(id, args)
-  if (!result.ok) notify.toast(result.error ?? t('pipelineEditor.error.command-failed'), { type: 'error' })
+  if (!result.ok) toastRefusal(result)
 }
-const control = (action: 'next' | 'abort' | 'resume' | 'restart'): Promise<void> => command(`ui.pipeline.${action}`)
+// Reset closes every pane in the window and Abort stops the run, so the host
+// asks first (confirm); MCP callers send no flag and are never asked.
+const control = (action: 'next' | 'abort' | 'resume' | 'restart' | 'reset'): Promise<void> =>
+  command(`ui.pipeline.${action}`, action === 'reset' || action === 'abort' ? { confirm: true } : undefined)
+/** Task for a run started from here; ui.pipeline.start runs the same
+ *  onPipelineStart as the sidebar's Run. */
+const runTask = ref('')
+const canStart = computed(() =>
+  !!props.workspacePath && props.run.state !== 'running' && stepCount.value > 0 && runTask.value.trim().length > 0
+)
+/** The condition holding Run back, for its tooltip ('' when it can run). */
+const startBlocked = computed(() => {
+  if (!props.workspacePath) return t('pipelineEditor.run.blocked-workspace')
+  if (stepCount.value === 0) return t('pipelineEditor.state.empty-title')
+  if (!runTask.value.trim()) return t('pipelineEditor.run.blocked-task')
+  return ''
+})
+/** Executions' empty state: back to the editor, cursor in the task box. */
+async function focusRunTask(): Promise<void> {
+  tab.value = 'editor'
+  await nextTick()
+  root.value?.querySelector<HTMLInputElement>('.pe-start-input')?.focus()
+}
+async function startRun(): Promise<void> {
+  if (!canStart.value) return
+  const result = await invokeCommand('ui.pipeline.start', { pipelineId: props.pipelineId, task: runTask.value.trim() })
+  if (!result.ok) toastRefusal(result)
+  else runTask.value = ''
+}
 const decideGate = (nodeId: string, decision: 'approve' | 'reject', comment: string): Promise<void> =>
-  command(decision === 'approve' ? 'ui.pipeline.gate_pass' : 'ui.pipeline.gate_reject', decision === 'reject' ? { nodeId, comment } : { nodeId })
+  command(decision === 'approve' ? 'ui.pipeline.gate_pass' : 'ui.pipeline.gate_reject', decision === 'reject' ? { nodeId, comment, confirm: true } : { nodeId })
 const restartFrom = (nodeId: string): Promise<void> => command('ui.pipeline.restart_from', { nodeId })
+/** Retry a failed step of a stopped run: a resume when it sits in the first
+ *  unfinished layer (the stage the run resumes at, panes and context kept),
+ *  otherwise a restart from it (earlier outputs reused). */
+function retryNode(nodeId: string): Promise<void> {
+  const g = graph.value
+  if (!g) return Promise.resolve()
+  const { layers } = layerGraph(g)
+  const at = layers.findIndex((l) => l.includes(nodeId))
+  const finished = (id: string): boolean => byId.value.get(id)?.kind !== 'slot' || ['done', 'skipped'].includes(props.run.nodes[id]?.status ?? '')
+  const firstOpen = layers.findIndex((l) => !l.every(finished))
+  return at >= 0 && at === firstOpen ? control('resume') : restartFrom(nodeId)
+}
 async function openPane(paneId: string): Promise<void> {
   await command('ui.pane.focus', { paneId })
   emit('leave')
@@ -462,6 +557,11 @@ watch(inspectorOpen, () => {
 })
 
 const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
+/** Save state; the long "derived" sentence is cut to the room left (v-truncate shows it whole). */
+const saveText = computed(() => {
+  if (editor.pending.value) return t('pipelineEditor.toolbar.saving')
+  return editor.derived.value ? t('pipelineEditor.toolbar.derived') : t('pipelineEditor.toolbar.saved')
+})
 </script>
 
 <template>
@@ -508,11 +608,17 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
         <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg>
         {{ t('pipelineEditor.toolbar.locked') }}
       </span>
-      <span v-else-if="graph" class="pe-save" role="status" aria-live="polite">
-        {{ editor.pending.value ? t('pipelineEditor.toolbar.saving') : (editor.derived.value ? t('pipelineEditor.toolbar.derived') : t('pipelineEditor.toolbar.saved')) }}
-      </span>
+      <span v-else-if="graph" v-truncate class="pe-save" role="status" aria-live="polite">{{ saveText }}</span>
 
       <span class="pe-spacer"></span>
+
+      <form v-if="graph && run.state !== 'running'" class="pe-start" @submit.prevent="startRun">
+        <input
+          v-model="runTask" type="text" class="pe-start-input" spellcheck="false"
+          :placeholder="t('pipelineEditor.toolbar.task')" :aria-label="t('pipelineEditor.toolbar.task')"
+        />
+        <button type="submit" class="pe-text-btn pe-start-btn" :disabled="!canStart" :title="startBlocked || undefined">{{ t('action.run-pipeline') }}</button>
+      </form>
 
       <template v-if="tab === 'editor'">
         <button
@@ -573,7 +679,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
 
     <div v-else-if="tab === 'editor'" class="pe-main" :class="{ 'has-inspector': inspectorOpen, 'no-palette': paletteCollapsed }">
       <aside v-if="!paletteCollapsed" class="pe-palette" :aria-label="t('pipelineEditor.palette.title')">
-        <PipelinePalette :roles="roles" :locked="locked" @pick="addFromPalette" />
+        <PipelinePalette :roles="roles" :locked="locked" :subpipeline-blocked="subpipelineBlocked" @pick="addFromPalette" />
       </aside>
 
       <div class="pe-view" :class="[`pe-view--${view}`, { 'is-entering': entering }]">
@@ -607,6 +713,26 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
           </span>
           <button type="button" class="pe-text-btn" :disabled="locked" @click="removeEdge(selectedRejectEdge.id)">{{ t('pipelineEditor.edge.remove') }}</button>
         </div>
+        <div v-if="view === 'canvas' && selectedLinkEdge" class="pe-edge-panel" role="group" :aria-label="t('pipelineEditor.link.title')">
+          <span class="pe-edge-title">{{ t('pipelineEditor.link.title') }}</span>
+          <span class="pe-edge-desc" v-truncate>{{ t('pipelineEditor.link.desc', { from: edgeEndName(selectedLinkEdge.from), to: edgeEndName(selectedLinkEdge.to) }) }}</span>
+          <select
+            class="pe-link-input" :value="selectedLinkEdge.kind ?? 'main'" :disabled="locked" :aria-label="t('pipelineEditor.link.kind')"
+            @change="setLinkKind(selectedLinkEdge, ($event.target as HTMLSelectElement).value as GraphEdgeKind)"
+          >
+            <option value="main">{{ t('pipelineEditor.link.kind-main') }}</option>
+            <option value="branch">{{ t('pipelineEditor.link.kind-branch') }}</option>
+            <option value="error">{{ t('pipelineEditor.link.kind-error') }}</option>
+          </select>
+          <input
+            v-if="selectedLinkEdge.kind === 'branch'" :key="selectedLinkEdge.id" class="pe-link-input" type="text"
+            :value="whenText(selectedLinkEdge)" :readonly="typeof selectedLinkEdge.when === 'object'" :disabled="locked"
+            :placeholder="t('pipelineEditor.link.when-placeholder')" :aria-label="t('pipelineEditor.link.when')"
+            :title="t('pipelineEditor.link.branch-help')"
+            @change="setLinkWhen(selectedLinkEdge, ($event.target as HTMLInputElement).value)"
+          />
+          <button type="button" class="pe-text-btn" :disabled="locked" @click="removeEdge(selectedLinkEdge.id)">{{ t('pipelineEditor.link.remove') }}</button>
+        </div>
         <div v-if="stepCount === 0 && !locked && view === 'canvas'" class="pe-empty" aria-live="polite">
           <p class="pe-empty-title">{{ t('pipelineEditor.state.empty-title') }}</p>
           <p>{{ t('pipelineEditor.state.empty-body') }}</p>
@@ -619,10 +745,11 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
           class="pe-inspector"
           :backend="backend" :graph="graph" :node="selectedNode" :stage="selectedStage"
           :roles="roles" :agent-options="agentOptions" :run="run" :now="now" :locked="locked"
-          :workspace-path="workspacePath"
+          :workspace-path="workspacePath" :pipeline-id="pipelineId"
           @edit="editFromInspector" @stage-meta="editStageMeta" @remove="removeNode"
           @close="select(null); selectedLayer = null"
-          @open-pane="openPane" @restart-from="restartFrom" @gate="decideGate"
+          @open-pane="openPane" @restart-from="restartFrom" @retry-node="retryNode" @gate="decideGate"
+          @control="control"
         />
       </Transition>
     </div>
@@ -633,13 +760,14 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
       :backend="backend" :workspace-path="workspacePath" :pipeline-id="pipelineId"
       :graph="graph" :run="run" :role-labels="roleLabels" :agent-labels="agentLabels" :now="now"
       @control="control" @gate="decideGate" @select-node="(id) => { tab = 'editor'; select(id) }"
+      @start="focusRunTask"
     />
 
     <div
       v-if="quick" class="pe-quick" role="dialog" :aria-label="t('pipelineEditor.palette.quick-add')"
       :style="{ left: `${quick.x}px`, top: `${quick.y}px` }"
     >
-      <PipelinePalette :roles="roles" compact @pick="quickPick" />
+      <PipelinePalette :roles="roles" compact :subpipeline-blocked="subpipelineBlocked" @pick="quickPick" />
     </div>
   </div>
 </template>
@@ -704,13 +832,12 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-width: 0;
   max-width: 34%;
   padding-right: var(--space-3);
   margin-right: var(--space-1);
   border-right: 1px solid var(--border-default);
 }
-.pe-trail { display: flex; align-items: center; gap: var(--space-1); }
+.pe-trail { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 .pe-seg {
   display: inline-flex;
   padding: 2px;
@@ -732,6 +859,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--font-xs);
+  white-space: nowrap;
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
 }
@@ -753,8 +881,8 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
   font-size: var(--font-xs);
 }
 .pe-lock svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; }
-.pe-save { font-size: var(--font-xs); color: var(--text-muted); }
-.pe-spacer { flex: 1; }
+.pe-save { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-xs); color: var(--text-muted); }
+.pe-spacer { flex: 1 0 0; }
 .pe-divider { width: 1px; height: 18px; background: var(--border-default); }
 .pe-icon {
   display: grid;
@@ -780,10 +908,28 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
   color: var(--text-primary);
   font: inherit;
   font-size: var(--font-xs);
+  white-space: nowrap;
   cursor: pointer;
 }
 .pe-text-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .pe-text-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pe-start { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 0 1 auto; }
+.pe-start-input {
+  width: 220px;
+  min-width: 96px;
+  flex: 0 1 auto;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-xs);
+}
+.pe-start-input:focus { outline: none; border-color: var(--accent-emphasis); }
+.pe-start-btn:not(:disabled) { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
+.pe-start-btn:hover:not(:disabled) { background: var(--accent-bright); }
 
 .pe-main {
   flex: 1;
@@ -849,6 +995,16 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
 }
 .pe-edge-title { font-weight: 600; color: var(--done-fg); white-space: nowrap; }
 .pe-edge-desc { color: var(--text-secondary); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pe-link-input {
+  font: inherit;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  max-width: 200px;
+}
+.pe-link-input:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: -1px; }
 .pe-stepper { display: inline-flex; align-items: center; border: 1px solid var(--border-default); border-radius: var(--radius-control); overflow: hidden; }
 .pe-stepper button {
   width: 24px;

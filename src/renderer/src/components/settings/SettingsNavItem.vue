@@ -9,6 +9,19 @@ defineProps<{
   active?: boolean
   /** Numeric badge after the label (e.g. pending updates); hidden at 0. */
   badge?: number
+  /** State of pages folded under this row (a warning, or "On"), named by `label`. */
+  marker?: { text: string; tone: 'risk' | 'on'; label: string } | null
+  /**
+   * Its pages are unfolded under it: the selected page row carries the
+   * selection, so this row shows only an expanded state (except in the
+   * icon-only rail, where the pages are hidden and it is the selection again).
+   */
+  expanded?: boolean
+  /**
+   * It has pages that fold under it: a chevron at the right edge shows
+   * whether they are unfolded (▾) or folded (▸).
+   */
+  foldable?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -20,9 +33,10 @@ const emit = defineEmits<{
   <button
     type="button"
     class="settings-nav-item"
-    :class="{ active }"
+    :class="{ active, expanded }"
     :title="label"
-    :aria-current="active ? 'page' : undefined"
+    :aria-current="active && !expanded ? 'page' : undefined"
+    :aria-expanded="foldable ? !!expanded : (expanded || undefined)"
     @click="emit('select')"
   >
     <span class="settings-nav-item-icon">
@@ -30,6 +44,17 @@ const emit = defineEmits<{
     </span>
     <span class="settings-nav-item-label" v-truncate>{{ label }}</span>
     <span v-if="badge" class="settings-nav-item-badge">{{ badge }}</span>
+    <span
+      v-if="marker"
+      class="settings-nav-item-marker"
+      :class="`settings-nav-item-marker--${marker.tone}`"
+      role="img"
+      :aria-label="marker.label"
+      :title="marker.label"
+    >{{ marker.text }}</span>
+    <span v-if="foldable" class="settings-nav-item-chevron" :class="{ open: expanded }" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>
+    </span>
   </button>
 </template>
 
@@ -48,10 +73,12 @@ const emit = defineEmits<{
   text-align: left;
   color: var(--text-primary);
   font-size: var(--font-row-title);
-  transition: background-color 120ms ease, color 120ms ease;
 }
+/* Only the hover eases in. A row that loses the selection (or the pointer)
+   clears at once, so it never shows a fading fill next to the new active row. */
 .settings-nav-item:hover {
   background: var(--bg-hover);
+  transition: background-color 120ms ease, color 120ms ease;
 }
 .settings-nav-item:focus-visible {
   outline: 2px solid var(--accent-focus);
@@ -88,19 +115,98 @@ const emit = defineEmits<{
   line-height: 18px;
   text-align: center;
 }
+.settings-nav-item-marker {
+  margin-left: auto;
+  flex: none;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  line-height: 18px;
+}
+.settings-nav-item-badge + .settings-nav-item-marker {
+  margin-left: 4px;
+}
+.settings-nav-item-marker--risk {
+  background: var(--risk-subtle);
+  color: var(--risk-fg);
+}
+/* An "on" state is a short labelled pill after the label ("Dev"), with the
+   full meaning in its tooltip and accessible label. */
+.settings-nav-item-marker--on {
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: var(--font-2xs);
+  white-space: nowrap;
+}
+.settings-nav-item-chevron {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+  color: var(--text-secondary);
+  transition: transform 120ms ease;
+}
+.settings-nav-item-badge ~ .settings-nav-item-chevron,
+.settings-nav-item-marker ~ .settings-nav-item-chevron {
+  margin-left: 4px;
+}
+.settings-nav-item-chevron.open {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-nav-item-chevron { transition: none; }
+}
 .settings-nav-item-icon {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
 }
-/* A long label wraps onto a second line instead of being cut off: some
-   languages cannot shorten a name the glossary fixes (es-ES "Complementos de
-   Navide" is 14px wider than the sidebar). */
+/* A badge or marker takes only its own width at the right edge: the row's
+   right padding shrinks to make room for it and the gap before it halves,
+   so the label keeps the rest of the width ("Плагины Navide", "Navide
+   プラグイン" stay on one line beside their marker at 1280). */
+@media (min-width: 721px) {
+  .settings-nav-item:has(.settings-nav-item-badge, .settings-nav-item-marker, .settings-nav-item-chevron) {
+    padding-right: 6px;
+    gap: 4px;
+  }
+  .settings-nav-item:has(.settings-nav-item-badge, .settings-nav-item-marker, .settings-nav-item-chevron) .settings-nav-item-label {
+    margin-left: 4px;
+  }
+}
+/* Up to two lines per row: a label too long for the sidebar (ja-JP "Navide
+   マーケットプレイス", es-ES "Complementos de Navide") wraps under its own
+   first letter (not under the icon), and only a third line ends in an
+   ellipsis, with the full name in the tooltip. A badge or marker after it
+   keeps its own width at the row's right edge. */
 .settings-nav-item-label {
+  flex: 1 1 auto;
   min-width: 0;
-  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow-wrap: break-word;
   line-height: 1.3;
+}
+
+/* Expanded parent: a heading for the page rows under it, not a second
+   selection. Normal text and icon colour, normal weight, no fill, no
+   indicator bar; only its open chevron says the pages under it are shown.
+   The page row under it carries the only selection styling. */
+@media (min-width: 721px) {
+  .settings-nav-item.active.expanded {
+    background: transparent;
+    color: var(--text-primary);
+    font-weight: 400;
+  }
+  .settings-nav-item.active.expanded:hover {
+    background: var(--bg-hover);
+  }
+  .settings-nav-item.active.expanded::before {
+    display: none;
+  }
 }
 
 /* Narrow modal: collapse to an icon-only rail. The label stays in the
@@ -123,6 +229,10 @@ const emit = defineEmits<{
     clip-path: inset(50%);
     overflow: hidden;
     white-space: nowrap;
+  }
+  .settings-nav-item-marker,
+  .settings-nav-item-chevron {
+    display: none;
   }
 }
 </style>

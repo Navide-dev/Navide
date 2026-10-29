@@ -307,8 +307,8 @@ export function parseSpawns(turnText: string): ParsedSpawnRequest[] {
  * Kickoff prompt for a SPAWN-created pane: the task followed by a report-back
  * instruction pointing at the parent's messaging name. The instruction stays
  * on a single line so it can never parse as a bare marker, and it spells out
- * that `to:` shares the marker's line — writing it on the next line is the one
- * mistake that makes the whole block vanish without a trace.
+ * that `to:` shares the marker's line. The parser also accepts `to:` on the
+ * line below a bare marker; the instruction asks for the stricter form anyway.
  */
 export function renderSpawnKickoff(task: string, parentName: string): string {
   return (
@@ -381,9 +381,9 @@ function neutralizeExternalBoundary(content: string): string {
 /**
  * Wrap a message for injection into the target pane. The reply hint stays on
  * a single line so it can never parse as a bare marker, and it states outright
- * that `to:` belongs on the marker's own line: START_RE only matches the two
- * together, so a reply that breaks them apart is dropped silently — no queue
- * entry, no failure notice, nothing for either side to see.
+ * that `to:` belongs on the marker's own line. The parser also accepts `to:` on
+ * the line below a bare marker (START_BARE_RE + TO_LINE_RE); the hint asks for
+ * the stricter form anyway.
  *
  * The hint also says when NOT to reply. Without that, agents read it as "every
  * message must be answered" and ack each other's acks, each ack costing the
@@ -560,18 +560,23 @@ export function renderFallbackReport(turnText: string): string {
 /** Notice for a parent whose spawned panes a relaunch interrupted. Resuming
  *  only brings the conversation back — none of them was told to carry on, so
  *  whether to continue or re-dispatch is the parent's decision. Returns '' for
- *  no children. */
+ *  no children. `cause` 'backend-restart' (H3) is the same notice after
+ *  Navide's backend restarted under a running window. */
 export function renderInterruptedChildrenNotice(
   children: readonly { name: string; resumed: boolean }[],
+  cause: 'relaunch' | 'backend-restart' = 'relaunch',
 ): string {
   if (children.length === 0) return ''
   const lines = children.map((c) =>
     c.resumed
       ? `- ${c.name}：已接回（對話已恢復，停在提示字元）`
-      : `- ${c.name}：未接回（仍是還原佔位，超過自動接回上限或接回失敗）`,
+      : cause === 'backend-restart'
+        ? `- ${c.name}：未接回（已結束，超過自動接回上限、後端短時間內反覆崩潰或接回失敗）`
+        : `- ${c.name}：未接回（仍是還原佔位，超過自動接回上限或接回失敗）`,
   )
+  const when = cause === 'backend-restart' ? 'Navide 的後端重新啟動時' : 'Navide 重新啟動時'
   return (
-    `${MSG_INTERRUPTED_PREFIX} — Navide 重新啟動時，你派出的以下 pane 正在工作中，回合被中斷：\n` +
+    `${MSG_INTERRUPTED_PREFIX} — ${when}，你派出的以下 pane 正在工作中，回合被中斷：\n` +
     `${lines.join('\n')}\n\n` +
     `已接回的 pane 沒有自動續跑。要它繼續，用 cli_send 叫它繼續；也可以改派或重派。` +
     `它被叫繼續之後，回合結束時仍會回報給你。`

@@ -21,6 +21,8 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import { formatBytes } from '../lib/formatBytes'
+import PathText from './settings/PathText.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 
 type Backend = ReturnType<typeof useBackend>
 
@@ -447,11 +449,9 @@ defineExpose({ reload, confirmDiscard })
 
 <template>
   <section class="memory-pane" :aria-label="t('settings.memory.title')">
+    <!-- The page intro sits under the page title (the settings modal renders
+         it); the head keeps the one action at the right. -->
     <header class="memory-pane-head">
-      <div>
-        <h2>{{ t('settings.memory.title') }}</h2>
-        <p>{{ t('settings.memory.intro') }}</p>
-      </div>
       <button type="button" :disabled="loading || busy" @click="reload">{{ t('action.refresh') }}</button>
     </header>
 
@@ -465,14 +465,14 @@ defineExpose({ reload, confirmDiscard })
             <h3 class="memory-group-title">
               {{ group.label }}<span class="count">{{ group.files.length }}</span>
             </h3>
-            <p
+            <SettingsEmptyState
               v-if="group.scope === 'project' && !props.workspacePath"
-              class="memory-group-note"
-            >{{ t('settings.memory.no-workspace') }}</p>
-            <p
+              :message="t('settings.memory.no-workspace')"
+            />
+            <SettingsEmptyState
               v-else-if="group.files.length === 0"
-              class="memory-group-note"
-            >{{ t('settings.memory.empty') }}</p>
+              :message="t('settings.memory.empty')"
+            />
             <ul v-else class="memory-list">
               <li
                 v-for="file in group.files"
@@ -500,7 +500,7 @@ defineExpose({ reload, confirmDiscard })
                     <template v-if="file.exists">
                       {{ formatBytes(file.size) }} · {{ modifiedLabel(file) }}
                     </template>
-                    <template v-else>{{ file.path }}</template>
+                    <PathText v-else :path="file.path" />
                   </span>
                 </button>
                 <button
@@ -520,10 +520,8 @@ defineExpose({ reload, confirmDiscard })
               {{ t('settings.memory.scope-auto') }}<span class="count">{{ autoMemoryFiles.length }}</span>
             </h3>
             <p class="memory-group-note">{{ t('settings.memory.auto-intro') }}</p>
-            <code v-if="autoMemoryDir" class="memory-auto-dir">{{ autoMemoryDir }}</code>
-            <p v-if="autoMemoryFiles.length === 0" class="memory-group-note">
-              {{ t('settings.memory.auto-empty') }}
-            </p>
+            <PathText v-if="autoMemoryDir" class="memory-auto-dir" :path="autoMemoryDir" />
+            <SettingsEmptyState v-if="autoMemoryFiles.length === 0" :message="t('settings.memory.auto-empty')" />
             <ul v-else class="memory-list">
               <li
                 v-for="file in autoMemoryFiles"
@@ -585,7 +583,7 @@ defineExpose({ reload, confirmDiscard })
             @click="requestClose"
           >✕</button>
         </header>
-        <code class="memory-editor-path">{{ selectedFile.path }}</code>
+        <PathText class="memory-editor-path" :path="selectedFile.path" />
         <p v-if="selectedFile.autoMemory" class="memory-editor-hint">
           {{ t('settings.memory.auto-editor-hint') }}
         </p>
@@ -664,9 +662,8 @@ defineExpose({ reload, confirmDiscard })
   overflow: hidden;
   color: var(--text-primary);
 }
-.memory-pane-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.memory-pane-head h2 { margin: 0; font-size: 15px; color: var(--text-bright); }
-.memory-pane-head p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); }
+.memory-pane-head { display: flex; align-items: flex-start; justify-content: flex-end; gap: 10px; }
+/* The page intro uses the same size as every other page's intro. */
 button, textarea { font: inherit; }
 button {
   border: 1px solid var(--border-default);
@@ -701,37 +698,48 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   display: flex;
   align-items: baseline;
   gap: 6px;
-  margin: 10px 4px 6px;
-  font-size: var(--font-3xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  /* SettingsSection's label, on the page's left content line. */
+  margin: 10px 0 8px;
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
 .memory-group-title .count { font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
-.memory-group-note { margin: 0 4px; color: var(--text-secondary); font-size: var(--font-2xs); }
+.memory-group-note { margin: 0; color: var(--text-secondary); font-size: var(--font-xs); }
 .memory-auto { display: flex; flex-direction: column; gap: 6px; }
 .memory-auto .memory-group-title { margin-bottom: 0; }
 .memory-auto-dir {
   display: block;
   margin: 0 4px;
-  font-size: 10.5px;
+  font-size: var(--font-xs);
   color: var(--text-secondary);
-  word-break: break-all;
 }
-.memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* The Settings list grammar: one grouped card, rows split by hairlines
+   (the same look as SettingsCard). */
+.memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--settings-card-border, var(--border-default));
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
 .memory-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-card);
-  background: var(--bg-subtle);
-  padding: 4px 9px 4px 4px;
+  padding: 6px 12px 6px 6px;
   min-width: 0;
 }
-.memory-row.missing { border-style: dashed; }
-.memory-row.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
+.memory-row + .memory-row { border-top: 1px solid var(--settings-card-divider, var(--border-muted)); }
+/* A file not created yet is still a real row (open it to create the file),
+   set apart by its tag. Dashed borders are for empty states only. */
+.memory-row.active { background: var(--bg-muted); box-shadow: inset 2px 0 0 var(--accent-fg, var(--border-emphasis)); }
 .memory-open {
   flex: 1;
   min-width: 0;
@@ -747,26 +755,25 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 .memory-open:hover:not(:disabled) { background: var(--bg-muted); }
 .memory-row-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .memory-relative {
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
   color: var(--text-bright);
-  font-family: Menlo, Monaco, monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .memory-readers { display: flex; flex-wrap: wrap; gap: 3px; }
 .memory-row-meta {
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
-  word-break: break-all;
 }
-.memory-create { flex: none; font-size: var(--font-2xs); }
+.memory-create { flex: none; font-size: var(--font-xs); }
 .rchip {
   display: inline-block;
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   border: 1px solid var(--border-muted);
   color: var(--text-secondary);
@@ -778,7 +785,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-muted);
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   white-space: nowrap;
   flex: none;
@@ -797,7 +804,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 .memory-agent-group { display: flex; flex-direction: column; gap: 4px; }
 .memory-agent-state { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .memory-agent-state strong { font-size: var(--font-2xs); color: var(--text-bright); }
-.memory-agent-state span { font-size: 10.5px; color: var(--text-secondary); }
+.memory-agent-state span { font-size: var(--font-xs); color: var(--text-secondary); }
 .memory-agent-chips { display: flex; flex-wrap: wrap; gap: 3px; }
 .memory-agent-group[data-state='configured'] .rchip,
 .memory-agent-group[data-state='unknown'] .rchip { opacity: 0.7; border-style: dashed; }
@@ -821,14 +828,13 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 .memory-editor-close { padding: 2px 7px; font-size: var(--font-xs); line-height: 1; }
 .memory-editor-path {
   display: block;
-  font-size: 10.5px;
+  font-size: var(--font-xs);
   padding: 5px 8px;
   border-radius: var(--radius-control);
   background: var(--bg-muted);
   color: var(--text-secondary);
-  word-break: break-all;
 }
-.memory-editor-hint { margin: 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; }
+.memory-editor-hint { margin: 0; font-size: var(--font-xs); color: var(--text-secondary); line-height: 1.4; }
 .memory-conflict {
   display: flex;
   flex-direction: column;
@@ -866,7 +872,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   border-radius: var(--radius-control);
   background: var(--bg-base);
   font-family: Menlo, Monaco, monospace;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-all;

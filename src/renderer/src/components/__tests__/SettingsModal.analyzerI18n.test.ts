@@ -36,22 +36,22 @@ describe('Settings — remaining hard-coded strings', () => {
   // key → [template/script reference, en-US text, zh-TW text]
   const KEYS: Array<[string, string, string, string]> = [
     // A. Analyzer tab
-    ['settings.analyzer.ai-keys-label', "{{ $t('settings.analyzer.ai-keys-label') }} {{ settingsPaths.ai_chat }}", 'AI keys:', 'AI 金鑰：'],
+    ['settings.analyzer.ai-keys-label', "<span class=\"settings-meta-label\">{{ $t('settings.analyzer.ai-keys-label') }}</span>", 'AI keys:', 'AI 金鑰：'],
     ['settings.analyzer.llama-cli-placeholder', ":placeholder=\"$t('settings.analyzer.llama-cli-placeholder')\"", 'e.g. llama-cli or /usr/local/bin/llama-completion', '例如 llama-cli 或 /usr/local/bin/llama-completion'],
     ['settings.analyzer.gguf-file-found', "{{ $t('settings.analyzer.gguf-file-found') }} ·", 'File found', '已找到檔案'],
     ['settings.analyzer.gguf-not-detected', "?.gguf_warning ?? $t('settings.analyzer.gguf-not-detected')", 'Not yet detected', '尚未偵測到'],
     ['settings.analyzer.gguf-hint', "<div class=\"az-gguf-hint\" v-html=\"$t('settings.analyzer.gguf-hint')\"></div>", 'Download a <code>.gguf</code> file from', '下載 <code>.gguf</code> 檔案，並在這裡填入完整路徑'],
     // B. Settings bundle export / import
     ['settings.management.export-dialog-title', "title: t('settings.management.export-dialog-title')", 'Export Settings Bundle', '匯出設定全集'],
-    ['settings.management.exported', "settingsBundleSummary.value = t('settings.management.exported')", 'Settings bundle exported', '設定全集已匯出'],
-    ['settings.management.export-failed', "err.message : t('settings.management.export-failed')", 'Export failed', '匯出失敗'],
+    ['settings.management.exported', "settingsBundleSummary.value = [{ key: 'settings.management.exported' }]", 'Settings bundle exported', '設定全集已匯出'],
+    ['settings.management.export-failed', "{ text: err.message } : { key: 'settings.management.export-failed' }", 'Export failed', '匯出失敗'],
     ['settings.management.import-dialog-title', "openJson({ title: t('settings.management.import-dialog-title') })", 'Import Settings Bundle JSON', '匯入設定全集 JSON'],
-    ['settings.management.import-failed', "err.message : t('settings.management.import-failed')", 'Import failed', '匯入失敗'],
+    ['settings.management.import-failed', "{ text: err.message } : { key: 'settings.management.import-failed' }", 'Import failed', '匯入失敗'],
     ['settings.analyzer.filter-executable', "{ name: t('settings.analyzer.filter-executable'), extensions: ['*'] }", 'Executable', '執行檔'],
     ['settings.analyzer.filter-gguf', "{ name: t('settings.analyzer.filter-gguf'), extensions: ['gguf'] }", 'GGUF Model', 'GGUF 模型'],
     ['settings.analyzer.filter-all-files', "{ name: t('settings.analyzer.filter-all-files'), extensions: ['*'] }", 'All Files', '所有檔案'],
     // C. Shell
-    ['settings.nav.sections-label', "<nav class=\"s-nav\" :aria-label=\"$t('settings.nav.sections-label')\">", 'Settings sections', '設定分區'],
+    ['settings.nav.sections-label', "<nav class=\"s-nav\" ref=\"navRef\" :aria-label=\"$t('settings.nav.sections-label')\">", 'Settings sections', '設定分區'],
     ['action.close-esc', ":title=\"$t('action.close-esc')\"", 'Close (ESC)', '關閉（ESC）'],
   ]
 
@@ -63,7 +63,7 @@ describe('Settings — remaining hard-coded strings', () => {
   })
 
   it('the import summary interpolates the applied list', () => {
-    expect(source).toContain("t('settings.management.imported', { items: applied.join(', ') || 'appearance' })")
+    expect(source).toContain("{ key: 'settings.management.imported', params: { items: applied.join(', ') || 'appearance' } }")
     expect(tIn('en-US', 'settings.management.imported', { items: 'roles, mcp' })).toBe('Imported: roles, mcp')
     expect(tIn('zh-TW', 'settings.management.imported', { items: 'roles, mcp' })).toBe('已匯入：roles, mcp')
   })
@@ -76,7 +76,7 @@ describe('Settings — remaining hard-coded strings', () => {
 
   it('leaves product names, units, ids and example values untranslated', () => {
     for (const literal of [
-      '>Ollama REST</button>',
+      '>Ollama</button>',
       '>llama.cpp</button>',
       'placeholder="http://localhost:11434"',
       "v-for=\"t in ['T1','T2','T3','T4']\"",

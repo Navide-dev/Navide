@@ -15,13 +15,18 @@ export type JobSchedule =
 /** Wake a CLI pane and send it `text`. At least one of pane_id / pane_name is
  *  present; with pane_id the backend delivers to that exact pane and never
  *  falls back to a same-named one. A system job of the workspace
- *  self-evolution feature carries `kind: 'evolve'` and only `workspace`. */
+ *  self-evolution feature carries `kind: 'evolve'` and only `workspace`.
+ *  `kind: 'pipeline_start'` starts a pipeline run in `workspace` instead: one
+ *  of pipeline_id / pipeline_name, and the run's `task` (no pane, no text). */
 export interface JobAction {
-  kind: 'message' | 'evolve'
+  kind: 'message' | 'evolve' | 'pipeline_start'
   workspace: string
   pane_id?: string
   pane_name?: string
-  text: string
+  text?: string
+  pipeline_id?: string
+  pipeline_name?: string
+  task?: string
 }
 
 export interface JobPolicy {
@@ -46,6 +51,9 @@ export interface JobState {
   last_run_at?: number | null
   last_status?: 'ok' | 'error' | 'skipped' | null
   last_error?: string | null
+  /** The failed run's reason code ('no_window', 'pipeline_not_found', ...);
+   *  `last_error` keeps the backend's own words for it. */
+  last_error_code?: string | null
   last_duration_ms?: number | null
   consecutive_errors?: number
   backoff_until?: number | null
@@ -107,6 +115,21 @@ export type JobDraft = Omit<
   'id' | 'state' | 'created_at' | 'updated_at' | 'owner' | 'updated_by' | 'owner_gone'
 > & {
   id?: string
+}
+
+/** A scheduler failure in the UI language. `code` is a run's
+ *  state.last_error_code, run_now's error_code, or a WS refusal's
+ *  SCHEDULER_<CODE>; a code with words under scheduler.fail-reason reads as
+ *  them, anything else as `fallback` (the backend's own words). */
+export function schedulerFailReason(
+  t: (key: string) => string,
+  te: (key: string) => boolean,
+  code: string | null | undefined,
+  fallback: string
+): string {
+  const reason = (code ?? '').replace(/^SCHEDULER_/, '').toLowerCase()
+  const key = `scheduler.fail-reason.${reason}`
+  return reason && te(key) ? t(key) : fallback
 }
 
 export const MINUTE_MS = 60_000

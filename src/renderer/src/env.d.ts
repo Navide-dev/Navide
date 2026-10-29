@@ -6,6 +6,7 @@ type UpdaterSettings = import('../../shared/updater').UpdaterSettings
 type UpdateState = import('../../shared/updater').UpdateState
 type ExecutionPolicyApi = import('../../shared/executionPolicy').ExecutionPolicyApi
 type FnKeyApi = import('../../shared/fnKey').FnKeyApi
+type AppLockApi = import('../../shared/appLock').AppLockApi
 type DeepLinkApi = import('../../shared/deepLink').DeepLinkApi
 type DeveloperApi = import('../../shared/marketplaceDeveloper').DeveloperApi
 type ManifestPermissionsSummary = import('../../shared/executionPolicy').ManifestPermissionsSummary
@@ -107,6 +108,7 @@ declare global {
       onPluginStagedCandidateNotActivated?: (cb: (notice: { pluginId: string; version: string; reason: string }) => void) => () => void
       onPluginStagedUpdates?: (cb: (updates: { pluginId: string; activeVersion: string; stagedVersion: string; reason?: string }[]) => void) => () => void
       onPluginSwitched?: (cb: (notice: { pluginId: string; fromVersion: string; toVersion: string; source: 'marketplace' | 'local-unsigned'; at: number; agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true } }) => void) => () => void
+      onPluginSwitching?: (cb: (notice: { pluginId: string; toVersion: string; phase: 'start' | 'end' }) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
       onSystemResumed: (cb: () => void) => () => void
       setRecentWorkspaces: (list: { path: string; name: string; exists: boolean }[]) => void
@@ -392,6 +394,7 @@ declare global {
       media?: {
         askMicrophone: () => Promise<{ granted: boolean; status: string; prompted?: boolean }>
       }
+      appLock?: AppLockApi
       fnKey?: FnKeyApi
       deepLink?: DeepLinkApi
       developer?: DeveloperApi

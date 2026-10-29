@@ -5,7 +5,8 @@
 //
 // What it adds to the dev server, bound to 127.0.0.1 only:
 // - /__navide_dev_web/mint   (POST, x-electron-token = the dev token from
-//   $TMPDIR/agent-team-dev-token) → a one-time login code
+//   devTokenFile(): $TMPDIR/agent-team-dev-token, or
+//   $TMPDIR/agent-team-dev-token-<port> off the default port) → a one-time login code
 // - /__navide_dev_web/login?code=… → a host-only HttpOnly session cookie
 // - a session cookie stands in for the x-electron-token header, so the
 //   existing electron-only gate still answers 403 to everyone else
@@ -234,6 +235,8 @@ function isolatedBackend(env: NodeJS.ProcessEnv, repoRoot: string): DevWebBacken
       USERPROFILE: home,
       TMPDIR: tmp,
       AGENT_TEAM_DATA_DIR: dataDir,
+      // Home lookups that bypass $HOME (the passwd entry) use HOME here instead.
+      AGENT_TEAM_ISOLATED_HOME: '1',
       AGENT_TEAM_PARENT_PID: String(process.pid),
       PYTHONPATH: join(repoRoot, 'backend'),
       PATH: [bin, venvBin, ...(isWin ? [env.PATH ?? ''] : ['/usr/bin', '/bin', '/usr/sbin', '/sbin'])].join(isWin ? ';' : ':'),
@@ -266,6 +269,18 @@ function isolatedBackend(env: NodeJS.ProcessEnv, repoRoot: string): DevWebBacken
   }
 }
 
+/**
+ * Where this dev server writes its dev token (the x-electron-token secret).
+ * The Electron dev server and a dev web server on the default port keep the
+ * shared name main reads; a dev web server on any other port gets a file of
+ * its own, so two of them sharing one $TMPDIR cannot overwrite each other.
+ */
+export function devTokenFile(env: NodeJS.ProcessEnv = process.env, dir = tmpdir()): string {
+  const port = Number(env.NAVIDE_DEV_WEB_PORT) || DEFAULT_PORT
+  const own = env.NAVIDE_DEV_WEB === '1' && port !== DEFAULT_PORT
+  return join(dir, own ? `agent-team-dev-token-${port}` : 'agent-team-dev-token')
+}
+
 /** The dev web plugin, or nothing at all unless NAVIDE_DEV_WEB is exactly "1". */
 export function devWebPlugins(devToken: string, env: NodeJS.ProcessEnv = process.env, repoRoot = process.cwd()): Plugin[] {
   if (env.NAVIDE_DEV_WEB !== '1') return []
@@ -286,6 +301,7 @@ export function devWebPlugins(devToken: string, env: NodeJS.ProcessEnv = process
         process.once('exit', stop)
         server.httpServer?.once('listening', () => {
           console.log(`[navide-dev-web] one-time login: http://127.0.0.1:${port}${DEV_WEB_PREFIX}login?code=${gate.mintCode()}`)
+          console.log(`[navide-dev-web] dev token file: ${devTokenFile(env)}`)
         })
       },
       transformIndexHtml: () => [{ tag: 'script', attrs: { type: 'module', src: SHIM_SRC }, injectTo: 'head-prepend' }],

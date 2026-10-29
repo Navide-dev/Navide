@@ -46,13 +46,18 @@ export const GRAPH_VERSION = 1
 /** Default and ceiling for a reject edge's loop budget. */
 export const DEFAULT_MAX_LOOPS = 2
 export const MAX_LOOPS_CEILING = 10
+/** Bounds of a slot node's retry policy (maxTries counts the first try). */
+export const MAX_TRIES_CEILING = 5
+export const MAX_RETRY_WAIT_MS = 300_000
+/** How deep sub-pipelines may nest at run time (the outermost run is depth 1). */
+export const MAX_SUBPIPELINE_DEPTH = 3
 
 export interface GraphPosition {
   x: number
   y: number
 }
 
-export type GraphNodeKind = 'trigger' | 'slot' | 'gate'
+export type GraphNodeKind = 'trigger' | 'slot' | 'gate' | 'subpipeline'
 
 /** A slot node's agent configuration — the same fields a stage slot has. */
 export type SlotConfig = StageSlot
@@ -60,6 +65,18 @@ export type SlotConfig = StageSlot
 export interface GateConfig {
   /** Shown to the approver ("check both implementations before review"). */
   prompt?: string
+}
+
+/** A subpipeline node runs another pipeline and waits for it: the parent run
+ *  suspends, the child runs in the same workspace, and its last layer's
+ *  summary and structured output become this node's output. */
+export interface SubpipelineConfig {
+  pipelineId: string
+  /** The child run's task; may use {{task}}, {{prev.summary}} and
+   *  {{node.<id>.output…}}. Empty or absent: the parent's task. */
+  task?: string
+  /** Only true is supported: the parent waits for the child. */
+  wait?: true
 }
 
 export interface GraphNode {
@@ -71,25 +88,55 @@ export interface GraphNode {
   slot?: SlotConfig
   /** Optional for kind 'gate'. */
   gate?: GateConfig
+  /** Required for kind 'subpipeline', absent otherwise. */
+  subpipeline?: SubpipelineConfig
   /** The stage this node came from; used to keep stage metadata (title,
    *  sentinel, question, …) when stages are re-derived from layers. */
   stageId?: string
   /** Frozen output: reruns skip this node and reuse its last result. */
   pinned?: boolean
+  /** Set by the n8n import on a step the user should check before running. */
+  needsReview?: boolean
+  /** Slot nodes only: a failed try (kickoff never landed, or the agent
+   *  reported ---NODE-FAILED---) is retried on the same node, up to maxTries
+   *  tries in all, waitMs apart, before its error edge or the run fails. */
+  retry?: RetryPolicy
 }
 
-export type GraphEdgeKind = 'main' | 'reject'
+export interface RetryPolicy {
+  /** Tries in all, the first one included: 1..MAX_TRIES_CEILING. */
+  maxTries: number
+  /** Wait before each retry: 0..MAX_RETRY_WAIT_MS (default 0). */
+  waitMs?: number
+}
+
+export type GraphEdgeKind = 'main' | 'reject' | 'branch' | 'error'
+
+/** Edge kinds that carry flow forward (layering, cycle check, readiness). */
+export const FORWARD_EDGE_KINDS: readonly GraphEdgeKind[] = ['main', 'branch', 'error']
+
+/** Reserved branch value: taken when no other branch edge of the source matched. */
+export const BRANCH_DEFAULT = 'default'
+
+/** A branch edge's condition: a string is matched (trimmed, case-insensitive)
+ *  against the value the agent reported with ---BRANCH:<code>: <value>---; an object
+ *  compares one field of the source node's structured output. */
+export type BranchWhen = string | { path: string; equals: string | number | boolean | null }
 
 export interface GraphEdge {
   id: string
   from: string
   to: string
   /** 'main' (default) is forward flow. 'reject' is a bounded loop back to an
-   *  upstream node, taken when a gate is rejected (or a slot reports reject). */
+   *  upstream node, taken when a gate is rejected (or a slot reports reject).
+   *  'branch' is forward flow taken only when `when` matches the source's
+   *  result; 'error' is forward flow taken only when the source slot failed. */
   kind?: GraphEdgeKind
   /** Reject edges only: how many times the loop may be taken in one run.
    *  Defaults to DEFAULT_MAX_LOOPS; 1..MAX_LOOPS_CEILING. */
   maxLoops?: number
+  /** Branch edges only (required there). */
+  when?: BranchWhen
 }
 
 export interface PipelineGraph {
@@ -102,12 +149,13 @@ export interface PipelineGraph {
 export type GraphOp =
   | { op: 'add_node'; node: GraphNode; after?: string[]; before?: string[] }
   | { op: 'remove_node'; id: string; reconnect?: boolean }
-  | { op: 'update_node'; id: string; label?: string; slot?: Partial<SlotConfig>; gate?: GateConfig }
+  | { op: 'update_node'; id: string; label?: string; slot?: Partial<SlotConfig>; gate?: GateConfig; subpipeline?: Partial<SubpipelineConfig> }
   | { op: 'move_node'; id: string; position: GraphPosition }
   | { op: 'add_edge'; edge: GraphEdge }
   | { op: 'remove_edge'; id: string }
   | { op: 'set_gate'; id: string; prompt?: string }
   | { op: 'set_pin'; id: string; pinned: boolean }
+  | { op: 'set_retry'; id: string; retry: RetryPolicy | null }
   | ({ op: 'set_stage_meta'; stageId: string } & StageMetaPatch)
 
 /** Layer (stage) metadata editable through set_stage_meta. The graph does not
@@ -126,7 +174,7 @@ export type NodeRunStatus =
   | 'awaiting' // gate waiting for approve/reject
   | 'rejected'
   | 'failed'
-  | 'skipped' // pinned node reused its frozen output this run
+  | 'skipped' // pinned node reused its frozen output this run, or (skipReason 'untaken') no input reached it
   | 'aborted'
 
 export interface NodeRunState {
@@ -142,6 +190,17 @@ export interface NodeRunState {
   summary?: string
   /** Why a `failed` node failed (e.g. its kickoff never reached the agent). */
   error?: string
+  /** 'untaken': skipped because none of its inputs was taken (an unchosen
+   *  branch, an error edge of a node that did not fail, or skipped upstream).
+   *  Absent for a skip that reuses a frozen output (pin, restart point). */
+  skipReason?: 'untaken'
+  /** A failed node whose failure went down its error edge(s): the run went on. */
+  errorRouted?: boolean
+  /** The value the agent reported with ---BRANCH:<code>: <value>---. */
+  branch?: string
+  /** The JSON the agent reported between ---OUTPUT-START/END--- (null when it
+   *  did not parse), for {{node.<id>.output}} and object branch conditions. */
+  output?: unknown
 }
 
 // ── Role properties (declarative node settings form) ─────────────────────────
@@ -202,11 +261,120 @@ export function slotNodeId(stageId: string, slotIndex: number): string {
 }
 
 export function edgeId(from: string, to: string, kind: GraphEdgeKind = 'main'): string {
-  return kind === 'reject' ? `r-${from}-${to}` : `e-${from}-${to}`
+  const prefix = kind === 'reject' ? 'r' : kind === 'branch' ? 'b' : kind === 'error' ? 'x' : 'e'
+  return `${prefix}-${from}-${to}`
 }
 
 function isMain(e: GraphEdge): boolean {
   return (e.kind ?? 'main') === 'main'
+}
+
+export function isForwardEdge(e: GraphEdge): boolean {
+  return FORWARD_EDGE_KINDS.includes(e.kind ?? 'main')
+}
+
+/** True for a graph with any branch or error edge — the only graphs the
+ *  readiness/skip rules change anything for. */
+export function hasBranchingEdges(graph: PipelineGraph): boolean {
+  return graph.edges.some((e) => e.kind === 'branch' || e.kind === 'error')
+}
+
+/** Nodes that run work and can fail: they may carry retry and start branch
+ *  and error edges. */
+function isWorkNode(n: GraphNode | undefined): boolean {
+  return n?.kind === 'slot' || n?.kind === 'subpipeline'
+}
+
+/** [problem code, message] pairs; see GraphProblem. */
+type CodedErrors = Array<[string, string]>
+
+function subpipelineErrors(n: GraphNode): CodedErrors {
+  const c = n.subpipeline as unknown
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return [['subpipeline-none', `subpipeline node ${n.id} needs subpipeline.pipelineId`]]
+  const o = c as Record<string, unknown>
+  const errors: CodedErrors = []
+  const push = (message: string): void => { errors.push(['subpipeline-config', message]) }
+  if (typeof o.pipelineId !== 'string' || !o.pipelineId.trim()) errors.push(['subpipeline-none', `subpipeline node ${n.id} needs subpipeline.pipelineId`])
+  if (o.task !== undefined && typeof o.task !== 'string') push(`subpipeline node ${n.id}: task must be a string`)
+  if (o.wait !== undefined && o.wait !== true) push(`subpipeline node ${n.id}: wait must be true (the parent always waits)`)
+  if (Object.keys(o).some((k) => k !== 'pipelineId' && k !== 'task' && k !== 'wait')) {
+    push(`subpipeline node ${n.id}: subpipeline takes only pipelineId, task and wait`)
+  }
+  return errors
+}
+
+/** Sub-pipeline references that loop (A → B → A) across `graphs`, keyed by
+ *  pipeline id; each cycle is reported once, from its smallest id. A reference
+ *  to a pipeline not in `graphs` is reported too. The backend twin is
+ *  subpipeline_cycle_errors in pipeline_graph.py. */
+export function subpipelineCycleErrors(graphs: Readonly<Record<string, PipelineGraph>>): string[] {
+  const refs = new Map<string, string[]>()
+  const errors: string[] = []
+  for (const [pid, g] of Object.entries(graphs)) {
+    const out: string[] = []
+    for (const n of g.nodes) {
+      const child = n.kind === 'subpipeline' ? n.subpipeline?.pipelineId : undefined
+      if (!child) continue
+      if (!(child in graphs)) errors.push(`subpipeline node ${n.id} in ${pid} names unknown pipeline ${child}`)
+      else out.push(child)
+    }
+    refs.set(pid, out)
+  }
+  const seen = new Set<string>()
+  const ids = [...refs.keys()].sort()
+  for (const start of ids) {
+    const stack: string[] = []
+    const walk = (pid: string): void => {
+      const at = stack.indexOf(pid)
+      if (at >= 0) {
+        const loop = stack.slice(at)
+        const min = [...loop].sort()[0]
+        const rot = [...loop.slice(loop.indexOf(min)), ...loop.slice(0, loop.indexOf(min))]
+        const key = rot.join('\u0000')
+        if (!seen.has(key)) {
+          seen.add(key)
+          errors.push(`subpipeline cycle: ${[...rot, rot[0]].join(' → ')}`)
+        }
+        return
+      }
+      stack.push(pid)
+      for (const child of refs.get(pid) ?? []) walk(child)
+      stack.pop()
+    }
+    walk(start)
+  }
+  return errors
+}
+
+function retryErrors(n: GraphNode): CodedErrors {
+  if (!isWorkNode(n)) return [['retry-config', `node ${n.id}: only slot and subpipeline nodes carry retry`]]
+  const r = n.retry as unknown
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return [['retry-config', `node ${n.id}: retry must be {maxTries, waitMs?}`]]
+  const o = r as Record<string, unknown>
+  const errors: CodedErrors = []
+  const push = (message: string): void => { errors.push(['retry-config', message]) }
+  if (Object.keys(o).some((k) => k !== 'maxTries' && k !== 'waitMs')) push(`node ${n.id}: retry takes only maxTries and waitMs`)
+  const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v)
+  if (!isInt(o.maxTries) || o.maxTries < 1 || o.maxTries > MAX_TRIES_CEILING) {
+    push(`node ${n.id}: retry.maxTries must be an integer 1..${MAX_TRIES_CEILING}`)
+  }
+  if (o.waitMs !== undefined && (!isInt(o.waitMs) || o.waitMs < 0 || o.waitMs > MAX_RETRY_WAIT_MS)) {
+    push(`node ${n.id}: retry.waitMs must be an integer 0..${MAX_RETRY_WAIT_MS}`)
+  }
+  return errors
+}
+
+function branchWhenErrors(e: GraphEdge): CodedErrors {
+  const w = e.when as unknown
+  if (typeof w === 'string') return w.trim() ? [] : [['branch-when', `branch edge ${e.id}: when must not be empty`]]
+  if (w && typeof w === 'object' && !Array.isArray(w)) {
+    const o = w as Record<string, unknown>
+    const extra = Object.keys(o).filter((k) => k !== 'path' && k !== 'equals')
+    const eq = o.equals
+    const okEq = eq === null || ['string', 'number', 'boolean'].includes(typeof eq)
+    if (typeof o.path === 'string' && o.path.trim() && 'equals' in o && okEq && !extra.length) return []
+  }
+  return [['branch-when', `branch edge ${e.id}: when must be a non-empty string or {path, equals}`]]
 }
 
 /** The graph a legacy linear pipeline implies: a trigger, one node per slot,
@@ -243,7 +411,7 @@ export interface GraphLayers {
   triggers: string[]
 }
 
-/** Longest-path layering over main edges. Triggers are depth -1 and are
+/** Longest-path layering over forward (main, branch, error) edges. Triggers are depth -1 and are
  *  reported separately, so layer 0 is the first real step (= legacy stage 0).
  *  Assumes the main edges are acyclic (see validateGraph); nodes on a cycle
  *  are dropped rather than looping. */
@@ -252,7 +420,7 @@ export function layerGraph(graph: PipelineGraph): GraphLayers {
   const preds = new Map<string, string[]>()
   for (const n of graph.nodes) preds.set(n.id, [])
   for (const e of graph.edges) {
-    if (!isMain(e) || !kind.has(e.from) || !kind.has(e.to)) continue
+    if (!isForwardEdge(e) || !kind.has(e.from) || !kind.has(e.to)) continue
     preds.get(e.to)!.push(e.from)
   }
   const depth = new Map<string, number>()
@@ -352,26 +520,60 @@ export function isLinearGraph(graph: PipelineGraph): boolean {
   return true
 }
 
-/** Structural problems, empty when the graph is valid. Main edges must form
- *  a DAG; the only cycles allowed are reject edges, which must point to an
- *  upstream node of their source and carry a bounded loop count. */
+/** One problem validateGraph reports, with a stable `code` and the step it is
+ *  about, so a window can say it in the UI language and name the step by its
+ *  label (pipelineErrors.graphProblemText). `message` is validateGraph's
+ *  English sentence, unchanged. */
+export interface GraphProblem {
+  code: string
+  message: string
+  /** The node the problem is on; for a link, the node it starts at. */
+  nodeId?: string
+  /** That node's label (its id when it has none). */
+  label?: string
+  params?: Record<string, string | number>
+}
+
+/** Structural problems, empty when the graph is valid. Forward edges (main,
+ *  branch, error) must form a DAG; the only cycles allowed are reject edges,
+ *  which must point to an upstream node of their source and carry a bounded
+ *  loop count. Branch and error edges start at a slot; only branch edges carry
+ *  `when`, and they must. */
 export function validateGraph(graph: PipelineGraph): string[] {
-  const errors: string[] = []
+  return graphProblems(graph).map((p) => p.message)
+}
+
+/** validateGraph's problems with their codes (see GraphProblem). */
+export function graphProblems(graph: PipelineGraph): GraphProblem[] {
+  const errors: GraphProblem[] = []
   if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
-    return ['graph must have nodes[] and edges[]']
+    return [{ code: 'graph-shape', message: 'graph must have nodes[] and edges[]' }]
   }
   const nodes = new Map<string, GraphNode>()
+  const at = (nodeId: string | undefined): Pick<GraphProblem, 'nodeId' | 'label'> => {
+    if (!nodeId) return {}
+    const n = nodes.get(nodeId)
+    return { nodeId, label: n?.label || n?.slot?.label || nodeId }
+  }
+  const add = (code: string, message: string, nodeId?: string, params?: GraphProblem['params']): void => {
+    errors.push({ code, message, ...at(nodeId), ...(params ? { params } : {}) })
+  }
   for (const n of graph.nodes) {
-    if (!n?.id) { errors.push('node without id'); continue }
-    if (nodes.has(n.id)) errors.push(`duplicate node id ${n.id}`)
+    if (!n?.id) { add('node-no-id', 'node without id'); continue }
+    if (nodes.has(n.id)) add('duplicate-node', `duplicate node id ${n.id}`, n.id)
     nodes.set(n.id, n)
-    if (!['trigger', 'slot', 'gate'].includes(n.kind)) errors.push(`node ${n.id}: unknown kind ${String(n.kind)}`)
+    if (!['trigger', 'slot', 'gate', 'subpipeline'].includes(n.kind)) add('unknown-kind', `node ${n.id}: unknown kind ${String(n.kind)}`, n.id)
+    if (n.kind === 'subpipeline') for (const [code, m] of subpipelineErrors(n)) add(code, m, n.id)
+    else if (n.subpipeline != null) add('misplaced-config', `node ${n.id}: only subpipeline nodes carry subpipeline config`, n.id)
     if (n.kind === 'slot' && (!n.slot || !n.slot.agentKey || !n.slot.label)) {
-      errors.push(`slot node ${n.id} needs slot.agentKey and slot.label`)
+      add('slot-incomplete', `slot node ${n.id} needs slot.agentKey and slot.label`, n.id)
     }
-    if (n.kind !== 'slot' && n.slot) errors.push(`node ${n.id}: only slot nodes carry slot config`)
+    if (n.kind !== 'slot' && n.slot) add('misplaced-config', `node ${n.id}: only slot nodes carry slot config`, n.id)
     if (!n.position || !Number.isFinite(n.position.x) || !Number.isFinite(n.position.y)) {
-      errors.push(`node ${n.id} needs a numeric position`)
+      add('no-position', `node ${n.id} needs a numeric position`, n.id)
+    }
+    if (n.retry != null) {
+      for (const [code, m] of retryErrors(n)) add(code, m, n.id, { maxTries: MAX_TRIES_CEILING, maxWaitMs: MAX_RETRY_WAIT_MS })
     }
   }
   const edgeIds = new Set<string>()
@@ -379,28 +581,33 @@ export function validateGraph(graph: PipelineGraph): string[] {
   const succ = new Map<string, string[]>()
   for (const id of nodes.keys()) succ.set(id, [])
   for (const e of graph.edges) {
-    if (!e?.id) { errors.push('edge without id'); continue }
-    if (edgeIds.has(e.id)) errors.push(`duplicate edge id ${e.id}`)
+    if (!e?.id) { add('edge-no-id', 'edge without id'); continue }
+    if (edgeIds.has(e.id)) add('duplicate-edge-id', `duplicate edge id ${e.id}`, e.from)
     edgeIds.add(e.id)
     const kind = e.kind ?? 'main'
-    if (kind !== 'main' && kind !== 'reject') errors.push(`edge ${e.id}: unknown kind ${String(kind)}`)
-    if (!nodes.has(e.from) || !nodes.has(e.to)) { errors.push(`edge ${e.id} references a missing node`); continue }
-    if (e.from === e.to) errors.push(`edge ${e.id} is a self-loop`)
+    const known = kind === 'main' || kind === 'reject' || kind === 'branch' || kind === 'error'
+    if (!known) add('unknown-edge-kind', `edge ${e.id}: unknown kind ${String(kind)}`, e.from)
+    if (!nodes.has(e.from) || !nodes.has(e.to)) { add('edge-missing-node', `edge ${e.id} references a missing node`); continue }
+    if (e.from === e.to) add('self-loop', `edge ${e.id} is a self-loop`, e.from)
     const pair = `${kind}\u0000${e.from}\u0000${e.to}`
-    if (pairs.has(pair)) errors.push(`duplicate edge ${e.from} → ${e.to}`)
+    if (pairs.has(pair)) add('duplicate-edge', `duplicate edge ${e.from} → ${e.to}`, e.from)
     pairs.add(pair)
-    if (nodes.get(e.to)!.kind === 'trigger') errors.push(`edge ${e.id} points into a trigger`)
-    if (kind === 'main') succ.get(e.from)!.push(e.to)
-    else {
-      if (nodes.get(e.from)!.kind === 'trigger') errors.push(`reject edge ${e.id} cannot start at a trigger`)
+    if (nodes.get(e.to)!.kind === 'trigger') add('edge-into-trigger', `edge ${e.id} points into a trigger`, e.from)
+    if (kind === 'reject') {
+      if (nodes.get(e.from)!.kind === 'trigger') add('reject-from-trigger', `reject edge ${e.id} cannot start at a trigger`, e.from)
       const m = e.maxLoops ?? DEFAULT_MAX_LOOPS
       if (!Number.isInteger(m) || m < 1 || m > MAX_LOOPS_CEILING) {
-        errors.push(`reject edge ${e.id}: maxLoops must be an integer 1..${MAX_LOOPS_CEILING}`)
+        add('max-loops-range', `reject edge ${e.id}: maxLoops must be an integer 1..${MAX_LOOPS_CEILING}`, e.from, { max: MAX_LOOPS_CEILING })
       }
+    } else if (known) {
+      succ.get(e.from)!.push(e.to)
+      if (e.maxLoops !== undefined) add('misplaced-config', `edge ${e.id}: maxLoops is only for reject edges`, e.from)
+      if (kind !== 'main' && !isWorkNode(nodes.get(e.from))) add('edge-must-start-at-work', `${kind} edge ${e.id} must start at a slot or subpipeline node`, e.from)
     }
-    if (kind === 'main' && e.maxLoops !== undefined) errors.push(`edge ${e.id}: maxLoops is only for reject edges`)
+    if (kind === 'branch') for (const [code, m] of branchWhenErrors(e)) add(code, m, e.from)
+    else if (e.when != null) add('misplaced-config', `edge ${e.id}: when is only for branch edges`, e.from)
   }
-  // Main-edge cycle check (iterative DFS, colour marking).
+  // Forward-edge cycle check (iterative DFS, colour marking).
   const colour = new Map<string, 0 | 1 | 2>()
   let cyclic = false
   for (const start of nodes.keys()) {
@@ -417,11 +624,11 @@ export function validateGraph(graph: PipelineGraph): string[] {
     }
     if (cyclic) break
   }
-  if (cyclic) errors.push('main edges form a cycle; loops must use a reject edge')
+  if (cyclic) add('cycle', 'main edges form a cycle; loops must use a reject edge')
   else {
     for (const e of graph.edges) {
       if ((e.kind ?? 'main') !== 'reject' || !nodes.has(e.from) || !nodes.has(e.to)) continue
-      if (!reaches(succ, e.to, e.from)) errors.push(`reject edge ${e.id} must point to an upstream node of ${e.from}`)
+      if (!reaches(succ, e.to, e.from)) add('reject-upstream', `reject edge ${e.id} must point to an upstream node of ${e.from}`, e.from)
     }
   }
   return errors
@@ -505,6 +712,10 @@ export function applyGraphOps(graph: PipelineGraph, ops: readonly GraphOp[]): Pi
           if (n.kind !== 'gate') throw new Error(`node ${op.id} is not a gate`)
           n.gate = { ...n.gate, ...op.gate }
         }
+        if (op.subpipeline) {
+          if (n.kind !== 'subpipeline') throw new Error(`node ${op.id} is not a subpipeline`)
+          n.subpipeline = { ...(n.subpipeline as SubpipelineConfig), ...op.subpipeline }
+        }
         break
       }
       case 'move_node':
@@ -532,6 +743,13 @@ export function applyGraphOps(graph: PipelineGraph, ops: readonly GraphOp[]): Pi
         if (n.kind !== 'slot') throw new Error(`only slot nodes can be pinned: ${op.id}`)
         if (op.pinned) n.pinned = true
         else delete n.pinned
+        break
+      }
+      case 'set_retry': {
+        const n = node(op.id)
+        if (n.kind !== 'slot' && n.kind !== 'subpipeline') throw new Error(`only slot and subpipeline nodes can retry: ${op.id}`)
+        if (op.retry) n.retry = { ...op.retry }
+        else delete n.retry
         break
       }
       case 'set_stage_meta':

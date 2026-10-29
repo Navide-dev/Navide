@@ -12,6 +12,7 @@ import pytest
 from agent_team_backend.channels import media
 
 from agent_team_backend import osplat
+from agent_team_backend import prompt_skills as ps
 
 # Windows creates symlinks only with Developer Mode or elevation.
 needs_symlinks = pytest.mark.skipif(not osplat.paths.symlinks_available(),
@@ -227,7 +228,7 @@ def test_human_size() -> None:
 def test_every_language_has_every_notice() -> None:
     keys = set(media.STRINGS[media.DEFAULT_LANGUAGE])
     assert all(set(table) == keys for table in media.STRINGS.values())
-    assert set(media.STRINGS) == {"zh-TW", "en-US", "ja-JP"}
+    assert set(media.STRINGS) == set(ps.LANGUAGES)
 
 
 # --- Hardening: broad workspaces, every path segment, links and swaps -----------------

@@ -273,7 +273,7 @@ function pressUnbind(paneId: string): void {
 .cb-chat-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border-muted); background: var(--bg-muted); }
 .cb-chat-icon { font-size: var(--font-xs); }
 .cb-chat-title { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cb-chat-kind { font-size: var(--font-3xs); color: var(--text-secondary); white-space: nowrap; }
+.cb-chat-kind { font-size: var(--font-2xs); color: var(--text-secondary); white-space: nowrap; }
 .cb-unbound { margin: 0; padding: 8px 10px; font-size: var(--font-2xs); color: var(--text-muted); }
 .cb-row { padding: 6px 10px; }
 .cb-row + .cb-row { border-top: 1px solid var(--border-muted); }
@@ -286,7 +286,7 @@ function pressUnbind(paneId: string): void {
 .cb-topic { font-size: var(--font-2xs); color: var(--text-secondary); }
 .cb-pane { font-size: var(--font-xs); font-weight: 600; color: var(--text-bright); }
 .cb-ws, .cb-auto {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   color: var(--text-secondary);
   border: 1px solid var(--border-default);
   border-radius: 999px;
@@ -317,5 +317,5 @@ function pressUnbind(paneId: string): void {
 .ch-btn.danger-ghost { color: var(--danger-fg); border-color: var(--danger-muted); }
 .ch-btn.danger-ghost:hover:not(:disabled) { border-color: var(--danger-fg); }
 .ch-btn.danger { color: var(--text-on-emphasis); background: var(--danger-emphasis, var(--danger-fg)); border-color: var(--danger-emphasis, var(--danger-fg)); }
-.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); word-break: break-word; }
+.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 </style>

@@ -10,9 +10,13 @@ Navide は、一人の人間が複数の Coding Agent を指揮するための�
 
 [English](README.md) | [繁體中文](README.zh-TW.md) | 日本語
 
-[v0.2.32 をダウンロード](https://github.com/Navide-dev/Navide/releases/tag/v0.2.32) | [はじめに](docs/ja-JP/getting-started.md) | [ドキュメント](docs/ja-JP/README.md) | [ロードマップ](docs/ja-JP/roadmap.md)
+[v0.2.34 をダウンロード](https://github.com/Navide-dev/Navide/releases/tag/v0.2.34) | [はじめに](docs/ja-JP/getting-started.md) | [ドキュメント](docs/ja-JP/README.md) | [ロードマップ](docs/ja-JP/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Navide-dev/Navide/total?label=downloads&logo=github&color=2ea043)](https://github.com/Navide-dev/Navide/releases)
+[![Commits per month](https://img.shields.io/github/commit-activity/m/Navide-dev/Navide?label=commits%2Fmonth&logo=git&logoColor=white&color=f0883e)](https://github.com/Navide-dev/Navide/commits/main)
+[![Last commit](https://img.shields.io/github/last-commit/Navide-dev/Navide?label=last%20commit&logo=github)](https://github.com/Navide-dev/Navide/commits/main)
+
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron)](https://www.electronjs.org/)
 [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js)](https://vuejs.org/)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python)](https://python.org/)
@@ -33,12 +37,16 @@ AI はこの前提を変えます。一人のエンジニアが複数の Agent �
 
 AI モデルは実行力を提供し、Navide はその力を指揮するためのエンジニアリングシステムを提供します。
 
-```text
-従来の IDE
-エンジニア → ファイルを編集しツールを操作する → ソフトウェア
-
-Navide
-エンジニア → 目標、Agent、意思決定、根拠を指揮する → ソフトウェア
+```mermaid
+flowchart LR
+  subgraph trad["従来の IDE"]
+    direction LR
+    e1["エンジニア"] --> w1["ファイルを編集し<br/>ツールを操作する"] --> s1["ソフトウェア"]
+  end
+  subgraph nav["Navide"]
+    direction LR
+    e2["エンジニア"] --> w2["目標、Agent、意思決定、<br/>根拠を指揮する"] --> p2["並列の<br/>Agent Session"] --> s2["ソフトウェア"]
+  end
 ```
 
 意図、アーキテクチャ、リスク、判断、最終的な受け入れには、引き続きエンジニアが責任を持ちます。Agent は反復可能な実行を担い、Navide は作業を可視化し、同期し、中断可能かつ復旧可能に保ちます。
@@ -59,6 +67,13 @@ Workspace ごとの状態、過去の Run、Session 情報、Handoff、History �
 
 ## 一つの環境、三つのエンジニアリングループ
 
+```mermaid
+flowchart LR
+  g["Genesis<br/>アイデアから最初に動く形へ"] --> e["Evolution<br/>継続的なプロダクト開発<br/>繰り返される日々のループ"]
+  e <-->|"人間の判断が必要なとき"| i["Intervention<br/>人間による正確な制御"]
+  e --> e
+```
+
 ### Genesis — アイデアから最初に動く形へ
 
 要件、計画、設計、実装、セキュリティレビュー、テストを含む設定可能な Pipeline から新しいプロジェクトを始めます。複数の Agent Slot が並行して作業し、Stage 間で文脈を引き継げます。
@@ -78,6 +93,29 @@ Navide はすでに、創設者がこのプロジェクトを進化させるた�
 新規プロジェクトは要件と Pipeline から始まります。日々のプロダクト開発では、複数の Agent Session が実装、テスト、修正、レビュー、改善を進めます。統合された mini IDE は、成果の確認や精密な編集が必要な場合に選択的に開かれます。
 
 これは開発者自身による Dogfooding の証拠であり、独立した顧客検証ではありません。次の証明は、他のエンジニアが自身の実プロジェクトで Navide を使うことから得る必要があります。
+
+### 数字で見る Navide 自身の開発
+
+| 2026-05-28 以降 | |
+|---|---|
+| Commit | **4,182** |
+| リリース | **87** |
+| 月間 Commit | **約 1,384** |
+
+直近 8 週間の週ごとの commit 数です。どの週も 130 件を超えています。
+
+| 週 | | Commit |
+|---|---|---|
+| 8 週間前 | ██████ | 137 |
+| 7 週間前 | ██████████████ | 324 |
+| 6 週間前 | ████████ | 185 |
+| 5 週間前 | █████████ | 209 |
+| 4 週間前 | ███████████ | 253 |
+| 3 週間前 | █████████████████████████ | 577 |
+| 2 週間前 | █████████████ | 293 |
+| 先週 | █████████ | 204 |
+
+数値は 2026-10-27（v0.2.34）時点のものです。ページ上部のバッジには最新の数値が表示されます。
 
 ## 現在利用できる機能
 
@@ -115,13 +153,13 @@ Local-first は常に完全オフラインという意味ではありません�
 
 ## Navide を試す
 
-Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.32 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 Installer と Linux x64 Package を提供しています。
+Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.34 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 Installer と Linux x64 Package を提供しています。
 
-- [DMG をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.dmg))
-- [ZIP をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.zip))
-- [Windows x64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-x64.exe))
-- [Windows ARM64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-arm64.exe))
-- [Linux AppImage をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-x86_64.AppImage))・[Linux .deb をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-amd64.deb))
+- [DMG をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-arm64.dmg))
+- [ZIP をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-arm64.zip))
+- [Windows x64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-win-x64.exe))
+- [Windows ARM64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-win-arm64.exe))
+- [Linux AppImage をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-x86_64.AppImage))・[Linux .deb をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-amd64.deb))
 
 リンク先は dl.navide.dev で、アプリの自動更新と同じ配信元です。隣の「GitHub」リンクは GitHub Release 上の同じファイル（バイト単位で同一。リリースワークフローが両方に公開し、チェックサムの一致を確認しています）。
 

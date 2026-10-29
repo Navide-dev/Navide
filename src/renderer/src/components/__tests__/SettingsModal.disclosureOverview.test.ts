@@ -7,6 +7,7 @@ import SettingsModal from '../SettingsModal.vue'
 import ExtensionsPane from '../ExtensionsPane.vue'
 import PluginDisclosureOverview from '../PluginDisclosureOverview.vue'
 import SettingsNavSubItem from '../settings/SettingsNavSubItem.vue'
+import SettingsNavItem from '../settings/SettingsNavItem.vue'
 import ExecutionPolicyPane from '../ExecutionPolicyPane.vue'
 
 function api(): never {
@@ -61,6 +62,9 @@ describe('SettingsModal Navide Plugins pages', () => {
   })
 
   async function mountModal(initialTab?: string) {
+    // A second mount in one test would otherwise leave the first modal in the
+    // document, where body() finds it first.
+    wrapper?.unmount()
     wrapper = shallowMount(SettingsModal, {
       props: {
         backend: backend() as never,
@@ -92,12 +96,12 @@ describe('SettingsModal Navide Plugins pages', () => {
   it('lists the four pages under Navide Plugins and switches between them', async () => {
     await mountModal('extensions')
     expect(wrapper!.findAllComponents(SettingsNavSubItem).map((n) => n.props('label'))).toEqual([
-      'Navide plugins',
+      'Installed',
       'Execution Policy',
       'Developer and native code',
       'Disclosure overview',
     ])
-    expect(body('extensions').get('h1').text()).toBe('Navide plugins')
+    expect(body('extensions').get('h1').text()).toBe('Installed Navide plugins')
     expect(wrapper!.findComponent(ExtensionsPane).props('page')).toBe('plugins')
     expect(partShown('execution-policy')).toBe(false)
 
@@ -133,7 +137,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     await vi.advanceTimersByTimeAsync(5_000)
     expect(plugins.backendResourceUsage).toHaveBeenCalledTimes(2)
 
-    await openPage('Navide plugins')
+    await openPage('Installed')
     await vi.advanceTimersByTimeAsync(15_000)
     expect(plugins.backendResourceUsage).toHaveBeenCalledTimes(2)
 
@@ -212,7 +216,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     await flushPromises()
     vm().setTab('extensions')
     await flushPromises()
-    expect(body('extensions').get('h1').text()).toBe('Navide plugins')
+    expect(body('extensions').get('h1').text()).toBe('Installed Navide plugins')
     expect(wrapper!.findComponent(ExtensionsPane).props('page')).toBe('plugins')
   })
 
@@ -226,12 +230,12 @@ describe('SettingsModal Navide Plugins pages', () => {
   })
 
   // The pages split one scrolling page, so each page's state shows on its row and
-  // in the narrow tab strip: ⚠ while Execution Policy warns, "On" for Developer.
+  // in the narrow tab strip: ⚠ while Execution Policy warns, "Dev" or "Native" for Developer.
   const marker = (label: string) => wrapper!.findAllComponents(SettingsNavSubItem).find((n) => n.props('label') === label)!.props('marker')
   const tabMarker = (label: string) => body('extensions').findAll('.ext-pages-tab').find((tab) => tab.text().startsWith(label))!.find('.ext-pages-marker')
 
   it('marks Execution Policy with ⚠ and the reasons while the page warns', async () => {
-    await mountModal('general')
+    await mountModal('extensions')
     expect(marker('Execution Policy')).toBeNull()
     expect(tabMarker('Execution Policy').exists()).toBe(false)
 
@@ -243,7 +247,7 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(tab.attributes('role')).toBe('img')
     expect(tab.attributes('aria-label')).toBe('Repository recommendation: Untrusted\nEffective policy: Stale')
     // Only that page carries it.
-    expect(marker('Navide plugins')).toBeNull()
+    expect(marker('Installed')).toBeNull()
     expect(marker('Developer and native code')).toBeNull()
 
     wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', [])
@@ -251,18 +255,96 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(marker('Execution Policy')).toBeNull()
   })
 
-  it('marks Developer and native code "On" with the switches that are on', async () => {
-    await mountModal('general')
-    expect(marker('Developer and native code')).toBeNull()
+  // The "Dev" / "Native on" state is a pill beside the page title: in the
+  // sidebar a long or translated label truncated the row (ja, ru).
+  const pageStatus = () => body('extensions').find('.s-page-title .s-page-status')
+
+  it('names the switch that is on beside the page title, not in the sidebar', async () => {
+    await mountModal('extensions')
+    expect(pageStatus().exists()).toBe(false)
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode', 'Allow native backends'])
     await flushPromises()
-    expect(marker('Developer and native code')).toEqual({ text: 'On', tone: 'on', label: 'On: Turn on Developer Mode, Allow native backends' })
-    expect(tabMarker('Developer and native code').attributes('aria-label')).toBe('On: Turn on Developer Mode, Allow native backends')
+    expect(pageStatus().text()).toBe('Developer Mode on')
+    expect(pageStatus().attributes('title')).toBe('Developer and native code: Turn on Developer Mode, Allow native backends')
+    expect(marker('Developer and native code')).toBeNull()
+    expect(tabMarker('Developer and native code').exists()).toBe(false)
     expect(marker('Execution Policy')).toBeNull()
+
+    // Developer Mode off, a native-code switch on: the pill names that switch.
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Allow native backends'])
+    await flushPromises()
+    expect(pageStatus().text()).toBe('Native code on')
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', [])
     await flushPromises()
+    expect(pageStatus().exists()).toBe(false)
+  })
+  // Only the open entry unfolds its pages: with another entry open, the Navide
+  // Plugins pages fold away and the row itself carries their state.
+  const subLabels = () => wrapper!.findAllComponents(SettingsNavSubItem).map((n) => n.props('label'))
+  const pluginsRow = () => wrapper!.findAllComponents(SettingsNavItem).find((n) => n.props('label') === 'Navide Plugins')!
+
+  it('unfolds the Navide Plugins pages only while that entry is open', async () => {
+    await mountModal('marketplace')
+    expect(subLabels()).toEqual([])
+
+    vm().setTab('extensions')
+    await flushPromises()
+    expect(subLabels()).toHaveLength(4)
+
+    await openPage('Disclosure overview')
+    vm().setTab('marketplace')
+    await flushPromises()
+    expect(subLabels()).toEqual([])
+  })
+
+  it('unfolds onto the page a search hit or old link opens', async () => {
+    await mountModal('general')
+    await vm().setSection('extensions', 'execution-policy')
+    await flushPromises()
+    expect(wrapper!.findAllComponents(SettingsNavSubItem).filter((n) => n.props('active')).map((n) => n.props('label'))).toEqual(['Execution Policy'])
+
+    await mountModal('disclosureOverview')
+    expect(wrapper!.findAllComponents(SettingsNavSubItem).filter((n) => n.props('active')).map((n) => n.props('label'))).toEqual(['Disclosure overview'])
+  })
+
+  it('puts the folded pages\' warning on the Navide Plugins row, never the "Dev" pill', async () => {
+    await mountModal('general')
+    expect(pluginsRow().props('marker')).toBeNull()
+
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toBeNull()
+
+    wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', ['Effective policy: Stale'])
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toEqual({ text: '⚠', tone: 'risk', label: 'Effective policy: Stale' })
+
+    // Unfolded, the marker is back on its page's row, not on both.
+    vm().setTab('extensions')
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toBeNull()
+    expect(marker('Execution Policy')).toMatchObject({ text: '⚠' })
+  })
+
+  it('shows the "Dev" pill on every Navide Plugins page and on no sidebar row', async () => {
+    await mountModal('general')
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toBeNull()
+    expect(pluginsRow().props('foldable')).toBe(true)
+    expect(pluginsRow().props('expanded')).toBe(false)
+
+    vm().setTab('extensions')
+    await flushPromises()
+    expect(pluginsRow().props('marker')).toBeNull()
+    expect(pluginsRow().props('expanded')).toBe(true)
     expect(marker('Developer and native code')).toBeNull()
+    expect(pageStatus().text()).toBe('Developer Mode on')
+
+    await openPage('Developer and native code')
+    expect(pluginsRow().props('marker')).toBeNull()
+    expect(pageStatus().text()).toBe('Developer Mode on')
   })
 })

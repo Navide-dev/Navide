@@ -78,12 +78,20 @@ function graphServer(initial = seedGraph()) {
     }
     if (type === 'pipelines.graph.set') { stored = payload.graph as PipelineGraph; return ok({ pipeline_id: 'p1', graph: stored, stages: [] }) }
     if (type === 'tokens.snapshot') return ok(tokens)
+    if (type === 'pipelines.list') return ok({ pipelines: [{ id: 'p1', name: 'This one' }, { id: 'p2', name: 'Reporter' }], active_pipeline_id: 'p1', path: '' })
     return ok(null)
   }
   return { mock, stored: () => stored, lastOps: () => mock.sent.filter((s) => s.type === 'pipelines.graph.apply').at(-1)?.payload.ops as GraphOp[] | undefined }
 }
 
 let tokens: unknown = { workspace_path: '/ws', workspace: { current_run: null, runs: [] } }
+
+/** Open the Recover menu inside `within` and pick one of its actions. */
+async function recover(w: VueWrapper, within: string, action: string): Promise<void> {
+  await w.get(`${within} .pam-trigger`).trigger('click')
+  await w.get(`.pam-list [data-action="${action}"]`).trigger('click')
+  await flushPromises()
+}
 
 describe('PipelineEditor', () => {
   let wrapper: VueWrapper | undefined
@@ -98,7 +106,7 @@ describe('PipelineEditor', () => {
     scope = effectScope()
     const w = scope.run(() => mount(PipelineEditor, {
       props: { backend: server.mock.backend, pipelineId: 'p1', roles, workspacePath: '/ws', run: opts.run ?? EMPTY_RUN, locked: !!opts.locked },
-      global: { plugins: [i18n], stubs: { PipelineCanvas: { name: 'PipelineCanvas', template: '<div class="canvas-stub" />' } } },
+      global: { plugins: [i18n], stubs: { teleport: true, PipelineCanvas: { name: 'PipelineCanvas', template: '<div class="canvas-stub" />' } } },
       attachTo: document.body,
     }))!
     wrapper = w
@@ -231,6 +239,38 @@ describe('PipelineEditor', () => {
     expect(w.find('.pe-stepper-value').text()).toBe('at most 3×')
   })
 
+  it('turns a link out of a step into a branch and edits its value, one command each', async () => {
+    const { w, server } = await mountEditor()
+    await w.findAll('.pe-seg-btn')[1].trigger('click') // canvas
+    await flushPromises()
+    w.findComponent({ name: 'PipelineCanvas' }).vm.$emit('select-edge', 'e-plan-fe')
+    await flushPromises()
+    const panel = w.find('.pe-edge-panel')
+    expect(panel.text()).toContain('Link')
+    await panel.find('select').setValue('branch')
+    await flushPromises()
+    expect(server.lastOps()).toEqual([
+      { op: 'remove_edge', id: 'e-plan-fe' },
+      { op: 'add_edge', edge: { id: 'b-plan-fe', from: 'plan', to: 'fe', kind: 'branch', when: 'default' } },
+    ])
+    const when = w.find('.pe-edge-panel input')
+    await when.setValue('approved')
+    await flushPromises()
+    expect(server.lastOps()).toEqual([
+      { op: 'remove_edge', id: 'b-plan-fe' },
+      { op: 'add_edge', edge: { id: 'b-plan-fe', from: 'plan', to: 'fe', kind: 'branch', when: 'approved' } },
+    ])
+  })
+
+  it('offers no link kinds for a link out of the trigger', async () => {
+    const { w } = await mountEditor()
+    await w.findAll('.pe-seg-btn')[1].trigger('click')
+    await flushPromises()
+    w.findComponent({ name: 'PipelineCanvas' }).vm.$emit('select-edge', 'e-trigger-plan')
+    await flushPromises()
+    expect(w.find('.pe-edge-panel').exists()).toBe(false)
+  })
+
   it('locks every edit while the pipeline runs', async () => {
     const { w, server } = await mountEditor({ locked: true })
     expect(w.find('.pe-lock').exists()).toBe(true)
@@ -253,6 +293,169 @@ describe('PipelineEditor', () => {
     expect(calls).toEqual([{ nodeId: 'gate' }])
   })
 
+  it('retries a failed step by resuming when it is the first unfinished one, else by restarting from it', async () => {
+    const resumed: unknown[] = []
+    const restarted: unknown[] = []
+    registerCommand('ui.pipeline.resume', (args) => { resumed.push(args) })
+    registerCommand('ui.pipeline.restart_from', (args) => { restarted.push(args) })
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: { plan: { status: 'done' }, fe: { status: 'failed' }, be: { status: 'done' } } }
+    const { w } = await mountEditor({ run })
+    await w.find('.lane-card[data-node-id="fe"]').trigger('click')
+    await flushPromises()
+    await recover(w, '.pi-foot', 'retry')
+    expect(resumed).toHaveLength(1)
+    expect(restarted).toEqual([])
+    // review failed while an earlier layer is still unfinished (fe): a resume
+    // would start there, so the retry restarts from review instead.
+    await w.setProps({ run: { ...run, nodes: { plan: { status: 'done' }, fe: { status: 'failed' }, be: { status: 'done' }, review: { status: 'failed' } } } })
+    await w.find('.lane-card[data-node-id="review"]').trigger('click')
+    await flushPromises()
+    await recover(w, '.pi-foot', 'retry')
+    expect(restarted).toEqual([{ nodeId: 'review' }])
+    expect(resumed).toHaveLength(1)
+  })
+
+  it('adds a sub-pipeline from the palette, calling another pipeline', async () => {
+    const { w, server } = await mountEditor()
+    await w.find('.lane-card[data-node-id="review"]').trigger('click')
+    const item = w.findAll('.pe-palette .pp-item').find((b) => b.text().includes('Sub-pipeline'))!
+    await item.trigger('click')
+    await flushPromises()
+    const add = server.lastOps()![0] as { op: string; node: { kind: string; subpipeline: unknown } }
+    expect(add.op).toBe('add_node')
+    expect(add.node.kind).toBe('subpipeline')
+    expect(add.node.subpipeline).toEqual({ pipelineId: 'p2', task: '{{task}}', wait: true })
+  })
+
+  it('starts a run from the toolbar through ui.pipeline.start, with this pipeline and the task', async () => {
+    const calls: unknown[] = []
+    registerCommand('ui.pipeline.start', (args) => { calls.push(args) })
+    const { w } = await mountEditor()
+    const btn = w.find('.pe-start-btn')
+    expect(btn.text()).toBe('▶ Run Pipeline')
+    expect(btn.attributes('disabled')).toBeDefined()
+    await w.find('.pe-start-input').setValue('  Ship it  ')
+    expect(btn.attributes('disabled')).toBeUndefined()
+    await w.find('.pe-start').trigger('submit')
+    await flushPromises()
+    expect(calls).toEqual([{ pipelineId: 'p1', task: 'Ship it' }])
+    expect((w.find('.pe-start-input').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('keeps the task when the start is refused, and offers no start while a run is going', async () => {
+    registerCommand('ui.pipeline.start', () => { throw new Error('nope') })
+    const { w } = await mountEditor()
+    await w.find('.pe-start-input').setValue('Ship it')
+    await w.find('.pe-start').trigger('submit')
+    await flushPromises()
+    expect((w.find('.pe-start-input').element as HTMLInputElement).value).toBe('Ship it')
+    await w.setProps({ run: { pipelineId: 'other', state: 'running', gate: null, nodes: {} } })
+    expect(w.find('.pe-start').exists()).toBe(false)
+  })
+
+  it('resets a finished run of this pipeline from Executions through ui.pipeline.reset', async () => {
+    const calls: unknown[] = []
+    registerCommand('ui.pipeline.reset', (args) => { calls.push(args) })
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: {} }
+    const { w } = await mountEditor({ run })
+    await w.findAll('.pe-seg-btn')[2].trigger('click')
+    await flushPromises()
+    await w.find('.px-bar .pam-trigger').trigger('click')
+    const reset = w.find('.pam-list [data-action="reset"]')
+    expect(reset.find('.pam-label').text()).toBe('Reset')
+    expect(reset.classes()).toContain('is-danger')
+    await reset.trigger('click')
+    await flushPromises()
+    // The host asks first, naming every pane it would close; an MCP reset
+    // (no confirm flag) keeps going straight through.
+    expect(calls).toEqual([{ confirm: true }])
+  })
+
+  it('asks the host to confirm an Abort from Executions; MCP aborts stay unconfirmed (D4)', async () => {
+    const calls: unknown[] = []
+    registerCommand('ui.pipeline.abort', (args) => { calls.push(args) })
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'running', gate: null, nodes: {} }
+    const { w } = await mountEditor({ run })
+    await w.findAll('.pe-seg-btn')[2].trigger('click')
+    await flushPromises()
+    await w.get('.px-bar .px-btn--danger').trigger('click')
+    await flushPromises()
+    expect(calls).toEqual([{ confirm: true }])
+  })
+
+  it('points an empty Executions at the Run box, in the middle of the page (D5)', async () => {
+    tokens = { workspace_path: '/ws', workspace: { current_run: null, runs: [] } }
+    const { w } = await mountEditor()
+    await w.findAll('.pe-seg-btn')[2].trigger('click')
+    await flushPromises()
+    const empty = w.get('.px-placeholder')
+    expect(empty.text()).toContain(i18n.global.t('pipelineEditor.exec.empty-title'))
+    expect(empty.text()).toContain(i18n.global.t('pipelineEditor.exec.empty-body'))
+    // It used to say "Pick a run" with no run to pick.
+    expect(empty.text()).not.toContain('Pick a run')
+    expect(w.find('.px-list .px-empty').exists()).toBe(false)
+    await empty.get('[data-test="exec-run"]').trigger('click')
+    await flushPromises()
+    expect(w.find('.pe-main').exists()).toBe(true)
+    expect(document.activeElement).toBe(w.get('.pe-start-input').element)
+  })
+
+  it('says why Run is disabled', async () => {
+    const { w } = await mountEditor()
+    const btn = w.find('.pe-start-btn')
+    expect(btn.attributes('title')).toBe(i18n.global.t('pipelineEditor.run.blocked-task'))
+    await w.find('.pe-start-input').setValue('Ship it')
+    expect(btn.attributes('title')).toBeUndefined()
+    await w.setProps({ workspacePath: '' })
+    expect(btn.attributes('title')).toBe(i18n.global.t('pipelineEditor.run.blocked-workspace'))
+  })
+
+  it('lets a link out of a sub-pipeline be a branch or an error link', async () => {
+    const g = seedGraph()
+    g.nodes.push({ id: 'call', kind: 'subpipeline', label: 'Call', position: { x: 0, y: 0 }, subpipeline: { pipelineId: 'p2', task: '{{task}}', wait: true } })
+    g.edges.push(edge('plan', 'call'), edge('call', 'review'))
+    const server = graphServer(g)
+    scope = effectScope()
+    const w = scope.run(() => mount(PipelineEditor, {
+      props: { backend: server.mock.backend, pipelineId: 'p1', roles, workspacePath: '/ws', run: EMPTY_RUN, locked: false },
+      global: { plugins: [i18n], stubs: { teleport: true, PipelineCanvas: { name: 'PipelineCanvas', template: '<div class="canvas-stub" />' } } },
+      attachTo: document.body,
+    }))!
+    wrapper = w
+    await flushPromises()
+    await w.findAll('.pe-seg-btn')[1].trigger('click')
+    await flushPromises()
+    w.findComponent({ name: 'PipelineCanvas' }).vm.$emit('select-edge', 'e-call-review')
+    await flushPromises()
+    const panel = w.find('.pe-edge-panel')
+    expect(panel.exists()).toBe(true)
+    expect(panel.findAll('option').map((o) => o.attributes('value'))).toEqual(['main', 'branch', 'error'])
+  })
+
+  it('disables the Sub-pipeline item, saying why, when there is no other pipeline', async () => {
+    const server = graphServer()
+    const send = server.mock.backend.send
+    ;(server.mock.backend as { send: unknown }).send = async (type: string, payload?: Record<string, unknown>) =>
+      type === 'pipelines.list'
+        ? { id: 't', type, ok: true, error: null, timestamp: '', payload: { pipelines: [{ id: 'p1', name: 'This one' }] } }
+        : send(type, payload)
+    scope = effectScope()
+    const w = scope.run(() => mount(PipelineEditor, {
+      props: { backend: server.mock.backend, pipelineId: 'p1', roles, workspacePath: '/ws', run: EMPTY_RUN, locked: false },
+      global: { plugins: [i18n], stubs: { teleport: true, PipelineCanvas: { name: 'PipelineCanvas', template: '<div class="canvas-stub" />' } } },
+      attachTo: document.body,
+    }))!
+    wrapper = w
+    await flushPromises()
+    const item = w.findAll('.pe-palette .pp-item').find((b) => b.text().includes('Sub-pipeline'))!
+    expect(item.attributes('disabled')).toBeDefined()
+    expect(item.attributes('title')).toBe(i18n.global.t('pipelineEditor.error.subpipeline-none'))
+    const before = server.mock.sent.filter((s) => s.type === 'pipelines.graph.apply').length
+    await item.trigger('click')
+    await flushPromises()
+    expect(server.mock.sent.filter((s) => s.type === 'pipelines.graph.apply').length).toBe(before)
+  })
+
   it('reports a run command the host does not know instead of failing silently', async () => {
     const run: RunSnapshot = { pipelineId: 'p1', state: 'running', gate: 'gate', nodes: { gate: { status: 'awaiting' } } }
     const { w } = await mountEditor({ run, locked: true })
@@ -261,7 +464,41 @@ describe('PipelineEditor', () => {
     await flushPromises()
     await w.find('.pi-decision .pi-btn:not(.pi-btn--primary)').trigger('click') // send back
     await flushPromises()
-    expect(useNotify().toasts.value.slice(before).at(-1)?.message).toContain('ui.pipeline.gate_reject')
+    // Said in the UI language; the host's own sentence is behind Details (B2).
+    const toast = useNotify().toasts.value.slice(before).at(-1)
+    expect(toast?.message).toBe('The run did not accept that command.')
+    expect(toast?.action?.label).toBe('Details')
+    toast?.action?.run()
+    expect(useNotify().dialog.value?.message).toContain('ui.pipeline.gate_reject')
+    useNotify().resolveDialog(true)
+  })
+
+  it('says a refused run command in the UI language, naming the gate by its label (B2)', async () => {
+    registerCommand('ui.pipeline.gate_pass', () => {
+      throw Object.assign(new Error('ui.pipeline.gate_pass: the run is waiting on gate "other", not "gate"'), { code: 'wrong-gate', params: { gate: 'other', asked: 'gate' } })
+    })
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'running', gate: 'gate', nodes: { gate: { status: 'awaiting' } } }
+    const { w } = await mountEditor({ run, locked: true })
+    const before = useNotify().toasts.value.length
+    await w.find('.lane-card[data-node-id="gate"]').trigger('click')
+    await flushPromises()
+    await w.find('.pi-decision .pi-btn--primary').trigger('click') // approve
+    await flushPromises()
+    const message = useNotify().toasts.value.slice(before).at(-1)?.message ?? ''
+    // "other" is not a node here, so it stays its id; "gate" is the gate's label.
+    expect(message).toBe('The run is waiting at other, not at Approve.')
+  })
+
+  it('a person\'s Send Back asks the host to confirm a run-ending reject (B4)', async () => {
+    const calls: unknown[] = []
+    registerCommand('ui.pipeline.gate_reject', (args) => { calls.push(args) })
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'running', gate: 'gate', nodes: { gate: { status: 'awaiting' } } }
+    const { w } = await mountEditor({ run, locked: true })
+    await w.find('.lane-card[data-node-id="gate"]').trigger('click')
+    await flushPromises()
+    await w.find('.pi-decision .pi-btn:not(.pi-btn--primary)').trigger('click')
+    await flushPromises()
+    expect(calls).toEqual([expect.objectContaining({ nodeId: 'gate', confirm: true })])
   })
 
   it('shows a run strip with progress and what is running, in every editor view', async () => {
@@ -338,11 +575,214 @@ describe('PipelineInspector', () => {
       props: {
         backend: mock.backend, graph: seedGraph(), node, stage: null, roles,
         agentOptions: [{ key: 'claude', label: 'Claude' }, { key: 'codex', label: 'Codex' }],
-        run: EMPTY_RUN, now: Date.now(), locked: false, workspacePath: '/ws', ...extra,
+        run: EMPTY_RUN, now: Date.now(), locked: false, workspacePath: '/ws', pipelineId: 'p1', ...extra,
+      },
+      global: { plugins: [i18n], stubs: { teleport: true } },
+    }))!
+  }
+
+  it('edits a sub-pipeline\'s pipeline and task template', async () => {
+    const node: GraphNode = { id: 'call', kind: 'subpipeline', label: 'Call', position: { x: 0, y: 0 }, subpipeline: { pipelineId: 'p2', task: '{{task}}', wait: true } }
+    const mock = createMockBackend('connected')
+    ;(mock.backend as { send: unknown }).send = async (type: string) => ({
+      id: 't', type, ok: true, error: null, timestamp: '',
+      payload: type === 'pipelines.list' ? { pipelines: [{ id: 'p1', name: 'This' }, { id: 'p2', name: 'Reporter' }, { id: 'p3', name: 'Fixer' }] } : null,
+    })
+    scope = effectScope()
+    const w = scope.run(() => mount(PipelineInspector, {
+      props: {
+        backend: mock.backend, graph: seedGraph(), node, stage: null, roles, agentOptions: [], pipelineId: 'p1',
+        run: { ...EMPTY_RUN, pipelineId: 'p1' }, now: Date.now(), locked: false, workspacePath: '/ws',
       },
       global: { plugins: [i18n] },
     }))!
-  }
+    await flushPromises()
+    const options = w.findAll('[data-field="subpipeline-pipeline"] option').map((o) => o.text())
+    expect(options).toContain('Fixer')
+    expect(options).not.toContain('This')
+    await w.find('[data-field="subpipeline-pipeline"]').setValue('p3')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'update_node', id: 'call', subpipeline: { pipelineId: 'p3' } }])
+    await w.find('[data-field="subpipeline-task"]').setValue('summarise: {{prev.summary}}')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'update_node', id: 'call', subpipeline: { task: 'summarise: {{prev.summary}}' } }])
+    await w.find('[data-field="retry-tries"]').setValue('2')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'call', retry: { maxTries: 2, waitMs: 0 } }])
+  })
+
+  it('leaves the pipeline being edited out of the sub-pipeline list, with no run going', async () => {
+    const node: GraphNode = { id: 'call', kind: 'subpipeline', label: 'Call', position: { x: 0, y: 0 }, subpipeline: { pipelineId: 'p2', task: '{{task}}', wait: true } }
+    const mock = createMockBackend('connected')
+    ;(mock.backend as { send: unknown }).send = async (type: string) => ({
+      id: 't', type, ok: true, error: null, timestamp: '',
+      payload: type === 'pipelines.list' ? { pipelines: [{ id: 'p1', name: 'This' }, { id: 'p2', name: 'Reporter' }] } : null,
+    })
+    scope = effectScope()
+    const w = scope.run(() => mount(PipelineInspector, {
+      props: {
+        backend: mock.backend, graph: seedGraph(), node, stage: null, roles, agentOptions: [], pipelineId: 'p1',
+        run: EMPTY_RUN, now: Date.now(), locked: false, workspacePath: '/ws',
+      },
+      global: { plugins: [i18n] },
+    }))!
+    await flushPromises()
+    const options = w.findAll('[data-field="subpipeline-pipeline"] option').map((o) => o.text())
+    expect(options).toContain('Reporter')
+    expect(options).not.toContain('This')
+    // …and a sub-pipeline node is titled in words, not with its i18n key.
+    expect(w.find('.pi-kind').text()).toContain(i18n.global.t('pipelineEditor.inspector.kind-subpipeline'))
+    expect(w.find('.pi-kind').text()).not.toContain('pipelineEditor.')
+  })
+
+  it('shows why a failed step failed in its Output tab', async () => {
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: { fe: { status: 'failed', error: 'kickoff never reached the agent' } } }
+    const w = mountInspector(slot('fe', 'Frontend'), { run })
+    await w.findAll('.pi-tab')[2].trigger('click')
+    const why = w.get('[data-test="output-error"]')
+    expect(why.text()).toContain(i18n.global.t('pipelineEditor.inspector.failure'))
+    expect(why.text()).toContain('kickoff never reached the agent')
+  })
+
+  it('edits the retry policy as one op, and one try clears it', async () => {
+    const w = mountInspector(slot('fe', 'Frontend'))
+    expect(w.find('[data-field="retry-wait"]').exists()).toBe(false)
+    await w.find('[data-field="retry-tries"]').setValue('3')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'fe', retry: { maxTries: 3, waitMs: 0 } }])
+    await w.setProps({ node: { ...slot('fe', 'Frontend'), retry: { maxTries: 3, waitMs: 0 } } })
+    await w.find('[data-field="retry-wait"]').setValue('2.5')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'fe', retry: { maxTries: 3, waitMs: 2500 } }])
+    await w.find('[data-field="retry-tries"]').setValue('9')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'fe', retry: { maxTries: 5, waitMs: 0 } }])
+    await w.find('[data-field="retry-tries"]').setValue('1')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'set_retry', id: 'fe', retry: null }])
+  })
+
+  it('lists the links out of a step in its settings, no canvas hover needed (D3)', () => {
+    const w = mountInspector(slot('plan', 'Plan', 'planner'))
+    const rows = w.findAll('.pi-links [data-test="link-row"]')
+    expect(rows.map((r) => r.find('.pi-link-to').text())).toEqual(['Frontend', 'Backend'])
+    expect((rows[0].find('select').element as HTMLSelectElement).value).toBe('main')
+  })
+
+  it('adds a branch link from the settings, with the value the step must report (D3)', async () => {
+    const w = mountInspector(slot('plan', 'Plan', 'planner'))
+    const add = w.get('.pi-links [data-test="link-add"]')
+    await add.get('[data-field="link-kind"]').setValue('branch')
+    await add.get('[data-field="link-to"]').setValue('review')
+    const btn = add.get('button')
+    // A branch link needs the value that picks it.
+    expect(btn.attributes('disabled')).toBeDefined()
+    await add.get('[data-field="link-when"]').setValue('  yes ')
+    await btn.trigger('click')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([
+      { op: 'add_edge', edge: { id: 'b-plan-review', from: 'plan', to: 'review', kind: 'branch', when: 'yes' } },
+    ])
+  })
+
+  it('adds an on-error link from the settings of a sub-pipeline step too (D3)', async () => {
+    const call: GraphNode = { id: 'plan', kind: 'subpipeline', label: 'Call', position: { x: 0, y: 0 }, subpipeline: { pipelineId: 'p2', task: '{{task}}', wait: true } }
+    const w = mountInspector(call)
+    const add = w.get('.pi-links [data-test="link-add"]')
+    await add.get('[data-field="link-kind"]').setValue('error')
+    expect(add.find('[data-field="link-when"]').exists()).toBe(false)
+    await add.get('[data-field="link-to"]').setValue('review')
+    await add.get('button').trigger('click')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([
+      { op: 'add_edge', edge: { id: 'x-plan-review', from: 'plan', to: 'review', kind: 'error' } },
+    ])
+  })
+
+  it('changes and removes a link from the settings (D3)', async () => {
+    const w = mountInspector(slot('plan', 'Plan', 'planner'))
+    const row = w.findAll('.pi-links [data-test="link-row"]')[0]
+    await row.get('select').setValue('error')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([
+      { op: 'remove_edge', id: 'e-plan-fe' },
+      { op: 'add_edge', edge: { id: 'x-plan-fe', from: 'plan', to: 'fe', kind: 'error' } },
+    ])
+    await row.get('[data-test="link-remove"]').trigger('click')
+    expect(w.emitted('edit')?.at(-1)?.[1]).toEqual([{ op: 'remove_edge', id: 'e-plan-fe' }])
+  })
+
+  it('says how a step reports its branch value, as the engine reads it (D3)', async () => {
+    const g = seedGraph()
+    g.edges.push({ id: 'b-plan-review', from: 'plan', to: 'review', kind: 'branch', when: 'ship' })
+    const w = mountInspector(slot('plan', 'Plan', 'planner'), { graph: g })
+    const help = w.get('.pi-links [data-test="branch-help"]')
+    expect(help.text()).toBe(i18n.global.t('pipelineEditor.link.branch-help'))
+    // The format the kickoff hint asks for and parseNodeSignals takes.
+    expect(help.text()).toContain('---BRANCH:')
+    const branchRow = w.findAll('.pi-links [data-test="link-row"]').find((r) => r.find('.pi-link-to').text() === 'Review')!
+    expect((branchRow.get('[data-field="link-when"]').element as HTMLInputElement).value).toBe('ship')
+  })
+
+  it('keeps the footer to one row: Freeze Output, Recover and Delete (D2)', async () => {
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: { fe: { status: 'done' } } }
+    const w = mountInspector(slot('fe', 'Frontend'), { run })
+    const foot = w.get('.pi-foot')
+    // Pin, Rerun, Retry, the reason Retry was off and Delete used to share
+    // this row; ja-JP broke Retry onto three lines.
+    expect(foot.findAll('button').map((b) => b.text())).toEqual([
+      i18n.global.t('pipelineEditor.inspector.pin'),
+      i18n.global.t('pipelineEditor.recover.title'),
+      i18n.global.t('action.delete'),
+    ])
+    expect(foot.find('[data-test="retry-blocked"]').exists()).toBe(false)
+  })
+
+  it('gathers the five recovery actions in one Recover menu, each saying what it does (D4)', async () => {
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: { fe: { status: 'failed' } } }
+    const w = mountInspector(slot('fe', 'Frontend'), { run })
+    await w.get('.pi-foot .pam-trigger').trigger('click')
+    const items = w.findAll('.pam-list [role="menuitem"]')
+    expect(items.map((b) => b.attributes('data-action'))).toEqual(['retry', 'rerun', 'resume', 'restart', 'reset'])
+    expect(items.map((b) => b.find('.pam-desc').text())).toEqual([
+      i18n.global.t('pipelineEditor.inspector.retry-node-help'),
+      i18n.global.t('pipelineEditor.inspector.restart-help'),
+      i18n.global.t('pipelineEditor.recover.resume-desc'),
+      i18n.global.t('pipelineEditor.recover.restart-desc'),
+      i18n.global.t('pipelineEditor.recover.reset-desc'),
+    ])
+    expect(items.every((b) => b.attributes('disabled') === undefined)).toBe(true)
+    await w.get('.pi-foot .pam-trigger').trigger('click') // close
+    await recover(w, '.pi-foot', 'rerun')
+    await recover(w, '.pi-foot', 'resume')
+    await recover(w, '.pi-foot', 'restart')
+    await recover(w, '.pi-foot', 'reset')
+    expect(w.emitted('restart-from')).toEqual([['fe']])
+    expect(w.emitted('control')).toEqual([['resume'], ['restart'], ['reset']])
+  })
+
+  it('turns the run-wide recovery off for a run of another pipeline, saying why (D4)', async () => {
+    const run: RunSnapshot = { pipelineId: 'other', state: 'aborted', gate: null, nodes: {} }
+    const w = mountInspector(slot('fe', 'Frontend'), { run })
+    await w.get('.pi-foot .pam-trigger').trigger('click')
+    for (const action of ['rerun', 'resume', 'restart', 'reset']) {
+      const item = w.get(`.pam-list [data-action="${action}"]`)
+      expect(item.attributes('disabled'), action).toBeDefined()
+      expect(item.find('.pam-desc').text()).toBe(i18n.global.t('pipelineEditor.inspector.retry-blocked-no-run'))
+    }
+  })
+
+  it('keeps Retry This Step visible, and says why it is disabled', async () => {
+    const failed: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: { fe: { status: 'failed' } } }
+    const cases: Array<[RunSnapshot, string]> = [
+      [{ ...failed, state: 'running' }, 'pipelineEditor.inspector.retry-blocked-running'],
+      [EMPTY_RUN, 'pipelineEditor.inspector.retry-blocked-no-run'],
+      [{ ...failed, nodes: { fe: { status: 'done' } } }, 'pipelineEditor.inspector.retry-blocked-not-failed'],
+    ]
+    for (const [run, key] of cases) {
+      const w = mountInspector(slot('fe', 'Frontend'), { run })
+      await w.get('.pi-foot .pam-trigger').trigger('click')
+      const btn = w.get('.pam-list [data-action="retry"]')
+      expect(btn.attributes('disabled')).toBeDefined()
+      expect(btn.find('.pam-desc').text()).toBe(i18n.global.t(key))
+      w.unmount()
+    }
+    const w = mountInspector(slot('fe', 'Frontend'), { run: failed })
+    await w.get('.pi-foot .pam-trigger').trigger('click')
+    expect(w.get('.pam-list [data-action="retry"]').attributes('disabled')).toBeUndefined()
+    await w.get('.pam-list [data-action="retry"]').trigger('click')
+    expect(w.emitted('retry-node')).toEqual([['fe']])
+  })
 
   it('builds the role\'s fields and hides the ones displayOptions rules out', () => {
     const w = mountInspector(slot('fe', 'Frontend'))
@@ -467,7 +907,7 @@ describe('PipelineExecutions', () => {
     const scope = effectScope()
     const w = scope.run(() => mount(PipelineExecutions, {
       props: { backend: server.mock.backend, workspacePath: '/ws', pipelineId: 'p1', graph: seedGraph(), run: EMPTY_RUN, roleLabels: {}, agentLabels: {}, now: Date.now() },
-      global: { plugins: [i18n], stubs: { PipelineCanvas: { props: ['runNodes'], template: '<div class="canvas-stub">{{ JSON.stringify(runNodes) }}</div>' } } },
+      global: { plugins: [i18n], stubs: { teleport: true, PipelineCanvas: { props: ['runNodes'], template: '<div class="canvas-stub">{{ JSON.stringify(runNodes) }}</div>' } } },
     }))!
     await flushPromises()
     const runs = w.findAll('.px-run')
@@ -475,6 +915,112 @@ describe('PipelineExecutions', () => {
     expect(w.find('.px-head').text()).toContain('second')
     expect(w.find('.canvas-stub').text()).toContain('"plan"')
     expect(w.text()).toContain('1 older run')
+    scope.stop()
+  })
+
+  function mountExec(run: RunSnapshot) {
+    const server = graphServer()
+    const scope = effectScope()
+    const w = scope.run(() => mount(PipelineExecutions, {
+      props: { backend: server.mock.backend, workspacePath: '/ws', pipelineId: 'p1', graph: seedGraph(), run, roleLabels: {}, agentLabels: {}, now: Date.now() },
+      global: { plugins: [i18n], stubs: { teleport: true, PipelineCanvas: { template: '<div class="canvas-stub" />' } } },
+    }))!
+    return { w, scope }
+  }
+
+  it('disables Next like the sidebar: while a gate waits and on the last stage, saying why', async () => {
+    tokens = { workspace_path: '/ws', workspace: { current_run: null, runs: [] } }
+    const live: RunSnapshot = { pipelineId: 'p1', state: 'running', gate: null, nodes: {} }
+    const cases: Array<[RunSnapshot, string | undefined]> = [
+      [{ ...live, gate: 'gate' }, 'pipelineEditor.controlPane.next-gated'],
+      [{ ...live, lastStage: true }, 'pipelineEditor.controlPane.last-stage'],
+      [live, undefined],
+    ]
+    for (const [run, key] of cases) {
+      const { w, scope } = mountExec(run)
+      await flushPromises()
+      const next = w.get('[data-test="exec-next"]')
+      if (key) {
+        expect(next.attributes('disabled')).toBeDefined()
+        expect(next.attributes('title')).toBe(i18n.global.t(key))
+      } else {
+        expect(next.attributes('disabled')).toBeUndefined()
+        await next.trigger('click')
+        expect(w.emitted('control')).toEqual([['next']])
+      }
+      scope.stop()
+    }
+  })
+
+  it('says in the header which step failed and why', async () => {
+    tokens = {
+      workspace_path: '/ws',
+      workspace: {
+        current_run: null,
+        runs: [{ run_id: 'a', task: 'ship', pipeline_id: 'p1', outcome: 'failed', node_states: { plan: { status: 'done' }, fe: { status: 'failed', error: 'kickoff never reached the agent' } } }],
+      },
+    }
+    const { w, scope } = mountExec(EMPTY_RUN)
+    await flushPromises()
+    const why = w.get('[data-test="run-error"]')
+    expect(why.text()).toBe(i18n.global.t('pipelineEditor.exec.failed-step', { name: 'Frontend', error: 'kickoff never reached the agent' }))
+    scope.stop()
+  })
+})
+
+describe('PipelineExecutions recovery (D4)', () => {
+  function mountExec(run: RunSnapshot) {
+    const server = graphServer()
+    const scope = effectScope()
+    const w = scope.run(() => mount(PipelineExecutions, {
+      props: { backend: server.mock.backend, workspacePath: '/ws', pipelineId: 'p1', graph: seedGraph(), run, roleLabels: {}, agentLabels: {}, now: Date.now() },
+      global: { plugins: [i18n], stubs: { teleport: true, PipelineCanvas: { template: '<div class="canvas-stub" />' } } },
+    }))!
+    return { w, scope }
+  }
+  const stopped: RunSnapshot = { pipelineId: 'p1', state: 'aborted', gate: null, nodes: {} }
+  const twoRuns = {
+    workspace_path: '/ws',
+    workspace: {
+      current_run: null,
+      runs: [
+        { run_id: 'a', task: 'first', pipeline_id: 'p1', outcome: 'completed', started_at: '2026-10-28T01:00:00Z', ended_at: '2026-10-28T01:10:00Z' },
+        { run_id: 'b', task: 'second', pipeline_id: 'p1', outcome: 'aborted', started_at: '2026-10-29T01:00:00Z', ended_at: '2026-10-29T01:10:00Z' },
+      ],
+    },
+  }
+
+  it('offers Resume, Start Over and Reset in one Recover menu, each saying what it does', async () => {
+    tokens = twoRuns
+    const { w, scope } = mountExec(stopped)
+    await flushPromises()
+    const bar = w.get('.px-bar')
+    expect(bar.findAll('button').map((b) => b.text())).toEqual([i18n.global.t('pipelineEditor.recover.title')])
+    await w.get('.px-bar .pam-trigger').trigger('click')
+    const items = w.findAll('.pam-list [role="menuitem"]')
+    expect(items.map((b) => b.attributes('data-action'))).toEqual(['resume', 'restart', 'reset'])
+    expect(items.map((b) => b.find('.pam-desc').text())).toEqual([
+      i18n.global.t('pipelineEditor.recover.resume-desc'),
+      i18n.global.t('pipelineEditor.recover.restart-desc'),
+      i18n.global.t('pipelineEditor.recover.reset-desc'),
+    ])
+    await w.get('.pam-list [data-action="restart"]').trigger('click')
+    expect(w.emitted('control')).toEqual([['restart']])
+    scope.stop()
+  })
+
+  it('turns recovery off while an earlier run is on screen, saying it acts on the latest run', async () => {
+    tokens = twoRuns
+    const { w, scope } = mountExec(stopped)
+    await flushPromises()
+    expect(w.find('.px-older').exists()).toBe(false)
+    await w.findAll('.px-run')[1].trigger('click') // "first", the older one
+    expect(w.get('.px-head').text()).toContain('first')
+    expect(w.get('.px-bar .pam-trigger').attributes('disabled')).toBeDefined()
+    expect(w.get('.px-older').text()).toContain(i18n.global.t('pipelineEditor.recover.older-run'))
+    await w.get('.px-older button').trigger('click')
+    expect(w.get('.px-head').text()).toContain('second')
+    expect(w.get('.px-bar .pam-trigger').attributes('disabled')).toBeUndefined()
     scope.stop()
   })
 })

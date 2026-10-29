@@ -91,18 +91,19 @@ def _reason(action: str, level: str, reasons: tuple[str, ...], source: str, tain
 
 def evaluate(
     *, pane_id: str, vendor: str, tool: str, tool_input: dict, cwd: str,
-    workspace: str, source: str = "local",
+    workspace: str, source: str = "local", record: bool = True,
 ) -> Decision:
+    """``record=False`` only previews the decision: no audit row, no event."""
     try:
         return _evaluate(pane_id=pane_id, vendor=vendor, tool=tool, tool_input=tool_input,
-                         cwd=cwd, workspace=workspace, source=source)
+                         cwd=cwd, workspace=workspace, source=source, record=record)
     except Exception as err:  # noqa: BLE001
         # Fail mode (Phase 0 decision): relay denies, everything else allows
         # with a visible warning so a guard bug never wedges every CLI.
         log.warning("guard: evaluate failed (%s): %s", source, err, exc_info=True)
         action = "deny" if source == "relay" else "allow"
         reason = f"Navide Guard error, {'denied' if action == 'deny' else 'allowed'}: {err}"
-        if source == "relay" or not switched_off():
+        if record and (source == "relay" or not switched_off()):
             _emit_failure(pane_id, reason, action="deny" if action == "deny" else "error")
         return Decision(action, "normal", ("guard-error",), reason, False)
 
@@ -129,7 +130,7 @@ def _emit_failure(pane_id: str, reason: str, *, action: str = "error") -> None:
         log.warning("guard: could not report a guard error", exc_info=True)
 
 
-def _evaluate(*, pane_id, vendor, tool, tool_input, cwd, workspace, source) -> Decision:
+def _evaluate(*, pane_id, vendor, tool, tool_input, cwd, workspace, source, record=True) -> Decision:
     tool_input = tool_input if isinstance(tool_input, dict) else {}
     store = runtime.store()
     overrides, branches = store.grading()
@@ -147,6 +148,8 @@ def _evaluate(*, pane_id, vendor, tool, tool_input, cwd, workspace, source) -> D
     if not enforced and level != "normal":
         reason = f"guard disabled; {reason}"
     decision = Decision(action, level, rule_ids, reason, tainted)
+    if not record:
+        return decision
     # Bookkeeping must never overturn the decision: an audit write failing
     # (database is locked) used to raise into evaluate()'s fail-open branch
     # and turn this ask/deny into an allow.

@@ -21,6 +21,7 @@ The root [README](../../README.md) introduces the product and current distributi
 |---|---|
 | [Getting started](getting-started.md) | Download the signed macOS build or the Windows or Linux installer, or install from source, then complete the first launch |
 | [User guide](user-guide.md) | Learn workspaces, panes, pipelines, coordination, Git, history, and editor workflows |
+| [Import from n8n](import-from-n8n.md) | Turn an exported n8n workflow into a pipeline: preview, credentials, external-content taint, n8n MCP |
 | [Troubleshooting](troubleshooting.md) | Resolve startup, permissions, agent-session, analyzer, and token-tracking problems |
 
 ## Trust and safety
@@ -38,6 +39,7 @@ The root [README](../../README.md) introduces the product and current distributi
 | [Architecture](architecture.md) | Understand process boundaries, state ownership, and major services |
 | [Adding a CLI vendor](../adding-a-cli-vendor.md) | Add an AI coding CLI: the two spec files, registration, and the checks CI enforces |
 | [CI and CLI regressions](ci-and-cli-regression.md) | Run deterministic regression suites, maintain vendor contracts, and understand native platform guarantees |
+| [UI verification](ui-verification.md) | Screenshot the main window through dev web mode, isolated from the real app and screen |
 | [CLI integration records](cli-extension-guide.md) | Per-vendor integration records: install routes, resume syntax, session storage formats |
 | [CLI vendor matrix](cli-vendor-matrix.md) | See every shipped CLI, the command it runs, and the capabilities its spec declares |
 | [Glossary](glossary.md) | One term per concept: Navide plugins, Agent Assets, CLI extensions, and the words never to use bare |
@@ -55,6 +57,7 @@ The root [README](../../README.md) introduces the product and current distributi
 |---|---|
 | [Inter-CLI messaging](inter-cli-messaging.md) | Address, send, receive and troubleshoot messages between CLI agents |
 | [Keyboard shortcuts](keybindings.md) | Review default keyboard commands and interaction patterns |
+| [What takes effect when](apply-timing.md) | See which changes apply at once, which need a new pane or a rebuild, and what never reloads in place |
 | [Editor design](editor-design.md) | Understand the current editor architecture and design direction |
 | [Historical milestone record](spec.md) | Review the original implementation milestone record |
 | [Changelog](../../CHANGELOG.md) | Review shipped changes by version |

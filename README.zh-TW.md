@@ -10,9 +10,13 @@ Navide 是一套開源、AI-native 的軟體工程環境，專為一個人調度
 
 [English](README.md) | 繁體中文 | [日本語](README.ja-JP.md)
 
-[下載 v0.2.32](https://github.com/Navide-dev/Navide/releases/tag/v0.2.32) | [開始使用](docs/zh-TW/getting-started.md) | [文件中心](docs/zh-TW/README.md) | [Roadmap](docs/zh-TW/roadmap.md)
+[下載 v0.2.34](https://github.com/Navide-dev/Navide/releases/tag/v0.2.34) | [開始使用](docs/zh-TW/getting-started.md) | [文件中心](docs/zh-TW/README.md) | [Roadmap](docs/zh-TW/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Navide-dev/Navide/total?label=downloads&logo=github&color=2ea043)](https://github.com/Navide-dev/Navide/releases)
+[![Commits per month](https://img.shields.io/github/commit-activity/m/Navide-dev/Navide?label=commits%2Fmonth&logo=git&logoColor=white&color=f0883e)](https://github.com/Navide-dev/Navide/commits/main)
+[![Last commit](https://img.shields.io/github/last-commit/Navide-dev/Navide?label=last%20commit&logo=github)](https://github.com/Navide-dev/Navide/commits/main)
+
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron)](https://www.electronjs.org/)
 [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js)](https://vuejs.org/)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python)](https://python.org/)
@@ -33,12 +37,16 @@ AI 改變了這個前提。一位工程師現在可以同時要求多個 Agent �
 
 AI 模型提供執行動力，Navide 提供駕馭這股力量所需的工程系統。
 
-```text
-傳統 IDE
-工程師 → 編輯檔案、操作工具 → 軟體
-
-Navide
-工程師 → 指揮目標、Agent、決策與證據 → 軟體
+```mermaid
+flowchart LR
+  subgraph trad["傳統 IDE"]
+    direction LR
+    e1["工程師"] --> w1["編輯檔案、<br/>操作工具"] --> s1["軟體"]
+  end
+  subgraph nav["Navide"]
+    direction LR
+    e2["工程師"] --> w2["指揮目標、Agent、<br/>決策與證據"] --> p2["平行的<br/>Agent Session"] --> s2["軟體"]
+  end
 ```
 
 工程師仍然對意圖、架構、風險、判斷與最終驗收負責；Agent 承接可重複的執行工作；Navide 讓整個過程保持可見、同步、可中斷並可恢復。
@@ -59,6 +67,13 @@ Navide
 
 ## 一套環境，三種工程循環
 
+```mermaid
+flowchart LR
+  g["Genesis<br/>從想法到第一個可運作成果"] --> e["Evolution<br/>持續發展產品<br/>反覆發生的日常循環"]
+  e <-->|"需要人的判斷時"| i["Intervention<br/>人類精準控制"]
+  e --> e
+```
+
 ### Genesis — 從想法到第一個可運作成果
 
 以可設定的 Pipeline 啟動新專案，涵蓋需求、規劃、設計、實作、安全審查與測試。多個 Agent slot 可以平行工作，並在各階段之間傳遞脈絡。
@@ -78,6 +93,29 @@ Navide 已經是創辦人持續開發這個專案時使用的主要工程環境�
 新專案從需求與 Pipeline 開始；日常產品工作透過多個 Agent Session 完成實作、測試、修正、審查與微調；整合的 mini IDE 則在需要檢查成果或精準編輯時選擇性開啟。
 
 這是創辦人親自使用產品的第一方證據，不是獨立客戶驗證。下一階段的證據，必須來自其他工程師在自己的真實專案中使用 Navide。
+
+### Navide 自己開發自己，用數字說
+
+| 自 2026-05-28 起 | |
+|---|---|
+| Commit | **4,182** |
+| 發版 | **87** |
+| 每月 Commit | **約 1,384** |
+
+近八週的每週 commit——每週都超過 130 個：
+
+| 週 | | Commit |
+|---|---|---|
+| 8 週前 | ██████ | 137 |
+| 7 週前 | ██████████████ | 324 |
+| 6 週前 | ████████ | 185 |
+| 5 週前 | █████████ | 209 |
+| 4 週前 | ███████████ | 253 |
+| 3 週前 | █████████████████████████ | 577 |
+| 2 週前 | █████████████ | 293 |
+| 上週 | █████████ | 204 |
+
+計數時間為 2026-10-27（v0.2.34）；頁首徽章顯示的是即時數字。
 
 ## 目前已具備
 
@@ -115,13 +153,13 @@ Local-first 不代表所有情況都完全離線。使用外部 Agent CLI、雲�
 
 ## 試用 Navide
 
-Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.32 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 安裝程式與 Linux x64 套件：
+Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.34 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 安裝程式與 Linux x64 套件：
 
-- [下載 DMG](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.dmg))
-- [下載 ZIP](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.zip))
-- [下載 Windows x64 安裝程式](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-x64.exe))
-- [下載 Windows ARM64 安裝程式](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-arm64.exe))
-- [下載 Linux AppImage](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-x86_64.AppImage))・[下載 Linux .deb](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-amd64.deb))
+- [下載 DMG](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-arm64.dmg))
+- [下載 ZIP](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-arm64.zip))
+- [下載 Windows x64 安裝程式](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-win-x64.exe))
+- [下載 Windows ARM64 安裝程式](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-win-arm64.exe))
+- [下載 Linux AppImage](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-x86_64.AppImage))・[下載 Linux .deb](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-amd64.deb))
 
 連結指向 dl.navide.dev，與 App 自動更新用的是同一個載點；旁邊的「GitHub」連結是 GitHub Release 上同一個檔案、逐位元相同（發版流程同時發佈兩邊並比對 checksum）。
 

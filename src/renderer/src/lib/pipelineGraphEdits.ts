@@ -24,6 +24,7 @@ export const NODE_SIZE: Record<GraphNode['kind'], { w: number; h: number }> = {
   trigger: { w: 168, h: 56 },
   slot: { w: 232, h: 76 },
   gate: { w: 196, h: 68 },
+  subpipeline: { w: 232, h: 76 },
 }
 
 const LAYER_DX = 300
@@ -185,17 +186,20 @@ export function opsAutoLayout(graph: PipelineGraph): GraphOp[] {
 // ── Swimlane badges: what the columns cannot draw ────────────────────────────
 
 export interface LaneBadge {
-  kind: 'reject' | 'skip'
+  kind: 'reject' | 'skip' | 'branch' | 'error'
   /** Edge to focus on the canvas when the badge is clicked. */
   edgeId: string
-  /** Target layer (1-based for display) for reject/skip; undefined otherwise. */
+  /** Target layer (1-based for display). */
   targetLayer?: number
   maxLoops?: number
+  /** Branch badges: the value the link is taken on. */
+  when?: string
 }
 
 /** Badges per node: reject loops leaving it (↺ back to layer N — for a gate
- *  that is also its pass/reject fork) and main edges that jump over a layer
- *  (⤳). These are
+ *  that is also its pass/reject fork), branch and error links leaving it (⑂ /
+ *  ⚠ — forward flow taken only on a value or a failure) and main edges that
+ *  jump over a layer (⤳). These are
  *  the edges the column layout cannot express, so the swimlane marks them and
  *  hands the user to the canvas. */
 export function laneBadges(graph: PipelineGraph): Map<string, LaneBadge[]> {
@@ -210,7 +214,12 @@ export function laneBadges(graph: PipelineGraph): Map<string, LaneBadge[]> {
     const from = layer.get(e.from)
     const to = layer.get(e.to)
     if (from === undefined || to === undefined) continue
-    if (!isMain(e)) {
+    if (e.kind === 'branch') {
+      const when = typeof e.when === 'string' ? e.when : e.when ? `${e.when.path} = ${JSON.stringify(e.when.equals)}` : ''
+      push(e.from, { kind: 'branch', edgeId: e.id, targetLayer: to + 1, when })
+    } else if (e.kind === 'error') {
+      push(e.from, { kind: 'error', edgeId: e.id, targetLayer: to + 1 })
+    } else if (!isMain(e)) {
       push(e.from, { kind: 'reject', edgeId: e.id, targetLayer: to + 1, maxLoops: e.maxLoops })
     } else if (from >= 0 && to - from > 1) {
       push(e.from, { kind: 'skip', edgeId: e.id, targetLayer: to + 1 })

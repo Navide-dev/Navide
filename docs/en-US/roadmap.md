@@ -39,7 +39,7 @@ The user remains responsible for intent, lasting decisions, credentials, destruc
 
 | Area | Today | Destination |
 |---|---|---|
-| Genesis | Configurable linear SDLC pipeline | Adaptive creation workflow producing a validated initial system and durable project intelligence |
+| Genesis | Configurable SDLC pipeline graph with parallel stages, approval gates, bounded reject loops, pinned nodes and restart-from | Adaptive creation workflow producing a validated initial system and durable project intelligence |
 | Evolution | Manual panes and maintenance tasks | Intent-driven daily workspace coordinating multiple owned, dependent sessions |
 | Intervention | Monaco, Diff, terminal, Git, diagnostics, review | Complete navigation, editing, execution, debugging, testing, review, versioning, and delivery environment |
 | Coordination | Manager protocol, handoffs, history, session attribution | Structured shared state, ownership, dependency, conflict, and progress synchronization |

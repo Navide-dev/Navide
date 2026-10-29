@@ -26,6 +26,9 @@ Pane 空下來時，把訊息輸入進去。
   取消則整個放棄這次重新命名。
 - 清空 Pane 標題會讓 Handle 回到自動推導的標題，若沒有則回到 Vendor 標籤。
 - Handle 在重新啟動後仍然保留。
+- 比對是完全一致、區分大小寫：`Reviewer` 送不到 `reviewer`。只有廣播位址（`all`、
+  `*`）不分大小寫。沒有 `parent` 這種別名 —— 被 spawn 的 Pane 會拿到父 Pane 的
+  實際位址，必須用那個位址。
 - 一般 Terminal Pane（登入 shell，agent key `terminal`）也有 Handle，但只能接收
   —— shell 沒有 MCP 工具，也沒有東西會掃描它的輸出找訊息區塊。見
   [一般 Terminal Pane](#一般-terminal-pane)。
@@ -86,6 +89,10 @@ Parser 套用的規則：
 - 缺少 `---MSG-END---` 是可以容忍的：區塊會在下一個 `---MSG-START---` 或該回合
   結束時關閉。
 - 目標為空或內文為空的區塊會被丟棄。
+- 沒有關閉的 fence 會一路延續到回合結束。若是在區塊內文裡開的，那個區塊會一直
+  開著：它的 `---MSG-END---` 與後面所有 marker 都變成內文（以零寬空白打斷），
+  所以那一個區塊會在回合結束時送出，後面的區塊都不會各自送出。若是在任何區塊
+  之前開的，後面所有區塊都會被藏起來，也不會為它們送出格式通知。
 - 一個回合可以包含多個區塊；全部都會被送出。
 - 內文中任何 `---MARKER---` token 都會在投遞前以零寬空白打斷，因此被轉發的文字
   永遠無法再次觸發 Parser。
@@ -176,11 +183,23 @@ Rebased onto main — please re-run the suite.
 當兩個開啟中的 Workspace 有相同的資料夾名稱時，請使用完整路徑
 （`/Users/me/Agent-Team/reviewer`）。不含 `/` 的目標一律在傳送端的視窗內解析。
 
+反過來只對 `cli_send` 成立。MSG 區塊會先找名稱完全一致的本地 Pane，所以名稱就叫
+`fix/bug` 的 Pane 在自己的視窗裡仍然收得到；`cli_send` 則把任何含 `/` 的目標都當
+成限定位址，這種 Pane 在那裡只能用 `pane_id` 指定。三段式的
+`<device>/<workspace>/<pane>` 只有在第一段指名一台裝置（另一台機器的 id，或
+roster 裡的裝置）、而且沒有本地目標先符合整個位址時，才會送往另一台機器；否則
+`a/b/c` 會被讀成 workspace `a/b` 裡的 Pane `c`。`cli_read_log` 沒有遠端分支：
+給它另一台裝置的位址，會回 `unknown-target`，看起來像打錯字，其實不是。
+
 ### 回覆
 
 送達的訊息會帶一個 correlation id。把它原樣放回 `re:` 欄位，就能把回覆與它所回應
 的訊息串起來，這也是 Messages 面板把兩列串成同一串的依據。沒有寫 `re:` 的回覆一
 樣會送達 —— 只是抵達時沒有連結關係。
+
+`reply_to` 不會傳到另一台裝置。經 Navide-Server 轉送的訊息抵達時不帶它，所以寄件
+端那一列永遠不會和對方的回覆連在一起；對方那邊仍會把自己的回覆串到它收到的那則
+訊息上。
 
 ---
 
@@ -504,6 +523,8 @@ Claude Code 會在回合結束時執行 Stop hook，而 Stop hook 可以回答�
 hook 執行期間會擋住 Agent，因此視窗有 **1.5 秒**可以回答。超過之後 hook 就不再等
 待，該 Pane 正常停止；被保留的訊息會被放回它佇列的最前端，並以一般的輸入方式送
 出。沒有東西遺失，也沒有東西被送達兩次 —— 遲到的回答會被告知 hook 早已放棄了。
+視窗把答案回給 Backend 的那一次呼叫本身上限是 **5 秒**；呼叫失敗或在時限內沒有
+回應，訊息會以同樣方式放回佇列最前端。
 
 「沒有排隊中的訊息」這個回答是一個**空回應**，而不是 JSON：Claude Code 會把 hook
 的 stdout 讀成它的決定，而它不認得的 JSON 物件會被當成 hook 錯誤回報給你。空的表
@@ -512,7 +533,8 @@ hook 執行期間會擋住 Agent，因此視窗有 **1.5 秒**可以回答。超
 被擋下的回合仍然會寫進 CLI 的對話 Log，而它的 reader 會在稍後把它回報為一次回合
 結束。Navide 會把那筆記錄標記為 superseded：從它讀出來的一切（該 Pane 對其他人定
 址的 MSG 區塊、它的 sentinel、它的 auto-name）仍然算數，但它不再代表該 Pane 已經
-空下來 —— 因為它並沒有。
+空下來 —— 因為它並沒有。這個標記在 hook 擋下該 Pane 之後維持 **15 秒**，或在下一次
+被放行的 Stop hook 時提前清除。
 
 ### 它沒有涵蓋的部分
 
@@ -650,7 +672,7 @@ hook：這次切換要等到那個 Pane 下一次啟動才對它生效，在那�
 
 | 防護 | 上限 |
 |---|---|
-| 每個「寄件者→目標」配對的 Rate Limit | 每 60 秒 5 則訊息（聊天頻道寄件者：30 則，見頻道一節） |
+| 每個「寄件者→目標」配對的 Rate Limit | 每 60 秒 5 則訊息，從另一台裝置轉送進來的訊息也算（聊天頻道寄件者：30 則，見頻道一節） |
 | 每個目標 Pane 的待處理訊息 | 10 |
 | 投遞記錄 | 最後 500 列 |
 | 全域暫停 | Messages 面板標題列 |
@@ -711,6 +733,8 @@ hook：這次切換要等到那個 Pane 下一次啟動才對它生效，在那�
 | `busy` / `not-ready` | 目標 Pane 不在可以接受輸入的狀態 |
 | `starting` | 目標 Pane 仍在啟動中 |
 | `typing` | 有人正在目標 Pane 中打字 |
+| `composer` | 先前推送的文字可能還留在目標的輸入框（它的送出失敗、清除也沒有確認）；在 Pane 出現比那次推送更新的活動之前不會輸入任何東西 |
+| `pty-blocked` | 正在輸入，但目標的終端機已經停止讀取輸入；會一直保留到它恢復讀取 |
 | `mid-turn` | 目標 Agent 正在工作（對會在回合中途把輸入排隊的 Vendor 絕不會回報這個） |
 | `settling` | 目標剛剛安靜下來；正在等它穩定（同樣的豁免） |
 | `paused` | 這個視窗的投遞已暫停 |
@@ -743,7 +767,6 @@ Agent 不必有 Messages 面板可看，也能讀到同一個原因 ——
 | `rate-limit` / `queue-full` | 上面的某條防護欄 |
 | `pane-closed` | 目標在投遞前就關閉了 |
 | `inject-failed` / `inject-error` | 把它輸入到該 Pane 沒有成功 |
-| `delivery-unconfirmed` | 不是失敗：已輸入並送出到剛 resume 的 CLI，但它還沒顯示收到。該列顯示為 delivered 並附上這個提醒；重送前先查看該 Pane。transcript 出現這則訊息後提醒會消失 |
 | `window-reloaded` | 視窗在它傳輸中途重新載入 |
 | `no-report` | 另一個視窗始終沒有回報結果 |
 | `receiver-error` | 另一台裝置收到了，但處理時出錯；錯誤堆疊在它的 Backend log 裡。重試可能會成功 |
@@ -751,6 +774,15 @@ Agent 不必有 Messages 面板可看，也能讀到同一個原因 ——
 | `unknown-target-in-workspace` / `ambiguous-target` | Workspace 解析成功，但 Pane 名稱沒有 —— 或是對應到兩個 |
 | `unknown-pane-id` | 一個在這台機器上指不到任何 Pane 的 `pane_id` —— 去 `cli_list_targets` 讀一個新的 |
 | `no-group` | 沒有 Pane、因此也沒有群組的呼叫端，要求 `cli_send` 廣播給群組 |
+
+`delivery-unconfirmed` 不在這張表裡，因為它不是失敗：訊息已輸入並送出到剛
+resume 的 CLI，但它還沒顯示收到。Messages 面板那一列顯示為 `delivered` 並附上
+這個提醒，`cli_check_message` 回報的狀態是 `unconfirmed`；transcript 出現這則
+訊息後，兩者都會變成單純的 `delivered`。重送前先查看該 Pane —— 它可能已經在跑了。
+
+「refused」也不是一種狀態。還沒排進佇列就被擋下的送出（例如位址不存在、
+指令被拒）回傳 `ok: false`，而且沒有 `msg_key`；排進佇列之後才被擋下的，會以
+這張表裡的原因變成 `failed`，若是另一台裝置的 Pane 政策拒絕則是 `rejected`。
 
 ---
 

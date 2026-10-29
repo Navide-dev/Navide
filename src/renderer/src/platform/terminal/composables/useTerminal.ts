@@ -842,6 +842,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // When Claude's PermissionRequest hook raised a wait, 0 when none: the box
   // stays open until answered, so output cannot end it. See holdNeedsInput.
   const awaitingHeldAt = ref<number>(0)
+  // The screen watcher sees the vendor's box on screen right now. A state, not
+  // an event: it holds while the box is there and ends when the box leaves,
+  // with no settle window to absorb what the CLI prints after the answer.
+  // Kept apart from awaitingInputAt so a box leaving never ends a wait the
+  // Notification hook raised. See markBoxOnScreen.
+  const boxOnScreen = ref(false)
   // The tool that box is for, as the backend keyed it. Not reactive: only
   // App.vue's release decision reads it.
   let awaitingHeldKey = ''
@@ -1129,6 +1135,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // A turn that ended is not waiting on anyone: clear the flag so a stale
     // notification can't hold the badge on AWAITING past the turn.
     awaitingInputAt.value = 0
+    boxOnScreen.value = false
     releaseNeedsInputHold()
   }
 
@@ -1148,6 +1155,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     awaitingInputAt.value = 0
   }
 
+  /** The screen watcher's view of the box: on screen (true) or not. Only that
+   *  watcher calls this, once per poll. It never touches the hook's wait. */
+  function markBoxOnScreen(onScreen: boolean): void {
+    boxOnScreen.value = onScreen
+  }
+
   /** A permission wait is on right now: held, or raised by the Notification hook
    *  or the screen watcher and not yet settled. App.vue asks before raising one
    *  so a box two signals report chimes once. Edge: a Notification wait older
@@ -1156,6 +1169,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   function permissionWaitLive(): boolean {
     return (
       awaitingHeldAt.value > 0 ||
+      boxOnScreen.value ||
       (awaitingInputAt.value > 0 &&
         lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS)
     )
@@ -2282,6 +2296,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     return term.modes.bracketedPasteMode === true
   }
 
+  /** The xterm's size now, for App.vue's inject.failed diagnostic (#448). */
+  function terminalSize(): { cols: number; rows: number } {
+    return { cols: term.cols, rows: term.rows }
+  }
+
   /** The other half of the same problem, and the precise one: a prompt answered
    *  with a single key never reaches Enter, so nothing above empties the buffer
    *  and the pane stays "being typed at" for good. Leaving `awaiting`/`question`
@@ -2638,7 +2657,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     const id = sessionId.value
     try {
       const resp = await terminalPort.reattach([id], 0, 0)
-      if (!resp.ok || !resp.payload || !resp.payload.alive.includes(id)) {
+      // Only an explicit answer that leaves this session out means the PTY is
+      // gone. An error reply says nothing about the PTY — it may well be alive
+      // — so it is treated like the probe throwing: leave the pane alone and
+      // let the next reconnect ask again.
+      if (!resp.ok || !resp.payload) return
+      if (!resp.payload.alive.includes(id)) {
         // PTY died while disconnected — mark exited so the user sees it
         status.value = 'exited'
         term.writeln('\r\n\x1b[33m[session ended while disconnected]\x1b[0m')
@@ -3055,6 +3079,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // timestamp here would show the fresh pane as parked on a question that
     // no longer exists.
     awaitingInputAt.value = 0
+    boxOnScreen.value = false
     releaseNeedsInputHold()
     questionAt.value = 0
     deliveredPendingCount.value = 0
@@ -3535,9 +3560,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     hasDraft,
     lastUserKeyAt,
     isBracketedPasteActive,
+    terminalSize,
     markTurnComplete,
     markNeedsInput,
     clearNeedsInput,
+    markBoxOnScreen,
     holdNeedsInput,
     releaseNeedsInputHold,
     awaitingHeld: (): { since: number; key: string } => ({ since: awaitingHeldAt.value, key: awaitingHeldKey }),

@@ -9,6 +9,7 @@ import { withDescendants } from '../lib/paneLineage'
 import { setBatchDragImage } from '../lib/batchDragImage'
 import { paneStatusLabelText, type PaneStatusValue } from '../lib/paneStatusLabel'
 import { rollupPaneStatus } from '../lib/paneStatusRollup'
+import { pipelineDisplayName, roleDisplayOneLine } from '../lib/builtinNames'
 import { subtreeSignals } from '../lib/paneSubtreeStatus'
 import { workspaceAliasKey, workspaceAliasOf, workspaceBasename, workspaceDisplayName } from '../lib/workspaceAlias'
 import type { SidebarMode } from '../lib/sidebarMode'
@@ -292,6 +293,8 @@ export interface PipelineSummary {
   name: string
   builtin: boolean
   stage_count: number
+  /** Steps as the editor counts them; absent from an older backend. */
+  step_count?: number
 }
 
 export type PipelineState = 'idle' | 'running' | 'completed' | 'aborted'
@@ -310,6 +313,14 @@ export interface PipelineStatusView {
   projectFile: string
   pipelineLogFile: string
   backendLogFile: string
+  /** The gate the run is paused on, or null; the sidebar's Next stays
+   *  disabled until it is passed or sent back. */
+  /** prompt: what the gate asks to check; rejectEndsRun: Send Back would end
+   *  the run (no loop back, or its budget spent). */
+  awaitingGate?: { gateId: string; label: string; prompt?: string; rejectEndsRun?: false | 'no-edge' | 'exhausted' } | null
+  /** A sub-pipeline's child run: the parent runs waiting on it, outermost
+   *  first. Absent for a run that is no one's child. */
+  parents?: Array<{ name: string; pipelineId: string }>
 }
 
 export interface ExistingProjectInfo {
@@ -332,6 +343,11 @@ export interface ExistingProjectInfo {
   nodeGate?: { gateId?: string; nextIndex?: number } | null
   /** Last reported per-node run states (project node_states). */
   nodeStates?: Record<string, import('../lib/pipelineGraph').NodeRunState>
+  /** Recorded per-node outputs (project node_outputs). */
+  nodeOutputs?: Record<string, unknown>
+  /** Parent runs suspended at a sub-pipeline, outermost first (project
+   *  run_stack); absent when there are none. */
+  runStack?: Array<{ id: string; pipeline_name: string; node_id: string; run?: { pipeline_id?: string } }>
 }
 
 export interface AnalyzerModelOption {
@@ -375,6 +391,10 @@ interface Props {
   pipelines?: PipelineSummary[]
   /** Currently active pipeline id (global). */
   activePipelineId?: string
+  /** The pipeline this window's run belongs to; '' with no run. Running a
+   *  pipeline no longer makes it the default, so this, not activePipelineId,
+   *  names the running one. */
+  runPipelineId?: string
   /** Full backend instance — forwarded to GitPane for git operations. */
   backend?: ReturnType<typeof useBackend>
   /** Past spawns (incl. backend-backfilled manual panes) for the resume datalist. */
@@ -1147,6 +1167,8 @@ const emit = defineEmits<{
   (e: 'context-menu', paneId: string, ev: MouseEvent): void
   (e: 'pipeline-start', payload: { task: string; workspacePath: string; pipelineId?: string }): void
   (e: 'pipeline-next'): void
+  (e: 'pipeline-gate-approve', gateId: string): void
+  (e: 'pipeline-gate-reject', gateId: string, comment?: string): void
   (e: 'pipeline-abort'): void
   (e: 'pipeline-reset'): void
   (e: 'update:yoloEnabled', v: boolean): void
@@ -1769,6 +1791,12 @@ const openedPipeline = computed(
   () => props.pipelines?.find((p) => p.id === openedPipelineId.value) ?? null
 )
 
+/** A listed pipeline's name as shown (a builtin in the UI language); undefined when not listed. */
+function pipelineNameById(id: string | null | undefined): string | undefined {
+  const p = props.pipelines?.find((x) => x.id === id)
+  return p ? pipelineDisplayName(p) : undefined
+}
+
 function openPipelineDetail(id: string): void {
   openedPipelineId.value = id
   sidebarView.value = 'pipeline'
@@ -1848,8 +1876,11 @@ watch(visibleTabs, (tabs) => {
   showSidebarTab(tabs[0].id)
 }, { immediate: true })
 
+// The run's pipeline: the one this window ran, else the default (no run yet).
+const runId = computed(() => props.runPipelineId || props.activePipelineId || '')
+
 function isPipelineRunning(pipelineId: string): boolean {
-  return pipelineId === (props.activePipelineId ?? '') && props.pipeline.state === 'running'
+  return pipelineId === runId.value && props.pipeline.state === 'running'
 }
 
 // The unfinished run recorded in project.json belongs to exactly ONE pipeline.
@@ -1860,7 +1891,7 @@ function isPipelineRunning(pipelineId: string): boolean {
 const resumeMatchesActivePipeline = computed<boolean>(() => {
   const owner = props.existingProject?.pipelineId ?? ''
   if (!owner) return true
-  return owner === (props.activePipelineId ?? '')
+  return owner === runId.value
 })
 
 // Name of the pipeline the unfinished run belongs to, for the card shown when
@@ -1868,7 +1899,7 @@ const resumeMatchesActivePipeline = computed<boolean>(() => {
 // been deleted, and the id is still more use than an empty string.
 const resumeOwnerPipelineName = computed<string>(() => {
   const owner = props.existingProject?.pipelineId ?? ''
-  return props.pipelines?.find((p) => p.id === owner)?.name ?? owner
+  return pipelineNameById(owner) ?? owner
 })
 
 // ── Pipeline list pagination ───────────────────────────────────────────────
@@ -1988,6 +2019,14 @@ function openPipelineManager(pipelineId?: string): void {
   emit('open-pipeline-manager', pipelineId)
 }
 
+/** A pipeline's size in steps, as the editor and Executions count it; stages
+ *  only when an older backend sends no step count. */
+function sizeLabel(p: PipelineSummary): string {
+  return p.step_count === undefined
+    ? i18n.global.t('label.stage-count', { count: p.stage_count })
+    : i18n.global.t('label.step-count', { count: p.step_count })
+}
+
 function interruptTooltip(p: ActivePaneView): string {
   if (p.status !== 'running') return i18n.global.t('action.interrupt-not-running')
   return i18n.global.t('action.interrupt')
@@ -2060,7 +2099,7 @@ function showResumeError(message: string): void {
 
 // Stage count for the pipeline currently being viewed (may differ from active pipeline)
 const effectiveStageCount = computed(() => {
-  if (!openedPipelineId.value || openedPipelineId.value === (props.activePipelineId ?? '')) {
+  if (!openedPipelineId.value || openedPipelineId.value === runId.value) {
     return props.stages.length
   }
   return openedPipeline.value?.stage_count ?? 0
@@ -2074,6 +2113,16 @@ const canRunPipeline = computed(
     props.pipeline.state !== 'running' &&
     effectiveStageCount.value > 0
 )
+
+/** The condition holding Run back, in canRunPipeline's order ('' when it can
+ *  run, or while a run is going — Run is not offered then). */
+const runBlockedReason = computed(() => {
+  if (props.backendStatus !== 'connected') return i18n.global.t('pipelineEditor.run.blocked-backend')
+  if (!workspacePath.value.trim()) return i18n.global.t('pipelineEditor.run.blocked-workspace')
+  if (effectiveStageCount.value <= 0) return i18n.global.t('pipelineEditor.state.empty-title')
+  if (!taskDescription.value.trim()) return i18n.global.t('pipelineEditor.run.blocked-task')
+  return ''
+})
 
 /** Set while a spawn is on its way from a workspace heading other than this
  *  window's primary. Cleared once the request is out — the card's own button
@@ -2820,7 +2869,7 @@ function startPipeline(): void {
   emit('pipeline-start', {
     task: taskDescription.value.trim(),
     workspacePath: workspacePath.value,
-    // Pass the opened pipeline id so App.vue activates it first if it differs from active
+    // Pass the opened pipeline id so App.vue runs it; the default pipeline stays as it is
     pipelineId: openedPipelineId.value || undefined,
   })
   backToList()
@@ -2891,37 +2940,42 @@ const pipelineNextStage = computed<Stage | null>(() => {
   return props.stages[props.pipeline.stageIndex + 1] ?? null
 })
 
+const pipelineGate = computed(() => (props.pipeline.state === 'running' ? props.pipeline.awaitingGate ?? null : null))
+/** Optional reason sent back with a Send Back; cleared for each new gate. */
+const gateComment = ref('')
+watch(() => pipelineGate.value?.gateId, () => { gateComment.value = '' })
+
 function injectionLabel(status: ActivePaneView['injectionStatus']): string {
   switch (status) {
     case 'pending':
-      return 'role: waiting'
+      return i18n.global.t('pipelineEditor.paneStatus.role.pending')
     case 'scheduled':
-      return 'role: injecting'
+      return i18n.global.t('pipelineEditor.paneStatus.role.scheduled')
     case 'sent':
-      return 'role: injected'
+      return i18n.global.t('pipelineEditor.paneStatus.role.sent')
     case 'failed':
-      return 'role: inject failed'
+      return i18n.global.t('pipelineEditor.paneStatus.role.failed')
     case 'skipped':
-      return 'role: skipped'
+      return i18n.global.t('pipelineEditor.paneStatus.role.skipped')
   }
 }
 
 function preparationLabel(status: ActivePaneView['preparationStatus']): string {
   switch (status) {
     case 'starting':
-      return 'setup: starting CLI'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.starting')
     case 'checking-dialog':
-      return 'setup: checking dialog'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.checking-dialog')
     case 'settling':
-      return 'setup: waiting prompt'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.settling')
     case 'injecting-role':
-      return 'setup: injecting role'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.injecting-role')
     case 'waiting-agent':
-      return 'setup: waiting agent'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.waiting-agent')
     case 'ready':
-      return 'setup: ready'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.ready')
     case 'failed':
-      return 'setup: failed'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.failed')
     default:
       return ''
   }
@@ -2931,15 +2985,15 @@ function kickoffLabel(status?: ActivePaneView['kickoffStatus']): string {
   if (!status || status === 'none') return ''
   switch (status) {
     case 'pending':
-      return '· kickoff: queued'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.pending')
     case 'sent':
-      return '· kickoff: sent'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.sent')
     // Written, but the only echo we got was the buffer growing — which a
     // booting CLI does regardless. Say so rather than claiming it was sent.
     case 'unverified':
-      return '· kickoff: unverified'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.unverified')
     case 'failed':
-      return '· kickoff: failed'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.failed')
   }
 }
 
@@ -3415,7 +3469,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
     <section class="block panel-section">
       <div class="row between">
         <label class="lbl">{{ $t('label.pipelines') }}</label>
-        <button class="ghost manage-btn" :title="$t('action.manage-pipelines')" @click="openPipelineManager()">⚙</button>
+        <button class="ghost manage-btn" @click="openPipelineManager()">{{ $t('action.manage-pipelines') }}</button>
       </div>
       <ul v-if="pipelines && pipelines.length && pipeline.state !== 'running' && pipeline.state !== 'aborted'" class="pipeline-list">
         <li
@@ -3425,17 +3479,17 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :class="{ 'pipeline-active': p.id === activePipelineId }"
           @click="openPipelineDetail(p.id)"
         >
-          <span class="pipeline-item-name" v-truncate>{{ p.name }}</span>
-          <span class="pipeline-item-meta">{{ $t('label.stage-count', { count: p.stage_count }) }}</span>
+          <span class="pipeline-item-name" v-truncate>{{ pipelineDisplayName(p) }}</span>
+          <span class="pipeline-item-meta">{{ sizeLabel(p) }}</span>
           <span
             class="pipeline-item-badge"
             :class="isPipelineRunning(p.id) ? 'running'
-              : p.id === activePipelineId && pipeline.state === 'completed' ? 'done'
+              : p.id === runId && pipeline.state === 'completed' ? 'done'
               : existingProject?.pipelineId === p.id && existingProject?.nextStageIndex < 0 ? 'done'
               : 'idle'"
           >
             {{ isPipelineRunning(p.id) ? `● ${$t('paneStatus.running')}`
-              : p.id === activePipelineId && pipeline.state === 'completed' ? `✓ ${$t('label.pipeline-runs-done', { count: existingProject?.runCount ?? 1 })}`
+              : p.id === runId && pipeline.state === 'completed' ? `✓ ${$t('label.pipeline-runs-done', { count: existingProject?.runCount ?? 1 })}`
               : existingProject?.pipelineId === p.id && existingProject?.nextStageIndex < 0 ? `✓ ${$t('label.pipeline-runs-done', { count: existingProject.runCount })}`
               : `○ ${$t('paneStatus.idle')}` }}
           </span>
@@ -3497,7 +3551,16 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <div class="pipeline-running-divider"></div>
         <div class="pipeline-running-name">
           <div class="prn-title">
-            ▶ {{ pipelines?.find(p => p.id === activePipelineId)?.name ?? $t('label.pipelines') }}
+            ▶ {{ pipelineNameById(runId) ?? $t('label.pipelines') }}
+          </div>
+          <!-- A sub-pipeline's child run: where it was called from, and a way
+               back to the parent's runs. -->
+          <div v-if="pipeline.parents?.length" class="prn-crumbs" data-test="run-parents" :aria-label="$t('pipelineEditor.controlPane.parents')">
+            <template v-for="(p, i) in pipeline.parents" :key="i">
+              <button class="ghost prn-crumb" :title="$t('pipelineEditor.controlPane.open-parent')" @click="openPipelineManager(p.pipelineId || undefined)">{{ p.name }}</button>
+              <span class="prn-crumb-sep" aria-hidden="true">›</span>
+            </template>
+            <span class="prn-crumb-here">{{ pipelineNameById(runId) ?? '' }}</span>
           </div>
           <div v-if="pipeline.task" class="prn-task" v-truncate>{{ pipeline.task }}</div>
           <div class="prn-meta">
@@ -3506,7 +3569,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </div>
           <!-- Full run control (gates, rerun-from-step, per-step state) lives
                in the Pipeline workspace; this card stays compact. -->
-          <button class="ghost prn-open" @click="openPipelineManager(activePipelineId || undefined)">
+          <button class="ghost prn-open" @click="openPipelineManager(runId || undefined)">
             {{ $t('pipelineEditor.controlPane.open-in-canvas') }}
           </button>
         </div>
@@ -3518,10 +3581,35 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             {{ $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: pipeline.totalStages }) }}
             <span v-if="pipelineCurrentStage" class="muted">· {{ pipelineCurrentStage.shortTitle }}</span>
           </div>
+          <div v-if="pipelineGate" class="pipeline-gate">
+            <p class="hint warn pipeline-gate-label">{{ $t('pipelineEditor.run.gate', { name: pipelineGate.label }) }}</p>
+            <p class="hint pipeline-gate-prompt">{{ pipelineGate.prompt || $t('pipelineEditor.gate.default-prompt') }}</p>
+            <textarea
+              v-model="gateComment"
+              class="pipeline-gate-comment"
+              rows="2"
+              spellcheck="false"
+              :placeholder="$t('pipelineEditor.gate.comment')"
+              :aria-label="$t('pipelineEditor.gate.comment')"
+            ></textarea>
+            <div class="row pipeline-row">
+              <button class="primary wide pipeline-gate-approve" @click="emit('pipeline-gate-approve', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.approve') }}</button>
+              <button class="ghost pipeline-gate-reject" @click="emit('pipeline-gate-reject', pipelineGate.gateId, gateComment.trim())">{{ $t('pipelineEditor.gate.reject') }}</button>
+            </div>
+            <p v-if="pipelineGate.rejectEndsRun" class="hint warn pipeline-gate-ends">{{ $t('pipelineErrors.gate.ends-run-hint') }}</p>
+            <p class="hint pipeline-gate-why">{{ $t('pipelineEditor.controlPane.next-gated') }}</p>
+          </div>
           <div class="row pipeline-row">
-            <button class="primary wide" :disabled="!pipelineNextStage" @click="emit('pipeline-next')">
-              {{ pipelineNextStage ? `Next → ${pipelineNextStage.shortTitle}` : $t('action.finish') }}
+            <button
+              v-if="pipelineNextStage"
+              class="primary wide"
+              :disabled="!!pipelineGate"
+              :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
+              @click="emit('pipeline-next')"
+            >
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: pipelineNextStage.shortTitle }) }}
             </button>
+            <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
           </div>
         </div>
@@ -4435,7 +4523,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
                 ⚙ {{ $t('action.settings') }}
               </button>
             </div>
-            <p class="role-line" v-truncate>{{ currentRole.one_line }}</p>
+            <p class="role-line" v-truncate>{{ roleDisplayOneLine(currentRole) }}</p>
             <pre v-if="previewOpen" class="prompt-preview">{{ currentRole.system_prompt }}</pre>
           </div>
           <div v-else class="prompt-block warn-block">
@@ -4460,14 +4548,14 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
       <section class="block pipeline-detail-header">
         <div class="pipeline-detail-nav">
           <button class="ghost back-btn" @click="backToList">← {{ $t('action.back') }}</button>
-          <span class="pipeline-detail-name" v-truncate>{{ openedPipeline?.name ?? openedPipelineId }}</span>
+          <span class="pipeline-detail-name" v-truncate>{{ openedPipeline ? pipelineDisplayName(openedPipeline) : openedPipelineId }}</span>
           <span v-if="openedPipelineId === activePipelineId" class="active-tag">{{ $t('label.default') }}</span>
-          <button class="ghost manage-btn" :title="$t('action.manage-pipelines')" @click="openPipelineManager(openedPipelineId || undefined)">⚙</button>
+          <button class="ghost manage-btn" @click="openPipelineManager(openedPipelineId || undefined)">{{ $t('action.manage-pipelines') }}</button>
         </div>
       </section>
       <section class="block" :class="{ pipeline: pipelineOpen }">
         <button class="lbl collapsible-header" @click="pipelineOpen = !pipelineOpen">
-          {{ pipelineOpen ? '▾' : '▸' }} {{ openedPipeline?.name ?? $t('label.pipelines') }} · {{ $t('label.stage-count', { count: effectiveStageCount }) }}
+          {{ pipelineOpen ? '▾' : '▸' }} {{ openedPipeline ? pipelineDisplayName(openedPipeline) : $t('label.pipelines') }} · {{ openedPipeline ? sizeLabel(openedPipeline) : $t('label.stage-count', { count: effectiveStageCount }) }}
         </button>
         <template v-if="pipelineOpen">
         <div
@@ -4576,12 +4664,12 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </button>
         </div>
         <div v-if="pipeline.state === 'idle' || pipeline.state === 'completed' || pipeline.state === 'aborted'" class="row pipeline-row">
-          <button class="primary wide" :disabled="!canRunPipeline" @click="startPipeline">
+          <button class="primary wide" :disabled="!canRunPipeline" :title="runBlockedReason || undefined" @click="startPipeline">
             {{ $t('action.run-pipeline') }}
           </button>
           <button
             v-if="pipeline.state !== 'idle'"
-            class="ghost"
+            class="danger"
             @click="emit('pipeline-reset')"
             :title="$t('action.clear-pipeline')"
           >
@@ -4598,14 +4686,35 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               · {{ pipelineCurrentStage.shortTitle }}
             </span>
           </div>
+          <div v-if="pipelineGate" class="pipeline-gate">
+            <p class="hint warn pipeline-gate-label">{{ $t('pipelineEditor.run.gate', { name: pipelineGate.label }) }}</p>
+            <p class="hint pipeline-gate-prompt">{{ pipelineGate.prompt || $t('pipelineEditor.gate.default-prompt') }}</p>
+            <textarea
+              v-model="gateComment"
+              class="pipeline-gate-comment"
+              rows="2"
+              spellcheck="false"
+              :placeholder="$t('pipelineEditor.gate.comment')"
+              :aria-label="$t('pipelineEditor.gate.comment')"
+            ></textarea>
+            <div class="row pipeline-row">
+              <button class="primary wide pipeline-gate-approve" @click="emit('pipeline-gate-approve', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.approve') }}</button>
+              <button class="ghost pipeline-gate-reject" @click="emit('pipeline-gate-reject', pipelineGate.gateId, gateComment.trim())">{{ $t('pipelineEditor.gate.reject') }}</button>
+            </div>
+            <p v-if="pipelineGate.rejectEndsRun" class="hint warn pipeline-gate-ends">{{ $t('pipelineErrors.gate.ends-run-hint') }}</p>
+            <p class="hint pipeline-gate-why">{{ $t('pipelineEditor.controlPane.next-gated') }}</p>
+          </div>
           <div class="row pipeline-row">
             <button
+              v-if="pipelineNextStage"
               class="primary wide"
-              :disabled="!pipelineNextStage"
+              :disabled="!!pipelineGate"
+              :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ pipelineNextStage ? `Next → ${pipelineNextStage.shortTitle}` : $t('action.finish') }}
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: pipelineNextStage.shortTitle }) }}
             </button>
+            <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
           </div>
         </div>
@@ -4615,8 +4724,8 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <p v-else-if="pipeline.state === 'aborted'" class="hint warn">
           {{ $t('label.pipeline-aborted-paused') }}
         </p>
-        <p v-else-if="pipeline.state === 'idle' && !canRunPipeline" class="hint">
-          {{ $t('label.provide-task') }}
+        <p v-else-if="pipeline.state === 'idle' && !canRunPipeline" class="hint pipeline-run-blocked">
+          {{ runBlockedReason }}
         </p>
         </template>
       </section>
@@ -5396,6 +5505,8 @@ button.icon-btn.muted:hover {
   color: var(--text-bright);
 }
 .manage-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: var(--font-2xs);
   padding: 2px 6px;
   color: var(--text-secondary);
@@ -5614,6 +5725,21 @@ button.icon-btn.muted:hover {
   color: var(--success-fg);
   letter-spacing: 0.02em;
 }
+.prn-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+}
+.prn-crumb {
+  padding: 0 2px;
+  font-size: var(--font-2xs);
+  color: var(--accent-fg);
+}
+.prn-crumb-sep { color: var(--text-secondary); }
+.prn-crumb-here { color: var(--text-bright); font-weight: 600; }
 .prn-task {
   font-size: var(--font-2xs);
   color: var(--text-bright);

@@ -208,7 +208,7 @@ describe('MemoryPane', () => {
 
     expect(send).toHaveBeenCalledWith('memory.list', { workspace_path: '' })
     const groups = wrapper.findAll('.memory-group')
-    expect(groups[1].find('.memory-group-note').text()).toContain('No folder is open')
+    expect(groups[1].find('.settings-empty-message').text()).toContain('No folder is open')
   })
 
   it('loads a file into the editor and saves the edited text back to its path', async () => {

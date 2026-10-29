@@ -92,7 +92,7 @@ on-screen label exactly as the label is written.
 **Feature names are proper nouns** and keep their capitals everywhere, in
 any of the above: Turn Stats, Navide Cloud, Navide Marketplace, Navide Plugin
 Pack, Agent Assets, Pipeline Manager, Resource Manager, Execution Policy,
-Auto Commit, Developer Mode, Navide Guard, Navide Browser, Loop.
+Auto Commit, Developer Mode, Navide Guard, Navide Browser, Loop, App Lock.
 
 **Title Case mechanics (Apple Style Guide):** capitalize the first and last
 word and every noun, pronoun, verb, adjective and adverb; lowercase a, an,
@@ -116,6 +116,7 @@ term kept in English here stays English in zh-CN too.
 
 **Kept in English in zh-TW and zh-CN:** AI, agent, CLI, MCP, MCP server, Git,
 PR, API, JSON, SSH, OAuth, LLM, token, session, hook, bot, stash, Loop, Guard,
+App Lock,
 pane, pipeline, worktree, repo, URL, plus product and vendor names. Common
 nouns are lowercase even at the start of a string (agent, token, session,
 hook, bot, pane, pipeline, worktree, repo); acronyms and feature names keep
@@ -144,13 +145,20 @@ rendering for a term the locale already uses.
 
 **Feature names kept in English:** Turn Stats, Pipeline Manager, Loop
 (also in the "∞ Loop" badge), Navide Cloud, Navide Marketplace, Navide Guard,
-Navide Browser, Testplace, Registry. Other feature names are translated like
+Navide Browser, Testplace, Registry, App Lock. Other feature names are translated like
 ordinary words: Resource Manager is de-DE "Ressourcenverwaltung", ja-JP
 "リソースマネージャー"; Memory (the CLI instruction files) is de-DE
 "Gedächtnis", ja-JP "メモリ".
 
-**Kept in English in de-DE:** turn (an agent's turn, as in Turn Stats; the
-Turn Stats table's "Turns" column too), plus the words zh-TW and zh-CN keep.
+**de-DE renderings (the user's call, 2026-10-29):** pane "Bereich" (der
+Bereich; "Claude-Bereich", "Terminalbereich"), turn "Runde" ("Rundenerkennung",
+"Rundenende"). The feature name Turn Stats and its table's columns stay
+English. Otherwise de-DE keeps in English the words zh-TW and zh-CN keep.
+
+**ru-RU renderings (the user's call, 2026-10-29):** agent "агент", pane
+"панель", session "сеанс" (never "сессия"), skill "навык", workspace "рабочая
+область", turn "ход", declined like any Russian noun. hook, token,
+worktree, prompt and the feature names above stay English.
 
 ## What stays as it is
 

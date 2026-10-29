@@ -11,6 +11,7 @@ import type { MentionCandidate } from '@navide/terminal'
 import { PLAN_REF_MIME, isPlanDrag, parsePlanRefPayload, type PlanDragRef } from '../lib/planDrag'
 import { formatLoopTime } from '../lib/loopPrompt'
 import { PANE_STUCK_AFTER_MS } from '../lib/paneStuck'
+import type { StaleConfigPart } from '../lib/staleConfigPanes'
 import PromptSkillPicker from './PromptSkillPicker.vue'
 import { usePromptSkills } from '../composables/usePromptSkills'
 import { castablePromptSkills } from '../lib/promptSkills'
@@ -83,6 +84,9 @@ interface Props {
   /** When the pane went quiet mid-turn (App.vue's stuck poll); null when not
    *  stuck. */
   stuckSince?: number | null
+  /** What this pane's CLI loaded at start that has changed since (MCP
+   *  servers, skills); empty when nothing has. Clicking asks for a rebuild. */
+  staleConfig?: StaleConfigPart[]
   /** The user muted this pane: no desktop notification and no sound from it.
    *  Shown as a 🔇 badge; clicking it asks App.vue to unmute. */
   muted?: boolean
@@ -390,12 +394,14 @@ defineExpose({
   lastUserKeyAt: terminal.lastUserKeyAt,
   // What the CLI on the other end actually asked for, for injectText's guards.
   isBracketedPasteActive: terminal.isBracketedPasteActive,
+  terminalSize: terminal.terminalSize,
   // The ⌘V path (never submits), false when the text would be dropped; voice
   // dictation types its text through it.
   insertText: terminal.insertText,
   markTurnComplete: terminal.markTurnComplete,
   markNeedsInput: terminal.markNeedsInput,
   clearNeedsInput: terminal.clearNeedsInput,
+  markBoxOnScreen: terminal.markBoxOnScreen,
   holdNeedsInput: terminal.holdNeedsInput,
   releaseNeedsInputHold: terminal.releaseNeedsInputHold,
   awaitingHeld: terminal.awaitingHeld,
@@ -737,6 +743,18 @@ onMounted(() => {
           class="stuck-inline"
           :title="$t('pane.terminal.stuck-tooltip', { minutes: PANE_STUCK_AFTER_MS / 60_000 })"
         >{{ $t('pane.terminal.stuck-badge', { minutes: PANE_STUCK_AFTER_MS / 60_000 }) }}</span>
+        <span
+          v-if="staleConfig?.length && displayStatus !== 'exited' && displayStatus !== 'error'"
+          class="stale-config-inline"
+          role="button"
+          data-testid="stale-config-badge"
+          :title="$t(staleConfig.length > 1
+            ? 'pane.terminal.stale-config-tooltip-both'
+            : staleConfig[0] === 'mcp'
+              ? 'pane.terminal.stale-config-tooltip-mcp'
+              : 'pane.terminal.stale-config-tooltip-skills')"
+          @click.stop="emit('rebuild')"
+        >{{ $t('pane.terminal.stale-config-badge') }}</span>
         <span
           v-if="usageLimitHit"
           class="usage-limit-inline"
@@ -1129,6 +1147,19 @@ onMounted(() => {
   padding: 1px 6px;
   white-space: nowrap;
   flex-shrink: 0;
+}
+/* Started before an MCP or skills change: a quiet notice, clickable to rebuild. */
+.stale-config-inline {
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 /* Quota exhausted. Deliberately louder than the login badge. Clicking it
    (after a confirm) dismisses the flag, e.g. when it is stale or moot. */

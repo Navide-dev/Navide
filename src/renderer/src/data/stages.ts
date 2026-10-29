@@ -1,7 +1,7 @@
 // Pipeline stage type definitions and utility functions.
 // The actual stage data is loaded dynamically from the backend via useStages().
 
-import { MSG_START, MSG_END, MSG_ENVELOPE_PREFIX, MSG_NOTICE_PREFIX, MSG_SPAWN_FAILED_PREFIX, MSG_SPAWN_PARTIAL_PREFIX, SPAWN_START, SPAWN_END } from '../lib/agentMessaging'
+import { MSG_START, MSG_END, MSG_ENVELOPE_PREFIX, MSG_NOTICE_PREFIX, MSG_FORMAT_PREFIX, MSG_FALLBACK_PREFIX, MSG_SPAWN_FAILED_PREFIX, MSG_SPAWN_PARTIAL_PREFIX, SPAWN_START, SPAWN_END } from '../lib/agentMessaging'
 
 export type StageId = string
 // Derived from the per-vendor specs (agents/index.ts) — no hand-written
@@ -65,7 +65,7 @@ export const DISPATCH_END = '---DISPATCH-END---'
 // no upfront protocol; the delivery envelope carries a one-line reply hint.
 export const MESSAGING_PROTOCOL = `[Inter-CLI Messaging Protocol]
 你可以與其他 CLI pane 的 agent 互傳訊息。控制訊號必須是裸文字，不可放進 markdown code block。
-to: 必須與 ${MSG_START} 寫在同一行；把 to: 換到下一行會讓整個區塊失效，而且不會有任何錯誤提示。
+to: 必須與 ${MSG_START} 寫在同一行。
 
 主動傳訊息給其他 agent 時，輸出：
 ${MSG_START} to: <對方名稱>
@@ -80,6 +80,7 @@ ${MSG_START} to: Agent-Team/reviewer
 
 收到開頭為 ${MSG_ENVELOPE_PREFIX} <名稱> 的輸入時，那是其他 agent 傳來的訊息；需要回覆就用上述 MSG 區塊指名對方（跨工作區來的訊息，名稱本身就已經帶工作區前綴，照原樣回覆即可）。
 訊息送不到時，你會收到開頭為 ${MSG_NOTICE_PREFIX} 的通知，裡面有目標名稱與英文的失敗原因；那是 Navide 發出的，不要回覆它。
+你的 turn 出現了 ${MSG_START} 卻沒有解析出任何訊息時，你會收到開頭為 ${MSG_FORMAT_PREFIX} 的通知；照上面的格式重寫即可，同樣不要回覆它。
 沒有溝通需求時不要輸出 MSG 區塊。
 
 `
@@ -95,13 +96,18 @@ task: <任務內容；task: 之後到區塊結尾全是任務，可多行>
 ${SPAWN_END}
 
 規則：一個 turn 可以輸出多個 SPAWN 區塊，全部都會被處理。子 pane 數、工作區 CLI pane 總數、spawn 鏈深度沒有強制上限，但數量偏多或鏈太深時你會在回報中收到提醒。
-新 pane 完成任務後應該會用 MSG 區塊回報結果給你。那份回報是子 agent 自己的輸出，不是 Navide 的保證：你正在執行中時它會排隊等你告一段落，子 agent 沒照格式輸出時則不會送達。需要確定它做完了就自己去查它的狀態。
+新 pane 完成任務後應該會用 MSG 區塊回報結果給你。那份回報是子 agent 自己的輸出，不是 Navide 的保證：你正在執行中時它會排隊等你告一段落。子 agent 第一個 turn 結束時若沒有用 MSG 區塊回報，Navide 會改把那個 turn 的最後輸出轉交給你，開頭為 ${MSG_FALLBACK_PREFIX}，那是代轉的內容，不是它自己寫的回報。需要確定它做完了就自己去查它的狀態。
 spawn 因名稱衝突、agent key 不合法或任務內容缺漏而沒開成 pane 時，你會收到開頭為 ${MSG_SPAWN_FAILED_PREFIX} 的通知，可以修正後重試。
 pane 已經開起來但任務沒注入成功時，開頭是 ${MSG_SPAWN_PARTIAL_PREFIX} —— 那個 pane 已經存在，不要用同一個名稱重新 spawn。
 這兩種都是 Navide 發出的系統通知，和投遞失敗通知一樣不要回覆。
 沒有派工需求時不要輸出 SPAWN 區塊。
 
 `
+
+// The prompts of the two QUESTION examples in INTERACTION_PROTOCOL. A CLI
+// that echoes the kickoff verbatim (Codex) puts these examples in the pane
+// buffer, so the buffer question scan skips blocks with these prompts (#733).
+export const PROTOCOL_EXAMPLE_PROMPTS: readonly string[] = ['請問系統的主要使用者是誰？', '資料庫要使用哪種技術？']
 
 // Universal pre-amble for Stage 01-style stages — the PM may ask the user.
 export const INTERACTION_PROTOCOL = `[Pipeline Control Protocol]

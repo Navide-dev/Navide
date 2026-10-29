@@ -1,5 +1,6 @@
 """Managed destinations use disposable homes, stores and database rows only."""
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -162,7 +163,11 @@ async def test_watcher_polls_the_bound_destination_only(store_case):
         await asyncio.sleep(0.3)
         assert touched == []
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('{"changed": true}')
+        # One atomic rename, so a 0.05s poll cannot see write_text's truncate
+        # and its write as two separate changes on a slow runner.
+        staged = path.with_name(path.name + ".tmp")
+        staged.write_text('{"changed": true}')
+        os.replace(staged, path)
         await asyncio.sleep(0.3)
         assert touched == [vendor]
     finally:

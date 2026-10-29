@@ -166,9 +166,11 @@ def test_gate_analyzer_is_optional() -> None:
     assert g["analyzer_ready"] is False and g["all_required_ready"] is True
 
 
-def test_gate_blocks_without_foundation() -> None:
+def test_gate_does_not_require_foundation() -> None:
+    """Missing foundation tools must not block first use: the packaged app
+    never runs them, and Linux has no in-app install for node/python."""
     g = ob.compute_gate(_deps(False, True, True), models=["m"])
-    assert g["foundation_ready"] is False and g["all_required_ready"] is False
+    assert g["foundation_ready"] is False and g["all_required_ready"] is True
 
 
 # ── install whitelist ─────────────────────────────────────────────────────────

@@ -126,6 +126,8 @@ def _is_within(path: Path, root: Path) -> bool:
 
 def _real_home() -> Path:
     """The user's real home, immune to a shimmed ``$HOME`` (see native_skills)."""
+    if os.environ.get("AGENT_TEAM_ISOLATED_HOME") == "1":
+        return Path.home()
     try:
         import pwd
 

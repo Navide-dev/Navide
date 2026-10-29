@@ -1000,6 +1000,10 @@
       "exit-fault-tooltip": "CLI 以结束代码 {code} 结束，可能是当掉了；这个代码也记录在错误帐本里。",
       "stuck-badge": "⏳ 超过 {minutes} 分钟没有动静",
       "stuck-tooltip": "这个回合已超过 {minutes} 分钟没有任何记录或输出，CLI 可能卡住了；Navide 没有中断它。",
+      "stale-config-badge": "设置已更新",
+      "stale-config-tooltip-mcp": "这个 pane 打开后，此 CLI 的 MCP server 有变动。重建前它会沿用旧列表。点一下重建（接续对话）。",
+      "stale-config-tooltip-skills": "这个 pane 打开后，发给此 CLI 的 skills 有变动。重建前它可能沿用旧的。点一下重建（接续对话）。",
+      "stale-config-tooltip-both": "这个 pane 打开后，此 CLI 的 MCP server 和 skills 都有变动。重建前它会沿用旧的。点一下重建（接续对话）。",
       "usage-limit-badge": "⛔ {time} 恢复",
       "usage-limit-badge-unknown": "⛔ 额度用完",
       "usage-limit-tooltip": "此 CLI 的额度已用完 — 预计 {time} 恢复。点击可清除",
@@ -1033,6 +1037,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "从 n8n 导入",
     "switch-and-resume": "↻ 切换并继续",
     "go-to-stage": "打开这个 stage",
     "new-pipeline": "＋ 添加流程",
@@ -1187,7 +1192,6 @@
     "collapse": "收合",
     "restore": "↑ 还原",
     "retry": "↻ 重试",
-    "finish": "完成",
     "connect-to-remote": "连接到远程",
     "scan-repos-anyway": "仍要扫描仓库",
     "amend-commit": "修改提交",
@@ -1196,7 +1200,7 @@
     "go-to-commit": "前往提交",
     "install-missing": "安装缺少的项目",
     "fix": "修复",
-    "add-mcp": "添加 MCP +",
+    "add-mcp": "+ 添加 MCP",
     "open-mcp-config": "打开 MCP 设置",
     "accept-ours": "采用我们的版本",
     "accept-theirs": "采用他们的版本",
@@ -1239,7 +1243,7 @@
     "replace-in-file": "取代文件中所有符合项",
     "replace-match": "取代此符合项",
     "open-in-finder": "用 Finder 打开此文件夹",
-    "clear-pipeline": "清除流程状态并关闭所有 Agent 面板",
+    "clear-pipeline": "清除流程状态并关闭所有 agent pane",
     "remove-from-history": "从历史记录中移除",
     "double-click-rename": "双击重命名",
     "close-workspace": "关闭工作区",
@@ -1260,6 +1264,7 @@
     "toggle-replace": "切换取代（⌘H）",
     "delete-pipeline": "删除此管线",
     "open": "打开",
+    "learn-more": "了解更多",
     "view-as-list": "查看为清单",
     "view-as-tree": "查看为树状",
     "show-ignored-files": "显示忽略的文件",
@@ -1364,7 +1369,7 @@
     "stall-force-advance": "强制推进",
     "prev-page": "上一页",
     "next-page": "下一页",
-    "manage-pipelines": "管理 pipeline",
+    "manage-pipelines": "流程管理",
     "reset-run-counter": "重设本次运行的计数",
     "wipe-workspace-history": "清除这个工作区的历史统计",
     "wipe-global-tally": "清除全域总计",
@@ -1462,11 +1467,58 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock 是隐私遮罩，不是访问控制。你离开时，它会盖住 Navide 的每个窗口；agent、终端、聊天室、MCP 工具和调度都照常运行，坐在这台电脑前又懂技术的人仍然可以绕过它。",
+      "section-lock": "锁定",
+      "enabled": "开启 App Lock",
+      "enabled-hint": "请先设置 PIN。即使开启了 Touch ID，PIN 也始终可以解锁。",
+      "lock-now": "立即锁定",
+      "lock-now-hint": "马上盖住所有窗口。快捷键 {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "已设置 PIN。",
+      "pin-none-hint": "尚未设置 PIN，请使用 4 到 12 位数字。",
+      "set-pin": "设置 PIN",
+      "change-pin": "更改 PIN",
+      "remove-pin": "移除 PIN",
+      "remove-pin-hint": "移除 PIN 会关闭 App Lock。",
+      "current-pin": "当前 PIN",
+      "new-pin": "新 PIN",
+      "confirm-pin": "确认 PIN",
+      "save": "保存",
+      "cancel": "取消",
+      "pin-saved": "PIN 已保存。",
+      "pin-removed": "PIN 已移除，App Lock 已关闭。",
+      "section-unlock": "解锁",
+      "method": "解锁方式",
+      "method-system": "Touch ID，PIN 作为备用",
+      "method-pin": "仅用 PIN",
+      "system-unavailable": "这台电脑无法使用 Touch ID，Navide 会用 PIN 解锁。",
+      "section-auto": "自动锁定",
+      "idle": "闲置后",
+      "idle-hint": "按整台电脑没有键盘或鼠标操作的时间计算。",
+      "idle-never": "从不",
+      "idle-minutes": "{n} 分钟",
+      "on-screen-lock": "屏幕锁定时",
+      "on-suspend": "电脑睡眠时",
+      "on-start": "Navide 启动时",
+      "section-forgot": "忘记 PIN？",
+      "reset-with-system": "用 Touch ID 重设 PIN",
+      "forgot-system": "先用 Touch ID 确认是你本人，再设置新的 PIN。",
+      "forgot-manual-title": "没有 Touch ID 时",
+      "forgot-manual": "退出 Navide，然后删除 Navide 数据文件夹中的 app-lock.json。这只会移除 App Lock 和它的 PIN，其他都不受影响。",
+      "error-invalid-pin": "请使用 4 到 12 位数字。",
+      "error-mismatch": "两次输入的 PIN 不一致。",
+      "error-wrong-pin": "当前 PIN 不正确。",
+      "error-cooldown": "尝试次数过多，请在 {seconds} 秒后重试。",
+      "error-system-failed": "Touch ID 未能确认是你本人。",
+      "error-generic": "没有成功，请再试一次。"
+    },
     "cliExtensions": {
       "tabInstalled": "已安装的 CLI 扩展",
       "tabConvenience": "Navide 做的修改",
       "intro": "每个 AI CLI 为自己安装的 CLI 扩展（Claude plugin 与 mod、Codex hook、Pi extension 等），以及各自能碰到什么。这里只读取，不会安装、激活或修改任何东西。Navide 插件另有专页。",
-      "summary": "{total} 个 CLI 扩展 · 其中 {l3} 个在 CLI 进程内运行代码",
+      "summary": "{total} 个 CLI 扩展 · 其中 {l3} 个在 CLI 内运行，{l2} 个运行独立程序",
       "machineWide": "每家 CLI 整台机器只有一份：Navide 里这家 CLI 的每个 pane、每个账号，都会加载同一套。",
       "rescan": "重新扫描",
       "loading": "扫描中…",
@@ -1481,17 +1533,17 @@
       "inferred": "推定",
       "inferredHint": "这些能力是从源代码文字推定的，CLI 的 manifest 没有声明。",
       "tier": {
-        "L1": "L1 文字资产",
-        "L2": "L2 子进程",
-        "L3": "L3 进程内代码"
+        "L1": "仅文本",
+        "L2": "运行独立程序",
+        "L3": "在 CLI 内运行"
       },
       "tierHint": {
         "L1": "只有指令、说明之类的文字，不会自己运行。",
-        "L2": "会以子进程运行命令（hook、MCP、LSP），权限跟你的用户账号一样。",
+        "L2": "会启动一个独立程序（hook 命令，或 MCP、LSP 服务器），权限跟你的用户账号一样。",
         "L3": "在 CLI 自己的进程里运行，权限跟 CLI 一样，而且不会跳出权限提示。"
       },
       "capability": {
-        "exec": "运行指令",
+        "exec": "执行 shell 指令",
         "network": "连网",
         "fs": "读写文件",
         "intercept-tools": "拦截工具调用",
@@ -1505,6 +1557,19 @@
         "capability-approve": "CLI 会先要求你核准它的能力",
         "hot-reload": "热重载前，每个 session 会询问一次"
       }
+    },
+    "applies": {
+      "new-panes-only": "仅对新开的 pane 生效",
+      "new-panes-only-tooltip": "CLI 启动时才读取这项设置。已打开的 pane 会沿用旧值，重建后才应用。"
+    },
+    "stale-config": {
+      "title": "在这次变更前就已打开的 pane：{count} 个",
+      "body-mcp": "CLI 启动时才读取自己的 MCP server，所以这些 pane 仍在用旧列表。重建会接续对话，但会中断进行中的回合并重新输出对话。",
+      "body-skills": "CLI 启动时才读取 skills，所以这些 pane 可能仍在用旧的。重建会接续对话，但会中断进行中的回合并重新输出对话。",
+      "rebuild-all-idle": "重建所有空闲的（{count}）",
+      "busy": "运行中——“重建所有空闲的”会跳过",
+      "cannot-rebuild": "没有可接续的对话",
+      "rebuild": "重建"
     },
     "limits": {
       "hint": "选用的限制，避免 Navide 与它启动的 agent 把这台电脑压垮。每一项在你调整之前都是关闭，或维持 Navide 原本的行为。",
@@ -1585,7 +1650,7 @@
         },
         "analyzer-backend": {
           "title": "推论后端",
-          "summary": "切换 Ollama REST 或 llama.cpp，并设置推论网址、llama-cli 路径与 GGUF 模型路径。"
+          "summary": "切换 Ollama 或 llama.cpp，并设置推论网址、llama-cli 路径与 GGUF 模型路径。"
         },
         "analyzer-models": {
           "title": "模型与基准测试",
@@ -1626,6 +1691,10 @@
         "status-badges": {
           "title": "状态徽章",
           "summary": "替九种面板状态各自重命名并选颜色，中文、英文与日文名称可分开填。"
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "用锁定画面盖住所有窗口，用 Touch ID 或 PIN 解锁"
         },
         "voice-input": {
           "title": "语音输入",
@@ -1727,7 +1796,7 @@
       "title": "设置管理",
       "export-bundle": "导出设置全集",
       "import-bundle": "导入设置全集",
-      "bundle-hint": "导出内容包含 Roles、Pipelines、MCP、Analyzer、AI Chat 非敏感设置与外观偏好；API key 和 token 会被屏蔽，导入时不会覆盖。",
+      "bundle-hint": "导出角色、Pipeline、MCP、分析器、AI 聊天与外观设置，API 密钥与 token 会被遮蔽。",
       "export-dialog-title": "导出设置全集",
       "exported": "设置全集已导出",
       "export-failed": "导出失败",
@@ -1739,7 +1808,7 @@
     "executionPolicy": {
       "unavailable": "执行策略目前无法使用。请检查 Navide 主程序后再试。",
       "errors": {
-        "invalid-policy": "执行策略无效。请使用支持的模式、系统命名空间与可可执行文件名称。",
+        "invalid-policy": "执行策略无效。请使用支持的模式、Navide 功能与可执行文件名称。",
         "high-risk-confirmation-required": "完整模式需要明确确认允许任意可可执行文件运行。",
         "recovery-confirmation-required": "重建执行策略需要明确确认。",
         "source-reset-confirmation-required": "重设所有政策来源选择需要明确确认。",
@@ -1755,7 +1824,7 @@
         "recommendation-unavailable": "Repository 政策建议无法使用。",
         "recommendation-invalid": "Repository 政策建议无效。",
         "recommendation-stale": "Repository 政策建议已变更。请重新检查后再接受。",
-        "user-policy-unavailable": "没有可用的全域用户政策。请创建政策或选择 Host 默认值。",
+        "user-policy-unavailable": "没有可用的全域用户政策。请创建政策或选择 Navide 默认值。",
         "global-policy-corrupt": "全域执行策略已损坏。请先重建后再切换到这个来源。",
         "recovery-blocked-by-global-policy": "全域执行策略不健康时，无法恢复来源。",
         "commit-uncertain": "无法确认政策变更结果。政策仍维持失败关闭，请重新检查。",
@@ -1763,12 +1832,12 @@
       },
       "loading": "正在加载执行策略…",
       "saved": "执行策略已保存。",
-      "rebuilt": "已从 Host 默认值重建执行策略。",
+      "rebuilt": "已从 Navide 默认值重建执行策略。",
       "notice": {
         "save": "执行策略已保存。",
-        "resetUser": "用户政策已重设为 Host 默认值。",
+        "resetUser": "用户政策已重设为 Navide 默认值。",
         "source": "政策来源已变更。",
-        "rebuild": "已从 Host 默认值重建执行策略。",
+        "rebuild": "已从 Navide 默认值重建执行策略。",
         "resetSources": "所有政策来源选择已重设。"
       },
       "externalUpdate": "政策已在其他地方变更。你的草稿会保留，直到重新加载最新版本。",
@@ -1789,7 +1858,7 @@
         "unavailable": "选用的政策来源无法使用。Navide 会在你选择可用来源前维持失败关闭。",
         "corrupt": "选用的政策已损坏。修复前 Navide 会维持失败关闭。"
       },
-      "hostDefaultTitle": "Host 默认值",
+      "hostDefaultTitle": "Navide 默认值",
       "readOnly": "唯读",
       "hostDefaultHint": "内置的最小权限基准。即使用户政策保存区遗失，仍然可以使用。",
       "userTitle": "用户政策",
@@ -1797,7 +1866,7 @@
       "userHint": "编辑工作区选用 User 来源时使用的全域政策。保存会取代目前的用户政策。",
       "mode": {
         "full": "完整",
-        "allowlist": "允许清单",
+        "allowlist": "仅允许的命令",
         "denylist": "拒绝清单"
       },
       "fullWarning": "完整模式允许任意可可执行文件（包括高风险工具）与系统能力。保存前请再次确认这项高风险选择。",
@@ -1805,12 +1874,20 @@
       "denylistWarning": "拒绝清单模式是默认放行：列出名称并不会限制它实际授予的范围，因此 Navide 一律将拒绝清单视为高风险选择，保存前请再次确认。",
       "denylistConfirmation": "我了解拒绝清单模式默认放行，不会因为我列出的名称而缩小授予范围。",
       "shellDenylistScope": "在拒绝清单模式下，Agent 只能运行这台主机支持的指令（{executables}），再扣掉你在这里拒绝的项目；拒绝清单外的名称不会有任何作用。",
-      "systemLabel": "系统命名空间",
-      "systemHint": "选择 Agent 可使用的 V2 系统命名空间。",
-      "systemAllowlistLabel": "要允许的系统命名空间",
-      "systemAllowlistHint": "选择 Agent 可使用的 V2 系统命名空间。",
-      "systemDenylistLabel": "要拒绝的系统命名空间",
-      "systemDenylistHint": "选择 Agent 不得使用的 V2 系统命名空间。",
+      "systemLabel": "Navide 功能",
+      "systemHint": "选择 agent 可以使用的 Navide 功能。",
+      "systemAllowlistLabel": "要允许的 Navide 功能",
+      "systemAllowlistHint": "选择 agent 可以使用的 Navide 功能。",
+      "systemDenylistLabel": "要拒绝的 Navide 功能",
+      "systemDenylistHint": "选择 agent 不得使用的 Navide 功能。",
+      "namespace": {
+        "fs": "工作区文件",
+        "ui": "自有视图",
+        "aiCli": "AI CLI 会话",
+        "web": "浏览网页",
+        "agents": "agent pane",
+        "agentMessages": "agent 消息"
+      },
       "shellLabel": "Shell 可可执行文件",
       "shellHint": "只允许最上层可可执行文件名称，不接受路径或 shell 表达式。",
       "shellAllowlistLabel": "要允许的 Shell 可可执行文件",
@@ -1826,13 +1903,14 @@
       "save": "保存政策",
       "resetUser": "重设用户政策",
       "sourceTitle": "工作区政策来源",
-      "sourceHint": "Repository 建议在你查看并明确接受前都不受信任。切换来源需要精确符合目前指纹。",
+      "sourceHint": "Repository 建议在你查看并明确接受前都不受信任。切换来源只对你最后看到的那一版政策生效；若之后有变动，请重新查看。",
       "source": {
-        "default": "Host 默认值",
+        "default": "Navide 默认值",
         "user": "用户政策",
         "repository": "Repository 政策"
       },
       "sourceNeedsWorkspace": "打开工作区后才能选择工作区政策来源。",
+      "sourceImplicit": "自动",
       "recommendationTitle": "Repository 建议",
       "untrusted": "不受信任",
       "recommendationHint": "这项政策来自工作区 repository；除非明确接受，否则不会取代目前生效的来源。",
@@ -1847,7 +1925,7 @@
       "sourceCorruptHint": "政策来源状态已损坏。重设所有政策来源选择即可清除 Host-owned pin，不会修改 repository 政策文件。",
       "sourceManualRecoveryHint": "政策来源状态不安全或无法使用。请人工修正列出的 Host-owned 路径；Navide 不会自动删除它。",
       "resetSourceSelections": "重设所有政策来源选择",
-      "resetSourceSelectionsBody": "这会清除所有 repository 来源 pin，不会修改或删除 repository 政策文件。所有工作区之后会再次依照全域 Host 默认值或用户政策解析。",
+      "resetSourceSelectionsBody": "这会清除所有 repository 来源 pin，不会修改或删除 repository 政策文件。所有工作区之后会再次依照全域 Navide 默认值或用户政策解析。",
       "resetSourceSelectionsCheck": "我了解所有 repository 来源 pin 都会被清除。",
       "resetSourceSelectionsConfirm": "确认重设",
       "recheck": "再次检查",
@@ -1863,7 +1941,7 @@
       "corruptHint": "保存的用户政策已损坏。重建会写入全新的 Host 默认状态，并保留工作区来源选择。",
       "manualRecoveryHint": "政策保存区不安全或无法使用。请修正 execution-policy 文件夹的权限或路径，再重新打开设置；目前禁用自动重建。",
       "rebuild": "重建全域政策",
-      "rebuildConfirmBody": "只会依 Host 默认值重建全域政策与 revision 文件。现有工作区来源选择与 repository 政策文件都会保留。",
+      "rebuildConfirmBody": "只会依 Navide 默认值重建全域政策与 revision 文件。现有工作区来源选择与 repository 政策文件都会保留。",
       "rebuildConfirmCheck": "我了解损坏的全域政策会被取代。",
       "rebuildConfirm": "确认重建",
       "cancel": "取消"
@@ -1883,18 +1961,19 @@
         "total": "共 {count} 个工具，文字与输入结构合计 {size}。"
       },
       "nativeBackends": {
-        "title": "原生后端",
+        "title": "Navide 插件内含的程序",
+        "summary": "原生代码在沙箱中运行，但同时会执行 git、gh、glab 的 Navide 插件（下方标为高风险）能借由它们连接网络主机、发送工作区数据并修改工作区文件。",
         "description": "部分 Navide 插件内含原生程序。Navide 会把它放在沙盒里运行，它本身没有网络：只能读取你一起打开的工作区，也只能在你允许的地方修改文件。但同时会运行 git、gh、glab 指令的 Navide 插件（下方标示为高风险）可以通过这些指令连到网络主机、送出工作区数据，也可以不经上述允许就读取与修改工作区文件。下方开关打开时，安装含原生代码的 Navide 插件即表示允许它运行；关闭开关可停用全部。",
-        "enable": "允许第三方 Navide 插件运行原生后端",
+        "enable": "允许第三方 Navide 插件运行自带的程序",
         "offUnsaved": "第三方原生后端目前已关闭，但 Navide 无法保存这个设置，重新启动 Navide 后会再变回开启。",
         "offUnsavedRetry": "再试一次",
         "agentTools": {
           "enable": "允许 agent 调用第三方 Navide 插件的工具",
-          "description": "默认关闭。打开后，你允许过的第三方 Navide 插件所声明的工具，pane 里的 agent 就能调用；会修改文件的工具在每个工作区第一次使用时会先问你。关闭时，Navide 的行为就像没有任何 Navide 插件提供工具。",
+          "description": "让 pane 里的 agent 调用你已允许的 Navide 插件所声明的工具；会改动文件的工具在每个工作区询问一次。",
           "externalCallers": "外部 MCP 客户端也能调用",
           "externalCallersDisclosure": "外部程序只共用一组 token，审核记录分不出是哪个程序，只能记成“外部客户端”。Host 凭据也比照处理。"
         },
-        "empty": "目前没有安装任何含原生后端的 Navide 插件。",
+        "empty": "目前没有安装任何自带程序的 Navide 插件。",
         "windowWithout": "{name} 已打开，但没有原生后端：{reason}。需要后端的功能将无法使用。{next}",
         "windowWithoutAllow": "要允许后端，请到“设置 → Navide 插件 → {page}”，然后重新打开窗口。",
         "windowWithoutDetails": "原因可在“设置 → Navide 插件 → {page}”中查看。",
@@ -1925,12 +2004,17 @@
           "shellNotAllowed": "已封锁：要求完整 shell 权限",
           "stoppedAfterCrashes": "多次失败后已停止",
           "unavailable": "无法使用"
-        }
+        },
+        "loadFailed": "无法读取原生后端设置。"
       },
       "bundled": "内置",
-      "listTitle": "Navide 插件",
+      "listTitle": "已安装",
+      "installedTitle": "已安装的 Navide 插件",
       "developerNative": "开发者与原生代码",
       "pageOn": "已开启",
+      "developerOnMarker": "开发者模式已开启",
+      "nativeOnMarker": "原生代码已开启",
+      "browseMarketplace": "浏览 Navide 市场",
       "bundledGit": "内置 Git",
       "state": {
         "active": "激活中",
@@ -1940,7 +2024,7 @@
       "restore": "还原",
       "candidateReady": "更新 {version} 已就绪",
       "activationFailed": "{plugin} 已安装，但无法激活：{reason}。请在下方清单重新启动或放弃它。",
-      "switchNow": "核准后，{id} 会立即切换到 {version}。开着的画面会重新加载，画面里没存的内容会遗失。这次切换会记录在公告中心，可以一键退回。",
+      "switchNow": "核准后，{id} 会立即切换到 {version}。开着的画面会重新加载：用 Navide SDK 保存状态的画面会回到原来的位置，其他没存的内容会遗失。这次切换会记录在公告中心，可以一键退回。",
       "restartPlugin": "重新启动 Navide 插件",
       "disable": "禁用",
       "enable": "激活",
@@ -2044,8 +2128,6 @@
         "featured": "精选",
         "clearSearch": "清除搜索",
         "showAllCategories": "显示所有分类",
-        "noResultsHint": "换个关键字，或浏览所有分类。",
-        "noExtensionsHint": "发布者上架 Navide 插件后，就会出现在这里。",
         "loadFailedTitle": "无法连上 Navide 市场",
         "loadFailedHint": "请检查网络连接后重试；已安装的 Navide 插件不受影响。",
         "errorDetails": "详细信息",
@@ -2114,7 +2196,7 @@
         },
         "title": "开发者模式",
         "switch": "打开开发者模式",
-        "hint": "打开后可以从你选的文件夹加载 Navide 插件来开发与测试，也会应用自架 Registry 的设置（AGENT_TEAM_MARKETPLACE_URL）。只有在这个设置页可以切换，每次变更都会记录。关闭时会卸下所有从文件夹加载的 Navide 插件，选了但还没同意的文件夹也会清掉；你同意过的文件夹清单会保留，再打开时自动接回，也可以在这里移除。",
+        "hint": "可从文件夹加载 Navide 插件来开发与测试，也能从你自己的服务器、而非 Navide 市场安装 Navide 插件；关闭时会卸下这些 Navide 插件。",
         "banner": "开发者模式已打开，从文件夹加载的 Navide 插件没有经过审核。",
         "reminder": "开发者模式已打开：从文件夹加载的 Navide 插件没有经过审核。不用时请到“设置 → Navide 插件”关闭。",
         "reminderClose": "知道了",
@@ -2188,7 +2270,7 @@
       },
       "localInstall": {
         "agentRequest": "由 {requester} 提出。Navide 没有审核过这个 Navide 插件，要不要安装由你决定。",
-        "button": "从文件安装 .vsix…",
+        "button": "从文件安装…",
         "backToMarketplace": "换回 Navide 市场版本",
         "warning": "这个 Navide 插件来自你选的本机文件，没有经过 Navide 审核，也没有签章：无法确认作者，文件也可能被改过。只安装你信任的人给你的文件。",
         "signatureLabel": "签章",
@@ -2319,12 +2401,12 @@
       "user": "用户",
       "userWorkspace": "用户／工作区",
       "accountServer": "账号／服务器",
-      "userWorkspaceBindings": "用户／工作区绑定"
+      "userWorkspaceBindings": "用户，以及各工作区选用的账号"
     },
     "storage": {
       "localStorage": "ui_settings.json（App 数据）＋工作区备份",
-      "mainProcess": "Electron 主进程 userData",
-      "safeStorage": "本机加密的 safeStorage 登录",
+      "mainProcess": "与 Navide 的应用数据一起存在这台电脑上",
+      "safeStorage": "加密存储在这台电脑上",
       "cliFiles": "各 CLI 自己的指示档"
     },
     "voice": {
@@ -2349,7 +2431,6 @@
       "readback-rate": "语速",
       "readback-preview": "试听",
       "readback-stop-hint": "朗读中按 Esc 或语音输入快捷键即可立刻停止。",
-      "section": "语音输入",
       "enabled": "语音输入（按住说话）",
       "enabled-hint": "按住 Ctrl+Alt+M（可在快捷键设置中更改）即可对目前聚焦的 CLI pane 听写。文字会像手动输入一样填进输入框，不会自动送出，确认后请自己按 Enter。语音由本机的 Whisper 模型转成文字，音频不会离开这台电脑。",
       "device": "麦克风",
@@ -2452,7 +2533,7 @@
       "download-retry": "重新下载"
     },
     "general": {
-      "auto-resume-reconnect": "后端重启后自动接回工作阶段",
+      "auto-resume-reconnect": "Navide 后台服务重启后自动接回工作阶段",
       "resume-interrupted-on-launch": "重开 Navide 后自动接回工作中的 pane",
       "system-notify": "系统通知",
       "system-notify-hint": "Navide 在背景时，CLI 完成回合或需要你输入会送出桌面通知。Dock 徽章的计数不受此开关影响。",
@@ -2467,14 +2548,14 @@
         "unknown": "尚未测试。",
         "not-applicable": "此平台不提供。"
       },
-      "auto-resume-reconnect-hint": "后端崩溃时会一并带走所有 CLI 进程。打开后，后端恢复时会自动接回目前看得见的 pane 的对话，不必逐一手动重建。",
-      "resume-interrupted-on-launch-hint": "重开 Navide 时，正在跑回合、停在权限询问或快选等待的 pane，以及等它们回报的母 pane，会自动接回（最多 6 个，其余标记“重开时工作中”）。接回后不会自动续跑，按“继续”或由母 pane 下令才会继续；母 pane 会收到哪些子 pane 被中断的通知。",
+      "auto-resume-reconnect-hint": "后台服务重启回来后，自动接回 pane 的对话。重启会一并结束所有 CLI 进程；画面上的 pane 以及画面外最多六个正在工作的 pane 会接回但不自己继续，派出它的 pane 会收到通知，公告中心会列出经过。如果很快又崩溃，就不会再自动接回。",
+      "resume-interrupted-on-launch-hint": "重开 Navide 时，自动接回工作中的 pane，等你下令再继续。范围是正在跑回合、停在权限询问或快选等待的 pane，以及等它们回报的母 pane（最多 6 个，其余标记“重开时工作中”）。按“继续”或由母 pane 下令才会继续；母 pane 会收到哪些子 pane 被中断的通知。",
       "confirm-close-pane": "关闭 pane 前确认",
       "confirm-close-pane-hint": "用关闭 pane 快捷键关闭 CLI pane 前先跳出确认。运行中的 pane 一律会确认，不受此设置影响。",
       "confirm-close-workspace": "关闭工作区前确认",
-      "confirm-close-workspace-hint": "从侧栏“关闭工作区与 CLI 窗口”前先跳出确认。这一行会结束该工作区的所有 CLI pane；记录会保留，重新打开时会留成可点击接续的卡片。单纯的“关闭工作区”不会结束 CLI，也不会询问。",
+      "confirm-close-workspace-hint": "侧栏关闭工作区并结束其中的 CLI pane 前先询问。",
       "idle-reclaim": "回收闲置的 CLI",
-      "idle-reclaim-hint": "闲置的 CLI 仍然占着它配置过的内存，每个常是 200–300 MB。回收会结束该进程，pane 留在原位变成点一下就继续的预留位置，对话会从 CLI 自己的记录接回。目前聚焦中的 pane、正在等你回答的 pane、以及有未送出文字的 pane 都不会被回收。",
+      "idle-reclaim-hint": "结束闲置的 CLI 以释放内存，pane 保留为点一下就能接续的占位（不含焦点所在、等你回答或有未送出文字的 pane）。",
       "idle-reclaim-after": "闲置多久后回收",
       "idle-reclaim-after-hint": "一个 pane 要多久没有 agent 输出、也没有按键，才会被回收。",
       "idle-reclaim-15m": "15 分钟",
@@ -2484,8 +2565,8 @@
       "idle-reclaim-8h": "8 小时",
       "idle-reclaim-never": "永不回收",
       "idle-reclaim-now": "立即回收",
-      "idle-reclaim-now-hint": "现在就结束这些 CLI，不等门槛。目前有 {count} 个 pane 符合条件，约占用 {size}。每一个都会变成点一下就继续的预留位置。",
-      "idle-reclaim-now-empty": "目前没有符合条件的 pane — 聚焦中、正在等你回答、有未送出文字、以及无法接回对话的 pane 一律不会被回收。",
+      "idle-reclaim-now-hint": "现在就结束，不必等待：有 {count} 个 pane 符合条件，约占用 {size}。",
+      "idle-reclaim-now-empty": "目前没有符合条件的 pane。聚焦中、正在等你回答、有未送出文字、以及无法接回对话的 pane 一律不会被回收。",
       "idle-reclaim-now-action": "立即回收 {count} 个",
       "idle-reclaim-now-action-empty": "没有可回收的",
       "default-editor": "默认编辑器",
@@ -2516,6 +2597,7 @@
       "language-beta": "Beta",
       "language-beta-hint": "机器翻译，尚待母语者审阅。",
       "language-hint": "语言是用户层级的偏好设置，对所有工作区生效。",
+      "language-display": "界面语言",
       "ui-scale": "界面缩放",
       "ui-scale-hint": "整体放大或缩小界面——文字、图标与间距——并应用到所有窗口。与终端、编辑器的字级无关，那两者仍各自使用 ⌘= / ⌘- 快捷键。",
       "restore-windows": "还原窗口",
@@ -2537,15 +2619,22 @@
       "resume-behavior-never": "一律开新对话",
       "resume-behavior-ask": "每次询问",
       "restore-scope": "恢复范围",
-      "restore-scope-hint": "选择“总是恢复”时，可自动打开单一 CLI、目前的 Grid 页面、目前标签页、全部 CLI，或“自动”：只恢复上次关闭 Navide 时仍在运行的 CLI（全部 CLI 与自动都一次两个依序启动）。",
+      "restore-scope-hint": "始终接续时要重新打开哪些 CLI。可选一个 CLI、当前 Grid 页、当前分页、所有 CLI，或自动（上次关闭时正在运行的 CLI）。",
       "restore-scope-single": "单一 CLI",
       "restore-scope-page": "目前 Grid 页面",
       "restore-scope-tab": "目前标签页",
       "restore-scope-all": "全部 CLI",
       "restore-scope-auto": "自动",
       "resume-concurrency": "同时恢复上限",
-      "resume-concurrency-hint": "打开工作区或还原版面时，最多可同时恢复几个 CLI pane，其余依序排队。若一次恢复太多 pane 导致“terminal.create timeout”错误，就把这个值调小（1–10）。",
-      "resume-concurrency-label": "同时恢复数上限"
+      "resume-concurrency-hint": "同时接续的 CLI pane 数量（1–10）；接续时 pane 超时就调低。",
+      "resume-concurrency-label": "同时恢复数上限",
+      "theme-name": {
+        "dark-github": "深色（GitHub）",
+        "dark-midnight": "午夜",
+        "dark-forest": "森林",
+        "light": "浅色",
+        "high-contrast": "高对比度"
+      }
     },
     "roles": {
       "title": "角色",
@@ -2613,6 +2702,7 @@
       "executionPolicy": "执行策略",
       "statusBadges": "状态徽章",
       "voice": "语音输入",
+      "appLock": "App Lock",
       "keybindings": "快捷键",
       "updates": "更新",
       "help": "说明"
@@ -2679,14 +2769,14 @@
         "intro": "设置窗口的十九个标签页分别管什么、Navide Cloud 怎么把几台机器接成一个私有网络，以及菜单、独立窗口、用量统计与资源维护这些散在主画面之外的系统面。",
         "s1": {
           "title": "设置总览",
-          "p1": "设置窗口用 <kbd class=\"syh-kbd\">⌘,</kbd> 打开，标题栏的齿轮钮是同一个入口。左侧侧栏分五组，共 <strong>24 个标签页</strong>。",
+          "p1": "设置窗口用 <kbd class=\"syh-kbd\">⌘,</kbd> 打开，标题栏的齿轮钮是同一个入口。左侧侧栏分五组，共 <strong>25 个标签页</strong>。",
           "h1": "搜索框",
           "p2": "侧栏标题底下有一个搜索框，提示字是 <code>搜索设置…</code>。它<strong>跨标签页</strong>比对设置项的标题、所属区块与关键字（使用目前界面语言与已收录的关键字），最多行 8 笔；点一笔会切到那个标签页并卷到对应区块（“保存空间”那笔例外：它会关掉设置、直接开“资源控管”），没命中时显示 <code>找不到相符设置</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜索索引不是全覆盖",
             "text": "索引是一份人工维护的清单，<strong>{layout}、{notifications}、{security}、{channels} 这四个标签页没有任何条目</strong>，搜索不到它们里面的东西，得自己点进去。CLI Agents 的条目点下去会直接打开某一家的设置抽屉（见“CLI Agent 与账号”标签页）。"
           },
-          "h2": "二十四个标签页",
+          "h2": "二十五个标签页",
           "tabTable": {
             "group": "分组",
             "tab": "标签页",
@@ -2721,6 +2811,10 @@
             "voice": {
               "what": "按住说话、本机转写的语音输入：快捷键、麦克风、录音方式、中文输出、模型与引擎",
               "more": "本面板的“{workspace}”标签页“语音输入”章"
+            },
+            "appLock": {
+              "what": "盖住所有窗口的隐私遮罩：PIN、Touch ID、闲置与睡眠时自动锁定",
+              "more": "App Lock 页最上方的说明"
             },
             "cloud": {
               "what": "跨设备连接状态、本机指纹、谁可以命令这台机器",
@@ -2831,7 +2925,7 @@
               "fallback": "单一 CLI"
             },
             "resumeAfterRestart": {
-              "desc": "Backend 挂掉会带走所有 CLI 进程；开着的话它回来后自动接续画面上的面板。",
+              "desc": "后端崩溃或重新启动时会带走所有 CLI 进程；开启后，后端恢复时会自动接回画面上的 pane，以及画面外最多六个正在工作的 pane。公告中心会列出哪些回合被中断。",
               "fallback": "—"
             },
             "resumeInterrupted": {
@@ -3044,7 +3138,7 @@
           "h3": "分析器",
           "p5": "这里设置的是<strong>本机小模型</strong>，Navide 拿它做 pipeline 的意图判读，跟你在面板里用的 CLI agent 无关。三段：",
           "analyzer": {
-            "backend": "<strong>Inference backend</strong> — 先选 <em>Ollama REST</em> 或 <em>llama.cpp</em> 两种后端。选 llama.cpp 要填 <code>llama-cli</code> 路径（有自动侦测钮与文件浏览器）与选用的 GGUF 模型路径；选 Ollama 则填推论网址（默认 <code>http://localhost:11434</code>）。两者旁边都有健康指示灯。",
+            "backend": "<strong>Inference backend</strong> — 先选 <em>Ollama</em> 或 <em>llama.cpp</em> 两种后端。选 llama.cpp 要填 <code>llama-cli</code> 路径（有自动侦测钮与文件浏览器）与选用的 GGUF 模型路径；选 Ollama 则填推论网址（默认 <code>http://localhost:11434</code>）。两者旁边都有健康指示灯。",
             "models": "<strong>Model manager</strong>（Ollama 模式） — 输入模型名称按 <em>⬇ 下载</em> 下载，有进度条；下方列出已安装的模型（名称、参数量、大小），可逐一删除。",
             "benchmark": "<strong>Model benchmark</strong> — 对所有本机模型跑四项任务：技术栈侦测（输出 JSON）、工作区一句话摘要、从文档清单挑最相关的一笔、解析 CLI 输出并抽出问题与选项。结果表逐项打勾并附耗时，<strong>四题至少过三题（≥75%）</strong>才算通过；没过的模型会从模型下拉菜单里藏起来。"
           },
@@ -3058,14 +3152,14 @@
           "mirror": "<strong>下载镜像</strong>：每个版本的文件同时放在 GitHub Release 与 <code>dl.navide.dev</code>（同样的比特，附 sha256 可比对）。<strong>更新来源默认就是镜像</strong>——app 一启动就把 feed 指到 <code>dl.navide.dev</code>，GitHub 是备援。只有遇到<strong>网络层失败</strong>（连不上、超时、5xx／429）才会退回 GitHub，退过之后<strong>这个 session 就一直用 GitHub</strong>，重开 app 才会回到镜像。<strong>404 与签章／checksum 错误不会退回</strong>——两边放的是同一份档，换过去只会同样失败，照原样回报才有用。",
           "policyIntro": "<strong>执行策略</strong>决定 Navide 插件的后端可以运行什么。它<strong>不是独立标签页</strong>，而是 Navide 插件标签页最上面那一块，带自己的层级徽章（用户＋工作区）与政策档路径。最上面先显示<em>目前生效的政策</em>：来源、模式，以及状态 <em>生效中</em>／<em>已过期</em>／<em>无法使用</em>／<em>损坏</em>。",
           "policy": {
-            "hostDefault": "<strong>Host 默认值</strong> — 内置的最小权限基准，标着<strong>唯读</strong>。即使用户政策的保存区整个不见了它仍然可用，所以永远有一条退路。",
+            "hostDefault": "<strong>Navide 默认值</strong> — 内置的最小权限基准，标着<strong>唯读</strong>。即使用户政策的保存区整个不见了它仍然可用，所以永远有一条退路。",
             "user": "<strong>用户政策</strong> — 全域那一份，工作区选 User 来源时用的就是它，没建过会写“尚未创建”。三种模式：<em>完整</em>、<em>允许清单</em>、<em>拒绝清单</em>；可设“系统命名空间”与“Shell 可可执行文件”，后者<strong>只收最上层可可执行文件名称</strong>，不接受路径或 shell 表达式。",
             "highRisk": "<strong>完整与拒绝清单都要勾一个确认框才能存</strong>，而且画面把理由写出来：完整模式允许任意可可执行文件（包含高风险工具）与系统能力；拒绝清单模式是<strong>默认放行</strong>——列出名称并不会缩小它实际授予的范围，所以 Navide 一律把它当高风险选择。",
-            "source": "<strong>工作区政策来源</strong> — 每个工作区各自选 Host 默认值／用户政策／Repository 政策。<strong>Repository 建议在你亲自查看并按下“接受 Repository 政策”之前都标成“不受信任”</strong>，切换来源还要指纹精确相符；你看过之后它又被改动就变成“查看后已变更”，得再按一次“再次检查”。没开工作区时这一块不能选。",
+            "source": "<strong>工作区政策来源</strong> — 每个工作区各自选 Navide 默认值／用户政策／Repository 政策。<strong>Repository 建议在你亲自查看并按下“接受 Repository 政策”之前都标成“不受信任”</strong>，切换来源还要指纹精确相符；你看过之后它又被改动就变成“查看后已变更”，得再按一次“再次检查”。没开工作区时这一块不能选。",
             "recovery": "<strong>全域政策保存区</strong> — 状态有正常／遗失／损坏／不安全的项目／不安全或无法使用的文件夹。损坏时可以<strong>重建全域政策</strong>，但要勾确认；重建只换全域政策与 revision 档，工作区的来源选择与 repository 政策文件都保留。保存区被判定为<strong>不安全</strong>时自动重建会禁用，画面要你自己去修它列出来的那几个 Host-owned 路径。",
             "failClosed": "任何一种不健康状态都是<strong>失败关闭</strong>：在你明确选一个可用来源或修好它之前，什么都不会被放行。连“存不确定”也一样——消息是“无法确认政策变更结果。政策仍维持失败关闭，请重新检查”。"
           },
-          "policyNote": "要一次清掉所有 repository 来源 pin，用“重设所有政策来源选择”，同样要勾确认。它<strong>不会</strong>修改或删除任何 repository 政策文件，只是让每个工作区之后重新依全域 Host 默认值或用户政策解析。",
+          "policyNote": "要一次清掉所有 repository 来源 pin，用“重设所有政策来源选择”，同样要勾确认。它<strong>不会</strong>修改或删除任何 repository 政策文件，只是让每个工作区之后重新依全域 Navide 默认值或用户政策解析。",
           "extNote": "Navide 插件后端出状况时的分界：<strong>只有协定讯框（request／response／cancel）满了才会终止那个后端</strong>；Host 通知满了只是丢弃并计数，不会把整个 Navide 插件拖垮。干净结束的后端会把原因记下来，不再无声消失。"
         },
         "s5": {
@@ -3305,7 +3399,7 @@
           "h3": "孤儿进程与 Backend",
           "orphans": {
             "leftover": "<strong>残留的 CLI 进程</strong> — 状态栏出现 <code>⚠ N 残留</code> 时点开，会问“侦测到 N 个先前残留的 CLI 进程 — 可能耗尽内存。要清理吗？”，按 <em>清理</em> 清掉、<em>关闭</em> 略过。这些是上一轮运行没收干净的进程。",
-            "backend": "<strong>Backend</strong> — 状态栏的 Backend 药丸点开有地址、PID，以及两颗钮：<em>Restart</em>（没连上时显示 <em>Start</em>）与 <em>Stop</em>（只有连上时能按）。<strong>重启 Backend 会一并带走所有 CLI 进程</strong>；想让它回来之后自动接续对话，就把一般标签页的 <em>后端重启后自动接回工作阶段</em> 打开。",
+            "backend": "<strong>Backend</strong> — 状态栏的 Backend 药丸点开有地址、PID，以及两颗钮：<em>Restart</em>（没连上时显示 <em>Start</em>）与 <em>Stop</em>（只有连上时能按）。<strong>重启 Backend 会一并带走所有 CLI 进程</strong>；想让它回来之后自动接续对话，就把一般标签页的 <em>Navide 后台服务重启后自动接回工作阶段</em> 打开。",
             "timeout": "Backend 起太慢而报错时，调一般标签页的 <em>后端启动超时</em>（15–120 秒）。"
           },
           "h4": "维护动作速查",
@@ -6834,13 +6928,22 @@
       "env": "环境变量",
       "no-env": "没有环境变量",
       "needs-setup": "需要设置",
+      "needs-node": "需要 Node.js",
+      "needs-node-hint": "这个服务器用 {command} 启动，而 {command} 是 Node.js 附带的。这台电脑找不到 Node.js，安装之前服务器无法启动。",
+      "install-node": "安装 Node.js",
+      "risk": {
+        "tag": "高风险权限",
+        "shell": "这个服务器可以用你的用户权限在这台电脑上执行 shell 命令，包括删除文件、修改设置、结束程序。",
+        "desktop": "这个服务器可以读取其他 App 屏幕上的内容，并操控你的鼠标和键盘，所以能在任何你已登录的 App 里操作。",
+        "guard": "Navide 不会拦截它。Navide Guard 会用和内置 shell 相同的规则，判断它的命令、文件、注册表和进程工具。"
+      },
       "fill-locally": "有些值为空，请在这台电脑上填写。环境变量和标头的值不会在设备之间同步。",
       "fill-credentials-locally": "网址或参数中有空值。如果原本是凭证，请在这台电脑上填写。网址和参数中的凭证不会在设备之间同步。",
       "headers": "标头",
       "no-headers": "没有标头",
       "show": "显示",
       "hide": "隐藏",
-      "conflict": "此文件已在 Agent-Team 外部变更，请重新加载后再保存。",
+      "conflict": "此文件已在 Navide 外部变更，请重新加载后再保存。",
       "reload": "从磁盘重新加载",
       "custom-title": "添加自订 MCP server",
       "custom-hint": "先选择传输方式，创建后再到已安装清单填写连接信息。",
@@ -6880,6 +6983,9 @@
       "state-on": "已激活",
       "state-off": "已禁用",
       "status": "状态：{status}",
+      "transport-local": "本地",
+      "transport-remote": "远程",
+      "status-failed": "启动失败",
       "starting-note": "仍在启动（已 {seconds} 秒）。如果通过 npx 或 uvx 运行，首次运行可能正在下载软件包。",
       "error-reason": "启动失败：{reason}",
       "tools-error": "无法读取工具列表：{reason}",
@@ -6911,6 +7017,11 @@
       "keyring-bad-hint": "没有系统钥匙圈时，凭据容易被存成明文文件。",
       "incomplete": "这次扫描不完整：达到时间或文件夹数量上限，或略过了无法安全读取的 repo，下列位置的发现项目可能有遗漏。",
       "keyring-reason-unknown": "未回报原因。",
+      "keyring-reason": {
+        "tool-missing": "缺少读取它的系统工具。",
+        "read-failed": "Navide 读取失败。",
+        "no-service": "没有正在运行的 Secret Service。"
+      },
       "scan": "扫描",
       "scanning": "扫描中…",
       "scan-roots": "扫描范围…",
@@ -6925,9 +7036,7 @@
       "all": "全部",
       "loading": "正在扫描这台机器…",
       "error-load": "扫描失败。",
-      "empty-findings-title": "没有发现项目",
       "empty-findings-body": "目前的筛选条件下没有风险项目。",
-      "empty-inventory-title": "没有清单项目",
       "empty-inventory-body": "目前的筛选条件下没有凭据。",
       "not-scanned": "按“扫描”开始检查这台机器上的凭据。",
       "severity": {
@@ -7136,7 +7245,7 @@
       "group-native": "{agent} 自己的",
       "delivery-title": "投递给",
       "delivery-hint": "● 自己就读得到 · ✓ 由 Navide 投递（点击切换）· 灰色：未投递",
-      "delivery-auto": "{n} 家自己读得到",
+      "delivery-auto": "{n} 个 CLI 自行读取",
       "delivery-none": "尚未投递给任何一家",
       "location": "位置",
       "also-linked-from": "也链接自：{roots}",
@@ -7177,7 +7286,7 @@
       },
       "share": {
         "title": "分享链接",
-        "hint": "在这台机器上加密的 plan 或报告唯读链接。钥匙只存在链接里，服务器只保存它打不开的密文。",
+        "hint": "在这台机器上加密的 plan 或报告唯读链接。钥匙只存在链接里，所以服务器读不到它保存的内容。",
         "col-item": "项目",
         "col-creator": "创建者",
         "col-created": "创建时间",
@@ -7210,7 +7319,7 @@
     },
     "sync": {
       "title": "同步",
-      "hint": "打开一个区块，它就会在登录同一个账号的每台设备上保持一致。内容在本机加密，服务器只存它没有密钥的密文。",
+      "hint": "打开一个区块，它就会在登录同一个账号的每台设备上保持一致。内容在本机加密，所以服务器读不到。",
       "not-yet": "尚未支持同步。",
       "retired-memory": "记忆已不再同步。请关闭这个开关；这台的指示档和云端上的副本都会维持原样，不会被改动或删除。",
       "not-connected": "未连接——已打开的区块会在连接恢复后自动补上。",
@@ -7233,7 +7342,7 @@
       "approval-cut": "……预览到此为止，文件还有后续内容",
       "approval-expand": "显示完整内容",
       "approval-deletes": "会删除这台的提示词 {name}。",
-      "approval-new-loop": "{name} 会变成 loop 提示词。",
+      "approval-new-loop": "{name} 会变成默认技能。",
       "approval-text": "收到的完整内容",
       "approval-diff": "与这台的差异",
       "approval-changes": "有变动的字段",
@@ -7258,7 +7367,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "技能",
       "scope-memory": "记忆",
-      "scope-hint-prompts": "提示词技能与 Loop 提示词。",
+      "scope-hint-prompts": "已存指令，以及哪一个是默认技能。",
       "error-load": "读不到同步设置。",
       "scope-hint-mcp": "你在 Navide 加的 MCP。其中的秘密会加密后才离开这台机器。",
       "scope-hint-skills": "哪些技能开着、各自送给哪几家 CLI，以及在 Navide 创建的技能的文件（大型技能以加密 blob 发送）。你自己放进文件夹的技能只同步设置。",
@@ -7444,15 +7553,14 @@
       "error-save": "无法保存这个文件，草稿仍留在编辑器中。"
     },
     "prompts": {
-      "title": "Prompt 技能",
-      "intro": "CLI pane 的 ∞ 按钮可施放的整段指令。一个技能就是一整段 prompt —— 选技能是“换一段”，不会跟别的技能叠加。只有默认技能会以 loop 运行，其他技能都只送出一次。",
-      "new": "添加技能",
-      "new-name": "新技能",
+      "intro": "CLI pane 标题栏的重复按钮（∞）送出的已存指令。选一个技能就是整段替换；只有默认技能会在每轮结束后重复送出，其他只送出一次。",
+      "new": "添加 Prompt",
+      "new-name": "新 Prompt",
       "copy-name": "{name} 副本",
       "filter-label": "依分类筛选",
       "all": "全部",
-      "search": "搜索技能…",
-      "empty": "没有符合这个筛选的技能。",
+      "search": "搜索 Prompt…",
+      "empty": "没有符合这个筛选的 Prompt。",
       "default-badge": "★ 默认",
       "turns": "×{n}",
       "turns-unlimited": "无轮次上限",
@@ -7472,10 +7580,10 @@
       "disable": "禁用",
       "duplicate": "复制",
       "delete": "删除",
-      "hint": "默认技能就是单击 ∞ 会送出的那一段，也是唯一会 loop 的技能；禁用的技能留在这里，但不会出现在菜单上。",
+      "hint": "单击重复按钮会送出默认技能，也是唯一会重复的技能；禁用的技能留在这里，但不会出现在菜单上。",
       "advanced": "高级",
       "send-once": "单次送出",
-      "send-once-hint": "只有默认技能会以 loop 方式运行；这个技能只送出一次，没有续跑词与轮次上限。",
+      "send-once-hint": "只有默认技能会在每轮结束后重复送出；这个技能只送出一次，没有续跑词与轮次上限。",
       "untitled-name": "未命名技能",
       "prompt-empty": "Prompt 不能为空，已保留原本的内容。要移除这个技能，请使用“删除”。",
       "delete-confirm": "删除“{name}”？此操作无法撤销，同步 prompt 的其他机器也会一并删除。"
@@ -7483,12 +7591,9 @@
     "section": {
       "general-behavior": "一般行为",
       "resource-limits": "资源限制",
-      "notifications": "通知",
       "settings-management": "设置管理",
       "theme": "主题",
-      "language": "语言",
-      "other": "其他",
-      "updates": "更新"
+      "other": "其他"
     },
     "p2p": {
       "title": "连接",
@@ -7746,17 +7851,18 @@
     },
     "cliAgents": {
       "title": "CLI Agents",
-      "hint": "激活并排序手动生成菜单中的 CLI agent；顺序也会应用到 Ctrl+数字快捷键。打开卡片即可管理该 agent，至少须保留一个激活。",
+      "hint": "激活并排序新建 pane 菜单中的 CLI agent；顺序也会应用到 Ctrl+数字快捷键。打开卡片即可管理该 agent，至少须保留一个激活。",
       "drag-hint": "拖曳以排序",
       "search": "搜索 agent…",
       "filter-label": "筛选 CLI agent",
       "filter-all": "全部",
       "filter-enabled": "已激活",
       "filter-attention": "需要注意",
+      "attention-badge": "需要注意",
       "count": "显示 {visible} / {total} 个 agent · {enabled} 个已激活",
       "reorder-filtered": "清除搜索并选择“全部”后即可排序",
-      "enabled": "已激活",
-      "enable-agent": "激活 {agent}",
+      "enabled": "显示在菜单",
+      "enable-agent": "在菜单中显示 {agent}",
       "manage": "管理",
       "manage-agent": "管理 {agent}",
       "move-up": "将 {agent} 向前移",
@@ -7787,9 +7893,9 @@
         "perm-inherit": "权限 继承",
         "perm-force-on": "权限 强制开",
         "perm-force-off": "权限 强制关",
-        "push": "推送打开",
-        "push-off": "推送已关",
-        "no-push": "无推送通道",
+        "push": "直接送达开启",
+        "push-off": "直接送达已关",
+        "no-push": "以输入方式送达",
         "accounts": "{count} 账号",
         "signed-out": "未登录",
         "custom-binary": "自订可执行文件",
@@ -7836,12 +7942,13 @@
       "restart-note": "旗标在 pane 启动时就写进它的命令。这里的变更只影响之后生成的 pane；已经在跑的 pane 会保留启动时的设置，直到重建或还原。"
     },
     "keybindings": {
-      "intro": "下方任何快捷键都可以重新设置。点击键帽即可录制新组合，用 + 添加第二组绑定，用 ✕ 移除。变更会立即写入 keybindings.json，并应用到所有打开中的窗口。",
+      "intro": "下方任何快捷键都可以重新设置。点击键帽即可录制新组合，用 + 添加第二组绑定，用 ✕ 移除。变更会立即写入快捷键文件，并应用到所有打开中的窗口。",
+      "file-tooltip": "Navide 应用数据文件夹中的 keybindings.json",
       "search-placeholder": "搜索命令、按键或情境…",
       "filter": {
         "all": "全部",
         "customized": "已自订",
-        "conflicts": "冲突"
+        "conflicts": "共用按键"
       },
       "export": "导出",
       "import": "导入",
@@ -8061,6 +8168,12 @@
         "workbench_action_zoomUiOut": "界面缩小",
         "workbench_action_zoomUiReset": "界面缩放重设"
       },
+      "cmdWhen": {
+        "workbench_action_closeModal": {
+          "notTerminal": "在终端外关闭对话框",
+          "planWindow": "关闭计划窗口的浮层"
+        }
+      },
       "col": {
         "command": "命令",
         "keys": "快捷键",
@@ -8127,12 +8240,19 @@
       "conflict-hard": "冲突",
       "conflict-soft": "共用按键",
       "when-any": "总是生效",
+      "when-limited": "仅在特定情况下",
       "no-results": "没有符合搜索条件的命令。",
-      "footnote": "支持两段式和弦：先录一组组合键，再按第二组。不归此表管辖的按键，已列在本页下方的唯读区块。"
+      "footnote": "支持两段式和弦：先录一组组合键，再按第二组。不归此表管辖的按键，已列在本页下方的唯读区块。",
+      "category": {
+        "workbench": "工作台",
+        "editor": "编辑器",
+        "controlPane": "CLI pane",
+        "ui": "外部控制"
+      }
     },
     "accounts": {
       "title": "Git 账号",
-      "encrypted-note": "Token 会通过操作系统密钥链（safeStorage）加密后保存在本机。",
+      "encrypted-note": "Token 会通过操作系统密钥链加密，只保存在本机。",
       "unavailable": "此系统无法使用加密功能，因此无法添加账号。通常代表操作系统密钥链无法访问。",
       "empty": "尚未添加任何账号。",
       "new-account": "＋ 添加账号",
@@ -8144,7 +8264,7 @@
       "host": "主机",
       "username": "用户名",
       "token": "Token",
-      "token-hint": "粘贴 Personal Access Token。会以 safeStorage 加密并保存在本机，不会以明文保存。",
+      "token-hint": "粘贴 Personal Access Token。会加密并只保存在本机，不会以明文保存。",
       "token-keep": "留空则沿用现有 Token",
       "delete-confirm": "确定删除此账号？",
       "cli": {
@@ -8173,11 +8293,14 @@
         "agent-switch-confirm-to": "切换后账号",
         "agent-switch-confirm-caller": "提出要求的 pane",
         "agent-switch-confirm-workspace": "pane 所在的 workspace",
+        "agent-switch-confirm-pane": "要移动的 pane",
+        "agent-switch-confirm-pane-body": "你同意之前什么都不会切换。只有这个 pane 会移动：它会在另一个账号自己的文件夹里接着原来的对话重新打开。CLI 当前登录的账号和其他 pane 都保持不变。如果这个 pane 正在工作，停止它之前会再问你一次。没有回答的话，这个请求会自动关闭。",
         "agent-switch-confirm-reason": "理由（由 agent 提供）",
         "agent-switch-confirm-reason-truncated": "agent 的理由超过 300 字，只显示前 300 字。",
         "agent-switch-confirm-cancel": "取消",
         "agent-switch-confirm-ok": "切换账号",
         "agent-switch-done": "{agent} 把 {vendor} 从 {from} 切换到 {to}。agent 给的理由：{reason}",
+        "agent-switch-pane-done": "{agent} 把一个 pane 从 {from} 移到了 {to}。当前登录的账号和其他 pane 都没有变。agent 给的理由：{reason}",
         "login-complete": "已登录 {email}，账号已保存。",
         "login-complete-no-email": "登录完成，账号已保存。",
         "login-step2": "第 1 步完成：{email} 已保存。还要再授权一次，让这个账号登录到自己的文件夹，请在新开的登录 pane 里完成浏览器授权。",
@@ -8204,8 +8327,12 @@
         "dir-sign-in-hint": "在这个账号自己的文件夹登录一次，停放时也能实时读取额度。浏览器会再请你授权一次，请使用同一个 email。",
         "dir-email-mismatch": "账号文件夹登录的是 {dirEmail}，不是 {expected}。这张卡片上的额度属于 {dirEmail}。",
         "default-hint": "你原本的登录凭据",
-        "is-default": "默认",
-        "set-default": "设为默认",
+        "default-collapsed": "原始登录（Navide 外）：尚未登录",
+        "default-sign-in-title": "切换到原始登录？",
+        "default-sign-in-body": "在这里登录会先把 {agent} 切换到原始登录。原始登录没有保存任何登录，所以当前的在线登录（{current}）会被清除；那个账号仍保存在它自己的卡片上，之后可以再切换回去。这次登录完成前，新开的 {agent} pane 都不会处于登录状态。",
+        "default-sign-in-confirm": "切换并登录",
+        "is-default": "使用中",
+        "set-default": "切换到此账号",
         "switching": "切换中…",
         "not-signed-in": "尚未登录",
         "rename": "重命名",
@@ -8247,6 +8374,8 @@
       "inference-url": "推论服务器 URL",
       "recheck-title": "重新检查连接",
       "ollama-connected": "Ollama {version} 已连接",
+      "ollama-missing": "这台电脑尚未安装 Ollama。",
+      "install-ollama": "安装 Ollama",
       "not-connected": "未连接 · 请运行",
       "model-manager": "模型管理员",
       "model-manager-note": "输入名称从 Ollama 下载模型，或删除不再需要的模型",
@@ -8262,7 +8391,7 @@
       "testing": "测试中：",
       "preparing": "准备中…",
       "benchmark-hint": "对所有本地模型运行 4 项标准任务，以判断哪些模型适合用于流程意图侦测：",
-      "task-t1": "技术堆栈侦测 — 输出 JSON",
+      "task-t1": "技术堆栈侦测 — 列出工作区使用的库",
       "task-t2": "工作区摘要 — 单句摘要",
       "task-t3": "相关性选择 — 从文档清单中挑选最相关的项目",
       "task-t4": "CLI 意图解析 — 解析 Agent 输出并提取问题与选项",
@@ -8299,6 +8428,8 @@
     }
   },
   "label": {
+    "step-count": "{count} 个步骤",
+    "imported-from-n8n": "来自 n8n",
     "resume-other-pipeline": "有一个未完成的运行属于“{name}”。切换到该流程即可继续。",
     "role-rename-repointed": "已更新 {count} 条流程中的角色引用。",
     "pipeline-manager": "流程管理",
@@ -8307,7 +8438,6 @@
     "stage-count": "{count} 个阶段",
     "pipeline-count": "{count} 条流程",
     "builtin": "内置",
-    "pipeline-definition-file": "定义档",
     "loading-pipelines": "流程加载中…",
     "pipelines-unreadable": "读不到流程定义",
     "pipelines-empty": "还没有任何流程",
@@ -8488,7 +8618,6 @@
     "pipeline-aborted": "流程已中止。Agent 保留 — 继续以恢复，或重设以清除。",
     "pipeline-aborted-paused": "流程已中止（暂停）。Agent 保留 — 继续以恢复，或重设以清除。",
     "pipeline-completed": "✓ 流程完成所有 {count} 个阶段。请查看右侧各面板。",
-    "provide-task": "请提供任务描述 + 工作区，然后开始。",
     "missing": "⚠ 遗失",
     "already-open": "● 已打开",
     "tagline": "同时驱动 Claude Code · Codex · Antigravity CLI",
@@ -8900,6 +9029,7 @@
     "drag-resize-log": "拖曳以调整记录面板高度",
     "filter-by-type": "依类型筛选",
     "all-stages-finished": "{count} 个阶段全部顺利完成",
+    "region-switching": "正在把 {title} 切换到 {version}…",
     "region-unavailable": "{title} 无法使用"
   },
   "layout": {
@@ -8912,7 +9042,7 @@
       "down": "下方横行",
       "main": "主要区域"
     },
-    "settings-intro": "主窗口的每一个区域。每个 view 全程只有一份，搬移就是把它从现在的位置移走。主要区域固定放 CLI 舞台，不可更动。",
+    "settings-intro": "主窗口的每一个区域。每个 view 只能放在一个位置，移到别处就会从原来的位置移走。主要区域固定放 CLI 舞台，不可更动。",
     "width": "宽度",
     "height": "高度",
     "collapsed": "收合",
@@ -8939,6 +9069,9 @@
     "statusbar-note": "状态栏上的信息窗会一起消失"
   },
   "error": {
+    "pipeline-call-failed": "子 Pipeline {node} 失败（{reason}），本轮已停止。",
+    "pipeline-parent-suspended": "有一条挂起中的父 run（{name}），请先 resume 或 reset。",
+    "pipeline-node-failed": "阶段 {stage}：步骤 {slot} 报告失败（{reason}），重试次数已用完。本轮已停止，可以 resume 再试一次。",
     "pipeline-start-refused": "流程没有启动：{reason}",
     "pipeline-kickoff-failed": "流程失败：阶段 {stage}、slot {slot} — {reason}。它的 pane 仍保持打开。",
     "pipeline-kickoff-held": "流程失败：阶段 {stage}、slot {slot} — 它的 kickoff 停在输入框。保持不动，resume 会帮你送出；或者把它清掉。它的 pane 仍保持打开。",
@@ -8990,6 +9123,8 @@
     "merge-aborted": "合并已中止 — 冲突已取消。"
   },
   "hint": {
+    "pipelines-stored-locally": "保存在这台电脑的 Navide 设置中，不在工作区内。要迁移到另一台电脑，请在设置中导出设置包。",
+    "imported-from-n8n": "这个流程的每次运行都会标记为外部内容。",
     "role-not-found-refresh": "“{key}”这个角色已经不存在了——可能是其他窗口把它删掉了。左侧清单已经自动更新，请重新选取角色。",
     "role-key-exists-recover": "已经有一个识别码为“{key}”的角色。如果它是上一次没改完的改名留下来的，请先在左侧清单删除“{key}”，然后再改名一次。",
     "role-in-use-list": "请先把下列 stage 插槽改指到别的角色或移除：",
@@ -9006,6 +9141,7 @@
     "default-role-fallback": "`defaultRole` 将在运行时自动比对",
     "replace-all-roles": "全部取代 — 删除不在导入文件中的目前角色",
     "reset-stages-warning": "所有自订阶段将被移除…",
+    "reset-stages-graph-warning": "这条流程上手画的闸门、循环、分支也会一并清除，无法复原。",
     "completion-modal-body": "每个 Agent 都已完成任务 — 请查看右侧各面板。",
     "git-credential-token": "密码字段请贴 Personal Access Token（非登录密码）。",
     "install-foundation-tools": "安装所有 Agent 运作所需的基础工具…",
@@ -9048,8 +9184,7 @@
     "attention-body": "{label} 正在等待你的输入"
   },
   "updater": {
-    "section-title": "更新",
-    "section-hint": "让 Agent-Team 保持在最新版本。更新会应用到所有工作区。",
+    "section-hint": "让 Navide 保持在最新版本。更新会应用到所有工作区。",
     "current-version": "目前版本",
     "check": "检查更新",
     "checking": "正在检查更新…",
@@ -9124,6 +9259,21 @@
     "load-more": "加载更多（还有 {count} 则）",
     "mcp-tools-changed": "MCP 工具可能已变更",
     "mcp-tools-changed-note": "CLI agent 只在启动时读一次 Navide 的 MCP 工具清单。从上一个版本（{from}）就连着的对象 — CLI pane 或外部 MCP client — 拿到的还是当时那份清单；重开 pane 或重新连接才会拿到新的工具。",
+    "backend-restart": {
+      "title": "后端在 {time} 重新启动",
+      "note": "接回的 pane 会停在提示符，不会自己继续；已结束的 pane 保持原状，要你点「重建」才会重开。",
+      "crash-loop": "后端重启后很快又崩溃，所以这次不再自动接回任何 pane。需要的请自己重建。",
+      "resumed": "已接回：{names}",
+      "interrupted": "回合被中断：{names}",
+      "rebuild": "重建 {name}",
+      "not-resumed": {
+        "crash-loop": "{name}：未接回，因为后端短时间内反复崩溃",
+        "over-limit": "{name}：未接回，因为画面外正在工作的 pane 超过六个",
+        "idle-off-screen": "{name}：未接回，因为它在画面外而且是空闲的",
+        "no-session": "{name}：未接回，因为没有可接续的对话",
+        "failed": "{name}：接回失败"
+      }
+    },
     "scheduler-disabled": "调度“{name}”已禁用：目标 pane 不存在",
     "scheduler-disabled-note": "连续 {n} 次到点都找不到目标 pane，所以自动禁用。到调度面板按“重新绑定”指向现有的 pane，再重新激活。",
     "quota": {
@@ -9321,9 +9471,6 @@
     "intro": "自订每个 pane 状态的名称与颜色。变更会应用到所有显示状态的地方——pane 徽章、侧栏、会议行与资源面板——并保存于你的账号，不随项目切换。",
     "col": {
       "status": "状态",
-      "zh": "繁体中文",
-      "en": "英文",
-      "ja": "日文",
       "color": "颜色"
     },
     "row-only": "仅清单",
@@ -9501,7 +9648,7 @@
     "failed": "无法接回这段对话，其历史记录可能已不存在"
   },
   "cli-account": {
-    "default": "默认",
+    "default": "原始登录",
     "switch-title": "切换账号",
     "swap-failed": "账号切换失败，仍使用原本的账号。",
     "panes-running": "有 {count} 个运行中的 CLI pane 正在使用此账号，请先关闭再切换。",
@@ -9811,6 +9958,7 @@
     "reading-short": "读取中",
     "reading-tooltip": "这个账号刚切换为使用中。读取额度需要启动一次 Claude Code，因此在完成前下方显示的是上一次的数字，最多约 3 分钟。",
     "refresh-status": "刷新：{status}",
+    "refresh-not-signed-in": "无法刷新——尚未登录",
     "refresh-error": "原因：{reason}",
     "refresh-status-ok": "已是最新",
     "refresh-status-not-refreshed": "尚未刷新",
@@ -9860,13 +10008,13 @@
     "settings-title": "CLI 额度徽章",
     "settings-enabled": "在 CLI pane 标题栏显示剩余额度",
     "settings-refresh": "刷新间隔",
-    "settings-hint": "显示 11 家 CLI 的额度：claude、codex、kimi、grok、antigravity、opencode、qwen、kilo、pi、copilot、cursor。多数是读取本机 CLI 凭据查找该供应商的官方用量 API，仅读取、不写入凭据。claude 则不同，改为驱动 Claude CLI 内置的 /usage 面板，不读取凭据。",
+    "settings-hint": "以只读方式显示 11 家 CLI 提供商的额度，来自各家的用量 API（Claude 则来自内置的 /usage 面板）。",
     "failover-title": "额度耗尽时的账号切换",
-    "failover-hint": "CLI 账号额度用完时 Navide 的做法：不处理、列出可切换的账号（默认），或自动切换——每个 CLI 每 5 小时最多自动切换 3 次，且不会自动切回耗尽的账号。表格列出各 CLI 的能力；是否切换由后端决定。",
+    "failover-hint": "CLI 账号额度用完时 Navide 的做法：不处理、列出可切换的账号（默认），或自动切换（每个 CLI 每 5 小时最多 3 次）。",
     "failover-loop-title": "循环遇到额度耗尽时，切换后立即继续",
-    "failover-loop-hint": "正在跑循环的 pane 额度用完时，自动切换到还有额度的账号并立刻送出继续，不等额度重置。需要上方选“自动切换”。",
+    "failover-loop-hint": "跑 loop 的 pane 额度用完时，切到还有额度的账号并立刻继续；需要选“自动切换”。",
     "follow-switch-title": "切换 Claude 账号时，固定账号的 pane 一起换",
-    "follow-switch-hint": "在账号自己的登录文件夹里运行的 Claude pane，不会跟着账号切换。打开后，切换时会列出这些 pane 让你选择一起换；额度用完的 pane 也会出现“换账号”按钮。换过去的 pane 会用新账号重新打开并接回原本的对话。默认关闭。",
+    "follow-switch-hint": "切换账号时，把使用账号专属登录文件夹的 Claude pane 一并移到新账号并接续对话。",
     "failover-mode-off": "关闭",
     "failover-mode-notify": "通知我",
     "failover-mode-auto": "自动切换",
@@ -9955,6 +10103,7 @@
       }
     },
     "blocked-by": "需要先安装 {names}，才能从这里安装。",
+    "installs-first": "安装时会先一并安装 {names}。",
     "go-install": "先安装 {name}",
     "complete-failed": "无法保存设置进度：{error}。请再试一次。",
     "ollama-start-failed": "无法启动 Ollama 服务。详情请见记录，或在终端运行 `ollama serve`。",
@@ -10086,6 +10235,9 @@
     "weekday-6": "周六"
   },
   "scheduler": {
+    "pipeline-title": "此计划任务每次运行都会启动一轮 Pipeline，会打开 CLI Pane 并消耗额度",
+    "pipeline-tag": "Pipeline",
+    "pipeline-target": "启动 Pipeline {name}",
     "system": {
       "tag": "系统",
       "manage": "到 workspace 管理 →",
@@ -10126,7 +10278,22 @@
       "expired": "已过期：agent job 7 天未更新",
       "unknown": "略过"
     },
+    "fail-reason": {
+      "no_window": "没有 Navide 窗口打开这个 job 的 workspace。请先打开 workspace，再运行一次。",
+      "pipeline_not_found": "这个 job 要启动的 Pipeline 不存在，或名称对应到不止一条。请编辑 job，重新选择 Pipeline。",
+      "pipeline_already_running": "那个 workspace 已有 Pipeline 正在运行，所以这次没有启动。"
+    },
     "editor": {
+      "err-task": "请输入任务",
+      "err-pipeline": "请选择 Pipeline",
+      "task-placeholder": "每一轮 Pipeline 要做什么…",
+      "task": "任务",
+      "pipeline-cost": "每次运行都会打开这个 Pipeline 的 CLI Pane 并消耗额度。计划任务不会自动打开窗口：如果这个 workspace 没有打开，本轮会失败并说明原因。",
+      "pick-pipeline": "选择 Pipeline",
+      "pipeline": "Pipeline",
+      "action-pipeline": "启动 Pipeline",
+      "action-message": "向 Pane 发送指令",
+      "action": "动作",
       "title-new": "添加调度工作",
       "title-edit": "编辑调度工作",
       "name": "名称",
@@ -10166,6 +10333,7 @@
       "save": "保存"
     },
     "owner": {
+      "user": "由你创建",
       "agent": "agent · {name}",
       "external": "外部 agent",
       "agent-title": "由 agent“{name}”创建；只有它和你可以修改",
@@ -10613,7 +10781,7 @@
     "desc": {
       "telegram": "用 {'@'}BotFather 创建的 bot",
       "discord": "服务器里的 bot 应用程序",
-      "slack": "工作区里的 Socket Mode 应用程序",
+      "slack": "从这台电脑主动连接的 Slack 应用程序（请在 Slack 开启 Socket Mode）",
       "feishu": "飞书或 Lark 的自建应用",
       "dingtalk": "Stream 模式的企业内部机器人",
       "matrix": "任一 homeserver 上的 bot 用户",
@@ -10820,7 +10988,7 @@
     "unavailable": "目前的后端还没有 Navide Guard，更新后请重新启动 Navide。",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "依动作的危险程度与要求来源判断每个 CLI 动作，危险的先挡下或要求确认。判断是固定规则的代码，不经过 AI。即使关闭，从聊天频道核准高风险动作仍会被拒绝。终端指令防护，以及 agent 通过 MCP 回答提示时的检查，也不受这个开关影响。"
+      "desc": "依危险程度与要求来源，用固定规则（不经过 AI）挡下危险的 CLI 动作或先要求确认。即使关闭，从聊天频道核准高风险动作仍会被拒绝，终端指令防护与通过 MCP 回答提示时的检查也照常运作。"
     },
     "counts": {
       "critical": "严重 {n}",
@@ -10860,7 +11028,7 @@
     },
     "vendors": {
       "title": "Guard 能挡哪些 CLI",
-      "hint": "Guard 通过 CLI 自己的 hook 挡下动作。没有 hook 的 CLI 只能靠拒绝聊天室核准、以及不用 YOLO 模式运行来保护。",
+      "hint": "只有能让 Navide 在每个动作执行前先检查的 CLI，Guard 才挡得下。其他 CLI 只能靠拒绝来自聊天室的核准请求、并保持权限提示开启来保护。",
       "block": "可阻挡",
       "none": "无法阻挡",
       "unknown": "未知"
@@ -11081,8 +11249,81 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "详细",
+    "stage-not-found": "这个步骤已经不存在，可能在别处被修改了；请重新打开这条 pipeline。",
+    "refused": {
+      "last-pipeline": "这是唯一的一条 pipeline，不能删除。请先创建另一条。",
+      "last-stage": "pipeline 至少要有一个步骤，所以不能删除最后一个。",
+      "not-builtin": "只有内置的 pipeline 能还原成原本的步骤。",
+      "no-seed": "这条内置 pipeline 没有可还原的原始步骤。",
+      "stage-id-required": "这个步骤没有 ID，请设置后再试一次。",
+      "stage-id-invalid": "步骤 ID 只能使用英文字母、数字、连字符、下划线和句点。",
+      "stage-needs-slot": "每个步骤至少要有一个 agent。"
+    },
+    "run": {
+      "no-workspace": "请先打开一个工作区。",
+      "already-running": "这个工作区已经有 pipeline 在运行。请先中止它。",
+      "no-pipeline": "请先选择一条 pipeline。",
+      "not-started": "运行没有开始，原因记在 pipeline 日志里。",
+      "not-running": "这个工作区没有正在运行的 pipeline。",
+      "last-stage": "这是最后一个阶段（第 {stage} 个，共 {total} 个），报告完成后运行就会结束。",
+      "gate-waiting": "运行正在“{gate}”等待你核准。请先核准或退回。",
+      "not-advanced": "运行没有往下走，原因记在 pipeline 日志里。",
+      "no-run": "这个工作区没有可以继续的运行。",
+      "nothing-to-resume": "上一次运行的每个阶段都已完成（{done}/{total}）。",
+      "not-resumed": "运行没有继续，原因记在 pipeline 日志里。",
+      "not-cleared": "运行没有被清除，原因记在 pipeline 日志里。",
+      "stored-not-cleared": "pane 已经关闭，但保存的运行记录没有清除。",
+      "no-task": "没有可运行的任务，请先输入任务。",
+      "not-at-gate": "运行目前没有在等待核准。",
+      "wrong-gate": "运行正在“{gate}”等待，不是“{asked}”。",
+      "node-required": "请选择要从哪个步骤重新运行。"
+    },
+    "start": {
+      "parent-suspended": "“{name}”正在这里等它的子 Pipeline。请先继续或重置它。",
+      "switch-failed": "无法切换到这条 pipeline。",
+      "stages-load-failed": "无法加载这条 pipeline 的步骤。",
+      "no-stages": "这条 pipeline 还没有任何步骤，请先添加一个。",
+      "graph-failed": "无法准备这条 pipeline 的运行。",
+      "spawn-failed": "第一个步骤的 agent 都无法启动。请确认它们的 CLI 已安装。",
+      "already-running": "这个 workspace 已有 pipeline 正在运行，请先中止它。",
+      "not-recorded": "这次运行没有被记录下来，所以没有启动。原因请看 pipeline 日志。"
+    },
+    "graph": {
+      "slot-incomplete": "“{label}”需要设置 agent 和名称。",
+      "self-loop": "“{label}”不能连到自己。",
+      "edge-into-trigger": "任何连接都不能连进 pipeline 的起点。",
+      "reject-from-trigger": "退回连接不能从 pipeline 的起点拉出。",
+      "max-loops-range": "从“{label}”拉出的退回连接可重复 1 到 {max} 次。",
+      "edge-must-start-at-work": "分支和错误连接必须从步骤拉出（“{label}”不是步骤）。",
+      "branch-when": "从“{label}”拉出的分支连接需要一个匹配值。",
+      "retry-config": "“{label}”的重试设置超出范围：尝试 1 到 {maxTries} 次，间隔 0 到 {maxWaitMs} 毫秒。",
+      "subpipeline-links": "子 Pipeline 会互相调用形成循环，或调用了已不存在的 pipeline。",
+      "no-graph": "pipeline 还没加载完成，请稍后再试。",
+      "other": "这个修改会让 pipeline 无法运行。",
+      "other-at": "这个修改会让 pipeline 在“{label}”无法运行。"
+    },
+    "gate": {
+      "confirm-title": "要结束这次运行吗？",
+      "confirm-no-edge": "“{name}”没有退回连接，退回会让这次运行以失败结束。pane 会保留。",
+      "confirm-exhausted": "“{name}”的退回次数已达连接上限，再退回会让这次运行以失败结束。pane 会保留。",
+      "confirm-button": "结束运行",
+      "rejected-failed": "“{name}”已退回，这次运行以失败结束。",
+      "ends-run-hint": "在这里退回会结束这次运行。"
+    }
+  },
   "pipelineEditor": {
+    "recover": {
+      "title": "恢复",
+      "resume-desc": "从第一个未完成的阶段继续这次停止的运行，沿用它的 pane 和上下文。",
+      "restart-desc": "关闭这次运行的 pane，从第一个阶段重新运行同一个任务。",
+      "reset-desc": "清除这次运行，并关闭这个窗口的所有 pane，包括你自己开的 pane。",
+      "older-run": "这是较早的一次运行。恢复动作一律作用在这个 Pipeline 最新的那次运行。",
+      "show-latest": "显示最新的运行"
+    },
     "error": {
+      "subpipeline-none": "子 Pipeline 需要另一条 Pipeline 可运行，请先创建一条。",
       "pipeline-running": "这条 pipeline 正在运行，目前无法修改。请先中止或等运行结束。",
       "pipeline-not-found": "找不到这条 pipeline，可能已在别处被删除。请改选其他 pipeline。",
       "export-failed": "导出失败：{message}",
@@ -11090,7 +11331,6 @@
       "command-failed": "运行没有接受这个指令。",
       "cycle": "这条连接会让流程无限循环。请改用从闸门或步骤拉出的退回连接，它有重试上限。",
       "duplicate-edge": "这两个步骤已经连在一起了。",
-      "invalid": "这个修改会让 pipeline 失效：{detail}",
       "reject-upstream": "退回连接必须指向更早的步骤。",
       "transport": "无法连到后端：{message}",
       "unknown": "后端拒绝了这个修改，但没有说明原因。"
@@ -11098,10 +11338,14 @@
     "badge": {
       "open-canvas": "在画布上显示这条连接",
       "reject": "↺ 退回第 {layer} 层（最多 {max} 次）",
-      "skip": "⤳ 跳到第 {layer} 层"
+      "skip": "⤳ 跳到第 {layer} 层",
+      "branch": "⑂ 若为 {when} → 第 {layer} 层",
+      "error": "⚠ 失败时 → 第 {layer} 层"
     },
     "canvas": {
       "insert-on-edge": "在这里插入步骤",
+      "branch-label": "若 {when}",
+      "error-label": "失败时",
       "loop-label": "↺ 最多 {max} 次",
       "minimap": "整条 pipeline 的缩略图",
       "pass": "核准后继续",
@@ -11112,7 +11356,7 @@
     },
     "exec": {
       "abort": "中止运行",
-      "empty-body": "从侧栏、指令或 CLI（通过 MCP）启动这条 pipeline 后，运行记录会出现在这里。",
+      "empty-body": "在上方的输入框写下任务后运行，或从侧栏、排程、CLI（通过 MCP）启动这条 pipeline。",
       "empty-title": "还没有运行记录",
       "list": "这条 pipeline 的运行记录",
       "live": "运行中",
@@ -11125,7 +11369,7 @@
       "outcome-ended": "已结束",
       "outcome-unknown": "未知",
       "outcome-idle": "闲置",
-      "pick": "选一笔运行记录，在图上重播。",
+      "failed-step": "{name} 失败：{error}",
       "progress": "{done}／{total} 个步骤",
       "restart": "重新开始",
       "resume": "继续",
@@ -11142,6 +11386,8 @@
       "reject": "退回修改"
     },
     "history": {
+      "subpipeline": "编辑子 Pipeline",
+      "retry": "更改重试",
       "add": "添加 {name}",
       "edit-cli": "更换 CLI",
       "edit-field": "修改 {field}",
@@ -11161,9 +11407,25 @@
       "tidy": "整理排版",
       "unlink": "移除连接",
       "unpin": "取消冻结",
+      "link-kind": "更改连接类型",
+      "link-when": "更改分支值",
       "loop-budget": "修改重试上限"
     },
     "inspector": {
+      "subpipeline-task-help": "留空时使用本轮的任务。可以使用上一步的摘要和其他步骤的产出，用法与 Kickoff 相同。",
+      "subpipeline-task": "那一轮的任务",
+      "subpipeline-help": "本轮会在这里暂停，在同一个 workspace 运行那条 Pipeline，再带着它的结果继续。期间本轮的 Pane 会保留。",
+      "subpipeline-pick": "选择 Pipeline",
+      "subpipeline-pipeline": "要运行的 Pipeline",
+      "retry-blocked-not-failed": "只有失败的步骤可以重试",
+      "retry-blocked-no-run": "无法使用：这个 Pipeline 没有运行记录",
+      "retry-blocked-running": "运行进行中，无法使用",
+      "retry-node-help": "重新运行这个失败的步骤：从它这里 resume，后面的步骤已运行过时则从它重新开始",
+      "retry-node": "重试此步骤",
+      "retry-wait": "每次重试前等待（秒）",
+      "retry-help": "失败的一次（任务没有送到 agent，或 agent 报告失败）会在同一步骤再运行一次，总共最多 {max} 次。",
+      "retry-tries": "总尝试次数",
+      "retry-title": "失败时重试",
       "aria": "{name} 的设置",
       "attempts": "尝试次数",
       "elapsed": "耗时",
@@ -11173,6 +11435,7 @@
       "kind-gate": "核准闸门",
       "kind-slot": "步骤",
       "kind-trigger": "启动",
+      "kind-subpipeline": "子 Pipeline",
       "layer": "层设置",
       "live-empty": "这个步骤运行时才会有实时画面。启动 pipeline 后再回来看。",
       "live-unavailable": "目前读不到这个 pane 的逐字稿。",
@@ -11181,6 +11444,7 @@
       "not-run": "尚未运行",
       "open-pane": "打开 pane",
       "output-empty": "还没有产出。这个步骤运行后，摘要会显示在这里。",
+      "failure": "失败原因",
       "pin": "冻结产出",
       "pin-help": "重跑时会跳过冻结的步骤，沿用它上次的产出。",
       "required": "必填",
@@ -11212,17 +11476,21 @@
       "more": "还有 {n} 层"
     },
     "node": {
+      "subpipeline-sub": "运行 Pipeline {pipeline}",
       "commander": "pipeline 总指挥",
       "gate-sub": "等待核准",
       "pinned": "产出已冻结",
       "tokens": "{n} tok",
-      "trigger-sub": "手动、指令或 MCP"
+      "trigger-sub": "手动、指令或 MCP",
+      "needs-review": "从 n8n 导入：运行流程前，请先确认这个步骤"
     },
     "notice": {
       "external-edit": "这条 pipeline 在别处被修改了。已显示最新版本，undo 记录已清除。",
       "reorder-on-canvas": "这条 pipeline 有闸门、循环或自订连接，顺序由连接决定，请到画布上调整。"
     },
     "palette": {
+      "subpipeline-desc": "运行另一条 Pipeline，等待其结果",
+      "subpipeline": "子 Pipeline",
       "agents": "Agent",
       "branch-tip": "要分支，就在画布上从一个步骤拉出两条线；要汇合，就把两条线拉进同一个步骤。",
       "flow": "流程控制",
@@ -11245,11 +11513,13 @@
       "awaiting": "等待核准",
       "rejected": "已退回",
       "failed": "失败",
+      "untaken": "已跳过（不在执行路径上）",
       "skipped": "沿用冻结产出",
       "aborted": "已中止",
       "pinned": "产出已冻结"
     },
     "toolbar": {
+      "more": "更多动作",
       "canvas": "画布",
       "derived": "由 stage 推导——第一次编辑时会存成图",
       "executions": "运行记录",
@@ -11265,10 +11535,73 @@
       "undo-none": "没有可恢复的操作",
       "view": "查看",
       "show-palette": "显示节点面板",
-      "hide-palette": "隐藏节点面板"
+      "hide-palette": "隐藏节点面板",
+      "task": "这次要运行的任务"
     },
     "controlPane": {
-      "open-in-canvas": "在 pipeline 画布中打开"
+      "open-parent": "打开调用它的 Pipeline",
+      "parents": "调用自",
+      "open-in-canvas": "在 pipeline 画布中打开",
+      "gate-toast": "pipeline 已暂停，等待你在“{name}”核准",
+      "next-gated": "先核准或退回这个闸门，才能进入下一阶段。",
+      "last-stage": "这是最后一个阶段，报告完成后这次运行就会结束。",
+      "next-stage": "下一步 → {stage}"
+    },
+    "paneStatus": {
+      "setup": {
+        "starting": "准备：启动 CLI",
+        "checking-dialog": "准备：检查对话框",
+        "settling": "准备：等待提示符",
+        "injecting-role": "准备：注入角色",
+        "waiting-agent": "准备：等待 agent",
+        "ready": "准备：就绪",
+        "failed": "准备：失败"
+      },
+      "role": {
+        "pending": "角色：等待中",
+        "scheduled": "角色：注入中",
+        "sent": "角色：已注入",
+        "failed": "角色：注入失败",
+        "skipped": "角色：已跳过"
+      },
+      "kickoff": {
+        "pending": "· 启动提示：排队中",
+        "sent": "· 启动提示：已发送",
+        "unverified": "· 启动提示：未确认",
+        "failed": "· 启动提示：失败"
+      }
+    },
+    "builtin": {
+      "pipeline": {
+        "default": "默认流程",
+        "maintenance": "维护流程",
+        "evolve-landing": "提案落地流程"
+      },
+      "role": {
+        "pm": "PRD、用户故事、UAT、KPI、优先级",
+        "backend": "API、数据库、业务逻辑、安全性",
+        "frontend": "组件、状态管理、响应式布局、性能",
+        "mobile": "iOS、Android、跨平台、离线优先",
+        "qa": "E2E、边界情况、自动化测试矩阵"
+      }
+    },
+    "link": {
+      "out-title": "连到",
+      "none": "这个步骤还没有连出去的连线。",
+      "to": "连到的步骤",
+      "to-pick": "选择步骤",
+      "add": "新增连线",
+      "branch-help": "Navide 会在这个步骤的开场提示里加一行，请 Agent 在回复最后单独一行输出 ---BRANCH:<code>: <value>---。运行会走值相符的那条连线（不分大小写）；都不相符时，走值为 default 的连线。",
+      "error-help": "这个步骤重试后仍失败时走这条连线（Agent 回报 ---NODE-FAILED---，或任务没有送达）。运行不会停下，而是沿这条连线继续。",
+      "title": "连接",
+      "desc": "{from} → {to}",
+      "kind": "连接类型",
+      "kind-main": "始终",
+      "kind-branch": "分支（条件）",
+      "kind-error": "失败时",
+      "when": "分支值",
+      "when-placeholder": "步骤报告的值，或 default",
+      "remove": "移除连接"
     },
     "edge": {
       "title": "退回循环",
@@ -11321,9 +11654,19 @@
       "problem-condition": "显示条件指向“{field}”，但它不是这个角色的其他字段。"
     },
     "run": {
+      "abort-title": "中止这次运行？",
+      "abort-message": "运行会停在目前的位置。pane 保持打开，之后可以继续。",
       "running": "运行中：{names}",
       "gate": "等待你在“{name}”核准",
-      "review": "前往核准"
+      "review": "前往核准",
+      "blocked-backend": "尚未连接后端。",
+      "blocked-workspace": "请先打开工作区。",
+      "blocked-task": "请先描述任务。",
+      "reset-title": "要重设这次运行吗？",
+      "reset-message": "重设会清除这次运行，并关闭这个窗口里的所有 pane，包括你自己开的。将关闭 {count} 个 pane。",
+      "reset-message-none": "重设会清除这次运行。目前没有打开的 pane，不会关闭任何 pane。",
+      "reset-manual-mark": "非这次运行开的",
+      "reset-confirm": "重设并关闭 pane"
     }
   },
   "evolve": {
@@ -11365,6 +11708,14 @@
       "not-reclaimed": "（未回收）",
       "fix": "修正",
       "proposal": "提案",
+      "proposal-reason": "理由：{reason}",
+      "effect-title": "成效与频率",
+      "adoption": "采用 {adopted} / {resolved}",
+      "adoption-none": "尚无已有结果的提案",
+      "lowered": "{date} 起自动降为每周：连续 {n} 份提案都没被采用",
+      "landed-title": "已落地的提案",
+      "landed-none": "尚无已落地的提案",
+      "effect-counts": "{before} → {after}（落地前／后 7 天）",
       "history": "历史（最近 30 次）",
       "unsaved": "有未保存的变更",
       "save": "保存",
@@ -11402,6 +11753,21 @@
       "scope-propose": "只提案（不改程序）",
       "scope-fix-no-git": "这个 workspace 不是 git repo，没有 worktree 与主分支可用，只能“只提案”。",
       "scope-always-propose": "新功能、设计取舍、删数据／migration、push、发版一律写提案（内置规则）。",
+      "retro": "回顾",
+      "retro-tools": "重复手动的事",
+      "retro-tools-hint": "每次最多 {tokens} token。读取这个 workspace 近 7 天的消息记录与计划任务执行记录，只取次数；同一件事做了 3 次以上，就提议做成 pipeline、skill、Prompt 等。",
+      "retro-corrections": "你的纠正",
+      "retro-corrections-hint": "每次最多 {tokens} token。读取你在这个 workspace 的 plan 上留下的 review note 与提案退回理由，近 7 天、只取次数；同一个纠正出现 2 次以上，就提议修改规则。",
+      "burst": "提前运行",
+      "burst-on": "同一个错误短时间内大量出现时，提前运行一轮",
+      "burst-count": "次",
+      "burst-minutes": "分钟内",
+      "burst-per-day": "次／天上限",
+      "burst-hint": "只读取这个 workspace 的错误台账。默认关闭；仍受每天次数上限与同时只运行一轮限制，同一个错误 24 小时内最多触发一次。",
+      "reclaim-retro": "回收前回顾",
+      "reclaim-retro-on": "长时间派工的 pane 被自动回收或被父 pane 回收前，请它写三行回顾",
+      "reclaim-retro-per-day": "则／天上限",
+      "reclaim-retro-hint": "只限由别的 pane 开出（cli_open_agent）、运行了 30 分钟以上的 pane，而且只在闲置自动回收、父 pane 回收、pipeline 交接时才问；你自己点的回收不会等待。每次会花那个 pane 一个回合的 token，最多等待 {seconds} 秒，只保留 pane 自己写的三行（先遮罩），只存在这台电脑。",
       "rules": "规则模板",
       "rules-builtin": "内置 v{version}",
       "rules-view": "查看全文",
@@ -11426,6 +11792,29 @@
       "error": "失败",
       "timeout": "超时",
       "skipped": "未运行"
+    },
+    "source": {
+      "failures": "错误分诊",
+      "tools": "重复手动的事",
+      "corrections": "你的纠正"
+    },
+    "freq": {
+      "daily": "每天",
+      "weekly": "每周"
+    },
+    "effect": {
+      "effective": "见效",
+      "not-effective": "未见效",
+      "insufficient": "样本不足",
+      "pending": "待判定"
+    },
+    "proposal-status": {
+      "proposed": "提案中",
+      "approved": "已批准",
+      "rejected": "已退回",
+      "in-progress": "进行中",
+      "landed": "已落地",
+      "abandoned": "已放弃"
     },
     "history": {
       "date": "日期",
@@ -11476,9 +11865,8 @@
     "no-match": "没有符合“{query}”的工作区。",
     "trimmed": "有 {count} 笔较旧的记录因历史上限被移除，可在“设置 → 一般”调整。",
     "limit-title": "最近工作区保留上限",
+    "limit-count": "最多保留条数",
     "limit-hint": "“最近”会保留每个开过的工作区，直到你手动移除。这只是保存安全上限：达到上限时先移除最旧的记录，已打开与已钉选的工作区永远不会被移除。",
-    "limit-off": "不设上限",
-    "limit-on": "最多保留",
     "state-completed": "已完成",
     "state-running": "运行中",
     "state-aborted": "已中止",
@@ -11630,7 +12018,7 @@
     "overview": {
       "title": "揭露总览",
       "intro": "所有从 Navide 市场安装的 Navide 插件：声明了什么、风险等级、最近活动和异常，集中在这一页。只是记录，这里的内容不会改变 Navide 插件能做的事。",
-      "empty": "没有安装任何来自 Navide 市场的 Navide 插件。",
+      "empty": "尚未安装任何来自 Navide 市场的内容。",
       "installedScan": "安装时验证过的扫描",
       "noScanRecord": "安装时没有记录扫描。",
       "activity": "最近活动",
@@ -12065,6 +12453,155 @@
       "not-signed-in": "请先在“开发者账号”登录。",
       "qualification": "开发者申请需要先通过审核。",
       "registry": "Navide 市场拒绝了这个动作（{status} {code}）：{message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "从 n8n 导入",
+    "subtitle": "粘贴从 n8n 导出的工作流，先预览转换结果，再导入为新的流程。",
+    "default-agent": "需要 agent 的步骤使用的 CLI",
+    "default-agent-hint": "需要 agent 的步骤会在这个 CLI 的 pane 里运行；导入后仍可逐个调整。",
+    "json-label": "工作流 JSON",
+    "json-placeholder": "粘贴从 n8n 导出的工作流 JSON",
+    "choose-file": "选择文件…",
+    "choose-file-title": "选择 n8n 工作流",
+    "preview": "预览",
+    "previewing": "预览中…",
+    "import": "导入",
+    "importing": "导入中…",
+    "preview-stale": "JSON 在预览后有改动，请重新预览再导入。",
+    "import-blocked-preview": "请先预览工作流。",
+    "stats": {
+      "workflow": "工作流",
+      "nodes": "n8n 节点",
+      "slots": "步骤",
+      "gates": "核准闸门",
+      "triggers": "触发"
+    },
+    "category": {
+      "native": "直接转换",
+      "agent": "由 agent 执行",
+      "pending": "需要确认",
+      "unsupported": "不支持"
+    },
+    "needs-review": "有 {n} 个步骤需要确认",
+    "needs-review-hint": "仍然可以导入；运行流程前，请先在编辑器里确认这些步骤。",
+    "subworkflow": "这个工作流会调用另一个 Navide 还没有的 n8n 工作流。请把被调用的工作流一起粘贴到这里（放在同一个 JSON 数组里），或先导入它们，这个调用就会作为子 Pipeline 运行。",
+    "external": "导入的流程每次运行都会标记为外部内容，因为它的步骤来自 Navide 之外制作的文件。",
+    "warnings": "警告",
+    "canvas-title": "转换后的流程图",
+    "legend": "颜色说明",
+    "report-title": "转换报告",
+    "col": {
+      "node": "节点",
+      "type": "节点类型",
+      "result": "转成",
+      "category": "类别",
+      "detail": "说明",
+      "actions": "待办",
+      "field": "字段"
+    },
+    "result": {
+      "trigger": "触发",
+      "slot": "步骤",
+      "gate": "核准闸门",
+      "subpipeline": "子 Pipeline",
+      "folded": "并入步骤",
+      "removed": "已移除"
+    },
+    "review-mark": "需要确认",
+    "action-code": {
+      "add-credential": "添加凭据",
+      "confirm-step": "确认步骤",
+      "choose-mcp": "选择 MCP 服务器",
+      "start-manually": "手动启动",
+      "paste-subworkflow": "粘贴子工作流",
+      "keep-in-n8n": "留在 n8n"
+    },
+    "kickoffs-title": "步骤指示",
+    "kickoffs-hint": "这就是每个 pane 在步骤开始时收到的完整文本。",
+    "gates-title": "核准闸门",
+    "gates-hint": "这就是运行到每个闸门时显示的完整问题。",
+    "credentials-title": "凭据",
+    "credentials-hint": "凭据设置在这台电脑上：在“设置 → MCP”添加一个 MCP 服务器，或用该服务自己的 CLI 登录。凭据绝不会存入流程。",
+    "credentials-used-by": "用于：{nodes}",
+    "secrets-title": "已移除的机密",
+    "secrets-hint": "这些值没有保留在流程里，请在这台电脑上重新设置。",
+    "error": {
+      "invalid": "这不是 Navide 能读取的 n8n 工作流。",
+      "preview-failed": "预览失败。",
+      "import-failed": "导入失败。"
+    },
+    "imported": "已导入“{name}”",
+    "imported-review": "已导入“{name}”· 有 {n} 个步骤需要确认",
+    "imported-reused": "“{name}”刚刚已经导入过。已打开那个流程，没有另外创建副本。",
+    "merged-nodes": "这个步骤包含 {n} 个 n8n 节点",
+    "subworkflows-title": "被调用的工作流",
+    "will-create": "导入会创建 {n} 个流程。",
+    "subworkflow-status": {
+      "imported": "已导入",
+      "will-import": "与这个工作流一起导入",
+      "existing": "使用之前导入的流程",
+      "missing": "Navide 中还没有",
+      "recursive": "会回头调用：保留待确认"
+    },
+    "error-in-workflow": "工作流 {n}：{message}",
+    "import-timeout": "导入耗时较长，仍可能完成。请再点一次“导入”：如果流程已创建就会直接打开，绝不会创建副本。",
+    "detail": {
+      "unknown-version": "typeVersion {version} 超出已知范围 {lo}–{hi}，由 agent 按它的参数执行。",
+      "unknown-type": "这个节点类型不在导入对照表中，由 agent 按它的参数执行。",
+      "community-node": "社区节点，由 agent 按它的参数执行。",
+      "merge-combine": "“{mode}”模式的 Merge 会合并数据，由 agent 按它的合并规则执行。",
+      "role-trigger-schedule": "在 n8n 中按计划运行。请手动启动流程，或在每轮消耗 ▸ 调度中新增动作为“启动 Pipeline”的任务。",
+      "role-trigger-webhook": "在 n8n 中由 HTTP 请求启动。Navide 还没有 webhook 触发。",
+      "role-trigger-error": "n8n 的错误工作流在 Navide 中还没有对应的功能。",
+      "role-trigger-app": "在 n8n 中由应用事件启动。Navide 还没有应用触发。",
+      "role-subworkflow": "会调用另一个尚未导入的 n8n 工作流。请把那个工作流也一起粘贴，或先导入它。",
+      "role-respond": "响应 n8n 的 webhook。Navide 还没有 webhook 触发。",
+      "error-workflow": "这个工作流就是它自己的错误工作流。某个步骤失败时，后面的步骤会经由错误连线运行。",
+      "recursive-subworkflow": "会调用 n8n 工作流 {workflowId}，而它又会回头调用这个工作流。子 Pipeline 不能运行自己，所以这个调用保留待确认。",
+      "tool-pipeline": "这是会调用 n8n 工作流 {workflowId} 的 agent 工具，该工作流已导入为流程 {pipelineId}。流程不能作为工具调用，所以改在步骤指示中写明它。",
+      "subpipeline": "以子 Pipeline 运行流程 {pipelineId}（即 n8n 工作流 {workflowId}），并等待它完成。",
+      "subpipeline-nowait": "以子 Pipeline 运行流程 {pipelineId}（即 n8n 工作流 {workflowId}），并等待它完成。n8n 原本不会等它；Navide 总是等待子 Pipeline。",
+      "loop-batch": "这个循环已并入一个步骤，逐个处理每个项目。",
+      "loop-repeat": "这个循环已并入一个步骤，会一直重复，直到退出循环的条件成立。",
+      "loop-wait": "循环中的 n8n Wait。步骤会在每一轮之间在此暂停；不会有核准闸门让运行停下。",
+      "loop-subworkflow": "在循环中调用另一个 n8n 工作流。由 agent 把整个循环作为一个步骤执行。",
+      "removed-sticky": "便签。它的文字已放入说明，以及最近一个步骤的指示中。",
+      "removed-disabled": "在 n8n 中已停用。已略过，它的连线直接接通。",
+      "removed-noop": "No Operation 节点。已移除，并把它的连线接起来。",
+      "cluster-model": "这个步骤改由 CLI agent 运行，不使用这个模型。",
+      "cluster-memory": "已舍弃。CLI 会话会自己保留上下文。",
+      "cluster-tool": "agent 会使用它自己相当于这个工具的功能。",
+      "cluster-mcp-tool": "请在“设置 → MCP”中设置同一个 MCP 服务器。",
+      "cluster-tool-workflow": "这是会调用另一个 n8n 工作流的 agent 工具，而那个工作流尚未导入。流程不能作为工具调用，所以改在步骤指示中描述它。",
+      "cluster-parser": "输出格式已写入步骤指示。",
+      "cluster-vector": "不支持向量数据库集群。请把这部分留在 n8n。",
+      "cluster-other": "已并入 agent 的步骤。",
+      "branch-if": "分支连线：agent 会报告条件走向哪一边，只有那个分支会运行。",
+      "branch-switch": "分支连线，每条规则一条：agent 会报告匹配了哪条规则，只有那个分支会运行。",
+      "merge-join": "等待实际会运行的输入。所属分支没有走到的输入会被跳过。",
+      "agent-step": "由 agent 按原来的参数执行。"
+    },
+    "warning": {
+      "error-workflow-other": "这个工作流的设置指定了另一个 n8n 工作流来处理错误。这部分错误处理不会导入。",
+      "into-trigger": "已舍弃一条连入触发“{node}”的连线。",
+      "plain-connection": "从“{node}”出去的一条 {kind} 连线已改为普通连线：只有步骤能分支或失败。",
+      "outputs-same-step": "“{node}”有多个输出连到同一个步骤，只保留“{kept}”。",
+      "retry-capped": "“{node}”在 n8n 中会重试 {tries} 次，每次间隔 {waitMs} ms。Navide 最多允许 {maxTries} 次、间隔 {maxWaitMs} ms，所以改用 {usedTries} 次、间隔 {usedWaitMs} ms。",
+      "over-target": "{slots} 个步骤超过了约 {target} 个的目标。每个步骤都会打开一个 CLI pane。",
+      "wait-in-loop": "Wait“{node}”位于循环中，已并入它所在的步骤。运行不会在那里被核准闸门停下。"
+    },
+    "error-reason": {
+      "invalid": "这不是 Navide 能读取的 n8n 工作流。",
+      "invalid-json": "这段文本不是有效的 JSON。",
+      "not-object": "n8n 工作流必须是 JSON 对象。",
+      "no-nodes": "n8n 工作流需要有节点和连线。",
+      "node-shape": "节点 {index} 需要名称和类型。",
+      "duplicate-name": "节点 {index} 的名称与前面的节点重复。",
+      "empty-list": "这个列表中没有任何 n8n 工作流。",
+      "internal": "转换后的流程图无效。这是导入器的错误。",
+      "too-large": "这个工作流有 {sizeMb} MB，一次导入最多 {limitMb} MB。",
+      "store-refused": "无法保存工作流“{workflow}”，所以没有导入任何内容：{problems}"
     }
   }
 }

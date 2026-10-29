@@ -84,3 +84,22 @@ describe('invokeCommand', () => {
     expect(outcome).toEqual({ ok: false, error: 'unknown command: does.not.exist' })
   })
 })
+
+describe('invokeCommand – a coded refusal', () => {
+  it('passes the code and params an error carries, next to its message', async () => {
+    registerCommand('test.coded', () => {
+      throw Object.assign(new Error('test.coded: stage 3 of 3 is the last one'), { code: 'last-stage', params: { stage: 3, total: 3 } })
+    })
+    expect(await invokeCommand('test.coded')).toEqual({
+      ok: false,
+      error: 'test.coded: stage 3 of 3 is the last one',
+      code: 'last-stage',
+      params: { stage: 3, total: 3 },
+    })
+  })
+
+  it('an uncoded error answers exactly as before', async () => {
+    registerCommand('test.plain', () => { throw new Error('boom') })
+    expect(await invokeCommand('test.plain')).toEqual({ ok: false, error: 'boom' })
+  })
+})

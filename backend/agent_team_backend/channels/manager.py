@@ -62,6 +62,10 @@ SKILLS_CALLBACK = "nv4:skills"
 MCP_CALLBACK = "nv4:mcp"
 WAKE_CALLBACK = "nv4:wake"
 WAKE_WORDS = {"/wake"}
+# Mattermost's client takes a leading "/" for one of its own slash commands and, finding no
+# "wake" among them, never posts the message; it has no buttons either. So there the bare word
+# wakes too, and is what the hint names.
+MATTERMOST_WAKE_WORD = "wake"
 _CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume",
                       PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp",
                       WAKE_CALLBACK: "/wake"}
@@ -1611,13 +1615,13 @@ class ChannelManager:
         return None
 
     async def _reply(self, msg: InboundMessage, text: str,
-                     buttons: list[tuple[str, str]] | None = None) -> str:
+                     buttons: list[tuple[str, str]] | None = None, typed_hint: str = MSG_TYPED_HINT) -> str:
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
             return ""
         loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
         if not adapter.capabilities.buttons:
-            text += _typed_hint(buttons or [])
+            text += _typed_hint(buttons or [], typed_hint, msg.platform)
             buttons = None
         try:
             ids = await self.mirror.send(loc, text, buttons=buttons)
@@ -1719,7 +1723,7 @@ class ChannelManager:
         # A typed /wake (offered where there are no buttons) is answered like the button, never
         # sent to the CLI as a prompt.
         wake_asked = wake_pressed or _command_word(
-            quick_menu.strip_mention(msg.text, self._identity(msg))) in WAKE_WORDS
+            quick_menu.strip_mention(msg.text, self._identity(msg))) in _wake_words(msg.platform)
         if wake_asked or key in self._wake_kept:
             # The pane is back (on its own, or a wake asked for before it came back): what
             # was kept for it goes in first, in order.
@@ -1773,12 +1777,13 @@ class ChannelManager:
             await self._reply(msg, wake.text(lang, "no_window"))
             return
         command = quick_menu.strip_mention(msg.text, self._identity(msg))
-        if _command_word(command) in WAKE_WORDS:
+        if _command_word(command) in _wake_words(msg.platform):
             await self._wake(msg, binding, lang)
             return
         word = _command_word(command)
         if _is_stop_word(command) or word in CANCEL_WORDS or word in RESUME_WORDS:
-            await self._reply(msg, wake.text(lang, "offline_wake_nothing_kept"), buttons=WAKE_BUTTONS)
+            await self._reply(msg, wake.text(lang, "offline_wake_nothing_kept"), buttons=wake_buttons(lang),
+                              typed_hint=wake.text(lang, "typed_hint", commands="{commands}"))
             return
         key = binding.location().key()
         kept = await self._live_kept(msg, key, lang)
@@ -1789,7 +1794,8 @@ class ChannelManager:
                                              items=_previews(dropped)))
         self._set_kept(key, kept)
         await self._reply(msg, wake.text(lang, "offline_wake", max=wake.STASH_MAX,
-                                         minutes=int(wake.STASH_TTL_S // 60)), buttons=WAKE_BUTTONS)
+                                         minutes=int(wake.STASH_TTL_S // 60)), buttons=wake_buttons(lang),
+                          typed_hint=wake.text(lang, "typed_hint", commands="{commands}"))
 
     async def _wake(self, msg: InboundMessage, binding: Binding, lang: str) -> None:
         key = binding.location().key()
@@ -2130,16 +2136,17 @@ class ChannelManager:
         self._spawn(self._follow_up(request.pane_id, request.loc, route.child if route else ""))
         await self._reply(msg, MSG_RELAY_PROMPT_CHANGED)
 
-    def _guard_vetoes(self, request: relay.RelayRequest) -> bool:
+    def _guard_vetoes(self, request: relay.RelayRequest, *, record: bool = True) -> bool:
         """Navide Guard on a remote approval: high/critical (or unscreenable)
-        prompts need someone at the computer. Deterministic, never an LLM."""
+        prompts need someone at the computer. Deterministic, never an LLM.
+        ``record=False`` only previews it, for the buttons a prompt offers."""
         if not request.prompt.strip():
             return True  # nothing to screen: a chat approval fails closed
         try:
             workspace = self._seams.pane_workspace(request.pane_id)
         except Exception:  # noqa: BLE001
             workspace = ""
-        return relay.screen_approval(request.pane_id, request.prompt, workspace).action != "allow"
+        return relay.screen_approval(request.pane_id, request.prompt, workspace, record=record).action != "allow"
 
     async def _link_chat(self, msg: InboundMessage, code: str) -> None:
         # The invite is already spent, so every way out must reach the waiting UI.
@@ -3091,6 +3098,14 @@ class ChannelManager:
         prompt = str(info.get("prompt") or "")
         kind = str(info.get("kind") or "") or "permission"
         options = [str(o) for o in (info.get("options") or [])]
+        if not options and str(info.get("agent") or "") in relay.MENU_AGENTS:
+            # No menu on screen, nothing to answer: the input box and footer an
+            # answered question leaves while the pane's AWAITING badge settles.
+            # A prompt relayed earlier stays up; leaving awaiting settles it.
+            shown = self._awaiting_shown.get(pane_id)
+            self._awaiting_failures.pop(pane_id, None)
+            self._awaiting_shown[pane_id] = _Shown(prompt, shown.request_id if shown else "")
+            return
         if kind == "question" and not options:
             # A plain-text question at turn end: the turn's text already reached the
             # chat, and a typed reply goes in like any message.
@@ -3113,6 +3128,9 @@ class ChannelManager:
         request = self.relay.create(pane_id, kind, options, loc, prompt=prompt,
                                     agent_key=str(info.get("agent") or ""),
                                     multi=any(relay.is_multi_select(o) for o in options))
+        if kind == "permission":
+            # An 允許 the guard is bound to refuse would only look like a dead button.
+            request.local_only = self._guard_vetoes(request, record=False)
         text = who + relay.prompt_text(request, prompt)
         buttons = _relay_buttons(adapter, request)
         try:
@@ -3377,12 +3395,27 @@ def _previews(kept: list[tuple[float, InboundMessage]]) -> str:
     return wake.quoted([_preview(m) for _, m in kept])
 
 
-def _typed_hint(buttons: list[tuple[str, str]]) -> str:
+def _typed_hint(buttons: list[tuple[str, str]], template: str = MSG_TYPED_HINT, platform: str = "") -> str:
     """The commands ``buttons`` stand for, for a platform that cannot show them; "" when
     none of them has a typed form."""
-    commands = [f"{_CALLBACK_COMMANDS[data]} {label.split(' ', 1)[-1]}"
+    commands = [f"{_typed_command(data, platform)} {label.split(' ', 1)[-1]}"
                 for label, data in buttons if data in _CALLBACK_COMMANDS]
-    return "\n" + MSG_TYPED_HINT.format(commands=" · ".join(commands)) if commands else ""
+    return "\n" + template.format(commands=" · ".join(commands)) if commands else ""
+
+
+def _typed_command(data: str, platform: str) -> str:
+    if platform == "mattermost" and data == WAKE_CALLBACK:
+        return MATTERMOST_WAKE_WORD
+    return _CALLBACK_COMMANDS[data]
+
+
+def _wake_words(platform: str) -> set[str]:
+    return WAKE_WORDS | {MATTERMOST_WAKE_WORD} if platform == "mattermost" else WAKE_WORDS
+
+
+def wake_buttons(lang: str) -> list[tuple[str, str]]:
+    """WAKE_BUTTONS in the Navide language."""
+    return [(wake.text(lang, "button"), WAKE_CALLBACK)]
 
 
 def _command_word(text: str) -> str:
