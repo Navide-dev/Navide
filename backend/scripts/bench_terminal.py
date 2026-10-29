@@ -152,6 +152,10 @@ async def measure_throughput(
         )
         try:
             await asyncio.wait_for(sink.exited.wait(), timeout_s)
+            # terminal.exit can overtake the close's last drain, which is
+            # still sending what the child wrote before it exited.
+            while svc._drain_tasks:
+                await asyncio.sleep(0.005)
         finally:
             if not sink.exited.is_set():
                 await svc.kill(session.id, force=True)
