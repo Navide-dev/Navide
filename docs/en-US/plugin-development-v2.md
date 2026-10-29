@@ -1592,8 +1592,8 @@ agent or a backend can never perform them.
 | Address | Request → result | Rule |
 |---|---|---|
 | `web.list` | `{}` → `{views: WebViewInfo[]}` | Every view of this package |
-| `web.create` | `{space, url?}` → `{viewId}` | User gesture. `owner` and `control` start as `user` |
-| `web.attach` | `{viewId, rect: {x, y, width, height}}` → `{ok}` | Draws the view over the caller's own view at `rect`, in coordinates relative to that view; one attached view per caller at a time |
+| `web.create` | `{space, url?}` → `{viewId}` | User gesture. `owner` and `control` start as `user`. A package has at most 32 live views; past that it is `RESOURCE_LIMIT` |
+| `web.attach` | `{viewId, rect: {x, y, width, height}}` → `{ok}` | Draws the view over the caller's own view at `rect`, in coordinates relative to that view and clamped inside it. Several views may be attached at once, each at its own `rect` (a tiled grid), up to 9 per package; attaching a tenth is `RESOURCE_LIMIT`. Calling it again for an attached view moves it; a view attached to another of the package's views moves there |
 | `web.detach` | `{viewId}` → `{ok}` | Takes the view off screen; it keeps running |
 | `web.navigate` | `{viewId, url?, action?}` → `{ok}` | Exactly one of `url` or `action` (`back`, `forward`, `reload`, `stop`). A user action: on an agent-owned view, `control` passes to `user` |
 | `web.setOwner` | `{viewId, owner: "agent" \| "user"}` → `{ok}` | User gesture; hands a space to an agent or takes it back |
@@ -1614,6 +1614,10 @@ and `y` at least 0, `width` and `height` from 1 to 16384. Unknown fields are
 The `web.changed` event carries `{views: WebViewInfo[]}` whenever any view of
 the package changes. It is delivered only to views of the same package.
 
+The Host's own code for both caps is `LIMIT_REACHED`. The view-side contract
+has no such code, so `web.*` answers `RESOURCE_LIMIT`; the Bridge port answers
+`LIMIT_REACHED`.
+
 <!-- docs-typecheck: skip (shape reference; the SDK does not export WebViewInfo yet) -->
 ```ts
 interface WebViewInfo {
@@ -1629,6 +1633,12 @@ interface WebViewInfo {
   attached: boolean
   agentScriptSinceLoad: boolean // the agent ran Runtime.evaluate or callFunctionOn
                                 // since the main frame last loaded a document
+  openerViewId?: string        // the view whose window.open created this one
+  dialog?: {                   // a JS dialog open in the page (see below)
+    type: 'alert' | 'confirm' | 'prompt' | 'beforeunload'
+    message: string            // at most 500 characters
+    defaultPrompt?: string     // prompt only, at most 500 characters
+  }
 }
 ```
 
@@ -1648,8 +1658,8 @@ belongs to no pane: every pane sees it, and may drive it while `owner` and
 
 | Operation | Arguments → result | Rule |
 |---|---|---|
-| `list` | `{}` → `{views}` | A view whose `owner` is `user` is listed with `url` and `title` empty and no `note`: the agent learns that the user's Space exists and who controls it, not what is open in it. `web.list` in the package UI is unredacted |
-| `create` | `{space, url?}` → `{viewId}` | `owner` and `control` are `agent`, `state` is `running`; the view runs in the background, unattached and without background throttling |
+| `list` | `{}` → `{views}` | A view whose `owner` is `user` is listed with `url` and `title` empty and no `note` or `dialog`: the agent learns that the user's Space exists and who controls it, not what is open in it. `web.list` in the package UI is unredacted |
+| `create` | `{space, url?}` → `{viewId}` | `owner` and `control` are `agent`, `state` is `running`; the view runs in the background, unattached and without background throttling. `LIMIT_REACHED` once the package has 32 live views |
 | `close` | `{viewId}` | Only a view whose `owner` is `agent` |
 | `cdp` | `{viewId, method, params?}` → `{result}` | One Chrome DevTools Protocol command (`Domain.method`, at most 128 characters; `params` a plain object) from the Host allowlist (see [Host-enforced boundaries](#host-enforced-boundaries)); any other method is `CAPABILITY_DENIED`. The debugger attaches to that one view only. Refused with `USER_IN_CONTROL` while `owner` or `control` is `user`, with `reason` `user-owned`, `manual_takeover` or `permission` |
 | `setState` | `{viewId, state, note?}` | `note` at most 500 characters; `need-action` also sets `control` to `user`, and reloads the page first when `agentScriptSinceLoad` is set |
@@ -1667,14 +1677,19 @@ someone it is not.
 - **The page is only a page.** Guests run sandboxed with context isolation, no
   preload and no Node.js. Only `http(s)` and `about:blank` load; that keeps
   `file:` and Host-internal pages out of a view an agent can read.
-  `window.open` loads in the same view instead of opening a new window.
+  `window.open` never opens a window. An allowed URL becomes a new view of
+  the same package, in the same `space`, with the opener's `owner`, its pane
+  and `control` set to that owner, created through the same rules as
+  `create`; its `openerViewId` names the opener. At the 32-view cap the URL
+  loads in the opener instead. Any other URL does nothing.
 - **CDP is a per-method allowlist.** The Bridge `cdp` operation accepts only
   these methods, which are what the Navide Browser backend uses to read and
   drive a page: `Accessibility.getFullAXTree`, `DOM.focus`, `DOM.getBoxModel`,
   `DOM.resolveNode`, `DOM.scrollIntoViewIfNeeded`,
   `DOMSnapshot.captureSnapshot`, `Input.dispatchKeyEvent`,
   `Input.dispatchMouseEvent`, `Input.insertText`, `Page.captureScreenshot`,
-  `Page.getNavigationHistory`, `Page.navigate` (its `url` follows the same
+  `Page.getNavigationHistory`, `Page.handleJavaScriptDialog`,
+  `DOM.setFileInputFiles` (see below), `Page.navigate` (its `url` follows the same
   `http(s)` rule as `web.create`), `Page.navigateToHistoryEntry`,
   `Runtime.callFunctionOn` and `Runtime.evaluate`. Every other method is
   `CAPABILITY_DENIED`. That keeps out the cookie jar (`Network.getCookies`,
@@ -1682,9 +1697,35 @@ someone it is not.
   agent the HttpOnly session tokens of sites the user signed in to), the cache,
   request interception (`Fetch.*`, `Network.setRequestInterception`), scripts
   and bindings that outlive a page (`Page.addScriptToEvaluateOnNewDocument`,
-  `Runtime.addBinding`), `DOMStorage`, file chooser paths, the download
-  directory and other targets. Script run with `Runtime.evaluate` still acts
-  inside the page with the page's own sign-in, as the disclosure says.
+  `Runtime.addBinding`), `DOMStorage`, the download directory and other
+  targets. `Page.enable` is the Host's own and refused from the package.
+  Script run with `Runtime.evaluate` still acts inside the page with the
+  page's own sign-in, as the disclosure says.
+- **File uploads stay inside the workspace.** `DOM.setFileInputFiles` is
+  passed on only when `params.files` is 1 to 16 absolute paths and each one,
+  with symbolic links resolved, is an existing regular file strictly inside
+  the workspace of the pane behind the call (also resolved; a workspace at
+  the file system root contains nothing). Each file is then opened without
+  following a final link, must still be the same file and at most 64 MiB,
+  and is copied owner-only into a Host-private directory; the page receives
+  the copy (deleted when the view closes), and the other params pass
+  unchanged. No pane, no workspace, a relative path, a missing file, a
+  directory or any path outside is `CAPABILITY_DENIED`.
+- **Uploads are disclosed, not restricted.** Every upload is recorded on the
+  view as `uploads` (newest 20: the path relative to the workspace, the
+  origin of the page it went to, the time, and `sensitive` when the file
+  name looks like a secret: `.env`, `*.pem`, `id_*`, or a name containing
+  `credentials`, `secret` or `token`). The `cdp` result carries the same
+  `uploaded` list, and a `warning` naming any secret-looking file. The
+  plugin shows them on the Space; nothing is refused for its name.
+- **Dialogs are visible.** When the Host attaches the debugger for an agent
+  `cdp` call it enables the Page domain once and records an
+  `alert`/`confirm`/`prompt`/`beforeunload` dialog the page opens as
+  `dialog` on the view (message cut to 500 characters). The agent answers it
+  with `Page.handleJavaScriptDialog`. `dialog` is cleared when the dialog
+  closes, when the main frame navigates and whenever the debugger is
+  detached (every takeover), so it is only ever seen while the agent drives
+  the view.
 - **Permission requests are denied.** Camera, microphone, location,
   notifications and other permission prompts are denied in this first
   version; on an agent-controlled view the `state` becomes `need-action` with
@@ -2043,7 +2084,9 @@ its own `manifest.json`, which changes only when that plugin changes, and the
 App records the versions it bundles in `src/main/plugins/officialPluginVersions.ts`
 to look the copies up at `official-artifacts/<id>/<version>/<target>`. When a
 verified Marketplace copy of the same id is also installed, the newer version
-by SemVer is loaded and the installed copy wins a tie. An older installed copy
+by SemVer is loaded and the installed copy wins a tie; an opted-out bundled
+copy and a forced legacy recovery (`NAVIDE_GIT_RECOVERY=legacy`,
+`NAVIDE_PLANS_RECOVERY=legacy`) leave the installed copy in charge. An older installed copy
 is left on disk with its lifecycle record untouched and is reconsidered on the
 next start, so a later App that bundles an older version hands the id back to
 it.

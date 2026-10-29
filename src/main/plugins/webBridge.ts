@@ -7,7 +7,7 @@ import { validateWebBridgeRequest, type WebAgentCaller, type WebViewInfo, type W
  *  and who controls it, never where the user is or what the page is called. */
 function agentView(view: WebViewInfo): WebViewInfo {
   if (view.owner !== 'user') return view
-  const { note: _note, ...rest } = view
+  const { note: _note, dialog: _dialog, ...rest } = view
   return { ...rest, url: '', title: '' }
 }
 
