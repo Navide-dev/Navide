@@ -74,14 +74,38 @@ These observations help you inspect local activity; they do not prove exfiltrati
 
 ## Pipelines
 
-The included pipeline covers requirements, planning, design, implementation, security review, and testing. Stages, slots, roles, kickoff prompts, questions, and completion sentinels are edited in the **Pipeline Manager** (Window ▸ Pipeline Manager, or the ⚙ **Manage Pipelines** button in the sidebar's Pipeline tab). Its **Swimlane** and **Canvas** views edit the same pipeline as a graph of steps; **Executions** shows the runs and their controls. A new run still starts from the sidebar: type the task and choose Run.
+The included pipeline covers requirements, planning, design, implementation, security review, and testing. Stages, slots, roles, kickoff prompts, questions, and completion sentinels are edited in the **Pipeline Manager** (Window ▸ Pipeline Manager, or the ⚙ **Manage Pipelines** button in the sidebar's Pipeline tab). Its **Swimlane** and **Canvas** views edit the same pipeline as a graph of steps; **Executions** shows the runs and their controls. Pipelines are kept on this computer with Navide's settings, not in the workspace; **Export Settings Bundle** in Settings copies them to another computer.
+
+### Starting a run
+
+A run starts from the sidebar (type the task and choose **▶ Run Pipeline**) or from the editor's toolbar (fill **Task for this run** and choose **▶ Run Pipeline**), a command, a scheduled job, or a CLI through the MCP tool `pipeline_start`. Starting from the editor runs the pipeline you are editing without making it the default one. When the button is off, its tooltip says why: no task, no open workspace, a pipeline with no steps, or no connection to the backend. Only one run goes at a time in a workspace: starting another while one is running is refused with "A pipeline is already running in this workspace. Abort it first."
+
+- **Abort** pauses the run: Navide stops driving it but leaves its panes open, and **Resume** (in the sidebar banner or **Executions**) carries on from where it stopped. Abort does not ask first.
+- **Reset** clears the run and closes every pane in this window, including panes you opened yourself. It asks first, names the panes that will close and marks the ones the run did not open.
+- **Start Over** in **Executions** runs the same task again from the first stage.
+
+When a run or an edit is refused, the message says why in the UI language (for example "This pipeline is running, so it cannot be changed right now. Abort or finish the run first."), and **Details** shows the backend's own text. A step that fails shows its reason in the step's **Output** tab and at the top of **Executions**.
+
+### Steps, links and branches
 
 - **Approval gate.** Add one from the palette to pause the run between two steps; its **What to check** text tells the reviewer what to look at. While the run waits, the editor shows a banner with **Review**, and the gate offers **Approve and Continue** or **Send Back**, with an optional note for the agents. The sidebar's Next does not move past a gate.
-- **Reject loop.** In the Canvas view, drag from a step's bottom handle to a step upstream. **Send Back** then re-runs the work from that step, with your note in front of its kickoff. A loop runs at most the number shown on its **↺ max** pill (2 by default, up to 10); after that, sending back again ends the run as failed.
+- **Reject loop.** In the Canvas view, drag from a step's bottom handle to a step upstream. **Send Back** then re-runs the work from that step, with your note in front of its kickoff. A loop runs at most the number shown on its **↺ max** pill (2 by default, up to 10). When a gate has no loop, or its loop is used up, **Send Back** asks first ("End the run?"), because it ends the run as failed; the panes stay open.
+- **Branch and error links.** On the Canvas, draw a link from one step to another, then select the link and set its **Link type**: **Always** (the default), **Branch (if…)** or **On error**. A branch link runs only when the step reports the **Branch value** set on it; the step's agent reports it with the signal line its kickoff describes (`---BRANCH:…: <value>---`), the match ignores case, and a branch link whose value is `default` runs when no other branch of that step matched. An error link runs only when its step failed. Draw two links out of one step to branch, and two into one step to join.
+- **Retry on failure.** In a step's Inspector, **Retry on failure** runs a failed try again on the same step, up to 5 tries in all, waiting up to 300 seconds before each retry. A try fails when its task never reached the agent or the agent reported a failure. Once a run has stopped, **Retry This Step** runs a failed step again: the run resumes at it, or restarts from it when later steps already ran.
+- **Sub-pipeline.** Add one from **Flow control** in the palette and choose **Pipeline to run**: the run pauses there, runs that pipeline in the same workspace, and carries on with its result; its panes stay open meanwhile. **Task for that run** is optional; empty, it is this run's task. Sub-pipelines nest at most three deep, and one that would end up calling itself is refused.
 - **Freeze Output (pin).** In the Inspector, a frozen step is skipped on later runs and its last output is reused.
 - **Rerun from Here (restart from).** In the Inspector of a step, once the pipeline has a run that is not running, this starts a new run at that step and keeps the output of the steps before it — cheaper than **Start Over**, which re-runs everything.
 
-A third built-in, **提案落地流程** (proposal landing, id `evolve-landing`), is the path an approved self-evolution proposal takes once you or a commander pane dispatches it: an implementation step, a read-only review step, a CI check step that reports the workflow run's jobs and neither reruns nor merges, and an approval gate only you pass. It is a template: nothing starts it, it is never made the active pipeline, and it has no merge, publish, plugin-load, skill-delivery or schedule step. Navide adds it once to an existing pipeline list; if you delete it, it is not added back. **Reset** restores its stages and its gate. Like the other built-ins, its name is fixed in the seed rather than translated.
+Resetting the steps of a pipeline you created (**Reset** in the Pipeline Manager) asks first. When the pipeline has gates, loops or branches drawn on it, the confirmation says those are deleted too and cannot be brought back.
+
+### Importing and scheduling
+
+- **Import from n8n** in the Pipeline Manager turns an n8n workflow into a new pipeline, with a preview of every step before anything is written. See [Import from n8n](import-from-n8n.md).
+- **Schedule a run.** In **Turn Stats ▸ Schedule**, choose **+ New**, set **Action** to **Start a pipeline**, and pick the workspace, the pipeline and the task. A pipeline that does not exist is refused when the job is saved. Each run opens that pipeline's CLI panes and spends their quota; it never opens a window, so a run whose workspace no window has open fails and says so. A failed job shows its reason and a **Repair** button, which does not run again while the workspace is still not open.
+
+### Built-in pipelines
+
+The built-in pipelines are shown under their name in the UI language until you rename one. A third built-in, **Proposal Landing Pipeline** (id `evolve-landing`), is the path an approved self-evolution proposal takes once you or a commander pane dispatches it: an implementation step, a read-only review step, a CI check step that reports the workflow run's jobs and neither reruns nor merges, and an approval gate only you pass. It is a template: nothing starts it, it is never made the active pipeline, and it has no merge, publish, plugin-load, skill-delivery or schedule step. Navide adds it once to an existing pipeline list; if you delete it, it is not added back. **Reset** restores its stages and its gate.
 
 A stage can run multiple slots in parallel. Navide advances based on configured completion signals and agent state. Always review generated changes and test results; automated completion indicates workflow progress, not correctness.
 
