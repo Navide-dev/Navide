@@ -232,7 +232,7 @@ describe('release workflow verifies the Plans artifact it signs', () => {
   })
 
   it('asserts each release artifact carries its exact official Plans package backend', () => {
-    expect(verifyStep).toContain('artifact_version="$(node -p "require(\'./package.json\').version")"')
+    expect(verifyStep).toContain('artifact_version="$(node -p "require(\'./plugins/navide-plans/manifest.json\').version")"')
     expect(verifyStep).toContain(
       'Contents/Resources/official-artifacts/navide.plans/${artifact_version}/darwin-arm64/package/backend/navide-plans',
     )

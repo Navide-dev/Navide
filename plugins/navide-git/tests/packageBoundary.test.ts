@@ -52,7 +52,7 @@ describe('navide.git production package boundary', () => {
     const scanned = loadPluginDir(packageRoot)
     expect(scanned.error).toBeUndefined()
     expect(scanned.descriptor?.id).toBe('navide.git')
-    expect(scanned.descriptor?.packageVersion).toBe('0.1.0')
+    expect(scanned.descriptor?.packageVersion).toBe('1.0.0')
     expect(scanned.descriptor?.views?.map((view) => view.contributionKey)).toEqual([
       'navide.git.left',
       'navide.git.branch-detail',
