@@ -333,6 +333,16 @@ def test_switch_v1_v2_rules_branch_by_their_declared_output(ver):
     assert "rule 0 → 2, rule 1 → 0, no rule matches → default" in kick
 
 
+def test_switch_v1_v2_output_indices_out_of_range_are_ignored():
+    # The indices come from the file: a huge one must not size anything.
+    params = {"mode": "rules", "rules": {"rules": [{"output": 1000}, {"output": 0}]}, "fallbackOutput": 1000}
+    w = wf([node("Start", "manualTrigger"), node("Route", "switch", 2, 200, parameters=params),
+            node("A", "set", 3.4, 400), node("B", "set", 3.4, 400, 100)],
+           link(("Start", "Route"), ("Route", "A", 0), ("Route", "B", 1)))
+    # Rule 0 falls back to its own position, 0, as rule 1 says; no fallback.
+    assert entry(convert(w), "Route")["branches"] == ["0"]
+
+
 def test_switch_v1_v2_without_a_fallback_has_no_default_branch():
     params = {"mode": "rules", "rules": {"rules": [{"output": 1}, {"output": 0}]}, "fallbackOutput": -1}
     w = wf([node("Start", "manualTrigger"), node("Route", "switch", 2, 200, parameters=params),

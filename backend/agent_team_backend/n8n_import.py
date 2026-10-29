@@ -359,6 +359,11 @@ def _external_header(wf_name: str) -> str:
             "ask for or print secret values.]")
 
 
+# n8n's Switch v1/v2 has 4 outputs; an index from the file beyond this is
+# ignored rather than sizing the branch list.
+_SWITCH_V1_MAX_OUTPUTS = 64
+
+
 def _switch_v1_routes(node: dict[str, Any]) -> tuple[list[int], int | None] | None:
     """For a Switch v1/v2 in rules mode, the output each rule sends to (by
     rule) and the fallback output (None without one); None for other
@@ -372,9 +377,13 @@ def _switch_v1_routes(node: dict[str, Any]) -> tuple[list[int], int | None] | No
     outs = []
     for i, rule in enumerate(rules["rules"]):
         o = rule.get("output") if isinstance(rule, dict) else None
-        outs.append(o if isinstance(o, int) and not isinstance(o, bool) and o >= 0 else i)
+        outs.append(o if _output_index(o) else i)
     fb = p.get("fallbackOutput")
-    return outs, fb if isinstance(fb, int) and not isinstance(fb, bool) and fb >= 0 else None
+    return outs, fb if _output_index(fb) else None
+
+
+def _output_index(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < _SWITCH_V1_MAX_OUTPUTS
 
 
 def _branch_values(node: dict[str, Any], role: str) -> list[str]:
