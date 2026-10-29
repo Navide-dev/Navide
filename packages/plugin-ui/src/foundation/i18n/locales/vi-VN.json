@@ -1192,7 +1192,6 @@
     "collapse": "Thu gọn",
     "restore": "↑ Khôi phục",
     "retry": "↻ Thử lại",
-    "finish": "Hoàn tất",
     "connect-to-remote": "Kết nối với remote",
     "scan-repos-anyway": "Vẫn quét tìm kho",
     "amend-commit": "Sửa commit",
@@ -8556,7 +8555,6 @@
     "pipeline-aborted": "Pipeline đã bị hủy giữa chừng. Các agent được giữ lại — nhấn Tiếp tục để chạy tiếp hoặc Đặt lại để xóa.",
     "pipeline-aborted-paused": "Pipeline đã bị hủy giữa chừng (tạm dừng). Các agent được giữ lại — nhấn Tiếp tục để chạy tiếp hoặc Đặt lại để xóa.",
     "pipeline-completed": "✓ Pipeline đã hoàn tất cả {count} giai đoạn. Hãy xem lại từng pane ở bên phải.",
-    "provide-task": "Hãy nhập mô tả tác vụ + workspace, rồi bắt đầu.",
     "missing": "⚠ bị thiếu",
     "already-open": "● đang mở",
     "tagline": "Điều khiển Claude Code · Codex · Antigravity CLI cùng lúc",
@@ -11200,7 +11198,9 @@
     "badge": {
       "open-canvas": "Hiện liên kết này trên canvas",
       "reject": "↺ Quay về tầng {layer} (tối đa {max})",
-      "skip": "⤳ Nhảy tới tầng {layer}"
+      "skip": "⤳ Nhảy tới tầng {layer}",
+      "branch": "⑂ Nếu {when} → tầng {layer}",
+      "error": "⚠ Khi thất bại → tầng {layer}"
     },
     "canvas": {
       "insert-on-edge": "Chèn một bước vào đây",
@@ -11229,6 +11229,7 @@
       "outcome-ended": "Đã kết thúc",
       "outcome-unknown": "Không rõ",
       "outcome-idle": "Rảnh",
+      "failed-step": "{name} thất bại: {error}",
       "pick": "Chọn một lần chạy để phát lại trên đồ thị.",
       "progress": "{done} trên {total} bước",
       "restart": "Bắt đầu lại",
@@ -11295,6 +11296,7 @@
       "kind-gate": "Điểm phê duyệt",
       "kind-slot": "Bước",
       "kind-trigger": "Bắt đầu",
+      "kind-subpipeline": "Pipeline con",
       "layer": "Cài đặt tầng",
       "live-empty": "Chế độ xem trực tiếp mở khi bước này đang chạy. Hãy khởi động pipeline, rồi quay lại đây.",
       "live-unavailable": "Hiện không đọc được bản ghi của pane.",
@@ -11303,6 +11305,7 @@
       "not-run": "Chưa chạy",
       "open-pane": "Mở pane",
       "output-empty": "Chưa có đầu ra. Sau khi bước này chạy, bản tóm tắt sẽ hiện ở đây.",
+      "failure": "Lý do thất bại",
       "pin": "Cố định đầu ra",
       "pin-help": "Các lần chạy lại bỏ qua bước đã cố định và dùng lại đầu ra gần nhất của nó.",
       "required": "Bắt buộc",
@@ -11399,7 +11402,8 @@
       "parents": "Được gọi từ",
       "open-in-canvas": "Mở trong canvas pipeline",
       "gate-toast": "Pipeline đang chờ bạn phê duyệt tại {name}",
-      "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo."
+      "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo.",
+      "last-stage": "Đây là giai đoạn cuối. Lần chạy sẽ kết thúc khi giai đoạn này báo hoàn tất."
     },
     "link": {
       "title": "Liên kết",
@@ -11465,7 +11469,15 @@
     "run": {
       "running": "Đang chạy: {names}",
       "gate": "Đang chờ bạn phê duyệt tại {name}",
-      "review": "Xem xét"
+      "review": "Xem xét",
+      "blocked-backend": "Chưa kết nối tới backend.",
+      "blocked-workspace": "Hãy mở một workspace trước.",
+      "blocked-task": "Hãy mô tả nhiệm vụ trước.",
+      "reset-title": "Đặt lại lần chạy này?",
+      "reset-message": "Đặt lại sẽ xóa lần chạy này và đóng mọi pane trong cửa sổ, kể cả pane bạn tự mở. {count} pane sẽ bị đóng.",
+      "reset-message-none": "Đặt lại sẽ xóa lần chạy này. Không có pane nào đang mở nên sẽ không đóng pane nào.",
+      "reset-manual-mark": "do bạn mở",
+      "reset-confirm": "Đặt lại và đóng pane"
     }
   },
   "evolve": {
@@ -12268,6 +12280,7 @@
     "import": "Nhập",
     "importing": "Đang nhập…",
     "preview-stale": "JSON đã thay đổi sau khi xem trước. Hãy xem trước lại trước khi nhập.",
+    "import-blocked-preview": "Hãy xem trước workflow trước.",
     "stats": {
       "workflow": "Tên workflow",
       "nodes": "Nút n8n",

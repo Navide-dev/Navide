@@ -14,6 +14,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { linearPipelineDag } from './pipelineDagTestStub'
+import { resetConfirmDialog } from '../../lib/pipelineResetConfirm'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -202,10 +203,10 @@ describe('the Run button shows the refusal', () => {
 })
 
 describe('reset clears the stored run, and only the user reset does', () => {
-  async function loadReset(resp: unknown) {
+  async function loadReset(resp: unknown, confirmed = true) {
     const resetSource = block('async function clearStoredPipelineRun(', '\n// ─────────── Switch / close workspace')
     const { code } = await transformWithEsbuild(
-      `${resetSource}\nreturn { clearStoredPipelineRun, onPipelineUserReset }`,
+      `${resetSource}\nreturn { clearStoredPipelineRun, onPipelineUserReset, confirmPipelineReset }`,
       'AppReset.ts',
       { loader: 'ts' },
     )
@@ -213,7 +214,16 @@ describe('reset clears the stored run, and only the user reset does', () => {
     const existingProject = { value: { state: 'aborted' } as unknown }
     const sendQuiet = vi.fn(async () => resp)
     const onPipelineReset = vi.fn(async () => {})
+    const confirm = vi.fn(async (_message: string, _opts: { detail?: string; danger?: boolean }) => confirmed)
     const deps: Record<string, unknown> = {
+      notifyRestore: { confirm },
+      i18n: { global: { t: (key: string, values?: Record<string, unknown>) => (values ? `${key} ${JSON.stringify(values)}` : key) } },
+      resetConfirmDialog,
+      // What onKillAll tears down: the panes of the workspace on screen.
+      panesInView: { value: [
+        { id: 'a', origin: 'pipeline', agentLabel: 'Claude', customName: 'Planner' },
+        { id: 'b', origin: 'manual', agentLabel: 'Codex', autoName: 'my shell' },
+      ] },
       sendQuiet,
       existingProject,
       currentWorkspace: { value: '/tmp/ws' },
@@ -224,8 +234,9 @@ describe('reset clears the stored run, and only the user reset does', () => {
     const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as {
       clearStoredPipelineRun: (ws: string) => Promise<boolean>
       onPipelineUserReset: () => Promise<void>
+      confirmPipelineReset: () => Promise<boolean>
     }
-    return { api, sendQuiet, existingProject, log, onPipelineReset }
+    return { api, sendQuiet, existingProject, log, onPipelineReset, confirm }
   }
 
   it('sends pipeline.reset and adopts the idle run it answers with', async () => {
@@ -246,6 +257,23 @@ describe('reset clears the stored run, and only the user reset does', () => {
     await t.api.onPipelineUserReset()
     expect(t.onPipelineReset).toHaveBeenCalled()
     expect(t.sendQuiet).toHaveBeenCalledWith('pipeline.reset', { workspace_path: '/tmp/ws' })
+  })
+
+  it('the Reset button asks first, naming every pane it closes — the manual ones too', async () => {
+    const t = await loadReset({ project: { state: 'idle' } })
+    await t.api.onPipelineUserReset()
+    expect(t.confirm).toHaveBeenCalledTimes(1)
+    const [, opts] = t.confirm.mock.calls[0]
+    expect(opts.danger).toBe(true)
+    expect(opts.detail).toBe('• Planner\n• my shell (pipelineEditor.run.reset-manual-mark)')
+    expect(t.onPipelineReset).toHaveBeenCalled()
+  })
+
+  it('a cancelled confirm closes nothing and keeps the stored run', async () => {
+    const t = await loadReset({ project: { state: 'idle' } }, false)
+    await t.api.onPipelineUserReset()
+    expect(t.onPipelineReset).not.toHaveBeenCalled()
+    expect(t.sendQuiet).not.toHaveBeenCalled()
   })
 
   it('is wired to the Reset button, while closing or leaving a workspace keeps the run for Resume', () => {

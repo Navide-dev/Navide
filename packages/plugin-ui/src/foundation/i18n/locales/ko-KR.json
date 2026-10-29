@@ -1192,7 +1192,6 @@
     "collapse": "접기",
     "restore": "↑ 복원",
     "retry": "↻ 다시 시도",
-    "finish": "완료",
     "connect-to-remote": "원격에 연결",
     "scan-repos-anyway": "그래도 저장소 검색",
     "amend-commit": "커밋 수정",
@@ -8556,7 +8555,6 @@
     "pipeline-aborted": "Pipeline이 중단되었어요. agent는 유지돼요 — 계속하려면 재개를, 정리하려면 초기화를 누르세요.",
     "pipeline-aborted-paused": "Pipeline이 중단되었어요(일시 중지). agent는 유지돼요 — 계속하려면 재개를, 정리하려면 초기화를 누르세요.",
     "pipeline-completed": "✓ Pipeline이 {count}개 단계를 모두 완료했어요. 오른쪽의 각 pane을 검토하세요.",
-    "provide-task": "작업 설명과 작업 영역을 입력한 뒤 시작하세요.",
     "missing": "⚠ 없음",
     "already-open": "● 열림",
     "tagline": "Claude Code · Codex · Antigravity CLI를 함께 운용하세요",
@@ -11200,7 +11198,9 @@
     "badge": {
       "open-canvas": "캔버스에서 이 연결 보기",
       "reject": "↺ {layer}레이어로 되돌림(최대 {max})",
-      "skip": "⤳ {layer}레이어로 건너뜀"
+      "skip": "⤳ {layer}레이어로 건너뜀",
+      "branch": "⑂ {when}일 때 → {layer}레이어",
+      "error": "⚠ 실패 시 → {layer}레이어"
     },
     "canvas": {
       "insert-on-edge": "여기에 단계 삽입",
@@ -11229,6 +11229,7 @@
       "outcome-ended": "종료됨",
       "outcome-unknown": "알 수 없음",
       "outcome-idle": "유휴",
+      "failed-step": "{name} 실패: {error}",
       "pick": "그래프에서 다시 볼 실행을 선택하세요.",
       "progress": "{total}단계 중 {done}단계",
       "restart": "처음부터 다시",
@@ -11295,6 +11296,7 @@
       "kind-gate": "승인 게이트",
       "kind-slot": "단계",
       "kind-trigger": "시작",
+      "kind-subpipeline": "하위 Pipeline",
       "layer": "레이어 설정",
       "live-empty": "이 단계가 실행 중일 때 실시간 보기가 열려요. pipeline을 시작한 뒤 다시 오세요.",
       "live-unavailable": "지금은 pane의 대화 기록을 읽을 수 없어요.",
@@ -11303,6 +11305,7 @@
       "not-run": "아직 실행 안 됨",
       "open-pane": "pane 열기",
       "output-empty": "아직 출력이 없어요. 이 단계가 실행되면 요약이 여기에 표시돼요.",
+      "failure": "실패 원인",
       "pin": "출력 고정",
       "pin-help": "다시 실행할 때 고정된 단계는 건너뛰고 마지막 출력을 재사용해요.",
       "required": "필수",
@@ -11399,7 +11402,8 @@
       "parents": "호출한 곳",
       "open-in-canvas": "pipeline 캔버스에서 열기",
       "gate-toast": "pipeline이 {name}에서 승인을 기다리고 있어요",
-      "next-gated": "다음 단계로 넘어가기 전에 이 게이트를 승인하거나 되돌려 보내세요."
+      "next-gated": "다음 단계로 넘어가기 전에 이 게이트를 승인하거나 되돌려 보내세요.",
+      "last-stage": "마지막 단계예요. 완료를 보고하면 실행이 끝나요."
     },
     "link": {
       "title": "연결",
@@ -11465,7 +11469,15 @@
     "run": {
       "running": "실행 중: {names}",
       "gate": "{name}에서 승인을 기다리는 중",
-      "review": "검토"
+      "review": "검토",
+      "blocked-backend": "백엔드에 연결되어 있지 않아요.",
+      "blocked-workspace": "먼저 작업 영역을 여세요.",
+      "blocked-task": "먼저 작업을 설명하세요.",
+      "reset-title": "이 실행을 재설정할까요?",
+      "reset-message": "재설정하면 이 실행이 지워지고, 직접 연 pane을 포함해 이 창의 모든 pane이 닫혀요. pane {count}개가 닫혀요.",
+      "reset-message-none": "재설정하면 이 실행이 지워져요. 열린 pane이 없어서 닫히는 pane은 없어요.",
+      "reset-manual-mark": "직접 연 pane",
+      "reset-confirm": "재설정하고 pane 닫기"
     }
   },
   "evolve": {
@@ -12268,6 +12280,7 @@
     "import": "가져오기",
     "importing": "가져오는 중…",
     "preview-stale": "미리 본 뒤 JSON이 바뀌었어요. 가져오기 전에 다시 미리 보세요.",
+    "import-blocked-preview": "먼저 워크플로를 미리 보세요.",
     "stats": {
       "workflow": "워크플로",
       "nodes": "n8n 노드",

@@ -45,6 +45,16 @@ describe('usePipelineRunState', () => {
     expect(state.isRunning('p1')).toBe(true)
   })
 
+  it('carries the host run\'s last-stage flag, so Executions can disable Next there', async () => {
+    const host = ref<HostRun | null>({ state: 'running', pipelineId: 'p1', workspacePath: '/ws', lastStage: false })
+    const { state } = setup(null, host)
+    await flushPromises()
+    expect(state.run.value.lastStage).toBe(false)
+    host.value = { state: 'running', pipelineId: 'p1', workspacePath: '/ws', lastStage: true }
+    await nextTick()
+    expect(state.run.value.lastStage).toBe(true)
+  })
+
   it('re-reads the project when the host run ends, dropping a stale running state', async () => {
     const host = ref<HostRun | null>({ state: 'running', pipelineId: 'p1', workspacePath: '/ws' })
     const { state, mock } = setup({ state: 'running', pipeline_id: 'p1' }, host)

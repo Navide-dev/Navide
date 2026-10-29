@@ -49,6 +49,8 @@ const aria = computed(() =>
 
 function badgeText(b: LaneBadge): string {
   if (b.kind === 'reject') return t('pipelineEditor.badge.reject', { layer: b.targetLayer ?? '?', max: b.maxLoops ?? 2 })
+  if (b.kind === 'branch') return t('pipelineEditor.badge.branch', { when: b.when ?? '', layer: b.targetLayer ?? '?' })
+  if (b.kind === 'error') return t('pipelineEditor.badge.error', { layer: b.targetLayer ?? '?' })
   return t('pipelineEditor.badge.skip', { layer: b.targetLayer ?? '?' })
 }
 </script>
@@ -257,10 +259,15 @@ function badgeText(b: LaneBadge): string {
 }
 .pnc-badge:hover { background: color-mix(in srgb, var(--done-emphasis) 18%, transparent); }
 .pnc-badge:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: 1px; }
-.pnc-badge--skip {
+.pnc-badge--skip, .pnc-badge--branch {
   border-color: var(--border-default);
   background: var(--bg-muted);
   color: var(--text-secondary);
+}
+.pnc-badge--error {
+  border-color: color-mix(in srgb, var(--danger-emphasis) 40%, transparent);
+  background: var(--danger-subtle);
+  color: var(--danger-fg);
 }
 
 @keyframes pnc-pulse {

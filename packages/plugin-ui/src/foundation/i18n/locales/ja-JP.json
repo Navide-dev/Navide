@@ -1192,7 +1192,6 @@
     "collapse": "折りたたむ",
     "restore": "↑ 復元",
     "retry": "↻ 再試行",
-    "finish": "完了",
     "connect-to-remote": "リモートに接続",
     "scan-repos-anyway": "それでもリポジトリを検索",
     "amend-commit": "直前のコミットを修正",
@@ -8556,7 +8555,6 @@
     "pipeline-aborted": "パイプラインを中止しました。エージェントは保持されます。続けるには「再開」、クリアするには「リセット」を選択してください。",
     "pipeline-aborted-paused": "パイプラインを中止しました（一時停止）。エージェントは保持されます。続けるには「再開」、クリアするには「リセット」を選択してください。",
     "pipeline-completed": "✓ パイプラインの全 {count} ステージが完了しました。右側の各ペインを確認してください。",
-    "provide-task": "タスクの説明とワークスペースを指定してから開始してください。",
     "missing": "⚠ 見つかりません",
     "already-open": "● 起動済み",
     "tagline": "Claude Code · Codex · Antigravity CLI をまとめて操作",
@@ -11200,7 +11198,9 @@
     "badge": {
       "open-canvas": "キャンバスでこの接続を表示",
       "reject": "↺ 第 {layer} 層へ差し戻し（最大 {max} 回）",
-      "skip": "⤳ 第 {layer} 層へスキップ"
+      "skip": "⤳ 第 {layer} 層へスキップ",
+      "branch": "⑂ {when} の場合 → 第 {layer} 層",
+      "error": "⚠ 失敗時 → 第 {layer} 層"
     },
     "canvas": {
       "insert-on-edge": "ここにステップを挿入",
@@ -11229,6 +11229,7 @@
       "outcome-ended": "終了",
       "outcome-unknown": "不明",
       "outcome-idle": "待機中",
+      "failed-step": "{name} が失敗しました：{error}",
       "pick": "実行を選ぶとグラフ上で再生します。",
       "progress": "{total} ステップ中 {done}",
       "restart": "最初からやり直す",
@@ -11295,6 +11296,7 @@
       "kind-gate": "承認ゲート",
       "kind-slot": "ステップ",
       "kind-trigger": "開始",
+      "kind-subpipeline": "サブ Pipeline",
       "layer": "レイヤー設定",
       "live-empty": "このステップの実行中にライブ表示が開きます。パイプラインを開始してから戻ってください。",
       "live-unavailable": "このペインの記録を今は読み込めません。",
@@ -11303,6 +11305,7 @@
       "not-run": "未実行",
       "open-pane": "ペインを開く",
       "output-empty": "まだ出力はありません。このステップの実行後、要約がここに表示されます。",
+      "failure": "失敗の理由",
       "pin": "出力を固定",
       "pin-help": "再実行時、固定したステップはスキップされ前回の出力を再利用します。",
       "required": "必須",
@@ -11399,7 +11402,8 @@
       "parents": "呼び出し元",
       "open-in-canvas": "パイプラインキャンバスで開く",
       "gate-toast": "パイプラインは「{name}」で承認待ちです",
-      "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。"
+      "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。",
+      "last-stage": "これが最後のステージです。完了が報告されると実行は終了します。"
     },
     "link": {
       "title": "接続",
@@ -11465,7 +11469,15 @@
     "run": {
       "running": "実行中：{names}",
       "gate": "「{name}」で承認待ち",
-      "review": "確認する"
+      "review": "確認する",
+      "blocked-backend": "バックエンドに接続されていません。",
+      "blocked-workspace": "先にワークスペースを開いてください。",
+      "blocked-task": "先にタスクを入力してください。",
+      "reset-title": "この実行をリセットしますか？",
+      "reset-message": "リセットするとこの実行がクリアされ、自分で開いたペインも含めて、このウィンドウのペインがすべて閉じます。{count} 個のペインが閉じます。",
+      "reset-message-none": "リセットするとこの実行がクリアされます。開いているペインはないため、閉じるものはありません。",
+      "reset-manual-mark": "手動で開いたもの",
+      "reset-confirm": "リセットしてペインを閉じる"
     }
   },
   "evolve": {
@@ -12268,6 +12280,7 @@
     "import": "インポート",
     "importing": "インポート中…",
     "preview-stale": "プレビュー後に JSON が変更されました。インポートする前にもう一度プレビューしてください。",
+    "import-blocked-preview": "先にワークフローをプレビューしてください。",
     "stats": {
       "workflow": "ワークフロー",
       "nodes": "n8n ノード",

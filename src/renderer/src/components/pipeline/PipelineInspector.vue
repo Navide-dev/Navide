@@ -39,6 +39,8 @@ const props = defineProps<{
   now: number
   locked: boolean
   workspacePath: string
+  /** The pipeline being edited: a sub-pipeline node may not call it. */
+  pipelineId?: string
 }>()
 const emit = defineEmits<{
   (e: 'edit', label: string, ops: GraphOp[]): void
@@ -119,12 +121,13 @@ const retryBlocked = computed(() => {
   return ''
 })
 
-/** Pipelines a subpipeline node can call: every one but this pipeline. */
+/** Pipelines a subpipeline node can call: every one but the pipeline being
+ *  edited (whichever pipeline happens to be running is beside the point). */
 const callablePipelines = ref<Array<{ id: string; name: string }>>([])
 async function loadCallable(): Promise<void> {
   try {
     const resp = await props.backend.send<{ pipelines?: Array<{ id: string; name: string }> }>('pipelines.list', {})
-    callablePipelines.value = (resp.payload?.pipelines ?? []).filter((p) => p.id !== props.run.pipelineId || !props.run.pipelineId)
+    callablePipelines.value = (resp.payload?.pipelines ?? []).filter((p) => p.id !== props.pipelineId)
   } catch {
     // Keep the last list.
   }
@@ -530,8 +533,12 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
           <div v-if="tokens"><dt>{{ t('pipelineEditor.inspector.tokens') }}</dt><dd>{{ tokens }}</dd></div>
           <div v-if="(runState.attempts ?? 0) > 1"><dt>{{ t('pipelineEditor.inspector.attempts') }}</dt><dd>{{ runState.attempts }}</dd></div>
         </dl>
+        <div v-if="runState?.status === 'failed' && runState.error" class="pi-failure" role="alert" data-test="output-error">
+          <strong>{{ t('pipelineEditor.inspector.failure') }}</strong>
+          <p>{{ runState.error }}</p>
+        </div>
         <p v-if="runState?.summary" class="pi-summary">{{ runState.summary }}</p>
-        <div v-else class="pi-empty"><p>{{ t('pipelineEditor.inspector.output-empty') }}</p></div>
+        <div v-else-if="!(runState?.status === 'failed' && runState.error)" class="pi-empty"><p>{{ t('pipelineEditor.inspector.output-empty') }}</p></div>
       </template>
     </div>
 
@@ -850,6 +857,17 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
 .pi-stats div { display: grid; gap: 2px; }
 .pi-stats dt { font-size: var(--font-2xs); color: var(--text-muted); }
 .pi-stats dd { margin: 0; font-size: var(--font-md); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.pi-failure {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger-emphasis) 40%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--danger-subtle);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+}
+.pi-failure strong { display: block; color: var(--danger-fg); font-size: var(--font-xs); }
+.pi-failure p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pi-summary { margin: 0; font-size: var(--font-sm); line-height: var(--lh-loose); color: var(--text-primary); white-space: pre-wrap; }
 .pi-empty { display: grid; place-items: center; min-height: 160px; text-align: center; }
 .pi-empty p { margin: 0; max-width: 260px; font-size: var(--font-xs); line-height: var(--lh-base); color: var(--text-muted); }

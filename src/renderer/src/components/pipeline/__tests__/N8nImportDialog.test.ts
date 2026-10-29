@@ -156,6 +156,26 @@ describe('N8nImportDialog', () => {
     expect(w.emitted('close')).toHaveLength(1)
   })
 
+  it('counts "needs review" the way the banner does', async () => {
+    const { w, mock } = mountDialog()
+    // An unknown community node folded into an agent step: its category is
+    // not "pending", but it is the step the banner asks you to review.
+    const p = payload()
+    p.report.stats.byCategory = { native: 2, agent: 2, pending: 0, unsupported: 1 }
+    await previewWith(w, mock, p)
+    expect(w.find('[data-testid="n8n-needs-review"]').text()).toContain('1 step needs review')
+    expect(w.find('.n8n-categories [data-category="pending"] strong').text()).toBe('1')
+  })
+
+  it('says why Import is disabled', async () => {
+    const { w, mock } = mountDialog()
+    expect(w.find('.n8n-import-btn').attributes('title')).toBe(i18n.global.t('pipelineImport.import-blocked-preview'))
+    await previewWith(w, mock)
+    expect(w.find('.n8n-import-btn').attributes('title')).toBeUndefined()
+    await w.find('textarea').setValue('{"nodes":[1],"connections":{}}')
+    expect(w.find('.n8n-import-btn').attributes('title')).toBe(i18n.global.t('pipelineImport.preview-stale'))
+  })
+
   it('needs a fresh preview after the JSON changes', async () => {
     const { w, mock } = mountDialog()
     expect(w.find('.n8n-import-btn').attributes('disabled')).toBeDefined()

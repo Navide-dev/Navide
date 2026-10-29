@@ -115,6 +115,7 @@ import { usePipelines } from './composables/usePipelines'
 import { usePipelineDag } from './composables/usePipelineDag'
 import { signalsAfterKickoff } from './lib/pipelineDagRun'
 import type { NodeRunState } from './lib/pipelineGraph'
+import { resetConfirmDialog } from './lib/pipelineResetConfirm'
 import { useRecentWorkspaces } from './composables/useRecentWorkspaces'
 import { useWorkspaceAliases } from './composables/useWorkspaceAliases'
 import { useAnalyzer, type ClassifyResult } from './composables/useAnalyzer'
@@ -9843,6 +9844,8 @@ const pmHostRun = computed(() => ({
   state: pipeline.state,
   pipelineId: pipeline.state === 'running' ? pipelinesApi.activePipelineId.value : '',
   workspacePath: pipeline.state === 'running' ? pipelineRunWorkspace : '',
+  // Same test as ui.pipeline.next's refusal, so Executions disables Next there.
+  lastStage: pipeline.state === 'running' && pipeline.stageIndex + 1 >= stagesApi.stages.value.length,
 }))
 function openPipelineManager(pipelineId?: string): void {
   pmInitialPipelineId.value = pipelineId ?? ''
@@ -11225,12 +11228,17 @@ registerCommand('ui.pipeline.resume', async () => {
     stages: stagesApi.stages.value.length,
   }
 })
-registerCommand('ui.pipeline.reset', async () => {
+registerCommand('ui.pipeline.reset', async (args) => {
   // Reset is the destructive one: it kills EVERY pane in the window, manual
   // panes included, so it needs an open workspace to be the workspace whose
   // panes go. onPipelineReset has no soft exit of its own — it always lands on
   // 'idle' — so the check below is a contract test, not a known escape hatch.
   if (!currentWorkspace.value) throw new Error('ui.pipeline.reset requires an open workspace')
+  // The editor's Reset button asks first, like the sidebar's; a caller that
+  // sets no confirm flag (MCP pipeline_reset) resets without a dialog.
+  if ((args as { confirm?: unknown } | undefined)?.confirm === true && !(await confirmPipelineReset())) {
+    return { workspacePath: currentWorkspace.value, state: pipeline.state, cancelled: true }
+  }
   await onPipelineReset()
   const state: PipelineRun['state'] = pipeline.state
   if (state !== 'idle') {
@@ -15499,8 +15507,19 @@ async function clearStoredPipelineRun(workspacePath: string): Promise<boolean> {
   return true
 }
 
+/** The user's Reset closes every pane of the workspace on screen (onKillAll),
+ *  manual ones included, so it names them and asks first. */
+async function confirmPipelineReset(): Promise<boolean> {
+  const dialog = resetConfirmDialog(i18n.global.t, panesInView.value.map((p) => ({
+    name: p.customName || p.autoName || p.agentLabel,
+    manual: p.origin === 'manual',
+  })))
+  return notifyRestore.confirm(dialog.message, dialog)
+}
+
 /** ControlPane's Reset button. */
 async function onPipelineUserReset(): Promise<void> {
+  if (!(await confirmPipelineReset())) return
   await onPipelineReset()
   await clearStoredPipelineRun(currentWorkspace.value)
 }

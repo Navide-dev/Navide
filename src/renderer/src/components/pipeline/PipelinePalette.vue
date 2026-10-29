@@ -15,6 +15,8 @@ const props = defineProps<{
   locked?: boolean
   /** Popover mode: autofocus search, no section chrome. */
   compact?: boolean
+  /** Why Sub-pipeline cannot be added now ('' or absent when it can). */
+  subpipelineBlocked?: string
 }>()
 const emit = defineEmits<{ (e: 'pick', item: PaletteItem): void }>()
 const { t } = useI18n()
@@ -50,14 +52,16 @@ const flowItems = computed<PaletteItem[]>(() =>
 )
 const empty = computed(() => !roleItems.value.length && !flowItems.value.length)
 
+const blocked = (item: PaletteItem): string => (item.kind === 'subpipeline' ? props.subpipelineBlocked ?? '' : '')
+
 function onDragStart(e: DragEvent, item: PaletteItem): void {
-  if (props.locked || !e.dataTransfer) return
+  if (props.locked || blocked(item) || !e.dataTransfer) return
   e.dataTransfer.setData(DND_PALETTE, JSON.stringify(item))
   e.dataTransfer.effectAllowed = 'copy'
 }
 
 function pick(item: PaletteItem): void {
-  if (!props.locked) emit('pick', item)
+  if (!props.locked && !blocked(item)) emit('pick', item)
 }
 
 /** ↑/↓ walk the items; the search box hands off to the first one. */
@@ -110,7 +114,8 @@ onMounted(() => {
         <h3 class="pp-group">{{ t('pipelineEditor.palette.flow') }}</h3>
         <button
           v-for="item in flowItems" :key="item.kind"
-          type="button" role="listitem" class="pp-item" :draggable="!locked" :disabled="locked"
+          type="button" role="listitem" class="pp-item" :draggable="!locked && !blocked(item)" :disabled="locked || !!blocked(item)"
+          :title="blocked(item) || undefined"
           @dragstart="onDragStart($event, item)" @click="pick(item)"
         >
           <span v-if="item.kind === 'subpipeline'" class="pp-glyph pp-glyph--subpipeline" aria-hidden="true">

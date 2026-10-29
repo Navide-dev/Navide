@@ -1192,7 +1192,6 @@
     "collapse": "Réduire",
     "restore": "↑ Restaurer",
     "retry": "↻ Réessayer",
-    "finish": "Terminer",
     "connect-to-remote": "Se connecter au dépôt distant",
     "scan-repos-anyway": "Rechercher quand même les dépôts",
     "amend-commit": "Modifier le dernier commit (amend)",
@@ -8556,7 +8555,6 @@
     "pipeline-aborted": "Pipeline interrompu. Les agents sont conservés – « Reprendre » pour continuer, ou « Réinitialiser » pour effacer.",
     "pipeline-aborted-paused": "Pipeline interrompu (en pause). Les agents sont conservés – « Reprendre » pour continuer, ou « Réinitialiser » pour effacer.",
     "pipeline-completed": "✓ Le pipeline a terminé ses {count} étapes. Examinez chaque pane à droite.",
-    "provide-task": "Indiquez la description de la tâche et l’espace de travail, puis démarrez.",
     "missing": "⚠ manquant",
     "already-open": "● ouvert",
     "tagline": "Pilotez ensemble Claude Code · Codex · Antigravity CLI",
@@ -11200,7 +11198,9 @@
     "badge": {
       "open-canvas": "Afficher ce lien sur le canevas",
       "reject": "↺ Retour à la couche {layer} (max. {max})",
-      "skip": "⤳ Passe à la couche {layer}"
+      "skip": "⤳ Passe à la couche {layer}",
+      "branch": "⑂ Si {when} → couche {layer}",
+      "error": "⚠ En cas d’échec → couche {layer}"
     },
     "canvas": {
       "insert-on-edge": "Insérer une étape ici",
@@ -11229,6 +11229,7 @@
       "outcome-ended": "Finie",
       "outcome-unknown": "Inconnue",
       "outcome-idle": "Inactive",
+      "failed-step": "{name} a échoué : {error}",
       "pick": "Choisissez une exécution pour la rejouer sur le graphe.",
       "progress": "{done} étapes sur {total}",
       "restart": "Recommencer",
@@ -11295,6 +11296,7 @@
       "kind-gate": "Validation",
       "kind-slot": "Étape",
       "kind-trigger": "Départ",
+      "kind-subpipeline": "Sous-pipeline",
       "layer": "Paramètres de la couche",
       "live-empty": "La vue en direct s’ouvre quand cette étape est en cours. Lancez le pipeline, puis revenez ici.",
       "live-unavailable": "La transcription du pane n’est pas lisible pour l’instant.",
@@ -11303,6 +11305,7 @@
       "not-run": "Pas encore exécutée",
       "open-pane": "Ouvrir le pane",
       "output-empty": "Pas encore de sortie. Après l’exécution de cette étape, son résumé s’affichera ici.",
+      "failure": "Cause de l’échec",
       "pin": "Figer la sortie",
       "pin-help": "Les nouvelles exécutions ignorent une étape figée et réutilisent sa dernière sortie.",
       "required": "Obligatoire",
@@ -11399,7 +11402,8 @@
       "parents": "Appelé depuis",
       "open-in-canvas": "Ouvrir dans le canevas du pipeline",
       "gate-toast": "Le pipeline attend votre approbation à {name}",
-      "next-gated": "Approuvez ou renvoyez cette validation avant de passer à l’étape suivante."
+      "next-gated": "Approuvez ou renvoyez cette validation avant de passer à l’étape suivante.",
+      "last-stage": "C’est la dernière étape. L’exécution se termine dès qu’elle signale avoir fini."
     },
     "link": {
       "title": "Lien",
@@ -11465,7 +11469,15 @@
     "run": {
       "running": "En cours : {names}",
       "gate": "En attente de votre approbation à {name}",
-      "review": "Examiner"
+      "review": "Examiner",
+      "blocked-backend": "Pas de connexion au backend.",
+      "blocked-workspace": "Ouvrez d’abord un espace de travail.",
+      "blocked-task": "Décrivez d’abord la tâche.",
+      "reset-title": "Réinitialiser cette exécution ?",
+      "reset-message": "La réinitialisation efface cette exécution et ferme tous les panes de cette fenêtre, y compris ceux que vous avez ouverts vous-même. {count} pane sera fermé. | La réinitialisation efface cette exécution et ferme tous les panes de cette fenêtre, y compris ceux que vous avez ouverts vous-même. {count} panes seront fermés.",
+      "reset-message-none": "La réinitialisation efface cette exécution. Aucun pane n’est ouvert, donc aucun ne sera fermé.",
+      "reset-manual-mark": "ouvert par vous",
+      "reset-confirm": "Réinitialiser et fermer les panes"
     }
   },
   "evolve": {
@@ -12268,6 +12280,7 @@
     "import": "Importer",
     "importing": "Import en cours…",
     "preview-stale": "Le JSON a changé depuis l’aperçu. Relancez l’aperçu avant d’importer.",
+    "import-blocked-preview": "Prévisualisez d’abord le workflow.",
     "stats": {
       "workflow": "Nom du workflow",
       "nodes": "Nœuds n8n",

@@ -1192,7 +1192,6 @@
     "collapse": "Einklappen",
     "restore": "↑ Wiederherstellen",
     "retry": "↻ Erneut versuchen",
-    "finish": "Fertigstellen",
     "connect-to-remote": "Mit Remote verbinden",
     "scan-repos-anyway": "Trotzdem nach Repositorys suchen",
     "amend-commit": "Commit ergänzen",
@@ -8556,7 +8555,6 @@
     "pipeline-aborted": "Pipeline abgebrochen. Agents bleiben erhalten – „Fortsetzen“ zum Weitermachen oder „Zurücksetzen“ zum Leeren.",
     "pipeline-aborted-paused": "Pipeline abgebrochen (pausiert). Agents bleiben erhalten – „Fortsetzen“ zum Weitermachen oder „Zurücksetzen“ zum Leeren.",
     "pipeline-completed": "✓ Pipeline hat alle {count} Stufen abgeschlossen. Prüfen Sie jedes Pane rechts.",
-    "provide-task": "Aufgabenbeschreibung und Arbeitsbereich angeben, dann starten.",
     "missing": "⚠ fehlt",
     "already-open": "● geöffnet",
     "tagline": "Claude Code · Codex · Antigravity CLI gemeinsam steuern",
@@ -11200,7 +11198,9 @@
     "badge": {
       "open-canvas": "Diese Verbindung auf der Arbeitsfläche anzeigen",
       "reject": "↺ Zurück zu Ebene {layer} (max. {max})",
-      "skip": "⤳ Springt zu Ebene {layer}"
+      "skip": "⤳ Springt zu Ebene {layer}",
+      "branch": "⑂ Wenn {when} → Ebene {layer}",
+      "error": "⚠ Bei Fehler → Ebene {layer}"
     },
     "canvas": {
       "insert-on-edge": "Hier einen Schritt einfügen",
@@ -11229,6 +11229,7 @@
       "outcome-ended": "Beendet",
       "outcome-unknown": "Unbekannt",
       "outcome-idle": "Leerlauf",
+      "failed-step": "{name} fehlgeschlagen: {error}",
       "pick": "Wählen Sie einen Lauf, um ihn im Graphen nachzuverfolgen.",
       "progress": "{done} von {total} Schritten",
       "restart": "Von vorn beginnen",
@@ -11295,6 +11296,7 @@
       "kind-gate": "Genehmigungsschranke",
       "kind-slot": "Schritt",
       "kind-trigger": "Start",
+      "kind-subpipeline": "Unter-Pipeline",
       "layer": "Ebeneneinstellungen",
       "live-empty": "Die Live-Ansicht öffnet sich, wenn dieser Schritt läuft. Starten Sie die Pipeline und kommen Sie dann hierher zurück.",
       "live-unavailable": "Das Transkript des Panes ist gerade nicht lesbar.",
@@ -11303,6 +11305,7 @@
       "not-run": "Noch nicht ausgeführt",
       "open-pane": "Pane öffnen",
       "output-empty": "Noch keine Ausgabe. Nachdem dieser Schritt gelaufen ist, erscheint hier seine Zusammenfassung.",
+      "failure": "Warum es fehlschlug",
       "pin": "Ausgabe einfrieren",
       "pin-help": "Erneute Läufe überspringen einen eingefrorenen Schritt und verwenden seine letzte Ausgabe wieder.",
       "required": "Erforderlich",
@@ -11399,7 +11402,8 @@
       "parents": "Aufgerufen von",
       "open-in-canvas": "Auf der Pipeline-Arbeitsfläche öffnen",
       "gate-toast": "Die Pipeline wartet bei {name} auf Ihre Genehmigung",
-      "next-gated": "Genehmigen Sie diese Schranke oder schicken Sie sie zurück, bevor es mit der nächsten Stufe weitergeht."
+      "next-gated": "Genehmigen Sie diese Schranke oder schicken Sie sie zurück, bevor es mit der nächsten Stufe weitergeht.",
+      "last-stage": "Das ist die letzte Stufe. Der Lauf endet, sobald sie den Abschluss meldet."
     },
     "link": {
       "title": "Verbindung",
@@ -11465,7 +11469,15 @@
     "run": {
       "running": "Läuft: {names}",
       "gate": "Wartet bei {name} auf Ihre Genehmigung",
-      "review": "Prüfen"
+      "review": "Prüfen",
+      "blocked-backend": "Keine Verbindung zum Backend.",
+      "blocked-workspace": "Öffnen Sie zuerst einen Arbeitsbereich.",
+      "blocked-task": "Beschreiben Sie zuerst die Aufgabe.",
+      "reset-title": "Diesen Lauf zurücksetzen?",
+      "reset-message": "Zurücksetzen löscht diesen Lauf und schließt jedes Pane in diesem Fenster, auch selbst geöffnete. {count} Pane wird geschlossen. | Zurücksetzen löscht diesen Lauf und schließt jedes Pane in diesem Fenster, auch selbst geöffnete. {count} Panes werden geschlossen.",
+      "reset-message-none": "Zurücksetzen löscht diesen Lauf. Es ist kein Pane geöffnet, also wird keines geschlossen.",
+      "reset-manual-mark": "von Ihnen geöffnet",
+      "reset-confirm": "Zurücksetzen und Panes schließen"
     }
   },
   "evolve": {
@@ -12268,6 +12280,7 @@
     "import": "Importieren",
     "importing": "Wird importiert …",
     "preview-stale": "Das JSON wurde nach der Vorschau geändert. Erstellen Sie vor dem Import erneut eine Vorschau.",
+    "import-blocked-preview": "Erstellen Sie zuerst eine Vorschau des Workflows.",
     "stats": {
       "workflow": "Workflow-Name",
       "nodes": "n8n-Knoten",
