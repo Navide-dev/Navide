@@ -24,6 +24,8 @@ export interface RunSnapshot {
   nodes: Record<string, NodeRunState>
   /** Node id of the gate awaiting a decision, if any. */
   gate: string | null
+  /** Known only for the window driving the run: it is on its last stage. */
+  lastStage?: boolean
 }
 
 export const EMPTY_RUN: RunSnapshot = { pipelineId: '', state: 'idle', nodes: {}, gate: null }

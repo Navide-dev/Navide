@@ -1192,7 +1192,6 @@
     "collapse": "Recolher",
     "restore": "↑ Restaurar",
     "retry": "↻ Tentar novamente",
-    "finish": "Concluir",
     "connect-to-remote": "Conectar ao remoto",
     "scan-repos-anyway": "Procurar repositórios mesmo assim",
     "amend-commit": "Corrigir commit",
@@ -8563,7 +8562,6 @@
     "pipeline-aborted": "Pipeline cancelado. Os agents são mantidos: use “Retomar” para continuar ou “Redefinir” para limpar.",
     "pipeline-aborted-paused": "Pipeline cancelado (pausado). Os agents são mantidos: use “Retomar” para continuar ou “Redefinir” para limpar.",
     "pipeline-completed": "✓ O pipeline concluiu todas as {count} etapas. Revise cada pane à direita.",
-    "provide-task": "Informe a descrição da tarefa e o workspace e depois comece.",
     "missing": "⚠ ausente",
     "already-open": "● aberto",
     "tagline": "Comande Claude Code · Codex · Antigravity CLI juntos",
@@ -11207,7 +11205,9 @@
     "badge": {
       "open-canvas": "Mostrar este vínculo na tela",
       "reject": "↺ Volta para a camada {layer} (máx. {max})",
-      "skip": "⤳ Pula para a camada {layer}"
+      "skip": "⤳ Pula para a camada {layer}",
+      "branch": "⑂ Se {when} → camada {layer}",
+      "error": "⚠ Em caso de falha → camada {layer}"
     },
     "canvas": {
       "insert-on-edge": "Inserir um passo aqui",
@@ -11236,6 +11236,7 @@
       "outcome-ended": "Encerrada",
       "outcome-unknown": "Desconhecida",
       "outcome-idle": "Ociosa",
+      "failed-step": "{name} falhou: {error}",
       "pick": "Escolha uma execução para reproduzi-la no grafo.",
       "progress": "{done} de {total} passos",
       "restart": "Recomeçar",
@@ -11302,6 +11303,7 @@
       "kind-gate": "Ponto de aprovação",
       "kind-slot": "Passo",
       "kind-trigger": "Início",
+      "kind-subpipeline": "Subpipeline",
       "layer": "Configurações da camada",
       "live-empty": "A visualização ao vivo abre quando este passo está em execução. Inicie o pipeline e volte aqui.",
       "live-unavailable": "A transcrição do pane não pode ser lida agora.",
@@ -11310,6 +11312,7 @@
       "not-run": "Ainda não executado",
       "open-pane": "Abrir pane",
       "output-empty": "Nenhuma saída ainda. Depois que este passo for executado, o resumo dele aparecerá aqui.",
+      "failure": "Motivo da falha",
       "pin": "Congelar saída",
       "pin-help": "As novas execuções pulam um passo congelado e reutilizam a última saída dele.",
       "required": "Obrigatório",
@@ -11407,7 +11410,8 @@
       "parents": "Chamado de",
       "open-in-canvas": "Abrir na tela do pipeline",
       "gate-toast": "O pipeline está aguardando sua aprovação em {name}",
-      "next-gated": "Aprove ou devolva este ponto de aprovação antes de seguir para a próxima etapa."
+      "next-gated": "Aprove ou devolva este ponto de aprovação antes de seguir para a próxima etapa.",
+      "last-stage": "Esta é a última etapa. A execução termina assim que ela informar que concluiu."
     },
     "link": {
       "title": "Vínculo",
@@ -11473,7 +11477,15 @@
     "run": {
       "running": "Em execução: {names}",
       "gate": "Aguardando sua aprovação em {name}",
-      "review": "Revisar"
+      "review": "Revisar",
+      "blocked-backend": "Sem conexão com o backend.",
+      "blocked-workspace": "Abra um workspace primeiro.",
+      "blocked-task": "Descreva a tarefa primeiro.",
+      "reset-title": "Redefinir esta execução?",
+      "reset-message": "Redefinir limpa esta execução e fecha todos os panes desta janela, inclusive os que você abriu. {count} pane será fechado. | Redefinir limpa esta execução e fecha todos os panes desta janela, inclusive os que você abriu. {count} panes serão fechados.",
+      "reset-message-none": "Redefinir limpa esta execução. Nenhum pane está aberto, então nenhum será fechado.",
+      "reset-manual-mark": "não aberto pela execução",
+      "reset-confirm": "Redefinir e fechar panes"
     }
   },
   "evolve": {
@@ -12276,6 +12288,7 @@
     "import": "Importar",
     "importing": "Importando…",
     "preview-stale": "O JSON mudou depois da prévia. Gere a prévia de novo antes de importar.",
+    "import-blocked-preview": "Gere a prévia do workflow primeiro.",
     "stats": {
       "workflow": "Nome do workflow",
       "nodes": "Nós do n8n",

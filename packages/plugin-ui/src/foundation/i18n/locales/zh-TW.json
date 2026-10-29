@@ -1192,7 +1192,6 @@
     "collapse": "收合",
     "restore": "↑ 還原",
     "retry": "↻ 重試",
-    "finish": "完成",
     "connect-to-remote": "連接到遠端",
     "scan-repos-anyway": "仍要掃描儲存庫",
     "amend-commit": "修改提交",
@@ -8563,7 +8562,6 @@
     "pipeline-aborted": "流程已中止。Agent 保留 — 繼續以恢復，或重設以清除。",
     "pipeline-aborted-paused": "流程已中止（暫停）。Agent 保留 — 繼續以恢復，或重設以清除。",
     "pipeline-completed": "✓ 流程完成所有 {count} 個階段。請查看右側各面板。",
-    "provide-task": "請提供任務描述 + 工作區，然後開始。",
     "missing": "⚠ 遺失",
     "already-open": "● 已開啟",
     "tagline": "同時驅動 Claude Code · Codex · Antigravity CLI",
@@ -11207,7 +11205,9 @@
     "badge": {
       "open-canvas": "在畫布上顯示這條連線",
       "reject": "↺ 退回第 {layer} 層（最多 {max} 次）",
-      "skip": "⤳ 跳到第 {layer} 層"
+      "skip": "⤳ 跳到第 {layer} 層",
+      "branch": "⑂ 若為 {when} → 第 {layer} 層",
+      "error": "⚠ 失敗時 → 第 {layer} 層"
     },
     "canvas": {
       "insert-on-edge": "在這裡插入步驟",
@@ -11236,6 +11236,7 @@
       "outcome-ended": "已結束",
       "outcome-unknown": "未知",
       "outcome-idle": "閒置",
+      "failed-step": "{name} 失敗：{error}",
       "pick": "選一筆執行紀錄，在圖上重播。",
       "progress": "{done}／{total} 個步驟",
       "restart": "重新開始",
@@ -11302,6 +11303,7 @@
       "kind-gate": "核准閘門",
       "kind-slot": "步驟",
       "kind-trigger": "啟動",
+      "kind-subpipeline": "子 Pipeline",
       "layer": "層設定",
       "live-empty": "這個步驟執行時才會有即時畫面。啟動 pipeline 後再回來看。",
       "live-unavailable": "目前讀不到這個 pane 的逐字稿。",
@@ -11310,6 +11312,7 @@
       "not-run": "尚未執行",
       "open-pane": "開啟 pane",
       "output-empty": "還沒有產出。這個步驟執行後，摘要會顯示在這裡。",
+      "failure": "失敗原因",
       "pin": "凍結產出",
       "pin-help": "重跑時會跳過凍結的步驟，沿用它上次的產出。",
       "required": "必填",
@@ -11407,7 +11410,8 @@
       "parents": "呼叫自",
       "open-in-canvas": "在 pipeline 畫布中開啟",
       "gate-toast": "pipeline 已暫停，等待你在「{name}」核准",
-      "next-gated": "先核准或退回這個閘門，才能進入下一階段。"
+      "next-gated": "先核准或退回這個閘門，才能進入下一階段。",
+      "last-stage": "這是最後一個階段，回報完成後這次執行就會結束。"
     },
     "link": {
       "title": "連線",
@@ -11473,7 +11477,15 @@
     "run": {
       "running": "執行中：{names}",
       "gate": "等待你在「{name}」核准",
-      "review": "前往核准"
+      "review": "前往核准",
+      "blocked-backend": "尚未連上後端。",
+      "blocked-workspace": "請先開啟工作區。",
+      "blocked-task": "請先描述任務。",
+      "reset-title": "要重設這次執行嗎？",
+      "reset-message": "重設會清除這次執行，並關閉這個視窗裡的所有 pane，包括你自己開的。將關閉 {count} 個 pane。",
+      "reset-message-none": "重設會清除這次執行。目前沒有開著的 pane，不會關閉任何 pane。",
+      "reset-manual-mark": "非這次執行開的",
+      "reset-confirm": "重設並關閉 pane"
     }
   },
   "evolve": {
@@ -12276,6 +12288,7 @@
     "import": "匯入",
     "importing": "匯入中…",
     "preview-stale": "JSON 在預覽後有變動，請重新預覽再匯入。",
+    "import-blocked-preview": "請先預覽工作流。",
     "stats": {
       "workflow": "工作流",
       "nodes": "n8n 節點",

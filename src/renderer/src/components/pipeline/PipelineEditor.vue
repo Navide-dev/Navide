@@ -187,6 +187,8 @@ watch(() => props.pipelineId, async (self) => {
     callable.value = []
   }
 }, { immediate: true })
+/** Why the palette's Sub-pipeline cannot be added ('' when it can). */
+const subpipelineBlocked = computed(() => (callable.value.length ? '' : t('pipelineEditor.error.subpipeline-none')))
 function nodeFor(item: PaletteItem): GraphNode {
   const g = graph.value!
   if (item.kind === 'subpipeline') {
@@ -312,7 +314,8 @@ const selectedRejectEdge = computed(() => {
  *  error) and a branch's condition are edited in the same panel. */
 const selectedLinkEdge = computed(() => {
   const e = graph.value?.edges.find((x) => x.id === selectedEdgeId.value)
-  return e && e.kind !== 'reject' && byId.value.get(e.from)?.kind === 'slot' ? e : null
+  const from = byId.value.get(e?.from ?? '')?.kind
+  return e && e.kind !== 'reject' && (from === 'slot' || from === 'subpipeline') ? e : null
 })
 const whenText = (e: GraphEdge): string =>
   typeof e.when === 'string' ? e.when : e.when ? `${e.when.path} = ${JSON.stringify(e.when.equals)}` : ''
@@ -379,13 +382,22 @@ async function command(id: string, args?: unknown): Promise<void> {
   const result = await invokeCommand(id, args)
   if (!result.ok) notify.toast(result.error ?? t('pipelineEditor.error.command-failed'), { type: 'error' })
 }
-const control = (action: 'next' | 'abort' | 'resume' | 'restart' | 'reset'): Promise<void> => command(`ui.pipeline.${action}`)
+// Reset closes every pane in the window, so the host asks first (confirm).
+const control = (action: 'next' | 'abort' | 'resume' | 'restart' | 'reset'): Promise<void> =>
+  command(`ui.pipeline.${action}`, action === 'reset' ? { confirm: true } : undefined)
 /** Task for a run started from here; ui.pipeline.start runs the same
  *  onPipelineStart as the sidebar's Run. */
 const runTask = ref('')
 const canStart = computed(() =>
   !!props.workspacePath && props.run.state !== 'running' && stepCount.value > 0 && runTask.value.trim().length > 0
 )
+/** The condition holding Run back, for its tooltip ('' when it can run). */
+const startBlocked = computed(() => {
+  if (!props.workspacePath) return t('pipelineEditor.run.blocked-workspace')
+  if (stepCount.value === 0) return t('pipelineEditor.state.empty-title')
+  if (!runTask.value.trim()) return t('pipelineEditor.run.blocked-task')
+  return ''
+})
 async function startRun(): Promise<void> {
   if (!canStart.value) return
   const result = await invokeCommand('ui.pipeline.start', { pipelineId: props.pipelineId, task: runTask.value.trim() })
@@ -587,7 +599,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
           v-model="runTask" type="text" class="pe-start-input" spellcheck="false"
           :placeholder="t('pipelineEditor.toolbar.task')" :aria-label="t('pipelineEditor.toolbar.task')"
         />
-        <button type="submit" class="pe-text-btn pe-start-btn" :disabled="!canStart">{{ t('action.run-pipeline') }}</button>
+        <button type="submit" class="pe-text-btn pe-start-btn" :disabled="!canStart" :title="startBlocked || undefined">{{ t('action.run-pipeline') }}</button>
       </form>
 
       <template v-if="tab === 'editor'">
@@ -649,7 +661,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
 
     <div v-else-if="tab === 'editor'" class="pe-main" :class="{ 'has-inspector': inspectorOpen, 'no-palette': paletteCollapsed }">
       <aside v-if="!paletteCollapsed" class="pe-palette" :aria-label="t('pipelineEditor.palette.title')">
-        <PipelinePalette :roles="roles" :locked="locked" @pick="addFromPalette" />
+        <PipelinePalette :roles="roles" :locked="locked" :subpipeline-blocked="subpipelineBlocked" @pick="addFromPalette" />
       </aside>
 
       <div class="pe-view" :class="[`pe-view--${view}`, { 'is-entering': entering }]">
@@ -714,7 +726,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
           class="pe-inspector"
           :backend="backend" :graph="graph" :node="selectedNode" :stage="selectedStage"
           :roles="roles" :agent-options="agentOptions" :run="run" :now="now" :locked="locked"
-          :workspace-path="workspacePath"
+          :workspace-path="workspacePath" :pipeline-id="pipelineId"
           @edit="editFromInspector" @stage-meta="editStageMeta" @remove="removeNode"
           @close="select(null); selectedLayer = null"
           @open-pane="openPane" @restart-from="restartFrom" @retry-node="retryNode" @gate="decideGate"
@@ -734,7 +746,7 @@ const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
       v-if="quick" class="pe-quick" role="dialog" :aria-label="t('pipelineEditor.palette.quick-add')"
       :style="{ left: `${quick.x}px`, top: `${quick.y}px` }"
     >
-      <PipelinePalette :roles="roles" compact @pick="quickPick" />
+      <PipelinePalette :roles="roles" compact :subpipeline-blocked="subpipelineBlocked" @pick="quickPick" />
     </div>
   </div>
 </template>

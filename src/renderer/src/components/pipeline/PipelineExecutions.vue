@@ -8,7 +8,7 @@ import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../../composables/useBackend'
 import type { NodeRunState, PipelineGraph } from '../../lib/pipelineGraph'
 import PipelineCanvas from './PipelineCanvas.vue'
-import { formatElapsed, formatTokens, type RunSnapshot } from './pipelineEditorModel'
+import { formatElapsed, formatTokens, nodeTitle, type RunSnapshot } from './pipelineEditorModel'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 
 interface RunRecord {
@@ -122,6 +122,20 @@ const progress = computed(() => {
   return { done, total: ids.length }
 })
 const awaitingGate = computed(() => (isLiveSelected.value ? props.run.gate : null))
+/** Why the selected run failed: each failed step with its reason, which
+ *  otherwise only shows in that card's tooltip. */
+const failures = computed(() =>
+  props.graph.nodes.flatMap((n) => {
+    const s = replayNodes.value[n.id]
+    return s?.status === 'failed' && s.error ? [t('pipelineEditor.exec.failed-step', { name: nodeTitle(n), error: s.error })] : []
+  })
+)
+/** Why Next cannot advance now ('' when it can) — the sidebar's rule. */
+const nextBlocked = computed(() => {
+  if (props.run.gate) return t('pipelineEditor.controlPane.next-gated')
+  if (props.run.lastStage) return t('pipelineEditor.controlPane.last-stage')
+  return ''
+})
 const gateComment = ref('')
 </script>
 
@@ -184,6 +198,7 @@ const gateComment = ref('')
         <span class="px-head-text">
           <strong v-truncate>{{ selected.task || t('pipelineEditor.exec.no-task') }}</strong>
           <span>{{ t(`pipelineEditor.exec.outcome-${outcomeOf(selected)}`) }} · {{ when(selected) }} · {{ duration(selected) }}</span>
+          <span v-for="(f, i) in failures" :key="i" class="px-head-error" role="alert" data-test="run-error">{{ f }}</span>
         </span>
       </header>
       <div class="px-canvas">
@@ -205,13 +220,16 @@ const gateComment = ref('')
         </span>
         <span class="px-spacer"></span>
         <template v-if="isLiveSelected && run.state === 'running'">
-          <button type="button" class="px-btn" @click="emit('control', 'next')">{{ t('pipelineEditor.exec.next') }}</button>
+          <button
+            type="button" class="px-btn" data-test="exec-next" :disabled="!!nextBlocked" :title="nextBlocked || undefined"
+            @click="emit('control', 'next')"
+          >{{ t('pipelineEditor.exec.next') }}</button>
           <button type="button" class="px-btn px-btn--danger" @click="emit('control', 'abort')">{{ t('pipelineEditor.exec.abort') }}</button>
         </template>
         <template v-else-if="run.pipelineId === pipelineId && run.state !== 'running' && run.state !== 'idle'">
           <button type="button" class="px-btn" @click="emit('control', 'resume')">{{ t('pipelineEditor.exec.resume') }}</button>
           <button type="button" class="px-btn" @click="emit('control', 'restart')">{{ t('pipelineEditor.exec.restart') }}</button>
-          <button type="button" class="px-btn px-reset" :title="t('action.clear-pipeline')" @click="emit('control', 'reset')">{{ t('action.reset') }}</button>
+          <button type="button" class="px-btn px-btn--danger px-reset" :title="t('action.clear-pipeline')" @click="emit('control', 'reset')">{{ t('action.reset') }}</button>
         </template>
       </footer>
     </section>
@@ -293,6 +311,7 @@ const gateComment = ref('')
 .px-head-text { display: grid; gap: 2px; min-width: 0; }
 .px-head-text strong { font-size: var(--font-md); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .px-head-text span { font-size: var(--font-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.px-head-text .px-head-error { color: var(--danger-fg); overflow-wrap: anywhere; }
 .px-placeholder { display: grid; place-items: center; height: 100%; color: var(--text-muted); font-size: var(--font-sm); }
 .px-gate {
   display: flex;
@@ -343,6 +362,8 @@ const gateComment = ref('')
   cursor: pointer;
 }
 .px-btn:hover { background: var(--bg-hover); }
+.px-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.px-btn:disabled:hover { background: var(--bg-elevated); }
 .px-btn:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: 1px; }
 .px-btn--primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
 .px-btn--primary:hover { background: var(--accent-bright); }

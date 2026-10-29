@@ -1192,7 +1192,6 @@
     "collapse": "Collapse",
     "restore": "↑ Restore",
     "retry": "↻ Retry",
-    "finish": "Finish",
     "connect-to-remote": "Connect to Remote",
     "scan-repos-anyway": "Scan for Repositories Anyway",
     "amend-commit": "Amend Commit",
@@ -8563,7 +8562,6 @@
     "pipeline-aborted": "Pipeline aborted. Agents are kept — Resume to continue, or Reset to clear.",
     "pipeline-aborted-paused": "Pipeline aborted (paused). Agents are kept — Resume to continue, or Reset to clear.",
     "pipeline-completed": "✓ Pipeline completed all {count} stages. Review each pane on the right.",
-    "provide-task": "Provide task description + workspace, then start.",
     "missing": "⚠ missing",
     "already-open": "● open",
     "tagline": "Drive Claude Code · Codex · Antigravity CLI together",
@@ -11207,7 +11205,9 @@
     "badge": {
       "open-canvas": "Show this link on the canvas",
       "reject": "↺ Back to layer {layer} (max {max})",
-      "skip": "⤳ Skips to layer {layer}"
+      "skip": "⤳ Skips to layer {layer}",
+      "branch": "⑂ If {when} → layer {layer}",
+      "error": "⚠ On failure → layer {layer}"
     },
     "canvas": {
       "insert-on-edge": "Insert a Step Here",
@@ -11236,6 +11236,7 @@
       "outcome-ended": "Ended",
       "outcome-unknown": "Unknown",
       "outcome-idle": "Idle",
+      "failed-step": "{name} failed: {error}",
       "pick": "Pick a run to replay it on the graph.",
       "progress": "{done} of {total} steps",
       "restart": "Start Over",
@@ -11302,6 +11303,7 @@
       "kind-gate": "Approval gate",
       "kind-slot": "Step",
       "kind-trigger": "Start",
+      "kind-subpipeline": "Sub-pipeline",
       "layer": "Layer settings",
       "live-empty": "The live view opens when this step is running. Start the pipeline, then come back here.",
       "live-unavailable": "The pane's transcript is not readable right now.",
@@ -11310,6 +11312,7 @@
       "not-run": "Not run yet",
       "open-pane": "Open Pane",
       "output-empty": "No output yet. After this step runs, its summary shows here.",
+      "failure": "Why it failed",
       "pin": "Freeze Output",
       "pin-help": "Reruns skip a frozen step and reuse its last output.",
       "required": "Required",
@@ -11407,7 +11410,8 @@
       "parents": "Called from",
       "open-in-canvas": "Open in the Pipeline Canvas",
       "gate-toast": "The pipeline is waiting for your approval at {name}",
-      "next-gated": "Approve or send back this gate before moving on to the next stage."
+      "next-gated": "Approve or send back this gate before moving on to the next stage.",
+      "last-stage": "This is the last stage. The run finishes once it reports done."
     },
     "link": {
       "title": "Link",
@@ -11473,7 +11477,15 @@
     "run": {
       "running": "Running: {names}",
       "gate": "Waiting for your approval at {name}",
-      "review": "Review"
+      "review": "Review",
+      "blocked-backend": "Not connected to the backend.",
+      "blocked-workspace": "Open a workspace first.",
+      "blocked-task": "Describe the task first.",
+      "reset-title": "Reset this run?",
+      "reset-message": "Reset clears this run and closes every pane in this window, including panes you opened yourself. {count} pane will close. | Reset clears this run and closes every pane in this window, including panes you opened yourself. {count} panes will close.",
+      "reset-message-none": "Reset clears this run. No pane is open, so none will close.",
+      "reset-manual-mark": "not opened by the run",
+      "reset-confirm": "Reset and Close Panes"
     }
   },
   "evolve": {
@@ -12276,6 +12288,7 @@
     "import": "Import",
     "importing": "Importing…",
     "preview-stale": "The JSON changed after the preview. Preview it again before importing.",
+    "import-blocked-preview": "Preview the workflow first.",
     "stats": {
       "workflow": "Workflow",
       "nodes": "n8n nodes",

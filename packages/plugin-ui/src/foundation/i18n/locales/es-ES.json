@@ -1192,7 +1192,6 @@
     "collapse": "Contraer",
     "restore": "↑ Restaurar",
     "retry": "↻ Reintentar",
-    "finish": "Finalizar",
     "connect-to-remote": "Conectar al remoto",
     "scan-repos-anyway": "Buscar repositorios igualmente",
     "amend-commit": "Enmendar commit",
@@ -8563,7 +8562,6 @@
     "pipeline-aborted": "Pipeline cancelada. Los agents se conservan: pulsa «Reanudar» para continuar o «Restablecer» para limpiar.",
     "pipeline-aborted-paused": "Pipeline cancelada (en pausa). Los agents se conservan: pulsa «Reanudar» para continuar o «Restablecer» para limpiar.",
     "pipeline-completed": "✓ La pipeline completó sus {count} etapas. Revisa cada pane de la derecha.",
-    "provide-task": "Indica la descripción de la tarea y el área de trabajo, y luego empieza.",
     "missing": "⚠ falta",
     "already-open": "● abierta",
     "tagline": "Controla Claude Code · Codex · Antigravity CLI a la vez",
@@ -11207,7 +11205,9 @@
     "badge": {
       "open-canvas": "Mostrar este enlace en el lienzo",
       "reject": "↺ Volver a la capa {layer} (máx. {max})",
-      "skip": "⤳ Salta a la capa {layer}"
+      "skip": "⤳ Salta a la capa {layer}",
+      "branch": "⑂ Si {when} → capa {layer}",
+      "error": "⚠ Si falla → capa {layer}"
     },
     "canvas": {
       "insert-on-edge": "Insertar un paso aquí",
@@ -11236,6 +11236,7 @@
       "outcome-ended": "Terminada",
       "outcome-unknown": "Desconocida",
       "outcome-idle": "Inactiva",
+      "failed-step": "{name} falló: {error}",
       "pick": "Elige una ejecución para reproducirla en el grafo.",
       "progress": "{done} de {total} pasos",
       "restart": "Empezar de nuevo",
@@ -11302,6 +11303,7 @@
       "kind-gate": "Puerta de aprobación",
       "kind-slot": "Paso",
       "kind-trigger": "Inicio",
+      "kind-subpipeline": "Subpipeline",
       "layer": "Ajustes de la capa",
       "live-empty": "La vista en vivo se abre cuando este paso se está ejecutando. Inicia la pipeline y vuelve aquí.",
       "live-unavailable": "La transcripción del pane no se puede leer ahora mismo.",
@@ -11310,6 +11312,7 @@
       "not-run": "Aún no se ha ejecutado",
       "open-pane": "Abrir pane",
       "output-empty": "Aún no hay salida. Cuando se ejecute este paso, su resumen aparecerá aquí.",
+      "failure": "Motivo del fallo",
       "pin": "Congelar salida",
       "pin-help": "Las nuevas ejecuciones se saltan un paso congelado y reutilizan su última salida.",
       "required": "Obligatorio",
@@ -11407,7 +11410,8 @@
       "parents": "Llamada desde",
       "open-in-canvas": "Abrir en el lienzo de pipelines",
       "gate-toast": "La pipeline está esperando tu aprobación en {name}",
-      "next-gated": "Aprueba o devuelve esta puerta antes de pasar a la siguiente etapa."
+      "next-gated": "Aprueba o devuelve esta puerta antes de pasar a la siguiente etapa.",
+      "last-stage": "Es la última etapa. La ejecución termina en cuanto informe que ha terminado."
     },
     "link": {
       "title": "Enlace",
@@ -11473,7 +11477,15 @@
     "run": {
       "running": "En ejecución: {names}",
       "gate": "Esperando tu aprobación en {name}",
-      "review": "Revisar"
+      "review": "Revisar",
+      "blocked-backend": "No hay conexión con el backend.",
+      "blocked-workspace": "Abre primero un área de trabajo.",
+      "blocked-task": "Describe primero la tarea.",
+      "reset-title": "¿Restablecer esta ejecución?",
+      "reset-message": "Restablecer borra esta ejecución y cierra todos los panes de esta ventana, incluidos los que abriste tú. Se cerrará {count} pane. | Restablecer borra esta ejecución y cierra todos los panes de esta ventana, incluidos los que abriste tú. Se cerrarán {count} panes.",
+      "reset-message-none": "Restablecer borra esta ejecución. No hay ningún pane abierto, así que no se cerrará ninguno.",
+      "reset-manual-mark": "no abierto por la ejecución",
+      "reset-confirm": "Restablecer y cerrar panes"
     }
   },
   "evolve": {
@@ -12276,6 +12288,7 @@
     "import": "Importar",
     "importing": "Importando…",
     "preview-stale": "El JSON cambió después de la vista previa. Vuelve a generarla antes de importar.",
+    "import-blocked-preview": "Primero genera la vista previa del flujo de trabajo.",
     "stats": {
       "workflow": "Flujo de trabajo",
       "nodes": "Nodos de n8n",

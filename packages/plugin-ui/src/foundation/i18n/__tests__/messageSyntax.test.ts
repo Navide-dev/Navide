@@ -28,6 +28,7 @@ const PLURAL_KEYS = [
   'time.ago-days',
   'time.ago-months',
   'pipelineEditor.lane.more',
+  'pipelineEditor.run.reset-message',
   'pipelineImport.needs-review',
   'pipelineImport.imported-review',
   'pipelineImport.merged-nodes',
