@@ -65,6 +65,39 @@
     "errors": {
       "generic": "Etwas ist schiefgelaufen ({code}).",
       "invalid-address": "Geben Sie eine http- oder https-Adresse ein."
+    },
+    "layout": {
+      "label": "Anordnung",
+      "tiled": "Nebeneinander",
+      "switch": "Einzeln"
+    },
+    "page": {
+      "previous": "Vorherige Seite",
+      "next": "Nächste Seite",
+      "status": "Seite {page} von {count}"
+    },
+    "tab": {
+      "new": "Neuer Tab",
+      "close": "Tab schließen",
+      "untitled": "Neuer Tab",
+      "discarded": "Zum Speichersparen geschlossen; zum erneuten Laden klicken",
+      "discarded-note": "Dieser Tab war über 10 Minuten nicht zu sehen und wurde geschlossen, um Speicher zu sparen. Die Seite wird von ihrer Adresse neu geladen.",
+      "restore": "Tab neu laden"
+    },
+    "dialog": {
+      "open": "Dialog geöffnet ({type}): {message}",
+      "type": {
+        "alert": "Hinweis",
+        "confirm": "Bestätigung",
+        "prompt": "Eingabe",
+        "beforeunload": "Seite verlassen"
+      }
+    },
+    "uploads": {
+      "title": "Vom Agent hochgeladene Dateien",
+      "item": "{file} → {origin}, {time}",
+      "sensitive": "Sieht nach einem Geheimnis aus",
+      "sensitive-note": "Der Agent hat Dateien hochgeladen, deren Namen nach Geheimnissen aussehen"
     }
   }
 }
