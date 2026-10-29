@@ -871,7 +871,8 @@ describe('file upload', () => {
     expect(files.map((file) => basename(file))).toEqual(['a.txt', 'b.txt', 'a.txt'])
     for (const file of files) expect(file.startsWith(workspace)).toBe(false)
     expect(files.map((file) => readFileSync(file, 'utf8'))).toEqual(['a', 'b', 'a'])
-    expect(statSync(files[0]).mode & 0o077).toBe(0)
+    // Owner-only where the file system has POSIX modes (Windows has none to check).
+    if (process.platform !== 'win32') expect(statSync(files[0]).mode & 0o077).toBe(0)
     // A later change to the source does not reach the copy the page holds.
     writeFileSync(join(workspace, 'a.txt'), 'changed')
     expect(readFileSync(files[0], 'utf8')).toBe('a')
