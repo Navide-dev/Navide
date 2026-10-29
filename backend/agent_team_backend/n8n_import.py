@@ -36,6 +36,7 @@ import copy
 import hashlib
 import json
 import re
+import threading
 from datetime import datetime, timezone
 from collections.abc import Collection, Mapping
 from typing import Any
@@ -46,6 +47,12 @@ SLOT_TARGET = 8
 SMALL_BRANCH_MAX = 6
 TAINT_SOURCE = "remote"
 DEFAULT_AGENT = "claude"
+# Well under the 16 MiB a ws frame may carry, so the window refuses a
+# workflow with a reason instead of losing its connection.
+MAX_IMPORT_BYTES = 5 * 1024 * 1024
+# The window gives up on an import after 30 s while it may still finish:
+# the same import sent again within this long answers with what it made.
+IMPORT_REUSE_SECONDS = 600
 
 BASE = "n8n-nodes-base."
 LANGCHAIN = "@n8n/n8n-nodes-langchain."
@@ -55,7 +62,14 @@ _RANK = {"native": 0, "agent": 1, "pending": 2, "unsupported": 3}
 
 
 class N8nImportError(ValueError):
-    """The input is not an n8n workflow this converter can read."""
+    """The input is not an n8n workflow this converter can read, or the
+    import could not be stored. `reason` is a stable code and `params` its
+    values, for a translated message; str() stays the English sentence."""
+
+    def __init__(self, message: str, reason: str = "invalid", params: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.params = params or {}
 
 
 # ── node table ───────────────────────────────────────────────────────────
@@ -139,14 +153,16 @@ def _classify(node: dict[str, Any]) -> dict[str, Any]:
     ver = node.get("typeVersion")
     ver_ok = isinstance(ver, (int, float)) and not isinstance(ver, bool)
     entry = _TABLE.get(ntype)
-    out: dict[str, Any] = {"role": "step", "needsReview": False, "reason": "", "detail": ""}
+    out: dict[str, Any] = {"role": "step", "needsReview": False, "reason": "", "detail": "",
+                           "detailCode": "", "detailParams": {}}
     if entry is not None:
         lo, hi, role = entry
         if ver_ok and lo <= ver <= hi:
             out["role"] = role
         else:
             out.update(role="step", needsReview=True, reason="unknown-version",
-                       detail=f"typeVersion {ver} is not in the known range {lo}–{hi}; an agent carries it out from its parameters")
+                       detail=f"typeVersion {ver} is not in the known range {lo}–{hi}; an agent carries it out from its parameters",
+                       detailCode="unknown-version", detailParams={"version": ver, "lo": lo, "hi": hi})
             # A known trigger stays a trigger whatever its version.
             if role.startswith("trigger") or role in ("noop", "sticky"):
                 out["role"] = role
@@ -155,32 +171,36 @@ def _classify(node: dict[str, Any]) -> dict[str, Any]:
         if role is not None:
             out["role"] = role
         else:
-            out.update(needsReview=True, reason="unknown-type",
+            out.update(needsReview=True, reason="unknown-type", detailCode="unknown-type",
                        detail="node type not in the import table; an agent carries it out from its parameters")
     elif ntype.startswith(BASE):
         if ntype.endswith("Trigger"):
             out["role"] = "trigger_app"
         else:
-            out.update(role="app", needsReview=True, reason="unknown-type",
+            out.update(role="app", needsReview=True, reason="unknown-type", detailCode="unknown-type",
                        detail="node type not in the import table; an agent carries it out from its parameters")
     else:
         out.update(role="trigger_app" if ntype.endswith("Trigger") else "app", needsReview=True,
-                   reason="community-node",
+                   reason="community-node", detailCode="community-node",
                    detail="community node: an agent carries it out from its parameters")
     params = node.get("parameters") if isinstance(node.get("parameters"), dict) else {}
     if out["role"] in ("app", "step") and params.get("operation") == _SEND_AND_WAIT:
         out["role"] = "gate"
     # Only a Merge that waits for its inputs (append, chooseBranch) is a join;
     # one that combines data (by fields, position, all, SQL) is an agent step.
+    # Merge v1 also joins in passThrough (one input's items) and wait.
     mode = params.get("mode", "append")
-    if out["role"] == "merge" and mode not in _JOIN_MERGE_MODES:
-        out.update(role="step", reason="merge-combine",
+    joins = _JOIN_MERGE_MODES + (_JOIN_MERGE_V1_MODES if isinstance(ver, (int, float)) and ver < 2 else ())
+    if out["role"] == "merge" and mode not in joins:
+        out.update(role="step", reason="merge-combine", detailCode="merge-combine", detailParams={"mode": mode},
                    detail=f"Merge in \"{mode}\" mode combines data: an agent carries it out by its merge rule")
-    out["detail"] = out["detail"] or _ROLE_DETAIL.get(out["role"], "")
+    if not out["detail"] and out["role"] in _ROLE_DETAIL:
+        out.update(detail=_ROLE_DETAIL[out["role"]], detailCode="role-" + out["role"].replace("_", "-"))
     return out
 
 
 _JOIN_MERGE_MODES = ("append", "chooseBranch")
+_JOIN_MERGE_V1_MODES = ("passThrough", "wait")
 
 _ROLE_DETAIL = {
     "trigger_schedule": "runs on a schedule in n8n: start it by hand until Navide schedules pipelines",
@@ -339,14 +359,48 @@ def _external_header(wf_name: str) -> str:
             "ask for or print secret values.]")
 
 
+# n8n's Switch v1/v2 has 4 outputs; an index from the file beyond this is
+# ignored rather than sizing the branch list.
+_SWITCH_V1_MAX_OUTPUTS = 64
+
+
+def _switch_v1_routes(node: dict[str, Any]) -> tuple[list[int], int | None] | None:
+    """For a Switch v1/v2 in rules mode, the output each rule sends to (by
+    rule) and the fallback output (None without one); None for other
+    Switches, whose outputs follow their rules one by one."""
+    ver = node.get("typeVersion")
+    p = node.get("parameters") if isinstance(node.get("parameters"), dict) else {}
+    rules = p.get("rules") if isinstance(p.get("rules"), dict) else {}
+    if not (isinstance(ver, (int, float)) and ver < 3 and p.get("mode", "rules") == "rules"
+            and isinstance(rules.get("rules"), list)):
+        return None
+    outs = []
+    for i, rule in enumerate(rules["rules"]):
+        o = rule.get("output") if isinstance(rule, dict) else None
+        outs.append(o if _output_index(o) else i)
+    fb = p.get("fallbackOutput")
+    return outs, fb if _output_index(fb) else None
+
+
+def _output_index(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < _SWITCH_V1_MAX_OUTPUTS
+
+
 def _branch_values(node: dict[str, Any], role: str) -> list[str]:
     """The branch edge `when` of each regular output of an IF or Switch node,
     by n8n output index: IF true/false; Switch one per rule (its output name
-    when renamed, else the index) plus "default" for a fallback output."""
+    when renamed, else the index) plus "default" for a fallback output. A
+    Switch v1/v2 rule names its output: there each output is labeled by its
+    own index, or "default" when only the fallback leads there."""
     if role == "if":
         return ["true", "false"]
     if role != "switch":
         return []
+    routes = _switch_v1_routes(node)
+    if routes is not None:
+        outs, fb = routes
+        width = max([*outs, -1 if fb is None else fb]) + 1
+        return [pg.BRANCH_DEFAULT if o == fb and o not in outs else str(o) for o in range(width)]
     p = node.get("parameters") if isinstance(node.get("parameters"), dict) else {}
     rules = p.get("rules") if isinstance(p.get("rules"), dict) else {}
     listed = rules.get("values") if isinstance(rules.get("values"), list) else rules.get("rules")
@@ -436,7 +490,7 @@ def _reach(succ: dict[str, list[str]], start: str, stop: str | None = None) -> s
     seen = {start}
     queue = [start]
     while queue:
-        n = queue.pop(0)
+        n = queue.pop()  # a set comes out: the visiting order does not matter
         for m in succ.get(n, []):
             if m not in seen and m != stop:
                 seen.add(m)
@@ -464,17 +518,17 @@ def _parse(workflow: Any) -> dict[str, Any]:
         try:
             workflow = json.loads(workflow)
         except (ValueError, TypeError):
-            raise N8nImportError("not valid JSON") from None
+            raise N8nImportError("not valid JSON", "invalid-json") from None
     if not isinstance(workflow, dict):
-        raise N8nImportError("an n8n workflow is a JSON object")
+        raise N8nImportError("an n8n workflow is a JSON object", "not-object")
     if not isinstance(workflow.get("nodes"), list) or not isinstance(workflow.get("connections"), dict):
-        raise N8nImportError("an n8n workflow needs nodes[] and connections{}")
+        raise N8nImportError("an n8n workflow needs nodes[] and connections{}", "no-nodes")
     names: set[str] = set()
     for i, n in enumerate(workflow["nodes"]):
         if not isinstance(n, dict) or not isinstance(n.get("name"), str) or not n["name"] or not isinstance(n.get("type"), str):
-            raise N8nImportError(f"node {i} needs a name and a type")
+            raise N8nImportError(f"node {i} needs a name and a type", "node-shape", {"index": i})
         if n["name"] in names:
-            raise N8nImportError(f"node {i}: duplicate node name")
+            raise N8nImportError(f"node {i}: duplicate node name", "duplicate-name", {"index": i})
         names.add(n["name"])
     return workflow
 
@@ -538,6 +592,11 @@ def convert_n8n_workflow(
     for name, n in by_name.items():
         info[name]["category"] = _ROLE_CATEGORY.get(info[name]["role"], "agent")
     warnings: list[str] = []
+    warning_items: list[dict[str, Any]] = []
+
+    def warn(code: str, text: str, **params: Any) -> None:
+        warnings.append(text)
+        warning_items.append({"code": code, "params": params, "text": text})
 
     # connections → (src, type, out_index, dst)
     conns: list[tuple[str, str, int, str]] = []
@@ -588,9 +647,9 @@ def convert_n8n_workflow(
     error_triggers = [n for n in by_name if info[n]["role"] == "trigger_error" and n not in removed]
     handler_trigger = error_triggers[0] if error_wf and error_wf == str(wf.get("id") or "") and error_triggers else None
     if error_wf and handler_trigger is None:
-        warnings.append("settings.errorWorkflow names another n8n workflow; its error handling is not imported")
+        warn("error-workflow-other", "settings.errorWorkflow names another n8n workflow; its error handling is not imported")
     if handler_trigger:
-        info[handler_trigger].update(category="native", reason="error-workflow",
+        info[handler_trigger].update(category="native", reason="error-workflow", detailCode="error-workflow",
                                      detail="this workflow is its own error workflow: the steps after it run "
                                             "through error edges when a step fails")
 
@@ -604,19 +663,23 @@ def convert_n8n_workflow(
         if name in removed or wid is None or info[name]["role"] not in ("subworkflow", "tool_workflow"):
             continue
         if wid in recursive_workflows:
-            info[name].update(reason="recursive-subworkflow",
+            info[name].update(reason="recursive-subworkflow", detailCode="recursive-subworkflow",
+                              detailParams={"workflowId": wid},
                               detail=f"calls the n8n workflow {wid}, which calls this workflow back: a sub-pipeline "
                                      "cannot run itself, so this call stays for review")
         elif known.get(wid) and info[name]["role"] == "tool_workflow":
             tool_pipelines[name] = known[wid]
-            info[name]["detail"] = (f"an agent tool that calls the n8n workflow {wid}, imported as the pipeline "
-                                    f"{known[wid]}; a pipeline cannot be called as a tool, so the kickoff names it instead")
+            info[name].update(detailCode="tool-pipeline", detailParams={"workflowId": wid, "pipelineId": known[wid]},
+                              detail=f"an agent tool that calls the n8n workflow {wid}, imported as the pipeline "
+                                     f"{known[wid]}; a pipeline cannot be called as a tool, so the kickoff names it instead")
         elif known.get(wid):
             sub_target[name] = known[wid]
             opts = n["parameters"].get("options") if isinstance(n["parameters"].get("options"), dict) else {}
             waits = "" if opts.get("waitForSubWorkflow", True) is not False else (
                 "; n8n did not wait for it, Navide always waits for a sub-pipeline")
             info[name].update(role="subpipeline", category="native", reason="subpipeline",
+                              detailCode="subpipeline-nowait" if waits else "subpipeline",
+                              detailParams={"pipelineId": known[wid], "workflowId": wid},
                               detail=f"runs the pipeline {known[wid]} (the n8n workflow {wid}) as a sub-pipeline and "
                                      f"waits for it{waits}")
 
@@ -634,7 +697,7 @@ def convert_n8n_workflow(
     for s, oi, d in list(main):
         if info[d]["role"] in _TRIGGER_ROLES:
             main.remove((s, oi, d))
-            warnings.append(f"dropped a connection into trigger node \"{d}\"")
+            warn("into-trigger", f"dropped a connection into trigger node \"{d}\"", node=d)
     seen_e: set[tuple[str, int, str]] = set()
     main = [e for e in main if not (e in seen_e or seen_e.add(e))]
     # Error outputs (onError "continueErrorOutput") become error edges.
@@ -680,14 +743,26 @@ def convert_n8n_workflow(
     uf = _UF(flow)
     group_note: dict[str, str] = {}
 
-    # 1. Loops (cycles over main edges) collapse into one slot.
+    # 1. Loops (cycles over main edges) collapse into one slot. Only a Loop
+    # Over Items (splitInBatches) goes item by item; any other cycle (an IF
+    # back to a poll) repeats until its exit condition holds.
     for comp in _sccs(bfs, succ):
         for n in comp[1:]:
             uf.union(comp[0], n)
+        batch = any(info[n]["role"] == "loop" for n in comp)
         for n in comp:
             group_note[n] = "loop"
-            info[n].update(needsReview=True, reason=info[n]["reason"] or "loop-collapsed",
-                           detail=info[n]["detail"] or "loop collapsed into one slot that processes the items one by one")
+            if kind_of(n) == "gate" and not batch:
+                code, detail = "loop-wait", "an n8n Wait inside a loop: the slot pauses here between rounds, no gate stops the run"
+                warn("wait-in-loop", f"the Wait \"{n}\" sits inside a loop and is folded into its slot; "
+                                     "no gate stops the run there", node=n)
+            elif batch:
+                code, detail = "loop-batch", "loop collapsed into one slot that processes the items one by one"
+            else:
+                code, detail = "loop-repeat", "loop collapsed into one slot that repeats its steps until the condition that leaves it holds"
+            info[n].update(needsReview=True, reason=info[n]["reason"] or "loop-collapsed")
+            if not info[n]["detail"]:
+                info[n].update(detail=detail, detailCode=code, detailParams={})
 
     # 2. IF and Switch become branch edges; any other node with several
     # outputs has its small region folded into one slot.
@@ -731,6 +806,8 @@ def convert_n8n_workflow(
             if gs != gd:
                 gsucc.setdefault(gs, set()).add(gd)
                 gpred.setdefault(gd, set()).add(gs)
+        # Groups only change at the union below, which ends this pass.
+        branch_groups = {uf.find(b) for b in branch_src}
         for s in bfs:
             gs = uf.find(s)
             nxt = gsucc.get(gs, set())
@@ -738,7 +815,7 @@ def convert_n8n_workflow(
                 continue
             gd = next(iter(nxt))
             # A branch node ends its slot: the slot reports which way it went.
-            if any(uf.find(b) == gs for b in branch_src):
+            if gs in branch_groups:
                 continue
             if gpred.get(gd) == {gs} and is_step_group(gs) and is_step_group(gd):
                 uf.union(gs, gd)
@@ -766,7 +843,7 @@ def convert_n8n_workflow(
     for name in [m for m in sub_target if len(members[uf.find(m)]) > 1]:
         del sub_target[name]
         info[name] = {**_classify(by_name[name]), "category": "pending"}
-        info[name].update(needsReview=True, reason="loop-collapsed",
+        info[name].update(needsReview=True, reason="loop-collapsed", detailCode="loop-subworkflow", detailParams={},
                           detail="calls another n8n workflow inside a loop: an agent carries the loop out as one step")
 
     # ── build the graph ──────────────────────────────────────────────────
@@ -810,7 +887,8 @@ def convert_n8n_workflow(
         if src == dst or (kind, src, dst) in seen_edges:
             return
         if kind != "main" and not is_slot_group.get(src):
-            warnings.append(f"a {kind} connection out of \"{src}\" became a plain one: only steps can branch or fail")
+            warn("plain-connection", f"a {kind} connection out of \"{src}\" became a plain one: only steps can branch or fail",
+                 kind=kind, node=next((members[g][0] for g in group_list if gid[g] == src), src))
             kind, when = "main", None
             if (kind, src, dst) in seen_edges:
                 return
@@ -838,7 +916,8 @@ def convert_n8n_workflow(
             add_edge("main", a, b2)  # every way out leads here
         else:
             if len(set(whens)) > 1:
-                warnings.append(f"several outputs of \"{src_node}\" lead to the same step; only \"{whens[0]}\" is kept")
+                warn("outputs-same-step", f"several outputs of \"{src_node}\" lead to the same step; only \"{whens[0]}\" is kept",
+                     node=src_node, kept=whens[0])
             add_edge("branch", a, b2, whens[0])
     for s_, _, d in errs:
         add_edge("error", node_of[s_], node_of[d])
@@ -909,9 +988,11 @@ def convert_n8n_workflow(
             capped = applied["maxTries"] != t or applied["waitMs"] != w
             retry_note[m] = {"requested": {"maxTries": t, "waitMs": w}, "applied": applied, "capped": capped}
             if capped:
-                warnings.append(f"\"{m}\" retries {t} times {w} ms apart in n8n; Navide allows at most "
-                                f"{pg.MAX_TRIES_CEILING} tries {pg.MAX_RETRY_WAIT_MS} ms apart, so it uses "
-                                f"{applied['maxTries']} tries {applied['waitMs']} ms apart")
+                warn("retry-capped", f"\"{m}\" retries {t} times {w} ms apart in n8n; Navide allows at most "
+                                     f"{pg.MAX_TRIES_CEILING} tries {pg.MAX_RETRY_WAIT_MS} ms apart, so it uses "
+                                     f"{applied['maxTries']} tries {applied['waitMs']} ms apart",
+                     node=m, tries=t, waitMs=w, maxTries=pg.MAX_TRIES_CEILING, maxWaitMs=pg.MAX_RETRY_WAIT_MS,
+                     usedTries=applied["maxTries"], usedWaitMs=applied["waitMs"])
             tries, waits = max(tries, applied["maxTries"]), max(waits, applied["waitMs"])
         if tries and is_slot_group[gid[g]]:
             retry_of[gid[g]] = {"maxTries": tries, "waitMs": waits}
@@ -957,6 +1038,8 @@ def convert_n8n_workflow(
                                               "kickoffBody": kickoff, "isCommander": False}}
         if nid in retry_of:
             slot_node["retry"] = retry_of[nid]
+        if any(info[m]["needsReview"] for m in mem):
+            slot_node["needsReview"] = True  # the editor badges it until the user checks it
         nodes_out.append(slot_node)
         slots_report.append({
             "id": nid, "label": label, "agentKey": agent_key, "category": cat, "nodes": list(mem),
@@ -972,7 +1055,7 @@ def convert_n8n_workflow(
     _place(graph)
     errors = pg.validate_graph(graph)
     if errors:
-        raise N8nImportError("internal: the converted graph is invalid: " + "; ".join(errors))
+        raise N8nImportError("internal: the converted graph is invalid: " + "; ".join(errors), "internal")
 
     # ── report ───────────────────────────────────────────────────────────
     entries: list[dict[str, Any]] = []
@@ -982,10 +1065,12 @@ def convert_n8n_workflow(
         entry: dict[str, Any] = {
             "name": name, "type": n["type"], "typeVersion": n.get("typeVersion"),
             "category": i["category"], "needsReview": i["needsReview"],
-            "reason": i["reason"], "detail": i["detail"], "actions": [], "node": None, "result": "",
+            "reason": i["reason"], "detail": i["detail"], "detailCode": i["detailCode"],
+            "detailParams": dict(i["detailParams"]), "actions": [], "node": None, "result": "",
         }
         if name in removed:
-            entry.update(result="removed", reason=removed[name], detail={
+            entry.update(result="removed", reason=removed[name], detailCode="removed-" + removed[name], detailParams={},
+                         detail={
                 "sticky": "sticky note: its text is in the description and the nearest slot's kickoff",
                 "disabled": "disabled in n8n: left out, its connections pass through",
                 "noop": "No Operation node: removed and its connections joined",
@@ -995,6 +1080,8 @@ def convert_n8n_workflow(
         elif name in cluster_of:
             entry.update(result="folded", node=node_of.get(cluster_of[name]))
             role = i["role"]
+            if not entry["detail"]:
+                entry["detailCode"] = "cluster-" + role.replace("_", "-") if role in _SUB_ROLES else "cluster-other"
             entry["detail"] = entry["detail"] or {
                 "model": "the slot runs on a CLI agent instead of this model",
                 "memory": "dropped: the CLI session keeps its own context",
@@ -1020,6 +1107,9 @@ def convert_n8n_workflow(
                     "subpipeline": "subpipeline",
                     "if": "branch", "switch": "branch", "merge": "merge",
                 }.get(i["role"], "agent-step")
+            if not entry["detail"]:
+                entry["detailCode"] = {"if": "branch-if", "switch": "branch-switch", "merge": "merge-join"}.get(
+                    i["role"], "agent-step")
                 entry["detail"] = entry["detail"] or {
                     "if": "branch edges: the agent reports which way the condition went and only that branch runs",
                     "switch": "branch edges, one per rule: the agent reports which rule matched and only that branch runs",
@@ -1049,7 +1139,8 @@ def convert_n8n_workflow(
     by_cat = {c: sum(1 for e in kept if e["category"] == c) for c in CATEGORIES}
     n_slots = sum(1 for x in nodes_out if x["kind"] == "slot")
     if n_slots > SLOT_TARGET:
-        warnings.append(f"{n_slots} slots is above the target of about {SLOT_TARGET}; each slot opens a CLI pane")
+        warn("over-target", f"{n_slots} slots is above the target of about {SLOT_TARGET}; each slot opens a CLI pane",
+             slots=n_slots, target=SLOT_TARGET)
     credentials = _credentials(wf, removed)
     report = {
         "workflow": wf_name,
@@ -1074,6 +1165,7 @@ def convert_n8n_workflow(
         "description": "\n\n".join(t for notes in sticky_notes.values() for t in notes),
         "testInputs": {k: v for k, v in pin_data.items() if k in by_name and k not in removed},
         "warnings": warnings,
+        "warningItems": warning_items,
         "n8nMcp": {"nodes": [e["name"] for e in entries if "keep-in-n8n" in e["actions"]],
                    "steps": list(N8N_MCP_STEPS)} if any("keep-in-n8n" in e["actions"] for e in entries) else None,
         "taint": {"source": TAINT_SOURCE, "detail": f"imported from the n8n workflow \"{wf_name[:80]}\""},
@@ -1190,9 +1282,16 @@ def _kickoff(
                          + (", taking only the branch whose condition holds" if any(group_note.get(m) == "branch" for m in mem) else "")
                          + ".")
         looped = [m for m in mem if group_note.get(m) == "loop"]
-        if looped:
+        if looped and any(info[m]["role"] == "loop" for m in looped):
             parts.append("In n8n, " + ", ".join(f"\"{m}\"" for m in looped) + " formed a loop: repeat those steps "
                          "for one item (or batch) at a time until the loop's \"done\" output is reached.")
+        elif looped:
+            parts.append("In n8n, " + ", ".join(f"\"{m}\"" for m in looped) + " formed a loop: repeat those steps "
+                         "until the condition that leaves the loop holds.")
+            for m in looped:
+                if info[m]["role"] == "gate":
+                    parts.append(f"\"{m}\" is an n8n Wait inside the loop: pause as its parameters say before the "
+                                 "next round.")
         for i, name in enumerate(mem, 1):
             parts.append(_step_section(i, name, by_name[name], info[name], mem, main))
     parts += extras
@@ -1226,6 +1325,15 @@ def _kickoff_extras(
             out.append(f"This step ends at the n8n {kind} node \"{b}\". Evaluate its condition (its parameters above, "
                        f"verbatim) and report the branch you take, one of: {values}, the way the branch instructions "
                        "at the end of this kickoff say. Only that branch runs next.")
+            routes = _switch_v1_routes(by_name[b]) if kind == "Switch" else None
+            if routes is not None:
+                outs, fb = routes
+                values_of = branch_src[b]
+                pairs = [f"rule {i} → {values_of[o]}" for i, o in enumerate(outs)]
+                if fb is not None:
+                    pairs.append(f"no rule matches → {values_of[fb]}")
+                out.append("Each rule of this Switch names the output it sends to; report that output, not the "
+                           "rule's number: " + ", ".join(pairs) + ".")
     for reader, read, owner in refs:
         if owner:
             out.append(f"\"{reader}\" reads data from the n8n node \"{read}\" ($('{read}').item.json). That node ran in "
@@ -1356,23 +1464,32 @@ def import_detail(imported_from: dict[str, Any]) -> str:
     return f"imported from the n8n workflow \"{str(imported_from.get('workflow') or '')[:80]}\""
 
 
+def _check_size(size: int) -> None:
+    if size > MAX_IMPORT_BYTES:
+        limit = MAX_IMPORT_BYTES // (1024 * 1024)
+        mb = round(size / (1024 * 1024), 1)
+        raise N8nImportError(f"the workflow is {mb} MB; an import takes at most {limit} MB", "too-large",
+                             {"limitMb": limit, "sizeMb": mb})
+
+
 def _workflows(workflow: Any) -> list[dict[str, Any]]:
     """One workflow, or the list `n8n export:workflow --all` writes."""
     if isinstance(workflow, (str, bytes)):
+        _check_size(len(workflow.encode("utf-8") if isinstance(workflow, str) else workflow))
         try:
             workflow = json.loads(workflow)
         except (ValueError, TypeError):
-            raise N8nImportError("not valid JSON") from None
+            raise N8nImportError("not valid JSON", "invalid-json") from None
     if not isinstance(workflow, list):
         return [_parse(workflow)]
     if not workflow:
-        raise N8nImportError("the list holds no n8n workflow")
+        raise N8nImportError("the list holds no n8n workflow", "empty-list")
     out = []
     for i, w in enumerate(workflow):
         try:
             out.append(_parse(w))
         except N8nImportError as exc:
-            raise N8nImportError(f"workflow {i + 1}: {exc}") from None
+            raise N8nImportError(f"workflow {i + 1}: {exc}", exc.reason, {**exc.params, "workflow": i + 1}) from None
     return out
 
 
@@ -1404,9 +1521,14 @@ def import_into_store(
     if any; a call that would loop back stays pending. Returns {dry_run,
     graph, report, credentials} for the main workflow, report.subworkflows
     listing every called workflow, plus `pipeline` (the new pipeline's
-    summary) when something was written. Raises N8nImportError; the store's
-    GraphError cannot happen for a converted graph but is not caught."""
+    summary) when something was written, and `reused` when the same import
+    (same workflows, name and default agent) was stored less than
+    IMPORT_REUSE_SECONDS ago: that one is answered instead of a copy. Raises
+    N8nImportError, also when the store refuses a graph: whatever this
+    import had written by then is removed again."""
     wfs = _workflows(workflow)
+    key = hashlib.sha256(json.dumps([wfs, name, default_agent], sort_keys=True, ensure_ascii=False,
+                                    separators=(",", ":")).encode("utf-8")).hexdigest()[:32]
     ids = [str(w.get("id") or "") for w in wfs]
     listed: dict[str, int] = {}
     for i, wid in enumerate(ids):
@@ -1473,23 +1595,41 @@ def import_into_store(
 
     # Convert everything once first, so a bad workflow fails before any write.
     results = {i: convert(i, preview=True) for i in order}
+    reused: dict[int, dict[str, Any]] | None = None
     if not dry_run:
-        for i in order:
-            result = convert(i, preview=False)
-            results[i] = result
-            imported_from = {
-                "kind": "n8n",
-                "importedAt": result["source"]["importedAt"],
-                "workflow": result["report"]["workflow"],
-                **({"workflowId": ids[i]} if ids[i] else {}),
-            }
-            created[i] = store.create_imported_pipeline(
-                (name if i == main else "") or result["report"]["workflow"],
-                result["graph"],
-                imported_from,
-                result["source"],
-                result["credentials"],
-            )
+        with _IMPORT_LOCK:
+            reused = _recent_import(store, key, order)
+            try:
+                for i in order:
+                    result = convert(i, preview=False)
+                    results[i] = result
+                    if reused is not None:
+                        created[i] = reused[i]
+                        continue
+                    imported_from = {
+                        "kind": "n8n",
+                        "importedAt": result["source"]["importedAt"],
+                        "workflow": result["report"]["workflow"],
+                        **({"workflowId": ids[i]} if ids[i] else {}),
+                        "importKey": key,
+                        "importPart": i,
+                    }
+                    created[i] = store.create_imported_pipeline(
+                        (name if i == main else "") or result["report"]["workflow"],
+                        result["graph"],
+                        imported_from,
+                        result["source"],
+                        result["credentials"],
+                    )
+            except Exception as exc:
+                if reused is None:
+                    for done in created.values():
+                        store.delete_pipeline(done["id"])
+                if isinstance(exc, pg.GraphError):
+                    wname = results[i]["report"]["workflow"]
+                    raise N8nImportError(f"the workflow \"{wname}\" could not be stored, nothing was imported: {exc}",
+                                         "store-refused", {"workflow": wname, "problems": "; ".join(exc.errors)}) from exc
+                raise
 
     subworkflows: list[dict[str, Any]] = []
     for w in dict.fromkeys([w for i in order for w in runs[i] + tools[i]]
@@ -1519,4 +1659,28 @@ def import_into_store(
     }
     if main in created:
         out["pipeline"] = created[main]
+    if reused is not None:
+        out["reused"] = True
     return out
+
+
+_IMPORT_LOCK = threading.Lock()
+
+
+def _recent_import(store: Any, key: str, order: list[int]) -> dict[int, dict[str, Any]] | None:
+    """The pipelines an import with this key made less than
+    IMPORT_REUSE_SECONDS ago, by workflow index, or None unless every one of
+    `order` is still there."""
+    now = datetime.strptime(_now_iso(), "%Y-%m-%dT%H:%M:%SZ")
+    found: dict[int, dict[str, Any]] = {}
+    for p in store.list_pipelines():
+        rec = p.get("imported_from") or {}
+        if rec.get("kind") != "n8n" or rec.get("importKey") != key or not isinstance(rec.get("importPart"), int):
+            continue
+        try:
+            at = datetime.strptime(str(rec.get("importedAt") or ""), "%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            continue
+        if 0 <= (now - at).total_seconds() <= IMPORT_REUSE_SECONDS:
+            found[rec["importPart"]] = {k: v for k, v in p.items() if k != "has_graph"}
+    return found if all(i in found for i in order) else None

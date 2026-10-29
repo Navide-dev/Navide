@@ -8,6 +8,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
+import { useNotify } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
 import type { GraphNode, PipelineGraph } from '../../lib/pipelineGraph'
 import { backendErrorText, type BackendErrorLike } from '../../lib/pipelineErrors'
@@ -25,9 +26,14 @@ interface ReportNode {
   node: string | null
   reason: string
   detail: string
+  /** pipelineImport.detail.<code>, with detailParams; detail is the English. */
+  detailCode?: string
+  detailParams?: Record<string, unknown>
   needsReview: boolean
   actions: string[]
 }
+interface Coded { code: string; params: Record<string, unknown>; text: string }
+interface Subworkflow { workflowId: string; name: string; status: string }
 interface ImportReport {
   workflow: string
   nodes: ReportNode[]
@@ -39,12 +45,14 @@ interface ImportReport {
     byCategory: Record<Category, number>
     needsReview: number
   }
-  slots: Array<{ id: string; label: string; agentKey: string; kickoffBody: string }>
+  slots: Array<{ id: string; label: string; agentKey: string; kickoffBody: string; nodes?: string[] }>
   gates: Array<{ id: string; label: string; prompt: string }>
   nodeCategories: Record<string, Category>
   secretsRemoved: Array<{ node: string | null; field: string }>
   credentials?: Credential[]
   warnings: string[]
+  warningItems?: Coded[]
+  subworkflows?: Subworkflow[]
 }
 interface Credential { type: string; name: string; nodes: string[] }
 interface ImportPayload {
@@ -52,8 +60,11 @@ interface ImportPayload {
   graph: PipelineGraph
   report: ImportReport
   credentials?: Credential[]
-  pipeline?: { id: string }
+  pipeline?: { id: string; name?: string }
+  /** The same import was sent a moment ago: this is the pipeline it made. */
+  reused?: boolean
 }
+type ImportError = BackendErrorLike & { details?: { reason?: string; params?: Record<string, unknown> } }
 
 const props = defineProps<{
   backend: ReturnType<typeof useBackend>
@@ -65,8 +76,12 @@ const emit = defineEmits<{
   (e: 'imported', pipelineId: string): void
 }>()
 const { t, te } = useI18n()
+const notify = useNotify()
 
 const TIMEOUT_MS = 30_000
+/** The backend refuses more (n8n_import.MAX_IMPORT_BYTES); a ws frame near
+ *  16 MiB would drop the whole window's connection instead. */
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024
 const CATEGORIES: Category[] = ['native', 'agent', 'pending', 'unsupported']
 const agentOptions = CLI_AGENT_SPECS.map((s) => ({ key: s.agentKey, label: s.label }))
 const agentLabels = Object.fromEntries(agentOptions.map((a) => [a.key, a.label]))
@@ -93,6 +108,27 @@ const needsSubworkflow = computed(
 const graphLabels = computed(
   () => new Map((preview.value?.graph.nodes ?? []).map((n) => [n.id, n.label]))
 )
+/** Rows to confirm first; otherwise the workflow's order. */
+const sortedNodes = computed(() => {
+  const nodes = report.value?.nodes ?? []
+  return [...nodes.filter((n) => n.needsReview), ...nodes.filter((n) => !n.needsReview)]
+})
+/** n8n nodes merged into each step, for steps holding more than one. */
+const mergedNodes = computed(
+  () => new Map((report.value?.slots ?? []).filter((s) => (s.nodes?.length ?? 0) > 1).map((s) => [s.id, s.nodes!]))
+)
+const subworkflows = computed(() => report.value?.subworkflows ?? [])
+const pipelinesToCreate = computed(() => 1 + subworkflows.value.filter((s) => s.status === 'will-import').length)
+const warningTexts = computed(() =>
+  report.value?.warningItems?.map((w) => coded('warning', w.code, w.params, w.text)) ?? report.value?.warnings ?? []
+)
+
+/** The translation for a backend reason code, or the backend's English. */
+function coded(group: string, code: string | undefined, params: Record<string, unknown> | undefined, english: string): string {
+  const key = `pipelineImport.${group}.${code}`
+  return code && te(key) ? t(key, params ?? {}) : english
+}
+const detailText = (r: ReportNode): string => coded('detail', r.detailCode, r.detailParams, r.detail)
 
 function reset(): void {
   jsonText.value = ''
@@ -103,25 +139,44 @@ function reset(): void {
 }
 watch(() => props.open, (open) => { if (!open) reset() })
 
-function showError(err: BackendErrorLike | null | undefined, fallbackKey: string): void {
+function showError(err: ImportError | null | undefined, fallbackKey: string): void {
+  const { reason, params = {} } = err?.details ?? {}
+  let why = reason ? coded('error-reason', reason, params, '') : ''
+  if (why && params.workflow && reason !== 'store-refused') {
+    why = t('pipelineImport.error-in-workflow', { n: params.workflow, message: why })
+  }
+  // Too large or refused by the store: the reason is the whole message.
+  if (why && err?.code !== 'N8N_INVALID') {
+    error.value = { text: why, detail: '' }
+    return
+  }
   const text = backendErrorText(t, err, fallbackKey)
   // The translated N8N_INVALID sentence is generic; the backend's says what
   // exactly is wrong with this file.
-  const detail = err?.code === 'N8N_INVALID' && err.message && err.message !== text ? err.message : ''
+  const detail = err?.code === 'N8N_INVALID' ? why || (err.message && err.message !== text ? err.message : '') : ''
   error.value = { text, detail }
 }
 
 async function run(dryRun: boolean): Promise<ImportPayload | null> {
   const fallbackKey = dryRun ? 'pipelineImport.error.preview-failed' : 'pipelineImport.error.import-failed'
   const text = jsonText.value
+  const size = new TextEncoder().encode(text).length
+  if (size > MAX_IMPORT_BYTES) {
+    const limitMb = MAX_IMPORT_BYTES / (1024 * 1024)
+    error.value = { text: t('pipelineImport.error-reason.too-large', { sizeMb: Math.round(size / 104857.6) / 10, limitMb }), detail: '' }
+    return null
+  }
   busy.value = dryRun ? 'preview' : 'import'
   error.value = null
+  const send = () => props.backend.send<ImportPayload>(
+    'pipelines.import_n8n',
+    { json: text, dry_run: dryRun, default_agent: agent.value, workspace_path: props.workspacePath },
+    TIMEOUT_MS
+  )
   try {
-    const resp = await props.backend.send<ImportPayload>(
-      'pipelines.import_n8n',
-      { json: text, dry_run: dryRun, default_agent: agent.value, workspace_path: props.workspacePath },
-      TIMEOUT_MS
-    )
+    // An import that timed out may still finish in the backend. Sent again,
+    // the same import answers with the pipeline it made (never a copy).
+    const resp = dryRun ? await send() : await send().catch(() => send())
     if (!resp.ok || !resp.payload) {
       showError(resp.error, fallbackKey)
       return null
@@ -132,7 +187,8 @@ async function run(dryRun: boolean): Promise<ImportPayload | null> {
     }
     return resp.payload
   } catch (err) {
-    error.value = { text: t(fallbackKey), detail: err instanceof Error ? err.message : String(err) }
+    const why = err instanceof Error ? err.message : String(err)
+    error.value = { text: dryRun ? t(fallbackKey) : t('pipelineImport.import-timeout'), detail: why }
     return null
   } finally {
     busy.value = null
@@ -150,6 +206,13 @@ async function runImport(): Promise<void> {
   const payload = await run(false)
   const id = payload?.pipeline?.id
   if (!id) return
+  const name = payload.pipeline?.name ?? payload.report.workflow
+  const n = payload.report.stats.needsReview
+  notify.toast(
+    payload.reused ? t('pipelineImport.imported-reused', { name })
+      : n > 0 ? t('pipelineImport.imported-review', { name, n }, n) : t('pipelineImport.imported', { name }),
+    { type: 'success' }
+  )
   emit('imported', id)
   emit('close')
 }
@@ -169,10 +232,8 @@ async function chooseFile(): Promise<void> {
   }
 }
 
-/** Unsupported nodes share the pending color: both need the user. */
 function swatch(category: Category | undefined): string {
-  if (category === 'native' || category === 'agent') return category
-  return 'pending'
+  return category && CATEGORIES.includes(category) ? category : 'pending'
 }
 const nodeClass = (n: GraphNode): string => {
   const category = report.value?.nodeCategories[n.id]
@@ -268,7 +329,7 @@ useDialogFocus(card, () => textarea.value)
             <p class="n8n-notice" data-testid="n8n-external">{{ t('pipelineImport.external') }}</p>
             <div v-if="report.warnings?.length" class="n8n-warnings">
               <h5>{{ t('pipelineImport.warnings') }}</h5>
-              <ul><li v-for="(w, i) in report.warnings" :key="i">{{ w }}</li></ul>
+              <ul><li v-for="(w, i) in warningTexts" :key="i">{{ w }}</li></ul>
             </div>
           </section>
 
@@ -291,6 +352,19 @@ useDialogFocus(card, () => textarea.value)
             </ul>
           </section>
 
+          <!-- The other workflows of a list import, and what each becomes. -->
+          <section v-if="subworkflows.length" class="n8n-section" data-testid="n8n-subworkflows">
+            <h5>{{ t('pipelineImport.subworkflows-title') }}</h5>
+            <p class="nv-hint">{{ t('pipelineImport.will-create', { n: pipelinesToCreate }, pipelinesToCreate) }}</p>
+            <ul class="n8n-subworkflows">
+              <li v-for="sw in subworkflows" :key="sw.workflowId">
+                {{ sw.name || sw.workflowId }}
+                <code v-if="sw.name">{{ sw.workflowId }}</code>
+                <span class="nv-hint">{{ coded('subworkflow-status', sw.status, {}, sw.status) }}</span>
+              </li>
+            </ul>
+          </section>
+
           <!-- c. How every n8n node was converted. -->
           <section class="n8n-section">
             <h5>{{ t('pipelineImport.report-title') }}</h5>
@@ -307,7 +381,7 @@ useDialogFocus(card, () => textarea.value)
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(r, i) in report.nodes" :key="i" class="n8n-row" :class="{ 'is-review': r.needsReview }">
+                  <tr v-for="(r, i) in sortedNodes" :key="i" class="n8n-row" :class="{ 'is-review': r.needsReview }">
                     <td>
                       {{ r.name }}
                       <span v-if="r.needsReview" class="n8n-review-mark">{{ t('pipelineImport.review-mark') }}</span>
@@ -315,13 +389,18 @@ useDialogFocus(card, () => textarea.value)
                     <td><code>{{ r.type }}@{{ r.typeVersion }}</code></td>
                     <td>
                       {{ t(`pipelineImport.result.${r.result}`) }}
-                      <span v-if="r.node" class="n8n-target">· {{ graphLabels.get(r.node) ?? r.node }}</span>
+                      <details v-if="r.node && mergedNodes.has(r.node)" class="n8n-merged">
+                        <summary class="n8n-target">· {{ graphLabels.get(r.node) ?? r.node }}</summary>
+                        <span class="nv-hint">{{ t('pipelineImport.merged-nodes', { n: mergedNodes.get(r.node)!.length }, mergedNodes.get(r.node)!.length) }}</span>
+                        <ul><li v-for="m in mergedNodes.get(r.node)" :key="m">{{ m }}</li></ul>
+                      </details>
+                      <span v-else-if="r.node" class="n8n-target">· {{ graphLabels.get(r.node) ?? r.node }}</span>
                     </td>
                     <td>
                       <span class="n8n-swatch" :class="`n8n-swatch--${swatch(r.category)}`" aria-hidden="true"></span>
                       {{ t(`pipelineImport.category.${r.category}`) }}
                     </td>
-                    <td class="n8n-detail">{{ r.detail }}</td>
+                    <td class="n8n-detail">{{ detailText(r) }}</td>
                     <td>
                       <ul v-if="r.actions.length" class="n8n-actions">
                         <li v-for="a in r.actions" :key="a">{{ actionLabel(a) }}</li>
@@ -475,6 +554,8 @@ useDialogFocus(card, () => textarea.value)
 .n8n-legend,
 .n8n-actions,
 .n8n-credentials,
+.n8n-subworkflows,
+.n8n-merged ul,
 .n8n-warnings ul {
   list-style: none;
   margin: 0;
@@ -502,6 +583,7 @@ useDialogFocus(card, () => textarea.value)
 .n8n-swatch--native { background: var(--success-fg); }
 .n8n-swatch--agent { background: var(--accent-fg); }
 .n8n-swatch--pending { background: var(--attention-fg); }
+.n8n-swatch--unsupported { background: var(--danger-fg); }
 .n8n-notice {
   margin: 0;
   padding: 6px 10px;
@@ -529,6 +611,7 @@ useDialogFocus(card, () => textarea.value)
 .n8n-canvas :deep(.vue-flow__node.n8n-cat--native) { box-shadow: 0 0 0 2px var(--success-fg); }
 .n8n-canvas :deep(.vue-flow__node.n8n-cat--agent) { box-shadow: 0 0 0 2px var(--accent-fg); }
 .n8n-canvas :deep(.vue-flow__node.n8n-cat--pending) { box-shadow: 0 0 0 2px var(--attention-fg); }
+.n8n-canvas :deep(.vue-flow__node.n8n-cat--unsupported) { box-shadow: 0 0 0 2px var(--danger-fg); }
 .n8n-table-wrap {
   overflow-x: auto;
 }
@@ -570,6 +653,20 @@ useDialogFocus(card, () => textarea.value)
 }
 .n8n-detail {
   overflow-wrap: anywhere;
+}
+.n8n-merged summary {
+  cursor: pointer;
+}
+.n8n-merged ul {
+  margin-top: 2px;
+  color: var(--text-secondary);
+}
+.n8n-subworkflows li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 0;
 }
 .n8n-kickoff,
 .n8n-gate {

@@ -52,9 +52,9 @@ GLOB_TOOLS = {"glob"}
 #: WRITE_TOOLS / READ_TOOLS name (its path fields are graded as that tool's),
 #: "process-input" (`input` is graded as a shell command), "write-pdf" (`path`
 #: and `outputPath` are writes), or one of MCP_ACTIONS (see
-#: _classify_mcp_action). A "shell" row is graded in the dialect its `shell`
-#: argument names, or as both POSIX and PowerShell when it names none. Add a
-#: row for each server tool verified to take these arguments.
+#: _classify_mcp_action). A "shell" row is graded as both POSIX and
+#: PowerShell, keeping the worse; nothing the caller passes narrows that. Add
+#: a row for each server tool verified to take these arguments.
 MCP_TOOLS = {
     # Windows-MCP (CursorTouch/Windows-MCP): PowerShell(command), FileSystem(mode,
     # path, destination, recursive), Registry(mode, path), Process(mode, name, pid).
@@ -62,13 +62,14 @@ MCP_TOOLS = {
     "filesystem": "filesystem",
     "registry": "registry",
     "process": "process",
-    # Generic shell tools: `command` holds the command line.
+    # Generic shell tools: `command` holds the command line. They name no
+    # dialect, so they are "shell" rows (graded as POSIX and as PowerShell).
     "bash": "bash",
     "shell": "shell",
-    "run_command": "run_command",
-    "run_shell_command": "run_shell_command",
-    "shell_command": "shell_command",
-    "exec_command": "exec_command",
+    "run_command": "shell",
+    "run_shell_command": "shell",
+    "shell_command": "shell",
+    "exec_command": "shell",
     "execute_command": "shell",
     # Desktop Commander (wonderwhy-er/DesktopCommanderMCP, src/tools/schemas.ts):
     # start_process(command), interact_with_process(pid, input) types into a
@@ -1625,19 +1626,17 @@ def classify(
         mcp, tool_input = "shell", {"command": tool_input.get("input")}
     if mcp == "shell":
         # The server picks the shell: a POSIX shell, or PowerShell / cmd on
-        # Windows. Unless the call names POSIX or PowerShell, grade both and
-        # keep the worse; cmd has no dialect of its own here, so it is also
-        # marked not statically judgeable.
-        dialect = _mcp_shell_dialect(tool_input.get("shell"))
-        if dialect in (None, "cmd"):
-            kw = {"cwd": cwd, "workspace": workspace, "protected_branches": protected_branches}
-            both = _worse(classify("shell", tool_input, **kw), classify("powershell", tool_input, **kw))
-            if dialect == "cmd" and _tool_command(tool_input):
-                opaque = _Acc()
-                opaque.opaque("untokenizable-shape", "cmd syntax is not modelled")
-                both = _worse(both, opaque.verdict())
-            return both
-        mcp = dialect
+        # Windows. A `shell` argument is the caller's word, which the server
+        # may ignore, so it never narrows the grading: always grade both and
+        # keep the worse. cmd has no dialect of its own here, so naming it
+        # also marks the command not statically judgeable.
+        kw = {"cwd": cwd, "workspace": workspace, "protected_branches": protected_branches}
+        both = _worse(classify("shell", tool_input, **kw), classify("powershell", tool_input, **kw))
+        if _mcp_shell_dialect(tool_input.get("shell")) == "cmd" and _tool_command(tool_input):
+            opaque = _Acc()
+            opaque.opaque("untokenizable-shape", "cmd syntax is not modelled")
+            both = _worse(both, opaque.verdict())
+        return both
     if mcp == "write-pdf":
         mcp, tool_input = "write", {"paths": [p for p in (tool_input.get("path"), tool_input.get("outputPath")) if p]}
     if mcp in MCP_ACTIONS:
@@ -1705,7 +1704,11 @@ def _worse(a: Verdict, b: Verdict) -> Verdict:
 
 def _classify_mcp_action(kind: str, tool_input: dict, ctx: _Ctx, acc: _Acc) -> None:
     """MCP tools that act through arguments rather than a command line."""
-    mode = str(tool_input.get("mode") or "").strip().lower()
+    # Only a kind whose server takes a mode reads one: move_file has none, and
+    # a caller-supplied `mode` must not steer it into another branch.
+    mode = str(tool_input.get("mode") or "").strip().lower() if kind in _MCP_MODES else ""
+    if kind == "move-file":
+        mode = "move"
     if kind in _MCP_MODES and mode not in _MCP_MODES[kind]:
         acc.opaque("mcp-unknown-mode", f"MCP tool mode is not one Guard knows: {mode or '(none)'}")
         return
@@ -1720,18 +1723,19 @@ def _classify_mcp_action(kind: str, tool_input: dict, ctx: _Ctx, acc: _Acc) -> N
             _classify_rm(["--", path], ctx, acc, from_stdin=False, recursive=recursive)
             return
         dest = tool_input.get("destination")
-        if kind == "move-file":
-            mode = "move"
         writes = {"write": [path], "move": [path, dest], "copy": [dest]}.get(mode, [])
         reads = [path] if mode in ("read", "copy") else []
-        for raw, write in [(r, True) for r in writes] + [(r, False) for r in reads]:
+        # list / search / info name what is under or at the path, like ls.
+        lists = [path] if mode in ("list", "search", "info") else []
+        checks = [(r, True, False) for r in writes] + [(r, False, False) for r in reads] + [(r, False, True) for r in lists]
+        for raw, write, list_only in checks:
             if not isinstance(raw, str) or not raw:
                 continue
             resolved = _resolve(raw, ctx)
             if resolved is None:
                 acc.opaque("dynamic-path", f"path is not static: {raw}")
             else:
-                _check_path(acc, resolved, ctx, write=write)
+                _check_path(acc, resolved, ctx, write=write, list_only=list_only)
     elif kind == "registry":
         if mode in ("set", "delete"):
             acc.hit("high", "mcp-registry-write", f"MCP tool changes the Windows registry ({mode})")

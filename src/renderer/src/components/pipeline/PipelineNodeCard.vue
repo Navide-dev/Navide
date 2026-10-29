@@ -79,6 +79,10 @@ function badgeText(b: LaneBadge): string {
           <title>{{ t('pipelineEditor.node.pinned') }}</title>
           <path d="M6 1.5h4l-.6 4.2L12 8.5H8.7V14L8 15l-.7-1V8.5H4l2.6-2.8z" />
         </svg>
+        <svg v-if="node.needsReview" class="pnc-mark pnc-mark--review" viewBox="0 0 16 16" :aria-label="t('pipelineEditor.node.needs-review')">
+          <title>{{ t('pipelineEditor.node.needs-review') }}</title>
+          <path d="M8 1.5 15 14.5H1zM7.25 6v4.5h1.5V6zm0 5.75v1.5h1.5v-1.5z" fill-rule="evenodd" />
+        </svg>
       </span>
       <!-- Title > role > CLI: when space runs out the role yields first, the
            title never does. -->
@@ -186,6 +190,7 @@ function badgeText(b: LaneBadge): string {
 .pnc-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pnc-mark { flex: none; width: 12px; height: 12px; fill: var(--manager-fg); color: var(--manager-fg); }
 .pnc-mark--pin { fill: var(--done-fg); }
+.pnc-mark--review { fill: var(--attention-fg); }
 .pnc-meta { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .pnc-sub {
   flex: 0 1 auto;

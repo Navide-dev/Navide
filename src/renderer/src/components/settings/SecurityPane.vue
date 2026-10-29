@@ -432,7 +432,8 @@ async function runTest(): Promise<void> {
 .gd-input.grow { flex: 1; min-width: 160px; }
 .gd-input.mono { font-family: var(--font-mono, monospace); }
 .gd-input:hover { border-color: var(--border-strong); }
-.gd-input:focus { outline: none; border-color: var(--accent-focus); }
+.gd-input:focus { border-color: var(--accent-focus); }
+.gd-input:focus:not(:focus-visible) { outline: none; }
 .gd-check { display: inline-flex; align-items: center; gap: 4px; font-size: var(--font-xs); color: var(--text-secondary); }
 .gd-test-result { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 var(--space-row-x) 10px; }
 .gd-test-matched .gd-item { padding-top: 4px; padding-bottom: 4px; }

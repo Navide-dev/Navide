@@ -6,12 +6,15 @@
  */
 defineProps<{
   message: string
+  /** A short bold line above the message, when the page has one. */
+  title?: string
 }>()
 </script>
 
 <template>
   <div class="settings-empty">
     <span v-if="$slots.icon" class="settings-empty-icon" aria-hidden="true"><slot name="icon" /></span>
+    <strong v-if="title" class="settings-empty-title">{{ title }}</strong>
     <p class="settings-empty-message">{{ message }}</p>
     <div v-if="$slots.default" class="settings-empty-actions"><slot /></div>
   </div>
@@ -45,6 +48,14 @@ defineProps<{
 .settings-empty-icon :deep(svg) {
   width: 20px;
   height: 20px;
+}
+.settings-empty-title {
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+.settings-empty-title + .settings-empty-message {
+  margin-top: calc(-1 * var(--space-1, 4px));
 }
 .settings-empty-message {
   margin: 0;

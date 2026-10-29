@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import StaleConfigNotice from './StaleConfigNotice.vue'
 
 type Backend = ReturnType<typeof useBackend>
@@ -981,10 +982,11 @@ watch(
       <!-- ── Main region: browse (cards) or route (matrix) ──────────── -->
       <div class="skills-main">
         <div v-if="loading" class="skills-state nv-loading">{{ t('label.loading') }}</div>
-        <div v-else-if="matrixRows.length === 0" class="skills-state nv-empty">
-          <strong>{{ t('settings.skills.empty-title') }}</strong>
-          <span>{{ t('settings.skills.empty-body') }}</span>
-        </div>
+        <SettingsEmptyState
+          v-else-if="matrixRows.length === 0"
+          :title="t('settings.skills.empty-title')"
+          :message="t('settings.skills.empty-body')"
+        />
 
         <!-- Browse: cards grouped by source. Each card carries one source
              badge and a compact "who receives it" line — enough to scan,
@@ -1620,7 +1622,7 @@ button.dchip.on:hover:not(:disabled), button.dchip.off:hover:not(:disabled) { ba
 .skill-drawer-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .skill-drawer-hint { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); line-height: 1.4; }
 .skill-drawer-path { display: block; font-size: var(--font-2xs); padding: 5px 8px; border-radius: var(--radius-control); background: var(--bg-muted); word-break: break-all; }
-.skill-drawer-prose { margin: 0; font-size: 11.5px; line-height: var(--lh-base); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; }
+.skill-drawer-prose { margin: 0; font-size: var(--font-xs); line-height: var(--lh-base); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; }
 .skill-drawer-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .skill-drawer-actions.secondary { justify-content: flex-start; margin-top: 0; }
 .skill-badge { border-radius: var(--radius-pill); padding: 2px 7px; font-size: var(--font-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }

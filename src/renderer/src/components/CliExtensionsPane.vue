@@ -139,68 +139,71 @@ onMounted(() => { void load() })
     </header>
     <p v-if="error" role="alert" class="cli-ext-error">{{ t('settings.cliExtensions.loadFailed', { error }) }}</p>
 
-    <template v-for="group in groups" :key="group.vendor.cli">
-      <!-- A CLI with nothing to list is one row: there is nothing to unfold. -->
-      <div v-if="!group.vendor.supported || !group.rows.length" class="cli-ext-group is-empty" :data-cli="group.vendor.cli">
-        <div class="cli-ext-group-head">
-          <span class="cli-ext-vendor">{{ group.vendor.label }}</span>
-          <span class="cli-ext-vendor-count">{{ group.vendor.count }}</span>
-          <span v-if="!group.vendor.supported" class="cli-ext-empty cli-ext-unsupported">{{ t('settings.cliExtensions.unsupported') }}</span>
-          <span v-else class="cli-ext-empty">{{ t('settings.cliExtensions.empty') }}</span>
+    <!-- One grouped card, one row per CLI: the Settings list grammar. -->
+    <div v-if="groups.length" class="cli-ext-groups">
+      <template v-for="group in groups" :key="group.vendor.cli">
+        <!-- A CLI with nothing to list is one row: there is nothing to unfold. -->
+        <div v-if="!group.vendor.supported || !group.rows.length" class="cli-ext-group is-empty" :data-cli="group.vendor.cli">
+          <div class="cli-ext-group-head">
+            <span class="cli-ext-vendor">{{ group.vendor.label }}</span>
+            <span class="cli-ext-vendor-count">{{ group.vendor.count }}</span>
+            <span v-if="!group.vendor.supported" class="cli-ext-empty cli-ext-unsupported">{{ t('settings.cliExtensions.unsupported') }}</span>
+            <span v-else class="cli-ext-empty">{{ t('settings.cliExtensions.empty') }}</span>
+          </div>
         </div>
-      </div>
-      <details v-else class="cli-ext-group" :data-cli="group.vendor.cli" open>
-        <summary class="cli-ext-group-head">
-          <span class="cli-ext-chevron" aria-hidden="true" />
-          <span class="cli-ext-vendor">{{ group.vendor.label }}</span>
-          <span class="cli-ext-vendor-count">{{ group.vendor.count }}</span>
-        </summary>
-        <ul class="cli-ext-list">
-          <li
-            v-for="item in group.rows"
-            :key="item.id"
-            class="cli-ext-card"
-            :data-id="item.id"
-            :data-tier="item.exec_tier"
-            :class="{ off: !item.enabled && !item.enabled_error, broken: !item.valid }"
-          >
-            <div class="cli-ext-title">
-              <button
-                v-if="isNavideChange(item)"
-                type="button"
-                class="cli-ext-name cli-ext-feature-link"
-                :data-feature="item.name"
-                @click="openFeature(item.name)"
-              >{{ convenienceText(item.name, 'name') }}</button>
-              <span v-else class="cli-ext-name">{{ item.name }}</span>
-              <span v-if="item.version" class="cli-ext-version">{{ item.version }}</span>
-            </div>
-            <div class="cli-ext-badges">
-              <span v-truncate class="cli-ext-type">{{ item.type_label }}</span>
-              <span v-truncate class="cli-ext-tier" :class="`tier-${item.exec_tier}`" :title="t(`settings.cliExtensions.tierHint.${item.exec_tier}`)">
-                {{ t(`settings.cliExtensions.tier.${item.exec_tier}`) }}
-              </span>
-              <span v-if="item.owner === 'navide'" v-truncate class="cli-ext-owner">{{ t('settings.cliExtensions.ownerNavide') }}</span>
-              <span v-if="item.enabled_error" v-truncate class="cli-ext-unknown">{{ t('settings.cliExtensions.enabledUnknown') }}</span>
-              <span v-else-if="!item.enabled" v-truncate class="cli-ext-disabled">{{ t('settings.cliExtensions.disabled') }}</span>
-            </div>
-            <p v-if="!item.valid" class="cli-ext-error">{{ t('settings.cliExtensions.invalid', { error: item.error }) }}</p>
-            <template v-else>
-              <p v-if="item.enabled_error" class="cli-ext-warning">{{ t('settings.cliExtensions.enabledUnknownReason', { error: item.enabled_error }) }}</p>
-              <div v-if="shownCapabilities(item).length" class="cli-ext-caps">
-                <span v-for="cap in shownCapabilities(item)" :key="cap" v-truncate class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
-                <span v-if="item.evidence === 'inferred'" v-truncate class="cli-ext-inferred" :title="t('settings.cliExtensions.inferredHint')">{{ t('settings.cliExtensions.inferred') }}</span>
+        <details v-else class="cli-ext-group" :data-cli="group.vendor.cli" open>
+          <summary class="cli-ext-group-head">
+            <span class="cli-ext-chevron" aria-hidden="true" />
+            <span class="cli-ext-vendor">{{ group.vendor.label }}</span>
+            <span class="cli-ext-vendor-count">{{ group.vendor.count }}</span>
+          </summary>
+          <ul class="cli-ext-list">
+            <li
+              v-for="item in group.rows"
+              :key="item.id"
+              class="cli-ext-card"
+              :data-id="item.id"
+              :data-tier="item.exec_tier"
+              :class="{ off: !item.enabled && !item.enabled_error, broken: !item.valid }"
+            >
+              <div class="cli-ext-title">
+                <button
+                  v-if="isNavideChange(item)"
+                  type="button"
+                  class="cli-ext-name cli-ext-feature-link"
+                  :data-feature="item.name"
+                  @click="openFeature(item.name)"
+                >{{ convenienceText(item.name, 'name') }}</button>
+                <span v-else class="cli-ext-name">{{ item.name }}</span>
+                <span v-if="item.version" class="cli-ext-version">{{ item.version }}</span>
               </div>
-              <p v-if="!isNavideChange(item)" class="cli-ext-consent">{{ t(`settings.cliExtensions.consent.${item.native_consent}`) }}</p>
-              <code v-if="item.detail" v-truncate class="cli-ext-detail">{{ item.detail }}</code>
-              <!-- Shortened in the middle and wrapped after a separator, so a
-                   narrow window never hard-clips the folder that matters. -->
-              <code v-if="item.path" class="cli-ext-path"><PathText :path="item.path" /></code>
-            </template>
-          </li>
-        </ul>
-      </details>
-    </template>
+              <div class="cli-ext-badges">
+                <span v-truncate class="cli-ext-type">{{ item.type_label }}</span>
+                <span v-truncate class="cli-ext-tier" :class="`tier-${item.exec_tier}`" :title="t(`settings.cliExtensions.tierHint.${item.exec_tier}`)">
+                  {{ t(`settings.cliExtensions.tier.${item.exec_tier}`) }}
+                </span>
+                <span v-if="item.owner === 'navide'" v-truncate class="cli-ext-owner">{{ t('settings.cliExtensions.ownerNavide') }}</span>
+                <span v-if="item.enabled_error" v-truncate class="cli-ext-unknown">{{ t('settings.cliExtensions.enabledUnknown') }}</span>
+                <span v-else-if="!item.enabled" v-truncate class="cli-ext-disabled">{{ t('settings.cliExtensions.disabled') }}</span>
+              </div>
+              <p v-if="!item.valid" class="cli-ext-error">{{ t('settings.cliExtensions.invalid', { error: item.error }) }}</p>
+              <template v-else>
+                <p v-if="item.enabled_error" class="cli-ext-warning">{{ t('settings.cliExtensions.enabledUnknownReason', { error: item.enabled_error }) }}</p>
+                <div v-if="shownCapabilities(item).length" class="cli-ext-caps">
+                  <span v-for="cap in shownCapabilities(item)" :key="cap" v-truncate class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
+                  <span v-if="item.evidence === 'inferred'" v-truncate class="cli-ext-inferred" :title="t('settings.cliExtensions.inferredHint')">{{ t('settings.cliExtensions.inferred') }}</span>
+                </div>
+                <p v-if="!isNavideChange(item)" class="cli-ext-consent">{{ t(`settings.cliExtensions.consent.${item.native_consent}`) }}</p>
+                <code v-if="item.detail" v-truncate class="cli-ext-detail">{{ item.detail }}</code>
+                <!-- Shortened in the middle and wrapped after a separator, so a
+                     narrow window never hard-clips the folder that matters. -->
+                <code v-if="item.path" class="cli-ext-path"><PathText :path="item.path" /></code>
+              </template>
+            </li>
+          </ul>
+        </details>
+      </template>
+    </div>
   </section>
 </template>
 
@@ -231,7 +234,7 @@ onMounted(() => { void load() })
 /* A scrolling flex column must not squeeze its rows to fit. */
 .cli-ext > * { flex-shrink: 0; }
 .cli-ext-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
-.cli-ext-intro, .cli-ext-note { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.cli-ext-intro, .cli-ext-note { margin: 0; font-size: var(--font-xs); line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .cli-ext-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
 .cli-ext-counts { flex: 1 1 240px; min-width: 0; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
 .cli-ext-rescan { flex-shrink: 0; font: inherit; font-size: var(--font-2xs); color: var(--text-primary); background: var(--bg-muted); border: 1px solid var(--border-default); border-radius: var(--radius-control); padding: 4px 10px; cursor: pointer; }
@@ -240,12 +243,22 @@ onMounted(() => { void load() })
 .cli-ext-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 .cli-ext-warning { margin: 0; font-size: var(--font-2xs); color: var(--warning-fg, var(--text-primary)); overflow-wrap: anywhere; }
 
-.cli-ext-group { min-width: 0; border: 1px solid var(--border-muted); border-radius: var(--radius-md); background: var(--bg-inset); }
+.cli-ext-groups {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--settings-card-border, var(--border-default));
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+.cli-ext-group { min-width: 0; }
+.cli-ext-group + .cli-ext-group { border-top: 1px solid var(--settings-card-divider, var(--border-muted)); }
 .cli-ext-group-head { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 12px; font-size: var(--font-sm); color: var(--text-bright); }
-summary.cli-ext-group-head { cursor: pointer; list-style: none; border-radius: var(--radius-md); }
+summary.cli-ext-group-head { cursor: pointer; list-style: none; }
 summary.cli-ext-group-head::-webkit-details-marker { display: none; }
 summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
-.cli-ext-group[open] > summary.cli-ext-group-head { border-bottom: 1px solid var(--border-muted); border-radius: var(--radius-md) var(--radius-md) 0 0; }
+.cli-ext-group[open] > summary.cli-ext-group-head { border-bottom: 1px solid var(--settings-card-divider, var(--border-muted)); }
 .cli-ext-chevron { flex-shrink: 0; width: 0; height: 0; border-left: 5px solid var(--text-secondary); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform 0.12s ease; }
 .cli-ext-group[open] > summary .cli-ext-chevron { transform: rotate(90deg); }
 .cli-ext-vendor { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
@@ -254,10 +267,12 @@ summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
 .cli-ext-group.is-empty .cli-ext-vendor { font-weight: 500; color: var(--text-primary); }
 .cli-ext-empty { margin-left: auto; min-width: 0; font-size: var(--font-2xs); color: var(--text-muted); text-align: right; }
 
-.cli-ext-list { list-style: none; margin: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.cli-ext-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 9px 12px; border: 1px solid var(--settings-card-border, var(--border-muted)); border-radius: var(--radius-sm); background: var(--bg-elevated); }
+.cli-ext-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+/* Items are rows of their CLI's row, indented past the chevron. */
+.cli-ext-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 9px 12px 9px 29px; }
+.cli-ext-card + .cli-ext-card { border-top: 1px solid var(--settings-card-divider, var(--border-muted)); }
 .cli-ext-card.off { opacity: 0.7; }
-.cli-ext-card.broken { border-color: var(--danger-muted); }
+.cli-ext-card.broken { box-shadow: inset 2px 0 0 var(--danger-fg); }
 .cli-ext-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
 .cli-ext-name {
   min-width: 0;

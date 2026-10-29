@@ -44,6 +44,17 @@ describe('PipelineNodeCard', () => {
     w.unmount()
   })
 
+  it('badges an imported step that needs review', () => {
+    const w = mount(PipelineNodeCard, { props: { node: { ...node, needsReview: true } }, global: { plugins: [i18n] } })
+    const mark = w.find('.pnc-mark--review')
+    expect(mark.exists()).toBe(true)
+    expect(mark.attributes('aria-label')).toBe(i18n.global.t('pipelineEditor.node.needs-review'))
+    w.unmount()
+    const plain = mount(PipelineNodeCard, { props: { node }, global: { plugins: [i18n] } })
+    expect(plain.find('.pnc-mark--review').exists()).toBe(false)
+    plain.unmount()
+  })
+
   it('adds no reason to a node that has none', () => {
     const w = mount(PipelineNodeCard, { props: { node, run: { status: 'done' } }, global: { plugins: [i18n] } })
     expect(w.find('.pnc-status').attributes('title')).toBeUndefined()
