@@ -65,6 +65,39 @@
     "errors": {
       "generic": "发生错误（{code}）。",
       "invalid-address": "请输入 http 或 https 网址。"
+    },
+    "layout": {
+      "label": "布局",
+      "tiled": "并排显示",
+      "switch": "一次一个"
+    },
+    "page": {
+      "previous": "前一页",
+      "next": "后一页",
+      "status": "第 {page}/{count} 页"
+    },
+    "tab": {
+      "new": "新建标签页",
+      "close": "关闭标签页",
+      "untitled": "新标签页",
+      "discarded": "为节省内存已关闭，点击重新加载",
+      "discarded-note": "此标签页超过 10 分钟没有显示，为节省内存已关闭，将从原来的网址重新加载。",
+      "restore": "重新加载标签页"
+    },
+    "dialog": {
+      "open": "页面打开了对话框（{type}）：{message}",
+      "type": {
+        "alert": "警告",
+        "confirm": "确认",
+        "prompt": "输入",
+        "beforeunload": "离开页面"
+      }
+    },
+    "uploads": {
+      "title": "agent 上传的文件",
+      "item": "{file} → {origin}，{time}",
+      "sensitive": "疑似机密",
+      "sensitive-note": "agent 上传了文件名疑似机密的文件"
     }
   }
 }

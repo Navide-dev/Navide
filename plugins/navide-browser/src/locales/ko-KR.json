@@ -65,6 +65,39 @@
     "errors": {
       "generic": "문제가 발생했어요({code}).",
       "invalid-address": "http 또는 https 주소를 입력하세요."
+    },
+    "layout": {
+      "label": "레이아웃",
+      "tiled": "나란히 보기",
+      "switch": "하나씩 보기"
+    },
+    "page": {
+      "previous": "이전 페이지",
+      "next": "다음 페이지",
+      "status": "{page}/{count} 페이지"
+    },
+    "tab": {
+      "new": "새 탭",
+      "close": "탭 닫기",
+      "untitled": "새 탭",
+      "discarded": "메모리를 아끼려고 닫았어요. 클릭하면 다시 불러와요",
+      "discarded-note": "이 탭은 10분 넘게 보이지 않아 메모리를 아끼려고 닫았어요. 원래 주소에서 다시 불러와요.",
+      "restore": "탭 다시 불러오기"
+    },
+    "dialog": {
+      "open": "대화 상자가 열려 있어요({type}): {message}",
+      "type": {
+        "alert": "경고",
+        "confirm": "확인",
+        "prompt": "입력",
+        "beforeunload": "페이지 나가기"
+      }
+    },
+    "uploads": {
+      "title": "agent가 업로드한 파일",
+      "item": "{file} → {origin}, {time}",
+      "sensitive": "비밀 정보로 보임",
+      "sensitive-note": "agent가 비밀 정보처럼 보이는 이름의 파일을 업로드했어요"
     }
   }
 }
