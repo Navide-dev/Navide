@@ -2018,6 +2018,7 @@
       "nativeOnMarker": "Código nativo ativado",
       "browseMarketplace": "Explorar o Navide Marketplace",
       "bundledGit": "Git integrado",
+      "bundledBrowser": "Navegador integrado",
       "state": {
         "active": "Ativo",
         "removed": "Removido",
@@ -2083,6 +2084,7 @@
       "permissionDetails": "Permissões e concessões",
       "permissionDetailsWithActivity": "Permissões, concessões e atividade",
       "plansRiskNote": "Este plug-in do Navide tem o próprio programa de back-end, que é executado com as permissões do seu usuário e sem sandbox. Ele trabalha nos documentos de plano do projeto atual, a partir da raiz do repositório Git encontrada acima dele (incluindo repositórios aninhados): as pastas de planos e relatórios em .agent-team, .claude, .cursor e docs em qualquer profundidade, .plans na raiz e o .history deles (somente leitura). O back-end lê e grava esses arquivos diretamente; exclusões e renomeações continuam passando pelo Navide.",
+      "browserRiskNote": "Este plug-in do Navide tem o próprio programa de back-end, que é executado com as permissões do seu usuário e sem sandbox. Ele pode abrir e navegar em qualquer site. Os logins nos sites ficam guardados neste computador. Os agentes podem ler todas as páginas que este plug-in do Navide abre e o estado de login delas.",
       "searchPlaceholder": "Pesquisar plug-ins do Navide",
       "search": "Pesquisar",
       "install": "Instalar",

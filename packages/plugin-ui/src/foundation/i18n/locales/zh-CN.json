@@ -2018,6 +2018,7 @@
       "nativeOnMarker": "原生代码已开启",
       "browseMarketplace": "浏览 Navide 市场",
       "bundledGit": "内置 Git",
+      "bundledBrowser": "内置浏览器",
       "state": {
         "active": "激活中",
         "removed": "已移除",
@@ -2083,6 +2084,7 @@
       "permissionDetails": "权限与授予",
       "permissionDetailsWithActivity": "权限、授予与活动",
       "plansRiskNote": "此 Navide 插件有自己的后端程序，以你的用户权限运行，没有沙盒。它处理目前项目的计划文档：从往上找到的 Git 仓库根目录起（含其下的嵌套仓库），任何深度的 .agent-team、.claude、.cursor 与 docs 底下的 plans／reports 类文件夹、根目录的 .plans，以及这些文件夹的 .history（只读）。读取与写入计划文档都由此 Navide 插件的后端直接进行；删除与改名仍经由 Navide 进行。",
+      "browserRiskNote": "此 Navide 插件有自己的后端程序，以你的用户权限运行，没有沙盒。它可以打开并浏览任何网站；网站登录信息保存在本机；agent 可以读取此 Navide 插件打开的所有网页内容与登录状态。",
       "searchPlaceholder": "搜索 Navide 插件",
       "search": "搜索",
       "install": "安装",

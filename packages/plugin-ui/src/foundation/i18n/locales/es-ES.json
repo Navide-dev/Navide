@@ -2018,6 +2018,7 @@
       "nativeOnMarker": "Código nativo activado",
       "browseMarketplace": "Explorar Navide Marketplace",
       "bundledGit": "Git integrado",
+      "bundledBrowser": "Navegador integrado",
       "state": {
         "active": "Activo",
         "removed": "Quitado",
@@ -2083,6 +2084,7 @@
       "permissionDetails": "Permisos y concesiones",
       "permissionDetailsWithActivity": "Permisos, concesiones y actividad",
       "plansRiskNote": "Este complemento de Navide tiene su propio programa backend, que se ejecuta con tus permisos de usuario y sin entorno aislado. Trabaja con los documentos de plan del proyecto actual, empezando por la raíz del repositorio Git que encuentra por encima (incluidos los repositorios anidados): las carpetas de planes e informes de .agent-team, .claude, .cursor y docs a cualquier profundidad, .plans en la raíz y su .history (solo lectura). Su backend las lee y escribe directamente; las eliminaciones y los cambios de nombre siguen pasando por Navide.",
+      "browserRiskNote": "Este complemento de Navide tiene su propio programa backend, que se ejecuta con tus permisos de usuario y sin entorno aislado. Puede abrir y navegar por cualquier sitio web. Los inicios de sesión en los sitios se guardan en este ordenador. Los agentes pueden leer cada página que abre este complemento de Navide y su estado de inicio de sesión.",
       "searchPlaceholder": "Buscar complementos de Navide",
       "search": "Buscar",
       "install": "Instalar",

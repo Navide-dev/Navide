@@ -2501,6 +2501,16 @@ restrict filesystem, network, subprocess, or OS access. A third-party backend
 runs only inside the OS sandbox described in
 [Third-party backends](#third-party-backends-sandbox-consent-and-publishing).
 
+The first-party Navide Browser backend (`navide.browser`) ships with the App
+as a built-in, like Plans, Git and Mini-IDE, built per platform, and is
+enabled by default. It also runs outside the third-party gate, with only the
+`web` bridge port, but only for the package the Host loads from the App's
+factory resources (`factory-bundled`) or one the Official Registry installed
+(`official-registry`), which takes precedence. The same id from a developer
+folder or a local file never gets that treatment. The user disables it in
+Settings → Navide Plugins like the other built-ins, which stops its backend
+and agent tools; it cannot be removed.
+
 - Normal mode will run only complete artifacts covered by a Registry envelope
   signature that chains to a Host-pinned Registry root; publisher keys are not
   Client trust roots in v2.
