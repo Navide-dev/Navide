@@ -17,9 +17,9 @@ Agent 也能透過 MCP 工具 `pipeline_import_n8n` 做同樣的事，預設是 
 
 畫布依每個步驟的轉換方式上色：
 
-- **直接轉換**：Navide 照 workflow 原意執行。包括 Manual、Chat、Execute Workflow 觸發；AI Agent 叢集（模型、記憶、工具、輸出解析器併成一個步驟）；Wait 與 send-and-wait 核准（Gate）；IF 與 Switch（分支）；Append 或 Choose Branch 模式的 Merge；錯誤輸出與重試。
+- **直接轉換**：Navide 照 workflow 原意執行。包括 Manual、Chat、Execute Workflow 觸發；AI Agent 叢集（模型、記憶、工具、輸出解析器併成一個步驟）；Wait 與 send-and-wait 核准（Gate）；IF 與 Switch（分支）；Append 或 Choose Branch 模式的 Merge；錯誤輸出與重試；以及呼叫 Navide 已有 workflow 的 Execute Workflow（子 Pipeline，見下文）。
 - **由 agent 執行**：HTTP Request、Code、Set、會合併資料的 Merge（依欄位、位置、所有組合或 SQL；Agent 照它的合併規則做）、應用程式節點（Google Sheets、Slack、Gmail……）、社群節點，以及不認得的節點類型或版本。由 CLI Agent 依節點原本的參數執行，expression 與 Code 原樣傳過去，結果可能和 n8n 不同。沒有分支的連續步驟會併成一個步驟，所以不會一個節點開一個 Pane。
-- **需要確認**：已匯入，但需要 Navide 目前還沒有的能力。包括 Schedule、Webhook、Form 與應用程式觸發（請手動啟動 Pipeline）、Respond to Webhook、Execute Workflow 與 Call n8n Workflow Tool（sub-workflow：請一併匯入被引用的 workflow），以及建議留在 n8n 的步驟（見下文，標成 **不支援**）。
+- **需要確認**：已匯入，但需要 Navide 目前還沒有的能力。包括 Schedule、Webhook、Form 與應用程式觸發（請手動啟動 Pipeline）、Respond to Webhook、呼叫 Navide 還沒有的 workflow 的 Execute Workflow、Call n8n Workflow Tool（見下文），以及建議留在 n8n 的步驟（見下文，標成 **不支援**）。
 
 畫布下方的報告會逐一列出：每個 n8n 節點變成什麼、你要做什麼；每個步驟完整的 Kickoff 與每個 Gate 的提示（也就是每個 Pane 會收到的原文）；要補的憑證；秘密在哪裡被移除；有幾個步驟需要確認。這些都不會擋住 **匯入**，只是讓你在執行前先知道。
 
@@ -29,6 +29,16 @@ Agent 也能透過 MCP 工具 `pipeline_import_n8n` 做同樣的事，預設是 
 - 設成 **On Error → Continue (using error output)** 的節點會有一條錯誤邊：只有它失敗時才會執行下一步。自己就是自己的 error workflow（Settings → Error Workflow）的 workflow，其 Error Trigger 之後的步驟會接成每個步驟的錯誤邊。
 - **Retry On Fail** 會變成該步驟的重試：總共最多 5 次，間隔最多 300000 ms。n8n 原設定超過這個上限的節點，報告會標出來。
 - 讀取其他節點的 expression，例如 `$('Lookup').item.json`，會在 Kickoff 裡拿到那個步驟的結果 `{{node.<步驟 id>.output}}`，而那個步驟會被要求在結尾以 JSON 輸出結果。
+
+### Sub-workflow
+
+Navide 已有被呼叫的 workflow 時，**Execute Workflow** 節點會變成子 Pipeline 節點：執行到那裡會暫停，在同一個 workspace 執行那條 Pipeline，再帶著它的結果繼續。即使 n8n 設成不等待，Navide 也一律等它完成。它的錯誤輸出與 Retry On Fail 和其他步驟一樣對應。
+
+要連同 sub-workflow 一起匯入，請把它們放在同一個 JSON 陣列裡一起貼上（也就是 `n8n export:workflow --all` 寫出的格式），匯入一次即可：被呼叫的 workflow 會先各自變成一條 Pipeline，沒有被其他 workflow 呼叫的那個會在匯入後打開。之前匯入過的 workflow 會直接沿用，所以也可以先匯入被呼叫的 workflow，再匯入呼叫它的那個。報告會列出每個被呼叫的 workflow，以及有沒有找到。
+
+會繞回來的呼叫（A 呼叫 B、B 又呼叫 A，或 workflow 呼叫自己）會維持 **需要確認**，因為子 Pipeline 不能執行自己。呼叫 Navide 沒有的 workflow、用 expression 選 workflow，或以 JSON、檔案、URL 傳入 workflow 的呼叫，也一樣。
+
+**Call n8n Workflow Tool** 讓 AI Agent 把 workflow 當成工具呼叫。步驟無法把 Pipeline 當成工具呼叫，所以不會轉換：若那個 workflow 已匯入，步驟的 Kickoff 會寫出它對應的 Pipeline，報告也會標成需要確認。
 
 ## 憑證與秘密
 
@@ -56,7 +66,7 @@ Agent 也能透過 MCP 工具 `pipeline_import_n8n` 做同樣的事，預設是 
 
 ## 已知限制
 
-- Execute Workflow 與 Call n8n Workflow Tool 會維持待處理，直到 Navide 有 sub-pipeline。
+- 只有呼叫 Navide 已有 workflow 的 Execute Workflow 會變成子 Pipeline；遞迴呼叫與 Call n8n Workflow Tool 會維持需要確認。
 - `pinData` 會變成 Kickoff 裡的測試輸入，不會變成凍結輸出的步驟。
 - 超過約 8 個步驟只會警告；每個步驟都會開一個 CLI Pane。
 - 節點對照表依 n8n 公開文件、按節點類型與版本整理；不認得的節點由 Agent 代行並標成需要確認。

@@ -12283,7 +12283,7 @@
     },
     "needs-review": "{n} étape à vérifier | {n} étapes à vérifier",
     "needs-review-hint": "L’import reste possible. Vérifiez ces étapes dans l’éditeur avant d’exécuter le pipeline.",
-    "subworkflow": "Ce workflow appelle un autre workflow n8n. Collez aussi le JSON de ce workflow ici et importez-le séparément.",
+    "subworkflow": "Ce workflow appelle un autre workflow n8n que Navide n’a pas encore. Collez aussi ici les workflows appelés, ensemble dans un tableau JSON, ou importez-les d’abord ; l’appel s’exécute alors comme sous-pipeline.",
     "external": "Chaque exécution du pipeline importé est marquée comme contenu externe, car ses étapes proviennent d’un fichier créé hors de Navide.",
     "warnings": "Avertissements",
     "canvas-title": "Graphe converti",
@@ -12302,6 +12302,7 @@
       "trigger": "Déclencheur",
       "slot": "Étape",
       "gate": "Validation",
+      "subpipeline": "Sous-pipeline",
       "folded": "Fusionné dans une étape",
       "removed": "Supprimé"
     },

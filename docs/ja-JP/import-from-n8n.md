@@ -17,9 +17,9 @@ Agent は MCP ツール `pipeline_import_n8n` で同じことができます。�
 
 キャンバスは、各ステップがどう変換されたかで色分けされます。
 
-- **そのまま変換**：Navide がワークフローの意図どおりに実行します。Manual・Chat・Execute Workflow トリガー、AI Agent クラスター（モデル、メモリ、ツール、出力パーサーは一つのステップにまとまります）、Wait と send-and-wait の承認（Gate）、IF と Switch（分岐）、Append または Choose Branch モードの Merge、エラー出力とリトライです。
+- **そのまま変換**：Navide がワークフローの意図どおりに実行します。Manual・Chat・Execute Workflow トリガー、AI Agent クラスター（モデル、メモリ、ツール、出力パーサーは一つのステップにまとまります）、Wait と send-and-wait の承認（Gate）、IF と Switch（分岐）、Append または Choose Branch モードの Merge、エラー出力とリトライ、Navide にあるワークフローを呼ぶ Execute Workflow（サブ Pipeline、下記）です。
 - **エージェントが実行**：HTTP Request、Code、Set、データを結合する Merge（フィールド、位置、全組み合わせ、SQL。Agent がその結合ルールに従います）、アプリのノード（Google Sheets、Slack、Gmail…）、コミュニティノード、未知のノード種別やバージョンです。CLI Agent がノードの元のパラメータからステップを実行し、expression と Code はそのまま渡されます。結果は n8n と異なることがあります。分岐のない連続したステップは一つのステップにまとまるため、ノードごとに Pane が開くことはありません。
-- **要確認**：インポートされますが、Navide にまだ無い機能が必要です。Schedule・Webhook・Form・アプリのトリガー（Pipeline は手動で開始してください）、Respond to Webhook、Execute Workflow と Call n8n Workflow Tool（サブワークフロー：参照先のワークフローもインポートしてください）、n8n に残すべきステップ（下記。**未対応** と表示されます）です。
+- **要確認**：インポートされますが、Navide にまだ無い機能が必要です。Schedule・Webhook・Form・アプリのトリガー（Pipeline は手動で開始してください）、Respond to Webhook、Navide にないワークフローを呼ぶ Execute Workflow、Call n8n Workflow Tool（下記）、n8n に残すべきステップ（下記。**未対応** と表示されます）です。
 
 キャンバスの下のレポートには、各 n8n ノードが何になり何をすべきか、各ステップの Kickoff 全文と各 Gate のプロンプト（各 Pane が受け取る文面そのもの）、設定が必要な認証情報、秘密が取り除かれた場所、確認が必要なステップ数が並びます。どれも **インポート** を妨げません。実行前に把握するためのものです。
 
@@ -29,6 +29,16 @@ Agent は MCP ツール `pipeline_import_n8n` で同じことができます。�
 - **On Error → Continue (using error output)** のノードにはエラーエッジが付き、失敗したときだけ次のステップが実行されます。自分自身をエラーワークフローにしているワークフロー（Settings → Error Workflow）では、Error Trigger の後のステップがすべてのステップからのエラーエッジとしてつながります。
 - **Retry On Fail** はそのステップのリトライになります：合計で最大 5 回、間隔は最大 300000 ms です。n8n の設定がこれを超えるノードは、レポートに示されます。
 - `$('Lookup').item.json` のように他のノードを読む expression は、Kickoff でそのステップの結果を `{{node.<ステップ id>.output}}` として受け取ります。読まれる側のステップには、最後に結果を JSON で出力するよう指示されます。
+
+### サブワークフロー
+
+呼び出すワークフローが Navide にあるとき、**Execute Workflow** ノードはサブ Pipeline ノードになります。実行はそこで一時停止し、同じ workspace でその Pipeline を実行してから、結果を持って続行します。n8n で待たない設定にしていても、Navide は必ず完了を待ちます。エラー出力と Retry On Fail は他のステップと同じように対応します。
+
+サブワークフローもまとめてインポートするには、一つの JSON 配列（`n8n export:workflow --all` が書き出す形式）にして貼り付け、一度インポートします。呼び出されるワークフローが先にそれぞれ Pipeline になり、他のどれからも呼ばれないワークフローがインポート後に開きます。以前インポートしたワークフローはそのまま再利用されるので、呼び出される側を先にインポートしてから呼び出す側をインポートしてもかまいません。レポートには、呼び出される各ワークフローと、それが見つかったかどうかが並びます。
+
+戻ってくる呼び出し（A が B を呼び、B が A を呼ぶ、またはワークフローが自分自身を呼ぶ）は、サブ Pipeline が自分自身を実行できないため **要確認** のままです。Navide にないワークフローの呼び出し、expression でワークフローを選ぶ呼び出し、JSON・ファイル・URL で渡す呼び出しも同じです。
+
+**Call n8n Workflow Tool** は AI Agent がワークフローをツールとして呼ぶものです。ステップから Pipeline をツールとして呼ぶことはできないため、変換しません。そのワークフローをインポート済みなら、ステップの Kickoff に対応する Pipeline が書かれ、レポートでは要確認と示されます。
 
 ## 認証情報と秘密
 
@@ -56,7 +66,7 @@ Agent は MCP ツール `pipeline_import_n8n` で同じことができます。�
 
 ## 既知の制限
 
-- Execute Workflow と Call n8n Workflow Tool は、Navide にサブ Pipeline ができるまで保留のままです。
+- サブ Pipeline になるのは、Navide にあるワークフローを呼ぶ Execute Workflow だけです。再帰的な呼び出しと Call n8n Workflow Tool は要確認のままです。
 - `pinData` は Kickoff 内のテスト入力になり、出力を固定したステップにはなりません。
 - ステップが約 8 個を超えると警告だけが出ます。各ステップが CLI Pane を一つ開きます。
 - ノードの対応表は n8n の公開ドキュメントに基づき、ノード種別とバージョンごとに整理しています。未知のノードは Agent が代行し、確認が必要と示されます。

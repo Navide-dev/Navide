@@ -8,6 +8,7 @@ the source.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -682,3 +683,123 @@ def test_input_is_not_mutated():
     before = json.dumps(w, sort_keys=True)
     convert(w)
     assert json.dumps(w, sort_keys=True) == before
+
+
+# ── sub-pipelines ────────────────────────────────────────────────────────
+def subpipeline_call(**extra: Any) -> dict:
+    """Execute Workflow wf-42 between two steps, failing into Alert."""
+    return wf(
+        [node("Start", "manualTrigger"),
+         node("Prepare", "set", 3.4, 200),
+         node("Run child", "executeWorkflow", 1.2, 400, onError="continueErrorOutput", retryOnFail=True,
+              maxTries=2, waitBetweenTries=500, parameters={
+                  "source": "database", "workflowId": {"__rl": True, "mode": "list", "value": "wf-42"},
+                  "workflowInputs": {"value": {"email": "={{ $json.email }}"}}, **extra}),
+         node("Report", "slack", 2.3, 600), node("Alert", "slack", 2.3, 600, 100)],
+        link(("Start", "Prepare"), ("Prepare", "Run child"), ("Run child", "Report", 0), ("Run child", "Alert", 1)),
+    )
+
+
+def test_execute_workflow_of_a_known_pipeline_becomes_a_subpipeline_node():
+    out = convert(subpipeline_call(), subpipelines={"wf-42": "pl-child"})
+    assert shape(out) == {
+        "nodes": [("trigger", "trigger", "Start"), ("n8n-prepare", "slot", "Prepare"),
+                  ("n8n-run-child", "subpipeline", "Run child"), ("n8n-report", "slot", "Report"),
+                  ("n8n-alert", "slot", "Alert")],
+        "edges": [("n8n-prepare", "n8n-run-child"), ("n8n-run-child", "n8n-alert"),
+                  ("n8n-run-child", "n8n-report"), ("trigger", "n8n-prepare")],
+    }
+    sub = slot(out, "n8n-run-child")
+    assert sub["retry"] == {"maxTries": 2, "waitMs": 500}
+    assert sub["subpipeline"]["pipelineId"] == "pl-child" and sub["subpipeline"]["wait"] is True
+    task = sub["subpipeline"]["task"]
+    assert task.startswith("[External content: imported from the n8n workflow")
+    assert '"email": "={{ $json.email }}"' in task and "{{task}}" in task and "{{prev.summary}}" in task
+    assert "wf-42" not in task  # the call itself is the node, not part of its task
+    assert ("error", "n8n-run-child", "n8n-alert", None) in edges(out)
+    e = entry(out, "Run child")
+    assert (e["category"], e["reason"], e["result"], e["node"]) == ("native", "subpipeline", "subpipeline", "n8n-run-child")
+    assert "paste-subworkflow" not in e["actions"] and "pl-child" in e["detail"]
+    assert out["report"]["stats"]["subpipelines"] == 1
+    assert out["report"]["subpipelines"][0] == {"id": "n8n-run-child", "label": "Run child", "pipelineId": "pl-child",
+                                               "task": task, "tainted": True, "retry": {"maxTries": 2, "waitMs": 500}}
+
+
+def test_a_sub_workflow_n8n_does_not_wait_for_still_waits():
+    out = convert(subpipeline_call(options={"waitForSubWorkflow": False}), subpipelines={"wf-42": "pl-child"})
+    assert "Navide always waits" in entry(out, "Run child")["detail"]
+
+
+@pytest.mark.parametrize("params", [
+    {"source": "database", "workflowId": "={{ $json.next }}"},  # chosen by an expression
+    {"source": "parameter", "workflowJson": "{}"},  # passed as JSON
+    {"source": "database", "workflowId": {"__rl": True, "mode": "id", "value": "wf-other"}},  # not imported
+])
+def test_a_call_navide_cannot_resolve_stays_pending(params):
+    w = subworkflow()
+    w["nodes"][1]["parameters"] = params
+    out = convert(w, subpipelines={"wf-42": "pl-child"})
+    e = entry(out, "Run child")
+    assert (e["category"], e["result"]) == ("pending", "slot") and "paste-subworkflow" in e["actions"]
+    assert not any(n["kind"] == "subpipeline" for n in out["graph"]["nodes"])
+
+
+def test_a_recursive_call_stays_pending_without_asking_for_a_paste():
+    out = convert(subworkflow(), subpipelines={"wf-42": "pl-self"}, recursive_workflows={"wf-42"})
+    e = entry(out, "Run child")
+    assert (e["category"], e["reason"], e["result"]) == ("pending", "recursive-subworkflow", "slot")
+    assert "paste-subworkflow" not in e["actions"] and "calls this workflow back" in e["detail"]
+    assert not any(n["kind"] == "subpipeline" for n in out["graph"]["nodes"])
+
+
+def test_a_workflow_tool_is_named_in_the_kickoff_never_converted():
+    w = ai_cluster()
+    w["nodes"].append(node("Lookup tool", ni.LANGCHAIN + "toolWorkflow", 2, 300, 200, parameters={
+        "source": "database", "workflowId": {"__rl": True, "mode": "id", "value": "wf-7"}}))
+    w["connections"]["Lookup tool"] = {"ai_tool": [[{"node": "Agent", "type": "ai_tool", "index": 0}]]}
+    unresolved = convert(w)
+    e = entry(unresolved, "Lookup tool")
+    assert (e["category"], e["result"]) == ("pending", "folded") and "paste-subworkflow" in e["actions"]
+    out = convert(w, subpipelines={"wf-7": "pl-lookup"})
+    e = entry(out, "Lookup tool")
+    assert (e["category"], e["result"]) == ("pending", "folded") and "paste-subworkflow" not in e["actions"]
+    assert "pl-lookup" in e["detail"]
+    assert not any(n["kind"] == "subpipeline" for n in out["graph"]["nodes"])
+    kick = next(s["kickoffBody"] for s in out["report"]["slots"])
+    assert "imported here as the pipeline pl-lookup" in kick
+
+
+def test_no_kickoff_or_sub_pipeline_task_writes_a_signal_format():
+    # The engine appends the signal instructions with their per-kickoff code
+    # (#752); a converted kickoff must never hold a format of its own.
+    needles = ["---" + "BRANCH", "---" + "OUTPUT-", "---" + "NODE-FAILED"]
+    cross = wf([node("Start", "manualTrigger"), node("Lookup", "httpRequest", 4.2, 200),
+                node("Mid", "if", 2.2, 400), node("Use", "set", 3.4, 600,
+                                                  parameters={"value": "={{ $('Lookup').item.json.email }}"})],
+               link(("Start", "Lookup"), ("Lookup", "Mid"), ("Mid", "Use", 0)))
+    outs = [convert(w) for w in (linear(), ai_cluster(), if_merge(), if_merge(True), loop(), webhook(), schedule(),
+                                 subworkflow(), removals(), cross)]
+    outs.append(convert(subpipeline_call(), subpipelines={"wf-42": "pl-child"}))
+    texts = [s["kickoffBody"] for o in outs for s in o["report"]["slots"]]
+    texts += [s["task"] for o in outs for s in o["report"]["subpipelines"]]
+    assert texts and any("report the branch you take" in t for t in texts)
+    for t in texts:
+        assert not any(n in t for n in needles), t[:200]
+
+
+NATIVE_FLOW_SIGNALS_FIXTURE = (
+    Path(__file__).resolve().parents[2] / "src" / "renderer" / "src" / "lib" / "__tests__" / "fixtures"
+    / "n8n-native-flow-signals.json"
+)
+
+
+def test_the_native_flow_signal_fixture_is_the_converters_output():
+    # pipelineSignalN8nNativeFlow.test.ts runs this graph through the pipeline
+    # engine: forged signals and the kickoff's echo steer nothing, signals
+    # with the kickoff's code do.
+    fixture = json.loads(NATIVE_FLOW_SIGNALS_FIXTURE.read_text(encoding="utf-8"))
+    out = convert(fixture["workflow"])
+    assert out["graph"] == fixture["graph"]
+    kinds = {(e["from"], e["kind"]) for e in out["graph"]["edges"]}
+    assert {("n8n-plan", "branch"), ("n8n-route", "branch"), ("n8n-plan", "error")} <= kinds
+    assert "{{node.n8n-plan.output}}" in slot(out, "n8n-fast")["slot"]["kickoffBody"]

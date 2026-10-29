@@ -29,7 +29,8 @@ The canvas colors each step by how it was converted:
 - **Converted directly** — Navide runs it as the workflow meant: Manual, Chat and
   Execute Workflow triggers, AI Agent clusters (model, memory, tools and
   output parser fold into one step), Wait and send-and-wait approvals
-  (gates), IF and Switch (branches), Merge in Append or Choose Branch mode, error outputs and retries.
+  (gates), IF and Switch (branches), Merge in Append or Choose Branch mode, error outputs and retries,
+  and Execute Workflow calling a workflow Navide has (a sub-pipeline, see below).
 - **Run by an agent** — HTTP Request, Code, Set, Merge that combines data (by fields, position, all combinations or SQL; the agent follows its merge rule), app nodes (Google
   Sheets, Slack, Gmail…), community nodes and unknown node types or
   versions. A CLI agent does the step from the node's original parameters;
@@ -38,9 +39,9 @@ The canvas colors each step by how it was converted:
   workflow does not open one pane per node.
 - **Needs review** — imported, but it needs something Navide does not have yet:
   Schedule, Webhook, Form and app triggers (start the pipeline by hand),
-  Respond to Webhook, Execute Workflow and Call n8n Workflow Tool
-  (sub-workflows: import the referenced workflow too), and steps best left
-  in n8n (see below), shown as **Not supported**.
+  Respond to Webhook, Execute Workflow calling a workflow Navide does not
+  have, Call n8n Workflow Tool (see below), and steps best left in n8n (see
+  below), shown as **Not supported**.
 
 Below the canvas, the report lists every n8n node with what it became and
 what to do about it, every step's full kickoff and every gate's prompt —
@@ -66,6 +67,31 @@ secrets were removed, and how many steps need review. None of this blocks
 - An expression that reads another node, such as `$('Lookup').item.json`,
   gets that step's result as `{{node.<step id>.output}}` in its kickoff, and
   that step is asked to end with its result as JSON.
+
+### Sub-workflows
+
+An **Execute Workflow** node becomes a sub-pipeline node when Navide has the
+workflow it calls: the run pauses there, runs that pipeline in the same
+workspace and goes on with its result. Navide always waits for it, even
+where n8n was set not to wait. Its error output and Retry On Fail map as for
+any other step.
+
+To import a workflow with its sub-workflows, paste them together as one JSON
+array (the format `n8n export:workflow --all` writes) and import once: the
+called workflows become pipelines of their own first, and the workflow no
+other one calls is the one that opens. A workflow you imported before is
+reused instead: import the called workflow first, then the one that calls
+it. The report lists every called workflow and whether it was found.
+
+A call that would come back around (A calls B and B calls A, or a workflow
+calls itself) stays **Needs review**, because a sub-pipeline cannot run
+itself. So does a call to a workflow Navide does not have, a workflow
+chosen by an expression, and one passed as JSON, a file or a URL.
+
+**Call n8n Workflow Tool** lets an AI Agent call a workflow as a tool. A
+pipeline cannot be called as a tool from a step, so it is not converted: the
+step's kickoff names the pipeline that workflow was imported as, if any, and
+the report marks it for review.
 
 ## Credentials and secrets
 
@@ -124,8 +150,8 @@ Source: n8n's documentation, "Connect to n8n MCP server"
 
 ## Known limits
 
-- Execute Workflow and Call n8n Workflow Tool stay pending until Navide has
-  sub-pipelines.
+- Execute Workflow becomes a sub-pipeline only for a workflow Navide has;
+  recursive calls and Call n8n Workflow Tool stay for review.
 - `pinData` becomes test input shown in the kickoff, not a frozen step.
 - More than about 8 steps only warns; each step opens a CLI pane.
 - The node table follows n8n's public documentation by node type and

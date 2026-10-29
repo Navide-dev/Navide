@@ -12283,7 +12283,7 @@
     },
     "needs-review": "{n} step needs review | {n} steps need review",
     "needs-review-hint": "Importing still works. Check these steps in the editor before running the pipeline.",
-    "subworkflow": "This workflow calls another n8n workflow. Paste that workflow's JSON here too and import it separately.",
+    "subworkflow": "This workflow calls another n8n workflow that Navide does not have yet. Paste the called workflows here too, together in one JSON array, or import them first; then the call runs as a sub-pipeline.",
     "external": "Every run of the imported pipeline is marked as external content, because its steps come from a file made outside Navide.",
     "warnings": "Warnings",
     "canvas-title": "Converted graph",
@@ -12302,6 +12302,7 @@
       "trigger": "Trigger",
       "slot": "Step",
       "gate": "Approval gate",
+      "subpipeline": "Sub-pipeline",
       "folded": "Merged into a step",
       "removed": "Removed"
     },
