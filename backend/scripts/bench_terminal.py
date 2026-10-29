@@ -26,8 +26,8 @@ Usage (repository root)::
     uv --project backend run python backend/scripts/bench_terminal.py \\
         --mb 64 --payload cjk --send-delay-ms 1 --json
 
-The throughput check is POSIX-only: under ConPTY the 0.25 MiB smoke run did
-not finish within 60 s on the Windows CI runner (not investigated further).
+The payload check is POSIX-only: ConPTY re-renders the screen instead of
+passing bytes through, so Windows reports no expected count.
 
 Numbers depend on the machine and its load; compare runs taken back to back on
 the same machine, not across machines.
@@ -116,18 +116,21 @@ class _Sink:
             self.exited.set()
 
 
-def _writer_child(path: str) -> list[str]:
+def _writer_child(path: str, block: int) -> list[str]:
     # The payload is read from a file so the child's own startup is the only
-    # Python work before the flood; writes go out in 64 KiB blocks.
+    # Python work before the flood. Blocks are whole lines (~64 KiB): on a
+    # Windows console, stdout writes UTF-8 through WindowsConsoleIO, and a
+    # block ending mid-character there left the CJK run hanging in the child.
     code = (
         "import sys\n"
         "data = open(sys.argv[1], 'rb').read()\n"
+        "step = int(sys.argv[2])\n"
         "out = sys.stdout.buffer\n"
-        "for i in range(0, len(data), 65536):\n"
-        "    out.write(data[i:i + 65536])\n"
+        "for i in range(0, len(data), step):\n"
+        "    out.write(data[i:i + step])\n"
         "out.flush()\n"
     )
-    return [sys.executable, "-c", code, path]
+    return [sys.executable, "-c", code, path, str(block)]
 
 
 async def measure_throughput(
@@ -151,7 +154,7 @@ async def measure_throughput(
         session = svc.create(
             pane_id="bench-throughput",
             agent_key=None,
-            command=_writer_child(path),
+            command=_writer_child(path, max(1, 65536 // len(line)) * len(line)),
             cwd=tmp,
             cols=200,
             rows=50,
