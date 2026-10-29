@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Shortcuts (0.2.35): on Windows and Linux, Open Plans, the Git window and the Mini IDE have working default keys. They were bound to ⌘ only, which is the Win/Super key off macOS. Open Plans now answers Ctrl+Shift+D and the Git window Ctrl+Shift+G; the Mini IDE answers Ctrl+Shift+M, because Ctrl+Shift+I stays Toggle Developer Tools there. macOS keys are unchanged.
+
 ## [0.2.34] — unreleased
 
 ### Added
