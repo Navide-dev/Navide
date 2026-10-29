@@ -495,6 +495,7 @@ class TestProjectNodeStates:
         p = ProjectStore().peek(ws)
         assert p.node_states == {"a": {"status": "running"}, "b": {"status": "done"}}
         assert p.node_gate == {"nodeId": "g"}
+        store.abort_pipeline(ws)  # a live run refuses a new start
         store.start_pipeline(ws, task_description="t2", total_stages=1, stage_blueprint=[{"stage_id": "01", "slots": []}])
         p = ProjectStore().peek(ws)
         assert p.node_states == {} and p.node_gate == {}
@@ -534,8 +535,10 @@ def test_start_index_records_skipped_stages_as_completed(tmp_path):
     bp = [{"stage_id": sid, "slots": []} for sid in ("01", "02", "03")]
     store.start_pipeline(ws, task_description="t", total_stages=3, stage_blueprint=bp, start_index=2)
     assert [s.status for s in ProjectStore().peek(ws).stages] == ["completed", "completed", "pending"]
+    store.abort_pipeline(ws)  # only a stopped run resumes
     _, nxt = store.resume_pipeline(ws)
     assert nxt == 2
+    store.abort_pipeline(ws)
     store.start_pipeline(ws, task_description="t", total_stages=3, stage_blueprint=bp)
     assert [s.status for s in ProjectStore().peek(ws).stages] == ["pending"] * 3
 
@@ -552,5 +555,6 @@ def test_paused_gate_survives_abort_and_resume_until_a_new_run(tmp_path):
     assert ProjectStore().peek(ws).node_gate == {"gateId": "gate", "nextIndex": 1}
     store.resume_pipeline(ws)
     assert ProjectStore().peek(ws).node_gate == {"gateId": "gate", "nextIndex": 1}
+    store.abort_pipeline(ws)  # a live run refuses a new start
     store.start_pipeline(ws, task_description="t", total_stages=2, stage_blueprint=bp)
     assert ProjectStore().peek(ws).node_gate == {}

@@ -153,3 +153,80 @@ async def test_an_agent_job_carries_its_taint_to_the_run(env) -> None:  # noqa: 
     job = normalize_job(pipeline_job(), None, NOW)
     job["owner"] = {"kind": "pane", "pane_id": "p-9", "pane_name": "worker", "workspace": "/ws"}
     assert sched_mod._with_origin(job)[sched_mod.TAINT_KEY] == "scheduled by worker"  # noqa: SLF001
+
+
+# ── E3: a pipeline job is checked when it is saved, and says why it failed ──
+
+
+def _service(env, bridge):  # noqa: F811
+    async def no_sleep(seconds: float) -> None:
+        pass
+
+    async def no_notify(jobs: list) -> None:
+        pass
+
+    env["bridge"] = bridge
+    return sched_mod.SchedulerService(
+        env["make"]().store, clock=env["clock"], sleep=no_sleep, bridge=bridge, notify=no_notify
+    )
+
+
+async def test_saving_a_job_for_a_pipeline_that_does_not_exist_is_refused(env) -> None:  # noqa: F811
+    service = _service(env, PipelineBridge())
+    for bad in ({"pipeline_name": "Nigthly"}, {"pipeline_name": None, "pipeline_id": "zz"}):
+        with pytest.raises(JobInvalid) as refused:
+            await service.upsert(pipeline_job(**bad))
+        assert refused.value.code == "pipeline_not_found"
+    assert (await service.list())["jobs"] == []
+
+
+async def test_saving_an_unchanged_action_does_not_check_it_again(env) -> None:  # noqa: F811
+    bridge = PipelineBridge()
+    service = _service(env, bridge)
+    job = (await service.upsert(pipeline_job()))["job"]
+    bridge.pipeline_list = []  # the pipeline was deleted later
+    renamed = await service.upsert({"id": job["id"], "name": "renamed"})
+    assert renamed["ok"] is True
+
+
+async def test_a_failed_run_keeps_its_reason_code(env) -> None:  # noqa: F811
+    bridge = PipelineBridge()
+    bridge.pipeline_outcome = {"status": "error", "reason": "no_window", "detail": "no Navide window has /ws open"}
+    service = _service(env, bridge)
+    job = (await service.upsert(pipeline_job()))["job"]
+    env["clock"].advance_ms(10 * MINUTE)
+    await service.tick()
+    await settle(service)
+    assert (await state(service, job["id"]))["last_error_code"] == "no_window"
+
+
+async def test_repair_with_no_window_says_so_instead_of_failing_again(env) -> None:  # noqa: F811
+    bridge = PipelineBridge()
+    service = _service(env, bridge)
+    job = (await service.upsert(pipeline_job()))["job"]
+    bridge.window = False
+
+    answer = await service.run_now(job["id"])
+
+    assert answer["ok"] is False and answer["error_code"] == "no_window"
+    assert "/ws" in answer["error"]
+    await settle(service)
+    assert bridge.started == [] and await runs(service, job["id"]) == []
+
+
+async def test_ws_upsert_answers_the_refusal_code(env, monkeypatch) -> None:  # noqa: F811
+    from agent_team_backend import ws_handlers
+
+    service = _service(env, PipelineBridge())
+    monkeypatch.setattr(sched_mod, "get_service", lambda: service)
+    sent: list = []
+    session = SimpleNamespace(send_json=lambda m: _append(sent, m))
+
+    await ws_handlers.scheduler_upsert(session, "1", "scheduler.upsert", {"job": pipeline_job(pipeline_name="Gone")})
+
+    assert sent[-1]["ok"] is False
+    assert sent[-1]["error"]["code"] == "SCHEDULER_PIPELINE_NOT_FOUND"
+
+
+async def _append(sent: list, message: dict) -> None:
+    sent.append(message)

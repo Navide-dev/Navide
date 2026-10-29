@@ -10220,6 +10220,11 @@
       "expired": "Caducada: tarea de agent no renovada en 7 días",
       "unknown": "Omitida"
     },
+    "fail-reason": {
+      "no_window": "Ninguna ventana de Navide tiene abierta el área de trabajo de esta tarea. Abre el área de trabajo y vuelve a ejecutarla.",
+      "pipeline_not_found": "La pipeline que inicia esta tarea no existe o su nombre coincide con varias. Edita la tarea y elige una pipeline.",
+      "pipeline_already_running": "Ya había una pipeline en ejecución en esa área de trabajo, así que esta no se inició."
+    },
     "editor": {
       "err-task": "Escribe una tarea",
       "err-pipeline": "Elige una pipeline",

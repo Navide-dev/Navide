@@ -10220,6 +10220,11 @@
       "expired": "Expirée : tâche d’agent non renouvelée depuis 7 jours",
       "unknown": "Ignorée"
     },
+    "fail-reason": {
+      "no_window": "Aucune fenêtre Navide n’a ouvert l’espace de travail de cette tâche. Ouvrez l’espace de travail, puis relancez la tâche.",
+      "pipeline_not_found": "Le pipeline que lance cette tâche n’existe pas, ou son nom en désigne plusieurs. Modifiez la tâche et choisissez un pipeline.",
+      "pipeline_already_running": "Un pipeline était déjà en cours dans cet espace de travail, celui-ci n’a donc pas démarré."
+    },
     "editor": {
       "err-task": "Saisissez une tâche",
       "err-pipeline": "Choisissez un pipeline",

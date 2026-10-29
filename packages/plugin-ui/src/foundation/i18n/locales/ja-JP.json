@@ -10220,6 +10220,11 @@
       "expired": "期限切れ：agent のジョブが 7 日間更新されていません",
       "unknown": "スキップ"
     },
+    "fail-reason": {
+      "no_window": "この job の workspace を開いている Navide ウィンドウがありません。workspace を開いてから、もう一度実行してください。",
+      "pipeline_not_found": "この job が開始する Pipeline が存在しないか、同じ名前の Pipeline が複数あります。job を編集して Pipeline を選び直してください。",
+      "pipeline_already_running": "その workspace ではすでに Pipeline が実行中のため、今回は開始しませんでした。"
+    },
     "editor": {
       "err-task": "タスクを入力してください",
       "err-pipeline": "Pipeline を選択してください",

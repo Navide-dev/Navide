@@ -31,6 +31,7 @@ const startsPipeline = computed(() => props.job.action.kind === 'pipeline_start'
 const expiry = computed(() => props.api.expiryLabel(props.job))
 const updatedBy = computed(() => props.api.updatedByLabel(props.job))
 const system = computed(() => props.api.isSystem(props.job))
+const failReason = computed(() => props.api.failReason(props.job))
 
 function manage(): void {
   openEvolvePanel(props.api.systemWorkspace(props.job))
@@ -57,7 +58,7 @@ function manage(): void {
           class="sj-fail-repair"
           data-test="repair"
           :disabled="busy"
-          :title="job.state?.last_error ?? ''"
+          :title="failReason"
           @click="api.runNow(job)"
         >
           {{ t('scheduler.repair') }}
@@ -114,6 +115,13 @@ function manage(): void {
         <span class="sj-updated" data-test="updated-by">{{ updatedBy }}</span>
       </template>
     </div>
+    <div
+      v-if="light === 'err' && !gone && !system && failReason"
+      class="sj-fail-reason"
+      v-truncate
+      data-test="fail-reason"
+      :title="failReason"
+    >{{ failReason }}</div>
     <div v-if="gone && !system" class="sj-gone" data-test="target-gone">
       <span>{{ t('scheduler.skip.target_gone') }}</span>
       <span v-if="job.state?.disabled_reason === 'target_gone'" data-test="gone-disabled">
@@ -353,6 +361,15 @@ function manage(): void {
   padding-left: 11px;
   font-size: var(--font-3xs);
   color: var(--text-secondary);
+}
+.sj-fail-reason {
+  margin-top: 2px;
+  padding-left: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-3xs);
+  color: var(--danger-fg);
 }
 .sj-gone {
   display: flex;

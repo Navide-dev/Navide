@@ -10220,6 +10220,11 @@
       "expired": "Expirada: tarefa de agent não renovada em 7 dias",
       "unknown": "Ignorada"
     },
+    "fail-reason": {
+      "no_window": "Nenhuma janela do Navide está com o workspace desta tarefa aberto. Abra o workspace e execute a tarefa de novo.",
+      "pipeline_not_found": "O pipeline que esta tarefa inicia não existe ou o nome corresponde a mais de um. Edite a tarefa e escolha um pipeline.",
+      "pipeline_already_running": "Já havia um pipeline em execução nesse workspace, então este não foi iniciado."
+    },
     "editor": {
       "err-task": "Digite uma tarefa",
       "err-pipeline": "Escolha um pipeline",

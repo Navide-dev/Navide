@@ -124,7 +124,13 @@ LIMIT = "SCHEDULER_LIMIT"
 
 
 class JobInvalid(ValueError):
-    """A job definition that cannot be saved; the message is caller-facing."""
+    """A job definition that cannot be saved; the message is caller-facing.
+    ``code`` names the refusal for a caller that branches or translates
+    ("" when the message is all there is)."""
+
+    def __init__(self, message: str, code: str = "") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 # ── schedule arithmetic ─────────────────────────────────────────────────────
@@ -328,6 +334,9 @@ def _initial_state() -> dict[str, Any]:
         "last_status": None,
         "last_skip_reason": None,
         "last_error": None,
+        # The failed run's reason ("no_window", "pipeline_not_found", ...), so a
+        # window can say it in the UI language; last_error keeps the detail.
+        "last_error_code": None,
         "last_duration_ms": None,
         "consecutive_errors": 0,
         "backoff_until": None,
@@ -574,6 +583,13 @@ def _normalize_pipeline_action(raw: dict[str, Any]) -> dict[str, Any]:
     return action
 
 
+def _no_window_detail(workspace: str) -> str:
+    return (
+        f"no Navide window has {workspace} open; a scheduled pipeline run never "
+        "opens one — open the workspace, then run the job again"
+    )
+
+
 def resolve_pipeline(pipelines: list[dict[str, Any]], action: dict[str, Any]) -> tuple[str, str]:
     """(pipeline id, "") for a pipeline_start action, or ("", why not).
 
@@ -603,6 +619,18 @@ class LiveBridge:
         from . import app
 
         return any(not getattr(s, "dead", False) for s in list(app._SESSIONS))
+
+    def pipelines(self) -> list[dict[str, Any]]:
+        """The pipelines a pipeline_start job may name, as pipeline_list has them."""
+        from . import app
+
+        return app.stages_store.list_pipelines()
+
+    async def window_holds(self, workspace: str) -> bool:
+        """True when a window holds ``workspace``: a pipeline run starts nowhere else."""
+        from .mcp_server import server as mcp
+
+        return await mcp._probe_window(workspace, PIPELINE_PROBE_S)
 
     def still_queued(self, msg_key: str | None) -> bool:
         """True while this job's previous message still waits in the target's queue."""
@@ -691,11 +719,7 @@ class LiveBridge:
         if problem:
             return {"status": "error", "reason": "pipeline_not_found", "detail": problem}
         if not await mcp._probe_window(workspace, PIPELINE_PROBE_S):
-            return {
-                "status": "error", "reason": SKIP_NO_WINDOW,
-                "detail": f"no Navide window has {workspace} open; a scheduled pipeline run never "
-                "opens one — open the workspace, then run the job again",
-            }
+            return {"status": "error", "reason": SKIP_NO_WINDOW, "detail": _no_window_detail(workspace)}
         answer = await mcp._start_pipeline_run(
             mcp._Caller(kind="host"), workspace, action["task"], pipeline_id,
             taint_detail=action.get(TAINT_KEY) or "",
@@ -1156,11 +1180,13 @@ class SchedulerService:
                 state["consecutive_errors"] = 0
                 state["backoff_until"] = None
                 state["last_error"] = None
+                state["last_error_code"] = None
             elif status == "error":
                 errors = int(state.get("consecutive_errors") or 0) + 1
                 state["consecutive_errors"] = errors
                 state["backoff_until"] = now + BACKOFF_S[min(errors, len(BACKOFF_S)) - 1] * 1000
                 state["last_error"] = outcome.get("detail") or outcome.get("reason") or "error"
+                state["last_error_code"] = outcome.get("reason") or None
             if status == "skipped" and outcome.get("reason") == SKIP_TARGET_GONE:
                 state["consecutive_target_gone"] = int(state.get("consecutive_target_gone") or 0) + 1
             elif status != "skipped":
@@ -1259,6 +1285,15 @@ class SchedulerService:
                     return _not_owner(existing)
             now = self.now_ms()
             job = normalize_job(raw, existing, now)
+            # Checked when saved, so a misspelt pipeline is refused now rather
+            # than failing at its first run; an action saved unchanged is not
+            # checked again (the pipeline may have been deleted since).
+            if job["action"].get("kind") == "pipeline_start" and (
+                existing is None or job["action"] != existing["action"]
+            ):
+                _, problem = resolve_pipeline(self.bridge.pipelines(), job["action"])
+                if problem:
+                    raise JobInvalid(problem, code="pipeline_not_found")
             if job["action"].get("kind") == "evolve" and not is_system(actor):
                 raise JobInvalid(
                     'action.kind "evolve" is kept by Navide; turn self-evolution on '
@@ -1364,7 +1399,15 @@ class SchedulerService:
         Bypasses the skip gates (the user asked for it) but not the reentry
         lock. Clears any backoff window, which is what "repair" needs; the
         error count resets only if this run succeeds.
+
+        A pipeline_start job whose workspace no window holds is refused
+        (error_code "no_window") before anything runs: the run could only fail
+        the same way again, adding an error and a backoff to the one it repairs.
         """
+        pending = await self.store.get_job(job_id)
+        action = (pending or {}).get("action") or {}
+        if action.get("kind") == "pipeline_start" and not await self.bridge.window_holds(action["workspace"]):
+            return {"ok": False, "error": _no_window_detail(action["workspace"]), "error_code": SKIP_NO_WINDOW}
         async with self._lock:
             job = await self.store.get_job(job_id)
             if job is None:

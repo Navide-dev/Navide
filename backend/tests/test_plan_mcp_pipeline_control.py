@@ -122,7 +122,7 @@ class _FakeStagesStore:
         self.writes.append(("delete", id, pipeline_id))
         return list(self.stages)
 
-    def reset(self, pipeline_id: str | None = None) -> list[dict[str, Any]]:
+    def reset(self, pipeline_id: str | None = None, *, discard_graph: bool = False) -> list[dict[str, Any]]:
         self.writes.append(("reset", pipeline_id))
         return list(self.stages)
 
@@ -971,6 +971,7 @@ async def test_the_pipeline_control_tools_are_registered_with_their_arguments() 
         "stage",
         "ids",
         "workspace_path",
+        "discard_graph",
     }
     assert set(tools["role_define"].inputSchema.get("properties") or {}) == {
         "op",

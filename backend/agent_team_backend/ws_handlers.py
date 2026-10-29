@@ -11127,7 +11127,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
         project = app.project_store.start_pipeline(
             payload["workspace_path"],
             task_description=payload.get("task_description", ""),
-            total_stages=int(payload.get("total_stages", 4)),
+            total_stages=int(payload.get("total_stages", len(payload.get("stage_blueprint") or []))),
             stage_blueprint=payload.get("stage_blueprint", []),
             backend_version=app.__version__,
             pipeline_id=payload.get("pipeline_id", "") or app.stages_store.get_active_pipeline_id(),
@@ -11402,10 +11402,19 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
     ):
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "nodes/gate/outputs must be objects"))
         return
+    # Only nodes of the run's own pipeline are stored; anything else is
+    # dropped and named back. A pipeline the store cannot read (deleted
+    # mid-run) filters nothing rather than dropping the run's states.
+    before = app.project_store.peek(payload["workspace_path"])
+    try:
+        known = app.stages_store.node_ids(getattr(before, "pipeline_id", "") or None)
+    except (KeyError, ValueError):
+        known = None
     project = app.project_store.record_node_states(
-        payload["workspace_path"], nodes=nodes, gate=gate, outputs=outputs
+        payload["workspace_path"], nodes=nodes, gate=gate, outputs=outputs, known_ids=known
     )
-    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+    dropped = sorted({str(n) for n in [*nodes, *(outputs or {})]} - known) if known is not None else []
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, **({"dropped": dropped} if dropped else {})}))
     await app.broadcast(make_event("pipeline.node_states_changed", {
         "workspace_path": project.workspace_path,
         "pipeline_id": project.pipeline_id,
@@ -12969,7 +12978,10 @@ async def scheduler_upsert(session: "Session", msg_id: str, msg_type: str, paylo
     try:
         result = await scheduler.get_service().upsert(job)
     except scheduler.JobInvalid as err:
-        await _scheduler_bad_request(session, msg_id, msg_type, str(err))
+        if err.code:
+            await session.send_json(make_error(msg_id, msg_type, f"SCHEDULER_{err.code.upper()}", str(err)))
+        else:
+            await _scheduler_bad_request(session, msg_id, msg_type, str(err))
         return
     await session.send_json(make_response(msg_id, msg_type, result))
     await scheduler.broadcast_changed(exclude=session)

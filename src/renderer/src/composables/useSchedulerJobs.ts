@@ -21,6 +21,7 @@ import { useI18n } from 'vue-i18n'
 import type { useBackend } from './useBackend'
 import {
   formatClock,
+  schedulerFailReason,
   shortId,
   type JobOwner,
   type SchedulerJob,
@@ -36,7 +37,7 @@ const DAY_MS = 86_400_000
 export type Light = 'running' | 'off' | 'err' | 'skip' | 'ok' | 'new'
 
 export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
-  const { t } = useI18n()
+  const { t, te } = useI18n()
 
   const jobs = ref<SchedulerJob[]>([])
   /** From the last scheduler.list; runs today is not in the change broadcast. */
@@ -80,6 +81,11 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   /** Rebound onto its rebuilt pane but still stopped: it waits for someone to switch it on. */
   function rebound(job: SchedulerJob): boolean {
     return !job.enabled && !!job.state?.rebound_needs_enable && !targetGone(job)
+  }
+
+  /** Why the last run failed, in the UI language when its code is known. */
+  function failReason(job: SchedulerJob): string {
+    return schedulerFailReason(t, te, job.state?.last_error_code, job.state?.last_error ?? '')
   }
 
   function skipLabel(job: SchedulerJob): string {
@@ -216,13 +222,13 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   async function mutate(type: string, payload: Record<string, unknown>): Promise<boolean> {
     opError.value = ''
     try {
-      const resp = await backend.send<{ ok: boolean; error?: string }>(type, payload, RPC_TIMEOUT_MS)
+      const resp = await backend.send<{ ok: boolean; error?: string; error_code?: string }>(type, payload, RPC_TIMEOUT_MS)
       if (!resp.ok) {
-        opError.value = resp.error?.message ?? `${type} failed`
+        opError.value = schedulerFailReason(t, te, resp.error?.code, resp.error?.message ?? `${type} failed`)
         return false
       }
       if (resp.payload && resp.payload.ok === false) {
-        opError.value = resp.payload.error ?? `${type} failed`
+        opError.value = schedulerFailReason(t, te, resp.payload.error_code, resp.payload.error ?? `${type} failed`)
         return false
       }
       return true
@@ -315,6 +321,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     light,
     targetGone,
     rebound,
+    failReason,
     skipLabel,
     targetLabel,
     isSystem,

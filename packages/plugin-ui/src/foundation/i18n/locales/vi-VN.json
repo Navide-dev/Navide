@@ -10220,6 +10220,11 @@
       "expired": "Đã hết hạn: tác vụ của agent không được gia hạn trong 7 ngày",
       "unknown": "Đã bỏ qua"
     },
+    "fail-reason": {
+      "no_window": "Không có cửa sổ Navide nào đang mở workspace của tác vụ này. Hãy mở workspace rồi chạy lại.",
+      "pipeline_not_found": "Pipeline mà tác vụ này khởi động không tồn tại hoặc tên trùng với nhiều pipeline. Hãy sửa tác vụ và chọn pipeline.",
+      "pipeline_already_running": "Workspace đó đang có một pipeline chạy, nên lần này không khởi động."
+    },
     "editor": {
       "err-task": "Hãy nhập tác vụ",
       "err-pipeline": "Hãy chọn pipeline",

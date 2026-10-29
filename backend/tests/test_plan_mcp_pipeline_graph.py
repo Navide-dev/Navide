@@ -174,3 +174,62 @@ async def test_unknown_pipeline_is_a_clear_not_found(wired: SimpleNamespace, op:
     )
     assert out["ok"] is False and out["error_code"] == "not_found", out
     assert out["error"] == "pipeline not found: no-such-pipeline"
+
+
+async def _custom_gated(wired: SimpleNamespace) -> str:
+    pid = wired.stages.create_pipeline("Mine")["id"]
+    for sid in ("01", "02"):
+        wired.stages.upsert(
+            {"id": sid, "title": sid, "slots": [{"label": sid, "agent_key": "claude", "role_key": "", "kickoff_body": ""}]},
+            pid,
+        )
+    assert (await plan_mcp.pipeline_graph(_ctx(), "apply", pipeline_id=pid, ops=GATE))["ok"] is True
+    return pid
+
+
+@pytest.mark.asyncio
+async def test_stage_define_reset_keeps_a_drawn_graph_unless_told_to_discard_it(wired: SimpleNamespace) -> None:
+    pid = await _custom_gated(wired)
+
+    refused = await plan_mcp.stage_define(_ctx(), "reset", pipeline_id=pid)
+    assert refused["ok"] is False and refused["error_code"] == "graph_nonlinear"
+    assert "discard_graph" in refused["error"]
+    assert (await plan_mcp.pipeline_graph(_ctx(), "get", pipeline_id=pid))["derived"] is False
+
+    done = await plan_mcp.stage_define(_ctx(), "reset", pipeline_id=pid, discard_graph=True)
+    assert done["ok"] is True and done["stages"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_bad_op_names_its_index_and_the_ops_there_are(wired: SimpleNamespace) -> None:
+    out = await plan_mcp.pipeline_graph(_ctx(), "apply", pipeline_id="default", ops=[
+        {"op": "move_node", "id": "n-01-0", "position": {"x": 1, "y": 1}},
+        {"op": "add_nodes", "node": {}},
+    ])
+    assert out["ok"] is False and out["error_code"] == "invalid"
+    assert out["op_index"] == 1
+    assert out["error"].startswith("ops[1]")
+    assert "add_node" in out["error"] and "set_retry" in out["error"]
+
+
+@pytest.mark.asyncio
+async def test_an_op_on_a_missing_node_names_its_index(wired: SimpleNamespace) -> None:
+    out = await plan_mcp.pipeline_graph(_ctx(), "apply", pipeline_id="default", ops=[
+        {"op": "set_pin", "id": "n-01-0", "pinned": True},
+        {"op": "set_pin", "id": "n-01-0", "pinned": False},
+        {"op": "remove_node", "id": "nope"},
+    ])
+    assert out["op_index"] == 2
+    assert out["error"].startswith("ops[2] (remove_node)")
+    assert "nope" in out["error"]
+
+
+@pytest.mark.asyncio
+async def test_a_bad_edge_kind_lists_the_kinds_there_are(wired: SimpleNamespace) -> None:
+    out = await plan_mcp.pipeline_graph(_ctx(), "apply", pipeline_id="default", ops=[
+        {"op": "add_edge", "edge": {"from": "n-01-0", "to": "n-02-0", "kind": "loop"}},
+    ])
+    assert out["ok"] is False
+    assert out["op_index"] == 0
+    for kind in ("main", "reject", "branch", "error"):
+        assert kind in out["error"]

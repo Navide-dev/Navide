@@ -10220,6 +10220,11 @@
       "expired": "Abgelaufen: Agent-Auftrag seit 7 Tagen nicht erneuert",
       "unknown": "Übersprungen"
     },
+    "fail-reason": {
+      "no_window": "Kein Navide-Fenster hat den Arbeitsbereich dieses Jobs geöffnet. Öffnen Sie den Arbeitsbereich und führen Sie den Job erneut aus.",
+      "pipeline_not_found": "Die Pipeline, die dieser Job startet, gibt es nicht, oder ihr Name passt auf mehrere. Bearbeiten Sie den Job und wählen Sie eine Pipeline.",
+      "pipeline_already_running": "In diesem Arbeitsbereich lief bereits eine Pipeline, daher wurde diese nicht gestartet."
+    },
     "editor": {
       "err-task": "Gib eine Aufgabe ein",
       "err-pipeline": "Wähle eine Pipeline",

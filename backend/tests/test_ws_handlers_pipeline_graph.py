@@ -112,11 +112,15 @@ async def test_node_states_are_stored_and_broadcast(monkeypatch):
 
     calls: dict = {}
 
-    def record(ws, *, nodes, gate=None, outputs=None):
-        calls.update(ws=ws, nodes=nodes, gate=gate, outputs=outputs)
+    def record(ws, *, nodes, gate=None, outputs=None, known_ids=None):
+        calls.update(ws=ws, nodes=nodes, gate=gate, outputs=outputs, known_ids=known_ids)
         return SimpleNamespace(workspace_path=ws, pipeline_id="p1", state="running", node_states=nodes, node_gate=gate or {})
 
-    monkeypatch.setattr(app_module, "project_store", SimpleNamespace(record_node_states=record), raising=False)
+    monkeypatch.setattr(
+        app_module, "project_store",
+        SimpleNamespace(record_node_states=record, peek=lambda ws: SimpleNamespace(pipeline_id="p1")), raising=False,
+    )
+    monkeypatch.setattr(app_module, "stages_store", SimpleNamespace(node_ids=lambda pid: {"n1", "g"}), raising=False)
     monkeypatch.setattr(app_module, "broadcast", fake_broadcast, raising=False)
     s = _Session()
     await ws_handlers.pipeline_node_states(
@@ -125,6 +129,7 @@ async def test_node_states_are_stored_and_broadcast(monkeypatch):
     )
     assert s.last["ok"] is True
     assert calls["nodes"] == {"n1": {"status": "running"}}
+    assert calls["known_ids"] == {"n1", "g"}
     ev = events[-1]
     assert ev["type"] == "pipeline.node_states_changed"
     assert ev["payload"]["pipeline_id"] == "p1"

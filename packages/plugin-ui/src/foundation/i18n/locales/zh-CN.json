@@ -10220,6 +10220,11 @@
       "expired": "已过期：agent job 7 天未更新",
       "unknown": "略过"
     },
+    "fail-reason": {
+      "no_window": "没有 Navide 窗口打开这个 job 的 workspace。请先打开 workspace，再运行一次。",
+      "pipeline_not_found": "这个 job 要启动的 Pipeline 不存在，或名称对应到不止一条。请编辑 job，重新选择 Pipeline。",
+      "pipeline_already_running": "那个 workspace 已有 Pipeline 正在运行，所以这次没有启动。"
+    },
     "editor": {
       "err-task": "请输入任务",
       "err-pipeline": "请选择 Pipeline",

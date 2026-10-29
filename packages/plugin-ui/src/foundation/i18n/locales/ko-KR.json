@@ -10220,6 +10220,11 @@
       "expired": "만료됨: agent 작업이 7일 동안 갱신되지 않음",
       "unknown": "건너뜀"
     },
+    "fail-reason": {
+      "no_window": "이 작업의 작업 영역을 연 Navide 창이 없습니다. 작업 영역을 연 다음 다시 실행하세요.",
+      "pipeline_not_found": "이 작업이 시작할 Pipeline이 없거나 같은 이름이 여러 개입니다. 작업을 편집해 Pipeline을 다시 선택하세요.",
+      "pipeline_already_running": "해당 작업 영역에서 이미 Pipeline이 실행 중이라 이번에는 시작하지 않았습니다."
+    },
     "editor": {
       "err-task": "작업을 입력하세요",
       "err-pipeline": "Pipeline을 선택하세요",

@@ -208,7 +208,7 @@ import {
 } from './lib/spawnKickoff'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { terminalMultilineRefusal } from './lib/terminalInput'
-import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
+import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink, injectFailedMessage } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
@@ -4683,7 +4683,7 @@ async function injectText(
     recordDiagnostic({
       level: 'error',
       code: 'inject.failed',
-      message: 'content never appeared in the input box',
+      message: injectFailedMessage(paneId ? paneRefs[paneId]?.terminalSize?.() : null),
       paneId
     })
     return giveUp()

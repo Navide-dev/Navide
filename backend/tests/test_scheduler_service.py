@@ -48,8 +48,15 @@ class Bridge:
         self.gate: asyncio.Event | None = None
         self.counter = 0
         self.final: dict[str, dict[str, Any]] = {}
+        self.pipeline_list: list[dict[str, Any]] = [{"id": "p1", "name": "Nightly"}]
 
     def has_window(self) -> bool:
+        return self.window
+
+    def pipelines(self) -> list[dict[str, Any]]:
+        return self.pipeline_list
+
+    async def window_holds(self, workspace: str) -> bool:
         return self.window
 
     def still_queued(self, msg_key: str | None) -> bool:
