@@ -59,7 +59,7 @@ def wired(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         raising=False,
     )
     monkeypatch.setattr(
-        app_module, "stages_store", SimpleNamespace(get_active_pipeline_id=lambda: "pl-1"), raising=False
+        app_module, "stages_store", SimpleNamespace(get_active_pipeline_id=lambda: "pl-1", imported_from=lambda pid: None), raising=False
     )
     monkeypatch.setattr(app_module, "_register_workspace_and_backfill", lambda *a, **k: None, raising=False)
     monkeypatch.setattr(

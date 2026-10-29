@@ -623,6 +623,15 @@ export interface PluginIpcOptions {
     /** Set when an agent's automatic update (O1) drove the switch. */
     agent?: PluginAgentRequester
   }) => void
+  /** H1: a switch between installed versions (Restart, an update taking
+   *  effect, Back to) passed its readiness check and is about to drain the
+   *  running views ('start'), then settled, switched or not ('end'). Lets the
+   *  main window show the plugin's views as switching. */
+  onPackageSwitching?: (notice: {
+    pluginId: string
+    toVersion: string
+    phase: 'start' | 'end'
+  }) => void
   /** O1: an agent's automatic update was staged but its switch failed; the
    *  old version runs again and the main window keeps a row to apply it. */
   onPackageSwitchFailed?: (notice: {
@@ -678,6 +687,10 @@ export interface PluginIpcOptions {
   /** `<userData>/plugin-storage-v2`: view storage, set aside with the native
    * backend data when a package's source changes (card K3, D7). */
   pluginStorageRoot?: string
+  /** H1: copy only the SDK view state (`view-state:` keys) of one version's
+   * storage over the same keys of another's. Called for a switch within one
+   * source only; a failure is logged and never fails the switch. */
+  carryPluginViewState?: (pluginId: string, fromVersion: string, toVersion: string) => Promise<void>
   /** Card K4: the Host's own folder dialog, parented to the window that
    * asked. Absent, loading from a folder is unavailable. */
   pickDeveloperFolder?: (event: IpcMainInvokeEvent) => Promise<string | null>
@@ -3209,9 +3222,38 @@ export function registerPluginIpc(
    * backend is not started here, so two versions of it never run at once: it
    * still stops and starts with the switch. */
   const preflightDeveloperFolder = async (dir: string): Promise<void> => {
-    const descriptor = loadPluginDir(dir).descriptor
+    await preflightViews(loadPluginDir(dir).descriptor)
+  }
+
+  /** The hidden-view readiness check of a package about to become active:
+   * a developer folder before its reload, and (H1) an installed version right
+   * before a switch drains the running one. A package without views has
+   * nothing to check; its backend is never started early. */
+  const preflightViews = async (descriptor: PluginLaunchDescriptor | undefined): Promise<void> => {
     if (descriptor?.views?.length && options.preflightCandidateFrontend) {
       await options.preflightCandidateFrontend(descriptor)
+    }
+  }
+
+  /** H1: tell the main window a switch drains views now, or has settled. A
+   * failure to tell never affects the switch. */
+  const reportSwitching = (pluginId: string, toVersion: string, phase: 'start' | 'end'): void => {
+    try {
+      options.onPackageSwitching?.({ pluginId, toVersion, phase })
+    } catch (error) {
+      console.warn(`[plugins] switching notice of ${pluginId} was not sent: ${errorText(error)}`)
+    }
+  }
+
+  /** H1: within one source, a switch hands the SDK view state of the version
+   * that ran to the one that runs next, so remounted views restore it. A
+   * failed copy is logged; the switch goes on. */
+  const carryViewState = async (pluginId: string, fromVersion: string, toVersion: string): Promise<void> => {
+    if (!options.carryPluginViewState || fromVersion === toVersion) return
+    try {
+      await options.carryPluginViewState(pluginId, fromVersion, toVersion)
+    } catch (error) {
+      console.warn(`[plugins] view state of ${pluginId} was not carried to ${toVersion}: ${errorText(error)}`)
     }
   }
 
@@ -4044,6 +4086,7 @@ export function registerPluginIpc(
     let restartTransaction: PluginPackageRestartTransaction | undefined
     let drainedBackendOnly = false
     let promoted = false
+    let switching = false
     try {
       if (!selectedBeforeRestart.active && previousVersion && previousGrant &&
           (previousDescriptor?.packageDir === legacyDir || legacyBackendOnly)) {
@@ -4061,6 +4104,14 @@ export function registerPluginIpc(
           artifactDigest: legacyTrust.artifactDigest,
           layout: 'legacy-mutable',
         }, previousGrant)
+      }
+      // H1: the version about to run proves its views report ready before
+      // anything of the running one is drained; a failure here leaves it
+      // running and the update staged. The backend is never started early.
+      await preflightViews(scanned.descriptor)
+      if (previousVersion) {
+        switching = true
+        reportSwitching(id, selectedBeforeRestart.candidate.packageVersion, 'start')
       }
       lifecycleSelector.beginActivation(id, previousGrant && !isFactory ? { previousGrant } : {})
       if (previousVersion) {
@@ -4143,6 +4194,11 @@ export function registerPluginIpc(
         })
       }
       options.onActivationChange?.({ pluginId: id, activation })
+      // H1: within one source, the remounted views restore the view state the
+      // replaced version left; a change of source hands over nothing (D7).
+      if (previousVersion && scanned.descriptor && !sourceReplaced && !isFactory) {
+        await carryViewState(id, previousVersion, selected.active!.packageVersion)
+      }
       if (restartTransaction && !scanned.descriptor) {
         manager.completePackageRestartWithoutFrontend(restartTransaction)
         restartTransaction = undefined
@@ -4328,6 +4384,7 @@ export function registerPluginIpc(
       throw error
     } finally {
       activeTransactions.delete(id)
+      if (switching) reportSwitching(id, selectedBeforeRestart.candidate.packageVersion, 'end')
     }
   }
 
@@ -4637,11 +4694,21 @@ export function registerPluginIpc(
     // A backend-only activation has no descriptor, but its exact active
     // selector identity still owns a live runtime that must drain first.
     const currentVersion = currentDescriptor?.packageVersion ?? selectedBeforeRollback.active.packageVersion
+    // H1: going back within one source carries the view state; a kept file
+    // version never takes another file's data (MED-4).
+    const sameSource = !previousIsLocal &&
+      dataSourceOf(manager.listInstalledPackages().find((pkg) => pkg.id === id)) === 'marketplace'
     activeTransactions.add(id)
     let restartTransaction: PluginPackageRestartTransaction | undefined
     let drainedBackendOnly = false
     let promoted = false
+    let switching = false
     try {
+      // H1: the version gone back to proves its views report ready before the
+      // running one is drained; a failure here leaves the running one as is.
+      await preflightViews(previousScanned.descriptor)
+      switching = true
+      reportSwitching(id, previous.packageVersion, 'start')
       lifecycleSelector.beginRollback(id)
       if (currentDescriptor) {
         restartTransaction = await manager.beginPackageRestart(id, currentVersion)
@@ -4678,6 +4745,9 @@ export function registerPluginIpc(
           artifactDigest: currentPreviousTrust.artifactDigest,
         },
       })
+      if (sameSource && previousScanned.descriptor) {
+        await carryViewState(id, currentVersion, selected.active!.packageVersion)
+      }
       if (restartTransaction && previousScanned.descriptor) {
         const report = await manager.restorePackageRestart(restartTransaction, selected.active!.packageVersion)
         manager.completePackageRestart(restartTransaction)
@@ -4732,6 +4802,7 @@ export function registerPluginIpc(
       throw error
     } finally {
       activeTransactions.delete(id)
+      if (switching) reportSwitching(id, previous.packageVersion, 'end')
     }
   })
 

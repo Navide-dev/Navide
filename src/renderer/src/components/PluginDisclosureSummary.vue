@@ -70,7 +70,7 @@ const clauses = computed(() => disclosureClauses(t, locale.value, props.disclosu
   display: block;
 }
 .nv-disclosure-level--low { color: var(--success-fg); background: var(--success-subtle); }
-.nv-disclosure-level--medium { color: var(--attention-fg); background: var(--attention-subtle); }
+.nv-disclosure-level--medium { color: var(--attention-on-subtle); background: var(--attention-subtle); }
 .nv-disclosure-level--high { color: var(--risk-fg); background: var(--risk-subtle); }
 .nv-disclosure-level--highest { color: var(--danger-fg); background: var(--danger-subtle); }
 </style>

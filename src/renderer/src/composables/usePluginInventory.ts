@@ -22,6 +22,10 @@ export function usePluginInventory(): PluginInventory {
       api.listInstalled(),
       api.listFactoryPackages(),
     ])
+    // No answer is a failed read, not an empty inventory: the pages say so.
+    if (!Array.isArray(nextInstalled) || !Array.isArray(nextFactory)) {
+      throw new Error('The installed Navide plugins could not be read.')
+    }
     installed.value = nextInstalled
     factoryPackages.value = nextFactory
   }

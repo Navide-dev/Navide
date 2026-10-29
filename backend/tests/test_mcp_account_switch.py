@@ -215,7 +215,57 @@ async def test_switch_is_registered_with_its_declared_arguments() -> None:
     tools = {tool.name: tool for tool in await plan_mcp.server.list_tools()}
     assert set(tools["cli_account_switch"].inputSchema.get("properties") or {}) == {
         "agent", "profile_id", "reason",
+        # 0.2.34 P4: switch one pane instead of the CLI's live login.
+        "pane_id",
     }
+
+
+# ── pane_id: one pane only (plan mcp-pane-cli-usage_213031 P4) ──────────────
+
+
+@pytest.mark.asyncio
+async def test_a_pane_switch_names_the_pane_and_nothing_else_changes(ui: _UiRequests) -> None:
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {
+        "ok": True, "result": {"status": "switched-pane", "from": "Account 13", "to": "Account 14"},
+    }
+
+    result = await plan_mcp.cli_account_switch(
+        _ctx(), agent="claude", profile_id="a14", reason="use 14 here", pane_id=" pw ",
+    )
+
+    assert result == {
+        "ok": True, "status": "switched-pane", "agent": "claude", "profile_id": "a14", "pane_id": "pw",
+        "from": "Account 13", "to": "Account 14",
+    }
+    [call] = ui.calls
+    args = dict(call["args"])
+    args.pop("confirmBy")
+    assert args == {
+        "agentKey": "claude", "profileId": "a14", "reason": "use 14 here", "reasonTruncated": False,
+        "paneId": "pw",
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_pane_result_never_answers_a_cli_wide_switch(ui: _UiRequests) -> None:
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {"ok": True, "result": {"status": "switched-pane", "from": "A", "to": "B"}}
+
+    result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="a14", reason="x")
+
+    assert result["ok"] is False
+    assert "paneId" not in ui.calls[0]["args"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["unknown-pane", "unsupported", "needs-user", "restart-declined"])
+async def test_a_pane_switch_passes_on_the_windows_refusal(ui: _UiRequests, status: str) -> None:
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {"ok": True, "result": {"status": status, "message": "no"}}
+    result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="a14", reason="x", pane_id="pw")
+    assert result["ok"] is False
+    assert result["error_code"] == status
 
 
 def test_the_switch_waits_long_enough_and_is_withdrawn_when_nobody_waits() -> None:

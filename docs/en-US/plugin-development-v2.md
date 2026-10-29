@@ -1441,8 +1441,14 @@ storage cannot be read, which is the case while the Host checks a new version
 in a hidden view. `save(value)` writes in the background, one write at a time,
 and only the newest value waiting is written; `flush()` resolves when they are
 done. The default `scope` is `plugin`; pass `{ scope: 'workspace' }` for state
-per workspace. Storage is per package version, so a new `version` starts from
-the fallback.
+per workspace. Storage is per package version, with one exception: when the
+Host switches between two Navide Marketplace versions of the plugin (an update
+taking effect, **Restart Plugin**, **Back to**), it copies the `view-state:`
+keys of the version that ran into the one that runs next, before the views
+remount, so `restore()` returns what the previous version saved. No other key
+is copied, and nothing is carried for a local file version or when the source
+changes (a local file replacing a Navide Marketplace version, or the reverse);
+there a new `version` starts from the fallback.
 
 Every view must call `ready()` once it has mounted. The Host waits 10 seconds
 after the entry document finishes loading. During install and update preflight
@@ -1938,7 +1944,10 @@ silently retargeting it. Plugin code never sees tier, version, or storage
 identity.
 
 Package-version upgrades do not automatically carry data forward for ordinary
-public packages: a new version starts with its own empty snapshot. The
+public packages: a new version starts with its own empty snapshot. The one
+exception is SDK view state (`view-state:` keys) on a switch between two Navide
+Marketplace versions, described under `createPluginViewState`; it is never
+carried across a change of source. The
 first-party `navide.git` migration is an explicit Host-owned exception: before
 its current package version is promoted, the Host may clone the prior active
 Git snapshot into the current candidate, then retain the prior snapshot for
@@ -2397,7 +2406,13 @@ activated as soon as it is approved. An approved update, and an agent's
 automatic update whose disclosure is identical to the running version's
 (O1), switches right away through the same per-plugin switch as
 **Restart Plugin**: the consent dialog says beforehand that the plugin's open
-views reload and lose what is not saved in them. Navide drains only that plugin,
+views reload, that a view saving its state through the SDK comes back where it
+was, and that anything else not saved in them is lost. Right before the switch,
+and before going **Back to** a version, the version about to run is checked
+again in hidden views that must report ready; if one does not, nothing is
+drained, the running version keeps running and an update stays staged. While
+the switch drains and remounts, each in-window region of the plugin says it is
+switching to the new version. Navide drains only that plugin,
 atomically selects one complete frontend/backend package version and its
 matching storage selection, then restores native view placements from fresh
 Host-owned descriptor and Grant data. Navide itself and unrelated plugins do

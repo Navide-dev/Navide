@@ -14,6 +14,7 @@ type Translate = (key: string, named?: Record<string, unknown>) => string
 const KNOWN_CODES: Record<string, string> = {
   PIPELINE_RUNNING: 'pipelineEditor.error.pipeline-running',
   PIPELINE_NOT_FOUND: 'pipelineEditor.error.pipeline-not-found',
+  N8N_INVALID: 'pipelineImport.error.invalid',
 }
 
 export function backendErrorText(

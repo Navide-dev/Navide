@@ -97,7 +97,7 @@ Tool 都回傳單一物件，因此這個問題只會在 `plan_list` 上出現�
 | `cli_pending_incoming` | `limit=20`（上限 200） | **僅限 CLI Pane。** 目前排給*你*、還沒送進來的訊息：`{count, messages: [{uid, sender, status, age_seconds, kind?, excerpt, correlation_id?, in_reply_to?, hold?, held_for_s?, stale?}]}` |
 | `cli_read_incoming` | `uid=""`、`limit=5`（上限 20）、`include_delivered=false`、`peek=false` | **僅限 CLI Pane。** 寄給你的訊息**全文**——`cli_pending_incoming` 只給 200 字元且壓平空白：`{count, messages: [{uid, sender, status, kind?, content, age_seconds, consumed, correlation_id?, in_reply_to?, hold?, held_for_s?, stale?}], note?}`。**預設讀取即消費**，讀過的訊息不會再注入你的輸入框；`peek: true` 只讀不消費。消費採「先保留、後釋放」，釋放若遺失，訊息會退回佇列並可能再送達一次；`consumed` 逐則回報，未消費的原因寫在 `note` |
 | `cli_send_and_wait` | `to`、`text`、`timeout_s=60`（上限 120）、`pane_id?` | `cli_send` 再加上等待該回合結束；回傳 `cli_wait_idle` 的結果，外加 `{ok, target, msg_key}`  **遠端 Pane**：送出與送達閘門與本機相同（`rejected` 仍與 `failed` 分開）；等待那半用名冊狀態字，弱點與 `cli_wait_idle` 相同。 |
-| `cli_open_agent` | `agent`、`name`、`task`、`workspace_path`（非 Pane 呼叫端必填）、`model`、`effort`、`pane_id?`、`session_id?`、`run_group_id?` | 帶著一項任務 Spawn 新的 CLI Pane；回傳 `{ok, name, address, pane_id}`，若該次 Spawn 跨過 Advisory 門檻則另附 `advisories`。**派工原則**（server instructions 也有同一句）：會改檔案、跑超過幾分鐘、或使用者可能想看、中斷或接手的工作，要派給這裡開出的 Pane —— 不是 Agent 自己的 subagent 機制（Claude Code 的 `Agent`／`Task` 工具）。Pane 在 Navide 裡看得到、跑到一半可以打開、比呼叫端的 Session 活得久；subagent 是只交回一段摘要的黑盒。純唯讀、整個結果只有一段話的短查詢仍適合用 subagent。`model` 與 `effort` 為選填，該 CLI 不支援時會「拒絕」而非忽略，Pane 不會悄悄用別的模型啟動。多數 CLI 接受 model；接受獨立 effort 的較少，其餘把 effort 編在 model id 裡（`gpt-5.3-codex-high`）。model id 不做驗證（每次改版都會變），effort 則會對照該 CLI 的合法值檢查。**`agent: "terminal"`** 會開一個一般登入 shell Pane：`task` 可省略 —— 是提示字元出現後打進去一次的指令列，後面不附加任何東西（沒有回報說明；shell 無法回報）—— 而 `model`、`effort`、`session_id` 會被拒絕。指令絕不重打，所以無法確認的 kickoff 會回 `unverified`；重送前先讀 `cli_read_log`，因為重送會讓指令再跑一次 |
+| `cli_open_agent` | `agent`、`name`、`task`、`workspace_path`（非 Pane 呼叫端必填）、`model`、`effort`、`pane_id?`、`session_id?`、`run_group_id?`、`account?` | 帶著一項任務 Spawn 新的 CLI Pane；回傳 `{ok, name, address, pane_id}`，若該次 Spawn 跨過 Advisory 門檻則另附 `advisories`。**`account`** 指定 Pane 用哪個帳號，預設沿用呼叫端自己的（`"inherit"`）：呼叫端若跑在某個 claude 帳號自己的資料夾（📌 固定的 Pane），子 Pane 也開在同一個資料夾；其他情況一律和以前一樣跑在 live 登入。`"active"` 選回舊行為；給帳號 id 會把 claude Pane 開在該帳號的資料夾，不合法時拒絕並回 `unknown-profile`、`vendor-mismatch`、`unsupported`（其他 CLI 或內建 Default）或 `needs-user`（尚未在資料夾內登入）。不會切換 live 登入，也不會動到其他 Pane；有指定或實際用到帳號時，回傳會加上 `account: {mode, profile_id, runs_on, fixed}`。**派工原則**（server instructions 也有同一句）：會改檔案、跑超過幾分鐘、或使用者可能想看、中斷或接手的工作，要派給這裡開出的 Pane —— 不是 Agent 自己的 subagent 機制（Claude Code 的 `Agent`／`Task` 工具）。Pane 在 Navide 裡看得到、跑到一半可以打開、比呼叫端的 Session 活得久；subagent 是只交回一段摘要的黑盒。純唯讀、整個結果只有一段話的短查詢仍適合用 subagent。`model` 與 `effort` 為選填，該 CLI 不支援時會「拒絕」而非忽略，Pane 不會悄悄用別的模型啟動。多數 CLI 接受 model；接受獨立 effort 的較少，其餘把 effort 編在 model id 裡（`gpt-5.3-codex-high`）。model id 不做驗證（每次改版都會變），effort 則會對照該 CLI 的合法值檢查。**`agent: "terminal"`** 會開一個一般登入 shell Pane：`task` 可省略 —— 是提示字元出現後打進去一次的指令列，後面不附加任何東西（沒有回報說明；shell 無法回報）—— 而 `model`、`effort`、`session_id` 會被拒絕。指令絕不重打，所以無法確認的 kickoff 會回 `unverified`；重送前先讀 `cli_read_log`，因為重送會讓指令再跑一次 |
 | `cli_close_agent` | `target`、`pane_id?` | 關掉一個 Pane —— `cli_open_agent` 的另一半。**這會直接終結對方的工作**：Pane 與它的 PTY 一併消失，正在跑的回合跟著死掉，排給它的訊息永遠不會送達，而且無法復原 —— 關掉的 Pane 是 Session 沒了，不是暫存起來。動手前先用 `cli_get_status` 看它是不是正在做事；`cli_interrupt` 是比較軟的一階，`cli_send` 更軟（它會等回合做完）。回傳 `{ok, target, name, closed, advisories?}`，`advisories` 說明這次關閉的代價，而且是別人不會回報的那些：Pane 正在回合中、有訊息排在它的佇列裡、它底下有子 Pane 現在變成孤兒。這些都在 Kill 之前先蒐集，因為事後就再也問不到了。僅限本機 Pane：`<device>/<workspace>/<pane>` 這種位址會以 `close-local-only` 失敗，那是這個 Tool 的限制，不是位址寫錯 |
 | `cli_reclaim_agent` | `target`、`pane_id?` | 回收一個做完的 Pane —— `cli_close_agent` 可復原的那一版。CLI 行程結束，Pane 留成可點擊接續的卡片、對話完整保留；等同狀態列的「立即回收」（`ui.pane.reclaim`），但用 `cli_send` 的位址指定單一 Pane，送到持有它的那個視窗。狀態列的守衛照樣適用：忙碌、被聚焦、無法接續，或有未送出輸入、排隊訊息的 Pane 會被拒絕。回傳 `{ok, target, name, reclaimed}`；被拒時是 `ok: false`、`reclaimed: false`、守衛的 `reason`，`error_code` 為 `reclaim-refused`。僅限本機 Pane（`reclaim-local-only`），不能回收自己（`self-reclaim`）；早於 v0.2.16 的視窗回 `reclaim-unsupported` —— 請更新 App，不要改用 `cli_close_agent` 代替 |
 
@@ -451,7 +451,7 @@ watcher 兜底，以 `source: "watcher"` 且無歸屬的形式記錄。因此 `p
 | `cli_failover_state` | `agent=""` | Navide 額度用完自動切換目前的狀態：對用完額度的 CLI 帳號正在做什麼、還能做什麼。唯讀 —— 不刷新、不切換、不確認，也不讀任何憑證。`agent` 可把答案縮到單一廠商鍵。回傳 `{ok, policy, auditDegraded, capabilities, budget, unreconciled, incidents, transactions, recentIncidents, recentTransactions}`，有過濾時再加上 `agent`。`policy` 是 `off` / `notify` / `auto`；`budget` 依帳號池計算**自動**切換已用幾次（`{used, limit, windowSec, minGapSec, nextAllowedAt}`），手動切換不算在內；列在 `unreconciled` 的廠商在使用者於 Navide 處理那次做到一半的切換之前，任何切換都會被拒。各列只傳指名的欄位：帳號以 slot id 表示，live 登入的身分與指紋、錯誤原文、從 Pane 輸出擷取的證據一律不回傳 |
 | `cli_accounts_list` | `agent=""` | Navide 保存的 CLI 帳號，以及每家 CLI 目前用哪一個 —— 就是 Settings → Accounts 列出的那些帳號，只從 Navide 的帳號設定檔讀取。回傳 `{ok, accounts, active, defaultNames, paneDefaults, panes}`，有過濾時再加上 `agent`：`accounts` 是每個新增過的帳號 `{id, agentKey, name, scope?, createdAt}`；`active` 是廠商對應目前使用的帳號，`"__default__"` 代表內建的 Default 列；`defaultNames` 是 Default 列的自訂名稱；`paneDefaults` 是新 Pane 釘選的帳號（與 `active` 不同時才有）；`panes` 是有帳號的廠商每個開著的本機 Pane `{paneId, name, address, agentKey, profileId, runsOn}`，標出它目前實際用的帳號（`runsOn` 與 `cli_get_status` 的 `account` 相同，為 `"account-dir"` 或 `"live"`）。`name` 是使用者幫帳號取的名稱；Navide 自動登記的帳號會用登入的 email 當名稱，所以名稱可能是 email。不含是否已登入：那得讀取憑證本身（claude 是 Keychain），這個工具永遠不讀。唯讀 |
 | `cli_account_sign_in` | `agent`、`profile_id`、`reason`、`mode="isolated"` | 開啟 Navide 本來就有的某個 CLI 帳號登入流程 —— 就是 Settings → Accounts 會開的那個登入 Pane，在呼叫者的視窗裡執行 CLI 自己的登入指令 —— 使用者只需在瀏覽器完成。使用者在主視窗的確認框按同意之前，什麼都不會開；確認框預設停在「取消」，列出廠商、帳號（名稱；Navide 自動登記的帳號名稱就是它的 email，所以可能顯示 email）、提出要求的 pane、登入 pane 會開在哪個 workspace（就是呼叫者的 workspace），以及 agent 給的 `reason`（必填，超過 300 字截斷，有截斷時確認框會註明），標明由 agent 提供，不可見字元會顯示出來。工具呼叫被取消或逾時、或視窗和後端斷線時，還開著的確認框會以 `confirm-timeout` 關閉，不開任何 pane。使用者拒絕、在期限前沒回答（比視窗的等待時間早一個一般 UI 動作的等待時間）、已有別的 agent 的登入在等確認，或視窗在這段期間離開呼叫者的 workspace，都不會開任何 pane，分別回傳 `declined`、`confirm-timeout`、`busy`、`wrong-workspace` 或 `workspace-changed`。`mode` 為 `isolated` 時，停用中的帳號在它自己的私有 home 登入；為 `folder` 時，claude 帳號在它自己的設定資料夾登入。目前使用中的帳號、內建 Default，以及登入時會取代 live 憑證的廠商，一律以 `needs-user` 拒絕；不會切換帳號。只限 CLI Pane 呼叫。回傳 `{ok, status: "started", agent, profile_id, mode, login_pane_id}` 或 `{ok: false, error, error_code}`。不回傳任何 token、代碼或網址，登入 Pane 印出的內容其他 Pane 也讀不到：它不寫 log、`cli_read_log` 拒絕讀取、`cli_get_status` 不帶它的文字、聊天室也不能連接到它。`ui_invoke` 對 `ui.accounts.*` 一律以 `ui_dedicated_tool` 拒絕 |
-| `cli_account_switch` | `agent`、`profile_id`、`reason` | 請使用者把某個 CLI 切換到它的另一個帳號（`profile_id` 用 `cli_accounts_list` 列出的值，內建 Default 用 `__default__`）。使用者在主視窗的確認框按同意之前，什麼都不會切換；確認框預設停在「取消」，列出廠商、從哪個帳號切到哪個帳號、提出要求的 pane 與它的 workspace，以及 agent 給的 `reason`（必填，超過 300 字截斷，有截斷時確認框會註明），標明由 agent 提供，不可見字元會顯示出來。同意後走主視窗自己的切換（和 Settings → Accounts 同一個），不強制：如果有 pane 正在用這個 CLI，重啟前會再問使用者一次（拒絕則回 `restart-declined`）。使用者拒絕、期限內沒回答、已有別的 agent 的切換在等確認，或工具呼叫被取消或逾時，都不會切換（`declined`、`confirm-timeout`、`busy`）；Navide 拒絕的切換只回 `refused` 與它的 `code`（例如 `SWITCH_RATE_LIMITED`、`UNRECONCILED_STATE`）。只限 CLI Pane 呼叫。回傳 `{ok, status: "switched" \| "switched-signed-out", agent, profile_id, from, to}`（`from`、`to` 是顯示名稱：別名或帳號名稱；Navide 自動登記的帳號名稱就是它的 email）或 `{ok: false, error, error_code}`。不回傳任何憑證或 token。`ui_invoke` 對 `ui.accounts.*` 一律以 `ui_dedicated_tool` 拒絕 |
+| `cli_account_switch` | `agent`、`profile_id`、`reason`、`pane_id?` | 請使用者把某個 CLI 切換到它的另一個帳號（`profile_id` 用 `cli_accounts_list` 列出的值，內建 Default 用 `__default__`）。改變的是該 CLI 的 **live 登入**，所有沒有固定帳號的 Pane 都跑在它上面：claude 是熱切換（不重啟任何 Pane，執行中的 Pane 從下一個請求起改用新帳號），其他 CLI 在使用者同意後會重啟執行中的 Pane；跑在帳號自己資料夾裡的 claude Pane 不受影響。**`pane_id`**（只限 claude）改成只動那一個 Pane，和帳號徽章的「只換這個 pane」相同：它會在 `profile_id` 自己的資料夾裡接著原本的對話重新開啟，live 登入和其他 Pane 都不變（`switched-pane`；拒絕時回 `unknown-pane`、`unsupported`、`needs-user`）。使用者在主視窗的確認框按同意之前，什麼都不會切換；確認框預設停在「取消」，列出廠商、從哪個帳號切到哪個帳號、提出要求的 pane 與它的 workspace，以及 agent 給的 `reason`（必填，超過 300 字截斷，有截斷時確認框會註明），標明由 agent 提供，不可見字元會顯示出來。同意後走主視窗自己的切換（和 Settings → Accounts 同一個），不強制：如果有 pane 正在用這個 CLI，重啟前會再問使用者一次（拒絕則回 `restart-declined`）。使用者拒絕、期限內沒回答、已有別的 agent 的切換在等確認，或工具呼叫被取消或逾時，都不會切換（`declined`、`confirm-timeout`、`busy`）；Navide 拒絕的切換只回 `refused` 與它的 `code`（例如 `SWITCH_RATE_LIMITED`、`UNRECONCILED_STATE`）。只限 CLI Pane 呼叫。回傳 `{ok, status: "switched" \| "switched-signed-out", agent, profile_id, from, to}`（`from`、`to` 是顯示名稱：別名或帳號名稱；Navide 自動登記的帳號名稱就是它的 email）或 `{ok: false, error, error_code}`。不回傳任何憑證或 token。`ui_invoke` 對 `ui.accounts.*` 一律以 `ui_dedicated_tool` 拒絕 |
 | `cli_token_stats` | `workspace_path` | 這個 Workspace 花掉多少 Token，以 Navide 的計數為準 —— 就是 Token 面板背後的那些數字。回傳 `{workspace_path, current_run, cumulative, runs, runs_truncated, live_sessions, live_session_count, all_time, by_vendor, by_day}`。`cumulative` 是這個專案的總計，含 `by_vendor` 與 `by_stage` 拆解；`all_time` 與 `by_vendor` 是所有專案的；沒有 Pipeline 執行開著時 `current_run` 為 `null`；`runs` 是最近幾輪已封存的執行，只有彙總值，較舊的被切掉時 `runs_truncated` 為真；`live_sessions` 是現在跑得最兇的幾個 CLI Session（各自 `{input, output, calls}`），`live_session_count` 是總共有幾個，`by_day` 則是最近一週的全域用量。計數的來源是各廠商自己的 Session Log，所以 Navide 讀不到 Log 的廠商是「沒有貢獻」，而不是回一個零。`cli_usage` 是另外一半 —— 那邊是廠商端還剩多少額度，這邊是這裡記錄到的花費 |
 
 ### Workspace、Skills 與指示檔
@@ -560,7 +560,7 @@ Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`�
 
 #### 編輯樣板
 
-另外四個 Tool 寫的是「一輪執行是從什麼定義組出來的」。和上面八個不同，它們**不**走視窗：
+另外五個 Tool 寫的是「一輪執行是從什麼定義組出來的」。和上面八個不同，它們**不**走視窗：
 它們直接寫後端自己的 Store，並廣播與 WS handler 相同的 `pipelines.changed`／
 `stages.changed`／`roles.changed` 事件（`pipeline_graph` 會先送 `pipeline.graph_changed`，
 再送 Stage 與 Pipeline 的事件），所以開著的 Pipelines 視窗會自己更新。前三個的讀取端是
@@ -572,6 +572,7 @@ Renderer 管，所以它們分別走 `ui.pipeline.next`／`.resume`／`.reset`�
 | `stage_define` | `op`、`pipeline_id`、`stage_id`、`stage`、`ids`、`workspace_path` | 在一個 Pipeline 裡新增、編輯、移除、重新排序或重新灌入它的 **Stage**。一個 Stage 是一個步驟，裡面裝著會變成 Pane 的 Slot：每個 Slot 指名一個 CLI（`agent_key`）與一個 Role（`role_key`），並帶著那個 Pane 啟動時要用的 Kickoff 文字。`pipeline_id` 留空代表**作用中**的那個 Pipeline，也就是 Pipelines 視窗選定的那個，不一定是你剛才在讀的那個 —— 請明寫。回傳 `{ok, op, stages, pipeline_id, pipelines, active_pipeline_id}`，`upsert` 另外帶 `stage`。一個 Pipeline 的最後一個 Stage 不能刪 |
 | `role_define` | `op`、`key`、`new_key`、`label`、`one_line`、`system_prompt`、`properties` | 建立、編輯、更名、刪除或重新灌入 Slot 選角用的 **Role**。Role 就是一段有名字的 System Prompt：Slot 以 `role_key` 指名一個，而那個 Slot 開出來的 Pane 就以這段 Prompt 啟動。Role 是整台機器共用的 —— 不分 Pipeline、不分 Workspace —— 所以這裡改一次會影響每個指名該 Role 的 Pipeline，也因此沒有 `workspace_path` 可以縮小範圍。回傳 `{ok, op, roles}`，`upsert` 與 `rename` 另外帶 `role`，`rename` 還帶 `repointed_pipeline_ids`。最後一個 Role 不能刪。已經開起來的 Pane 會保留它拿到的那段 Prompt；改動影響的是那個 Slot 下一次開出來的 Pane，不是螢幕上這些 |
 | `pipeline_graph` | `op`、`pipeline_id`、`ops`、`graph`、`workspace_path` | 把 Pipeline **樣板**當成一張圖來讀或編輯：Slot 節點（各是一個 CLI Pane，帶著和 Stage Slot 相同的 Agent、Role、Label、Kickoff 與 Commander 欄位，另可有 `params`）、Gate 節點（執行會停在那裡，直到 `pipeline_gate` 決定）與一個 Trigger，用 `main`、`reject`、`branch` 與 `error` 邊連起來。一個節點會等它上游的每個節點都完成。從沒以圖編輯過的 Pipeline，`get` 會回它的 Stage 推導出來的圖（`derived: true`），在你寫入之前都不會改變。`pipeline_id` 留空代表作用中的 Pipeline —— 請明寫。回傳 `{ok, op, pipeline_id, graph, stages}`，`get` 另外帶 `derived`；不合法的圖回 `error_code: "invalid"`，原因列在 `errors`，而且什麼都沒寫進去 |
+| `pipeline_import_n8n` | `json`、`dry_run`、`default_agent`、`name`、`workspace_path` | 把匯出的 n8n workflow 轉成一個**新的** Pipeline 樣板。`dry_run`（預設 `true`）什麼都不寫，只回預覽用的 `graph`、轉換報告 `report` 與憑證清單 `credentials`；`dry_run: false` 會建立新的 Pipeline —— 絕不覆寫既有的，名稱撞到會加上 ` (2)`、` (3)`…… —— 存進圖、遮蔽過的來源 JSON 與憑證清單，後兩者只留在這台機器（設定包匯出不含它們）。大多數步驟由 CLI Agent 依節點原本的參數代行，結果可能和 n8n 不同；`report.slots` 列出每個 Slot 完整的 Kickoff，`report.gates` 列出每個 Gate 的提示。內嵌的秘密一律換成 `<removed: add credential for …>`，`report.secretsRemoved` 只寫節點與欄位。匯入的 Pipeline 不論由誰啟動，每次執行都會把它的 Pane 標上 Navide Guard 的外部內容標記。回傳 `{ok, dry_run, graph, report, credentials}`，建立了 Pipeline 時另帶 `pipeline` 與 `pipelines`；不是 n8n workflow 的輸入回 `error_code: "invalid"` |
 
 **每個 `op` 各需要哪些參數。** 這是這幾個 Tool 最容易用錯的地方：`op` 決定了其他參數
 哪些是必要的，缺了就會回 `ok: false` 帶 `error_code: "missing_argument"`，而且什麼都
@@ -607,21 +608,23 @@ Pipeline 則照常可用，圖也會跟著更新。
 **子 Pipeline。** `subpipeline` 節點（`subpipeline: {pipelineId, task?, wait?: true}`）會執行另一條 Pipeline 並等它完成。這一輪會在節點這裡掛起，它的 Pane 保留不關。子 Pipeline 在同一個 workspace 以一般的一輪執行。子 Pipeline 完成後，它最後幾個步驟的摘要和結構化產出就是這個節點的產出，父 run 接著從下一個 Stage 繼續。`task` 是子 run 的任務，留空時用父 run 的任務，可以使用 `{{task}}`、`{{prev.summary}}`、`{{node.<id>.output}}`。子 run 會繼承父 run 的 Guard taint。子 run 失敗時這個節點就失敗，接著和 Slot 一樣走重試（`set_retry`）或 error 邊。父 run 等待期間，這個 workspace 不能啟動其他一輪：啟動會被拒絕並寫明父 run 的名稱，直到它被 resume 或 reset。中止時，子 run 和父 run 會一起暫停；resume 時先接續子 run，再接續父 run。reset 會把兩者都清掉。跨 Pipeline 的呼叫不能成環：A → B → A 在儲存時就會被拒絕，被指定的 Pipeline 也必須存在。巢狀最多 3 層。子 run 執行期間，`pipeline_status` 會帶 `run_stack`（等待中的父 run）、`parent` 和 `depth`。開著的 Pane 數是各層加總，最多是 3 輪的份量。沒有 subpipeline 節點的圖，行為和以前完全相同。
 
 **branch 邊與 error 邊。** 兩者都從 Slot 出發。`branch` 邊帶 `when`：是字串時，與該 Slot 的
-Agent 獨立一行回報的 `---BRANCH: <value>---` 比對（不分大小寫；`"default"` 在該 Slot 其他
-branch 都沒對上時走）；是 `{path, equals}` 時，與 Agent 用 `---OUTPUT-START---`、
-`---OUTPUT-END---` 兩行包住回報的 JSON 的某個欄位比對。`error` 邊只在該 Slot 失敗時走：
-Kickoff 沒送到 Agent，或 Agent 回報了 `---NODE-FAILED: <reason>---`。沒有 error 邊的 Slot，
+Agent 獨立一行回報的 `---BRANCH:<code>: <value>---` 比對（不分大小寫；`"default"` 在該 Slot 其他
+branch 都沒對上時走）；是 `{path, equals}` 時，與 Agent 用 `---OUTPUT-START:<code>---`、
+`---OUTPUT-END:<code>---` 兩行包住回報的 JSON 的某個欄位比對。`error` 邊只在該 Slot 失敗時走：
+Kickoff 沒送到 Agent，或 Agent 回報了 `---NODE-FAILED:<code>: <reason>---`。沒有 error 邊的 Slot，
 Kickoff 沒送到時仍和以前一樣讓這一輪以失敗結束。節點只要有至少一條輸入被走過就會執行；所有輸入
 都沒被走過的節點會被略過（`nodes` 裡是 `{status: "skipped", skipReason: "untaken"}`），只由它
-接出去的節點也一樣略過。這些訊號只從 Agent 自己的回覆讀取，絕不從 Kickoff 讀；Slot 的 Kickoff
-會附上它的邊需要的訊號說明。Kickoff 也可以用 `{{node.<id>.output}}`（整段 JSON）或
+接出去的節點也一樣略過。`<code>` 是每次 Kickoff 在最後一行給出的隨機訊號代碼；沒帶這個代碼的訊號一律不算，
+所以 Kickoff 的回顯、Agent 讀到的檔案或網頁、匯入的範本，都不能選分支、寫入產出或讓步驟失敗。
+Claude Code 和 Codex 的訊號只從 CLI 自己紀錄裡的回合文字讀，絕不看畫面；其他 CLI 只讀 Kickoff 之後的畫面。
+Slot 的 Kickoff 會附上它的邊需要的訊號說明。Kickoff 也可以用 `{{node.<id>.output}}`（整段 JSON）或
 `{{node.<id>.output.<path>}}`（單一欄位）讀別的節點的產出，取不到時為空字串。Stage 仍是一層一層
 執行，所以輸入已經就緒的節點，可能還要等同一層裡不相關的節點。沒有 branch 邊也沒有 error 邊的圖，
 行為和以前完全相同。
 
 **執行進行中還去編輯會怎樣。** 當該 Workspace 有一輪執行處於 `running` 狀態時，
 `pipeline_define` 的 `delete` 與 `set_active` 會直接被拒絕；`reset_builtin` 則是在
-進行中的那一輪正用著該 Pipeline 時被拒絕。`stage_define` 的四個 op 與 `pipeline_graph` 的 `apply`、`set` **全部**同樣被拒絕
+進行中的那一輪正用著該 Pipeline 時被拒絕。`stage_define` 的四個 op 與 `pipeline_graph` 的 `apply`、`set` **全部**同樣被拒絕；`pipeline_import_n8n` 的 `dry_run: false` 則和 `delete` 一樣，在該工作區有 `running` 狀態的執行時被拒絕
 —— 執行中途被改掉的 Stage 清單，等於在這一輪腳下換了流程。拒絕的形式是 `ok: false` 帶
 `error_code: "pipeline_running"`，而且什麼都沒寫進去。一輪執行是跟它啟動當下記錄的
 Pipeline 比對，所以明寫那個 Pipeline 也繞不過這道守衛；其他 Workspace、或跑著別的
@@ -635,7 +638,7 @@ Pipeline 的執行則不受影響。`workspace_path` 指的是「要檢查哪個
 它們改指到別的 Role，或改成更名。指著已刪除 Role 的 Slot 會讓 Role 注入失敗，那個 Stage
 的 Pane 會停在一個空 Prompt 前面，畫面上沒有任何東西說明原因 —— 這道拒絕就是為了這個。
 
-這四個 Tool 還會回的 `error_code` 是 `not_found` 與 `invalid`（Store 拒絕了那個值）。
+這五個 Tool 還會回的 `error_code` 是 `not_found` 與 `invalid`（Store 拒絕了那個值）。
 任何一種失敗都不會寫入。
 
 ### 排程

@@ -59,11 +59,16 @@ def wired(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
         SimpleNamespace(touch=lambda *a, **k: None, list=lambda: [], set_last_state=lambda *a, **k: None),
         raising=False,
     )
-    monkeypatch.setattr(app_module, "stages_store", SimpleNamespace(get_active_pipeline_id=lambda: "parent"), raising=False)
+    imported: dict[str, dict] = {}
+    monkeypatch.setattr(
+        app_module, "stages_store",
+        SimpleNamespace(get_active_pipeline_id=lambda: "parent", imported_from=lambda pid: imported.get(pid or "")),
+        raising=False,
+    )
     monkeypatch.setattr(app_module, "_register_workspace_and_backfill", lambda *a, **k: None, raising=False)
     monkeypatch.setattr(app_module, "_project_payload", lambda p: {"project": p.to_dict()}, raising=False)
     guard_taint._reset_pipeline_runs_for_test()
-    yield SimpleNamespace(store=store, tokens=tokens)
+    yield SimpleNamespace(store=store, tokens=tokens, imported=imported)
     guard_taint._reset_pipeline_runs_for_test()
 
 
@@ -211,6 +216,46 @@ async def test_a_tainted_child_keeps_its_taint_on_the_parent(wired, ws) -> None:
     await _call(ws_handlers.pipeline_complete, {"workspace_path": ws})
     await _call(ws_handlers.pipeline_child_finished, {"workspace_path": ws, "outcome": "completed"})
     assert guard_taint.pipeline_run_taint(ws) == "child read external content"
+
+
+async def test_a_child_of_an_imported_parent_is_tainted_and_the_parent_stays_so(wired, ws) -> None:
+    # #741: a run of an imported pipeline is tainted whoever starts it; its
+    # child carries that taint, and the parent has it again when it returns.
+    wired.imported["parent"] = {"source": "n8n", "workflow": "Leads"}
+    await _start(ws, "parent", "p", 2)
+    imported = guard_taint.pipeline_run_taint(ws)
+    assert "Leads" in imported
+    f = (await _suspend(ws))["payload"]["frame_id"]
+    await _start(ws, "child", "c", 1, child_of=f)
+    assert guard_taint.pipeline_run_taint(ws) == imported
+    await _call(ws_handlers.pipeline_complete, {"workspace_path": ws})
+    # Even when a restart emptied the in-memory run table before it returned.
+    guard_taint._reset_pipeline_runs_for_test()
+    await _call(ws_handlers.pipeline_child_finished, {"workspace_path": ws, "outcome": "completed"})
+    assert guard_taint.pipeline_run_taint(ws) == imported
+
+
+async def test_an_imported_pipeline_called_as_a_child_is_tainted_and_taints_its_parent(wired, ws) -> None:
+    wired.imported["child"] = {"source": "n8n", "workflow": "Inbox triage"}
+    await _start(ws, "parent", "p", 2)
+    assert guard_taint.pipeline_run_taint(ws) == ""
+    f = (await _suspend(ws))["payload"]["frame_id"]
+    await _start(ws, "child", "c", 1, child_of=f)
+    child_taint = guard_taint.pipeline_run_taint(ws)
+    assert "Inbox triage" in child_taint
+    await _call(ws_handlers.pipeline_complete, {"workspace_path": ws})
+    await _call(ws_handlers.pipeline_child_finished, {"workspace_path": ws, "outcome": "completed"})
+    # Merged, never cleared: the clean parent now carries the child's taint.
+    assert guard_taint.pipeline_run_taint(ws) == child_taint
+
+
+async def test_resuming_a_parent_stopped_at_its_call_keeps_the_frames_taint(wired, ws) -> None:
+    guard_taint.arm_pipeline_run(ws, "started by worker")
+    await _start(ws, "parent", "p", 3)
+    await _suspend(ws, next_index=2)
+    guard_taint._reset_pipeline_runs_for_test()
+    await _call(ws_handlers.pipeline_resume, {"workspace_path": ws})
+    assert guard_taint.pipeline_run_taint(ws) == "started by worker"
 
 
 async def test_a_clean_parent_has_a_clean_child(wired, ws) -> None:

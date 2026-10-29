@@ -568,3 +568,63 @@ describe('PluginStorageStore', () => {
     ])
   })
 })
+
+describe('carryViewState (H1)', () => {
+  const set = (store: PluginStorageStore, packageVersion: string, key: string, value: string, workspace: string | null = null) =>
+    store.execute({
+      address: 'storage.set',
+      args: { scope: workspace === null ? 'plugin' : 'workspace', key, value },
+      partition: { pluginId, workspaceId: workspace, key },
+      snapshot: { pluginId, tier: 'active', packageVersion },
+    })
+  const get = (store: PluginStorageStore, packageVersion: string, key: string, workspace: string | null = null) =>
+    store.execute({
+      address: 'storage.get',
+      args: { scope: workspace === null ? 'plugin' : 'workspace', key },
+      partition: { pluginId, workspaceId: workspace, key },
+      snapshot: { pluginId, tier: 'active', packageVersion },
+    })
+
+  it('copies only view-state keys of every partition, over the same keys of the target', async () => {
+    const { store } = await storageFixture()
+    await set(store, '1.0.0', 'view-state:left', 'old-left')
+    await set(store, '1.0.0', 'setting', 'old-setting')
+    await set(store, '1.0.0', 'view-state:panel', 'old-panel', workspaceId)
+    await set(store, '1.0.0', 'draft', 'old-draft', workspaceId)
+    await set(store, '2.0.0', 'view-state:left', 'new-left')
+    await set(store, '2.0.0', 'view-state:only-new', 'kept')
+    await set(store, '2.0.0', 'setting', 'new-setting')
+
+    await store.carryViewState(pluginId, '1.0.0', '2.0.0')
+
+    expect(await get(store, '2.0.0', 'view-state:left')).toEqual({ found: true, value: 'old-left' })
+    expect(await get(store, '2.0.0', 'view-state:only-new')).toEqual({ found: true, value: 'kept' })
+    expect(await get(store, '2.0.0', 'setting')).toEqual({ found: true, value: 'new-setting' })
+    // The target had no workspace partition: it is created with the view state only.
+    expect(await get(store, '2.0.0', 'view-state:panel', workspaceId)).toEqual({ found: true, value: 'old-panel' })
+    expect(await get(store, '2.0.0', 'draft', workspaceId)).toEqual({ found: false, value: null })
+    // The source is read, never changed.
+    expect(await get(store, '1.0.0', 'view-state:left')).toEqual({ found: true, value: 'old-left' })
+    expect(await get(store, '1.0.0', 'setting')).toEqual({ found: true, value: 'old-setting' })
+  })
+
+  it('writes nothing when the source has no view state or no snapshot', async () => {
+    const { store, root } = await storageFixture()
+    await store.carryViewState(pluginId, '1.0.0', '2.0.0')
+    await set(store, '1.0.0', 'setting', 'old')
+    await store.carryViewState(pluginId, '1.0.0', '2.0.0')
+    expect(await readdir(join(root, hash(pluginId)))).toEqual([hash('1.0.0')])
+  })
+
+  it('refuses the same version, and writes nothing when the target would exceed its quota', async () => {
+    const { store, root } = await storageFixture()
+    await expect(store.carryViewState(pluginId, '1.0.0', '1.0.0')).rejects.toThrow(/must differ/)
+    const large = 'x'.repeat(STORAGE_LIMITS.maxValueBytes - 64)
+    for (let index = 0; index < 6; index += 1) await set(store, '1.0.0', `view-state:${index}`, large, `ws-${index}`)
+    for (let index = 0; index < 6; index += 1) await set(store, '2.0.0', `other-${index}`, large, `other-${index}`)
+    const before = await readFile(partitionFile(root, '2.0.0', 'active', 'workspace', 'other-0'), 'utf8')
+    await expect(store.carryViewState(pluginId, '1.0.0', '2.0.0')).rejects.toMatchObject({ code: 'STORAGE_QUOTA_EXCEEDED' })
+    expect(await get(store, '2.0.0', 'view-state:0', 'ws-0')).toEqual({ found: false, value: null })
+    expect(await readFile(partitionFile(root, '2.0.0', 'active', 'workspace', 'other-0'), 'utf8')).toBe(before)
+  })
+})
