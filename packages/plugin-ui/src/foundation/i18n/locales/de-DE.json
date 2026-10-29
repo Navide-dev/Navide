@@ -2018,6 +2018,7 @@
       "nativeOnMarker": "Nativer Code an",
       "browseMarketplace": "Navide Marketplace durchsuchen",
       "bundledGit": "Mitgeliefertes Git",
+      "bundledBrowser": "Mitgelieferter Browser",
       "state": {
         "active": "Aktiv",
         "removed": "Entfernt",
@@ -2083,6 +2084,7 @@
       "permissionDetails": "Berechtigungen und Gewährungen",
       "permissionDetailsWithActivity": "Berechtigungen, Gewährungen und Aktivität",
       "plansRiskNote": "Dieses Navide-Plug-in hat ein eigenes Backend-Programm, das mit Ihren Benutzerrechten und ohne Sandbox läuft. Es arbeitet mit Plan-Dokumenten im aktuellen Projekt, ausgehend vom darüber gefundenen Stammverzeichnis des Git-Repositorys (einschließlich darin verschachtelter Repositorys): die Plan- und Berichtsordner unter .agent-team, .claude, .cursor und docs in beliebiger Tiefe, .plans im Stammverzeichnis sowie deren .history (nur lesend). Sein Backend liest und schreibt sie direkt; Löschen und Umbenennen laufen weiterhin über Navide.",
+      "browserRiskNote": "Dieses Navide-Plug-in hat ein eigenes Backend-Programm, das mit Ihren Benutzerrechten und ohne Sandbox läuft. Es kann jede Website öffnen und darin navigieren. Anmeldungen bei Websites bleiben auf diesem Computer gespeichert. Agents können jede Seite lesen, die dieses Navide-Plug-in öffnet, samt ihrem Anmeldestatus.",
       "searchPlaceholder": "Navide-Plug-ins durchsuchen",
       "search": "Suchen",
       "install": "Installieren",
