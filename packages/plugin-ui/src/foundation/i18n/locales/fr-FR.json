@@ -2016,6 +2016,7 @@
       "nativeOnMarker": "Code natif activé",
       "browseMarketplace": "Parcourir Navide Marketplace",
       "bundledGit": "Git fourni",
+      "bundledBrowser": "Navigateur fourni",
       "state": {
         "active": "Actif",
         "removed": "Supprimé",
@@ -2081,6 +2082,7 @@
       "permissionDetails": "Autorisations et accords",
       "permissionDetailsWithActivity": "Autorisations, accords et activité",
       "plansRiskNote": "Ce plugin Navide possède son propre programme backend, qui s’exécute avec vos autorisations d’utilisateur et sans bac à sable. Il travaille sur les documents de plan du projet actuel, à partir de la racine du dépôt Git trouvée au-dessus (y compris les dépôts imbriqués) : les dossiers de plans et de rapports sous .agent-team, .claude, .cursor et docs à n’importe quelle profondeur, .plans à la racine, et leur .history (lecture seule). Son backend les lit et les écrit directement ; les suppressions et renommages passent toujours par Navide.",
+      "browserRiskNote": "Ce plugin Navide possède son propre programme backend, qui s’exécute avec vos autorisations d’utilisateur et sans bac à sable. Il peut ouvrir et parcourir n’importe quel site web. Les connexions aux sites sont conservées sur cet ordinateur. Les agents peuvent lire chaque page que ce plugin Navide ouvre, ainsi que son état de connexion.",
       "searchPlaceholder": "Rechercher des plugins Navide",
       "search": "Rechercher",
       "install": "Installer",

@@ -2016,6 +2016,7 @@
       "nativeOnMarker": "네이티브 코드 켜짐",
       "browseMarketplace": "Navide 마켓플레이스 둘러보기",
       "bundledGit": "기본 포함 Git",
+      "bundledBrowser": "기본 포함 브라우저",
       "state": {
         "active": "사용 중",
         "removed": "제거됨",
@@ -2081,6 +2082,7 @@
       "permissionDetails": "권한 및 부여 내역",
       "permissionDetailsWithActivity": "권한, 부여 내역 및 활동",
       "plansRiskNote": "이 Navide 플러그인에는 자체 백엔드 프로그램이 있으며, 사용자 권한으로 샌드박스 없이 실행돼요. 현재 프로젝트의 계획 문서를 다루며, 그 위에서 찾은 Git 저장소 루트(안에 중첩된 저장소 포함)부터 시작해요. 대상은 모든 깊이의 .agent-team, .claude, .cursor, docs 아래 계획 및 보고서 폴더, 루트의 .plans, 그리고 그 .history(읽기 전용)예요. 백엔드가 직접 읽고 쓰며, 삭제와 이름 변경은 여전히 Navide를 거쳐요.",
+      "browserRiskNote": "이 Navide 플러그인에는 자체 백엔드 프로그램이 있으며, 사용자 권한으로 샌드박스 없이 실행돼요. 어떤 웹사이트든 열고 탐색할 수 있고, 사이트 로그인 정보는 이 컴퓨터에 저장돼요. agent는 이 Navide 플러그인이 연 모든 페이지의 내용과 로그인 상태를 읽을 수 있어요.",
       "searchPlaceholder": "Navide 플러그인 검색",
       "search": "검색",
       "install": "설치",

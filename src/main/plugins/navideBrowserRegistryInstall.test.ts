@@ -6,7 +6,7 @@
 // (backend outside the third-party gate with exactly the `web` bridge port,
 // agent tools behind the master switch but without consent) and that look-alikes do
 // not get it: a third-party `acme.browser`, and `navide.browser` from any
-// source other than the Official Registry.
+// source other than the Official Registry or the App bundle.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { generateKeyPairSync, sign as edSign } from 'node:crypto'
@@ -385,46 +385,63 @@ describe('(c) look-alikes do not get first-party treatment', () => {
     expect(activations.has('navide.browser')).toBe(false)
   })
 
-  it('never treats a navide.browser activation without Official Registry provenance as first-party', async () => {
+  it('never treats a navide.browser activation from neither the Official Registry nor the App bundle as first-party', async () => {
     register()
     const installed = await installFromRegistry('navide.browser')
     const { provenance: _provenance, ...bare } = installed
     for (const activation of [
       bare,
       { ...bare, provenance: 'developer-local-unpacked' as const },
-      { ...bare, provenance: 'factory-bundled' as const },
       { ...bare, source: 'local-unsigned' as const },
+      { ...bare, provenance: 'factory-bundled' as const, source: 'local-signed' as const },
     ]) {
       expect(firstPartyBackendLaunchSpec(activation)).toBeNull()
       expect(firstPartyAgentToolSpec(activation)).toBeNull()
     }
   })
+
+  it('treats the App-bundled navide.browser as first-party, like a registry install', async () => {
+    register()
+    const installed = await installFromRegistry('navide.browser')
+    const bundled = { ...installed, provenance: 'factory-bundled' as const }
+    const spec = firstPartyBackendLaunchSpec(bundled)
+    expect(spec).not.toBeNull()
+    expect(isThirdPartyLaunchSpec(spec!)).toBe(false)
+    expect(spec!.approvedBridgePorts).toEqual(['web'])
+    expect(firstPartyAgentToolSpec(bundled)).not.toBeNull()
+  })
 })
 
-describe('disable and removal of a registry-installed navide.browser', () => {
-  it('can be disabled: its web views go and it registers nothing; enabling brings it back', async () => {
-    register()
-    await installFromRegistry('navide.browser')
-    // The backend's web port has used the registry, as a running browser does.
-    manager.pluginWebViews()
+describe('a registry-installed navide.browser keeps the built-in rules, as Git and Mini-IDE do', () => {
+  /** The Host's built-in switch (applyBuiltinSwitch in main) over the real manager. */
+  const builtinSwitch = {
+    setBuiltinDisabled: async (id: string, disabled: boolean) => {
+      if (disabled) await manager.suspendBuiltinPlugin(id)
+      else manager.resumeBuiltinPlugin(id)
+    },
+  }
+
+  it('is disabled with the built-in switch: its backend stops and Enable starts it again', async () => {
+    register(OFFICIAL_TRUST, builtinSwitch)
+    const installed = await installFromRegistry('navide.browser')
+    manager.registerBuiltinBackendActivation(firstPartyBackendLaunchSpec(installed)!)
+    expect(manager.hasBackendActivation('navide.browser', '1.0.0')).toBe(true)
+    expect(manager.canDisablePlugin('navide.browser')).toBe(false)
+
     await expect(call('plugins:setDisabled', { id: 'navide.browser', disabled: true }))
       .resolves.toEqual({ id: 'navide.browser', disabled: true })
-    expect(web.destroyed).toContain('navide.browser')
-    expect(activations.has('navide.browser')).toBe(false)
-    expect(manager.isPluginDisabled('navide.browser')).toBe(true)
-    expect(manager.getDescriptor('navide.browser')).toBeUndefined()
-    const listed = (await call('plugins:listInstalled')) as Array<Record<string, unknown>>
-    expect(listed.find((pkg) => pkg.id === 'navide.browser')).toMatchObject({ disabled: true })
+    expect(manager.isBuiltinPluginDisabled('navide.browser')).toBe(true)
+    expect(manager.hasBackendActivation('navide.browser', '1.0.0')).toBe(false)
+    expect(manager.listDisabledBuiltinPlugins()).toEqual(['navide.browser'])
 
     await expect(call('plugins:setDisabled', { id: 'navide.browser', disabled: false }))
       .resolves.toEqual({ id: 'navide.browser', disabled: false })
-    expect(activations.get('navide.browser')).toMatchObject({ provenance: 'official-registry' })
-    expect(manager.isPluginDisabled('navide.browser')).toBe(false)
-    expect(manager.getDescriptor('navide.browser')?.packageVersion).toBe('1.0.0')
+    expect(manager.isBuiltinPluginDisabled('navide.browser')).toBe(false)
+    expect(manager.hasBackendActivation('navide.browser', '1.0.0')).toBe(true)
   })
 
-  it('stays disabled across a restart of the App', async () => {
-    register()
+  it('stays disabled across a restart of the App, and its backend waits for Enable', async () => {
+    register(OFFICIAL_TRUST, builtinSwitch)
     await installFromRegistry('navide.browser')
     await call('plugins:setDisabled', { id: 'navide.browser', disabled: true })
     const coldStart = new FrontendPluginManager()
@@ -440,28 +457,21 @@ describe('disable and removal of a registry-installed navide.browser', () => {
       },
     })
     expect(loaded.errors).toEqual([])
-    expect(loaded.activationCatalog.some((entry) => entry.pluginId === 'navide.browser')).toBe(false)
-    expect(coldStart.getDescriptor('navide.browser')).toBeUndefined()
-    expect(coldStart.isPluginDisabled('navide.browser')).toBe(true)
+    const activation = loaded.activationCatalog.find((entry) => entry.pluginId === 'navide.browser')
+    expect(activation).toBeDefined()
+    expect(coldStart.isBuiltinPluginDisabled('navide.browser')).toBe(true)
+    // As main's startup loop registers it: kept, not started.
+    coldStart.registerBuiltinBackendActivation(firstPartyBackendLaunchSpec(activation!)!)
+    expect(coldStart.hasBackendActivation('navide.browser', '1.0.0')).toBe(false)
+    await coldStart.closeBackendPlugins()
   })
 
-  it('can be removed, and removal clears its browser partition', async () => {
-    register()
+  it('cannot be removed: its files and browser partition stay', async () => {
+    register(OFFICIAL_TRUST, builtinSwitch)
     await installFromRegistry('navide.browser')
-    manager.pluginWebViews()
-    await expect(call('plugins:remove', { id: 'navide.browser' })).resolves.toEqual({ ok: true })
-    expect(web.destroyed).toContain('navide.browser')
-    expect(web.cleared).toEqual(['persist:navide-web:navide.browser'])
-    expect(activations.has('navide.browser')).toBe(false)
-    expect(manager.listInstalledPackages().some((pkg) => pkg.id === 'navide.browser')).toBe(false)
-  })
-
-  it('clears the browser partition when a disabled navide.browser is removed', async () => {
-    register()
-    await installFromRegistry('navide.browser')
-    await call('plugins:setDisabled', { id: 'navide.browser', disabled: true })
-    await expect(call('plugins:remove', { id: 'navide.browser' })).resolves.toEqual({ ok: true })
-    expect(web.cleared).toEqual(['persist:navide-web:navide.browser'])
+    await expect(call('plugins:remove', { id: 'navide.browser' })).rejects.toThrow(/cannot be removed/)
+    expect(web.cleared).toEqual([])
+    expect(manager.listInstalledPackages().some((pkg) => pkg.id === 'navide.browser')).toBe(true)
   })
 })
 

@@ -1083,12 +1083,13 @@ export function isReservedPluginId(id: string): boolean {
   return id === HOST_EVENT_SOURCE_PLUGIN_ID || id.startsWith('navide.')
 }
 
-/** The three bundled first-party Navide plugins. They cannot be removed; the
- *  user can disable them. Their names, for messages the user reads. */
+/** The bundled first-party Navide plugins. They cannot be removed; the user
+ *  can disable them. Their names, for messages the user reads. */
 export const BUILTIN_PLUGIN_NAMES: ReadonlyMap<string, string> = new Map([
   ['navide.plans', 'Plans'],
   ['navide.git', 'Git'],
   ['navide.mini-ide', 'Mini-IDE'],
+  ['navide.browser', 'Browser'],
 ])
 
 /** A web view refusal as a capability error. The view-side contract has no
@@ -2497,14 +2498,16 @@ export class FrontendPluginManager {
   }
 
   /** A first-party package the Official Registry installed that is not
-   *  bundled with the App (navide.browser; never Plans): the user disables
-   *  and removes it like any Marketplace package. Every other reserved
-   *  `navide.` id keeps its own rules. */
+   *  bundled with the App (never Plans): the user disables and removes it like
+   *  any Marketplace package. A bundled built-in (navide.browser included)
+   *  installed from the Registry keeps the built-in rules, as Git and
+   *  Mini-IDE do. Every other reserved `navide.` id keeps its own rules. */
   isMarketplaceFirstPartyPackage(
     pluginId: string,
     provenance: InstalledPluginPackageSummary['provenance'] = this.installedPackages.get(pluginId)?.provenance,
   ): boolean {
-    return isFirstPartyAgentToolPlugin(pluginId) && provenance === 'official-registry'
+    return isFirstPartyAgentToolPlugin(pluginId) && !BUILTIN_PLUGIN_NAMES.has(pluginId) &&
+      provenance === 'official-registry'
   }
 
   /** The user's Disabled switch for the built-in Plans, Git and Mini-IDE
@@ -2533,6 +2536,17 @@ export class FrontendPluginManager {
       this.preparePluginRemoval(pluginId)
     }
     this.refreshHostSessionRegistration()
+  }
+
+  /** Register a built-in's backend, or, while the built-in is disabled, keep
+   *  it for {@link resumeBuiltinPlugin} instead: a built-in disabled before
+   *  the App started never starts its backend until the user enables it. */
+  registerBuiltinBackendActivation(activation: BackendPluginLaunchSpec): void {
+    if (this.isBuiltinPluginDisabled(activation.pluginId)) {
+      this.suspendedBuiltinBackends.set(activation.pluginId, [activation])
+      return
+    }
+    this.registerBackendActivation(activation)
   }
 
   /** Undo {@link suspendBuiltinPlugin} for a just-enabled built-in. */

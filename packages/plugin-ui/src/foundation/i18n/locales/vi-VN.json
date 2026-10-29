@@ -2016,6 +2016,7 @@
       "nativeOnMarker": "Mã gốc đang bật",
       "browseMarketplace": "Duyệt Navide Marketplace",
       "bundledGit": "Git đi kèm",
+      "bundledBrowser": "Trình duyệt đi kèm",
       "state": {
         "active": "Đang hoạt động",
         "removed": "Đã gỡ",
@@ -2081,6 +2082,7 @@
       "permissionDetails": "Quyền và cấp phép",
       "permissionDetailsWithActivity": "Quyền, cấp phép và hoạt động",
       "plansRiskNote": "Plugin Navide này có chương trình backend riêng, chạy với quyền người dùng của bạn và không có sandbox. Nó làm việc với tài liệu Plan trong dự án hiện tại, bắt đầu từ thư mục gốc của kho Git tìm thấy phía trên (kể cả các kho lồng bên trong): các thư mục plan và báo cáo trong .agent-team, .claude, .cursor và docs ở mọi cấp, .plans ở thư mục gốc và .history của chúng (chỉ đọc). Backend của nó đọc và ghi trực tiếp các tệp đó; thao tác xóa và đổi tên vẫn đi qua Navide.",
+      "browserRiskNote": "Plugin Navide này có chương trình backend riêng, chạy với quyền người dùng của bạn và không có sandbox. Nó có thể mở và duyệt bất kỳ trang web nào. Thông tin đăng nhập trang web được lưu trên máy tính này. Agent có thể đọc mọi trang mà plugin Navide này mở và trạng thái đăng nhập của trang đó.",
       "searchPlaceholder": "Tìm plugin Navide",
       "search": "Tìm",
       "install": "Cài đặt",

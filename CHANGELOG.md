@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Navide Browser (0.2.35): Navide Browser now ships with the App on macOS, Windows and Linux and is enabled by default, like Plans, Git and Mini-IDE; it no longer has to be installed from the Navide Marketplace. Its package carries the App's version and its own native backend for each platform. It can be disabled in Settings → Navide Plugins like the other built-ins, which stops its backend and agent tools until it is enabled again; like them it cannot be removed. A copy installed earlier from the Marketplace keeps running and takes precedence over the bundled one, as for Git and Mini-IDE. Its backend gets the first-party treatment only as the bundled package or an Official Registry install, never from a developer folder or a local file. Two strings (the Bundled Browser label and its risk note) return in all 11 interface languages.
+
 ## [0.2.34] — unreleased
 
 ### Added
