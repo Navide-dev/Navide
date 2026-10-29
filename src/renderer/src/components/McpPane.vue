@@ -22,6 +22,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import SettingsOverflowActions from './settings/SettingsOverflowActions.vue'
+import { shortenMiddle } from '../lib/shortenPath'
 import StaleConfigNotice from './StaleConfigNotice.vue'
 import {
   isSecretSettingKey,
@@ -238,6 +240,14 @@ function sourceLabel(source: string): string {
 
 function rowTransport(row: McpRow): string {
   return row.navide?.transport ?? row.natives[0]?.transport ?? 'unknown'
+}
+
+/** The transport in plain words: a stdio server runs on this machine, an
+ *  http/sse one is reached over the network. The raw value stays in the tooltip. */
+function transportLabel(transport: string): string {
+  if (transport === 'stdio') return t('settings.mcp.transport-local')
+  if (transport === 'http' || transport === 'sse') return t('settings.mcp.transport-remote')
+  return transport
 }
 
 /** Where the row is set up: one chip per place, Navide's first. */
@@ -471,18 +481,29 @@ async function openConfig(path: string): Promise<void> {
 function entries(map: Record<string, string>): [string, string][] {
   return Object.entries(map)
 }
+// The card's one detail line: the URL or command, a native's error, or a dash.
+function cardDetail(row: McpRow): string {
+  return row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—'
+}
 </script>
 
 <template>
   <section class="mcp-pane" :aria-label="t('settings.mcp.agent-title')">
+    <!-- The page's one toolbar row: the parent's secondary actions (slot) and
+         Refresh, then its one primary action at the right. The page intro
+         sits under the page title (the settings modal renders it), and the
+         section keeps its name as an aria-label only. On a narrow page the
+         secondary actions fold into one "⋯" menu; the primary stays visible. -->
     <header class="mcp-pane-head">
-      <div>
-        <h2>{{ t('settings.mcp.agent-title') }}</h2>
-        <p>{{ t('settings.mcp.agent-intro') }}</p>
+      <div class="mcp-pane-actions">
+        <SettingsOverflowActions align="start">
+          <slot name="actions" />
+          <button type="button" :disabled="loading" @click="emit('refresh')">
+            {{ t('action.refresh') }}
+          </button>
+        </SettingsOverflowActions>
+        <slot name="primary" />
       </div>
-      <button type="button" :disabled="loading" @click="emit('refresh')">
-        {{ t('action.refresh') }}
-      </button>
     </header>
 
     <StaleConfigNotice part="mcp" />
@@ -492,19 +513,22 @@ function entries(map: Record<string, string>): [string, string][] {
           v-for="chip in sourceChips"
           :key="chip.key"
           type="button"
-          class="mcp-chip"
+          class="mcp-chip settings-filter-chip"
           :class="{ on: sourceFilter === chip.key }"
           :aria-pressed="sourceFilter === chip.key"
           @click="sourceFilter = chip.key"
         >{{ chip.label }}<span class="count">{{ chip.count }}</span></button>
       </div>
+      <!-- Search and the view switch wrap as one unit at the right, so the
+           switch never lands on a row of its own. -->
+      <div class="mcp-filter-end">
       <input
         v-model="query"
         class="mcp-pane-search"
         type="search"
         :placeholder="t('settings.mcp.agent-search')"
       />
-      <div class="mcp-view-switch" role="group" :aria-label="t('settings.mcp.view-label')">
+      <div class="mcp-view-switch settings-segmented" role="group" :aria-label="t('settings.mcp.view-label')">
         <button
           type="button"
           :class="{ on: view === 'browse' }"
@@ -517,6 +541,7 @@ function entries(map: Record<string, string>): [string, string][] {
           :aria-pressed="view === 'compare'"
           @click="view = 'compare'"
         >{{ t('settings.mcp.view-compare') }}</button>
+      </div>
       </div>
     </div>
 
@@ -548,19 +573,25 @@ function entries(map: Record<string, string>): [string, string][] {
                     v-if="row.navide"
                     class="mcp-status-dot"
                     :class="row.navide.status ?? 'unknown'"
+                    aria-hidden="true"
                   ></span>
-                  <strong v-truncate>{{ row.name }}</strong>
-                  <span class="mcp-tag">{{ rowTransport(row) }}</span>
+                  <!-- One line, cut in the middle when long; the full name is in
+                       the tooltip. The status word wraps under it when the two
+                       do not fit side by side. -->
+                  <strong v-truncate="row.name">{{ shortenMiddle(row.name, 28) }}</strong>
+                  <!-- Red alone is not a label: a failed server says so in words. -->
+                  <span v-if="row.navide?.status === 'error'" class="mcp-status-text mcp-status-text--error">{{ t('settings.mcp.status-failed') }}</span>
+                </span>
+                <span class="mcp-card-detail" v-truncate="cardDetail(row)">{{ shortenMiddle(cardDetail(row), 34) }}</span>
+                <!-- The transport and Node badges lead the meta line, so the name keeps the full width. -->
+                <span class="mcp-card-places">
+                  <span class="mcp-tag" :title="rowTransport(row)">{{ transportLabel(rowTransport(row)) }}</span>
                   <span
                     v-if="needsNode(row.navide)"
                     class="mcp-tag mcp-tag-warn"
                     data-testid="mcp-needs-node"
                   >{{ t('settings.mcp.needs-node') }}</span>
-                </span>
-                <span class="mcp-card-detail" v-truncate>
-                  {{ row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—' }}
-                </span>
-                <span class="mcp-card-places" aria-hidden="true">
+                  <span class="mcp-card-places-chips" aria-hidden="true">
                   <span
                     v-for="chip in placeChips(row)"
                     :key="chip.key"
@@ -575,6 +606,7 @@ function entries(map: Record<string, string>): [string, string][] {
                     class="pchip needs"
                   >
                     {{ t('settings.mcp.needs-setup') }}
+                  </span>
                   </span>
                 </span>
               </button>
@@ -892,10 +924,12 @@ function entries(map: Record<string, string>): [string, string][] {
   gap: 12px;
   min-height: 0;
   color: var(--text-primary);
+  container: mcp-pane / inline-size;
 }
-.mcp-pane-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.mcp-pane-head h2 { margin: 0; font-size: 15px; color: var(--text-bright); }
-.mcp-pane-head p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); }
+.mcp-pane-head { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px 12px; }
+.mcp-pane-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+/* Refresh is the same size as the page's actions beside it (.mcp-action-btn). */
+.mcp-pane-actions > button { min-height: var(--control-h-md); padding: 0 11px; font-size: var(--font-xs); }
 button, input, select { font: inherit; }
 button {
   border: 1px solid var(--border-default);
@@ -923,26 +957,11 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 /* ── Filter bar: one bar, both views ───────────────────────────────────── */
 .mcp-filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mcp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.mcp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-2xs);
-}
-.mcp-chip.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
-.mcp-chip .count { font-size: var(--font-3xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
-.mcp-pane-search { flex: 1; min-width: 140px; max-width: 260px; }
-.mcp-view-switch {
-  margin-left: auto;
-  display: inline-flex;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-  overflow: hidden;
-}
-.mcp-view-switch button { border: 0; border-radius: 0; background: transparent; padding: 5px 11px; font-size: var(--font-2xs); }
-.mcp-view-switch button.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
+/* The chips are the Settings window's shared .settings-filter-chip. */
+.mcp-filter-end { display: flex; align-items: center; gap: 10px; margin-left: auto; min-width: 0; }
+.mcp-pane-search { flex: 1 1 200px; min-width: 140px; max-width: 260px; }
+/* The modal's shared .settings-segmented control. */
+.mcp-view-switch { flex: none; }
 
 /* ── Body: main region + optional drawer ───────────────────────────────── */
 .mcp-pane-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-height: 0; }
@@ -957,15 +976,16 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   display: flex;
   align-items: baseline;
   gap: 6px;
-  margin: 10px 4px 6px;
-  font-size: var(--font-3xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  /* SettingsSection's label, on the page's left content line. */
+  margin: 10px 0 8px;
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
 .mcp-group-title .count { font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
-.mcp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.mcp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px; }
 .mcp-card {
   display: flex;
   flex-direction: column;
@@ -973,19 +993,21 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   gap: 5px;
   padding: 9px 11px;
   text-align: left;
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
   min-width: 0;
 }
 .mcp-card:hover:not(:disabled) { background: var(--bg-muted); border-color: var(--border-default); }
 .mcp-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
-.mcp-card.native { border-style: dashed; }
-.mcp-card-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.mcp-card-head strong { flex: 1; font-size: var(--font-xs); color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
+/* Names never break inside a word: one line, shortened in the middle. */
+.mcp-card-head strong { flex: 1 1 auto; min-width: 0; font-size: var(--font-xs); color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mcp-status-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
 .mcp-status-dot.connected { background: var(--success-fg); }
 .mcp-status-dot.error { background: var(--danger-fg); }
+.mcp-status-text { flex: none; font-size: var(--font-2xs); font-weight: 600; white-space: nowrap; }
+.mcp-status-text--error { color: var(--danger-fg); }
 .mcp-status-dot.starting { background: var(--warning-fg); }
 .mcp-status-note { display: block; color: var(--warning-fg); }
 .mcp-status-error { display: block; color: var(--danger-fg); }
@@ -1005,28 +1027,31 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-stderr pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
 .mcp-status-dot.disabled { background: var(--border-default); }
 .mcp-card-detail {
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   font-family: Menlo, Monaco, monospace;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  /* A URL or command never breaks mid-token: one line, cut in the middle. */
+  white-space: nowrap;
   overflow: hidden;
-  word-break: break-all;
+  text-overflow: ellipsis;
 }
-.mcp-card-places { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.mcp-card-places { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 2px; }
+.mcp-card-places-chips { display: contents; }
 .pchip {
   display: inline-block;
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 600;
-  border: 1px solid color-mix(in srgb, var(--success-fg) 40%, transparent);
-  color: var(--success-fg);
+  /* One neutral look for every source: green on some cards and grey on others
+     read as a status the chip does not carry. A switched-off source is told
+     apart by its dashed outline, not by colour. */
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
   white-space: nowrap;
   line-height: var(--lh-base);
 }
-.pchip.off { color: var(--text-secondary); border-color: var(--border-muted); opacity: 0.75; }
+.pchip.off { color: var(--text-secondary); border-style: dashed; }
 .pchip.tools { color: var(--text-secondary); border-color: var(--border-muted); font-weight: 500; }
 .pchip.needs { color: var(--warning-fg); border-color: var(--warning-fg); }
 .mcp-tag {
@@ -1034,11 +1059,10 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-muted);
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
   white-space: nowrap;
   flex: none;
-  text-transform: uppercase;
 }
 
 /* ── Compare: the matrix ───────────────────────────────────────────────── */
@@ -1086,7 +1110,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-matrix td.unsupported > span { color: var(--text-secondary); opacity: 0.6; }
 .mcp-matrix tbody tr.group th {
   background: var(--bg-muted);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1101,7 +1125,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   padding: 0;
   list-style: none;
   color: var(--text-secondary);
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
 }
 .mcp-matrix-legend li { display: flex; align-items: center; gap: 5px; }
 .mcp-matrix-legend .swatch {
@@ -1132,21 +1156,21 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-drawer-title h3 { margin: 0; font-size: var(--font-md); color: var(--text-bright); }
 .mcp-drawer-close { padding: 2px 7px; font-size: var(--font-xs); line-height: 1; }
 .mcp-drawer-section { display: flex; flex-direction: column; gap: 6px; }
-.mcp-drawer-section h4 { margin: 0; font-size: var(--font-3xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
-.mcp-drawer-hint { margin: 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; }
+.mcp-drawer-section h4 { margin: 0; font-size: var(--font-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.mcp-drawer-hint { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); line-height: 1.4; }
 .mcp-drawer-hint.danger { color: var(--danger-fg); }
 .mcp-drawer-hint.warn { color: var(--warning-fg); }
-.mcp-drawer-meta { font-size: 10.5px; color: var(--text-secondary); }
+.mcp-drawer-meta { font-size: var(--font-2xs); color: var(--text-secondary); }
 .mcp-drawer-path {
   display: block;
-  font-size: 10.5px;
+  font-size: var(--font-2xs);
   padding: 5px 8px;
   border-radius: var(--radius-control);
   background: var(--bg-muted);
   word-break: break-all;
 }
 .mcp-drawer-path.muted { color: var(--text-secondary); }
-.mcp-drawer-kv { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: 10.5px; }
+.mcp-drawer-kv { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: var(--font-2xs); }
 .mcp-drawer-kv dt { color: var(--text-secondary); }
 .mcp-drawer-kv dd { margin: 0; word-break: break-all; }
 .mcp-drawer-actions { display: flex; justify-content: flex-start; gap: 8px; }
@@ -1164,28 +1188,36 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   border-radius: var(--radius-control);
 }
 .mcp-drawer-toggle strong { display: block; font-size: var(--font-2xs); color: var(--text-bright); }
-.mcp-drawer-toggle small { display: block; font-size: 10.5px; color: var(--text-secondary); }
-.mcp-tools { font-size: 10.5px; }
+.mcp-drawer-toggle small { display: block; font-size: var(--font-2xs); color: var(--text-secondary); }
+.mcp-tools { font-size: var(--font-2xs); }
 .mcp-tools summary { cursor: pointer; color: var(--text-secondary); }
 .mcp-tool-list { margin: 6px 0 0; padding-left: 16px; color: var(--text-secondary); }
 .mcp-field { display: flex; flex-direction: column; gap: 4px; }
 .mcp-field > span,
 .mcp-field-head {
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-secondary);
 }
 .mcp-field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.mcp-field-head button { padding: 2px 7px; font-size: var(--font-3xs); text-transform: none; letter-spacing: 0; }
+.mcp-field-head button { padding: 2px 7px; font-size: var(--font-2xs); text-transform: none; letter-spacing: 0; }
 .mcp-kv-row { display: flex; align-items: center; gap: 5px; }
 .mcp-kv-row input { flex: 1; min-width: 0; font-size: var(--font-2xs); padding: 5px 7px; }
 .mcp-kv-row .mcp-kv-key { flex: 0 1 40%; }
-.mcp-kv-row button { padding: 3px 7px; font-size: var(--font-3xs); }
-.mcp-kv-index { flex: none; width: 14px; font-size: var(--font-3xs); color: var(--text-secondary); text-align: right; }
+.mcp-kv-row button { padding: 3px 7px; font-size: var(--font-2xs); }
+.mcp-kv-index { flex: none; width: 14px; font-size: var(--font-2xs); color: var(--text-secondary); text-align: right; }
 
 @media (max-width: 900px) {
   .mcp-pane-body, .mcp-pane-body.drawer-open { grid-template-columns: 1fr; }
+}
+/* Narrow page: the actions start at the content edge as one group; the
+   search and the view switch take the first filter row together (the search
+   stretching, the switch at its right), then the chips at the content edge. */
+@container mcp-pane (max-width: 720px) {
+  .mcp-pane-actions { flex: 1 1 100%; justify-content: flex-start; }
+  .mcp-filter-end { order: -1; flex: 1 1 100%; margin-left: 0; }
+  .mcp-pane-search { max-width: none; }
 }
 </style>

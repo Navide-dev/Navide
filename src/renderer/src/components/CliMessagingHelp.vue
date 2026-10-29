@@ -505,7 +505,7 @@ const logRows = computed(() => [
   flex-direction: column;
   gap: 22px;
   color: var(--text-primary);
-  max-width: 78ch;
+  max-width: var(--settings-page-max);
 }
 
 .cmh-intro {

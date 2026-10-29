@@ -29,29 +29,38 @@ function onChange(raw: string): void {
 </script>
 
 <template>
+  <!-- One row per control: the switch, then (while on) the bound itself. -->
   <SettingRow
     data-settings-section="general-recent-workspaces-limit"
     :title="$t('recentWorkspaces.limit-title')"
     :description="$t('recentWorkspaces.limit-hint')"
   >
     <template #control>
-      <div v-if="loaded" class="row-g gap">
-        <template v-if="bounded">
-          <span class="s-ctrl-label">{{ $t('recentWorkspaces.limit-on') }}</span>
-          <input
-            type="number"
-            min="1"
-            :value="limit"
-            @change="onChange(($event.target as HTMLInputElement).value)"
-          />
-        </template>
-        <span v-else class="s-ctrl-label">{{ $t('recentWorkspaces.limit-off') }}</span>
-        <ToggleSwitch
-          :model-value="bounded"
-          :aria-label="$t('recentWorkspaces.limit-title')"
-          @update:model-value="onToggle"
-        />
-      </div>
+      <ToggleSwitch
+        v-if="loaded"
+        :model-value="bounded"
+        :aria-label="$t('recentWorkspaces.limit-title')"
+        @update:model-value="onToggle"
+      />
+    </template>
+  </SettingRow>
+  <SettingRow v-if="loaded && bounded" :title="$t('recentWorkspaces.limit-count')">
+    <template #control>
+      <input
+        class="nv-input recent-limit-input"
+        type="number"
+        min="1"
+        :value="limit"
+        :aria-label="$t('recentWorkspaces.limit-count')"
+        @change="onChange(($event.target as HTMLInputElement).value)"
+      />
     </template>
   </SettingRow>
 </template>
+
+<style scoped>
+.recent-limit-input {
+  width: 96px;
+  box-sizing: border-box;
+}
+</style>

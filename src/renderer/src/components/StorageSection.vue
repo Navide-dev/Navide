@@ -513,7 +513,7 @@ function groupShare(group: StorageGroup): string {
   border-radius: var(--radius-pill);
 }
 .su-risk-safe { color: var(--success-fg); background: var(--success-subtle); }
-.su-risk-caution { color: var(--attention-fg); background: var(--attention-subtle); }
+.su-risk-caution { color: var(--attention-on-subtle); background: var(--attention-subtle); }
 .su-risk-danger { color: var(--danger-fg); background: var(--danger-subtle); }
 .su-locked { color: var(--text-muted); background: var(--bg-muted); }
 .su-paths-toggle { padding: 2px 8px; font-size: var(--font-3xs); }

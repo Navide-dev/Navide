@@ -1200,7 +1200,7 @@
     "go-to-commit": "커밋으로 이동",
     "install-missing": "누락된 항목 설치",
     "fix": "수정",
-    "add-mcp": "MCP 추가 +",
+    "add-mcp": "+ MCP 추가",
     "open-mcp-config": "MCP 설정 열기",
     "accept-ours": "현재 쪽 적용",
     "accept-theirs": "상대 쪽 적용",
@@ -1264,6 +1264,7 @@
     "toggle-replace": "바꾸기 전환 (⌘H)",
     "delete-pipeline": "이 pipeline 삭제",
     "open": "열기",
+    "learn-more": "자세히 보기",
     "view-as-list": "목록으로 보기",
     "view-as-tree": "트리로 보기",
     "show-ignored-files": "무시된 파일 표시",
@@ -1470,7 +1471,7 @@
       "tabInstalled": "설치된 CLI 확장",
       "tabConvenience": "Navide가 변경하는 내용",
       "intro": "각 AI CLI가 스스로 설치한 항목(Claude plugin과 mod, Codex hook, Pi extension 등)과 각 항목이 접근할 수 있는 범위예요. 읽기 전용이라 여기서는 아무것도 설치·사용·변경하지 않아요. Navide 플러그인은 별도 페이지가 있어요.",
-      "summary": "CLI 확장 {total}개 · {l3}개는 CLI 안에서 코드를 실행해요",
+      "summary": "CLI 확장 {total}개 · {l3}개는 CLI 안에서 실행 · {l2}개는 별도 프로그램 실행",
       "machineWide": "CLI마다 컴퓨터 전체에 한 세트예요. 그 CLI의 모든 Navide pane과 계정이 같은 항목을 불러와요.",
       "rescan": "다시 검색",
       "loading": "검색하는 중…",
@@ -1485,17 +1486,17 @@
       "inferred": "추정",
       "inferredHint": "소스 텍스트에서 읽은 내용이에요. CLI의 매니페스트에는 명시되어 있지 않아요.",
       "tier": {
-        "L1": "L1 텍스트 자산",
-        "L2": "L2 하위 프로세스",
-        "L3": "L3 프로세스 내 코드"
+        "L1": "텍스트만",
+        "L2": "별도 프로그램 실행",
+        "L3": "CLI 안에서 실행"
       },
       "tierHint": {
         "L1": "지시문과 기타 텍스트만 있어요. 스스로 실행되는 것은 없어요.",
-        "L2": "사용자 권한으로 하위 프로세스(hook, MCP, LSP)에서 명령을 실행해요.",
+        "L2": "사용자 권한으로 별도 프로그램(hook 명령, MCP 또는 LSP 서버)을 시작해요.",
         "L3": "CLI 자체 프로세스 안에서 CLI의 권한으로, 권한 확인 없이 실행돼요."
       },
       "capability": {
-        "exec": "명령 실행",
+        "exec": "셸 명령 실행",
         "network": "네트워크",
         "fs": "파일",
         "intercept-tools": "도구 호출 가로채기",
@@ -1602,7 +1603,7 @@
         },
         "analyzer-backend": {
           "title": "추론 백엔드",
-          "summary": "Ollama REST나 llama.cpp로 전환하고, 기본 URL, llama-cli 경로, GGUF 모델 경로를 설정해요."
+          "summary": "Ollama나 llama.cpp로 전환하고, 기본 URL, llama-cli 경로, GGUF 모델 경로를 설정해요."
         },
         "analyzer-models": {
           "title": "모델 및 벤치마크",
@@ -1744,7 +1745,7 @@
       "title": "설정 관리",
       "export-bundle": "설정 번들 내보내기",
       "import-bundle": "설정 번들 가져오기",
-      "bundle-hint": "역할, pipeline, MCP, 분석기, 민감하지 않은 AI 채팅 설정, 모양 환경설정을 내보내요. API 키와 token은 가려지며 가져올 때 덮어쓰지 않아요.",
+      "bundle-hint": "역할, 파이프라인, MCP, 분석기, AI 채팅, 모양 설정을 내보내며 API 키와 토큰은 가려요.",
       "export-dialog-title": "설정 번들 내보내기",
       "exported": "설정 번들을 내보냈어요",
       "export-failed": "내보내지 못했어요",
@@ -1756,7 +1757,7 @@
     "executionPolicy": {
       "unavailable": "Execution Policy를 사용할 수 없어요. Navide 호스트를 확인하고 다시 시도하세요.",
       "errors": {
-        "invalid-policy": "실행 정책이 올바르지 않아요. 지원되는 모드, 시스템 네임스페이스, 실행 파일 이름을 사용하세요.",
+        "invalid-policy": "실행 정책이 올바르지 않아요. 지원되는 모드, Navide 기능, 실행 파일 이름을 사용하세요.",
         "high-risk-confirmation-required": "Full 모드에서는 임의의 실행 파일이 실행될 수 있다는 점을 명시적으로 확인해야 해요.",
         "recovery-confirmation-required": "실행 정책을 다시 만들려면 명시적으로 확인해야 해요.",
         "source-reset-confirmation-required": "모든 정책 소스 선택을 재설정하려면 명시적으로 확인해야 해요.",
@@ -1772,7 +1773,7 @@
         "recommendation-unavailable": "저장소 정책 권장 사항을 사용할 수 없어요.",
         "recommendation-invalid": "저장소 정책 권장 사항이 올바르지 않아요.",
         "recommendation-stale": "저장소 정책 권장 사항이 바뀌었어요. 수락하기 전에 다시 확인하세요.",
-        "user-policy-unavailable": "사용할 수 있는 전역 사용자 정책이 없어요. 새로 만들거나 Host 기본값을 선택하세요.",
+        "user-policy-unavailable": "사용할 수 있는 전역 사용자 정책이 없어요. 새로 만들거나 Navide 기본값을 선택하세요.",
         "global-policy-corrupt": "전역 실행 정책이 손상되었어요. 이 소스로 바꾸기 전에 다시 만드세요.",
         "recovery-blocked-by-global-policy": "전역 실행 정책이 정상이 아닐 때는 소스를 복구할 수 없어요.",
         "commit-uncertain": "정책 변경을 확인하지 못했어요. 정책은 계속 차단 상태로 유지돼요. 다시 확인하세요.",
@@ -1780,12 +1781,12 @@
       },
       "loading": "Execution Policy를 불러오는 중…",
       "saved": "Execution Policy를 저장했어요.",
-      "rebuilt": "Host 기본값으로 Execution Policy를 다시 만들었어요.",
+      "rebuilt": "Navide 기본값으로 Execution Policy를 다시 만들었어요.",
       "notice": {
         "save": "Execution Policy를 저장했어요.",
-        "resetUser": "사용자 정책을 Host 기본값으로 재설정했어요.",
+        "resetUser": "사용자 정책을 Navide 기본값으로 재설정했어요.",
         "source": "정책 소스를 변경했어요.",
-        "rebuild": "Host 기본값으로 Execution Policy를 다시 만들었어요.",
+        "rebuild": "Navide 기본값으로 Execution Policy를 다시 만들었어요.",
         "resetSources": "모든 정책 소스 선택을 재설정했어요."
       },
       "externalUpdate": "다른 곳에서 정책이 바뀌었어요. 최신 버전을 다시 불러오기 전까지 초안은 유지돼요.",
@@ -1806,7 +1807,7 @@
         "unavailable": "선택한 정책 소스를 사용할 수 없어요. 사용할 수 있는 소스를 선택할 때까지 Navide는 차단 상태를 유지해요.",
         "corrupt": "선택한 정책이 손상되었어요. 복구될 때까지 Navide는 차단 상태를 유지해요."
       },
-      "hostDefaultTitle": "Host 기본값",
+      "hostDefaultTitle": "Navide 기본값",
       "readOnly": "읽기 전용",
       "hostDefaultHint": "기본 제공되는 최소 권한 기준이에요. 사용자 정책 저장소가 없어도 계속 사용할 수 있어요.",
       "userTitle": "사용자 정책",
@@ -1814,7 +1815,7 @@
       "userHint": "작업 영역이 사용자 소스를 선택할 때 쓰는 전역 정책을 편집해요. 저장하면 현재 사용자 정책을 대체해요.",
       "mode": {
         "full": "Full",
-        "allowlist": "허용 목록",
+        "allowlist": "허용한 명령만",
         "denylist": "거부 목록"
       },
       "fullWarning": "Full 모드는 고위험 도구를 포함한 임의의 실행 파일과 시스템 기능을 허용해요. 저장하기 전에 이 고위험 선택을 검토하세요.",
@@ -1822,12 +1823,20 @@
       "denylistWarning": "거부 목록 모드는 기본적으로 허용해요. 이름을 나열해도 허용 범위가 제한되지 않으므로 Navide는 모든 거부 목록을 고위험 선택으로 취급해요. 저장하기 전에 검토하세요.",
       "denylistConfirmation": "거부 목록 모드는 기본적으로 허용하며 나열한 이름으로 범위가 좁혀지지 않는다는 것을 이해해요.",
       "shellDenylistScope": "거부 목록 모드에서 agent는 이 Host가 지원하는 명령({executables}) 중 여기서 거부한 것을 뺀 명령만 실행할 수 있어요. 그 목록 밖의 이름을 거부해도 효과가 없어요.",
-      "systemLabel": "시스템 네임스페이스",
-      "systemHint": "agent가 사용할 수 있는 V2 시스템 네임스페이스를 선택하세요.",
-      "systemAllowlistLabel": "허용할 시스템 네임스페이스",
-      "systemAllowlistHint": "agent가 사용할 수 있는 V2 시스템 네임스페이스를 선택하세요.",
-      "systemDenylistLabel": "거부할 시스템 네임스페이스",
-      "systemDenylistHint": "agent가 사용하면 안 되는 V2 시스템 네임스페이스를 선택하세요.",
+      "systemLabel": "Navide 기능",
+      "systemHint": "에이전트가 쓸 수 있는 Navide 기능을 고르세요.",
+      "systemAllowlistLabel": "허용할 Navide 기능",
+      "systemAllowlistHint": "에이전트가 쓸 수 있는 Navide 기능을 고르세요.",
+      "systemDenylistLabel": "거부할 Navide 기능",
+      "systemDenylistHint": "에이전트가 쓰면 안 되는 Navide 기능을 고르세요.",
+      "namespace": {
+        "fs": "작업 공간 파일",
+        "ui": "자체 보기",
+        "aiCli": "AI CLI 세션",
+        "web": "웹 탐색",
+        "agents": "에이전트 pane",
+        "agentMessages": "에이전트 메시지"
+      },
       "shellLabel": "셸 실행 파일",
       "shellHint": "최상위 실행 파일 이름만 허용해요. 경로와 셸 표현식은 받지 않아요.",
       "shellAllowlistLabel": "허용할 셸 실행 파일",
@@ -1843,13 +1852,14 @@
       "save": "정책 저장",
       "resetUser": "사용자 정책 재설정",
       "sourceTitle": "작업 영역 정책 소스",
-      "sourceHint": "저장소 권장 사항은 직접 확인하고 명시적으로 수락하기 전까지 신뢰하지 않아요. 소스를 바꾸려면 정확한 현재 지문이 필요해요.",
+      "sourceHint": "저장소 권장 사항은 직접 확인하고 명시적으로 수락하기 전까지 신뢰하지 않아요. 소스 전환은 마지막으로 본 상태의 정책에만 적용돼요. 그 뒤에 바뀌었다면 다시 확인하세요.",
       "source": {
-        "default": "Host 기본값",
+        "default": "Navide 기본값",
         "user": "사용자 정책",
         "repository": "저장소 정책"
       },
       "sourceNeedsWorkspace": "작업 영역 소스는 작업 영역을 연 뒤에 선택할 수 있어요.",
+      "sourceImplicit": "자동",
       "recommendationTitle": "저장소 권장 사항",
       "untrusted": "신뢰하지 않음",
       "recommendationHint": "이 정책은 작업 영역 저장소에서 가져오며, 명시적으로 수락하지 않으면 사용 중인 소스를 절대 대체하지 않아요.",
@@ -1880,7 +1890,7 @@
       "corruptHint": "저장된 사용자 정책이 손상되었어요. 다시 만들면 새로운 Host 기본 상태를 기록하고 작업 영역 소스 선택은 유지해요.",
       "manualRecoveryHint": "정책 저장소가 안전하지 않거나 사용할 수 없어요. 실행 정책 디렉터리의 권한이나 경로를 고친 뒤 설정을 다시 여세요. 자동 다시 만들기는 꺼져 있어요.",
       "rebuild": "전역 정책 다시 만들기",
-      "rebuildConfirmBody": "Host 기본값으로 전역 정책과 리비전 파일만 다시 만들어요. 기존 작업 영역 소스 선택과 저장소 정책 파일은 유지돼요.",
+      "rebuildConfirmBody": "Navide 기본값으로 전역 정책과 리비전 파일만 다시 만들어요. 기존 작업 영역 소스 선택과 저장소 정책 파일은 유지돼요.",
       "rebuildConfirmCheck": "손상된 전역 정책이 대체된다는 것을 이해해요.",
       "rebuildConfirm": "다시 만들기 확인",
       "cancel": "취소"
@@ -1900,18 +1910,19 @@
         "total": "도구 {count}개, 텍스트와 입력 스키마 합계 {size}."
       },
       "nativeBackends": {
-        "title": "네이티브 백엔드",
+        "title": "Navide 플러그인에 포함된 프로그램",
+        "summary": "네이티브 코드는 샌드박스에서 실행되지만, git, gh, glab도 실행하는 Navide 플러그인(아래에 고위험으로 표시)은 이를 통해 네트워크 호스트에 연결하고 워크스페이스 데이터를 보내며 워크스페이스 파일을 바꿀 수 있어요.",
         "description": "일부 Navide 플러그인에는 네이티브 코드가 들어 있어요. Navide는 이 코드를 자체 네트워크 접근이 없는 샌드박스에서 실행해요. 함께 연 작업 영역만 읽을 수 있고, 허용한 곳에서만 파일을 변경할 수 있어요. git, gh, glab 명령도 실행하는 Navide 플러그인(아래에 고위험으로 표시)은 이 명령을 통해 네트워크 호스트에 접속해 작업 영역 데이터를 보내고, 그 권한 없이도 작업 영역 파일을 읽고 변경할 수 있어요. 아래 스위치가 켜져 있으면 네이티브 코드가 있는 Navide 플러그인을 설치하는 것이 실행 허용이 돼요. 스위치를 끄면 모두 멈춰요.",
-        "enable": "타사 Navide 플러그인의 네이티브 백엔드 실행 허용",
+        "enable": "타사 Navide 플러그인이 자체 프로그램을 실행하도록 허용",
         "offUnsaved": "서드파티 네이티브 백엔드는 지금은 꺼져 있지만 Navide가 이 설정을 저장하지 못해서, Navide를 다시 시작하면 다시 켜져요.",
         "offUnsavedRetry": "다시 시도",
         "agentTools": {
           "enable": "agent가 타사 Navide 플러그인의 도구를 호출하도록 허용",
-          "description": "기본값은 꺼짐이에요. 켜면 pane의 agent가 허용하신 타사 Navide 플러그인이 선언한 도구를 호출할 수 있어요. 파일을 변경하는 도구는 작업 영역마다 한 번 물어봐요. 끄면 Navide는 도구가 있는 Navide 플러그인이 없는 것처럼 동작해요.",
+          "description": "허용한 Navide 플러그인이 선언한 도구를 pane의 에이전트가 호출할 수 있게 해요. 파일을 바꾸는 도구는 작업 공간마다 한 번 물어봐요.",
           "externalCallers": "외부 MCP 클라이언트도 호출하도록 허용",
           "externalCallersDisclosure": "외부 프로그램은 token 하나를 공유하므로 호출 기록에는 어떤 프로그램인지가 아니라 \"외부 클라이언트\"라고만 남아요. Host 자격 증명도 같은 방식으로 처리돼요."
         },
-        "empty": "설치된 Navide 플러그인 중 네이티브 백엔드가 있는 것이 없어요.",
+        "empty": "설치된 Navide 플러그인 중 자체 프로그램이 있는 것이 없어요.",
         "windowWithout": "{name}이(가) 네이티브 백엔드 없이 열렸어요: {reason}. 백엔드가 필요한 기능은 작동하지 않아요. {next}",
         "windowWithoutAllow": "백엔드를 허용하려면 설정 → Navide 플러그인 → {page}(으)로 가서 허용한 뒤 창을 다시 여세요.",
         "windowWithoutDetails": "이유는 설정 → Navide 플러그인 → {page}에서 볼 수 있어요.",
@@ -1942,12 +1953,17 @@
           "shellNotAllowed": "차단됨: 전체 셸 접근을 요청함",
           "stoppedAfterCrashes": "반복된 실패로 중지됨",
           "unavailable": "사용할 수 없음"
-        }
+        },
+        "loadFailed": "네이티브 백엔드 설정을 읽을 수 없습니다."
       },
       "bundled": "기본 포함",
-      "listTitle": "Navide 플러그인",
+      "listTitle": "설치됨",
+      "installedTitle": "설치된 Navide 플러그인",
       "developerNative": "개발자 및 네이티브 코드",
       "pageOn": "켜짐",
+      "developerOnMarker": "개발",
+      "nativeOnMarker": "네이티브 켜짐",
+      "browseMarketplace": "Navide 마켓플레이스 둘러보기",
       "bundledGit": "기본 포함 Git",
       "state": {
         "active": "사용 중",
@@ -2061,8 +2077,6 @@
         "featured": "추천",
         "clearSearch": "검색 지우기",
         "showAllCategories": "모든 카테고리 표시",
-        "noResultsHint": "다른 단어로 검색하거나 모든 카테고리를 둘러보세요.",
-        "noExtensionsHint": "게시자가 출시하면 Navide 플러그인이 바로 여기에 표시돼요.",
         "loadFailedTitle": "Navide 마켓플레이스에 연결할 수 없어요",
         "loadFailedHint": "연결을 확인하고 다시 시도하세요. 설치된 Navide 플러그인은 계속 작동해요.",
         "errorDetails": "세부 정보",
@@ -2131,7 +2145,7 @@
         },
         "title": "Developer Mode",
         "switch": "Developer Mode 켜기",
-        "hint": "선택한 폴더에서 Navide 플러그인을 불러와 개발하고 테스트할 수 있으며, 자체 호스팅 레지스트리 설정(AGENT_TEAM_MARKETPLACE_URL)을 적용해요. 이 페이지에서만 바꿀 수 있고 모든 변경이 기록돼요. 끄면 폴더에서 불러온 모든 Navide 플러그인을 내리고, 선택했지만 동의하지 않은 폴더는 버려요. 동의한 폴더는 목록에 남아 다시 켜면 불러오며, 여기서 제거할 수 있어요.",
+        "hint": "폴더에서 Navide 플러그인을 불러와 개발하고 테스트하며 Navide 마켓플레이스 대신 직접 운영하는 서버에서 Navide 플러그인을 설치할 수 있어요. 끄면 그 Navide 플러그인을 내려요.",
         "banner": "Developer Mode가 켜져 있어요. 폴더에서 불러온 Navide 플러그인은 검토되지 않았어요.",
         "reminder": "Developer Mode가 켜져 있어요: 폴더에서 불러온 Navide 플러그인은 검토되지 않았어요. 더 이상 필요하지 않으면 설정 → Navide 플러그인에서 끄세요.",
         "reminderClose": "확인",
@@ -2205,7 +2219,7 @@
       },
       "localInstall": {
         "agentRequest": "{requester}이(가) 요청했어요. Navide는 이 패키지를 검토하지 않았으며, 설치 여부는 직접 결정하세요.",
-        "button": ".vsix 파일에서 설치…",
+        "button": "파일에서 설치…",
         "backToMarketplace": "Navide 마켓플레이스 버전으로 되돌리기",
         "warning": "이 Navide 플러그인은 이 컴퓨터의 파일에서 가져온 거예요. Navide가 검토하지 않았고 서명되지도 않아서 작성자를 확인할 수 없으며 파일이 변경되었을 수 있어요. 신뢰하는 사람의 파일만 설치하세요.",
         "signatureLabel": "서명",
@@ -2336,12 +2350,12 @@
       "user": "사용자",
       "userWorkspace": "사용자 / 작업 영역",
       "accountServer": "계정 / 서버",
-      "userWorkspaceBindings": "사용자 / 작업 영역 연결"
+      "userWorkspaceBindings": "사용자 및 작업 영역별 계정 선택"
     },
     "storage": {
       "localStorage": "ui_settings.json(앱 데이터) + 작업 영역 백업",
-      "mainProcess": "Electron 메인 프로세스 userData",
-      "safeStorage": "암호화된 로컬 safeStorage 레지스트리",
+      "mainProcess": "이 컴퓨터의 Navide 앱 데이터에 저장됨",
+      "safeStorage": "이 컴퓨터에 암호화되어 저장됨",
       "cliFiles": "각 CLI의 자체 지시 파일"
     },
     "voice": {
@@ -2366,7 +2380,6 @@
       "readback-rate": "속도",
       "readback-preview": "미리 듣기",
       "readback-stop-hint": "Esc 키나 음성 입력 단축키를 누르면 바로 읽기를 멈춰요.",
-      "section": "음성 입력",
       "enabled": "음성 입력(길게 눌러 말하기)",
       "enabled-hint": "Ctrl+Alt+M(단축키에서 변경 가능)을 길게 누르면 포커스된 CLI pane에 받아쓰기해요. 텍스트는 직접 입력한 것처럼 입력란에 들어가며, Enter 키를 직접 누르기 전까지 아무것도 보내지 않아요. 음성은 이 컴퓨터의 로컬 Whisper 모델이 받아쓰며, 오디오는 절대 컴퓨터 밖으로 나가지 않아요.",
       "device": "마이크",
@@ -2469,7 +2482,7 @@
       "download-retry": "다운로드 다시 시도"
     },
     "general": {
-      "auto-resume-reconnect": "백엔드가 다시 시작된 뒤 session 재개",
+      "auto-resume-reconnect": "Navide 백그라운드 서비스가 다시 시작된 뒤 session 재개",
       "resume-interrupted-on-launch": "Navide를 다시 시작한 뒤 작업 중이던 pane 재개",
       "system-notify": "시스템 알림",
       "system-notify-hint": "Navide가 백그라운드에 있을 때 CLI가 턴을 마치거나 입력이 필요하면 데스크톱 알림을 표시해요. Dock 배지는 어느 경우든 계속 개수를 세요.",
@@ -2484,14 +2497,14 @@
         "unknown": "아직 테스트하지 않았어요.",
         "not-applicable": "이 플랫폼에서는 사용할 수 없어요."
       },
-      "auto-resume-reconnect-hint": "백엔드가 충돌하거나 다시 시작되면 모든 CLI 프로세스도 함께 종료돼요. 켜 두면 백엔드가 돌아왔을 때 화면에 있는 pane과 화면 밖에서 작업 중이던 pane 최대 여섯 개의 대화를 자동으로 다시 연결해서, 하나씩 직접 다시 빌드하지 않아도 돼요. 다시 연결된 pane은 스스로 이어가지 않고, 그 pane을 연 pane에 알림이 가며, 공지에 경과가 표시돼요. 곧바로 다시 충돌하면 더는 자동으로 다시 연결하지 않아요.",
-      "resume-interrupted-on-launch-hint": "Navide가 다시 시작되면 턴을 실행 중이거나 권한 확인·질문을 기다리던 pane과, 그 보고를 기다리던 상위 pane이 자동으로 재개돼요(최대 6개, 나머지는 \"다시 시작할 때 작업 중\"으로 표시). 저절로 계속되지는 않아요: 계속을 누르거나 상위 pane이 지시하게 하세요. 상위 pane에는 어떤 pane이 중단되었는지 알려 줘요.",
+      "auto-resume-reconnect-hint": "백그라운드 서비스가 다시 시작된 뒤 돌아오면 pane의 대화를 다시 연결해요. 다시 시작되면 모든 CLI 프로세스가 함께 종료돼요. 화면에 있는 pane과 화면 밖에서 작업 중이던 pane 최대 여섯 개가 스스로 이어가지 않은 채 돌아오고, 그 pane을 연 pane에 알림이 가며, 공지에 경과가 표시돼요. 곧바로 다시 충돌하면 더는 자동으로 다시 연결하지 않아요.",
+      "resume-interrupted-on-launch-hint": "Navide가 다시 시작되면 작업 중이던 pane이 재개되고, 계속하라는 지시를 기다려요. 턴을 실행 중이거나 권한 확인·질문을 기다리던 pane과 그 보고를 기다리던 상위 pane이 대상이에요(최대 6개, 나머지는 \"다시 시작할 때 작업 중\"으로 표시). 계속을 누르거나 상위 pane이 지시하게 하세요. 상위 pane에는 어떤 pane이 중단되었는지 알려 줘요.",
       "confirm-close-pane": "pane을 닫기 전에 확인",
       "confirm-close-pane-hint": "pane 닫기 단축키로 CLI pane을 닫기 전에 물어봐요. 턴이 진행 중인 pane은 이 설정과 관계없이 항상 물어봐요.",
       "confirm-close-workspace": "작업 영역을 닫기 전에 확인",
-      "confirm-close-workspace-hint": "사이드바에서 작업 영역과 pane을 닫기 전에 물어봐요. 그 항목은 작업 영역의 모든 CLI pane을 종료하며, 기록은 남아 있어서 다시 열면 각 pane이 클릭해서 재개할 수 있는 카드로 돌아와요. 일반 “작업 영역 닫기”는 CLI를 계속 실행해 두며 묻지 않아요.",
+      "confirm-close-workspace-hint": "사이드바가 작업 공간을 닫고 CLI pane을 종료하기 전에 물어봐요.",
       "idle-reclaim": "유휴 CLI 회수",
-      "idle-reclaim-hint": "유휴 CLI는 할당한 메모리를 계속 차지해요(보통 하나당 200–300 MB). 회수하면 프로세스를 종료하고 pane을 클릭해서 재개하는 자리 표시자로 남겨요. 대화는 CLI 자체 기록에서 재개돼요. 포커스된 pane, 답변을 기다리는 pane, 보내지 않은 텍스트가 있는 pane에는 적용하지 않아요.",
+      "idle-reclaim-hint": "유휴 CLI를 종료해 메모리를 확보하고, 각 pane은 클릭하면 재개되는 자리 표시자로 남겨요(포커스된 pane, 답변을 기다리는 pane, 보내지 않은 텍스트가 있는 pane은 제외).",
       "idle-reclaim-after": "회수 시점",
       "idle-reclaim-after-hint": "agent 출력이나 키 입력 없이 이 시간이 지나면 pane을 회수해요.",
       "idle-reclaim-15m": "15분",
@@ -2501,8 +2514,8 @@
       "idle-reclaim-8h": "8시간",
       "idle-reclaim-never": "안 함",
       "idle-reclaim-now": "지금 회수",
-      "idle-reclaim-now-hint": "기준 시간을 기다리지 않고 해당 CLI를 지금 종료해요. 대상 pane은 {count}개이며 약 {size}을(를) 차지하고 있어요. 각 pane은 클릭해서 재개하는 자리 표시자가 돼요.",
-      "idle-reclaim-now-empty": "지금은 대상 pane이 없어요 — 포커스된 pane, 답변을 기다리는 pane, 보내지 않은 텍스트가 있는 pane, 재개할 수 없는 pane은 회수하지 않아요.",
+      "idle-reclaim-now-hint": "기다리지 않고 지금 종료해요: 대상 pane {count}개가 약 {size}를 쓰고 있어요.",
+      "idle-reclaim-now-empty": "지금은 대상 pane이 없어요. 포커스된 pane, 답변을 기다리는 pane, 보내지 않은 텍스트가 있는 pane, 재개할 수 없는 pane은 회수하지 않아요.",
       "idle-reclaim-now-action": "지금 {count}개 회수",
       "idle-reclaim-now-action-empty": "회수할 항목 없음",
       "default-editor": "기본 편집기",
@@ -2555,15 +2568,22 @@
       "resume-behavior-never": "항상 새로 시작",
       "resume-behavior-ask": "매번 묻기",
       "restore-scope": "재개 범위",
-      "restore-scope-hint": "항상 재개할 때 CLI 하나, 현재 Grid 페이지, 활성 탭, 모든 CLI, 또는 자동(Navide를 마지막으로 닫을 때 실행 중이던 CLI만)을 고르세요. 모든 CLI와 자동은 두 개씩 순서대로 시작해요.",
+      "restore-scope-hint": "항상 재개할 때 다시 열 CLI예요. CLI 하나, 현재 그리드 페이지, 활성 탭, 모든 CLI 또는 자동(마지막으로 닫을 때 실행 중이던 CLI) 중에서 고르세요.",
       "restore-scope-single": "CLI 하나",
       "restore-scope-page": "현재 Grid 페이지",
       "restore-scope-tab": "활성 탭",
       "restore-scope-all": "모든 CLI",
       "restore-scope-auto": "자동",
       "resume-concurrency": "동시 재개 한도",
-      "resume-concurrency-hint": "작업 영역을 열거나 레이아웃을 복원할 때 동시에 재개할 수 있는 CLI pane 수예요. 나머지는 대기해요. 한 번에 많은 pane을 재개할 때 'terminal.create timeout' 오류가 나면 줄이세요(1–10).",
-      "resume-concurrency-label": "최대 동시 재개 수"
+      "resume-concurrency-hint": "동시에 재개할 CLI pane 수예요(1–10). 재개하다 pane이 시간 초과되면 값을 낮추세요.",
+      "resume-concurrency-label": "최대 동시 재개 수",
+      "theme-name": {
+        "dark-github": "다크(GitHub)",
+        "dark-midnight": "미드나이트",
+        "dark-forest": "포레스트",
+        "light": "라이트",
+        "high-contrast": "고대비"
+      }
     },
     "roles": {
       "title": "역할",
@@ -3062,7 +3082,7 @@
           "h3": "분석기",
           "p5": "여기서 설정하는 것은 Navide가 pipeline의 의도를 읽는 데 쓰는 <strong>작은 로컬 모델</strong>이며, pane에서 쓰는 CLI agent와는 관계가 없어요. 세 부분으로 되어 있어요:",
           "analyzer": {
-            "backend": "<strong>추론 백엔드</strong> — 먼저 <em>Ollama REST</em>와 <em>llama.cpp</em> 중 하나를 골라요. llama.cpp에는 <code>llama-cli</code> 경로(자동 감지 버튼과 파일 찾아보기 포함)와 선택 사항인 GGUF 모델 경로가 필요하고, Ollama에는 추론 URL(기본값 <code>http://localhost:11434</code>)이 필요해요. 둘 다 옆에 상태 표시기가 있어요.",
+            "backend": "<strong>추론 백엔드</strong> — 먼저 <em>Ollama</em>와 <em>llama.cpp</em> 중 하나를 골라요. llama.cpp에는 <code>llama-cli</code> 경로(자동 감지 버튼과 파일 찾아보기 포함)와 선택 사항인 GGUF 모델 경로가 필요하고, Ollama에는 추론 URL(기본값 <code>http://localhost:11434</code>)이 필요해요. 둘 다 옆에 상태 표시기가 있어요.",
             "models": "<strong>모델 관리자</strong>(Ollama 모드) — 모델 이름을 입력하고 <em>⬇ 다운로드</em>를 누르면 진행 표시줄이 나타나요. 그 아래에 설치된 모델(이름, 매개변수 수, 크기)이 나열되며 하나씩 삭제할 수 있어요.",
             "benchmark": "<strong>모델 벤치마크</strong> — 모든 로컬 모델에 네 가지 작업을 실행해요: 기술 스택 감지(JSON 출력), 작업 영역 한 문장 요약, 문서 목록에서 가장 관련 있는 항목 고르기, CLI 출력을 질문과 선택지로 해석하기. 결과 표에 항목마다 소요 시간과 함께 통과 여부가 표시되며, <strong>네 개 중 최소 세 개(≥75%)</strong>를 통과해야 해요. 통과하지 못한 모델은 모델 드롭다운에서 숨겨져요."
           },
@@ -3076,14 +3096,14 @@
           "mirror": "<strong>다운로드 미러</strong>: 모든 릴리스 파일은 GitHub Release와 <code>dl.navide.dev</code> 두 곳에 게시돼요 — 같은 바이트이며 확인용 sha256 합계가 있어요. <strong>미러가 기본 업데이트 소스예요</strong>: 앱은 시작할 때 피드를 <code>dl.navide.dev</code>로 지정하고 GitHub는 대체 경로예요. <strong>네트워크성 실패</strong>(호스트 연결 불가, 시간 초과, 5xx/429)에서만 대체 경로로 넘어가며, 한번 넘어가면 <strong>그 session 동안 계속 GitHub를 사용해요</strong> — 다시 시작해야 미러로 돌아와요. <strong>404나 서명/체크섬 오류는 절대 대체 경로로 넘어가지 않아요</strong> — 두 호스트의 파일이 같아서 똑같이 실패할 것이고, 실패를 숨기기보다 그대로 알리는 편이 더 도움이 되기 때문이에요.",
           "policyIntro": "<strong>실행 정책</strong>은 Navide 플러그인의 백엔드가 무엇을 실행할 수 있는지 정해요. <strong>별도의 탭이 아니라</strong> Navide 플러그인 페이지 맨 위의 블록이며, 자체 범위 배지(사용자별·작업 영역별)와 정책 파일 경로가 있어요. 맨 위에는 <em>적용 중인 정책</em>의 소스, 모드, 상태(<em>사용 중</em>, <em>오래됨</em>, <em>사용할 수 없음</em>, <em>손상됨</em>)가 표시돼요.",
           "policy": {
-            "hostDefault": "<strong>Host 기본값</strong> — 기본 제공되는 최소 권한 기준이며 <strong>읽기 전용</strong>으로 표시돼요. 사용자 정책 저장소가 완전히 사라져도 계속 쓸 수 있어서 언제든 돌아갈 길이 있어요.",
+            "hostDefault": "<strong>Navide 기본값</strong> — 기본 제공되는 최소 권한 기준이며 <strong>읽기 전용</strong>으로 표시돼요. 사용자 정책 저장소가 완전히 사라져도 계속 쓸 수 있어서 언제든 돌아갈 길이 있어요.",
             "user": "<strong>사용자 정책</strong> — 작업 영역이 사용자 소스를 선택할 때 쓰는 전역 정책이며, 만들기 전까지는 \"만들지 않음\"으로 표시돼요. 모드는 <em>full</em>, <em>허용 목록</em>, <em>거부 목록</em> 세 가지예요. 시스템 네임스페이스와 셸 실행 파일을 설정할 수 있으며, 셸 실행 파일에는 <strong>최상위 실행 파일 이름만</strong> 넣을 수 있어요 — 경로나 셸 표현식은 안 돼요.",
             "highRisk": "<strong>full과 거부 목록은 저장하기 전에 명시적인 확인란이 필요하며</strong>, 화면에서 그 이유를 알려 줘요: full 모드는 임의의 실행 파일(고위험 도구 포함)과 시스템 기능을 허용하고, 거부 목록 모드는 <strong>기본 허용</strong>이라 이름을 나열해도 실제 허용 범위가 좁혀지지 않아요. 그래서 Navide는 이것도 고위험 선택으로 취급해요.",
-            "source": "<strong>작업 영역 정책 소스</strong> — 작업 영역마다 Host 기본값, 사용자 정책, 저장소 정책 중 하나를 골라요. <strong>저장소 권장 사항은 읽고 \"저장소 정책 수락\"을 누르기 전까지 \"신뢰하지 않음\"으로 표시되며</strong>, 소스를 바꾸려면 지문이 정확히 일치해야 해요. 검토한 뒤 바뀌면 \"확인 후 바뀜\"이 되어 다시 확인해야 해요. 열린 작업 영역이 없으면 이 블록은 사용할 수 없어요.",
+            "source": "<strong>작업 영역 정책 소스</strong> — 작업 영역마다 Navide 기본값, 사용자 정책, 저장소 정책 중 하나를 골라요. <strong>저장소 권장 사항은 읽고 \"저장소 정책 수락\"을 누르기 전까지 \"신뢰하지 않음\"으로 표시되며</strong>, 소스를 바꾸려면 지문이 정확히 일치해야 해요. 검토한 뒤 바뀌면 \"확인 후 바뀜\"이 되어 다시 확인해야 해요. 열린 작업 영역이 없으면 이 블록은 사용할 수 없어요.",
             "recovery": "<strong>전역 정책 저장소</strong> — 상태는 정상, 없음, 손상됨, 안전하지 않은 항목, 안전하지 않거나 사용할 수 없는 디렉터리 중 하나예요. 손상된 저장소는 확인란을 거쳐 <strong>다시 만들</strong> 수 있으며, 다시 만들면 전역 정책과 리비전 파일만 대체하고 모든 작업 영역 소스 선택과 저장소 정책 파일은 유지돼요. 저장소가 <strong>안전하지 않다고</strong> 판단되면 자동 다시 만들기가 꺼지고, 화면에 나열된 호스트 소유 경로를 직접 고치라고 안내해요.",
             "failClosed": "정상이 아닌 모든 상태는 <strong>차단 상태로 유지돼요</strong>: 사용할 수 있는 소스를 고르거나 손상된 소스를 복구하기 전까지 아무것도 허용하지 않아요. 저장 결과가 불확실한 경우도 마찬가지이며, 이때 메시지는 \"정책 변경 결과를 확인하지 못했어요. 정책은 계속 차단 상태로 유지돼요. 다시 확인하세요\"예요."
           },
-          "policyNote": "모든 저장소 소스 고정을 한 번에 지우려면 \"모든 정책 소스 선택 재설정\"을 사용하세요. 이것도 확인란을 거쳐요. 저장소 정책 파일은 <strong>수정하거나 삭제하지 않으며</strong>, 각 작업 영역이 다시 전역 Host 기본값이나 사용자 정책을 따르게 할 뿐이에요.",
+          "policyNote": "모든 저장소 소스 고정을 한 번에 지우려면 \"모든 정책 소스 선택 재설정\"을 사용하세요. 이것도 확인란을 거쳐요. 저장소 정책 파일은 <strong>수정하거나 삭제하지 않으며</strong>, 각 작업 영역이 다시 전역 Navide 기본값이나 사용자 정책을 따르게 할 뿐이에요.",
           "extNote": "오작동하는 Navide 플러그인 백엔드가 멈추는 경우: <strong>프로토콜 프레임(요청 / 응답 / 취소)의 넘침만 그 백엔드에 치명적이에요</strong>. 호스트 알림의 넘침은 버리고 개수만 세므로, 시끄러운 백엔드 하나 때문에 Navide 플러그인 전체가 내려가지 않아요. 정상 종료한 백엔드는 조용히 사라지지 않고 이유를 기록해요."
         },
         "s5": {
@@ -6861,7 +6881,7 @@
       "no-headers": "헤더 없음",
       "show": "표시",
       "hide": "숨기기",
-      "conflict": "이 파일이 Agent-Team 밖에서 변경됐어요. 다시 저장하기 전에 다시 불러오세요.",
+      "conflict": "이 파일이 Navide 밖에서 변경됐어요. 다시 저장하기 전에 다시 불러오세요.",
       "reload": "디스크에서 다시 불러오기",
       "custom-title": "사용자 지정 MCP 서버 추가",
       "custom-hint": "지금 전송 방식을 고른 다음, 설치된 서버 목록에서 연결 정보를 입력하세요.",
@@ -6901,6 +6921,9 @@
       "state-on": "사용",
       "state-off": "사용 안 함",
       "status": "상태: {status}",
+      "transport-local": "로컬",
+      "transport-remote": "원격",
+      "status-failed": "시작하지 못함",
       "starting-note": "아직 시작 중입니다({seconds}초 경과). npx 또는 uvx로 실행하는 경우 처음에는 패키지를 내려받고 있을 수 있습니다.",
       "error-reason": "시작하지 못했습니다: {reason}",
       "tools-error": "도구 목록을 읽지 못했습니다: {reason}",
@@ -6932,6 +6955,11 @@
       "keyring-bad-hint": "시스템 키링이 없으면 자격 증명이 일반 파일에 저장되기 쉬워요.",
       "incomplete": "이번 스캔은 완전하지 않아요. 시간이나 폴더 한도에 도달했거나 안전하게 읽을 수 없는 저장소를 건너뛰어서, 아래 폴더의 항목이 빠졌을 수 있어요.",
       "keyring-reason-unknown": "보고된 이유가 없어요.",
+      "keyring-reason": {
+        "tool-missing": "읽는 데 쓰는 시스템 도구가 없어요.",
+        "read-failed": "Navide가 읽지 못했어요.",
+        "no-service": "실행 중인 Secret Service가 없어요."
+      },
       "scan": "스캔",
       "scanning": "스캔하는 중…",
       "scan-roots": "스캔 루트…",
@@ -6946,9 +6974,7 @@
       "all": "전체",
       "loading": "이 컴퓨터를 스캔하는 중…",
       "error-load": "스캔하지 못했어요.",
-      "empty-findings-title": "발견 항목 없음",
       "empty-findings-body": "현재 필터와 일치하는 위험 항목이 없어요.",
-      "empty-inventory-title": "목록 없음",
       "empty-inventory-body": "현재 필터와 일치하는 자격 증명이 없어요.",
       "not-scanned": "스캔을 누르면 이 컴퓨터에서 자격 증명을 찾아요.",
       "severity": {
@@ -6968,7 +6994,7 @@
       },
       "reminder": {
         "title": "알림",
-        "active": "활성",
+        "active": "확인 필요",
         "snoozed": "다시 알림 예약됨",
         "dismissed": "닫음",
         "until": "{date}까지",
@@ -7157,7 +7183,7 @@
       "group-native": "{agent} 자체 스킬",
       "delivery-title": "전달 대상",
       "delivery-hint": "● 직접 읽음 · ✓ Navide가 전달(클릭해서 전환) · 회색: 전달 안 됨",
-      "delivery-auto": "{n}개가 직접 읽음",
+      "delivery-auto": "CLI {n}개가 직접 불러옴",
       "delivery-none": "어디에도 전달 안 됨",
       "location": "위치",
       "also-linked-from": "다음 위치에서도 링크됨: {roots}",
@@ -7198,7 +7224,7 @@
       },
       "share": {
         "title": "공유 링크",
-        "hint": "이 컴퓨터에서 암호화한 계획이나 보고서의 읽기 전용 링크예요. 키는 링크 안에만 담겨 전달되고, 서버는 열 수 없는 암호문만 저장해요.",
+        "hint": "이 컴퓨터에서 암호화한 계획이나 보고서의 읽기 전용 링크예요. 키는 링크 안에만 담겨 전달되므로 서버는 저장한 내용을 읽을 수 없어요.",
         "col-item": "항목",
         "col-creator": "만든 사람",
         "col-created": "만든 날짜",
@@ -7231,7 +7257,7 @@
     },
     "sync": {
       "title": "동기화",
-      "hint": "섹션을 켜면 이 계정에 로그인한 모든 기기에서 같은 상태로 유지돼요. 레코드는 이 컴퓨터에서 암호화되며, 서버는 키 없이 암호문만 저장해요.",
+      "hint": "섹션을 켜면 이 계정에 로그인한 모든 기기에서 같은 상태로 유지돼요. 레코드는 이 컴퓨터에서 암호화되므로 서버는 읽을 수 없어요.",
       "not-yet": "아직 동기화할 수 없어요.",
       "retired-memory": "메모리는 더 이상 동기화되지 않아요. 꺼 주세요. 여기의 지침 파일과 클라우드의 사본은 그대로 남아요.",
       "not-connected": "연결되지 않음 — 연결이 돌아오면 동기화 섹션이 따라잡아요.",
@@ -7254,7 +7280,7 @@
       "approval-cut": "… 미리보기는 여기까지이고 파일은 계속돼요",
       "approval-expand": "전체 보기",
       "approval-deletes": "여기서 프롬프트 {name}이(가) 삭제돼요.",
-      "approval-new-loop": "{name}이(가) 루프 프롬프트가 돼요.",
+      "approval-new-loop": "{name}이(가) 기본 프롬프트가 돼요.",
       "approval-text": "받은 텍스트 전체",
       "approval-diff": "이 기기와 비교한 변경 사항",
       "approval-changes": "변경된 필드",
@@ -7279,7 +7305,7 @@
       "scope-mcp": "MCP",
       "scope-skills": "스킬",
       "scope-memory": "메모리",
-      "scope-hint-prompts": "프롬프트 스킬과 루프 프롬프트.",
+      "scope-hint-prompts": "저장된 프롬프트와 어느 것이 기본인지.",
       "error-load": "동기화 설정을 읽지 못했어요.",
       "scope-hint-mcp": "Navide에서 추가한 MCP 서버예요. 비밀 값은 전송 전에 암호화돼요.",
       "scope-hint-skills": "어떤 스킬이 켜져 있고 각각 어느 CLI로 가는지, 그리고 Navide에서 만든 스킬의 파일이에요(큰 파일은 암호화된 blob으로 전달돼요). 폴더에 직접 넣은 스킬은 설정만 동기화돼요.",
@@ -7465,15 +7491,14 @@
       "error-save": "이 파일을 저장하지 못했어요. 초안은 편집기에 남아 있어요."
     },
     "prompts": {
-      "title": "프롬프트",
-      "intro": "CLI pane이 ∞ 버튼으로 보낼 수 있는 재사용 가능한 완전한 지시예요. 스킬 하나가 완전한 프롬프트 하나이며, 스킬을 고르면 프롬프트가 바뀔 뿐 다른 프롬프트에 덧붙지 않아요. 기본 스킬만 루프로 실행되고 다른 스킬은 한 번만 전송돼요.",
-      "new": "새 스킬",
-      "new-name": "새 스킬",
+      "intro": "CLI pane 제목 표시줄의 반복 버튼(∞)으로 보내는 저장된 프롬프트예요. 하나를 고르면 프롬프트 전체가 바뀌고, 기본 프롬프트만 턴마다 다시 전송되며 나머지는 한 번만 전송돼요.",
+      "new": "새 프롬프트",
+      "new-name": "새 프롬프트",
       "copy-name": "{name} 사본",
       "filter-label": "범주로 필터",
       "all": "전체",
-      "search": "스킬 검색…",
-      "empty": "이 필터와 일치하는 스킬이 없어요.",
+      "search": "프롬프트 검색…",
+      "empty": "이 필터와 일치하는 프롬프트가 없어요.",
       "default-badge": "★ 기본값",
       "turns": "×{n}",
       "turns-unlimited": "턴 제한 없음",
@@ -7481,7 +7506,7 @@
       "name": "이름",
       "icon": "아이콘",
       "icon-custom": "사용자 지정 아이콘",
-      "icon-custom-hint": "이모지를 입력하거나 붙여 넣으면 이 스킬의 아이콘으로 쓰여요.",
+      "icon-custom-hint": "이모지를 입력하거나 붙여 넣으면 이 프롬프트의 아이콘으로 쓰여요.",
       "description": "요약",
       "prompt": "보낼 때 전송할 프롬프트",
       "resume": "재개 텍스트",
@@ -7493,22 +7518,20 @@
       "disable": "사용 안 함",
       "duplicate": "복제",
       "delete": "삭제",
-      "hint": "기본 스킬은 ∞를 그냥 클릭했을 때 보내는 스킬이며 유일하게 루프로 실행돼요. 사용하지 않는 스킬은 여기 남지만 선택기에서는 빠져요.",
+      "hint": "반복 버튼을 그냥 클릭하면 기본 프롬프트를 보내며, 이것만 반복돼요. 사용하지 않는 프롬프트는 여기 남지만 선택기에서는 빠져요.",
       "advanced": "고급",
       "send-once": "한 번만 전송",
-      "send-once-hint": "기본 스킬만 루프로 실행돼요. 이 스킬은 재개나 턴 제한 없이 한 번만 전송돼요.",
-      "untitled-name": "제목 없는 스킬",
-      "prompt-empty": "프롬프트는 비울 수 없어요. 이전 내용을 그대로 두었어요. 이 스킬을 없애려면 삭제를 사용하세요.",
+      "send-once-hint": "기본 프롬프트만 턴마다 다시 전송돼요. 이 프롬프트는 재개나 턴 제한 없이 한 번만 전송돼요.",
+      "untitled-name": "제목 없는 프롬프트",
+      "prompt-empty": "프롬프트는 비울 수 없어요. 이전 내용을 그대로 두었어요. 이 프롬프트를 없애려면 삭제를 사용하세요.",
       "delete-confirm": "\"{name}\"을(를) 삭제할까요? 되돌릴 수 없으며, 프롬프트를 동기화하는 다른 기기에서도 삭제돼요."
     },
     "section": {
       "general-behavior": "일반 동작",
       "resource-limits": "리소스 제한",
-      "notifications": "알림",
       "settings-management": "설정 관리",
       "theme": "테마",
-      "other": "기타",
-      "updates": "업데이트"
+      "other": "기타"
     },
     "p2p": {
       "title": "연결",
@@ -7766,7 +7789,7 @@
     },
     "cliAgents": {
       "title": "CLI Agent",
-      "hint": "수동 생성 드롭다운에 표시할 CLI agent를 켜고 순서를 바꿔요. 카드를 열면 해당 agent를 관리할 수 있어요. 최소 하나는 켜 두어야 해요.",
+      "hint": "새 pane 메뉴에 표시할 CLI agent를 켜고 순서를 바꿔요. 카드를 열면 해당 agent를 관리할 수 있어요. 최소 하나는 켜 두어야 해요.",
       "drag-hint": "드래그해서 순서 변경",
       "search": "agent 찾기…",
       "filter-label": "CLI agent 필터",
@@ -7775,8 +7798,8 @@
       "filter-attention": "확인 필요",
       "count": "agent {total}개 중 {visible}개 · {enabled}개 사용 중",
       "reorder-filtered": "순서를 바꾸려면 검색을 지우고 전체를 선택하세요",
-      "enabled": "사용",
-      "enable-agent": "{agent} 사용",
+      "enabled": "메뉴에 표시",
+      "enable-agent": "{agent}을(를) 메뉴에 표시",
       "manage": "관리",
       "manage-agent": "{agent} 관리",
       "move-up": "{agent} 앞으로 이동",
@@ -7807,9 +7830,9 @@
         "perm-inherit": "권한 상속",
         "perm-force-on": "권한 강제 켬",
         "perm-force-off": "권한 강제 끔",
-        "push": "푸시 켜짐",
-        "push-off": "푸시 꺼짐",
-        "no-push": "푸시 채널 없음",
+        "push": "직접 전달 켜짐",
+        "push-off": "직접 전달 꺼짐",
+        "no-push": "입력창으로 전달",
         "accounts": "계정 {count}개 | 계정 {count}개 | 계정 {count}개",
         "signed-out": "로그아웃됨",
         "custom-binary": "사용자 지정 바이너리",
@@ -7856,12 +7879,13 @@
       "restart-note": "플래그는 pane이 시작될 때 명령에 고정돼요. 여기서 바꾼 내용은 이후에 생성되는 pane에 적용되고, 이미 실행 중인 pane은 다시 빌드하거나 복원할 때까지 시작할 때의 설정을 유지해요."
     },
     "keybindings": {
-      "intro": "아래 단축키를 원하는 대로 다시 지정하세요. 키 모양을 클릭하면 새 조합을 녹화하고, +로 두 번째 바인딩을 추가하며, ✕로 제거해요. 변경 사항은 keybindings.json에 바로 저장되고 열려 있는 모든 창에 적용돼요.",
+      "intro": "아래 단축키를 원하는 대로 다시 지정하세요. 키 모양을 클릭하면 새 조합을 녹화하고, +로 두 번째 바인딩을 추가하며, ✕로 제거해요. 변경 사항은 단축키 파일에 바로 저장되고 열려 있는 모든 창에 적용돼요.",
+      "file-tooltip": "Navide 앱 데이터 폴더의 keybindings.json",
       "search-placeholder": "명령, 키 또는 컨텍스트 검색…",
       "filter": {
         "all": "전체",
         "customized": "사용자 지정됨",
-        "conflicts": "충돌"
+        "conflicts": "공유 키"
       },
       "export": "내보내기",
       "import": "가져오기",
@@ -8014,7 +8038,7 @@
         "workbench_action_closeAllEditors": "모든 편집기 닫기",
         "workbench_action_closeEditorsToTheLeft": "왼쪽 편집기 닫기",
         "workbench_action_closeEditorsToTheRight": "오른쪽 편집기 닫기",
-        "workbench_action_closeModal": "모달 닫기",
+        "workbench_action_closeModal": "대화 상자 닫기",
         "workbench_action_closeOtherEditors": "다른 편집기 닫기",
         "workbench_action_closeActivePane": "활성 pane 닫기",
         "workbench_action_closeWindow": "창 닫기",
@@ -8080,6 +8104,12 @@
         "workbench_action_zoomUiIn": "인터페이스 확대",
         "workbench_action_zoomUiOut": "인터페이스 축소",
         "workbench_action_zoomUiReset": "인터페이스 확대/축소 초기화"
+      },
+      "cmdWhen": {
+        "workbench_action_closeModal": {
+          "notTerminal": "터미널 밖에서 대화 상자 닫기",
+          "planWindow": "플랜 창 오버레이 닫기"
+        }
       },
       "col": {
         "command": "명령",
@@ -8147,12 +8177,19 @@
       "conflict-hard": "충돌",
       "conflict-soft": "공유 키",
       "when-any": "항상",
+      "when-limited": "일부 상황에서만",
       "no-results": "이 검색과 일치하는 명령이 없어요.",
-      "footnote": "두 키 연속 조합을 지원해요. 첫 조합을 녹화한 뒤 두 번째를 누르세요. 이 표가 관리하지 않는 키는 이 페이지 아래쪽에 읽기 전용으로 나열돼요."
+      "footnote": "두 키 연속 조합을 지원해요. 첫 조합을 녹화한 뒤 두 번째를 누르세요. 이 표가 관리하지 않는 키는 이 페이지 아래쪽에 읽기 전용으로 나열돼요.",
+      "category": {
+        "workbench": "워크벤치",
+        "editor": "편집기",
+        "controlPane": "CLI 창",
+        "ui": "외부 제어"
+      }
     },
     "accounts": {
       "title": "Git 계정",
-      "encrypted-note": "token은 OS 키체인(safeStorage)으로 암호화되어 이 컴퓨터에 로컬로 저장돼요.",
+      "encrypted-note": "token은 OS 키체인으로 암호화되어 이 컴퓨터에만 저장돼요.",
       "unavailable": "이 시스템에서는 암호화를 사용할 수 없어서 계정을 추가할 수 없어요. 대개 OS 키체인에 접근할 수 없다는 뜻이에요.",
       "empty": "계정이 아직 없어요.",
       "new-account": "+ 새 계정",
@@ -8164,7 +8201,7 @@
       "host": "호스트",
       "username": "사용자 이름",
       "token": "Token",
-      "token-hint": "Personal Access Token을 붙여 넣으세요. safeStorage로 암호화되어 로컬에 저장되며 일반 텍스트로는 절대 저장되지 않아요.",
+      "token-hint": "Personal Access Token을 붙여 넣으세요. 암호화되어 이 컴퓨터에만 저장되며 일반 텍스트로는 절대 저장되지 않아요.",
       "token-keep": "비워 두면 현재 token을 유지해요",
       "delete-confirm": "이 계정을 삭제할까요?",
       "cli": {
@@ -8291,7 +8328,7 @@
       "testing": "테스트 중:",
       "preparing": "준비하는 중…",
       "benchmark-hint": "모든 로컬 모델로 표준 작업 4개를 실행해 pipeline 의도 감지에 적합한 모델을 판단해요:",
-      "task-t1": "기술 스택 감지 — JSON 출력",
+      "task-t1": "기술 스택 감지 — 워크스페이스가 쓰는 라이브러리를 찾음",
       "task-t2": "작업 영역 요약 — 한 문장 요약",
       "task-t3": "관련성 선택 — 문서 목록에서 가장 관련 있는 항목 선택",
       "task-t4": "CLI 의도 분석 — agent 출력을 분석해 질문과 선택지를 추출",
@@ -9079,8 +9116,7 @@
     "attention-body": "{label}이(가) 답변을 기다리고 있어요"
   },
   "updater": {
-    "section-title": "업데이트",
-    "section-hint": "Agent-Team을 최신 상태로 유지하세요. 업데이트는 모든 작업 영역에 적용돼요.",
+    "section-hint": "Navide를 최신 상태로 유지하세요. 업데이트는 모든 작업 영역에 적용돼요.",
     "current-version": "현재 버전",
     "check": "업데이트 확인",
     "checking": "업데이트 확인하는 중…",
@@ -9367,9 +9403,6 @@
     "intro": "pane 상태의 이름과 색상을 바꿀 수 있어요. 변경 사항은 상태가 표시되는 모든 곳(pane 배지, 사이드바, 회의 스트립, 리소스 패널)에 적용되며, 프로젝트가 아닌 계정에 저장돼요.",
     "col": {
       "status": "상태",
-      "zh": "중국어(번체)",
-      "en": "영어",
-      "ja": "일본어",
       "color": "색상"
     },
     "row-only": "목록 전용",
@@ -9857,6 +9890,7 @@
     "reading-short": "읽는 중",
     "reading-tooltip": "이 계정이 방금 활성화되었어요. 할당량을 읽으려면 Claude Code를 시작해야 하므로, 완료될 때까지(최대 3분) 아래 수치는 이전 측정값이에요.",
     "refresh-status": "새로 고침: {status}",
+    "refresh-not-signed-in": "새로 고칠 수 없어요 — 로그인되지 않음",
     "refresh-error": "이유: {reason}",
     "refresh-status-ok": "최신",
     "refresh-status-not-refreshed": "아직 새로 고치지 않음",
@@ -9906,13 +9940,13 @@
     "settings-title": "CLI 할당량 배지",
     "settings-enabled": "CLI pane 헤더에 남은 할당량 표시",
     "settings-refresh": "새로 고침 간격",
-    "settings-hint": "공급자 11곳(claude, codex, kimi, grok, antigravity, opencode, qwen, kilo, pi, copilot, cursor)의 CLI 할당량을 표시해요. 대부분은 로컬 CLI 자격 증명을 읽어 해당 공급자의 사용량 API를 조회해요. 읽기 전용이며 자격 증명은 절대 기록하지 않아요. Claude는 다르게 자격 증명을 읽지 않고 Claude CLI의 내장 /usage 패널을 사용해요.",
+    "settings-hint": "CLI 제공자 11곳의 할당량을 각 제공자의 사용량 API에서 읽기 전용으로 보여 줘요(Claude는 내장 /usage 패널에서).",
     "failover-title": "할당량 소진 시 계정 전환",
-    "failover-hint": "CLI 계정의 할당량이 소진되었을 때 Navide가 할 일이에요: 아무것도 하지 않기, 전환할 수 있는 계정 목록 보여 주기(기본값), 자동 전환(CLI당 5시간에 최대 3번, 소진된 계정으로 스스로 돌아가지 않음). 표는 각 CLI가 할 수 있는 일을 보여 주며, 실제 전환은 백엔드가 결정해요.",
+    "failover-hint": "CLI 계정의 할당량이 떨어졌을 때 Navide가 할 일이에요: 아무것도 안 함, 전환할 계정 표시(기본값), 또는 자동 전환(CLI마다 5시간에 최대 3회).",
     "failover-loop-title": "할당량 소진 시 전환 직후 Loop 재개",
-    "failover-loop-hint": "Loop를 실행 중인 pane의 할당량이 소진되면 초기화를 기다리지 않고 할당량이 남은 계정으로 전환한 뒤 바로 continue를 보내요. 위의 \"자동 전환\"이 필요해요.",
+    "failover-loop-hint": "루프 중인 pane의 할당량이 떨어지면 할당량이 남은 계정으로 바꾸고 바로 계속해요. \"자동 전환\"이 필요해요.",
     "follow-switch-title": "Claude 계정 전환 시 고정된 pane도 함께 이동",
-    "follow-switch-hint": "계정 전용 로그인 폴더로 실행 중인 Claude pane은 계정 전환을 따라가지 않아요. 이 옵션을 켜면 전환할 때 해당 pane 목록이 표시되어 함께 옮길 수 있고, 할당량이 소진된 pane에는 \"계정 전환\" 버튼이 생겨요. 각 pane은 새 계정으로 다시 열리고 대화를 재개해요. 기본값은 꺼짐이에요.",
+    "follow-switch-hint": "계정 전용 로그인 폴더를 쓰는 Claude pane을 전환할 때 새 계정으로 옮기고 대화를 재개해요.",
     "failover-mode-off": "끔",
     "failover-mode-notify": "알림만",
     "failover-mode-auto": "자동 전환",
@@ -10674,7 +10708,7 @@
     "desc": {
       "telegram": "{'@'}BotFather로 만든 bot",
       "discord": "서버의 bot 애플리케이션",
-      "slack": "작업 공간의 Socket Mode 앱",
+      "slack": "이 컴퓨터에서 연결하는 Slack 앱 (Slack에서 Socket Mode를 켜세요)",
       "feishu": "Feishu 또는 Lark의 사용자 지정 앱",
       "dingtalk": "Stream 모드의 내부 로봇",
       "matrix": "모든 홈서버의 bot 사용자",
@@ -10881,7 +10915,7 @@
     "unavailable": "이 백엔드에서는 아직 Navide Guard를 사용할 수 없어요. 업데이트 후 Navide를 다시 시작하세요.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "각 CLI 동작을 위험도와 요청 주체에 따라 판단해, 위험한 동작은 멈추거나 먼저 물어봐요. 규칙은 AI가 아닌 고정된 코드예요. 채팅 채널에서 고위험 동작을 승인하는 것은 이 설정이 꺼져 있어도 계속 거부돼요. 터미널 명령 보호와 MCP를 통한 agent의 프롬프트 응답 검사도 이 스위치의 영향을 받지 않아요."
+      "desc": "위험도와 요청 주체에 따른 고정 규칙(AI가 아님)으로 위험한 CLI 동작을 멈추거나 먼저 물어봐요. 꺼져 있어도 채팅 채널에서의 고위험 동작 승인은 계속 거부되고, 터미널 명령 보호와 MCP를 통한 프롬프트 응답 검사도 계속 작동해요."
     },
     "counts": {
       "critical": "심각 {n}",
@@ -10921,7 +10955,7 @@
     },
     "vendors": {
       "title": "Guard가 차단할 수 있는 CLI",
-      "hint": "Guard는 CLI 자체 hook을 통해 동작을 막아요. hook이 없는 CLI는 채팅 승인 거부와 YOLO 모드로 실행하지 않는 것으로만 보호할 수 있어요.",
+      "hint": "Guard는 실행 전에 Navide가 각 동작을 확인할 수 있는 CLI에서만 동작을 막을 수 있어요. 그 외 CLI는 채팅에서 온 승인 요청을 거부하고 권한 확인을 켜 두는 것으로만 보호할 수 있어요.",
       "block": "차단 가능",
       "none": "차단 불가",
       "unknown": "알 수 없음"
@@ -11612,9 +11646,8 @@
     "no-match": "“{query}”과(와) 일치하는 작업 영역이 없어요.",
     "trimmed": "기록 한도 때문에 이전 항목 {count}개가 제거되었어요. 설정 → 일반에서 바꿀 수 있어요.",
     "limit-title": "최근 작업 영역 한도",
+    "limit-count": "최대 항목 수",
     "limit-hint": "최근 항목은 직접 제거할 때까지 연 모든 작업 영역을 보관해요. 이 값은 저장 공간을 위한 안전 한도일 뿐이에요. 한도에 도달하면 가장 오래된 항목부터 제거되며, 열려 있거나 고정된 작업 영역은 제거되지 않아요.",
-    "limit-off": "제한 없음",
-    "limit-on": "최대 보관 개수",
     "state-completed": "완료됨",
     "state-running": "실행 중",
     "state-aborted": "중단됨",
@@ -11766,7 +11799,7 @@
     "overview": {
       "title": "공개 정보 개요",
       "intro": "Navide 마켓플레이스에서 설치한 모든 Navide 플러그인의 선언 내용, 위험 수준, 최근 활동, 특이 사항을 한 페이지에서 보여 줘요. 기록일 뿐이며, 여기서 Navide 플러그인이 할 수 있는 일을 바꾸지는 않아요.",
-      "empty": "Navide 마켓플레이스에서 설치한 Navide 플러그인이 없어요.",
+      "empty": "Navide 마켓플레이스에서 아직 아무것도 설치하지 않았어요.",
       "installedScan": "설치 시 검증된 검사",
       "noScanRecord": "설치 시 기록된 검사가 없어요.",
       "activity": "최근 활동",

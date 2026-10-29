@@ -22,6 +22,7 @@ const PLURAL_KEYS = [
   'plans.share.days',
   'settings.credentials.banner-high',
   'settings.cliAgents.chip.accounts',
+  'settings.skills.delivery-auto',
   'time.ago-minutes',
   'time.ago-hours',
   'time.ago-days',

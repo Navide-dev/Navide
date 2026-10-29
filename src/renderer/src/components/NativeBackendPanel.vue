@@ -12,6 +12,7 @@ import MarketplaceIcon from './MarketplaceIcon.vue'
 import PluginAgentToolsList from './PluginAgentToolsList.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingRow from './settings/SettingRow.vue'
+import SettingsNotice from './settings/SettingsNotice.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
 import { leadSentence } from '../lib/leadSentence'
 
@@ -33,6 +34,7 @@ const switchesOn = computed<string[]>(() => {
 watch(switchesOn, (switches) => emit('on', switches), { immediate: true })
 const busy = ref(false)
 const error = ref('')
+const noAnswer = ref(false)
 
 function api() {
   return window.agentTeam?.plugins?.nativeBackends
@@ -51,8 +53,12 @@ async function setMasterSwitch(on: boolean): Promise<void> {
 async function run(action: () => Promise<NativeBackendOverview>): Promise<void> {
   busy.value = true
   error.value = ''
+  noAnswer.value = false
   try {
-    overview.value = await action()
+    const next = await action()
+    // No answer is a failed read: keep the last state the page showed.
+    if (next && Array.isArray(next.plugins)) overview.value = next
+    else noAnswer.value = true
   } catch (err) {
     error.value = ipcErrorMessage(err)
   } finally {
@@ -78,6 +84,7 @@ function statusText(row: NativeBackendStatusRow): string {
 function refresh(): void {
   const backends = api()
   if (backends) void run(() => backends.list())
+  else noAnswer.value = true
 }
 
 onMounted(refresh)
@@ -87,20 +94,34 @@ watch(installed, refresh)
 </script>
 
 <template>
-  <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
+  <!-- Before the first answer the section says it is loading, or why it is
+       not there, with Retry: never an empty page. -->
+  <section v-if="!overview" class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
+    <h3 id="native-backends-title" class="native-backends-title">{{ $t('settings.extensions.nativeBackends.title') }}</h3>
+    <p v-if="!error && !noAnswer" class="native-backends-state nv-loading" role="status">{{ $t('label.loading') }}</p>
+    <div v-else class="native-backends-state nv-empty" role="alert">
+      <p class="native-backends-state-text">{{ $t('settings.extensions.nativeBackends.loadFailed') }}</p>
+      <code v-if="error" class="native-backends-state-detail">{{ error }}</code>
+      <button type="button" class="native-backends-retry nv-btn nv-btn--sm" :disabled="busy" @click="refresh">
+        {{ $t('settings.extensions.marketplace.retry') }}
+      </button>
+    </div>
+  </section>
+  <section v-else class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
     <h3 id="native-backends-title" class="native-backends-title">{{ $t('settings.extensions.nativeBackends.title') }}</h3>
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
     <!-- One card: the warning about native code sits right above the switch it
          governs, and the external-callers switch is indented under the switch
          it depends on. -->
     <SettingsCard class="native-backends-card">
-      <div class="native-backends-callout">
-        <svg class="native-backends-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M7.1 2.6 1.9 12a1 1 0 0 0 .9 1.5h10.4a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0Z" />
-          <path d="M8 6.2v3M8 11.3v.1" />
-        </svg>
-        <p class="native-backends-description"><strong class="native-backends-lead">{{ nativeWarning.lead }}</strong>{{ nativeWarning.separator }}{{ nativeWarning.rest }}</p>
-      </div>
+      <SettingsNotice class="native-backends-callout" tone="warning">
+        <!-- The risk in one sentence; the whole account folds under Learn more. -->
+        <p class="native-backends-description"><strong class="native-backends-lead">{{ $t('settings.extensions.nativeBackends.summary') }}</strong></p>
+        <details class="native-backends-more settings-more">
+          <summary>{{ $t('action.learn-more') }}</summary>
+          <p>{{ nativeWarning.lead }}{{ nativeWarning.separator }}{{ nativeWarning.rest }}</p>
+        </details>
+      </SettingsNotice>
       <SettingRow :title="$t('settings.extensions.nativeBackends.enable')">
         <template #control>
           <ToggleSwitch
@@ -244,42 +265,29 @@ watch(installed, refresh)
   /* Native controls (checkboxes, scrollbars) follow the theme. */
   color-scheme: var(--nv-color-scheme);
 }
+/* The section heading is SettingsSection's label. */
 .native-backends-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-3);
-  color: var(--text-bright);
-  font-size: var(--font-lg);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-/* The warning is a row of the switch card, in the page's one warning style:
-   a 2px amber edge and the warning icon over the card's own surface. */
+/* The warning is the first row of the switch card: SettingsNotice, flush
+   with the card's edges. */
 .native-backends-callout {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-row-x);
-  box-shadow: inset 2px 0 0 var(--risk-fg);
-  border-bottom: 1px solid var(--border-muted);
-  color: var(--text-primary);
-}
-.native-backends-callout .native-backends-description {
-  max-width: 72ch;
-}
-.native-backends-icon {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  color: var(--risk-fg);
+  margin: 0;
+  padding-block: var(--space-3);
+  border-radius: 0;
+  background: transparent;
 }
 .native-backends-description {
   margin: 0;
   font-size: var(--font-xs);
   line-height: var(--lh-base);
 }
+.native-backends-more { margin-top: 4px; }
 /* External callers only apply once agent tools are on: indented under that switch. */
 .native-backends-dependent {
   padding-left: calc(var(--space-row-x) + 24px);
@@ -303,6 +311,19 @@ watch(installed, refresh)
 .native-backends-unsaved p {
   margin: 0;
   flex: 1;
+}
+.native-backends-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.native-backends-state-text {
+  margin: 0;
+}
+.native-backends-state-detail {
+  font-size: var(--font-2xs);
+  overflow-wrap: anywhere;
 }
 .ext-error {
   margin: var(--space-3) 0;

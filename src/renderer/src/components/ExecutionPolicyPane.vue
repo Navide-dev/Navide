@@ -25,17 +25,24 @@ const props = defineProps<{
 const emit = defineEmits<{ attention: [reasons: string[]] }>()
 
 const { t, te } = useI18n()
+// Messages keep their i18n key and are translated when shown, so a language
+// change never leaves one in the previous language. Text from the main
+// process (no key for its code) is shown as given.
+type PaneMessage = { key: string; params?: Record<string, unknown> } | { text: string }
+function messageText(message: PaneMessage): string {
+  return 'key' in message ? t(message.key, message.params ?? {}) : message.text
+}
 const snapshot = ref<ExecutionPolicySettingsSnapshot | null>(null)
 const draft = ref<ExecutionPolicy | null>(null)
 const draftBasePolicy = ref<ExecutionPolicy | null>(null)
 const draftBaseRevision = ref<number | null>(null)
 const selectedSource = ref<ExecutionPolicySource | null>(null)
 const shellInput = ref('')
-const shellInputError = ref('')
+const shellInputError = ref<PaneMessage | null>(null)
 const loading = ref(false)
 const busy = ref(false)
-const error = ref('')
-const notice = ref('')
+const error = ref<PaneMessage | null>(null)
+const notice = ref<PaneMessage | null>(null)
 const fullConfirmed = ref(false)
 const repositoryFullConfirmed = ref(false)
 const rebuildArmed = ref(false)
@@ -93,7 +100,7 @@ function replaceDraftFromSnapshot(next: ExecutionPolicySettingsSnapshot): void {
   draftBasePolicy.value = clonePolicy(source)
   draftBaseRevision.value = next.global.revision
   fullConfirmed.value = false
-  shellInputError.value = ''
+  shellInputError.value = null
   externalUpdate.value = false
 }
 
@@ -111,20 +118,20 @@ function applySnapshotPreservingDraft(next: ExecutionPolicySettingsSnapshot): vo
 async function load(options: { replaceDraft?: boolean } = {}): Promise<void> {
   const api = policyApi()
   if (!api) {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
     return
   }
   const sequence = ++loadSequence
   const replaceDraft = options.replaceDraft ?? !draftDirty.value
   loading.value = true
-  if (!externalUpdate.value) error.value = ''
+  if (!externalUpdate.value) error.value = null
   try {
     const next = await api.inspect(props.workspacePath)
     if (sequence !== loadSequence) return
     if (replaceDraft) replaceDraftFromSnapshot(next)
     else applySnapshotPreservingDraft(next)
   } catch {
-    if (sequence === loadSequence) error.value = t('settings.executionPolicy.unavailable')
+    if (sequence === loadSequence) error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     if (sequence === loadSequence) loading.value = false
   }
@@ -216,6 +223,14 @@ function listOrNone(values: readonly string[]): string {
   return values.length > 0 ? values.join(', ') : t('settings.executionPolicy.none')
 }
 
+/** A system list by name (as the checkboxes show it), not by manifest id. */
+function systemListOrNone(values: readonly string[]): string {
+  return listOrNone(values.map((id) => {
+    const key = `settings.executionPolicy.namespace.${id}`
+    return te(key) ? t(key) : id
+  }))
+}
+
 /** `full` and `denylist` are both high risk but for opposite reasons — one says
  * "everything", the other grants by default — so they must not share one
  * sentence. The acknowledgement text especially: it is what the user attests
@@ -258,14 +273,14 @@ function toggleSystem(namespace: PluginSystemNamespace): void {
 
 function addShell(): void {
   if (!draft.value || draft.value.mode === 'full') return
-  shellInputError.value = ''
+  shellInputError.value = null
   const name = shellInput.value.trim().toLowerCase()
   if (!/^[a-z0-9][a-z0-9._+-]*$/u.test(name)) {
-    shellInputError.value = t('settings.executionPolicy.shellInvalid')
+    shellInputError.value = { key: 'settings.executionPolicy.shellInvalid' }
     return
   }
   if (draft.value.shell.includes(name)) {
-    shellInputError.value = t('settings.executionPolicy.shellDuplicate', { name })
+    shellInputError.value = { key: 'settings.executionPolicy.shellDuplicate', params: { name } }
     return
   }
   draft.value.shell = [...draft.value.shell, name]
@@ -279,9 +294,9 @@ function removeShell(name: string): void {
 
 type OperationKind = 'save' | 'resetUser' | 'source' | 'rebuild' | 'resetSources'
 
-function operationErrorMessage(operationError: ExecutionPolicyError): string {
+function operationErrorMessage(operationError: ExecutionPolicyError): PaneMessage {
   const key = `settings.executionPolicy.errors.${operationError.code}`
-  return te(key) ? t(key) : operationError.message
+  return te(key) ? { key } : { text: operationError.message }
 }
 
 function applyOperationResult(
@@ -299,7 +314,7 @@ function applyOperationResult(
   } else {
     applySnapshotPreservingDraft(result.snapshot)
   }
-  notice.value = t(`settings.executionPolicy.notice.${operation}`)
+  notice.value = { key: `settings.executionPolicy.notice.${operation}` }
   return true
 }
 
@@ -309,8 +324,8 @@ async function save(): Promise<void> {
   const expectedRevision = draftBaseRevision.value
   if (expectedRevision === null) return
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.setUser({
       policy: clonePolicy(draft.value),
@@ -320,7 +335,7 @@ async function save(): Promise<void> {
     })
     applyOperationResult(result, 'save')
   } catch {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -332,8 +347,8 @@ async function resetUser(): Promise<void> {
   const expectedRevision = snapshot.value?.global.revision
   if (expectedRevision === undefined) return
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.resetUser(
       {
@@ -343,7 +358,7 @@ async function resetUser(): Promise<void> {
     )
     applyOperationResult(result, 'resetUser')
   } catch {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -364,8 +379,8 @@ async function selectSource(source: ExecutionPolicySource): Promise<void> {
     return
   }
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.selectSource({
       workspacePath,
@@ -377,7 +392,7 @@ async function selectSource(source: ExecutionPolicySource): Promise<void> {
     applyOperationResult(result, 'source')
   } catch {
     if (snapshot.value) selectedSource.value = sourceSelectionFor(snapshot.value)
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -387,8 +402,8 @@ async function rebuild(): Promise<void> {
   const api = policyApi()
   if (!api || !rebuildConfirmed.value) return
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.rebuild({
       confirmed: true,
@@ -399,7 +414,7 @@ async function rebuild(): Promise<void> {
       rebuildConfirmed.value = false
     }
   } catch {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -419,8 +434,8 @@ async function resetSourceSelections(): Promise<void> {
   const api = policyApi()
   if (!api || !sourceResetConfirmed.value) return
   busy.value = true
-  error.value = ''
-  notice.value = ''
+  error.value = null
+  notice.value = null
   try {
     const result = await api.resetSourceSelections({
       confirmed: true,
@@ -431,7 +446,7 @@ async function resetSourceSelections(): Promise<void> {
       sourceResetConfirmed.value = false
     }
   } catch {
-    error.value = t('settings.executionPolicy.unavailable')
+    error.value = { key: 'settings.executionPolicy.unavailable' }
   } finally {
     busy.value = false
   }
@@ -463,8 +478,8 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 <template>
   <div class="execution-policy-pane">
     <p v-if="loading" class="ep-loading">{{ $t('settings.executionPolicy.loading') }}</p>
-    <p v-if="error" class="ep-error" role="alert">{{ error }}</p>
-    <p v-if="notice" class="ep-notice" role="status">{{ notice }}</p>
+    <p v-if="error" class="ep-error" role="alert">{{ messageText(error) }}</p>
+    <p v-if="notice" class="ep-notice" role="status">{{ messageText(notice) }}</p>
     <div v-if="externalUpdate" class="ep-conflict" role="alert">
       <span>{{ $t('settings.executionPolicy.externalUpdate') }}</span>
       <button type="button" class="nv-btn nv-btn--sm" :disabled="busy" @click="reloadLatest">
@@ -487,7 +502,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
           · {{ $t('settings.executionPolicy.modeLabel') }}: <strong>{{ modeLabel(workspaceSnapshot.policy.mode) }}</strong>
         </p>
         <div class="ep-policy-card ep-effective-policy">
-          <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(workspaceSnapshot.policy.system) }}</span></div>
+          <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ systemListOrNone(workspaceSnapshot.policy.system) }}</span></div>
           <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(workspaceSnapshot.policy.shell) }}</span></div>
         </div>
         <p v-if="workspaceSnapshot.status !== 'active'" class="ep-warning" role="alert">
@@ -501,8 +516,17 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
         <h2>{{ $t('settings.executionPolicy.sourceTitle') }}</h2>
       </div>
       <p class="ep-hint">{{ $t('settings.executionPolicy.sourceHint') }}</p>
-      <div class="ep-source-list">
-        <label v-for="source in (['default', 'user', 'repository'] as ExecutionPolicySource[])" :key="source" class="ep-source-option">
+      <!-- A choice per workspace: without one there is nothing to choose, so
+           only the hint below shows. With no explicit choice yet, the source
+           in effect carries the selected fill and an "Automatic" note; its
+           radio stays unchecked so picking it records an explicit choice. -->
+      <div v-if="workspaceSnapshot" class="ep-source-list settings-segmented">
+        <label
+          v-for="source in (['default', 'user', 'repository'] as ExecutionPolicySource[])"
+          :key="source"
+          class="ep-source-option"
+          :class="{ 'ep-source-implicit': selectedSource === null && workspaceSnapshot.activeSource === source }"
+        >
           <input
             type="radio"
             name="execution-policy-source"
@@ -514,6 +538,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
           <span>
             <strong>{{ sourceLabel(source) }}</strong>
             <small v-if="source === 'repository' && recommendation">{{ recommendationStateLabel(recommendation.state) }}</small>
+            <small v-if="selectedSource === null && workspaceSnapshot.activeSource === source">{{ $t('settings.executionPolicy.sourceImplicit') }}</small>
           </span>
         </label>
       </div>
@@ -556,7 +581,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <p class="ep-recommendation-state">{{ recommendationStateLabel(recommendation.state) }}</p>
       <div v-if="recommendation.policy" class="ep-policy-card ep-recommendation-policy">
         <div><span class="ep-k">{{ $t('settings.executionPolicy.modeLabel') }}</span><span class="ep-v">{{ modeLabel(recommendation.policy.mode) }}</span></div>
-        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(recommendation.policy.system) }}</span></div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ systemListOrNone(recommendation.policy.system) }}</span></div>
         <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(recommendation.policy.shell) }}</span></div>
       </div>
       <div v-if="recommendation.state === 'valid' && recommendationIsHighRisk" class="ep-warning" role="alert">
@@ -581,7 +606,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
         <span class="ep-readonly" v-if="!hasUserPolicy">{{ $t('settings.executionPolicy.notCreated') }}</span>
       </div>
       <p class="ep-hint">{{ $t('settings.executionPolicy.userHint') }}</p>
-      <div class="ep-mode-list" role="radiogroup" :aria-label="$t('settings.executionPolicy.modeLabel')">
+      <div class="ep-mode-list settings-segmented" role="radiogroup" :aria-label="$t('settings.executionPolicy.modeLabel')">
         <label v-for="mode in policyModes" :key="mode" class="ep-mode-option" :data-mode="mode">
           <input
             type="radio"
@@ -615,7 +640,8 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
                 :data-system="namespace"
                 @change="toggleSystem(namespace)"
               />
-              <code>{{ namespace }}</code>
+              <!-- The name, not the manifest id; the id stays on hover. -->
+              <span :title="namespace">{{ $t(`settings.executionPolicy.namespace.${namespace}`) }}</span>
             </label>
           </div>
         </div>
@@ -636,7 +662,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
             />
             <button type="submit" class="nv-btn" :disabled="!shellInput.trim()">{{ $t('settings.executionPolicy.add') }}</button>
           </form>
-          <p v-if="shellInputError" class="ep-error" role="alert">{{ shellInputError }}</p>
+          <p v-if="shellInputError" class="ep-error" role="alert">{{ messageText(shellInputError) }}</p>
           <div v-if="draft.shell.length" class="ep-chip-list">
             <span v-for="name in draft.shell" :key="name" class="ep-chip">
               <code>{{ name }}</code>
@@ -661,7 +687,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <p class="ep-hint">{{ $t('settings.executionPolicy.hostDefaultHint') }}</p>
       <div v-if="snapshot" class="ep-policy-card">
         <div><span class="ep-k">{{ $t('settings.executionPolicy.modeLabel') }}</span><span class="ep-v">{{ modeLabel(snapshot.defaultPolicy.mode) }}</span></div>
-        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(snapshot.defaultPolicy.system) }}</span></div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ systemListOrNone(snapshot.defaultPolicy.system) }}</span></div>
         <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(snapshot.defaultPolicy.shell) }}</span></div>
       </div>
     </section>
@@ -720,14 +746,22 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 }
 .ep-section.ep-effective { border-top: 0; padding-top: var(--space-1); }
 /* Sections are divided by hairlines, Linear-style; the one part the user edits
-   is the page's single card, with the accent edge. */
+   is the page's single card. */
 [data-section='user-policy'] {
   margin: var(--space-2) 0 var(--space-4);
   padding: var(--space-row-y) var(--space-row-x);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
-  box-shadow: inset 3px 0 0 var(--accent-emphasis);
+}
+/* Inside the card its heading is the card's first row title, not a second
+   section-label style. */
+[data-section='user-policy'] .ep-section-heading h2 {
+  font-size: var(--font-row-title);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-bright);
 }
 [data-section='user-policy'] + .ep-section { border-top: 0; }
 .ep-effective {
@@ -751,7 +785,8 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-accept-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .ep-section-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: 2px; }
 /* The section's state sits right beside its title. */
-.ep-section h2 { margin: 0; font-size: var(--font-row-title); font-weight: 600; color: var(--text-bright); }
+/* Section headings share SettingsSection's small uppercase label. */
+.ep-section h2 { margin: 0; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .ep-section h3 { margin: 0 0 2px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
 .ep-hint, .ep-summary, .ep-recommendation-state, .ep-empty {
   margin: 2px 0 var(--space-3);
@@ -779,7 +814,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   font-weight: 600;
 }
 /* Untrusted is "not yet checked", a caution; risk and danger tones stay for real risk. */
-.ep-untrusted { background: var(--attention-subtle); color: var(--attention-fg); }
+.ep-untrusted { background: var(--attention-subtle); color: var(--attention-on-subtle); }
 /* Every button on the page has a 32px target. */
 .execution-policy-pane .nv-btn { min-height: var(--control-h-lg); }
 /* An offset ring that also shows on the filled Save button (the house ring is inset). */
@@ -813,7 +848,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   line-height: var(--lh-base);
 }
 .ep-rebuild-confirm p, .ep-source-reset-confirm p { margin-top: 0; }
-.ep-rebuild-confirm label, .ep-source-reset-confirm label { display: flex; align-items: center; gap: var(--space-2); }
+.ep-rebuild-confirm label, .ep-source-reset-confirm label { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-h-sm); cursor: pointer; }
 .ep-conflict {
   display: flex;
   align-items: center;
@@ -829,41 +864,12 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 }
 .ep-conflict button { flex: 0 0 auto; }
 .ep-recommendation-policy { margin-top: var(--space-2); }
-/* Mode and source are segmented controls: one bordered strip, a segment per
-   choice, the checked one tinted. The radio stays in the DOM for keyboard and
-   assistive tech; the segment draws its focus. */
-.ep-mode-list, .ep-source-list {
-  display: inline-flex;
-  flex-wrap: wrap;
-  max-width: 100%;
-  margin: var(--space-1) 0 var(--space-3);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-  background: var(--bg-base);
-  overflow: hidden;
-}
-.ep-mode-option, .ep-source-option {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: var(--control-h-lg);
-  padding: 4px 14px;
-  border-left: 1px solid var(--border-default);
-  cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
-}
-.ep-mode-option:first-child, .ep-source-option:first-child { border-left: 0; }
-.ep-mode-option:hover, .ep-source-option:hover:not(:has(input:disabled)) { background: var(--bg-hover); }
-.ep-mode-option:has(input:checked), .ep-source-option:has(input:checked) {
-  background: var(--accent-subtle);
-  color: var(--accent-fg);
-  font-weight: 600;
-}
-.ep-mode-option:has(input:focus-visible), .ep-source-option:has(input:focus-visible) {
-  outline: 2px solid var(--accent-focus);
-  outline-offset: -2px;
-}
-.ep-source-option:has(input:disabled) { cursor: not-allowed; opacity: 0.55; }
+/* Mode and source are the Settings modal's shared segmented control
+   (.settings-segmented); the radio stays in the DOM for keyboard and
+   assistive tech and the segment draws its focus. Only the spacing and the
+   hidden radio are set here, so the pane still works mounted on its own. */
+.ep-mode-list, .ep-source-list { margin: var(--space-1) 0 var(--space-3); }
+.ep-mode-option, .ep-source-option { position: relative; }
 .ep-mode-option input, .ep-source-option input {
   position: absolute;
   inset: 0;
@@ -871,9 +877,16 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   opacity: 0;
   cursor: inherit;
 }
-.ep-source-option span { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+/* The recommendation's state sits beside the source name, so every segment
+   (here and in the mode strip) keeps one height. */
+.ep-source-option span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; }
 .ep-source-option strong { font-weight: inherit; }
 .ep-source-option small { color: var(--text-secondary); font-size: var(--font-2xs); font-weight: 400; }
+.ep-source-option.ep-source-implicit {
+  background: var(--bg-selected);
+  color: var(--accent-bright);
+  font-weight: 600;
+}
 .ep-full-warning, .ep-warning:has(label) {
   margin: 0 0 var(--space-3);
   padding: var(--space-3) var(--space-4);
@@ -885,7 +898,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   line-height: var(--lh-base);
 }
 .ep-warning:has(label) p { margin: 0; }
-.ep-confirm-label, .ep-warning:has(label) label { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); font-weight: 600; }
+.ep-confirm-label, .ep-warning:has(label) label { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-h-sm); margin-top: var(--space-2); font-weight: 600; cursor: pointer; }
 /* The allowlist and shell parts are sub-rows of the user policy card. */
 .ep-editor-block {
   margin: 0 calc(-1 * var(--space-row-x)) var(--space-3);

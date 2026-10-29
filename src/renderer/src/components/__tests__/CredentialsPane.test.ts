@@ -173,6 +173,14 @@ describe('CredentialsPane', () => {
     expect(wrapper!.find('.cred-keyring').text()).toContain('no secret service')
   })
 
+  it('names a keyring reason code in words and keeps the code on hover', async () => {
+    await mountPane({ 'credentials.scan': { ok: true, payload: { ...scan, keyring: { available: false, backend: 'macos-keychain', reason: 'dump-keychain-failed' } } } })
+    const status = wrapper!.find('.cred-keyring')
+    expect(status.text()).toContain('Navide could not read it.')
+    expect(status.text()).not.toContain('dump-keychain-failed')
+    expect(status.attributes('title')).toBe('dump-keychain-failed')
+  })
+
   it('shows an inline error when the scan fails', async () => {
     await mountPane({ 'credentials.scan': { ok: true, payload: { ok: false, error: 'boom', error_code: 'scan_failed' } } })
     expect(wrapper!.find('.cred-error').text()).toContain('boom')
