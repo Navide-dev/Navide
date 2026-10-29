@@ -21,6 +21,7 @@ import {
   pinnedLabels as planPinnedLabels,
   readsFailure,
   rejectGate,
+  rejectOutcome,
   restartPointFor,
   retryPolicyOf,
   routeFailure as planRouteFailure,
@@ -275,6 +276,20 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     deps.log(`◆ Gate "${gateId}" ✓ approved`)
     void report()
     return true
+  }
+
+  /** Whether rejecting the gate the run waits on would end the run as
+   *  failed (see rejectOutcome), so the UI can ask first. */
+  function rejectEndsRun(gateId: string): false | 'no-edge' | 'exhausted' {
+    const p = plan.value
+    if (!p || !run) return false
+    const outcome = rejectOutcome(p, run, gateId)
+    return outcome === 'loop' ? false : outcome
+  }
+
+  /** What the gate asks its approver to check (its `gate.prompt`), or ''. */
+  function gatePrompt(gateId: string): string {
+    return plan.value?.graph.nodes.find((n) => n.id === gateId)?.gate?.prompt?.trim() ?? ''
   }
 
   function reject(gateId: string, comment = ''): RejectResult | null {
@@ -591,6 +606,8 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     holdBeforeStage,
     approve,
     reject,
+    rejectEndsRun,
+    gatePrompt,
     pinnedLabels,
     untakenLabels,
     conditionalLabels,

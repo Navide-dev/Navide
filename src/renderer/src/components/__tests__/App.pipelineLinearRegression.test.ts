@@ -211,7 +211,7 @@ const gateSource = block(
 
 async function loadGraphRun(graph: PipelineGraph) {
   const { code } = await transformWithEsbuild(
-    `${sources.join('\n')}\n${gateSource}\nreturn { onPipelineStart, onPipelineNext, onPipelineGateApprove, onPipelineGateReject }`,
+    `${sources.join('\n')}\n${gateSource}\nreturn { onPipelineStart, onPipelineNext, onPipelineGateApprove, onPipelineGateReject, onPipelineGateRejectFromPanel }`,
     'AppPipelineDag.ts',
     { loader: 'ts' },
   )
@@ -226,9 +226,13 @@ async function loadGraphRun(graph: PipelineGraph) {
     workspacePath: () => workspace,
   })
   const base = await load({ pipelineDag: dag })
+  const toast = vi.fn()
+  const confirm = vi.fn(async (_message: string, _opts?: unknown) => true)
   const deps = {
     ...base.deps,
     pipelineDag: dag,
+    notifyRestore: { toast, confirm },
+    i18n: { global: { t: (key: string, p?: Record<string, unknown>) => (p ? `${key} ${JSON.stringify(p)}` : key) } },
     tearDownPipelineOrchestration: () => { base.pipeline.state = 'aborted'; base.events.push('teardown') },
     onWorkspaceCheck: async () => {},
   }
@@ -237,13 +241,14 @@ async function loadGraphRun(graph: PipelineGraph) {
     onPipelineNext: () => Promise<void>
     onPipelineGateApprove: (id: string) => Promise<boolean>
     onPipelineGateReject: (id: string, comment?: string) => Promise<boolean>
+    onPipelineGateRejectFromPanel: (id: string, comment?: string) => Promise<boolean>
   }
   const start = async (opts: { fromNodeId?: string } = {}) => {
     workspace = '/ws'
     await api.onPipelineStart({ task: 'ship', workspacePath: '/ws', ...opts })
     await flush()
   }
-  return { api, dag, sent, events: base.events, pipeline: base.pipeline, start }
+  return { api, dag, sent, events: base.events, pipeline: base.pipeline, start, toast, confirm }
 }
 
 /** STAGES as a graph with a gate between 01 and 02 that loops back to 01. */
@@ -296,6 +301,32 @@ describe('a graph pipeline runs its gates, loops and pins', () => {
     await flush()
     expect(run.pipeline.state).toBe('aborted')
     expect(run.events.some((e) => e.startsWith('send pipeline.abort') && e.includes('"reason":"failed"'))).toBe(true)
+    // B4: the run ending is said, not only logged.
+    expect(run.toast).toHaveBeenCalledWith('pipelineErrors.gate.rejected-failed {"name":"OK?"}', { type: 'error' })
+  })
+
+  it('Send Back from a person asks first when it would end the run (B4)', async () => {
+    const run = await loadGraphRun(gatedGraph())
+    await run.start()
+    await run.api.onPipelineNext()
+    await flush()
+    // The budget (1) is not spent: no question, the run loops back.
+    expect(await run.api.onPipelineGateRejectFromPanel('gate', 'redo')).toBe(true)
+    await flush()
+    expect(run.confirm).not.toHaveBeenCalled()
+    await run.api.onPipelineNext()
+    await flush()
+    // Spent now: asked, and saying no keeps the run waiting at the gate.
+    run.confirm.mockResolvedValueOnce(false)
+    expect(await run.api.onPipelineGateRejectFromPanel('gate')).toBe(false)
+    expect(run.confirm).toHaveBeenCalledTimes(1)
+    expect(run.confirm.mock.calls[0][0]).toBe('pipelineErrors.gate.confirm-exhausted {"name":"OK?"}')
+    expect(run.pipeline.state).toBe('running')
+    expect(run.dag.awaitingGate.value?.gateId).toBe('gate')
+    // Saying yes ends it.
+    expect(await run.api.onPipelineGateRejectFromPanel('gate')).toBe(true)
+    await flush()
+    expect(run.pipeline.state).toBe('aborted')
   })
 
   it('a pinned slot is not spawned and counts as done', async () => {

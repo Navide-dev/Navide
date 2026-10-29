@@ -669,7 +669,7 @@ class StagesStore:
             (p for p in doc.get("pipelines", []) if p["id"] == pipeline_id), None
         )
         if not pipeline:
-            raise KeyError(f"pipeline not found: {pipeline_id}")
+            raise StoreNotFound("pipeline", str(pipeline_id), f"pipeline not found: {pipeline_id}")
         return pipeline
 
     # ── Pipeline CRUD ──────────────────────────────────────────────────────────
@@ -844,7 +844,7 @@ class StagesStore:
         # stage CRUD is the point but here would rename whatever happens to be
         # active instead of what the caller asked for.
         if not pipeline_id:
-            raise KeyError("pipeline id is required")
+            raise StoreNotFound("pipeline", "", "pipeline id is required")
         with self._lock:
             doc = self._read_doc()
             pipeline = self._get_pipeline(doc, pipeline_id)
@@ -862,12 +862,12 @@ class StagesStore:
         # the active pipeline) and then matches nothing to remove, so the caller
         # is told the delete succeeded while nothing was deleted.
         if not pipeline_id:
-            raise KeyError("pipeline id is required")
+            raise StoreNotFound("pipeline", "", "pipeline id is required")
         with self._lock:
             doc = self._read_doc()
             self._get_pipeline(doc, pipeline_id)  # raises KeyError if not found
             if len(doc.get("pipelines", [])) <= 1:
-                raise ValueError("cannot delete the last remaining pipeline")
+                raise StoreRefused("last-pipeline", "cannot delete the last remaining pipeline")
             doc["pipelines"] = [p for p in doc["pipelines"] if p["id"] != pipeline_id]
             # Fallback active_pipeline_id if the deleted one was active
             if doc.get("active_pipeline_id") == pipeline_id:
@@ -884,7 +884,7 @@ class StagesStore:
         with self._lock:
             doc = self._read_doc()
             if not any(p["id"] == pipeline_id for p in doc.get("pipelines", [])):
-                raise KeyError(f"pipeline not found: {pipeline_id}")
+                raise StoreNotFound("pipeline", pipeline_id, f"pipeline not found: {pipeline_id}")
             doc["active_pipeline_id"] = pipeline_id
             self._write_doc(doc)
         return pipeline_id
@@ -894,7 +894,7 @@ class StagesStore:
             doc = self._read_doc()
             pipeline = self._get_pipeline(doc, pipeline_id)
             if not pipeline.get("builtin"):
-                raise ValueError(f"pipeline is not builtin: {pipeline_id!r}")
+                raise StoreRefused("not-builtin", f"pipeline is not builtin: {pipeline_id!r}")
             # Matched against the requested id, not the resolved pipeline: a
             # blank id resolves to the active pipeline in _get_pipeline above but
             # matches neither seed here, so it lands in the else and writes
@@ -906,7 +906,7 @@ class StagesStore:
             elif pipeline_id == EVOLVE_LANDING_ID:
                 pipeline.update(default_evolve_landing_pipeline())
             else:
-                raise ValueError(f"no seed data for builtin pipeline: {pipeline_id!r}")
+                raise StoreRefused("no-seed", f"no seed data for builtin pipeline: {pipeline_id!r}")
             # Restoring the seed restores its shape too: the seeds are linear,
             # except the landing pipeline's, whose seed carries its graph.
             if pipeline_id != EVOLVE_LANDING_ID:
@@ -1023,11 +1023,11 @@ class StagesStore:
     ) -> dict[str, Any]:
         sid = data.get("id") or ""
         if not sid:
-            raise ValueError("stage id is required")
+            raise StoreRefused("stage-id-required", "stage id is required")
         if not self._ID_RE.match(sid):
-            raise ValueError(f"invalid stage id {sid!r}: use alphanumeric, hyphen, underscore, dot only")
+            raise StoreRefused("stage-id-invalid", f"invalid stage id {sid!r}: use alphanumeric, hyphen, underscore, dot only")
         if not data.get("slots"):
-            raise ValueError("stage must have at least one slot")
+            raise StoreRefused("stage-needs-slot", "stage must have at least one slot")
         with self._lock:
             doc = self._read_doc()
             pipeline = self._get_pipeline(doc, pipeline_id)
@@ -1076,9 +1076,9 @@ class StagesStore:
             stages: list[dict[str, Any]] = pipeline.get("stages", [])
             new_stages = [s for s in stages if s.get("id") != id]
             if len(new_stages) == len(stages):
-                raise KeyError(f"stage not found: {id}")
+                raise StoreNotFound("stage", id, f"stage not found: {id}")
             if not new_stages:
-                raise ValueError("cannot delete the last remaining stage")
+                raise StoreRefused("last-stage", "cannot delete the last remaining stage")
             self._require_stage_editable(pipeline)
             pipeline["stages"] = new_stages
             _resync_linear_graph(pipeline)
@@ -1155,7 +1155,7 @@ class StagesStore:
             for op in meta_ops:
                 stage = next((s for s in pipeline["stages"] if s.get("id") == op.get("stageId")), None)
                 if stage is None:
-                    raise pg.GraphError([f"stage not found: {op.get('stageId')}"])
+                    raise pg.GraphError([f"stage not found: {op.get('stageId')}"], "stage-not-found")
                 for field, key in pg.STAGE_META_FIELDS.items():
                     if field in op:
                         stage[key] = op[field]
@@ -1178,7 +1178,7 @@ class StagesStore:
             graphs[str(pipeline["id"])] = graph
             errors = pg.subpipeline_cycle_errors(graphs)
             if errors:
-                raise pg.GraphError(errors)
+                raise pg.GraphError(errors, "subpipeline-links")
         stages = pg.derive_stages_from_graph(graph, [_migrate(s) for s in pipeline.get("stages", [])], stamp=True)
         for stage in stages:
             if not self._ID_RE.match(str(stage.get("id", ""))):
@@ -1193,6 +1193,25 @@ class StagesStore:
 
 class GraphNonLinearError(ValueError):
     """A stage-level edit on a pipeline whose graph stages cannot express."""
+
+
+class StoreRefused(ValueError):
+    """A refusal of the caller's request (not a fault): `reason` is a stable
+    code a window translates; the message stays the English sentence."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+class StoreNotFound(KeyError):
+    """No pipeline or stage with that id. `what` is "pipeline" or "stage";
+    `ident` is the id asked for ("" when none was given)."""
+
+    def __init__(self, what: str, ident: str, message: str) -> None:
+        super().__init__(message)
+        self.what = what
+        self.ident = ident
 
 
 def _graph_slot_configs(pipeline: dict[str, Any]) -> list[dict[str, Any]]:

@@ -42,11 +42,13 @@ ROLE_PROPERTY_TYPES = ("string", "text", "template", "number", "boolean", "optio
 
 
 class GraphError(ValueError):
-    """Invalid graph or graph op; .errors lists every problem found."""
+    """Invalid graph or graph op; .errors lists every problem found. `code`
+    names the kind of problem for a window to translate ("" when unset)."""
 
-    def __init__(self, errors: list[str]) -> None:
+    def __init__(self, errors: list[str], code: str = "") -> None:
         super().__init__("; ".join(errors) or "invalid graph")
         self.errors = errors
+        self.code = code
 
 
 def slot_node_id(stage_id: str, slot_index: int) -> str:

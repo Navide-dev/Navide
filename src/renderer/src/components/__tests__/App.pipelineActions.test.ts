@@ -241,7 +241,7 @@ describe('ui.pipeline.start', () => {
       task: 'ship it',
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-7',
-    })
+    }, expect.any(Function)) // the refusal reporter (PR-B)
     expect(result).toEqual({
       pipelineId: 'pl-active',
       stages: 4,
@@ -258,7 +258,7 @@ describe('ui.pipeline.start', () => {
       task: 'go',
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-current',
-    })
+    }, expect.any(Function)) // the refusal reporter (PR-B)
   })
 
   it('defaults task to an empty string when none was given', async () => {
@@ -269,7 +269,7 @@ describe('ui.pipeline.start', () => {
       task: '',
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-active',
-    })
+    }, expect.any(Function)) // the refusal reporter (PR-B)
   })
 
   it('refuses a second run while one is already running, without touching the first', async () => {
@@ -699,5 +699,40 @@ describe('ui.settings.yolo', () => {
     const result = await yolo({ yolo: 'off' })
     expect(stubs.yoloEnabled.value).toBe(true)
     expect(result).toMatchObject({ yolo: true })
+  })
+})
+
+// Pipeline UX PR-B (B2): every refusal also carries a code (and the numbers
+// it mentions) for the editor to say in the UI language; the English sentence
+// is unchanged for MCP callers.
+describe('refusals carry a code', () => {
+  it('the start, with the refusal onPipelineStart reported', async () => {
+    const stubs = makeStubs()
+    stubs.onPipelineStart.mockImplementation(async (_p: StartPayload, report?: (r: unknown) => void) => {
+      report?.({ code: 'spawn-failed', params: {} })
+      return 'no agent of the first stage could be started'
+    })
+    const handlers = await loadActions(stubs)
+    await expect(handlers['ui.pipeline.start']({ task: 'x' })).rejects.toMatchObject({
+      code: 'not-started',
+      params: { reason: 'spawn-failed' },
+    })
+  })
+
+  it('next on the last stage says which stage of how many', async () => {
+    const stubs = makeStubs({ state: 'running', stageIndex: 2, stages: 3 })
+    const handlers = await loadActions(stubs)
+    await expect(handlers['ui.pipeline.next']()).rejects.toMatchObject({
+      code: 'last-stage',
+      params: { stage: 3, total: 3 },
+      message: 'ui.pipeline.next: stage 3 of 3 is the last one — there is no next stage to advance to',
+    })
+  })
+
+  it('abort, resume and gate decisions', async () => {
+    const idle = await loadActions(makeStubs({ state: 'idle' }))
+    await expect(idle['ui.pipeline.abort']()).rejects.toMatchObject({ code: 'not-running' })
+    await expect(idle['ui.pipeline.resume']()).rejects.toMatchObject({ code: 'no-run' })
+    await expect(idle['ui.pipeline.gate_pass']({ nodeId: 'g' })).rejects.toMatchObject({ code: 'not-at-gate' })
   })
 })

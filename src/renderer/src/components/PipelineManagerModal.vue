@@ -144,7 +144,7 @@ function plBackToList(): void {
  *  fold it into the toast instead of showing a bare "failed". */
 function plFail(key: string): string {
   const reason = pipelinesApi.error.value
-    ? backendErrorText(t, { code: pipelinesApi.errorCode.value, message: pipelinesApi.error.value }, key)
+    ? backendErrorText(t, { code: pipelinesApi.errorCode.value, message: pipelinesApi.error.value, details: pipelinesApi.errorDetails.value }, key)
     : ''
   return reason ? `${t(key)} — ${reason}` : t(key)
 }

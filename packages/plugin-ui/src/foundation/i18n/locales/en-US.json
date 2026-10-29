@@ -11242,10 +11242,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "Details",
+    "stage-not-found": "That step no longer exists. It may have been changed elsewhere; reopen the pipeline.",
+    "refused": {
+      "last-pipeline": "This is the only pipeline, so it cannot be deleted. Create another one first.",
+      "last-stage": "A pipeline needs at least one step, so the last one cannot be deleted.",
+      "not-builtin": "Only built-in pipelines can be restored to their original steps.",
+      "no-seed": "This built-in pipeline has no original steps to restore.",
+      "stage-id-required": "The step has no ID. Give it one and try again.",
+      "stage-id-invalid": "A step ID can only use letters, numbers, hyphens, underscores and dots.",
+      "stage-needs-slot": "A step needs at least one agent."
+    },
+    "run": {
+      "no-workspace": "Open a workspace first.",
+      "already-running": "A pipeline is already running in this workspace. Abort it first.",
+      "no-pipeline": "Choose a pipeline first.",
+      "not-started": "The run did not start. The pipeline log says why.",
+      "not-running": "No pipeline is running in this workspace.",
+      "last-stage": "This is the last stage ({stage} of {total}). The run finishes when it reports done.",
+      "gate-waiting": "The run is waiting for your approval at {gate}. Approve it or send it back first.",
+      "not-advanced": "The run did not move on. The pipeline log says why.",
+      "no-run": "This workspace has no run to resume.",
+      "nothing-to-resume": "Every stage of the last run is already done ({done} of {total}).",
+      "not-resumed": "The run did not resume. The pipeline log says why.",
+      "not-cleared": "The run was not cleared. The pipeline log says why.",
+      "stored-not-cleared": "The panes were closed, but the saved run was not cleared.",
+      "no-task": "There is no task to run. Enter a task first.",
+      "not-at-gate": "The run is not waiting for an approval.",
+      "wrong-gate": "The run is waiting at {gate}, not at {asked}.",
+      "node-required": "Choose a step to rerun from."
+    },
+    "start": {
+      "parent-suspended": "{name} is waiting here for its sub-pipeline. Resume or reset it first.",
+      "switch-failed": "Could not switch to this pipeline.",
+      "stages-load-failed": "Could not load this pipeline’s steps.",
+      "no-stages": "This pipeline has no steps yet. Add one first.",
+      "graph-failed": "Could not prepare the pipeline for running.",
+      "spawn-failed": "None of the first step’s agents could be started. Check that their CLIs are installed."
+    },
+    "graph": {
+      "slot-incomplete": "{label} needs an agent and a name.",
+      "self-loop": "{label} cannot link to itself.",
+      "edge-into-trigger": "Nothing can link into the start of the pipeline.",
+      "reject-from-trigger": "A send-back link cannot start at the start of the pipeline.",
+      "max-loops-range": "The send-back link from {label} can repeat 1 to {max} times.",
+      "edge-must-start-at-work": "Branch and error links have to start at a step ({label} is not one).",
+      "branch-when": "The branch link from {label} needs a value to match.",
+      "retry-config": "Retry settings on {label} are out of range: 1 to {maxTries} tries, 0 to {maxWaitMs} ms between them.",
+      "subpipeline-links": "Sub-pipelines would call each other in a loop, or call a pipeline that no longer exists.",
+      "no-graph": "The pipeline has not loaded yet. Try again in a moment.",
+      "other": "That change would break the pipeline.",
+      "other-at": "That change would break the pipeline at {label}."
+    },
+    "gate": {
+      "confirm-title": "End the run?",
+      "confirm-no-edge": "{name} has no send-back link, so sending it back ends the run as failed. The panes stay open.",
+      "confirm-exhausted": "{name} has already sent work back as many times as its link allows, so sending it back again ends the run as failed. The panes stay open.",
+      "confirm-button": "End the Run",
+      "rejected-failed": "{name} was sent back and the run ended as failed.",
+      "ends-run-hint": "Sending back here ends the run."
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "A sub-pipeline needs another pipeline to run; create one first.",
-      "subpipeline-cycle": "Sub-pipelines would call each other in a loop: {detail}",
       "pipeline-running": "This pipeline is running, so it cannot be changed right now. Abort or finish the run first.",
       "pipeline-not-found": "This pipeline no longer exists. It may have been deleted elsewhere; pick another pipeline.",
       "export-failed": "Export failed: {message}",
@@ -11253,7 +11314,6 @@
       "command-failed": "The run did not accept that command.",
       "cycle": "That link would make the flow loop forever. Use a reject link from the gate or step instead — it has a retry limit.",
       "duplicate-edge": "These two steps are already linked.",
-      "invalid": "That change would break the pipeline: {detail}",
       "reject-upstream": "A reject link has to point back to an earlier step.",
       "transport": "Could not reach the backend: {message}",
       "unknown": "The backend refused the change without saying why."

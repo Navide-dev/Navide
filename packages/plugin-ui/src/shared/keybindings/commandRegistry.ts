@@ -33,6 +33,10 @@ export interface InvokeCommandResult {
   ok: boolean
   result?: unknown
   error?: string
+  /** A stable reason the handler attached to the error it threw (`code` on
+   *  the Error), for a caller that words the failure itself. */
+  code?: string
+  params?: Record<string, unknown>
 }
 
 // Like executeCommand, but awaits the handler and surfaces its return value
@@ -45,7 +49,13 @@ export async function invokeCommand(id: string, args?: unknown): Promise<InvokeC
     const result = await handler(args)
     return { ok: true, result }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    const coded = err as { code?: unknown; params?: unknown } | null
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      ...(typeof coded?.code === 'string' ? { code: coded.code } : {}),
+      ...(coded?.params && typeof coded.params === 'object' ? { params: coded.params as Record<string, unknown> } : {}),
+    }
   }
 }
 

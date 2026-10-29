@@ -11242,10 +11242,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "Chi tiết",
+    "stage-not-found": "Bước đó không còn nữa. Có thể nó đã được sửa ở nơi khác; hãy mở lại pipeline.",
+    "refused": {
+      "last-pipeline": "Đây là pipeline duy nhất nên không xóa được. Hãy tạo một pipeline khác trước.",
+      "last-stage": "Pipeline cần ít nhất một bước nên không xóa được bước cuối cùng.",
+      "not-builtin": "Chỉ pipeline có sẵn mới khôi phục được về các bước ban đầu.",
+      "no-seed": "Pipeline có sẵn này không có bước ban đầu nào để khôi phục.",
+      "stage-id-required": "Bước này chưa có ID. Hãy đặt ID rồi thử lại.",
+      "stage-id-invalid": "ID của bước chỉ được dùng chữ cái, chữ số, dấu gạch ngang, dấu gạch dưới và dấu chấm.",
+      "stage-needs-slot": "Mỗi bước cần ít nhất một agent."
+    },
+    "run": {
+      "no-workspace": "Hãy mở một không gian làm việc trước.",
+      "already-running": "Không gian làm việc này đã có pipeline đang chạy. Hãy hủy nó trước.",
+      "no-pipeline": "Hãy chọn một pipeline trước.",
+      "not-started": "Lần chạy chưa bắt đầu. Lý do có trong nhật ký pipeline.",
+      "not-running": "Không có pipeline nào đang chạy trong không gian làm việc này.",
+      "last-stage": "Đây là giai đoạn cuối ({stage}/{total}). Lần chạy kết thúc khi nó báo đã xong.",
+      "gate-waiting": "Lần chạy đang chờ bạn phê duyệt tại {gate}. Hãy phê duyệt hoặc trả về trước.",
+      "not-advanced": "Lần chạy không đi tiếp. Lý do có trong nhật ký pipeline.",
+      "no-run": "Không gian làm việc này không có lần chạy nào để tiếp tục.",
+      "nothing-to-resume": "Mọi giai đoạn của lần chạy trước đều đã xong ({done}/{total}).",
+      "not-resumed": "Lần chạy không tiếp tục. Lý do có trong nhật ký pipeline.",
+      "not-cleared": "Lần chạy chưa được xóa. Lý do có trong nhật ký pipeline.",
+      "stored-not-cleared": "Các pane đã đóng, nhưng lần chạy đã lưu chưa được xóa.",
+      "no-task": "Không có tác vụ nào để chạy. Hãy nhập tác vụ trước.",
+      "not-at-gate": "Lần chạy hiện không chờ phê duyệt.",
+      "wrong-gate": "Lần chạy đang chờ tại {gate}, không phải tại {asked}.",
+      "node-required": "Hãy chọn bước để chạy lại từ đó."
+    },
+    "start": {
+      "parent-suspended": "{name} đang chờ pipeline con của nó ở đây. Hãy tiếp tục hoặc đặt lại nó trước.",
+      "switch-failed": "Không chuyển sang pipeline này được.",
+      "stages-load-failed": "Không tải được các bước của pipeline này.",
+      "no-stages": "Pipeline này chưa có bước nào. Hãy thêm một bước trước.",
+      "graph-failed": "Không chuẩn bị được pipeline để chạy.",
+      "spawn-failed": "Không khởi động được agent nào của bước đầu tiên. Hãy kiểm tra CLI của chúng đã được cài đặt chưa."
+    },
+    "graph": {
+      "slot-incomplete": "{label} cần một agent và một tên.",
+      "self-loop": "{label} không thể liên kết với chính nó.",
+      "edge-into-trigger": "Không liên kết nào được đi vào điểm bắt đầu của pipeline.",
+      "reject-from-trigger": "Liên kết trả về không thể bắt đầu từ điểm bắt đầu của pipeline.",
+      "max-loops-range": "Liên kết trả về đi ra từ {label} có thể lặp lại từ 1 đến {max} lần.",
+      "edge-must-start-at-work": "Liên kết rẽ nhánh và liên kết lỗi phải bắt đầu từ một bước ({label} không phải là bước).",
+      "branch-when": "Liên kết rẽ nhánh đi ra từ {label} cần một giá trị để so khớp.",
+      "retry-config": "Thiết lập thử lại của {label} nằm ngoài phạm vi: từ 1 đến {maxTries} lần thử, cách nhau từ 0 đến {maxWaitMs} ms.",
+      "subpipeline-links": "Các pipeline con sẽ gọi nhau thành vòng lặp, hoặc gọi một pipeline không còn tồn tại.",
+      "no-graph": "Pipeline chưa tải xong. Hãy thử lại sau giây lát.",
+      "other": "Thay đổi đó sẽ làm hỏng pipeline.",
+      "other-at": "Thay đổi đó sẽ làm hỏng pipeline tại {label}."
+    },
+    "gate": {
+      "confirm-title": "Kết thúc lần chạy?",
+      "confirm-no-edge": "{name} không có liên kết trả về, nên trả về sẽ kết thúc lần chạy là thất bại. Các pane vẫn mở.",
+      "confirm-exhausted": "{name} đã trả về công việc nhiều lần nhất mà liên kết cho phép, nên trả về lần nữa sẽ kết thúc lần chạy là thất bại. Các pane vẫn mở.",
+      "confirm-button": "Kết thúc lần chạy",
+      "rejected-failed": "{name} đã bị trả về và lần chạy kết thúc là thất bại.",
+      "ends-run-hint": "Trả về ở đây sẽ kết thúc lần chạy."
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "Pipeline con cần một pipeline khác để chạy; hãy tạo một cái trước.",
-      "subpipeline-cycle": "Các pipeline con sẽ gọi nhau thành vòng lặp: {detail}",
       "pipeline-running": "Pipeline này đang chạy, nên hiện không thay đổi được. Hãy hủy hoặc chờ lần chạy kết thúc trước.",
       "pipeline-not-found": "Pipeline này không còn tồn tại. Có thể nó đã bị xóa ở nơi khác; hãy chọn pipeline khác.",
       "export-failed": "Không xuất được: {message}",
@@ -11253,7 +11314,6 @@
       "command-failed": "Lần chạy không chấp nhận lệnh đó.",
       "cycle": "Liên kết đó sẽ khiến luồng lặp mãi. Hãy dùng liên kết trả về từ một điểm phê duyệt hoặc một bước thay cho liên kết này — liên kết trả về có giới hạn số lần thử lại.",
       "duplicate-edge": "Hai bước này đã được liên kết.",
-      "invalid": "Thay đổi đó sẽ làm hỏng pipeline: {detail}",
       "reject-upstream": "Liên kết trả về phải trỏ ngược về một bước trước đó.",
       "transport": "Không kết nối được tới backend: {message}",
       "unknown": "Backend từ chối thay đổi mà không nói lý do."

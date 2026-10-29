@@ -11242,10 +11242,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "Détails",
+    "stage-not-found": "Cette étape n’existe plus. Elle a peut-être été modifiée ailleurs. Rouvrez le pipeline.",
+    "refused": {
+      "last-pipeline": "C’est le seul pipeline, il ne peut donc pas être supprimé. Créez-en d’abord un autre.",
+      "last-stage": "Un pipeline doit avoir au moins une étape, la dernière ne peut donc pas être supprimée.",
+      "not-builtin": "Seuls les pipelines intégrés peuvent retrouver leurs étapes d’origine.",
+      "no-seed": "Ce pipeline intégré n’a pas d’étapes d’origine à restaurer.",
+      "stage-id-required": "L’étape n’a pas d’ID. Donnez-lui en un et réessayez.",
+      "stage-id-invalid": "Un ID d’étape ne peut contenir que des lettres, des chiffres, des tirets, des traits de soulignement et des points.",
+      "stage-needs-slot": "Une étape a besoin d’au moins un agent."
+    },
+    "run": {
+      "no-workspace": "Ouvrez d’abord un espace de travail.",
+      "already-running": "Un pipeline est déjà en cours dans cet espace de travail. Interrompez-le d’abord.",
+      "no-pipeline": "Choisissez d’abord un pipeline.",
+      "not-started": "L’exécution n’a pas démarré. Le journal du pipeline en donne la raison.",
+      "not-running": "Aucun pipeline n’est en cours dans cet espace de travail.",
+      "last-stage": "C’est la dernière étape ({stage} sur {total}). L’exécution se termine quand elle signale qu’elle a fini.",
+      "gate-waiting": "L’exécution attend votre approbation à {gate}. Approuvez-la ou renvoyez-la d’abord.",
+      "not-advanced": "L’exécution n’a pas avancé. Le journal du pipeline en donne la raison.",
+      "no-run": "Cet espace de travail n’a aucune exécution à reprendre.",
+      "nothing-to-resume": "Toutes les étapes de la dernière exécution sont déjà terminées ({done} sur {total}).",
+      "not-resumed": "L’exécution n’a pas repris. Le journal du pipeline en donne la raison.",
+      "not-cleared": "L’exécution n’a pas été effacée. Le journal du pipeline en donne la raison.",
+      "stored-not-cleared": "Les volets ont été fermés, mais l’exécution enregistrée n’a pas été effacée.",
+      "no-task": "Il n’y a aucune tâche à exécuter. Saisissez d’abord une tâche.",
+      "not-at-gate": "L’exécution n’attend aucune approbation.",
+      "wrong-gate": "L’exécution attend à {gate}, pas à {asked}.",
+      "node-required": "Choisissez l’étape à partir de laquelle relancer."
+    },
+    "start": {
+      "parent-suspended": "{name} attend ici son sous-pipeline. Reprenez-le ou réinitialisez-le d’abord.",
+      "switch-failed": "Impossible de passer à ce pipeline.",
+      "stages-load-failed": "Impossible de charger les étapes de ce pipeline.",
+      "no-stages": "Ce pipeline n’a encore aucune étape. Ajoutez-en une d’abord.",
+      "graph-failed": "Impossible de préparer l’exécution du pipeline.",
+      "spawn-failed": "Aucun agent de la première étape n’a pu démarrer. Vérifiez que leurs CLI sont installées."
+    },
+    "graph": {
+      "slot-incomplete": "{label} a besoin d’un agent et d’un nom.",
+      "self-loop": "{label} ne peut pas être lié à lui-même.",
+      "edge-into-trigger": "Aucun lien ne peut entrer dans le début du pipeline.",
+      "reject-from-trigger": "Un lien de renvoi ne peut pas partir du début du pipeline.",
+      "max-loops-range": "Le lien de renvoi partant de {label} peut se répéter de 1 à {max} fois.",
+      "edge-must-start-at-work": "Les liens de branche et d’erreur doivent partir d’une étape ({label} n’en est pas une).",
+      "branch-when": "Le lien de branche partant de {label} a besoin d’une valeur à comparer.",
+      "retry-config": "Les réglages de nouvelle tentative de {label} sont hors limites : 1 à {maxTries} tentatives, 0 à {maxWaitMs} ms entre elles.",
+      "subpipeline-links": "Des sous-pipelines s’appelleraient en boucle, ou appelleraient un pipeline qui n’existe plus.",
+      "no-graph": "Le pipeline n’est pas encore chargé. Réessayez dans un instant.",
+      "other": "Cette modification casserait le pipeline.",
+      "other-at": "Cette modification casserait le pipeline à {label}."
+    },
+    "gate": {
+      "confirm-title": "Terminer l’exécution ?",
+      "confirm-no-edge": "{name} n’a pas de lien de renvoi. Le renvoyer termine donc l’exécution en échec. Les volets restent ouverts.",
+      "confirm-exhausted": "{name} a déjà renvoyé le travail autant de fois que son lien le permet. Le renvoyer encore termine l’exécution en échec. Les volets restent ouverts.",
+      "confirm-button": "Terminer l’exécution",
+      "rejected-failed": "{name} a été renvoyé et l’exécution s’est terminée en échec.",
+      "ends-run-hint": "Renvoyer ici termine l’exécution."
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "Un sous-pipeline a besoin d’un autre pipeline à exécuter ; créez-en un d’abord.",
-      "subpipeline-cycle": "Des sous-pipelines s’appelleraient en boucle : {detail}",
       "pipeline-running": "Ce pipeline est en cours d’exécution, il ne peut donc pas être modifié pour l’instant. Interrompez ou terminez d’abord l’exécution.",
       "pipeline-not-found": "Ce pipeline n’existe plus. Il a peut-être été supprimé ailleurs ; choisissez un autre pipeline.",
       "export-failed": "Échec de l’export : {message}",
@@ -11253,7 +11314,6 @@
       "command-failed": "L’exécution n’a pas accepté cette commande.",
       "cycle": "Ce lien ferait boucler le flux indéfiniment. Utilisez plutôt un lien de renvoi depuis la validation ou l’étape : il a une limite de tentatives.",
       "duplicate-edge": "Ces deux étapes sont déjà liées.",
-      "invalid": "Cette modification casserait le pipeline : {detail}",
       "reject-upstream": "Un lien de renvoi doit pointer vers une étape antérieure.",
       "transport": "Impossible de joindre le backend : {message}",
       "unknown": "Le backend a refusé la modification sans dire pourquoi."

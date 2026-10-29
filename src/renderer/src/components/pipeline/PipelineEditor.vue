@@ -39,7 +39,7 @@ import {
   type LaneBadge,
 } from '../../lib/pipelineGraphEdits'
 import { applyGraphOps, DEFAULT_MAX_LOOPS, MAX_LOOPS_CEILING } from '../../lib/pipelineGraph'
-import { backendErrorText } from '../../lib/pipelineErrors'
+import { backendErrorText, detailsAction, graphProblemText, runErrorText } from '../../lib/pipelineErrors'
 import PipelineSwimlane, { type LaneTarget } from './PipelineSwimlane.vue'
 import PipelineCanvas from './PipelineCanvas.vue'
 import PipelinePalette from './PipelinePalette.vue'
@@ -151,23 +151,25 @@ function reviewGate(): void {
 }
 
 // ── Errors ───────────────────────────────────────────────────────────────────
+// Problems carry a code and the step's label (graphProblems); the English
+// sentence they replace stays behind the toast's Details.
 function explain(err: EditorError): string {
   if (err.code === 'PIPELINE_RUNNING') return t('pipelineEditor.error.pipeline-running')
+  if (err.code === 'NO_GRAPH') return graphProblemText(t, { code: 'no-graph' })
   if (err.code === 'GRAPH_INVALID') {
-    const first = err.details?.[0] ?? err.message
-    if (/subpipeline cycle/.test(first)) return t('pipelineEditor.error.subpipeline-cycle', { detail: first })
-    if (/needs subpipeline\.pipelineId/.test(first)) return t('pipelineEditor.error.subpipeline-none')
-    if (/cycle/.test(first)) return t('pipelineEditor.error.cycle')
-    if (/upstream node/.test(first)) return t('pipelineEditor.error.reject-upstream')
-    if (/duplicate edge/.test(first)) return t('pipelineEditor.error.duplicate-edge')
-    return t('pipelineEditor.error.invalid', { detail: first })
+    const first = err.problems?.[0]
+    if (first) return graphProblemText(t, first)
+    return graphProblemText(t, { code: err.problemCode ?? '' })
   }
   if (err.code === 'TRANSPORT') return t('pipelineEditor.error.transport', { message: err.message })
-  return backendErrorText(t, err, 'pipelineEditor.error.unknown')
+  return backendErrorText(t, { code: err.code, message: err.message }, 'pipelineEditor.error.unknown')
+}
+function rawOf(err: EditorError): string {
+  return err.details?.length ? err.details.join('\n') : err.message
 }
 async function apply(label: string, ops: GraphOp[], undoOps?: GraphOp[]): Promise<boolean> {
   const result = await editor.execute(label, ops, undoOps)
-  if (!result.ok) notify.toast(explain(result.error), { type: 'error' })
+  if (!result.ok) notify.toast(explain(result.error), { type: 'error', action: detailsAction(t, notify, rawOf(result.error)) })
   return result.ok
 }
 watch(() => editor.externalEdits.value, () => {
@@ -378,9 +380,15 @@ async function openOnCanvas(b: LaneBadge): Promise<void> {
 }
 
 // ── Run control (engine lives in the host; reached as UI commands) ───────────
+/** A refused command in the UI language (its code); the developer sentence
+ *  ("ui.pipeline.next: …", meant for MCP callers) is behind Details. */
+function toastRefusal(result: { error?: string; code?: string; params?: Record<string, unknown> }): void {
+  const label = (id: string): string => byId.value.get(id)?.label || id
+  notify.toast(runErrorText(t, result, label), { type: 'error', action: detailsAction(t, notify, result.error ?? '') })
+}
 async function command(id: string, args?: unknown): Promise<void> {
   const result = await invokeCommand(id, args)
-  if (!result.ok) notify.toast(result.error ?? t('pipelineEditor.error.command-failed'), { type: 'error' })
+  if (!result.ok) toastRefusal(result)
 }
 // Reset closes every pane in the window, so the host asks first (confirm).
 const control = (action: 'next' | 'abort' | 'resume' | 'restart' | 'reset'): Promise<void> =>
@@ -401,11 +409,11 @@ const startBlocked = computed(() => {
 async function startRun(): Promise<void> {
   if (!canStart.value) return
   const result = await invokeCommand('ui.pipeline.start', { pipelineId: props.pipelineId, task: runTask.value.trim() })
-  if (!result.ok) notify.toast(result.error ?? t('pipelineEditor.error.command-failed'), { type: 'error' })
+  if (!result.ok) toastRefusal(result)
   else runTask.value = ''
 }
 const decideGate = (nodeId: string, decision: 'approve' | 'reject', comment: string): Promise<void> =>
-  command(decision === 'approve' ? 'ui.pipeline.gate_pass' : 'ui.pipeline.gate_reject', decision === 'reject' ? { nodeId, comment } : { nodeId })
+  command(decision === 'approve' ? 'ui.pipeline.gate_pass' : 'ui.pipeline.gate_reject', decision === 'reject' ? { nodeId, comment, confirm: true } : { nodeId })
 const restartFrom = (nodeId: string): Promise<void> => command('ui.pipeline.restart_from', { nodeId })
 /** Retry a failed step of a stopped run: a resume when it sits in the first
  *  unfinished layer (the stage the run resumes at, panes and context kept),

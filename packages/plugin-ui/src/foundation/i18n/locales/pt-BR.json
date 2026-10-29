@@ -11242,10 +11242,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "Detalhes",
+    "stage-not-found": "Esse passo não existe mais. Ele pode ter sido alterado em outro lugar; abra o pipeline de novo.",
+    "refused": {
+      "last-pipeline": "Este é o único pipeline, então não pode ser excluído. Crie outro primeiro.",
+      "last-stage": "Um pipeline precisa de pelo menos um passo, então o último não pode ser excluído.",
+      "not-builtin": "Só pipelines integrados podem voltar aos passos originais.",
+      "no-seed": "Este pipeline integrado não tem passos originais para restaurar.",
+      "stage-id-required": "O passo não tem ID. Defina um e tente de novo.",
+      "stage-id-invalid": "Um ID de passo só pode usar letras, números, hifens, sublinhados e pontos.",
+      "stage-needs-slot": "Um passo precisa de pelo menos um agent."
+    },
+    "run": {
+      "no-workspace": "Abra um espaço de trabalho primeiro.",
+      "already-running": "Já há um pipeline em execução neste espaço de trabalho. Cancele-o primeiro.",
+      "no-pipeline": "Escolha um pipeline primeiro.",
+      "not-started": "A execução não começou. O log do pipeline mostra o motivo.",
+      "not-running": "Nenhum pipeline está em execução neste espaço de trabalho.",
+      "last-stage": "Esta é a última etapa ({stage} de {total}). A execução termina quando ela informar que concluiu.",
+      "gate-waiting": "A execução está aguardando sua aprovação em {gate}. Aprove ou devolva primeiro.",
+      "not-advanced": "A execução não avançou. O log do pipeline mostra o motivo.",
+      "no-run": "Este espaço de trabalho não tem nenhuma execução para retomar.",
+      "nothing-to-resume": "Todas as etapas da última execução já foram concluídas ({done} de {total}).",
+      "not-resumed": "A execução não foi retomada. O log do pipeline mostra o motivo.",
+      "not-cleared": "A execução não foi limpa. O log do pipeline mostra o motivo.",
+      "stored-not-cleared": "Os painéis foram fechados, mas a execução salva não foi limpa.",
+      "no-task": "Não há tarefa para executar. Digite uma tarefa primeiro.",
+      "not-at-gate": "A execução não está aguardando nenhuma aprovação.",
+      "wrong-gate": "A execução está aguardando em {gate}, não em {asked}.",
+      "node-required": "Escolha o passo a partir do qual executar de novo."
+    },
+    "start": {
+      "parent-suspended": "{name} está aguardando aqui o seu subpipeline. Retome ou redefina primeiro.",
+      "switch-failed": "Não foi possível mudar para este pipeline.",
+      "stages-load-failed": "Não foi possível carregar os passos deste pipeline.",
+      "no-stages": "Este pipeline ainda não tem passos. Adicione um primeiro.",
+      "graph-failed": "Não foi possível preparar o pipeline para executar.",
+      "spawn-failed": "Nenhum agent do primeiro passo pôde ser iniciado. Verifique se as CLIs deles estão instaladas."
+    },
+    "graph": {
+      "slot-incomplete": "{label} precisa de um agent e de um nome.",
+      "self-loop": "{label} não pode ter um vínculo consigo mesmo.",
+      "edge-into-trigger": "Nenhum vínculo pode entrar no início do pipeline.",
+      "reject-from-trigger": "Um vínculo de rejeição não pode sair do início do pipeline.",
+      "max-loops-range": "O vínculo de rejeição que sai de {label} pode se repetir de 1 a {max} vezes.",
+      "edge-must-start-at-work": "Vínculos de ramificação e de erro precisam sair de um passo ({label} não é um passo).",
+      "branch-when": "O vínculo de ramificação que sai de {label} precisa de um valor para comparar.",
+      "retry-config": "As configurações de nova tentativa de {label} estão fora do intervalo: de 1 a {maxTries} tentativas, de 0 a {maxWaitMs} ms entre elas.",
+      "subpipeline-links": "Subpipelines chamariam uns aos outros em loop ou chamariam um pipeline que não existe mais.",
+      "no-graph": "O pipeline ainda não foi carregado. Tente de novo daqui a pouco.",
+      "other": "Essa alteração quebraria o pipeline.",
+      "other-at": "Essa alteração quebraria o pipeline em {label}."
+    },
+    "gate": {
+      "confirm-title": "Encerrar a execução?",
+      "confirm-no-edge": "{name} não tem vínculo de rejeição, então devolver encerra a execução como falha. Os painéis continuam abertos.",
+      "confirm-exhausted": "{name} já devolveu o trabalho tantas vezes quanto o vínculo permite, então devolver de novo encerra a execução como falha. Os painéis continuam abertos.",
+      "confirm-button": "Encerrar a Execução",
+      "rejected-failed": "{name} foi devolvido e a execução terminou como falha.",
+      "ends-run-hint": "Devolver aqui encerra a execução."
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "Um subpipeline precisa de outro pipeline para executar; crie um primeiro.",
-      "subpipeline-cycle": "Subpipelines chamariam uns aos outros em loop: {detail}",
       "pipeline-running": "Este pipeline está em execução; por isso, não pode ser alterado agora. Cancele ou conclua a execução primeiro.",
       "pipeline-not-found": "Este pipeline não existe mais. Ele pode ter sido excluído em outro lugar; escolha outro pipeline.",
       "export-failed": "Falha na exportação: {message}",
@@ -11253,7 +11314,6 @@
       "command-failed": "A execução não aceitou esse comando.",
       "cycle": "Esse vínculo faria o fluxo entrar em loop para sempre. Use um vínculo de rejeição a partir do ponto de aprovação ou do passo – ele tem limite de novas tentativas.",
       "duplicate-edge": "Estes dois passos já estão vinculados.",
-      "invalid": "Essa alteração quebraria o pipeline: {detail}",
       "reject-upstream": "Um vínculo de rejeição precisa apontar de volta para um passo anterior.",
       "transport": "Não foi possível acessar o back-end: {message}",
       "unknown": "O back-end recusou a alteração sem informar o motivo."
