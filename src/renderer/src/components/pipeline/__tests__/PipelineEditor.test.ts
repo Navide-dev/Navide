@@ -370,7 +370,41 @@ describe('PipelineEditor', () => {
     await flushPromises()
     await w.find('.pi-decision .pi-btn:not(.pi-btn--primary)').trigger('click') // send back
     await flushPromises()
-    expect(useNotify().toasts.value.slice(before).at(-1)?.message).toContain('ui.pipeline.gate_reject')
+    // Said in the UI language; the host's own sentence is behind Details (B2).
+    const toast = useNotify().toasts.value.slice(before).at(-1)
+    expect(toast?.message).toBe('The run did not accept that command.')
+    expect(toast?.action?.label).toBe('Details')
+    toast?.action?.run()
+    expect(useNotify().dialog.value?.message).toContain('ui.pipeline.gate_reject')
+    useNotify().resolveDialog(true)
+  })
+
+  it('says a refused run command in the UI language, naming the gate by its label (B2)', async () => {
+    registerCommand('ui.pipeline.gate_pass', () => {
+      throw Object.assign(new Error('ui.pipeline.gate_pass: the run is waiting on gate "other", not "gate"'), { code: 'wrong-gate', params: { gate: 'other', asked: 'gate' } })
+    })
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'running', gate: 'gate', nodes: { gate: { status: 'awaiting' } } }
+    const { w } = await mountEditor({ run, locked: true })
+    const before = useNotify().toasts.value.length
+    await w.find('.lane-card[data-node-id="gate"]').trigger('click')
+    await flushPromises()
+    await w.find('.pi-decision .pi-btn--primary').trigger('click') // approve
+    await flushPromises()
+    const message = useNotify().toasts.value.slice(before).at(-1)?.message ?? ''
+    // "other" is not a node here, so it stays its id; "gate" is the gate's label.
+    expect(message).toBe('The run is waiting at other, not at Approve.')
+  })
+
+  it('a person\'s Send Back asks the host to confirm a run-ending reject (B4)', async () => {
+    const calls: unknown[] = []
+    registerCommand('ui.pipeline.gate_reject', (args) => { calls.push(args) })
+    const run: RunSnapshot = { pipelineId: 'p1', state: 'running', gate: 'gate', nodes: { gate: { status: 'awaiting' } } }
+    const { w } = await mountEditor({ run, locked: true })
+    await w.find('.lane-card[data-node-id="gate"]').trigger('click')
+    await flushPromises()
+    await w.find('.pi-decision .pi-btn:not(.pi-btn--primary)').trigger('click')
+    await flushPromises()
+    expect(calls).toEqual([expect.objectContaining({ nodeId: 'gate', confirm: true })])
   })
 
   it('shows a run strip with progress and what is running, in every editor view', async () => {

@@ -285,16 +285,20 @@ function isWorkNode(n: GraphNode | undefined): boolean {
   return n?.kind === 'slot' || n?.kind === 'subpipeline'
 }
 
-function subpipelineErrors(n: GraphNode): string[] {
+/** [problem code, message] pairs; see GraphProblem. */
+type CodedErrors = Array<[string, string]>
+
+function subpipelineErrors(n: GraphNode): CodedErrors {
   const c = n.subpipeline as unknown
-  if (!c || typeof c !== 'object' || Array.isArray(c)) return [`subpipeline node ${n.id} needs subpipeline.pipelineId`]
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return [['subpipeline-none', `subpipeline node ${n.id} needs subpipeline.pipelineId`]]
   const o = c as Record<string, unknown>
-  const errors: string[] = []
-  if (typeof o.pipelineId !== 'string' || !o.pipelineId.trim()) errors.push(`subpipeline node ${n.id} needs subpipeline.pipelineId`)
-  if (o.task !== undefined && typeof o.task !== 'string') errors.push(`subpipeline node ${n.id}: task must be a string`)
-  if (o.wait !== undefined && o.wait !== true) errors.push(`subpipeline node ${n.id}: wait must be true (the parent always waits)`)
+  const errors: CodedErrors = []
+  const push = (message: string): void => { errors.push(['subpipeline-config', message]) }
+  if (typeof o.pipelineId !== 'string' || !o.pipelineId.trim()) errors.push(['subpipeline-none', `subpipeline node ${n.id} needs subpipeline.pipelineId`])
+  if (o.task !== undefined && typeof o.task !== 'string') push(`subpipeline node ${n.id}: task must be a string`)
+  if (o.wait !== undefined && o.wait !== true) push(`subpipeline node ${n.id}: wait must be true (the parent always waits)`)
   if (Object.keys(o).some((k) => k !== 'pipelineId' && k !== 'task' && k !== 'wait')) {
-    errors.push(`subpipeline node ${n.id}: subpipeline takes only pipelineId, task and wait`)
+    push(`subpipeline node ${n.id}: subpipeline takes only pipelineId, task and wait`)
   }
   return errors
 }
@@ -342,26 +346,27 @@ export function subpipelineCycleErrors(graphs: Readonly<Record<string, PipelineG
   return errors
 }
 
-function retryErrors(n: GraphNode): string[] {
-  if (!isWorkNode(n)) return [`node ${n.id}: only slot and subpipeline nodes carry retry`]
+function retryErrors(n: GraphNode): CodedErrors {
+  if (!isWorkNode(n)) return [['retry-config', `node ${n.id}: only slot and subpipeline nodes carry retry`]]
   const r = n.retry as unknown
-  if (!r || typeof r !== 'object' || Array.isArray(r)) return [`node ${n.id}: retry must be {maxTries, waitMs?}`]
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return [['retry-config', `node ${n.id}: retry must be {maxTries, waitMs?}`]]
   const o = r as Record<string, unknown>
-  const errors: string[] = []
-  if (Object.keys(o).some((k) => k !== 'maxTries' && k !== 'waitMs')) errors.push(`node ${n.id}: retry takes only maxTries and waitMs`)
+  const errors: CodedErrors = []
+  const push = (message: string): void => { errors.push(['retry-config', message]) }
+  if (Object.keys(o).some((k) => k !== 'maxTries' && k !== 'waitMs')) push(`node ${n.id}: retry takes only maxTries and waitMs`)
   const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v)
   if (!isInt(o.maxTries) || o.maxTries < 1 || o.maxTries > MAX_TRIES_CEILING) {
-    errors.push(`node ${n.id}: retry.maxTries must be an integer 1..${MAX_TRIES_CEILING}`)
+    push(`node ${n.id}: retry.maxTries must be an integer 1..${MAX_TRIES_CEILING}`)
   }
   if (o.waitMs !== undefined && (!isInt(o.waitMs) || o.waitMs < 0 || o.waitMs > MAX_RETRY_WAIT_MS)) {
-    errors.push(`node ${n.id}: retry.waitMs must be an integer 0..${MAX_RETRY_WAIT_MS}`)
+    push(`node ${n.id}: retry.waitMs must be an integer 0..${MAX_RETRY_WAIT_MS}`)
   }
   return errors
 }
 
-function branchWhenErrors(e: GraphEdge): string[] {
+function branchWhenErrors(e: GraphEdge): CodedErrors {
   const w = e.when as unknown
-  if (typeof w === 'string') return w.trim() ? [] : [`branch edge ${e.id}: when must not be empty`]
+  if (typeof w === 'string') return w.trim() ? [] : [['branch-when', `branch edge ${e.id}: when must not be empty`]]
   if (w && typeof w === 'object' && !Array.isArray(w)) {
     const o = w as Record<string, unknown>
     const extra = Object.keys(o).filter((k) => k !== 'path' && k !== 'equals')
@@ -369,7 +374,7 @@ function branchWhenErrors(e: GraphEdge): string[] {
     const okEq = eq === null || ['string', 'number', 'boolean'].includes(typeof eq)
     if (typeof o.path === 'string' && o.path.trim() && 'equals' in o && okEq && !extra.length) return []
   }
-  return [`branch edge ${e.id}: when must be a non-empty string or {path, equals}`]
+  return [['branch-when', `branch edge ${e.id}: when must be a non-empty string or {path, equals}`]]
 }
 
 /** The graph a legacy linear pipeline implies: a trigger, one node per slot,
@@ -515,63 +520,92 @@ export function isLinearGraph(graph: PipelineGraph): boolean {
   return true
 }
 
+/** One problem validateGraph reports, with a stable `code` and the step it is
+ *  about, so a window can say it in the UI language and name the step by its
+ *  label (pipelineErrors.graphProblemText). `message` is validateGraph's
+ *  English sentence, unchanged. */
+export interface GraphProblem {
+  code: string
+  message: string
+  /** The node the problem is on; for a link, the node it starts at. */
+  nodeId?: string
+  /** That node's label (its id when it has none). */
+  label?: string
+  params?: Record<string, string | number>
+}
+
 /** Structural problems, empty when the graph is valid. Forward edges (main,
  *  branch, error) must form a DAG; the only cycles allowed are reject edges,
  *  which must point to an upstream node of their source and carry a bounded
  *  loop count. Branch and error edges start at a slot; only branch edges carry
  *  `when`, and they must. */
 export function validateGraph(graph: PipelineGraph): string[] {
-  const errors: string[] = []
+  return graphProblems(graph).map((p) => p.message)
+}
+
+/** validateGraph's problems with their codes (see GraphProblem). */
+export function graphProblems(graph: PipelineGraph): GraphProblem[] {
+  const errors: GraphProblem[] = []
   if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
-    return ['graph must have nodes[] and edges[]']
+    return [{ code: 'graph-shape', message: 'graph must have nodes[] and edges[]' }]
   }
   const nodes = new Map<string, GraphNode>()
+  const at = (nodeId: string | undefined): Pick<GraphProblem, 'nodeId' | 'label'> => {
+    if (!nodeId) return {}
+    const n = nodes.get(nodeId)
+    return { nodeId, label: n?.label || n?.slot?.label || nodeId }
+  }
+  const add = (code: string, message: string, nodeId?: string, params?: GraphProblem['params']): void => {
+    errors.push({ code, message, ...at(nodeId), ...(params ? { params } : {}) })
+  }
   for (const n of graph.nodes) {
-    if (!n?.id) { errors.push('node without id'); continue }
-    if (nodes.has(n.id)) errors.push(`duplicate node id ${n.id}`)
+    if (!n?.id) { add('node-no-id', 'node without id'); continue }
+    if (nodes.has(n.id)) add('duplicate-node', `duplicate node id ${n.id}`, n.id)
     nodes.set(n.id, n)
-    if (!['trigger', 'slot', 'gate', 'subpipeline'].includes(n.kind)) errors.push(`node ${n.id}: unknown kind ${String(n.kind)}`)
-    if (n.kind === 'subpipeline') errors.push(...subpipelineErrors(n))
-    else if (n.subpipeline != null) errors.push(`node ${n.id}: only subpipeline nodes carry subpipeline config`)
+    if (!['trigger', 'slot', 'gate', 'subpipeline'].includes(n.kind)) add('unknown-kind', `node ${n.id}: unknown kind ${String(n.kind)}`, n.id)
+    if (n.kind === 'subpipeline') for (const [code, m] of subpipelineErrors(n)) add(code, m, n.id)
+    else if (n.subpipeline != null) add('misplaced-config', `node ${n.id}: only subpipeline nodes carry subpipeline config`, n.id)
     if (n.kind === 'slot' && (!n.slot || !n.slot.agentKey || !n.slot.label)) {
-      errors.push(`slot node ${n.id} needs slot.agentKey and slot.label`)
+      add('slot-incomplete', `slot node ${n.id} needs slot.agentKey and slot.label`, n.id)
     }
-    if (n.kind !== 'slot' && n.slot) errors.push(`node ${n.id}: only slot nodes carry slot config`)
+    if (n.kind !== 'slot' && n.slot) add('misplaced-config', `node ${n.id}: only slot nodes carry slot config`, n.id)
     if (!n.position || !Number.isFinite(n.position.x) || !Number.isFinite(n.position.y)) {
-      errors.push(`node ${n.id} needs a numeric position`)
+      add('no-position', `node ${n.id} needs a numeric position`, n.id)
     }
-    if (n.retry != null) errors.push(...retryErrors(n))
+    if (n.retry != null) {
+      for (const [code, m] of retryErrors(n)) add(code, m, n.id, { maxTries: MAX_TRIES_CEILING, maxWaitMs: MAX_RETRY_WAIT_MS })
+    }
   }
   const edgeIds = new Set<string>()
   const pairs = new Set<string>()
   const succ = new Map<string, string[]>()
   for (const id of nodes.keys()) succ.set(id, [])
   for (const e of graph.edges) {
-    if (!e?.id) { errors.push('edge without id'); continue }
-    if (edgeIds.has(e.id)) errors.push(`duplicate edge id ${e.id}`)
+    if (!e?.id) { add('edge-no-id', 'edge without id'); continue }
+    if (edgeIds.has(e.id)) add('duplicate-edge-id', `duplicate edge id ${e.id}`, e.from)
     edgeIds.add(e.id)
     const kind = e.kind ?? 'main'
     const known = kind === 'main' || kind === 'reject' || kind === 'branch' || kind === 'error'
-    if (!known) errors.push(`edge ${e.id}: unknown kind ${String(kind)}`)
-    if (!nodes.has(e.from) || !nodes.has(e.to)) { errors.push(`edge ${e.id} references a missing node`); continue }
-    if (e.from === e.to) errors.push(`edge ${e.id} is a self-loop`)
+    if (!known) add('unknown-edge-kind', `edge ${e.id}: unknown kind ${String(kind)}`, e.from)
+    if (!nodes.has(e.from) || !nodes.has(e.to)) { add('edge-missing-node', `edge ${e.id} references a missing node`); continue }
+    if (e.from === e.to) add('self-loop', `edge ${e.id} is a self-loop`, e.from)
     const pair = `${kind}\u0000${e.from}\u0000${e.to}`
-    if (pairs.has(pair)) errors.push(`duplicate edge ${e.from} → ${e.to}`)
+    if (pairs.has(pair)) add('duplicate-edge', `duplicate edge ${e.from} → ${e.to}`, e.from)
     pairs.add(pair)
-    if (nodes.get(e.to)!.kind === 'trigger') errors.push(`edge ${e.id} points into a trigger`)
+    if (nodes.get(e.to)!.kind === 'trigger') add('edge-into-trigger', `edge ${e.id} points into a trigger`, e.from)
     if (kind === 'reject') {
-      if (nodes.get(e.from)!.kind === 'trigger') errors.push(`reject edge ${e.id} cannot start at a trigger`)
+      if (nodes.get(e.from)!.kind === 'trigger') add('reject-from-trigger', `reject edge ${e.id} cannot start at a trigger`, e.from)
       const m = e.maxLoops ?? DEFAULT_MAX_LOOPS
       if (!Number.isInteger(m) || m < 1 || m > MAX_LOOPS_CEILING) {
-        errors.push(`reject edge ${e.id}: maxLoops must be an integer 1..${MAX_LOOPS_CEILING}`)
+        add('max-loops-range', `reject edge ${e.id}: maxLoops must be an integer 1..${MAX_LOOPS_CEILING}`, e.from, { max: MAX_LOOPS_CEILING })
       }
     } else if (known) {
       succ.get(e.from)!.push(e.to)
-      if (e.maxLoops !== undefined) errors.push(`edge ${e.id}: maxLoops is only for reject edges`)
-      if (kind !== 'main' && !isWorkNode(nodes.get(e.from))) errors.push(`${kind} edge ${e.id} must start at a slot or subpipeline node`)
+      if (e.maxLoops !== undefined) add('misplaced-config', `edge ${e.id}: maxLoops is only for reject edges`, e.from)
+      if (kind !== 'main' && !isWorkNode(nodes.get(e.from))) add('edge-must-start-at-work', `${kind} edge ${e.id} must start at a slot or subpipeline node`, e.from)
     }
-    if (kind === 'branch') errors.push(...branchWhenErrors(e))
-    else if (e.when != null) errors.push(`edge ${e.id}: when is only for branch edges`)
+    if (kind === 'branch') for (const [code, m] of branchWhenErrors(e)) add(code, m, e.from)
+    else if (e.when != null) add('misplaced-config', `edge ${e.id}: when is only for branch edges`, e.from)
   }
   // Forward-edge cycle check (iterative DFS, colour marking).
   const colour = new Map<string, 0 | 1 | 2>()
@@ -590,11 +624,11 @@ export function validateGraph(graph: PipelineGraph): string[] {
     }
     if (cyclic) break
   }
-  if (cyclic) errors.push('main edges form a cycle; loops must use a reject edge')
+  if (cyclic) add('cycle', 'main edges form a cycle; loops must use a reject edge')
   else {
     for (const e of graph.edges) {
       if ((e.kind ?? 'main') !== 'reject' || !nodes.has(e.from) || !nodes.has(e.to)) continue
-      if (!reaches(succ, e.to, e.from)) errors.push(`reject edge ${e.id} must point to an upstream node of ${e.from}`)
+      if (!reaches(succ, e.to, e.from)) add('reject-upstream', `reject edge ${e.id} must point to an upstream node of ${e.from}`, e.from)
     }
   }
   return errors

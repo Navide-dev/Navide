@@ -11188,10 +11188,71 @@
       }
     }
   },
+  "pipelineErrors": {
+    "details": "詳細",
+    "stage-not-found": "這個步驟已經不存在，可能在別處被修改了；請重新開啟這條 pipeline。",
+    "refused": {
+      "last-pipeline": "這是唯一的一條 pipeline，不能刪除。請先建立另一條。",
+      "last-stage": "pipeline 至少要有一個步驟，所以不能刪除最後一個。",
+      "not-builtin": "只有內建的 pipeline 能還原成原本的步驟。",
+      "no-seed": "這條內建 pipeline 沒有可還原的原始步驟。",
+      "stage-id-required": "這個步驟沒有 ID，請設定後再試一次。",
+      "stage-id-invalid": "步驟 ID 只能使用英文字母、數字、連字號、底線和句點。",
+      "stage-needs-slot": "每個步驟至少要有一個 agent。"
+    },
+    "run": {
+      "no-workspace": "請先開啟一個工作區。",
+      "already-running": "這個工作區已經有 pipeline 在執行。請先中止它。",
+      "no-pipeline": "請先選擇一條 pipeline。",
+      "not-started": "執行沒有開始，原因記在 pipeline 紀錄裡。",
+      "not-running": "這個工作區沒有正在執行的 pipeline。",
+      "last-stage": "這是最後一個階段（第 {stage} 個，共 {total} 個），回報完成後執行就會結束。",
+      "gate-waiting": "執行正在「{gate}」等待你核准。請先核准或退回。",
+      "not-advanced": "執行沒有往下走，原因記在 pipeline 紀錄裡。",
+      "no-run": "這個工作區沒有可以繼續的執行。",
+      "nothing-to-resume": "上一次執行的每個階段都已完成（{done}／{total}）。",
+      "not-resumed": "執行沒有繼續，原因記在 pipeline 紀錄裡。",
+      "not-cleared": "執行沒有被清除，原因記在 pipeline 紀錄裡。",
+      "stored-not-cleared": "pane 已經關閉，但儲存的執行紀錄沒有清除。",
+      "no-task": "沒有可執行的任務，請先輸入任務。",
+      "not-at-gate": "執行目前沒有在等待核准。",
+      "wrong-gate": "執行正在「{gate}」等待，不是「{asked}」。",
+      "node-required": "請選擇要從哪個步驟重新執行。"
+    },
+    "start": {
+      "parent-suspended": "「{name}」正在這裡等它的子 Pipeline。請先繼續或重設它。",
+      "switch-failed": "無法切換到這條 pipeline。",
+      "stages-load-failed": "無法載入這條 pipeline 的步驟。",
+      "no-stages": "這條 pipeline 還沒有任何步驟，請先新增一個。",
+      "graph-failed": "無法準備這條 pipeline 的執行。",
+      "spawn-failed": "第一個步驟的 agent 都無法啟動。請確認它們的 CLI 已安裝。"
+    },
+    "graph": {
+      "slot-incomplete": "「{label}」需要設定 agent 和名稱。",
+      "self-loop": "「{label}」不能連到自己。",
+      "edge-into-trigger": "任何連線都不能連進 pipeline 的起點。",
+      "reject-from-trigger": "退回連線不能從 pipeline 的起點拉出。",
+      "max-loops-range": "從「{label}」拉出的退回連線可重複 1 到 {max} 次。",
+      "edge-must-start-at-work": "分支和錯誤連線必須從步驟拉出（「{label}」不是步驟）。",
+      "branch-when": "從「{label}」拉出的分支連線需要一個比對值。",
+      "retry-config": "「{label}」的重試設定超出範圍：嘗試 1 到 {maxTries} 次，間隔 0 到 {maxWaitMs} 毫秒。",
+      "subpipeline-links": "子 Pipeline 會互相呼叫形成循環，或呼叫了已不存在的 pipeline。",
+      "no-graph": "pipeline 還沒載入完成，請稍後再試。",
+      "other": "這個修改會讓 pipeline 無法執行。",
+      "other-at": "這個修改會讓 pipeline 在「{label}」無法執行。"
+    },
+    "gate": {
+      "confirm-title": "要結束這次執行嗎？",
+      "confirm-no-edge": "「{name}」沒有退回連線，退回會讓這次執行以失敗結束。pane 會保留。",
+      "confirm-exhausted": "「{name}」的退回次數已達連線上限，再退回會讓這次執行以失敗結束。pane 會保留。",
+      "confirm-button": "結束執行",
+      "rejected-failed": "「{name}」已退回，這次執行以失敗結束。",
+      "ends-run-hint": "在這裡退回會結束這次執行。"
+    }
+  },
   "pipelineEditor": {
     "error": {
       "subpipeline-none": "子 Pipeline 需要另一條 Pipeline 可以執行，請先建立一條。",
-      "subpipeline-cycle": "子 Pipeline 會互相呼叫成迴圈：{detail}",
       "pipeline-running": "這條 pipeline 正在執行，目前無法修改。請先中止或等執行結束。",
       "pipeline-not-found": "找不到這條 pipeline，可能已在別處被刪除。請改選其他 pipeline。",
       "export-failed": "匯出失敗：{message}",
@@ -11199,7 +11260,6 @@
       "command-failed": "執行沒有接受這個指令。",
       "cycle": "這條連線會讓流程無限循環。請改用從閘門或步驟拉出的退回連線，它有重試上限。",
       "duplicate-edge": "這兩個步驟已經連在一起了。",
-      "invalid": "這個修改會讓 pipeline 失效：{detail}",
       "reject-upstream": "退回連線必須指向更早的步驟。",
       "transport": "無法連到後端：{message}",
       "unknown": "後端拒絕了這個修改，但沒有說明原因。"

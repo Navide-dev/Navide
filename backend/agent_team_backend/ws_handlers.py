@@ -62,7 +62,7 @@ from .mcp_settings import (
     unfilled_mcp_secrets,
 )
 from .plan_index import resolve_plan_root
-from .stages_store import GraphNonLinearError
+from .stages_store import GraphNonLinearError, StoreNotFound, StoreRefused
 from .plan_provisioning import SPEC_FILENAME, TEMPLATE_FILENAME, ensure_plan_assets
 from .profiles_store import SUPPORTED_AGENT_KEYS as PROFILE_AGENT_KEYS
 from .skills_events import notify_skills_changed
@@ -6761,6 +6761,41 @@ async def roles_reset(session: "Session", msg_id: str, msg_type: str, payload: d
 
 
 # ── Pipelines registry (pipelines.*) ────────────────────────────────────────
+def _is_store_refusal(err: BaseException) -> bool:
+    """A refusal of the caller's request rather than a fault: one of the store's
+    own, or any store error that names itself with an `error_code` (snake
+    case, as the MCP tools answer)."""
+    return isinstance(err, (StoreNotFound, StoreRefused)) or isinstance(getattr(err, "error_code", None), str)
+
+
+def _store_error(msg_id: str, msg_type: str, err: BaseException, pipeline_id: str | None = None) -> dict:
+    """A store refusal as a coded answer. Without it the dispatcher reported a
+    missing pipeline as "missing field" and a user's mistake (deleting the last
+    pipeline) as INTERNAL_ERROR, recorded in the error ledger as a crash. The
+    details name what does exist, so the caller can correct itself."""
+    from . import app
+
+    code = getattr(err, "error_code", None)
+    if isinstance(code, str) and code:
+        # pipeline_running → PIPELINE_RUNNING: the WS spelling of the same code.
+        return make_error(msg_id, msg_type, code.upper(), str(err.args[0] if err.args else err))
+    if isinstance(err, StoreRefused):
+        return make_error(msg_id, msg_type, "PIPELINE_REFUSED", str(err), {"reason": err.reason})
+    message = str(err.args[0] if err.args else err)
+    ident = str(getattr(err, "ident", ""))
+    if getattr(err, "what", "") == "stage":
+        try:
+            stage_ids = [s.get("id") for s in app.stages_store.list(pipeline_id)]
+        except StoreNotFound:
+            stage_ids = []
+        return make_error(msg_id, msg_type, "STAGE_NOT_FOUND", message,
+                          {"stage_id": ident, "available_stage_ids": stage_ids})
+    return make_error(msg_id, msg_type, "PIPELINE_NOT_FOUND", message, {
+        "pipeline_id": ident,
+        "available_ids": [p["id"] for p in app.stages_store.list_pipelines()],
+    })
+
+
 @handler("pipelines.list")
 async def pipelines_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -6840,7 +6875,13 @@ async def pipelines_rename(session: "Session", msg_id: str, msg_type: str, paylo
 
     pipeline_id = payload.get("pipeline_id", "")
     name = payload.get("name", "")
-    pipeline = app.stages_store.rename_pipeline(pipeline_id, name)
+    try:
+        pipeline = app.stages_store.rename_pipeline(pipeline_id, name)
+    except (KeyError, ValueError) as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err))
+        return
     pipelines = app.stages_store.list_pipelines()
     await session.send_json(
         make_response(msg_id, msg_type, {"pipeline": pipeline, "pipelines": pipelines})
@@ -6865,7 +6906,13 @@ async def pipelines_delete(session: "Session", msg_id: str, msg_type: str, paylo
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot delete pipeline while a project is running")
             )
             return
-    pipelines = app.stages_store.delete_pipeline(pipeline_id)
+    try:
+        pipelines = app.stages_store.delete_pipeline(pipeline_id)
+    except (KeyError, ValueError) as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err))
+        return
     await session.send_json(
         make_response(msg_id, msg_type, {"pipelines": pipelines})
     )
@@ -6889,7 +6936,13 @@ async def pipelines_set_active(session: "Session", msg_id: str, msg_type: str, p
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot switch pipeline while a project is running")
             )
             return
-    app.stages_store.set_active_pipeline(pipeline_id)
+    try:
+        app.stages_store.set_active_pipeline(pipeline_id)
+    except (KeyError, ValueError) as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err))
+        return
     pipelines = app.stages_store.list_pipelines()
     await session.send_json(
         make_response(msg_id, msg_type, {
@@ -6918,7 +6971,13 @@ async def pipelines_reset_builtin(session: "Session", msg_id: str, msg_type: str
             make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot reset stages while the active pipeline is running")
         )
         return
-    pipeline = app.stages_store.reset_builtin(pipeline_id)
+    try:
+        pipeline = app.stages_store.reset_builtin(pipeline_id)
+    except (KeyError, ValueError) as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err))
+        return
     pipelines = app.stages_store.list_pipelines()
     stages = app.stages_store.list(pipeline_id)
     await session.send_json(
@@ -6978,7 +7037,13 @@ async def stages_list(session: "Session", msg_id: str, msg_type: str, payload: d
     from . import app
 
     pipeline_id = payload.get("pipeline_id") or None
-    stages = app.stages_store.list(pipeline_id)
+    try:
+        stages = app.stages_store.list(pipeline_id)
+    except (KeyError, ValueError) as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err))
+        return
     active_id = app.stages_store.get_active_pipeline_id()
     await session.send_json(
         make_response(
@@ -7000,10 +7065,16 @@ async def stages_upsert(session: "Session", msg_id: str, msg_type: str, payload:
             make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot edit stages while the active pipeline is running")
         )
         return
+    data = payload["stage"]
     try:
-        stage = app.stages_store.upsert(payload["stage"], pipeline_id)
+        stage = app.stages_store.upsert(data, pipeline_id)
     except GraphNonLinearError as err:
         await session.send_json(make_error(msg_id, msg_type, "GRAPH_NONLINEAR", str(err)))
+        return
+    except (KeyError, ValueError) as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err, pipeline_id))
         return
     effective_pipeline_id = pipeline_id or app.stages_store.get_active_pipeline_id()
     updated_stages = app.stages_store.list(pipeline_id)
@@ -7029,10 +7100,16 @@ async def stages_reorder(session: "Session", msg_id: str, msg_type: str, payload
             make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot reorder stages while the active pipeline is running")
         )
         return
+    ids = payload["ids"]
     try:
-        updated_stages = app.stages_store.reorder(payload["ids"], pipeline_id)
+        updated_stages = app.stages_store.reorder(ids, pipeline_id)
     except GraphNonLinearError as err:
         await session.send_json(make_error(msg_id, msg_type, "GRAPH_NONLINEAR", str(err)))
+        return
+    except (KeyError, ValueError) as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err, pipeline_id))
         return
     effective_pipeline_id = pipeline_id or app.stages_store.get_active_pipeline_id()
     await session.send_json(
@@ -7057,10 +7134,16 @@ async def stages_delete(session: "Session", msg_id: str, msg_type: str, payload:
             make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot delete stages while the active pipeline is running")
         )
         return
+    stage_id = payload["id"]
     try:
-        updated_stages = app.stages_store.delete(payload["id"], pipeline_id)
+        updated_stages = app.stages_store.delete(stage_id, pipeline_id)
     except GraphNonLinearError as err:
         await session.send_json(make_error(msg_id, msg_type, "GRAPH_NONLINEAR", str(err)))
+        return
+    except (KeyError, ValueError) as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err, pipeline_id))
         return
     effective_pipeline_id = pipeline_id or app.stages_store.get_active_pipeline_id()
     await session.send_json(
@@ -7085,7 +7168,13 @@ async def stages_reset(session: "Session", msg_id: str, msg_type: str, payload: 
             make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot reset stages while the active pipeline is running")
         )
         return
-    updated_stages = app.stages_store.reset(pipeline_id)
+    try:
+        updated_stages = app.stages_store.reset(pipeline_id)
+    except (KeyError, ValueError) as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err))
+        return
     effective_pipeline_id = pipeline_id or app.stages_store.get_active_pipeline_id()
     await session.send_json(
         make_response(msg_id, msg_type, {"stages": updated_stages})
@@ -7130,7 +7219,10 @@ async def _write_graph(session: "Session", msg_id: str, msg_type: str, payload: 
     try:
         out = write(pipeline_id)
     except GraphError as err:
-        await session.send_json(make_error(msg_id, msg_type, "GRAPH_INVALID", str(err), {"errors": err.errors}))
+        details: dict[str, Any] = {"errors": err.errors}
+        if err.code:
+            details["code"] = err.code
+        await session.send_json(make_error(msg_id, msg_type, "GRAPH_INVALID", str(err), details))
         return
     except KeyError as err:
         await session.send_json(_pipeline_not_found(msg_id, msg_type, err))
@@ -11087,6 +11179,7 @@ async def pipeline_claim(session: "Session", msg_id: str, msg_type: str, payload
 @handler("pipeline.resume")
 async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .projects import NoRunToResume
 
     # Resuming a parent suspended at its sub-pipeline pops its frame: keep the
     # taint the frame recorded (merged, never cleared).
@@ -11094,7 +11187,16 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     before = peek(payload["workspace_path"]) if peek else None
     stack = getattr(before, "run_stack", None) if before is not None else None
     frame_taint = str(stack[-1].get("taint") or "") if before is not None and before.state == "suspended" and stack else ""
-    project, resume_index = app.project_store.resume_pipeline(payload["workspace_path"])
+    try:
+        project, resume_index = app.project_store.resume_pipeline(payload["workspace_path"])
+    except NoRunToResume as err:
+        await session.send_json(make_error(msg_id, msg_type, "NO_RUN_TO_RESUME", str(err)))
+        return
+    except ValueError as err:
+        if not _is_store_refusal(err):
+            raise
+        await session.send_json(_store_error(msg_id, msg_type, err))
+        return
     from .guard.taint import pipeline_run_resumed, restore_pipeline_run_taint
 
     restore_pipeline_run_taint(payload["workspace_path"], frame_taint)
@@ -11138,6 +11240,9 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
         await session.send_json(make_error(msg_id, msg_type, "PIPELINE_SUSPENDED", str(err)))
         return
     except ValueError as err:
+        if _is_store_refusal(err):
+            await session.send_json(_store_error(msg_id, msg_type, err))
+            return
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
         return
     from .guard.taint import arm_pipeline_run, pipeline_run_started
@@ -11171,14 +11276,19 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
 @handler("pipeline.stage_spawn")
 async def pipeline_stage_spawn(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .projects import StageOutOfRange
 
-    project = app.project_store.record_stage_spawn(
-        payload["workspace_path"],
-        stage_index=int(payload["stage_index"]),
-        pane_id=payload["pane_id"],
-        agent=payload.get("agent", ""),
-        role=payload.get("role", ""),
-    )
+    try:
+        project = app.project_store.record_stage_spawn(
+            payload["workspace_path"],
+            stage_index=int(payload["stage_index"]),
+            pane_id=payload["pane_id"],
+            agent=payload.get("agent", ""),
+            role=payload.get("role", ""),
+        )
+    except StageOutOfRange as err:
+        await session.send_json(_stage_out_of_range(msg_id, msg_type, err))
+        return
     from .guard.taint import pipeline_pane_spawned
 
     pipeline_pane_spawned(payload["workspace_path"], str(payload["pane_id"]))
@@ -11191,24 +11301,29 @@ async def pipeline_stage_spawn(session: "Session", msg_id: str, msg_type: str, p
 @handler("pipeline.slot_spawn")
 async def pipeline_slot_spawn(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .projects import StageOutOfRange
 
     slot_pin = _profile_pin_for_bookkeeping(
         payload.get("agent", ""), payload.get("pane_id"), payload.get("profile_id"))
-    project = app.project_store.record_slot_spawn(
-        payload["workspace_path"],
-        stage_index=int(payload["stage_index"]),
-        slot_label=payload["slot_label"],
-        pane_id=payload["pane_id"],
-        agent=payload.get("agent", ""),
-        role=payload.get("role", ""),
-        # Claude passes its pinned --session-id here; Codex/Antigravity pass
-        # "" and persist later via pipeline.slot_session once detected.
-        session_id=payload.get("session_id", ""),
-        session_home_id=payload.get("session_home_id", ""),
-        profile_id=slot_pin,
-        run_group_id=payload.get("run_group_id", ""),
-        launch_id=launch_id.current(),
-    )
+    try:
+        project = app.project_store.record_slot_spawn(
+            payload["workspace_path"],
+            stage_index=int(payload["stage_index"]),
+            slot_label=payload["slot_label"],
+            pane_id=payload["pane_id"],
+            agent=payload.get("agent", ""),
+            role=payload.get("role", ""),
+            # Claude passes its pinned --session-id here; Codex/Antigravity pass
+            # "" and persist later via pipeline.slot_session once detected.
+            session_id=payload.get("session_id", ""),
+            session_home_id=payload.get("session_home_id", ""),
+            profile_id=slot_pin,
+            run_group_id=payload.get("run_group_id", ""),
+            launch_id=launch_id.current(),
+        )
+    except StageOutOfRange as err:
+        await session.send_json(_stage_out_of_range(msg_id, msg_type, err))
+        return
     app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(slot_pin))
     from .guard.taint import pipeline_pane_spawned
 
@@ -11216,6 +11331,11 @@ async def pipeline_slot_spawn(session: "Session", msg_id: str, msg_type: str, pa
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )
+
+
+def _stage_out_of_range(msg_id: str, msg_type: str, err: Any) -> dict:
+    return make_error(msg_id, msg_type, "STAGE_OUT_OF_RANGE", str(err),
+                      {"stage_index": err.stage_index, "total_stages": err.total})
 
 
 @handler("pipeline.slot_session")
@@ -11277,14 +11397,19 @@ async def _sweep_pane_ptys(session: "Session", pane_id: str, *, force: bool = Tr
 @handler("pipeline.slot_unspawn")
 async def pipeline_slot_unspawn(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .projects import StageOutOfRange
 
     stage_index = int(payload["stage_index"])
     slot_label = payload["slot_label"]
-    project = app.project_store.record_slot_unspawn(
-        payload["workspace_path"],
-        stage_index=stage_index,
-        slot_label=slot_label,
-    )
+    try:
+        project = app.project_store.record_slot_unspawn(
+            payload["workspace_path"],
+            stage_index=stage_index,
+            slot_label=slot_label,
+        )
+    except StageOutOfRange as err:
+        await session.send_json(_stage_out_of_range(msg_id, msg_type, err))
+        return
     # A pipeline slot is closed through the same paths as a manual pane, so it
     # needs the same sweep: the record is now 'removed' and nothing will point
     # at the process again.
@@ -11304,13 +11429,19 @@ async def pipeline_slot_unspawn(session: "Session", msg_id: str, msg_type: str, 
 @handler("pipeline.slot_kickoff")
 async def pipeline_slot_kickoff(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .projects import SlotNotFound
 
-    project = app.project_store.update_slot_kickoff(
-        payload["workspace_path"],
-        stage_index=int(payload["stage_index"]),
-        slot_label=payload["slot_label"],
-        kickoff_status=payload.get("kickoff_status", "sent"),
-    )
+    try:
+        project = app.project_store.update_slot_kickoff(
+            payload["workspace_path"],
+            stage_index=int(payload["stage_index"]),
+            slot_label=payload["slot_label"],
+            kickoff_status=payload.get("kickoff_status", "sent"),
+        )
+    except SlotNotFound as err:
+        await session.send_json(make_error(msg_id, msg_type, "SLOT_NOT_FOUND", str(err),
+                                           {"stage_index": err.stage_index, "slot_label": err.slot_label}))
+        return
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )
@@ -11445,12 +11576,17 @@ async def pipeline_fetch_docs(session: "Session", msg_id: str, msg_type: str, pa
 async def pipeline_auto_answer(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    result = await app.analyzer_auto_answer(
-        questions=payload.get("questions", []),
-        task=payload.get("task", ""),
-        stage_title=payload.get("stage_title", ""),
-        model=payload.get("model") or app.ANALYZER_DEFAULT_MODEL,
-    )
+    try:
+        result = await app.analyzer_auto_answer(
+            questions=payload.get("questions", []),
+            task=payload.get("task", ""),
+            stage_title=payload.get("stage_title", ""),
+            model=payload.get("model") or app.ANALYZER_DEFAULT_MODEL,
+        )
+    except Exception as err:  # noqa: BLE001 — the local analyzer being down is not a backend fault
+        log.warning("pipeline.auto_answer failed: %s", err)
+        await session.send_json(make_error(msg_id, msg_type, "AUTO_ANSWER_FAILED", str(err)))
+        return
     app._record_analyzer_tokens(result, payload)
     await session.send_json(make_response(msg_id, msg_type, result))
 

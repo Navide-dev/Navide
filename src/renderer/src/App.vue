@@ -115,6 +115,7 @@ import { usePipelines } from './composables/usePipelines'
 import { usePipelineDag } from './composables/usePipelineDag'
 import { signalsAfterKickoff } from './lib/pipelineDagRun'
 import type { NodeRunState } from './lib/pipelineGraph'
+import { detailsAction, startRefusalText, type StartRefusal } from './lib/pipelineErrors'
 import { useRecentWorkspaces } from './composables/useRecentWorkspaces'
 import { useWorkspaceAliases } from './composables/useWorkspaceAliases'
 import { useAnalyzer, type ClassifyResult } from './composables/useAnalyzer'
@@ -11113,7 +11114,7 @@ registerCommand('ui.window.openPipeline', (args) => {
 // buttons emit into (@pipeline-start / @pipeline-abort) rather than a copy.
 registerCommand('ui.pipeline.start', async (args) => {
   const a = (args as { pipelineId?: string; task?: string } | undefined) ?? {}
-  if (!currentWorkspace.value) throw new Error('ui.pipeline.start requires an open workspace')
+  if (!currentWorkspace.value) throw Object.assign(new Error('ui.pipeline.start requires an open workspace'), { code: 'no-workspace' })
   // A second run would overwrite pipeline.task/stageIndex/state under the
   // panes the first one is still driving, so refuse rather than restart.
   // Guarding a copy rather than pipeline.state itself keeps the state read
@@ -11121,13 +11122,14 @@ registerCommand('ui.pipeline.start', async (args) => {
   // the rest of the function, and TS does not widen it back across an await.
   const before: PipelineRun['state'] = pipeline.state
   if (before === 'running') {
-    throw new Error('ui.pipeline.start: a pipeline is already running in this workspace — abort it first')
+    throw Object.assign(new Error('ui.pipeline.start: a pipeline is already running in this workspace — abort it first'), { code: 'already-running' })
   }
   const pipelineId = a.pipelineId || pipelinesApi.activePipelineId.value
   if (!pipelineId) {
-    throw new Error('ui.pipeline.start requires a pipelineId: this workspace has no active pipeline')
+    throw Object.assign(new Error('ui.pipeline.start requires a pipelineId: this workspace has no active pipeline'), { code: 'no-pipeline' })
   }
-  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId })
+  const refused: { last?: StartRefusal } = {}
+  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId }, (r) => { refused.last = r })
   // onPipelineStart bails SOFTLY on every one of its own refusals (unknown
   // pipeline, stages not loaded, every slot of stage 01 failing to spawn) —
   // it logs and returns. Reporting ok on that is exactly the "started but
@@ -11135,10 +11137,10 @@ registerCommand('ui.pipeline.start', async (args) => {
   // what gets reported, not the fact that the call returned.
   const started: PipelineRun['state'] = pipeline.state
   if (started !== 'running') {
-    throw new Error(
+    throw Object.assign(new Error(
       `ui.pipeline.start: the run did not start (state "${started}")` +
         (refusal ? `: ${refusal}` : ' — see the pipeline log for why')
-    )
+    ), { code: 'not-started', params: refused.last ? { ...refused.last.params, reason: refused.last.code } : {} })
   }
   return {
     pipelineId: pipelinesApi.activePipelineId.value,
@@ -11151,7 +11153,7 @@ registerCommand('ui.pipeline.abort', async () => {
   // onPipelineAbort itself returns silently when nothing is running; say so
   // instead of answering ok for a no-op.
   if (pipeline.state !== 'running') {
-    throw new Error(`ui.pipeline.abort: no pipeline is running in this workspace (state "${pipeline.state}")`)
+    throw Object.assign(new Error(`ui.pipeline.abort: no pipeline is running in this workspace (state "${pipeline.state}")`), { code: 'not-running' })
   }
   await onPipelineAbort()
   return { workspacePath: pipeline.workspacePath, state: pipeline.state }
@@ -11163,13 +11165,13 @@ registerCommand('ui.pipeline.next', async () => {
   // so this refuses it too rather than completing a run behind a caller that
   // asked to step forward.
   if (pipeline.state !== 'running') {
-    throw new Error(`ui.pipeline.next: no pipeline is running in this workspace (state "${pipeline.state}")`)
+    throw Object.assign(new Error(`ui.pipeline.next: no pipeline is running in this workspace (state "${pipeline.state}")`), { code: 'not-running' })
   }
   const before = pipeline.stageIndex
   if (before + 1 >= stagesApi.stages.value.length) {
-    throw new Error(
+    throw Object.assign(new Error(
       `ui.pipeline.next: stage ${before + 1} of ${stagesApi.stages.value.length} is the last one — there is no next stage to advance to`
-    )
+    ), { code: 'last-stage', params: { stage: before + 1, total: stagesApi.stages.value.length } })
   }
   await onPipelineNext()
   // Advancing IS the stageIndex move: onPipelineNext sets it before it
@@ -11177,12 +11179,12 @@ registerCommand('ui.pipeline.next', async () => {
   // it where it was, and that must not read as ok.
   const gate = pipelineDag.awaitingGate.value
   if (gate && pipeline.stageIndex <= before) {
-    throw new Error(`ui.pipeline.next: the run is waiting on gate "${gate.gateId}" — pass or reject it (ui.pipeline.gate_pass / gate_reject)`)
+    throw Object.assign(new Error(`ui.pipeline.next: the run is waiting on gate "${gate.gateId}" — pass or reject it (ui.pipeline.gate_pass / gate_reject)`), { code: 'gate-waiting', params: { gate: gate.gateId } })
   }
   if (pipeline.stageIndex <= before) {
-    throw new Error(
+    throw Object.assign(new Error(
       `ui.pipeline.next: the run did not advance (still on stage ${pipeline.stageIndex}, state "${pipeline.state}") — see the pipeline log for why`
-    )
+    ), { code: 'not-advanced' })
   }
   return {
     workspacePath: pipeline.workspacePath,
@@ -11192,23 +11194,23 @@ registerCommand('ui.pipeline.next', async () => {
   }
 })
 registerCommand('ui.pipeline.resume', async () => {
-  if (!currentWorkspace.value) throw new Error('ui.pipeline.resume requires an open workspace')
+  if (!currentWorkspace.value) throw Object.assign(new Error('ui.pipeline.resume requires an open workspace'), { code: 'no-workspace' })
   // Same reason ui.pipeline.start guards a copy: the read after the await must
   // stay unnarrowed.
   const before: PipelineRun['state'] = pipeline.state
   if (before === 'running') {
-    throw new Error('ui.pipeline.resume: a pipeline is already running in this workspace — abort it first')
+    throw Object.assign(new Error('ui.pipeline.resume: a pipeline is already running in this workspace — abort it first'), { code: 'already-running' })
   }
   // onPipelineResume reads the recorded run and returns silently when there is
   // none, or when it has no stage left. Both are worth naming.
   const info = existingProject.value
   if (!info) {
-    throw new Error('ui.pipeline.resume: this workspace has no recorded run to resume')
+    throw Object.assign(new Error('ui.pipeline.resume: this workspace has no recorded run to resume'), { code: 'no-run' })
   }
   if (info.nextStageIndex < 0) {
-    throw new Error(
+    throw Object.assign(new Error(
       `ui.pipeline.resume: the recorded run has no stage left to resume (${info.stagesCompleted}/${info.totalStages} stages done)`
-    )
+    ), { code: 'nothing-to-resume', params: { done: info.stagesCompleted, total: info.totalStages } })
   }
   await onPipelineResume()
   // Its remaining soft exits (pipeline switch failed, stages failed to load,
@@ -11216,7 +11218,7 @@ registerCommand('ui.pipeline.resume', async () => {
   // short of 'running'.
   const resumed: PipelineRun['state'] = pipeline.state
   if (resumed !== 'running') {
-    throw new Error(`ui.pipeline.resume: the run did not resume (state "${resumed}") — see the pipeline log for why`)
+    throw Object.assign(new Error(`ui.pipeline.resume: the run did not resume (state "${resumed}") — see the pipeline log for why`), { code: 'not-resumed' })
   }
   return {
     workspacePath: pipeline.workspacePath,
@@ -11230,22 +11232,22 @@ registerCommand('ui.pipeline.reset', async () => {
   // panes included, so it needs an open workspace to be the workspace whose
   // panes go. onPipelineReset has no soft exit of its own — it always lands on
   // 'idle' — so the check below is a contract test, not a known escape hatch.
-  if (!currentWorkspace.value) throw new Error('ui.pipeline.reset requires an open workspace')
+  if (!currentWorkspace.value) throw Object.assign(new Error('ui.pipeline.reset requires an open workspace'), { code: 'no-workspace' })
   await onPipelineReset()
   const state: PipelineRun['state'] = pipeline.state
   if (state !== 'idle') {
-    throw new Error(`ui.pipeline.reset: the run was not cleared (state "${state}") — see the pipeline log for why`)
+    throw Object.assign(new Error(`ui.pipeline.reset: the run was not cleared (state "${state}") — see the pipeline log for why`), { code: 'not-cleared' })
   }
   if (!(await clearStoredPipelineRun(currentWorkspace.value))) {
-    throw new Error('ui.pipeline.reset: the panes were closed but the stored run was not cleared — see the backend log')
+    throw Object.assign(new Error('ui.pipeline.reset: the panes were closed but the stored run was not cleared — see the backend log'), { code: 'stored-not-cleared' })
   }
   return { workspacePath: currentWorkspace.value, state, stageIndex: pipeline.stageIndex }
 })
 registerCommand('ui.pipeline.restart', async () => {
-  if (!currentWorkspace.value) throw new Error('ui.pipeline.restart requires an open workspace')
+  if (!currentWorkspace.value) throw Object.assign(new Error('ui.pipeline.restart requires an open workspace'), { code: 'no-workspace' })
   const before: PipelineRun['state'] = pipeline.state
   if (before === 'running') {
-    throw new Error('ui.pipeline.restart: a pipeline is already running in this workspace — abort it first')
+    throw Object.assign(new Error('ui.pipeline.restart: a pipeline is already running in this workspace — abort it first'), { code: 'already-running' })
   }
   // Start over re-runs the SAME task from stage 01; it has no task of its own.
   // ControlPane's Start Over button takes it from the recorded run first and
@@ -11253,7 +11255,7 @@ registerCommand('ui.pipeline.restart', async () => {
   // handing onPipelineRestart an empty task the run would then carry.
   const task = existingProject.value?.taskDescription || pipeline.task
   if (!task) {
-    throw new Error('ui.pipeline.restart: no previous run to start over from — use ui.pipeline.start with a task')
+    throw Object.assign(new Error('ui.pipeline.restart: no previous run to start over from — use ui.pipeline.start with a task'), { code: 'no-task' })
   }
   await onPipelineRestart({ task, workspacePath: currentWorkspace.value })
   // onPipelineRestart ends in onPipelineStart, so it inherits every one of its
@@ -11262,7 +11264,7 @@ registerCommand('ui.pipeline.restart', async () => {
   // exactly when "ok, nothing happened" is the most misleading answer.
   const restarted: PipelineRun['state'] = pipeline.state
   if (restarted !== 'running') {
-    throw new Error(`ui.pipeline.restart: the run did not start (state "${restarted}") — see the pipeline log for why`)
+    throw Object.assign(new Error(`ui.pipeline.restart: the run did not start (state "${restarted}") — see the pipeline log for why`), { code: 'not-started' })
   }
   return {
     pipelineId: pipelinesApi.activePipelineId.value,
@@ -11279,37 +11281,43 @@ registerCommand('ui.pipeline.restart', async () => {
 registerCommand('ui.pipeline.gate_pass', async (args) => {
   const nodeId = (args as { nodeId?: string } | undefined)?.nodeId ?? ''
   const waiting = pipelineDag.awaitingGate.value
-  if (!waiting) throw new Error('ui.pipeline.gate_pass: the run is not waiting on a gate')
+  if (!waiting) throw Object.assign(new Error('ui.pipeline.gate_pass: the run is not waiting on a gate'), { code: 'not-at-gate' })
   if (nodeId && nodeId !== waiting.gateId) {
-    throw new Error(`ui.pipeline.gate_pass: the run is waiting on gate "${waiting.gateId}", not "${nodeId}"`)
+    throw Object.assign(new Error(`ui.pipeline.gate_pass: the run is waiting on gate "${waiting.gateId}", not "${nodeId}"`), { code: 'wrong-gate', params: { gate: waiting.gateId, asked: nodeId } })
   }
   await onPipelineGateApprove(waiting.gateId)
   return { gateId: waiting.gateId, state: pipeline.state, stageIndex: pipeline.stageIndex }
 })
 registerCommand('ui.pipeline.gate_reject', async (args) => {
-  const a = (args as { nodeId?: string; comment?: string } | undefined) ?? {}
+  // confirm: a caller with a person at it (the editor) asks before a reject
+  // that would end the run; MCP callers do not pass it and are not asked.
+  const a = (args as { nodeId?: string; comment?: string; confirm?: boolean } | undefined) ?? {}
   const waiting = pipelineDag.awaitingGate.value
-  if (!waiting) throw new Error('ui.pipeline.gate_reject: the run is not waiting on a gate')
+  if (!waiting) throw Object.assign(new Error('ui.pipeline.gate_reject: the run is not waiting on a gate'), { code: 'not-at-gate' })
   if (a.nodeId && a.nodeId !== waiting.gateId) {
-    throw new Error(`ui.pipeline.gate_reject: the run is waiting on gate "${waiting.gateId}", not "${a.nodeId}"`)
+    throw Object.assign(new Error(`ui.pipeline.gate_reject: the run is waiting on gate "${waiting.gateId}", not "${a.nodeId}"`), { code: 'wrong-gate', params: { gate: waiting.gateId, asked: a.nodeId } })
   }
-  await onPipelineGateReject(waiting.gateId, a.comment ?? '')
+  if (a.confirm) {
+    if (!(await onPipelineGateRejectFromPanel(waiting.gateId, a.comment ?? ''))) return { gateId: waiting.gateId, cancelled: true }
+  } else {
+    await onPipelineGateReject(waiting.gateId, a.comment ?? '')
+  }
   return { gateId: waiting.gateId, state: pipeline.state, stageIndex: pipeline.stageIndex }
 })
 registerCommand('ui.pipeline.restart_from', async (args) => {
   const a = (args as { nodeId?: string; task?: string } | undefined) ?? {}
-  if (!currentWorkspace.value) throw new Error('ui.pipeline.restart_from requires an open workspace')
-  if (!a.nodeId) throw new Error('ui.pipeline.restart_from requires nodeId')
+  if (!currentWorkspace.value) throw Object.assign(new Error('ui.pipeline.restart_from requires an open workspace'), { code: 'no-workspace' })
+  if (!a.nodeId) throw Object.assign(new Error('ui.pipeline.restart_from requires nodeId'), { code: 'node-required' })
   const before: PipelineRun['state'] = pipeline.state
   if (before === 'running') {
-    throw new Error('ui.pipeline.restart_from: a pipeline is already running in this workspace — abort it first')
+    throw Object.assign(new Error('ui.pipeline.restart_from: a pipeline is already running in this workspace — abort it first'), { code: 'already-running' })
   }
   const task = a.task || existingProject.value?.taskDescription || pipeline.task
-  if (!task) throw new Error('ui.pipeline.restart_from: no task — pass task or start the pipeline once first')
+  if (!task) throw Object.assign(new Error('ui.pipeline.restart_from: no task — pass task or start the pipeline once first'), { code: 'no-task' })
   await onPipelineRestart({ task, workspacePath: currentWorkspace.value, fromNodeId: a.nodeId })
   const restarted: PipelineRun['state'] = pipeline.state
   if (restarted !== 'running') {
-    throw new Error(`ui.pipeline.restart_from: the run did not start (state "${restarted}") — see the pipeline log for why`)
+    throw Object.assign(new Error(`ui.pipeline.restart_from: the run did not start (state "${restarted}") — see the pipeline log for why`), { code: 'not-started' })
   }
   return { workspacePath: pipeline.workspacePath, state: restarted, stageIndex: pipeline.stageIndex }
 })
@@ -12151,7 +12159,12 @@ const pipelineView = computed<PipelineStatusView>(() => ({
   pipelineLogFile: pipeline.pipelineLogFile,
   backendLogFile: pipeline.backendLogFile,
   awaitingGate: pipelineDag.awaitingGate.value
-    ? { gateId: pipelineDag.awaitingGate.value.gateId, label: pipelineDag.awaitingGate.value.label }
+    ? {
+        gateId: pipelineDag.awaitingGate.value.gateId,
+        label: pipelineDag.awaitingGate.value.label,
+        prompt: pipelineDag.gatePrompt(pipelineDag.awaitingGate.value.gateId),
+        rejectEndsRun: pipelineDag.rejectEndsRun(pipelineDag.awaitingGate.value.gateId),
+      }
     : null,
   // A sub-pipeline's child run: the parents waiting on it, outermost first.
   ...(pipelineDag.runStack.value.length
@@ -14918,22 +14931,27 @@ async function spawnPipelineStage(index: number): Promise<void> {
 }
 
 /** Returns why the run was refused, or '' when it was not (ui.pipeline.start
- *  reports the reason). */
-async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string; childOf?: string }): Promise<string> {
+ *  reports the reason). `report` also gets the refusal's code, for a caller
+ *  that says it in the UI language (pipelineErrors.startRefusalText). */
+async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string; childOf?: string }, report?: (refusal: StartRefusal) => void): Promise<string> {
   const pid = payload.pipelineId || pipelinesApi.activePipelineId.value
   // pipelineLog alone left a refusal nowhere durable: it persists only once
   // pipeline.workspacePath is set, which happens below, so after a reset or a
   // restart nothing about it reached any log (#417).
-  const refuse = (reason: string): string => {
+  const refuse = (reason: string, code: StartRefusal['code'], params: Record<string, unknown> = {}): string => {
     pipelineLog(`Pipeline start refused: ${reason}`)
     void sendQuiet('pipeline.start_refused', { workspace_path: payload.workspacePath, pipeline_id: pid, reason })
+    report?.({ code, params })
     return reason
   }
   // A parent run suspended here waits for its own child: nothing else starts
   // (the backend refuses it too). Known from this window's own run, or from
   // the project the workspace opened with.
   const waiting = payload.childOf ? undefined : (pipelineDag.runStack.value.at(-1) ?? existingProject.value?.runStack?.at(-1))
-  if (waiting) return refuse(i18n.global.t('error.pipeline-parent-suspended', { name: waiting.pipeline_name || '?' }))
+  if (waiting) {
+    const name = waiting.pipeline_name || '?'
+    return refuse(i18n.global.t('error.pipeline-parent-suspended', { name }), 'parent-suspended', { name })
+  }
   // If a specific pipeline was requested and it's not currently active, switch first.
   if (payload.pipelineId && payload.pipelineId !== pipelinesApi.activePipelineId.value) {
     // Both calls fail SOFTLY — setActivePipeline returns false and refresh only
@@ -14944,7 +14962,8 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
     if (!switched) {
       return refuse(
         `could not switch to pipeline ${payload.pipelineId}` +
-          (pipelinesApi.error.value ? ` — ${pipelinesApi.error.value}` : '')
+          (pipelinesApi.error.value ? ` — ${pipelinesApi.error.value}` : ''),
+        'switch-failed',
       )
     }
   }
@@ -14955,10 +14974,10 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   // start from it was refused, or ran stages the pipeline no longer has (#417).
   await stagesApi.refresh(pid)
   if (stagesApi.error.value) {
-    return refuse(`could not load the stages of pipeline ${pid} — ${stagesApi.error.value}`)
+    return refuse(`could not load the stages of pipeline ${pid} — ${stagesApi.error.value}`, 'stages-load-failed')
   }
   if (!stagesApi.isLoaded.value || stagesApi.stages.value.length === 0) {
-    return refuse(`pipeline ${pid} has no stages`)
+    return refuse(`pipeline ${pid} has no stages`, 'no-stages')
   }
   const stateBefore = pipeline.state
   pipeline.task = payload.task
@@ -14974,7 +14993,7 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   })
   if (startIndex === null) {
     pipeline.state = stateBefore
-    return refuse('could not prepare the run graph — see the DAG line above')
+    return refuse('could not prepare the run graph — see the DAG line above', 'graph-failed')
   }
   pipeline.stageIndex = startIndex
   // Pipeline-created panes are grouped under a RunGroup tab named after the
@@ -15036,8 +15055,9 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   // releaseStageSlot's `expected === 0` branch sets state='aborted'. Without
   // this check activateStage(0) then re-registered the stage and spawned the
   // same missing agents a second time, and the global router was armed on a
-  // run that had already stopped.
-  if (pipeline.state !== 'running') return ''
+  // run that had already stopped. It is a refusal like the ones above: the
+  // screen used to show nothing at all.
+  if (pipeline.state !== 'running') return refuse('no agent of the first stage could be started — see the pipeline log for which', 'spawn-failed')
   // Activate the first stage: build context + inject kickoffs + arm watchers.
   await activateStage(startIndex)
   // Start the global Manager cross-stage router (if configured).
@@ -15045,10 +15065,16 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   return ''
 }
 
-/** ControlPane's Run button: a refusal is toasted, not only logged (#417). */
+/** ControlPane's Run button: a refusal is toasted, not only logged (#417),
+ *  in the UI language when its code is known; the English reason stays one
+ *  click away (Details). */
 async function onPipelineStartFromPanel(payload: Parameters<typeof onPipelineStart>[0]): Promise<void> {
-  const refusal = await onPipelineStart(payload)
-  if (refusal) notifyRestore.toast(i18n.global.t('error.pipeline-start-refused', { reason: refusal }), { type: 'error' })
+  const coded: { last?: StartRefusal } = {}
+  const refusal = await onPipelineStart(payload, (r) => { coded.last = r })
+  if (!refusal) return
+  const t = i18n.global.t
+  const text = startRefusalText(t, coded.last) || t('error.pipeline-start-refused', { reason: refusal })
+  notifyRestore.toast(text, { type: 'error', action: detailsAction(t, notifyRestore, refusal) })
 }
 
 /** Before firing 🎉 on the final stage, wait until every pipeline pane has
@@ -15340,6 +15366,7 @@ async function onPipelineGateApprove(gateId: string): Promise<boolean> {
  *  the budget is spent. */
 async function onPipelineGateReject(gateId: string, comment = ''): Promise<boolean> {
   if (pipeline.state !== 'running') return false
+  const gateLabel = pipelineDag.awaitingGate.value?.label || gateId
   const result = pipelineDag.reject(gateId, comment)
   if (!result) return false
   if (result.kind === 'loop') {
@@ -15366,9 +15393,30 @@ async function onPipelineGateReject(gateId: string, comment = ''): Promise<boole
     reason: 'failed'
   })
   applyProjectPaths(resp ?? undefined)
+  // The run just ended: say so, wherever the reject came from.
+  notifyRestore.toast(i18n.global.t('pipelineErrors.gate.rejected-failed', { name: gateLabel }), { type: 'error' })
   if (pipelineDag.isChildRun() && await returnToParent('failed', { summary: '', output: null }, `gate "${gateId}" rejected`)) return true
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
   return true
+}
+
+/** A person's Send Back (sidebar, editor): when it would end the run — the
+ *  gate has no loop back, or its loop budget is spent — ask first and say
+ *  so. Resolves false when they keep the run going. */
+async function onPipelineGateRejectFromPanel(gateId: string, comment = ''): Promise<boolean> {
+  const ends = pipelineDag.rejectEndsRun(gateId)
+  if (ends) {
+    const t = i18n.global.t
+    const name = pipelineDag.awaitingGate.value?.label || gateId
+    const ok = await notifyRestore.confirm(t(`pipelineErrors.gate.confirm-${ends}`, { name }), {
+      title: t('pipelineErrors.gate.confirm-title'),
+      confirmText: t('pipelineErrors.gate.confirm-button'),
+      cancelText: t('action.cancel'),
+      danger: true,
+    })
+    if (!ok) return false
+  }
+  return onPipelineGateReject(gateId, comment)
 }
 
 /** The run cannot continue past subpipeline node `nodeId` (its child failed
@@ -23416,7 +23464,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @pipeline-start="onPipelineStartFromPanel"
       @pipeline-next="onPipelineNext"
       @pipeline-gate-approve="onPipelineGateApprove"
-      @pipeline-gate-reject="onPipelineGateReject"
+      @pipeline-gate-reject="onPipelineGateRejectFromPanel"
       @pipeline-abort="onPipelineAbort"
       @pipeline-reset="onPipelineUserReset"
       @workspace-check="onWorkspaceCheck"

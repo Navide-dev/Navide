@@ -14,6 +14,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { linearPipelineDag } from './pipelineDagTestStub'
+import { detailsAction, startRefusalText } from '../../lib/pipelineErrors'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -42,6 +43,8 @@ interface StartOpts {
   switchOk?: boolean
   activePipelineId?: string
   dag?: unknown
+  /** Every slot of the first stage fails to spawn (releaseStageSlot aborts). */
+  spawnFails?: boolean
 }
 
 async function loadStart(opts: StartOpts = {}) {
@@ -86,13 +89,14 @@ async function loadStart(opts: StartOpts = {}) {
       sent.push({ type, payload })
       return null
     }),
-    preSpawnStage: vi.fn(async () => {}),
+    preSpawnStage: vi.fn(async () => { if (opts.spawnFails) pipeline.state = 'aborted' }),
     activateStage: vi.fn(async () => {}),
     startGlobalManagerRouter: vi.fn(),
     pipelineDag: opts.dag ?? linearPipelineDag(() => pipeline.workspacePath).dag,
   }
   const onPipelineStart = new Function(...Object.keys(deps), code)(...Object.values(deps)) as (
     p: { task: string; workspacePath: string; pipelineId?: string },
+    report?: (r: { code: string; params?: Record<string, unknown> }) => void,
   ) => Promise<string>
   return { onPipelineStart, pipeline, sent, stagesApi, pipelinesApi }
 }
@@ -129,6 +133,9 @@ describe('start reloads the stages of the pipeline it starts', () => {
     expect(t.sent.find((s) => s.type === 'pipeline.start')?.payload.pipeline_id).toBe('pl-2')
   })
 })
+
+const refusalOf = (sent: Array<{ type: string; payload: Record<string, unknown> }>) =>
+  sent.find((s) => s.type === 'pipeline.start_refused')?.payload
 
 describe('a refused start says why, durably', () => {
   const refusal = (sent: Array<{ type: string; payload: Record<string, unknown> }>) =>
@@ -170,24 +177,58 @@ describe('a refused start says why, durably', () => {
   })
 })
 
+describe('every slot of the first stage failing to spawn is a refusal (B2)', () => {
+  it('says so instead of returning as if it started', async () => {
+    const t = await loadStart({ spawnFails: true })
+    const report = vi.fn()
+    const reason = await t.onPipelineStart(START, report)
+    expect(reason).toMatch(/first stage could be started/)
+    expect(report).toHaveBeenCalledWith({ code: 'spawn-failed', params: {} })
+    expect(refusalOf(t.sent)?.reason).toBe(reason)
+  })
+
+  it('reports the code of every other refusal too', async () => {
+    const t = await loadStart({ served: [] })
+    const report = vi.fn()
+    await t.onPipelineStart(START, report)
+    expect(report).toHaveBeenCalledWith({ code: 'no-stages', params: {} })
+  })
+})
+
 describe('the Run button shows the refusal', () => {
-  async function loadPanel(refusal: string) {
+  async function loadPanel(refusal: string, coded?: { code: string; params?: Record<string, unknown> }) {
     const src = block('async function onPipelineStartFromPanel(', '\n/** Before firing 🎉')
     const { code } = await transformWithEsbuild(`${src}\nreturn onPipelineStartFromPanel`, 'AppPanel.ts', { loader: 'ts' })
     const toast = vi.fn()
+    const alert = vi.fn()
     const deps: Record<string, unknown> = {
-      onPipelineStart: vi.fn(async () => refusal),
-      notifyRestore: { toast },
-      i18n: { global: { t: (key: string, p: { reason: string }) => `${key}: ${p.reason}` } },
+      onPipelineStart: vi.fn(async (_p: unknown, report?: (r: unknown) => void) => {
+        if (coded) report?.(coded)
+        return refusal
+      }),
+      notifyRestore: { toast, alert },
+      i18n: { global: { t: (key: string, p?: { reason?: string }) => (p?.reason ? `${key}: ${p.reason}` : key) } },
+      startRefusalText,
+      detailsAction,
     }
     const fn = new Function(...Object.keys(deps), code)(...Object.values(deps)) as (p: unknown) => Promise<void>
-    return { fn, toast }
+    return { fn, toast, alert }
   }
 
-  it('toasts the reason when the start is refused', async () => {
+  it('toasts the refusal in the UI language, the English reason behind Details (B2)', async () => {
+    const t = await loadPanel('pipeline pl-2 has no stages', { code: 'no-stages', params: {} })
+    await t.fn(START)
+    const [text, opts] = t.toast.mock.calls[0]
+    expect(text).toBe('pipelineErrors.start.no-stages')
+    expect(opts.type).toBe('error')
+    opts.action.run()
+    expect(t.alert).toHaveBeenCalledWith('pipeline pl-2 has no stages', { title: 'pipelineErrors.details' })
+  })
+
+  it('an uncoded refusal still names its reason', async () => {
     const t = await loadPanel('pipeline pl-2 has no stages')
     await t.fn(START)
-    expect(t.toast).toHaveBeenCalledWith('error.pipeline-start-refused: pipeline pl-2 has no stages', { type: 'error' })
+    expect(t.toast.mock.calls[0][0]).toBe('error.pipeline-start-refused: pipeline pl-2 has no stages')
   })
 
   it('stays quiet when the run started', async () => {
