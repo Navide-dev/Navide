@@ -2048,6 +2048,17 @@ is left on disk with its lifecycle record untouched and is reconsidered on the
 next start, so a later App that bundles an older version hands the id back to
 it.
 
+Because the installed copy wins a tie, content must never change under a
+released version. `plugins/official-plugin-fingerprints.json` records each
+plugin's version with a fingerprint of the tracked sources its package is built
+from (its directory, the `packages/plugin-*` workspace packages and, for Plans,
+the core modules its backend bundles; tests and Markdown excluded).
+`tests/infrastructure/officialPluginFingerprints.test.ts` fails when the
+fingerprint changes and the version does not. Bump the version in the
+plugin's `manifest.json`, its `package.json` and `officialPluginVersions.ts`,
+then run `node scripts/official-plugin-fingerprints.mjs --write`, which refuses
+changed content at the old version and a version that does not go up.
+
 ### First-party production Plans package
 
 Issue 23E makes `navide.plans` the first combined production package that

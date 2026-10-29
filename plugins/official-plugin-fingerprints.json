@@ -1,0 +1,14 @@
+{
+  "navide.git": {
+    "version": "1.0.0",
+    "fingerprint": "50eb06172c3c17592d374aff1e5f17d34ac9f0fab479ee8bcfd21b4a2b6b1d59"
+  },
+  "navide.mini-ide": {
+    "version": "1.0.0",
+    "fingerprint": "8e1e771ef9d80d10c82cabcddd419ee0833ae031309b3a45b46bf032747c54e9"
+  },
+  "navide.plans": {
+    "version": "1.0.0",
+    "fingerprint": "50384b1a3e877962f72937d7887872609c92ad7294b9e0336fbfbccb2e99283d"
+  }
+}

@@ -55,6 +55,7 @@ from .versions import (
     TESTPLACE_VALIDITY_DAYS,
     latest_stable_version,
     version_channel,
+    version_key,
 )
 
 MAX_LABEL_LENGTH = 120
@@ -103,20 +104,24 @@ def live_rows(
     return [r for r in rows if r.expires_at is not None and _aware(r.expires_at) > now]
 
 
+def _by_version(rows) -> list[ExtensionVersion]:
+    """SemVer order, then target. The database orders version text, which puts
+    1.10.0 before 1.9.0."""
+    return sorted(rows, key=lambda row: (version_key(row.version), row.target))
+
+
 def withdrawn_rows(session: Session, extension: Extension) -> list[ExtensionVersion]:
     """Testplace artifacts taken back: yanked by the developer, revoked by the
     developer or an admin, or withdrawn with the publisher's qualification.
     Listed to the extension's testers only, so an expired build that was
     taken back is never offered to keep (T-MED-1)."""
-    return list(
+    return _by_version(
         session.exec(
-            select(ExtensionVersion)
-            .where(
+            select(ExtensionVersion).where(
                 ExtensionVersion.extension_id == extension.id,
                 ExtensionVersion.channel == TESTPLACE_CHANNEL,
                 ExtensionVersion.yanked == True,  # noqa: E712
             )
-            .order_by(ExtensionVersion.version, ExtensionVersion.target)
         ).all()
     )
 
@@ -140,11 +145,11 @@ def seat_ended(session: Session, extension_id: int, member_id: str) -> datetime 
 
 def testplace_rows(session: Session, extension: Extension) -> list[ExtensionVersion]:
     """Every testplace artifact of the extension, whatever its state."""
-    return list(
+    return _by_version(
         session.exec(
-            select(ExtensionVersion)
-            .where(ExtensionVersion.extension_id == extension.id, ExtensionVersion.channel == TESTPLACE_CHANNEL)
-            .order_by(ExtensionVersion.version, ExtensionVersion.target)
+            select(ExtensionVersion).where(
+                ExtensionVersion.extension_id == extension.id, ExtensionVersion.channel == TESTPLACE_CHANNEL
+            )
         ).all()
     )
 
