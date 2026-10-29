@@ -18,7 +18,7 @@ const PANE = {
   preparationStatus: 'ready', injectionStatus: 'sent', kickoffStatus: 'unverified',
 }
 
-function mount(tab: string, opts: { locale?: string; pipelines?: unknown[]; state?: string } = {}): VueWrapper {
+function mount(tab: string, opts: { locale?: 'en-US' | 'zh-TW'; pipelines?: unknown[]; state?: string } = {}): VueWrapper {
   i18n.global.locale.value = opts.locale ?? 'zh-TW'
   sessionStorage.setItem('agentTeam.sidebarTab', tab)
   return shallowMount(ControlPane as never, {
