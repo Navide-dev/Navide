@@ -424,3 +424,82 @@ async def test_mcp_and_ws_take_a_list_too(wired: SimpleNamespace) -> None:
     assert session.last["payload"]["report"]["subworkflows"][0]["workflowId"] == "wf-b"
     bad = await plan_mcp.pipeline_import_n8n(_ctx(), json.dumps([_calling("wf-a", "A"), {"nodes": "x"}]))
     assert bad["ok"] is False and bad["error_code"] == "invalid" and bad["error"].startswith("workflow 2:")
+
+
+# ── resend, size limit, rollback ─────────────────────────────────────────
+async def test_a_resend_of_the_same_import_returns_the_pipeline_it_made(wired: SimpleNamespace) -> None:
+    # The window gives up after 30 s while the import may still finish: the
+    # same request again answers with that pipeline instead of a "(2)" copy.
+    text = json.dumps(_workflow())
+    a = await plan_mcp.pipeline_import_n8n(_ctx(), text, dry_run=False)
+    s = _Session()
+    await ws_handlers.pipelines_import_n8n(s, "1", "pipelines.import_n8n", {"json": text, "dry_run": False})
+    b = s.last["payload"]
+    assert b["pipeline"]["id"] == a["pipeline"]["id"] and b["reused"] is True
+    assert _names(wired.store).count("Lead intake") == 1 and "Lead intake (2)" not in _names(wired.store)
+    # Whitespace does not make it another workflow; another name or CLI does.
+    c = await plan_mcp.pipeline_import_n8n(_ctx(), json.dumps(_workflow(), indent=2), dry_run=False)
+    assert c["pipeline"]["id"] == a["pipeline"]["id"]
+    d = await plan_mcp.pipeline_import_n8n(_ctx(), text, dry_run=False, default_agent="codex")
+    assert d["pipeline"]["id"] != a["pipeline"]["id"] and "reused" not in d
+
+
+async def test_a_resend_after_the_reuse_window_imports_again(wired: SimpleNamespace, monkeypatch) -> None:
+    text = json.dumps(_workflow())
+    monkeypatch.setattr(ni, "_now_iso", lambda: "2026-10-29T00:00:00Z")
+    a = ni.import_into_store(wired.store, text, dry_run=False)
+    monkeypatch.setattr(ni, "_now_iso", lambda: "2026-10-29T00:11:00Z")
+    b = ni.import_into_store(wired.store, text, dry_run=False)
+    assert b["pipeline"]["id"] != a["pipeline"]["id"] and b["pipeline"]["name"] == "Lead intake (2)"
+
+
+async def test_a_list_resend_reuses_every_pipeline_it_made(wired: SimpleNamespace) -> None:
+    text = json.dumps([_calling("wf-a", "Parent", calls="wf-b"), _calling("wf-b", "Child")])
+    a = ni.import_into_store(wired.store, text, dry_run=False)
+    count = len(wired.store.list_pipelines())
+    b = ni.import_into_store(wired.store, text, dry_run=False)
+    assert b["pipeline"]["id"] == a["pipeline"]["id"] and b["reused"] is True
+    assert b["report"]["subworkflows"] == a["report"]["subworkflows"]
+    assert len(wired.store.list_pipelines()) == count
+
+
+async def test_a_workflow_over_the_size_limit_is_refused_on_both_paths(wired: SimpleNamespace) -> None:
+    big = _workflow()
+    big["nodes"][1]["parameters"]["body"] = "x" * ni.MAX_IMPORT_BYTES
+    text = json.dumps(big)
+    before = wired.store.export_document()
+    out = await plan_mcp.pipeline_import_n8n(_ctx(), text)
+    assert out["ok"] is False and out["error_code"] == "too_large"
+    assert "5 MB" in out["error"]
+    s = _Session()
+    await ws_handlers.pipelines_import_n8n(s, "1", "pipelines.import_n8n", {"json": text, "dry_run": False})
+    err = s.last["error"]
+    assert err["code"] == "N8N_TOO_LARGE"
+    assert err["details"] == {"reason": "too-large", "params": {"limitMb": 5, "sizeMb": 5.0}}
+    assert wired.store.export_document() == before
+
+
+async def test_a_store_refusal_mid_list_rolls_back_and_says_why(wired: SimpleNamespace, monkeypatch) -> None:
+    text = json.dumps([_calling("wf-a", "Parent", calls="wf-b"), _calling("wf-b", "Child")])
+    real = wired.store.create_imported_pipeline
+    calls = {"n": 0}
+
+    def flaky(*a: Any, **kw: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise pg.GraphError(["sub-pipeline cycle: x → y → x"])
+        return real(*a, **kw)
+
+    monkeypatch.setattr(wired.store, "create_imported_pipeline", flaky)
+    before = [p["id"] for p in wired.store.list_pipelines()]
+    out = await plan_mcp.pipeline_import_n8n(_ctx(), text, dry_run=False)
+    assert out["ok"] is False and out["error_code"] == "refused"
+    assert "Parent" in out["error"] and "sub-pipeline cycle" in out["error"]
+    assert [p["id"] for p in wired.store.list_pipelines()] == before
+    assert wired.events == []
+    calls["n"] = 0
+    s = _Session()
+    await ws_handlers.pipelines_import_n8n(s, "1", "pipelines.import_n8n", {"json": text, "dry_run": False})
+    assert s.last["error"]["code"] == "N8N_REFUSED"
+    assert s.last["error"]["details"]["reason"] == "store-refused"
+    assert [p["id"] for p in wired.store.list_pipelines()] == before

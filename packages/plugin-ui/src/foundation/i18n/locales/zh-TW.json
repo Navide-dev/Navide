@@ -11339,7 +11339,8 @@
       "gate-sub": "等待核准",
       "pinned": "產出已凍結",
       "tokens": "{n} tok",
-      "trigger-sub": "手動、指令或 MCP"
+      "trigger-sub": "手動、指令或 MCP",
+      "needs-review": "從 n8n 匯入：執行流程前，請先確認這個步驟"
     },
     "notice": {
       "external-edit": "這條 pipeline 在別處被修改了。已顯示最新版本，undo 紀錄已清除。",
@@ -12328,6 +12329,78 @@
       "invalid": "這不是 Navide 能讀取的 n8n 工作流。",
       "preview-failed": "預覽失敗。",
       "import-failed": "匯入失敗。"
+    },
+    "imported": "已匯入「{name}」",
+    "imported-review": "已匯入「{name}」· 有 {n} 個步驟需要確認",
+    "imported-reused": "「{name}」剛剛已經匯入過。已開啟那個流程，沒有另外建立副本。",
+    "merged-nodes": "這個步驟包含 {n} 個 n8n 節點",
+    "subworkflows-title": "被呼叫的工作流",
+    "will-create": "匯入會建立 {n} 個流程。",
+    "subworkflow-status": {
+      "imported": "已匯入",
+      "will-import": "與這個工作流一起匯入",
+      "existing": "使用先前匯入的流程",
+      "missing": "Navide 裡還沒有",
+      "recursive": "會回頭呼叫：保留待確認"
+    },
+    "error-in-workflow": "工作流 {n}：{message}",
+    "import-timeout": "匯入花的時間較長，仍可能完成。請再按一次「匯入」：流程若已建立就會直接開啟，絕不會建立副本。",
+    "detail": {
+      "unknown-version": "typeVersion {version} 超出已知範圍 {lo}–{hi}，由 agent 依它的參數執行。",
+      "unknown-type": "這個節點類型不在匯入對照表裡，由 agent 依它的參數執行。",
+      "community-node": "社群節點，由 agent 依它的參數執行。",
+      "merge-combine": "「{mode}」模式的 Merge 會合併資料，由 agent 依它的合併規則執行。",
+      "role-trigger-schedule": "在 n8n 裡依排程執行。在 Navide 能排程執行流程之前，請手動啟動。",
+      "role-trigger-webhook": "在 n8n 裡由 HTTP 請求啟動。Navide 還沒有 webhook 觸發。",
+      "role-trigger-error": "n8n 的錯誤工作流在 Navide 還沒有對應的功能。",
+      "role-trigger-app": "在 n8n 裡由應用程式事件啟動。Navide 還沒有應用程式觸發。",
+      "role-subworkflow": "會呼叫另一個尚未匯入的 n8n 工作流。請把那個工作流也一起貼上，或先匯入它。",
+      "role-respond": "回應 n8n 的 webhook。Navide 還沒有 webhook 觸發。",
+      "error-workflow": "這個工作流就是它自己的錯誤工作流。某個步驟失敗時，後面的步驟會經由錯誤連線執行。",
+      "recursive-subworkflow": "會呼叫 n8n 工作流 {workflowId}，而它又會回頭呼叫這個工作流。子 Pipeline 不能執行自己，所以這個呼叫保留待確認。",
+      "tool-pipeline": "這是會呼叫 n8n 工作流 {workflowId} 的 agent 工具，該工作流已匯入為流程 {pipelineId}。流程不能當成工具呼叫，所以改在步驟指示裡寫明它。",
+      "subpipeline": "以子 Pipeline 執行流程 {pipelineId}（即 n8n 工作流 {workflowId}），並等待它完成。",
+      "subpipeline-nowait": "以子 Pipeline 執行流程 {pipelineId}（即 n8n 工作流 {workflowId}），並等待它完成。n8n 原本不會等它；Navide 一律等待子 Pipeline。",
+      "loop-batch": "這個迴圈已併入一個步驟，逐一處理每個項目。",
+      "loop-repeat": "這個迴圈已併入一個步驟，會一直重複，直到離開迴圈的條件成立。",
+      "loop-wait": "迴圈裡的 n8n Wait。步驟會在每一輪之間於此暫停；不會有核准閘門讓執行停下。",
+      "loop-subworkflow": "在迴圈裡呼叫另一個 n8n 工作流。由 agent 把整個迴圈當成一個步驟執行。",
+      "removed-sticky": "便利貼。它的文字已放進說明，以及最近一個步驟的指示裡。",
+      "removed-disabled": "在 n8n 裡已停用。已略過，它的連線直接接通。",
+      "removed-noop": "No Operation 節點。已移除，並把它的連線接起來。",
+      "cluster-model": "這個步驟改由 CLI agent 執行，不使用這個模型。",
+      "cluster-memory": "已捨棄。CLI 工作階段會自己保留上下文。",
+      "cluster-tool": "agent 會使用它自己相當於這個工具的功能。",
+      "cluster-mcp-tool": "請在「設定 → MCP」設定同一個 MCP 伺服器。",
+      "cluster-tool-workflow": "這是會呼叫另一個 n8n 工作流的 agent 工具，而那個工作流尚未匯入。流程不能當成工具呼叫，所以改在步驟指示裡描述它。",
+      "cluster-parser": "輸出格式已寫進步驟指示。",
+      "cluster-vector": "不支援向量資料庫叢集。請把這部分留在 n8n。",
+      "cluster-other": "已併入 agent 的步驟。",
+      "branch-if": "分支連線：agent 會回報條件走向哪一邊，只有那個分支會執行。",
+      "branch-switch": "分支連線，每條規則一條：agent 會回報符合哪條規則，只有那個分支會執行。",
+      "merge-join": "等待實際會執行的輸入。所屬分支沒有被走到的輸入會略過。",
+      "agent-step": "由 agent 依原本的參數執行。"
+    },
+    "warning": {
+      "error-workflow-other": "這個工作流的設定指定了另一個 n8n 工作流來處理錯誤。這部分的錯誤處理不會匯入。",
+      "into-trigger": "已捨棄一條連進觸發「{node}」的連線。",
+      "plain-connection": "從「{node}」出去的一條 {kind} 連線已改成一般連線：只有步驟能分支或失敗。",
+      "outputs-same-step": "「{node}」有多個輸出接到同一個步驟，只保留「{kept}」。",
+      "retry-capped": "「{node}」在 n8n 裡會重試 {tries} 次，每次間隔 {waitMs} ms。Navide 最多允許 {maxTries} 次、間隔 {maxWaitMs} ms，所以改用 {usedTries} 次、間隔 {usedWaitMs} ms。",
+      "over-target": "{slots} 個步驟超過約 {target} 個的目標。每個步驟都會開一個 CLI pane。",
+      "wait-in-loop": "Wait「{node}」位於迴圈裡，已併入它所在的步驟。執行不會在那裡被核准閘門停下。"
+    },
+    "error-reason": {
+      "invalid": "這不是 Navide 能讀取的 n8n 工作流。",
+      "invalid-json": "這段文字不是有效的 JSON。",
+      "not-object": "n8n 工作流必須是 JSON 物件。",
+      "no-nodes": "n8n 工作流需要有節點和連線。",
+      "node-shape": "節點 {index} 需要名稱和類型。",
+      "duplicate-name": "節點 {index} 的名稱和前面的節點重複。",
+      "empty-list": "這個清單裡沒有任何 n8n 工作流。",
+      "internal": "轉換後的流程圖無效。這是匯入器的錯誤。",
+      "too-large": "這個工作流有 {sizeMb} MB，一次匯入最多 {limitMb} MB。",
+      "store-refused": "無法儲存工作流「{workflow}」，所以沒有匯入任何內容：{problems}"
     }
   }
 }

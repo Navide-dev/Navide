@@ -11339,7 +11339,8 @@
       "gate-sub": "Wartet auf Genehmigung",
       "pinned": "Ausgabe eingefroren",
       "tokens": "{n} Tok.",
-      "trigger-sub": "Manuell, per Befehl oder MCP"
+      "trigger-sub": "Manuell, per Befehl oder MCP",
+      "needs-review": "Aus n8n importiert: Prüfen Sie diesen Schritt, bevor Sie die Pipeline ausführen"
     },
     "notice": {
       "external-edit": "Diese Pipeline wurde an anderer Stelle geändert. Die neueste Version wird angezeigt; der Rückgängig-Verlauf wurde gelöscht.",
@@ -12328,6 +12329,78 @@
       "invalid": "Das ist kein n8n-Workflow, den Navide lesen kann.",
       "preview-failed": "Vorschau fehlgeschlagen.",
       "import-failed": "Import fehlgeschlagen."
+    },
+    "imported": "„{name}“ importiert",
+    "imported-review": "„{name}“ importiert · {n} Schritt muss geprüft werden | „{name}“ importiert · {n} Schritte müssen geprüft werden",
+    "imported-reused": "„{name}“ wurde gerade eben schon importiert. Diese Pipeline wurde geöffnet; es wurde keine Kopie erstellt.",
+    "merged-nodes": "{n} n8n-Knoten in diesem Schritt | {n} n8n-Knoten in diesem Schritt",
+    "subworkflows-title": "Aufgerufene Workflows",
+    "will-create": "Der Import erstellt {n} Pipeline. | Der Import erstellt {n} Pipelines.",
+    "subworkflow-status": {
+      "imported": "Importiert",
+      "will-import": "Wird mit diesem importiert",
+      "existing": "Verwendet die zuvor importierte Pipeline",
+      "missing": "Noch nicht in Navide",
+      "recursive": "Ruft zurück: bleibt zur Prüfung"
+    },
+    "error-in-workflow": "Workflow Nr. {n}: {message}",
+    "import-timeout": "Der Import dauert lange und kann noch abgeschlossen werden. Klicken Sie erneut auf „Importieren“: Wurde die Pipeline erstellt, wird sie geöffnet, und es wird nie eine Kopie erstellt.",
+    "detail": {
+      "unknown-version": "typeVersion {version} liegt außerhalb des bekannten Bereichs {lo}–{hi}. Ein Agent führt ihn anhand seiner Parameter aus.",
+      "unknown-type": "Dieser Knotentyp steht nicht in der Importtabelle. Ein Agent führt ihn anhand seiner Parameter aus.",
+      "community-node": "Community-Knoten. Ein Agent führt ihn anhand seiner Parameter aus.",
+      "merge-combine": "Merge im Modus „{mode}“ kombiniert Daten. Ein Agent führt ihn nach seiner Merge-Regel aus.",
+      "role-trigger-schedule": "Läuft in n8n nach Zeitplan. Starten Sie ihn manuell, bis Navide Pipelines planen kann.",
+      "role-trigger-webhook": "Startet in n8n durch eine HTTP-Anfrage. Navide hat noch keinen Webhook-Auslöser.",
+      "role-trigger-error": "Für n8n-Fehler-Workflows gibt es in Navide noch keine Entsprechung.",
+      "role-trigger-app": "Startet in n8n durch ein App-Ereignis. Navide hat noch keine App-Auslöser.",
+      "role-subworkflow": "Ruft einen anderen n8n-Workflow auf, der nicht importiert ist. Fügen Sie diesen Workflow ebenfalls ein oder importieren Sie ihn zuerst.",
+      "role-respond": "Antwortet auf einen n8n-Webhook. Navide hat noch keinen Webhook-Auslöser.",
+      "error-workflow": "Dieser Workflow ist sein eigener Fehler-Workflow. Schlägt ein Schritt fehl, laufen die folgenden Schritte über Fehlerkanten.",
+      "recursive-subworkflow": "Ruft den n8n-Workflow {workflowId} auf, der diesen Workflow wieder aufruft. Eine Unter-Pipeline kann sich nicht selbst ausführen, daher bleibt dieser Aufruf zur Prüfung.",
+      "tool-pipeline": "Ein Agent-Werkzeug, das den n8n-Workflow {workflowId} aufruft, importiert als Pipeline {pipelineId}. Eine Pipeline kann nicht als Werkzeug aufgerufen werden, deshalb nennen die Schrittanweisungen sie stattdessen.",
+      "subpipeline": "Führt die Pipeline {pipelineId} (den n8n-Workflow {workflowId}) als Unter-Pipeline aus und wartet auf sie.",
+      "subpipeline-nowait": "Führt die Pipeline {pipelineId} (den n8n-Workflow {workflowId}) als Unter-Pipeline aus und wartet auf sie. n8n hat nicht auf sie gewartet; Navide wartet immer auf eine Unter-Pipeline.",
+      "loop-batch": "Die Schleife wird in einen Schritt zusammengeführt, der die Elemente nacheinander verarbeitet.",
+      "loop-repeat": "Die Schleife wird in einen Schritt zusammengeführt, der sich wiederholt, bis die Bedingung zum Verlassen der Schleife erfüllt ist.",
+      "loop-wait": "Ein n8n-Wait innerhalb einer Schleife. Der Schritt pausiert hier zwischen den Durchläufen; keine Genehmigungsschranke hält den Lauf an.",
+      "loop-subworkflow": "Ruft innerhalb einer Schleife einen anderen n8n-Workflow auf. Ein Agent führt die Schleife als einen Schritt aus.",
+      "removed-sticky": "Haftnotiz. Ihr Text steht in der Beschreibung und in den Anweisungen des nächstgelegenen Schritts.",
+      "removed-disabled": "In n8n deaktiviert. Ausgelassen; seine Verbindungen werden durchgereicht.",
+      "removed-noop": "No-Operation-Knoten. Entfernt, seine Verbindungen wurden verbunden.",
+      "cluster-model": "Der Schritt läuft auf einem CLI-Agent statt auf diesem Modell.",
+      "cluster-memory": "Verworfen. Die CLI-Sitzung behält ihren eigenen Kontext.",
+      "cluster-tool": "Der Agent verwendet seine eigene Entsprechung dieses Werkzeugs.",
+      "cluster-mcp-tool": "Richten Sie denselben MCP-Server unter Einstellungen → MCP ein.",
+      "cluster-tool-workflow": "Ein Agent-Werkzeug, das einen anderen n8n-Workflow aufruft, der nicht importiert ist. Eine Pipeline kann nicht als Werkzeug aufgerufen werden, deshalb beschreiben die Schrittanweisungen ihn.",
+      "cluster-parser": "Das Ausgabeformat ist Teil der Schrittanweisungen.",
+      "cluster-vector": "Vektorspeicher-Cluster werden nicht unterstützt. Belassen Sie diesen Teil in n8n.",
+      "cluster-other": "In den Schritt des Agents zusammengeführt.",
+      "branch-if": "Verzweigungskanten: Der Agent meldet, wie die Bedingung ausgefallen ist, und nur dieser Zweig läuft.",
+      "branch-switch": "Verzweigungskanten, eine pro Regel: Der Agent meldet, welche Regel zutraf, und nur dieser Zweig läuft.",
+      "merge-join": "Wartet auf die Eingänge, die laufen. Ein Eingang, dessen Zweig nicht genommen wurde, wird übersprungen.",
+      "agent-step": "Ein Agent führt ihn anhand der ursprünglichen Parameter aus."
+    },
+    "warning": {
+      "error-workflow-other": "Die Workflow-Einstellungen nennen einen anderen n8n-Workflow für Fehler. Diese Fehlerbehandlung wird nicht importiert.",
+      "into-trigger": "Eine Verbindung in den Auslöser „{node}“ wurde entfernt.",
+      "plain-connection": "Eine {kind}-Verbindung aus „{node}“ wurde zu einer einfachen Verbindung: Nur Schritte können verzweigen oder fehlschlagen.",
+      "outputs-same-step": "Mehrere Ausgänge von „{node}“ führen zum selben Schritt. Nur „{kept}“ wird behalten.",
+      "retry-capped": "„{node}“ wiederholt in n8n {tries}-mal im Abstand von {waitMs} ms. Navide erlaubt höchstens {maxTries} Versuche im Abstand von {maxWaitMs} ms und verwendet daher {usedTries} Versuche im Abstand von {usedWaitMs} ms.",
+      "over-target": "{slots} Schritte sind mehr als das Ziel von etwa {target}. Jeder Schritt öffnet ein CLI-Pane.",
+      "wait-in-loop": "Das Wait „{node}“ liegt in einer Schleife und wird in seinen Schritt zusammengeführt. Dort hält keine Genehmigungsschranke den Lauf an."
+    },
+    "error-reason": {
+      "invalid": "Das ist kein n8n-Workflow, den Navide lesen kann.",
+      "invalid-json": "Der Text ist kein gültiges JSON.",
+      "not-object": "Ein n8n-Workflow ist ein JSON-Objekt.",
+      "no-nodes": "Ein n8n-Workflow braucht Knoten und Verbindungen.",
+      "node-shape": "Knoten {index} braucht einen Namen und einen Typ.",
+      "duplicate-name": "Knoten {index} hat denselben Namen wie ein früherer Knoten.",
+      "empty-list": "Die Liste enthält keinen n8n-Workflow.",
+      "internal": "Der umgewandelte Graph ist ungültig. Das ist ein Fehler im Importer.",
+      "too-large": "Der Workflow ist {sizeMb} MB groß. Ein Import darf höchstens {limitMb} MB umfassen.",
+      "store-refused": "Der Workflow „{workflow}“ konnte nicht gespeichert werden, daher wurde nichts importiert: {problems}"
     }
   }
 }

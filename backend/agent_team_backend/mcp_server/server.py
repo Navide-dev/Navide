@@ -9483,7 +9483,10 @@ async def pipeline_import_n8n(
     a name already in use gets " (2)", " (3)"… — holding the graph, the
     redacted source JSON and the credential checklist. `name` defaults to the
     workflow's name; `default_agent` (an agentKey, default "claude") is the CLI
-    for slots no AI Agent model decides.
+    for slots no AI Agent model decides. Sending the same import again (same
+    `json`, `name` and `default_agent`) within 10 minutes answers with the
+    pipeline it created, flagged `reused`, instead of a copy. `json` may be at
+    most 5 MB.
 
     What the user should know before importing (say it):
     - CLI agents carry out most steps. HTTP Request, Code, Set, app nodes
@@ -9519,7 +9522,8 @@ async def pipeline_import_n8n(
     graph, report, credentials} plus `pipeline` (the new pipeline's summary)
     and `pipelines` when one was created; ok false carries `error` and
     `error_code` ("invalid" for input that is not an n8n workflow,
-    "pipeline_running").
+    "too_large", "refused" when the pipeline store refused a graph — nothing
+    of that import is kept — or "pipeline_running").
     """
     caller = _resolve_caller(ctx)
     from agent_team_backend import app as _app
@@ -9539,7 +9543,8 @@ async def pipeline_import_n8n(
             name=str(name or ""),
         )
     except N8nImportError as exc:
-        return {"ok": False, "error": str(exc), "error_code": "invalid"}
+        code = {"too-large": "too_large", "store-refused": "refused"}.get(exc.reason, "invalid")
+        return {"ok": False, "error": str(exc), "error_code": code}
     if not dry_run:
         out.update(await _publish_pipelines("import"))
     return {"ok": True, **out}

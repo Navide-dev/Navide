@@ -11339,7 +11339,8 @@
       "gate-sub": "Chờ phê duyệt",
       "pinned": "Đầu ra đã cố định",
       "tokens": "{n} token",
-      "trigger-sub": "Thủ công, lệnh hoặc MCP"
+      "trigger-sub": "Thủ công, lệnh hoặc MCP",
+      "needs-review": "Đã nhập từ n8n: hãy kiểm tra bước này trước khi chạy pipeline"
     },
     "notice": {
       "external-edit": "Pipeline này đã được thay đổi ở nơi khác. Đang hiện phiên bản mới nhất; lịch sử hoàn tác đã bị xóa.",
@@ -12328,6 +12329,78 @@
       "invalid": "Đây không phải workflow n8n mà Navide đọc được.",
       "preview-failed": "Xem trước thất bại.",
       "import-failed": "Nhập thất bại."
+    },
+    "imported": "Đã nhập “{name}”",
+    "imported-review": "Đã nhập “{name}” · {n} bước cần xem lại",
+    "imported-reused": "“{name}” vừa được nhập cách đây ít phút. Đã mở pipeline đó; không tạo bản sao nào.",
+    "merged-nodes": "{n} nút n8n trong bước này",
+    "subworkflows-title": "Workflow được gọi",
+    "will-create": "Khi nhập sẽ tạo {n} pipeline.",
+    "subworkflow-status": {
+      "imported": "Đã nhập",
+      "will-import": "Nhập cùng với workflow này",
+      "existing": "Dùng pipeline đã nhập trước đó",
+      "missing": "Chưa có trong Navide",
+      "recursive": "Gọi ngược lại: giữ lại để xem lại"
+    },
+    "error-in-workflow": "Workflow số {n}: {message}",
+    "import-timeout": "Quá trình nhập đang mất nhiều thời gian và có thể vẫn hoàn tất. Hãy bấm Nhập lần nữa: nếu pipeline đã được tạo thì nó sẽ được mở, và không bao giờ tạo bản sao.",
+    "detail": {
+      "unknown-version": "typeVersion {version} nằm ngoài phạm vi đã biết {lo}–{hi}. Một agent thực hiện nó theo các tham số của nó.",
+      "unknown-type": "Loại nút này không có trong bảng nhập. Một agent thực hiện nó theo các tham số của nó.",
+      "community-node": "Nút cộng đồng. Một agent thực hiện nó theo các tham số của nó.",
+      "merge-combine": "Merge ở chế độ “{mode}” kết hợp dữ liệu. Một agent thực hiện nó theo quy tắc gộp của nó.",
+      "role-trigger-schedule": "Trong n8n, nút này chạy theo lịch. Hãy khởi động thủ công cho đến khi Navide hỗ trợ lên lịch cho pipeline.",
+      "role-trigger-webhook": "Trong n8n, nút này bắt đầu từ một yêu cầu HTTP. Navide chưa có trình kích hoạt webhook.",
+      "role-trigger-error": "Workflow lỗi của n8n chưa có tính năng tương đương trong Navide.",
+      "role-trigger-app": "Trong n8n, nút này bắt đầu từ một sự kiện ứng dụng. Navide chưa có trình kích hoạt ứng dụng.",
+      "role-subworkflow": "Gọi một workflow n8n khác chưa được nhập. Hãy dán cả workflow đó, hoặc nhập nó trước.",
+      "role-respond": "Trả lời một webhook của n8n. Navide chưa có trình kích hoạt webhook.",
+      "error-workflow": "Workflow này là workflow lỗi của chính nó. Khi một bước thất bại, các bước sau sẽ chạy qua các cạnh lỗi.",
+      "recursive-subworkflow": "Gọi workflow n8n {workflowId}, và workflow đó lại gọi ngược workflow này. Pipeline con không thể tự chạy chính nó, nên lệnh gọi này được giữ lại để xem lại.",
+      "tool-pipeline": "Một công cụ của agent gọi workflow n8n {workflowId}, đã được nhập thành pipeline {pipelineId}. Pipeline không thể được gọi như một công cụ, nên hướng dẫn của bước sẽ nêu tên nó thay vào đó.",
+      "subpipeline": "Chạy pipeline {pipelineId} (workflow n8n {workflowId}) như một Pipeline con và chờ nó hoàn tất.",
+      "subpipeline-nowait": "Chạy pipeline {pipelineId} (workflow n8n {workflowId}) như một Pipeline con và chờ nó hoàn tất. n8n không chờ nó; Navide luôn chờ Pipeline con.",
+      "loop-batch": "Vòng lặp được gộp vào một bước xử lý lần lượt từng mục.",
+      "loop-repeat": "Vòng lặp được gộp vào một bước lặp lại cho đến khi điều kiện thoát vòng lặp được thỏa.",
+      "loop-wait": "Một nút Wait của n8n bên trong vòng lặp. Bước sẽ tạm dừng ở đây giữa các vòng; không có điểm phê duyệt nào dừng lần chạy.",
+      "loop-subworkflow": "Gọi một workflow n8n khác bên trong vòng lặp. Một agent thực hiện cả vòng lặp như một bước.",
+      "removed-sticky": "Ghi chú dán. Nội dung của nó nằm trong phần mô tả và trong hướng dẫn của bước gần nhất.",
+      "removed-disabled": "Đã bị tắt trong n8n. Đã bỏ qua; các kết nối của nó được nối thẳng.",
+      "removed-noop": "Nút No Operation. Đã xóa và nối các kết nối của nó lại.",
+      "cluster-model": "Bước này chạy trên một CLI agent thay vì mô hình này.",
+      "cluster-memory": "Đã bỏ. Phiên CLI tự giữ ngữ cảnh của nó.",
+      "cluster-tool": "Agent dùng công cụ tương đương của chính nó.",
+      "cluster-mcp-tool": "Hãy thiết lập cùng máy chủ MCP đó trong Cài đặt → MCP.",
+      "cluster-tool-workflow": "Một công cụ của agent gọi một workflow n8n khác chưa được nhập. Pipeline không thể được gọi như một công cụ, nên hướng dẫn của bước sẽ mô tả nó.",
+      "cluster-parser": "Định dạng đầu ra là một phần trong hướng dẫn của bước.",
+      "cluster-vector": "Không hỗ trợ cụm kho vector. Hãy giữ phần này trong n8n.",
+      "cluster-other": "Đã gộp vào bước của agent.",
+      "branch-if": "Cạnh rẽ nhánh: agent báo điều kiện đi theo hướng nào, và chỉ nhánh đó chạy.",
+      "branch-switch": "Cạnh rẽ nhánh, mỗi quy tắc một cạnh: agent báo quy tắc nào khớp, và chỉ nhánh đó chạy.",
+      "merge-join": "Chờ các đầu vào có chạy. Đầu vào thuộc nhánh không được chọn sẽ bị bỏ qua.",
+      "agent-step": "Một agent thực hiện nó theo các tham số gốc."
+    },
+    "warning": {
+      "error-workflow-other": "Phần cài đặt của workflow chỉ định một workflow n8n khác để xử lý lỗi. Phần xử lý lỗi đó không được nhập.",
+      "into-trigger": "Đã bỏ một kết nối đi vào trình kích hoạt “{node}”.",
+      "plain-connection": "Một kết nối {kind} đi ra từ “{node}” đã thành kết nối thường: chỉ các bước mới có thể rẽ nhánh hoặc thất bại.",
+      "outputs-same-step": "Nhiều đầu ra của “{node}” dẫn đến cùng một bước. Chỉ giữ “{kept}”.",
+      "retry-capped": "Trong n8n, “{node}” thử lại {tries} lần, cách nhau {waitMs} ms. Navide cho phép tối đa {maxTries} lần thử cách nhau {maxWaitMs} ms, nên sẽ dùng {usedTries} lần thử cách nhau {usedWaitMs} ms.",
+      "over-target": "{slots} bước là nhiều hơn mục tiêu khoảng {target}. Mỗi bước sẽ mở một pane CLI.",
+      "wait-in-loop": "Nút Wait “{node}” nằm trong vòng lặp nên được gộp vào bước của nó. Không có điểm phê duyệt nào dừng lần chạy tại đó."
+    },
+    "error-reason": {
+      "invalid": "Đây không phải workflow n8n mà Navide đọc được.",
+      "invalid-json": "Văn bản này không phải JSON hợp lệ.",
+      "not-object": "Workflow n8n phải là một đối tượng JSON.",
+      "no-nodes": "Workflow n8n cần có nút và kết nối.",
+      "node-shape": "Nút {index} cần có tên và loại.",
+      "duplicate-name": "Nút {index} trùng tên với một nút trước đó.",
+      "empty-list": "Danh sách không chứa workflow n8n nào.",
+      "internal": "Đồ thị đã chuyển đổi không hợp lệ. Đây là lỗi của trình nhập.",
+      "too-large": "Workflow có dung lượng {sizeMb} MB. Mỗi lần nhập tối đa {limitMb} MB.",
+      "store-refused": "Không thể lưu workflow “{workflow}”, nên không có gì được nhập: {problems}"
     }
   }
 }

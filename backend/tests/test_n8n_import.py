@@ -244,6 +244,23 @@ def test_a_merge_that_waits_for_its_inputs_is_native(mode):
     assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("native", "merge")
 
 
+@pytest.mark.parametrize("mode", ["passThrough", "wait"])
+def test_a_merge_v1_pass_through_or_wait_is_a_native_join(mode):
+    w = if_merge()
+    w["nodes"][4]["typeVersion"] = 1
+    w["nodes"][4]["parameters"] = {"mode": mode}
+    out = convert(w)
+    assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("native", "merge")
+
+
+def test_a_merge_v2_keeps_its_own_modes():
+    w = if_merge()
+    w["nodes"][4]["typeVersion"] = 2
+    w["nodes"][4]["parameters"] = {"mode": "passThrough"}
+    out = convert(w)
+    assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("agent", "merge-combine")
+
+
 def test_a_combine_by_sql_merge_is_an_agent_step_folded_downstream():
     w = if_merge()
     sql = "SELECT * FROM input1 LEFT JOIN input2 ON input1.id = input2.id"
@@ -295,6 +312,35 @@ def test_switch_rules_map_one_by_one_and_the_fallback_to_default():
         ("branch", "n8n-route", "n8n-c", "default"),
     ]
     assert "one of: Refund, 1, default" in slot(out, "n8n-route")["slot"]["kickoffBody"]
+
+
+@pytest.mark.parametrize("ver", [1, 2])
+def test_switch_v1_v2_rules_branch_by_their_declared_output(ver):
+    # Rule 0 sends to output 2, rule 1 to output 0, and no match to output 1:
+    # the branch value of an edge is the output it leaves from, not the rule's
+    # position in the list.
+    params = {"mode": "rules", "rules": {"rules": [{"output": 2}, {"output": 0}]}, "fallbackOutput": 1}
+    w = wf([node("Start", "manualTrigger"), node("Route", "switch", ver, 200, parameters=params),
+            node("A", "set", 3.4, 400), node("B", "set", 3.4, 400, 100), node("C", "set", 3.4, 400, 200)],
+           link(("Start", "Route"), ("Route", "A", 0), ("Route", "B", 1), ("Route", "C", 2)))
+    out = convert(w)
+    assert [e for e in edges(out) if e[0] == "branch"] == [
+        ("branch", "n8n-route", "n8n-a", "0"), ("branch", "n8n-route", "n8n-b", "default"),
+        ("branch", "n8n-route", "n8n-c", "2"),
+    ]
+    assert entry(out, "Route")["branches"] == ["0", "default", "2"]
+    kick = slot(out, "n8n-route")["slot"]["kickoffBody"]
+    assert "rule 0 → 2, rule 1 → 0, no rule matches → default" in kick
+
+
+def test_switch_v1_v2_without_a_fallback_has_no_default_branch():
+    params = {"mode": "rules", "rules": {"rules": [{"output": 1}, {"output": 0}]}, "fallbackOutput": -1}
+    w = wf([node("Start", "manualTrigger"), node("Route", "switch", 2, 200, parameters=params),
+            node("A", "set", 3.4, 400), node("B", "set", 3.4, 400, 100)],
+           link(("Start", "Route"), ("Route", "A", 0), ("Route", "B", 1)))
+    out = convert(w)
+    assert entry(out, "Route")["branches"] == ["0", "1"]
+    assert "no rule matches" not in slot(out, "n8n-route")["slot"]["kickoffBody"]
 
 
 def test_two_outputs_into_one_step_keep_one_branch_and_warn():
@@ -426,6 +472,34 @@ def test_split_in_batches_back_edge_becomes_one_loop_slot():
     for name in ("Each", "Call", "Fix"):
         assert entry(out, name)["node"] == "n8n-rows" and entry(out, name)["needsReview"]
     assert not entry(out, "Rows")["needsReview"]
+
+
+def poll_loop(with_wait: bool = True) -> dict:
+    nodes = [node("Start", "manualTrigger"), node("Poll", "httpRequest", 4.2, 200), node("Ready", "if", 2, 400),
+             node("Use", "set", 3.4, 600, 100)]
+    pairs = [("Start", "Poll"), ("Poll", "Ready"), ("Ready", "Use", 0)]
+    if with_wait:
+        nodes.append(node("Pause", "wait", 1.1, 600, parameters={"amount": 30, "unit": "seconds"}))
+        pairs += [("Ready", "Pause", 1), ("Pause", "Poll")]
+    else:
+        pairs.append(("Ready", "Poll", 1))
+    return wf(nodes, link(*pairs))
+
+
+@pytest.mark.parametrize("with_wait", [True, False])
+def test_a_poll_loop_repeats_until_its_condition_holds(with_wait):
+    out = convert(poll_loop(with_wait))
+    group = entry(out, "Poll")["node"]
+    kick = slot(out, group)["slot"]["kickoffBody"]
+    assert "one by one" not in entry(out, "Poll")["detail"]
+    assert "until" in entry(out, "Poll")["detail"] and "condition" in entry(out, "Poll")["detail"]
+    assert "one item (or batch) at a time" not in kick
+    assert "repeat those steps until the condition that leaves the loop holds" in kick
+    if with_wait:
+        assert entry(out, "Pause")["node"] == group
+        assert "Wait" in entry(out, "Pause")["detail"]
+        assert "\"Pause\" is an n8n Wait inside the loop" in kick
+        assert any("\"Pause\"" in x and "inside a loop" in x for x in out["report"]["warnings"])
 
 
 def test_loop_holding_an_agent_stays_its_own_slot_between_agents():
@@ -803,3 +877,153 @@ def test_the_native_flow_signal_fixture_is_the_converters_output():
     kinds = {(e["from"], e["kind"]) for e in out["graph"]["edges"]}
     assert {("n8n-plan", "branch"), ("n8n-route", "branch"), ("n8n-plan", "error")} <= kinds
     assert "{{node.n8n-plan.output}}" in slot(out, "n8n-fast")["slot"]["kickoffBody"]
+
+
+# ── translatable report ──────────────────────────────────────────────────
+EN_US = Path(__file__).resolve().parents[2] / "packages" / "plugin-ui" / "src" / "foundation" / "i18n" / "locales" / "en-US.json"
+
+
+def _report_corpus() -> list[dict]:
+    """Conversions that between them hit every detail and warning the report can carry."""
+    w_trig = wf([node("Start", "manualTrigger"), node("A", "set", 3.4, 200), node("Again", "manualTrigger", 1, 400)],
+                link(("Start", "A"), ("A", "Again")))
+    w_err_other = wf([node("Start", "manualTrigger"), node("A", "set", 3.4, 200)], link(("Start", "A")),
+                     settings={"errorWorkflow": "elsewhere"})
+    w_own_err = wf([node("Start", "manualTrigger"), node("A", "set", 3.4, 200), node("Oops", "errorTrigger", 1, 0, 300),
+                    node("Tell", "slack", 2.3, 200, 300)],
+                   link(("Start", "A"), ("Oops", "Tell")), id="self", settings={"errorWorkflow": "self"})
+    w_retry = wf([node("Start", "manualTrigger"), node("Call", "httpRequest", 4.2, 200, retryOnFail=True, maxTries=8)],
+                 link(("Start", "Call")))
+    w_gate_branch = wf([node("Start", "manualTrigger"), node("Ok", "wait", 1.1, 200, onError="continueErrorOutput"),
+                        node("A", "set", 3.4, 400), node("B", "set", 3.4, 400, 100)],
+                       link(("Start", "Ok"), ("Ok", "A", 0), ("Ok", "B", 1)))
+    w_same = wf([node("Start", "manualTrigger"),
+                 node("Route", "switch", 3.2, 200, parameters={"rules": {"values": [{}, {}, {}]}}),
+                 node("A", "set", 3.4, 400), node("B", "set", 3.4, 400, 100)],
+                link(("Start", "Route"), ("Route", "A", 0), ("Route", "A", 1), ("Route", "B", 2)))
+    w_many = wf([node("Start", "manualTrigger")] + [node(f"Ai{i}", ni.LANGCHAIN + "chainLlm", 1.5, i * 100) for i in range(10)],
+                link(("Start", "Ai0"), *[(f"Ai{i}", f"Ai{i + 1}") for i in range(9)]))
+    w_odd = wf([node("Start", "manualTrigger"), node("Old", "httpRequest", 9, 200), node("New", "fooBar", 1, 400),
+                node("Weird", "acme.thing", 1, 600), node("Hook", "slackTrigger", 1, 0, 200),
+                node("Join", "merge", 3, 800, parameters={"mode": "combine"}), node("Tool", ni.LANGCHAIN + "toolCode", 1, 0, 400),
+                node("Vec", ni.LANGCHAIN + "vectorStoreInMemory", 1, 0, 500), node("Mem", ni.LANGCHAIN + "memoryBufferWindow", 1, 0, 600),
+                node("Mcp", ni.LANGCHAIN + "mcpClientTool", 1, 0, 700), node("Parse", ni.LANGCHAIN + "outputParserStructured", 1, 0, 800),
+                node("Other", ni.LANGCHAIN + "somethingNew", 1, 0, 900), node("Agent", ni.LANGCHAIN + "agent", 1.7, 1000),
+                node("Model", ni.LANGCHAIN + "lmChatAnthropic", 1, 0, 1000), node("Answer", "respondToWebhook", 1, 1200),
+                node("Helper", "set", 3.4, 0, 1100)],
+               {**link(("Start", "Old"), ("Old", "New"), ("New", "Weird"), ("Weird", "Join"), ("Join", "Agent"),
+                       ("Agent", "Answer"), ("Hook", "Join")),
+                **link(("Tool", "Agent", 0, "ai_tool")), **{"Vec": link(("Vec", "Agent", 0, "ai_tool"))["Vec"]},
+                **link(("Mem", "Agent", 0, "ai_memory")), **link(("Mcp", "Agent", 0, "ai_tool")),
+                **link(("Parse", "Agent", 0, "ai_outputParser")), **link(("Model", "Agent", 0, "ai_languageModel")),
+                **link(("Other", "Agent", 0, "ai_tool")), **link(("Helper", "Agent", 0, "ai_tool"))})
+    sub_loop = wf([node("Start", "manualTrigger"), node("Each", "splitInBatches", 3, 200),
+                   node("Run", "executeWorkflow", 1.2, 400, parameters={"workflowId": "wf-42"})],
+                  link(("Start", "Each"), ("Each", "Run", 1), ("Run", "Each")))
+    tool_wf = wf([node("Start", "manualTrigger"), node("Agent", ni.LANGCHAIN + "agent", 1.7, 200),
+                  node("Model", ni.LANGCHAIN + "lmChatAnthropic", 1, 0, 200),
+                  node("Calls", ni.LANGCHAIN + "toolWorkflow", 1, 0, 300, parameters={"workflowId": "wf-42"})],
+                 {**link(("Start", "Agent")), **link(("Model", "Agent", 0, "ai_languageModel")),
+                  **link(("Calls", "Agent", 0, "ai_tool"))})
+    outs = [convert(w) for w in (linear(), ai_cluster(), if_merge(), if_merge(True), loop(), webhook(), schedule(),
+                                 subworkflow(), removals(), poll_loop(), poll_loop(False), w_trig, w_err_other, w_own_err,
+                                 w_retry, w_gate_branch, w_same, w_many, w_odd, tool_wf)]
+    outs.append(convert(subpipeline_call(), subpipelines={"wf-42": "pl-child"}))
+    nowait = subpipeline_call(options={"waitForSubWorkflow": False})
+    outs.append(convert(nowait, subpipelines={"wf-42": "pl-child"}))
+    outs.append(convert(wf([node("Oops", "errorTrigger"), node("Tell", "slack", 2.3, 200)], link(("Oops", "Tell")))))
+    outs.append(convert(subpipeline_call(), subpipelines={"wf-42": "pl-child"}, recursive_workflows={"wf-42"}))
+    outs.append(convert(sub_loop, subpipelines={"wf-42": "pl-child"}))
+    outs.append(convert(tool_wf, subpipelines={"wf-42": "pl-child"}))
+    switch_v2 = wf([node("Start", "manualTrigger"),
+                    node("Route", "switch", 2, 200, parameters={"rules": {"rules": [{"output": 1}]}, "fallbackOutput": 0}),
+                    node("A", "set", 3.4, 400), node("B", "set", 3.4, 400, 100)],
+                   link(("Start", "Route"), ("Route", "A", 0), ("Route", "B", 1)))
+    outs.append(convert(switch_v2))
+    return outs
+
+
+def test_every_detail_and_warning_carries_a_code_the_window_translates():
+    loc = json.loads(EN_US.read_text(encoding="utf-8"))["pipelineImport"]
+    details, warns = set(), set()
+    for out in _report_corpus():
+        rep = out["report"]
+        for e in rep["nodes"]:
+            assert e["detail"] and e["detailCode"] in loc["detail"], (e["name"], e["detailCode"], e["detail"])
+            assert isinstance(e["detailParams"], dict)
+            details.add(e["detailCode"])
+        assert [w["text"] for w in rep["warningItems"]] == rep["warnings"]
+        for w in rep["warningItems"]:
+            assert w["code"] in loc["warning"], w
+            warns.add(w["code"])
+    # The corpus reaches every message the window has, so none is dead.
+    assert details == set(loc["detail"]) and warns == set(loc["warning"])
+
+
+def test_detail_params_carry_the_values_in_the_sentence():
+    w = wf([node("Start", "manualTrigger"), node("Old", "httpRequest", 9, 200)], link(("Start", "Old")))
+    e = entry(convert(w), "Old")
+    assert (e["detailCode"], e["detailParams"]) == ("unknown-version", {"version": 9, "lo": 1, "hi": 4.3})
+    w = if_merge()
+    w["nodes"][4]["parameters"] = {"mode": "combineBySql"}
+    e = entry(convert(w), "Join")
+    assert (e["detailCode"], e["detailParams"]) == ("merge-combine", {"mode": "combineBySql"})
+
+
+@pytest.mark.parametrize("bad, reason", [
+    ("{not json", "invalid-json"), ("[]", "empty-list"), ("3", "not-object"), ('{"nodes": 1}', "no-nodes"),
+    ('{"nodes": [{}], "connections": {}}', "node-shape"),
+])
+def test_errors_carry_a_reason_the_window_translates(bad, reason):
+    loc = json.loads(EN_US.read_text(encoding="utf-8"))["pipelineImport"]["error-reason"]
+    with pytest.raises(ni.N8nImportError) as exc:
+        ni.import_into_store(None, bad)
+    assert exc.value.reason == reason and reason in loc
+    for code in ("duplicate-name", "internal", "too-large", "store-refused", "invalid"):
+        assert code in loc
+
+
+def test_steps_to_review_carry_the_flag_into_the_graph():
+    w = wf([node("Start", "manualTrigger"), node("Old", "httpRequest", 9, 200), node("Weird", "acme.thing", 1, 400),
+            node("Agent", ni.LANGCHAIN + "chainLlm", 1.5, 600), node("Ok", "set", 3.4, 800)],
+           link(("Start", "Old"), ("Old", "Weird"), ("Weird", "Agent"), ("Agent", "Ok")))
+    out = convert(w)
+    flags = {n["id"]: n.get("needsReview") for n in out["graph"]["nodes"]}
+    assert flags == {"trigger": None, "n8n-old": True, "n8n-agent": None, "n8n-ok": None}
+
+
+
+def test_the_review_flag_survives_the_store(tmp_path):
+    from agent_team_backend.stages_store import PIPELINES_FILE, StagesStore
+
+    store = StagesStore(tmp_path / PIPELINES_FILE)
+    w = wf([node("Start", "manualTrigger"), node("Old", "httpRequest", 9, 200)], link(("Start", "Old")))
+    out = ni.import_into_store(store, w, dry_run=False)
+    graph = store.get_graph(out["pipeline"]["id"])["graph"]
+    assert next(n for n in graph["nodes"] if n["id"] == "n8n-old")["needsReview"] is True
+
+
+def _if_chain(n: int) -> dict:
+    nodes = [node("Start", "manualTrigger")] + [
+        node(f"N{i}", "set" if i % 3 else "if", 3.4 if i % 3 else 2, i * 10) for i in range(n)]
+    return wf(nodes, link(("Start", "N0"), *[(f"N{i}", f"N{i + 1}") for i in range(n - 1)]))
+
+
+def test_an_if_heavy_chain_grows_about_quadratically(monkeypatch):
+    # Counted, not timed, so a slow runner cannot fail it: grouping work is
+    # union-find lookups. Doubling the chain must not multiply them by ~8
+    # (cubic, 800 nodes took 5 s); quadratic is ~4.
+    calls = {"n": 0}
+    find = ni._UF.find
+
+    def counted(self: Any, x: str) -> str:
+        calls["n"] += 1
+        return find(self, x)
+
+    monkeypatch.setattr(ni._UF, "find", counted)
+    counts = []
+    for n in (400, 800):
+        calls["n"] = 0
+        ni.convert_n8n_workflow(_if_chain(n), imported_at=NOW)
+        counts.append(calls["n"])
+    assert counts[1] / counts[0] < 5.5, counts
