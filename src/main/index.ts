@@ -1611,8 +1611,13 @@ if (!installedMiniIdeDescriptorPresent && !pluginFactoryOptOuts.has(MINI_IDE_PLU
 // target, because its backend is a native program. A registry install of it
 // takes precedence, as for Git and Mini-IDE.
 const BROWSER_PLUGIN_ID = 'navide.browser'
+const browserSource = {
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  artifactVersion: officialPluginVersion(BROWSER_PLUGIN_ID),
+}
 const factoryBrowserDir = (): string => officialPluginArtifactPackageDir(
-  miniIdeSource,
+  browserSource,
   BROWSER_PLUGIN_ID,
   currentPluginHostTarget(),
 )

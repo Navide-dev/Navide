@@ -241,12 +241,14 @@ describe('release workflow verifies the Plans artifact it signs', () => {
     )
   })
 
-  it('asserts each release artifact carries the bundled Navide Browser backend', () => {
+  it('asserts each release artifact carries the bundled Navide Browser backend at its own version', () => {
+    expect(verifyStep).toContain('browser_version="$(node -p "require(\'./plugins/navide-browser/manifest.json\').version")"')
+    expect(linuxValidationStep).toContain('browser_version="$(node -p "require(\'./plugins/navide-browser/manifest.json\').version")"')
     expect(verifyStep).toContain(
-      'test -x "${app_path}/Contents/Resources/official-artifacts/navide.browser/${artifact_version}/darwin-arm64/package/backend/navide-browser"',
+      'test -x "${app_path}/Contents/Resources/official-artifacts/navide.browser/${browser_version}/darwin-arm64/package/backend/navide-browser"',
     )
     expect(linuxValidationStep).toContain(
-      'test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${artifact_version}/linux-x64/package/backend/navide-browser"',
+      'test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${browser_version}/linux-x64/package/backend/navide-browser"',
     )
   })
 })
