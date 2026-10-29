@@ -10,8 +10,10 @@ Two measurements:
 
 throughput  A child writes ``--mb`` MiB of text as fast as it can. Reports
             MiB/s from create() to the last output frame, how many frames
-            carried it, and whether every byte arrived (the 5 MB drop policy
-            would show up here as missing bytes).
+            carried it, and whether every payload byte arrived (the 5 MB drop
+            policy would show up here as missing bytes). Carriage returns are
+            not counted: the tty adds them (ONLCR), and macOS occasionally
+            emits a doubled one where a "\n" lands on a 1 KiB boundary.
 startup     ``--runs`` trivial children that print one marker and exit.
             Reports create() -> first output frame, p50 / p95 / max.
 
@@ -57,8 +59,9 @@ class ThroughputResult:
     seconds: float
     mib_per_s: float
     frames: int
-    bytes_expected: int | None
     bytes_received: int
+    payload_expected: int | None
+    payload_received: int
 
 
 @dataclass
@@ -83,6 +86,7 @@ class _Sink:
         self.delay = send_delay_ms / 1000
         self.frames = 0
         self.nbytes = 0
+        self.payload = 0
         self.first_frame_at: float | None = None
         self.last_frame_at: float | None = None
         self.first_text = b""
@@ -99,6 +103,7 @@ class _Sink:
                 self.first_text += data[: 256 - len(self.first_text)]
             self.frames += 1
             self.nbytes += len(data)
+            self.payload += len(data) - data.count(b"\r")
             if self.delay:
                 await asyncio.sleep(self.delay)
             else:
@@ -127,10 +132,9 @@ async def measure_throughput(
     line = _LINES[payload].encode("utf-8")
     count = max(1, int(mib * 1024 * 1024) // len(line))
     data = line * count
-    # The PTY's ONLCR turns every "\n" into "\r\n" on the way out. ConPTY
-    # re-renders the screen instead of passing bytes through, so on Windows
-    # there is no byte count to check against.
-    expected = None if sys.platform == "win32" else len(data) + data.count(b"\n")
+    # ConPTY re-renders the screen instead of passing bytes through, so on
+    # Windows there is no byte count to check against.
+    expected = None if sys.platform == "win32" else len(data)
     sink = _Sink(send_delay_ms)
     svc = TerminalService(sink.emit)
     with tempfile.TemporaryDirectory() as tmp:
@@ -161,8 +165,9 @@ async def measure_throughput(
         seconds=round(seconds, 3),
         mib_per_s=round(received_mib / seconds, 1) if seconds > 0 else 0.0,
         frames=sink.frames,
-        bytes_expected=expected,
         bytes_received=sink.nbytes,
+        payload_expected=expected,
+        payload_received=sink.payload,
     )
 
 
@@ -213,8 +218,8 @@ async def _main(args: argparse.Namespace) -> int:
     throughput = report.get("throughput")
     if (
         isinstance(throughput, dict)
-        and throughput["bytes_expected"] is not None
-        and throughput["bytes_received"] != throughput["bytes_expected"]
+        and throughput["payload_expected"] is not None
+        and throughput["payload_received"] != throughput["payload_expected"]
     ):
         print("WARNING: output bytes were lost (drop policy engaged?)", file=sys.stderr)
         return 1
