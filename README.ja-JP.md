@@ -10,7 +10,7 @@ Navide は、一人の人間が複数の Coding Agent を指揮するための�
 
 [English](README.md) | [繁體中文](README.zh-TW.md) | 日本語
 
-[v0.2.33 をダウンロード](https://github.com/Navide-dev/Navide/releases/tag/v0.2.33) | [はじめに](docs/ja-JP/getting-started.md) | [ドキュメント](docs/ja-JP/README.md) | [ロードマップ](docs/ja-JP/roadmap.md)
+[v0.2.34 をダウンロード](https://github.com/Navide-dev/Navide/releases/tag/v0.2.34) | [はじめに](docs/ja-JP/getting-started.md) | [ドキュメント](docs/ja-JP/README.md) | [ロードマップ](docs/ja-JP/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Navide-dev/Navide/total?label=downloads&logo=github&color=2ea043)](https://github.com/Navide-dev/Navide/releases)
@@ -115,7 +115,7 @@ Navide はすでに、創設者がこのプロジェクトを進化させるた�
 | 2 週間前 | █████████████ | 293 |
 | 先週 | █████████ | 204 |
 
-数値は 2026-10-27（v0.2.33）時点のものです。ページ上部のバッジには最新の数値が表示されます。
+数値は 2026-10-27（v0.2.34）時点のものです。ページ上部のバッジには最新の数値が表示されます。
 
 ## 現在利用できる機能
 
@@ -153,13 +153,13 @@ Local-first は常に完全オフラインという意味ではありません�
 
 ## Navide を試す
 
-Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.33 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 Installer と Linux x64 Package を提供しています。
+Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.34 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 Installer と Linux x64 Package を提供しています。
 
-- [DMG をダウンロード](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-arm64.dmg))
-- [ZIP をダウンロード](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-arm64.zip))
-- [Windows x64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-win-x64.exe))
-- [Windows ARM64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-win-arm64.exe))
-- [Linux AppImage をダウンロード](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-x86_64.AppImage))・[Linux .deb をダウンロード](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-amd64.deb))
+- [DMG をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-arm64.dmg))
+- [ZIP をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-arm64.zip))
+- [Windows x64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-win-x64.exe))
+- [Windows ARM64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-win-arm64.exe))
+- [Linux AppImage をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-x86_64.AppImage))・[Linux .deb をダウンロード](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-amd64.deb))
 
 リンク先は dl.navide.dev で、アプリの自動更新と同じ配信元です。隣の「GitHub」リンクは GitHub Release 上の同じファイル（バイト単位で同一。リリースワークフローが両方に公開し、チェックサムの一致を確認しています）。
 

@@ -10,7 +10,7 @@ It is not another chat panel inside the traditional IDE. Navide is being built a
 
 English | [繁體中文](README.zh-TW.md) | [日本語](README.ja-JP.md)
 
-[Download v0.2.33](https://github.com/Navide-dev/Navide/releases/tag/v0.2.33) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
+[Download v0.2.34](https://github.com/Navide-dev/Navide/releases/tag/v0.2.34) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Navide-dev/Navide/total?label=downloads&logo=github&color=2ea043)](https://github.com/Navide-dev/Navide/releases)
@@ -115,7 +115,7 @@ Commits per week over the last eight weeks - never fewer than 130:
 | 2 weeks ago | █████████████ | 293 |
 | last week | █████████ | 204 |
 
-Counts as of 2026-10-27 (v0.2.33). The badges at the top track the live numbers.
+Counts as of 2026-10-27 (v0.2.34). The badges at the top track the live numbers.
 
 ## Available today
 
@@ -153,13 +153,13 @@ Read [Privacy and Data Flows](docs/en-US/privacy.md) and the [Security Policy](S
 
 ## Try Navide
 
-Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.33 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
+Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.34 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
 
-- [Download DMG](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-arm64.dmg))
-- [Download ZIP](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-arm64.zip))
-- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-win-x64.exe))
-- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-win-arm64.exe))
-- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.33/Navide-0.2.33-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.33/Navide-0.2.33-amd64.deb))
+- [Download DMG](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-arm64.dmg))
+- [Download ZIP](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-arm64.zip))
+- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-win-x64.exe))
+- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-win-arm64.exe))
+- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.34/Navide-0.2.34-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.34/Navide-0.2.34-amd64.deb))
 
 Links go to dl.navide.dev, the same host the app updates itself from; the *GitHub* link beside each one is the same file, byte for byte, on the GitHub Release (the release workflow publishes both and checks their checksums match).
 
