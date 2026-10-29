@@ -98,6 +98,10 @@ const report = computed(() => preview.value?.report ?? null)
 const credentials = computed(() => preview.value?.credentials ?? report.value?.credentials ?? [])
 const stale = computed(() => !!preview.value && previewedText.value !== jsonText.value)
 const canImport = computed(() => !!preview.value && !stale.value && !busy.value)
+/** Why Import is disabled, for its tooltip ('' when it is not, or busy). */
+const importBlocked = computed(() =>
+  !preview.value ? t('pipelineImport.import-blocked-preview') : stale.value ? t('pipelineImport.preview-stale') : ''
+)
 const needsSubworkflow = computed(
   () => !!report.value?.nodes.some((n) => n.actions.includes('paste-subworkflow'))
 )
@@ -313,7 +317,8 @@ useDialogFocus(card, () => textarea.value)
               <li v-for="c in CATEGORIES" :key="c" :data-category="c">
                 <span class="n8n-swatch" :class="`n8n-swatch--${swatch(c)}`" aria-hidden="true"></span>
                 {{ t(`pipelineImport.category.${c}`) }}
-                <strong>{{ report.stats.byCategory?.[c] ?? 0 }}</strong>
+                <!-- "Needs review" counts what the banner counts: steps flagged for review. -->
+                <strong>{{ c === 'pending' ? report.stats.needsReview : (report.stats.byCategory?.[c] ?? 0) }}</strong>
               </li>
             </ul>
             <div v-if="report.stats.needsReview > 0" class="n8n-notice n8n-notice--review" data-testid="n8n-needs-review">
@@ -456,7 +461,7 @@ useDialogFocus(card, () => textarea.value)
 
       <div class="nv-dialog-actions">
         <button type="button" class="nv-btn n8n-cancel" @click="emit('close')">{{ t('action.cancel') }}</button>
-        <button type="button" class="nv-btn nv-btn--primary n8n-import-btn" :disabled="!canImport" @click="runImport">
+        <button type="button" class="nv-btn nv-btn--primary n8n-import-btn" :disabled="!canImport" :title="importBlocked || undefined" @click="runImport">
           {{ busy === 'import' ? t('pipelineImport.importing') : t('pipelineImport.import') }}
         </button>
       </div>

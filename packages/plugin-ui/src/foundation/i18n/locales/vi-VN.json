@@ -1192,7 +1192,6 @@
     "collapse": "Thu gọn",
     "restore": "↑ Khôi phục",
     "retry": "↻ Thử lại",
-    "finish": "Hoàn tất",
     "connect-to-remote": "Kết nối với remote",
     "scan-repos-anyway": "Vẫn quét tìm kho",
     "amend-commit": "Sửa commit",
@@ -1468,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock là màn che riêng tư, không phải kiểm soát truy cập. Khi bạn rời đi, nó che mọi cửa sổ của Navide. Agent, terminal, kênh chat, công cụ MCP và lịch chạy vẫn tiếp tục hoạt động, và người ngồi trước máy này nếu biết cách vẫn có thể vượt qua nó.",
+      "section-lock": "Khóa",
+      "enabled": "Bật App Lock",
+      "enabled-hint": "Hãy đặt PIN trước. PIN luôn mở khóa được, kể cả khi bật Touch ID.",
+      "lock-now": "Khóa ngay",
+      "lock-now-hint": "Che mọi cửa sổ ngay lập tức. Phím tắt {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "Đã đặt PIN.",
+      "pin-none-hint": "Chưa có PIN. Dùng từ 4 đến 12 chữ số.",
+      "set-pin": "Đặt PIN",
+      "change-pin": "Đổi PIN",
+      "remove-pin": "Xóa PIN",
+      "remove-pin-hint": "Xóa PIN sẽ tắt App Lock.",
+      "current-pin": "PIN hiện tại",
+      "new-pin": "PIN mới",
+      "confirm-pin": "Xác nhận PIN",
+      "save": "Lưu",
+      "cancel": "Hủy",
+      "pin-saved": "Đã lưu PIN.",
+      "pin-removed": "Đã xóa PIN. App Lock đã tắt.",
+      "section-unlock": "Mở khóa",
+      "method": "Mở khóa bằng",
+      "method-system": "Touch ID, PIN làm dự phòng",
+      "method-pin": "Chỉ PIN",
+      "system-unavailable": "Máy này không dùng được Touch ID nên Navide mở khóa bằng PIN của bạn.",
+      "section-auto": "Tự động khóa",
+      "idle": "Sau khi không dùng",
+      "idle-hint": "Thời gian không có thao tác bàn phím hay chuột trên toàn bộ máy này.",
+      "idle-never": "Không bao giờ",
+      "idle-minutes": "{n} phút",
+      "on-screen-lock": "Khi màn hình khóa",
+      "on-suspend": "Khi máy ngủ",
+      "on-start": "Khi Navide khởi động",
+      "section-forgot": "Quên PIN?",
+      "reset-with-system": "Đặt lại PIN bằng Touch ID",
+      "forgot-system": "Touch ID xác nhận đúng là bạn, rồi bạn chọn PIN mới.",
+      "forgot-manual-title": "Khi không có Touch ID",
+      "forgot-manual": "Thoát Navide rồi xóa app-lock.json trong thư mục dữ liệu của Navide. Việc này chỉ xóa App Lock và PIN của nó, không ảnh hưởng gì khác.",
+      "error-invalid-pin": "Dùng từ 4 đến 12 chữ số.",
+      "error-mismatch": "Hai PIN không khớp.",
+      "error-wrong-pin": "PIN hiện tại không đúng.",
+      "error-cooldown": "Quá nhiều lần thử. Hãy thử lại sau {seconds} giây.",
+      "error-system-failed": "Touch ID không xác nhận được đó là bạn.",
+      "error-generic": "Không thành công. Hãy thử lại."
+    },
     "cliExtensions": {
       "tabInstalled": "Tiện ích mở rộng CLI đã cài",
       "tabConvenience": "Những gì Navide thay đổi",
@@ -1645,6 +1691,10 @@
         "status-badges": {
           "title": "Huy hiệu trạng thái",
           "summary": "Đổi tên từng trạng thái pane và chọn màu cho nó, theo từng ngôn ngữ."
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "Ẩn mọi cửa sổ sau màn hình khóa và mở khóa bằng Touch ID hoặc PIN"
         },
         "voice-input": {
           "title": "Nhập bằng giọng nói",
@@ -2652,6 +2702,7 @@
       "executionPolicy": "Chính sách thực thi",
       "statusBadges": "Huy hiệu trạng thái",
       "voice": "Nhập bằng giọng nói",
+      "appLock": "App Lock",
       "keybindings": "Phím tắt",
       "updates": "Cập nhật",
       "help": "Trợ giúp"
@@ -2718,14 +2769,14 @@
         "intro": "Mỗi tab trong mười chín tab cài đặt điều khiển gì, Navide Cloud nối nhiều máy thành một mạng riêng như thế nào, và các thành phần hệ thống nằm ngoài màn hình chính — các menu, các cửa sổ độc lập, các chế độ xem mức sử dụng và việc bảo trì tài nguyên.",
         "s1": {
           "title": "Tổng quan về cài đặt",
-          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>24 tab</strong>.",
+          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>25 tab</strong>.",
           "h1": "Ô tìm kiếm",
           "p2": "Dưới tiêu đề thanh bên có một ô tìm kiếm với chữ gợi ý <code>Tìm cài đặt…</code>. Ô này tìm theo tên cài đặt, mục chứa cài đặt và từ khóa <strong>trên mọi tab</strong> (theo ngôn ngữ giao diện hiện tại và các từ khóa đã lập chỉ mục), hiển thị tối đa 8 kết quả; nhấp vào một kết quả sẽ chuyển sang tab đó và cuộn tới mục tương ứng (có một ngoại lệ: “Lưu trữ” đóng cài đặt và mở thẳng Resource Manager). Khi không có kết quả, ô hiển thị <code>Không có cài đặt phù hợp</code>. <kbd class=\"syh-kbd\">Esc</kbd> xóa nội dung ô.",
           "callout": {
             "title": "Chỉ mục tìm kiếm chưa đầy đủ",
             "text": "Chỉ mục là một danh sách được duy trì thủ công, và <strong>các tab {layout}, {notifications}, {security} và {channels} hoàn toàn không có mục nào</strong>, nên không tìm được gì bên trong các tab này — bạn phải tự mở. Một mục CLI agent sẽ mở thẳng ngăn cài đặt của một CLI (xem chủ đề “CLI agent và tài khoản”)."
           },
-          "h2": "Hai mươi bốn tab",
+          "h2": "Hai mươi lăm tab",
           "tabTable": {
             "group": "Nhóm",
             "tab": "Tab",
@@ -2760,6 +2811,10 @@
             "voice": {
               "what": "Nhập bằng giọng nói kiểu nhấn giữ, chuyển thành văn bản ngay trên máy này: phím tắt, micrô, chế độ ghi âm, đầu ra tiếng Trung, model và bộ xử lý",
               "more": "Chương “Nhập bằng giọng nói” của chủ đề “{workspace}”"
+            },
+            "appLock": {
+              "what": "Màn che riêng tư phủ mọi cửa sổ: PIN, Touch ID, tự khóa khi không dùng và khi ngủ",
+              "more": "ghi chú ở đầu trang App Lock"
             },
             "cloud": {
               "what": "Trạng thái liên kết giữa các thiết bị, dấu vân tay của máy này, ai được phép ra lệnh cho máy này",
@@ -8563,7 +8618,6 @@
     "pipeline-aborted": "Pipeline đã bị hủy giữa chừng. Các agent được giữ lại — nhấn Tiếp tục để chạy tiếp hoặc Đặt lại để xóa.",
     "pipeline-aborted-paused": "Pipeline đã bị hủy giữa chừng (tạm dừng). Các agent được giữ lại — nhấn Tiếp tục để chạy tiếp hoặc Đặt lại để xóa.",
     "pipeline-completed": "✓ Pipeline đã hoàn tất cả {count} giai đoạn. Hãy xem lại từng pane ở bên phải.",
-    "provide-task": "Hãy nhập mô tả tác vụ + workspace, rồi bắt đầu.",
     "missing": "⚠ bị thiếu",
     "already-open": "● đang mở",
     "tagline": "Điều khiển Claude Code · Codex · Antigravity CLI cùng lúc",
@@ -11267,7 +11321,9 @@
     "badge": {
       "open-canvas": "Hiện liên kết này trên canvas",
       "reject": "↺ Quay về tầng {layer} (tối đa {max})",
-      "skip": "⤳ Nhảy tới tầng {layer}"
+      "skip": "⤳ Nhảy tới tầng {layer}",
+      "branch": "⑂ Nếu {when} → tầng {layer}",
+      "error": "⚠ Khi thất bại → tầng {layer}"
     },
     "canvas": {
       "insert-on-edge": "Chèn một bước vào đây",
@@ -11296,6 +11352,7 @@
       "outcome-ended": "Đã kết thúc",
       "outcome-unknown": "Không rõ",
       "outcome-idle": "Rảnh",
+      "failed-step": "{name} thất bại: {error}",
       "pick": "Chọn một lần chạy để phát lại trên đồ thị.",
       "progress": "{done} trên {total} bước",
       "restart": "Bắt đầu lại",
@@ -11362,6 +11419,7 @@
       "kind-gate": "Điểm phê duyệt",
       "kind-slot": "Bước",
       "kind-trigger": "Bắt đầu",
+      "kind-subpipeline": "Pipeline con",
       "layer": "Cài đặt tầng",
       "live-empty": "Chế độ xem trực tiếp mở khi bước này đang chạy. Hãy khởi động pipeline, rồi quay lại đây.",
       "live-unavailable": "Hiện không đọc được bản ghi của pane.",
@@ -11370,6 +11428,7 @@
       "not-run": "Chưa chạy",
       "open-pane": "Mở pane",
       "output-empty": "Chưa có đầu ra. Sau khi bước này chạy, bản tóm tắt sẽ hiện ở đây.",
+      "failure": "Lý do thất bại",
       "pin": "Cố định đầu ra",
       "pin-help": "Các lần chạy lại bỏ qua bước đã cố định và dùng lại đầu ra gần nhất của nó.",
       "required": "Bắt buộc",
@@ -11467,7 +11526,8 @@
       "parents": "Được gọi từ",
       "open-in-canvas": "Mở trong canvas pipeline",
       "gate-toast": "Pipeline đang chờ bạn phê duyệt tại {name}",
-      "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo."
+      "next-gated": "Hãy phê duyệt hoặc trả về điểm phê duyệt này trước khi sang giai đoạn tiếp theo.",
+      "last-stage": "Đây là giai đoạn cuối. Lần chạy sẽ kết thúc khi giai đoạn này báo hoàn tất."
     },
     "link": {
       "title": "Liên kết",
@@ -11533,7 +11593,15 @@
     "run": {
       "running": "Đang chạy: {names}",
       "gate": "Đang chờ bạn phê duyệt tại {name}",
-      "review": "Xem xét"
+      "review": "Xem xét",
+      "blocked-backend": "Chưa kết nối tới backend.",
+      "blocked-workspace": "Hãy mở một workspace trước.",
+      "blocked-task": "Hãy mô tả nhiệm vụ trước.",
+      "reset-title": "Đặt lại lần chạy này?",
+      "reset-message": "Đặt lại sẽ xóa lần chạy này và đóng mọi pane trong cửa sổ, kể cả pane bạn tự mở. {count} pane sẽ bị đóng.",
+      "reset-message-none": "Đặt lại sẽ xóa lần chạy này. Không có pane nào đang mở nên sẽ không đóng pane nào.",
+      "reset-manual-mark": "không do lần chạy mở",
+      "reset-confirm": "Đặt lại và đóng pane"
     }
   },
   "evolve": {
@@ -12336,6 +12404,7 @@
     "import": "Nhập",
     "importing": "Đang nhập…",
     "preview-stale": "JSON đã thay đổi sau khi xem trước. Hãy xem trước lại trước khi nhập.",
+    "import-blocked-preview": "Hãy xem trước workflow trước.",
     "stats": {
       "workflow": "Tên workflow",
       "nodes": "Nút n8n",

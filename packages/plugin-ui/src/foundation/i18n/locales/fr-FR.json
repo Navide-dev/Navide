@@ -1192,7 +1192,6 @@
     "collapse": "Réduire",
     "restore": "↑ Restaurer",
     "retry": "↻ Réessayer",
-    "finish": "Terminer",
     "connect-to-remote": "Se connecter au dépôt distant",
     "scan-repos-anyway": "Rechercher quand même les dépôts",
     "amend-commit": "Modifier le dernier commit (amend)",
@@ -1468,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock est un écran de confidentialité, pas un contrôle d’accès. Il couvre toutes les fenêtres de Navide pendant votre absence. Les agents, les terminaux, les canaux de discussion, les outils MCP et les planifications continuent de tourner, et une personne devant cet ordinateur qui sait s’y prendre peut le contourner.",
+      "section-lock": "Verrouillage",
+      "enabled": "Activer App Lock",
+      "enabled-hint": "Définissez d’abord un PIN. Le PIN déverrouille toujours, même avec Touch ID activé.",
+      "lock-now": "Verrouiller maintenant",
+      "lock-now-hint": "Couvre toutes les fenêtres immédiatement. Raccourci {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "Un PIN est défini.",
+      "pin-none-hint": "Aucun PIN pour l’instant. Utilisez 4 à 12 chiffres.",
+      "set-pin": "Définir le PIN",
+      "change-pin": "Modifier le PIN",
+      "remove-pin": "Supprimer le PIN",
+      "remove-pin-hint": "Supprimer le PIN désactive App Lock.",
+      "current-pin": "PIN actuel",
+      "new-pin": "Nouveau PIN",
+      "confirm-pin": "Confirmer le PIN",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "pin-saved": "PIN enregistré.",
+      "pin-removed": "PIN supprimé. App Lock est désactivé.",
+      "section-unlock": "Déverrouillage",
+      "method": "Déverrouiller avec",
+      "method-system": "Touch ID, avec le PIN en secours",
+      "method-pin": "PIN uniquement",
+      "system-unavailable": "Touch ID n’est pas disponible sur cet ordinateur, Navide se déverrouille donc avec votre PIN.",
+      "section-auto": "Verrouillage automatique",
+      "idle": "Après inactivité",
+      "idle-hint": "Durée sans clavier ni souris sur l’ensemble de cet ordinateur.",
+      "idle-never": "Jamais",
+      "idle-minutes": "{n} min",
+      "on-screen-lock": "Au verrouillage de l’écran",
+      "on-suspend": "À la mise en veille de l’ordinateur",
+      "on-start": "Au démarrage de Navide",
+      "section-forgot": "PIN oublié ?",
+      "reset-with-system": "Réinitialiser le PIN avec Touch ID",
+      "forgot-system": "Touch ID confirme que c’est bien vous, puis vous choisissez un nouveau PIN.",
+      "forgot-manual-title": "Sans Touch ID",
+      "forgot-manual": "Quittez Navide et supprimez app-lock.json du dossier de données de Navide. Cela supprime App Lock et son PIN, et rien d’autre.",
+      "error-invalid-pin": "Utilisez 4 à 12 chiffres.",
+      "error-mismatch": "Les deux PIN ne correspondent pas.",
+      "error-wrong-pin": "Le PIN actuel est incorrect.",
+      "error-cooldown": "Trop de tentatives. Réessayez dans {seconds} s.",
+      "error-system-failed": "Touch ID n’a pas confirmé votre identité.",
+      "error-generic": "Cela n’a pas fonctionné. Réessayez."
+    },
     "cliExtensions": {
       "tabInstalled": "Extensions CLI installées",
       "tabConvenience": "Ce que Navide modifie",
@@ -1645,6 +1691,10 @@
         "status-badges": {
           "title": "Badges d’état",
           "summary": "Renommer chaque état de pane et choisir sa couleur, par langue."
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "Masquer toutes les fenêtres derrière un écran de verrouillage et déverrouiller avec Touch ID ou un PIN"
         },
         "voice-input": {
           "title": "Saisie vocale",
@@ -2652,6 +2702,7 @@
       "executionPolicy": "Politique d’exécution",
       "statusBadges": "Badges d’état",
       "voice": "Saisie vocale",
+      "appLock": "App Lock",
       "keybindings": "Raccourcis",
       "updates": "Mises à jour",
       "help": "Aide"
@@ -2718,14 +2769,14 @@
         "intro": "Ce que contrôle chacun des dix-neuf onglets des paramètres, comment Navide Cloud relie plusieurs machines en un réseau privé, et les éléments du système situés hors de l’écran principal : les menus, les fenêtres autonomes, les vues d’utilisation et l’entretien des ressources.",
         "s1": {
           "title": "Vue d’ensemble des paramètres",
-          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>24 onglets</strong> au total.",
+          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>25 onglets</strong> au total.",
           "h1": "Le champ de recherche",
           "p2": "Sous l’en-tête de la barre latérale se trouve un champ de recherche dont le texte indicatif est <code>Rechercher dans les paramètres…</code>. Il recherche dans les titres des paramètres, leur section et leurs mots-clés <strong>dans tous les onglets</strong> (dans la langue actuelle de l’interface et avec les mots-clés indexés), et affiche au plus 8 résultats ; cliquer sur l’un d’eux ouvre l’onglet correspondant et fait défiler jusqu’à la section (à une exception près : « Stockage » ferme les paramètres et ouvre directement le Resource Manager). Sans résultat, il affiche <code>Aucun paramètre correspondant</code>. <kbd class=\"syh-kbd\">Esc</kbd> le vide.",
           "callout": {
             "title": "L’index de recherche n’est pas exhaustif",
             "text": "L’index est une liste tenue à la main, et <strong>les onglets {layout}, {notifications}, {security} et {channels} n’y ont aucune entrée</strong> : rien de ce qu’ils contiennent n’est donc trouvable, il faut les ouvrir vous-même. Une entrée CLI Agents ouvre directement le panneau de réglages d’une CLI (voir la rubrique « Agents CLI et comptes »)."
           },
-          "h2": "Les vingt-quatre onglets",
+          "h2": "Les vingt-cinq onglets",
           "tabTable": {
             "group": "Groupe",
             "tab": "Onglet",
@@ -2760,6 +2811,10 @@
             "voice": {
               "what": "Saisie vocale en maintenant une touche, transcrite sur cette machine : raccourci, micro, mode d’enregistrement, sortie en chinois, modèle et moteur",
               "more": "Le chapitre « Saisie vocale » de la rubrique « {workspace} »"
+            },
+            "appLock": {
+              "what": "Un écran de confidentialité sur toutes les fenêtres : PIN, Touch ID, verrouillage après inactivité et en veille",
+              "more": "l’avertissement en haut de la page App Lock"
             },
             "cloud": {
               "what": "État de la liaison entre appareils, empreinte de cette machine, qui peut donner des ordres à cette machine",
@@ -8563,7 +8618,6 @@
     "pipeline-aborted": "Pipeline interrompu. Les agents sont conservés – « Reprendre » pour continuer, ou « Réinitialiser » pour effacer.",
     "pipeline-aborted-paused": "Pipeline interrompu (en pause). Les agents sont conservés – « Reprendre » pour continuer, ou « Réinitialiser » pour effacer.",
     "pipeline-completed": "✓ Le pipeline a terminé ses {count} étapes. Examinez chaque pane à droite.",
-    "provide-task": "Indiquez la description de la tâche et l’espace de travail, puis démarrez.",
     "missing": "⚠ manquant",
     "already-open": "● ouvert",
     "tagline": "Pilotez ensemble Claude Code · Codex · Antigravity CLI",
@@ -11267,7 +11321,9 @@
     "badge": {
       "open-canvas": "Afficher ce lien sur le canevas",
       "reject": "↺ Retour à la couche {layer} (max. {max})",
-      "skip": "⤳ Passe à la couche {layer}"
+      "skip": "⤳ Passe à la couche {layer}",
+      "branch": "⑂ Si {when} → couche {layer}",
+      "error": "⚠ En cas d’échec → couche {layer}"
     },
     "canvas": {
       "insert-on-edge": "Insérer une étape ici",
@@ -11296,6 +11352,7 @@
       "outcome-ended": "Finie",
       "outcome-unknown": "Inconnue",
       "outcome-idle": "Inactive",
+      "failed-step": "{name} a échoué : {error}",
       "pick": "Choisissez une exécution pour la rejouer sur le graphe.",
       "progress": "{done} étapes sur {total}",
       "restart": "Recommencer",
@@ -11362,6 +11419,7 @@
       "kind-gate": "Validation",
       "kind-slot": "Étape",
       "kind-trigger": "Départ",
+      "kind-subpipeline": "Sous-pipeline",
       "layer": "Paramètres de la couche",
       "live-empty": "La vue en direct s’ouvre quand cette étape est en cours. Lancez le pipeline, puis revenez ici.",
       "live-unavailable": "La transcription du pane n’est pas lisible pour l’instant.",
@@ -11370,6 +11428,7 @@
       "not-run": "Pas encore exécutée",
       "open-pane": "Ouvrir le pane",
       "output-empty": "Pas encore de sortie. Après l’exécution de cette étape, son résumé s’affichera ici.",
+      "failure": "Cause de l’échec",
       "pin": "Figer la sortie",
       "pin-help": "Les nouvelles exécutions ignorent une étape figée et réutilisent sa dernière sortie.",
       "required": "Obligatoire",
@@ -11467,7 +11526,8 @@
       "parents": "Appelé depuis",
       "open-in-canvas": "Ouvrir dans le canevas du pipeline",
       "gate-toast": "Le pipeline attend votre approbation à {name}",
-      "next-gated": "Approuvez ou renvoyez cette validation avant de passer à l’étape suivante."
+      "next-gated": "Approuvez ou renvoyez cette validation avant de passer à l’étape suivante.",
+      "last-stage": "C’est la dernière étape. L’exécution se termine dès qu’elle signale avoir fini."
     },
     "link": {
       "title": "Lien",
@@ -11533,7 +11593,15 @@
     "run": {
       "running": "En cours : {names}",
       "gate": "En attente de votre approbation à {name}",
-      "review": "Examiner"
+      "review": "Examiner",
+      "blocked-backend": "Pas de connexion au backend.",
+      "blocked-workspace": "Ouvrez d’abord un espace de travail.",
+      "blocked-task": "Décrivez d’abord la tâche.",
+      "reset-title": "Réinitialiser cette exécution ?",
+      "reset-message": "La réinitialisation efface cette exécution et ferme tous les panes de cette fenêtre, y compris ceux que vous avez ouverts vous-même. {count} pane sera fermé. | La réinitialisation efface cette exécution et ferme tous les panes de cette fenêtre, y compris ceux que vous avez ouverts vous-même. {count} panes seront fermés.",
+      "reset-message-none": "La réinitialisation efface cette exécution. Aucun pane n’est ouvert, donc aucun ne sera fermé.",
+      "reset-manual-mark": "pas ouvert par l’exécution",
+      "reset-confirm": "Réinitialiser et fermer les panes"
     }
   },
   "evolve": {
@@ -12336,6 +12404,7 @@
     "import": "Importer",
     "importing": "Import en cours…",
     "preview-stale": "Le JSON a changé depuis l’aperçu. Relancez l’aperçu avant d’importer.",
+    "import-blocked-preview": "Prévisualisez d’abord le workflow.",
     "stats": {
       "workflow": "Nom du workflow",
       "nodes": "Nœuds n8n",

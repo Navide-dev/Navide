@@ -65,6 +65,7 @@ interface Stubs {
   onPipelineReset: ReturnType<typeof vi.fn>
   onPipelineRestart: ReturnType<typeof vi.fn>
   clearStoredPipelineRun: ReturnType<typeof vi.fn>
+  confirmPipelineReset: ReturnType<typeof vi.fn>
 }
 
 interface StubOverrides {
@@ -125,6 +126,7 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
       pipeline.stageIndex = 0
     }),
     clearStoredPipelineRun: vi.fn(async () => true),
+    confirmPipelineReset: vi.fn(async () => true),
   }
 }
 
@@ -150,6 +152,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     'onPipelineGateApprove',
     'onPipelineGateReject',
     'clearStoredPipelineRun',
+    'confirmPipelineReset',
     code,
   )
   factory(
@@ -171,6 +174,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     vi.fn(async () => true),
     vi.fn(async () => true),
     stubs.clearStoredPipelineRun,
+    stubs.confirmPipelineReset,
   )
   return handlers
 }
@@ -477,6 +481,34 @@ describe('ui.pipeline.reset', () => {
     await expect(handlers['ui.pipeline.reset']()).rejects.toThrow(/was not cleared/)
     expect(stubs.onPipelineReset).toHaveBeenCalledTimes(1)
     expect(stubs.clearStoredPipelineRun).not.toHaveBeenCalled()
+  })
+
+  it('never asks a caller that sets no confirm flag (MCP pipeline_reset)', async () => {
+    const stubs = makeStubs({ state: 'aborted' })
+    const handlers = await loadActions(stubs)
+    await handlers['ui.pipeline.reset']()
+    expect(stubs.confirmPipelineReset).not.toHaveBeenCalled()
+    expect(stubs.onPipelineReset).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks first when the editor Reset sets confirm, and changes nothing on cancel', async () => {
+    const stubs = makeStubs({ state: 'aborted', stageIndex: 1 })
+    stubs.confirmPipelineReset.mockImplementation(async () => false)
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.reset']({ confirm: true })
+    expect(stubs.confirmPipelineReset).toHaveBeenCalledTimes(1)
+    expect(stubs.onPipelineReset).not.toHaveBeenCalled()
+    expect(stubs.clearStoredPipelineRun).not.toHaveBeenCalled()
+    expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'aborted', cancelled: true })
+  })
+
+  it('resets as before once the confirm is accepted', async () => {
+    const stubs = makeStubs({ state: 'aborted', stageIndex: 1 })
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.reset']({ confirm: true })
+    expect(stubs.confirmPipelineReset).toHaveBeenCalledTimes(1)
+    expect(stubs.onPipelineReset.mock.calls).toEqual([[]])
+    expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'idle', stageIndex: -1 })
   })
 })
 

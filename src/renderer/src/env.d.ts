@@ -6,6 +6,7 @@ type UpdaterSettings = import('../../shared/updater').UpdaterSettings
 type UpdateState = import('../../shared/updater').UpdateState
 type ExecutionPolicyApi = import('../../shared/executionPolicy').ExecutionPolicyApi
 type FnKeyApi = import('../../shared/fnKey').FnKeyApi
+type AppLockApi = import('../../shared/appLock').AppLockApi
 type DeepLinkApi = import('../../shared/deepLink').DeepLinkApi
 type DeveloperApi = import('../../shared/marketplaceDeveloper').DeveloperApi
 type ManifestPermissionsSummary = import('../../shared/executionPolicy').ManifestPermissionsSummary
@@ -393,6 +394,7 @@ declare global {
       media?: {
         askMicrophone: () => Promise<{ granted: boolean; status: string; prompted?: boolean }>
       }
+      appLock?: AppLockApi
       fnKey?: FnKeyApi
       deepLink?: DeepLinkApi
       developer?: DeveloperApi

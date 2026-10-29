@@ -1192,7 +1192,6 @@
     "collapse": "折りたたむ",
     "restore": "↑ 復元",
     "retry": "↻ 再試行",
-    "finish": "完了",
     "connect-to-remote": "リモートに接続",
     "scan-repos-anyway": "それでもリポジトリを検索",
     "amend-commit": "直前のコミットを修正",
@@ -1468,6 +1467,53 @@
     }
   },
   "settings": {
+    "app-lock": {
+      "notice": "App Lock はプライバシー保護の画面で、アクセス制御ではありません。席を外している間、Navide のすべてのウィンドウを覆います。エージェント、ターミナル、チャット連携、MCP ツール、スケジュールは動作を続け、このコンピューターの前にいて知識のある人なら回避できます。",
+      "section-lock": "ロック",
+      "enabled": "App Lock をオンにする",
+      "enabled-hint": "先に PIN を設定してください。Touch ID がオンでも PIN でいつでもロックを解除できます。",
+      "lock-now": "今すぐロック",
+      "lock-now-hint": "すべてのウィンドウをすぐに覆います。ショートカット {shortcut}",
+      "section-pin": "PIN",
+      "pin": "PIN",
+      "pin-set-hint": "PIN は設定済みです。",
+      "pin-none-hint": "PIN はまだありません。4〜12 桁の数字を使ってください。",
+      "set-pin": "PIN を設定",
+      "change-pin": "PIN を変更",
+      "remove-pin": "PIN を削除",
+      "remove-pin-hint": "PIN を削除すると App Lock はオフになります。",
+      "current-pin": "現在の PIN",
+      "new-pin": "新しい PIN",
+      "confirm-pin": "PIN を確認",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "pin-saved": "PIN を保存しました。",
+      "pin-removed": "PIN を削除しました。App Lock はオフです。",
+      "section-unlock": "ロック解除",
+      "method": "ロック解除の方法",
+      "method-system": "Touch ID（予備は PIN）",
+      "method-pin": "PIN のみ",
+      "system-unavailable": "このコンピューターでは Touch ID を使えないため、Navide は PIN でロックを解除します。",
+      "section-auto": "自動ロック",
+      "idle": "アイドル時間",
+      "idle-hint": "このコンピューター全体でキーボードやマウスの操作がない時間です。",
+      "idle-never": "しない",
+      "idle-minutes": "{n} 分",
+      "on-screen-lock": "画面のロック時",
+      "on-suspend": "スリープ時",
+      "on-start": "Navide の起動時",
+      "section-forgot": "PIN を忘れた場合",
+      "reset-with-system": "Touch ID で PIN をリセット",
+      "forgot-system": "Touch ID で本人確認してから、新しい PIN を設定します。",
+      "forgot-manual-title": "Touch ID がない場合",
+      "forgot-manual": "Navide を終了し、Navide のデータフォルダーにある app-lock.json を削除してください。App Lock とその PIN だけが消え、ほかには影響しません。",
+      "error-invalid-pin": "4〜12 桁の数字を使ってください。",
+      "error-mismatch": "2 つの PIN が一致しません。",
+      "error-wrong-pin": "現在の PIN が違います。",
+      "error-cooldown": "試行回数が多すぎます。{seconds} 秒後にもう一度お試しください。",
+      "error-system-failed": "Touch ID で本人確認できませんでした。",
+      "error-generic": "うまくいきませんでした。もう一度お試しください。"
+    },
     "cliExtensions": {
       "tabInstalled": "インストール済みの CLI 拡張",
       "tabConvenience": "Navide による変更",
@@ -1645,6 +1691,10 @@
         "status-badges": {
           "title": "ステータスバッジ",
           "summary": "ペインの各ステータスの名前と色を、言語ごとに設定します。"
+        },
+        "app-lock": {
+          "title": "App Lock",
+          "summary": "ロック画面ですべてのウィンドウを隠し、Touch ID または PIN で解除します"
         },
         "voice-input": {
           "title": "音声入力",
@@ -2652,6 +2702,7 @@
       "executionPolicy": "実行ポリシー",
       "statusBadges": "ステータスバッジ",
       "voice": "音声入力",
+      "appLock": "App Lock",
       "keybindings": "ショートカット",
       "updates": "更新",
       "help": "ヘルプ"
@@ -2718,14 +2769,14 @@
         "intro": "19 個の設定タブで変更できる内容、Navide Cloud で複数のマシンを 1 つのプライベートネットワークに接続する方法、そしてメニュー、独立ウィンドウ、使用量の表示、リソースの管理など、メイン画面の外にあるシステム機能を紹介します。",
         "s1": {
           "title": "設定の概要",
-          "p1": "<kbd class=\"syh-kbd\">⌘,</kbd> で設定ウィンドウを開きます。タイトルバーの歯車ボタンからも開けます。左のサイドバーは 5 つのグループに分かれ、合計 <strong>24 個のタブ</strong>があります。",
+          "p1": "<kbd class=\"syh-kbd\">⌘,</kbd> で設定ウィンドウを開きます。タイトルバーの歯車ボタンからも開けます。左のサイドバーは 5 つのグループに分かれ、合計 <strong>25 個のタブ</strong>があります。",
           "h1": "検索欄",
           "p2": "サイドバーの見出しの下に、<code>設定を検索…</code> と表示された検索欄があります。設定項目のタイトル、所属セクション、キーワードを<strong>タブをまたいで</strong>現在の表示言語と登録済みのキーワードを使って検索し、最大 8 件を表示します。結果をクリックすると該当タブに切り替わり、そのセクションまでスクロールします。ただし「ストレージ」は例外で、設定を閉じてリソースマネージャーを直接開きます。一致する項目がなければ <code>一致する設定がありません</code> と表示されます。<kbd class=\"syh-kbd\">Esc</kbd> で検索欄をクリアします。",
           "callout": {
             "title": "すべての設定を検索できるわけではありません",
             "text": "検索インデックスは手作業で管理する一覧です。<strong>「{layout}」「{notifications}」「{security}」「{channels}」の各タブには登録項目がありません</strong>。そのため、これらのタブ内の設定は検索できず、タブを直接開く必要があります。CLI エージェントの項目をクリックすると、いずれかの CLI の設定ドロワーが直接開きます（「CLI エージェントとアカウント」を参照）。"
           },
-          "h2": "24 個のタブ",
+          "h2": "25 個のタブ",
           "tabTable": {
             "group": "グループ",
             "tab": "タブ",
@@ -2760,6 +2811,10 @@
             "voice": {
               "what": "押して話す、ローカルで文字起こしする音声入力：ショートカット、マイク、録音方式、中国語の出力、モデルとエンジン",
               "more": "このパネルの「{workspace}」の「音声入力」章"
+            },
+            "appLock": {
+              "what": "すべてのウィンドウを覆うプライバシー画面：PIN、Touch ID、アイドル時とスリープ時の自動ロック",
+              "more": "App Lock ページ冒頭の説明"
             },
             "cloud": {
               "what": "デバイス間の接続状態、このマシンのフィンガープリント、このマシンへの操作を許可する相手",
@@ -8563,7 +8618,6 @@
     "pipeline-aborted": "パイプラインを中止しました。エージェントは保持されます。続けるには「再開」、クリアするには「リセット」を選択してください。",
     "pipeline-aborted-paused": "パイプラインを中止しました（一時停止）。エージェントは保持されます。続けるには「再開」、クリアするには「リセット」を選択してください。",
     "pipeline-completed": "✓ パイプラインの全 {count} ステージが完了しました。右側の各ペインを確認してください。",
-    "provide-task": "タスクの説明とワークスペースを指定してから開始してください。",
     "missing": "⚠ 見つかりません",
     "already-open": "● 起動済み",
     "tagline": "Claude Code · Codex · Antigravity CLI をまとめて操作",
@@ -11267,7 +11321,9 @@
     "badge": {
       "open-canvas": "キャンバスでこの接続を表示",
       "reject": "↺ 第 {layer} 層へ差し戻し（最大 {max} 回）",
-      "skip": "⤳ 第 {layer} 層へスキップ"
+      "skip": "⤳ 第 {layer} 層へスキップ",
+      "branch": "⑂ {when} の場合 → 第 {layer} 層",
+      "error": "⚠ 失敗時 → 第 {layer} 層"
     },
     "canvas": {
       "insert-on-edge": "ここにステップを挿入",
@@ -11296,6 +11352,7 @@
       "outcome-ended": "終了",
       "outcome-unknown": "不明",
       "outcome-idle": "待機中",
+      "failed-step": "{name} が失敗しました：{error}",
       "pick": "実行を選ぶとグラフ上で再生します。",
       "progress": "{total} ステップ中 {done}",
       "restart": "最初からやり直す",
@@ -11362,6 +11419,7 @@
       "kind-gate": "承認ゲート",
       "kind-slot": "ステップ",
       "kind-trigger": "開始",
+      "kind-subpipeline": "サブ Pipeline",
       "layer": "レイヤー設定",
       "live-empty": "このステップの実行中にライブ表示が開きます。パイプラインを開始してから戻ってください。",
       "live-unavailable": "このペインの記録を今は読み込めません。",
@@ -11370,6 +11428,7 @@
       "not-run": "未実行",
       "open-pane": "ペインを開く",
       "output-empty": "まだ出力はありません。このステップの実行後、要約がここに表示されます。",
+      "failure": "失敗の理由",
       "pin": "出力を固定",
       "pin-help": "再実行時、固定したステップはスキップされ前回の出力を再利用します。",
       "required": "必須",
@@ -11467,7 +11526,8 @@
       "parents": "呼び出し元",
       "open-in-canvas": "パイプラインキャンバスで開く",
       "gate-toast": "パイプラインは「{name}」で承認待ちです",
-      "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。"
+      "next-gated": "次のステージに進む前に、このゲートを承認するか差し戻してください。",
+      "last-stage": "これが最後のステージです。完了が報告されると実行は終了します。"
     },
     "link": {
       "title": "接続",
@@ -11533,7 +11593,15 @@
     "run": {
       "running": "実行中：{names}",
       "gate": "「{name}」で承認待ち",
-      "review": "確認する"
+      "review": "確認する",
+      "blocked-backend": "バックエンドに接続されていません。",
+      "blocked-workspace": "先にワークスペースを開いてください。",
+      "blocked-task": "先にタスクを入力してください。",
+      "reset-title": "この実行をリセットしますか？",
+      "reset-message": "リセットするとこの実行がクリアされ、自分で開いたペインも含めて、このウィンドウのペインがすべて閉じます。{count} 個のペインが閉じます。",
+      "reset-message-none": "リセットするとこの実行がクリアされます。開いているペインはないため、閉じるものはありません。",
+      "reset-manual-mark": "この実行以外で開いたもの",
+      "reset-confirm": "リセットしてペインを閉じる"
     }
   },
   "evolve": {
@@ -12336,6 +12404,7 @@
     "import": "インポート",
     "importing": "インポート中…",
     "preview-stale": "プレビュー後に JSON が変更されました。インポートする前にもう一度プレビューしてください。",
+    "import-blocked-preview": "先にワークフローをプレビューしてください。",
     "stats": {
       "workflow": "ワークフロー",
       "nodes": "n8n ノード",

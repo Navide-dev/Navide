@@ -2090,6 +2090,16 @@ const canRunPipeline = computed(
     effectiveStageCount.value > 0
 )
 
+/** The condition holding Run back, in canRunPipeline's order ('' when it can
+ *  run, or while a run is going — Run is not offered then). */
+const runBlockedReason = computed(() => {
+  if (props.backendStatus !== 'connected') return i18n.global.t('pipelineEditor.run.blocked-backend')
+  if (!workspacePath.value.trim()) return i18n.global.t('pipelineEditor.run.blocked-workspace')
+  if (effectiveStageCount.value <= 0) return i18n.global.t('pipelineEditor.state.empty-title')
+  if (!taskDescription.value.trim()) return i18n.global.t('pipelineEditor.run.blocked-task')
+  return ''
+})
+
 /** Set while a spawn is on its way from a workspace heading other than this
  *  window's primary. Cleared once the request is out — the card's own button
  *  always means "here". */
@@ -3567,13 +3577,15 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </div>
           <div class="row pipeline-row">
             <button
+              v-if="pipelineNextStage"
               class="primary wide"
-              :disabled="!pipelineNextStage || !!pipelineGate"
+              :disabled="!!pipelineGate"
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ pipelineNextStage ? `Next → ${pipelineNextStage.shortTitle}` : $t('action.finish') }}
+              {{ `Next → ${pipelineNextStage.shortTitle}` }}
             </button>
+            <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
           </div>
         </div>
@@ -4628,12 +4640,12 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </button>
         </div>
         <div v-if="pipeline.state === 'idle' || pipeline.state === 'completed' || pipeline.state === 'aborted'" class="row pipeline-row">
-          <button class="primary wide" :disabled="!canRunPipeline" @click="startPipeline">
+          <button class="primary wide" :disabled="!canRunPipeline" :title="runBlockedReason || undefined" @click="startPipeline">
             {{ $t('action.run-pipeline') }}
           </button>
           <button
             v-if="pipeline.state !== 'idle'"
-            class="ghost"
+            class="danger"
             @click="emit('pipeline-reset')"
             :title="$t('action.clear-pipeline')"
           >
@@ -4670,13 +4682,15 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </div>
           <div class="row pipeline-row">
             <button
+              v-if="pipelineNextStage"
               class="primary wide"
-              :disabled="!pipelineNextStage || !!pipelineGate"
+              :disabled="!!pipelineGate"
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ pipelineNextStage ? `Next → ${pipelineNextStage.shortTitle}` : $t('action.finish') }}
+              {{ `Next → ${pipelineNextStage.shortTitle}` }}
             </button>
+            <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
           </div>
         </div>
@@ -4686,8 +4700,8 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <p v-else-if="pipeline.state === 'aborted'" class="hint warn">
           {{ $t('label.pipeline-aborted-paused') }}
         </p>
-        <p v-else-if="pipeline.state === 'idle' && !canRunPipeline" class="hint">
-          {{ $t('label.provide-task') }}
+        <p v-else-if="pipeline.state === 'idle' && !canRunPipeline" class="hint pipeline-run-blocked">
+          {{ runBlockedReason }}
         </p>
         </template>
       </section>

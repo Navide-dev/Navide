@@ -25,7 +25,7 @@ const LITERAL_OPTIONS = ['繁體中文', '日本語']
 // The first table is the settings nav: twenty-five pages in five groups,
 // counted from SettingsModal.vue's `.s-nav-group` blocks rather than from the
 // prose. The last one is section 8's which-surface-is-which table.
-const TABLE_ROWS = [24, 15, 9, 4, 3, 6, 2, 6, 3, 8, 4, 10, 3]
+const TABLE_ROWS = [25, 15, 9, 4, 3, 6, 2, 6, 3, 8, 4, 10, 3]
 
 function unexpectedWarnings(warn: ReturnType<typeof vi.spyOn>): unknown[][] {
   return warn.mock.calls.filter(([first]) => !String(first).startsWith(HTML_ADVISORY))
@@ -108,9 +108,9 @@ describe('SettingsSystemHelp', () => {
     const figures = wrapper.findAll('.mk-fig')
     expect(figures).toHaveLength(2)
     expect(figures.map((f) => f.findAll('.mk-fig-legend li').length)).toEqual([3, 3])
-    // The nav picture draws the real sidebar: five groups, twenty-four pages.
+    // The nav picture draws the real sidebar: five groups, twenty-five pages.
     expect(figures[0].findAll('.mk-set-grouptitle')).toHaveLength(5)
-    expect(figures[0].findAll('.mk-set-navitem')).toHaveLength(24)
+    expect(figures[0].findAll('.mk-set-navitem')).toHaveLength(25)
     // ...and the search box with the two hits it drops down.
     expect(figures[0].findAll('.mk-set-result')).toHaveLength(2)
     // The resource picture: a header row plus one row per pane.
