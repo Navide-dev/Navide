@@ -1962,8 +1962,8 @@
       "installedTitle": "Complementos de Navide instalados",
       "developerNative": "Desarrollador y código nativo",
       "pageOn": "Activado",
-      "developerOnMarker": "Desarr.",
-      "nativeOnMarker": "Nativo activo",
+      "developerOnMarker": "Modo de desarrollador activado",
+      "nativeOnMarker": "Código nativo activado",
       "browseMarketplace": "Explorar Navide Marketplace",
       "bundledGit": "Git integrado",
       "state": {

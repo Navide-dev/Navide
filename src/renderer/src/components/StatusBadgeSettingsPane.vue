@@ -437,9 +437,15 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
  * label column per UI locale (eleven) the table needs about 1340px, more than
  * the modal's content area ever gets, so in practice the rows always stack. */
 @container sb (max-width: 1360px) {
+  /* Stacked, the statuses are the Settings list grammar: one grouped card,
+   * one row per status split by hairlines. */
   .sb {
     display: flex;
     flex-direction: column;
+    border: 1px solid var(--settings-card-border, var(--border-default));
+    border-radius: var(--radius-card);
+    background: var(--bg-subtle);
+    overflow: hidden;
   }
   .sb-head {
     display: none;
@@ -454,8 +460,15 @@ function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void
   .sb-row {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 8px 12px;
-    border-color: var(--border-muted);
-    margin-bottom: 8px;
+    padding: 12px;
+    border: none;
+    border-radius: 0;
+  }
+  .sb-row + .sb-row {
+    border-top: 1px solid var(--settings-card-divider, var(--border-muted));
+  }
+  .sb-row[data-customized='yes'] {
+    box-shadow: inset 2px 0 0 var(--accent-fg, var(--border-emphasis));
   }
   .sb-row > .sb-status,
   .sb-row > .sb-colors,

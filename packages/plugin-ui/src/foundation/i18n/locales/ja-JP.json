@@ -1962,8 +1962,8 @@
       "installedTitle": "インストール済みの Navide プラグイン",
       "developerNative": "開発者とネイティブコード",
       "pageOn": "オン",
-      "developerOnMarker": "開発",
-      "nativeOnMarker": "ネイティブ有効",
+      "developerOnMarker": "開発者モード オン",
+      "nativeOnMarker": "ネイティブコード オン",
       "browseMarketplace": "Navide マーケットプレイスを見る",
       "bundledGit": "同梱の Git",
       "state": {

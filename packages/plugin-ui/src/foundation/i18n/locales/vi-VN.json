@@ -1962,8 +1962,8 @@
       "installedTitle": "Plugin Navide đã cài",
       "developerNative": "Nhà phát triển và mã gốc",
       "pageOn": "Bật",
-      "developerOnMarker": "Dev.",
-      "nativeOnMarker": "Gốc đang bật",
+      "developerOnMarker": "Chế độ nhà phát triển đang bật",
+      "nativeOnMarker": "Mã gốc đang bật",
       "browseMarketplace": "Duyệt Navide Marketplace",
       "bundledGit": "Git đi kèm",
       "state": {

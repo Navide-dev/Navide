@@ -208,17 +208,23 @@ async function remove(id: string): Promise<void> {
 .ga-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .ga-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 60ch; line-height: 1.4; text-wrap: pretty; word-break: auto-phrase; }
 
-.ga-list { display: flex; flex-direction: column; gap: 6px; }
+/* The Settings list grammar: one grouped card, rows split by hairlines. */
+.ga-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--settings-card-border, var(--border-default));
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
 .ga-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  background: var(--bg-subtle);
+  padding: 8px 12px;
 }
+.ga-row + .ga-row { border-top: 1px solid var(--settings-card-divider, var(--border-muted)); }
 .ga-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ga-row-label { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
 .ga-row-meta { font-size: var(--font-2xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

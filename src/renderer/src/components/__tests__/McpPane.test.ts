@@ -363,7 +363,7 @@ describe('McpPane', () => {
   it('says so when nothing is configured anywhere', () => {
     wrapper = mountPane({ servers: [], native: [] })
 
-    expect(wrapper.find('.nv-empty').exists()).toBe(true)
+    expect(wrapper.find('.settings-empty').exists()).toBe(true)
     expect(wrapper.findAll('.mcp-card')).toHaveLength(0)
   })
 

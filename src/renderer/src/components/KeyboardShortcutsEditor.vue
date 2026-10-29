@@ -40,6 +40,7 @@ import { useKeyChordRecorder } from '../composables/useKeyChordRecorder'
 import { useFnKeyRecorder } from '../voice/fnKeyRecorder'
 import { HOLD_TO_TALK_COMMAND } from '../voice/voiceSettings'
 import KeyRecorderFeedback from './settings/KeyRecorderFeedback.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 
 type FilterMode = 'all' | 'customized' | 'conflicts'
 
@@ -545,9 +546,7 @@ const visibleReference = computed(() => {
       </div>
     </div>
 
-    <p v-if="!groupedRows.length && !visibleReference.length" class="kse-empty">
-      {{ $t('settings.keybindings.no-results') }}
-    </p>
+    <SettingsEmptyState v-if="!groupedRows.length && !visibleReference.length" class="kse-empty" :message="$t('settings.keybindings.no-results')" />
 
     <!-- Keys the rule table does not own: listed, never editable. -->
     <div v-if="visibleReference.length" class="kse-reference">
@@ -1051,7 +1050,5 @@ const visibleReference = computed(() => {
 
 .kse-empty {
   margin: 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
 }
 </style>

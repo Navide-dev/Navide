@@ -153,6 +153,7 @@ import SettingsNavItem from './settings/SettingsNavItem.vue'
 import SettingsNavSubItem from './settings/SettingsNavSubItem.vue'
 import SettingsSection from './settings/SettingsSection.vue'
 import SettingsCard from './settings/SettingsCard.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import SettingRow from './settings/SettingRow.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
 import PathText from './settings/PathText.vue'
@@ -323,8 +324,8 @@ function pluginsPageMarker(page: PluginsPage): { text: string; tone: 'risk' | 'o
   }
   return null
 }
-// One marker text on the page row and the folded parent row, naming the switch
-// that is on: "Dev" while Developer Mode is on, "Native" while only a
+// One status text beside the Navide Plugins page titles, naming the switch
+// that is on: "Developer Mode on", or "Native code on" while only a
 // native-code switch is.
 const developerMarkerText = computed(() =>
   developerSwitchesOn.value.includes(t('settings.extensions.developerMode.switch'))
@@ -345,6 +346,13 @@ const pluginsFoldedMarker = computed(() => {
     label: t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.developerNative'), value: developerSwitchesOn.value.join(', ') }),
   }
 })
+// The sidebar and the page tabs keep only the short warning glyph; the
+// developer / native-code state is a labelled pill beside the page title,
+// where the full translated words fit (in the sidebar they truncated the
+// ja/ru label and had to be abbreviated).
+function navMarker<M extends { tone: string }>(marker: M | null): M | null {
+  return marker?.tone === 'risk' ? marker : null
+}
 /** The page each section of the former single Navide Plugins page lives on. */
 const PLUGINS_SECTION_PAGE: Readonly<Record<string, PluginsPage>> = {
   'extensions-bundled': 'plugins',
@@ -2905,7 +2913,7 @@ watch(activeTab, (tab) => {
                   <NavideCloudMark variant="solid" class="nvc-nav-mark" />
                 </template>
               </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :expanded="activeTab === 'extensions'" foldable :badge="pluginUpdates.count.value" :marker="pluginsFoldedMarker" @select="activeTab = 'extensions'">
+              <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :expanded="activeTab === 'extensions'" foldable :badge="pluginUpdates.count.value" :marker="navMarker(pluginsFoldedMarker)" @select="activeTab = 'extensions'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
                 </template>
@@ -2918,7 +2926,7 @@ watch(activeTab, (tab) => {
                   :key="page.id"
                   :label="$t(page.label)"
                   :active="pluginsPage === page.id"
-                  :marker="pluginsPageMarker(page.id)"
+                  :marker="navMarker(pluginsPageMarker(page.id))"
                   @select="openPluginsPage(page.id)"
                 />
               </template>
@@ -3098,7 +3106,7 @@ watch(activeTab, (tab) => {
                 <button v-if="mIsInstalled(item.name)" class="mcp-installed-badge" disabled>{{ $t('label.installed') }}</button>
                 <button v-else class="mcp-add-btn nv-btn nv-btn--primary" @click="mAddFromCatalog(item)" :disabled="mSaving">+ {{ $t('action.add') }}</button>
               </div>
-              <div v-if="mFilteredCatalog.length === 0" class="mcp-empty">{{ $t('settings.mcp.catalog-empty') }}</div>
+              <SettingsEmptyState v-if="mFilteredCatalog.length === 0" class="mcp-empty" :message="$t('settings.mcp.catalog-empty')" />
             </div>
           </template>
 
@@ -3564,8 +3572,8 @@ watch(activeTab, (tab) => {
                 <!-- One line of short facts joined by "·"; only a label that
                      needs attention (amber / red) keeps a colour. -->
                 <p class="cli-card-status">
-                  <template v-for="(chip, index) in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id"><span v-if="index" class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact" :class="`cli-card-fact--${chip.tone}`">{{ chip.label }}</span></template>
-                  <template v-if="!row.chips.some((chip) => chip.id === 'install')"><span class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact">{{ $t('settings.cliAgents.not-detected') }}</span></template>
+                  <span v-for="chip in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id" class="cli-card-item"><span class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact" :class="`cli-card-fact--${chip.tone}`">{{ chip.label }}</span></span>
+                  <span v-if="!row.chips.some((chip) => chip.id === 'install')" class="cli-card-item"><span class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact">{{ $t('settings.cliAgents.not-detected') }}</span></span>
                 </p>
                 <div class="cli-card-footer">
                   <label class="cli-agent-toggle" @click.stop>
@@ -3576,7 +3584,7 @@ watch(activeTab, (tab) => {
                 </div>
               </li>
             </ul>
-            <p v-if="!filteredCliRows.length" class="cli-agent-empty">{{ $t('settings.cliAgents.no-results') }}</p>
+            <SettingsEmptyState v-if="!filteredCliRows.length" class="cli-agent-empty" :message="$t('settings.cliAgents.no-results')" />
           </section>
           <CliRiskRangesPane v-if="activeTab === 'cliAgents'" :backend="props.backend" />
           </div>
@@ -4314,7 +4322,7 @@ watch(activeTab, (tab) => {
                 </label>
 
                 <p class="policy-section-label">{{ $t('settings.p2p.policy.rules') }}</p>
-                <p v-if="!policyDoc.rules.length" class="policy-empty">{{ $t('settings.p2p.policy.empty') }}</p>
+                <SettingsEmptyState v-if="!policyDoc.rules.length" class="policy-empty" :message="$t('settings.p2p.policy.empty')" />
                 <!-- Two columns with a header. As one run of text separated by
                      a middle dot and an arrow, "who" and "what they may reach"
                      had to be parsed apart on every line. -->
@@ -4825,7 +4833,14 @@ watch(activeTab, (tab) => {
              the disclosure records. The scope badge sits on the policy page,
              because the policy is the part that is per user and per workspace. -->
         <div v-show="activeTab === 'extensions'" class="s-body s-body--bleed extensions-body" data-settings-section="extensions">
-          <h1 class="s-page-title">{{ $t(pluginsPageTitle) }}</h1>
+          <h1 class="s-page-title">
+            {{ $t(pluginsPageTitle) }}
+            <span
+              v-if="developerSwitchesOn.length"
+              class="s-page-status"
+              :title="$t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensions.developerNative'), value: developerSwitchesOn.join(', ') })"
+            >{{ developerMarkerText }}</span>
+          </h1>
           <p v-if="pluginsPage === 'disclosure'" class="s-page-intro">{{ $t('pluginActivity.overview.intro') }}</p>
           <!-- In the icon-only sidebar the pages have no rows of their own there. -->
           <div class="ext-pages" role="tablist" :aria-label="$t('settings.nav.extensions')">
@@ -4840,7 +4855,7 @@ watch(activeTab, (tab) => {
             >
               {{ $t(page.label) }}
               <span
-                v-if="pluginsPageMarker(page.id)"
+                v-if="navMarker(pluginsPageMarker(page.id))"
                 class="ext-pages-marker"
                 :class="`ext-pages-marker--${pluginsPageMarker(page.id)!.tone}`"
                 role="img"
@@ -5046,8 +5061,8 @@ watch(activeTab, (tab) => {
      variable). */
   padding: 0 var(--space-2, 8px) var(--space-3, 12px);
   gap: var(--space-2, 8px);
-  scroll-padding-top: calc(var(--s-sidebar-head-h, 96px) + var(--space-1, 4px));
-  scroll-padding-bottom: var(--space-2, 8px);
+  scroll-padding-top: calc(var(--s-sidebar-head-h, 96px) + var(--space-6, 24px));
+  scroll-padding-bottom: var(--space-6, 24px);
 }
 /* The title and search stick to the top of the scrolling sidebar on an
    opaque copy of its background, across its full width (the sidebar's side
@@ -5267,6 +5282,20 @@ watch(activeTab, (tab) => {
   font-weight: 700;
   color: var(--text-bright);
 }
+/* A page-wide state ("Native code on") sits beside the title, not in the sidebar. */
+.s-page-status {
+  display: inline-block;
+  margin-left: var(--space-2, 8px);
+  padding: 0 var(--space-2, 8px);
+  border-radius: var(--radius-pill);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  line-height: 20px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
 /* The title already reserves --space-group below it; the section's own top
    margin would double the gap on the tabs that open with a SettingsSection. */
 .s-page-title + .settings-section { margin-top: 0; }
@@ -5342,15 +5371,20 @@ watch(activeTab, (tab) => {
 .cli-card-heading .cli-agent-vendor { font-size: var(--font-xs); font-weight: 400; color: var(--text-secondary); }
 .cli-card-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px; background: var(--bg-muted); color: var(--text-secondary); font-size: var(--font-xs); font-weight: 700; }
 .cli-card-attention { margin-left: auto; color: var(--warning-fg, #c77400); font-weight: 700; }
-.cli-card-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; min-width: 0; min-height: 20px; margin: 0; font-size: var(--font-xs); line-height: 1.5; color: var(--text-secondary); }
+/* Every fact carries its own leading "·" and wraps with it; the line is
+   shifted left by one separator and that strip is clipped, so a line never
+   starts or ends on a dot, in any language. */
+.cli-card-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; min-width: 0; min-height: 20px; margin: 0 0 0 -14px; clip-path: inset(0 0 0 14px); font-size: var(--font-xs); line-height: 1.5; color: var(--text-secondary); }
+.cli-card-item { display: inline-flex; align-items: baseline; min-width: 0; max-width: 100%; }
 .cli-card-fact { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cli-card-sep { color: var(--text-muted); }
+.cli-card-sep { flex: 0 0 14px; text-align: center; color: var(--text-muted); }
 /* Colour only where something needs attention; installed, signed in and a
    channel that is on read as plain facts. */
 .cli-card-fact--warn { color: var(--attention-on-subtle, #c77400); font-weight: 600; }
 .cli-card-fact--bad { color: var(--danger-fg, #c0392b); font-weight: 600; }
 .cli-card-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; margin-top: auto; font-size: var(--font-xs); }
-.cli-agent-empty { color: var(--text-secondary); text-align: center; padding: 30px 10px; }
+/* Empty states are SettingsEmptyState; these classes only place them. */
+.cli-agent-empty { margin-top: var(--space-2, 8px); }
 .cli-drawer-layer { position: absolute; inset: 0; z-index: 20; }
 .cli-drawer-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / .25); }
 .cli-agent-drawer { position: absolute; inset: 0 0 0 auto; width: min(600px, 100%); display: flex; flex-direction: column; background: var(--bg-base); border-left: 1px solid var(--border-default); box-shadow: var(--shadow-modal); min-width: 0; }
@@ -5996,7 +6030,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .policy-switch-label { display: block; font-size: var(--font-xs); color: var(--text-bright); }
 .policy-switch .ap-hint { margin: 2px 0 0; }
 .policy-section-label { margin: 14px 0 6px; font-size: var(--font-2xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
-.policy-empty { margin: 0; font-size: 11.5px; color: var(--text-secondary); }
+.policy-empty { margin: 0; }
 .policy-rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .policy-rule { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-muted); }
 .policy-rule-from, .policy-rule-to {
@@ -6106,7 +6140,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   color: var(--attention-fg); font-size: var(--font-2xs);
 }
 
-.mcp-empty { color: var(--text-muted); font-size: var(--font-xs); padding: 24px 0; text-align: center; }
+.mcp-empty { margin: var(--space-3, 12px) 0; }
 
 /* Server card */
 

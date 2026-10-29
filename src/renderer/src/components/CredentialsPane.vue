@@ -592,14 +592,17 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-group { margin-bottom: 16px; }
 .cred-group-title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: var(--font-row-desc); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .cred-group-title .count { font-size: var(--font-xs); font-weight: 500; opacity: 0.6; }
-.cred-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px; }
-.cred-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px 11px; text-align: left; border: 1px solid var(--settings-card-border, var(--border-muted)); border-radius: var(--radius-card); background: var(--bg-subtle); min-width: 0; }
-.cred-card:hover:not(:disabled) { background: var(--bg-muted); border-color: var(--border-default); }
-.cred-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
+/* The Settings list grammar: one grouped card per group, rows split by
+   hairlines. */
+.cred-cards { display: flex; flex-direction: column; border: 1px solid var(--settings-card-border, var(--border-default)); border-radius: var(--radius-card); background: var(--bg-subtle); overflow: hidden; }
+.cred-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px 12px; text-align: left; border: none; border-radius: 0; background: transparent; min-width: 0; }
+.cred-card + .cred-card { border-top: 1px solid var(--settings-card-divider, var(--border-muted)); }
+.cred-card:hover:not(:disabled) { background: var(--bg-hover-faint, var(--bg-muted)); }
+.cred-card.active { background: var(--bg-muted); box-shadow: inset 2px 0 0 var(--accent-fg, var(--border-emphasis)); }
 /* Snoozed or dismissed: set back, but still readable. */
 /* A snoozed or dismissed finding: no fill, its words quieter. Dashed frames
    are kept for drop zones and add placeholders. */
-.cred-card.quiet { background: transparent; color: var(--text-secondary); }
+.cred-card.quiet { color: var(--text-secondary); }
 .cred-card.quiet .cred-card-head strong { color: var(--text-primary); }
 .cred-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; min-width: 0; }
 /* Titles are full sentences in en/ja: two lines before they clip. */

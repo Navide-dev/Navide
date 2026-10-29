@@ -62,6 +62,9 @@ describe('SettingsModal Navide Plugins pages', () => {
   })
 
   async function mountModal(initialTab?: string) {
+    // A second mount in one test would otherwise leave the first modal in the
+    // document, where body() finds it first.
+    wrapper?.unmount()
     wrapper = shallowMount(SettingsModal, {
       props: {
         backend: backend() as never,
@@ -252,24 +255,30 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(marker('Execution Policy')).toBeNull()
   })
 
-  it('marks Developer and native code with the switch that is on', async () => {
+  // The "Dev" / "Native on" state is a pill beside the page title: in the
+  // sidebar a long or translated label truncated the row (ja, ru).
+  const pageStatus = () => body('extensions').find('.s-page-title .s-page-status')
+
+  it('names the switch that is on beside the page title, not in the sidebar', async () => {
     await mountModal('extensions')
-    expect(marker('Developer and native code')).toBeNull()
+    expect(pageStatus().exists()).toBe(false)
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode', 'Allow native backends'])
     await flushPromises()
-    expect(marker('Developer and native code')).toEqual({ text: 'Dev', tone: 'on', label: 'On: Turn on Developer Mode, Allow native backends' })
-    expect(tabMarker('Developer and native code').attributes('aria-label')).toBe('On: Turn on Developer Mode, Allow native backends')
+    expect(pageStatus().text()).toBe('Developer Mode on')
+    expect(pageStatus().attributes('title')).toBe('Developer and native code: Turn on Developer Mode, Allow native backends')
+    expect(marker('Developer and native code')).toBeNull()
+    expect(tabMarker('Developer and native code').exists()).toBe(false)
     expect(marker('Execution Policy')).toBeNull()
 
-    // Developer Mode off, a native-code switch on: the marker names that switch.
+    // Developer Mode off, a native-code switch on: the pill names that switch.
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Allow native backends'])
     await flushPromises()
-    expect(marker('Developer and native code')).toMatchObject({ text: 'Native on' })
+    expect(pageStatus().text()).toBe('Native code on')
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', [])
     await flushPromises()
-    expect(marker('Developer and native code')).toBeNull()
+    expect(pageStatus().exists()).toBe(false)
   })
   // Only the open entry unfolds its pages: with another entry open, the Navide
   // Plugins pages fold away and the row itself carries their state.
@@ -300,13 +309,13 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(wrapper!.findAllComponents(SettingsNavSubItem).filter((n) => n.props('active')).map((n) => n.props('label'))).toEqual(['Disclosure overview'])
   })
 
-  it('puts the folded pages\' marker on the Navide Plugins row, a warning before the "Dev" pill', async () => {
+  it('puts the folded pages\' warning on the Navide Plugins row, never the "Dev" pill', async () => {
     await mountModal('general')
     expect(pluginsRow().props('marker')).toBeNull()
 
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
     await flushPromises()
-    expect(pluginsRow().props('marker')).toEqual({ text: 'Dev', tone: 'on', label: 'Developer and native code: Turn on Developer Mode' })
+    expect(pluginsRow().props('marker')).toBeNull()
 
     wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', ['Effective policy: Stale'])
     await flushPromises()
@@ -319,11 +328,11 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(marker('Execution Policy')).toMatchObject({ text: '⚠' })
   })
 
-  it('shows the "Dev" marker in exactly one place: the folded parent, or the page row once unfolded', async () => {
+  it('shows the "Dev" pill on every Navide Plugins page and on no sidebar row', async () => {
     await mountModal('general')
     wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode'])
     await flushPromises()
-    expect(pluginsRow().props('marker')).toMatchObject({ text: 'Dev' })
+    expect(pluginsRow().props('marker')).toBeNull()
     expect(pluginsRow().props('foldable')).toBe(true)
     expect(pluginsRow().props('expanded')).toBe(false)
 
@@ -331,11 +340,11 @@ describe('SettingsModal Navide Plugins pages', () => {
     await flushPromises()
     expect(pluginsRow().props('marker')).toBeNull()
     expect(pluginsRow().props('expanded')).toBe(true)
-    expect(marker('Developer and native code')).toMatchObject({ text: 'Dev' })
+    expect(marker('Developer and native code')).toBeNull()
+    expect(pageStatus().text()).toBe('Developer Mode on')
 
-    // Moving between the unfolded pages keeps the marker on its own row.
     await openPage('Developer and native code')
     expect(pluginsRow().props('marker')).toBeNull()
-    expect(marker('Developer and native code')).toMatchObject({ text: 'Dev' })
+    expect(pageStatus().text()).toBe('Developer Mode on')
   })
 })

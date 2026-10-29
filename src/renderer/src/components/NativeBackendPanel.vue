@@ -13,6 +13,7 @@ import PluginAgentToolsList from './PluginAgentToolsList.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingRow from './settings/SettingRow.vue'
 import SettingsNotice from './settings/SettingsNotice.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
 import { leadSentence } from '../lib/leadSentence'
 
@@ -177,9 +178,7 @@ watch(installed, refresh)
       </template>
     </SettingsCard>
     <!-- Below the switches: what they currently govern, not a precondition read before the warning. -->
-    <p v-if="overview.plugins.length === 0" class="native-backends-empty">
-      {{ $t('settings.extensions.nativeBackends.empty') }}
-    </p>
+    <SettingsEmptyState v-if="overview.plugins.length === 0" class="native-backends-empty" :message="$t('settings.extensions.nativeBackends.empty')" />
     <ul v-if="overview.plugins.length" class="ext-list">
       <li
         v-for="row in overview.plugins"
@@ -298,8 +297,6 @@ watch(installed, refresh)
 /* Nothing installed has a native backend: said in a line, not a box. */
 .native-backends-empty {
   margin: var(--space-2) 0 0;
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
 }
 .native-backends-unsaved {
   display: flex;

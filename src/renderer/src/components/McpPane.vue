@@ -26,6 +26,7 @@ import SettingsOverflowActions from './settings/SettingsOverflowActions.vue'
 import { shortenMiddle } from '../lib/shortenPath'
 import StaleConfigNotice from './StaleConfigNotice.vue'
 import SettingsNotice from './settings/SettingsNotice.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import { mcpRiskKinds, type McpRiskKind } from '../lib/mcpRisk'
 import {
   isSecretSettingKey,
@@ -556,10 +557,11 @@ function cardDetail(row: McpRow): string {
     <div class="mcp-pane-body" :class="{ 'drawer-open': selectedRow !== null }">
       <div class="mcp-pane-main">
         <div v-if="loading" class="mcp-pane-state nv-loading">{{ t('label.loading') }}</div>
-        <div v-else-if="visibleRows.length === 0" class="mcp-pane-state nv-empty">
-          <strong>{{ t('settings.mcp.agent-empty-title') }}</strong>
-          <span>{{ t('settings.mcp.agent-empty-body') }}</span>
-        </div>
+        <SettingsEmptyState
+          v-else-if="visibleRows.length === 0"
+          :title="t('settings.mcp.agent-empty-title')"
+          :message="t('settings.mcp.agent-empty-body')"
+        />
 
         <!-- Browse: one card per server, grouped by where it came from. -->
         <template v-else-if="view === 'browse'">
@@ -1003,21 +1005,31 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
   color: var(--text-secondary);
 }
 .mcp-group-title .count { font-weight: 500; opacity: 0.6; font-variant-numeric: tabular-nums; }
-.mcp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px; }
+/* The Settings list grammar: one grouped card per source, a row per server
+   split by hairlines (a half-empty card grid read as a different page). */
+.mcp-cards {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--settings-card-border, var(--border-default));
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
 .mcp-card {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 5px;
-  padding: 9px 11px;
+  padding: 9px 12px;
   text-align: left;
-  border: 1px solid var(--settings-card-border, var(--border-muted));
-  border-radius: var(--radius-card);
-  background: var(--bg-subtle);
+  border: none;
+  border-radius: 0;
+  background: transparent;
   min-width: 0;
 }
-.mcp-card:hover:not(:disabled) { background: var(--bg-muted); border-color: var(--border-default); }
-.mcp-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
+.mcp-card + .mcp-card { border-top: 1px solid var(--settings-card-divider, var(--border-muted)); }
+.mcp-card:hover:not(:disabled) { background: var(--bg-hover-faint, var(--bg-muted)); }
+.mcp-card.active { background: var(--bg-muted); box-shadow: inset 2px 0 0 var(--accent-fg, var(--border-emphasis)); }
 .mcp-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
 /* Names never break inside a word: one line, shortened in the middle. */
 .mcp-card-head strong { flex: 1 1 auto; min-width: 0; font-size: var(--font-xs); color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
