@@ -100,6 +100,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
   const factory = new Function(
     'pipeline',
     'pipelinesApi',
+    'runPipelineId',
     'stagesApi',
     'panes',
     'stageCompletions',
@@ -123,6 +124,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
   const api = factory(
     pipeline,
     { activePipelineId: { value: 'pl-1' }, setActivePipeline: vi.fn(), error: { value: '' } },
+    { value: '' },
     { isLoaded: { value: true }, stages: { value: stageList }, refresh: vi.fn(), error: { value: '' } },
     { value: [] as unknown[] },
     new Map(),

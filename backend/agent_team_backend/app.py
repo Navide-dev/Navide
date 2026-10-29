@@ -1037,6 +1037,14 @@ _TERMINALS: TerminalService | None = None
 # terminal_session_id → owning WS Session. Populated on terminal.create and
 # updated on terminal.reattach. Entries removed when the owning WS disconnects.
 _PTY_OWNERS: "dict[str, Session]" = {}
+# #448 diagnostics, counts only (ui_diagnostics → frame_drops): terminal frames
+# dropped because no window owns their PTY, and terminal requests that named a
+# terminal id this backend does not know. Since this backend started.
+_FRAME_DROPS: dict[str, int] = {"ownerless": 0, "unknown_terminal": 0}
+
+
+def frame_drop_counts() -> dict[str, int]:
+    return dict(_FRAME_DROPS)
 
 
 # An autonomous PTY death (exit/EOF) must release the attribution registration
@@ -1080,6 +1088,7 @@ async def _active_emit(event: dict[str, Any] | bytes) -> None:
         session_id = output_frame_session_id(frame)
         sess = _PTY_OWNERS.get(session_id) if session_id else None
         if sess is None:
+            _FRAME_DROPS["ownerless"] += 1
             return  # detached: drop output, PTY keeps running, TUI redraws on reattach
         try:
             await sess.send_bytes(frame)
@@ -1110,6 +1119,7 @@ async def _active_emit(event: dict[str, Any] | bytes) -> None:
     else:
         sess = _PTY_OWNERS.get(session_id) if session_id else None
     if sess is None:
+        _FRAME_DROPS["ownerless"] += 1
         return  # detached: drop output, PTY keeps running, TUI redraws on reattach
     try:
         await sess.send_json(event)
@@ -4179,6 +4189,8 @@ async def handle_message(session: Session, msg: dict[str, Any]) -> None:
             make_error(msg_id, msg_type, "SETUP_ERROR", _redact_home(str(err)))
         )
     except KeyError as err:
+        if "unknown terminal session" in str(err):
+            _FRAME_DROPS["unknown_terminal"] += 1
         await session.send_json(
             make_error(msg_id, msg_type, "BAD_REQUEST", f"missing field: {err}")
         )

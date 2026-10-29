@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole` se rabattra sur ce qui correspond à l’exécution",
     "replace-all-roles": "Tout remplacer : supprimer les rôles actuels ABSENTS du fichier importé",
     "reset-stages-warning": "Toutes les étapes personnalisées seront supprimées…",
+    "reset-stages-graph-warning": "Les portes, boucles et branches dessinées sur ce pipeline sont aussi supprimées, sans retour possible.",
     "completion-modal-body": "Tous les agents ont livré leurs résultats : consultez les panneaux de droite.",
     "git-credential-token": "Collez un token d’accès personnel dans le champ du mot de passe, pas votre mot de passe de connexion.",
     "install-foundation-tools": "Installez les outils de base nécessaires…",
@@ -10276,6 +10277,11 @@
       "expired": "Expirée : tâche d’agent non renouvelée depuis 7 jours",
       "unknown": "Ignorée"
     },
+    "fail-reason": {
+      "no_window": "Aucune fenêtre Navide n’a ouvert l’espace de travail de cette tâche. Ouvrez l’espace de travail, puis relancez la tâche.",
+      "pipeline_not_found": "Le pipeline que lance cette tâche n’existe pas, ou son nom en désigne plusieurs. Modifiez la tâche et choisissez un pipeline.",
+      "pipeline_already_running": "Un pipeline était déjà en cours dans cet espace de travail, celui-ci n’a donc pas démarré."
+    },
     "editor": {
       "err-task": "Saisissez une tâche",
       "err-pipeline": "Choisissez un pipeline",
@@ -11279,7 +11285,9 @@
       "stages-load-failed": "Impossible de charger les étapes de ce pipeline.",
       "no-stages": "Ce pipeline n’a encore aucune étape. Ajoutez-en une d’abord.",
       "graph-failed": "Impossible de préparer l’exécution du pipeline.",
-      "spawn-failed": "Aucun agent de la première étape n’a pu démarrer. Vérifiez que leurs CLI sont installées."
+      "spawn-failed": "Aucun agent de la première étape n’a pu démarrer. Vérifiez que leurs CLI sont installées.",
+      "already-running": "Un pipeline est déjà en cours dans cet espace de travail. Arrêtez-le d’abord.",
+      "not-recorded": "L’exécution n’a pas été enregistrée, donc rien n’a démarré. Le journal du pipeline indique pourquoi."
     },
     "graph": {
       "slot-incomplete": "{label} a besoin d’un agent et d’un nom.",

@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole` sẽ rơi về bất cứ vai trò nào tình cờ khớp lúc chạy",
     "replace-all-roles": "Thay thế tất cả — xóa các vai trò hiện có KHÔNG nằm trong tệp nhập",
     "reset-stages-warning": "Mọi giai đoạn tùy chỉnh sẽ bị gỡ...",
+    "reset-stages-graph-warning": "Các cổng, vòng lặp và nhánh đã vẽ trên pipeline này cũng bị xóa và không thể khôi phục.",
     "completion-modal-body": "Mọi agent đã giao kết quả — hãy xem các bảng bên phải.",
     "git-credential-token": "Dán Personal Access Token vào ô mật khẩu — không phải mật khẩu đăng nhập của bạn.",
     "install-foundation-tools": "Cài các công cụ nền tảng cần thiết...",
@@ -10276,6 +10277,11 @@
       "expired": "Đã hết hạn: tác vụ của agent không được gia hạn trong 7 ngày",
       "unknown": "Đã bỏ qua"
     },
+    "fail-reason": {
+      "no_window": "Không có cửa sổ Navide nào đang mở workspace của tác vụ này. Hãy mở workspace rồi chạy lại.",
+      "pipeline_not_found": "Pipeline mà tác vụ này khởi động không tồn tại hoặc tên trùng với nhiều pipeline. Hãy sửa tác vụ và chọn pipeline.",
+      "pipeline_already_running": "Workspace đó đang có một pipeline chạy, nên lần này không khởi động."
+    },
     "editor": {
       "err-task": "Hãy nhập tác vụ",
       "err-pipeline": "Hãy chọn pipeline",
@@ -11279,7 +11285,9 @@
       "stages-load-failed": "Không tải được các bước của pipeline này.",
       "no-stages": "Pipeline này chưa có bước nào. Hãy thêm một bước trước.",
       "graph-failed": "Không chuẩn bị được pipeline để chạy.",
-      "spawn-failed": "Không khởi động được agent nào của bước đầu tiên. Hãy kiểm tra CLI của chúng đã được cài đặt chưa."
+      "spawn-failed": "Không khởi động được agent nào của bước đầu tiên. Hãy kiểm tra CLI của chúng đã được cài đặt chưa.",
+      "already-running": "Workspace này đang có một pipeline chạy. Hãy dừng nó trước.",
+      "not-recorded": "Lần chạy không được ghi lại nên không có gì được khởi động. Xem log của pipeline để biết lý do."
     },
     "graph": {
       "slot-incomplete": "{label} cần một agent và một tên.",

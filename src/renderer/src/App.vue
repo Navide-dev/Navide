@@ -209,7 +209,7 @@ import {
 } from './lib/spawnKickoff'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { terminalMultilineRefusal } from './lib/terminalInput'
-import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
+import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink, injectFailedMessage } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
@@ -508,14 +508,22 @@ initUsage(backend)
 const rolesApi = useRoles(backend)
 const cliProfilesApi = useCliProfiles(backend)
 const pipelinesApi = usePipelines(backend)
-const stagesApi = useStages(backend, () => pipelinesApi.activePipelineId.value)
+// The pipeline this window's run belongs to ('' before any run, and after a
+// reset). Running a pipeline does not make it the default one: the run reads
+// its own id from here, and the default only says what Run starts.
+const runPipelineId = ref('')
+const stagesApi = useStages(backend, () => runPipelineId.value || pipelinesApi.activePipelineId.value)
 // The run panel's stage count reads this cache, so it follows the active
 // pipeline: it first loads before pipelines.list has answered (under the
 // 'default' placeholder id), and a switch made elsewhere (MCP, another window)
-// arrives as pipelines.changed with no stages for it (#417).
+// arrives as pipelines.changed with no stages for it (#417). While a run is
+// going the cache stays on the run's pipeline; a new default chosen between
+// runs is what the panel shows next.
 watch(
   () => pipelinesApi.activePipelineId.value,
   (id) => {
+    if (pipeline.state === 'running') return
+    runPipelineId.value = ''
     if (id) void stagesApi.refresh(id)
   },
 )
@@ -4684,7 +4692,7 @@ async function injectText(
     recordDiagnostic({
       level: 'error',
       code: 'inject.failed',
-      message: 'content never appeared in the input box',
+      message: injectFailedMessage(paneId ? paneRefs[paneId]?.terminalSize?.() : null),
       paneId
     })
     return giveUp()
@@ -9839,11 +9847,10 @@ const pmRef = ref<{ closeTopLayer?: () => boolean } | null>(null)
 const pmEverOpened = ref(false)
 const pmInitialPipelineId = ref('')
 // What the Pipeline workspace needs to lock a pipeline while this window runs
-// it. The run's pipeline is the active one: onPipelineStart switches to the
-// requested pipeline before it marks the run 'running'.
+// it: the run's own pipeline, which need not be the default one.
 const pmHostRun = computed(() => ({
   state: pipeline.state,
-  pipelineId: pipeline.state === 'running' ? pipelinesApi.activePipelineId.value : '',
+  pipelineId: pipeline.state === 'running' ? runPipelineId.value : '',
   workspacePath: pipeline.state === 'running' ? pipelineRunWorkspace : '',
   // Same test as ui.pipeline.next's refusal, so Executions disables Next there.
   lastStage: pipeline.state === 'running' && pipeline.stageIndex + 1 >= stagesApi.stages.value.length,
@@ -11146,7 +11153,7 @@ registerCommand('ui.pipeline.start', async (args) => {
     ), { code: 'not-started', params: refused.last ? { ...refused.last.params, reason: refused.last.code } : {} })
   }
   return {
-    pipelineId: pipelinesApi.activePipelineId.value,
+    pipelineId: runPipelineId.value,
     stages: stagesApi.stages.value.length,
     workspacePath: pipeline.workspacePath,
     state: started,
@@ -11275,7 +11282,7 @@ registerCommand('ui.pipeline.restart', async () => {
     throw Object.assign(new Error(`ui.pipeline.restart: the run did not start (state "${restarted}") — see the pipeline log for why`), { code: 'not-started' })
   }
   return {
-    pipelineId: pipelinesApi.activePipelineId.value,
+    pipelineId: runPipelineId.value,
     stages: stagesApi.stages.value.length,
     workspacePath: pipeline.workspacePath,
     state: restarted,
@@ -13900,9 +13907,12 @@ async function onRefreshAnalyzer(): Promise<void> {
 
 
 async function onPipelineRestart(payload: { task: string; workspacePath: string; fromNodeId?: string }): Promise<void> {
+  // Start Over runs the pipeline the run belonged to, not whichever is the
+  // default now: this window's run, else the one the workspace recorded.
+  const pipelineId = runPipelineId.value || existingProject.value?.pipelineId || pipelinesApi.activePipelineId.value
   // Check the restart point before anything below closes the run's panes.
   if (payload.fromNodeId && !(await pipelineDag.canRestartFrom(
-    pipelinesApi.activePipelineId.value, stagesApi.stages.value, payload.fromNodeId,
+    pipelineId, stagesApi.stages.value, payload.fromNodeId,
   ))) {
     pipelineLog(`Restart refused: node ${payload.fromNodeId} is not in this pipeline — nothing was closed`)
     return
@@ -13923,7 +13933,7 @@ async function onPipelineRestart(payload: { task: string; workspacePath: string;
       ? `↺ Restart from node ${payload.fromNodeId} — wiping previous stages`
       : '↺ Start over — wiping previous stages and re-running from 01'
   )
-  await onPipelineStart(payload)
+  await onPipelineStart({ ...payload, pipelineId })
 }
 
 /** Serializes resumes. The body turns the pipeline to 'running' — which hides
@@ -13959,27 +13969,21 @@ async function runPipelineResume(): Promise<void> {
   // The recorded run belongs to ONE pipeline. Resuming it against whatever
   // pipeline happens to be active read the WRONG stage list — a shorter one
   // made activateStage a no-op (state left 'running' with zero panes), a longer
-  // one ran an unrelated stage with this run's task. Switch first.
-  if (info.pipelineId && info.pipelineId !== pipelinesApi.activePipelineId.value) {
-    const switched = await pipelinesApi.setActivePipeline(info.pipelineId, resumeWorkspacePath)
-    if (!switched) {
-      pipelineLog(
-        `Resume aborted: could not switch to the pipeline this run belongs to` +
-          (pipelinesApi.error.value ? ` — ${pipelinesApi.error.value}` : '')
-      )
-      return
-    }
-    await stagesApi.refresh(info.pipelineId)
+  // one ran an unrelated stage with this run's task. Load its stages first —
+  // as the run's pipeline, without making it the default one.
+  const resumePipelineId = info.pipelineId || pipelinesApi.activePipelineId.value
+  if (resumePipelineId !== (runPipelineId.value || pipelinesApi.activePipelineId.value)) {
+    await stagesApi.refresh(resumePipelineId)
     if (stagesApi.error.value) {
       pipelineLog(`Resume aborted: could not load that pipeline's stages — ${stagesApi.error.value}`)
       return
     }
   }
+  runPipelineId.value = resumePipelineId
   // A run aborted while paused at a gate goes back to waiting on that gate
   // (persisted as project.node_gate) instead of re-running the stage before
   // it. Otherwise gates before the resume stage count as passed and one after
   // it still holds.
-  const resumePipelineId = info.pipelineId || pipelinesApi.activePipelineId.value
   // Recorded outputs of sub-pipeline calls an earlier run made, so they are
   // reused rather than called again (only subpipeline nodes read them).
   pipelineDag.adoptCallOutputs(info.nodeOutputs)
@@ -14074,7 +14078,9 @@ const uiStateSeqGuard = createUiStateSeqGuard()
 async function sendQuiet<T = unknown>(
   type: string,
   payload: Record<string, unknown>,
-  timeoutMs?: number
+  timeoutMs?: number,
+  // Told the backend's error code when it refuses ('' when the call threw).
+  onRefused?: (code: string) => void
 ): Promise<T | null> {
   try {
     // project.set_ui_state gets exactly one retry on timeout: it carries
@@ -14092,11 +14098,13 @@ async function sendQuiet<T = unknown>(
     )
     if (!resp.ok) {
       pipelineLog(`${type} failed: ${resp.error?.message ?? 'unknown'}`)
+      onRefused?.(resp.error?.code ?? '')
       return null
     }
     return resp.payload
   } catch (err) {
     pipelineLog(`${type} threw: ${String((err as Error).message ?? err)}`)
+    onRefused?.('')
     return null
   }
 }
@@ -14960,34 +14968,34 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
     const name = waiting.pipeline_name || '?'
     return refuse(i18n.global.t('error.pipeline-parent-suspended', { name }), 'parent-suspended', { name })
   }
-  // If a specific pipeline was requested and it's not currently active, switch first.
-  if (payload.pipelineId && payload.pipelineId !== pipelinesApi.activePipelineId.value) {
-    // Both calls fail SOFTLY — setActivePipeline returns false and refresh only
-    // sets `error`, leaving the previous pipeline's stages loaded and isLoaded
-    // still true. Ignoring that ran the OLD pipeline's stages under the NEW
-    // pipeline's name, so abort instead of starting the wrong run.
-    const switched = await pipelinesApi.setActivePipeline(payload.pipelineId, payload.workspacePath)
-    if (!switched) {
-      return refuse(
-        `could not switch to pipeline ${payload.pipelineId}` +
-          (pipelinesApi.error.value ? ` — ${pipelinesApi.error.value}` : ''),
-        'switch-failed',
-      )
-    }
-  }
+  // The run is this pipeline's, whichever is the default: starting one from the
+  // editor, the scheduler or MCP does not make it the default pipeline.
+  const runBefore = runPipelineId.value
+  runPipelineId.value = pid
   // Reload the stages of the pipeline being started, by explicit id so this
   // never races the active-id ref — even when it already is the active one.
   // The window's cache cannot be trusted for a start: it can hold none (it
   // first loads before the active id is known) or another template's, and a
   // start from it was refused, or ran stages the pipeline no longer has (#417).
+  // refresh fails SOFTLY (it only sets `error` and keeps the previous stages),
+  // so a failure must stop the start rather than run another pipeline's stages.
   await stagesApi.refresh(pid)
   if (stagesApi.error.value) {
+    runPipelineId.value = runBefore
     return refuse(`could not load the stages of pipeline ${pid} — ${stagesApi.error.value}`, 'stages-load-failed')
   }
   if (!stagesApi.isLoaded.value || stagesApi.stages.value.length === 0) {
+    runPipelineId.value = runBefore
     return refuse(`pipeline ${pid} has no stages`, 'no-stages')
   }
   const stateBefore = pipeline.state
+  // What the lines below overwrite, for a start the backend refuses.
+  const before = {
+    task: pipeline.task,
+    workspacePath: pipeline.workspacePath,
+    runWorkspace: pipelineRunWorkspace,
+    stageIndex: pipeline.stageIndex,
+  }
   pipeline.task = payload.task
   pipeline.workspacePath = payload.workspacePath
   // 'running' before the graph await below, as before that await existed: it
@@ -14996,18 +15004,15 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   pipeline.stageIndex = 0
   pipeline.state = 'running'
   // The graph decides where the run starts (0, or a restart-from-node point).
-  const startIndex = await pipelineDag.begin(pipelinesApi.activePipelineId.value, stagesApi.stages.value, {
+  const startIndex = await pipelineDag.begin(pid, stagesApi.stages.value, {
     fromNodeId: payload.fromNodeId,
   })
   if (startIndex === null) {
     pipeline.state = stateBefore
+    runPipelineId.value = runBefore
     return refuse('could not prepare the run graph — see the DAG line above', 'graph-failed')
   }
   pipeline.stageIndex = startIndex
-  // Pipeline-created panes are grouped under a RunGroup tab named after the
-  // Pipeline itself. Keep this separate from pipeline.task, which is the user's
-  // task prompt and should not become a tab/group label.
-  createRunGroup(pipelineRunGroupName(payload.pipelineId))
   // Derive global commander from stage config (slot with isCommander=true).
   pipeline.globalManager = deriveGlobalManager(stagesApi.stages.value)
   pipeline.log = []
@@ -15018,18 +15023,38 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
     sentinel: s.sentinel ?? '',
     slots: s.slots.map((sl) => ({ agent: sl.agentKey, role: sl.roleKey, label: sl.label }))
   }))
+  const refused: { code?: string } = {}
   const resp = await sendQuiet<ProjectPayload>('pipeline.start', {
     workspace_path: payload.workspacePath,
     task_description: payload.task,
     total_stages: stagesApi.stages.value.length,
     stage_blueprint: stageBlueprint,
-    pipeline_id: pipelinesApi.activePipelineId.value,
+    pipeline_id: pid,
     // Only a restart-from-node run carries it, so a normal start's request
     // is unchanged; the backend records the skipped stages as completed.
     ...(startIndex > 0 ? { start_index: startIndex } : {}),
     // A sub-pipeline's child run names the frame its parent waits on.
     ...(payload.childOf ? { child_of: payload.childOf } : {}),
-  })
+  }, undefined, (code) => { refused.code = code })
+  if (refused.code !== undefined) {
+    // The backend did not record the run (a run another window drives, or no
+    // answer): spawning on would drive panes for a run that does not exist.
+    // Put back what this start changed; sendQuiet has logged the reason.
+    pipeline.task = before.task
+    pipeline.workspacePath = before.workspacePath
+    pipelineRunWorkspace = before.runWorkspace
+    pipeline.stageIndex = before.stageIndex
+    pipeline.state = stateBefore
+    runPipelineId.value = runBefore
+    return refused.code === 'PIPELINE_ALREADY_RUNNING'
+      ? refuse('a pipeline run is already in progress in this workspace — abort it first', 'already-running')
+      : refuse('the backend did not record the run — see the line above', 'not-recorded')
+  }
+  // Pipeline-created panes are grouped under a RunGroup tab named after the
+  // Pipeline itself. Keep this separate from pipeline.task, which is the user's
+  // task prompt and should not become a tab/group label. Made once the backend
+  // has the run, so a refused start leaves no empty group behind.
+  createRunGroup(pipelineRunGroupName(pid))
   applyProjectPaths(resp ?? undefined)
   pipelineDag.setRunStack(resp?.project?.run_stack)
   pipelineDag.adoptOutputs(resp?.project?.node_outputs)
@@ -15457,7 +15482,7 @@ async function startChildRun(
   nextIndex: number,
 ): Promise<void> {
   const ws = pipeline.workspacePath
-  const parentId = pipelinesApi.activePipelineId.value
+  const parentId = runPipelineId.value || pipelinesApi.activePipelineId.value
   const parentName = pipelinesApi.pipelines.value.find((p) => p.id === parentId)?.name || parentId
   const task = (call.note ? `${call.note}\n\n` : '') + call.task.split('{{task}}').join(pipeline.task)
   pipelineDag.callStarted(call.nodeId)
@@ -15532,6 +15557,9 @@ async function onPipelineReset(paneIds?: readonly string[]): Promise<void> {
   pipeline.stageIndex = -1
   pipeline.state = 'idle'
   pipelineRunWorkspace = ''
+  // No run any more: the panel goes back to the default pipeline.
+  runPipelineId.value = ''
+  void stagesApi.refresh()
   pipeline.log = []
   pipeline.projectId = ''
   pipeline.projectFile = ''
@@ -23440,6 +23468,7 @@ function paneIsCommander(p: ActivePane): boolean {
       :analyzer-status="analyzerStatus"
       :pipelines="pipelinesApi.pipelines.value"
       :active-pipeline-id="pipelinesApi.activePipelineId.value"
+      :run-pipeline-id="runPipelineId"
       :backend="backend"
       :plugin-contributions="pluginContributions"
       :legacy-git-recovery="legacyGitRecovery"

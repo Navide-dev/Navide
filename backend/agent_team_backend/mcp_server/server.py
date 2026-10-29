@@ -6749,6 +6749,12 @@ async def ui_invoke(
     window owns workspace_path (or, for ui.workspace.open, no window is open
     at all) within 15s.
 
+    An action the window refuses answers ok false with its `error` sentence;
+    a refusal the action names with a reason also carries `error_code` (and
+    `params`, the values the sentence was built from) — branch on the code,
+    not on the wording. The pipeline_* tools that go through the window
+    answer the same way.
+
     Called from a CLI pane, the request is delivered straight to the window
     that hosts that pane — whether or not it is focused, and whatever project
     that window currently has open — as long as workspace_path names that
@@ -6910,6 +6916,11 @@ async def ui_diagnostics(
     own workspace, and none when it asks about another workspace; a refused
     request carries none. It is there even when no window answered.
 
+    `frame_drops` counts, since the backend started, terminal frames dropped
+    because no window owned their PTY (`ownerless`) and terminal requests that
+    named a terminal id the backend did not know (`unknown_terminal`). The
+    window's own `inject.failed` entries carry the pane's terminal size.
+
     Called from a CLI pane, this reads that pane's own window when
     workspace_path names that pane's own workspace (or is empty) — see
     ui_invoke.
@@ -6926,6 +6937,9 @@ async def ui_diagnostics(
     )
     if not answer.get("ok") and answer.get("error_code") not in _DIAGNOSTICS_UNANSWERED:
         return answer  # refused: nothing from the ledger either
+    from agent_team_backend import app as _app
+
+    answer = {**answer, "frame_drops": _app.frame_drop_counts()}
     scope = _persisted_scope(caller, workspace_path)
     if scope is None:
         return answer
@@ -7629,17 +7643,22 @@ async def pipeline_list(ctx: Context) -> dict[str, Any]:
     """List Navide's pipeline templates and the roles their stages are cast from.
 
     A pipeline is a saved multi-stage run: an ordered set of stages, each with
-    slots naming which CLI plays which role. The user starts one from the
-    Pipelines window, and it is the shape a whole team of panes is built in —
-    none of which was visible from here. Read it to describe what the user's
-    Navide can run, or to see which stage a task belongs to before opening a
-    pane for it yourself. Read-only: nothing here starts a run.
+    slots naming which CLI plays which role. A run starts from the window's
+    sidebar or pipeline editor, from pipeline_start, or from a scheduled job,
+    and it is the shape a whole team of panes is built in. Read it to describe
+    what the user's Navide can run, or to see which stage a task belongs to
+    before opening a pane for it yourself. Read-only: nothing here starts a run.
 
     Returns {pipelines, active_pipeline_id, roles}. Each pipeline is {id, name,
-    builtin, stage_count, stages}; each stage is {id, title, short_title,
-    description, sentinel, allow_questions, recommended_roles, slots}, and each
-    slot {agent_key, role_key, label, is_commander}. `active_pipeline_id` is
-    the template the Pipelines window currently has selected.
+    builtin, stage_count, has_graph, stages}, plus `imported_from` for one
+    imported from n8n; each stage is {id, title, short_title, description,
+    sentinel, allow_questions, recommended_roles, slots}, and each slot
+    {agent_key, role_key, label, is_commander}. `active_pipeline_id` is the
+    default pipeline: the one pipeline_start runs when given no pipeline_id.
+
+    For a pipeline with `has_graph` true the stages are the layers its graph
+    derives to; its gates, reject loops, branch and error edges and
+    sub-pipeline calls are not in them — pipeline_graph op "get" shows those.
 
     Two things are deliberately not here, because both are whole prompts: a
     slot's kickoff body, and a role's system prompt. `roles` gives each role's
@@ -7712,12 +7731,13 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     Read it before deciding how much of a job is yours. Read-only.
 
     Returns {workspace_path, active, ...}. `active` is true only while a run is
-    in progress. A workspace that has never run a pipeline answers with
+    in progress. A workspace Navide holds no project record for answers with
     {workspace_path, active: false} and nothing else — that is the empty state,
-    not an error.
+    not an error. One with a record that has never run a pipeline answers with
+    the fields below, state "idle", no stages and total_stages 0.
 
     When a project exists it also carries: state (idle / running / completed /
-    aborted / interrupted), task_description (what the run was started for), pipeline_id
+    aborted / interrupted / suspended), task_description (what the run was started for), pipeline_id
     (which template from pipeline_list), current_stage_index and total_stages,
     run_count, log_file_name, updated_at, plus `stages` — {stage_id, title,
     agent, role, pane_id, status, started_at, ended_at} each — and `panes`,
@@ -7740,7 +7760,8 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     `gate`, the gate the run is paused on ({gateId, label, prompt, nextIndex},
     or {} when it is not paused). Node ids are the ones pipeline_graph op
     "get" returns; a pipeline without a stored graph uses n-<stage_id>-<slot
-    index>. A paused gate is resolved with pipeline_gate.
+    index>. Only nodes of the run's own pipeline are recorded. A paused gate
+    is resolved with pipeline_gate.
 
     While the run is a sub-pipeline's child run it also carries `run_stack`,
     the parent runs suspended at their subpipeline nodes, outermost first
@@ -8683,17 +8704,22 @@ async def pipeline_start(
     starting one is not a step to take on a guess.
 
     `pipeline_id` is the template to run, as pipeline_list reports its id. Left
-    empty, the workspace's currently selected pipeline runs; a workspace with
-    none selected refuses rather than picking one for you. `task` is what the
-    run is for — the text each stage's kickoff message is built from.
+    empty, the default pipeline runs (pipeline_list's active_pipeline_id).
+    `task` is what the run is for — the text each stage's kickoff message is
+    built from.
 
     Returns the window's own reply — {ok, result, error}. `result` carries
     {pipelineId, stages, workspacePath, state} for a run that actually started.
-    ok false means nothing started: a run already going (abort it first), a
-    parent run suspended at a sub-pipeline waiting here (resume or reset it
-    first), no pipeline to run, or a first stage whose panes all failed to spawn. The
-    window reports the run's own state rather than the fact that the call
-    returned, so "ok" here is not the "started but nothing happened" answer.
+    ok false means nothing started. A run already in progress in the workspace
+    is refused before any window is asked, with error_code
+    "pipeline_already_running" (abort it first); a run left at running by a
+    closed or crashed app is not in progress and does not block a start. The
+    window's own refusals — a parent run suspended at a sub-pipeline waiting
+    here (resume or reset it first), no pipeline to run, or a first stage whose
+    panes all failed to spawn — carry its `error`, plus `error_code` and
+    `params` when the window names the reason. The window reports the run's
+    own state rather than the fact that the call returned, so "ok" here is not
+    the "started but nothing happened" answer.
 
     workspace_path defaults to your own pane's workspace; pass it only to start
     a run in another project's window.
@@ -8711,6 +8737,13 @@ async def _start_pipeline_run(
     """pipeline_start's path, shared with the scheduler's pipeline_start jobs:
     ui.pipeline.start in the window holding the workspace, with the caller's
     Guard taint carried into the run."""
+    from agent_team_backend.projects import PipelineAlreadyRunning
+
+    # The window refuses a second run too, but only in words; the stored run
+    # answers with the code callers branch on, before any window is asked.
+    if await asyncio.to_thread(_run_is_active, workspace_path):
+        refused = PipelineAlreadyRunning("start a pipeline run")
+        return {"ok": False, "error": str(refused), "error_code": refused.error_code}
     args: dict[str, Any] = {"task": str(task or "")}
     pipeline_id = str(pipeline_id or "").strip()
     if pipeline_id:
@@ -8935,11 +8968,12 @@ async def pipeline_define(
     - "rename"        — needs `pipeline_id` and `name`. Renames in place; ids
                         and stages are untouched.
     - "delete"        — needs `pipeline_id`. DESTRUCTIVE, see below.
-    - "set_active"    — needs `pipeline_id`. Selects the template the Pipelines
-                        window shows and that pipeline_start uses when called
-                        with no pipeline_id of its own.
-    - "reset_builtin" — needs `pipeline_id`, and only "default" or
-                        "maintenance" have seed data. DESTRUCTIVE, see below.
+    - "set_active"    — needs `pipeline_id`. Makes it the default pipeline:
+                        the one pipeline_start runs when called with no
+                        pipeline_id of its own.
+    - "reset_builtin" — needs `pipeline_id`, and only the builtins "default",
+                        "maintenance" and "evolve-landing" have seed data.
+                        DESTRUCTIVE, see below.
 
     `workspace_path` names the project whose run the guards check; it defaults
     to your own pane's workspace, and a caller with no pane that passes nothing
@@ -8950,8 +8984,10 @@ async def pipeline_define(
     - "delete" and "set_active" are REFUSED outright while that workspace has
       a run in the running state (error_code "pipeline_running"). Abort the run
       first if you mean it.
-    - "reset_builtin" replaces every stage of the pipeline with its seed set,
-      and is refused while the run in progress is using that pipeline — a run
+    - "reset_builtin" replaces every stage of the pipeline with its seed set
+      and drops a graph drawn on it (gates, loops, branches) — "evolve-landing"
+      gets its seed graph back instead — and is refused while the run in
+      progress is using that pipeline — a run
       records which pipeline it belongs to, and naming it explicitly does not
       get past the guard.
     - A deleted pipeline does not stop or rewind a run that was already
@@ -9029,6 +9065,7 @@ async def stage_define(
     stage: dict[str, Any] | None = None,
     ids: list[str] | None = None,
     workspace_path: str = "",
+    discard_graph: bool = False,
 ) -> dict[str, Any]:
     """Add, edit, remove, reorder or re-seed the STAGES inside one pipeline.
 
@@ -9060,8 +9097,8 @@ async def stage_define(
     - "reset"   — takes no extra argument. DESTRUCTIVE, see below.
 
     `pipeline_id` picks which pipeline to edit; left empty it means the active
-    one, which is what the Pipelines window has selected and not necessarily
-    the one you were reading. Name it.
+    one, which is the default pipeline (pipeline_list's active_pipeline_id)
+    and not necessarily the one you were reading. Name it.
 
     `workspace_path` names the project whose run the guard checks; it defaults
     to your own pane's workspace.
@@ -9079,7 +9116,10 @@ async def stage_define(
     the built-in stages for "default" and "maintenance", and NOTHING AT ALL for
     a pipeline you created — a custom pipeline reset this way is left empty and
     unrunnable, and there is no undo. Read it out of pipeline_list first if you
-    might want it back.
+    might want it back. A pipeline you created whose graph has gates, reject
+    loops or branches loses that graph too, so its reset is refused (error_code
+    "graph_nonlinear") unless you pass `discard_graph` true — ask the user
+    first. A builtin's reset always restores its seed, graph included.
 
     A pipeline whose graph has gates, reject loops or cross-layer edges cannot
     be expressed as a stage list: "upsert", "delete" and "reorder" are refused
@@ -9126,7 +9166,9 @@ async def stage_define(
             )
             written = None
         else:
-            await asyncio.to_thread(_app.stages_store.reset, pipeline_id or None)
+            await asyncio.to_thread(
+                _app.stages_store.reset, pipeline_id or None, discard_graph=bool(discard_graph)
+            )
             written = None
     except GraphNonLinearError as exc:
         return {"ok": False, "error": str(exc), "error_code": "graph_nonlinear"}
@@ -9424,7 +9466,10 @@ async def pipeline_graph(
     active pipeline; name it. Returns {ok, op, pipeline_id, graph, stages}
     (+ derived for "get"); ok false carries `error`, `error_code` ("bad_op",
     "missing_argument", "pipeline_running", "not_found", "invalid") and, for
-    an invalid graph, `errors` — nothing was written.
+    an invalid graph, `errors` — nothing was written. A refused "apply" op also
+    carries `op_index`, the ops[] entry it came from; its errors start with
+    "ops[<i>] (<op>)", and an unknown op, node kind, edge kind or stageId
+    lists the ones there are.
     """
     caller = _resolve_caller(ctx)
     op = str(op or "").strip()
@@ -9453,7 +9498,10 @@ async def pipeline_graph(
         else:
             out = await asyncio.to_thread(_app.stages_store.set_graph, pipeline_id or None, graph)
     except GraphError as exc:
-        return {"ok": False, "error": str(exc), "error_code": "invalid", "errors": exc.errors}
+        refused = {"ok": False, "error": str(exc), "error_code": "invalid", "errors": exc.errors}
+        if getattr(exc, "op_index", None) is not None:
+            refused["op_index"] = exc.op_index  # type: ignore[attr-defined]
+        return refused
     except (KeyError, ValueError) as exc:
         return _store_refused(exc)
     # The same three events the pipelines.graph.* ws handlers send.
@@ -9948,11 +9996,14 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
         task}: start a pipeline run there, exactly as pipeline_start would —
         THIS OPENS CLI PANES AND SPENDS THEIR QUOTA on every run. Exactly one of
         pipeline_id / pipeline_name (as pipeline_list reports them; a name must
-        match one pipeline exactly), resolved each time the job runs. It never
-        opens a window: when no window holds the workspace the run is an ERROR
-        with reason "no_window" (not a skip), as are an unknown or ambiguous
-        pipeline ("pipeline_not_found") and a start the window refuses (a run
-        already going, …), each with the reason in last_error. A pane caller's
+        match one pipeline exactly), checked when the job is saved — an
+        unknown or ambiguous one is refused then, with error_code
+        "pipeline_not_found" — and resolved again each time the job runs. It
+        never opens a window: when no window holds the workspace the run is an
+        ERROR with reason "no_window" (not a skip), as are a pipeline deleted
+        since ("pipeline_not_found") and a refused start (a run already in
+        progress is "pipeline_already_running"), each with the reason code in
+        state.last_error_code and the detail in last_error. A pane caller's
         default workspace is its own.
       policy — optional {catch_up: "once" | "skip", max_runs_per_day, timeout_s};
         defaults {"once", 24, 1800}.
@@ -9992,7 +10043,7 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
     try:
         result = await _scheduler_service().upsert(job, _scheduler_actor(caller))
     except JobInvalid as err:
-        return {"ok": False, "error": str(err)}
+        return {"ok": False, "error": str(err), **({"error_code": err.code} if err.code else {})}
     if result.get("ok"):
         await _announce_scheduler()
     return result
@@ -10043,7 +10094,9 @@ async def scheduler_run_now(id: str, ctx: Context) -> dict[str, Any]:
     scheduler_runs for the outcome. Refused while that job is already running.
     Clears a failure backoff; the error count resets only if this run succeeds.
     The run does not move the job's next scheduled slot. Only a job you created
-    (see scheduler_upsert, OWNERSHIP).
+    (see scheduler_upsert, OWNERSHIP). A pipeline_start job whose workspace no
+    window holds is refused before anything runs, with error_code "no_window":
+    open the workspace first.
     """
     try:
         caller = _resolve_caller(ctx)

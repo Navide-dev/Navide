@@ -79,6 +79,10 @@ export const START_REFUSAL_CODES = [
   'no-stages',
   'graph-failed',
   'spawn-failed',
+  // The backend refused to record the run: another window's run is in
+  // progress here (PIPELINE_ALREADY_RUNNING), or the request failed.
+  'already-running',
+  'not-recorded',
 ] as const
 
 /** A start refusal as onPipelineStart reports it. */

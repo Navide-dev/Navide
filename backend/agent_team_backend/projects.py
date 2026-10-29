@@ -196,6 +196,31 @@ class ParentRunSuspended(ValueError):
         self.pipeline_name = name
 
 
+class PipelineAlreadyRunning(ValueError):
+    """A start or resume refused because a window still drives this
+    workspace's run. A stored ``running`` run nobody drives any more (see
+    pipeline_liveness) is not refused: that is the crash case, which Start
+    Over and Resume exist for.
+
+    ``error_code`` is what MCP and the scheduler answer with; the WS handlers
+    answer with its upper-case twin, as pipeline_running / PIPELINE_RUNNING."""
+
+    error_code = "pipeline_already_running"
+
+    def __init__(self, what: str) -> None:
+        super().__init__(
+            f"cannot {what}: a pipeline run is already in progress in this workspace — "
+            "abort it first"
+        )
+
+
+def _refuse_live_run(project: "Project", what: str) -> None:
+    from . import pipeline_liveness
+
+    if pipeline_liveness.run_is_live(project):
+        raise PipelineAlreadyRunning(what)
+
+
 def _stage_record(s: dict[str, Any]) -> "StageRecord":
     """A StageRecord back from asdict() (a run_stack frame), slots included."""
     known = {f for f in StageRecord.__dataclass_fields__} - {"slots"}
@@ -220,7 +245,7 @@ class Project:
     task_description: str = ""
     state: str = "idle"  # idle / running / completed / aborted
     current_stage_index: int = -1
-    total_stages: int = 5
+    total_stages: int = 0  # len(stages): 0 until a run records its stage blueprint
     stages: list[StageRecord] = field(default_factory=list)
     panes: list[PaneRecord] = field(default_factory=list)   # unified: pipeline slots + manual panes
     manual_panes: list[ManualPaneRecord] = field(default_factory=list)  # legacy — kept for backward compat
@@ -626,7 +651,10 @@ class ProjectStore:
 
         While a parent run is suspended here (run_stack), the only run that
         may start is the child it is waiting for: ``child_of`` naming the top
-        frame's id. Anything else raises :class:`ParentRunSuspended`."""
+        frame's id. Anything else raises :class:`ParentRunSuspended`.
+
+        A run a window still drives raises :class:`PipelineAlreadyRunning`
+        rather than being overwritten underneath its panes."""
         with self._save_lock:
             project = self.load_or_create(workspace_path, backend_version=backend_version)
             if project.run_stack:
@@ -635,6 +663,7 @@ class ProjectStore:
                     raise ParentRunSuspended(str(top.get("pipeline_name") or top.get("run", {}).get("pipeline_id") or ""))
             elif child_of:
                 raise ValueError("no parent run is waiting for a child run")
+            _refuse_live_run(project, "start a pipeline run")
             project.task_description = task_description
             project.total_stages = total_stages
             if pipeline_id:
@@ -1752,19 +1781,21 @@ class ProjectStore:
         nodes: dict[str, Any],
         gate: dict[str, Any] | None = None,
         outputs: dict[str, Any] | None = None,
+        known_ids: set[str] | None = None,
     ) -> Project:
         """Merge per-node run states reported by the engine (a node absent from
         `nodes` keeps its last state). gate=None leaves the paused gate as it
-        is; {} clears it. outputs merge into node_outputs."""
+        is; {} clears it. outputs merge into node_outputs. With `known_ids`, a
+        state or output for any other node id is not stored."""
         with self._save_lock:
             project = self.load_or_create(workspace_path)
             for nid, state in nodes.items():
-                if isinstance(state, dict):
+                if isinstance(state, dict) and (known_ids is None or str(nid) in known_ids):
                     project.node_states[str(nid)] = state
             if gate is not None:
                 project.node_gate = gate
             for nid, out in (outputs or {}).items():
-                if isinstance(out, dict):
+                if isinstance(out, dict) and (known_ids is None or str(nid) in known_ids):
                     project.node_outputs[str(nid)] = out
             self.save(project)
         return project
@@ -1774,9 +1805,13 @@ class ProjectStore:
 
         next_stage_index = -1 means "all stages already completed".
         Picks the first stage whose status is not 'completed'.
+
+        Only a stopped run resumes: one a window still drives raises
+        :class:`PipelineAlreadyRunning`, so its running stage keeps its pane.
         """
         with self._save_lock:
             project = self.load_or_create(workspace_path)
+            _refuse_live_run(project, "resume the pipeline run")
             if project.state == "suspended" and project.run_stack:
                 # Stopped after the parent suspended but before its child
                 # started: put the parent back as it was; the window calls the

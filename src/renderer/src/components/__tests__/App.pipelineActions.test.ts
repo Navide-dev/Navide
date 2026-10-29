@@ -56,6 +56,8 @@ interface Stubs {
   currentWorkspace: { value: string }
   pipeline: { state: PipelineState; workspacePath: string; task: string; stageIndex: number }
   pipelinesApi: { activePipelineId: { value: string } }
+  /** The run's own pipeline (PR-E E4): what the real onPipelineStart sets. */
+  runPipelineId: { value: string }
   stagesApi: { stages: { value: unknown[] } }
   existingProject: { value: ExistingRun | null }
   onPipelineStart: ReturnType<typeof vi.fn>
@@ -85,10 +87,12 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
     stageIndex: overrides.stageIndex ?? -1,
   }
   const existingProject = { value: overrides.existingProject ?? null }
+  const runPipelineId = { value: '' }
   return {
     currentWorkspace: { value: overrides.workspace ?? '/tmp/ws' },
     pipeline,
     pipelinesApi: { activePipelineId: { value: overrides.activePipelineId ?? 'pl-active' } },
+    runPipelineId,
     stagesApi: { stages: { value: new Array(overrides.stages ?? 3).fill({}) } },
     existingProject,
     // The real onPipelineStart is what moves the run to 'running'; a stub that
@@ -96,6 +100,7 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
     // below: each one reproduces the state move its real counterpart makes, so
     // a test that wants the soft-exit case has to opt into it explicitly.
     onPipelineStart: vi.fn(async (payload: StartPayload) => {
+      runPipelineId.value = payload.pipelineId ?? ''
       pipeline.state = 'running'
       pipeline.workspacePath = payload.workspacePath
       pipeline.task = payload.task
@@ -120,6 +125,7 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
       pipeline.task = ''
     }),
     onPipelineRestart: vi.fn(async (payload: StartPayload) => {
+      runPipelineId.value = runPipelineId.value || (overrides.activePipelineId ?? 'pl-active')
       pipeline.state = 'running'
       pipeline.workspacePath = payload.workspacePath
       pipeline.task = payload.task
@@ -140,6 +146,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     'currentWorkspace',
     'pipeline',
     'pipelinesApi',
+    'runPipelineId',
     'stagesApi',
     'existingProject',
     'onPipelineStart',
@@ -160,6 +167,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     stubs.currentWorkspace,
     stubs.pipeline,
     stubs.pipelinesApi,
+    stubs.runPipelineId,
     stubs.stagesApi,
     stubs.existingProject,
     stubs.onPipelineStart,
@@ -242,8 +250,9 @@ describe('ui.pipeline.start', () => {
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-7',
     }, expect.any(Function)) // the refusal reporter (PR-B)
+    // The run's pipeline, which is not made the default (PR-E E4).
     expect(result).toEqual({
-      pipelineId: 'pl-active',
+      pipelineId: 'pl-7',
       stages: 4,
       workspacePath: '/tmp/ws',
       state: 'running',

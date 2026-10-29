@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole` vai recorrer ao que corresponder durante a execução",
     "replace-all-roles": "Substituir tudo – excluir os papéis atuais que NÃO estão no arquivo importado",
     "reset-stages-warning": "Todas as etapas personalizadas serão removidas…",
+    "reset-stages-graph-warning": "Os portões, loops e ramificações desenhados neste pipeline também são apagados e não podem ser recuperados.",
     "completion-modal-body": "Todos os agents entregaram seus resultados – confira os painéis à direita.",
     "git-credential-token": "Cole um Personal Access Token no campo de senha – não a sua senha de login.",
     "install-foundation-tools": "Instale as ferramentas básicas necessárias…",
@@ -10276,6 +10277,11 @@
       "expired": "Expirada: tarefa de agent não renovada em 7 dias",
       "unknown": "Ignorada"
     },
+    "fail-reason": {
+      "no_window": "Nenhuma janela do Navide está com o workspace desta tarefa aberto. Abra o workspace e execute a tarefa de novo.",
+      "pipeline_not_found": "O pipeline que esta tarefa inicia não existe ou o nome corresponde a mais de um. Edite a tarefa e escolha um pipeline.",
+      "pipeline_already_running": "Já havia um pipeline em execução nesse workspace, então este não foi iniciado."
+    },
     "editor": {
       "err-task": "Digite uma tarefa",
       "err-pipeline": "Escolha um pipeline",
@@ -11279,7 +11285,9 @@
       "stages-load-failed": "Não foi possível carregar os passos deste pipeline.",
       "no-stages": "Este pipeline ainda não tem passos. Adicione um primeiro.",
       "graph-failed": "Não foi possível preparar o pipeline para executar.",
-      "spawn-failed": "Nenhum agent do primeiro passo pôde ser iniciado. Verifique se as CLIs deles estão instaladas."
+      "spawn-failed": "Nenhum agent do primeiro passo pôde ser iniciado. Verifique se as CLIs deles estão instaladas.",
+      "already-running": "Já há um pipeline em execução neste workspace. Interrompa-o primeiro.",
+      "not-recorded": "A execução não foi registrada, então nada foi iniciado. O log do pipeline mostra o motivo."
     },
     "graph": {
       "slot-incomplete": "{label} precisa de um agent e de um nome.",

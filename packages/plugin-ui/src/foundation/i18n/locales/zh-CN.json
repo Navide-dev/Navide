@@ -9140,6 +9140,7 @@
     "default-role-fallback": "`defaultRole` 将在运行时自动比对",
     "replace-all-roles": "全部取代 — 删除不在导入文件中的目前角色",
     "reset-stages-warning": "所有自订阶段将被移除…",
+    "reset-stages-graph-warning": "这条流程上手画的闸门、循环、分支也会一并清除，无法复原。",
     "completion-modal-body": "每个 Agent 都已完成任务 — 请查看右侧各面板。",
     "git-credential-token": "密码字段请贴 Personal Access Token（非登录密码）。",
     "install-foundation-tools": "安装所有 Agent 运作所需的基础工具…",
@@ -10276,6 +10277,11 @@
       "expired": "已过期：agent job 7 天未更新",
       "unknown": "略过"
     },
+    "fail-reason": {
+      "no_window": "没有 Navide 窗口打开这个 job 的 workspace。请先打开 workspace，再运行一次。",
+      "pipeline_not_found": "这个 job 要启动的 Pipeline 不存在，或名称对应到不止一条。请编辑 job，重新选择 Pipeline。",
+      "pipeline_already_running": "那个 workspace 已有 Pipeline 正在运行，所以这次没有启动。"
+    },
     "editor": {
       "err-task": "请输入任务",
       "err-pipeline": "请选择 Pipeline",
@@ -11279,7 +11285,9 @@
       "stages-load-failed": "无法加载这条 pipeline 的步骤。",
       "no-stages": "这条 pipeline 还没有任何步骤，请先添加一个。",
       "graph-failed": "无法准备这条 pipeline 的运行。",
-      "spawn-failed": "第一个步骤的 agent 都无法启动。请确认它们的 CLI 已安装。"
+      "spawn-failed": "第一个步骤的 agent 都无法启动。请确认它们的 CLI 已安装。",
+      "already-running": "这个 workspace 已有 pipeline 正在运行，请先中止它。",
+      "not-recorded": "这次运行没有被记录下来，所以没有启动。原因请看 pipeline 日志。"
     },
     "graph": {
       "slot-incomplete": "“{label}”需要设置 agent 和名称。",

@@ -1085,11 +1085,26 @@ class StagesStore:
             self._write_doc(doc)
             return new_stages
 
-    def reset(self, pipeline_id: str | None = None) -> list[dict[str, Any]]:
+    def reset(self, pipeline_id: str | None = None, *, discard_graph: bool = False) -> list[dict[str, Any]]:
+        """Put back the seed stages (none for a pipeline the user created).
+
+        A created pipeline whose graph has gates, loops or branches holds more
+        than its stage list says, and none of it comes back; that reset raises
+        GraphNonLinearError unless the caller passes discard_graph=True. A
+        builtin's reset is "factory defaults" and always drops its graph."""
         with self._lock:
             doc = self._read_doc()
             pipeline = self._get_pipeline(doc, pipeline_id)
             pid = pipeline.get("id", "")
+            graph = pipeline.get("graph")
+            if (
+                pid not in ("default", "maintenance") and not discard_graph
+                and graph is not None and not pg.is_linear_graph(graph)
+            ):
+                raise GraphResetNeedsConsent(
+                    "resetting this pipeline would delete its graph (gates, loops or branches) "
+                    "with no way back; pass discard_graph to confirm"
+                )
             if pid == "default":
                 pipeline["stages"] = default_stages()
             elif pid == "maintenance":
@@ -1124,6 +1139,17 @@ class StagesStore:
             graph = pg.derive_graph_from_stages(stages)
         return {"pipeline_id": pipeline["id"], "graph": graph, "derived": derived, "stages": stages}
 
+    def node_ids(self, pipeline_id: str | None = None) -> set[str]:
+        """Every node id a run of this pipeline can report state for: its
+        stored graph's, and the ones its stages derive to — the run engine
+        falls back to the derived graph when the stored one does not match
+        the stages it loaded."""
+        doc = self._read_doc()
+        pipeline = self._get_pipeline(doc, pipeline_id)
+        derived = pg.derive_graph_from_stages([_migrate(s) for s in pipeline.get("stages", [])])
+        graphs = [derived] + ([pipeline["graph"]] if isinstance(pipeline.get("graph"), dict) else [])
+        return {str(n.get("id")) for g in graphs for n in g.get("nodes", []) if isinstance(n, dict) and n.get("id")}
+
     def set_graph(self, pipeline_id: str | None, graph: Any) -> dict[str, Any]:
         """Validate and store a graph; stages are re-derived from it."""
         errors = pg.validate_graph(graph)
@@ -1146,16 +1172,22 @@ class StagesStore:
             errors = pg.validate_graph(graph)
             if errors:
                 raise pg.GraphError(errors)
-            meta_ops = [op for op in ops if op.get("op") == "set_stage_meta"]
+            meta_ops = [(i, op) for i, op in enumerate(ops) if op.get("op") == "set_stage_meta"]
             if not meta_ops:
                 return self._store_graph(doc, pipeline, graph)
             # Derive first so a layer's new L<n> stage exists to receive its
             # metadata, then patch and store.
             self._store_graph(doc, pipeline, graph, write=False)
-            for op in meta_ops:
+            for index, op in meta_ops:
                 stage = next((s for s in pipeline["stages"] if s.get("id") == op.get("stageId")), None)
                 if stage is None:
-                    raise pg.GraphError([f"stage not found: {op.get('stageId')}"], "stage-not-found")
+                    known = ", ".join(str(s.get("id")) for s in pipeline["stages"])
+                    missing = pg.GraphError(
+                        [f"ops[{index}] (set_stage_meta): stage not found: {op.get('stageId')}; one of {known}"],
+                        "stage-not-found",
+                    )
+                    missing.op_index = index  # type: ignore[attr-defined]
+                    raise missing
                 for field, key in pg.STAGE_META_FIELDS.items():
                     if field in op:
                         stage[key] = op[field]
@@ -1193,6 +1225,14 @@ class StagesStore:
 
 class GraphNonLinearError(ValueError):
     """A stage-level edit on a pipeline whose graph stages cannot express."""
+
+
+class GraphResetNeedsConsent(GraphNonLinearError):
+    """A reset that would delete a drawn graph, asked for without
+    discard_graph. Coded, so the ws handlers answer it as GRAPH_NONLINEAR
+    rather than as a fault."""
+
+    error_code = "graph_nonlinear"
 
 
 class StoreRefused(ValueError):

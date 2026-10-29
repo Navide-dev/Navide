@@ -21,6 +21,7 @@ import {
   isValidTimeZone,
   localTimeZone,
   previewNextRun,
+  schedulerFailReason,
   shortId,
   type JobDraft,
   type JobSchedule,
@@ -39,7 +40,7 @@ const emit = defineEmits<{ close: []; saved: [job: SchedulerJob]; removed: [id: 
 // The welcome tour steps aside while the editor is open.
 blockTourWhile(() => props.open)
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const tr: Translate = (key, params) => (params ? t(key, params) : t(key))
 
 interface RosterPane {
@@ -345,7 +346,9 @@ async function save(): Promise<void> {
       'scheduler.upsert',
       { job: buildDraft() }
     )
-    if (!resp.ok) serverError.value = resp.error?.message ?? 'scheduler.upsert failed'
+    // A refusal with a code (a pipeline that does not exist) reads in the UI
+    // language; anything else keeps the backend's words.
+    if (!resp.ok) serverError.value = schedulerFailReason(t, te, resp.error?.code, resp.error?.message ?? 'scheduler.upsert failed')
     else if (!resp.payload || resp.payload.ok === false || !resp.payload.job)
       serverError.value = resp.payload?.error ?? 'scheduler.upsert failed'
     else emit('saved', resp.payload.job)
