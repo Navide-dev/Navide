@@ -12100,7 +12100,7 @@ describe('first-party Git private bridge', () => {
         'official-artifacts',
         'factory-resources',
         PLANS_PLUGIN_ID,
-        '0.1.0',
+        '1.0.0',
         `${process.platform}-${process.arch}`,
         'package',
       )
@@ -12114,24 +12114,24 @@ describe('first-party Git private bridge', () => {
       expect(registerBundledPlans(mgr, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '0.1.0',
+        artifactVersion: '1.0.0',
         devRoot: root,
       })).toEqual({ registered: true })
       mgr.setPlansDiagnosticsEnabled(true)
-      mgr.setCapabilityGrantResolver(() => ({ packageVersion: '0.1.0', system: ['fs', 'ui', 'aiCli'], storage: true }))
+      mgr.setCapabilityGrantResolver(() => ({ packageVersion: '1.0.0', system: ['fs', 'ui', 'aiCli'], storage: true }))
       const descriptor = mgr.getDescriptor(PLANS_PLUGIN_ID)!
       const contribution = descriptor.views!.find((view) => view.location === 'window')!
       const host = new FakeBrowserWindow()
       await mgr.openView({ ...descriptor, entryFile: contribution.entryFile }, contribution, {
         hostWindow: asHost(host), bounds: 'fill', workspacePath: root,
-        capabilityContext: mgr.plansCapabilityContext('0.1.0', root, 'plans-window'),
+        capabilityContext: mgr.plansCapabilityContext('1.0.0', root, 'plans-window'),
         query: '?plans_package_source=spoofed',
       })
       const loaded = (host.children[0] as FakeViewLike).webContents.loads[0]
       expect(loaded).toContain(contribution.entryFile)
       const query = new URLSearchParams(loaded.split('?')[1])
       expect(query.get('plans_package_source')).toBe('factory-bundled')
-      expect(query.get('plans_package_version')).toBe('0.1.0')
+      expect(query.get('plans_package_version')).toBe('1.0.0')
     } finally {
       await mgr.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
