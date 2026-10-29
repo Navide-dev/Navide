@@ -200,7 +200,8 @@ function ruleLabel(rule: string): string {
 }
 .tp-input.grow { flex: 1; min-width: 160px; }
 .tp-input.mono { font-family: var(--font-mono, monospace); }
-.tp-input:focus { outline: none; border-color: var(--accent-focus); }
+.tp-input:focus { border-color: var(--accent-focus); }
+.tp-input:focus:not(:focus-visible) { outline: none; }
 .tp-result { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 var(--space-row-x) 10px; }
 .tp-pill {
   flex-shrink: 0; font-size: var(--font-2xs); font-weight: 600; border-radius: 999px; padding: 1px 8px;

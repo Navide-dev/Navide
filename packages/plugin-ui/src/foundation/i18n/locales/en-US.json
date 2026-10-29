@@ -7803,6 +7803,7 @@
       "filter-all": "All",
       "filter-enabled": "Enabled",
       "filter-attention": "Needs attention",
+      "attention-badge": "Needs attention",
       "count": "{visible} of {total} agents · {enabled} enabled",
       "reorder-filtered": "Clear search and choose All to reorder",
       "enabled": "Show in menu",

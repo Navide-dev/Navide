@@ -1057,7 +1057,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-risk-card { margin: 0 0 12px; }
 .mcp-risk-line { margin: 0 0 4px; }
 .mcp-risk-line:last-child { margin-bottom: 0; }
-.mcp-stderr pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+.mcp-stderr pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: var(--font-xs); }
 .mcp-status-dot.disabled { background: var(--border-default); }
 .mcp-card-detail {
   font-size: var(--font-xs);

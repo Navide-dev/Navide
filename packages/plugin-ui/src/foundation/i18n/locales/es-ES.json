@@ -7803,6 +7803,7 @@
       "filter-all": "Todos",
       "filter-enabled": "Activados",
       "filter-attention": "Requieren atención",
+      "attention-badge": "Requiere atención",
       "count": "{visible} de {total} agents · {enabled} activados",
       "reorder-filtered": "Borra la búsqueda y elige «Todos» para reordenar",
       "enabled": "Mostrar en el menú",

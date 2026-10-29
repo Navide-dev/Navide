@@ -156,7 +156,6 @@ import SettingsCard from './settings/SettingsCard.vue'
 import SettingsEmptyState from './settings/SettingsEmptyState.vue'
 import SettingRow from './settings/SettingRow.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
-import PathText from './settings/PathText.vue'
 import RecentWorkspacesLimitRow from './settings/RecentWorkspacesLimitRow.vue'
 import ResourceLimitsSection from './settings/ResourceLimitsSection.vue'
 import VoiceSettingsSection from './settings/VoiceSettingsSection.vue'
@@ -2978,8 +2977,8 @@ watch(activeTab, (tab) => {
               </span>
               <span class="settings-meta-paths">
                 <span class="settings-meta-path">
-                  <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.mcp.storage) }" v-truncate>{{ pathForTab('mcp') }}</span>
-                  <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.mcp" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.mcp)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+                  <span v-truncate class="settings-path settings-path--prose">{{ $t('settings.storage.mainProcess') }}</span>
+                  <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.mcp" :title="settingsPaths.mcp ? $t('settings.extensionsPolicy.labeledValue', { label: $t('action.open'), value: settingsPaths.mcp }) : $t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.mcp)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
                 </span>
               </span>
             </div>
@@ -3221,13 +3220,12 @@ watch(activeTab, (tab) => {
             </span>
             <span class="settings-meta-paths">
               <span class="settings-meta-path">
-                <PathText class="settings-path" :path="settingsPaths.analyzer ?? ''" />
-                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.analyzer" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.analyzer)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+                <span v-truncate class="settings-path settings-path--prose">{{ $t('settings.storage.mainProcess') }}</span>
+                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.analyzer" :title="settingsPaths.analyzer ? $t('settings.extensionsPolicy.labeledValue', { label: $t('action.open'), value: settingsPaths.analyzer }) : $t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.analyzer)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
               </span>
               <span class="settings-meta-path">
                 <span class="settings-meta-label">{{ $t('settings.analyzer.ai-keys-label') }}</span>
-                <PathText class="settings-path" :path="settingsPaths.ai_chat ?? ''" :max="48" />
-                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.ai_chat" :title="$t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.ai_chat)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+                <button class="settings-path-btn settings-path-btn--icon" :disabled="!settingsPaths.ai_chat" :title="settingsPaths.ai_chat ? $t('settings.extensionsPolicy.labeledValue', { label: $t('action.open'), value: settingsPaths.ai_chat }) : $t('action.open')" :aria-label="$t('action.open')" @click="openSettingsPath(settingsPaths.ai_chat)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
               </span>
             </span>
           </div>
@@ -3565,13 +3563,13 @@ watch(activeTab, (tab) => {
                     <span class="cli-agent-name">{{ cardNameParts(row.label).name }}</span>
                     <span v-if="cardNameParts(row.label).vendor" class="cli-agent-vendor">{{ cardNameParts(row.label).vendor }}</span>
                   </span>
-                  <!-- An installed CLI needs attention when it is outdated: the mark names
-                       what (the install chip's "Update available …"), not just that. -->
-                  <span v-if="row.needsAttention && row.installed" class="cli-card-attention" role="img" :title="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')" :aria-label="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')">!</span>
                 </div>
                 <!-- One line of short facts joined by "·"; only a label that
                      needs attention (amber / red) keeps a colour. -->
                 <p class="cli-card-status">
+                  <!-- An installed CLI that needs attention says so in words, first on
+                       the line; the tooltip names what (e.g. "Update available …"). -->
+                  <span v-if="row.needsAttention && row.installed" class="cli-card-item"><span class="cli-card-sep" aria-hidden="true">·</span><span class="cli-card-attention" :title="row.chips.find((chip) => chip.id === 'install')?.label ?? $t('settings.cliAgents.filter-attention')">{{ $t('settings.cliAgents.attention-badge') }}</span></span>
                   <span v-for="chip in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id" class="cli-card-item"><span class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact" :class="`cli-card-fact--${chip.tone}`">{{ chip.label }}</span></span>
                   <span v-if="!row.chips.some((chip) => chip.id === 'install')" class="cli-card-item"><span class="cli-card-sep" aria-hidden="true">·</span><span v-truncate class="cli-card-fact">{{ $t('settings.cliAgents.not-detected') }}</span></span>
                 </p>
@@ -4450,7 +4448,7 @@ watch(activeTab, (tab) => {
                  intro above it says what the page is for. -->
             <SettingRow :description="$t('settings.extensionsPolicy.labeledValue', { label: $t('updater.current-version'), value: 'v' + updateState.currentVersion })">
               <template #control>
-                <button class="ap-reset" :disabled="updIsBusy || updateState.status === 'unsupported'" @click="checkForUpdates">{{ $t('updater.check') }}</button>
+                <button type="button" class="nv-btn" :disabled="updIsBusy || updateState.status === 'unsupported'" @click="checkForUpdates">{{ $t('updater.check') }}</button>
               </template>
             </SettingRow>
             <div class="s-fullrow">
@@ -5034,6 +5032,9 @@ watch(activeTab, (tab) => {
 .s-overlay.confirm { z-index: calc(var(--z-modal) + 130); }
 
 .s-modal {
+  /* No Settings text under 12px: the badge/tag size is raised to the
+     smallest body size for everything this window renders. */
+  --font-2xs: var(--font-xs);
   background: var(--bg-base);
   color: var(--text-bright);
   border: 1px solid var(--border-muted);
@@ -5254,7 +5255,7 @@ watch(activeTab, (tab) => {
 }
 .s-search-empty {
   padding: 10px;
-  font-size: 11.5px;
+  font-size: var(--font-xs);
   color: var(--text-muted);
 }
 
@@ -5267,7 +5268,7 @@ watch(activeTab, (tab) => {
 .ap-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 /* Section headings share SettingsSection's small uppercase label. */
 .ap-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
-.ap-hint { margin: 0 0 14px; font-size: 11.5px; color: var(--text-secondary); text-wrap: pretty; }
+.ap-hint { margin: 0 0 14px; font-size: var(--font-xs); color: var(--text-secondary); text-wrap: pretty; }
 .ap-hint-warn { color: var(--danger-fg); }
 
 /* ── Two-column settings layout (page title / full-width rows / control labels) ── */
@@ -5328,7 +5329,7 @@ watch(activeTab, (tab) => {
   padding: var(--space-row-y) var(--space-row-x);
 }
 .s-fullrow > :last-child { margin-bottom: 0; }
-.s-ctrl-label { font-size: 11.5px; color: var(--text-secondary); }
+.s-ctrl-label { font-size: var(--font-xs); color: var(--text-secondary); }
 /* Controls placed in a SettingRow #control slot: keep them compact and
    right-aligned instead of the full-width default used inside cards/fields. */
 .setting-row-control select { width: auto; min-width: 120px; }
@@ -5370,7 +5371,8 @@ watch(activeTab, (tab) => {
 .cli-card-heading .cli-agent-label { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 .cli-card-heading .cli-agent-vendor { font-size: var(--font-xs); font-weight: 400; color: var(--text-secondary); }
 .cli-card-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px; background: var(--bg-muted); color: var(--text-secondary); font-size: var(--font-xs); font-weight: 700; }
-.cli-card-attention { margin-left: auto; color: var(--warning-fg, #c77400); font-weight: 700; }
+/* Status in words, not a lone "!" in colour. */
+.cli-card-attention { flex: none; padding: 0 8px; border-radius: var(--radius-pill); background: var(--attention-subtle); color: var(--attention-on-subtle); font-size: var(--font-xs); font-weight: 600; line-height: 20px; white-space: nowrap; }
 /* Every fact carries its own leading "·" and wraps with it; the line is
    shifted left by one separator and that strip is clipped, so a line never
    starts or ends on a dot, in any language. */
@@ -5383,6 +5385,9 @@ watch(activeTab, (tab) => {
 .cli-card-fact--warn { color: var(--attention-on-subtle, #c77400); font-weight: 600; }
 .cli-card-fact--bad { color: var(--danger-fg, #c0392b); font-weight: 600; }
 .cli-card-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; margin-top: auto; font-size: var(--font-xs); }
+/* The label stays on one line; where it does not fit beside Manage (ru),
+   Manage moves to its own line on every card alike. */
+.cli-card-footer .cli-agent-toggle > span { white-space: nowrap; }
 /* Empty states are SettingsEmptyState; these classes only place them. */
 .cli-agent-empty { margin-top: var(--space-2, 8px); }
 .cli-drawer-layer { position: absolute; inset: 0; z-index: 20; }
@@ -5874,7 +5879,7 @@ button.tiny {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--font-xs);
   color: var(--text-muted);
 }
 .upd-stage + .upd-stage::before {
@@ -5912,7 +5917,7 @@ button.tiny {
   overflow: auto;
   margin: 4px 0 10px;
   padding: 8px 10px;
-  font-size: 11.5px;
+  font-size: var(--font-xs);
   font-family: inherit;
   background: var(--bg-subtle);
   border-radius: var(--radius-sm);
@@ -5992,7 +5997,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .p2p-tab:disabled { opacity: 0.5; cursor: default; }
 .p2p-actions { margin-top: 12px; }
 .p2p-titlebar-hint { margin: 10px 0 0; }
-.p2p-status { display: flex; align-items: center; margin: 12px 0 0; font-size: 11.5px; color: var(--text-bright); }
+.p2p-status { display: flex; align-items: center; margin: 12px 0 0; font-size: var(--font-xs); color: var(--text-bright); }
 .p2p-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
 .p2p-dot.ok { background: var(--success-fg); }
 .p2p-dot.err { background: var(--danger-fg); }
@@ -6034,7 +6039,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .policy-rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .policy-rule { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-muted); }
 .policy-rule-from, .policy-rule-to {
-  flex: 1; min-width: 0; font-size: 11.5px; color: var(--text-bright);
+  flex: 1; min-width: 0; font-size: var(--font-xs); color: var(--text-bright);
   word-break: break-all;
 }
 /* The header is a row without the box: it labels the columns rather than
@@ -6049,7 +6054,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
    it looked like part of editing. */
 .policy-secondary {
   background: none; border: 1px solid var(--border-default); color: var(--text-secondary);
-  font-size: 11.5px; padding: 4px 10px; border-radius: var(--radius-control, 6px);
+  font-size: var(--font-xs); padding: 4px 10px; border-radius: var(--radius-control, 6px);
   cursor: pointer;
 }
 .policy-secondary:hover:not(:disabled) { color: var(--text-primary); }
@@ -6170,7 +6175,8 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   background: var(--bg-subtle); border: 1px solid var(--border-default); color: var(--text-bright);
   font-size: var(--font-xs); box-sizing: border-box;
 }
-.mcp-search:focus { outline: none; border-color: var(--accent-emphasis); }
+.mcp-search:focus { border-color: var(--accent-emphasis); }
+.mcp-search:focus:not(:focus-visible) { outline: none; }
 .mcp-search-icon {
   position: absolute; right: 28px; top: 50%; transform: translateY(-50%);
   font-size: var(--font-sm); color: var(--text-muted); pointer-events: none;
@@ -6274,9 +6280,10 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   width: 100%; box-sizing: border-box;
   background: var(--bg-base); border: 1px solid var(--border-default); color: var(--text-bright);
   font-size: var(--font-xs); padding: 7px 10px; border-radius: var(--radius-sm);
-  outline: none; transition: border-color var(--motion-fast) var(--ease-out);
+  transition: border-color var(--motion-fast) var(--ease-out);
 }
 .az-input:focus { border-color: var(--accent-focus); }
+.az-input:focus:not(:focus-visible) { outline: none; }
 .az-status-row { margin-top: 8px; }
 
 .az-pull-row { display: flex; gap: 8px; align-items: center; }
@@ -6470,8 +6477,15 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .s-body input[type='password']:focus,
 .s-body input[type='search']:focus,
 .s-body select:focus {
-  outline: none;
   border-color: var(--accent-focus);
+}
+/* A pointer focus shows only the border; keyboard focus keeps the ring. */
+.s-body input[type='text']:focus:not(:focus-visible),
+.s-body input[type='number']:focus:not(:focus-visible),
+.s-body input[type='password']:focus:not(:focus-visible),
+.s-body input[type='search']:focus:not(:focus-visible),
+.s-body select:focus:not(:focus-visible) {
+  outline: none;
 }
 .s-body input[type='text']:disabled,
 .s-body input[type='number']:disabled,
