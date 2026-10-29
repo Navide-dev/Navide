@@ -78,7 +78,7 @@ export const CORE_TOOL_NAMES = [
   'marketplace_request_install', 'marketplace_request_rollback',
   'marketplace_request_status', 'marketplace_request_update', 'marketplace_search',
   'marketplace_testplace_invite_fill', 'marketplace_testplace_invite_open', 'mcp_list', 'memory_list',
-  'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
+  'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph', 'pipeline_import_n8n',
   'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
   'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
   'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo',

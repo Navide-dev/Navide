@@ -71,6 +71,9 @@ const props = defineProps<{
   locked: boolean
   /** Instance id, so a second canvas (executions replay) keeps its own viewport. */
   flowId?: string
+  /** Extra class on a node's Vue Flow wrapper (the n8n import preview colors
+   *  nodes by how they were converted). */
+  nodeClass?: (node: GraphNode) => string
 }>()
 const emit = defineEmits<{
   (e: 'select', id: string | null): void
@@ -105,6 +108,7 @@ const flowNodes = computed<FlowNode[]>(() =>
     connectable: !props.locked,
     selected: props.selectedId === n.id,
     width: NODE_SIZE[n.kind].w,
+    class: props.nodeClass?.(n),
   }))
 )
 

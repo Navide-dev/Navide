@@ -81,6 +81,7 @@
     "pipeline_define",
     "pipeline_gate",
     "pipeline_graph",
+    "pipeline_import_n8n",
     "pipeline_list",
     "pipeline_next",
     "pipeline_reset",

@@ -25,6 +25,8 @@ log = logging.getLogger("agent_team_backend.stages")
 PIPELINES_FILE = "pipelines.json"
 STAGES_FILE = "stages.json"  # legacy — only used for migration detection
 _KV_KEY = "pipelines"
+# Pipeline keys that never leave this machine (settings bundle export).
+LOCAL_ONLY_PIPELINE_KEYS = ("source", "credentials")
 
 # Persisted-store schema version. Bumped when the on-disk shape changes in a way
 # that needs a forward migration (see store_migrations.py). Distinct from the
@@ -681,6 +683,7 @@ class StagesStore:
                 "builtin": p.get("builtin", False),
                 "stage_count": len(p.get("stages", [])),
                 "has_graph": "graph" in p,
+                **({"imported_from": p["importedFrom"]} if isinstance(p.get("importedFrom"), dict) else {}),
             }
             for p in doc.get("pipelines", [])
         ]
@@ -689,8 +692,29 @@ class StagesStore:
         doc = self._read_doc()
         return doc.get("active_pipeline_id", "default")
 
-    def export_document(self) -> dict[str, Any]:
-        return self._read_doc()
+    def export_document(self, *, include_local: bool = False) -> dict[str, Any]:
+        """The document for the settings bundle file, without the keys that
+        stay on this machine (an import's source JSON and credential list)
+        unless `include_local`."""
+        doc = self._read_doc()
+        if include_local:
+            return doc
+        return {
+            **doc,
+            "pipelines": [
+                {k: v for k, v in p.items() if k not in LOCAL_ONLY_PIPELINE_KEYS} for p in doc.get("pipelines", [])
+            ],
+        }
+
+    def imported_from(self, pipeline_id: str | None) -> dict[str, Any] | None:
+        """The import record of a pipeline ({kind, importedAt, workflow}), or
+        None for one made in Navide or not found."""
+        doc = self._read_doc()
+        try:
+            record = self._get_pipeline(doc, pipeline_id).get("importedFrom")
+        except KeyError:
+            return None
+        return record if isinstance(record, dict) else None
 
     def replace_document(self, incoming: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(incoming, dict):
@@ -724,6 +748,8 @@ class StagesStore:
                 "builtin": bool(raw.get("builtin", False)),
                 "stages": migrated_stages,
             }
+            if isinstance(raw.get("importedFrom"), dict):
+                clean["importedFrom"] = raw["importedFrom"]
             graph = raw.get("graph")
             if graph is not None:
                 errors = pg.validate_graph(graph)
@@ -748,6 +774,51 @@ class StagesStore:
         with self._lock:
             self._write_doc(doc)
         return doc
+
+    def create_imported_pipeline(
+        self,
+        name: str,
+        graph: dict[str, Any],
+        imported_from: dict[str, Any],
+        source: dict[str, Any],
+        credentials: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """A new pipeline holding an imported graph; never overwrites one. A
+        name already in use gets " (2)", " (3)"…. `source` and `credentials`
+        stay on this machine (export_document leaves them out)."""
+        errors = pg.validate_graph(graph)
+        if errors:
+            raise pg.GraphError(errors)
+        base = name.strip() or "新流程"
+        with self._lock:
+            doc = self._read_doc()
+            taken = {p.get("name") for p in doc["pipelines"]}
+            unique, n = base, 2
+            while unique in taken:
+                unique, n = f"{base} ({n})", n + 1
+            ids = {p.get("id") for p in doc["pipelines"]}
+            pid = uuid.uuid4().hex[:8]
+            while pid in ids:
+                pid = uuid.uuid4().hex[:8]
+            pipeline: dict[str, Any] = {
+                "id": pid,
+                "name": unique,
+                "builtin": False,
+                "stages": [],
+                "importedFrom": dict(imported_from),
+                "source": source,
+                "credentials": list(credentials),
+            }
+            self._store_graph(doc, pipeline, graph, write=False)
+            doc["pipelines"].append(pipeline)
+            self._write_doc(doc)
+        return {
+            "id": pid,
+            "name": unique,
+            "builtin": False,
+            "stage_count": len(pipeline["stages"]),
+            "imported_from": pipeline["importedFrom"],
+        }
 
     def create_pipeline(self, name: str) -> dict[str, Any]:
         pid = uuid.uuid4().hex[:8]

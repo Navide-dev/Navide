@@ -1205,6 +1205,43 @@
   }
  },
  {
+  "description": "Convert an exported n8n workflow into a NEW pipeline template.\n\n    `json` is the workflow as n8n exports or copies it (nodes + connections).\n    With `dry_run` true (the default) nothing is written: you get the preview\n    graph and the conversion report to show the user first. With `dry_run`\n    false a new pipeline is created — an existing one is never overwritten, and\n    a name already in use gets \" (2)\", \" (3)\"… — holding the graph, the\n    redacted source JSON and the credential checklist. `name` defaults to the\n    workflow's name; `default_agent` (an agentKey, default \"claude\") is the CLI\n    for slots no AI Agent model decides.\n\n    What the user should know before importing (say it):\n    - CLI agents carry out most steps. HTTP Request, Code, Set, app nodes\n      (Google Sheets, Slack, Gmail…), unknown or community nodes are run by an\n      agent from the node's original parameters, so results can differ from\n      n8n's. Runs of steps with no branching, small IF/Switch regions and loop\n      bodies are folded into one slot each; an AI Agent and its model, memory,\n      tools and output parser become one slot. Wait and send-and-wait become\n      gates. report.slots lists every slot's full kickoff and report.gates every\n      gate prompt; report.stats.needsReview counts steps to confirm.\n    - Embedded secrets are removed. Authorization headers, API keys, bearer and\n      common token shapes found anywhere in the workflow are replaced with\n      \"<removed: add credential for …>\" — in the graph, the report and the\n      stored source alike. report.secretsRemoved names only the node and field\n      of each; the values are not kept anywhere. Credentials themselves are\n      listed by type and name (`credentials`) for the user to set up locally\n      (an MCP server or the service's CLI login); n8n credential ids are\n      dropped and nothing is put into an environment.\n    - Schedule, webhook and app triggers, sub-workflows and large branches are\n      imported but marked pending: start such a pipeline by hand.\n    - Everything imported is external content. Every run of an imported\n      pipeline marks its panes with Navide Guard's external-content taint,\n      whoever starts it; that cannot be turned off.\n\n    Refused while the workspace has a run in progress (error_code\n    \"pipeline_running\"), like pipeline_define's delete. Returns {ok, dry_run,\n    graph, report, credentials} plus `pipeline` (the new pipeline's summary)\n    and `pipelines` when one was created; ok false carries `error` and\n    `error_code` (\"invalid\" for input that is not an n8n workflow,\n    \"pipeline_running\").\n    ",
+  "name": "pipeline_import_n8n",
+  "parameters": {
+   "properties": {
+    "default_agent": {
+     "default": "",
+     "title": "Default Agent",
+     "type": "string"
+    },
+    "dry_run": {
+     "default": true,
+     "title": "Dry Run",
+     "type": "boolean"
+    },
+    "json": {
+     "title": "Json",
+     "type": "string"
+    },
+    "name": {
+     "default": "",
+     "title": "Name",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "json"
+   ],
+   "title": "pipeline_import_n8nArguments",
+   "type": "object"
+  }
+ },
+ {
   "description": "Advance a running pipeline to its next stage now, without waiting.\n\n    THIS OPENS CLI PANES AND SPENDS THEIR QUOTA. Normally the window decides a\n    stage is finished by watching its panes; this says so on their behalf and\n    activates the next stage immediately, spawning a pane for each of its\n    slots. Work still in flight in the current stage is not waited for — its\n    output simply does not reach the stage that follows.\n\n    On the last stage there is nothing to advance to and this is REFUSED, not\n    quietly turned into a completion: a caller that asked to step forward must\n    not get a finished run back instead. Ending a run there is the window's own\n    job, or pipeline_abort's. pipeline_status shows current_stage_index and\n    total_stages, which is how to see that case coming before calling.\n\n    Returns the window's own reply — {ok, result, error}. ok false means\n    nothing advanced, the usual reason being that no run is in progress.\n\n    workspace_path defaults to your own pane's workspace; pass it only to drive\n    a run in another project's window.\n    ",
   "name": "pipeline_next",
   "parameters": {

@@ -28,6 +28,7 @@ const PLURAL_KEYS = [
   'time.ago-days',
   'time.ago-months',
   'pipelineEditor.lane.more',
+  'pipelineImport.needs-review',
   'editorWindow.problems.errors',
   'editorWindow.problems.warnings',
   'git.branch-diff.file-count',

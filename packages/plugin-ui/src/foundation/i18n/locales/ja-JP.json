@@ -1037,6 +1037,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "n8n からインポート",
     "switch-and-resume": "↻ 切り替えて再開",
     "go-to-stage": "このステージを開く",
     "new-pipeline": "＋ 新規パイプライン",
@@ -8365,6 +8366,7 @@
     }
   },
   "label": {
+    "imported-from-n8n": "n8n から取り込み",
     "resume-other-pipeline": "未完了の実行は「{name}」のものです。続けるには、そのパイプラインに切り替えてください。",
     "role-rename-repointed": "{count} 個のパイプラインでロールの参照を更新しました。",
     "pipeline-manager": "パイプライン管理",
@@ -9058,6 +9060,7 @@
     "merge-aborted": "マージを中止し、競合を取り消しました。"
   },
   "hint": {
+    "imported-from-n8n": "このパイプラインの実行は外部コンテンツとして扱われます。",
     "role-not-found-refresh": "ロール \"{key}\" は存在しません。別のウィンドウで削除された可能性があります。左の一覧は更新済みです。ロールを選び直してください。",
     "role-key-exists-recover": "キー \"{key}\" のロールはすでに存在します。名前の変更が途中で止まって残った場合は、先に左の一覧から \"{key}\" を削除してから、名前を変更し直してください。",
     "role-in-use-list": "先に次のステージスロットの参照先を変更するか、スロットを削除してください：",
@@ -12234,6 +12237,81 @@
       "not-signed-in": "先に「開発者アカウント」でサインインしてください。",
       "qualification": "開発者の申請が承認されている必要があります。",
       "registry": "Navide マーケットプレイスが拒否しました（{status} {code}）：{message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "n8n からインポート",
+    "subtitle": "n8n からエクスポートしたワークフローを貼り付け、変換結果をプレビューしてから新しいパイプラインとしてインポートします。",
+    "default-agent": "エージェントのステップに使う CLI",
+    "default-agent-hint": "エージェントが必要なステップはこの CLI のペインで実行されます。インポート後にステップごとに変更できます。",
+    "json-label": "ワークフロー JSON",
+    "json-placeholder": "n8n からエクスポートしたワークフロー JSON を貼り付け",
+    "choose-file": "ファイルを選択…",
+    "choose-file-title": "n8n ワークフローを選択",
+    "preview": "プレビュー",
+    "previewing": "プレビュー中…",
+    "import": "インポート",
+    "importing": "インポート中…",
+    "preview-stale": "プレビュー後に JSON が変更されました。インポートする前にもう一度プレビューしてください。",
+    "stats": {
+      "workflow": "ワークフロー",
+      "nodes": "n8n ノード",
+      "slots": "ステップ",
+      "gates": "承認ゲート",
+      "triggers": "トリガー"
+    },
+    "category": {
+      "native": "そのまま変換",
+      "agent": "エージェントが実行",
+      "pending": "要確認",
+      "unsupported": "未対応"
+    },
+    "needs-review": "{n} 個のステップに確認が必要です",
+    "needs-review-hint": "インポートはできます。パイプラインを実行する前に、エディターでこれらのステップを確認してください。",
+    "subworkflow": "このワークフローは別の n8n ワークフローを呼び出します。そのワークフローの JSON もここに貼り付けて、別途インポートしてください。",
+    "external": "インポートしたパイプラインの実行はすべて外部コンテンツとして扱われます。ステップが Navide の外で作られたファイルに由来するためです。",
+    "warnings": "警告",
+    "canvas-title": "変換後のグラフ",
+    "legend": "色の凡例",
+    "report-title": "変換レポート",
+    "col": {
+      "node": "ノード",
+      "type": "ノードの種類",
+      "result": "変換先",
+      "category": "カテゴリ",
+      "detail": "詳細",
+      "actions": "対応",
+      "field": "フィールド"
+    },
+    "result": {
+      "trigger": "トリガー",
+      "slot": "ステップ",
+      "gate": "承認ゲート",
+      "folded": "ステップに統合",
+      "removed": "削除"
+    },
+    "review-mark": "要確認",
+    "action-code": {
+      "add-credential": "認証情報を追加",
+      "confirm-step": "ステップを確認",
+      "choose-mcp": "MCP サーバーを選択",
+      "start-manually": "手動で開始",
+      "paste-subworkflow": "サブワークフローを貼り付け",
+      "keep-in-n8n": "n8n に残す"
+    },
+    "kickoffs-title": "ステップの指示",
+    "kickoffs-hint": "各ペインがステップ開始時に受け取るテキストそのものです。",
+    "gates-title": "承認ゲート",
+    "gates-hint": "実行が各ゲートに到達したときに表示される質問そのものです。",
+    "credentials-title": "認証情報",
+    "credentials-hint": "認証情報はこのマシンで設定します（「設定 → MCP」で MCP サーバーを追加するか、サービス自身の CLI でログイン）。パイプラインには保存されません。",
+    "credentials-used-by": "使用ノード：{nodes}",
+    "secrets-title": "削除したシークレット",
+    "secrets-hint": "これらの値はパイプラインに残していません。このマシンで設定し直してください。",
+    "error": {
+      "invalid": "Navide が読み取れる n8n ワークフローではありません。",
+      "preview-failed": "プレビューに失敗しました。",
+      "import-failed": "インポートに失敗しました。"
     }
   }
 }

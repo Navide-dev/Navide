@@ -687,7 +687,7 @@ the user has in the window, addressed by MCP.
 
 #### Editing the templates
 
-Four more tools write the definitions a run is built from. Unlike the eight
+Five more tools write the definitions a run is built from. Unlike the eight
 above they do **not** go through a window: they write the backend's own store
 and broadcast the same `pipelines.changed` / `stages.changed` /
 `roles.changed` events the WS handlers do (`pipeline_graph` sends
@@ -701,6 +701,7 @@ three; `pipeline_graph` op `get` reads the graph.
 | `stage_define` | `op`, `pipeline_id`, `stage_id`, `stage`, `ids`, `workspace_path` | Add, edit, remove, reorder or re-seed the **stages** inside one pipeline. A stage is one step and holds the slots that become panes: each slot names a CLI (`agent_key`) and a role (`role_key`) and carries the kickoff text that pane is started with. `pipeline_id` left empty means the *active* pipeline, which is what the Pipelines window has selected and not necessarily the one you were reading — name it. Returns `{ok, op, stages, pipeline_id, pipelines, active_pipeline_id}`, plus `stage` for `upsert`. A pipeline's last remaining stage cannot be deleted |
 | `role_define` | `op`, `key`, `new_key`, `label`, `one_line`, `system_prompt`, `properties` | Create, edit, rename, delete or re-seed the **roles** slots are cast from. A role is a named system prompt: a slot names one by `role_key`, and the pane that slot opens is started with that prompt. Roles are global to the machine — not per pipeline, not per workspace — so an edit here reaches every pipeline that names the role, and there is no `workspace_path` to narrow it. Returns `{ok, op, roles}`, plus `role` for `upsert` and `rename` and `repointed_pipeline_ids` for `rename`. The last remaining role cannot be deleted. A pane already started keeps the prompt it was given; a change reaches the next pane opened for that slot, not the ones on screen |
 | `pipeline_graph` | `op`, `pipeline_id`, `ops`, `graph`, `workspace_path` | Read or edit a pipeline **template** as a graph: slot nodes (one CLI pane each, carrying the same agent, role, label, kickoff and commander fields a stage slot has, plus optional `params`), gate nodes (the run pauses there until `pipeline_gate` decides) and a trigger, joined by `main`, `reject`, `branch` and `error` edges. A node waits for every node upstream of it. A pipeline never edited as a graph answers `get` with the graph its stages imply (`derived: true`) and is unchanged until you write one. `pipeline_id` left empty means the active pipeline — name it. Returns `{ok, op, pipeline_id, graph, stages}`, plus `derived` for `get`; an invalid graph is `error_code: "invalid"` with the reasons in `errors`, and nothing was written |
+| `pipeline_import_n8n` | `json`, `dry_run`, `default_agent`, `name`, `workspace_path` | Convert an exported n8n workflow into a **new** pipeline template. `dry_run` (default `true`) writes nothing and returns the preview `graph`, the conversion `report` and the `credentials` checklist; with `dry_run: false` a new pipeline is created — never overwriting one, a taken name gets ` (2)`, ` (3)`… — holding the graph plus the redacted source JSON and credential list, which stay on this machine (the settings bundle export leaves them out). CLI agents carry out most steps from the original node parameters, so results can differ from n8n's; `report.slots` lists every slot's full kickoff and `report.gates` every gate prompt. Embedded secrets are replaced with `<removed: add credential for …>` everywhere and `report.secretsRemoved` names only node and field. Every run of an imported pipeline, whoever starts it, marks its panes with Navide Guard's external-content taint. Returns `{ok, dry_run, graph, report, credentials}`, plus `pipeline` and `pipelines` when one was created; input that is not an n8n workflow is `error_code: "invalid"` |
 
 **Which arguments each `op` needs.** This is where these tools are easiest to
 misuse: `op` decides which other arguments are required, and a missing one
@@ -764,7 +765,7 @@ edges runs exactly as before.
 `set_active` are refused outright while that workspace has a run in the
 `running` state, and `reset_builtin` is refused while the run in progress is
 using that pipeline. Every one of `stage_define`'s four ops, and
-`pipeline_graph`'s `apply` and `set`, is refused the same way — a stage list edited mid-run would change the flow underneath the run. The
+`pipeline_graph`'s `apply` and `set`, is refused the same way; `pipeline_import_n8n` with `dry_run: false` is refused, like `delete`, while the workspace has a run in the `running` state — a stage list edited mid-run would change the flow underneath the run. The
 refusal is `ok: false` with `error_code: "pipeline_running"`, and nothing was
 written. A run compares against the pipeline it recorded at start, so naming
 that pipeline explicitly does not get past the guard; runs in other workspaces,
@@ -782,7 +783,7 @@ any stage slot still names the role, and the refusal (`error_code:
 role fails role injection and leaves that stage's pane sitting at an empty
 prompt with nothing on screen to say why, which is what the refusal is for.
 
-The other `error_code` values these four return are `not_found` and `invalid`
+The other `error_code` values these five return are `not_found` and `invalid`
 (the store refused the value). Every failure writes nothing.
 
 ### Scheduler

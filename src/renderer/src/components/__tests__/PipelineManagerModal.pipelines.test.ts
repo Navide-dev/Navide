@@ -190,6 +190,38 @@ describe('PipelineManagerModal — pipelines tab', () => {
     }
   })
 
+  it('badges an imported pipeline and opens the n8n import dialog from the toolbar', async () => {
+    const { wrapper: w, mock, pipelinesApi } = await open()
+    mock.setResponse('pipelines.list', {
+      pipelines: [pipelines[0], { ...pipelines[1], imported_from: { kind: 'n8n', importedAt: '2026-10-29T00:00:00Z', workflow: 'Mail' } }],
+      active_pipeline_id: 'default',
+      path: '/data/pipelines.json',
+    })
+    await pipelinesApi.refresh()
+    await flushPromises()
+
+    const rows = tab(w).findAll('.pl-item')
+    expect(rows[0].find('.pl-badge--imported').exists()).toBe(false)
+    const badge = rows[1].find('.pl-badge--imported')
+    expect(badge.text()).toBe(i18n.global.t('label.imported-from-n8n'))
+    expect(badge.attributes('title')).toBe(i18n.global.t('hint.imported-from-n8n'))
+
+    expect(w.find('.n8n-import').exists()).toBe(false)
+    await tab(w).find('.toolbar .pl-import-n8n').trigger('click')
+    expect(w.find('.n8n-import').exists()).toBe(true)
+    // Esc closes the dialog before the manager.
+    expect((w.vm as unknown as { closeTopLayer: () => boolean }).closeTopLayer()).toBe(true)
+    await flushPromises()
+    expect(w.find('.n8n-import').exists()).toBe(false)
+
+    // A finished import opens the new pipeline, badge in its header.
+    await tab(w).find('.toolbar .pl-import-n8n').trigger('click')
+    w.findComponent({ name: 'N8nImportDialog' }).vm.$emit('imported', 'custom')
+    await flushPromises()
+    expect(tab(w).find('.pl-detail-name').text()).toBe('Custom')
+    expect(tab(w).find('.pl-badge--imported').exists()).toBe(true)
+  })
+
   it('still reads correctly in en-US (no raw keys leaking through)', async () => {
     const { wrapper: w } = await open({ locale: 'en-US', initialPipelineId: 'default' })
 

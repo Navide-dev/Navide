@@ -1037,6 +1037,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "Aus n8n importieren",
     "switch-and-resume": "↻ Wechseln und fortsetzen",
     "go-to-stage": "Diese Stufe öffnen",
     "new-pipeline": "＋ Neue Pipeline",
@@ -8365,6 +8366,7 @@
     }
   },
   "label": {
+    "imported-from-n8n": "Aus n8n importiert",
     "resume-other-pipeline": "Ein nicht abgeschlossener Lauf gehört zu „{name}“. Wechseln Sie zu dieser Pipeline, um ihn fortzusetzen.",
     "role-rename-repointed": "Der Rollenverweis wurde in {count} Pipeline aktualisiert. | Der Rollenverweis wurde in {count} Pipelines aktualisiert.",
     "pipeline-manager": "Pipeline Manager",
@@ -9058,6 +9060,7 @@
     "merge-aborted": "Merge abgebrochen – Konflikte verworfen."
   },
   "hint": {
+    "imported-from-n8n": "Läufe dieser Pipeline werden als externer Inhalt markiert.",
     "role-not-found-refresh": "Die Rolle „{key}“ existiert nicht mehr – möglicherweise hat ein anderes Fenster sie gelöscht. Die Liste links ist bereits aktuell; wählen Sie erneut eine Rolle.",
     "role-key-exists-recover": "Eine Rolle mit dem Schlüssel „{key}“ existiert bereits. Falls eine halb abgeschlossene Umbenennung sie hinterlassen hat, löschen Sie zuerst „{key}“ aus der Liste links und benennen Sie dann erneut um.",
     "role-in-use-list": "Verweisen Sie diese Stufen-Slots zuerst um oder entfernen Sie sie:",
@@ -12234,6 +12237,81 @@
       "not-signed-in": "Melden Sie sich zuerst unter „Entwicklerkonto“ an.",
       "qualification": "Ihre Entwicklerbewerbung muss zuerst genehmigt werden.",
       "registry": "Der Navide Marketplace hat es abgelehnt ({status} {code}): {message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "Aus n8n importieren",
+    "subtitle": "Fügen Sie einen aus n8n exportierten Workflow ein, prüfen Sie die Umwandlung in der Vorschau und importieren Sie ihn dann als neue Pipeline.",
+    "default-agent": "CLI für Agent-Schritte",
+    "default-agent-hint": "Schritte, die einen Agent brauchen, laufen in einem Pane dieser CLI. Nach dem Import können Sie jeden Schritt ändern.",
+    "json-label": "Workflow-JSON",
+    "json-placeholder": "Aus n8n exportiertes Workflow-JSON hier einfügen",
+    "choose-file": "Datei auswählen …",
+    "choose-file-title": "n8n-Workflow auswählen",
+    "preview": "Vorschau",
+    "previewing": "Vorschau wird erstellt …",
+    "import": "Importieren",
+    "importing": "Wird importiert …",
+    "preview-stale": "Das JSON wurde nach der Vorschau geändert. Erstellen Sie vor dem Import erneut eine Vorschau.",
+    "stats": {
+      "workflow": "Workflow-Name",
+      "nodes": "n8n-Knoten",
+      "slots": "Schritte",
+      "gates": "Genehmigungsschranken",
+      "triggers": "Auslöser"
+    },
+    "category": {
+      "native": "Direkt umgewandelt",
+      "agent": "Von einem Agent ausgeführt",
+      "pending": "Prüfung nötig",
+      "unsupported": "Nicht unterstützt"
+    },
+    "needs-review": "{n} Schritt muss geprüft werden | {n} Schritte müssen geprüft werden",
+    "needs-review-hint": "Der Import ist trotzdem möglich. Prüfen Sie diese Schritte im Editor, bevor Sie die Pipeline ausführen.",
+    "subworkflow": "Dieser Workflow ruft einen anderen n8n-Workflow auf. Fügen Sie auch dessen JSON hier ein und importieren Sie ihn separat.",
+    "external": "Jede Ausführung der importierten Pipeline wird als externer Inhalt markiert, weil ihre Schritte aus einer außerhalb von Navide erstellten Datei stammen.",
+    "warnings": "Warnungen",
+    "canvas-title": "Umgewandelter Graph",
+    "legend": "Farblegende",
+    "report-title": "Umwandlungsbericht",
+    "col": {
+      "node": "Knoten",
+      "type": "Knotentyp",
+      "result": "Wird zu",
+      "category": "Kategorie",
+      "detail": "Einzelheiten",
+      "actions": "Zu tun",
+      "field": "Feld"
+    },
+    "result": {
+      "trigger": "Auslöser",
+      "slot": "Schritt",
+      "gate": "Genehmigungsschranke",
+      "folded": "In einen Schritt zusammengeführt",
+      "removed": "Entfernt"
+    },
+    "review-mark": "Prüfung nötig",
+    "action-code": {
+      "add-credential": "Zugangsdaten hinzufügen",
+      "confirm-step": "Schritt bestätigen",
+      "choose-mcp": "MCP-Server wählen",
+      "start-manually": "Manuell starten",
+      "paste-subworkflow": "Unter-Workflow einfügen",
+      "keep-in-n8n": "In n8n belassen"
+    },
+    "kickoffs-title": "Schrittanweisungen",
+    "kickoffs-hint": "Genau diesen Text erhält jedes Pane, wenn sein Schritt beginnt.",
+    "gates-title": "Genehmigungsschranken",
+    "gates-hint": "Genau diese Frage wird angezeigt, wenn der Lauf eine Schranke erreicht.",
+    "credentials-title": "Zugangsdaten",
+    "credentials-hint": "Zugangsdaten richten Sie auf diesem Rechner ein: als MCP-Server unter Einstellungen → MCP oder über die CLI-Anmeldung des Dienstes. Sie werden nie in der Pipeline gespeichert.",
+    "credentials-used-by": "Verwendet von {nodes}",
+    "secrets-title": "Entfernte Geheimnisse",
+    "secrets-hint": "Diese Werte wurden nicht in der Pipeline behalten. Richten Sie sie auf diesem Rechner neu ein.",
+    "error": {
+      "invalid": "Das ist kein n8n-Workflow, den Navide lesen kann.",
+      "preview-failed": "Vorschau fehlgeschlagen.",
+      "import-failed": "Import fehlgeschlagen."
     }
   }
 }

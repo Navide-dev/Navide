@@ -6,6 +6,8 @@ export interface PipelineSummary {
   name: string
   builtin: boolean
   stage_count: number
+  /** Set on pipelines made by importing an n8n workflow. */
+  imported_from?: { kind: string; importedAt: string; workflow: string }
 }
 
 /**

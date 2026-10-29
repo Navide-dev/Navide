@@ -1037,6 +1037,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "從 n8n 匯入",
     "switch-and-resume": "↻ 切換並繼續",
     "go-to-stage": "開啟這個 stage",
     "new-pipeline": "＋ 新增流程",
@@ -8365,6 +8366,7 @@
     }
   },
   "label": {
+    "imported-from-n8n": "來自 n8n",
     "resume-other-pipeline": "有一個未完成的執行屬於「{name}」。切換到該流程即可繼續。",
     "role-rename-repointed": "已更新 {count} 條流程中的角色引用。",
     "pipeline-manager": "流程管理",
@@ -9058,6 +9060,7 @@
     "merge-aborted": "合併已中止 — 衝突已取消。"
   },
   "hint": {
+    "imported-from-n8n": "這個流程的每次執行都會標示為外部內容。",
     "role-not-found-refresh": "「{key}」這個角色已經不存在了——可能是其他視窗把它刪掉了。左側清單已經自動更新，請重新選取角色。",
     "role-key-exists-recover": "已經有一個識別碼為「{key}」的角色。如果它是上一次沒改完的改名留下來的，請先在左側清單刪除「{key}」，然後再改名一次。",
     "role-in-use-list": "請先把下列 stage 插槽改指到別的角色或移除：",
@@ -12234,6 +12237,81 @@
       "not-signed-in": "請先在「開發者帳號」登入。",
       "qualification": "開發者申請需要先通過審核。",
       "registry": "Navide 市集拒絕了這個動作（{status} {code}）：{message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "從 n8n 匯入",
+    "subtitle": "貼上從 n8n 匯出的工作流，先預覽轉換結果，再匯入成新的流程。",
+    "default-agent": "需要 agent 的步驟使用的 CLI",
+    "default-agent-hint": "需要 agent 的步驟會在這個 CLI 的 pane 裡執行；匯入後仍可逐一調整。",
+    "json-label": "工作流 JSON",
+    "json-placeholder": "貼上從 n8n 匯出的工作流 JSON",
+    "choose-file": "選擇檔案…",
+    "choose-file-title": "選擇 n8n 工作流",
+    "preview": "預覽",
+    "previewing": "預覽中…",
+    "import": "匯入",
+    "importing": "匯入中…",
+    "preview-stale": "JSON 在預覽後有變動，請重新預覽再匯入。",
+    "stats": {
+      "workflow": "工作流",
+      "nodes": "n8n 節點",
+      "slots": "步驟",
+      "gates": "核准閘門",
+      "triggers": "觸發"
+    },
+    "category": {
+      "native": "直接轉換",
+      "agent": "由 agent 執行",
+      "pending": "需要確認",
+      "unsupported": "不支援"
+    },
+    "needs-review": "有 {n} 個步驟需要確認",
+    "needs-review-hint": "仍然可以匯入；執行流程前，請先在編輯器裡確認這些步驟。",
+    "subworkflow": "這個工作流會呼叫另一個 n8n 工作流。請把那個工作流的 JSON 也貼到這裡，另外匯入。",
+    "external": "匯入的流程每次執行都會標示為外部內容，因為它的步驟來自 Navide 以外製作的檔案。",
+    "warnings": "警告",
+    "canvas-title": "轉換後的流程圖",
+    "legend": "顏色說明",
+    "report-title": "轉換報告",
+    "col": {
+      "node": "節點",
+      "type": "節點類型",
+      "result": "轉成",
+      "category": "類別",
+      "detail": "說明",
+      "actions": "待辦",
+      "field": "欄位"
+    },
+    "result": {
+      "trigger": "觸發",
+      "slot": "步驟",
+      "gate": "核准閘門",
+      "folded": "併入步驟",
+      "removed": "已移除"
+    },
+    "review-mark": "需要確認",
+    "action-code": {
+      "add-credential": "新增憑證",
+      "confirm-step": "確認步驟",
+      "choose-mcp": "選擇 MCP 伺服器",
+      "start-manually": "手動啟動",
+      "paste-subworkflow": "貼上子工作流",
+      "keep-in-n8n": "留在 n8n"
+    },
+    "kickoffs-title": "步驟指示",
+    "kickoffs-hint": "這就是每個 pane 在步驟開始時收到的完整文字。",
+    "gates-title": "核准閘門",
+    "gates-hint": "這就是執行到每個閘門時顯示的完整問題。",
+    "credentials-title": "憑證",
+    "credentials-hint": "憑證設定在這台電腦上：在「設定 → MCP」加一個 MCP 伺服器，或用該服務自己的 CLI 登入。憑證絕不會存進流程。",
+    "credentials-used-by": "用於：{nodes}",
+    "secrets-title": "已移除的機密",
+    "secrets-hint": "這些值沒有保留在流程裡，請在這台電腦上重新設定。",
+    "error": {
+      "invalid": "這不是 Navide 能讀取的 n8n 工作流。",
+      "preview-failed": "預覽失敗。",
+      "import-failed": "匯入失敗。"
     }
   }
 }

@@ -6793,6 +6793,45 @@ async def pipelines_create(session: "Session", msg_id: str, msg_type: str, paylo
     }))
 
 
+@handler("pipelines.import_n8n")
+async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Convert an n8n workflow (dry_run: report only) or import it as a new
+    pipeline. Same conversion and storage as the MCP tool pipeline_import_n8n."""
+    from . import app
+    from .n8n_import import N8nImportError, import_into_store
+
+    dry_run = payload.get("dry_run", True) is not False
+    ws_path = payload.get("workspace_path", "") or ""
+    if not dry_run and ws_path:
+        proj = app.project_store.peek(ws_path)
+        if proj and proj.state == "running":
+            await session.send_json(
+                make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot import a pipeline while a project is running")
+            )
+            return
+    try:
+        out = await asyncio.to_thread(
+            import_into_store,
+            app.stages_store,
+            payload.get("json", ""),
+            dry_run=dry_run,
+            default_agent=str(payload.get("default_agent") or "claude"),
+            name=str(payload.get("name") or ""),
+        )
+    except N8nImportError as exc:
+        await session.send_json(make_error(msg_id, msg_type, "N8N_INVALID", str(exc)))
+        return
+    if not dry_run:
+        out["pipelines"] = app.stages_store.list_pipelines()
+    await session.send_json(make_response(msg_id, msg_type, out))
+    if not dry_run:
+        await app.broadcast(make_event("pipelines.changed", {
+            "pipelines": out["pipelines"],
+            "active_pipeline_id": app.stages_store.get_active_pipeline_id(),
+            "reason": "import",
+        }))
+
+
 @handler("pipelines.rename")
 async def pipelines_rename(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -10937,6 +10976,17 @@ def _mirror_pipeline_state(project: "Project") -> None:
     )
 
 
+def _imported_taint_detail(pipeline_id: str) -> str:
+    """Guard taint detail for a run of a pipeline imported from n8n, else ""."""
+    from . import app
+    from .n8n_import import import_detail
+
+    if not pipeline_id:
+        return ""
+    record = app.stages_store.imported_from(pipeline_id)
+    return import_detail(record) if record else ""
+
+
 @handler("pipeline.claim")
 async def pipeline_claim(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """A window's claim of the pipeline runs it drives, sent on every
@@ -10954,6 +11004,9 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     from . import app
 
     project, resume_index = app.project_store.resume_pipeline(payload["workspace_path"])
+    from .guard.taint import pipeline_run_resumed
+
+    pipeline_run_resumed(payload["workspace_path"], _imported_taint_detail(getattr(project, "pipeline_id", "")))
     pipeline_liveness.claim_run(session, project.workspace_path)
     _mirror_pipeline_state(project)
     resp = app._project_payload(project)
@@ -10976,7 +11029,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
     )
     from .guard.taint import pipeline_run_started
 
-    pipeline_run_started(payload["workspace_path"])
+    pipeline_run_started(payload["workspace_path"], _imported_taint_detail(getattr(project, "pipeline_id", "")))
     pipeline_liveness.claim_run(session, project.workspace_path)
     app._register_workspace_and_backfill(project.workspace_path)
     _mirror_pipeline_state(project)

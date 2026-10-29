@@ -1037,6 +1037,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "Import from n8n",
     "switch-and-resume": "↻ Switch and Resume",
     "go-to-stage": "Open this stage",
     "new-pipeline": "＋ New Pipeline",
@@ -8365,6 +8366,7 @@
     }
   },
   "label": {
+    "imported-from-n8n": "Imported from n8n",
     "resume-other-pipeline": "An unfinished run belongs to \"{name}\". Switch to that pipeline to continue it.",
     "role-rename-repointed": "Updated the role reference in {count} pipeline. | Updated the role reference in {count} pipelines.",
     "pipeline-manager": "Pipeline Manager",
@@ -9058,6 +9060,7 @@
     "merge-aborted": "Merge aborted — conflicts cancelled."
   },
   "hint": {
+    "imported-from-n8n": "Runs of this pipeline are marked as external content.",
     "role-not-found-refresh": "The role \"{key}\" no longer exists — another window may have deleted it. The list on the left is already up to date; pick a role again.",
     "role-key-exists-recover": "A role with the key \"{key}\" already exists. If a half-finished rename left it behind, delete \"{key}\" from the list on the left first, then rename again.",
     "role-in-use-list": "Repoint or remove these stage slots first:",
@@ -12234,6 +12237,81 @@
       "not-signed-in": "Sign in under Developer account first.",
       "qualification": "Your developer application must be approved first.",
       "registry": "The Navide Marketplace refused it ({status} {code}): {message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "Import from n8n",
+    "subtitle": "Paste a workflow exported from n8n, check how it converts, then import it as a new pipeline.",
+    "default-agent": "CLI for agent steps",
+    "default-agent-hint": "Steps that need an agent run in a pane of this CLI. You can change each step after importing.",
+    "json-label": "Workflow JSON",
+    "json-placeholder": "Paste the workflow JSON exported from n8n",
+    "choose-file": "Choose File…",
+    "choose-file-title": "Choose n8n Workflow",
+    "preview": "Preview",
+    "previewing": "Previewing…",
+    "import": "Import",
+    "importing": "Importing…",
+    "preview-stale": "The JSON changed after the preview. Preview it again before importing.",
+    "stats": {
+      "workflow": "Workflow",
+      "nodes": "n8n nodes",
+      "slots": "Steps",
+      "gates": "Approval gates",
+      "triggers": "Triggers"
+    },
+    "category": {
+      "native": "Converted directly",
+      "agent": "Run by an agent",
+      "pending": "Needs review",
+      "unsupported": "Not supported"
+    },
+    "needs-review": "{n} step needs review | {n} steps need review",
+    "needs-review-hint": "Importing still works. Check these steps in the editor before running the pipeline.",
+    "subworkflow": "This workflow calls another n8n workflow. Paste that workflow's JSON here too and import it separately.",
+    "external": "Every run of the imported pipeline is marked as external content, because its steps come from a file made outside Navide.",
+    "warnings": "Warnings",
+    "canvas-title": "Converted graph",
+    "legend": "Color legend",
+    "report-title": "Conversion report",
+    "col": {
+      "node": "Node",
+      "type": "Node type",
+      "result": "Becomes",
+      "category": "Category",
+      "detail": "Details",
+      "actions": "What to do",
+      "field": "Field"
+    },
+    "result": {
+      "trigger": "Trigger",
+      "slot": "Step",
+      "gate": "Approval gate",
+      "folded": "Merged into a step",
+      "removed": "Removed"
+    },
+    "review-mark": "Needs review",
+    "action-code": {
+      "add-credential": "Add a credential",
+      "confirm-step": "Confirm the step",
+      "choose-mcp": "Choose an MCP server",
+      "start-manually": "Start it manually",
+      "paste-subworkflow": "Paste the sub-workflow",
+      "keep-in-n8n": "Keep it in n8n"
+    },
+    "kickoffs-title": "Step instructions",
+    "kickoffs-hint": "This is the exact text each pane receives when its step starts.",
+    "gates-title": "Approval gates",
+    "gates-hint": "This is the exact question shown when the run reaches each gate.",
+    "credentials-title": "Credentials",
+    "credentials-hint": "Credentials are set up on this machine, as an MCP server in Settings → MCP or with the service's own CLI login. They are never stored in the pipeline.",
+    "credentials-used-by": "Used by {nodes}",
+    "secrets-title": "Secrets removed",
+    "secrets-hint": "These values were not kept in the pipeline. Set them up again on this machine.",
+    "error": {
+      "invalid": "This is not an n8n workflow Navide can read.",
+      "preview-failed": "Preview failed.",
+      "import-failed": "Import failed."
     }
   }
 }

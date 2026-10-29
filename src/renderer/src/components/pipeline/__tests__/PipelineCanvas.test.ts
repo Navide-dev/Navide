@@ -111,6 +111,22 @@ describe('PipelineCanvas', () => {
     w.unmount()
   })
 
+  it('adds the nodeClass result to each node, and nothing without it', async () => {
+    const w = mount(PipelineCanvas, {
+      props: { graph, roleLabels: {}, agentLabels: {}, runNodes: {}, now: 0, selectedId: null, locked: true, flowId: `t-${Math.random()}`, nodeClass: (n) => `cat-${n.kind}` },
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    expect(w.find('.vue-flow__node[data-id="a"]').classes()).toContain('cat-slot')
+    expect(w.find('.vue-flow__node[data-id="g"]').classes()).toContain('cat-gate')
+    w.unmount()
+    const plain = mountCanvas()
+    await flushPromises()
+    expect(plain.find('.vue-flow__node[data-id="a"]').classes().some((c) => c.startsWith('cat-'))).toBe(false)
+    plain.unmount()
+  })
+
   it('colours minimap nodes by run state', async () => {
     const { minimapClass } = await import('../PipelineCanvas.vue')
     expect(minimapClass('done')).toBe('pcv-mm pcv-mm--done')

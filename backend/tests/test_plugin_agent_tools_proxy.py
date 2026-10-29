@@ -119,7 +119,10 @@ pytestmark = pytest.mark.asyncio
 #: the pipeline_graph description documents the per-kickoff signal code in
 #: ---BRANCH--- / ---OUTPUT--- / ---NODE-FAILED--- and that claude / codex
 #: signals come from turn text only. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "421fe17362399e72d305bf1e17b55a6f9bc406b75990131dc2723a1f0585ebe2"
+#: Re-pinned for 0.2.34 n8n import on top of the signal-spoofing fix
+#: (previous pin 421fe173…, #752): adds the core tool pipeline_import_n8n.
+#: No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "39886aa6e8d2ad0aca3e25a4ff83730b3bdbbf56d7a391cd794d1e0b5ca92f31"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

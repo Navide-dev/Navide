@@ -1037,6 +1037,7 @@
     }
   },
   "action": {
+    "import-from-n8n": "Importar do n8n",
     "switch-and-resume": "↻ Trocar e retomar",
     "go-to-stage": "Abrir esta etapa",
     "new-pipeline": "＋ Novo pipeline",
@@ -8365,6 +8366,7 @@
     }
   },
   "label": {
+    "imported-from-n8n": "Importado do n8n",
     "resume-other-pipeline": "Uma execução não concluída pertence a “{name}”. Mude para esse pipeline para continuá-la.",
     "role-rename-repointed": "A referência ao papel foi atualizada em {count} pipeline. | A referência ao papel foi atualizada em {count} pipelines.",
     "pipeline-manager": "Pipeline Manager",
@@ -9058,6 +9060,7 @@
     "merge-aborted": "Merge cancelado – conflitos descartados."
   },
   "hint": {
+    "imported-from-n8n": "As execuções deste pipeline são marcadas como conteúdo externo.",
     "role-not-found-refresh": "O papel “{key}” não existe mais – outra janela pode tê-lo excluído. A lista à esquerda já está atualizada; escolha um papel novamente.",
     "role-key-exists-recover": "Já existe um papel com a chave “{key}”. Se uma renomeação incompleta o deixou para trás, exclua “{key}” da lista à esquerda primeiro e renomeie de novo.",
     "role-in-use-list": "Redirecione ou remova estas posições de etapa primeiro:",
@@ -12234,6 +12237,81 @@
       "not-signed-in": "Entre primeiro em Conta de desenvolvedor.",
       "qualification": "Sua candidatura de desenvolvedor precisa ser aprovada primeiro.",
       "registry": "O Navide Marketplace recusou ({status} {code}): {message}"
+    }
+  },
+  "pipelineImport": {
+    "title": "Importar do n8n",
+    "subtitle": "Cole um workflow exportado do n8n, confira a conversão na prévia e depois importe-o como um novo pipeline.",
+    "default-agent": "CLI dos passos com agent",
+    "default-agent-hint": "Passos que precisam de um agent rodam em um pane desta CLI. Você pode mudar cada passo depois de importar.",
+    "json-label": "JSON do workflow",
+    "json-placeholder": "Cole o JSON do workflow exportado do n8n",
+    "choose-file": "Escolher arquivo…",
+    "choose-file-title": "Escolher workflow do n8n",
+    "preview": "Prévia",
+    "previewing": "Gerando prévia…",
+    "import": "Importar",
+    "importing": "Importando…",
+    "preview-stale": "O JSON mudou depois da prévia. Gere a prévia de novo antes de importar.",
+    "stats": {
+      "workflow": "Nome do workflow",
+      "nodes": "Nós do n8n",
+      "slots": "Passos",
+      "gates": "Pontos de aprovação",
+      "triggers": "Gatilhos"
+    },
+    "category": {
+      "native": "Convertido diretamente",
+      "agent": "Executado por um agent",
+      "pending": "Precisa de revisão",
+      "unsupported": "Sem suporte"
+    },
+    "needs-review": "{n} passo precisa de revisão | {n} passos precisam de revisão",
+    "needs-review-hint": "Ainda é possível importar. Revise esses passos no editor antes de executar o pipeline.",
+    "subworkflow": "Este workflow chama outro workflow do n8n. Cole aqui também o JSON desse workflow e importe-o separadamente.",
+    "external": "Toda execução do pipeline importado é marcada como conteúdo externo, porque seus passos vêm de um arquivo criado fora do Navide.",
+    "warnings": "Avisos",
+    "canvas-title": "Grafo convertido",
+    "legend": "Legenda de cores",
+    "report-title": "Relatório de conversão",
+    "col": {
+      "node": "Nó",
+      "type": "Tipo de nó",
+      "result": "Vira",
+      "category": "Categoria",
+      "detail": "Detalhes",
+      "actions": "O que fazer",
+      "field": "Campo"
+    },
+    "result": {
+      "trigger": "Gatilho",
+      "slot": "Passo",
+      "gate": "Ponto de aprovação",
+      "folded": "Incorporado a um passo",
+      "removed": "Removido"
+    },
+    "review-mark": "Precisa de revisão",
+    "action-code": {
+      "add-credential": "Adicionar uma credencial",
+      "confirm-step": "Confirmar o passo",
+      "choose-mcp": "Escolher um servidor MCP",
+      "start-manually": "Iniciar manualmente",
+      "paste-subworkflow": "Colar o sub-workflow",
+      "keep-in-n8n": "Manter no n8n"
+    },
+    "kickoffs-title": "Instruções dos passos",
+    "kickoffs-hint": "Este é o texto exato que cada pane recebe quando seu passo começa.",
+    "gates-title": "Pontos de aprovação",
+    "gates-hint": "Esta é a pergunta exata mostrada quando a execução chega a cada ponto.",
+    "credentials-title": "Credenciais",
+    "credentials-hint": "As credenciais são configuradas nesta máquina, como um servidor MCP em Configurações → MCP ou pelo login da própria CLI do serviço. Elas nunca são salvas no pipeline.",
+    "credentials-used-by": "Usada por {nodes}",
+    "secrets-title": "Segredos removidos",
+    "secrets-hint": "Esses valores não foram mantidos no pipeline. Configure-os de novo nesta máquina.",
+    "error": {
+      "invalid": "Isto não é um workflow do n8n que o Navide consiga ler.",
+      "preview-failed": "Falha na prévia.",
+      "import-failed": "Falha na importação."
     }
   }
 }
