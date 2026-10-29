@@ -80,8 +80,6 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Settings (0.2.34): the Navide Plugins pages unfold under Navide Plugins in the sidebar only while that entry is open; they used to stay unfolded with, for example, Navide Marketplace selected. A search hit or a link to one of those pages opens it unfolded, and the folded Navide Plugins row carries its ⚠ marker. (#730)
 
-- Scheduler (0.2.34): for a pane, `scheduler_list` shows another workspace's jobs with their name, schedule, owner and timing only, marked `redacted: true`, without their task text or last error, and `scheduler_runs` refuses another workspace's job (`SCHEDULER_CROSS_WORKSPACE`). A pane still sees its own workspace's jobs in full, and the main window and host or external MCP clients see everything as before. (#757)
-
 - Dev web mode (for developers, 0.2.34): the isolated backend reads its scratch home folder instead of the real `~/.claude` and `~/.codex`, and its pane home shims no longer link the developer's real CLI files (#758); the packaged app is unchanged. Two dev web servers on different ports no longer overwrite each other's dev token (#771). `docs/en-US/ui-verification.md` describes checking the main window with dev web screenshots (#732).
 
 - Tests and CI (0.2.34): the reap-window test allows one clock tick on Windows (#744), a failed-helper test ends its helper before the next test starts (#745), and the credential watcher test writes its file atomically so a slow runner no longer sees two changes (#756).
@@ -89,6 +87,8 @@ All notable released changes to Navide will be documented in this file. The form
 ### Security
 
 - Dependencies (0.2.34): vue-i18n 11.4.16 and its @intlify packages, for GHSA-83rm-6c8r-g728. Navide does not turn on the affected option (`escapeParameter`), so it was not exposed; the upgrade clears the dependency audit. (#753)
+
+- Scheduler (0.2.34): for a pane, `scheduler_list` shows another workspace's jobs with their name, schedule, owner and timing only, marked `redacted: true`, without their task text or last error, and `scheduler_runs` refuses another workspace's job (`SCHEDULER_CROSS_WORKSPACE`). A pane still sees its own workspace's jobs in full, and the main window and host or external MCP clients see everything as before. (#757)
 
 ## [0.2.33] — 2026-10-29 — signed release
 
