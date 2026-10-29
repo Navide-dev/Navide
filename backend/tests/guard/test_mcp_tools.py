@@ -41,7 +41,6 @@ def test_windows_mcp_powershell_with_a_dangerous_command(command, level, rule):
 @pytest.mark.parametrize("mcp_name, builtin", [
     ("mcp__windows-mcp__PowerShell", "powershell"),
     ("mcp__some-server__bash", "Bash"),
-    ("mcp__x__run_command", "run_command"),
 ])
 def test_mcp_shell_tools_grade_exactly_like_the_builtin_shell(command, mcp_name, builtin):
     assert grade(mcp_name, {"command": command}) == grade(builtin, {"command": command})
@@ -150,12 +149,11 @@ def test_claude_hook_payload_reaches_the_mcp_rules():
     assert grade(tool, tool_input).level == "critical"
 
 
-def test_a_shell_named_by_the_call_picks_the_dialect():
-    for shell, builtin in [("bash", "shell"), ("/bin/zsh", "shell"), ("powershell.exe", "powershell"),
-                           ("pwsh", "powershell")]:
-        for command in ["rm -rf ~", "Remove-Item C:\\x", "git status"]:
+def test_a_posix_or_powershell_shell_named_by_the_call_changes_nothing():
+    for shell in ["bash", "/bin/zsh", "powershell.exe", "pwsh"]:
+        for command in ["rm -rf ~", "Remove-Item C:\\x", "git status", "cat ~\\.ssh\\id_rsa"]:
             got = grade("mcp__desktop-commander__start_process", {"command": command, "shell": shell})
-            assert got == grade(builtin, {"command": command}), (shell, command)
+            assert got == grade("mcp__desktop-commander__start_process", {"command": command}), (shell, command)
 
 
 @pytest.mark.parametrize("command", ["rm -rf ~", "cat ~/.ssh/id_rsa", "git status", "echo $'x'"])
@@ -187,3 +185,44 @@ def test_cmd_is_graded_as_both_dialects_and_never_parseable(command):
                                   "mcp__windows-mcp__PowerShell"])
 def test_a_cmd_keyed_command_is_graded_too(tool):
     assert grade(tool, {"cmd": "rm -rf ~"}).level == "critical"
+
+
+# ── a caller-supplied field never loosens the verdict ──────────────────────
+
+
+def test_move_file_ignores_a_caller_supplied_mode():
+    # Desktop Commander's move_file has no mode: `mode: delete` must not turn
+    # the move into a lone rm of the source and skip the destination check.
+    args = {"source": f"{WS}/a", "destination": f"{WS}/.git/hooks/pre-commit"}
+    plain = grade("mcp__desktop-commander__move_file", args)
+    assert grade("mcp__desktop-commander__move_file", {**args, "mode": "delete"}) == plain
+    assert plain.level == "high" and "git-hooks-write" in plain.rule_ids
+
+
+@pytest.mark.parametrize("shell", ["bash", "/bin/sh", "powershell", "pwsh"])
+def test_a_named_shell_never_grades_lower_than_naming_none(shell):
+    order = {"normal": 0, "high": 1, "critical": 2}
+    for command in ["cat ~\\.ssh\\id_rsa", "rm -rf ~", "echo $'x'"]:
+        named = grade("mcp__desktop-commander__start_process", {"command": command, "shell": shell})
+        unnamed = grade("mcp__desktop-commander__start_process", {"command": command})
+        assert order[named.level] >= order[unnamed.level], (shell, command)
+        assert set(unnamed.rule_ids) <= set(named.rule_ids), (shell, command)
+        assert named.parseable <= unnamed.parseable, (shell, command)
+
+
+@pytest.mark.parametrize("mode", ["list", "search", "info"])
+def test_filesystem_listing_modes_check_credential_locations(mode):
+    # The built-in `ls ~/.ssh` is high; listing it through FileSystem is too.
+    v = grade("mcp__windows-mcp__FileSystem", {"mode": mode, "path": "~/.ssh", "pattern": "*"})
+    assert v.level == "high" and "credential-path-list" in v.rule_ids
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__x__run_command", "mcp__x__run_shell_command", "mcp__x__shell_command", "mcp__x__exec_command",
+    "mcp__x__execute_command", "mcp__x__shell", "mcp__x__start_process",
+])
+def test_generic_mcp_shell_tools_grade_both_dialects(tool):
+    # A backslash path only PowerShell reads as a path: the generic tool may
+    # run on Windows, so it is graded as PowerShell too.
+    v = grade(tool, {"command": "cat ~\\.ssh\\id_rsa"})
+    assert v.level == "critical" and "credential-access" in v.rule_ids
