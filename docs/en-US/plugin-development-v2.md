@@ -2031,6 +2031,17 @@ factory or legacy copy. `NAVIDE_GIT_RECOVERY=legacy` remains the explicit operat
 Issue 19 does not remove the legacy implementation or implement later Skills
 migration or marketplace lifecycle work.
 
+The bundled first-party plugins (`navide.git`, `navide.mini-ide`,
+`navide.plans`) version independently of the App: each keeps the version in
+its own `manifest.json`, which changes only when that plugin changes, and the
+App records the versions it bundles in `src/main/plugins/officialPluginVersions.ts`
+to look the copies up at `official-artifacts/<id>/<version>/<target>`. When a
+verified Marketplace copy of the same id is also installed, the newer version
+by SemVer is loaded and the installed copy wins a tie. An older installed copy
+is left on disk with its lifecycle record untouched and is reconsidered on the
+next start, so a later App that bundles an older version hands the id back to
+it.
+
 ### First-party production Plans package
 
 Issue 23E makes `navide.plans` the first combined production package that
