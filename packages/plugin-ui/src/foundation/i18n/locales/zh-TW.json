@@ -9141,6 +9141,7 @@
     "default-role-fallback": "`defaultRole` 將在執行時自動比對",
     "replace-all-roles": "全部取代 — 刪除不在匯入檔案中的目前角色",
     "reset-stages-warning": "所有自訂階段將被移除…",
+    "reset-stages-graph-warning": "這條流程上手畫的閘門、迴圈、分支也會一併清除，無法復原。",
     "completion-modal-body": "每個 Agent 都已完成任務 — 請查看右側各面板。",
     "git-credential-token": "密碼欄位請貼 Personal Access Token（非登入密碼）。",
     "install-foundation-tools": "安裝所有 Agent 運作所需的基礎工具…",
@@ -10277,6 +10278,11 @@
       "expired": "已過期：agent job 7 天未更新",
       "unknown": "略過"
     },
+    "fail-reason": {
+      "no_window": "沒有 Navide 視窗開著這個 job 的 workspace。請先開啟 workspace，再執行一次。",
+      "pipeline_not_found": "這個 job 要啟動的 Pipeline 不存在，或名稱對到不只一條。請編輯 job，重新選擇 Pipeline。",
+      "pipeline_already_running": "那個 workspace 已有 Pipeline 正在執行，所以這次沒有啟動。"
+    },
     "editor": {
       "err-task": "請輸入任務",
       "err-pipeline": "請選擇 Pipeline",
@@ -11280,7 +11286,9 @@
       "stages-load-failed": "無法載入這條 pipeline 的步驟。",
       "no-stages": "這條 pipeline 還沒有任何步驟，請先新增一個。",
       "graph-failed": "無法準備這條 pipeline 的執行。",
-      "spawn-failed": "第一個步驟的 agent 都無法啟動。請確認它們的 CLI 已安裝。"
+      "spawn-failed": "第一個步驟的 agent 都無法啟動。請確認它們的 CLI 已安裝。",
+      "already-running": "這個 workspace 已有 pipeline 正在執行，請先中止它。",
+      "not-recorded": "這次執行沒有被記錄下來，所以沒有啟動。原因請看 pipeline 紀錄。"
     },
     "graph": {
       "slot-incomplete": "「{label}」需要設定 agent 和名稱。",

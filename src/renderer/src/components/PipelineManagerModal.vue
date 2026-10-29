@@ -126,6 +126,9 @@ const plCount = computed(() => pipelinesApi.pipelines.value.length)
 const plCurrentPipeline = computed(
   () => pipelinesApi.pipelines.value.find((p) => p.id === plEditingId.value) ?? null
 )
+/** A created pipeline's reset also deletes its drawn graph (gates, loops,
+ *  branches); the confirm says so, and confirming is what sends discard_graph. */
+const sResetDropsGraph = computed(() => !!plCurrentPipeline.value && !plCurrentPipeline.value.builtin && !!plCurrentPipeline.value.has_graph)
 
 async function plEnterDetail(id: string): Promise<void> {
   plEditingId.value = id
@@ -312,7 +315,11 @@ watch(
 async function sDoReset(): Promise<void> {
   try {
     const resp = await backend.send<{ stages: unknown[] }>(
-      'stages.reset', { pipeline_id: plEditingId.value, workspace_path: props.workspacePath }
+      'stages.reset', {
+        pipeline_id: plEditingId.value,
+        workspace_path: props.workspacePath,
+        ...(sResetDropsGraph.value ? { discard_graph: true } : {}),
+      }
     )
     sConfirmReset.value = false
     if (!resp.ok) { sError.value = backendErrorText(t, resp.error, 'error.reset-failed'); return }
@@ -889,6 +896,7 @@ function buildAiContext(): string {
       <div class="modal-card">
         <h3>{{ $t('hint.reset-stages-title') }}</h3>
         <p>{{ $t('hint.reset-stages-warning') }}</p>
+        <p v-if="sResetDropsGraph" class="reset-graph-warning" data-test="reset-graph-warning">{{ $t('hint.reset-stages-graph-warning') }}</p>
         <div class="modal-actions">
           <button class="ghost" @click="sConfirmReset = false">{{ $t('action.cancel') }}</button>
           <button class="danger nv-btn nv-btn--danger" @click="sDoReset">{{ $t('action.reset') }}</button>
@@ -1580,6 +1588,9 @@ button.ghost:hover:not(:disabled) {
   color: var(--text-primary);
   margin: 0 0 14px;
   line-height: 1.6;
+}
+.modal-card p.reset-graph-warning {
+  color: var(--attention-fg);
 }
 .modal-actions {
   display: flex;

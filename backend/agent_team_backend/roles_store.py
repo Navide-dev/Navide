@@ -1,8 +1,10 @@
 """Persistent role registry.
 
-Roles live in a single JSON file under the macOS app-data dir so users can
-edit them from the Role Manager window without recompiling the renderer.
-Defaults are seeded on first load.
+Roles live as one list under the ``roles`` key of the app-data SQLite
+database (navide.db, see db.py), so users can edit them from the Role Manager
+window without recompiling the renderer. A ``roles.json`` left by an older
+version is imported once on first read and renamed ``roles.json.migrated-v1``
+(Database.import_json). Defaults are seeded when nothing is stored.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ def _now_iso() -> str:
 def default_roles() -> list[dict[str, Any]]:
     """Seed set — identical content to src/renderer/src/data/roles.ts.
 
-    Kept in Python so that on first run we can populate roles.json without
+    Kept in Python so that on first run we can seed the stored roles without
     needing the renderer to push anything.
     """
     now = _now_iso()

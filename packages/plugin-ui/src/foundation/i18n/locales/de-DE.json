@@ -9141,6 +9141,7 @@
     "default-role-fallback": "`defaultRole` fällt zur Laufzeit auf das zurück, was gerade passt",
     "replace-all-roles": "Alle ersetzen – aktuelle Rollen löschen, die NICHT in der Importdatei enthalten sind",
     "reset-stages-warning": "Alle benutzerdefinierten Stufen werden entfernt …",
+    "reset-stages-graph-warning": "Die in diese Pipeline gezeichneten Gates, Schleifen und Verzweigungen werden ebenfalls gelöscht und lassen sich nicht wiederherstellen.",
     "completion-modal-body": "Alle Agents haben ihre Ergebnisse geliefert – sehen Sie sich die Panels rechts an.",
     "git-credential-token": "Fügen Sie ein Personal Access Token in das Passwortfeld ein – nicht Ihr Anmeldepasswort.",
     "install-foundation-tools": "Installieren Sie die erforderlichen Basiswerkzeuge …",
@@ -10277,6 +10278,11 @@
       "expired": "Abgelaufen: Agent-Auftrag seit 7 Tagen nicht erneuert",
       "unknown": "Übersprungen"
     },
+    "fail-reason": {
+      "no_window": "Kein Navide-Fenster hat den Arbeitsbereich dieses Jobs geöffnet. Öffnen Sie den Arbeitsbereich und führen Sie den Job erneut aus.",
+      "pipeline_not_found": "Die Pipeline, die dieser Job startet, gibt es nicht, oder ihr Name passt auf mehrere. Bearbeiten Sie den Job und wählen Sie eine Pipeline.",
+      "pipeline_already_running": "In diesem Arbeitsbereich lief bereits eine Pipeline, daher wurde diese nicht gestartet."
+    },
     "editor": {
       "err-task": "Gib eine Aufgabe ein",
       "err-pipeline": "Wähle eine Pipeline",
@@ -11280,7 +11286,9 @@
       "stages-load-failed": "Die Schritte dieser Pipeline konnten nicht geladen werden.",
       "no-stages": "Diese Pipeline hat noch keine Schritte. Fügen Sie zuerst einen hinzu.",
       "graph-failed": "Die Pipeline konnte nicht für den Lauf vorbereitet werden.",
-      "spawn-failed": "Keiner der Agents im ersten Schritt konnte gestartet werden. Prüfen Sie, ob ihre CLIs installiert sind."
+      "spawn-failed": "Keiner der Agents im ersten Schritt konnte gestartet werden. Prüfen Sie, ob ihre CLIs installiert sind.",
+      "already-running": "In diesem Arbeitsbereich läuft bereits eine Pipeline. Brechen Sie sie zuerst ab.",
+      "not-recorded": "Der Lauf wurde nicht gespeichert, daher wurde nichts gestartet. Den Grund nennt das Pipeline-Protokoll."
     },
     "graph": {
       "slot-incomplete": "{label} braucht einen Agent und einen Namen.",

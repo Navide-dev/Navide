@@ -477,8 +477,50 @@ def downstream_of(graph: dict[str, Any], nid: str) -> list[str]:
     return [e["to"] for e in graph.get("edges", []) if _is_main(e) and e.get("from") == nid]
 
 
+#: The ops apply_graph_ops takes, in the order pipeline_graph documents them.
+GRAPH_OPS = (
+    "add_node", "remove_node", "update_node", "move_node", "add_edge", "remove_edge",
+    "set_gate", "set_pin", "set_retry", "set_stage_meta",
+)
+
+
 def apply_graph_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[str, Any]:
-    """Apply edit ops to a copy (see the TS twin). Raises GraphError."""
+    """Apply edit ops to a copy (see the TS twin). Raises GraphError.
+
+    Ops apply one at a time, so a refusal names the op it came from: its
+    errors start with "ops[<i>] (<op>)" and the error carries ``op_index``.
+    A node or edge kind outside the known ones is refused at its op, with the
+    kinds there are, rather than only by the whole-graph check after."""
+    if not isinstance(ops, list):
+        raise GraphError(["ops must be a list"])
+    g = _apply_ops(graph, [])
+    for index, op in enumerate(ops):
+        try:
+            _check_op_kinds(op)
+            g = _apply_ops(g, [op])
+        except GraphError as exc:
+            name = op.get("op") if isinstance(op, dict) else None
+            where = f"ops[{index}] ({name})" if isinstance(name, str) and name else f"ops[{index}]"
+            indexed = GraphError([f"{where}: {e}" for e in exc.errors], exc.code)
+            indexed.op_index = index  # type: ignore[attr-defined]
+            raise indexed from None
+    return g
+
+
+def _check_op_kinds(op: Any) -> None:
+    if not isinstance(op, dict):
+        return
+    if op.get("op") == "add_node" and isinstance(op.get("node"), dict):
+        kind = op["node"].get("kind")
+        if kind not in NODE_KINDS:
+            raise GraphError([f"unknown node kind {kind}; one of {', '.join(NODE_KINDS)}"])
+    if op.get("op") == "add_edge" and isinstance(op.get("edge"), dict):
+        kind = op["edge"].get("kind") or "main"
+        if kind not in EDGE_KINDS:
+            raise GraphError([f"unknown edge kind {kind}; one of {', '.join(EDGE_KINDS)}"])
+
+
+def _apply_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[str, Any]:
     g = {
         "version": graph.get("version", GRAPH_VERSION),
         "nodes": copy.deepcopy(graph.get("nodes", [])),
@@ -597,7 +639,7 @@ def apply_graph_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[st
             # Stage metadata is not part of the graph; StagesStore applies it.
             pass
         else:
-            raise GraphError([f"unknown graph op: {kind}"])
+            raise GraphError([f"unknown graph op: {kind}; one of {', '.join(GRAPH_OPS)}"])
     return g
 
 

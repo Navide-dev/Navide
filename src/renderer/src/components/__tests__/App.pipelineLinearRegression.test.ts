@@ -71,6 +71,7 @@ async function load(extraDeps: Record<string, unknown> = {}) {
   const deps: Record<string, unknown> = {
     pipeline,
     pipelinesApi: { activePipelineId: { value: 'pl-1' }, setActivePipeline: vi.fn(async () => true), error: { value: '' } },
+    runPipelineId: { value: '' },
     stagesApi: { isLoaded: { value: true }, stages: { value: STAGES }, refresh: vi.fn(), error: { value: '' } },
     panes,
     paneRefs: {},
@@ -150,8 +151,10 @@ async function load(extraDeps: Record<string, unknown> = {}) {
 
 /** The exact event trace the pre-DAG engine produced for STAGES. */
 const EXPECTED = [
-  'runGroup Pipeline',
+  // The run group is made once the backend has recorded the run, so a
+  // refused start leaves no empty group behind (PR-E E1).
   'send pipeline.start {"workspace_path":"/ws","task_description":"ship","total_stages":2,"stage_blueprint":[{"stage_id":"01","title":"Plan","sentinel":"---01---","slots":[{"agent":"claude","role":"dev","label":"fe"},{"agent":"codex","role":"dev","label":"be"}]},{"stage_id":"02","title":"Review","sentinel":"---02---","slots":[{"agent":"claude","role":"qa","label":"rv"}]}],"pipeline_id":"pl-1"}',
+  'runGroup Pipeline',
   'spawn 01/fe claude kickoff=null',
   'spawn 01/be codex kickoff=null',
   'send pipeline.slot_spawn {"workspace_path":"/ws","stage_index":0,"slot_label":"fe","pane_id":"p1","agent":"claude","role":"dev","session_id":"","session_home_id":"","run_group_id":"rg-1"}',
@@ -440,6 +443,7 @@ describe('a run aborted while paused at a gate', () => {
     const resumeDeps: Record<string, unknown> = {
       existingProject: { value: info },
       pipelinesApi: { activePipelineId: { value: 'pl-1' }, setActivePipeline: vi.fn(), error: { value: '' } },
+      runPipelineId: { value: '' },
       stagesApi: { stages: { value: STAGES }, refresh: vi.fn(), error: { value: '' } },
       pipeline: run.pipeline,
       pipelineRunWorkspace: '',
@@ -541,6 +545,8 @@ describe('restart from a node', () => {
       onPipelineStart,
       pipelineDag: dag,
       pipelinesApi: { activePipelineId: { value: 'pl-1' } },
+      runPipelineId: { value: '' },
+      existingProject: { value: null },
       stagesApi: { stages: { value: STAGES } },
     }
     const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as {

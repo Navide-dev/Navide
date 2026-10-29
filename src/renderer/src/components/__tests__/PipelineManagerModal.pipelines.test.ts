@@ -31,6 +31,7 @@ const roles: Role[] = [
 const pipelines: PipelineSummary[] = [
   { id: 'default', name: 'Default', builtin: true, stage_count: 2, step_count: 3 },
   { id: 'custom', name: 'Custom', builtin: false, stage_count: 1, step_count: 1 },
+  { id: 'drawn', name: 'Drawn', builtin: false, stage_count: 2, step_count: 2, has_graph: true },
 ]
 const secondStage = {
   id: '02',
@@ -460,6 +461,37 @@ describe('PipelineManagerModal — pipelines tab', () => {
       pipeline_id: 'default',
       workspace_path: WORKSPACE,
     })
+  })
+
+  // PR-E E2: a created pipeline with a drawn graph loses its gates, loops and
+  // branches on reset, and the backend refuses that without discard_graph.
+  it('says a reset drops the drawn graph, and confirms it with discard_graph', async () => {
+    const { wrapper: w, mock } = await open({ initialPipelineId: 'drawn' })
+    mock.setResponse('stages.reset', { stages: [] })
+
+    await (await menuItem(w, 'reset')).trigger('click')
+    await flushPromises()
+    expect(w.find('.modal .modal-card [data-test="reset-graph-warning"]').text()).toBe(
+      i18n.global.t('hint.reset-stages-graph-warning'),
+    )
+    await w.find('.modal .modal-card .danger').trigger('click')
+    await flushPromises()
+
+    expect(sentPayload(mock, 'stages.reset')).toEqual({
+      pipeline_id: 'drawn',
+      workspace_path: WORKSPACE,
+      discard_graph: true,
+    })
+    expect(tab(w).find('.summary-ok').exists()).toBe(true)
+  })
+
+  it('a builtin reset says nothing about a graph and sends no discard_graph', async () => {
+    const { wrapper: w, mock } = await detail()
+    mock.setResponse('stages.reset', { stages: [twoSlotStage] })
+
+    await (await menuItem(w, 'reset')).trigger('click')
+    await flushPromises()
+    expect(w.find('.modal .modal-card [data-test="reset-graph-warning"]').exists()).toBe(false)
   })
 
   it('sends the workspace with every stage written by an import', async () => {

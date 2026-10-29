@@ -9141,6 +9141,7 @@
     "default-role-fallback": "`defaultRole`은 런타임에 우연히 일치하는 역할로 대체돼요",
     "replace-all-roles": "모두 바꾸기 — 가져올 파일에 없는 현재 역할 삭제",
     "reset-stages-warning": "모든 사용자 지정 단계가 제거돼요...",
+    "reset-stages-graph-warning": "이 파이프라인에 직접 그린 게이트, 루프, 분기도 함께 삭제되며 되돌릴 수 없어요.",
     "completion-modal-body": "모든 agent가 결과를 전달했어요 — 오른쪽 패널을 확인하세요.",
     "git-credential-token": "비밀번호 입력란에 로그인 비밀번호가 아닌 Personal Access Token을 붙여넣으세요.",
     "install-foundation-tools": "필요한 기본 도구를 설치하세요...",
@@ -10277,6 +10278,11 @@
       "expired": "만료됨: agent 작업이 7일 동안 갱신되지 않음",
       "unknown": "건너뜀"
     },
+    "fail-reason": {
+      "no_window": "이 작업의 작업 영역을 연 Navide 창이 없습니다. 작업 영역을 연 다음 다시 실행하세요.",
+      "pipeline_not_found": "이 작업이 시작할 Pipeline이 없거나 같은 이름이 여러 개입니다. 작업을 편집해 Pipeline을 다시 선택하세요.",
+      "pipeline_already_running": "해당 작업 영역에서 이미 Pipeline이 실행 중이라 이번에는 시작하지 않았습니다."
+    },
     "editor": {
       "err-task": "작업을 입력하세요",
       "err-pipeline": "Pipeline을 선택하세요",
@@ -11280,7 +11286,9 @@
       "stages-load-failed": "이 pipeline의 단계를 불러올 수 없었어요.",
       "no-stages": "이 pipeline에는 아직 단계가 없어요. 먼저 하나 추가하세요.",
       "graph-failed": "pipeline 실행을 준비할 수 없었어요.",
-      "spawn-failed": "첫 단계의 agent를 하나도 시작할 수 없었어요. CLI가 설치되어 있는지 확인하세요."
+      "spawn-failed": "첫 단계의 agent를 하나도 시작할 수 없었어요. CLI가 설치되어 있는지 확인하세요.",
+      "already-running": "이 작업 영역에서 이미 pipeline이 실행 중이에요. 먼저 중단하세요.",
+      "not-recorded": "실행이 기록되지 않아 시작하지 않았어요. 이유는 pipeline 로그에서 확인하세요."
     },
     "graph": {
       "slot-incomplete": "{label}에는 agent와 이름이 필요해요.",

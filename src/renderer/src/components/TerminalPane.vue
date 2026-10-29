@@ -394,6 +394,7 @@ defineExpose({
   lastUserKeyAt: terminal.lastUserKeyAt,
   // What the CLI on the other end actually asked for, for injectText's guards.
   isBracketedPasteActive: terminal.isBracketedPasteActive,
+  terminalSize: terminal.terminalSize,
   // The ⌘V path (never submits), false when the text would be dropped; voice
   // dictation types its text through it.
   insertText: terminal.insertText,

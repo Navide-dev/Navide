@@ -2282,6 +2282,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     return term.modes.bracketedPasteMode === true
   }
 
+  /** The xterm's size now, for App.vue's inject.failed diagnostic (#448). */
+  function terminalSize(): { cols: number; rows: number } {
+    return { cols: term.cols, rows: term.rows }
+  }
+
   /** The other half of the same problem, and the precise one: a prompt answered
    *  with a single key never reaches Enter, so nothing above empties the buffer
    *  and the pane stays "being typed at" for good. Leaving `awaiting`/`question`
@@ -3540,6 +3545,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     hasDraft,
     lastUserKeyAt,
     isBracketedPasteActive,
+    terminalSize,
     markTurnComplete,
     markNeedsInput,
     clearNeedsInput,

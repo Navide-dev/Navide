@@ -9141,6 +9141,7 @@
     "default-role-fallback": "`defaultRole` will fall back to whatever happens to match at runtime",
     "replace-all-roles": "Replace all — delete current roles NOT in the import file",
     "reset-stages-warning": "All custom stages will be removed...",
+    "reset-stages-graph-warning": "The gates, loops and branches drawn on this pipeline are deleted too, and cannot be brought back.",
     "completion-modal-body": "Every agent has delivered its results — check the panels on the right.",
     "git-credential-token": "Paste a Personal Access Token in the password field — not your login password.",
     "install-foundation-tools": "Install the foundational tools required...",
@@ -10277,6 +10278,11 @@
       "expired": "Expired: agent job not renewed in 7 days",
       "unknown": "Skipped"
     },
+    "fail-reason": {
+      "no_window": "No Navide window has this job's workspace open. Open the workspace, then run the job again.",
+      "pipeline_not_found": "The pipeline this job starts no longer exists, or its name matches more than one. Edit the job and pick a pipeline.",
+      "pipeline_already_running": "A pipeline run was already in progress in that workspace, so this one did not start."
+    },
     "editor": {
       "err-task": "Enter a task",
       "err-pipeline": "Choose a pipeline",
@@ -11280,7 +11286,9 @@
       "stages-load-failed": "Could not load this pipeline’s steps.",
       "no-stages": "This pipeline has no steps yet. Add one first.",
       "graph-failed": "Could not prepare the pipeline for running.",
-      "spawn-failed": "None of the first step’s agents could be started. Check that their CLIs are installed."
+      "spawn-failed": "None of the first step’s agents could be started. Check that their CLIs are installed.",
+      "already-running": "A pipeline is already running in this workspace. Abort it first.",
+      "not-recorded": "The run was not recorded, so nothing started. The pipeline log says why."
     },
     "graph": {
       "slot-incomplete": "{label} needs an agent and a name.",

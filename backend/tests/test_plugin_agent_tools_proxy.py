@@ -138,7 +138,19 @@ pytestmark = pytest.mark.asyncio
 #: scope (previous pin 8134eb17…, #757): pipeline_import_n8n documents that a
 #: resend within 10 minutes answers with the pipeline it made (`reused`), the
 #: 5 MB limit and the error codes too_large and refused. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "a1735e0d4d8d46c2b98ccc8d34fd0920b8a684f8e3335af903333de32f7741ea"
+#: Re-pinned for 0.2.34 UX PR-E on top of the n8n import fixes (previous pin
+#: a1735e0d…): pipeline_list, pipeline_status, pipeline_start and
+#: pipeline_define describe what they actually do (default pipeline,
+#: has_graph / imported_from, pipeline_already_running, suspended, the
+#: evolve-landing seed); stage_define takes `discard_graph`; pipeline_graph
+#: documents `op_index`; ui_diagnostics `frame_drops`; scheduler_upsert the
+#: save-time pipeline check and last_error_code; scheduler_run_now the
+#: no_window refusal; stage_define says an empty pipeline_id is the default
+#: pipeline. No other tool changed.
+#: Re-pinned again for PR-E's window error codes (previous pin 703c1dbf…):
+#: ui_invoke and pipeline_start say a window refusal that names its reason
+#: carries `error_code` and `params` next to `error`. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "65ad36fefaa999ccc3033f5800ab4dfa2ae5a6bdd3ce1c32d7fecf34b473428e"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
