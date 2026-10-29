@@ -70,6 +70,10 @@ describe('native backend IPC: agent-tool switches (plan B1-b)', () => {
     await expect(invoke('plugins:nativeBackends:setAgentTools', { externalCallers: true })).resolves.toMatchObject({
       agentTools: { enabled: true, externalCallers: true },
     })
+    await expect(invoke('plugins:nativeBackends:setAgentTools', { firstParty: false })).resolves.toMatchObject({
+      agentTools: { firstParty: false },
+    })
+    expect(controls.setSwitches).toHaveBeenCalledWith({ firstParty: false })
   })
 
   it('refuses malformed changes and untrusted senders', async () => {
@@ -77,6 +81,8 @@ describe('native backend IPC: agent-tool switches (plan B1-b)', () => {
     await expect(invoke('plugins:nativeBackends:setAgentTools', { enabled: 'yes' })).rejects.toThrow('invalid')
     await expect(invoke('plugins:nativeBackends:setAgentTools', { enabled: true, externalCallers: true })).rejects.toThrow('invalid')
     await expect(invoke('plugins:nativeBackends:setAgentTools', {})).rejects.toThrow('invalid')
+    await expect(invoke('plugins:nativeBackends:setAgentTools', { firstParty: 'off' })).rejects.toThrow('invalid')
+    await expect(invoke('plugins:nativeBackends:setAgentTools', { firstParty: false, enabled: true })).rejects.toThrow('invalid')
     expect(controls.setSwitches).not.toHaveBeenCalled()
     const untrusted = setup({ authorized: false })
     await expect(untrusted.invoke('plugins:nativeBackends:setAgentTools', { enabled: true })).rejects.toThrow('unauthorized')

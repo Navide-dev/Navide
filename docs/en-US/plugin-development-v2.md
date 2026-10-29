@@ -568,6 +568,12 @@ other external input. Methods that no tool names are never callable by
 agents. See [plugin-agent-tools-contract.md](plugin-agent-tools-contract.md)
 section 4.
 
+First-party Navide plugins (Navide Browser) have a switch of their own above
+those two, **Let agents call tools from first-party Navide plugins**, on by
+default. While it is on their tools are served without per-version consent;
+every other rule above applies to them, and turning it off takes all of them
+offline at once. The third-party switch does not reach them.
+
 `backend.methods` and `backend.events` declare the package-local names the
 Host forwards (1–64 methods, 1–32 events, dotted lower-camel names such as
 `files.search`). A name that is not declared is refused before it reaches the

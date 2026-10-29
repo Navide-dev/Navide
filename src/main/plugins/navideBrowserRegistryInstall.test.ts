@@ -297,15 +297,16 @@ describe('(a) navide.browser installed from the Official Registry', () => {
 })
 
 describe('(b) agent tools of a registry-installed navide.browser', () => {
-  it('are not served with the DB8 master switch off', async () => {
+  it('are served with the DB8 master switch off: it covers third-party packages only', async () => {
     register()
     const activation = await installFromRegistry('navide.browser')
-    const { host, sent, methods } = agentToolsHost([firstPartyAgentToolSpec(activation)!], [])
+    const { host, sent, methods, hasConsent } = agentToolsHost([firstPartyAgentToolSpec(activation)!], [])
     await host.refresh()
-    expect(sent).toEqual([])
-    expect(methods.get('navide.browser@1.0.0') ?? []).toEqual([])
+    expect(sent.at(-1)).toMatchObject({ enabled: true, externalCallers: false })
+    expect(methods.get('navide.browser@1.0.0')).toEqual(['browser.list', 'browser.open'])
     await expect(host.admit({ pluginId: 'navide.browser', toolName: 'browser_list', pluginVersion: '1.0.0', caller: PANE }, notStopping))
-      .resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+      .resolves.toMatchObject({ ok: true, tool: { name: 'browser_list' } })
+    expect(hasConsent).not.toHaveBeenCalled()
   })
 
   it('are served with the DB8 master switch on, without per-version consent', async () => {
