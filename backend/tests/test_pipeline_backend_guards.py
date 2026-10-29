@@ -281,3 +281,45 @@ async def test_ws_node_states_reports_the_ids_it_dropped(wired, ws, monkeypatch)
     assert window.sent[-1]["ok"] is True
     assert window.sent[-1]["payload"] == {"ok": True, "dropped": ["ghost"]}
     assert set(wired.store.peek(ws).node_states) == {"n-s0-0"}
+
+
+async def test_ws_start_while_running_answers_pipeline_already_running(wired, ws) -> None:
+    """End to end through the real handler and the pipeline handlers' store
+    error mapping: the exception's error_code in capitals."""
+    from agent_team_backend import app as app_mod
+
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    payload = {"workspace_path": ws, "task_description": "t", "total_stages": 2, "stage_blueprint": BLUEPRINT}
+    await app_mod.handle_message(window, {"id": "1", "type": "pipeline.start", "payload": payload})
+    assert window.sent[-1]["ok"] is True
+
+    await app_mod.handle_message(window, {"id": "2", "type": "pipeline.start", "payload": {**payload, "task_description": "again"}})
+
+    assert window.sent[-1]["ok"] is False
+    assert window.sent[-1]["error"]["code"] == "PIPELINE_ALREADY_RUNNING"
+    assert wired.store.peek(ws).task_description == "t"
+
+
+# ── A window's coded refusal reaches the MCP answer as error_code ──────────
+
+
+async def test_a_window_refusal_with_a_code_answers_error_code_and_params(monkeypatch) -> None:
+    resolved: list[dict] = []
+    monkeypatch.setattr(mcp, "resolve_ui_invoke", lambda rid, result: resolved.append(result) or True)
+    window = _Session()
+
+    await ws_handlers.ui_invoke_result(window, "1", "ui.invoke.result", {
+        "request_id": "r1", "ok": False, "result": None,
+        "error": "ui.pipeline.next: stage 3 of 3 is the last one",
+        "code": "last-stage", "params": {"stage": 3, "stages": 3},
+    })
+    await ws_handlers.ui_invoke_result(window, "2", "ui.invoke.result", {
+        "request_id": "r2", "ok": False, "result": None, "error": "plain",
+    })
+
+    assert resolved[0] == {
+        "ok": False, "result": None, "error": "ui.pipeline.next: stage 3 of 3 is the last one",
+        "error_code": "last-stage", "params": {"stage": 3, "stages": 3},
+    }
+    assert resolved[1] == {"ok": False, "result": None, "error": "plain"}

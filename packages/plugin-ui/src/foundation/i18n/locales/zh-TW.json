@@ -11284,7 +11284,9 @@
       "stages-load-failed": "無法載入這條 pipeline 的步驟。",
       "no-stages": "這條 pipeline 還沒有任何步驟，請先新增一個。",
       "graph-failed": "無法準備這條 pipeline 的執行。",
-      "spawn-failed": "第一個步驟的 agent 都無法啟動。請確認它們的 CLI 已安裝。"
+      "spawn-failed": "第一個步驟的 agent 都無法啟動。請確認它們的 CLI 已安裝。",
+      "already-running": "這個 workspace 已有 pipeline 正在執行，請先中止它。",
+      "not-recorded": "這次執行沒有被記錄下來，所以沒有啟動。原因請看 pipeline 紀錄。"
     },
     "graph": {
       "slot-incomplete": "「{label}」需要設定 agent 和名稱。",

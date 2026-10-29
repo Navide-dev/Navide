@@ -147,7 +147,10 @@ pytestmark = pytest.mark.asyncio
 #: save-time pipeline check and last_error_code; scheduler_run_now the
 #: no_window refusal; stage_define says an empty pipeline_id is the default
 #: pipeline. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "703c1dbfbd67a87822dd13e3fe2409b74bce37f992c5424f722d1f98144832ba"
+#: Re-pinned again for PR-E's window error codes (previous pin 703c1dbf…):
+#: ui_invoke and pipeline_start say a window refusal that names its reason
+#: carries `error_code` and `params` next to `error`. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "65ad36fefaa999ccc3033f5800ab4dfa2ae5a6bdd3ce1c32d7fecf34b473428e"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

@@ -12401,6 +12401,12 @@ async def ui_invoke_result(session: "Session", msg_id: str, msg_type: str, paylo
         "result": payload.get("result"),
         "error": str(payload["error"]) if payload.get("error") is not None else None,
     }
+    # A coded refusal: the handler's code as error_code (the MCP shape), its
+    # params as they came; `error` keeps the sentence.
+    if isinstance(payload.get("code"), str) and payload["code"]:
+        result["error_code"] = payload["code"]
+    if isinstance(payload.get("params"), dict):
+        result["params"] = payload["params"]
     if payload.get("warnings"):
         result["warnings"] = payload["warnings"]
     delivered = plan_mcp.resolve_ui_invoke(request_id, result)

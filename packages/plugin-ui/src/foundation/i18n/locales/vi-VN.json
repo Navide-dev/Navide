@@ -11284,7 +11284,9 @@
       "stages-load-failed": "Không tải được các bước của pipeline này.",
       "no-stages": "Pipeline này chưa có bước nào. Hãy thêm một bước trước.",
       "graph-failed": "Không chuẩn bị được pipeline để chạy.",
-      "spawn-failed": "Không khởi động được agent nào của bước đầu tiên. Hãy kiểm tra CLI của chúng đã được cài đặt chưa."
+      "spawn-failed": "Không khởi động được agent nào của bước đầu tiên. Hãy kiểm tra CLI của chúng đã được cài đặt chưa.",
+      "already-running": "Workspace này đang có một pipeline chạy. Hãy dừng nó trước.",
+      "not-recorded": "Lần chạy không được ghi lại nên không có gì được khởi động. Xem log của pipeline để biết lý do."
     },
     "graph": {
       "slot-incomplete": "{label} cần một agent và một tên.",

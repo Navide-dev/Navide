@@ -6749,6 +6749,12 @@ async def ui_invoke(
     window owns workspace_path (or, for ui.workspace.open, no window is open
     at all) within 15s.
 
+    An action the window refuses answers ok false with its `error` sentence;
+    a refusal the action names with a reason also carries `error_code` (and
+    `params`, the values the sentence was built from) — branch on the code,
+    not on the wording. The pipeline_* tools that go through the window
+    answer the same way.
+
     Called from a CLI pane, the request is delivered straight to the window
     that hosts that pane — whether or not it is focused, and whatever project
     that window currently has open — as long as workspace_path names that
@@ -8710,7 +8716,8 @@ async def pipeline_start(
     closed or crashed app is not in progress and does not block a start. The
     window's own refusals — a parent run suspended at a sub-pipeline waiting
     here (resume or reset it first), no pipeline to run, or a first stage whose
-    panes all failed to spawn — carry its `error`. The window reports the run's
+    panes all failed to spawn — carry its `error`, plus `error_code` and
+    `params` when the window names the reason. The window reports the run's
     own state rather than the fact that the call returned, so "ok" here is not
     the "started but nothing happened" answer.
 

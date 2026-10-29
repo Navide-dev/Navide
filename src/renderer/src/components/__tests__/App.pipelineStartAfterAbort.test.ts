@@ -41,11 +41,12 @@ interface StartOpts {
   loaded?: boolean
   served?: ReturnType<typeof stage>[]
   refreshError?: string
-  switchOk?: boolean
   activePipelineId?: string
   dag?: unknown
   /** Every slot of the first stage fails to spawn (releaseStageSlot aborts). */
   spawnFails?: boolean
+  /** The backend refuses pipeline.start with this error code. */
+  startRefusedCode?: string
 }
 
 async function loadStart(opts: StartOpts = {}) {
@@ -68,29 +69,32 @@ async function loadStart(opts: StartOpts = {}) {
   }
   const pipelinesApi = {
     activePipelineId: { value: opts.activePipelineId ?? 'pl-2' },
-    error: { value: 'switch refused' },
     setActivePipeline: vi.fn(async (id: string) => {
-      if (opts.switchOk === false) return false
       pipelinesApi.activePipelineId.value = id
       return true
     }),
   }
+  const runPipelineId = { value: '' }
+  const createRunGroup = vi.fn()
+  const preSpawnStage = vi.fn(async () => { if (opts.spawnFails) pipeline.state = 'aborted' })
   const deps: Record<string, unknown> = {
     pipeline,
     pipelinesApi,
     stagesApi,
+    runPipelineId,
     pipelineRunWorkspace: '',
     existingProject: { value: null },
     pipelineLog: (line: string) => pipeline.log.push(line),
     pipelineRunGroupName: () => 'Pipeline',
-    createRunGroup: vi.fn(),
+    createRunGroup,
     deriveGlobalManager: () => null,
     applyProjectPaths: vi.fn(),
-    sendQuiet: vi.fn(async (type: string, payload: Record<string, unknown>) => {
+    sendQuiet: vi.fn(async (type: string, payload: Record<string, unknown>, _timeout?: number, onRefused?: (code: string) => void) => {
       sent.push({ type, payload })
+      if (type === 'pipeline.start' && opts.startRefusedCode !== undefined) onRefused?.(opts.startRefusedCode)
       return null
     }),
-    preSpawnStage: vi.fn(async () => { if (opts.spawnFails) pipeline.state = 'aborted' }),
+    preSpawnStage,
     activateStage: vi.fn(async () => {}),
     startGlobalManagerRouter: vi.fn(),
     pipelineDag: opts.dag ?? linearPipelineDag(() => pipeline.workspacePath).dag,
@@ -99,7 +103,7 @@ async function loadStart(opts: StartOpts = {}) {
     p: { task: string; workspacePath: string; pipelineId?: string },
     report?: (r: { code: string; params?: Record<string, unknown> }) => void,
   ) => Promise<string>
-  return { onPipelineStart, pipeline, sent, stagesApi, pipelinesApi }
+  return { onPipelineStart, pipeline, sent, stagesApi, pipelinesApi, runPipelineId, createRunGroup, preSpawnStage }
 }
 
 const START = { task: 'kite story', workspacePath: '/tmp/ws', pipelineId: 'pl-2' }
@@ -126,10 +130,12 @@ describe('start reloads the stages of the pipeline it starts', () => {
     ])
   })
 
-  it('still switches first when another pipeline is requested', async () => {
+  it('runs another pipeline without making it the default (PR-E E4)', async () => {
     const t = await loadStart({ activePipelineId: 'pl-1', cached: STALE })
     await t.onPipelineStart(START)
-    expect(t.pipelinesApi.setActivePipeline).toHaveBeenCalledWith('pl-2', '/tmp/ws')
+    expect(t.pipelinesApi.setActivePipeline).not.toHaveBeenCalled()
+    expect(t.pipelinesApi.activePipelineId.value).toBe('pl-1')
+    expect(t.runPipelineId.value).toBe('pl-2')
     expect(t.stagesApi.refresh).toHaveBeenCalledWith('pl-2')
     expect(t.sent.find((s) => s.type === 'pipeline.start')?.payload.pipeline_id).toBe('pl-2')
   })
@@ -160,12 +166,14 @@ describe('a refused start says why, durably', () => {
     expect(t.pipeline.state).toBe('idle')
   })
 
-  it('a pipeline it cannot switch to', async () => {
-    const t = await loadStart({ activePipelineId: 'pl-1', switchOk: false })
+  it('another pipeline whose stages fail to load leaves the default and the run alone', async () => {
+    const t = await loadStart({ activePipelineId: 'pl-1', refreshError: 'pipeline not found: pl-2' })
     const reason = await t.onPipelineStart(START)
-    expect(reason).toContain('switch refused')
+    expect(reason).toContain('pipeline not found: pl-2')
     expect(refusal(t.sent)?.reason).toBe(reason)
-    expect(t.stagesApi.refresh).not.toHaveBeenCalled()
+    expect(t.pipelinesApi.setActivePipeline).not.toHaveBeenCalled()
+    expect(t.pipelinesApi.activePipelineId.value).toBe('pl-1')
+    expect(t.runPipelineId.value).toBe('')
   })
 
   it('a run graph that cannot be prepared, restoring the state it had', async () => {
@@ -175,6 +183,31 @@ describe('a refused start says why, durably', () => {
     expect(reason).toMatch(/run graph/)
     expect(refusal(t.sent)?.reason).toBe(reason)
     expect(t.pipeline.state).toBe('idle')
+  })
+})
+
+describe('a start the backend refuses is rolled back (PR-E E1)', () => {
+  it('a run already going elsewhere: nothing spawns, the state is put back, the code is reported', async () => {
+    const t = await loadStart({ startRefusedCode: 'PIPELINE_ALREADY_RUNNING' })
+    const report = vi.fn()
+    const reason = await t.onPipelineStart(START, report)
+    expect(reason).toMatch(/already in progress/)
+    expect(report).toHaveBeenCalledWith({ code: 'already-running', params: {} })
+    expect(t.pipeline.state).toBe('idle')
+    expect(t.pipeline.workspacePath).toBe('')
+    expect(t.pipeline.stageIndex).toBe(-1)
+    expect(t.runPipelineId.value).toBe('')
+    expect(t.createRunGroup).not.toHaveBeenCalled()
+    expect(t.preSpawnStage).not.toHaveBeenCalled()
+  })
+
+  it('any other refusal or no answer is not-recorded, rolled back the same way', async () => {
+    const t = await loadStart({ startRefusedCode: '' })
+    const report = vi.fn()
+    await t.onPipelineStart(START, report)
+    expect(report).toHaveBeenCalledWith({ code: 'not-recorded', params: {} })
+    expect(t.pipeline.state).toBe('idle')
+    expect(t.preSpawnStage).not.toHaveBeenCalled()
   })
 })
 
@@ -329,8 +362,9 @@ describe('the stage cache follows the active pipeline', () => {
   it('refetches the stages whenever the active pipeline id changes', () => {
     // The run panel's "0-stage" read this cache; it loaded with the 'default'
     // placeholder id before pipelines.list answered and was never refetched.
+    // Between runs, that is: a run keeps the cache on its own pipeline (E4).
     expect(appSource).toMatch(
-      /watch\(\s*\(\) => pipelinesApi\.activePipelineId\.value,\s*\(id\) => \{\s*if \(id\) void stagesApi\.refresh\(id\)/,
+      /watch\(\s*\(\) => pipelinesApi\.activePipelineId\.value,\s*\(id\) => \{\s*if \(pipeline\.state === 'running'\) return\s*runPipelineId\.value = ''\s*if \(id\) void stagesApi\.refresh\(id\)/,
     )
   })
 })

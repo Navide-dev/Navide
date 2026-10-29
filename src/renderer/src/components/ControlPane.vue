@@ -388,6 +388,10 @@ interface Props {
   pipelines?: PipelineSummary[]
   /** Currently active pipeline id (global). */
   activePipelineId?: string
+  /** The pipeline this window's run belongs to; '' with no run. Running a
+   *  pipeline no longer makes it the default, so this, not activePipelineId,
+   *  names the running one. */
+  runPipelineId?: string
   /** Full backend instance — forwarded to GitPane for git operations. */
   backend?: ReturnType<typeof useBackend>
   /** Past spawns (incl. backend-backfilled manual panes) for the resume datalist. */
@@ -1863,8 +1867,11 @@ watch(visibleTabs, (tabs) => {
   showSidebarTab(tabs[0].id)
 }, { immediate: true })
 
+// The run's pipeline: the one this window ran, else the default (no run yet).
+const runId = computed(() => props.runPipelineId || props.activePipelineId || '')
+
 function isPipelineRunning(pipelineId: string): boolean {
-  return pipelineId === (props.activePipelineId ?? '') && props.pipeline.state === 'running'
+  return pipelineId === runId.value && props.pipeline.state === 'running'
 }
 
 // The unfinished run recorded in project.json belongs to exactly ONE pipeline.
@@ -1875,7 +1882,7 @@ function isPipelineRunning(pipelineId: string): boolean {
 const resumeMatchesActivePipeline = computed<boolean>(() => {
   const owner = props.existingProject?.pipelineId ?? ''
   if (!owner) return true
-  return owner === (props.activePipelineId ?? '')
+  return owner === runId.value
 })
 
 // Name of the pipeline the unfinished run belongs to, for the card shown when
@@ -2075,7 +2082,7 @@ function showResumeError(message: string): void {
 
 // Stage count for the pipeline currently being viewed (may differ from active pipeline)
 const effectiveStageCount = computed(() => {
-  if (!openedPipelineId.value || openedPipelineId.value === (props.activePipelineId ?? '')) {
+  if (!openedPipelineId.value || openedPipelineId.value === runId.value) {
     return props.stages.length
   }
   return openedPipeline.value?.stage_count ?? 0
@@ -2845,7 +2852,7 @@ function startPipeline(): void {
   emit('pipeline-start', {
     task: taskDescription.value.trim(),
     workspacePath: workspacePath.value,
-    // Pass the opened pipeline id so App.vue activates it first if it differs from active
+    // Pass the opened pipeline id so App.vue runs it; the default pipeline stays as it is
     pipelineId: openedPipelineId.value || undefined,
   })
   backToList()
@@ -3460,12 +3467,12 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <span
             class="pipeline-item-badge"
             :class="isPipelineRunning(p.id) ? 'running'
-              : p.id === activePipelineId && pipeline.state === 'completed' ? 'done'
+              : p.id === runId && pipeline.state === 'completed' ? 'done'
               : existingProject?.pipelineId === p.id && existingProject?.nextStageIndex < 0 ? 'done'
               : 'idle'"
           >
             {{ isPipelineRunning(p.id) ? `● ${$t('paneStatus.running')}`
-              : p.id === activePipelineId && pipeline.state === 'completed' ? `✓ ${$t('label.pipeline-runs-done', { count: existingProject?.runCount ?? 1 })}`
+              : p.id === runId && pipeline.state === 'completed' ? `✓ ${$t('label.pipeline-runs-done', { count: existingProject?.runCount ?? 1 })}`
               : existingProject?.pipelineId === p.id && existingProject?.nextStageIndex < 0 ? `✓ ${$t('label.pipeline-runs-done', { count: existingProject.runCount })}`
               : `○ ${$t('paneStatus.idle')}` }}
           </span>
@@ -3527,7 +3534,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <div class="pipeline-running-divider"></div>
         <div class="pipeline-running-name">
           <div class="prn-title">
-            ▶ {{ pipelines?.find(p => p.id === activePipelineId)?.name ?? $t('label.pipelines') }}
+            ▶ {{ pipelines?.find(p => p.id === runId)?.name ?? $t('label.pipelines') }}
           </div>
           <!-- A sub-pipeline's child run: where it was called from, and a way
                back to the parent's runs. -->
@@ -3536,7 +3543,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               <button class="ghost prn-crumb" :title="$t('pipelineEditor.controlPane.open-parent')" @click="openPipelineManager(p.pipelineId || undefined)">{{ p.name }}</button>
               <span class="prn-crumb-sep" aria-hidden="true">›</span>
             </template>
-            <span class="prn-crumb-here">{{ pipelines?.find(p => p.id === activePipelineId)?.name ?? '' }}</span>
+            <span class="prn-crumb-here">{{ pipelines?.find(p => p.id === runId)?.name ?? '' }}</span>
           </div>
           <div v-if="pipeline.task" class="prn-task" v-truncate>{{ pipeline.task }}</div>
           <div class="prn-meta">
@@ -3545,7 +3552,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </div>
           <!-- Full run control (gates, rerun-from-step, per-step state) lives
                in the Pipeline workspace; this card stays compact. -->
-          <button class="ghost prn-open" @click="openPipelineManager(activePipelineId || undefined)">
+          <button class="ghost prn-open" @click="openPipelineManager(runId || undefined)">
             {{ $t('pipelineEditor.controlPane.open-in-canvas') }}
           </button>
         </div>

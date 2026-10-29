@@ -11284,7 +11284,9 @@
       "stages-load-failed": "No se han podido cargar los pasos de esta pipeline.",
       "no-stages": "Esta pipeline aún no tiene pasos. Añade uno primero.",
       "graph-failed": "No se ha podido preparar la pipeline para ejecutarla.",
-      "spawn-failed": "No se ha podido iniciar ningún agent del primer paso. Comprueba que sus CLI estén instaladas."
+      "spawn-failed": "No se ha podido iniciar ningún agent del primer paso. Comprueba que sus CLI estén instaladas.",
+      "already-running": "Ya hay una pipeline en ejecución en esta área de trabajo. Detenla primero.",
+      "not-recorded": "La ejecución no se registró, así que no se inició nada. El registro de la pipeline indica por qué."
     },
     "graph": {
       "slot-incomplete": "{label} necesita un agent y un nombre.",

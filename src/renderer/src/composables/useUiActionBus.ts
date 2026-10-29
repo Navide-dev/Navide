@@ -272,6 +272,9 @@ export async function handleUiInvokeRequest(
   let ok = true
   let result: unknown
   let error: string | undefined
+  // A handler's coded refusal (code/params on the Error it threw), handed on
+  // so an MCP caller gets an error_code next to the sentence.
+  let coded: { code?: string; params?: Record<string, unknown> } = {}
   try {
     if (wrongProject) {
       ok = false
@@ -317,6 +320,7 @@ export async function handleUiInvokeRequest(
           const outcome = await invokeCommand(req.action, { ...(req.args ?? {}), paneId: rest })
           ok = outcome.ok
           error = outcome.error
+          coded = { code: outcome.code, params: outcome.params }
           const answer = outcome.result as { reclaimed?: unknown[]; refused?: unknown[] } | undefined
           // Kept on a failure too: the caller must still learn its own id was taken out.
           const base = ok && answer ? answer : { reclaimed: [] }
@@ -327,6 +331,7 @@ export async function handleUiInvokeRequest(
         ok = outcome.ok
         result = outcome.result
         error = outcome.error
+        coded = { code: outcome.code, params: outcome.params }
       }
     } else if (req.op === 'snapshot') {
       result = await opts.buildSnapshot()
@@ -343,6 +348,8 @@ export async function handleUiInvokeRequest(
 
   const diagnostics = takeDiagnosticsSince(diagnosticSeq)
   const payload: Record<string, unknown> = { request_id: req.request_id, ok, result, error: error ?? null }
+  if (!ok && coded.code) payload.code = coded.code
+  if (!ok && coded.params) payload.params = coded.params
   if (diagnostics.length > 0) {
     payload.warnings = diagnostics.map((d) => `[${d.code}] ${d.message}`)
   }
