@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "Wiederherstellen",
-      "resume-desc": "Setzt den angehaltenen Lauf bei seiner ersten unfertigen Phase fort, mit seinen Panes und seinem Kontext.",
-      "restart-desc": "Schließt die Panes dieses Laufs und führt dieselbe Aufgabe ab der ersten Phase erneut aus.",
-      "reset-desc": "Löscht den Lauf und schließt alle Panes in diesem Fenster, auch die, die du selbst geöffnet hast.",
+      "resume-desc": "Setzt den angehaltenen Lauf bei seiner ersten unfertigen Phase fort, mit seinen Bereichen und seinem Kontext.",
+      "restart-desc": "Schließt die Bereiche dieses Laufs und führt dieselbe Aufgabe ab der ersten Phase erneut aus.",
+      "reset-desc": "Löscht den Lauf und schließt alle Bereiche in diesem Fenster, auch die, die du selbst geöffnet hast.",
       "older-run": "Das ist ein früherer Lauf. Wiederherstellen wirkt immer auf den neuesten Lauf dieser Pipeline.",
       "show-latest": "Neuesten Lauf zeigen"
     },
@@ -11655,7 +11655,7 @@
     },
     "run": {
       "abort-title": "Diesen Lauf abbrechen?",
-      "abort-message": "Der Lauf hält an der aktuellen Stelle an. Seine Panes bleiben offen, und du kannst ihn später fortsetzen.",
+      "abort-message": "Der Lauf hält an der aktuellen Stelle an. Seine Bereiche bleiben offen, und du kannst ihn später fortsetzen.",
       "running": "Läuft: {names}",
       "gate": "Wartet bei {name} auf Ihre Genehmigung",
       "review": "Prüfen",
@@ -12551,7 +12551,7 @@
       "unknown-type": "Dieser Knotentyp steht nicht in der Importtabelle. Ein Agent führt ihn anhand seiner Parameter aus.",
       "community-node": "Community-Knoten. Ein Agent führt ihn anhand seiner Parameter aus.",
       "merge-combine": "Merge im Modus „{mode}“ kombiniert Daten. Ein Agent führt ihn nach seiner Merge-Regel aus.",
-      "role-trigger-schedule": "Läuft in n8n nach Zeitplan. Starten Sie ihn manuell, bis Navide Pipelines planen kann.",
+      "role-trigger-schedule": "Läuft in n8n nach Zeitplan. Starten Sie die Pipeline manuell oder planen Sie sie unter Turn Stats ▸ Zeitplan mit einem Auftrag „Eine Pipeline starten“.",
       "role-trigger-webhook": "Startet in n8n durch eine HTTP-Anfrage. Navide hat noch keinen Webhook-Auslöser.",
       "role-trigger-error": "Für n8n-Fehler-Workflows gibt es in Navide noch keine Entsprechung.",
       "role-trigger-app": "Startet in n8n durch ein App-Ereignis. Navide hat noch keine App-Auslöser.",

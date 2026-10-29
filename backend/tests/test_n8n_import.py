@@ -542,6 +542,15 @@ def test_schedule_trigger_is_pending():
     assert shape(out)["edges"] == [("trigger", "n8n-digest")]
 
 
+def test_schedule_trigger_points_at_a_scheduled_pipeline_start():
+    # Navide schedules pipeline runs (a pipeline_start job); the note must not
+    # say it cannot.
+    e = entry(convert(schedule()), "Every day")
+    assert e["detailCode"] == "role-trigger-schedule"
+    assert "pipeline_start" in e["detail"]
+    assert "until Navide" not in e["detail"]
+
+
 def test_subworkflow_reference_is_pending_and_asks_for_the_child_json():
     out = convert(subworkflow())
     e = entry(out, "Run child")

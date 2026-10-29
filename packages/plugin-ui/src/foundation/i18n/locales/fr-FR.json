@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "Récupérer",
-      "resume-desc": "Poursuit l’exécution arrêtée à sa première étape inachevée, avec ses panneaux et son contexte.",
-      "restart-desc": "Ferme les panneaux de cette exécution et relance la même tâche depuis la première étape.",
-      "reset-desc": "Efface l’exécution et ferme tous les panneaux de cette fenêtre, y compris ceux que vous avez ouverts vous-même.",
+      "resume-desc": "Poursuit l’exécution arrêtée à sa première étape inachevée, avec ses panes et son contexte.",
+      "restart-desc": "Ferme les panes de cette exécution et relance la même tâche depuis la première étape.",
+      "reset-desc": "Efface l’exécution et ferme tous les panes de cette fenêtre, y compris ceux que vous avez ouverts vous-même.",
       "older-run": "Ceci est une exécution antérieure. Récupérer agit toujours sur la dernière exécution de ce pipeline.",
       "show-latest": "Afficher la dernière exécution"
     },
@@ -11655,7 +11655,7 @@
     },
     "run": {
       "abort-title": "Interrompre cette exécution ?",
-      "abort-message": "L’exécution s’arrête là où elle en est. Ses panneaux restent ouverts, et vous pourrez la reprendre plus tard.",
+      "abort-message": "L’exécution s’arrête là où elle en est. Ses panes restent ouverts, et vous pourrez la reprendre plus tard.",
       "running": "En cours : {names}",
       "gate": "En attente de votre approbation à {name}",
       "review": "Examiner",
@@ -12551,7 +12551,7 @@
       "unknown-type": "Ce type de nœud n’est pas dans la table d’import. Un agent l’exécute à partir de ses paramètres.",
       "community-node": "Nœud communautaire. Un agent l’exécute à partir de ses paramètres.",
       "merge-combine": "Merge en mode « {mode} » combine des données. Un agent l’exécute selon sa règle de fusion.",
-      "role-trigger-schedule": "S’exécute selon une planification dans n8n. Démarrez-le manuellement en attendant que Navide planifie les pipelines.",
+      "role-trigger-schedule": "S’exécute selon une planification dans n8n. Lancez le pipeline manuellement, ou planifiez-le dans Turn Stats ▸ Planification avec une tâche « Lancer un pipeline ».",
       "role-trigger-webhook": "Démarre sur une requête HTTP dans n8n. Navide n’a pas encore de déclencheur webhook.",
       "role-trigger-error": "Les workflows d’erreur n8n n’ont pas encore d’équivalent dans Navide.",
       "role-trigger-app": "Démarre sur un événement d’application dans n8n. Navide n’a pas encore de déclencheurs d’application.",

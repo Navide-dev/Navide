@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "Recuperar",
-      "resume-desc": "Continúa la ejecución detenida en su primera etapa sin terminar, con sus paneles y su contexto.",
-      "restart-desc": "Cierra los paneles de esta ejecución y vuelve a ejecutar la misma tarea desde la primera etapa.",
-      "reset-desc": "Borra la ejecución y cierra todos los paneles de esta ventana, incluidos los que abriste tú.",
+      "resume-desc": "Continúa la ejecución detenida en su primera etapa sin terminar, con sus panes y su contexto.",
+      "restart-desc": "Cierra los panes de esta ejecución y vuelve a ejecutar la misma tarea desde la primera etapa.",
+      "reset-desc": "Borra la ejecución y cierra todos los panes de esta ventana, incluidos los que abriste tú.",
       "older-run": "Esta es una ejecución anterior. Recuperar siempre actúa sobre la ejecución más reciente de esta pipeline.",
       "show-latest": "Mostrar la ejecución más reciente"
     },
@@ -11655,7 +11655,7 @@
     },
     "run": {
       "abort-title": "¿Cancelar esta ejecución?",
-      "abort-message": "La ejecución se detiene donde está. Sus paneles siguen abiertos y puedes reanudarla más tarde.",
+      "abort-message": "La ejecución se detiene donde está. Sus panes siguen abiertos y puedes reanudarla más tarde.",
       "running": "En ejecución: {names}",
       "gate": "Esperando tu aprobación en {name}",
       "review": "Revisar",
@@ -12551,7 +12551,7 @@
       "unknown-type": "Este tipo de nodo no está en la tabla de importación. Un agent lo ejecuta a partir de sus parámetros.",
       "community-node": "Nodo de la comunidad. Un agent lo ejecuta a partir de sus parámetros.",
       "merge-combine": "Merge en modo «{mode}» combina datos. Un agent lo ejecuta según su regla de combinación.",
-      "role-trigger-schedule": "En n8n se ejecuta según una programación. Inícialo manualmente hasta que Navide pueda programar pipelines.",
+      "role-trigger-schedule": "En n8n se ejecuta según una programación. Inicia la pipeline manualmente o prográmala en Turn Stats ▸ Programación con una tarea «Iniciar una pipeline».",
       "role-trigger-webhook": "En n8n se inicia con una petición HTTP. Navide aún no tiene disparador de webhook.",
       "role-trigger-error": "Los flujos de trabajo de error de n8n aún no tienen equivalente en Navide.",
       "role-trigger-app": "En n8n se inicia con un evento de una aplicación. Navide aún no tiene disparadores de aplicaciones.",

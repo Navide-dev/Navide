@@ -12551,7 +12551,7 @@
       "unknown-type": "Loại nút này không có trong bảng nhập. Một agent thực hiện nó theo các tham số của nó.",
       "community-node": "Nút cộng đồng. Một agent thực hiện nó theo các tham số của nó.",
       "merge-combine": "Merge ở chế độ “{mode}” kết hợp dữ liệu. Một agent thực hiện nó theo quy tắc gộp của nó.",
-      "role-trigger-schedule": "Trong n8n, nút này chạy theo lịch. Hãy khởi động thủ công cho đến khi Navide hỗ trợ lên lịch cho pipeline.",
+      "role-trigger-schedule": "Trong n8n, nút này chạy theo lịch. Hãy khởi động pipeline thủ công, hoặc lên lịch trong Turn Stats ▸ Lịch bằng một tác vụ “Khởi động pipeline”.",
       "role-trigger-webhook": "Trong n8n, nút này bắt đầu từ một yêu cầu HTTP. Navide chưa có trình kích hoạt webhook.",
       "role-trigger-error": "Workflow lỗi của n8n chưa có tính năng tương đương trong Navide.",
       "role-trigger-app": "Trong n8n, nút này bắt đầu từ một sự kiện ứng dụng. Navide chưa có trình kích hoạt ứng dụng.",

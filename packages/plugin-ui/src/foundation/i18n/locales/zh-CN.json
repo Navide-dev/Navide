@@ -1243,7 +1243,7 @@
     "replace-in-file": "取代文件中所有符合项",
     "replace-match": "取代此符合项",
     "open-in-finder": "用 Finder 打开此文件夹",
-    "clear-pipeline": "清除流程状态并关闭所有 Agent 面板",
+    "clear-pipeline": "清除流程状态并关闭所有 agent pane",
     "remove-from-history": "从历史记录中移除",
     "double-click-rename": "双击重命名",
     "close-workspace": "关闭工作区",
@@ -1369,7 +1369,7 @@
     "stall-force-advance": "强制推进",
     "prev-page": "上一页",
     "next-page": "下一页",
-    "manage-pipelines": "管理 pipeline",
+    "manage-pipelines": "流程管理",
     "reset-run-counter": "重设本次运行的计数",
     "wipe-workspace-history": "清除这个工作区的历史统计",
     "wipe-global-tally": "清除全域总计",
@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "恢复",
-      "resume-desc": "从第一个未完成的阶段继续这次停止的运行，沿用它的窗格和上下文。",
-      "restart-desc": "关闭这次运行的窗格，从第一个阶段重新运行同一个任务。",
-      "reset-desc": "清除这次运行，并关闭这个窗口的所有窗格，包括你自己开的窗格。",
+      "resume-desc": "从第一个未完成的阶段继续这次停止的运行，沿用它的 pane 和上下文。",
+      "restart-desc": "关闭这次运行的 pane，从第一个阶段重新运行同一个任务。",
+      "reset-desc": "清除这次运行，并关闭这个窗口的所有 pane，包括你自己开的 pane。",
       "older-run": "这是较早的一次运行。恢复动作一律作用在这个 Pipeline 最新的那次运行。",
       "show-latest": "显示最新的运行"
     },
@@ -11655,7 +11655,7 @@
     },
     "run": {
       "abort-title": "中止这次运行？",
-      "abort-message": "运行会停在目前的位置。窗格保持打开，之后可以继续。",
+      "abort-message": "运行会停在目前的位置。pane 保持打开，之后可以继续。",
       "running": "运行中：{names}",
       "gate": "等待你在“{name}”核准",
       "review": "前往核准",
@@ -12551,7 +12551,7 @@
       "unknown-type": "这个节点类型不在导入对照表中，由 agent 按它的参数执行。",
       "community-node": "社区节点，由 agent 按它的参数执行。",
       "merge-combine": "“{mode}”模式的 Merge 会合并数据，由 agent 按它的合并规则执行。",
-      "role-trigger-schedule": "在 n8n 中按计划运行。在 Navide 能按计划运行流程之前，请手动启动。",
+      "role-trigger-schedule": "在 n8n 中按计划运行。请手动启动流程，或在每轮消耗 ▸ 调度中新增动作为“启动 Pipeline”的任务。",
       "role-trigger-webhook": "在 n8n 中由 HTTP 请求启动。Navide 还没有 webhook 触发。",
       "role-trigger-error": "n8n 的错误工作流在 Navide 中还没有对应的功能。",
       "role-trigger-app": "在 n8n 中由应用事件启动。Navide 还没有应用触发。",

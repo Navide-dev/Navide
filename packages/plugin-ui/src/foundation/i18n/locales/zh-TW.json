@@ -1243,7 +1243,7 @@
     "replace-in-file": "取代檔案中所有符合項",
     "replace-match": "取代此符合項",
     "open-in-finder": "用 Finder 開啟此資料夾",
-    "clear-pipeline": "清除流程狀態並關閉所有 Agent 面板",
+    "clear-pipeline": "清除流程狀態並關閉所有 agent pane",
     "remove-from-history": "從歷史記錄中移除",
     "double-click-rename": "雙擊重新命名",
     "close-workspace": "關閉工作區",
@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "復原",
-      "resume-desc": "從第一個未完成的階段繼續這次停下的執行，沿用它的窗格和上下文。",
-      "restart-desc": "關閉這次執行的窗格，從第一個階段重新執行同一個任務。",
-      "reset-desc": "清除這次執行，並關閉這個視窗的所有窗格，包括你自己開的窗格。",
+      "resume-desc": "從第一個未完成的階段繼續這次停下的執行，沿用它的 pane 和上下文。",
+      "restart-desc": "關閉這次執行的 pane，從第一個階段重新執行同一個任務。",
+      "reset-desc": "清除這次執行，並關閉這個視窗的所有 pane，包括你自己開的 pane。",
       "older-run": "這是較早的一次執行。復原動作一律作用在這條 Pipeline 最新的那次執行。",
       "show-latest": "顯示最新的執行"
     },
@@ -11655,7 +11655,7 @@
     },
     "run": {
       "abort-title": "中止這次執行？",
-      "abort-message": "執行會停在目前的位置。窗格保持開啟，之後可以繼續。",
+      "abort-message": "執行會停在目前的位置。pane 保持開啟，之後可以繼續。",
       "running": "執行中：{names}",
       "gate": "等待你在「{name}」核准",
       "review": "前往核准",
@@ -12551,7 +12551,7 @@
       "unknown-type": "這個節點類型不在匯入對照表裡，由 agent 依它的參數執行。",
       "community-node": "社群節點，由 agent 依它的參數執行。",
       "merge-combine": "「{mode}」模式的 Merge 會合併資料，由 agent 依它的合併規則執行。",
-      "role-trigger-schedule": "在 n8n 裡依排程執行。在 Navide 能排程執行流程之前，請手動啟動。",
+      "role-trigger-schedule": "在 n8n 裡依排程執行。請手動啟動流程，或在每輪消耗 ▸ 排程新增動作為「啟動 Pipeline」的排程。",
       "role-trigger-webhook": "在 n8n 裡由 HTTP 請求啟動。Navide 還沒有 webhook 觸發。",
       "role-trigger-error": "n8n 的錯誤工作流在 Navide 還沒有對應的功能。",
       "role-trigger-app": "在 n8n 裡由應用程式事件啟動。Navide 還沒有應用程式觸發。",

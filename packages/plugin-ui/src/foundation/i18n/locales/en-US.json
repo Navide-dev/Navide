@@ -12551,7 +12551,7 @@
       "unknown-type": "This node type is not in the import table. An agent carries it out from its parameters.",
       "community-node": "Community node. An agent carries it out from its parameters.",
       "merge-combine": "Merge in “{mode}” mode combines data. An agent carries it out by its merge rule.",
-      "role-trigger-schedule": "Runs on a schedule in n8n. Start it manually until Navide schedules pipelines.",
+      "role-trigger-schedule": "Runs on a schedule in n8n. Start the pipeline by hand, or schedule it in Turn Stats ▸ Schedule with a “Start a pipeline” job.",
       "role-trigger-webhook": "Starts from an HTTP request in n8n. Navide has no webhook trigger yet.",
       "role-trigger-error": "n8n error workflows have no Navide equivalent yet.",
       "role-trigger-app": "Starts from an app event in n8n. Navide has no app triggers yet.",

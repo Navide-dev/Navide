@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "복구",
-      "resume-desc": "멈춘 실행을 끝나지 않은 첫 단계부터 이어 갑니다. 패널과 컨텍스트는 그대로 씁니다.",
-      "restart-desc": "이 실행의 패널을 닫고 같은 작업을 첫 단계부터 다시 실행합니다.",
-      "reset-desc": "실행을 지우고 이 창의 모든 패널을 닫습니다. 직접 연 패널도 포함됩니다.",
+      "resume-desc": "멈춘 실행을 끝나지 않은 첫 단계부터 이어 갑니다. pane과 컨텍스트는 그대로 씁니다.",
+      "restart-desc": "이 실행의 pane을 닫고 같은 작업을 첫 단계부터 다시 실행합니다.",
+      "reset-desc": "실행을 지우고 이 창의 모든 pane을 닫습니다. 직접 연 pane도 포함됩니다.",
       "older-run": "이전 실행입니다. 복구는 항상 이 Pipeline의 최신 실행에 적용됩니다.",
       "show-latest": "최신 실행 보기"
     },
@@ -11655,7 +11655,7 @@
     },
     "run": {
       "abort-title": "이 실행을 중단할까요?",
-      "abort-message": "실행이 지금 위치에서 멈춥니다. 패널은 열린 채로 남고, 나중에 재개할 수 있습니다.",
+      "abort-message": "실행이 지금 위치에서 멈춥니다. pane은 열린 채로 남고, 나중에 재개할 수 있습니다.",
       "running": "실행 중: {names}",
       "gate": "{name}에서 승인을 기다리는 중",
       "review": "검토",
@@ -12551,7 +12551,7 @@
       "unknown-type": "이 노드 유형은 가져오기 표에 없어요. Agent가 파라미터에 따라 실행해요.",
       "community-node": "커뮤니티 노드예요. Agent가 파라미터에 따라 실행해요.",
       "merge-combine": "“{mode}” 모드의 Merge는 데이터를 결합해요. Agent가 그 결합 규칙에 따라 실행해요.",
-      "role-trigger-schedule": "n8n에서는 일정에 따라 실행돼요. Navide가 pipeline 일정 실행을 지원할 때까지 직접 시작하세요.",
+      "role-trigger-schedule": "n8n에서는 일정에 따라 실행돼요. pipeline을 직접 시작하거나, Turn Stats ▸ 일정에서 동작이 “Pipeline 시작”인 작업을 추가하세요.",
       "role-trigger-webhook": "n8n에서는 HTTP 요청으로 시작돼요. Navide에는 아직 webhook 트리거가 없어요.",
       "role-trigger-error": "n8n 오류 워크플로에 해당하는 기능이 Navide에는 아직 없어요.",
       "role-trigger-app": "n8n에서는 앱 이벤트로 시작돼요. Navide에는 아직 앱 트리거가 없어요.",

@@ -11316,9 +11316,9 @@
   "pipelineEditor": {
     "recover": {
       "title": "Recuperar",
-      "resume-desc": "Continua a execução parada na primeira etapa não concluída, com seus painéis e contexto.",
-      "restart-desc": "Fecha os painéis desta execução e executa a mesma tarefa de novo desde a primeira etapa.",
-      "reset-desc": "Apaga a execução e fecha todos os painéis desta janela, inclusive os que você mesmo abriu.",
+      "resume-desc": "Continua a execução parada na primeira etapa não concluída, com seus panes e contexto.",
+      "restart-desc": "Fecha os panes desta execução e executa a mesma tarefa de novo desde a primeira etapa.",
+      "reset-desc": "Apaga a execução e fecha todos os panes desta janela, inclusive os que você mesmo abriu.",
       "older-run": "Esta é uma execução anterior. Recuperar sempre age sobre a execução mais recente deste pipeline.",
       "show-latest": "Mostrar a execução mais recente"
     },
@@ -11655,7 +11655,7 @@
     },
     "run": {
       "abort-title": "Cancelar esta execução?",
-      "abort-message": "A execução para onde está. Os painéis continuam abertos, e você pode retomá-la depois.",
+      "abort-message": "A execução para onde está. Os panes continuam abertos, e você pode retomá-la depois.",
       "running": "Em execução: {names}",
       "gate": "Aguardando sua aprovação em {name}",
       "review": "Revisar",
@@ -12551,7 +12551,7 @@
       "unknown-type": "Este tipo de nó não está na tabela de importação. Um agent o executa a partir dos parâmetros dele.",
       "community-node": "Nó da comunidade. Um agent o executa a partir dos parâmetros dele.",
       "merge-combine": "Merge no modo “{mode}” combina dados. Um agent o executa pela regra de combinação dele.",
-      "role-trigger-schedule": "Roda por agendamento no n8n. Inicie-o manualmente até o Navide agendar pipelines.",
+      "role-trigger-schedule": "Roda por agendamento no n8n. Inicie o pipeline manualmente ou agende-o em Turn Stats ▸ Agendamento com uma tarefa “Iniciar um pipeline”.",
       "role-trigger-webhook": "Começa com uma requisição HTTP no n8n. O Navide ainda não tem gatilho de webhook.",
       "role-trigger-error": "Workflows de erro do n8n ainda não têm equivalente no Navide.",
       "role-trigger-app": "Começa com um evento de aplicativo no n8n. O Navide ainda não tem gatilhos de aplicativo.",

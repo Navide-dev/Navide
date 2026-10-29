@@ -12551,7 +12551,7 @@
       "unknown-type": "このノードの種類はインポート表にありません。エージェントがパラメーターに従って実行します。",
       "community-node": "コミュニティノードです。エージェントがパラメーターに従って実行します。",
       "merge-combine": "「{mode}」モードの Merge はデータを結合します。エージェントがその結合ルールに従って実行します。",
-      "role-trigger-schedule": "n8n ではスケジュールで実行されます。Navide がパイプラインをスケジュール実行できるようになるまでは手動で開始してください。",
+      "role-trigger-schedule": "n8n ではスケジュールで実行されます。手動でパイプラインを開始するか、ターン統計 ▸ スケジュールでアクションが「Pipeline を開始」のジョブを追加してください。",
       "role-trigger-webhook": "n8n では HTTP リクエストで開始します。Navide にはまだ Webhook トリガーがありません。",
       "role-trigger-error": "n8n のエラーワークフローに相当する機能は Navide にまだありません。",
       "role-trigger-app": "n8n ではアプリのイベントで開始します。Navide にはまだアプリのトリガーがありません。",
