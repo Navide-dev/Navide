@@ -1968,6 +1968,8 @@
         "offUnsaved": "Backend gốc của bên thứ ba hiện đang tắt, nhưng Navide không lưu được thiết lập này, nên chúng sẽ bật lại sau khi Navide khởi động lại.",
         "offUnsavedRetry": "Thử lại",
         "agentTools": {
+          "firstParty": "Cho phép agent gọi công cụ từ plugin Navide chính thức",
+          "firstPartyDescription": "Bật theo mặc định. Cho phép agent trong pane gọi công cụ của plugin Navide chính thức, do Navide làm như Navide Browser, mà không hỏi cho từng phiên bản. Kết quả vẫn được đánh dấu là nội dung bên ngoài, và công cụ thay đổi thứ gì đó vẫn hỏi một lần cho mỗi không gian làm việc.",
           "enable": "Cho phép agent gọi công cụ từ plugin Navide của bên thứ ba",
           "description": "Cho phép agent trong pane gọi công cụ do plugin Navide bạn đã cho phép khai báo; công cụ thay đổi tệp sẽ hỏi một lần cho mỗi không gian làm việc.",
           "externalCallers": "Cho phép cả client MCP bên ngoài gọi chúng",

@@ -1968,6 +1968,8 @@
         "offUnsaved": "Native Backends von Drittanbietern sind vorerst aus, aber Navide konnte das nicht speichern. Nach einem Neustart von Navide sind sie wieder an.",
         "offUnsavedRetry": "Erneut versuchen",
         "agentTools": {
+          "firstParty": "Agents erlauben, Tools aus offiziellen Navide-Plug-ins aufzurufen",
+          "firstPartyDescription": "Standardmäßig an. Lässt Agents in Ihren Bereichen die Tools offizieller Navide-Plug-ins aufrufen, also der von Navide selbst wie Navide Browser, ohne für jede Version zu fragen. Ihre Ergebnisse gelten weiterhin als externe Inhalte, und ein Tool, das etwas ändert, fragt weiterhin einmal pro Arbeitsbereich.",
           "enable": "Agents erlauben, Tools aus Navide-Plug-ins von Drittanbietern aufzurufen",
           "description": "Lässt Agents in Ihren Bereichen Tools aufrufen, die von Ihnen erlaubte Navide-Plug-ins deklarieren; ein Tool, das Dateien ändert, fragt einmal pro Arbeitsbereich.",
           "externalCallers": "Auch externen MCP-Clients den Aufruf erlauben",

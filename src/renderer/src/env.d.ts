@@ -588,7 +588,7 @@ declare global {
           allow: (id: string) => Promise<NativeBackendOverview>
           setDisabled: (id: string, disabled: boolean) => Promise<NativeBackendOverview>
           revokeWorkspaceWrite: (id: string, workspacePath: string) => Promise<NativeBackendOverview>
-          setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean }) => Promise<NativeBackendOverview>
+          setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean } | { firstParty: boolean }) => Promise<NativeBackendOverview>
           /** Watchdog option C: unanswered resource notices (contract 5.2). */
           resourceNotices?: () => Promise<BackendResourceNoticeView[]>
           resourceStatus?: () => Promise<BackendResourceStatusView[]>
@@ -772,7 +772,7 @@ declare global {
     enabled: boolean
     plugins: NativeBackendStatusRow[]
     /** Plan B: agent-tool switches (DB8, DB4); absent on an older Host. */
-    agentTools?: { enabled: boolean; externalCallers: boolean }
+    agentTools?: { enabled: boolean; externalCallers: boolean; firstParty?: boolean }
     /** #642 review L2: off for this run, not saved; on again after a restart. */
     offUnsaved?: true
   }

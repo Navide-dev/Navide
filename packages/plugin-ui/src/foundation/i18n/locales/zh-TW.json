@@ -1968,6 +1968,8 @@
         "offUnsaved": "第三方原生後端目前已關閉，但 Navide 無法儲存這個設定，重新啟動 Navide 後會再變回開啟。",
         "offUnsavedRetry": "再試一次",
         "agentTools": {
+          "firstParty": "允許 agent 呼叫官方 Navide 外掛的工具",
+          "firstPartyDescription": "預設開啟。讓 pane 裡的 agent 呼叫官方 Navide 外掛（Navide 自己做的，例如 Navide Browser）的工具，不必每個版本都詢問。結果仍會標示為外部內容，會改動東西的工具在每個工作區仍會詢問一次。",
           "enable": "允許 agent 呼叫第三方 Navide 外掛的工具",
           "description": "讓 pane 裡的 agent 呼叫你已允許的 Navide 外掛所宣告的工具；會改動檔案的工具在每個工作區詢問一次。",
           "externalCallers": "外部 MCP 客戶端也能呼叫",

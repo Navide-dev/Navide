@@ -1968,6 +1968,8 @@
         "offUnsaved": "Os backends nativos de terceiros estão desativados por enquanto, mas o Navide não conseguiu salvar isso, então eles voltarão a ficar ativados quando o Navide reiniciar.",
         "offUnsavedRetry": "Tentar de novo",
         "agentTools": {
+          "firstParty": "Permitir que os agents chamem ferramentas de plug-ins do Navide oficiais",
+          "firstPartyDescription": "Ativado por padrão. Permite que os agentes dos seus panes chamem as ferramentas dos plug-ins do Navide oficiais, os que o Navide faz como o Navide Browser, sem perguntar a cada versão. Os resultados continuam marcados como conteúdo externo, e uma ferramenta que altera algo continua perguntando uma vez por espaço de trabalho.",
           "enable": "Permitir que os agents chamem ferramentas de plug-ins do Navide de terceiros",
           "description": "Permite que os agentes dos seus panes chamem ferramentas declaradas por plug-ins do Navide que você permitiu; uma ferramenta que altera arquivos pergunta uma vez por espaço de trabalho.",
           "externalCallers": "Permitir que clientes MCP externos também as chamem",

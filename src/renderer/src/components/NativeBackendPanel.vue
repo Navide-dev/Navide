@@ -28,6 +28,7 @@ const switchesOn = computed<string[]>(() => {
   if (!o) return []
   const out: string[] = []
   if (o.enabled) out.push(t('settings.extensions.nativeBackends.enable'))
+  if (o.agentTools && o.agentTools.firstParty !== false) out.push(t('settings.extensions.nativeBackends.agentTools.firstParty'))
   if (o.agentTools?.enabled) out.push(t('settings.extensions.nativeBackends.agentTools.enable'))
   if (o.agentTools?.enabled && o.agentTools.externalCallers) out.push(t('settings.extensions.nativeBackends.agentTools.externalCallers'))
   return out
@@ -146,6 +147,20 @@ watch(installed, refresh)
         </button>
       </div>
       <template v-if="overview.agentTools && api()?.setAgentTools">
+        <SettingRow
+          :title="$t('settings.extensions.nativeBackends.agentTools.firstParty')"
+          :description="$t('settings.extensions.nativeBackends.agentTools.firstPartyDescription')"
+        >
+          <template #control>
+            <ToggleSwitch
+              data-agent-tools-switch="firstParty"
+              :model-value="overview.agentTools.firstParty !== false"
+              :disabled="busy"
+              :aria-label="$t('settings.extensions.nativeBackends.agentTools.firstParty')"
+              @update:model-value="(on: boolean) => run(() => api()!.setAgentTools!({ firstParty: on }))"
+            />
+          </template>
+        </SettingRow>
         <SettingRow
           :title="$t('settings.extensions.nativeBackends.agentTools.enable')"
           :description="$t('settings.extensions.nativeBackends.agentTools.description')"
