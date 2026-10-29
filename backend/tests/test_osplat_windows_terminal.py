@@ -644,7 +644,19 @@ class TestHandle:
     # carry the TUI's current screen), as terminals' _BUF_CAP does on POSIX.
     async def test_paused_queue_is_bounded_and_keeps_the_newest_output(self, monkeypatch):
         monkeypatch.setattr(_windows, "_PAUSED_QUEUE_CAP", 4096)
-        pty = _FakePTY(80, 24)
+        import threading
+
+        released = threading.Event()
+
+        class _GatedPTY(_FakePTY):
+            # The output only starts once the pause is in place: the cap
+            # applies to what arrives during a pause, and a pump that won
+            # the race would have queued everything before it.
+            def read(self, blocking: bool = False) -> str:
+                released.wait(2)
+                return super().read(blocking)
+
+        pty = _GatedPTY(80, 24)
         pty.reads = [letter * 1024 for letter in "abcdefgh"] + [""]
         pty.alive = False
         handle = _handle(pty)
@@ -664,7 +676,8 @@ class TestHandle:
                 got.append(chunk)
 
         handle.start_reading(loop, on_readable)
-        handle.pause_reading()  # before the loop runs the queued wake-up
+        handle.pause_reading()
+        released.set()
         for _ in range(100):
             await asyncio.sleep(0.01)
             if handle._eof:
