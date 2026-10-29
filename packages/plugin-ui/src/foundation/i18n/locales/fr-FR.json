@@ -11345,7 +11345,8 @@
       "gate-sub": "Attend une approbation",
       "pinned": "Sortie figée",
       "tokens": "{n} tok",
-      "trigger-sub": "Manuel, commande ou MCP"
+      "trigger-sub": "Manuel, commande ou MCP",
+      "needs-review": "Importé depuis n8n : vérifiez cette étape avant d’exécuter le pipeline"
     },
     "notice": {
       "external-edit": "Ce pipeline a été modifié ailleurs. Affichage de la dernière version ; l’historique d’annulation a été effacé.",
@@ -12334,6 +12335,78 @@
       "invalid": "Ce n’est pas un workflow n8n que Navide peut lire.",
       "preview-failed": "Échec de l’aperçu.",
       "import-failed": "Échec de l’import."
+    },
+    "imported": "« {name} » importé",
+    "imported-review": "« {name} » importé · {n} étape à vérifier | « {name} » importé · {n} étapes à vérifier",
+    "imported-reused": "« {name} » a déjà été importé il y a un instant. Ce pipeline a été ouvert ; aucune copie n’a été créée.",
+    "merged-nodes": "{n} nœud n8n dans cette étape | {n} nœuds n8n dans cette étape",
+    "subworkflows-title": "Workflows appelés",
+    "will-create": "L’import crée {n} pipeline. | L’import crée {n} pipelines.",
+    "subworkflow-status": {
+      "imported": "Importé",
+      "will-import": "Importé avec celui-ci",
+      "existing": "Utilise le pipeline importé auparavant",
+      "missing": "Pas encore dans Navide",
+      "recursive": "Rappelle celui-ci : reste à vérifier"
+    },
+    "error-in-workflow": "Workflow {n} : {message}",
+    "import-timeout": "L’import prend du temps et peut encore aboutir. Cliquez à nouveau sur « Importer » : le pipeline s’ouvre s’il a été créé, et aucune copie n’est jamais créée.",
+    "detail": {
+      "unknown-version": "typeVersion {version} est hors de la plage connue {lo}–{hi}. Un agent l’exécute à partir de ses paramètres.",
+      "unknown-type": "Ce type de nœud n’est pas dans la table d’import. Un agent l’exécute à partir de ses paramètres.",
+      "community-node": "Nœud communautaire. Un agent l’exécute à partir de ses paramètres.",
+      "merge-combine": "Merge en mode « {mode} » combine des données. Un agent l’exécute selon sa règle de fusion.",
+      "role-trigger-schedule": "S’exécute selon une planification dans n8n. Démarrez-le manuellement en attendant que Navide planifie les pipelines.",
+      "role-trigger-webhook": "Démarre sur une requête HTTP dans n8n. Navide n’a pas encore de déclencheur webhook.",
+      "role-trigger-error": "Les workflows d’erreur n8n n’ont pas encore d’équivalent dans Navide.",
+      "role-trigger-app": "Démarre sur un événement d’application dans n8n. Navide n’a pas encore de déclencheurs d’application.",
+      "role-subworkflow": "Appelle un autre workflow n8n qui n’est pas importé. Collez aussi ce workflow, ou importez-le d’abord.",
+      "role-respond": "Répond à un webhook n8n. Navide n’a pas encore de déclencheur webhook.",
+      "error-workflow": "Ce workflow est son propre workflow d’erreur. Quand une étape échoue, les étapes suivantes passent par des liens d’erreur.",
+      "recursive-subworkflow": "Appelle le workflow n8n {workflowId}, qui rappelle ce workflow. Un sous-pipeline ne peut pas s’exécuter lui-même, cet appel reste donc à vérifier.",
+      "tool-pipeline": "Un outil d’agent qui appelle le workflow n8n {workflowId}, importé comme pipeline {pipelineId}. Un pipeline ne peut pas être appelé comme outil, les instructions de l’étape le nomment donc à la place.",
+      "subpipeline": "Exécute le pipeline {pipelineId} (le workflow n8n {workflowId}) comme sous-pipeline et attend sa fin.",
+      "subpipeline-nowait": "Exécute le pipeline {pipelineId} (le workflow n8n {workflowId}) comme sous-pipeline et attend sa fin. n8n ne l’attendait pas ; Navide attend toujours un sous-pipeline.",
+      "loop-batch": "La boucle est fusionnée dans une étape qui traite les éléments un par un.",
+      "loop-repeat": "La boucle est fusionnée dans une étape qui se répète jusqu’à ce que la condition de sortie de la boucle soit remplie.",
+      "loop-wait": "Un Wait n8n dans une boucle. L’étape fait une pause ici entre les tours ; aucune validation n’arrête l’exécution.",
+      "loop-subworkflow": "Appelle un autre workflow n8n dans une boucle. Un agent exécute la boucle comme une seule étape.",
+      "removed-sticky": "Note adhésive. Son texte figure dans la description et dans les instructions de l’étape la plus proche.",
+      "removed-disabled": "Désactivé dans n8n. Ignoré ; ses connexions sont reliées directement.",
+      "removed-noop": "Nœud No Operation. Supprimé, et ses connexions ont été reliées.",
+      "cluster-model": "L’étape s’exécute sur un agent CLI au lieu de ce modèle.",
+      "cluster-memory": "Abandonné. La session CLI garde son propre contexte.",
+      "cluster-tool": "L’agent utilise son propre équivalent de cet outil.",
+      "cluster-mcp-tool": "Configurez le même serveur MCP dans Paramètres → MCP.",
+      "cluster-tool-workflow": "Un outil d’agent qui appelle un autre workflow n8n, non importé. Un pipeline ne peut pas être appelé comme outil, les instructions de l’étape le décrivent donc.",
+      "cluster-parser": "Le format de sortie fait partie des instructions de l’étape.",
+      "cluster-vector": "Les clusters de base vectorielle ne sont pas pris en charge. Gardez cette partie dans n8n.",
+      "cluster-other": "Fusionné dans l’étape de l’agent.",
+      "branch-if": "Liens de branche : l’agent indique dans quel sens la condition a tourné, et seule cette branche s’exécute.",
+      "branch-switch": "Liens de branche, un par règle : l’agent indique quelle règle a correspondu, et seule cette branche s’exécute.",
+      "merge-join": "Attend les entrées qui s’exécutent. Une entrée dont la branche n’a pas été prise est ignorée.",
+      "agent-step": "Un agent l’exécute à partir des paramètres d’origine."
+    },
+    "warning": {
+      "error-workflow-other": "Les paramètres du workflow désignent un autre workflow n8n pour les erreurs. Cette gestion des erreurs n’est pas importée.",
+      "into-trigger": "Une connexion vers le déclencheur « {node} » a été supprimée.",
+      "plain-connection": "Une connexion {kind} sortant de « {node} » est devenue une connexion simple : seules les étapes peuvent créer une branche ou échouer.",
+      "outputs-same-step": "Plusieurs sorties de « {node} » mènent à la même étape. Seule « {kept} » est conservée.",
+      "retry-capped": "Dans n8n, « {node} » réessaie {tries} fois, à {waitMs} ms d’intervalle. Navide autorise au plus {maxTries} tentatives à {maxWaitMs} ms d’intervalle, il utilise donc {usedTries} tentatives à {usedWaitMs} ms d’intervalle.",
+      "over-target": "{slots} étapes, c’est plus que l’objectif d’environ {target}. Chaque étape ouvre un pane CLI.",
+      "wait-in-loop": "Le Wait « {node} » est dans une boucle et est fusionné dans son étape. Aucune validation n’y arrête l’exécution."
+    },
+    "error-reason": {
+      "invalid": "Ce n’est pas un workflow n8n que Navide peut lire.",
+      "invalid-json": "Le texte n’est pas du JSON valide.",
+      "not-object": "Un workflow n8n est un objet JSON.",
+      "no-nodes": "Un workflow n8n a besoin de nœuds et de connexions.",
+      "node-shape": "Le nœud {index} a besoin d’un nom et d’un type.",
+      "duplicate-name": "Le nœud {index} porte le même nom qu’un nœud précédent.",
+      "empty-list": "La liste ne contient aucun workflow n8n.",
+      "internal": "Le graphe converti n’est pas valide. C’est un bogue de l’importateur.",
+      "too-large": "Le workflow fait {sizeMb} Mo. Un import accepte au plus {limitMb} Mo.",
+      "store-refused": "Le workflow « {workflow} » n’a pas pu être enregistré, donc rien n’a été importé : {problems}"
     }
   }
 }

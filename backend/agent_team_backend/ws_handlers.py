@@ -6819,7 +6819,9 @@ async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, p
             name=str(payload.get("name") or ""),
         )
     except N8nImportError as exc:
-        await session.send_json(make_error(msg_id, msg_type, "N8N_INVALID", str(exc)))
+        code = {"too-large": "N8N_TOO_LARGE", "store-refused": "N8N_REFUSED"}.get(exc.reason, "N8N_INVALID")
+        await session.send_json(make_error(msg_id, msg_type, code, str(exc),
+                                           {"reason": exc.reason, "params": exc.params}))
         return
     if not dry_run:
         out["pipelines"] = app.stages_store.list_pipelines()
