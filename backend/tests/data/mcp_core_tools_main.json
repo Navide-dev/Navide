@@ -1361,7 +1361,7 @@
   }
  },
  {
-  "description": "List Navide's scheduled jobs. Returns {ok, jobs, now}.\n\n    Every job is listed, including ones you may not change: `editable` says\n    whether you may (you may change only jobs you created), `owner` says who\n    created it ({kind: \"user\"}, {kind: \"pane\", pane_id, pane_name, workspace}\n    or {kind: \"external\"}), and `owner_gone` is true when the creating pane is\n    gone — such a job is the user's to change now. `limits` reports the agent\n    limits (see scheduler_upsert, LIMITS) and how much of them is in use:\n    yours_enabled, agent_enabled, agent_runs_today.\n\n    Jobs fire only while Navide is running; nothing wakes the machine or the\n    app. See scheduler_upsert for the shape of a job.\n    ",
+  "description": "List Navide's scheduled jobs. Returns {ok, jobs, now}.\n\n    Every job is listed, including ones you may not change: `editable` says\n    whether you may (you may change only jobs you created), `owner` says who\n    created it ({kind: \"user\"}, {kind: \"pane\", pane_id, pane_name, workspace}\n    or {kind: \"external\"}), and `owner_gone` is true when the creating pane is\n    gone — such a job is the user's to change now. `limits` reports the agent\n    limits (see scheduler_upsert, LIMITS) and how much of them is in use:\n    yours_enabled, agent_enabled, agent_runs_today.\n\n    A pane sees a job aimed at another workspace as metadata only, marked\n    `redacted: true`: its action keeps just kind and workspace (no text, pane\n    or pipeline), and its state keeps timing and status but not last_error.\n    A caller with no pane identity sees every job in full.\n\n    Jobs fire only while Navide is running; nothing wakes the machine or the\n    app. See scheduler_upsert for the shape of a job.\n    ",
   "name": "scheduler_list",
   "parameters": {
    "properties": {},
@@ -1444,7 +1444,7 @@
   }
  },
  {
-  "description": "A job's run history, newest first (up to 200 kept). Returns {ok, runs}.\n\n    Each run is {id, job_id, started_at, ended_at, status: \"ok\" | \"error\" |\n    \"skipped\", reason, detail}.\n    ",
+  "description": "A job's run history, newest first (up to 200 kept). Returns {ok, runs}.\n\n    Each run is {id, job_id, started_at, ended_at, status: \"ok\" | \"error\" |\n    \"skipped\", reason, detail}.\n\n    A pane may read only the runs of jobs aimed at its own workspace; another\n    workspace's job answers {ok: false, code: \"SCHEDULER_CROSS_WORKSPACE\"}.\n    A caller with no pane identity may read any job's runs.\n    ",
   "name": "scheduler_runs",
   "parameters": {
    "properties": {
