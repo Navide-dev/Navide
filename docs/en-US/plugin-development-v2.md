@@ -2091,6 +2091,19 @@ is left on disk with its lifecycle record untouched and is reconsidered on the
 next start, so a later App that bundles an older version hands the id back to
 it.
 
+Because the installed copy wins a tie, content must never change under a
+released version. `plugins/official-plugin-fingerprints.json` is the release
+baseline: each plugin's version and a fingerprint of the tracked sources its
+package is built from (its directory, the `packages/plugin-*` workspace packages
+and, for Plans, the core modules its backend bundles; tests and Markdown
+excluded) as of the last App release tag. When a plugin's content differs from
+that baseline, its version must be higher than the baseline version: bump it
+once in the plugin's `manifest.json`, its `package.json` and
+`officialPluginVersions.ts`, and later changes in the same release cycle need
+no further bump. A version below the baseline is always refused.
+`tests/infrastructure/officialPluginFingerprints.test.ts` checks this on every
+PR; only `release.sh` rewrites the baseline (see `RELEASING.md`).
+
 ### First-party production Plans package
 
 Issue 23E makes `navide.plans` the first combined production package that
