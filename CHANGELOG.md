@@ -8,6 +8,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Plugin web views (0.2.35): a package may attach several of its browser views at once, each at its own rect clamped inside its plugin view, up to 9 (a 3×3 grid), and keep up to 32 live views; past either cap the Host answers `LIMIT_REACHED` on the Bridge port and `RESOURCE_LIMIT` to `web.*`. A page's `window.open` to an allowed URL now opens a new view in the same Space with the opener's owner and pane, created through the same rules as any view and marked with `openerViewId` (at the cap it loads in the opener as before). While the agent's debugger is attached the Host tracks JavaScript dialogs as `dialog` on the view (message cut to 500 characters), cleared on close, navigation and every takeover, and the agent may answer them with `Page.handleJavaScriptDialog`. `DOM.setFileInputFiles` is allowed only for 1 to 16 existing regular files that, with symbolic links resolved, are inside the calling pane's workspace; anything else is `CAPABILITY_DENIED`. The http(s) allowlist, denied permissions, cancelled downloads, per-package partitions, the user-in-control rules and pane isolation are unchanged.
 
+### Fixed
+
+- Shortcuts (0.2.35): on Windows and Linux, Open Plans, the Git window and the Mini IDE have working default keys. They were bound to ⌘ only, which is the Win/Super key off macOS. Open Plans now answers Ctrl+Shift+D and the Git window Ctrl+Shift+G; the Mini IDE answers Ctrl+Shift+M, because Ctrl+Shift+I stays Toggle Developer Tools there. macOS keys are unchanged.
+
 ## [0.2.34] — unreleased
 
 ### Added
