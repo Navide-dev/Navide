@@ -30,7 +30,8 @@ describe('sub-pipeline seams in App.vue', () => {
     const start = body('async function onPipelineStart(', '\n/** ControlPane')
     const refuse = start.indexOf("i18n.global.t('error.pipeline-parent-suspended'")
     expect(refuse).toBeGreaterThan(-1)
-    expect(refuse).toBeLessThan(start.indexOf('pipelinesApi.setActivePipeline('))
+    // Before the first thing a start changes: the run's pipeline id (PR-E E4).
+    expect(refuse).toBeLessThan(start.indexOf('runPipelineId.value = pid'))
     expect(start).toContain('payload.childOf ? undefined')
     expect(start).toContain('...(payload.childOf ? { child_of: payload.childOf } : {})')
   })
