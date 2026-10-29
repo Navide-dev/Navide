@@ -26,6 +26,9 @@ Usage (repository root)::
     uv --project backend run python backend/scripts/bench_terminal.py \\
         --mb 64 --payload cjk --send-delay-ms 1 --json
 
+The throughput check is POSIX-only: under ConPTY the 0.25 MiB smoke run did
+not finish within 60 s on the Windows CI runner (not investigated further).
+
 Numbers depend on the machine and its load; compare runs taken back to back on
 the same machine, not across machines.
 """
@@ -41,6 +44,7 @@ import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from agent_team_backend.terminals import TerminalService
 
@@ -127,7 +131,10 @@ def _writer_child(path: str) -> list[str]:
 
 
 async def measure_throughput(
-    mib: float, payload: str = "ascii", send_delay_ms: float = 0.0, timeout_s: float = 300.0
+    mib: float,
+    payload: str = "ascii",
+    send_delay_ms: float = 0.0,
+    timeout_s: float = 300.0,
 ) -> ThroughputResult:
     line = _LINES[payload].encode("utf-8")
     count = max(1, int(mib * 1024 * 1024) // len(line))
@@ -139,8 +146,7 @@ async def measure_throughput(
     svc = TerminalService(sink.emit)
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "payload.bin")
-        with open(path, "wb") as fp:
-            fp.write(data)
+        await asyncio.to_thread(Path(path).write_bytes, data)
         started = time.perf_counter()
         session = svc.create(
             pane_id="bench-throughput",
@@ -155,7 +161,9 @@ async def measure_throughput(
             # terminal.exit can overtake the close's last drain, which is
             # still sending what the child wrote before it exited.
             while svc._drain_tasks:
-                await asyncio.sleep(0.005)
+                await asyncio.gather(
+                    *list(svc._drain_tasks.values()), return_exceptions=True
+                )
         finally:
             if not sink.exited.is_set():
                 await svc.kill(session.id, force=True)
@@ -193,7 +201,10 @@ async def measure_startup(runs: int = 20, timeout_s: float = 30.0) -> StartupRes
         finally:
             if not sink.exited.is_set():
                 await svc.kill(session.id, force=True)
-        if sink.first_frame_at is None or _STARTUP_MARKER.encode() not in sink.first_text:
+        if (
+            sink.first_frame_at is None
+            or _STARTUP_MARKER.encode() not in sink.first_text
+        ):
             raise RuntimeError(f"startup run {i}: marker never arrived")
         samples.append((sink.first_frame_at - started) * 1000)
     samples.sort()
@@ -207,7 +218,10 @@ async def measure_startup(runs: int = 20, timeout_s: float = 30.0) -> StartupRes
 
 
 async def _main(args: argparse.Namespace) -> int:
-    report: dict[str, object] = {"platform": sys.platform, "python": sys.version.split()[0]}
+    report: dict[str, object] = {
+        "platform": sys.platform,
+        "python": sys.version.split()[0],
+    }
     if args.only in (None, "throughput"):
         report["throughput"] = asdict(
             await measure_throughput(args.mb, args.payload, args.send_delay_ms)

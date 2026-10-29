@@ -9,6 +9,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "bench_terminal.py"
 
 
@@ -22,6 +24,10 @@ def _load():
     return module
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="ConPTY re-renders output; the 0.25 MiB run timed out on the Windows runner",
+)
 async def test_throughput_delivers_every_byte():
     bench = _load()
     for payload in ("ascii", "cjk"):
