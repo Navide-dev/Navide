@@ -227,13 +227,20 @@ def _is_initiator(value: Any) -> bool:
         return False
     if value.get("kind") == "user":
         return _exact_keys(value, ("kind", "id")) and isinstance(value["id"], str) and bool(value["id"])
+    # ``pane`` (Host 0.2.35 and later) is optional: the calling pane's name or id.
     return (
         value.get("kind") == "agent"
         and value.get("source") == "mcp"
-        and _exact_keys(value, ("kind", "source", "id"))
+        and (_exact_keys(value, ("kind", "source", "id")) or (
+            _exact_keys(value, ("kind", "source", "id", "pane")) and _is_pane(value["pane"])
+        ))
         and isinstance(value["id"], str)
         and bool(value["id"])
     )
+
+
+def _is_pane(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= 200
 
 
 def _is_runtime(value: Any) -> bool:
@@ -784,10 +791,14 @@ def _versioned_plan(origin: dict[str, Any], rel_path: str) -> Path | None:
 
 
 def _version_author(origin: dict[str, Any]) -> dict[str, str]:
-    """Who wrote, as the Host authenticated the call: the user, or an agent."""
+    """Who wrote, as the Host authenticated the call: the user, or an agent
+    with the pane it ran in when the Host names one."""
     initiator = origin.get("initiator")
     kind = initiator.get("kind") if isinstance(initiator, dict) else None
-    return {"kind": "agent" if kind == "agent" else "user"}
+    if kind != "agent":
+        return {"kind": "user"}
+    pane = initiator.get("pane")
+    return {"kind": "agent", "pane": pane} if _is_pane(pane) else {"kind": "agent"}
 
 
 def _versioned_stage(origin: dict[str, Any], rel_path: str, data: bytes) -> tuple[Path, str] | None:

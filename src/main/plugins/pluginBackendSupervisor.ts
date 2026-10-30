@@ -1150,6 +1150,7 @@ export function createAuthenticatedBackendRuntime(
         source: 'mcp' as const,
         id: runtime.initiator.id,
         ...(runtime.initiator.caller ? { caller: Object.freeze({ ...runtime.initiator.caller }) } : {}),
+        ...(runtime.initiator.pane !== undefined ? { pane: runtime.initiator.pane } : {}),
       })
     : Object.freeze({
         kind: 'user' as const,

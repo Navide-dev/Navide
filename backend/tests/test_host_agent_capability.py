@@ -265,3 +265,29 @@ async def test_mcp_outwaits_a_caller_supplied_backend_deadline(
     payload = {"reqId": "plans-1", "name": "plans.list", "args": {}, "timeoutMs": 90_000}
     waited = await _waited_timeout(monkeypatch, _routes(payload)[route])
     assert waited > 90.0
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_backend_request_names_the_pane_only_when_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[dict[str, Any]] = []
+    call = {"reqId": "plans-2", "name": "plans.add_note", "args": {"rel_path": ".agent-team/plans/example.html"}}
+
+    async def host_reply(event: dict[str, Any]) -> bool:
+        events.append(event["payload"])
+        assert plan_mcp.resolve_agent_capability(event["payload"]["request_id"], {"ok": True, "result": {}})
+        return True
+
+    monkeypatch.setattr(app, "unicast_host", host_reply)
+    await request_host_agent_workspace_backend(
+        "navide.plans", "/workspace", call, caller=_Caller(kind="pane", pane_id="p-1"), pane="Reviewer",
+    )
+    await request_host_agent_workspace_backend(
+        "navide.plans", "/workspace", call, caller=_Caller(kind="pane", pane_id="p-1"),
+    )
+
+    assert set(events[0]) == {"request_id", "target", "operation", "payload", "pane"}
+    assert events[0]["pane"] == "Reviewer" and events[0]["operation"] == "backend"
+    # Without it the request is exactly what an older Host accepts.
+    assert set(events[1]) == {"request_id", "target", "operation", "payload"}

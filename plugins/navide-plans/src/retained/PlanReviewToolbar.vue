@@ -744,6 +744,8 @@ interface HistorySnapshot {
   stage: string
   date: Date
   author?: 'user' | 'agent' | 'external'
+  /** The agent's pane (name or id), when the Host named it. */
+  pane?: string
   reason?: 'save' | 'stage' | 'restore' | 'conflict' | 'external'
   restoredFrom?: string
   detached?: boolean
@@ -753,7 +755,7 @@ interface HistoryVersionResp {
   file: string
   stage: string
   ts?: string
-  author?: { kind?: string }
+  author?: { kind?: string; pane?: string }
   reason?: string
   restoredFrom?: string
   detached?: boolean
@@ -791,11 +793,15 @@ async function fetchHistory(): Promise<HistorySnapshot[]> {
     if (!parsed) return []
     const kind = version.author?.kind
     const author: HistorySnapshot['author'] = kind === 'user' || kind === 'agent' || kind === 'external' ? kind : undefined
+    const pane = author === 'agent' && typeof version.author?.pane === 'string' && version.author.pane.trim()
+      ? version.author.pane
+      : undefined
     return [{
       file: version.file,
       relPath: `${dir}/${version.file}`,
       ...parsed,
       ...(author ? { author } : {}),
+      ...(pane ? { pane } : {}),
       ...(version.reason ? { reason: version.reason as HistorySnapshot['reason'] } : {}),
       ...(version.restoredFrom ? { restoredFrom: version.restoredFrom } : {}),
       ...(version.detached ? { detached: true } : {}),
@@ -836,6 +842,7 @@ function snapshotLabel(snap: HistorySnapshot): string {
 }
 
 function authorLabel(snap: HistorySnapshot): string {
+  if (snap.pane) return t('pane.plans.history-author-agent-pane', { pane: snap.pane })
   return t(`pane.plans.history-author-${snap.author ?? 'unknown'}`)
 }
 

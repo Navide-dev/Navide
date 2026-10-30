@@ -80,6 +80,7 @@
       "history-diff-lines": "Строк: +{added} / −{removed}",
       "history-author-user": "Вы",
       "history-author-agent": "Агент",
+      "history-author-agent-pane": "Агент · {pane}",
       "history-author-external": "Вне Plans",
       "history-author-unknown": "Неизвестно",
       "history-reason-save": "Сохранено",

@@ -616,6 +616,65 @@ def test_writes_record_versions_with_their_author(backend_process: subprocess.Po
     assert not (mine / "docs" / "plans" / ".history").exists()
 
 
+def _write_as(
+    process: subprocess.Popen[bytes], host: _RootOnlyHost, rel_path: str, content: str, initiator: dict[str, Any]
+) -> dict[str, Any]:
+    global _counter
+    _counter += 1
+    request_id = f"initiator-{_counter}"
+    _send(process, {
+        "jsonrpc": "2.0", "id": request_id, "method": "navide/call",
+        "params": {
+            "_meta": CLIENT_META, "name": "plans.write_document",
+            "arguments": {"rel_path": rel_path, "content": content},
+            "runtime": {**_runtime("instance-1"), "initiator": initiator},
+        },
+    })
+    while True:
+        frame = _read(process, timeout=30)
+        if frame.get("id") == request_id:
+            return frame
+        assert frame.get("method") == "navide/host/call", frame
+        host(process, frame, "instance-1")
+
+
+def test_a_version_names_the_agent_pane_the_host_reports(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_html("Original"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    agent = {"kind": "agent", "source": "mcp", "id": "agent-1"}
+
+    # A Host from 0.2.35 on names the pane; the version keeps that name.
+    named = _write_as(backend_process, host, rel_path, _plan_html("By reviewer"), {**agent, "pane": "Reviewer"})
+    assert _value(named) == {"ok": True}
+    # An older Host sends the three agent keys only: the version has no pane.
+    unnamed = _write_as(backend_process, host, rel_path, _plan_html("By an agent"), agent)
+    assert _value(unnamed) == {"ok": True}
+    authors = [entry["author"] for _, entry in sorted(_history_entries(plan).items())]
+    assert authors == [{"kind": "agent", "pane": "Reviewer"}, {"kind": "agent"}]
+
+    listed = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))
+    assert [version["author"] for version in listed["versions"]] == [{"kind": "agent"}, {"kind": "agent", "pane": "Reviewer"}]
+
+    # Anything else in the initiator is still a malformed runtime, written nowhere.
+    before = plan.read_bytes()
+    for bad in (
+        {**agent, "pane": ""},
+        {**agent, "pane": "   "},
+        {**agent, "pane": 7},
+        {**agent, "pane": "x" * 201},
+        {**agent, "pane": "Reviewer", "token": "t"},
+        {"kind": "user", "id": "user-1", "pane": "Reviewer"},
+    ):
+        frame = _write_as(backend_process, host, rel_path, _plan_html("Rejected"), bad)
+        assert "error" in frame, bad
+    assert plan.read_bytes() == before
+
+
 def test_history_preserve_pins_disk_bytes_or_stores_the_users_side_without_scripts(
     backend_process: subprocess.Popen[bytes], tmp_path: Path
 ) -> None:

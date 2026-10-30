@@ -38,6 +38,7 @@ import {
   HOST_CAPABILITIES,
   HOST_EVENT_SOURCE_PLUGIN_ID,
   HOST_USER_INITIATOR,
+  isInitiatorPane,
   undispatched,
   type CapabilityCall,
   type CapabilityErrorCode,
@@ -7326,6 +7327,7 @@ export class FrontendPluginManager {
     pluginId: string,
     workspacePath: string,
     payload: unknown,
+    pane?: string,
   ): Promise<CapabilityResponse | BuiltinPluginDisabledResponse> {
     const record = this.exactBackendPayload(payload, new Set(['reqId', 'name', 'args', 'timeoutMs']))
     const reqId =
@@ -7375,10 +7377,15 @@ export class FrontendPluginManager {
     if (!this.plansCapabilityContext(packageVersion, workspacePath, 'plans-mcp')) {
       return buildError(record.reqId, 'CAPABILITY_DENIED', 'Plans package Grant is unavailable')
     }
+    // A Plans package older than 1.1.0 accepts only the three agent keys, so
+    // it gets exactly the Initiator it always did.
     const initiator: AuthenticatedInitiator = Object.freeze({
       kind: 'agent',
       source: 'mcp',
       id: randomUUID(),
+      ...(isInitiatorPane(pane) && (compareSemver(packageVersion, PLANS_INITIATOR_PANE_VERSION) ?? -1) >= 0
+        ? { pane }
+        : {}),
     })
     if (!this.plansAgentFilesystemPolicyAllows(workspacePath, initiator)) {
       return buildError(record.reqId, 'CAPABILITY_DENIED', 'agent execution policy denied the operation')
@@ -9432,9 +9439,10 @@ export class FrontendPluginManager {
       nonEmptyString(record.instance_id) &&
       (record.operation === 'capability' || record.operation === 'backend') &&
       isJsonValue(record.payload)
+    // `pane` is optional: the calling pane's name or id, for the plugin's records.
     const workspaceRequest =
-      Object.keys(record).length === 4 &&
-      Object.keys(record).every((key) => ['request_id', 'target', 'operation', 'payload'].includes(key)) &&
+      (Object.keys(record).length === 4 || (Object.keys(record).length === 5 && isInitiatorPane(record.pane))) &&
+      Object.keys(record).every((key) => ['request_id', 'target', 'operation', 'payload', 'pane'].includes(key)) &&
       nonEmptyString(record.request_id) &&
       record.operation === 'backend' &&
       isJsonValue(record.payload) &&
@@ -9493,6 +9501,7 @@ export class FrontendPluginManager {
           (record.target as Record<string, unknown>).plugin_id as string,
           (record.target as Record<string, unknown>).workspace_path as string,
           record.payload,
+          record.pane as string | undefined,
         )
     } catch (error) {
       return refuse('BACKEND_ERROR', error instanceof Error ? error.message : String(error))
@@ -14187,6 +14196,9 @@ export async function openMiniIdePluginView(
 
 /** Id of the Plans extension (the plan review surface). */
 export const PLANS_PLUGIN_ID = 'navide.plans'
+
+/** First Plans package whose backend accepts `initiator.pane`. */
+export const PLANS_INITIATOR_PANE_VERSION = '1.1.0'
 
 /** What an agent call gets for a workspace whose Plans child failed too often
  *  to be restarted, including how the user brings it back. */

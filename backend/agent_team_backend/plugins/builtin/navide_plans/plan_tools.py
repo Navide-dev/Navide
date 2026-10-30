@@ -71,6 +71,26 @@ PLANS_DISABLED_MESSAGE = (
 )
 
 
+#: Longest pane label sent to the Host; a longer name falls back to the id.
+PANE_LABEL_MAX = 200
+
+
+def _caller_pane(caller: Caller) -> str | None:
+    """The calling pane's name (its id when it has none), for version records.
+
+    Only a pane caller has one; the label is never a credential, token or
+    profile, just what the user sees on the pane."""
+    if caller.kind != "pane" or not caller.pane_id:
+        return None
+    from agent_team_backend import agent_messaging
+
+    entry = agent_messaging.get(caller.pane_id)
+    name = getattr(entry, "name", "") or ""
+    if isinstance(name, str) and 0 < len(name.strip()) <= PANE_LABEL_MAX:
+        return name.strip()
+    return caller.pane_id if len(caller.pane_id) <= PANE_LABEL_MAX else None
+
+
 async def _host_agent_plan_call(
     caller: Caller,
     workspace_path: str,
@@ -90,11 +110,13 @@ async def _host_agent_plan_call(
         # A CLI that cached tools/list still reaches here. The Host refuses the
         # same way; nothing below may serve the call locally instead.
         raise FsError(PLANS_DISABLED_MESSAGE, code="PLUGIN_TOOL_UNAVAILABLE")
+    pane = _caller_pane(caller)
     response = await request_host_agent_workspace_backend(
         "navide.plans",
         workspace_path,
         {"reqId": f"mcp:{secrets.token_hex(16)}", "name": name, "args": arguments},
         caller=caller,
+        pane=pane,
     )
     if (
         name in _READ_ONLY_PLAN_METHODS and isinstance(response, dict) and
@@ -107,6 +129,7 @@ async def _host_agent_plan_call(
             workspace_path,
             {"reqId": f"mcp:{secrets.token_hex(16)}", "name": name, "args": arguments},
             caller=caller,
+            pane=pane,
         )
     if not isinstance(response, dict):
         raise FsError("production Plans Host reply was malformed", code="BACKEND_UNAVAILABLE")

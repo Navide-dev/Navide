@@ -3121,3 +3121,18 @@ describe('PluginBackendSupervisor', () => {
     })
   })
 })
+
+describe('authenticated runtime initiator pane', () => {
+  it('keeps the calling pane through the authenticated copy, and adds none when absent', () => {
+    const named = createAuthenticatedBackendRuntime({
+      ...runtime,
+      initiator: { kind: 'agent', source: 'mcp', id: 'agent-pane-1', pane: 'Reviewer' },
+    })
+    expect(named.initiator).toEqual({ kind: 'agent', source: 'mcp', id: 'agent-pane-1', pane: 'Reviewer' })
+    const unnamed = createAuthenticatedBackendRuntime({
+      ...runtime,
+      initiator: { kind: 'agent', source: 'mcp', id: 'agent-pane-2' },
+    })
+    expect(Object.keys(unnamed.initiator).sort()).toEqual(['id', 'kind', 'source'])
+  })
+})
