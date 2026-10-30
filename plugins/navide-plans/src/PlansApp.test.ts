@@ -392,8 +392,9 @@ describe('PlansApp', () => {
     reviewFixture()
     const original = (window as any).nav.callBackend
     ;(window as any).nav.callBackend = async (reqId: string, name: string, args: Record<string, unknown>) => {
-      if (name === 'plans.list_directory') return { reqId, ok: true, result: { ok: true, entries: [{ name: '20260905T010203_draft.html', is_dir: false }] } }
-      if (name === 'plans.read_document' && String(args.rel_path).includes('/.history/')) return { reqId, ok: true, result: { ok: true, content: `<html><body><script id="plan-meta" type="application/json">${JSON.stringify({ schemaVersion: 1, name: 'Snapshot', stage: 'draft', todos: [], reviewNotes: [{ id: 's1', author: 'user', text: 'One', resolved: false, anchor: 'Snapshot scope' }, { id: 's2', author: 'user', text: 'Two', resolved: false, anchor: 'Snapshot scope' }] })}</script><h2>Snapshot scope</h2><p>Earlier snapshot</p></body></html>`, mtime: 1 } }
+      // Versions are listed and read through the backend (compressed or not).
+      if (name === 'plans.history_list') return { reqId, ok: true, result: { ok: true, versions: [{ file: '20260905T010203_draft.html.gz', stage: 'draft', author: { kind: 'user' }, reason: 'save' }] } }
+      if (name === 'plans.history_read' && args.file === '20260905T010203_draft.html.gz' && args.rel_path === existingPath) return { reqId, ok: true, result: { ok: true, content: `<html><body><script id="plan-meta" type="application/json">${JSON.stringify({ schemaVersion: 1, name: 'Snapshot', stage: 'draft', todos: [], reviewNotes: [{ id: 's1', author: 'user', text: 'One', resolved: false, anchor: 'Snapshot scope' }, { id: 's2', author: 'user', text: 'Two', resolved: false, anchor: 'Snapshot scope' }] })}</script><h2>Snapshot scope</h2><p>Earlier snapshot</p></body></html>`, mtime: 1 } }
       return original(reqId, name, args)
     }
     const view = await mountPlans({ attachTo: document.body })

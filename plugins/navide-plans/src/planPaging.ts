@@ -25,7 +25,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export async function readWholeDocument<T extends Record<string, unknown>>(
   call: BackendCall,
-  method: 'plans.read' | 'plans.read_document',
+  method: 'plans.read' | 'plans.read_document' | 'plans.history_read',
   textKey: 'html' | 'content',
   args: Record<string, unknown>,
 ): Promise<T> {

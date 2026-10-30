@@ -644,6 +644,124 @@ def test_history_preserve_pins_disk_bytes_or_stores_the_users_side_without_scrip
         assert _error_code(_call(backend_process, host, "plans.history_preserve", bad)) == "INVALID_ARGUMENT"
 
 
+def _plan_with(stage: str, body: str, todos: list[dict[str, str]] | None = None, notes: int = 0) -> str:
+    meta = {
+        "schemaVersion": 1, "name": "Doc", "overview": "", "stage": stage, "approvedAt": None,
+        "todos": todos or [], "reviewNotes": [
+            {"id": f"n{i}", "author": "user", "text": "t", "resolved": False, "reply": ""} for i in range(notes)
+        ],
+    }
+    todo_rows = "".join(
+        f'<li data-todo-id="{t["id"]}" data-status="{t["status"]}">{t["id"]}</li>' for t in (todos or [])
+    )
+    return (
+        '<!doctype html><html><head></head><body>\n'
+        f'<script type="application/json" id="plan-meta">\n{json.dumps(meta)}\n</script>\n'
+        f'<header><h1>Doc<span class="pill {stage}">{stage}</span></h1></header>\n'
+        f'<section><h2>Body</h2><p>{body}</p></section>\n'
+        f'<ul class="todos">{todo_rows}</ul>\n</body></html>\n'
+    )
+
+
+def test_versions_are_listed_read_and_restored_through_the_backend(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_with("draft", "First text", [{"id": "t1", "status": "pending"}]), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    # Two versions written by the backend: the old text, then the new one.
+    assert _value(_write(backend_process, host, rel_path, _plan_with("draft", "First text", [{"id": "t1", "status": "pending"}]) + " ")) == {"ok": True}
+    plan_versions_dir = plan.parent / ".history" / "doc_aaaaaa"
+    later = _plan_with("approved", "Second text", [{"id": "t1", "status": "done"}], notes=2)
+    assert _value(_write(backend_process, host, rel_path, later)) == {"ok": True}
+
+    listed = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))
+    assert listed["ok"] is True
+    files = [version["file"] for version in listed["versions"]]
+    assert len(files) == 2 and all(name.endswith(".html.gz") for name in files)
+    assert files == sorted(files, reverse=True)
+    first = listed["versions"][-1]
+    assert first["author"] == {"kind": "agent"} and first["stage"] == "draft"
+
+    read = _value(_call(backend_process, host, "plans.history_read", {"rel_path": rel_path, "file": first["file"]}))
+    assert read["ok"] is True and "First text" in read["content"]
+
+    # Restore brings back the text under the current meta (approved, t1 done,
+    # two notes), and is itself a new version.
+    restored = _value(_call(backend_process, host, "plans.history_restore", {"rel_path": rel_path, "file": first["file"]}))
+    assert restored == {"ok": True}
+    text = plan.read_text(encoding="utf-8")
+    assert "First text" in text and "Second text" not in text
+    meta = json.loads(re.search(r'id="plan-meta">([\s\S]*?)</script>', text).group(1))
+    assert meta["stage"] == "approved" and len(meta["reviewNotes"]) == 2
+    assert meta["todos"] == [{"id": "t1", "status": "done"}]
+    assert '<span class="pill approved">approved</span>' in text
+    assert 'data-status="done"' in text
+    newest = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))["versions"][0]
+    assert newest["reason"] == "restore" and newest["restoredFrom"] == first["file"]
+    assert len(list(plan_versions_dir.glob("*.gz"))) == 3
+
+
+def test_a_large_version_is_read_back_in_pages_byte_for_byte(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    body = "".join(f"<p>line {i} ✓ 計畫</p>" for i in range(60_000))
+    content = _plan_with("draft", body)
+    plan.write_text("seed", encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    data = content.encode("utf-8")
+    upload_id = "0123456789abcdef0123456789abcdef"
+    offset = 0
+    while offset < len(data):
+        part = data[offset : offset + 96 * 1024]
+        assert _value(_call(backend_process, host, "plans.write_document_part", {
+            "rel_path": rel_path, "upload_id": upload_id, "offset": offset,
+            "data_base64": base64.b64encode(part).decode("ascii"),
+        }))["ok"] is True
+        offset += len(part)
+    assert _value(_call(backend_process, host, "plans.write_document_commit", {
+        "rel_path": rel_path, "upload_id": upload_id, "total_size": len(data),
+    }))["ok"] is True
+    [version] = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))["versions"]
+    parts, offset = [], 0
+    while True:
+        page = _value(_call(backend_process, host, "plans.history_read", {"rel_path": rel_path, "file": version["file"], "offset": offset}))
+        parts.append(page["content"])
+        if page.get("eof", True):
+            break
+        offset = page["next_offset"]
+    assert len(parts) > 1
+    assert "".join(parts) == content
+
+
+def test_history_operations_refuse_paths_other_formats_and_stale_restores(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_with("draft", "Text"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    assert _value(_write(backend_process, host, rel_path, _plan_with("draft", "Text 2"))) == {"ok": True}
+    [version] = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))["versions"]
+
+    for bad in ("../doc_aaaaaa.html", "20260101T000000_draft.plan.md.gz", "index.jsonl", "x/20260101T000000_draft.html"):
+        for name in ("plans.history_read", "plans.history_restore"):
+            assert _error_code(_call(backend_process, host, name, {"rel_path": rel_path, "file": bad})) == "INVALID_ARGUMENT", (name, bad)
+    stale = _value(_call(backend_process, host, "plans.history_restore", {
+        "rel_path": rel_path, "file": version["file"], "expected_sha256": "0" * 64,
+    }))
+    assert stale == {"ok": False, "conflict": True}
+    assert "Text 2" in plan.read_text(encoding="utf-8")
+    # A document that keeps no history lists none.
+    assert _value(_call(backend_process, host, "plans.history_list", {"rel_path": "docs/plans/other_bbbbbb.html"})) == {"ok": True, "versions": []}
+
+
 def test_agent_changes_refuse_a_document_without_valid_plan_meta_and_leave_it_untouched(
     backend_process: subprocess.Popen[bytes], tmp_path: Path
 ) -> None:

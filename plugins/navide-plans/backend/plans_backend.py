@@ -731,6 +731,9 @@ def _write(
     content: str,
     expected_mtime: float | None = None,
     expected_sha256: str | None = None,
+    *,
+    version_reason: str = "save",
+    restored_from: str | None = None,
 ) -> float | None:
     """Write a document under the authorized root through the core write path.
 
@@ -749,7 +752,7 @@ def _write(
         _log(f"write {rel_path} refused: {exc}")
         raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION") from None
     data = content.encode("utf-8")
-    _announce_version(origin, rel_path, data, reason="save")
+    _announce_version(origin, rel_path, data, reason=version_reason)
     if len(data) > SINGLE_WRITE_MAX_BYTES:
         result = _write_staged(root, rel_path, data, expected_mtime, expected_sha256)
     else:
@@ -758,7 +761,7 @@ def _write(
         )
     if not _is_record(result) or result.get("ok") is not True:
         raise _write_failure(result, rel_path=rel_path)
-    _record_version(origin, rel_path, data, reason="save")
+    _record_version(origin, rel_path, data, reason=version_reason, restored_from=restored_from)
     mtime = result.get("mtime")
     return float(mtime) if isinstance(mtime, (int, float)) and not isinstance(mtime, bool) else None
 
@@ -814,6 +817,7 @@ def _announce_version(origin: dict[str, Any], rel_path: str, data: bytes, *, rea
 
 def _record_version(
     origin: dict[str, Any], rel_path: str, data: bytes, *, reason: str, detached: bool = False,
+    restored_from: str | None = None,
 ) -> str | None:
     """Record ``data`` (the bytes just written, or a conflict's other side) as
     a version. Never fails the write it follows: a problem is logged. Like
@@ -824,11 +828,145 @@ def _record_version(
     plan, stage = target
     try:
         return plan_versions.record_version(
-            plan, data, stage=stage, author=_version_author(origin), reason=reason, detached=detached, warn=_log,
+            plan, data, stage=stage, author=_version_author(origin), reason=reason, detached=detached,
+            restored_from=restored_from, warn=_log,
         )
     except (OSError, ValueError, FsError) as exc:
         _log(f"version of {rel_path} not recorded: {exc}")
         return None
+
+
+def _history_target(origin: dict[str, Any], arguments: dict[str, Any], keys: set[str]) -> tuple[str, Path, Path]:
+    """Validated (rel_path, plan file, history dir) of a history operation."""
+    if not {"rel_path"} <= set(arguments) or set(arguments) - keys:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    rel_path = _manual_write_path(arguments["rel_path"])
+    plan = _versioned_plan(origin, rel_path)
+    if plan is None:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    return rel_path, plan, plan_versions.history_dir_for(plan)
+
+
+def _history_file(arguments: dict[str, Any], plan: Path) -> str:
+    """A version name of this plan's format, never a path."""
+    name = arguments.get("file")
+    if (
+        not isinstance(name, str)
+        or plan_versions.SNAPSHOT_NAME_RE.fullmatch(name) is None
+        or plan_versions.suffix_for(plan) != plan_versions.SNAPSHOT_NAME_RE.fullmatch(name).group(3)
+    ):
+        raise BridgeFailure("INVALID_ARGUMENT")
+    return name
+
+
+def _read_version_bytes(history_dir: Path, name: str) -> bytes:
+    try:
+        return plan_versions.read_version(history_dir, name)
+    except (OSError, ValueError, EOFError) as exc:
+        _log(f"version {name}: {exc}")
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+
+
+def _history_list(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """The plan's versions, newest first, with who made each one and why.
+    Older snapshots without an index line carry their file name only."""
+    try:
+        _rel_path, plan, history_dir = _history_target(origin, arguments, {"rel_path"})
+    except BridgeFailure as error:
+        if error.code != "INVALID_ARGUMENT" or not isinstance(arguments.get("rel_path"), str):
+            raise
+        return {"ok": True, "versions": []}  # a document that keeps no history
+    suffix = plan_versions.suffix_for(plan)
+    versions = []
+    for version in plan_versions.list_versions(history_dir, _log):
+        match = plan_versions.SNAPSHOT_NAME_RE.fullmatch(version["file"])
+        if match is None or match.group(3) != suffix:
+            continue
+        entry = version["entry"] or {}
+        item: dict[str, Any] = {"file": version["file"], "stage": version["stage"]}
+        for key in ("ts", "author", "reason", "restoredFrom", "detached"):
+            if key in entry:
+                item[key] = entry[key]
+        versions.append(item)
+    return {"ok": True, "versions": versions}
+
+
+def _history_read(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """One page of a version's text, uncompressed, paged like read_document."""
+    _rel_path, plan, history_dir = _history_target(origin, arguments, {"rel_path", "file", "offset"})
+    name = _history_file(arguments, plan)
+    offset = _read_offset(arguments)
+    data = _read_version_bytes(history_dir, name)
+    try:
+        mtime = (history_dir / name).stat().st_mtime
+    except OSError:
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    chunk = data[offset : offset + TEXT_CHUNK_BYTES]
+    reached_end = offset + len(chunk) >= len(data)
+    text, consumed = _decode_chunk(chunk, reached_end)
+    while consumed > 4096 and len(_wire_json(text).encode("utf-8")) > FRAME_TEXT_BUDGET_BYTES:
+        text, consumed = _decode_chunk(chunk[: consumed // 2], False)
+        reached_end = False
+    result: dict[str, Any] = {"ok": True, "content": text, "mtime": mtime}
+    next_offset = offset + consumed
+    if offset > 0 or next_offset < len(data):
+        result.update({"size": len(data), "offset": offset, "eof": next_offset >= len(data)})
+        if next_offset < len(data):
+            result["next_offset"] = next_offset
+    return result
+
+
+def _restored_content(rel_path: str, current: str, version: str) -> str:
+    """The version's body under the current plan-meta (g5: a restore brings
+    back the text, never an older stage, approval, todos or review notes)."""
+    if rel_path.endswith(".html"):
+        current_island = PLAN_META_RE.search(current)
+        version_island = PLAN_META_RE.search(version)
+        if current_island is None or version_island is None:
+            raise BridgeFailure("INVALID_ARGUMENT")
+        restored = version[: version_island.start()] + current_island.group(0) + version[version_island.end():]
+        meta = _parse_plan_meta(current) or {}
+        stage = meta.get("stage")
+        if isinstance(stage, str) and stage in PLAN_STAGES:
+            restored = _sync_stage_markup(restored, stage)
+        for todo in meta.get("todos") or []:
+            if isinstance(todo, dict) and isinstance(todo.get("id"), str) and isinstance(todo.get("status"), str):
+                restored = _sync_todo_markup(restored, todo["id"], todo["status"])
+        return restored
+    current_end = current.find("\n---", 3) if current.startswith("---") else -1
+    version_end = version.find("\n---", 3) if version.startswith("---") else -1
+    if current_end < 0 or version_end < 0:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    return current[: current_end + 4] + version[version_end + 4 :]
+
+
+def _history_restore(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Bring back a version's text; the restore is itself a new version."""
+    rel_path, plan, history_dir = _history_target(origin, arguments, {"rel_path", "file", "expected_sha256"})
+    name = _history_file(arguments, plan)
+    expected = _sha256_argument(arguments.get("expected_sha256"))
+    try:
+        version = _read_version_bytes(history_dir, name).decode("utf-8")
+    except UnicodeDecodeError:
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    data, _size, mtime, _eof = _read_bytes(origin, rel_path, 0, None)
+    if expected is not None and hashlib.sha256(data).hexdigest() != expected:
+        return {"ok": False, "conflict": True}
+    try:
+        current = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    restored = _restored_content(rel_path, current, version)
+    try:
+        _write(
+            origin, rel_path, restored, mtime, hashlib.sha256(data).hexdigest(),
+            version_reason="restore", restored_from=name,
+        )
+    except BridgeFailure as error:
+        if error.code == "CONFLICT":
+            return {"ok": False, "conflict": True}
+        raise
+    return {"ok": True}
 
 
 _EXECUTABLE_SCRIPT_RE = re.compile(
@@ -2192,6 +2330,12 @@ def _handle(frame: Any) -> None:
             result = _manual_document(origin, arguments, "write")
         elif name == "plans.history_preserve":
             result = _history_preserve(origin, arguments)
+        elif name == "plans.history_list":
+            result = _history_list(origin, arguments)
+        elif name == "plans.history_read":
+            result = _history_read(origin, arguments)
+        elif name == "plans.history_restore":
+            result = _history_restore(origin, arguments)
         elif name == "plans.write_document_part":
             result = _manual_upload(origin, arguments, "part")
         elif name == "plans.write_document_commit":

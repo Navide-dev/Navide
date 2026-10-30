@@ -13,6 +13,9 @@ const fileMethods: Record<string, string> = {
   'fs.list_dir': 'plans.list_directory',
   'fs.delete': 'plans.delete',
   'history.preserve': 'plans.history_preserve',
+  'history.list': 'plans.history_list',
+  'history.read': 'plans.history_read',
+  'history.restore': 'plans.history_restore',
 }
 
 export const plansTransport: PlansTransport = {
@@ -22,9 +25,10 @@ export const plansTransport: PlansTransport = {
     // The legacy interface supplies workspace_path; the package boundary
     // deliberately drops it. The Host binds the root to the calling instance.
     const { workspace_path: _workspacePath, ...args } = payload
-    const result = type === 'fs.read_file'
-      // A document is returned page by page when it does not fit one response.
-      ? await readWholeDocument(plansBackend.call.bind(plansBackend) as never, 'plans.read_document', 'content', args)
+    const result = type === 'fs.read_file' || type === 'history.read'
+      // A document (or a version of one) is returned page by page when it
+      // does not fit one response.
+      ? await readWholeDocument(plansBackend.call.bind(plansBackend) as never, name as 'plans.read_document' | 'plans.history_read', 'content', args)
       : type === 'fs.write_file' && typeof args.content === 'string' && needsChunkedWrite(args.content)
         // Too large for one request: stage it in parts, then commit atomically.
         ? await writeDocumentChunked(
