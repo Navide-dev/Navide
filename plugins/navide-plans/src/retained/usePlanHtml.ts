@@ -242,6 +242,27 @@ function escapeHtmlAttr(value: string): string {
   return escapeHtmlText(value).replace(/"/g, '&quot;')
 }
 
+/**
+ * Mirror an edited plan name or overview into the document's `<header>`: the
+ * name is the text of its first `<h1>` before the first child element (the
+ * stage pill stays), the overview the content of its first
+ * `<p class="overview">`. The text is inserted escaped, so it is never markup.
+ * Best-effort like the other syncs: without that markup the content is
+ * returned unchanged and plan-meta stays authoritative.
+ */
+export function syncHeaderMarkup(content: string, field: 'name' | 'overview', text: string): string {
+  const header = /<header\b[^>]*>[\s\S]*?<\/header>/i.exec(content)
+  if (!header) return content
+  const escaped = escapeHtmlText(text)
+  const synced = field === 'name'
+    ? header[0].replace(/(<h1\b[^>]*>)[^<]*/i, (_whole, open: string) => `${open}${escaped}`)
+    : header[0].replace(
+      /(<p\b[^>]*\bclass=["'][^"']*\boverview\b[^"']*["'][^>]*>)[\s\S]*?(<\/p>)/i,
+      (_whole, open: string, close: string) => `${open}${escaped}${close}`,
+    )
+  return content.slice(0, header.index) + synced + content.slice(header.index + header[0].length)
+}
+
 // A `<ul class="... todos ...">…</ul>` block. Non-greedy: todo lists never nest.
 const TODOS_UL_RE = /<ul\b[^>]*\bclass=["'][^"']*\btodos\b[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi
 
