@@ -75,6 +75,7 @@ export default defineConfig({
         '@navide/plugin-ui/styles.css': resolve(__dirname, 'packages/plugin-ui/src/foundation/styles.css'),
         '@navide/plugin-ui/foundation': resolve(__dirname, 'packages/plugin-ui/src/foundation/index.ts'),
         '@navide/plugin-ui': resolve(__dirname, 'packages/plugin-ui/src/index.ts'),
+        '@navide/nvterm': resolve(__dirname, 'packages/nvterm/src/index.ts'),
       },
     },
     server: {

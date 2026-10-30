@@ -35,6 +35,7 @@ export default defineConfig({
     alias: {
       '@navide/plugin-contracts': resolve(__dirname, 'packages/plugin-contracts/src/index.ts'),
       '@navide/plugin-sdk': resolve(__dirname, 'packages/plugin-sdk/src/index.ts'),
+      '@navide/nvterm': resolve(__dirname, 'packages/nvterm/src/index.ts'),
       '@navide/plugin-ui/styles.css': resolve(__dirname, 'packages/plugin-ui/src/foundation/styles.css'),
       '@navide/plugin-ui/file-picker': resolve(__dirname, 'packages/plugin-ui/src/terminalFilePicker.ts'),
       '@navide/plugin-ui/shared/testing': resolve(__dirname, 'packages/plugin-ui/src/shared/testing.ts'),
