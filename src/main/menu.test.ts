@@ -185,7 +185,10 @@ describe('installApplicationMenu', () => {
     expect(locked).toHaveLength(unlocked.length)
     const usable = locked.filter((item) => item.enabled !== false)
     expect(usable.every((item) => typeof item.role === 'string' && !item.click)).toBe(true)
-    expect(usable.map((item) => item.role)).toEqual(expect.arrayContaining(['quit', 'paste', 'selectAll', 'toggleDevTools']))
+    expect(usable.map((item) => item.role)).toEqual(expect.arrayContaining(['quit', 'paste', 'selectAll']))
+    // DevTools cannot be opened (menu or ⌥⌘I / Ctrl+Shift+I) onto the window under the lock screen.
+    expect(locked.find((item) => item.role === 'toggleDevTools')?.enabled).toBe(false)
+    expect(unlocked.find((item) => item.role === 'toggleDevTools')?.enabled).not.toBe(false)
     for (const label of ['Settings…', 'Open Workspace…', 'New Window', 'Copy', 'Reload Window', 'w']) {
       expect(locked.find((item) => item.label === label)?.enabled).toBe(false)
     }
