@@ -31,6 +31,17 @@ RECONNECT_JITTER = 0.2
 STALL_WATCHDOG_S = 120.0
 RETRY_AFTER_CAP_S = 60.0
 
+# Telegram ``from`` ids that stand for many people: anonymous group admins
+# (GroupAnonymousBot), posts on behalf of a channel (Channel_Bot) and Telegram's
+# service account (notifications, a linked channel's auto-forwards). They
+# identify no one, so no gate admits them and no allowlist can hold them.
+TELEGRAM_SHARED_SENDER_IDS = frozenset({"1087968824", "136817688", "777000"})
+
+
+def is_shared_sender(platform: str, sender_id: str) -> bool:
+    """Whether ``sender_id`` names no single person on ``platform``."""
+    return platform == "telegram" and sender_id in TELEGRAM_SHARED_SENDER_IDS
+
 
 @dataclass(frozen=True)
 class Location:

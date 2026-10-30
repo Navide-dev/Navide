@@ -10902,7 +10902,11 @@
     "allow": {
       "title": "Expéditeurs autorisés",
       "empty": "Personne n’est encore autorisé.",
-      "remove": "Retirer"
+      "remove": "Retirer",
+      "via-pairing": "Code d’appairage",
+      "via-invite": "Code de liaison",
+      "shared": "ID partagé",
+      "shared-hint": "Cet identifiant Telegram représente de nombreuses personnes (administrateurs anonymes, canaux, Telegram lui-même) et est donc toujours refusé. Vous pouvez le retirer."
     },
     "pane": {
       "connect": "Connecter à un chat",

@@ -10902,7 +10902,11 @@
     "allow": {
       "title": "Zugelassene Absender",
       "empty": "Noch niemand zugelassen.",
-      "remove": "Entfernen"
+      "remove": "Entfernen",
+      "via-pairing": "Kopplungscode",
+      "via-invite": "Verknüpfungscode",
+      "shared": "Geteilte ID",
+      "shared-hint": "Diese Telegram-ID steht für viele Personen (anonyme Admins, Kanäle, Telegram selbst) und wird daher immer abgelehnt. Sie können sie entfernen."
     },
     "pane": {
       "connect": "Mit einem Chat verbinden",
