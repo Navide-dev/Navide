@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { ScreenSnapshot } from '../../src/snapshot.ts'
 import { fixtures } from '../fixtures/fixtures.ts'
-import { compareFixture } from './compare.ts'
+import { readFileSync } from 'node:fs'
+import { compareFixture, type Triage } from './compare.ts'
 import type { TerminalDriver } from './driver.ts'
+import { nvtermDriver } from './nvtermDriver.ts'
 import { xtermDriver } from './xtermOracle.ts'
 
 const byId = (id: string) => fixtures.find((f) => f.id === id)!
@@ -12,6 +14,14 @@ describe('golden comparison tool', () => {
     for (const fixture of fixtures) {
       const result = await compareFixture(fixture, xtermDriver, xtermDriver)
       expect(result.diffs, fixture.id).toEqual([])
+    }
+  })
+
+  it('nvterm matches the oracle on every fixture, apart from triaged differences (M1 gate)', async () => {
+    const triage = JSON.parse(readFileSync(new URL('./triage.json', import.meta.url), 'utf8')) as Triage
+    for (const fixture of fixtures) {
+      const result = await compareFixture(fixture, xtermDriver, nvtermDriver, triage)
+      expect(result.untriaged, fixture.id).toEqual([])
     }
   })
 

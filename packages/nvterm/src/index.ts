@@ -1,2 +1,6 @@
 export type { CellSnapshot, ColorSpec, LineSnapshot, ScreenSnapshot, SnapshotDiff } from './snapshot.ts'
 export { CellFlag, describeCell, diffKey, diffSnapshots } from './snapshot.ts'
+export type { ParserHandler, ParserOptions } from './parser.ts'
+export { Parser } from './parser.ts'
+export { TerminalCore, type Modes, type MouseTrackingMode, type TerminalCoreOptions } from './terminal.ts'
+export { charWidth } from './width.ts'

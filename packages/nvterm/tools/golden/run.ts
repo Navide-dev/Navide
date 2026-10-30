@@ -4,11 +4,10 @@
 import { readFileSync } from 'node:fs'
 import { fixtures } from '../fixtures/fixtures.ts'
 import { compareAll, type Triage } from './compare.ts'
+import { nvtermDriver } from './nvtermDriver.ts'
 import { xtermDriver } from './xtermOracle.ts'
 
-// Until the nvterm driver exists (M1) the candidate is a second xterm.js
-// instance, which checks the tool itself: every fixture must match.
-const candidate = xtermDriver
+const candidate = nvtermDriver
 const triage = JSON.parse(readFileSync(new URL('./triage.json', import.meta.url), 'utf8')) as Triage
 const wanted = new Set(process.argv.slice(2))
 const selected = wanted.size ? fixtures.filter((f) => wanted.has(f.id)) : fixtures

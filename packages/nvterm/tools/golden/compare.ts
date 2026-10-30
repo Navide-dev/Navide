@@ -17,7 +17,9 @@ export async function compareFixture(fixture: Fixture, oracle: TerminalDriver, c
   const [expected, actual] = await Promise.all([oracle.run(fixture), candidate.run(fixture)])
   const diffs = diffSnapshots(expected, actual)
   const decisions = triage[fixture.id] ?? {}
-  return { fixture: fixture.id, diffs, untriaged: diffs.filter((d) => !decisions[diffKey(d)]) }
+  // A '<kind>:*' key triages every difference of that kind in the fixture.
+  const triaged = (d: SnapshotDiff): boolean => Boolean(decisions[diffKey(d)] ?? decisions[`${d.kind}:*`])
+  return { fixture: fixture.id, diffs, untriaged: diffs.filter((d) => !triaged(d)) }
 }
 
 export async function compareAll(fixtures: Fixture[], oracle: TerminalDriver, candidate: TerminalDriver, triage: Triage = {}): Promise<FixtureResult[]> {

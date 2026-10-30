@@ -63,7 +63,10 @@ export class Parser {
   private readonly decoder = new Utf8Decoder()
   private codePoints = new Uint32Array(4096)
 
-  constructor(private readonly handler: ParserHandler, options: ParserOptions = {}) {
+  private readonly handler: ParserHandler
+
+  constructor(handler: ParserHandler, options: ParserOptions = {}) {
+    this.handler = handler
     this.maxOscLength = options.maxOscLength ?? 8 * 1024 * 1024
   }
 
