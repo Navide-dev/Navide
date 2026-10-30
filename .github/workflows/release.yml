@@ -32,7 +32,10 @@ jobs:
     if: github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49'
     name: Test, sign, notarize, and release macOS arm64
     runs-on: macos-14
-    timeout-minutes: 60
+    # Release gates take about 44 min and build, sign & notarize about 14, so
+    # 60 left nothing: dry run 41081465220 was cancelled mid-signing. 90 keeps
+    # room for notarytool queueing.
+    timeout-minutes: 90
     environment:
       name: production
       url: https://github.com/Navide-dev/Navide/releases/latest
