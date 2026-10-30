@@ -42,7 +42,7 @@ from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
 )
 from .base import ChannelAdapter, InboundMessage, Location, MediaTooLarge, is_shared_sender
-from .pairing import LinkInvites, SenderGate, parse_link_code
+from .pairing import LinkInvites, SenderGate, normalize_code, parse_link_code
 from .registry import PLATFORMS, load_module
 from .store import DEFAULT_ACCOUNT, DEFAULT_VERBOSITY, VERBOSITIES, Binding, ChannelStore
 from .text import chunk_for, msg_blocks, strip_msg_markers
@@ -1096,10 +1096,14 @@ class ChannelManager:
 
     def pairing_list(self, platform: str | None) -> dict[str, Any]:
         self.gate.prune()
-        return {"ok": True, "requests": [r.public() for r in self.store.list_pairing(platform or None)]}
+        # "invite": the request came from a redeemed link code (see ``_link_chat``).
+        return {"ok": True, "requests": [
+            {**r.public(), "source": "invite" if (r.platform, r.code) in self._pending_links else "pairing"}
+            for r in self.store.list_pairing(platform or None)]}
 
     async def pairing_approve(self, platform: str, code: str) -> dict[str, Any]:
-        req = self.gate.approve(platform, code)
+        via_invite = (platform, normalize_code(code)) in self._pending_links
+        req = self.gate.approve(platform, code, "invite" if via_invite else "pairing")
         if req is None:
             return {"ok": False, "error": "配對碼不存在或已過期 (unknown or expired code)"}
         pending_link = self._pending_links.pop((platform, req.code), None)
@@ -1160,7 +1164,10 @@ class ChannelManager:
                 "expires_at": invite.expires_at, "url": url or None}
 
     def allow_list(self, platform: str | None) -> dict[str, Any]:
-        return {"ok": True, "entries": self.store.list_allow(platform or None)}
+        # "shared": a Telegram id that stands for many people; the gate refuses it, and the
+        # UI offers to remove a row that names one (written before that rule).
+        return {"ok": True, "entries": [{**e, "shared": is_shared_sender(e["platform"], e["sender_id"])}
+                                        for e in self.store.list_allow(platform or None)]}
 
     async def allow_remove(self, platform: str, sender_id: str, account: str = DEFAULT_ACCOUNT) -> dict[str, Any]:
         _check_account(account)

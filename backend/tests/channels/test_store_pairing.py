@@ -42,7 +42,7 @@ def test_migration_is_idempotent(tmp_path) -> None:
     db = Database(tmp_path / "n.db")
     ChannelStore(db)
     ChannelStore(db)
-    assert db.schema_version("channels") == 6
+    assert db.schema_version("channels") == 7
     db.close()
 
 
@@ -131,7 +131,7 @@ def test_v2_seen_chats_survive_the_bot_migration_and_go_to_the_next_bot(tmp_path
         cur.execute("INSERT INTO channel_chats (platform, chat_id, title, kind, supports_topics, last_seen)"
                     " VALUES ('telegram', '-200', 'team', 'group', 1, 5)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 6
+    assert db.schema_version("channels") == 7
     assert s.chats("telegram", "bot-a") == []
     assert s.adopt_chats("telegram", "bot-a") == 1
     assert s.chats("telegram", "bot-a") == [
@@ -174,7 +174,7 @@ def test_v5_keeps_every_v4_account_and_binding_as_default(tmp_path) -> None:
         cur.execute("INSERT INTO channel_allow VALUES ('telegram', '7', 'alice', 3)")
         cur.execute("INSERT INTO channel_pairing_requests VALUES ('telegram', 'K7Q2M9XA', '42', 'neil', '42', 4)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 6
+    assert db.schema_version("channels") == 7
     assert s.accounts() == {("telegram", "default"): {"enabled": False, "config": {"group": "-100"}}}
     [b] = s.bindings()
     assert (b.pane_id, b.location().key(), b.verbosity) == ("p1", "telegram:default:-100:5", "full")
@@ -182,7 +182,7 @@ def test_v5_keeps_every_v4_account_and_binding_as_default(tmp_path) -> None:
     # Existing approvals and pending requests belong to the default bot, and only to it.
     assert s.is_allowed("telegram", "7") and not s.is_allowed("telegram", "7", "bot-b1")
     assert s.list_allow(None) == [{"platform": "telegram", "account": "default", "sender_id": "7",
-                                   "sender_name": "alice", "added_at": 3}]
+                                   "sender_name": "alice", "added_at": 3, "source": None}]
     assert [(r.code, r.account) for r in s.list_pairing("telegram")] == [("K7Q2M9XA", "default")]
     s.upsert_account("telegram", {}, account="bot-b1")  # the new key takes a second bot
     assert len(s.accounts()) == 2
@@ -218,3 +218,31 @@ def test_an_empty_sender_gets_no_pairing_code(store: ChannelStore) -> None:
     gate = SenderGate(store)
     outcome = gate.request_pairing("telegram", "", "x", "42")
     assert outcome.request is None and store.list_pairing(None) == []
+
+
+def test_allowlist_rows_say_how_they_were_added(store: ChannelStore) -> None:
+    gate = SenderGate(store)
+    code = gate.request_pairing("telegram", "7", "alice", "42").request.code
+    gate.approve("telegram", code)
+    store.add_allow("telegram", "8", "bob", 5, source="invite")
+    store.add_allow("telegram", "9", "carol", 6)  # a caller that names no source
+    rows = {r["sender_id"]: r for r in store.list_allow("telegram")}
+    assert rows["7"]["source"] == "pairing" and rows["7"]["added_at"] > 0
+    assert (rows["8"]["source"], rows["8"]["added_at"]) == ("invite", 5)
+    assert rows["9"]["source"] is None
+
+
+def test_v7_keeps_v6_allowlist_rows_with_no_source(tmp_path) -> None:
+    from agent_team_backend.channels import store as store_mod
+    db = Database(tmp_path / "n.db")
+    for version, fn in ((1, store_mod._v1), (2, store_mod._v2), (3, store_mod._v3), (4, store_mod._v4),
+                        (5, store_mod._v5), (6, store_mod._v6)):
+        db.migrate("channels", version, fn)
+    with db.transaction() as cur:
+        cur.execute("INSERT INTO channel_allow VALUES ('telegram', 'default', '7', 'alice', 3)")
+    s = ChannelStore(db)
+    assert db.schema_version("channels") == 7
+    assert s.list_allow("telegram") == [{"platform": "telegram", "account": "default", "sender_id": "7",
+                                         "sender_name": "alice", "added_at": 3, "source": None}]
+    assert s.is_allowed("telegram", "7")
+    db.close()

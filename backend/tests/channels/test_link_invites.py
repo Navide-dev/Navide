@@ -253,3 +253,26 @@ async def test_a_shared_or_unknown_telegram_sender_cannot_redeem_a_code(env: Env
     assert not env.store.is_allowed("telegram", sender)
     assert any(e == "channels.link_failed" and p["code"] == code for e, p in env.fake.events)
     assert env.tg.texts()[-1] == MSG_LINK_FAILED
+
+
+async def test_pending_and_allowed_entries_say_whether_a_link_code_or_a_pairing_code_made_them(env: Env) -> None:
+    code = env.m.link_create("telegram", "direct")["code"]
+    await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True)
+    await env.inbound("hi", sender="55", chat="55", thread="", direct=True)  # an ordinary pairing request
+    pending = {r["sender_id"]: r for r in env.m.pairing_list("telegram")["requests"]}
+    assert (pending["99"]["source"], pending["55"]["source"]) == ("invite", "pairing")
+    for sender in ("99", "55"):
+        assert (await env.m.pairing_approve("telegram", pending[sender]["code"]))["ok"]
+    entries = {e["sender_id"]: e for e in env.m.allow_list("telegram")["entries"]}
+    assert (entries["99"]["source"], entries["55"]["source"]) == ("invite", "pairing")
+    assert entries["99"]["added_at"] > 0
+    assert not any(e["shared"] for e in entries.values())
+
+
+async def test_the_allow_list_flags_a_shared_telegram_id_without_removing_it(env: Env) -> None:
+    env.store._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at)"
+                    " VALUES ('telegram', 'default', '1087968824', 'GroupAnonymousBot', 1)")
+    entries = {e["sender_id"]: e for e in env.m.allow_list(None)["entries"]}
+    assert entries["1087968824"]["shared"] is True and entries["1087968824"]["source"] is None
+    assert entries["7"]["shared"] is False
+    assert env.store.remove_allow("telegram", "1087968824")

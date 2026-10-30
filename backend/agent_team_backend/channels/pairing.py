@@ -82,12 +82,13 @@ class SenderGate:
         self._store.add_pairing(req)
         return PairingOutcome(req, created=True)
 
-    def approve(self, platform: str, code: str) -> PairingRequest | None:
+    def approve(self, platform: str, code: str, source: str = "pairing") -> PairingRequest | None:
+        """Admit the sender of pending ``code``; ``source`` records how they asked ("pairing" | "invite")."""
         self.prune()
         req = self._store.pop_pairing(platform, normalize_code(code))
         if req is None or is_shared_sender(platform, req.sender_id):
             return None  # a shared id's request (from before this rule) is dropped, not approved
-        self._store.add_allow(platform, req.sender_id, req.sender_name, int(self._now()), req.account)
+        self._store.add_allow(platform, req.sender_id, req.sender_name, int(self._now()), req.account, source)
         return req
 
     def reject(self, platform: str, code: str) -> PairingRequest | None:
