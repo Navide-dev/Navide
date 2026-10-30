@@ -10902,7 +10902,11 @@
     "allow": {
       "title": "Người gửi được phép",
       "empty": "Chưa cho phép ai cả.",
-      "remove": "Gỡ"
+      "remove": "Gỡ",
+      "via-pairing": "Mã ghép đôi",
+      "via-invite": "Mã liên kết",
+      "shared": "ID dùng chung",
+      "shared-hint": "ID Telegram này đại diện cho nhiều người (quản trị viên ẩn danh, kênh, chính Telegram) nên luôn bị từ chối. Bạn có thể gỡ nó."
     },
     "pane": {
       "connect": "Kết nối với cuộc trò chuyện",
