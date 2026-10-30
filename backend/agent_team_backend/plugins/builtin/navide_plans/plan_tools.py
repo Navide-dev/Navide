@@ -71,12 +71,31 @@ PLANS_DISABLED_MESSAGE = (
 )
 
 
-#: Longest pane label sent to the Host; a longer name falls back to the id.
+#: Longest pane label sent to the Host, in UTF-16 code units (the Host's unit).
 PANE_LABEL_MAX = 200
+
+# What JavaScript's String.prototype.trim removes (WhiteSpace and
+# LineTerminator), so the label is judged exactly as the Host's
+# isInitiatorPane judges it.
+_JS_TRIM = (
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
+
+
+def _pane_label_accepted(value: str) -> bool:
+    """True when both the Host (JS trim, UTF-16 length) and the Plans
+    backend (Python strip, code points) accept ``value`` as initiator.pane."""
+    return (
+        bool(value.strip(_JS_TRIM))
+        and bool(value.strip())
+        and len(value.encode("utf-16-le", "surrogatepass")) // 2 <= PANE_LABEL_MAX
+    )
 
 
 def _caller_pane(caller: Caller) -> str | None:
-    """The calling pane's name (its id when it has none), for version records.
+    """The calling pane's name, else its id, for version records; None when
+    neither would pass the Host's check, so the request keeps its four keys.
 
     Only a pane caller has one; the label is never a credential, token or
     profile, just what the user sees on the pane."""
@@ -86,9 +105,9 @@ def _caller_pane(caller: Caller) -> str | None:
 
     entry = agent_messaging.get(caller.pane_id)
     name = getattr(entry, "name", "") or ""
-    if isinstance(name, str) and 0 < len(name.strip()) <= PANE_LABEL_MAX:
-        return name.strip()
-    return caller.pane_id if len(caller.pane_id) <= PANE_LABEL_MAX else None
+    if isinstance(name, str) and _pane_label_accepted(name.strip(_JS_TRIM)):
+        return name.strip(_JS_TRIM)
+    return caller.pane_id if _pane_label_accepted(caller.pane_id) else None
 
 
 async def _host_agent_plan_call(

@@ -1326,6 +1326,17 @@ describe('agent initiator pane', () => {
     expect(isAuthenticatedInitiator({ ...base, pane: 'x'.repeat(200) })).toBe(true)
   })
 
+  it('counts UTF-16 code units and trims as JavaScript does, which the core matches', () => {
+    // 100 emoji are 200 code units; 150 are 300. The core sends the pane id instead.
+    expect(isAuthenticatedInitiator({ ...base, pane: '\u{1F600}'.repeat(100) })).toBe(true)
+    expect(isAuthenticatedInitiator({ ...base, pane: '\u{1F600}'.repeat(150) })).toBe(false)
+    expect(isAuthenticatedInitiator({ ...base, pane: '\u{20000}'.repeat(101) })).toBe(false)
+    expect(isAuthenticatedInitiator({ ...base, pane: '\uFEFF' })).toBe(false)
+    expect(isAuthenticatedInitiator({ ...base, pane: ' \u2028\u3000\uFEFF ' })).toBe(false)
+    // The id the core falls back to passes.
+    expect(isAuthenticatedInitiator({ ...base, pane: 'p-1' })).toBe(true)
+  })
+
   it('refuses an empty, oversized or non-string pane, a pane on a user, and any other extra key', () => {
     for (const pane of ['', '   ', 'x'.repeat(201), 7, null, { id: 'p-1' }]) {
       expect(isAuthenticatedInitiator({ ...base, pane })).toBe(false)

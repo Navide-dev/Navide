@@ -114,7 +114,8 @@ export type AuthenticatedInitiator =
   | Readonly<{ kind: 'user'; id: string }>
   | Readonly<{ kind: 'agent'; source: 'mcp'; id: string; caller?: AgentInitiatorCaller; pane?: string }>
 
-/** Longest `initiator.pane` the Host forwards. */
+/** Longest `initiator.pane` the Host forwards, in UTF-16 code units
+ * (`String.length`); the core's `_pane_label_accepted` matches this check. */
 export const INITIATOR_PANE_MAX_LENGTH = 200
 
 /** The calling pane's name or id (never a credential, token or profile), as

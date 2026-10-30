@@ -268,7 +268,7 @@
               "$ref": "#/$defs/agentCaller"
             },
             "pane": {
-              "description": "The calling pane's name, or its id when it has none, as the core MCP server resolved it from the pane's own MCP token. Never a credential, token or profile. For display and the package's own records, not an authorization decision; additive and optional, sent only to packages that accept it (Plans 1.1.0 and later).",
+              "description": "The calling pane's name, or its id when it has none or its name would not pass, as the core MCP server resolved it from the pane's own MCP token. Never a credential, token or profile. For display and the package's own records, not an authorization decision; additive and optional, sent only to packages that accept it (Plans 1.1.0 and later). The Host's check is authoritative: at most 200 UTF-16 code units (JavaScript length) and not empty after JavaScript trim(). maxLength and pattern here count code points and are only an approximation of it.",
               "type": "string",
               "minLength": 1,
               "maxLength": 200,

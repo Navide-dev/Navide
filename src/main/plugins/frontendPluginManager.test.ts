@@ -16706,19 +16706,24 @@ describe('agent capability requests the Host cannot serve', () => {
     try {
       request(socket, workspaceRequest('req-pane', { pane: 'Reviewer' }))
       request(socket, workspaceRequest('req-no-pane', {}))
+      request(socket, workspaceRequest('req-pane-id', { pane: 'p-1' }))
       await flush()
       expect(execute).toHaveBeenNthCalledWith(1, PLANS_PLUGIN_ID, '/workspace', expect.anything(), 'Reviewer')
       expect(execute).toHaveBeenNthCalledWith(2, PLANS_PLUGIN_ID, '/workspace', expect.anything(), undefined)
+      expect(execute).toHaveBeenNthCalledWith(3, PLANS_PLUGIN_ID, '/workspace', expect.anything(), 'p-1')
 
-      for (const [index, pane] of (['', '  ', 7, 'x'.repeat(201), { id: 'p-1' }] as unknown[]).entries()) {
+      // A name the core would never send (150 emoji = 300 UTF-16 units, U+FEFF
+      // only) is refused here; the core sends the pane id instead.
+      const refusedPanes = ['', '  ', 7, 'x'.repeat(201), { id: 'p-1' }, '\u{1F600}'.repeat(150), '\uFEFF']
+      for (const [index, pane] of (refusedPanes as unknown[]).entries()) {
         request(socket, workspaceRequest(`req-bad-${index}`, { pane }))
       }
       request(socket, workspaceRequest('req-extra', { pane: 'Reviewer', token: 't' }))
       await flush()
-      expect(execute).toHaveBeenCalledTimes(2)
+      expect(execute).toHaveBeenCalledTimes(3)
       const refused = resultsOf(socket).filter((message) => String(message.payload.request_id).startsWith('req-bad') ||
         message.payload.request_id === 'req-extra')
-      expect(refused).toHaveLength(6)
+      expect(refused).toHaveLength(8)
       for (const message of refused) {
         expect(message.payload.response).toEqual(expect.objectContaining({
           ok: false, error: expect.objectContaining({ code: 'BAD_REQUEST' }),

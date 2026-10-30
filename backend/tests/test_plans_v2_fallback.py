@@ -265,6 +265,18 @@ async def test_a_mutation_is_never_retried_after_a_host_timeout(monkeypatch: pyt
     (Caller(kind="pane", pane_id="p-1"), SimpleNamespace(name="  "), "p-1"),
     (Caller(kind="pane", pane_id="p-1"), None, "p-1"),
     (Caller(kind="pane", pane_id="p-1"), SimpleNamespace(name="x" * 201), "p-1"),
+    # The Host counts UTF-16 code units: 150 emoji are 300 of them, 100 are 200.
+    (Caller(kind="pane", pane_id="p-1"), SimpleNamespace(name="\U0001F600" * 150), "p-1"),
+    (Caller(kind="pane", pane_id="p-1"), SimpleNamespace(name="\U0001F600" * 100), "\U0001F600" * 100),
+    (Caller(kind="pane", pane_id="p-1"), SimpleNamespace(name="\U00020000" * 101), "p-1"),
+    # Blank to JavaScript's trim (U+FEFF) or to Python's strip (U+001C).
+    (Caller(kind="pane", pane_id="p-1"), SimpleNamespace(name="\ufeff"), "p-1"),
+    (Caller(kind="pane", pane_id="p-1"), SimpleNamespace(name=" \u2028\u3000\ufeff "), "p-1"),
+    (Caller(kind="pane", pane_id="p-1"), SimpleNamespace(name="\x1c"), "p-1"),
+    # Sent trimmed the way the Host trims.
+    (Caller(kind="pane", pane_id="p-1"), SimpleNamespace(name="\ufeffReviewer\u3000"), "Reviewer"),
+    # Neither the name nor the id passes: no pane at all.
+    (Caller(kind="pane", pane_id="p" * 201), SimpleNamespace(name="\ufeff"), None),
     (Caller(kind="external"), SimpleNamespace(name="Reviewer"), None),
     (Caller(kind="host"), None, None),
 ])
@@ -292,3 +304,24 @@ async def test_a_plan_call_from_a_pane_passes_its_name_to_the_host(monkeypatch: 
     await plan_tools._host_agent_plan_call(Caller(kind="pane", pane_id="p-1"), "/workspace", "plans.add_note", {})
     await plan_tools._host_agent_plan_call(Caller(kind="external"), "/workspace", "plans.add_note", {})
     assert seen == ["Reviewer", None]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["\U0001F600" * 150, "\ufeff"])
+async def test_a_name_the_host_would_refuse_falls_back_to_the_pane_id(
+    monkeypatch: pytest.MonkeyPatch, name: str,
+) -> None:
+    from agent_team_backend import agent_messaging
+
+    seen: list[Any] = []
+
+    async def route(*args: Any, **kwargs: Any) -> Any:
+        seen.append(kwargs.get("pane"))
+        return {"ok": True, "result": {"ok": True}}
+
+    monkeypatch.setattr(plan_mcp, "request_host_agent_workspace_backend", route)
+    monkeypatch.setattr(agent_messaging, "get", lambda pane_id: SimpleNamespace(name=name))
+    assert await plan_tools._host_agent_plan_call(
+        Caller(kind="pane", pane_id="p-1"), "/workspace", "plans.list", {},
+    ) == {"ok": True}
+    assert seen == ["p-1"]
