@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from agent_team_backend import osplat
+from agent_team_backend import osplat, plan_versions
 
 from tests.test_navide_plans_backend_wire import (  # noqa: F401 - backend_process is a fixture
     CLIENT_META,
@@ -501,7 +501,8 @@ def test_write_is_atomic_and_rejects_stale_mtime(backend_process: subprocess.Pop
     assert after.st_ino != before.st_ino
     if osplat.paths.enforces_posix_modes():
         assert after.st_mode & 0o777 == 0o640
-    assert sorted(path.name for path in plans.iterdir()) == ["doc_aaaaaa.html"]
+    # No temporary file is left behind (.history holds the write's version).
+    assert sorted(path.name for path in plans.iterdir() if path.name != ".history") == ["doc_aaaaaa.html"]
 
     # A document sent in parts swaps in the same way, with the same check.
     data = _plan_html("Chunked", padding=300 * 1024).encode("utf-8")
@@ -522,11 +523,11 @@ def test_write_is_atomic_and_rejects_stale_mtime(backend_process: subprocess.Pop
 
     assert upload(expected_mtime=1.0) == {"ok": False, "conflict": True}
     assert target.read_text(encoding="utf-8") == _plan_html("Updated")
-    assert sorted(path.name for path in plans.iterdir()) == ["doc_aaaaaa.html"]
+    assert sorted(path.name for path in plans.iterdir() if path.name != ".history") == ["doc_aaaaaa.html"]
     committed = upload(expected_mtime=target.stat().st_mtime)
     assert committed["ok"] is True
     assert target.read_bytes() == data
-    assert sorted(path.name for path in plans.iterdir()) == ["doc_aaaaaa.html"]
+    assert sorted(path.name for path in plans.iterdir() if path.name != ".history") == ["doc_aaaaaa.html"]
 
 
 def test_a_read_reports_the_content_hash_a_write_can_expect(
@@ -559,6 +560,88 @@ def test_a_read_reports_the_content_hash_a_write_can_expect(
 
     for bad in ("ABC", "0" * 63, 7):
         assert _error_code(_write(backend_process, host, rel_path, "x", expected_sha256=bad)) == "INVALID_ARGUMENT"
+
+
+def _history_entries(plan: Path) -> dict[str, dict[str, Any]]:
+    # Version lines only; the backend also announces each write before it.
+    history = plan.parent / ".history" / plan.name.removesuffix(".html")
+    entries: dict[str, dict[str, Any]] = {}
+    for line in (history / "index.jsonl").read_text(encoding="utf-8").splitlines():
+        entry = json.loads(line)
+        if "file" in entry:
+            entries[entry["file"]] = entry
+    return entries
+
+
+def test_the_manual_write_paths_never_write_into_history(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    host = _RootOnlyHost({"instance-1": mine})
+    history = ".agent-team/plans/.history/doc_aaaaaa/20260101T000000_draft.html"
+
+    assert _error_code(_write(backend_process, host, history, _plan_html("Planted"))) == "WORKSPACE_SCOPE_VIOLATION"
+    upload_id = "0123456789abcdef0123456789abcdef"
+    for name, extra in (
+        ("plans.write_document_part", {"upload_id": upload_id, "offset": 0, "data_base64": "eA=="}),
+        ("plans.write_document_commit", {"upload_id": upload_id, "total_size": 1}),
+        ("plans.history_preserve", {}),
+    ):
+        response = _call(backend_process, host, name, {"rel_path": history, **extra})
+        assert _error_code(response) == "WORKSPACE_SCOPE_VIOLATION", name
+    assert not (mine / ".agent-team" / "plans" / ".history").exists()
+
+
+def test_writes_record_versions_with_their_author(backend_process: subprocess.Popen[bytes], tmp_path: Path) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_html("Original"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+
+    # The default runtime is an agent's MCP call.
+    assert _value(_write(backend_process, host, rel_path, _plan_html("By agent"))) == {"ok": True}
+    entries = _history_entries(plan)
+    [first] = entries.values()
+    assert first["author"] == {"kind": "agent"}
+    assert first["sha256"] == hashlib.sha256(plan.read_bytes()).hexdigest()
+    snapshot = plan.parent / ".history" / "doc_aaaaaa" / first["file"]
+    assert plan_versions.read_version(snapshot.parent, snapshot.name) == plan.read_bytes()
+
+    # A document without a stage keeps no versions, and other plan
+    # directories keep none either.
+    assert _value(_write(backend_process, host, ".agent-team/plans/plain_bbbbbb.html", "<p>no meta</p>")) == {"ok": True}
+    assert _value(_write(backend_process, host, "docs/plans/elsewhere_cccccc.html", _plan_html("Docs"))) == {"ok": True}
+    assert sorted(p.name for p in (plan.parent / ".history").iterdir()) == ["doc_aaaaaa"]
+    assert not (mine / "docs" / "plans" / ".history").exists()
+
+
+def test_history_preserve_pins_disk_bytes_or_stores_the_users_side_without_scripts(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_html("Theirs"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+
+    pinned = _value(_call(backend_process, host, "plans.history_preserve", {"rel_path": rel_path}))
+    assert pinned["ok"] is True and isinstance(pinned["version"], str)
+    entry = _history_entries(plan)[pinned["version"]]
+    assert entry["reason"] == "conflict"
+    assert entry["sha256"] == hashlib.sha256(plan.read_bytes()).hexdigest()
+
+    planted = _plan_html("Mine").replace("</body>", "<script>alert(1)</script><SCRIPT src=x></SCRIPT ></body>")
+    kept = _value(_call(backend_process, host, "plans.history_preserve", {"rel_path": rel_path, "content": planted}))
+    stored = plan_versions.read_version(plan.parent / ".history" / "doc_aaaaaa", kept["version"]).decode("utf-8")
+    assert "Mine" in stored and "alert(1)" not in stored and "<SCRIPT" not in stored
+    assert 'id="plan-meta"' in stored  # the JSON island is data and stays
+    assert _history_entries(plan)[kept["version"]]["detached"] is True
+    # The plan itself was never written.
+    assert "Theirs" in plan.read_text(encoding="utf-8")
+
+    for bad in ({"rel_path": rel_path, "content": 7}, {"rel_path": rel_path, "extra": 1}, {}):
+        assert _error_code(_call(backend_process, host, "plans.history_preserve", bad)) == "INVALID_ARGUMENT"
 
 
 def test_agent_changes_refuse_a_document_without_valid_plan_meta_and_leave_it_untouched(

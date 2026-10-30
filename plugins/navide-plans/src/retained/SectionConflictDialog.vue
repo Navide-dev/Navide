@@ -19,6 +19,8 @@ const { t } = useI18n()
 /** Which side lost, once the parent reports the chosen write went through. */
 const discarded = ref<'mine' | 'theirs' | null>(null)
 const copied = ref<'mine' | 'theirs' | null>(null)
+/** Whether the discarded side is now a version in the plan's history. */
+const discardedKept = ref(false)
 
 const mineText = computed(() => props.conflict.mine)
 const theirsText = computed(() => props.conflict.theirs ?? '')
@@ -32,9 +34,11 @@ async function copy(side: 'mine' | 'theirs'): Promise<void> {
   }
 }
 
-/** Called by the parent after the chosen side was applied. */
-function showDiscarded(side: 'mine' | 'theirs'): void {
+/** Called by the parent after the chosen side was applied; `kept` says
+ *  whether the other side was saved as a version of the plan. */
+function showDiscarded(side: 'mine' | 'theirs', kept = false): void {
   discarded.value = side
+  discardedKept.value = kept
   copied.value = null
 }
 
@@ -81,7 +85,9 @@ defineExpose({ showDiscarded })
       </template>
       <template v-else>
         <h2>{{ t('pane.plans.conflict-discarded-title') }}</h2>
-        <p class="scd-note">{{ t('pane.plans.conflict-discarded-body') }}</p>
+        <p class="scd-note">
+          {{ discardedKept ? t('pane.plans.conflict-discarded-kept') : t('pane.plans.conflict-discarded-body') }}
+        </p>
         <section class="scd-side" :data-side="discarded">
           <header>
             <span>{{ discarded === 'mine' ? t('pane.plans.conflict-mine') : t('pane.plans.conflict-theirs') }}</span>

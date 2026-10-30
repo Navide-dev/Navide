@@ -30,6 +30,7 @@
         ],
         "write": [
           "**/.agent-team/plans/*",
+          "**/.agent-team/plans/.history/**",
           "**/.agent-team/reports/*",
           "**/.claude/loop-reports/*",
           "**/.claude/plans/*",

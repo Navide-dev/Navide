@@ -92,6 +92,7 @@
       "conflict-copied": "Copiado",
       "conflict-discarded-title": "La versión que no conservaste",
       "conflict-discarded-body": "No se guardó en ningún sitio. Cópiala ahora si necesitas algo de ella.",
+      "conflict-discarded-kept": "Se conserva como versión en el historial de este plan. También puedes copiarla ahora.",
       "conflict-close": "Cerrar",
       "merged-others": "Guardado. Se conservaron los cambios hechos en otras partes del documento.",
       "section-write-busy": "El documento no dejó de cambiar mientras se guardaba. Inténtalo de nuevo.",

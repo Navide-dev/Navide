@@ -14223,6 +14223,7 @@ export const PLANS_BACKEND_METHODS = [
   'plans.write_document_part',
   'plans.write_document_commit',
   'plans.write_document_abort',
+  'plans.history_preserve',
   'plans.list_directory',
   'plans.cache_put',
   'plans.create',

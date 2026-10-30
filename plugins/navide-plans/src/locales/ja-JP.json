@@ -92,6 +92,7 @@
       "conflict-copied": "コピーしました",
       "conflict-discarded-title": "残さなかった版",
       "conflict-discarded-body": "この内容はどこにも保存されていません。必要ならいまコピーしてください。",
+      "conflict-discarded-kept": "この内容はこのプランの履歴に版として残っています。いまコピーすることもできます。",
       "conflict-close": "閉じる",
       "merged-others": "保存しました。ドキュメントの他の箇所の変更はそのまま残っています。",
       "section-write-busy": "保存中にドキュメントが変わり続けました。もう一度お試しください。",

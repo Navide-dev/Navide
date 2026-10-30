@@ -24,7 +24,7 @@ import HtmlFilePreview from './HtmlFilePreview.vue'
 import PlanShareButton from './PlanShareButton.vue'
 import NotificationHost from './retained/NotificationHost.vue'
 import SectionConflictDialog from './retained/SectionConflictDialog.vue'
-import { resolvePlanStore, type SectionBody, type SectionConflict, type WriteResult } from './retained/planStore'
+import { preserveConflictSide, resolvePlanStore, type SectionBody, type SectionConflict, type WriteResult } from './retained/planStore'
 import { htmlPlanAwaitingUser, parseHtmlPlanMeta, replaceSectionBody as spliceHtmlSection, syncHeaderMarkup } from './retained/usePlanHtml'
 import { sharePlanToGit } from './retained/planShare'
 import { plansTransport } from './retained/transport'
@@ -486,16 +486,28 @@ async function deleteSection(anchor: string): Promise<void> {
     await settleSectionWrite(target, undefined, await writeSection(target, anchor, undefined, target.document.html ?? ''))
   } catch (cause) { toast(formatBackendError(cause), { type: 'error' }) }
 }
+/** Keep the side the user did not choose as a version; false when it could
+ *  not be (the dialog then says it exists only on screen). */
+async function preserveDiscarded(target: SectionTarget, mine?: string): Promise<boolean> {
+  try {
+    return await preserveConflictSide({ backend: plansTransport, workspacePath, relPath: target.path }, mine)
+  } catch (cause) {
+    toast(formatBackendError(cause), { type: 'error' })
+    return false
+  }
+}
 /** Write the user's version over the document shown in the conflict. */
 async function keepMySection(): Promise<void> {
   const pending = pendingSectionConflict.value
   if (!pending || sectionConflictSaving.value) return
   sectionConflictSaving.value = true
   try {
+    // The disk version is about to be overwritten: pin it as a version first.
+    const kept = await preserveDiscarded(pending.target)
     const result = await writeSection(pending.target, pending.conflict.anchor, pending.body, pending.conflict.fresh)
     // Conflicting again replaces the dialog's content with the newer disk version.
     if (await settleSectionWrite(pending.target, pending.body, result, editModeActive.value)) {
-      sectionConflictDialog.value?.showDiscarded('theirs')
+      sectionConflictDialog.value?.showDiscarded('theirs', kept)
       // The edit-mode frame still shows the other sections as they were; show
       // the document as it is now (edit mode stays on).
       if (editModeActive.value) await refreshSelected()
@@ -506,11 +518,17 @@ async function keepMySection(): Promise<void> {
     sectionConflictSaving.value = false
   }
 }
-/** Keep the disk version; the user's text stays in the dialog to copy. */
+/** Keep the disk version; the user's version is kept as a version of the
+ *  plan, and stays in the dialog to copy. */
 async function keepTheirSection(): Promise<void> {
   const pending = pendingSectionConflict.value
-  if (!pending) return
-  sectionConflictDialog.value?.showDiscarded('mine')
+  if (!pending || sectionConflictSaving.value) return
+  sectionConflictSaving.value = true
+  const store = resolvePlanStore(pending.target.path)
+  const mine = store.withSection(pending.conflict.fresh, pending.conflict.anchor, pending.body)
+  const kept = await preserveDiscarded(pending.target, mine)
+  sectionConflictSaving.value = false
+  sectionConflictDialog.value?.showDiscarded('mine', kept)
   if (isActiveSectionTarget(pending.target) || editModeActive.value) await refreshSelected()
 }
 

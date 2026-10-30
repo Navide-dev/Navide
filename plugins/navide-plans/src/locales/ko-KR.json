@@ -92,6 +92,7 @@
       "conflict-copied": "복사됨",
       "conflict-discarded-title": "남기지 않은 버전",
       "conflict-discarded-body": "이 내용은 어디에도 저장되지 않았습니다. 필요하면 지금 복사하세요.",
+      "conflict-discarded-kept": "이 내용은 이 계획의 기록에 버전으로 남아 있습니다. 지금 복사할 수도 있습니다.",
       "conflict-close": "닫기",
       "merged-others": "저장했습니다. 문서의 다른 부분에서 바뀐 내용은 그대로 유지되었습니다.",
       "section-write-busy": "저장하는 동안 문서가 계속 바뀌었습니다. 다시 시도하세요.",

@@ -92,6 +92,7 @@
       "conflict-copied": "Kopiert",
       "conflict-discarded-title": "Die Fassung, die du nicht behalten hast",
       "conflict-discarded-body": "Sie wurde nirgends gespeichert. Kopiere sie jetzt, falls du etwas davon brauchst.",
+      "conflict-discarded-kept": "Sie ist als Version im Verlauf dieses Plans erhalten. Du kannst sie auch jetzt kopieren.",
       "conflict-close": "Schließen",
       "merged-others": "Gespeichert. Änderungen an anderen Stellen des Dokuments wurden beibehalten.",
       "section-write-busy": "Das Dokument hat sich beim Speichern ständig geändert. Versuche es erneut.",

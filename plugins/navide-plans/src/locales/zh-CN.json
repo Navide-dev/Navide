@@ -92,6 +92,7 @@
       "conflict-copied": "已复制",
       "conflict-discarded-title": "你没有保留的那一份",
       "conflict-discarded-body": "这份内容没有保存在任何地方，需要的话请现在复制。",
+      "conflict-discarded-kept": "这份内容已保存为这份计划的一个历史版本，也可以现在复制。",
       "conflict-close": "关闭",
       "merged-others": "已保存，文档其他地方的修改都保留了。",
       "section-write-busy": "保存时文档一直在变动，请再试一次。",

@@ -12,6 +12,7 @@ const fileMethods: Record<string, string> = {
   'fs.write_file': 'plans.write_document',
   'fs.list_dir': 'plans.list_directory',
   'fs.delete': 'plans.delete',
+  'history.preserve': 'plans.history_preserve',
 }
 
 export const plansTransport: PlansTransport = {

@@ -92,6 +92,7 @@
       "conflict-copied": "已複製",
       "conflict-discarded-title": "你沒有保留的那一份",
       "conflict-discarded-body": "這份內容沒有存在任何地方，需要的話請現在複製。",
+      "conflict-discarded-kept": "這份內容已存成這份計畫的一個歷史版本，也可以現在複製。",
       "conflict-close": "關閉",
       "merged-others": "已存檔，文件其他地方的變更都保留了。",
       "section-write-busy": "存檔時文件一直在變動，請再試一次。",

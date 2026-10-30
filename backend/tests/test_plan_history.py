@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from agent_team_backend import plan_history
+from agent_team_backend import plan_history, plan_versions
 
 
 def _meta_island(stage: str) -> str:
@@ -75,20 +75,35 @@ def test_first_sight_creates_baseline_snapshot(tmp_path: Path) -> None:
 
     assert len(created) == 1
     assert created[0].startswith(".agent-team/plans/.history/my-plan_ab12cd/")
-    assert created[0].endswith("_in-review.html")
+    assert created[0].endswith("_in-review.html.gz")
     snap = tmp_path / created[0]
-    assert snap.read_text(encoding="utf-8") == _plan_html("in-review")
+    assert plan_versions.read_version(snap.parent, snap.name).decode("utf-8") == _plan_html("in-review")
 
 
-def test_same_stage_creates_no_new_snapshot(tmp_path: Path) -> None:
+def test_unchanged_bytes_create_no_new_version(tmp_path: Path) -> None:
     plans = _plans_dir(tmp_path)
     (plans / "my-plan_ab12cd.html").write_text(_plan_html("draft"), encoding="utf-8")
     assert len(plan_history.snapshot_plans(str(tmp_path))) == 1
-    # Content edit without a stage change must not snapshot again.
-    (plans / "my-plan_ab12cd.html").write_text(
-        _plan_html("draft").replace("body>x", "body>y"), encoding="utf-8"
-    )
     assert plan_history.snapshot_plans(str(tmp_path)) == []
+
+
+def test_a_content_edit_without_a_stage_change_is_an_external_version(tmp_path: Path) -> None:
+    plans = _plans_dir(tmp_path)
+    plan = plans / "my-plan_ab12cd.html"
+    plan.write_text(_plan_html("draft"), encoding="utf-8")
+    plan_history.snapshot_plans(str(tmp_path))
+    # An agent edits the file directly (not through the plan tools).
+    plan.write_text(_plan_html("draft").replace("body>x", "body>y"), encoding="utf-8")
+
+    created = plan_history.snapshot_plans(str(tmp_path))
+
+    assert len(created) == 1
+    history = plans / ".history" / "my-plan_ab12cd"
+    entries = plan_versions.read_index(history)
+    newest = entries[created[0].rsplit("/", 1)[1]]
+    assert newest["author"] == {"kind": "external"} and newest["reason"] == "external"
+    snap = tmp_path / created[0]
+    assert plan_versions.read_version(snap.parent, snap.name) == plan.read_bytes()
 
 
 def test_stage_transition_creates_snapshot(tmp_path: Path) -> None:
@@ -101,9 +116,9 @@ def test_stage_transition_creates_snapshot(tmp_path: Path) -> None:
     created = plan_history.snapshot_plans(str(tmp_path))
 
     assert len(created) == 1
-    assert created[0].endswith("_approved.html")
+    assert created[0].endswith("_approved.html.gz")
     history = plans / ".history" / "my-plan_ab12cd"
-    assert len(list(history.glob("*.html"))) == 2
+    assert len(plan_versions.list_versions(history)) == 2
 
 
 def test_infra_hidden_and_metaless_files_skipped(tmp_path: Path) -> None:
@@ -116,24 +131,24 @@ def test_infra_hidden_and_metaless_files_skipped(tmp_path: Path) -> None:
     assert not (plans / ".history").exists()
 
 
-def test_retention_prunes_oldest_beyond_cap(tmp_path: Path) -> None:
+def test_older_stage_snapshots_are_kept_forever(tmp_path: Path) -> None:
     plans = _plans_dir(tmp_path)
     plan = plans / "my-plan_ab12cd.html"
     plan.write_text(_plan_html("approved"), encoding="utf-8")
     history = plans / ".history" / "my-plan_ab12cd"
     history.mkdir(parents=True)
-    # Seed 25 old snapshots, newest recording stage "draft" (≠ approved).
+    # 25 snapshots from before versions had an index: stage snapshots, all old.
     for i in range(25):
         (history / f"20000101T0000{i:02d}_draft.html").write_text("old", encoding="utf-8")
 
     created = plan_history.snapshot_plans(str(tmp_path))
 
     assert len(created) == 1
-    remaining = sorted(p.name for p in history.glob("*.html"))
-    assert len(remaining) == plan_history.MAX_SNAPSHOTS_PER_PLAN
-    # The oldest seeds were pruned; the newest entry is the fresh snapshot.
-    assert "20000101T000000_draft.html" not in remaining
-    assert remaining[-1].endswith("_approved.html")
+    remaining = sorted(p.name for p in history.glob("*.html*"))
+    # Nothing was pruned (the former 20-snapshot cap is gone); the newest
+    # entry is the fresh stage version.
+    assert len(remaining) == 26
+    assert remaining[-1].endswith("_approved.html.gz")
 
 
 def test_missing_plans_dir_is_noop(tmp_path: Path) -> None:
@@ -181,9 +196,9 @@ def test_md_first_sight_creates_baseline_snapshot(tmp_path: Path) -> None:
 
     assert len(created) == 1
     assert created[0].startswith(".agent-team/plans/.history/my-plan_ab12cd/")
-    assert created[0].endswith("_in-review.plan.md")
+    assert created[0].endswith("_in-review.plan.md.gz")
     snap = tmp_path / created[0]
-    assert snap.read_text(encoding="utf-8") == _plan_md("in-review")
+    assert plan_versions.read_version(snap.parent, snap.name) == (plans / "my-plan_ab12cd.plan.md").read_bytes()
 
 
 def test_md_stage_transition_creates_snapshot(tmp_path: Path) -> None:
@@ -196,19 +211,19 @@ def test_md_stage_transition_creates_snapshot(tmp_path: Path) -> None:
     created = plan_history.snapshot_plans(str(tmp_path))
 
     assert len(created) == 1
-    assert created[0].endswith("_approved.plan.md")
+    assert created[0].endswith("_approved.plan.md.gz")
     history = plans / ".history" / "my-plan_ab12cd"
-    assert len(list(history.glob("*.plan.md"))) == 2
+    assert len(plan_versions.list_versions(history)) == 2
 
 
-def test_md_same_stage_creates_no_new_snapshot(tmp_path: Path) -> None:
+def test_md_body_edit_is_a_version_and_unchanged_bytes_are_not(tmp_path: Path) -> None:
     plans = _plans_dir(tmp_path)
     plan = plans / "my-plan_ab12cd.plan.md"
     plan.write_text(_plan_md("draft"), encoding="utf-8")
     assert len(plan_history.snapshot_plans(str(tmp_path))) == 1
-    # Body edit without a stage change must not snapshot again.
-    plan.write_text(_plan_md("draft").replace("# Body", "# Body edited"), encoding="utf-8")
     assert plan_history.snapshot_plans(str(tmp_path)) == []
+    plan.write_text(_plan_md("draft").replace("# Body", "# Body edited"), encoding="utf-8")
+    assert len(plan_history.snapshot_plans(str(tmp_path))) == 1
 
 
 def test_md_without_stage_is_not_snapshotted(tmp_path: Path) -> None:
@@ -226,7 +241,7 @@ def test_md_infra_and_hidden_files_skipped(tmp_path: Path) -> None:
     assert not (plans / ".history").exists()
 
 
-def test_md_retention_prunes_oldest_beyond_cap(tmp_path: Path) -> None:
+def test_md_older_stage_snapshots_are_kept_forever(tmp_path: Path) -> None:
     plans = _plans_dir(tmp_path)
     plan = plans / "my-plan_ab12cd.plan.md"
     plan.write_text(_plan_md("approved"), encoding="utf-8")
@@ -238,10 +253,9 @@ def test_md_retention_prunes_oldest_beyond_cap(tmp_path: Path) -> None:
     created = plan_history.snapshot_plans(str(tmp_path))
 
     assert len(created) == 1
-    remaining = sorted(p.name for p in history.glob("*.plan.md"))
-    assert len(remaining) == plan_history.MAX_SNAPSHOTS_PER_PLAN
-    assert "20000101T000000_draft.plan.md" not in remaining
-    assert remaining[-1].endswith("_approved.plan.md")
+    remaining = sorted(p.name for p in history.glob("*.plan.md*"))
+    assert len(remaining) == 26
+    assert remaining[-1].endswith("_approved.plan.md.gz")
 
 
 def test_html_and_md_plans_snapshot_independently(tmp_path: Path) -> None:
@@ -252,8 +266,8 @@ def test_html_and_md_plans_snapshot_independently(tmp_path: Path) -> None:
     created = plan_history.snapshot_plans(str(tmp_path))
 
     assert len(created) == 2
-    assert any(c.endswith("_approved.html") for c in created)
-    assert any(c.endswith("_in-review.plan.md") for c in created)
+    assert any(c.endswith("_approved.html.gz") for c in created)
+    assert any(c.endswith("_in-review.plan.md.gz") for c in created)
 
 
 def test_nested_plan_root_plans_are_snapshotted(tmp_path: Path) -> None:
