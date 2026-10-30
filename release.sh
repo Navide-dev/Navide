@@ -97,6 +97,7 @@ VERSION_FILES=(
   README.md
   README.zh-TW.md
   README.ja-JP.md
+  plugins/official-plugin-fingerprints.json
 )
 
 if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
@@ -152,6 +153,9 @@ node scripts/set-release-version.mjs "$VERSION"
 # Point the README download links at this release too (every release, patch
 # included), so the download point always reflects the latest version.
 node scripts/update-readme-download-links.mjs "$VERSION"
+# Record what each bundled first-party plugin ships in this release; refuses
+# when a plugin's content changed since the last release without a bump.
+node scripts/official-plugin-fingerprints.mjs --write --baseline "$TAG"
 uv --project backend lock
 pnpm release:check "$TAG"
 
@@ -178,7 +182,7 @@ node scripts/check-no-dev-web.mjs out
 unexpected_changes="$(
   git status --porcelain --untracked-files=all \
     | sed -E 's/^.. //' \
-    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md)$' \
+    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md|plugins/official-plugin-fingerprints\.json)$' \
     || true
 )"
 [[ -z "$unexpected_changes" ]] || \

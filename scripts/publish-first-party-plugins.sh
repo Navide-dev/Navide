@@ -15,9 +15,10 @@
 # vsix whose manifest id/version differ from --id (default navide.plans) and
 # --version, and a target outside KNOWN_TARGETS.
 #
-# The built packages carry the root package.json version unless
-# NAVIDE_PLUGIN_ARTIFACT_VERSION=<x.y.z> is set (the plugin vite configs read
-# it); plugin-packages.yml takes the same value as its artifact_version input.
+# The built packages carry the plugin's own version (plugins/<dir>/manifest.json,
+# independent of the App version) unless NAVIDE_PLUGIN_ARTIFACT_VERSION=<x.y.z>
+# is set (the plugin vite configs read it); plugin-packages.yml takes the same
+# value as its artifact_version input.
 #
 # --from-run downloads the navide.plans packages of a finished
 # plugin-packages.yml run with `gh run download`, checks each one's sha256,

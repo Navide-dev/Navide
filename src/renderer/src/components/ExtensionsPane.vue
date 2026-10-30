@@ -71,6 +71,7 @@ const selectedId = computed(() =>
 // list row; the full disclosure is in the selected card and the overview below.
 // The Plans risk note leads with its first sentence in bold; every word stays.
 const plansRiskNote = computed(() => leadSentence(t('settings.extensions.plansRiskNote')))
+const browserRiskNote = computed(() => leadSentence(t('settings.extensions.browserRiskNote')))
 const riskById = ref(new Map<string, DisclosureRiskLevel>())
 // What it declares, in the disclosure's own clauses: the card's one-line reason
 // for its risk level. The full record is on the Disclosure page.
@@ -140,6 +141,7 @@ function factoryWarnings(p: FactoryRow): string[] {
     out.push(t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.sensitive'), value: p.installed.sensitive.join(', ') }))
   }
   if (p.id === 'navide.plans') out.push(t('settings.extensions.plansRiskNote'))
+  if (p.id === 'navide.browser') out.push(t('settings.extensions.browserRiskNote'))
   return out
 }
 const busy = ref(false)
@@ -828,7 +830,7 @@ watch(installed, () => {
               >
                 <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="28" />
                 <span class="ext-md-row-text">
-                  <span class="ext-md-row-name" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id }}</span>
+                  <span class="ext-md-row-name" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id === 'navide.browser' ? $t('settings.extensions.bundledBrowser') : p.id }}</span>
                   <span class="ext-md-row-sub">{{ p.installed?.packageVersion ?? p.version }}</span>
                 </span>
                 <span class="ext-md-row-end">
@@ -956,7 +958,7 @@ watch(installed, () => {
             <div class="ext-row-head">
               <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="32" />
               <div class="ext-row-title">
-                <span class="ext-id" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id }}</span>
+                <span class="ext-id" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id === 'navide.browser' ? $t('settings.extensions.bundledBrowser') : p.id }}</span>
                 <span v-if="p.installed?.packageVersion ?? p.version" class="ext-requires">
                   {{ p.installed?.packageVersion ?? p.version }}
                 </span>
@@ -980,6 +982,9 @@ watch(installed, () => {
                  sandbox wording does not apply to it. -->
             <p v-if="p.id === 'navide.plans'" class="ext-risk-note">
             <strong class="ext-lead">{{ plansRiskNote.lead }}</strong>{{ plansRiskNote.separator }}{{ plansRiskNote.rest }}
+            </p>
+            <p v-if="p.id === 'navide.browser'" class="ext-risk-note">
+            <strong class="ext-lead">{{ browserRiskNote.lead }}</strong>{{ browserRiskNote.separator }}{{ browserRiskNote.rest }}
             </p>
             <div v-if="p.disabled !== undefined || p.installed?.pendingCandidateVersion" class="ext-actions">
               <button

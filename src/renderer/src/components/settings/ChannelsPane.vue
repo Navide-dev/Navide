@@ -729,7 +729,7 @@ function formatTime(ts: number | null | undefined): string {
             <p v-else-if="quickAdded[bot.key]" class="ch-form-hint" data-testid="channel-quick-added">{{ t('channels.quick.added') }}</p>
 
             <div
-              v-if="spec.id === 'telegram' && isConnected(bot) && (managedWaiting[bot.key] || managedAsk === bot.key || managedError[bot.key])"
+              v-if="spec.id === 'telegram' && isConnected(bot) && (bot.status.can_manage_bots || managedWaiting[bot.key] || managedAsk === bot.key || managedError[bot.key])"
               class="ch-managed"
             >
               <p v-if="managedWaiting[bot.key]" class="ch-form-hint" data-testid="channel-managed-waiting">{{ t('channels.managed.waiting') }}</p>
@@ -741,6 +741,15 @@ function formatTime(ts: number | null | undefined): string {
                   <button type="button" class="ch-btn primary sm" :disabled="busy" data-testid="channel-managed-confirm" @click="createManaged(bot)">{{ t('channels.managed.confirm') }}</button>
                 </div>
               </template>
+              <!-- Kept in sight on a bot that can create bots; the ⋯ menu keeps its entry too. -->
+              <button
+                v-else-if="bot.status.can_manage_bots"
+                type="button"
+                class="ch-btn ghost sm"
+                :disabled="busy"
+                data-testid="channel-managed-start"
+                @click="managedAsk = bot.key"
+              >{{ t('channels.managed.create') }}</button>
               <p v-if="managedError[bot.key]" class="ch-error" role="alert" data-testid="channel-managed-error">{{ managedError[bot.key] }}</p>
             </div>
 

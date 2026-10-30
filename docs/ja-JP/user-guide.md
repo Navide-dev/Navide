@@ -203,4 +203,6 @@ Claude Code はリクエストごとに Credential を読み直すため、何�
 
 これらの Credential は**この Machine から出ることはありません**。アカウントの Credential と Key はローカルにのみ保存されるため、**Sync** セクション（Settings → Sync）に 「認証情報とキー」の行はなく、古いビルドでオンのまま残った「認証情報とキー」のスイッチはオフとして扱われます。Sync セクションは Sync Key の ID を表示し（同期する資産を暗号化する Key で、CLI の Credential ではありません）、漏洩が疑われるときに Rotate を提供します。すべての Record が再暗号化され、ペアリング済みの Device は新しい Key を受け取ります。
 
+**App Lock**（設定 → App Lock）は、すべての Navide ウィンドウをロック画面で覆い、4〜12 桁の PIN で解除します。Mac では Touch ID、Windows 11 では Windows Hello を先に使えます。Windows 10 と Linux では PIN でのみ解除し、設定ページにもそう表示されます。これはプライバシー画面であり、アクセス制御ではありません。下では agent、ターミナル、チャットチャンネル、MCP ツール、ほかのデバイス、スケジュールがそのまま動き続け、コンピューターの前にいる詳しい人なら回避できます。ロック中は、隠す・終了・ウィンドウ操作と、PIN 入力欄に必要な編集キーを除いてアプリケーションメニューがグレー表示になり、キー入力も下のウィンドウには届かないため、メニューのクリックでもショートカットでも背後の App を操作できません。DevTools は変わりません。「今すぐロック」（⌘⌥L、Windows と Linux では Ctrl+Alt+L）で手動でロックできるほか、一定時間操作がないとき、画面がロックされたとき、コンピューターがスリープしたとき、Navide の起動時（既定でオフ）に自動でロックできます。PIN を忘れた場合は Touch ID または Windows Hello で確認してから再設定します。どちらもない場合は、Navide を終了して Navide のデータフォルダーにある `app-lock.json` を削除してください。App Lock とその PIN だけが削除され、ほかには影響しません。
+
 `.agent-team/` は現在 Portability Mechanism ではありません。将来 Machine 間で移行する場合は Git Synchronization ではなく、Redaction と Retention Control を備えた明示的な Local Export/Import Flow を使用すべきです。

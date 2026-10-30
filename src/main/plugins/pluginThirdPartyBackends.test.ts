@@ -1490,7 +1490,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('agent-tool consent and first-write confi
 describe('NativeBackendStore agent-tool switches', () => {
   it('are off by default and leave the file as on main until changed', () => {
     const fresh = new NativeBackendStore(join(root, 'switch-store'))
-    expect(fresh.agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+    expect(fresh.agentToolSwitches()).toEqual({ enabled: false, externalCallers: false, firstParty: true })
     fresh.setEnabled(true)
     const file = JSON.parse(readFileSync(join(root, 'switch-store', 'native-backends.json'), 'utf8'))
     expect(file).toEqual({ schemaVersion: 1, enabled: true, plugins: {} })
@@ -1500,11 +1500,23 @@ describe('NativeBackendStore agent-tool switches', () => {
     const switches = new NativeBackendStore(join(root, 'switch-store'))
     switches.setAgentToolSwitches({ enabled: true })
     switches.setAgentToolSwitches({ externalCallers: true })
-    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: true, externalCallers: true })
+    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: true, externalCallers: true, firstParty: true })
     writeFileSync(join(root, 'switch-store', 'native-backends.json'), JSON.stringify({
       schemaVersion: 1, enabled: false, plugins: {}, agentTools: { enabled: 'yes', externalCallers: 1 },
     }))
-    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: false, externalCallers: false, firstParty: true })
+  })
+
+  it('keeps the first-party switch on by default, persists it off, and reads only false as off', () => {
+    const switches = new NativeBackendStore(join(root, 'switch-store'))
+    switches.setAgentToolSwitches({ firstParty: false })
+    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: false, externalCallers: false, firstParty: false })
+    switches.setAgentToolSwitches({ firstParty: true })
+    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches().firstParty).toBe(true)
+    writeFileSync(join(root, 'switch-store', 'native-backends.json'), JSON.stringify({
+      schemaVersion: 1, enabled: false, plugins: {}, agentTools: { enabled: false, externalCallers: false, firstParty: 'no' },
+    }))
+    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches().firstParty).toBe(true)
   })
 
   it('turns external clients off with the agent switch, so turning it on never re-enables them silently', () => {
@@ -1512,9 +1524,9 @@ describe('NativeBackendStore agent-tool switches', () => {
     switches.setAgentToolSwitches({ enabled: true })
     switches.setAgentToolSwitches({ externalCallers: true })
     switches.setAgentToolSwitches({ enabled: false })
-    expect(switches.agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+    expect(switches.agentToolSwitches()).toEqual({ enabled: false, externalCallers: false, firstParty: true })
     switches.setAgentToolSwitches({ enabled: true })
-    expect(switches.agentToolSwitches()).toEqual({ enabled: true, externalCallers: false })
+    expect(switches.agentToolSwitches()).toEqual({ enabled: true, externalCallers: false, firstParty: true })
   })
 
   it('turns a switch off in memory even when the save fails', () => {

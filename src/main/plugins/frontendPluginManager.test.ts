@@ -363,7 +363,7 @@ vi.mock('./pluginWebViewHost', async () => {
           toJPEG: () => Buffer.from('jpeg'),
         }),
         navigationHistory: { canGoBack: () => false, canGoForward: () => false, goBack: () => {}, goForward: () => {} },
-        debugger: { isAttached: () => false, attach: () => {}, detach: () => {}, sendCommand: async () => ({}) },
+        debugger: { isAttached: () => false, attach: () => {}, detach: () => {}, sendCommand: async () => ({}), on: () => {} },
       }
       const guest = {
         options,
@@ -12100,7 +12100,7 @@ describe('first-party Git private bridge', () => {
         'official-artifacts',
         'factory-resources',
         PLANS_PLUGIN_ID,
-        '0.1.0',
+        '1.0.0',
         `${process.platform}-${process.arch}`,
         'package',
       )
@@ -12114,24 +12114,24 @@ describe('first-party Git private bridge', () => {
       expect(registerBundledPlans(mgr, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '0.1.0',
+        artifactVersion: '1.0.0',
         devRoot: root,
       })).toEqual({ registered: true })
       mgr.setPlansDiagnosticsEnabled(true)
-      mgr.setCapabilityGrantResolver(() => ({ packageVersion: '0.1.0', system: ['fs', 'ui', 'aiCli'], storage: true }))
+      mgr.setCapabilityGrantResolver(() => ({ packageVersion: '1.0.0', system: ['fs', 'ui', 'aiCli'], storage: true }))
       const descriptor = mgr.getDescriptor(PLANS_PLUGIN_ID)!
       const contribution = descriptor.views!.find((view) => view.location === 'window')!
       const host = new FakeBrowserWindow()
       await mgr.openView({ ...descriptor, entryFile: contribution.entryFile }, contribution, {
         hostWindow: asHost(host), bounds: 'fill', workspacePath: root,
-        capabilityContext: mgr.plansCapabilityContext('0.1.0', root, 'plans-window'),
+        capabilityContext: mgr.plansCapabilityContext('1.0.0', root, 'plans-window'),
         query: '?plans_package_source=spoofed',
       })
       const loaded = (host.children[0] as FakeViewLike).webContents.loads[0]
       expect(loaded).toContain(contribution.entryFile)
       const query = new URLSearchParams(loaded.split('?')[1])
       expect(query.get('plans_package_source')).toBe('factory-bundled')
-      expect(query.get('plans_package_version')).toBe('0.1.0')
+      expect(query.get('plans_package_version')).toBe('1.0.0')
     } finally {
       await mgr.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
@@ -18100,7 +18100,7 @@ describe('the Disabled switch for the built-in Plans, Git and Mini-IDE', () => {
     const mgr = new FrontendPluginManager()
     mgr.setDisabledPluginResolver(() => true)
     expect(mgr.isBuiltinPluginDisabled('acme.demo')).toBe(false)
-    expect(mgr.listDisabledBuiltinPlugins()).toEqual([GIT_PLUGIN_ID, MINI_IDE_PLUGIN_ID, PLANS_PLUGIN_ID].sort())
+    expect(mgr.listDisabledBuiltinPlugins()).toEqual(['navide.browser', GIT_PLUGIN_ID, MINI_IDE_PLUGIN_ID, PLANS_PLUGIN_ID].sort())
   })
 
   it('drains the real Plans backend activation on Disable and registers it again on Enable', async () => {
@@ -18636,6 +18636,29 @@ describe('web.* view capabilities (Host web view registry)', () => {
       record.carrier = 'surface'
     }
     expect(a.host.children).toHaveLength(1)
+  })
+
+  it('attaches several views at once and answers RESOURCE_LIMIT past the view cap', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-caps')
+    const ids: string[] = []
+    for (let index = 0; index < 32; index++) {
+      ids.push((await a.call('create', { space: `s-${index}` }, gesture)).result!.viewId as string)
+    }
+    await expect(a.call('create', { space: 'one-more' }, gesture)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'RESOURCE_LIMIT', message: 'web view limit reached (LIMIT_REACHED)' },
+    })
+    await a.call('attach', { viewId: ids[0], rect: { x: 0, y: 0, width: 50, height: 50 } })
+    await a.call('attach', { viewId: ids[1], rect: { x: 50, y: 0, width: 50, height: 50 } })
+    expect(pluginWebViewRegistry().list('acme.web-caps').filter(view => view.attached).map(view => view.viewId))
+      .toEqual([ids[0], ids[1]])
+    for (const viewId of ids.slice(2, 9)) await a.call('attach', { viewId, rect: { x: 0, y: 0, width: 10, height: 10 } })
+    await expect(a.call('attach', { viewId: ids[9], rect: { x: 0, y: 0, width: 10, height: 10 } })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'RESOURCE_LIMIT' },
+    })
+    pluginWebViewRegistry().destroyPlugin('acme.web-caps')
   })
 
   it('follows the plugin view bounds and visibility, and keeps views running after the view closes', async () => {

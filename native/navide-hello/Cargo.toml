@@ -1,0 +1,16 @@
+[package]
+name = "navide-hello"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Navide App Lock: Windows Hello verification helper"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Security_Credentials_UI", "Win32_Foundation", "Win32_System_WinRT"] }
+windows-core = "0.62"
+windows-future = "0.3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

@@ -60,6 +60,39 @@
     "errors": {
       "generic": "發生錯誤（{code}）。",
       "invalid-address": "請輸入 http 或 https 網址。"
+    },
+    "layout": {
+      "label": "版面配置",
+      "tiled": "並排顯示",
+      "switch": "一次一個"
+    },
+    "page": {
+      "previous": "前一頁",
+      "next": "後一頁",
+      "status": "第 {page}/{count} 頁"
+    },
+    "tab": {
+      "new": "新增分頁",
+      "close": "關閉分頁",
+      "untitled": "新分頁",
+      "discarded": "為節省記憶體已關閉，按一下重新載入",
+      "discarded-note": "這個分頁超過 10 分鐘沒有顯示，為節省記憶體已關閉，會從原本的網址重新載入。",
+      "restore": "重新載入分頁"
+    },
+    "dialog": {
+      "open": "頁面開著對話框（{type}）：{message}",
+      "type": {
+        "alert": "警告",
+        "confirm": "確認",
+        "prompt": "輸入",
+        "beforeunload": "離開頁面"
+      }
+    },
+    "uploads": {
+      "title": "agent 上傳的檔案",
+      "item": "{file} → {origin}，{time}",
+      "sensitive": "疑似機密",
+      "sensitive-note": "agent 上傳了檔名疑似機密的檔案"
     }
   }
 }
