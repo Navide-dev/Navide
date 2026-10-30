@@ -5,7 +5,7 @@ import { guardLastWindowClose } from './last-window-close'
 import { join, dirname, basename, isAbsolute, relative, sep } from 'node:path'
 import { writeFile, readFile, mkdir } from 'node:fs/promises'
 import { readFileSync, statSync, existsSync, realpathSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { release as osRelease, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import {
   startBackend,
@@ -193,7 +193,9 @@ import { registerSpotlightSettingsIpc } from './spotlight-settings-ipc'
 import { AppLockController } from './appLock'
 import { AppLockOverlay } from './appLockOverlay'
 import { APP_LOCK_FILE } from './appLockStore'
+import { APP_LOCK_SYSTEM_NAMES, type AppLockStatus, type AppLockSystemKind } from '../shared/appLock'
 import { appLockStrings } from './appLockStrings'
+import { hwndArg, runHelper, WindowsHello, windowsHelloHelperPath } from './windowsHello'
 import { registerAppLockIpc } from './app-lock-ipc'
 import { registerSpokenContentSettingsIpc } from './spoken-content-settings-ipc'
 import { createDeepLinkRouter, registerDeepLinkIpc } from './deep-link'
@@ -1821,21 +1823,47 @@ const appLockOverlay = new AppLockOverlay({
     ? { url: process.env['ELECTRON_RENDERER_URL'] }
     : { filePath: join(__dirname, '../renderer/index.html') },
 })
+// Windows 11 unlocks with Windows Hello through navide-hello.exe; macOS with
+// Touch ID; Linux and Windows 10 with the PIN only.
+const windowsHello = new WindowsHello({
+  platform: process.platform,
+  osRelease: osRelease(),
+  helperPath: () => windowsHelloHelperPath(app.isPackaged, process.resourcesPath, app.getAppPath()),
+  run: runHelper,
+  log: logMain,
+})
+const appLockSystemKind: AppLockSystemKind | null = isMac() ? 'touch-id' : windowsHello.supported() ? 'windows-hello' : null
+const appLockSystemName = (): string => APP_LOCK_SYSTEM_NAMES[appLockSystemKind ?? 'touch-id']
+function publishAppLockStatus(status: AppLockStatus): void {
+  if (status.locked) appLockOverlay.show()
+  else appLockOverlay.hide()
+  rebuildAppMenu()
+  for (const win of mainWindows) {
+    if (!win.isDestroyed()) win.webContents.send('app-lock:status-changed', status)
+  }
+}
 const appLock = new AppLockController({
   filePath: join(app.getPath('userData'), APP_LOCK_FILE),
   now: () => Date.now(),
   systemIdleSeconds: () => powerMonitor.getSystemIdleTime(),
-  canPromptSystem: () => isMac() && systemPreferences.canPromptTouchID(),
-  promptSystem: () => systemPreferences.promptTouchID(appLockStrings(currentUiLocale()).systemReason),
-  onChange: (status) => {
-    if (status.locked) appLockOverlay.show()
-    else appLockOverlay.hide()
-    rebuildAppMenu()
-    for (const win of mainWindows) {
-      if (!win.isDestroyed()) win.webContents.send('app-lock:status-changed', status)
-    }
+  systemKind: appLockSystemKind,
+  canPromptSystem: () =>
+    appLockSystemKind === 'touch-id' ? systemPreferences.canPromptTouchID() : windowsHello.isAvailable(),
+  promptSystem: () => {
+    const reason = appLockStrings(currentUiLocale(), appLockSystemName()).systemReason
+    if (appLockSystemKind === 'touch-id') return systemPreferences.promptTouchID(reason)
+    // Parent the dialog to the window the user is looking at, so it opens in front.
+    const win = BrowserWindow.getFocusedWindow() ?? [...mainWindows].find((w) => !w.isDestroyed())
+    if (!win) return Promise.reject(new Error('no window for Windows Hello'))
+    return windowsHello.verify(hwndArg(win.getNativeWindowHandle()), reason.charAt(0).toLocaleUpperCase() + reason.slice(1))
   },
+  onChange: (status) => publishAppLockStatus(status),
 })
+// Settings reads the status again whenever it opens; this keeps "Windows Hello
+// available" current after the user sets it up or removes it.
+const refreshWindowsHello = (): void => {
+  void windowsHello.refresh().then((changed) => { if (changed) publishAppLockStatus(appLock.status()) })
+}
 app.on('browser-window-created', (_event, win) => appLockOverlay.watch(win))
 const filePickerHostService = new FilePickerHostService({
   preloadPath: join(__dirname, '../preload/file-picker-preload.js'),
@@ -6134,15 +6162,17 @@ app.whenReady().then(async () => {
     controller: appLock,
     isAppWindow: (event) => isAppWindowSender(event),
     isLockScreen: (event) => appLockOverlay.isLockScreen(event.sender.id),
+    onStatusRead: refreshWindowsHello,
     screenInit: () => {
       const status = appLock.status()
       return {
-        strings: appLockStrings(currentUiLocale()).screen,
+        strings: appLockStrings(currentUiLocale(), appLockSystemName()).screen,
         systemUnlockAvailable: status.systemUnlockAvailable,
         preferSystem: status.settings.unlockMethod === 'system',
       }
     },
   })
+  refreshWindowsHello()
   powerMonitor.on('lock-screen', () => appLock.handleScreenLock())
   powerMonitor.on('suspend', () => appLock.handleSuspend())
   const appLockIdleTimer = setInterval(() => appLock.tick(), 15_000)
@@ -6254,6 +6284,7 @@ app.whenReady().then(async () => {
     onOpenLegal: (route) => void shell.openExternal(LEGAL_LINKS[route]),
     onLockNow: () => void appLock.lock(),
     lockNowEnabled: () => appLock.status().settings.enabled && !appLock.isLocked(),
+    appLocked: () => appLock.isLocked(),
     onReloadWindow: (target) => {
       void windowCloseCoordinator.prepareAndReload(target)
       // Handled synchronously from the menu's point of view whenever the target

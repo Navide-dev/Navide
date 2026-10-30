@@ -1471,7 +1471,8 @@
       "notice": "App Lock은 개인정보 보호 화면이지 접근 제어가 아니에요. 자리를 비운 동안 Navide의 모든 창을 가려요. 에이전트, 터미널, 채널, MCP 도구, 일정은 계속 실행되고, 이 컴퓨터 앞에 있는 사람이 방법을 안다면 우회할 수 있어요.",
       "section-lock": "잠금",
       "enabled": "App Lock 켜기",
-      "enabled-hint": "먼저 PIN을 설정하세요. Touch ID를 켜도 PIN으로 언제든 잠금을 해제할 수 있어요.",
+      "enabled-hint": "먼저 PIN을 설정하세요. {system}를 켜도 PIN으로 언제든 잠금을 해제할 수 있어요.",
+      "enabled-hint-pin-only": "먼저 PIN을 설정하세요. PIN으로 잠금을 해제해요.",
       "lock-now": "지금 잠그기",
       "lock-now-hint": "모든 창을 바로 가려요. 단축키 {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN을 삭제했어요. App Lock이 꺼졌어요.",
       "section-unlock": "잠금 해제",
       "method": "잠금 해제 방법",
-      "method-system": "Touch ID(PIN을 예비로 사용)",
+      "method-system": "{system}(PIN을 예비로 사용)",
       "method-pin": "PIN만 사용",
-      "system-unavailable": "이 컴퓨터에서는 Touch ID를 쓸 수 없어 Navide는 PIN으로 잠금을 해제해요.",
+      "system-unavailable": "이 컴퓨터에서는 {system}를 쓸 수 없어 Navide는 PIN으로 잠금을 해제해요.",
+      "pin-only": "이 시스템에서는 PIN으로만 잠금을 해제해요. Touch ID는 Mac, Windows Hello는 Windows 11이 필요해요.",
       "section-auto": "자동 잠금",
       "idle": "유휴 후",
       "idle-hint": "이 컴퓨터 전체에서 키보드나 마우스 입력이 없는 시간이에요.",
@@ -1503,15 +1505,16 @@
       "on-suspend": "컴퓨터가 잠자기에 들어갈 때",
       "on-start": "Navide가 시작될 때",
       "section-forgot": "PIN을 잊으셨나요?",
-      "reset-with-system": "Touch ID로 PIN 재설정",
-      "forgot-system": "Touch ID로 본인임을 확인한 뒤 새 PIN을 정해요.",
-      "forgot-manual-title": "Touch ID가 없을 때",
+      "reset-with-system": "{system}로 PIN 재설정",
+      "forgot-system": "{system}로 본인임을 확인한 뒤 새 PIN을 정해요.",
+      "forgot-manual-title": "{system}가 없을 때",
+      "forgot-manual-title-pin-only": "직접 재설정하기",
       "forgot-manual": "Navide를 종료하고 Navide 데이터 폴더에서 app-lock.json을 삭제하세요. App Lock과 그 PIN만 사라지고 다른 것은 바뀌지 않아요.",
       "error-invalid-pin": "숫자 4~12자리를 사용하세요.",
       "error-mismatch": "두 PIN이 일치하지 않아요.",
       "error-wrong-pin": "현재 PIN이 올바르지 않아요.",
       "error-cooldown": "시도 횟수가 너무 많아요. {seconds}초 후에 다시 시도하세요.",
-      "error-system-failed": "Touch ID로 본인임을 확인하지 못했어요.",
+      "error-system-failed": "{system}로 본인임을 확인하지 못했어요.",
       "error-generic": "실패했어요. 다시 시도하세요."
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "잠금 화면으로 모든 창을 가리고 Touch ID나 PIN으로 해제해요"
+          "summary": "잠금 화면으로 모든 창을 가리고 Touch ID, Windows Hello나 PIN으로 해제해요"
         },
         "voice-input": {
           "title": "음성 입력",
@@ -10899,7 +10902,11 @@
     "allow": {
       "title": "허용된 발신자",
       "empty": "아직 허용된 사람이 없어요.",
-      "remove": "제거"
+      "remove": "제거",
+      "via-pairing": "페어링 코드",
+      "via-invite": "연결 코드",
+      "shared": "공유 ID",
+      "shared-hint": "이 Telegram ID는 여러 사람(익명 관리자, 채널, Telegram 자체)을 나타내므로 항상 거부돼요. 제거할 수 있어요."
     },
     "pane": {
       "connect": "채팅에 연결",

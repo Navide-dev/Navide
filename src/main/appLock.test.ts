@@ -23,6 +23,7 @@ function setup(over: Partial<AppLockControllerDeps> = {}) {
     filePath: join(dir, APP_LOCK_FILE),
     now: () => clock,
     systemIdleSeconds: () => idle,
+    systemKind: 'touch-id',
     canPromptSystem: () => true,
     promptSystem,
     onChange: (s) => changes.push(s),
@@ -180,6 +181,12 @@ describe('AppLockController', () => {
 
     none.controller.updateSettings({ unlockMethod: 'pin' })
     expect(await none.controller.unlockWithSystem()).toMatchObject({ ok: false })
+  })
+
+  it('reports which system unlock this platform has, null for PIN only', () => {
+    expect(setup().controller.status().systemUnlockKind).toBe('touch-id')
+    expect(setup({ systemKind: 'windows-hello' }).controller.status().systemUnlockKind).toBe('windows-hello')
+    expect(setup({ systemKind: null, canPromptSystem: () => false }).controller.status()).toMatchObject({ systemUnlockKind: null, systemUnlockAvailable: false })
   })
 
   it('changes the PIN only with the current one', async () => {

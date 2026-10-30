@@ -1471,7 +1471,8 @@
       "notice": "App Lock est un écran de confidentialité, pas un contrôle d’accès. Il couvre toutes les fenêtres de Navide pendant votre absence. Les agents, les terminaux, les canaux de discussion, les outils MCP et les planifications continuent de tourner, et une personne devant cet ordinateur qui sait s’y prendre peut le contourner.",
       "section-lock": "Verrouillage",
       "enabled": "Activer App Lock",
-      "enabled-hint": "Définissez d’abord un PIN. Le PIN déverrouille toujours, même avec Touch ID activé.",
+      "enabled-hint": "Définissez d’abord un PIN. Le PIN déverrouille toujours, même avec {system} activé.",
+      "enabled-hint-pin-only": "Définissez d’abord un PIN. C’est lui qui déverrouille.",
       "lock-now": "Verrouiller maintenant",
       "lock-now-hint": "Couvre toutes les fenêtres immédiatement. Raccourci {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN supprimé. App Lock est désactivé.",
       "section-unlock": "Déverrouillage",
       "method": "Déverrouiller avec",
-      "method-system": "Touch ID, avec le PIN en secours",
+      "method-system": "{system}, avec le PIN en secours",
       "method-pin": "PIN uniquement",
-      "system-unavailable": "Touch ID n’est pas disponible sur cet ordinateur, Navide se déverrouille donc avec votre PIN.",
+      "system-unavailable": "{system} n’est pas disponible sur cet ordinateur, Navide se déverrouille donc avec votre PIN.",
+      "pin-only": "Sur ce système, Navide se déverrouille uniquement avec votre PIN : Touch ID nécessite un Mac et Windows Hello, Windows 11.",
       "section-auto": "Verrouillage automatique",
       "idle": "Après inactivité",
       "idle-hint": "Durée sans clavier ni souris sur l’ensemble de cet ordinateur.",
@@ -1503,15 +1505,16 @@
       "on-suspend": "À la mise en veille de l’ordinateur",
       "on-start": "Au démarrage de Navide",
       "section-forgot": "PIN oublié ?",
-      "reset-with-system": "Réinitialiser le PIN avec Touch ID",
-      "forgot-system": "Touch ID confirme que c’est bien vous, puis vous choisissez un nouveau PIN.",
-      "forgot-manual-title": "Sans Touch ID",
+      "reset-with-system": "Réinitialiser le PIN avec {system}",
+      "forgot-system": "{system} confirme que c’est bien vous, puis vous choisissez un nouveau PIN.",
+      "forgot-manual-title": "Sans {system}",
+      "forgot-manual-title-pin-only": "Le réinitialiser à la main",
       "forgot-manual": "Quittez Navide et supprimez app-lock.json du dossier de données de Navide. Cela supprime App Lock et son PIN, et rien d’autre.",
       "error-invalid-pin": "Utilisez 4 à 12 chiffres.",
       "error-mismatch": "Les deux PIN ne correspondent pas.",
       "error-wrong-pin": "Le PIN actuel est incorrect.",
       "error-cooldown": "Trop de tentatives. Réessayez dans {seconds} s.",
-      "error-system-failed": "Touch ID n’a pas confirmé votre identité.",
+      "error-system-failed": "{system} n’a pas confirmé votre identité.",
       "error-generic": "Cela n’a pas fonctionné. Réessayez."
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "Masquer toutes les fenêtres derrière un écran de verrouillage et déverrouiller avec Touch ID ou un PIN"
+          "summary": "Masquer toutes les fenêtres derrière un écran de verrouillage et déverrouiller avec Touch ID, Windows Hello ou un PIN"
         },
         "voice-input": {
           "title": "Saisie vocale",
@@ -10899,7 +10902,11 @@
     "allow": {
       "title": "Expéditeurs autorisés",
       "empty": "Personne n’est encore autorisé.",
-      "remove": "Retirer"
+      "remove": "Retirer",
+      "via-pairing": "Code d’appairage",
+      "via-invite": "Code de liaison",
+      "shared": "ID partagé",
+      "shared-hint": "Cet identifiant Telegram représente de nombreuses personnes (administrateurs anonymes, canaux, Telegram lui-même) et est donc toujours refusé. Vous pouvez le retirer."
     },
     "pane": {
       "connect": "Connecter à un chat",

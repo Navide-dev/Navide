@@ -1726,6 +1726,9 @@ async def test_a_link_code_only_works_on_the_bot_that_issued_it(env: Env) -> Non
     await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True)
     assert not env.store.is_allowed("telegram", "99")  # the default bot does not know it
     await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True, account="bot-b1")
+    # The redeemed code waits for approval on the bot that issued it.
+    [req] = env.store.list_pairing("telegram", "bot-b1")
+    assert (await env.m.pairing_approve("telegram", req.code))["ok"]
     assert env.store.is_allowed("telegram", "99", "bot-b1") and not env.store.is_allowed("telegram", "99")
     assert any("已連結" in t for t in b.texts())
 
@@ -2203,3 +2206,20 @@ async def test_line_prompt_vendor_without_a_menu_is_still_relayed(clocked) -> No
     clock.t += 1
     await _until_relay_prompt(env)
     assert next(iter(env.m.relay._by_id.values())).kind == "permission"
+
+
+@pytest.mark.parametrize("sender", ["1087968824", "136817688", "777000"])
+async def test_telegram_shared_sender_ids_are_refused_at_the_gate(env: Env, sender: str) -> None:
+    """Anonymous admins, channel posts and service messages share one id: even a row allowing
+    it (written before this rule) lets nothing through, and a DM gets no pairing code."""
+    env.store._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at)"
+                    " VALUES ('telegram', 'default', ?, 'x', 1)", (sender,))
+    sent = len(env.tg.sent)
+    await env.inbound("rm -rf ~", sender=sender)  # the bound group topic
+    await env.inbound("hello", sender=sender, chat=sender, thread="", direct=True)
+    assert env.fake.delivered == []
+    assert len(env.tg.sent) == sent
+    assert env.store.list_pairing("telegram") == []
+    # An approved person in the same topic still gets through.
+    await env.inbound("hello", sender="7")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "hello")
