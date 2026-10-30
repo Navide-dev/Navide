@@ -45,6 +45,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import uuid
 import zlib
 from collections.abc import Callable
@@ -326,15 +327,13 @@ def _safe_blobs_dir(history_dir: Path) -> Path | None:
 
 
 def _write_blob(blobs_dir: Path, sha: str, stored: bytes) -> None:
-    """Store a blob once; one already there is kept unless it is damaged."""
+    """Store a blob once. One already there is trusted by its name: blobs are
+    named by their hash and every read verifies it."""
     path = blobs_dir / sha
-    try:
-        if path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == sha:
-            return
-    except OSError:
-        pass
     if path.is_symlink():
         path.unlink()
+    elif path.is_file():
+        return
     _write_atomic(path, stored)
 
 
@@ -367,6 +366,25 @@ def _sweep_blobs(history_dir: Path, candidates: set[str] | None, warn: Warn) -> 
     blobs_dir = history_dir / BLOBS_DIR_NAME
     if candidates == set() or blobs_dir.is_symlink() or not blobs_dir.is_dir():
         return
+    # Listed and removed through one descriptor of the directory, opened
+    # without following a link, so a blobs/ swapped for a link after the check
+    # above is never followed. Windows has no dir_fd; there the path is used.
+    dir_fd: int | None = None
+    if os.unlink in os.supports_dir_fd and os.stat in os.supports_dir_fd and os.listdir in os.supports_fd:
+        try:
+            dir_fd = os.open(blobs_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        except OSError:
+            return
+    try:
+        _sweep_blobs_in(history_dir, blobs_dir, dir_fd, candidates, warn)
+    finally:
+        if dir_fd is not None:
+            os.close(dir_fd)
+
+
+def _sweep_blobs_in(
+    history_dir: Path, blobs_dir: Path, dir_fd: int | None, candidates: set[str] | None, warn: Warn,
+) -> None:
     referenced: set[str] = set()
     for child in history_dir.iterdir():
         if (
@@ -381,16 +399,19 @@ def _sweep_blobs(history_dir: Path, candidates: set[str] | None, warn: Warn) -> 
         except (OSError, ValueError, EOFError, gzip.BadGzipFile) as error:
             warn(f"{child}: unreadable version; no image blob removed: {error}")
             return
-    for blob in blobs_dir.iterdir():
-        name = blob.name
-        if _BLOB_NAME_RE.fullmatch(name) is None or blob.is_symlink() or name in referenced:
+    for name in os.listdir(dir_fd if dir_fd is not None else blobs_dir):
+        if _BLOB_NAME_RE.fullmatch(name) is None or name in referenced:
             continue
         if candidates is not None and name not in candidates:
             continue
         try:
-            blob.unlink()
+            if dir_fd is not None:
+                if stat.S_ISREG(os.stat(name, dir_fd=dir_fd, follow_symlinks=False).st_mode):
+                    os.unlink(name, dir_fd=dir_fd)
+            elif not (blobs_dir / name).is_symlink():
+                (blobs_dir / name).unlink()
         except OSError as error:
-            warn(f"{blob}: could not remove an unused image blob: {error}")
+            warn(f"{blobs_dir / name}: could not remove an unused image blob: {error}")
 
 
 def _plan_suffix(name: str) -> str:

@@ -431,6 +431,7 @@ def test_a_damaged_or_missing_blob_fails_the_read_and_an_unreadable_version_keep
     assert orphan in _blobs(plan) and any("no image blob removed" in w for w in warnings)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="creating symbolic links needs a privilege on Windows")
 def test_a_symlinked_blobs_directory_is_never_written_through(tmp_path: Path) -> None:
     plan = _plan(tmp_path)
     history = plan_versions.history_dir_for(plan)
@@ -469,3 +470,36 @@ def test_a_version_with_image_blobs_is_bounded_as_a_whole(tmp_path: Path) -> Non
     assert plan_versions.decode_version(history, name, raw, limit=len(data)) == data
     with pytest.raises(plan_versions.VersionTooLarge):
         plan_versions.decode_version(history, name, raw, limit=len(data) - 1)
+
+
+def test_a_stored_blob_is_trusted_by_its_name_and_not_reread_on_save(tmp_path: Path) -> None:
+    # Blobs are named by their hash and every read verifies it, so a save
+    # only checks that the name exists.
+    plan = _plan(tmp_path)
+    _record(plan, _with_images(b"one", _png(8)), at=T0, stage="draft", reason="stage")
+    blob = plan_versions.history_dir_for(plan) / "blobs" / hashlib.sha256(_png(8)).hexdigest()
+    blob.write_bytes(b"tampered")
+    inode = blob.stat().st_ino
+    _record(plan, _with_images(b"two", _png(8)), at=T0 + timedelta(minutes=1), stage="in-review", reason="stage")
+    assert blob.stat().st_ino == inode and blob.read_bytes() == b"tampered"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="creating symbolic links needs a privilege on Windows")
+def test_the_sweep_never_follows_a_blobs_directory_swapped_for_a_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _plan(tmp_path)
+    history = plan_versions.history_dir_for(plan)
+    _record(plan, _with_images(b"x", _png(10)), at=T0, stage="draft", reason="stage")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    victim = outside / hashlib.sha256(b"victim").hexdigest()
+    victim.write_bytes(b"victim")
+    # The directory is swapped for a link after any check by name has passed.
+    real = history / "blobs"
+    real.rename(history / "blobs-real")
+    real.symlink_to(outside, target_is_directory=True)
+    original = Path.is_symlink
+    monkeypatch.setattr(Path, "is_symlink", lambda self: False if self.name == "blobs" else original(self))
+    plan_versions.prune_history(history, now=T0 + timedelta(minutes=1))
+    assert victim.exists()
