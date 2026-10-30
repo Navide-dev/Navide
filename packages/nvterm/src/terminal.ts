@@ -117,39 +117,70 @@ export class TerminalCore implements ParserHandler {
 
   print(data: Uint32Array, start: number, end: number): void {
     const buf = this.active
+    const cols = this.cols
+    const special = this.charsets[this.glevel] === '0'
+    const insert = this.modes.insert
+    const style = this.styleId
+    let line = buf.line(buf.y)
     for (let i = start; i < end; i++) {
       let cp = data[i]!
-      const charset = this.charsets[this.glevel]
-      if (charset === '0' && cp >= 0x60 && cp <= 0x7e) cp = DEC_SPECIAL.codePointAt(cp - 0x60)!
-      const width = charWidth(cp)
+      if (special && cp >= 0x60 && cp <= 0x7e) cp = DEC_SPECIAL.codePointAt(cp - 0x60)!
+      // The parser only prints U+0020..U+007E and >= U+00A0.
+      const width = cp < 0x7f ? 1 : charWidth(cp)
 
       if (width === 0) {
-        // Combining character: joins the cell before the cursor.
-        let col = Math.min(buf.x, this.cols) - 1
-        if (col < 0) continue
-        const line = buf.line(buf.y)
-        if (line.widths[col] === WIDTH_TRAILING && col > 0) col--
-        line.appendCombining(col, String.fromCodePoint(cp))
-        continue
+        // Combining character: joins the cell before the cursor. With no cell
+        // before it, it is a defective combining sequence (Unicode 2.11) and
+        // takes a cell of its own, as if applied to a space.
+        let col = Math.min(buf.x, cols) - 1
+        if (col >= 0) {
+          if (line.widths[col] === WIDTH_TRAILING && col > 0) col--
+          line.appendCombining(col, String.fromCodePoint(cp))
+          continue
+        }
       }
 
-      if (buf.x >= this.cols) {
-        if (this.modes.autowrap) this.wrapToNextLine()
-        else buf.x = this.cols - 1
+      if (buf.x >= cols) {
+        if (this.modes.autowrap) {
+          this.wrapToNextLine()
+          line = buf.line(buf.y)
+        } else {
+          buf.x = cols - 1
+        }
       }
-      if (width === 2 && buf.x === this.cols - 1) {
+      if (width === 2 && buf.x === cols - 1) {
         // A wide character does not fit in the last column.
-        if (this.modes.autowrap) this.wrapToNextLine()
-        else if (this.cols < 2) continue
-        else buf.x = this.cols - 2
+        if (this.modes.autowrap) {
+          this.wrapToNextLine()
+          line = buf.line(buf.y)
+        } else if (cols < 2) {
+          continue
+        } else {
+          buf.x = cols - 2
+        }
       }
 
-      const line = buf.line(buf.y)
-      if (this.modes.insert) line.insertCells(buf.x, width, this.eraseStyle())
-      line.setCell(buf.x, cp, width === 2 ? WIDTH_WIDE : WIDTH_NORMAL, this.styleId)
+      const x = buf.x
+      if (insert) line.insertCells(x, width, this.eraseStyle())
+      if (width !== 2 && line.widths[x] === WIDTH_NORMAL) {
+        // Fast path: a narrow character over a narrow cell touches nothing else.
+        line.codes[x] = cp
+        line.styles[x] = style
+        if (line.extra) line.extra.delete(x)
+      } else if (width === 2 && line.widths[x] === WIDTH_NORMAL && line.widths[x + 1] === WIDTH_NORMAL && !line.extra) {
+        // Fast path: a wide character over two narrow cells.
+        line.codes[x] = cp
+        line.widths[x] = WIDTH_WIDE
+        line.styles[x] = style
+        line.codes[x + 1] = 0
+        line.widths[x + 1] = WIDTH_TRAILING
+        line.styles[x + 1] = style
+      } else {
+        line.setCell(x, cp, width === 2 ? WIDTH_WIDE : WIDTH_NORMAL, style)
+      }
       this.lastPrinted = cp
-      buf.x += width
-      if (buf.x >= this.cols && !this.modes.autowrap) buf.x = this.cols - 1
+      // x may reach cols even with autowrap off (xterm.js reports it so); the next character overwrites the last column.
+      buf.x += Math.max(width, 1)
     }
   }
 
@@ -221,7 +252,8 @@ export class TerminalCore implements ParserHandler {
           case 'M': this.deleteLines(params.count(0)); return // DL 8.3.32
           case 'P': this.line().deleteCells(this.col(), params.count(0), this.eraseStyle()); this.clampAfterEdit(); return // DCH 8.3.26
           case 'S': buf.scrollUp(params.count(0), buf.scrollTop, buf.scrollBottom, this.eraseStyle()); return // SU 8.3.147
-          case 'T': if (params.length <= 1) buf.scrollDown(params.count(0), buf.scrollTop, buf.scrollBottom, this.eraseStyle()); return // SD 8.3.113
+          // SD 8.3.113. The five-parameter form (xterm highlight mouse tracking) is not supported and scrolls like SD, as in xterm.js.
+          case 'T': buf.scrollDown(params.count(0), buf.scrollTop, buf.scrollBottom, this.eraseStyle()); return
           case 'X': { // ECH 8.3.38
             const x = this.col()
             this.line().erase(x, x + params.count(0), this.eraseStyle())
@@ -237,8 +269,9 @@ export class TerminalCore implements ParserHandler {
           case 'm': applySgr(this.attrs, params); this.styleId = this.styles.intern(this.attrs); return // SGR 8.3.117
           case 'n': this.deviceStatus(params.get(0, 0), false); return // DSR 8.3.35
           case 'r': this.setMargins(params.count(0), params.count(1, this.rows)); return // DECSTBM
-          case 's': if (params.length === 0) this.saveCursor(); return // SCOSC
-          case 'u': if (params.length === 0) this.restoreCursor(); return // SCORC
+          // SCOSC / SCORC. Without left/right margin mode (DECLRMM, unsupported) CSI s saves even with parameters.
+          case 's': this.saveCursor(); return
+          case 'u': this.restoreCursor(); return
         }
         return
       }
@@ -322,7 +355,7 @@ export class TerminalCore implements ParserHandler {
         sendFocusMode: this.modes.sendFocus,
         wraparoundMode: this.modes.autowrap,
       },
-      scrollbackLength: buf === this.normal ? buf.base : 0,
+      scrollbackLength: buf === this.normal ? buf.scrollbackLength : 0,
       lines,
     }
   }
@@ -406,6 +439,8 @@ export class TerminalCore implements ParserHandler {
 
   private tabForward(n: number): void {
     const buf = this.active
+    // With a wrap pending the cursor stays put (as xterm.js does).
+    if (buf.x >= this.cols) return
     let x = this.col()
     for (let i = 0; i < n && x < this.cols - 1; i++) {
       x++
@@ -577,7 +612,8 @@ export class TerminalCore implements ParserHandler {
         case 1016: this.setMouseEncoding('sgr-pixels', on); break
         case 2004: this.modes.bracketedPaste = on; break
         case 2026: this.modes.synchronizedOutput = on; break
-        case 47: case 1047: this.switchScreen(on, mode === 1047 && !on, false); break
+        // The alternate screen starts empty every time it is entered, as in xterm.js.
+        case 47: case 1047: this.switchScreen(on, mode === 1047 && !on, true); break
         case 1048: if (on) this.saveCursor(); else this.restoreCursor(); break
         case 1049:
           if (on) {
@@ -664,15 +700,8 @@ export class TerminalCore implements ParserHandler {
   private fullReset(): void {
     this.modes = defaultModes()
     this.active = this.normal
-    for (const buf of [this.normal, this.alternate]) {
-      buf.lines = Array.from({ length: this.rows }, () => new Line(this.cols))
-      buf.base = 0
-      buf.x = 0
-      buf.y = 0
-      buf.scrollTop = 0
-      buf.scrollBottom = this.rows - 1
-      buf.saved = null
-    }
+    this.normal.reset()
+    this.alternate.reset()
     Object.assign(this.attrs, DEFAULT_STYLE)
     this.styleId = 0
     this.tabs = defaultTabs(this.cols)

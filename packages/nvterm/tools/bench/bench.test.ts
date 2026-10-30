@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createXtermStream } from '../golden/xtermOracle.ts'
-import { measure } from './bench.ts'
+import { compare, measure } from './bench.ts'
+import { createNvtermStream } from '../golden/nvtermDriver.ts'
 import { datasets } from './datasets.ts'
 
 describe('throughput benchmark harness', () => {
@@ -14,5 +15,11 @@ describe('throughput benchmark harness', () => {
     const result = await measure(createXtermStream, datasets(32 * 1024)[0]!, { iterations: 1 })
     expect(result.runsMs).toHaveLength(1)
     expect(result.mibPerSecond).toBeGreaterThan(0)
+  })
+
+  it('compares two implementations in alternating rounds (smoke only)', async () => {
+    const result = await compare(createXtermStream, createNvtermStream, datasets(16 * 1024)[0]!, { rounds: 3 })
+    expect(result.ratios).toHaveLength(3)
+    expect(result.ratio).toBeGreaterThan(0)
   })
 })

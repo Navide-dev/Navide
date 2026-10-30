@@ -76,6 +76,15 @@ export class Line {
     }
   }
 
+  /** Empties the whole line for reuse. */
+  clear(style: number): void {
+    this.codes.fill(0)
+    this.widths.fill(WIDTH_NORMAL)
+    this.styles.fill(style)
+    this.extra = null
+    this.wrapped = false
+  }
+
   appendCombining(col: number, text: string): void {
     if (this.codes[col] === 0) return
     this.extra ??= new Map()
@@ -166,8 +175,10 @@ export interface SavedCursor {
 }
 
 export class Buffer {
-  /** Scrollback followed by the viewport. */
+  /** Scrollback followed by the viewport, from index `start`. Entries before `start` are dropped scrollback awaiting compaction. */
   lines: Line[] = []
+  /** Index in `lines` of the oldest kept scrollback line. */
+  private start = 0
   /** Index in `lines` of the top viewport row. */
   base = 0
   /** Cursor column; equals cols while a wrap is pending after the last column. */
@@ -193,6 +204,27 @@ export class Buffer {
     return this.lines[this.base + row]!
   }
 
+  get scrollbackLength(): number {
+    return this.base - this.start
+  }
+
+  /** The i-th scrollback line, oldest first. */
+  scrollbackLine(i: number): Line | undefined {
+    return i < this.scrollbackLength ? this.lines[this.start + i] : undefined
+  }
+
+  /** Empties the buffer: one blank viewport, no scrollback, cursor home, full margins. */
+  reset(): void {
+    this.lines = Array.from({ length: this.rows }, () => new Line(this.cols))
+    this.start = 0
+    this.base = 0
+    this.x = 0
+    this.y = 0
+    this.scrollTop = 0
+    this.scrollBottom = this.rows - 1
+    this.saved = null
+  }
+
   /**
    * Scrolls rows [top, bottom] up by n, filling with empty lines. With
    * `toScrollback`, a region starting at the top row keeps the lines that
@@ -202,14 +234,23 @@ export class Buffer {
   scrollUp(n: number, top: number, bottom: number, style: number, toScrollback = false): void {
     n = Math.min(n, bottom - top + 1)
     if (toScrollback && top === 0 && this.scrollback > 0) {
-      const fresh = Array.from({ length: n }, () => new Line(this.cols, style))
-      this.lines.splice(this.base + bottom + 1, 0, ...fresh)
-      this.base += n
-      const excess = this.base - this.scrollback
-      if (excess > 0) {
-        this.lines.splice(0, excess)
-        this.base -= excess
+      for (let i = 0; i < n; i++) {
+        let fresh: Line
+        if (this.scrollbackLength >= this.scrollback) {
+          // The scrollback is full: the oldest line is dropped and reused.
+          // Dropping from the front of an array is O(length), so move the
+          // start instead and compact once the dead prefix is large.
+          fresh = this.lines[this.start]!
+          fresh.clear(style)
+          this.start++
+        } else {
+          fresh = new Line(this.cols, style)
+        }
+        if (bottom === this.rows - 1) this.lines.push(fresh)
+        else this.lines.splice(this.base + bottom + 1, 0, fresh)
+        this.base++
       }
+      if (this.start >= 1024 && this.start * 2 >= this.lines.length) this.compact()
       return
     }
     const removed = this.lines.splice(this.base + top, n)
@@ -234,10 +275,18 @@ export class Buffer {
   clearScrollback(): void {
     this.lines.splice(0, this.base)
     this.base = 0
+    this.start = 0
+  }
+
+  private compact(): void {
+    this.lines.splice(0, this.start)
+    this.base -= this.start
+    this.start = 0
   }
 
   /** Resizes without reflow (reflow is M5). Rows shrink from the bottom first, then push lines into scrollback. */
   resize(cols: number, rows: number): void {
+    this.compact()
     for (const line of this.lines) line.resize(cols, 0)
     if (rows < this.rows) {
       const lastUsed = this.lastNonEmptyRow()

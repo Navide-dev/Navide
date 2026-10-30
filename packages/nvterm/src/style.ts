@@ -27,17 +27,38 @@ export const DEFAULT_STYLE: Readonly<Style> = Object.freeze({ fg: 0, bg: 0, flag
 
 export class StyleTable {
   private readonly styles: Style[] = [{ ...DEFAULT_STYLE }]
-  private readonly ids = new Map<string, number>([[key(DEFAULT_STYLE), 0]])
+  /** Styles with only fg, bg and flags (the common case): (fg * 2^26 + bg) -> flags -> id, no string keys. */
+  private readonly simple = new Map<number, Map<number, number>>([[0, new Map([[0, 0]])]])
+  private readonly ids = new Map<string, number>()
 
   intern(style: Style): number {
+    if (style.underlineStyle === 0 && style.underlineColor === 0 && style.link === 0) {
+      // Colours are below 2^26, so fg * 2^26 + bg is exact in a double.
+      const colors = style.fg * 0x4000000 + style.bg
+      let byFlags = this.simple.get(colors)
+      if (!byFlags) {
+        byFlags = new Map()
+        this.simple.set(colors, byFlags)
+      }
+      let id = byFlags.get(style.flags)
+      if (id === undefined) {
+        id = this.add(style)
+        byFlags.set(style.flags, id)
+      }
+      return id
+    }
     const k = key(style)
     let id = this.ids.get(k)
     if (id === undefined) {
-      id = this.styles.length
-      this.styles.push({ ...style })
+      id = this.add(style)
       this.ids.set(k, id)
     }
     return id
+  }
+
+  private add(style: Style): number {
+    this.styles.push({ ...style })
+    return this.styles.length - 1
   }
 
   get(id: number): Readonly<Style> {
@@ -45,8 +66,12 @@ export class StyleTable {
   }
 }
 
+/** One string from 16-bit halves: much cheaper than formatting six numbers. */
 function key(s: Style): string {
-  return `${s.fg},${s.bg},${s.flags},${s.underlineStyle},${s.underlineColor},${s.link}`
+  return String.fromCharCode(
+    s.fg & 0xffff, s.fg >>> 16, s.bg & 0xffff, s.bg >>> 16, s.flags, s.underlineStyle,
+    s.underlineColor & 0xffff, s.underlineColor >>> 16, s.link & 0xffff, s.link >>> 16,
+  )
 }
 
 /** Reads a 38/48/58 extended colour starting at parameter `i`. Returns the colour and how many extra parameters it used. */

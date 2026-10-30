@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ScreenSnapshot } from '../../src/snapshot.ts'
+import { diffKey, diffSnapshots, type ScreenSnapshot } from '../../src/snapshot.ts'
+import { screenCases } from '../../src/terminal.cases.ts'
 import { fixtures } from '../fixtures/fixtures.ts'
 import { readFileSync } from 'node:fs'
 import { compareFixture, type Triage } from './compare.ts'
@@ -23,6 +24,23 @@ describe('golden comparison tool', () => {
       const result = await compareFixture(fixture, xtermDriver, nvtermDriver, triage)
       expect(result.untriaged, fixture.id).toEqual([])
     }
+  })
+
+  it('every screen case in terminal.cases.ts behaves the same in the oracle, apart from listed spec choices', async () => {
+    // Cases where nvterm follows the specification and xterm.js does not.
+    const specChoices: Record<string, string> = {
+      'CUU at the region top stops in origin mode': 'DEC STD 070 CUU: stops at the top margin (see triage.json cuu-origin-mode-top)',
+      'combining mark at column 0 takes its own cell':
+        'Unicode 2.11: a defective combining sequence displays as if applied to a space; xterm.js stores it in a width-0 cell',
+    }
+    const mismatched: string[] = []
+    for (const [name, input, cols, rows] of screenCases) {
+      const fixture = { id: name, description: name, cols, rows, chunks: [new TextEncoder().encode(input)] }
+      const diffs = diffSnapshots(await xtermDriver.run(fixture), await nvtermDriver.run(fixture))
+      if (diffs.length && !specChoices[name]) mismatched.push(`${name}: ${diffs.slice(0, 3).map(diffKey).join(', ')}`)
+      if (!diffs.length && specChoices[name]) mismatched.push(`${name}: listed as a spec choice but now matches`)
+    }
+    expect(mismatched).toEqual([])
   })
 
   it('the oracle snapshot sees wide characters, colours, modes and the alternate screen', async () => {

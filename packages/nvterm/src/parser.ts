@@ -95,6 +95,19 @@ export class Parser {
         i = j
         continue
       }
+      // Fast path: parameter bytes inside CSI skip the per-byte state switch.
+      if ((this.state === State.CsiParam || this.state === State.CsiEntry) && c >= 0x30 && c <= 0x3b) {
+        let j = i
+        while (j < end) {
+          const d = data[j]!
+          if (d < 0x30 || d > 0x3b) break
+          this.addParam(d)
+          j++
+        }
+        this.state = State.CsiParam
+        i = j
+        continue
+      }
       this.step(c)
       i++
     }
