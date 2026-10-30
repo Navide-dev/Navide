@@ -39,6 +39,7 @@ import json
 import os
 import re
 import uuid
+import zlib
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -155,7 +156,11 @@ def read_index(
     return entries
 
 
-def read_version(history_dir: Path, name: str) -> bytes:
+class VersionTooLarge(ValueError):
+    """A version decompresses to more than the reader allowed."""
+
+
+def read_version(history_dir: Path, name: str, limit: int | None = None) -> bytes:
     """A version's plan bytes, uncompressed whatever form it was stored in.
     ``name`` must be a snapshot name; a symbolic link is refused."""
     if SNAPSHOT_NAME_RE.fullmatch(name) is None:
@@ -163,8 +168,40 @@ def read_version(history_dir: Path, name: str) -> bytes:
     path = history_dir / name
     if path.is_symlink():
         raise OSError(f"{path} is a symbolic link")
-    data = path.read_bytes()
-    return gzip.decompress(data) if name.endswith(COMPRESSED_SUFFIX) else data
+    return decode_version(history_dir, name, path.read_bytes(), limit=limit)
+
+
+def decode_version(history_dir: Path, name: str, raw: bytes, *, limit: int | None = None) -> bytes:
+    """The plan bytes of a version file's ``raw`` content. With ``limit``,
+    decompression stops and raises VersionTooLarge past that many bytes; a
+    version is never returned cut short."""
+    if not name.endswith(COMPRESSED_SUFFIX):
+        return raw
+    return gzip.decompress(raw) if limit is None else _gunzip_bounded(raw, limit)
+
+
+def _gunzip_bounded(raw: bytes, limit: int) -> bytes:
+    out = bytearray()
+    pending = raw
+    while True:
+        stream = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        while not stream.eof:
+            out += stream.decompress(pending, limit + 1 - len(out))
+            if len(out) > limit:
+                raise VersionTooLarge(f"version is larger than {limit} bytes")
+            if not stream.unconsumed_tail and not stream.eof and len(out) <= limit:
+                # Nothing left to feed: either more output is buffered (asked
+                # for again below) or the stream is truncated.
+                more = stream.decompress(b"", limit + 1 - len(out))
+                if not more:
+                    raise EOFError("compressed version ended early")
+                out += more
+                if len(out) > limit:
+                    raise VersionTooLarge(f"version is larger than {limit} bytes")
+            pending = stream.unconsumed_tail
+        pending = stream.unused_data
+        if not pending.strip(b"\0"):
+            return bytes(out)
 
 
 def _plan_suffix(name: str) -> str:

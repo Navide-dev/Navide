@@ -129,3 +129,111 @@ export function diffPlanContents(oldContent: string, newContent: string): PlanDi
     linesRemoved,
   }
 }
+
+// ── Text diff between two versions ─────────────────────────────────────────
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+
+/**
+ * The reader-visible text of a plan, one line per block: for HTML the markup
+ * is dropped (the plan-meta island, scripts and styles entirely) and common
+ * entities decoded; for markdown the frontmatter is dropped. The format is
+ * the plan file's (`relPath`), never guessed from the text, which in a
+ * markdown plan may hold HTML tags. Blank lines are left out, so a diff shows
+ * changed prose, not reformatting.
+ */
+export function visiblePlanLines(content: string, relPath: string): string[] {
+  let text: string
+  if (relPath.endsWith('.html')) {
+    text = content
+      .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
+      .replace(/<style\b[\s\S]*?<\/style\s*>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<(?:br|\/p|\/li|\/h[1-6]|\/tr|\/div|\/section|\/header|\/pre|\/td|\/th)\b[^>]*>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (whole, name: string) => {
+        if (name[0] === '#') {
+          const code = name[1] === 'x' || name[1] === 'X' ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10)
+          return Number.isFinite(code) ? String.fromCodePoint(code) : whole
+        }
+        return ENTITIES[name.toLowerCase()] ?? whole
+      })
+  } else {
+    const end = content.startsWith('---') ? content.indexOf('\n---', 3) : -1
+    text = end === -1 ? content : content.slice(end + 4)
+  }
+  return text.split('\n').map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean)
+}
+
+export interface DiffLine {
+  kind: 'same' | 'add' | 'del'
+  text: string
+}
+
+/** Above this many line pairs the diff falls back to removed-then-added. */
+const DIFF_MAX_CELLS = 4_000_000
+
+/**
+ * A line diff of `before` → `after` (longest common subsequence). Very large
+ * inputs fall back to every removed line followed by every added line, which
+ * is still complete, only less aligned.
+ */
+export function diffLines(before: string[], after: string[]): DiffLine[] {
+  let start = 0
+  while (start < before.length && start < after.length && before[start] === after[start]) start++
+  let endBefore = before.length
+  let endAfter = after.length
+  while (endBefore > start && endAfter > start && before[endBefore - 1] === after[endAfter - 1]) {
+    endBefore--
+    endAfter--
+  }
+  const head = before.slice(0, start).map(text => ({ kind: 'same' as const, text }))
+  const tail = before.slice(endBefore).map(text => ({ kind: 'same' as const, text }))
+  const a = before.slice(start, endBefore)
+  const b = after.slice(start, endAfter)
+  if (a.length * b.length > DIFF_MAX_CELLS) {
+    return [...head, ...a.map(text => ({ kind: 'del' as const, text })), ...b.map(text => ({ kind: 'add' as const, text })), ...tail]
+  }
+  // lengths[i][j] = LCS of a[i..] and b[j..], in one flat array.
+  const width = b.length + 1
+  const lengths = new Uint32Array((a.length + 1) * width)
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      lengths[i * width + j] = a[i] === b[j]
+        ? lengths[(i + 1) * width + j + 1] + 1
+        : Math.max(lengths[(i + 1) * width + j], lengths[i * width + j + 1])
+    }
+  }
+  const middle: DiffLine[] = []
+  let i = 0
+  let j = 0
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      middle.push({ kind: 'same', text: a[i] })
+      i++
+      j++
+    } else if (lengths[(i + 1) * width + j] >= lengths[i * width + j + 1]) {
+      middle.push({ kind: 'del', text: a[i++] })
+    } else {
+      middle.push({ kind: 'add', text: b[j++] })
+    }
+  }
+  while (i < a.length) middle.push({ kind: 'del', text: a[i++] })
+  while (j < b.length) middle.push({ kind: 'add', text: b[j++] })
+  return [...head, ...middle, ...tail]
+}
+
+/**
+ * Whether the plan's text changed since `approved` (the snapshot taken when it
+ * was approved). Todo lists and the stage badge are left out: they are meant
+ * to move after approval, through the toolbar and the plan tools (g6).
+ */
+export function textChangedSinceApproval(approved: string, current: string, relPath: string): boolean {
+  const prose = (content: string) => visiblePlanLines(
+    content
+      .replace(/<ul\b[^>]*\bclass=["'][^"']*\btodos\b[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, '')
+      .replace(/<span\b[^>]*\bclass=["'][^"']*\bpill\b[^"']*["'][^>]*>[\s\S]*?<\/span>/gi, ''),
+    relPath,
+  ).join('\n')
+  return prose(approved) !== prose(current)
+}

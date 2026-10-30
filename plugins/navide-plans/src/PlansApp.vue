@@ -1411,11 +1411,14 @@ function scrollToAnchor(anchor: string): void {
   planDocFrame.value?.contentWindow?.postMessage({ type: 'scroll-to', anchor }, '*')
 }
 
-async function previewSnapshot(snapshot: { relPath: string; label: string }): Promise<void> {
+async function previewSnapshot(snapshot: { relPath: string; label: string; file?: string }): Promise<void> {
   const path = selectedPath.value
   const generation = activeReadGeneration
   try {
-    const response = await plansTransport.send<{ ok: boolean; content?: string; error?: string }>('fs.read_file', { rel_path: snapshot.relPath })
+    // Versions are read through the backend, which decompresses them.
+    const response = snapshot.file
+      ? await plansTransport.send<{ ok: boolean; content?: string; error?: string }>('history.read', { rel_path: path, file: snapshot.file })
+      : await plansTransport.send<{ ok: boolean; content?: string; error?: string }>('fs.read_file', { rel_path: snapshot.relPath })
     if (selectedPath.value !== path || activeReadGeneration !== generation) return
     if (!response.payload.ok || response.payload.content === undefined) throw new Error(response.payload.error || t('pane.plans.history-diff-failed'))
     snapshotPreview.value = {
