@@ -360,6 +360,22 @@ export class TerminalCore implements ParserHandler {
     }
   }
 
+  /**
+   * Clears the scrollback and the screen except the cursor's line, which
+   * becomes the first row (an explicit "clear" command, never part of resize
+   * or redraw).
+   */
+  clearToCursorLine(): void {
+    const buf = this.active
+    const keep = new Line(this.cols)
+    keep.copyFrom(buf.line(buf.y))
+    keep.wrapped = false
+    buf.clearScrollback()
+    for (let r = 0; r < this.rows; r++) buf.line(r).clear(0)
+    buf.line(0).copyFrom(keep)
+    buf.y = 0
+  }
+
   resize(cols: number, rows: number): void {
     if (cols === this.cols && rows === this.rows) return
     this.normal.resize(cols, rows)

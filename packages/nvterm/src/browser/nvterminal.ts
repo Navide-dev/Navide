@@ -108,7 +108,9 @@ export class NvTerminal implements IDisposable {
   readonly onRendererChange = this.rendererEmitter.event
 
   constructor(options: NvTerminalOptions = {}) {
-    this.opts = { ...DEFAULTS, ...options }
+    // Options given as undefined keep their defaults.
+    const given = Object.fromEntries(Object.entries(options).filter(([, v]) => v !== undefined))
+    this.opts = { ...DEFAULTS, ...given }
     this.core = new TerminalCore({
       cols: this.opts.cols,
       rows: this.opts.rows,
@@ -143,6 +145,32 @@ export class NvTerminal implements IDisposable {
 
   get rendererKind(): 'webgl' | 'canvas' | undefined {
     return this.renderer?.kind
+  }
+
+  /** An IME composition is open. */
+  get isComposing(): boolean {
+    return this.composing
+  }
+
+  /** Abandons an open IME composition (for a composition that never ended). */
+  endComposition(): void {
+    this.composing = false
+    this.composition = ''
+    if (this.textarea) this.textarea.value = ''
+    this.queueRender()
+  }
+
+  /** Repaints on the next frame. */
+  refresh(): void {
+    this.queueRender()
+  }
+
+  /** Clears the scrollback and the screen except the cursor's line, which moves to the top. */
+  clear(): void {
+    this.core.clearToCursorLine()
+    this.selection.clear()
+    this.viewportAnchor = null
+    this.queueRender()
   }
 
   get options(): Readonly<ResolvedOptions> {
