@@ -80,6 +80,7 @@
       "history-diff-lines": "+{added} / −{removed} Zeilen",
       "history-author-user": "Du",
       "history-author-agent": "Agent",
+      "history-author-agent-pane": "Agent · {pane}",
       "history-author-external": "Außerhalb von Plans",
       "history-author-unknown": "Unbekannt",
       "history-reason-save": "Gespeichert",

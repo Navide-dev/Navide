@@ -80,6 +80,7 @@
       "history-diff-lines": "+{added} / −{removed} líneas",
       "history-author-user": "Tú",
       "history-author-agent": "Agente",
+      "history-author-agent-pane": "Agente · {pane}",
       "history-author-external": "Fuera de Plans",
       "history-author-unknown": "Desconocido",
       "history-reason-save": "Guardado",

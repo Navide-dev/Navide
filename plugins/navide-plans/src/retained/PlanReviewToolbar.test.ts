@@ -807,6 +807,23 @@ describe('PlanReviewToolbar – history panel', () => {
     ])
   })
 
+  it('names the agent pane a version came from, and ignores a pane on any other author', async () => {
+    const { wrapper } = await mountToolbar(planDoc(baseMeta()), {
+      history: {
+        versions: [
+          { file: '20260710T120000_in-review.html.gz', stage: 'in-review', author: { kind: 'agent', pane: 'Reviewer' }, reason: 'save' },
+          { file: '20260709T120000_in-review.html.gz', stage: 'in-review', author: { kind: 'agent', pane: '  ' }, reason: 'save' },
+          { file: '20260708T120000_in-review.html.gz', stage: 'in-review', author: { kind: 'user', pane: 'Reviewer' }, reason: 'save' },
+        ],
+      },
+    })
+    await openOverflow(wrapper)
+    await wrapper.find('.prt-history-btn').trigger('click')
+    await flushPromises()
+    const rows = wrapper.findAll('.prt-history-row')
+    expect(rows.map(row => row.find('.prt-history-author').text())).toEqual(['Agent · Reviewer', 'Agent', 'You'])
+  })
+
   it('restores a version after confirmation and refreshes the plan', async () => {
     const { wrapper, backend } = await mountToolbar(planDoc(baseMeta()), {
       history: { versions: [{ file: '20260601T080000_draft.html.gz', stage: 'draft', author: { kind: 'user' }, reason: 'save' }] },

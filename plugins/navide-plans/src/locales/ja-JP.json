@@ -80,6 +80,7 @@
       "history-diff-lines": "+{added} / −{removed} 行",
       "history-author-user": "あなた",
       "history-author-agent": "エージェント",
+      "history-author-agent-pane": "エージェント · {pane}",
       "history-author-external": "Plans の外",
       "history-author-unknown": "不明",
       "history-reason-save": "保存",

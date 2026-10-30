@@ -80,6 +80,7 @@
       "history-diff-lines": "+{added} / −{removed} dòng",
       "history-author-user": "Bạn",
       "history-author-agent": "Agent",
+      "history-author-agent-pane": "Agent · {pane}",
       "history-author-external": "Ngoài Plans",
       "history-author-unknown": "Không rõ",
       "history-reason-save": "Đã lưu",

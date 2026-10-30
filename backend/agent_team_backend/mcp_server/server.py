@@ -5728,6 +5728,7 @@ async def request_host_agent_workspace_backend(
     *,
     caller: "_Caller",
     agent_tool: dict[str, Any] | None = None,
+    pane: str | None = None,
 ) -> dict[str, Any]:
     """Route one agent backend call to a Host-owned workspace binding.
 
@@ -5742,6 +5743,10 @@ async def request_host_agent_workspace_backend(
     built from the resolved caller (with ``verifiedTo``) and the tool's
     ``timeout_ms`` (used for the wait, not sent). Without it the request is
     exactly the ``backend`` operation it always was.
+
+    ``pane`` (``backend`` operation only) names the calling pane, by its name
+    or id and nothing else, for the plugin's own records; the Host adds it to
+    the agent Initiator. Omitted, the request is unchanged.
     """
     from agent_team_backend import app
     from agent_team_backend.ipc import make_event
@@ -5758,6 +5763,8 @@ async def request_host_agent_workspace_backend(
         "operation": "backend",
         "payload": payload,
     }
+    if pane is not None and agent_tool is None:
+        request["pane"] = pane
     wait_payload = payload
     if agent_tool is not None:
         request["operation"] = "agentTool"
