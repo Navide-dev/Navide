@@ -378,7 +378,10 @@ export class TerminalCore implements ParserHandler {
 
   resize(cols: number, rows: number): void {
     if (cols === this.cols && rows === this.rows) return
-    this.normal.resize(cols, rows)
+    // The normal screen reflows when the width changes; the alternate screen
+    // (full-screen apps redraw themselves) is only cut or extended.
+    if (cols !== this.cols) this.normal.reflow(cols, rows)
+    else this.normal.resize(cols, rows)
     this.alternate.resize(cols, rows)
     const tabs = defaultTabs(cols)
     tabs.set(this.tabs.subarray(0, Math.min(cols, this.tabs.length)))

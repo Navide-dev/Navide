@@ -327,6 +327,121 @@ export class Buffer {
     this.y = Math.min(this.y, rows - 1)
   }
 
+  /**
+   * Resizes with reflow (normal screen): lines joined by autowrap are
+   * re-wrapped at the new width, so narrowing and widening again gives the
+   * original lines back. Nothing is cleared; scrollback only loses lines
+   * beyond its cap. The cursor keeps its place in its logical line.
+   */
+  reflow(cols: number, rows: number): void {
+    this.compact()
+    const cursorAbs = this.base + this.y
+    const cursorX = Math.min(this.x, this.cols)
+
+    // 1. Logical lines: a line plus the lines that continue it. Positions are
+    //    counted in columns (a wide character is two), like the cursor.
+    type Cell = { code: number; width: number; style: number; extra: string | undefined }
+    const logical: { cells: Cell[]; columns: number; cursorAt: number; fill: number }[] = []
+    for (let i = 0; i < this.lines.length; i++) {
+      const line = this.lines[i]!
+      if (!line.wrapped || logical.length === 0) logical.push({ cells: [], columns: 0, cursorAt: -1, fill: 0 })
+      const current = logical[logical.length - 1]!
+      const next = this.lines[i + 1]
+      const continues = next?.wrapped ?? false
+      // Trailing empty cells are not content, whatever their background; a
+      // background they share is kept as the fill of the re-wrapped line.
+      let end = line.cols
+      if (!continues) {
+        while (end > 0 && line.codes[end - 1] === 0 && line.widths[end - 1] !== WIDTH_TRAILING) end--
+        current.fill = end < line.cols ? line.styles[line.cols - 1]! : 0
+      } else if (next!.widths[0] === WIDTH_WIDE && line.codes[line.cols - 1] === 0) {
+        end-- // the gap a wide character left when it wrapped
+      }
+      if (i === cursorAbs) current.cursorAt = current.columns + cursorX
+      for (let x = 0; x < end; x++) {
+        if (line.widths[x] === WIDTH_TRAILING) continue
+        current.cells.push({ code: line.codes[x]!, width: line.widths[x]!, style: line.styles[x]!, extra: line.extra?.get(x) })
+        current.columns += line.widths[x] === WIDTH_WIDE ? 2 : 1
+      }
+    }
+
+    // 2. Re-wrap each logical line at the new width.
+    const out: Line[] = []
+    let newCursorAbs = 0
+    let newCursorX = 0
+    for (const { cells, columns, cursorAt, fill } of logical) {
+      let line = new Line(cols)
+      out.push(line)
+      let x = 0
+      let column = 0
+      let cursorPlaced = cursorAt < 0
+      for (const cell of cells) {
+        const w = cell.width === WIDTH_WIDE ? 2 : 1
+        if (x + w > cols) {
+          line = new Line(cols)
+          line.wrapped = true
+          out.push(line)
+          x = 0
+        }
+        if (!cursorPlaced && cursorAt <= column) {
+          newCursorAbs = out.length - 1
+          newCursorX = x
+          cursorPlaced = true
+        }
+        line.setCell(x, cell.code, cell.width === WIDTH_WIDE ? WIDTH_WIDE : WIDTH_NORMAL, cell.style)
+        if (cell.extra) line.appendCombining(x, cell.extra)
+        x += w
+        column += w
+      }
+      if (fill && x < cols) line.styles.fill(fill, x)
+      if (!cursorPlaced) {
+        // The cursor sits after the text (or further right, on blank cells).
+        let target = x + (cursorAt - columns)
+        let row = out.length - 1
+        while (target > cols) {
+          target -= cols
+          row++
+        }
+        while (out.length - 1 < row) {
+          const extra = new Line(cols, fill)
+          extra.wrapped = true
+          out.push(extra)
+        }
+        newCursorAbs = row
+        newCursorX = target
+      }
+    }
+
+    // 3. Viewport: drop blank lines below the cursor, keep the cursor on screen.
+    let last = out.length - 1
+    while (last > newCursorAbs && out[last]!.codes.every((c) => c === 0) && !out[last]!.wrapped) last--
+    out.length = last + 1
+    let base = Math.max(0, out.length - rows)
+    if (newCursorAbs < base) base = newCursorAbs
+    while (out.length < base + rows) out.push(new Line(cols))
+    // Scrollback cap.
+    const excess = base - this.scrollback
+    if (excess > 0) {
+      out.splice(0, excess)
+      base -= excess
+      newCursorAbs -= excess
+      this.dropped += excess
+    }
+    this.lines = out
+    this.start = 0
+    this.base = base
+    this.cols = cols
+    this.rows = rows
+    this.scrollTop = 0
+    this.scrollBottom = rows - 1
+    this.y = Math.max(0, Math.min(rows - 1, newCursorAbs - base))
+    this.x = Math.min(newCursorX, cols)
+    if (this.saved) {
+      this.saved.x = Math.min(this.saved.x, cols - 1)
+      this.saved.y = Math.min(this.saved.y, rows - 1)
+    }
+  }
+
   private lastNonEmptyRow(): number {
     for (let r = this.rows - 1; r >= 0; r--) {
       const line = this.line(r)

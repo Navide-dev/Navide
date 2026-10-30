@@ -220,7 +220,7 @@ describe('TerminalCore scrollback', () => {
   })
 })
 
-describe('TerminalCore resize (no reflow yet)', () => {
+describe('TerminalCore resize', () => {
   it('growing columns keeps content', () => {
     const t = term('abc', 4, 2)
     t.resize(8, 2)
@@ -228,11 +228,11 @@ describe('TerminalCore resize (no reflow yet)', () => {
     expect(t.snapshot().cols).toBe(8)
   })
 
-  it('shrinking columns truncates and clamps the cursor', () => {
+  it('shrinking columns re-wraps the line and keeps the cursor after the text', () => {
     const t = term('abcdef', 8, 2)
     t.resize(3, 2)
-    expect(rows(t)).toEqual(['abc', ''])
-    expect(cursor(t)[0]).toBeLessThanOrEqual(3)
+    expect(rows(t)).toEqual(['abc', 'def'])
+    expect(cursor(t)).toEqual([3, 1])
   })
 
   it('shrinking rows pushes the top into scrollback when the cursor would fall off', () => {
@@ -250,9 +250,10 @@ describe('TerminalCore resize (no reflow yet)', () => {
     expect(cursor(t)).toEqual([1, 3])
   })
 
-  it('a wide character cut by the new width disappears', () => {
+  it('a wide character that no longer fits moves to the next line', () => {
     const t = term('ab中', 4, 1)
     t.resize(3, 1)
-    expect(rows(t)).toEqual(['ab'])
+    expect(rows(t)).toEqual(['中'])
+    expect(t.active.scrollbackLine(0)?.chars(0)).toBe('a')
   })
 })
