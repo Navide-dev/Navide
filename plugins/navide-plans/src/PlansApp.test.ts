@@ -1289,6 +1289,81 @@ describe('PlansApp', () => {
     })
   })
 
+  describe('edit mode', () => {
+    const meta = { schemaVersion: 1, name: 'Existing plan', overview: 'Existing overview', stage: 'approved', todos: [], reviewNotes: [] }
+    const page = (goals: string, risks: string) => [
+      '<html><body>',
+      `<script type="application/json" id="plan-meta">${JSON.stringify(meta)}</script>`,
+      '<header><h1>Existing plan<span class="pill approved">approved</span></h1><p class="overview">Existing overview</p></header>',
+      `<section><h2>Goals</h2><p>${goals}</p></section>`,
+      `<section><h2>Risks</h2><p>${risks}</p></section>`,
+      '</body></html>',
+    ].join('')
+
+    async function enterEditMode() {
+      state.documents[existingPath].html = page('Goals 0', 'Risks 0')
+      state.documents[existingPath].raw = state.documents[existingPath].html
+      const view = await mountPlans({ attachTo: document.body })
+      const iframeEl = view.get('iframe.plan-doc-frame').element as HTMLIFrameElement
+      const frameWin = { postMessage: vi.fn() } as unknown as Window
+      Object.defineProperty(iframeEl, 'contentWindow', { value: frameWin, configurable: true })
+      const documentToken = (iframeEl.getAttribute('srcdoc') || '').match(/var documentToken = "([0-9a-f]{32})"/)?.[1]
+      const send = async (data: Record<string, unknown>) => {
+        window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { ...data, documentToken } }))
+        await flushPromises()
+      }
+      await view.get('.plan-edit-toggle').trigger('click')
+      expect(frameWin.postMessage).toHaveBeenCalledWith({ type: 'edit-mode', active: true, documentToken }, '*')
+      await send({ type: 'section-editing', active: true })
+      await send({ type: 'edit-mode-changed', active: true })
+      return { view, send, iframeEl }
+    }
+    const writes = () => state.calls.filter(call => call.name === 'plans.write_document')
+    const reads = () => state.calls.filter(call => call.name === 'plans.read')
+
+    it('saves each section without re-rendering the document', async () => {
+      const { view, send, iframeEl } = await enterEditMode()
+      const srcdoc = iframeEl.getAttribute('srcdoc')
+      const readsBefore = reads().length
+      await send({ type: 'section-edit', anchor: 'Goals', html: '<p>Goals 1</p>' })
+      expect(writes()).toHaveLength(1)
+      expect(writes()[0].args.content).toContain('<p>Goals 1</p>')
+      expect(reads().length).toBe(readsBefore)
+      expect(view.get('iframe.plan-doc-frame').attributes('srcdoc')).toBe(srcdoc)
+      expect(view.get('.plan-edit-status').text()).toContain('pane.plans.edit-saved')
+      expect(state.toast).not.toHaveBeenCalled()
+    })
+
+    it('never overwrites a section an agent changed after the frame rendered', async () => {
+      const { view, send } = await enterEditMode()
+      await send({ type: 'section-edit', anchor: 'Goals', html: '<p>Goals 1</p>' })
+      // An agent rewrites Risks on disk; the frame still shows "Risks 0".
+      state.documents[existingPath].raw = String(state.documents[existingPath].raw).replace('Risks 0', 'Agent risks')
+      await send({ type: 'section-edit', anchor: 'Risks', html: '<p>Risks 0 and mine</p>' })
+      expect(writes()).toHaveLength(1)
+      expect(view.get('.scd-dialog [data-side="theirs"] textarea').element.value).toContain('Agent risks')
+      expect(String(state.documents[existingPath].raw)).toContain('Agent risks')
+    })
+
+    it('saves the name to plan-meta and the header together', async () => {
+      const { send } = await enterEditMode()
+      await send({ type: 'header-edit', field: 'name', text: 'Renamed <plan>' })
+      expect(writes()).toHaveLength(1)
+      const content = String(writes()[0].args.content)
+      expect(parseHtmlPlanMeta(content)?.meta.name).toBe('Renamed <plan>')
+      expect(content).toContain('<h1>Renamed &lt;plan&gt;<span class="pill approved">approved</span></h1>')
+    })
+
+    it('shows the saved document once edit mode ends', async () => {
+      const { send } = await enterEditMode()
+      await send({ type: 'section-edit', anchor: 'Goals', html: '<p>Goals 1</p>' })
+      const readsBefore = reads().length
+      await send({ type: 'section-editing', active: false })
+      await send({ type: 'edit-mode-changed', active: false })
+      expect(reads().length).toBe(readsBefore + 1)
+    })
+  })
+
   describe('an open document changed on disk', () => {
     async function changeOnDisk(): Promise<void> {
       state.list[0].mtime = 2
