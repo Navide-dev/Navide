@@ -10902,7 +10902,11 @@
     "allow": {
       "title": "允许名单",
       "empty": "尚未允许任何人。",
-      "remove": "移除"
+      "remove": "移除",
+      "via-pairing": "配对码",
+      "via-invite": "链接代码",
+      "shared": "共享 ID",
+      "shared-hint": "这个 Telegram ID 代表许多人（匿名管理员、频道、Telegram 本身），一律会被拒绝，可以将它移除。"
     },
     "pane": {
       "connect": "连接聊天室",

@@ -10902,7 +10902,11 @@
     "allow": {
       "title": "허용된 발신자",
       "empty": "아직 허용된 사람이 없어요.",
-      "remove": "제거"
+      "remove": "제거",
+      "via-pairing": "페어링 코드",
+      "via-invite": "연결 코드",
+      "shared": "공유 ID",
+      "shared-hint": "이 Telegram ID는 여러 사람(익명 관리자, 채널, Telegram 자체)을 나타내므로 항상 거부돼요. 제거할 수 있어요."
     },
     "pane": {
       "connect": "채팅에 연결",

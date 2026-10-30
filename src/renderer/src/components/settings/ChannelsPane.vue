@@ -535,6 +535,13 @@ function botsWithoutManageMode(platform: ChannelPlatform): number {
   return botsOf(platform).filter((b) => isConnected(b) && !b.status.can_manage_bots).length
 }
 
+/** How a pairing request or allowed sender came: "—" when the backend recorded nothing. */
+function sourceLabel(source: string | null | undefined): string {
+  if (source === 'pairing') return t('channels.allow.via-pairing')
+  if (source === 'invite') return t('channels.allow.via-invite')
+  return '—'
+}
+
 function formatTime(ts: number | null | undefined): string {
   if (!ts) return ''
   const ms = ts < 1e12 ? ts * 1000 : ts
@@ -862,7 +869,7 @@ function formatTime(ts: number | null | undefined): string {
           <span class="ch-mark sm" aria-hidden="true">{{ badgeOf(req.platform) }}</span>
           <div class="ch-item-text">
             <span class="ch-item-name" v-truncate>{{ req.sender_name || req.sender_id }}</span>
-            <span class="ch-item-meta" v-truncate>{{ platformName(req.platform) }}<template v-if="entryBot(req.platform, req.account)"> · <span data-testid="pairing-bot">{{ entryBot(req.platform, req.account) }}</span></template> · {{ formatTime(req.created_at) }}</span>
+            <span class="ch-item-meta" v-truncate>{{ platformName(req.platform) }}<template v-if="entryBot(req.platform, req.account)"> · <span data-testid="pairing-bot">{{ entryBot(req.platform, req.account) }}</span></template> · <span data-testid="pairing-source">{{ sourceLabel(req.source ?? 'pairing') }}</span> · {{ formatTime(req.created_at) }}</span>
           </div>
           <code class="ch-code">{{ req.code }}</code>
           <div class="ch-row-actions">
@@ -873,13 +880,15 @@ function formatTime(ts: number | null | undefined): string {
       </SettingsCard>
     </SettingsSection>
 
-    <SettingsSection v-if="store.allow.value.length" :label="t('channels.allow.title')">
-      <SettingsCard>
+    <SettingsSection :label="t('channels.allow.title')">
+      <p v-if="!store.allow.value.length" class="ch-section-hint" data-testid="allow-empty">{{ t('channels.allow.empty') }}</p>
+      <SettingsCard v-else>
         <div v-for="entry in store.allow.value" :key="`${entry.platform}:${entry.account}:${entry.sender_id}`" class="ch-item" data-testid="allow-row">
           <span class="ch-mark sm" aria-hidden="true">{{ badgeOf(entry.platform) }}</span>
           <div class="ch-item-text">
-            <span class="ch-item-name" v-truncate>{{ entry.sender_name || entry.sender_id }}</span>
-            <span class="ch-item-meta" v-truncate>{{ platformName(entry.platform) }}<template v-if="entryBot(entry.platform, entry.account)"> · <span data-testid="allow-bot">{{ entryBot(entry.platform, entry.account) }}</span></template> · {{ entry.sender_id }}</span>
+            <span class="ch-item-name" v-truncate>{{ entry.sender_name || entry.sender_id }}<span v-if="entry.shared" class="ch-pill warn ch-item-badge" data-testid="allow-shared">{{ t('channels.allow.shared') }}</span></span>
+            <span class="ch-item-meta" v-truncate>{{ platformName(entry.platform) }}<template v-if="entryBot(entry.platform, entry.account)"> · <span data-testid="allow-bot">{{ entryBot(entry.platform, entry.account) }}</span></template> · {{ entry.sender_id }} · <span data-testid="allow-source">{{ sourceLabel(entry.source) }}</span> · <span data-testid="allow-added">{{ formatTime(entry.added_at) || '—' }}</span></span>
+            <span v-if="entry.shared" class="ch-item-meta ch-item-warn" data-testid="allow-shared-hint">{{ t('channels.allow.shared-hint') }}</span>
           </div>
           <div class="ch-row-actions">
             <button type="button" class="ch-btn ghost sm" :disabled="busy" data-testid="allow-remove" @click="run(null, () => store.removeAllow(entry.platform, entry.sender_id, entry.account))">{{ t('channels.allow.remove') }}</button>
@@ -1078,5 +1087,7 @@ function formatTime(ts: number | null | undefined): string {
 .ch-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .ch-item-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch-item-meta { font-size: var(--font-2xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-item-badge { margin-left: 6px; font-weight: 400; }
+.ch-item-warn { color: var(--attention-fg); white-space: normal; }
 .ch-code { font-family: var(--font-mono, monospace); font-size: var(--font-xs); letter-spacing: 0.08em; color: var(--text-bright); }
 </style>

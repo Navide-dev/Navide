@@ -97,6 +97,8 @@ export interface ChannelPairingRequest {
   sender_id: string
   sender_name: string
   created_at: number
+  /** "invite": made by a redeemed link code; "pairing": a pairing code. Absent from older backends. */
+  source?: 'pairing' | 'invite'
 }
 
 export interface ChannelAllowEntry {
@@ -106,6 +108,10 @@ export interface ChannelAllowEntry {
   sender_id: string
   sender_name: string
   added_at: number
+  /** How the sender was added; null for rows from before it was recorded, absent from older backends. */
+  source?: 'pairing' | 'invite' | null
+  /** A Telegram id shared by many people: always refused, and safe to remove. */
+  shared?: boolean
 }
 
 export interface ChannelBinding {

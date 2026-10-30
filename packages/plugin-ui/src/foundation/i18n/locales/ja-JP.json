@@ -10902,7 +10902,11 @@
     "allow": {
       "title": "許可リスト",
       "empty": "まだ誰も許可されていません。",
-      "remove": "削除"
+      "remove": "削除",
+      "via-pairing": "ペアリングコード",
+      "via-invite": "リンクコード",
+      "shared": "共有 ID",
+      "shared-hint": "この Telegram ID は多くの人（匿名の管理者、チャンネル、Telegram 自体）を表すため、常に拒否されます。削除できます。"
     },
     "pane": {
       "connect": "チャットに接続",
