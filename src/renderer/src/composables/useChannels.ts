@@ -190,7 +190,7 @@ export function chatRows(chat: ChannelOverviewChat): ChannelBindingRow[] {
     }))
 }
 
-/** A one-time code from `channels.link.create`: whoever sends it to the bot is linked. */
+/** A one-time code from `channels.link.create`: whoever sends it to the bot is linked once approved. */
 export interface ChannelLinkInvite {
   code: string
   target: 'direct' | 'group'

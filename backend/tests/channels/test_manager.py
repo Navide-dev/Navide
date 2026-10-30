@@ -1726,6 +1726,9 @@ async def test_a_link_code_only_works_on_the_bot_that_issued_it(env: Env) -> Non
     await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True)
     assert not env.store.is_allowed("telegram", "99")  # the default bot does not know it
     await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True, account="bot-b1")
+    # The redeemed code waits for approval on the bot that issued it.
+    [req] = env.store.list_pairing("telegram", "bot-b1")
+    assert (await env.m.pairing_approve("telegram", req.code))["ok"]
     assert env.store.is_allowed("telegram", "99", "bot-b1") and not env.store.is_allowed("telegram", "99")
     assert any("已連結" in t for t in b.texts())
 

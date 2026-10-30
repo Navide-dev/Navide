@@ -96,11 +96,11 @@ class SenderGate:
 
 @dataclass(frozen=True)
 class LinkInvite:
-    """A one-time code the user sends the bot to link their chat account (no approval step)."""
+    """A one-time code the user sends the bot to link their chat account (approved in Navide)."""
 
     platform: str
     code: str
-    target: str  # "direct" | "group": which deep link was offered; either chat kind may redeem it
+    target: str  # "direct" | "group": which deep link was offered (see manager.DM_ONLY_LINK_PLATFORMS)
     created_at: float
     account: str = DEFAULT_ACCOUNT  # the bot whose link was offered; only it may redeem the code
 
