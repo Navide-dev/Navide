@@ -755,6 +755,15 @@ jobs:
           NAVIDE_STT_REQUIRED: '1'
         run: bun run build:stt
 
+      - name: Build Windows Hello helper
+        # App Lock's Windows Hello check and prompt (native/navide-hello),
+        # packaged as bin/navide-hello.exe. Required here: without it
+        # Windows 11 users silently lose Windows Hello unlock.
+        shell: bash
+        env:
+          NAVIDE_HELLO_REQUIRED: '1'
+        run: bun run build:hello
+
       - name: Build application
         run: |
           bun run build
@@ -781,6 +790,7 @@ jobs:
           # and the v2 Plans package must carry its Windows backend. `test -f`
           # rather than `-x`: the executable bit means nothing on NTFS.
           test -f dist-release/win-unpacked/resources/bin/agent_team_backend.exe
+          test -f dist-release/win-unpacked/resources/bin/navide-hello.exe
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
           browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
           test -f "dist-release/win-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-x64/package/backend/navide-plans.exe"
@@ -915,6 +925,15 @@ jobs:
         env:
           NAVIDE_STT_REQUIRED: '0'
         run: bun run build:stt
+
+      - name: Build Windows Hello helper
+        # App Lock's Windows Hello check and prompt (native/navide-hello),
+        # packaged as bin/navide-hello.exe. Best-effort like the
+        # sidecar above: without it the build unlocks with the PIN only.
+        shell: bash
+        env:
+          NAVIDE_HELLO_REQUIRED: '0'
+        run: bun run build:hello
 
       - name: Build application
         run: |

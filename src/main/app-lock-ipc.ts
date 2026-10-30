@@ -13,6 +13,8 @@ interface Deps {
   controller: AppLockController
   isAppWindow: (event: IpcMainInvokeEvent) => boolean
   isLockScreen: (event: IpcMainInvokeEvent) => boolean
+  /** Settings asked for the status: recheck what can change outside Navide. */
+  onStatusRead?: () => void
   screenInit: () => AppLockScreenInit
 }
 
@@ -25,7 +27,10 @@ export function registerAppLockIpc(ipc: Pick<IpcMain, 'handle'>, deps: Deps): vo
     ipc.handle(channel, async (event, ...args: unknown[]) => (deps.isLockScreen(event) ? fn(...args) : UNTRUSTED_SENDER))
   }
 
-  app('app-lock:status', () => controller.status())
+  app('app-lock:status', () => {
+    deps.onStatusRead?.()
+    return controller.status()
+  })
   app('app-lock:update-settings', patch => controller.updateSettings(patch))
   app('app-lock:set-pin', (newPin, currentPin) => controller.setPin(newPin, currentPin))
   app('app-lock:reset-pin-with-system', newPin => controller.resetPinWithSystem(newPin))

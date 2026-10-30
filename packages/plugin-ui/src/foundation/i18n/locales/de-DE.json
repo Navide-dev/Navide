@@ -1471,7 +1471,8 @@
       "notice": "App Lock ist ein Sichtschutz, keine Zugriffskontrolle. Es verdeckt alle Navide-Fenster, solange Sie weg sind. Agents, Terminals, Chat-Kanäle, MCP-Tools und Zeitpläne laufen weiter, und wer an diesem Computer sitzt und sich auskennt, kann es umgehen.",
       "section-lock": "Sperre",
       "enabled": "App Lock aktivieren",
-      "enabled-hint": "Legen Sie zuerst eine PIN fest. Die PIN entsperrt immer, auch wenn Touch ID aktiv ist.",
+      "enabled-hint": "Legen Sie zuerst eine PIN fest. Die PIN entsperrt immer, auch wenn {system} aktiv ist.",
+      "enabled-hint-pin-only": "Legen Sie zuerst eine PIN fest. Mit ihr entsperren Sie.",
       "lock-now": "Jetzt sperren",
       "lock-now-hint": "Verdeckt sofort alle Fenster. Tastenkürzel {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN entfernt. App Lock ist deaktiviert.",
       "section-unlock": "Entsperren",
       "method": "Entsperren mit",
-      "method-system": "Touch ID, PIN als Ersatz",
+      "method-system": "{system}, PIN als Ersatz",
       "method-pin": "Nur PIN",
-      "system-unavailable": "Touch ID ist auf diesem Computer nicht verfügbar, daher entsperrt Navide mit Ihrer PIN.",
+      "system-unavailable": "{system} ist auf diesem Computer nicht verfügbar, daher entsperrt Navide mit Ihrer PIN.",
+      "pin-only": "Auf diesem System entsperrt Navide nur mit Ihrer PIN: Touch ID braucht einen Mac, Windows Hello braucht Windows 11.",
       "section-auto": "Automatisch sperren",
       "idle": "Nach Inaktivität",
       "idle-hint": "Zeit ohne Tastatur- oder Mauseingabe auf diesem Computer.",
@@ -1503,15 +1505,16 @@
       "on-suspend": "Wenn der Computer in den Ruhezustand geht",
       "on-start": "Beim Start von Navide",
       "section-forgot": "PIN vergessen?",
-      "reset-with-system": "PIN mit Touch ID zurücksetzen",
-      "forgot-system": "Touch ID bestätigt, dass Sie es sind, dann wählen Sie eine neue PIN.",
-      "forgot-manual-title": "Ohne Touch ID",
+      "reset-with-system": "PIN mit {system} zurücksetzen",
+      "forgot-system": "{system} bestätigt, dass Sie es sind, dann wählen Sie eine neue PIN.",
+      "forgot-manual-title": "Ohne {system}",
+      "forgot-manual-title-pin-only": "Von Hand zurücksetzen",
       "forgot-manual": "Beenden Sie Navide und löschen Sie app-lock.json aus dem Datenordner von Navide. Das entfernt App Lock und seine PIN, sonst nichts.",
       "error-invalid-pin": "Verwenden Sie 4 bis 12 Ziffern.",
       "error-mismatch": "Die beiden PINs stimmen nicht überein.",
       "error-wrong-pin": "Die aktuelle PIN ist falsch.",
       "error-cooldown": "Zu viele Versuche. Versuchen Sie es in {seconds} s erneut.",
-      "error-system-failed": "Touch ID hat Ihre Identität nicht bestätigt.",
+      "error-system-failed": "{system} hat Ihre Identität nicht bestätigt.",
       "error-generic": "Das hat nicht geklappt. Versuchen Sie es erneut."
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "Alle Fenster hinter einem Sperrbildschirm verbergen und mit Touch ID oder PIN entsperren"
+          "summary": "Alle Fenster hinter einem Sperrbildschirm verbergen und mit Touch ID, Windows Hello oder PIN entsperren"
         },
         "voice-input": {
           "title": "Spracheingabe",

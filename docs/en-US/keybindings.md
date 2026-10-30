@@ -13,6 +13,8 @@ and when-clause conditions.
 >
 > The built-in plugin windows are bound for Windows and Linux too: Open Plans answers **Ctrl+Shift+D**, the Git window **Ctrl+Shift+G** and Navide Browser **Ctrl+Shift+X**, the same letters as on macOS. The Mini IDE answers **Ctrl+Shift+M**, not Ctrl+Shift+I: off macOS Ctrl+Shift+I is the View menu's Toggle Developer Tools accelerator, which fires before any shortcut rule and keeps working as before, and Ctrl+Alt+I is not used because Ctrl+Alt is AltGr on Windows.
 
+> While the App Lock screen is up, no shortcut runs: keys never reach the windows underneath, and every menu item is greyed out except Hide, Quit, the window controls, Toggle Developer Tools and the editing keys the PIN box needs (paste, select all, undo). They all come back on unlock.
+
 Every binding below can be changed in **Settings → Shortcuts**; see
 [Customizing shortcuts](#customizing-shortcuts) for the file format and the
 rules the editor writes.

@@ -13,6 +13,7 @@ import SettingRow from './SettingRow.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 import {
   APP_LOCK_IDLE_CHOICES,
+  APP_LOCK_SYSTEM_NAMES,
   isValidAppLockPin,
   type AppLockResult,
   type AppLockSettings,
@@ -36,6 +37,9 @@ onBeforeUnmount(() => offStatus?.())
 const settings = computed(() => status.value?.settings)
 const hasPin = computed(() => status.value?.hasPin ?? false)
 const systemAvailable = computed(() => status.value?.systemUnlockAvailable ?? false)
+// Touch ID or Windows Hello; null where the PIN is the only way (Linux, Windows 10).
+const systemKind = computed(() => status.value?.systemUnlockKind ?? null)
+const system = computed(() => ({ system: APP_LOCK_SYSTEM_NAMES[systemKind.value ?? 'touch-id'] }))
 const shortcut = isMacPlatform() ? '⌘⌥L' : 'Ctrl+Alt+L'
 
 const form = ref<PinForm | null>(null)
@@ -53,7 +57,7 @@ function errorText(result: AppLockResult): string {
     case 'wrong-pin': return t('settings.app-lock.error-wrong-pin')
     case 'cooldown': return t('settings.app-lock.error-cooldown', { seconds: Math.ceil((result.retryAfterMs ?? 0) / 1000) })
     case 'system-failed':
-    case 'system-unavailable': return t('settings.app-lock.error-system-failed')
+    case 'system-unavailable': return t('settings.app-lock.error-system-failed', system.value)
     default: return t('settings.app-lock.error-generic')
   }
 }
@@ -122,7 +126,7 @@ function idleLabel(minutes: number): string {
 
     <SettingsSection :label="t('settings.app-lock.section-lock')">
       <SettingsCard>
-        <SettingRow :title="t('settings.app-lock.enabled')" :description="t('settings.app-lock.enabled-hint')">
+        <SettingRow :title="t('settings.app-lock.enabled')" :description="systemKind ? t('settings.app-lock.enabled-hint', system) : t('settings.app-lock.enabled-hint-pin-only')">
           <template #control>
             <ToggleSwitch
               data-testid="app-lock-enabled"
@@ -186,7 +190,7 @@ function idleLabel(minutes: number): string {
 
     <SettingsSection :label="t('settings.app-lock.section-unlock')">
       <SettingsCard>
-        <SettingRow :title="t('settings.app-lock.method')" :description="systemAvailable ? undefined : t('settings.app-lock.system-unavailable')">
+        <SettingRow :title="t('settings.app-lock.method')" :description="systemAvailable ? undefined : systemKind ? t('settings.app-lock.system-unavailable', system) : t('settings.app-lock.pin-only')">
           <template #control>
             <select
               class="al-select"
@@ -195,7 +199,7 @@ function idleLabel(minutes: number): string {
               :disabled="!systemAvailable"
               @change="update({ unlockMethod: ($event.target as HTMLSelectElement).value as AppLockSettings['unlockMethod'] })"
             >
-              <option value="system">{{ t('settings.app-lock.method-system') }}</option>
+              <option value="system">{{ t('settings.app-lock.method-system', system) }}</option>
               <option value="pin">{{ t('settings.app-lock.method-pin') }}</option>
             </select>
           </template>
@@ -239,14 +243,14 @@ function idleLabel(minutes: number): string {
       <SettingsCard>
         <SettingRow
           v-if="systemAvailable && hasPin"
-          :title="t('settings.app-lock.reset-with-system')"
-          :description="t('settings.app-lock.forgot-system')"
+          :title="t('settings.app-lock.reset-with-system', system)"
+          :description="t('settings.app-lock.forgot-system', system)"
         >
           <template #control>
-            <button type="button" class="al-btn ghost" data-testid="app-lock-reset-pin" @click="openForm('reset')">{{ t('settings.app-lock.reset-with-system') }}</button>
+            <button type="button" class="al-btn ghost" data-testid="app-lock-reset-pin" @click="openForm('reset')">{{ t('settings.app-lock.reset-with-system', system) }}</button>
           </template>
         </SettingRow>
-        <SettingRow v-else :title="t('settings.app-lock.forgot-manual-title')" :description="t('settings.app-lock.forgot-manual')" />
+        <SettingRow v-else :title="systemKind ? t('settings.app-lock.forgot-manual-title', system) : t('settings.app-lock.forgot-manual-title-pin-only')" :description="t('settings.app-lock.forgot-manual')" />
       </SettingsCard>
     </SettingsSection>
   </div>

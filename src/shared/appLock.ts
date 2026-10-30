@@ -10,7 +10,7 @@ export const APP_LOCK_IDLE_CHOICES = [0, 1, 5, 10, 15, 30, 60] as const
 
 export interface AppLockSettings {
   enabled: boolean
-  /** 'system' tries Touch ID first and keeps the PIN as the fallback. */
+  /** 'system' tries Touch ID or Windows Hello first and keeps the PIN as the fallback. */
   unlockMethod: AppLockUnlockMethod
   idleMinutes: number
   lockOnScreenLock: boolean
@@ -27,12 +27,23 @@ export const DEFAULT_APP_LOCK_SETTINGS: AppLockSettings = {
   lockOnStart: false,
 }
 
+/** The system unlock a platform can have: Touch ID on macOS, Windows Hello on Windows 11. */
+export type AppLockSystemKind = 'touch-id' | 'windows-hello'
+
+/** Product names, never translated. */
+export const APP_LOCK_SYSTEM_NAMES: Record<AppLockSystemKind, string> = {
+  'touch-id': 'Touch ID',
+  'windows-hello': 'Windows Hello',
+}
+
 export interface AppLockStatus {
   settings: AppLockSettings
   hasPin: boolean
   locked: boolean
-  /** Touch ID can be offered on this machine. */
+  /** Touch ID or Windows Hello can be offered on this machine right now. */
   systemUnlockAvailable: boolean
+  /** Which one this platform has; null on Linux and Windows 10 (PIN only). */
+  systemUnlockKind: AppLockSystemKind | null
 }
 
 export type AppLockError =

@@ -506,6 +506,37 @@ jobs:
       - name: Cargo tests
         run: cargo test --locked --manifest-path native/navide-stt/Cargo.toml
 
+  # App Lock's Windows Hello helper: it must build, and asking the runner (no
+  # Windows Hello set up) must answer "not available" (exit 1), not fail (2).
+  hello-helper:
+    name: Windows Hello helper
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: native/navide-hello
+      - name: Build
+        shell: bash
+        env:
+          NAVIDE_HELLO_REQUIRED: '1'
+        run: node scripts/build-hello.mjs
+      - name: Ask for availability
+        shell: bash
+        run: |
+          set +e
+          build/hello/navide-hello.exe check
+          code=$?
+          echo "check exit=$code"
+          test "$code" -eq 0 || test "$code" -eq 1 || exit 1
+          build/hello/navide-hello.exe verify not-a-window message
+          test $? -eq 2 || exit 1
+
   registry:
     name: Marketplace registry and contract checks
     runs-on: ubuntu-latest
@@ -545,7 +576,7 @@ jobs:
     # except a group the path filter (the changes job) chose not to run.
     name: Lint and test
     if: ${{ always() }}
-    needs: [changes, static, frontend, build-artifacts, pnpm-lockfile, backend, registry, dependency-audit, stt-sidecar]
+    needs: [changes, static, frontend, build-artifacts, pnpm-lockfile, backend, registry, dependency-audit, stt-sidecar, hello-helper]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -561,6 +592,7 @@ jobs:
           REGISTRY_RESULT: ${{ needs.registry.result }}
           AUDIT_RESULT: ${{ needs['dependency-audit'].result }}
           STT_RESULT: ${{ needs['stt-sidecar'].result }}
+          HELLO_RESULT: ${{ needs['hello-helper'].result }}
           RUN_FRONTEND: ${{ needs.changes.outputs.frontend }}
           RUN_BACKEND: ${{ needs.changes.outputs.backend }}
         run: |
@@ -580,3 +612,4 @@ jobs:
           check registry "$REGISTRY_RESULT"
           check dependency-audit "$AUDIT_RESULT"
           check stt-sidecar "$STT_RESULT"
+          check hello-helper "$HELLO_RESULT"
