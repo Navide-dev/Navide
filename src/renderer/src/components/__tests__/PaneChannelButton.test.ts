@@ -160,6 +160,43 @@ describe('PaneChannelButton', () => {
     expect(qa('[data-testid="channel-bind-new"]')).toHaveLength(1)
   })
 
+  describe('a bind whose chat is refused', () => {
+    const boundRow = { pane_id: 'p1', platform: 'telegram', account: 'default', chat_id: '-100', thread_id: '', title: 'api-refactor' }
+    const note = '[data-testid="channel-approval-note"]'
+
+    async function connect(w: VueWrapper, result: Record<string, unknown>): Promise<void> {
+      mock.setResponse('channels.bind', { ok: true, binding: boundRow, ...result })
+      await openPopover(w)
+      q('[data-testid="channel-bind-existing"]')!.click()
+      await flushPromises()
+      mock.setResponse('channels.bindings', { ok: true, bindings: [boundRow] })
+      q('[data-testid="channel-bind-confirm"]')!.click()
+      await flushPromises()
+    }
+
+    it('says so in the chip menu right after connecting, until it closes', async () => {
+      seed({ configured: true })
+      const w = await render()
+      await connect(w, { needs_approval: true })
+      expect(q('[data-testid="channel-popover"]')).toBeNull()
+      expect(q(note)?.textContent).toBe('Connected, but messages from this chat are refused until you approve its sender in Settings → Channels.')
+      await w.get('[data-testid="channel-chip-menu"]').trigger('click')
+      await flushPromises()
+      expect(q(note)).toBeNull()
+      await w.get('[data-testid="channel-chip-menu"]').trigger('click')
+      await flushPromises()
+      expect(q(note)).toBeNull()
+    })
+
+    it('stays closed and silent when the chat is usable', async () => {
+      seed({ configured: true })
+      const w = await render()
+      await connect(w, {})
+      expect(q('[data-testid="channel-popover"]')).toBeNull()
+      expect(q('[data-testid="channel-menu"]')).toBeNull()
+    })
+  })
+
   describe('linking guide when a connected platform knows no chat yet', () => {
     let openExternal: ReturnType<typeof vi.fn>
     beforeEach(() => {

@@ -1205,6 +1205,28 @@ describe('ChannelsPane', () => {
       localStorage.removeItem('navide.channels.managedHintDismissed')
     })
 
+    it('warns on a binding whose chat is refused, and not on a healthy or orphan row', async () => {
+      seedBots()
+      const gone = { exists: false, name: 'old', qualified_name: '', workspace_path: '', display_status: '', agent_key: '' }
+      mock.setResponse('channels.overview', {
+        ok: true,
+        bots: [{ platform: 'telegram', account: 'default', orphans: ['gone'], chats: [
+          { chat_id: '42', title: 'stranger', kind: 'private', supports_topics: false, bindings: [
+            binding('p1', { chat_id: '42', needs_approval: true }),
+          ] },
+          { chat_id: '-100', title: 'Dev group', kind: 'supergroup', supports_topics: true, bindings: [
+            binding('p2', { thread_id: '50' }),
+            binding('gone', { thread_id: '51', needs_approval: true, pane: gone }),
+          ] },
+        ] }],
+      })
+      const w = await render()
+      const note = '[data-testid="channel-binding-needs-approval"]'
+      expect(row(w, 'p1').get(note).text()).toBe('Messages from this chat are refused until you approve its sender')
+      expect(row(w, 'p2').find(note).exists()).toBe(false)
+      expect(row(w, 'gone').find(note).exists()).toBe(false)
+    })
+
     it('fetches the overview afresh each time the page shows', async () => {
       seedBots()
       const w = await render()
