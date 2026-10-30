@@ -1471,7 +1471,8 @@
       "notice": "App Lock là màn che riêng tư, không phải kiểm soát truy cập. Khi bạn rời đi, nó che mọi cửa sổ của Navide. Agent, terminal, kênh chat, công cụ MCP và lịch chạy vẫn tiếp tục hoạt động, và người ngồi trước máy này nếu biết cách vẫn có thể vượt qua nó.",
       "section-lock": "Khóa",
       "enabled": "Bật App Lock",
-      "enabled-hint": "Hãy đặt PIN trước. PIN luôn mở khóa được, kể cả khi bật Touch ID.",
+      "enabled-hint": "Hãy đặt PIN trước. PIN luôn mở khóa được, kể cả khi bật {system}.",
+      "enabled-hint-pin-only": "Hãy đặt PIN trước. Bạn sẽ mở khóa bằng PIN.",
       "lock-now": "Khóa ngay",
       "lock-now-hint": "Che mọi cửa sổ ngay lập tức. Phím tắt {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "Đã xóa PIN. App Lock đã tắt.",
       "section-unlock": "Mở khóa",
       "method": "Mở khóa bằng",
-      "method-system": "Touch ID, PIN làm dự phòng",
+      "method-system": "{system}, PIN làm dự phòng",
       "method-pin": "Chỉ PIN",
-      "system-unavailable": "Máy này không dùng được Touch ID nên Navide mở khóa bằng PIN của bạn.",
+      "system-unavailable": "Máy này không dùng được {system} nên Navide mở khóa bằng PIN của bạn.",
+      "pin-only": "Trên hệ thống này Navide chỉ mở khóa bằng PIN: Touch ID cần máy Mac, Windows Hello cần Windows 11.",
       "section-auto": "Tự động khóa",
       "idle": "Sau khi không dùng",
       "idle-hint": "Thời gian không có thao tác bàn phím hay chuột trên toàn bộ máy này.",
@@ -1503,15 +1505,16 @@
       "on-suspend": "Khi máy ngủ",
       "on-start": "Khi Navide khởi động",
       "section-forgot": "Quên PIN?",
-      "reset-with-system": "Đặt lại PIN bằng Touch ID",
-      "forgot-system": "Touch ID xác nhận đúng là bạn, rồi bạn chọn PIN mới.",
-      "forgot-manual-title": "Khi không có Touch ID",
+      "reset-with-system": "Đặt lại PIN bằng {system}",
+      "forgot-system": "{system} xác nhận đúng là bạn, rồi bạn chọn PIN mới.",
+      "forgot-manual-title": "Khi không có {system}",
+      "forgot-manual-title-pin-only": "Đặt lại thủ công",
       "forgot-manual": "Thoát Navide rồi xóa app-lock.json trong thư mục dữ liệu của Navide. Việc này chỉ xóa App Lock và PIN của nó, không ảnh hưởng gì khác.",
       "error-invalid-pin": "Dùng từ 4 đến 12 chữ số.",
       "error-mismatch": "Hai PIN không khớp.",
       "error-wrong-pin": "PIN hiện tại không đúng.",
       "error-cooldown": "Quá nhiều lần thử. Hãy thử lại sau {seconds} giây.",
-      "error-system-failed": "Touch ID không xác nhận được đó là bạn.",
+      "error-system-failed": "{system} không xác nhận được đó là bạn.",
       "error-generic": "Không thành công. Hãy thử lại."
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "Ẩn mọi cửa sổ sau màn hình khóa và mở khóa bằng Touch ID hoặc PIN"
+          "summary": "Ẩn mọi cửa sổ sau màn hình khóa và mở khóa bằng Touch ID, Windows Hello hoặc PIN"
         },
         "voice-input": {
           "title": "Nhập bằng giọng nói",
@@ -10899,7 +10902,11 @@
     "allow": {
       "title": "Người gửi được phép",
       "empty": "Chưa cho phép ai cả.",
-      "remove": "Gỡ"
+      "remove": "Gỡ",
+      "via-pairing": "Mã ghép đôi",
+      "via-invite": "Mã liên kết",
+      "shared": "ID dùng chung",
+      "shared-hint": "ID Telegram này đại diện cho nhiều người (quản trị viên ẩn danh, kênh, chính Telegram) nên luôn bị từ chối. Bạn có thể gỡ nó."
     },
     "pane": {
       "connect": "Kết nối với cuộc trò chuyện",

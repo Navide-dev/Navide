@@ -125,7 +125,7 @@ def test_v6_gives_old_bindings_no_wake_target_and_keeps_one_across_a_rename(tmp_
         cur.execute("INSERT INTO channel_bindings (pane_id, platform, account, chat_id, thread_id, title,"
                     " created_at) VALUES ('p1', 'telegram', 'default', '-1', '5', 't', 9)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 6
+    assert db.schema_version("channels") == 7
     [b] = s.bindings()
     assert (b.workspace_path, b.session_id) == ("", "")
     assert s.set_wake_target("p1", "/ws", "sess-1")

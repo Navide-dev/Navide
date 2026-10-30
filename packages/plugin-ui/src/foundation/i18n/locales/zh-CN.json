@@ -1471,7 +1471,8 @@
       "notice": "App Lock 是隐私遮罩，不是访问控制。你离开时，它会盖住 Navide 的每个窗口；agent、终端、聊天室、MCP 工具和调度都照常运行，坐在这台电脑前又懂技术的人仍然可以绕过它。",
       "section-lock": "锁定",
       "enabled": "开启 App Lock",
-      "enabled-hint": "请先设置 PIN。即使开启了 Touch ID，PIN 也始终可以解锁。",
+      "enabled-hint": "请先设置 PIN。即使开启了 {system}，PIN 也始终可以解锁。",
+      "enabled-hint-pin-only": "请先设置 PIN，解锁要靠它。",
       "lock-now": "立即锁定",
       "lock-now-hint": "马上盖住所有窗口。快捷键 {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN 已移除，App Lock 已关闭。",
       "section-unlock": "解锁",
       "method": "解锁方式",
-      "method-system": "Touch ID，PIN 作为备用",
+      "method-system": "{system}，PIN 作为备用",
       "method-pin": "仅用 PIN",
-      "system-unavailable": "这台电脑无法使用 Touch ID，Navide 会用 PIN 解锁。",
+      "system-unavailable": "这台电脑无法使用 {system}，Navide 会用 PIN 解锁。",
+      "pin-only": "在这个系统上 Navide 只能用 PIN 解锁：Touch ID 需要 Mac，Windows Hello 需要 Windows 11。",
       "section-auto": "自动锁定",
       "idle": "闲置后",
       "idle-hint": "按整台电脑没有键盘或鼠标操作的时间计算。",
@@ -1503,15 +1505,16 @@
       "on-suspend": "电脑睡眠时",
       "on-start": "Navide 启动时",
       "section-forgot": "忘记 PIN？",
-      "reset-with-system": "用 Touch ID 重设 PIN",
-      "forgot-system": "先用 Touch ID 确认是你本人，再设置新的 PIN。",
-      "forgot-manual-title": "没有 Touch ID 时",
+      "reset-with-system": "用 {system} 重设 PIN",
+      "forgot-system": "先用 {system} 确认是你本人，再设置新的 PIN。",
+      "forgot-manual-title": "没有 {system} 时",
+      "forgot-manual-title-pin-only": "手动重置",
       "forgot-manual": "退出 Navide，然后删除 Navide 数据文件夹中的 app-lock.json。这只会移除 App Lock 和它的 PIN，其他都不受影响。",
       "error-invalid-pin": "请使用 4 到 12 位数字。",
       "error-mismatch": "两次输入的 PIN 不一致。",
       "error-wrong-pin": "当前 PIN 不正确。",
       "error-cooldown": "尝试次数过多，请在 {seconds} 秒后重试。",
-      "error-system-failed": "Touch ID 未能确认是你本人。",
+      "error-system-failed": "{system} 未能确认是你本人。",
       "error-generic": "没有成功，请再试一次。"
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "用锁定画面盖住所有窗口，用 Touch ID 或 PIN 解锁"
+          "summary": "用锁定画面盖住所有窗口，用 Touch ID、Windows Hello 或 PIN 解锁"
         },
         "voice-input": {
           "title": "语音输入",
@@ -10899,7 +10902,11 @@
     "allow": {
       "title": "允许名单",
       "empty": "尚未允许任何人。",
-      "remove": "移除"
+      "remove": "移除",
+      "via-pairing": "配对码",
+      "via-invite": "链接代码",
+      "shared": "共享 ID",
+      "shared-hint": "这个 Telegram ID 代表许多人（匿名管理员、频道、Telegram 本身），一律会被拒绝，可以将它移除。"
     },
     "pane": {
       "connect": "连接聊天室",
