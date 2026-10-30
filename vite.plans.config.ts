@@ -77,6 +77,8 @@ export default defineConfig({
       { find: '@navide/plugin-ui/file-picker', replacement: resolve(__dirname, 'packages/plugin-ui/src/terminalFilePicker.ts') },
       { find: '@navide/plugin-ui', replacement: resolve(__dirname, 'packages/plugin-ui/src/index.ts') },
       { find: '@navide/terminal', replacement: resolve(__dirname, 'src/renderer/src/platform/terminal/index.ts') },
+      // The renderer terminal code imports @navide/nvterm (terminalKit); production builds drop it.
+      { find: '@navide/nvterm', replacement: resolve(__dirname, 'packages/nvterm/src/index.ts') },
       { find: '@navide/plugin-shell', replacement: resolve(__dirname, 'src/renderer/src/platform/plugin-shell/index.ts') },
     ],
   },

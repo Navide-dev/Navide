@@ -25,10 +25,13 @@ describe('NvTerminal.write slicing', () => {
     const order: string[] = []
     t.write(big(6000, 'a'), () => order.push('big'))
     t.write('\r\nTAIL', () => order.push('small'))
-    expect(t.core.active.line(4).chars(0)).not.toBe('T') // not parsed ahead of the large write
     await new Promise<void>((resolve) => t.write('', () => { order.push('barrier'); resolve() }))
     expect(order).toEqual(['big', 'small', 'barrier'])
-    expect(t.core.active.line(4).chars(0)).toBe('T')
+    // Whether or not the large write needed more than one slice on this machine, the small one
+    // must land after all of it: TAIL on the last row, right below the large write's last line.
+    const text = (row: number) => Array.from({ length: 8 }, (_, x) => t.core.active.line(row).chars(x) || ' ').join('').trimEnd()
+    expect(text(4)).toBe('TAIL')
+    expect(text(3)).toBe('a 5999 中')
   })
 
   it('a character split across slices is decoded correctly', async () => {
