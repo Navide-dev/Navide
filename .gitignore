@@ -29,6 +29,7 @@ build/pane-helper/
 build/fn-key/
 build/stt/
 native/navide-stt/target/
+native/navide-hello/target/
 backend/build/
 # ─── Electron packaging output ──────────────────────────────────────────────
 dist-local/
