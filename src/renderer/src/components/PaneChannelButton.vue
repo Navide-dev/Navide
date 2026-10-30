@@ -286,8 +286,17 @@ async function bind(platform: ChannelPlatform, account: string, loc: ChannelLoca
     account,
   })
   busy.value = false
-  if (res.ok) close()
-  else error.value = res.error ?? t('channels.error.generic')
+  if (!res.ok) {
+    error.value = res.error ?? t('channels.error.generic')
+    return
+  }
+  close()
+  // Connected, but the chat's messages will be refused: say so where the chip now stands.
+  if (res.data?.needs_approval === true) {
+    needsApproval.value = true
+    await nextTick()
+    await toggleMenu()
+  }
 }
 
 // The bound chat's title, from the chats the bot knows; '' until known.
@@ -328,6 +337,8 @@ const chipTip = computed(() => chipIdentity('full'))
 
 const VERBOSITIES: ChannelVerbosity[] = ['replies', 'minimal', 'standard', 'full']
 const menuOpen = ref(false)
+// Shown in the menu the bind that needs approval opened, until that menu closes.
+const needsApproval = ref(false)
 const chipRef = ref<HTMLElement | null>(null)
 const menuRef = ref<HTMLElement | null>(null)
 const menuStyle = ref<Record<string, string>>({})
@@ -354,6 +365,7 @@ async function toggleMenu(): Promise<void> {
 
 function closeMenu(): void {
   menuOpen.value = false
+  needsApproval.value = false
   document.removeEventListener('pointerdown', onMenuPointerDown, true)
   document.removeEventListener('keydown', onMenuKeydown, true)
 }
@@ -465,6 +477,7 @@ function openSettings(): void {
         @click.stop
         @mousedown.stop
       >
+        <p v-if="needsApproval" class="pch-warn" role="note" data-testid="channel-approval-note">{{ t('channels.pane.needs-approval') }}</p>
         <div class="pch-pop-head">{{ t('channels.pane.verbosity-label') }}</div>
         <button
           v-for="v in VERBOSITIES"
