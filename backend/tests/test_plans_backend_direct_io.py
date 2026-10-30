@@ -11,6 +11,7 @@ other filesystem bridge read.
 from __future__ import annotations
 
 import base64
+import gzip
 import hashlib
 import json
 import os
@@ -614,6 +615,35 @@ def test_writes_record_versions_with_their_author(backend_process: subprocess.Po
     assert _value(_write(backend_process, host, "docs/plans/elsewhere_cccccc.html", _plan_html("Docs"))) == {"ok": True}
     assert sorted(p.name for p in (plan.parent / ".history").iterdir()) == ["doc_aaaaaa"]
     assert not (mine / "docs" / "plans" / ".history").exists()
+
+
+@pytest.mark.parametrize("linked", [".history", ".history/doc_aaaaaa"])
+def test_history_list_read_and_restore_refuse_a_history_directory_behind_a_link(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path, linked: str
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plans = mine / ".agent-team" / "plans"
+    plan = plans / "doc_aaaaaa.html"
+    plan.write_text(_plan_with("draft", "Mine"), encoding="utf-8")
+    # A planted history elsewhere, with a version the link would expose.
+    outside = tmp_path / "outside"
+    outside_history = outside / "doc_aaaaaa" if linked == ".history" else outside
+    outside_history.mkdir(parents=True)
+    version = "20260601T080000_draft.html.gz"
+    (outside_history / version).write_bytes(gzip.compress(_plan_with("draft", "Planted").encode("utf-8"), mtime=0))
+    (plans / ".history").mkdir(exist_ok=True) if linked != ".history" else None
+    (plans / linked).symlink_to(outside if linked == ".history" else outside_history, target_is_directory=True)
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+
+    listed = _call(backend_process, host, "plans.history_list", {"rel_path": rel_path})
+    assert _error_code(listed) == "WORKSPACE_SCOPE_VIOLATION"
+    read = _call(backend_process, host, "plans.history_read", {"rel_path": rel_path, "file": version})
+    assert _error_code(read) == "WORKSPACE_SCOPE_VIOLATION"
+    restore = _call(backend_process, host, "plans.history_restore", {"rel_path": rel_path, "file": version})
+    assert _error_code(restore) == "WORKSPACE_SCOPE_VIOLATION"
+    assert "Planted" not in plan.read_text(encoding="utf-8")
+    assert sorted(p.name for p in outside_history.iterdir()) == [version]
 
 
 def test_history_preserve_pins_disk_bytes_or_stores_the_users_side_without_scripts(
