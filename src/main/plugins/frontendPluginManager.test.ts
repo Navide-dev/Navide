@@ -12092,6 +12092,8 @@ describe('first-party Git private bridge', () => {
 
   it('loads the selected factory contribution with its actual provenance regardless of the development environment flag', async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'plans-factory-query-')))
+    // The real manifest is copied in below; its version names the artifact.
+    const plansVersion = JSON.parse(readFileSync('plugins/navide-plans/manifest.json', 'utf8')).version as string
     const mgr = new FrontendPluginManager()
     try {
       const packageDir = join(
@@ -12100,7 +12102,7 @@ describe('first-party Git private bridge', () => {
         'official-artifacts',
         'factory-resources',
         PLANS_PLUGIN_ID,
-        '1.0.0',
+        plansVersion,
         `${process.platform}-${process.arch}`,
         'package',
       )
@@ -12114,24 +12116,24 @@ describe('first-party Git private bridge', () => {
       expect(registerBundledPlans(mgr, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '1.0.0',
+        artifactVersion: plansVersion,
         devRoot: root,
       })).toEqual({ registered: true })
       mgr.setPlansDiagnosticsEnabled(true)
-      mgr.setCapabilityGrantResolver(() => ({ packageVersion: '1.0.0', system: ['fs', 'ui', 'aiCli'], storage: true }))
+      mgr.setCapabilityGrantResolver(() => ({ packageVersion: plansVersion, system: ['fs', 'ui', 'aiCli'], storage: true }))
       const descriptor = mgr.getDescriptor(PLANS_PLUGIN_ID)!
       const contribution = descriptor.views!.find((view) => view.location === 'window')!
       const host = new FakeBrowserWindow()
       await mgr.openView({ ...descriptor, entryFile: contribution.entryFile }, contribution, {
         hostWindow: asHost(host), bounds: 'fill', workspacePath: root,
-        capabilityContext: mgr.plansCapabilityContext('1.0.0', root, 'plans-window'),
+        capabilityContext: mgr.plansCapabilityContext(plansVersion, root, 'plans-window'),
         query: '?plans_package_source=spoofed',
       })
       const loaded = (host.children[0] as FakeViewLike).webContents.loads[0]
       expect(loaded).toContain(contribution.entryFile)
       const query = new URLSearchParams(loaded.split('?')[1])
       expect(query.get('plans_package_source')).toBe('factory-bundled')
-      expect(query.get('plans_package_version')).toBe('1.0.0')
+      expect(query.get('plans_package_version')).toBe(plansVersion)
     } finally {
       await mgr.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
