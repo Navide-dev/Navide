@@ -18,6 +18,7 @@ import secrets
 import time
 from dataclasses import dataclass
 
+from .base import is_shared_sender
 from .store import DEFAULT_ACCOUNT, ChannelStore, PairingRequest
 
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -51,7 +52,9 @@ class SenderGate:
         self._now = now
 
     def is_allowed(self, platform: str, sender_id: str, account: str = DEFAULT_ACCOUNT) -> bool:
-        return bool(sender_id) and self._store.is_allowed(platform, sender_id, account)
+        # A shared id stays refused even if an older row allows it.
+        return (bool(sender_id) and not is_shared_sender(platform, sender_id)
+                and self._store.is_allowed(platform, sender_id, account))
 
     def has_linked(self, platform: str, account: str = DEFAULT_ACCOUNT) -> bool:
         """Whether any user is linked to (allowed on) this bot."""
@@ -62,6 +65,8 @@ class SenderGate:
 
     def request_pairing(self, platform: str, sender_id: str, sender_name: str, chat_id: str,
                         account: str = DEFAULT_ACCOUNT) -> PairingOutcome:
+        if not sender_id or is_shared_sender(platform, sender_id):
+            return PairingOutcome(None, created=False)  # no one to approve: no code
         self.prune()
         pending = self._store.list_pairing(platform, account)
         for req in pending:
@@ -80,8 +85,8 @@ class SenderGate:
     def approve(self, platform: str, code: str) -> PairingRequest | None:
         self.prune()
         req = self._store.pop_pairing(platform, normalize_code(code))
-        if req is None:
-            return None
+        if req is None or is_shared_sender(platform, req.sender_id):
+            return None  # a shared id's request (from before this rule) is dropped, not approved
         self._store.add_allow(platform, req.sender_id, req.sender_name, int(self._now()), req.account)
         return req
 

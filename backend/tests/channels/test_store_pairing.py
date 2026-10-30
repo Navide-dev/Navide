@@ -187,3 +187,34 @@ def test_v5_keeps_every_v4_account_and_binding_as_default(tmp_path) -> None:
     s.upsert_account("telegram", {}, account="bot-b1")  # the new key takes a second bot
     assert len(s.accounts()) == 2
     db.close()
+
+
+# Telegram ``from`` ids that stand for many people (anonymous admins, channel posts,
+# service messages): no one can be approved as one of them.
+TELEGRAM_SHARED = ("1087968824", "136817688", "777000")
+
+
+@pytest.mark.parametrize("sender", TELEGRAM_SHARED)
+def test_telegram_shared_sender_ids_are_never_admitted(store: ChannelStore, sender: str) -> None:
+    gate = SenderGate(store)
+    # A row written before this rule still admits no one.
+    store._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at)"
+                " VALUES ('telegram', 'default', ?, 'x', 1)", (sender,))
+    assert not gate.is_allowed("telegram", sender)
+    with pytest.raises(ValueError):
+        store.add_allow("telegram", sender, "x", 1)
+    # No pairing code is handed out, and an old pending one cannot be approved.
+    outcome = gate.request_pairing("telegram", sender, "x", "-100")
+    assert outcome.request is None and not outcome.created
+    store.add_pairing(PairingRequest("telegram", "ABCD2345", sender, "x", "-100", 1, "default"))
+    assert gate.approve("telegram", "ABCD2345") is None
+    assert store.list_pairing("telegram") == []
+    # The ids are Telegram's: on another platform they are ordinary ids.
+    store.add_allow("discord", sender, "x", 1)
+    assert gate.is_allowed("discord", sender)
+
+
+def test_an_empty_sender_gets_no_pairing_code(store: ChannelStore) -> None:
+    gate = SenderGate(store)
+    outcome = gate.request_pairing("telegram", "", "x", "42")
+    assert outcome.request is None and store.list_pairing(None) == []

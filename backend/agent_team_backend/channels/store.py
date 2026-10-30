@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..db import Database
-from .base import Location
+from .base import Location, is_shared_sender
 
 COMPONENT = "channels"
 KV_ENABLED = "channels.enabled"
@@ -352,6 +352,8 @@ class ChannelStore:
 
     def add_allow(self, platform: str, sender_id: str, sender_name: str, added_at: int,
                   account: str = DEFAULT_ACCOUNT) -> None:
+        if is_shared_sender(platform, sender_id):
+            raise ValueError(f"{platform} sender {sender_id} is shared by many people and cannot be allowed")
         self._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at)"
                    " VALUES (?, ?, ?, ?, ?) ON CONFLICT(platform, account, sender_id)"
                    " DO UPDATE SET sender_name = excluded.sender_name",
