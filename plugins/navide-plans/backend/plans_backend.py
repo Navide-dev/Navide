@@ -855,7 +855,70 @@ def _history_target(origin: dict[str, Any], arguments: dict[str, Any], keys: set
     plan = _versioned_plan(origin, rel_path)
     if plan is None:
         raise BridgeFailure("INVALID_ARGUMENT")
-    return rel_path, plan, plan_versions.history_dir_for(plan)
+    return rel_path, plan, _contained_history_dir(plan)
+
+
+def _contained_history_dir(plan: Path) -> Path:
+    """The plan's history directory, refused when ``.history`` or its stem is
+    a symbolic link or it resolves anywhere but under the plan's directory.
+    Nothing is created: a plan without history simply has none."""
+    history_root = plan.parent / plan_versions.HISTORY_DIR_NAME
+    history_dir = plan_versions.history_dir_for(plan)
+    try:
+        if history_root.is_symlink() or history_dir.is_symlink():
+            raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION")
+        expected = plan.parent.resolve() / plan_versions.HISTORY_DIR_NAME / history_dir.name
+        if history_dir.exists() and history_dir.resolve() != expected:
+            raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION")
+    except OSError:
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    return history_dir
+
+
+#: A version may decompress to at most this, or to 8 times the current plan
+#: when that is larger: a ceiling against a planted gzip bomb that never
+#: limits how large a plan, or its history, may grow.
+VERSION_READ_MIN_LIMIT = 256 * 1024 * 1024
+VERSION_READ_PLAN_FACTOR = 8
+
+# The last version read, by (path, mtime_ns, size, inode): paging through one
+# decompresses it once.
+_version_cache: tuple[tuple[str, int, int, int], bytes] | None = None
+
+
+def _read_version(history_dir: Path, name: str, plan: Path) -> tuple[bytes, float]:
+    """A version's plan bytes and its file's mtime, both from one open file
+    (a symbolic link is refused), decompressed with a ceiling."""
+    global _version_cache
+    path = history_dir / name
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+    except OSError as exc:
+        _log(f"version {name}: {exc}")
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    with os.fdopen(fd, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise BridgeFailure("BACKEND_UNAVAILABLE")
+        key = (str(path), info.st_mtime_ns, info.st_size, info.st_ino)
+        if _version_cache is not None and _version_cache[0] == key:
+            return _version_cache[1], info.st_mtime
+        raw = handle.read()
+    try:
+        plan_size = plan.stat().st_size
+    except OSError:
+        plan_size = 0
+    limit = max(VERSION_READ_MIN_LIMIT, VERSION_READ_PLAN_FACTOR * plan_size)
+    try:
+        data = plan_versions.decode_version(history_dir, name, raw, limit=limit)
+    except plan_versions.VersionTooLarge:
+        _log(f"version {name}: decompresses to more than {limit} bytes; refused")
+        raise BridgeFailure("RESOURCE_LIMIT") from None
+    except (OSError, ValueError, EOFError) as exc:
+        _log(f"version {name}: {exc}")
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    _version_cache = (key, data)
+    return data, info.st_mtime
 
 
 def _history_file(arguments: dict[str, Any], plan: Path) -> str:
@@ -870,12 +933,8 @@ def _history_file(arguments: dict[str, Any], plan: Path) -> str:
     return name
 
 
-def _read_version_bytes(history_dir: Path, name: str) -> bytes:
-    try:
-        return plan_versions.read_version(history_dir, name)
-    except (OSError, ValueError, EOFError) as exc:
-        _log(f"version {name}: {exc}")
-        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+def _read_version_bytes(history_dir: Path, name: str, plan: Path) -> bytes:
+    return _read_version(history_dir, name, plan)[0]
 
 
 def _history_list(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
@@ -907,11 +966,7 @@ def _history_read(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str
     _rel_path, plan, history_dir = _history_target(origin, arguments, {"rel_path", "file", "offset"})
     name = _history_file(arguments, plan)
     offset = _read_offset(arguments)
-    data = _read_version_bytes(history_dir, name)
-    try:
-        mtime = (history_dir / name).stat().st_mtime
-    except OSError:
-        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    data, mtime = _read_version(history_dir, name, plan)
     chunk = data[offset : offset + TEXT_CHUNK_BYTES]
     reached_end = offset + len(chunk) >= len(data)
     text, consumed = _decode_chunk(chunk, reached_end)
@@ -957,7 +1012,7 @@ def _history_restore(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[
     name = _history_file(arguments, plan)
     expected = _sha256_argument(arguments.get("expected_sha256"))
     try:
-        version = _read_version_bytes(history_dir, name).decode("utf-8")
+        version = _read_version_bytes(history_dir, name, plan).decode("utf-8")
     except UnicodeDecodeError:
         raise BridgeFailure("BACKEND_UNAVAILABLE") from None
     data, _size, mtime, _eof = _read_bytes(origin, rel_path, 0, None)

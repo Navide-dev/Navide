@@ -830,12 +830,20 @@ async function readVersion(snap: HistorySnapshot): Promise<string | null> {
   return resp.payload?.ok && resp.payload.content !== undefined ? resp.payload.content : null
 }
 
-async function readCurrent(): Promise<string | null> {
-  const resp = await props.backend.send<{ ok: boolean; content?: string }>('fs.read_file', {
+// sha256 of the plan the shown diff was computed against; a restore sends it
+// so it never overwrites a plan that changed after the user looked.
+let diffBaseSha256: string | undefined
+
+async function readCurrent(): Promise<{ content: string; sha256?: string } | null> {
+  const resp = await props.backend.send<{ ok: boolean; content?: string; sha256?: string }>('fs.read_file', {
     workspace_path: props.workspacePath,
     rel_path: props.relPath,
   })
-  return resp.payload?.ok && resp.payload.content !== undefined ? resp.payload.content : null
+  if (!resp.payload?.ok || resp.payload.content === undefined) return null
+  return {
+    content: resp.payload.content,
+    ...(typeof resp.payload.sha256 === 'string' ? { sha256: resp.payload.sha256 } : {}),
+  }
 }
 
 function snapshotLabel(snap: HistorySnapshot): string {
@@ -859,13 +867,16 @@ async function showDiff(snap: HistorySnapshot): Promise<void> {
     return
   }
   try {
-    const [version, current] = await Promise.all([readVersion(snap), readCurrent()])
-    if (version === null || current === null) {
+    const [version, read] = await Promise.all([readVersion(snap), readCurrent()])
+    if (version === null || read === null) {
       toast(t('pane.plans.history-diff-failed'))
       return
     }
+    const current = read.content
+    diffBaseSha256 = read.sha256
     diffSummary.value = diffPlanContents(version, current)
-    diffText.value = diffLines(visiblePlanLines(version), visiblePlanLines(current)).filter(line => line.kind !== 'same')
+    diffText.value = diffLines(visiblePlanLines(version, props.relPath), visiblePlanLines(current, props.relPath))
+      .filter(line => line.kind !== 'same')
     diffFor.value = snap.file
   } catch {
     toast(t('pane.plans.history-diff-failed'))
@@ -905,6 +916,7 @@ async function restoreVersion(snap: HistorySnapshot): Promise<void> {
       workspace_path: props.workspacePath,
       rel_path: props.relPath,
       file: snap.file,
+      ...(diffFor.value === snap.file && diffBaseSha256 ? { expected_sha256: diffBaseSha256 } : {}),
     })
     if (resp.payload?.ok) {
       toast(t('pane.plans.history-restored'), { type: 'success' })
@@ -922,19 +934,36 @@ async function restoreVersion(snap: HistorySnapshot): Promise<void> {
 
 const APPROVED_OR_LATER = new Set(['approved', 'in-progress', 'done'])
 
+/** The version the plan was approved as: the earliest of the newest run of
+ *  approved versions (saves made while approved add to that run), preferring
+ *  the stage change itself or an older snapshot without a reason. */
+function approvalVersion(history: HistorySnapshot[]): HistorySnapshot | null {
+  const attached = history.filter(snap => !snap.detached)
+  const start = attached.findIndex(snap => snap.stage === 'approved')
+  if (start < 0) return null
+  let end = start
+  while (end + 1 < attached.length && attached[end + 1].stage === 'approved') end++
+  const run = attached.slice(start, end + 1)
+  return [...run].reverse().find(snap => snap.reason === 'stage' || snap.reason === undefined) ?? run[run.length - 1]
+}
+
+// Only the newest check may set the badge.
+let approvedCheck = 0
+
 /** Find whether the text changed after approval; quiet on any failure. */
 async function checkApprovedModified(): Promise<void> {
+  const check = ++approvedCheck
   approvedModified.value = null
   if (!meta.value || !APPROVED_OR_LATER.has(meta.value.stage)) return
   const relPath = props.relPath
   try {
-    const approved = (await fetchHistory()).find(snap => snap.stage === 'approved' && !snap.detached)
-    if (!approved) return
+    const approved = approvalVersion(await fetchHistory())
+    if (!approved || check !== approvedCheck) return
     const [version, current] = await Promise.all([readVersion(approved), readCurrent()])
-    if (props.relPath !== relPath || version === null || current === null) return
-    if (textChangedSinceApproval(version, current)) approvedModified.value = approved
+    if (check !== approvedCheck || props.relPath !== relPath || version === null || current === null) return
+    if (textChangedSinceApproval(version, current.content, relPath)) approvedModified.value = approved
   } catch {
-    approvedModified.value = null
+    if (check === approvedCheck) approvedModified.value = null
   }
 }
 

@@ -443,3 +443,29 @@ def test_a_symlinked_blobs_directory_is_never_written_through(tmp_path: Path) ->
     assert name is not None and name.endswith(".html.gz") and not name.endswith(".parts.gz")
     assert list(outside.iterdir()) == []
     assert plan_versions.read_version(history, name) == data
+
+
+def test_decoding_is_bounded_and_never_returns_a_cut_version() -> None:
+    packed = gzip.compress(b"a" * 5_000, mtime=0)
+    name = "20261030T120000_draft.html.gz"
+    assert plan_versions.decode_version(Path("."), name, packed, limit=5_000) == b"a" * 5_000
+    with pytest.raises(plan_versions.VersionTooLarge):
+        plan_versions.decode_version(Path("."), name, packed, limit=4_999)
+    # Several gzip members read as one, as gzip.decompress does.
+    two = gzip.compress(b"one ", mtime=0) + gzip.compress(b"two", mtime=0)
+    assert plan_versions.decode_version(Path("."), name, two, limit=100) == b"one two"
+    with pytest.raises(EOFError):
+        plan_versions.decode_version(Path("."), name, packed[:-12], limit=10_000)
+    # An uncompressed snapshot is returned as it is.
+    assert plan_versions.decode_version(Path("."), "20261030T120000_draft.html", b"raw", limit=1) == b"raw"
+
+
+def test_a_version_with_image_blobs_is_bounded_as_a_whole(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    data = _with_images(b"x", _png(7))
+    name = _record(plan, data, at=T0)
+    history = plan_versions.history_dir_for(plan)
+    raw = (history / name).read_bytes()
+    assert plan_versions.decode_version(history, name, raw, limit=len(data)) == data
+    with pytest.raises(plan_versions.VersionTooLarge):
+        plan_versions.decode_version(history, name, raw, limit=len(data) - 1)
