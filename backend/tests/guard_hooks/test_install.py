@@ -12,9 +12,7 @@ import shlex
 import subprocess
 import sys
 import threading
-import time
 import tomllib
-import warnings
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -411,10 +409,9 @@ def _legacy_prelude(port_file: str) -> str:
 @pytest.mark.timeout(300)
 def test_powershell_hook_prelude_reads_the_port_file_as_get_content_did(tmp_path) -> None:
     # Same answer for every port file shape a hook can meet, from the legacy
-    # cmdlets and from the .NET calls that replaced them. Each form runs in a
-    # fresh PowerShell, and the time to its first read is reported: on the
-    # windows-11-arm runner the cmdlet form paid about 23 s there (the module
-    # autoload) and `exit 0` 0.4 s, which is why the hooks stopped using it.
+    # cmdlets and from the .NET calls that replaced them. Both forms run in
+    # one PowerShell, so the cmdlet module autoload is paid once per test run
+    # (39.3 s on the windows-11-arm runner, release dry run 41039191239).
     cases = {
         "absent": None,
         "empty": b"",
@@ -429,36 +426,23 @@ def test_powershell_hook_prelude_reads_the_port_file_as_get_content_did(tmp_path
         if content is not None:
             path.write_bytes(content)
         paths.append(str(path))
-    report = (
-        "[Console]::Out.Write('[' + [bool]$PORT + '|' + \"$PORT\" + ']'); "
-        "if ($null -eq $FIRST) { $FIRST = $SW.ElapsedMilliseconds }; "
-    )
+    report = "[Console]::Out.Write('[' + [bool]$PORT + '|' + \"$PORT\" + ']'); "
     temp = "[Console]::Out.Write('<' + $TMPNAME + '>'); "
 
-    def run(prelude, temp_path: str) -> tuple[str, float, str]:
-        script = (
-            "$SW = [Diagnostics.Stopwatch]::StartNew(); $FIRST = $null; "
-            + "".join(prelude(p) + report for p in paths)
-            + temp_path + temp
-            + "[Console]::Error.Write('first-read-ms=' + $FIRST); exit 0"
-        )
-        argv = hook_shell.shell_argv({"shell": "powershell", "command": script})
-        started = time.perf_counter()
-        done = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True,
-                              encoding="utf-8", errors="replace", timeout=120)
-        assert done.returncode == 0, done.stderr
-        return done.stdout, time.perf_counter() - started, done.stderr.strip()
+    def form(prelude, temp_path: str) -> str:
+        return "".join(prelude(p) + report for p in paths) + temp_path + temp
 
-    legacy_out, legacy_s, legacy_err = run(
-        _legacy_prelude, "$TMPNAME = Join-Path $env:TEMP 'navide-x'; ")
-    dotnet_out, dotnet_s, dotnet_err = run(
-        _windows._ps_read_port, "$TMPNAME = [IO.Path]::Combine($env:TEMP, 'navide-x'); ")
-    warnings.warn(
-        f"PowerShell hook prelude timing: cmdlets {legacy_s:.1f}s ({legacy_err}), "
-        f".NET {dotnet_s:.1f}s ({dotnet_err}), `exit 0` "
-        f"{hook_shell.cold_start_s(hook_shell.shell_argv({'shell': 'powershell', 'command': ''})):.1f}s",
-        stacklevel=1,
+    script = (
+        form(_legacy_prelude, "$TMPNAME = Join-Path $env:TEMP 'navide-x'; ")
+        + "[Console]::Out.Write('#'); "
+        + form(_windows._ps_read_port, "$TMPNAME = [IO.Path]::Combine($env:TEMP, 'navide-x'); ")
+        + "exit 0"
     )
+    argv = hook_shell.shell_argv({"shell": "powershell", "command": script})
+    done = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True,
+                          encoding="utf-8", errors="replace", timeout=120)
+    assert done.returncode == 0, done.stderr
+    legacy_out, dotnet_out = done.stdout.split("#")
     assert dotnet_out == legacy_out
     assert legacy_out.startswith("[False|][False|][True|51234][True|51234][False|][True|51234 9]")
 
