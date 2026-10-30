@@ -100,7 +100,13 @@ async def test_the_host_records_a_batch_redacted(audit: PluginAuditLog) -> None:
         {"address": None},
     ],
 )
-async def test_a_bad_row_is_skipped_and_the_rest_are_kept(audit: PluginAuditLog, bad: dict[str, Any]) -> None:
+async def test_a_bad_row_is_skipped_and_the_rest_are_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, bad: dict[str, Any]
+) -> None:
+    # A fixed clock, 30 s into a minute: on the wall clock the two good rows
+    # are dated one by one and can land either side of a minute boundary.
+    audit = PluginAuditLog(Database(tmp_path / "navide.db"), clock=lambda: 1_792_108_830.0)
+    monkeypatch.setattr(app, "plugin_audit_log", audit)
     host = _session(host=True)
     broken = _row(**bad)
     await ws_handlers.plugin_activity_record(
