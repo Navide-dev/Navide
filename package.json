@@ -279,6 +279,7 @@
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-vue": "^6.0.9",
     "@vue/test-utils": "^2.5.1",
+    "@xterm/headless": "6.0.0",
     "electron": "^44.9.1",
     "electron-builder": "^26.18.0",
     "electron-vite": "^3.1.0",
