@@ -165,8 +165,8 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[8].version).toBe('0.2.26')
-    expect(WHATS_NEW[9].version).toBe('0.2.25')
+    expect(WHATS_NEW[9].version).toBe('0.2.26')
+    expect(WHATS_NEW[10].version).toBe('0.2.25')
   })
 })
 
@@ -192,7 +192,7 @@ describe('0.2.27 — Navide Browser and blocked local installs', () => {
   it('shows once to someone updating from 0.2.26, and not to a build still running 0.2.26', () => {
     expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
-    expect(WHATS_NEW[7].version).toBe('0.2.27')
+    expect(WHATS_NEW[8].version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
   })
 })
@@ -241,7 +241,7 @@ describe('0.2.29 — six more languages', () => {
   it('shows once to someone updating from 0.2.28, and not to a build still running 0.2.28', () => {
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.29', '0.2.29')).toBeNull()
-    expect(WHATS_NEW[5].version).toBe('0.2.29')
+    expect(WHATS_NEW[6].version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
   })
 })
@@ -269,7 +269,7 @@ describe('0.2.30 — pipelines no longer stall silently', () => {
   it('shows once to someone updating from 0.2.29, and not to a build still running 0.2.29', () => {
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.30', '0.2.30')).toBeNull()
-    expect(WHATS_NEW[4].version).toBe('0.2.30')
+    expect(WHATS_NEW[5].version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
   })
 })
@@ -320,7 +320,7 @@ describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () 
   it('shows once to someone updating from 0.2.30, and not to a build still running 0.2.30', () => {
     expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.31', '0.2.31')).toBeNull()
-    expect(WHATS_NEW[3].version).toBe('0.2.31')
+    expect(WHATS_NEW[4].version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
   })
 })
@@ -364,7 +364,7 @@ describe('0.2.32 — secrets stay on this machine, Paste Credential removed', ()
   it('shows once to someone updating from 0.2.31, and not to a build still running 0.2.31', () => {
     expect(pickWhatsNew('0.2.32', '0.2.31')?.version).toBe('0.2.32')
     expect(pickWhatsNew('0.2.32', '0.2.32')).toBeNull()
-    expect(WHATS_NEW[2].version).toBe('0.2.32')
+    expect(WHATS_NEW[3].version).toBe('0.2.32')
     expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
   })
 })
@@ -402,7 +402,7 @@ describe('0.2.33 — chat wake brings back the conversation, in all 11 languages
   it('shows once to someone updating from 0.2.32, and not to a build still running 0.2.32', () => {
     expect(pickWhatsNew('0.2.33', '0.2.32')?.version).toBe('0.2.33')
     expect(pickWhatsNew('0.2.33', '0.2.33')).toBeNull()
-    expect(WHATS_NEW[1].version).toBe('0.2.33')
+    expect(WHATS_NEW[2].version).toBe('0.2.33')
     expect(pickWhatsNew('0.2.32', '0.2.31')?.version).toBe('0.2.32')
   })
 })
@@ -434,11 +434,36 @@ describe('0.2.34 — App Lock and Import from n8n', () => {
     expect(all).toContain('Settings → MCP')
   })
 
-  it('shows once to someone updating from 0.2.33, as the newest entry, and not to a build still running 0.2.33', () => {
+  it('shows once to someone updating from 0.2.33, and not to a build still running 0.2.33', () => {
     expect(pickWhatsNew('0.2.34', '0.2.33')?.version).toBe('0.2.34')
     expect(pickWhatsNew('0.2.34', '0.2.34')).toBeNull()
-    expect(WHATS_NEW[0].version).toBe('0.2.34')
+    expect(WHATS_NEW[1].version).toBe('0.2.34')
     expect(pickWhatsNew('0.2.33', '0.2.32')?.version).toBe('0.2.33')
+  })
+})
+
+describe('0.2.35 — edit Plans directly, a version for every change', () => {
+  const entry = whatsNewFor('0.2.35')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('names the Plans edit and history labels, and that Restore keeps the plan state', () => {
+    const all = entry!.highlights.map((text) => text['en-US']).join('\n')
+    expect(all).toContain('Edit document')
+    expect(all).toContain('History')
+    expect(all).toContain('Diff and Restore')
+    expect(all).toContain('keeps the stage, approval, todos and review notes')
+    expect(all).toContain('Changed since approval')
+  })
+
+  it('shows once to someone updating from 0.2.34, as the newest entry, and not to a build still running 0.2.34', () => {
+    expect(pickWhatsNew('0.2.35', '0.2.34')?.version).toBe('0.2.35')
+    expect(pickWhatsNew('0.2.35', '0.2.35')).toBeNull()
+    expect(WHATS_NEW[0].version).toBe('0.2.35')
+    expect(pickWhatsNew('0.2.34', '0.2.33')?.version).toBe('0.2.34')
   })
 })
 
