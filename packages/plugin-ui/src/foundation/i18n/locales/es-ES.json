@@ -1471,7 +1471,8 @@
       "notice": "App Lock es una pantalla de privacidad, no un control de acceso. Cubre todas las ventanas de Navide mientras no estás. Los agentes, los terminales, los canales de chat, las herramientas MCP y las programaciones siguen en marcha, y alguien frente a este ordenador que sepa cómo puede saltárselo.",
       "section-lock": "Bloqueo",
       "enabled": "Activar App Lock",
-      "enabled-hint": "Define primero un PIN. El PIN siempre desbloquea, aunque Touch ID esté activado.",
+      "enabled-hint": "Define primero un PIN. El PIN siempre desbloquea, aunque {system} esté activado.",
+      "enabled-hint-pin-only": "Define primero un PIN. Es con lo que desbloqueas.",
       "lock-now": "Bloquear ahora",
       "lock-now-hint": "Cubre todas las ventanas al instante. Atajo {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN quitado. App Lock está desactivado.",
       "section-unlock": "Desbloqueo",
       "method": "Desbloquear con",
-      "method-system": "Touch ID, con el PIN como alternativa",
+      "method-system": "{system}, con el PIN como alternativa",
       "method-pin": "Solo PIN",
-      "system-unavailable": "Touch ID no está disponible en este ordenador, así que Navide se desbloquea con tu PIN.",
+      "system-unavailable": "{system} no está disponible en este ordenador, así que Navide se desbloquea con tu PIN.",
+      "pin-only": "En este sistema Navide se desbloquea solo con tu PIN: Touch ID requiere un Mac y Windows Hello, Windows 11.",
       "section-auto": "Bloqueo automático",
       "idle": "Tras inactividad",
       "idle-hint": "Tiempo sin usar el teclado ni el ratón en todo este ordenador.",
@@ -1503,15 +1505,16 @@
       "on-suspend": "Al entrar el ordenador en reposo",
       "on-start": "Al iniciar Navide",
       "section-forgot": "¿Has olvidado el PIN?",
-      "reset-with-system": "Restablecer PIN con Touch ID",
-      "forgot-system": "Touch ID confirma que eres tú y luego eliges un PIN nuevo.",
-      "forgot-manual-title": "Sin Touch ID",
+      "reset-with-system": "Restablecer PIN con {system}",
+      "forgot-system": "{system} confirma que eres tú y luego eliges un PIN nuevo.",
+      "forgot-manual-title": "Sin {system}",
+      "forgot-manual-title-pin-only": "Restablecerlo a mano",
       "forgot-manual": "Cierra Navide y borra app-lock.json de la carpeta de datos de Navide. Así se quitan App Lock y su PIN, y nada más.",
       "error-invalid-pin": "Usa de 4 a 12 dígitos.",
       "error-mismatch": "Los dos PIN no coinciden.",
       "error-wrong-pin": "El PIN actual es incorrecto.",
       "error-cooldown": "Demasiados intentos. Vuelve a intentarlo en {seconds} s.",
-      "error-system-failed": "Touch ID no ha confirmado que seas tú.",
+      "error-system-failed": "{system} no ha confirmado que seas tú.",
       "error-generic": "No ha funcionado. Inténtalo de nuevo."
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "Oculta todas las ventanas tras una pantalla de bloqueo y desbloquea con Touch ID o un PIN"
+          "summary": "Oculta todas las ventanas tras una pantalla de bloqueo y desbloquea con Touch ID, Windows Hello o un PIN"
         },
         "voice-input": {
           "title": "Entrada de voz",
@@ -10899,7 +10902,11 @@
     "allow": {
       "title": "Remitentes permitidos",
       "empty": "Aún no hay nadie permitido.",
-      "remove": "Quitar"
+      "remove": "Quitar",
+      "via-pairing": "Código de emparejamiento",
+      "via-invite": "Código de vinculación",
+      "shared": "ID compartido",
+      "shared-hint": "Este ID de Telegram representa a muchas personas (administradores anónimos, canales, el propio Telegram), así que siempre se rechaza. Puedes quitarlo."
     },
     "pane": {
       "connect": "Conectar a un chat",

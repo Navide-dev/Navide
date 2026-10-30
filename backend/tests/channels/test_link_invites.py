@@ -1,4 +1,4 @@
-"""One-click linking: invite codes that allowlist their sender without a pairing approval."""
+"""One-click linking: invite codes whose sender is linked once the user approves them in Navide."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 from agent_team_backend.channels import pairing
 from agent_team_backend.channels.base import Location
 from agent_team_backend.channels.base import InboundMessage
-from agent_team_backend.channels.manager import MSG_LINK_FAILED, MSG_LINKED
+from agent_team_backend.channels.manager import MSG_LINK_DM_ONLY, MSG_LINK_FAILED, MSG_LINK_PENDING, MSG_LINKED
 from agent_team_backend.channels.pairing import CODE_ALPHABET, LinkInvites, parse_link_code
 from agent_team_backend.channels.telegram import TelegramAdapter
 
@@ -22,6 +22,17 @@ class Clock:
 
     def __call__(self) -> float:
         return self.t
+
+
+async def _redeem_and_approve(env: Env, text: str, **kw) -> str:
+    """Send an invite code as a stranger, check it waits for approval, approve it; the pairing code."""
+    await env.inbound(text, **kw)
+    sender = kw["sender"]
+    assert not env.store.is_allowed(kw.get("platform", "telegram"), sender)
+    req = next(r for r in env.store.list_pairing(kw.get("platform", "telegram")) if r.sender_id == sender)
+    assert not any(e == "channels.linked" for e, _ in env.fake.events)
+    assert (await env.m.pairing_approve(kw.get("platform", "telegram"), req.code))["ok"]
+    return req.code
 
 
 def test_invite_code_format_expiry_and_single_use() -> None:
@@ -85,6 +96,15 @@ async def test_link_create_answers_code_and_url(env: Env) -> None:
 async def test_start_code_from_a_stranger_links_their_dm(env: Env) -> None:
     code = env.m.link_create("telegram", "direct")["code"]
     await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True)
+    # The code alone admits no one: it asks for the same approval a pairing code does.
+    assert not env.store.is_allowed("telegram", "99")
+    [req] = env.store.list_pairing("telegram")
+    assert (req.sender_id, req.chat_id) == ("99", "99")
+    assert env.tg.texts()[-1] == MSG_LINK_PENDING.format(code=f"{req.code[:4]}-{req.code[4:]}")
+    assert ("channels.pairing_request", {"platform": "telegram", "account": "default", "code": req.code,
+                                         "sender_name": "alice"}) in env.fake.events
+    assert not any(e == "channels.linked" for e, _ in env.fake.events)
+    assert (await env.m.pairing_approve("telegram", req.code))["ok"]
     assert env.store.is_allowed("telegram", "99")
     assert env.store.list_pairing("telegram") == []
     assert env.tg.texts()[-1] == MSG_LINKED
@@ -105,7 +125,7 @@ async def test_start_code_from_a_stranger_links_their_dm(env: Env) -> None:
 async def test_startgroup_code_links_a_group_with_its_title(env: Env) -> None:
     env.tg.known_locations = lambda: [{"chat_id": "-500", "title": "Team room", "kind": "supergroup"}]
     code = env.m.link_create("telegram", "group")["code"]
-    await env.inbound(f"/start@navide_bot {code}", sender="42", chat="-500", thread="")
+    await _redeem_and_approve(env, f"/start@navide_bot {code}", sender="42", chat="-500", thread="")
     assert env.store.is_allowed("telegram", "42")
     assert ("channels.linked", {"platform": "telegram", "code": code, "chat_id": "-500",
                                 "title": "Team room", "kind": "group", "confirmed": True}) in env.fake.events
@@ -139,8 +159,9 @@ async def test_other_platform_link_code_from_a_group_mention(env: Env) -> None:
     assert (await env.m.configure("slack", {}, {"token": "tok-S"}))["ok"]
     res = env.m.link_create("slack", "direct")
     assert res["url"] is None
-    await env.inbound(f"<@U0BOT> link {res['code'].lower()}", sender="U9", chat="C1", thread="",
-                      platform="slack")
+    # Platforms with only a "direct" code may send it from a channel (the guide says so).
+    await _redeem_and_approve(env, f"<@U0BOT> link {res['code'].lower()}", sender="U9", chat="C1",
+                              thread="", platform="slack")
     assert env.store.is_allowed("slack", "U9")
     assert env.adapters["slack"].texts()[-1] == MSG_LINKED
     assert ("channels.linked", {"platform": "slack", "code": res["code"], "chat_id": "C1", "title": "C1",
@@ -156,7 +177,8 @@ async def test_an_allowed_senders_plain_start_keeps_todays_reply(env: Env) -> No
 async def test_a_failed_allowlist_write_tells_the_sender_and_the_ui(env: Env, monkeypatch) -> None:
     def boom(*_a, **_k):
         raise sqlite3.OperationalError("database is locked")
-    monkeypatch.setattr(env.store, "add_allow", boom)
+    # The redemption writes a pairing request (the allowlist waits for the approval).
+    monkeypatch.setattr(env.store, "add_pairing", boom)
     code = env.m.link_create("telegram", "direct")["code"]
     await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True)
     assert not env.store.is_allowed("telegram", "99")
@@ -183,7 +205,74 @@ async def test_an_unsent_confirmation_still_links_and_says_so(env: Env) -> None:
         raise RuntimeError("429 Too Many Requests")
     code = env.m.link_create("telegram", "direct")["code"]
     env.tg.send_text = failing
-    await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True)
+    await _redeem_and_approve(env, f"/start {code}", sender="99", chat="99", thread="", direct=True)
     assert env.store.is_allowed("telegram", "99")
     assert ("channels.linked", {"platform": "telegram", "code": code, "chat_id": "99", "title": "alice",
                                 "kind": "direct", "confirmed": False}) in env.fake.events
+
+
+async def test_an_allowed_sender_redeeming_a_code_links_at_once(env: Env) -> None:
+    """Someone already approved needs no second approval: linking another chat works as before."""
+    env.tg.known_locations = lambda: [{"chat_id": "-500", "title": "Team room", "kind": "supergroup"}]
+    code = env.m.link_create("telegram", "group")["code"]
+    await env.inbound(f"/start@navide_bot {code}", sender="7", chat="-500", thread="")
+    assert env.store.list_pairing("telegram") == []
+    assert env.tg.texts()[-1] == MSG_LINKED
+    assert ("channels.linked", {"platform": "telegram", "code": code, "chat_id": "-500",
+                                "title": "Team room", "kind": "group", "confirmed": True}) in env.fake.events
+
+
+async def test_a_direct_telegram_code_sent_in_a_group_is_refused(env: Env) -> None:
+    """A DM deep link's code showing up in a group has leaked: it is spent and links nothing."""
+    code = env.m.link_create("telegram", "direct")["code"]
+    for sender in ("42", "7"):  # a stranger, and even an allowed sender
+        await env.inbound(f"/start {code}", sender=sender, chat="-500", thread="")
+        code_events = [p for e, p in env.fake.events if e == "channels.link_failed" and p["code"] == code]
+        assert code_events and env.tg.texts()[-1] == MSG_LINK_DM_ONLY
+        code = env.m.link_create("telegram", "direct")["code"]
+    assert env.store.list_pairing("telegram") == []
+    assert not env.store.is_allowed("telegram", "42")
+    assert not any(e == "channels.linked" for e, _ in env.fake.events)
+
+
+async def test_rejecting_a_redeemed_code_tells_the_waiting_ui(env: Env) -> None:
+    code = env.m.link_create("telegram", "direct")["code"]
+    await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True)
+    [req] = env.store.list_pairing("telegram")
+    assert (await env.m.pairing_reject("telegram", req.code))["ok"]
+    assert not env.store.is_allowed("telegram", "99")
+    assert any(e == "channels.link_failed" and p["code"] == code for e, p in env.fake.events)
+    assert not any(e == "channels.linked" for e, _ in env.fake.events)
+
+
+@pytest.mark.parametrize("sender", ["1087968824", "136817688", "777000", ""])
+async def test_a_shared_or_unknown_telegram_sender_cannot_redeem_a_code(env: Env, sender: str) -> None:
+    code = env.m.link_create("telegram", "group")["code"]
+    await env.inbound(f"/start {code}", sender=sender, chat="-500", thread="")
+    assert env.store.list_pairing("telegram") == []
+    assert not env.store.is_allowed("telegram", sender)
+    assert any(e == "channels.link_failed" and p["code"] == code for e, p in env.fake.events)
+    assert env.tg.texts()[-1] == MSG_LINK_FAILED
+
+
+async def test_pending_and_allowed_entries_say_whether_a_link_code_or_a_pairing_code_made_them(env: Env) -> None:
+    code = env.m.link_create("telegram", "direct")["code"]
+    await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True)
+    await env.inbound("hi", sender="55", chat="55", thread="", direct=True)  # an ordinary pairing request
+    pending = {r["sender_id"]: r for r in env.m.pairing_list("telegram")["requests"]}
+    assert (pending["99"]["source"], pending["55"]["source"]) == ("invite", "pairing")
+    for sender in ("99", "55"):
+        assert (await env.m.pairing_approve("telegram", pending[sender]["code"]))["ok"]
+    entries = {e["sender_id"]: e for e in env.m.allow_list("telegram")["entries"]}
+    assert (entries["99"]["source"], entries["55"]["source"]) == ("invite", "pairing")
+    assert entries["99"]["added_at"] > 0
+    assert not any(e["shared"] for e in entries.values())
+
+
+async def test_the_allow_list_flags_a_shared_telegram_id_without_removing_it(env: Env) -> None:
+    env.store._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at)"
+                    " VALUES ('telegram', 'default', '1087968824', 'GroupAnonymousBot', 1)")
+    entries = {e["sender_id"]: e for e in env.m.allow_list(None)["entries"]}
+    assert entries["1087968824"]["shared"] is True and entries["1087968824"]["source"] is None
+    assert entries["7"]["shared"] is False
+    assert env.store.remove_allow("telegram", "1087968824")

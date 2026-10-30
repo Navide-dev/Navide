@@ -12,7 +12,7 @@ import { DEFAULT_APP_LOCK_SETTINGS, type AppLockApi, type AppLockStatus } from '
 
 function fakeApi(over: Partial<AppLockStatus> = {}) {
   let listener: ((s: AppLockStatus) => void) | null = null
-  const status: AppLockStatus = { settings: { ...DEFAULT_APP_LOCK_SETTINGS }, hasPin: false, locked: false, systemUnlockAvailable: true, ...over }
+  const status: AppLockStatus = { settings: { ...DEFAULT_APP_LOCK_SETTINGS }, hasPin: false, locked: false, systemUnlockAvailable: true, systemUnlockKind: 'touch-id', ...over }
   const api = {
     status: vi.fn(async () => status),
     updateSettings: vi.fn(async () => ({ ok: true as const })),
@@ -99,7 +99,7 @@ describe('AppLockPane', () => {
     await w.get('[data-testid="app-lock-on-start"]').trigger('click')
     expect(api.updateSettings).toHaveBeenCalledWith({ lockOnStart: true })
 
-    push({ settings: { ...DEFAULT_APP_LOCK_SETTINGS, enabled: true }, hasPin: true, locked: false, systemUnlockAvailable: true })
+    push({ settings: { ...DEFAULT_APP_LOCK_SETTINGS, enabled: true }, hasPin: true, locked: false, systemUnlockAvailable: true, systemUnlockKind: 'touch-id' })
     await flushPromises()
     await w.get('[data-testid="app-lock-lock-now"]').trigger('click')
     expect(api.lockNow).toHaveBeenCalled()
@@ -115,5 +115,23 @@ describe('AppLockPane', () => {
     expect(without.find('[data-testid="app-lock-reset-pin"]').exists()).toBe(false)
     expect(without.text()).toContain('app-lock.json')
     expect(without.get('[data-testid="app-lock-method"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('names Windows Hello on Windows 11', async () => {
+    fakeApi({ hasPin: true, systemUnlockKind: 'windows-hello' })
+    const w = await mountPane()
+    expect(w.get('[data-testid="app-lock-reset-pin"]').text()).toBe('Reset PIN with Windows Hello')
+    expect(w.get('[data-testid="app-lock-method"]').text()).toContain('Windows Hello, with PIN as a fallback')
+    expect(w.text()).not.toContain('Touch ID')
+  })
+
+  it('says the PIN is the only way where there is no system unlock (Linux, Windows 10)', async () => {
+    fakeApi({ hasPin: true, systemUnlockAvailable: false, systemUnlockKind: null })
+    const w = await mountPane()
+    expect(w.text()).toContain('unlocks with your PIN only')
+    expect(w.text()).toContain('Reset it by hand')
+    expect(w.text()).toContain('app-lock.json')
+    expect(w.find('[data-testid="app-lock-reset-pin"]').exists()).toBe(false)
+    expect(w.get('[data-testid="app-lock-method"]').attributes('disabled')).toBeDefined()
   })
 })
