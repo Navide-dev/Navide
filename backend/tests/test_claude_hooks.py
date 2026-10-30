@@ -375,7 +375,7 @@ def test_a_windows_install_writes_powershell_and_says_so(tmp_path, monkeypatch) 
         marker, command = hook["command"].split("\n", 1)
         assert marker.startswith("# agent-team-hook")
         assert "\n" not in command
-        assert command.startswith("$PORT = Get-Content -ErrorAction SilentlyContinue ")
+        assert command.startswith("$PORT = $null; try { $PORT = [IO.File]::ReadAllLines(")
         assert "curl.exe" in command
         assert command.endswith("exit 0") or command.endswith("exit 2 }; exit 0")
 

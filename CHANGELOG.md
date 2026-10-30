@@ -22,6 +22,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Windows hooks (0.2.35): the PowerShell hooks Navide installs for Claude Code, Qwen Code and Copilot CLI read the port file, make the temp path and delete it with .NET calls instead of `Get-Content`, `Join-Path` and `Remove-Item`, so a hook run no longer loads the Microsoft.PowerShell.Management module; on a Windows 11 arm64 machine with Defender on, that load took about 23 seconds per run before the hook reached Navide. Exit codes and output are unchanged. The new text is written at the next backend start through the existing CLI-config tracking: Qwen's `settings.json` change is logged with a backup in Settings, and Claude Code's and Copilot's copies live in Navide's own data.
+
 - Shortcuts (0.2.35): on Windows and Linux, Open Plans, the Git window and the Mini IDE have working default keys. They were bound to ⌘ only, which is the Win/Super key off macOS. Open Plans now answers Ctrl+Shift+D and the Git window Ctrl+Shift+G; the Mini IDE answers Ctrl+Shift+M, because Ctrl+Shift+I stays Toggle Developer Tools there. macOS keys are unchanged.
 
 ## [0.2.34] — unreleased

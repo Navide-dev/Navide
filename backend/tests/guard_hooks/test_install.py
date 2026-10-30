@@ -12,13 +12,16 @@ import shlex
 import subprocess
 import sys
 import threading
+import time
 import tomllib
+import warnings
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
 from agent_team_backend import claude_hooks, codex_session_hooks, copilot_hooks, osplat, qwen_hooks
 from agent_team_backend.claude_hooks import _build_curl_command
+from agent_team_backend.osplat import _windows
 from tests import hook_shell
 from tests.test_claude_hooks import _run_to_completion
 
@@ -396,3 +399,82 @@ def test_a_shell_start_that_hangs_is_killed_and_retried(tmp_path, monkeypatch) -
     hook_shell.warm(argv, attempt_s=3)
     assert marker.exists()
     assert hook_shell.cold_start_s(argv) < 3
+
+
+# What the PowerShell hooks read the port file and made the temp path with
+# until 0.2.35, kept here as the reference the .NET form must match.
+def _legacy_prelude(port_file: str) -> str:
+    return f"$PORT = Get-Content -ErrorAction SilentlyContinue {_windows._ps_quote(port_file)}; "
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="runs the PowerShell hook text for real")
+@pytest.mark.timeout(300)
+def test_powershell_hook_prelude_reads_the_port_file_as_get_content_did(tmp_path) -> None:
+    # Same answer for every port file shape a hook can meet, from the legacy
+    # cmdlets and from the .NET calls that replaced them. Each form runs in a
+    # fresh PowerShell, and the time to its first read is reported: on the
+    # windows-11-arm runner the cmdlet form paid about 23 s there (the module
+    # autoload) and `exit 0` 0.4 s, which is why the hooks stopped using it.
+    cases = {
+        "absent": None,
+        "empty": b"",
+        "crlf": b"51234\r\n",
+        "bare": b"51234",
+        "blank-line": b"\r\n",
+        "two-lines": b"51234\r\n9\r\n",
+    }
+    paths = []
+    for name, content in cases.items():
+        path = tmp_path / f"{name}.port"
+        if content is not None:
+            path.write_bytes(content)
+        paths.append(str(path))
+    report = (
+        "[Console]::Out.Write('[' + [bool]$PORT + '|' + \"$PORT\" + ']'); "
+        "if ($null -eq $FIRST) { $FIRST = $SW.ElapsedMilliseconds }; "
+    )
+    temp = "[Console]::Out.Write('<' + $TMPNAME + '>'); "
+
+    def run(prelude, temp_path: str) -> tuple[str, float, str]:
+        script = (
+            "$SW = [Diagnostics.Stopwatch]::StartNew(); $FIRST = $null; "
+            + "".join(prelude(p) + report for p in paths)
+            + temp_path + temp
+            + "[Console]::Error.Write('first-read-ms=' + $FIRST); exit 0"
+        )
+        argv = hook_shell.shell_argv({"shell": "powershell", "command": script})
+        started = time.perf_counter()
+        done = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True,
+                              encoding="utf-8", errors="replace", timeout=120)
+        assert done.returncode == 0, done.stderr
+        return done.stdout, time.perf_counter() - started, done.stderr.strip()
+
+    legacy_out, legacy_s, legacy_err = run(
+        _legacy_prelude, "$TMPNAME = Join-Path $env:TEMP 'navide-x'; ")
+    dotnet_out, dotnet_s, dotnet_err = run(
+        _windows._ps_read_port, "$TMPNAME = [IO.Path]::Combine($env:TEMP, 'navide-x'); ")
+    warnings.warn(
+        f"PowerShell hook prelude timing: cmdlets {legacy_s:.1f}s ({legacy_err}), "
+        f".NET {dotnet_s:.1f}s ({dotnet_err}), `exit 0` "
+        f"{hook_shell.cold_start_s(hook_shell.shell_argv({'shell': 'powershell', 'command': ''})):.1f}s",
+        stacklevel=1,
+    )
+    assert dotnet_out == legacy_out
+    assert legacy_out.startswith("[False|][False|][True|51234][True|51234][False|][True|51234 9]")
+
+
+def test_powershell_hooks_load_no_cmdlet_module() -> None:
+    # Static: a cmdlet from Microsoft.PowerShell.Management back in any hook
+    # text brings the per-run module autoload back with it.
+    texts = [
+        copilot_hooks._build_guard_command("C:/port", "powershell"),
+        _windows.scripts.hook_rewake(port_file="p", header_file="h", url_path="/u", timeout_s=3),
+        *(
+            _windows.scripts.hook_post_json(port_file="p", header_file="h", url_path="/u",
+                                            event="e", timeout_s=3, keep_body=keep)
+            for keep in (True, False)
+        ),
+    ]
+    for text in texts:
+        for cmdlet in ("Get-Content", "Join-Path", "Remove-Item", "Test-Path", "Set-Content"):
+            assert cmdlet not in text
