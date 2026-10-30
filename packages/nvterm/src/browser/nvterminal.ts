@@ -1,12 +1,20 @@
 // NvTerminal: the browser-facing terminal. Wires the headless core to a
 // renderer and to keyboard, IME, paste, mouse, selection, scrolling and links.
 import { TerminalCore } from '../terminal.ts'
-import { CanvasRenderer, type CursorShape, type Frame } from './canvasRenderer.ts'
+import { CanvasRenderer } from './canvasRenderer.ts'
+import type { CursorShape, Frame, Renderer } from './renderer.ts'
 import { Emitter, type IDisposable, type Link, type LinkProvider } from './events.ts'
 import { encodeKey } from './keyboard.ts'
 import { encodeMouse, type MouseReport } from './mouse.ts'
 import { lineText, Selection } from './selection.ts'
 import { resolveTheme, type Theme } from './theme.ts'
+import { WebglRenderer } from './webglRenderer.ts'
+
+export type RendererKind = 'auto' | 'webgl' | 'canvas'
+export interface RendererChange {
+  kind: 'webgl' | 'canvas'
+  reason: 'open' | 'requested' | 'context-lost' | 'released' | 'restored' | 'unavailable'
+}
 
 export interface NvTerminalOptions {
   cols?: number
@@ -25,6 +33,8 @@ export interface NvTerminalOptions {
   convertEol?: boolean
   /** Opens OSC 8 hyperlinks. Without it, OSC 8 links are not clickable. */
   linkHandler?: { activate(event: MouseEvent, uri: string): void }
+  /** 'auto' (default) uses WebGL2 when available and Canvas2D otherwise. */
+  renderer?: RendererKind
 }
 
 type ResolvedOptions = Required<Omit<NvTerminalOptions, 'linkHandler' | 'theme'>> & Pick<NvTerminalOptions, 'linkHandler' | 'theme'>
@@ -44,6 +54,7 @@ const DEFAULTS: ResolvedOptions = {
   macOptionClickForcesSelection: false,
   convertEol: false,
   linkHandler: undefined,
+  renderer: 'auto',
 }
 
 const BLINK_MS = 600
@@ -58,7 +69,9 @@ export class NvTerminal implements IDisposable {
   textarea: HTMLTextAreaElement | undefined
 
   private readonly opts: ResolvedOptions
-  private renderer: CanvasRenderer | undefined
+  private renderer: Renderer | undefined
+  /** releaseGpu() was called and restoreGpu() has not been yet. */
+  private gpuReleased = false
   private readonly selection: Selection
   /** Stable id (dropped + absolute index) of the top visible row; null = follow the bottom. */
   private viewportAnchor: number | null = null
@@ -83,6 +96,7 @@ export class NvTerminal implements IDisposable {
   private readonly titleEmitter = new Emitter<string>()
   private readonly bellEmitter = new Emitter<void>()
   private readonly renderEmitter = new Emitter<void>()
+  private readonly rendererEmitter = new Emitter<RendererChange>()
   readonly onData = this.dataEmitter.event
   readonly onResize = this.resizeEmitter.event
   readonly onSelectionChange = this.selectionEmitter.event
@@ -90,6 +104,8 @@ export class NvTerminal implements IDisposable {
   readonly onBell = this.bellEmitter.event
   /** Fires after each painted frame (tests and screenshot tools wait on it). */
   readonly onRender = this.renderEmitter.event
+  /** The renderer changed: WebGL unavailable, context lost, released or restored. */
+  readonly onRendererChange = this.rendererEmitter.event
 
   constructor(options: NvTerminalOptions = {}) {
     this.opts = { ...DEFAULTS, ...options }
@@ -125,6 +141,10 @@ export class NvTerminal implements IDisposable {
     return { width: m?.width ?? 0, height: m?.height ?? 0, measured: Boolean(m && m.width > 0) }
   }
 
+  get rendererKind(): 'webgl' | 'canvas' | undefined {
+    return this.renderer?.kind
+  }
+
   get options(): Readonly<ResolvedOptions> {
     return this.opts
   }
@@ -132,6 +152,7 @@ export class NvTerminal implements IDisposable {
   setOption<K extends keyof ResolvedOptions>(key: K, value: ResolvedOptions[K]): void {
     this.opts[key] = value
     if (key === 'cursorBlink') this.updateBlink()
+    if (key === 'renderer' && this.renderer && !this.gpuReleased) this.installRenderer(value === 'canvas' ? 'canvas' : 'webgl', 'requested')
     if (this.renderer && (key === 'fontSize' || key === 'fontFamily' || key === 'lineHeight' || key === 'theme' || key === 'minimumContrastRatio')) {
       this.renderer.setOptions(this.rendererOptions())
     }
@@ -145,9 +166,6 @@ export class NvTerminal implements IDisposable {
     element.style.position = 'relative'
     element.style.overflow = 'hidden'
     element.style.outline = 'none'
-    const canvas = doc.createElement('canvas')
-    canvas.className = 'nvterm-screen'
-    canvas.style.display = 'block'
     const textarea = doc.createElement('textarea')
     textarea.className = 'nvterm-input'
     textarea.setAttribute('autocorrect', 'off')
@@ -158,12 +176,11 @@ export class NvTerminal implements IDisposable {
       position: 'absolute', left: '0', top: '0', width: '1px', height: '1px', opacity: '0',
       padding: '0', border: '0', resize: 'none', overflow: 'hidden', whiteSpace: 'nowrap', zIndex: '-1',
     })
-    element.append(canvas, textarea)
+    element.append(textarea)
     parent.append(element)
     this.element = element
     this.textarea = textarea
-    this.renderer = new CanvasRenderer(canvas, this.rendererOptions())
-    this.renderer.resize(this.cols, this.rows)
+    this.installRenderer(this.opts.renderer === 'canvas' ? 'canvas' : 'webgl', 'open')
     this.bindInput(textarea)
     this.bindMouse(element)
     this.queueRender()
@@ -273,19 +290,85 @@ export class NvTerminal implements IDisposable {
     return this.selection.text()
   }
 
+  /**
+   * Gives the GPU back while the terminal is off screen: the WebGL renderer
+   * and its atlas are destroyed and its context released; Canvas2D draws
+   * until restoreGpu(). Does nothing on the Canvas2D renderer.
+   */
+  releaseGpu(): void {
+    if (this.gpuReleased) return
+    this.gpuReleased = true
+    if (this.renderer?.kind === 'webgl') this.installRenderer('canvas', 'released')
+  }
+
+  /** Undoes releaseGpu(): back to WebGL unless the renderer option says Canvas2D. */
+  restoreGpu(): void {
+    if (!this.gpuReleased) return
+    this.gpuReleased = false
+    if (this.opts.renderer !== 'canvas' && this.element) this.installRenderer('webgl', 'restored')
+  }
+
   dispose(): void {
     for (const [target, type, listener, options] of this.listeners) target.removeEventListener(type, listener, options)
     this.listeners.length = 0
     if (this.blinkTimer) clearInterval(this.blinkTimer)
     this.blinkTimer = undefined
+    this.retireRenderer()
     this.element?.remove()
     this.element = undefined
     this.textarea = undefined
-    this.renderer = undefined
-    for (const e of [this.dataEmitter, this.resizeEmitter, this.selectionEmitter, this.titleEmitter, this.bellEmitter, this.renderEmitter]) e.clear()
+    for (const e of [this.dataEmitter, this.resizeEmitter, this.selectionEmitter, this.titleEmitter, this.bellEmitter, this.renderEmitter, this.rendererEmitter]) e.clear()
   }
 
   // ---- Rendering ------------------------------------------------------------
+
+  /** Replaces the renderer (and its canvas element). WebGL falls back to Canvas2D when it cannot start. */
+  private installRenderer(want: 'webgl' | 'canvas', reason: RendererChange['reason']): void {
+    const element = this.element
+    if (!element) return
+    const canvas = element.ownerDocument.createElement('canvas')
+    canvas.className = 'nvterm-screen'
+    canvas.style.display = 'block'
+    let next: Renderer
+    let why = reason
+    if (want === 'webgl') {
+      try {
+        next = new WebglRenderer(canvas, this.rendererOptions())
+        canvas.addEventListener('webglcontextlost', (e) => {
+          e.preventDefault()
+          if (this.renderer?.canvas === canvas) this.installRenderer('canvas', 'context-lost')
+        })
+      } catch {
+        next = new CanvasRenderer(canvas, this.rendererOptions())
+        why = 'unavailable'
+      }
+    } else {
+      next = new CanvasRenderer(canvas, this.rendererOptions())
+    }
+    next.resize(this.cols, this.rows)
+    const prev = this.renderer
+    if (prev) prev.canvas.replaceWith(canvas)
+    else element.prepend(canvas)
+    this.renderer = next
+    if (prev) this.retire(prev, reason === 'context-lost')
+    this.rendererEmitter.fire({ kind: next.kind, reason: why })
+    this.queueRender()
+  }
+
+  private retireRenderer(): void {
+    if (this.renderer) this.retire(this.renderer, false)
+    this.renderer = undefined
+  }
+
+  /** Disposes a renderer; a WebGL one also releases its context unless it is already lost. */
+  private retire(renderer: Renderer, contextLost: boolean): void {
+    renderer.dispose()
+    if (renderer.kind === 'webgl' && !contextLost) {
+      const gl = renderer.canvas.getContext('webgl2')
+      gl?.getExtension('WEBGL_lose_context')?.loseContext()
+    }
+    renderer.canvas.remove()
+  }
 
   private rendererOptions() {
     return {

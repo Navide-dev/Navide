@@ -1,48 +1,16 @@
 // Canvas2D renderer: draws the visible rows of a buffer, the selection, link
 // underlines and the cursor. It is the fallback renderer; the WebGL2
 // renderer (M3) draws the same frame.
-import { WIDTH_TRAILING, WIDTH_WIDE, type Buffer } from '../buffer.ts'
+import { WIDTH_TRAILING, WIDTH_WIDE } from '../buffer.ts'
 import { CellFlag } from '../snapshot.ts'
 import type { Style } from '../style.ts'
-import { cellColor, cssColor, ensureContrast, type ResolvedColors } from './theme.ts'
-
-export interface RendererOptions {
-  fontFamily: string
-  fontSize: number
-  /** Multiplier on the font size for the row height. */
-  lineHeight: number
-  minimumContrastRatio: number
-  colors: ResolvedColors
-  devicePixelRatio: number
-}
-
-export interface CellMetrics {
-  /** CSS pixels. */
-  width: number
-  height: number
-  baseline: number
-}
-
-export type CursorShape = 'block' | 'underline' | 'bar'
-
-export interface Frame {
-  buffer: Buffer
-  style: (id: number) => Readonly<Style>
-  /** Absolute index of the first visible row. */
-  viewportTop: number
-  cursor: { x: number; row: number; shape: CursorShape; focused: boolean; visible: boolean } | null
-  /** Selected cells: returns true for (x, stable line id). */
-  isSelected: ((x: number, stableY: number) => boolean) | null
-  /** Cell ranges to underline as links: stable line id -> [startX, endX) pairs. */
-  linkUnderlines: Map<number, [number, number][]> | null
-  reverseVideo: boolean
-  /** IME composition text drawn at the cursor. */
-  composition: string
-}
+import { cellColors, fontString, measureCell, strokeUnderline, type CellMetrics, type Frame, type Renderer, type RendererOptions } from './renderer.ts'
+import { cellColor, cssColor } from './theme.ts'
 
 const CURSOR_THICKNESS = 2
 
-export class CanvasRenderer {
+export class CanvasRenderer implements Renderer {
+  readonly kind = 'canvas'
   readonly canvas: HTMLCanvasElement
   private readonly ctx: CanvasRenderingContext2D
   private options: RendererOptions
@@ -70,17 +38,8 @@ export class CanvasRenderer {
     this.resize(this.cols, this.rows)
   }
 
-  /** Measures one cell of the configured monospace font, rounded to device pixels. */
   measure(): CellMetrics {
-    const { fontSize, fontFamily, lineHeight, devicePixelRatio: dpr } = this.options
-    this.ctx.font = `${fontSize}px ${fontFamily}`
-    const m = this.ctx.measureText('W')
-    const ascent = m.actualBoundingBoxAscent || fontSize * 0.8
-    const descent = m.actualBoundingBoxDescent || fontSize * 0.2
-    const width = Math.max(1, Math.round(m.width * dpr)) / dpr
-    const height = Math.max(1, Math.ceil(fontSize * lineHeight * dpr)) / dpr
-    const baseline = Math.round(((height - (ascent + descent)) / 2 + ascent) * dpr) / dpr
-    this.metrics = { width, height, baseline }
+    this.metrics = measureCell(this.ctx, this.options)
     return this.metrics
   }
 
@@ -95,6 +54,8 @@ export class CanvasRenderer {
     this.canvas.style.width = `${w}px`
     this.canvas.style.height = `${h}px`
   }
+
+  dispose(): void {}
 
   render(frame: Frame): void {
     const { ctx } = this
@@ -156,13 +117,8 @@ export class CanvasRenderer {
     else if (frame.cursor?.visible) this.drawCursor(frame)
   }
 
-  /** Effective [fg, bg] after defaults, inverse and minimum contrast. */
   private cellColors(s: Readonly<Style>, defaultFg: number, defaultBg: number): [number, number] {
-    const { colors, minimumContrastRatio } = this.options
-    let fg = cellColor(s.fg, colors, defaultFg)
-    let bg = cellColor(s.bg, colors, defaultBg)
-    if (s.flags & CellFlag.Inverse) [fg, bg] = [bg, fg]
-    return [ensureContrast(fg, bg, minimumContrastRatio), bg]
+    return cellColors(s, defaultFg, defaultBg, this.options)
   }
 
   /** Left offset that centres a wide glyph narrower than two cells. */
@@ -181,8 +137,7 @@ export class CanvasRenderer {
     const key = flags & (CellFlag.Bold | CellFlag.Italic)
     let font = this.fonts.get(key)
     if (!font) {
-      const { fontSize, fontFamily } = this.options
-      font = `${flags & CellFlag.Italic ? 'italic ' : ''}${flags & CellFlag.Bold ? 'bold ' : ''}${fontSize}px ${fontFamily}`
+      font = fontString(flags, this.options)
       this.fonts.set(key, font)
     }
     return font
@@ -205,37 +160,8 @@ export class CanvasRenderer {
     }
   }
 
-  /** Underline styles 1 single, 2 double, 3 curly, 4 dotted, 5 dashed. */
   private underline(color: number, x: number, y: number, w: number, style: number): void {
-    const { ctx } = this
-    const base = y + this.metrics.height - 2
-    ctx.fillStyle = cssColor(color)
-    ctx.strokeStyle = cssColor(color)
-    switch (style) {
-      case 2:
-        ctx.fillRect(x, base - 2, w, 1)
-        ctx.fillRect(x, base, w, 1)
-        break
-      case 3: {
-        ctx.beginPath()
-        ctx.lineWidth = 1
-        for (let i = 0; i <= w; i += 2) {
-          const yy = base - 1 + Math.sin((i / w) * Math.PI * 2) * 1.5
-          if (i === 0) ctx.moveTo(x + i, yy)
-          else ctx.lineTo(x + i, yy)
-        }
-        ctx.stroke()
-        break
-      }
-      case 4:
-        for (let i = 0; i < w; i += 2) ctx.fillRect(x + i, base, 1, 1)
-        break
-      case 5:
-        for (let i = 0; i < w; i += 4) ctx.fillRect(x + i, base, Math.min(2, w - i), 1)
-        break
-      default:
-        ctx.fillRect(x, base, w, 1)
-    }
+    strokeUnderline(this.ctx, cssColor(color), x, y + this.metrics.height - 2, w, style)
   }
 
   private drawCursor(frame: Frame): void {
