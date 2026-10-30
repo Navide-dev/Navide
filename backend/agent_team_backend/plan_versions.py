@@ -1,8 +1,10 @@
 """Plan document versions under ``<plans dir>/.history/<plan stem>/``.
 
-Every version is a full copy of the plan file's bytes, named
-``<YYYYMMDDTHHMMSS>_<stage><suffix>`` as the stage snapshots before it were,
-so an older Plans view still lists them. ``index.jsonl`` in the same directory
+Every version is a full, gzip-compressed copy of the plan file's bytes, named
+``<YYYYMMDDTHHMMSS>_<stage><suffix>.gz``. Older stage snapshots, named the same
+without ``.gz``, stay as they are and read the same (:func:`read_version`);
+nothing is ever rewritten into the new form. ``sha256`` is always of the
+uncompressed bytes. ``index.jsonl`` in the same directory
 records, one JSON object per line, who made each version, when and why::
 
     {"file": "...html", "ts": "<ISO-8601>", "sha256": "<hex>", "stage": "draft",
@@ -31,6 +33,7 @@ there is no size limit.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -66,7 +69,8 @@ _MERGEABLE = frozenset({"save", "external"})
 _PERMANENT = frozenset({"stage"})
 
 _TS_FORMAT = "%Y%m%dT%H%M%S"
-SNAPSHOT_NAME_RE = re.compile(r"(\d{8}T\d{6})_([a-z-]+)(\.html|\.plan\.md)")
+SNAPSHOT_NAME_RE = re.compile(r"(\d{8}T\d{6})_([a-z-]+)(\.html|\.plan\.md)(\.gz)?")
+COMPRESSED_SUFFIX = ".gz"
 
 Warn = Callable[[str], None]
 
@@ -151,6 +155,24 @@ def read_index(
     return entries
 
 
+def read_version(history_dir: Path, name: str) -> bytes:
+    """A version's plan bytes, uncompressed whatever form it was stored in.
+    ``name`` must be a snapshot name; a symbolic link is refused."""
+    if SNAPSHOT_NAME_RE.fullmatch(name) is None:
+        raise ValueError("not a version name")
+    path = history_dir / name
+    if path.is_symlink():
+        raise OSError(f"{path} is a symbolic link")
+    data = path.read_bytes()
+    return gzip.decompress(data) if name.endswith(COMPRESSED_SUFFIX) else data
+
+
+def _plan_suffix(name: str) -> str:
+    """The plan format a version name belongs to (``.html`` or ``.plan.md``)."""
+    match = SNAPSHOT_NAME_RE.fullmatch(name)
+    return match.group(3) if match else ""
+
+
 def list_versions(history_dir: Path, warn: Warn = _no_warn) -> list[dict[str, Any]]:
     """Every snapshot in ``history_dir``, newest first, with its index entry
     when it has one (``entry: None`` for an older stage snapshot)."""
@@ -163,7 +185,9 @@ def list_versions(history_dir: Path, warn: Warn = _no_warn) -> list[dict[str, An
         if match is None or child.is_symlink() or not child.is_file():
             continue
         versions.append({"file": child.name, "stage": match.group(2), "entry": entries.get(child.name)})
-    versions.sort(key=lambda version: version["file"], reverse=True)
+    # Newest first by timestamp; a compressed and an uncompressed name with the
+    # same timestamp keep a stable order.
+    versions.sort(key=lambda version: (version["file"].split("_", 1)[0], version["file"]), reverse=True)
     return versions
 
 
@@ -308,15 +332,15 @@ def record_version(
         versions = list_versions(history_dir, warn)
         attached = [
             version for version in versions
-            if version["file"].endswith(suffix) and not (version["entry"] or {}).get("detached")
+            if _plan_suffix(version["file"]) == suffix and not (version["entry"] or {}).get("detached")
         ]
         newest = attached[0] if attached else None
         newest_entry = newest["entry"] if newest else None
         if newest is not None and newest_entry is None:
             # An older stage snapshot: give it the entry it never had.
             try:
-                legacy_sha = hashlib.sha256((history_dir / newest["file"]).read_bytes()).hexdigest()
-            except OSError:
+                legacy_sha = hashlib.sha256(read_version(history_dir, newest["file"])).hexdigest()
+            except (OSError, ValueError, EOFError, gzip.BadGzipFile):
                 legacy_sha = ""
             when = _file_time(newest["file"])
             newest_entry = {
@@ -358,6 +382,9 @@ def record_version(
             and newest_entry["reason"] == reason
             and _same_author(newest_entry["author"], author)
             and newest_entry["stage"] == stage
+            # Only a compressed version is folded into: an older uncompressed
+            # file is never rewritten.
+            and newest_entry["file"].endswith(COMPRESSED_SUFFIX)
         ):
             recorded = _parse_ts(newest_entry["ts"])
             if recorded is not None and timedelta(0) <= now - recorded <= MERGE_WINDOW:
@@ -365,11 +392,13 @@ def record_version(
         if target_name is None:
             moment = now
             while True:
-                target_name = f"{moment.strftime(_TS_FORMAT)}_{stage}{suffix}"
-                if not (history_dir / target_name).exists():
+                plain_name = f"{moment.strftime(_TS_FORMAT)}_{stage}{suffix}"
+                target_name = plain_name + COMPRESSED_SUFFIX
+                if not (history_dir / target_name).exists() and not (history_dir / plain_name).exists():
                     break
                 moment += timedelta(seconds=1)
-        _write_atomic(history_dir / target_name, data)
+        # mtime=0: the same bytes always compress to the same file.
+        _write_atomic(history_dir / target_name, gzip.compress(data, mtime=0))
         entry: dict[str, Any] = {
             "file": target_name, "ts": now.isoformat(), "sha256": sha, "stage": stage,
             "author": dict(author), "reason": reason,

@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from agent_team_backend import osplat
+from agent_team_backend import osplat, plan_versions
 
 from tests.test_navide_plans_backend_wire import (  # noqa: F401 - backend_process is a fixture
     CLIENT_META,
@@ -606,7 +606,7 @@ def test_writes_record_versions_with_their_author(backend_process: subprocess.Po
     assert first["author"] == {"kind": "agent"}
     assert first["sha256"] == hashlib.sha256(plan.read_bytes()).hexdigest()
     snapshot = plan.parent / ".history" / "doc_aaaaaa" / first["file"]
-    assert snapshot.read_bytes() == plan.read_bytes()
+    assert plan_versions.read_version(snapshot.parent, snapshot.name) == plan.read_bytes()
 
     # A document without a stage keeps no versions, and other plan
     # directories keep none either.
@@ -633,7 +633,7 @@ def test_history_preserve_pins_disk_bytes_or_stores_the_users_side_without_scrip
 
     planted = _plan_html("Mine").replace("</body>", "<script>alert(1)</script><SCRIPT src=x></SCRIPT ></body>")
     kept = _value(_call(backend_process, host, "plans.history_preserve", {"rel_path": rel_path, "content": planted}))
-    stored = (plan.parent / ".history" / "doc_aaaaaa" / kept["version"]).read_text(encoding="utf-8")
+    stored = plan_versions.read_version(plan.parent / ".history" / "doc_aaaaaa", kept["version"]).decode("utf-8")
     assert "Mine" in stored and "alert(1)" not in stored and "<SCRIPT" not in stored
     assert 'id="plan-meta"' in stored  # the JSON island is data and stays
     assert _history_entries(plan)[kept["version"]]["detached"] is True

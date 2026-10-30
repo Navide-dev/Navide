@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import subprocess
@@ -57,12 +58,12 @@ def test_the_write_path_bundle_stays_standard_library_only() -> None:
 def test_the_first_version_is_a_baseline_and_same_bytes_are_stored_once(tmp_path: Path) -> None:
     plan = _plan(tmp_path)
     first = _record(plan, b"v1", at=T0)
-    assert first == "20261030T120000_draft.html"
+    assert first == "20261030T120000_draft.html.gz"
     assert _record(plan, b"v1", at=T0 + timedelta(minutes=1)) is None
     [version] = _versions(plan)
     assert version["entry"]["reason"] == "stage"
     assert version["entry"]["sha256"] == hashlib.sha256(b"v1").hexdigest()
-    assert (plan_versions.history_dir_for(plan) / first).read_bytes() == b"v1"
+    assert plan_versions.read_version(plan_versions.history_dir_for(plan), first) == b"v1"
 
 
 def test_saves_of_one_author_within_ten_minutes_fold_into_one_version(tmp_path: Path) -> None:
@@ -70,7 +71,7 @@ def test_saves_of_one_author_within_ten_minutes_fold_into_one_version(tmp_path: 
     _record(plan, b"base", at=T0)
     second = _record(plan, b"a", at=T0 + timedelta(minutes=1))
     assert _record(plan, b"ab", at=T0 + timedelta(minutes=5)) == second
-    assert (plan_versions.history_dir_for(plan) / second).read_bytes() == b"ab"
+    assert plan_versions.read_version(plan_versions.history_dir_for(plan), second) == b"ab"
     # Another author, or past the window, starts a new version.
     agent = _record(plan, b"abc", at=T0 + timedelta(minutes=6), author=AGENT)
     assert agent not in {second, None}
@@ -84,7 +85,7 @@ def test_a_stage_change_is_its_own_permanent_version(tmp_path: Path) -> None:
     _record(plan, b"base", at=T0)
     save = _record(plan, b"edit", at=T0 + timedelta(minutes=1))
     approved = _record(plan, b"approved", at=T0 + timedelta(minutes=2), stage="approved")
-    assert approved not in {save, None} and approved.endswith("_approved.html")
+    assert approved not in {save, None} and approved.endswith("_approved.html.gz")
     assert _versions(plan)[0]["entry"]["reason"] == "stage"
 
 
@@ -94,7 +95,7 @@ def test_consecutive_outside_changes_fold_into_one_version(tmp_path: Path) -> No
     first = _record(plan, b"edit 1", at=T0 + timedelta(minutes=1), author=EXTERNAL, reason="external")
     assert _record(plan, b"edit 2", at=T0 + timedelta(minutes=4), author=EXTERNAL, reason="external") == first
     assert _record(plan, b"edit 3", at=T0 + timedelta(minutes=9), author=EXTERNAL, reason="external") == first
-    assert (plan_versions.history_dir_for(plan) / first).read_bytes() == b"edit 3"
+    assert plan_versions.read_version(plan_versions.history_dir_for(plan), first) == b"edit 3"
     # Past the window from the version's last change, a new one starts.
     later = _record(plan, b"edit 4", at=T0 + timedelta(minutes=20), author=EXTERNAL, reason="external")
     assert later not in {first, None}
@@ -109,9 +110,9 @@ def test_a_named_write_between_outside_changes_keeps_both_sides(tmp_path: Path) 
     after = _record(plan, b"agent edit 2", at=T0 + timedelta(minutes=3), author=EXTERNAL, reason="external")
     assert len({before, mine, after}) == 3
     history = plan_versions.history_dir_for(plan)
-    assert (history / before).read_bytes() == b"agent edit"
-    assert (history / mine).read_bytes() == b"user save"
-    assert (history / after).read_bytes() == b"agent edit 2"
+    assert plan_versions.read_version(history, before) == b"agent edit"
+    assert plan_versions.read_version(history, mine) == b"user save"
+    assert plan_versions.read_version(history, after) == b"agent edit 2"
 
 
 def test_an_announced_write_the_watcher_sees_first_is_recorded_as_its_author(tmp_path: Path) -> None:
@@ -124,7 +125,7 @@ def test_an_announced_write_the_watcher_sees_first_is_recorded_as_its_author(tmp
     seen = _record(plan, b"user save", at=T0 + timedelta(minutes=2, seconds=1), author=EXTERNAL, reason="external")
     assert seen != outside
     history = plan_versions.history_dir_for(plan)
-    assert (history / outside).read_bytes() == b"agent edit"
+    assert plan_versions.read_version(history, outside) == b"agent edit"
     entry = plan_versions.read_index(history)[seen]
     assert entry["author"] == USER and entry["reason"] == "save"
     # The writer's own record afterwards adds nothing.
@@ -144,7 +145,7 @@ def test_outside_changes_never_fold_into_a_stage_or_pinned_version(tmp_path: Pat
     assert _record(plan, b"edit", at=T0 + timedelta(minutes=2), reason="conflict") == edit
     after = _record(plan, b"edit 2", at=T0 + timedelta(minutes=3), author=EXTERNAL, reason="external")
     assert after != edit
-    assert (plan_versions.history_dir_for(plan) / edit).read_bytes() == b"edit"
+    assert plan_versions.read_version(plan_versions.history_dir_for(plan), edit) == b"edit"
 
 
 def test_a_pinned_conflict_side_is_never_folded_into(tmp_path: Path) -> None:
@@ -154,7 +155,7 @@ def test_a_pinned_conflict_side_is_never_folded_into(tmp_path: Path) -> None:
     assert _record(plan, b"theirs", at=T0 + timedelta(minutes=2), reason="conflict") == theirs
     after = _record(plan, b"theirs+more", at=T0 + timedelta(minutes=3), author=AGENT)
     assert after != theirs
-    assert (plan_versions.history_dir_for(plan) / theirs).read_bytes() == b"theirs"
+    assert plan_versions.read_version(plan_versions.history_dir_for(plan), theirs) == b"theirs"
 
 
 def test_a_detached_version_is_kept_but_never_compared_against(tmp_path: Path) -> None:
@@ -184,6 +185,53 @@ def test_a_broken_index_line_is_skipped_and_reported_not_fatal(tmp_path: Path) -
     assert [v["file"] for v in plan_versions.list_versions(index.parent)][0] == second
     # Recording still works on top of the broken lines.
     assert _record(plan, b"three", at=T0 + timedelta(minutes=30)) is not None
+
+
+def test_a_compressed_version_round_trips_byte_for_byte(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    data = ("<p>Plan ✓ 計畫</p>\r\n" * 2000).encode("utf-8") + bytes(range(256))
+    name = _record(plan, data, at=T0)
+    history = plan_versions.history_dir_for(plan)
+    stored = (history / name).read_bytes()
+    assert name.endswith(".html.gz") and stored[:2] == b"\x1f\x8b" and len(stored) < len(data)
+    assert gzip.decompress(stored) == data
+    assert plan_versions.read_version(history, name) == data
+    # The hash is of the plan bytes, never of the compressed file.
+    assert plan_versions.read_index(history)[name]["sha256"] == hashlib.sha256(data).hexdigest()
+    assert _record(plan, data, at=T0 + timedelta(minutes=1)) is None
+
+
+def test_older_uncompressed_snapshots_mix_with_compressed_versions(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    history = plan_versions.history_dir_for(plan)
+    history.mkdir(parents=True)
+    legacy = "20261001T090000_approved.html"
+    (history / legacy).write_bytes(b"approved before")
+    legacy_bytes = (history / legacy).read_bytes()
+    # Same bytes as the older snapshot: recognised by the uncompressed hash.
+    assert _record(plan, b"approved before", at=T0, stage="approved") is None
+    newer = _record(plan, b"edit", at=T0 + timedelta(minutes=1), stage="approved")
+    assert newer.endswith(".html.gz")
+    names = [v["file"] for v in plan_versions.list_versions(history)]
+    assert names == [newer, legacy]
+    assert plan_versions.read_version(history, legacy) == b"approved before"
+    assert plan_versions.read_version(history, newer) == b"edit"
+    # A same-second name never collides across the two forms.
+    (history / "20261030T120500_approved.html").write_bytes(b"old same second")
+    other = _record(plan, b"later", at=T0 + timedelta(minutes=5), stage="approved", author=AGENT)
+    assert other == "20261030T120501_approved.html.gz"
+    # Retention keeps the older snapshot (a stage snapshot) and never rewrites it.
+    plan_versions.prune_history(history, now=T0 + timedelta(days=400))
+    assert (history / legacy).read_bytes() == legacy_bytes
+    assert legacy in {v["file"] for v in plan_versions.list_versions(history)}
+    # An older uncompressed save is never folded into: a new compressed one is written.
+    with (history / plan_versions.INDEX_NAME).open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"file": "20261030T120600_approved.html", "ts": (T0 + timedelta(minutes=6)).isoformat(),
+                                 "sha256": "x", "stage": "approved", "author": USER, "reason": "save"}) + "\n")
+    (history / "20261030T120600_approved.html").write_bytes(b"plain save")
+    folded = _record(plan, b"plain save 2", at=T0 + timedelta(minutes=7), stage="approved")
+    assert folded.endswith(".gz")
+    assert (history / "20261030T120600_approved.html").read_bytes() == b"plain save"
 
 
 def test_retention_keeps_30_days_then_50_and_stage_snapshots_forever(tmp_path: Path) -> None:
