@@ -11,7 +11,7 @@ if (!prepared) {
   // Each dependency builds once before any test worker starts.
   for (const build of [
     'build:public-packages', 'build:plans:v2', 'build:plans:backend',
-    'build:mini-ide:v2', 'build:git:v2',
+    'build:mini-ide:v2', 'build:git:v2', 'build:browser:v2', 'build:browser:backend',
   ]) pnpm(['run', build])
   run(process.execPath, ['scripts/stage-official-plugin-artifacts.mjs'])
 }
