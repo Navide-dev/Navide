@@ -268,6 +268,11 @@ def _no_real_security_binary():
             raise AssertionError(f"a test reached the real Keychain: security {args[:1]}")
 
         monkeypatch.setattr(credential_vault, "_default_security_runner", refuse)
+
+        def refuse_home(home, args):
+            raise AssertionError(f"a test reached the real Keychain: security {args[:1]} under {home}")
+
+        monkeypatch.setattr(credential_vault, "_default_home_security_runner", refuse_home)
         yield
 
 
