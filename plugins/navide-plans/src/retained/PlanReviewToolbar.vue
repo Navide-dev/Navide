@@ -787,7 +787,8 @@ async function fetchHistory(): Promise<HistorySnapshot[]> {
   // `.plan.md` plan; only the open plan's format is shown.
   const isHtml = props.relPath.endsWith('.html')
   return versions.flatMap((version) => {
-    const name = version.file.replace(/\.gz$/, '')
+    // `.gz` and `.parts.gz` (embedded images stored once) are stored forms.
+    const name = version.file.replace(/(?:\.parts)?\.gz$/, '')
     if (name.endsWith('.html') !== isHtml) return []
     const parsed = parseSnapshotName(name)
     if (!parsed) return []

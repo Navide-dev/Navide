@@ -677,6 +677,30 @@ def test_a_version_names_the_agent_pane_the_host_reports(
     assert plan.read_bytes() == before
 
 
+def test_a_version_with_embedded_images_lists_reads_and_restores_whole(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    image = base64.b64encode(bytes(range(256)) * 40).decode("ascii")
+    with_image = _plan_with("draft", f'Shot <img src="data:image/png;base64,{image}">')
+    plan.write_text(with_image, encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    assert _value(_write(backend_process, host, rel_path, with_image + " ")) == {"ok": True}
+    assert _value(_write(backend_process, host, rel_path, _plan_with("approved", "Text only"))) == {"ok": True}
+
+    listed = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))
+    files = [version["file"] for version in listed["versions"]]
+    assert files[-1].endswith(".html.parts.gz") and files[0].endswith(".html.gz")
+    read = _value(_call(backend_process, host, "plans.history_read", {"rel_path": rel_path, "file": files[-1]}))
+    assert read["ok"] is True and read["content"] == with_image + " "
+
+    restored = _value(_call(backend_process, host, "plans.history_restore", {"rel_path": rel_path, "file": files[-1]}))
+    assert restored == {"ok": True}
+    assert f"data:image/png;base64,{image}" in plan.read_text(encoding="utf-8")
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="creating symbolic links needs a privilege on Windows")
 @pytest.mark.parametrize("linked", [".history", ".history/doc_aaaaaa"])
 def test_history_list_read_and_restore_refuse_a_history_directory_behind_a_link(

@@ -121,6 +121,21 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.35',
+    title: {
+      'zh-TW': 'Plans 可以直接編輯，每次變更都留下版本',
+      'en-US': 'Edit Plans Directly, with a Version for Every Change',
+      'ja-JP': 'プランを直接編集でき、変更のたびに版が残るように',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Plans：在 Plan 視圖按 HTML 計畫上方的「編輯文件」，就能直接修改整份文件，變更會自動存檔。agent 改到你正在編輯的段落時，會跳出對話框讓你選要保留哪一版，不會互相覆蓋。每次變更都會留下版本：「歷史」列出修改者（你、哪個 agent pane，或 Plans 以外的修改）和原因，可以看「差異」或「還原」。還原只換內文，階段、核准狀態、待辦和審查留言都維持現在的樣子。已核准的計畫內文被改過時會顯示「核准後已修改」，點一下就能比對。',
+        'en-US': 'Plans: Edit document above an HTML plan in the Plan view makes the whole document editable, and changes save by themselves. If an agent changes the section you are editing, a dialog lets you choose which version to keep, so neither overwrites the other. Every change now keeps a version: History shows who made it (you, a named agent pane, or a change outside Plans) and why, with Diff and Restore. Restore brings back the text only and keeps the stage, approval, todos and review notes. An approved plan whose text changed shows Changed since approval; click it to compare.',
+        'ja-JP': 'プラン：Plan ビューで HTML プランの上にある「ドキュメントを編集」を押すと、ドキュメント全体を直接編集でき、変更は自動で保存されます。編集中のセクションを agent が変更したときは、ダイアログでどちらの版を残すかを選べるので、互いに上書きされることはありません。変更のたびに版が残ります。「履歴」には、変更した人（あなた、どの agent pane か、または Plans の外での変更）と理由が表示され、「差分」と「復元」が使えます。復元で戻るのは本文だけで、ステージ、承認、ToDo、レビューノートは現在のまま残ります。承認済みのプランの本文が変更されると「承認後に変更あり」と表示され、クリックすると比較できます。',
+      },
+    ],
+  },
+  {
     version: '0.2.34',
     title: {
       'zh-TW': 'App 上鎖遮住畫面保護隱私，Pipeline 可以從 n8n 匯入',
