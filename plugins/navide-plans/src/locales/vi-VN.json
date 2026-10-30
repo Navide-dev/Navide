@@ -92,6 +92,7 @@
       "conflict-copied": "Đã sao chép",
       "conflict-discarded-title": "Phiên bản bạn không giữ",
       "conflict-discarded-body": "Nội dung này chưa được lưu ở đâu cả. Hãy sao chép ngay nếu bạn cần.",
+      "conflict-discarded-kept": "Nội dung này được giữ thành một phiên bản trong lịch sử của kế hoạch. Bạn cũng có thể sao chép ngay.",
       "conflict-close": "Đóng",
       "merged-others": "Đã lưu. Các thay đổi ở những chỗ khác trong tài liệu vẫn được giữ.",
       "section-write-busy": "Tài liệu liên tục thay đổi trong lúc lưu. Hãy thử lại.",

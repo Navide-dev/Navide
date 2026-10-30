@@ -92,6 +92,7 @@
       "conflict-copied": "Copié",
       "conflict-discarded-title": "La version que vous n’avez pas gardée",
       "conflict-discarded-body": "Elle n’a été enregistrée nulle part. Copiez-la maintenant si vous en avez besoin.",
+      "conflict-discarded-kept": "Elle est conservée comme version dans l’historique de ce plan. Vous pouvez aussi la copier maintenant.",
       "conflict-close": "Fermer",
       "merged-others": "Enregistré. Les modifications faites ailleurs dans ce document ont été conservées.",
       "section-write-busy": "Le document n’a pas cessé de changer pendant l’enregistrement. Réessayez.",

@@ -1273,6 +1273,12 @@ describe('PlansApp', () => {
       await view.get('.scd-keep-theirs').trigger('click')
       await flushPromises()
       expect(writes()).toHaveLength(0)
+      // The user's side is kept as a version: the disk document with their section.
+      const preserved = state.calls.filter(call => call.name === 'plans.history_preserve')
+      expect(preserved).toHaveLength(1)
+      expect(preserved[0].args.rel_path).toBe(existingPath)
+      expect(String(preserved[0].args.content)).toContain('<p>Mine prose.</p>')
+      expect(String(preserved[0].args.content)).toContain('Risk prose.')
       expect(view.get('.scd-dialog [data-side="mine"] textarea').element.value).toContain('Mine prose.')
       await view.get('.scd-close').trigger('click')
       expect(view.find('.scd-dialog').exists()).toBe(false)
@@ -1283,6 +1289,10 @@ describe('PlansApp', () => {
       await view.get('.scd-keep-mine').trigger('click')
       await flushPromises()
       expect(writes()).toHaveLength(1)
+      // The disk side is pinned (by the backend, from disk) before it is overwritten.
+      const order = state.calls.map(call => call.name).filter(name => name === 'plans.history_preserve' || name === 'plans.write_document')
+      expect(order).toEqual(['plans.history_preserve', 'plans.write_document'])
+      expect(state.calls.find(call => call.name === 'plans.history_preserve')?.args).toEqual({ rel_path: existingPath })
       expect(writes()[0].args.content).toContain('<p>Mine prose.</p>')
       expect(writes()[0].args.content).not.toContain('Agent prose.')
       expect(view.get('.scd-dialog [data-side="theirs"] textarea').element.value).toContain('Agent prose.')

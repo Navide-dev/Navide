@@ -30,12 +30,14 @@ import yaml
 from agent_team_backend.fs_write import (
     _WRITE_PART_MAX_BYTES,
     _resolve_mutation_safe,
+    _staging_path,
     write_abort,
     write_commit,
     write_file,
     write_part,
 )
 from agent_team_backend.path_guard import FsError, _resolve_safe
+from agent_team_backend import plan_versions
 
 PROTOCOL_REVISION = "2026-07-28"
 SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo"
@@ -755,8 +757,88 @@ def _write(
         )
     if not _is_record(result) or result.get("ok") is not True:
         raise _write_failure(result, rel_path=rel_path)
+    _record_version(origin, rel_path, data, reason="save")
     mtime = result.get("mtime")
     return float(mtime) if isinstance(mtime, (int, float)) and not isinstance(mtime, bool) else None
+
+
+def _versioned_plan(origin: dict[str, Any], rel_path: str) -> Path | None:
+    """The plan file behind ``rel_path`` when it keeps versions: a plan
+    document directly in a ``.agent-team/plans`` directory (the workspace's or
+    a nested root's), as the core watcher snapshots them. Anything else, the
+    other plan directories included, has no history."""
+    segments = rel_path.split("/")
+    name = segments[-1]
+    if segments[-3:-1] != [".agent-team", "plans"] or name.startswith(("_", ".")):
+        return None
+    if not (name.endswith(".html") or name.endswith(".plan.md")):
+        return None
+    try:
+        return _resolve_mutation_safe(_plan_root(origin), rel_path)
+    except FsError:
+        return None
+
+
+def _version_author(origin: dict[str, Any]) -> dict[str, str]:
+    """Who wrote, as the Host authenticated the call: the user, or an agent."""
+    initiator = origin.get("initiator")
+    kind = initiator.get("kind") if isinstance(initiator, dict) else None
+    return {"kind": "agent" if kind == "agent" else "user"}
+
+
+def _record_version(
+    origin: dict[str, Any], rel_path: str, data: bytes, *, reason: str, detached: bool = False,
+) -> str | None:
+    """Record ``data`` (the bytes just written, or a conflict's other side) as
+    a version. Never fails the write it follows: a problem is logged."""
+    plan = _versioned_plan(origin, rel_path)
+    if plan is None:
+        return None
+    try:
+        meta = _parse_plan_meta(data.decode("utf-8"))
+    except UnicodeDecodeError:
+        return None
+    stage = meta.get("stage") if isinstance(meta, dict) else None
+    if stage not in PLAN_STAGES:
+        return None  # like the watcher: a document without a stage keeps no versions
+    try:
+        return plan_versions.record_version(
+            plan, data, stage=stage, author=_version_author(origin), reason=reason, detached=detached, warn=_log,
+        )
+    except (OSError, ValueError, FsError) as exc:
+        _log(f"version of {rel_path} not recorded: {exc}")
+        return None
+
+
+_EXECUTABLE_SCRIPT_RE = re.compile(
+    r"<script\b(?![^>]*\btype=[\"']application/json[\"'])[\s\S]*?</script\s*>", re.IGNORECASE
+)
+
+
+def _history_preserve(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Keep both sides of a section conflict as versions.
+
+    Without ``content``: the document on disk is about to be overwritten by
+    the user's side, so its exact bytes are pinned as a ``conflict`` version
+    (read here, never taken from the caller). With ``content``: the user kept
+    the disk version, and ``content`` is the document as the user had it (the
+    disk bytes with their sanitized section). It is stored as a detached
+    ``conflict`` version with executable scripts removed, so no caller can
+    plant code in the history. Never writes the plan itself.
+    """
+    if set(arguments) - {"rel_path", "content"} or "rel_path" not in arguments:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    rel_path = _manual_write_path(arguments["rel_path"])
+    content = arguments.get("content")
+    if content is not None and not isinstance(content, str):
+        raise BridgeFailure("INVALID_ARGUMENT")
+    if _versioned_plan(origin, rel_path) is None:
+        return {"ok": True, "version": None}
+    if content is None:
+        data, _size, _mtime, _eof = _read_bytes(origin, rel_path, 0, None)
+        return {"ok": True, "version": _record_version(origin, rel_path, data, reason="conflict")}
+    data = _EXECUTABLE_SCRIPT_RE.sub("", content).encode("utf-8")
+    return {"ok": True, "version": _record_version(origin, rel_path, data, reason="conflict", detached=True)}
 
 
 def _write_staged(
@@ -1881,11 +1963,23 @@ def _manual_upload(origin: dict[str, Any], arguments: dict[str, Any], action: st
     ):
         raise BridgeFailure("INVALID_ARGUMENT")
     sha256 = _sha256_argument(arguments.get("expected_sha256"))
+    # The staged bytes are exactly what the commit swaps in: read them first,
+    # so the version recorded is this write's, not whatever lands after it.
+    staged: bytes | None = None
+    if _versioned_plan(origin, path) is not None:
+        try:
+            _target, staging = _staging_path(_plan_root(origin), path, upload_id)
+            if not staging.is_symlink():
+                staged = staging.read_bytes()
+        except (FsError, OSError):
+            staged = None
     result = write_commit(_plan_root(origin), path, upload_id, total, expected, sha256)
     if _is_record(result) and result.get("conflict") is True:
         return {"ok": False, "conflict": True}
     if not _is_record(result) or result.get("ok") is not True:
         raise _write_failure(result)
+    if staged is not None and len(staged) == total:
+        _record_version(origin, path, staged, reason="save")
     mtime = result.get("mtime")
     return {"ok": True, **({"mtime": float(mtime)} if isinstance(mtime, (int, float)) and not isinstance(mtime, bool) else {})}
 
@@ -2046,7 +2140,10 @@ def _handle(frame: Any) -> None:
     if not _is_method_name(name) or not _is_runtime(runtime) or not _is_json_value(arguments) or not _is_record(arguments):
         _protocol_error(frame["id"])
         return
-    origin = {"kind": "call", "requestId": frame["id"], "instance": runtime["instanceId"]}
+    origin = {
+        "kind": "call", "requestId": frame["id"], "instance": runtime["instanceId"],
+        "initiator": runtime["initiator"],
+    }
     try:
         if name == "plans.resolve_root":
             if set(arguments) - {"workspace_path"}:
@@ -2070,6 +2167,8 @@ def _handle(frame: Any) -> None:
             result = _manual_document(origin, arguments, "read")
         elif name == "plans.write_document":
             result = _manual_document(origin, arguments, "write")
+        elif name == "plans.history_preserve":
+            result = _history_preserve(origin, arguments)
         elif name == "plans.write_document_part":
             result = _manual_upload(origin, arguments, "part")
         elif name == "plans.write_document_commit":

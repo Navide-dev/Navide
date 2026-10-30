@@ -14,7 +14,7 @@ import { useI18n } from 'vue-i18n'
 import { parsePlanFile } from './usePlanFile'
 import type { PlanSection } from './usePlanFile'
 import type { PlansTransport } from './transport'
-import { resolvePlanStore, type PlanCtx, type SectionConflict, type WriteResult } from './planStore'
+import { preserveConflictSide, resolvePlanStore, type PlanCtx, type SectionConflict, type WriteResult } from './planStore'
 import SectionConflictDialog from './SectionConflictDialog.vue'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { renderLines, InlineText } from './markdownRender'
@@ -193,24 +193,41 @@ async function deleteSection(heading: string): Promise<void> {
   if (reportSectionResult(result, undefined)) await afterSectionWrite(heading)
 }
 
+/** Keep the side the user did not choose as a version of the plan. */
+async function preserveDiscarded(mine?: string): Promise<boolean> {
+  try {
+    return await preserveConflictSide(ctx.value, mine)
+  } catch (err) {
+    toast(err instanceof Error ? err.message : t('pane.plans.review-save-failed'))
+    return false
+  }
+}
+
 /** Write the user's version over the file shown in the conflict. */
 async function keepMySection(): Promise<void> {
   const pending = sectionConflict.value
   if (!pending || saving.value) return
   saving.value = true
+  // The file on disk is about to be overwritten: pin it as a version first.
+  const kept = await preserveDiscarded()
   const result = await writeSection(pending.conflict.anchor, pending.text, pending.conflict.fresh)
   saving.value = false
   if (reportSectionResult(result, pending.text)) {
-    conflictDialog.value?.showDiscarded('theirs')
+    conflictDialog.value?.showDiscarded('theirs', kept)
     await afterSectionWrite(pending.conflict.anchor)
   }
 }
 
-/** Keep the file on disk; the user's text stays in the dialog to copy. */
+/** Keep the file on disk; the user's version is kept as a version of the
+ *  plan and stays in the dialog to copy. */
 async function keepTheirSection(): Promise<void> {
   const pending = sectionConflict.value
-  if (!pending) return
-  conflictDialog.value?.showDiscarded('mine')
+  if (!pending || saving.value) return
+  saving.value = true
+  const body = pending.text === undefined ? undefined : { kind: 'markdown' as const, text: pending.text }
+  const kept = await preserveDiscarded(store.value.withSection(pending.conflict.fresh, pending.conflict.anchor, body))
+  saving.value = false
+  conflictDialog.value?.showDiscarded('mine', kept)
   await afterSectionWrite(pending.conflict.anchor)
 }
 

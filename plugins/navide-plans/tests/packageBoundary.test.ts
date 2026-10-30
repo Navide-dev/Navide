@@ -137,11 +137,12 @@ describe('navide.plans production package boundary', () => {
     expect(backend).not.toContain('"shell"')
     expect(backend).not.toContain('"network"')
     expect(backend).not.toContain('agentMethods')
-    // The core modules it may bundle are the standard-library-only path guard
-    // and write path.
+    // The core modules it may bundle are the standard-library-only path
+    // guard, write path and plan versions.
     expect(backend.match(/^.*agent_team_backend.*$/gm)).toEqual([
       'from agent_team_backend.fs_write import (',
       'from agent_team_backend.path_guard import FsError, _resolve_safe',
+      'from agent_team_backend import plan_versions',
     ])
   })
 

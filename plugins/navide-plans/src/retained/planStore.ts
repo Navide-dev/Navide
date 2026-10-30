@@ -115,6 +115,9 @@ export interface PlanStore {
   deleteSection(ctx: PlanCtx, anchor: string, base?: string): Promise<WriteResult>
   /** The source of the section `anchor` names (heading included), or null. */
   sectionRegion(raw: string, anchor: string): string | null
+  /** `raw` with the section `anchor` replaced by `body`, or removed when
+   *  `body` is absent: the same edit a section write applies, without I/O. */
+  withSection(raw: string, anchor: string, body?: SectionBody): string
   outline(raw: string): string[]
 }
 
@@ -299,6 +302,11 @@ class HtmlPlanStore implements PlanStore {
     return htmlSectionRegion(raw, anchor)
   }
 
+  withSection(raw: string, anchor: string, body?: SectionBody): string {
+    if (!body) return deleteHtmlSection(raw, anchor)
+    return replaceHtmlSectionBody(raw, anchor, body.kind === 'html' ? body.sanitized : body.text)
+  }
+
   outline(raw: string): string[] {
     return extractPlanOutline(raw)
   }
@@ -368,11 +376,34 @@ class MarkdownPlanStore implements PlanStore {
     return markdownSectionRegion(raw, anchor)
   }
 
+  withSection(raw: string, anchor: string, body?: SectionBody): string {
+    if (!body) return deleteMarkdownSection(raw, anchor)
+    return replacePlanSectionBody(raw, anchor, body.kind === 'markdown' ? body.text : body.sanitized)
+  }
+
   outline(raw: string): string[] {
     // Only sections PlanMarkdownBody actually renders (non-empty body); an empty
     // `##` heading has no anchor to scroll to, so listing it dead-ends the nav.
     return parsePlanFile(raw)?.sections.filter((s) => s.body.trim()).map((s) => s.heading) ?? []
   }
+}
+
+/**
+ * Keep the side of a section conflict the user did not choose as a version
+ * of the plan. `mine` is the user's document (their section applied to the
+ * disk version shown in the conflict) when they kept the disk version; absent,
+ * the backend pins the disk bytes it is about to be overwritten with. Resolves
+ * to whether a version now holds it.
+ */
+export async function preserveConflictSide(ctx: PlanCtx, mine?: string): Promise<boolean> {
+  const resp = await ctx.backend.send<{ ok?: boolean; version?: string | null }>('history.preserve', {
+    workspace_path: ctx.workspacePath,
+    rel_path: ctx.relPath,
+    ...(mine === undefined ? {} : { content: mine }),
+  })
+  // A document that keeps no history (no stage, or outside .agent-team/plans)
+  // answers ok with no version: nothing was kept.
+  return resp.payload?.ok === true && typeof resp.payload.version === 'string'
 }
 
 const htmlPlanStore = new HtmlPlanStore()

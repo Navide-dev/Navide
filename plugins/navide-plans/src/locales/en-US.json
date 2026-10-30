@@ -92,6 +92,7 @@
       "conflict-copied": "Copied",
       "conflict-discarded-title": "The version you did not keep",
       "conflict-discarded-body": "It was not saved anywhere. Copy it now if you need any of it.",
+      "conflict-discarded-kept": "It is kept as a version in this plan’s history. You can also copy it now.",
       "conflict-close": "Close",
       "merged-others": "Saved. Changes made elsewhere in this document were kept.",
       "section-write-busy": "The document kept changing while saving. Try again.",
