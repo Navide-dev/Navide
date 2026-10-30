@@ -888,7 +888,7 @@ function formatTime(ts: number | null | undefined): string {
           <div class="ch-item-text">
             <span class="ch-item-name" v-truncate>{{ entry.sender_name || entry.sender_id }}<span v-if="entry.shared" class="ch-pill warn ch-item-badge" data-testid="allow-shared">{{ t('channels.allow.shared') }}</span></span>
             <span class="ch-item-meta" v-truncate>{{ platformName(entry.platform) }}<template v-if="entryBot(entry.platform, entry.account)"> · <span data-testid="allow-bot">{{ entryBot(entry.platform, entry.account) }}</span></template> · {{ entry.sender_id }} · <span data-testid="allow-source">{{ sourceLabel(entry.source) }}</span> · <span data-testid="allow-added">{{ formatTime(entry.added_at) || '—' }}</span></span>
-            <span v-if="entry.shared" class="ch-item-meta ch-item-warn" data-testid="allow-shared-hint">{{ t('channels.allow.shared-hint') }}</span>
+            <span v-if="entry.shared" class="ch-item-warn" data-testid="allow-shared-hint">{{ t('channels.allow.shared-hint') }}</span>
           </div>
           <div class="ch-row-actions">
             <button type="button" class="ch-btn ghost sm" :disabled="busy" data-testid="allow-remove" @click="run(null, () => store.removeAllow(entry.platform, entry.sender_id, entry.account))">{{ t('channels.allow.remove') }}</button>
@@ -1088,6 +1088,6 @@ function formatTime(ts: number | null | undefined): string {
 .ch-item-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch-item-meta { font-size: var(--font-2xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch-item-badge { margin-left: 6px; font-weight: 400; }
-.ch-item-warn { color: var(--attention-fg); white-space: normal; }
+.ch-item-warn { font-size: var(--font-2xs); color: var(--attention-fg); }
 .ch-code { font-family: var(--font-mono, monospace); font-size: var(--font-xs); letter-spacing: 0.08em; color: var(--text-bright); }
 </style>
