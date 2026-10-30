@@ -7,6 +7,7 @@ import { Emitter, type IDisposable, type Link, type LinkProvider } from './event
 import { encodeKey } from './keyboard'
 import { encodeMouse, type MouseReport } from './mouse'
 import { lineText, Selection } from './selection'
+import { findFrom, type SearchMatch, type SearchOptions } from '../search'
 import { resolveTheme, type Theme } from './theme'
 import { WebglRenderer } from './webglRenderer'
 
@@ -334,6 +335,36 @@ export class NvTerminal implements IDisposable {
     if (!this.gpuReleased) return
     this.gpuReleased = false
     if (this.opts.renderer !== 'canvas' && this.element) this.installRenderer('webgl', 'restored')
+  }
+
+  /** Selects the next match after the current selection (or the top of the screen) and scrolls to it. */
+  findNext(query: string, options: SearchOptions = {}): boolean {
+    return this.find(query, false, options)
+  }
+
+  /** Selects the previous match before the current selection and scrolls to it. */
+  findPrevious(query: string, options: SearchOptions = {}): boolean {
+    return this.find(query, true, options)
+  }
+
+  private find(query: string, backwards: boolean, options: SearchOptions): boolean {
+    const buf = this.core.active
+    const range = this.selection.range()
+    const from = range ? { x: range.start.x, y: range.start.y - buf.dropped } : { x: -1, y: this.viewportY }
+    const match = findFrom(buf, query, from, backwards, options)
+    if (!match) return false
+    this.selectMatch(match)
+    return true
+  }
+
+  private selectMatch(match: SearchMatch): void {
+    const buf = this.core.active
+    this.selection.start({ x: match.x, y: buf.dropped + match.y }, 'char')
+    this.selection.extend({ x: match.endX, y: buf.dropped + match.endY })
+    // Bring the match into view, roughly centred, if it is off screen.
+    const top = this.viewportY
+    if (match.y < top || match.endY >= top + this.rows) this.scrollLines(match.y - Math.floor(this.rows / 2) - top)
+    this.selectionChanged()
   }
 
   dispose(): void {
