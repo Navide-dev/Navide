@@ -4,6 +4,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+## [0.2.35] — 2026-10-31
+
 ### Added
 
 - Navide Browser (0.2.35): Spaces now have tabs and run side by side. **Side by Side** shows up to 9 Spaces at once in a grid, each with its name, owner, who is in control, its state and note, a tab strip and its own live page, and pages through more like the pane grid; **One at a Time** shows one Space full size with a list to switch, and Ctrl+Tab / Ctrl+Shift+Tab move to the next or previous Space as they do for panes. The choice is remembered. A tab is one page of the Space: add (＋, in your own Spaces), close (×) and select tabs, and a page a site opens in a new window arrives as a tab next to the one that opened it. A tab out of sight for 10 minutes is closed to save memory and keeps its address, title and last picture; it loads again when you open it. A tab with an open dialog, one waiting for you and an agent's tab that is still working are never closed this way, and an agent's tab only once it is done or idle. Each Space shows an open dialog (type and message) and every file the agent uploaded (file, website and time), with names that look like secrets marked with a warning icon and label. Eight new agent tools: `browser_close`, `browser_tabs`, `browser_evaluate` (runs script in the page), `browser_wait` (URL, selector or text, at most 30 seconds), `browser_dialog`, `browser_upload` (files inside the pane's workspace, disclosed on the Space), `browser_take_over` (asks the user for control back and waits; it never takes control) and `browser_cdp` (a raw escape hatch limited to the Host's allowed DevTools methods); the first eight tools keep their names and inputs. New strings in all 11 interface languages.
@@ -30,7 +32,15 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Navide plugin agent tools (0.2.35): a new switch in Settings → Navide Plugins, **Let agents call tools from first-party Navide plugins**, on by default, turns the tools of Navide's own plugins (Navide Browser) on or off at once. **Let agents call tools from third-party Navide plugins** now covers third-party plugins only, as its label says, and stays off by default. Everything else stays as it was: external MCP clients still need the third-party switch and their own, the first write in each workspace still asks, and every result is still wrapped as external content and marks the calling pane. With no first-party plugin installed, nothing changes. Two new strings in all 11 interface languages.
 
+- Navide plugin versions (0.2.35): the plugins bundled with the App (Git, Mini-IDE, Plans and Navide Browser) now have their own versions, starting at 1.0.0, which change only when the plugin changes, so Settings → Navide Plugins no longer shows the App's version for them. Between a bundled copy and a Marketplace copy the newer version runs, and on a tie the installed copy does, as before; an older installed copy stays on disk unused and is considered again at every start. Opting out of a bundled copy, `NAVIDE_GIT_RECOVERY=legacy` and `NAVIDE_PLANS_RECOVERY=legacy` keep the installed copy. `plugins/official-plugin-fingerprints.json` records what each bundled plugin shipped in the last App release, and `release.sh` stops if a plugin's content changed without a newer version.
+
+- Channels (0.2.35): in Settings → Channels, a connected Telegram bot in Bot Management Mode shows **Create a New Bot** under it, so the flow no longer sits only in the bot's ⋯ menu, where it also stays. Other bots and platforms look as before.
+
 ### Fixed
+
+- Channels (0.2.35): a pane bound to a chat whose sender cannot pass the bot's sender check no longer looks connected while every message gets a pairing reply. Binding still works and nobody is approved by it, but the chat gets a warning instead of the plain confirmation, with the pending pairing code if there is one or otherwise how to get one, and Settings → Channels and the pane's chip menu warn too. In a group only a bot with nobody allowed is detected, and on platforms other than Telegram a stranger's DM gets no warning when someone else is allowed on the bot. Two new strings in all 11 interface languages.
+
+- Windows terminals (0.2.35): while a stalled pane has its output paused, the backend keeps at most 5 MB queued for it instead of growing without limit, dropping the oldest output first, as on macOS and Linux. The dropped byte count is logged when output resumes; it is not marked in a pipeline pane's output log.
 
 - Windows hooks (0.2.35): the PowerShell hooks Navide installs for Claude Code, Qwen Code and Copilot CLI read the port file, make the temp path and delete it with .NET calls instead of `Get-Content`, `Join-Path` and `Remove-Item`, so a hook run no longer loads the Microsoft.PowerShell.Management module; on a Windows 11 arm64 machine with Defender on, that load took about 23 seconds per run before the hook reached Navide. Exit codes and output are unchanged. The new text is written at the next backend start through the existing CLI-config tracking: Qwen's `settings.json` change is logged with a backup in Settings, and Claude Code's and Copilot's copies live in Navide's own data.
 
@@ -38,7 +48,11 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Shortcuts (0.2.35): on Windows and Linux, Open Plans, the Git window and the Mini IDE have working default keys. They were bound to ⌘ only, which is the Win/Super key off macOS. Open Plans now answers Ctrl+Shift+D and the Git window Ctrl+Shift+G; the Mini IDE answers Ctrl+Shift+M, because Ctrl+Shift+I stays Toggle Developer Tools there. macOS keys are unchanged.
 
-## [0.2.34] — unreleased
+### Security
+
+- Channels (0.2.35): redeeming a link code no longer puts a new sender straight on the allowed list. Someone not yet allowed gets the same pairing request as a stranger's DM, listed as Link code in Settings → Channels, and is linked once you approve it; a sender already allowed links at once. On Telegram a `direct` code sent in a group is refused, because it only travels in a DM link. Telegram's shared ids (`1087968824` GroupAnonymousBot, `136817688` Channel_Bot and `777000`) are never admitted, even from an older allowlist row, and a message sent on behalf of a channel or anonymous admin carries no sender and does not pass. Settings → Channels shows the allowed list even when it is empty, says how and when each sender was added (senders from before this release show "—"), and marks a row holding a shared id with a warning; nothing is deleted for you. The external-content fence around chat text now also catches disguised boundary markers (fullwidth brackets, both Chinese scripts, zero-width, bidi and control characters, and marks or fillers inside a marker). Four new strings in all 11 interface languages.
+
+## [0.2.34] — 2026-10-30 — signed release
 
 ### Added
 
