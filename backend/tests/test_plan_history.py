@@ -198,7 +198,7 @@ def test_md_first_sight_creates_baseline_snapshot(tmp_path: Path) -> None:
     assert created[0].startswith(".agent-team/plans/.history/my-plan_ab12cd/")
     assert created[0].endswith("_in-review.plan.md.gz")
     snap = tmp_path / created[0]
-    assert plan_versions.read_version(snap.parent, snap.name).decode("utf-8") == _plan_md("in-review")
+    assert plan_versions.read_version(snap.parent, snap.name) == (plans / "my-plan_ab12cd.plan.md").read_bytes()
 
 
 def test_md_stage_transition_creates_snapshot(tmp_path: Path) -> None:
