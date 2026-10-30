@@ -17,6 +17,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -676,6 +677,7 @@ def test_a_version_names_the_agent_pane_the_host_reports(
     assert plan.read_bytes() == before
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="creating symbolic links needs a privilege on Windows")
 @pytest.mark.parametrize("linked", [".history", ".history/doc_aaaaaa"])
 def test_history_list_read_and_restore_refuse_a_history_directory_behind_a_link(
     backend_process: subprocess.Popen[bytes], tmp_path: Path, linked: str
