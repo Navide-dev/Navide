@@ -563,11 +563,13 @@ def test_a_read_reports_the_content_hash_a_write_can_expect(
 
 
 def _history_entries(plan: Path) -> dict[str, dict[str, Any]]:
+    # Version lines only; the backend also announces each write before it.
     history = plan.parent / ".history" / plan.name.removesuffix(".html")
     entries: dict[str, dict[str, Any]] = {}
     for line in (history / "index.jsonl").read_text(encoding="utf-8").splitlines():
         entry = json.loads(line)
-        entries[entry["file"]] = entry
+        if "file" in entry:
+            entries[entry["file"]] = entry
     return entries
 
 

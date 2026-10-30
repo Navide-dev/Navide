@@ -88,18 +88,63 @@ def test_a_stage_change_is_its_own_permanent_version(tmp_path: Path) -> None:
     assert _versions(plan)[0]["entry"]["reason"] == "stage"
 
 
-def test_the_watchers_versions_never_merge_and_are_relabelled_by_the_real_author(tmp_path: Path) -> None:
+def test_consecutive_outside_changes_fold_into_one_version(tmp_path: Path) -> None:
     plan = _plan(tmp_path)
     _record(plan, b"base", at=T0)
-    agent_edit = _record(plan, b"agent", at=T0 + timedelta(minutes=1), author=EXTERNAL, reason="external")
-    # The watcher sees the user's write first; it must not fold it into the
-    # agent's version, and the user's own record then claims it.
-    watched = _record(plan, b"user", at=T0 + timedelta(minutes=2), author=EXTERNAL, reason="external")
-    assert watched != agent_edit
-    assert (plan_versions.history_dir_for(plan) / agent_edit).read_bytes() == b"agent"
-    assert _record(plan, b"user", at=T0 + timedelta(minutes=2, seconds=5)) == watched
-    newest = _versions(plan)[0]["entry"]
-    assert newest["author"] == USER and newest["reason"] == "save"
+    first = _record(plan, b"edit 1", at=T0 + timedelta(minutes=1), author=EXTERNAL, reason="external")
+    assert _record(plan, b"edit 2", at=T0 + timedelta(minutes=4), author=EXTERNAL, reason="external") == first
+    assert _record(plan, b"edit 3", at=T0 + timedelta(minutes=9), author=EXTERNAL, reason="external") == first
+    assert (plan_versions.history_dir_for(plan) / first).read_bytes() == b"edit 3"
+    # Past the window from the version's last change, a new one starts.
+    later = _record(plan, b"edit 4", at=T0 + timedelta(minutes=20), author=EXTERNAL, reason="external")
+    assert later not in {first, None}
+    assert len(_versions(plan)) == 3
+
+
+def test_a_named_write_between_outside_changes_keeps_both_sides(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    _record(plan, b"base", at=T0)
+    before = _record(plan, b"agent edit", at=T0 + timedelta(minutes=1), author=EXTERNAL, reason="external")
+    mine = _record(plan, b"user save", at=T0 + timedelta(minutes=2))
+    after = _record(plan, b"agent edit 2", at=T0 + timedelta(minutes=3), author=EXTERNAL, reason="external")
+    assert len({before, mine, after}) == 3
+    history = plan_versions.history_dir_for(plan)
+    assert (history / before).read_bytes() == b"agent edit"
+    assert (history / mine).read_bytes() == b"user save"
+    assert (history / after).read_bytes() == b"agent edit 2"
+
+
+def test_an_announced_write_the_watcher_sees_first_is_recorded_as_its_author(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    _record(plan, b"base", at=T0)
+    outside = _record(plan, b"agent edit", at=T0 + timedelta(minutes=1), author=EXTERNAL, reason="external")
+    # The Plans backend announces the user's save, then the watcher wins the
+    # race and records it: it must not fold it into the outside version.
+    plan_versions.announce_write(plan, b"user save", author=USER, reason="save", now=T0 + timedelta(minutes=2))
+    seen = _record(plan, b"user save", at=T0 + timedelta(minutes=2, seconds=1), author=EXTERNAL, reason="external")
+    assert seen != outside
+    history = plan_versions.history_dir_for(plan)
+    assert (history / outside).read_bytes() == b"agent edit"
+    entry = plan_versions.read_index(history)[seen]
+    assert entry["author"] == USER and entry["reason"] == "save"
+    # The writer's own record afterwards adds nothing.
+    assert _record(plan, b"user save", at=T0 + timedelta(minutes=2, seconds=2)) is None
+    # An announcement older than a minute no longer applies.
+    plan_versions.announce_write(plan, b"stale", author=AGENT, reason="save", now=T0 + timedelta(minutes=3))
+    late = _record(plan, b"stale", at=T0 + timedelta(minutes=5), author=EXTERNAL, reason="external")
+    assert plan_versions.read_index(history)[late]["author"] == EXTERNAL
+
+
+def test_outside_changes_never_fold_into_a_stage_or_pinned_version(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    baseline = _record(plan, b"base", at=T0, author=EXTERNAL, reason="external")
+    assert plan_versions.read_index(plan_versions.history_dir_for(plan))[baseline]["reason"] == "stage"
+    edit = _record(plan, b"edit", at=T0 + timedelta(minutes=1), author=EXTERNAL, reason="external")
+    assert edit != baseline
+    assert _record(plan, b"edit", at=T0 + timedelta(minutes=2), reason="conflict") == edit
+    after = _record(plan, b"edit 2", at=T0 + timedelta(minutes=3), author=EXTERNAL, reason="external")
+    assert after != edit
+    assert (plan_versions.history_dir_for(plan) / edit).read_bytes() == b"edit"
 
 
 def test_a_pinned_conflict_side_is_never_folded_into(tmp_path: Path) -> None:

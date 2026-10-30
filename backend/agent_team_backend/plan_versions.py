@@ -13,7 +13,9 @@ records, one JSON object per line, who made each version, when and why::
 A later line about the same file replaces an earlier one. A line that is not
 valid JSON, or not an object of that shape, is skipped and reported; it never
 hides the other versions. A snapshot with no line at all is an older stage
-snapshot and is kept like one.
+snapshot and is kept like one. ``{"announce": "<sha256>", "author", "reason",
+"ts"}`` lines are a writer saying, just before it writes, whose bytes those
+will be (see :func:`announce_write`); they are not versions.
 
 Two processes record versions (the Plans backend, which knows who wrote, and
 the core plans watcher, which also sees writes made outside the plan tools),
@@ -52,10 +54,14 @@ ATTRIBUTION_WINDOW = timedelta(seconds=60)
 
 AUTHOR_KINDS = frozenset({"user", "agent", "external"})
 REASONS = frozenset({"save", "stage", "restore", "conflict", "external"})
-# Versions a later save of the same author may fold into. The watcher's
-# ``external`` versions never merge: it cannot tell writers apart, so folding
-# one into the last could overwrite another writer's version.
-_MERGEABLE = frozenset({"save"})
+# Versions a later change of the same author may fold into: a save into the
+# same author's save, and a change the watcher saw into the watcher's previous
+# version (agents editing a plan directly do so many times a day). Only the
+# newest attached version is ever folded into, so a named version in between
+# always ends the run; stage, restore and pinned conflict versions never fold.
+# A Plans write announces itself first, so the watcher never mistakes it for
+# an outside change and folds it into one.
+_MERGEABLE = frozenset({"save", "external"})
 # Kept forever by retention.
 _PERMANENT = frozenset({"stage"})
 
@@ -99,9 +105,24 @@ def _valid_entry(value: Any) -> bool:
     )
 
 
-def read_index(history_dir: Path, warn: Warn = _no_warn) -> dict[str, dict[str, Any]]:
+def _valid_announcement(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("announce"), str)
+        and isinstance(value.get("ts"), str)
+        and isinstance(value.get("author"), dict)
+        and value["author"].get("kind") in AUTHOR_KINDS - {"external"}
+        and isinstance(value["author"].get("pane", ""), str)
+        and value.get("reason") in REASONS
+    )
+
+
+def read_index(
+    history_dir: Path, warn: Warn = _no_warn, announcements: list[dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
     """Each snapshot file's latest index entry. Bad lines are skipped and
-    reported through ``warn``; a missing or unreadable index is empty."""
+    reported through ``warn``; a missing or unreadable index is empty.
+    Announcement lines are collected into ``announcements`` when given."""
     path = history_dir / INDEX_NAME
     try:
         raw = path.read_bytes()
@@ -115,6 +136,13 @@ def read_index(history_dir: Path, warn: Warn = _no_warn) -> dict[str, dict[str, 
             value = json.loads(line.decode("utf-8"))
         except (UnicodeDecodeError, ValueError):
             warn(f"{path}: line {number} is not JSON; skipped")
+            continue
+        if isinstance(value, dict) and "announce" in value:
+            if _valid_announcement(value):
+                if announcements is not None:
+                    announcements.append(value)
+            else:
+                warn(f"{path}: line {number} is not a write announcement; skipped")
             continue
         if not _valid_entry(value):
             warn(f"{path}: line {number} is not a version entry; skipped")
@@ -201,6 +229,31 @@ def _safe_history_dir(plan_path: Path) -> Path | None:
     return history_dir
 
 
+def announce_write(
+    plan_path: Path, data: bytes, *, author: dict[str, Any], reason: str,
+    now: datetime | None = None, warn: Warn = _no_warn,
+) -> None:
+    """Say, just before writing ``data`` to ``plan_path``, whose bytes they are.
+
+    The watcher may see the new file before the writer records its version;
+    with the announcement it records the writer as the author instead of an
+    outside change, so it never folds the write into the previous outside
+    version. An announcement older than a minute is ignored.
+    """
+    if reason not in REASONS or author.get("kind") not in AUTHOR_KINDS - {"external"}:
+        raise ValueError("invalid announcement")
+    history_dir = _safe_history_dir(plan_path)
+    if history_dir is None:
+        warn(f"{plan_path}: history directory is not inside the plan's directory; not announced")
+        return
+    moment = (now or datetime.now()).astimezone()
+    with _target_lock(history_dir / INDEX_NAME):
+        _append(history_dir, {
+            "announce": hashlib.sha256(data).hexdigest(), "author": dict(author), "reason": reason,
+            "ts": moment.isoformat(),
+        })
+
+
 def record_version(
     plan_path: Path,
     data: bytes,
@@ -239,6 +292,19 @@ def record_version(
     now = (now or datetime.now()).astimezone()
     sha = hashlib.sha256(data).hexdigest()
     with _target_lock(history_dir / INDEX_NAME):
+        announcements: list[dict[str, Any]] = []
+        read_index(history_dir, announcements=announcements)
+        if author["kind"] == "external":
+            for announcement in reversed(announcements):
+                announced = _parse_ts(announcement["ts"])
+                if (
+                    announcement["announce"] == sha
+                    and announced is not None
+                    and timedelta(0) <= now - announced <= ATTRIBUTION_WINDOW
+                ):
+                    # A Plans write the watcher saw first: record its author.
+                    author, reason = dict(announcement["author"]), announcement["reason"]
+                    break
         versions = list_versions(history_dir, warn)
         attached = [
             version for version in versions

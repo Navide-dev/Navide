@@ -749,6 +749,7 @@ def _write(
         _log(f"write {rel_path} refused: {exc}")
         raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION") from None
     data = content.encode("utf-8")
+    _announce_version(origin, rel_path, data, reason="save")
     if len(data) > SINGLE_WRITE_MAX_BYTES:
         result = _write_staged(root, rel_path, data, expected_mtime, expected_sha256)
     else:
@@ -786,11 +787,8 @@ def _version_author(origin: dict[str, Any]) -> dict[str, str]:
     return {"kind": "agent" if kind == "agent" else "user"}
 
 
-def _record_version(
-    origin: dict[str, Any], rel_path: str, data: bytes, *, reason: str, detached: bool = False,
-) -> str | None:
-    """Record ``data`` (the bytes just written, or a conflict's other side) as
-    a version. Never fails the write it follows: a problem is logged."""
+def _versioned_stage(origin: dict[str, Any], rel_path: str, data: bytes) -> tuple[Path, str] | None:
+    """The plan file and the stage of ``data`` when this write keeps a version."""
     plan = _versioned_plan(origin, rel_path)
     if plan is None:
         return None
@@ -799,8 +797,31 @@ def _record_version(
     except UnicodeDecodeError:
         return None
     stage = meta.get("stage") if isinstance(meta, dict) else None
-    if stage not in PLAN_STAGES:
-        return None  # like the watcher: a document without a stage keeps no versions
+    return (plan, stage) if stage in PLAN_STAGES else None
+
+
+def _announce_version(origin: dict[str, Any], rel_path: str, data: bytes, *, reason: str) -> None:
+    """Tell the version history whose bytes are about to be written, so the
+    core watcher, should it see them first, records this author too."""
+    target = _versioned_stage(origin, rel_path, data)
+    if target is None:
+        return
+    try:
+        plan_versions.announce_write(target[0], data, author=_version_author(origin), reason=reason, warn=_log)
+    except (OSError, ValueError, FsError) as exc:
+        _log(f"write of {rel_path} not announced: {exc}")
+
+
+def _record_version(
+    origin: dict[str, Any], rel_path: str, data: bytes, *, reason: str, detached: bool = False,
+) -> str | None:
+    """Record ``data`` (the bytes just written, or a conflict's other side) as
+    a version. Never fails the write it follows: a problem is logged. Like
+    the watcher, a document without a stage keeps no versions."""
+    target = _versioned_stage(origin, rel_path, data)
+    if target is None:
+        return None
+    plan, stage = target
     try:
         return plan_versions.record_version(
             plan, data, stage=stage, author=_version_author(origin), reason=reason, detached=detached, warn=_log,
@@ -1973,6 +1994,8 @@ def _manual_upload(origin: dict[str, Any], arguments: dict[str, Any], action: st
                 staged = staging.read_bytes()
         except (FsError, OSError):
             staged = None
+    if staged is not None and len(staged) == total:
+        _announce_version(origin, path, staged, reason="save")
     result = write_commit(_plan_root(origin), path, upload_id, total, expected, sha256)
     if _is_record(result) and result.get("conflict") is True:
         return {"ok": False, "conflict": True}
