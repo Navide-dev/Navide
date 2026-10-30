@@ -35,6 +35,30 @@ describe('TerminalCore screen behaviour', () => {
   })
 })
 
+// Every SGR colour form, generated (ECMA-48 8.3.117; xterm ctlseqs 256 and direct colour).
+const colourCases: [string, string, Record<string, string>][] = []
+for (let i = 0; i < 8; i++) {
+  colourCases.push([`fg ${30 + i}`, `${CSI}${30 + i}mx`, { fg: `p:${i}` }])
+  colourCases.push([`bg ${40 + i}`, `${CSI}${40 + i}mx`, { bg: `p:${i}` }])
+  colourCases.push([`bright fg ${90 + i}`, `${CSI}${90 + i}mx`, { fg: `p:${8 + i}` }])
+  colourCases.push([`bright bg ${100 + i}`, `${CSI}${100 + i}mx`, { bg: `p:${8 + i}` }])
+}
+for (const n of [0, 7, 8, 15, 16, 21, 46, 51, 88, 124, 160, 196, 201, 226, 231, 232, 244, 255]) {
+  colourCases.push([`fg 38;5;${n}`, `${CSI}38;5;${n}mx`, { fg: `p:${n}` }])
+  colourCases.push([`bg 48;5;${n}`, `${CSI}48;5;${n}mx`, { bg: `p:${n}` }])
+}
+for (const [r, g, b] of [[0, 0, 0], [255, 255, 255], [1, 2, 3], [255, 0, 128], [18, 52, 86], [200, 100, 50]] as const) {
+  const hex = [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')
+  colourCases.push([`fg 38;2;${r};${g};${b}`, `${CSI}38;2;${r};${g};${b}mx`, { fg: `r:${hex}` }])
+  colourCases.push([`bg 48;2;${r};${g};${b}`, `${CSI}48;2;${r};${g};${b}mx`, { bg: `r:${hex}` }])
+}
+
+describe('TerminalCore colours (generated)', () => {
+  it.each(colourCases)('%s', (_name, input, expected) => {
+    expect(cell(term(input), 0, 0)).toMatchObject(expected)
+  })
+})
+
 describe('TerminalCore attributes', () => {
   it.each([
     ['bold', `${CSI}1mx`, { flags: CellFlag.Bold }],

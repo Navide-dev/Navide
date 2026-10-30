@@ -181,3 +181,106 @@ export const screenCases: ScreenCase[] = [
   ['the normal screen survives the alternate screen', `abc${CSI}?1049h${CSI}2Jxyz${CSI}?1049l`, 10, 2, ['abc', ''], [3, 0]],
   ['entering 1049 twice keeps the first saved cursor', `${CSI}2;3H${CSI}?1049h${CSI}H${CSI}?1049h${CSI}?1049lX`, 10, 3, ['', '  X', ''], [3, 1]],
 ]
+
+// ---- Systematic families (M6): every position or count of a function, with
+// the expected screen computed by hand from the specification. ----
+
+/** Rows of a blank screen with `marks` placed: [row, col, text]. Wide text takes two columns. */
+function screen(cols: number, rows: number, marks: [number, number, string][]): string[] {
+  const grid = Array.from({ length: rows }, () => Array<string>(cols).fill(' '))
+  for (const [r, c, text] of marks) {
+    let x = c
+    for (const ch of text) {
+      grid[r]![x] = ch
+      if (/[　-鿿]/.test(ch)) {
+        grid[r]![x + 1] = ''
+        x += 2
+      } else {
+        x++
+      }
+    }
+  }
+  return grid.map((row) => row.join('').trimEnd())
+}
+
+const fam: ScreenCase[] = []
+
+// CUP to every cell of a 6x5 screen (ECMA-48 8.3.21).
+for (let r = 1; r <= 5; r++) {
+  for (let c = 1; c <= 6; c++) {
+    fam.push([`family CUP ${r};${c}`, `${CSI}${r};${c}HX`, 6, 5, screen(6, 5, [[r - 1, c - 1, 'X']]), [c, r - 1]])
+  }
+}
+
+// CUU / CUD / CUF / CUB by 1..5 from the middle of a 9x9 screen, clamped at the edges.
+for (let n = 1; n <= 5; n++) {
+  const up = Math.max(0, 4 - n)
+  const down = Math.min(8, 4 + n)
+  const right = Math.min(8, 4 + n)
+  const left = Math.max(0, 4 - n)
+  fam.push([`family CUU ${n}`, `${CSI}5;5H${CSI}${n}AX`, 9, 9, screen(9, 9, [[up, 4, 'X']]), [5, up]])
+  fam.push([`family CUD ${n}`, `${CSI}5;5H${CSI}${n}BX`, 9, 9, screen(9, 9, [[down, 4, 'X']]), [5, down]])
+  fam.push([`family CUF ${n}`, `${CSI}5;5H${CSI}${n}CX`, 9, 9, screen(9, 9, [[4, right, 'X']]), [right + 1, 4]])
+  fam.push([`family CUB ${n}`, `${CSI}5;5H${CSI}${n}DX`, 9, 9, screen(9, 9, [[4, left, 'X']]), [left + 1, 4]])
+}
+
+// ECH / ICH / DCH by 1..6 at column 3 of "abcdefgh" (ECMA-48 8.3.38, 8.3.64, 8.3.26).
+for (let n = 1; n <= 6; n++) {
+  const s = 'abcdefgh'
+  const ech = (s.slice(0, 2) + ' '.repeat(n) + s.slice(2 + n)).slice(0, 10).trimEnd()
+  const ich = (s.slice(0, 2) + ' '.repeat(n) + s.slice(2)).slice(0, 10).trimEnd()
+  const dch = (s.slice(0, 2) + s.slice(2 + n)).trimEnd()
+  fam.push([`family ECH ${n}`, `${s}${CSI}3G${CSI}${n}X`, 10, 1, [ech], [2, 0]])
+  fam.push([`family ICH ${n}`, `${s}${CSI}3G${CSI}${n}@`, 10, 1, [ich], [2, 0]])
+  fam.push([`family DCH ${n}`, `${s}${CSI}3G${CSI}${n}P`, 10, 1, [dch], [2, 0]])
+}
+
+// EL 0 / 1 / 2 with the cursor in columns 1..4 (ECMA-48 8.3.41).
+for (let c = 1; c <= 4; c++) {
+  const s = 'abcdef'
+  fam.push([`family EL0 at ${c}`, `${s}${CSI}${c}G${CSI}0K`, 8, 1, [s.slice(0, c - 1)], [c - 1, 0]])
+  fam.push([`family EL1 at ${c}`, `${s}${CSI}${c}G${CSI}1K`, 8, 1, [' '.repeat(c) + s.slice(c)], [c - 1, 0]])
+  fam.push([`family EL2 at ${c}`, `${s}${CSI}${c}G${CSI}2K`, 8, 1, [''], [c - 1, 0]])
+}
+
+// HT from every column of a 20-column line (default stops every 8).
+for (let c = 0; c < 10; c++) {
+  const stop = c < 8 ? 8 : 16
+  fam.push([`family HT from ${c}`, `${CSI}${c + 1}G\tX`, 20, 1, [' '.repeat(stop) + 'X'], [stop + 1, 0]])
+}
+
+// IL / DL by 1..4 on each row of a 5-row screen (ECMA-48 8.3.67, 8.3.32).
+const five = ['r0', 'r1', 'r2', 'r3', 'r4']
+for (let row = 1; row <= 4; row++) {
+  for (let n = 1; n <= 4; n++) {
+    const il = [...five.slice(0, row), ...Array<string>(n).fill(''), ...five.slice(row)].slice(0, 5)
+    const dl = [...five.slice(0, row), ...five.slice(row + n), ...Array<string>(n).fill('')].slice(0, 5)
+    fam.push([`family IL ${n} at row ${row}`, `${five.join('\r\n')}${CSI}${row + 1}H${CSI}${n}L`, 4, 5, il, [0, row]])
+    fam.push([`family DL ${n} at row ${row}`, `${five.join('\r\n')}${CSI}${row + 1}H${CSI}${n}M`, 4, 5, dl, [0, row]])
+  }
+}
+
+// SU / SD by 1..4 (ECMA-48 8.3.147, 8.3.113); the cursor stays.
+for (let n = 1; n <= 4; n++) {
+  fam.push([`family SU ${n}`, `${five.join('\r\n')}${CSI}${n}S`, 4, 5, [...five.slice(n), ...Array<string>(n).fill('')], [2, 4]])
+  fam.push([`family SD ${n}`, `${five.join('\r\n')}${CSI}${n}T`, 4, 5, [...Array<string>(n).fill(''), ...five.slice(0, 5 - n)], [2, 4]])
+}
+
+// A line feed at the bottom margin of regions [t, b] scrolls only the region (DEC STD 070 DECSTBM).
+for (const [t, b] of [[1, 3], [2, 4], [2, 5], [3, 5], [1, 2], [4, 5]] as const) {
+  const after = [...five]
+  after.splice(t - 1, b - t + 1, ...five.slice(t, b), '')
+  after[b - 1] = 'X'
+  fam.push([`family DECSTBM ${t};${b} LF at bottom`, `${five.join('\r\n')}${CSI}${t};${b}r${CSI}${b}H\nX`, 4, 5, after, [1, b - 1]])
+}
+
+// A wide character printed at every column of a 6-column screen.
+for (let c = 0; c < 6; c++) {
+  if (c < 5) fam.push([`family wide at col ${c}`, `${CSI}${c + 1}G中`, 6, 2, screen(6, 2, [[0, c, '中']]), [c + 2, 0]])
+  else fam.push([`family wide at col ${c} wraps`, `${CSI}${c + 1}G中`, 6, 2, screen(6, 2, [[1, 0, '中']]), [2, 1]])
+}
+
+// REP 1..4 after one character (ECMA-48 8.3.103).
+for (let n = 1; n <= 4; n++) fam.push([`family REP ${n}`, `z${CSI}${n}b`, 10, 1, ['z'.repeat(n + 1)], [n + 1, 0]])
+
+screenCases.push(...fam)
