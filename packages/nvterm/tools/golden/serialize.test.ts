@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { serialize } from '../../src/serialize.ts'
-import { diffSnapshots } from '../../src/snapshot.ts'
-import { TerminalCore } from '../../src/terminal.ts'
-import { fixtures } from '../fixtures/fixtures.ts'
+import { serialize } from '../../src/serialize'
+import { diffSnapshots } from '../../src/snapshot'
+import { TerminalCore } from '../../src/terminal'
+import { fixtures } from '../fixtures/fixtures'
 import { readFileSync } from 'node:fs'
-import type { Triage } from './compare.ts'
-import { xtermDriver } from './xtermOracle.ts'
+import type { Triage } from './compare'
+import { xtermDriver } from './xtermOracle'
 
 /** Fixtures where nvterm and xterm.js already differ on purpose (triage.json). */
 const triaged = new Set(Object.keys(JSON.parse(readFileSync(new URL('./triage.json', import.meta.url), 'utf8')) as Triage))

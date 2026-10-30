@@ -1,5 +1,5 @@
-import { TerminalCore } from '../../src/terminal.ts'
-import type { TerminalDriver, TerminalStream } from './driver.ts'
+import { TerminalCore } from '../../src/terminal'
+import type { TerminalDriver, TerminalStream } from './driver'
 
 export const nvtermDriver: TerminalDriver = {
   name: 'nvterm',

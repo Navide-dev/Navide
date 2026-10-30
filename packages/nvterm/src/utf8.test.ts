@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { REPLACEMENT, Utf8Decoder } from './utf8.ts'
+import { REPLACEMENT, Utf8Decoder } from './utf8'
 
 function decodeChunks(...chunks: number[][]): number[] {
   const decoder = new Utf8Decoder()

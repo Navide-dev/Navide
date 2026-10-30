@@ -3,11 +3,11 @@
 // rectangles (backgrounds, selection, simple decorations, cursor) and glyphs
 // sampled from the atlas, tinted by colour unless the glyph has its own
 // colours (emoji).
-import { WIDTH_TRAILING, WIDTH_WIDE } from '../buffer.ts'
-import { CellFlag } from '../snapshot.ts'
-import type { Style } from '../style.ts'
-import { cellColors, fontString, measureCell, strokeUnderline, type CellMetrics, type Frame, type Renderer, type RendererOptions } from './renderer.ts'
-import { cellColor } from './theme.ts'
+import { WIDTH_TRAILING, WIDTH_WIDE } from '../buffer'
+import { CellFlag } from '../snapshot'
+import type { Style } from '../style'
+import { cellColors, fontString, measureCell, strokeUnderline, type CellMetrics, type Frame, type Renderer, type RendererOptions } from './renderer'
+import { cellColor } from './theme'
 
 const RECT_VS = `#version 300 es
 layout(location = 0) in vec2 a_unit;

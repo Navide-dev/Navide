@@ -7,10 +7,10 @@
 // Layout: the normal buffer (scrollback then viewport); if the alternate
 // screen is active and not excluded, `CSI ? 1049 h CSI H` and the alternate
 // screen; then the mode section.
-import { WIDTH_TRAILING, WIDTH_WIDE, type Buffer, type Line } from './buffer.ts'
-import { CellFlag } from './snapshot.ts'
-import { DEFAULT_COLOR, PALETTE, RGB, type Style } from './style.ts'
-import type { TerminalCore } from './terminal.ts'
+import { WIDTH_TRAILING, WIDTH_WIDE, type Buffer, type Line } from './buffer'
+import { CellFlag } from './snapshot'
+import { DEFAULT_COLOR, PALETTE, RGB, type Style } from './style'
+import type { TerminalCore } from './terminal'
 
 export interface SerializeOptions {
   /** Scrollback lines to include (most recent first); all when omitted. */

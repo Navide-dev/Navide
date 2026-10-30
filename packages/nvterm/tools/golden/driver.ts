@@ -1,5 +1,5 @@
-import type { ScreenSnapshot } from '../../src/snapshot.ts'
-import type { Fixture } from '../fixtures/fixtures.ts'
+import type { ScreenSnapshot } from '../../src/snapshot'
+import type { Fixture } from '../fixtures/fixtures'
 
 /** One terminal implementation, reduced to "bytes in, screen out". */
 export interface TerminalDriver {

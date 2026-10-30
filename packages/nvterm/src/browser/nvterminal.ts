@@ -1,14 +1,14 @@
 // NvTerminal: the browser-facing terminal. Wires the headless core to a
 // renderer and to keyboard, IME, paste, mouse, selection, scrolling and links.
-import { TerminalCore } from '../terminal.ts'
-import { CanvasRenderer } from './canvasRenderer.ts'
-import type { CursorShape, Frame, Renderer } from './renderer.ts'
-import { Emitter, type IDisposable, type Link, type LinkProvider } from './events.ts'
-import { encodeKey } from './keyboard.ts'
-import { encodeMouse, type MouseReport } from './mouse.ts'
-import { lineText, Selection } from './selection.ts'
-import { resolveTheme, type Theme } from './theme.ts'
-import { WebglRenderer } from './webglRenderer.ts'
+import { TerminalCore } from '../terminal'
+import { CanvasRenderer } from './canvasRenderer'
+import type { CursorShape, Frame, Renderer } from './renderer'
+import { Emitter, type IDisposable, type Link, type LinkProvider } from './events'
+import { encodeKey } from './keyboard'
+import { encodeMouse, type MouseReport } from './mouse'
+import { lineText, Selection } from './selection'
+import { resolveTheme, type Theme } from './theme'
+import { WebglRenderer } from './webglRenderer'
 
 export type RendererKind = 'auto' | 'webgl' | 'canvas'
 export interface RendererChange {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { CellFlag } from './snapshot.ts'
-import { screenCases } from './terminal.cases.ts'
-import { TerminalCore, type TerminalCoreOptions } from './terminal.ts'
+import { CellFlag } from './snapshot'
+import { screenCases } from './terminal.cases'
+import { TerminalCore, type TerminalCoreOptions } from './terminal'
 
 const ESC = '\x1b'
 const CSI = `${ESC}[`

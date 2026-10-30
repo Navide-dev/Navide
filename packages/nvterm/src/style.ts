@@ -2,8 +2,8 @@
 // style id; identical attribute sets share one id.
 // Spec: ECMA-48 8.3.117 (SGR); ITU T.416 / xterm ctlseqs for 38/48/58 colour
 // forms and the 4:n underline styles.
-import { CellFlag } from './snapshot.ts'
-import type { Params } from './params.ts'
+import { CellFlag } from './snapshot'
+import type { Params } from './params'
 
 /** Colour encoding: 0 = default, PALETTE | index (0-255), RGB | 0xrrggbb. */
 export const DEFAULT_COLOR = 0

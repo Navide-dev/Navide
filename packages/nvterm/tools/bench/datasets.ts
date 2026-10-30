@@ -1,7 +1,7 @@
 // Deterministic inputs for the renderer-side throughput benchmark. Each
 // dataset is a byte stream of roughly `targetBytes`, built from one repeated
 // pattern so runs are comparable across machines and implementations.
-import { cha, cup, cuu, ed, el, sgr, syncBegin, syncEnd } from '../fixtures/seq.ts'
+import { cha, cup, cuu, ed, el, sgr, syncBegin, syncEnd } from '../fixtures/seq'
 
 export interface Dataset {
   id: string

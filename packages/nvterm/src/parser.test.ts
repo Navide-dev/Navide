@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Params } from './params.ts'
-import { Parser, State, type ParserHandler } from './parser.ts'
+import type { Params } from './params'
+import { Parser, State, type ParserHandler } from './parser'
 
 type Event = (string | number | number[][])[]
 

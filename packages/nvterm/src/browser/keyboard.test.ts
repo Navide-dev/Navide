@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { encodeKey, type KeyInput, type KeyOptions } from './keyboard.ts'
+import { encodeKey, type KeyInput, type KeyOptions } from './keyboard'
 
 const base: KeyOptions = { applicationCursorKeys: false, applicationKeypad: false, isMac: false, macOptionIsMeta: false }
 function key(k: string, mods: Partial<KeyInput> = {}, opts: Partial<KeyOptions> = {}): string | undefined {

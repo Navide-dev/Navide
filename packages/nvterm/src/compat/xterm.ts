@@ -8,11 +8,11 @@
 // code needs no change: `_core._renderService` (cell size, render cache
 // clear) and `_core._compositionHelper` (stuck IME composition), plus
 // `WebglAddon._renderer.handleBlur`. They map onto nvterm's public API.
-import { NvTerminal, type NvTerminalOptions } from '../browser/nvterminal.ts'
-import type { IDisposable, LinkProvider } from '../browser/events.ts'
-import { lineText } from '../browser/selection.ts'
-import type { Line } from '../buffer.ts'
-import { serialize, type SerializeOptions } from '../serialize.ts'
+import { NvTerminal, type NvTerminalOptions } from '../browser/nvterminal'
+import type { IDisposable, LinkProvider } from '../browser/events'
+import { lineText } from '../browser/selection'
+import type { Line } from '../buffer'
+import { serialize, type SerializeOptions } from '../serialize'
 
 export interface CompatAddon {
   activate(terminal: Terminal): void
@@ -211,6 +211,16 @@ export class Terminal {
   }
 
   open(parent: HTMLElement): void {
+    // Canvas fonts cannot read CSS variables: resolve `var(--x, fallback)` against the parent first.
+    const family = this.nv.options.fontFamily
+    if (family.includes('var(')) {
+      const probe = parent.ownerDocument.createElement('span')
+      probe.style.fontFamily = family
+      parent.append(probe)
+      const resolved = getComputedStyle(probe).fontFamily
+      probe.remove()
+      if (resolved && !resolved.includes('var(')) this.nv.setOption('fontFamily', resolved)
+    }
     this.nv.open(parent)
     // Class names Navide queries for geometry and focus checks. Only these
     // two: the `.xterm` root class would pull in xterm.css rules.

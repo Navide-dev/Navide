@@ -3,7 +3,7 @@
 // (0 left, 1 middle, 2 right, 3 release, +32 motion, 64/65 wheel) with
 // modifier bits shift 4, meta 8, control 16; encodings default (CSI M with
 // bytes value + 32), UTF-8 (1005), SGR (1006), urxvt (1015), SGR pixels (1016).
-import type { Modes } from '../terminal.ts'
+import type { Modes } from '../terminal'
 
 export interface MouseReport {
   action: 'down' | 'up' | 'move' | 'wheel'

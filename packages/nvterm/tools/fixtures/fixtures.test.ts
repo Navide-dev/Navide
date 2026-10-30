@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fixtures } from './fixtures.ts'
+import { fixtures } from './fixtures'
 
 describe('fixtures', () => {
   it('has at least 30 fixtures with unique kebab-case ids', () => {

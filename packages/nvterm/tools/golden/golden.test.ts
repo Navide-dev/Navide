@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { diffKey, diffSnapshots, type ScreenSnapshot } from '../../src/snapshot.ts'
-import { screenCases } from '../../src/terminal.cases.ts'
-import { fixtures } from '../fixtures/fixtures.ts'
+import { diffKey, diffSnapshots, type ScreenSnapshot } from '../../src/snapshot'
+import { screenCases } from '../../src/terminal.cases'
+import { fixtures } from '../fixtures/fixtures'
 import { readFileSync } from 'node:fs'
-import { compareFixture, type Triage } from './compare.ts'
-import type { TerminalDriver } from './driver.ts'
-import { nvtermDriver } from './nvtermDriver.ts'
-import { xtermDriver } from './xtermOracle.ts'
+import { compareFixture, type Triage } from './compare'
+import type { TerminalDriver } from './driver'
+import { nvtermDriver } from './nvtermDriver'
+import { xtermDriver } from './xtermOracle'
 
 const byId = (id: string) => fixtures.find((f) => f.id === id)!
 

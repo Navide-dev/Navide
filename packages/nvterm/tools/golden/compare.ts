@@ -1,6 +1,6 @@
-import { diffKey, diffSnapshots, type SnapshotDiff } from '../../src/snapshot.ts'
-import type { Fixture } from '../fixtures/fixtures.ts'
-import type { TerminalDriver } from './driver.ts'
+import { diffKey, diffSnapshots, type SnapshotDiff } from '../../src/snapshot'
+import type { Fixture } from '../fixtures/fixtures'
+import type { TerminalDriver } from './driver'
 
 export type TriageCategory = 'oracle-bug' | 'accepted'
 

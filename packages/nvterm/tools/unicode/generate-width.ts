@@ -1,4 +1,4 @@
-// Usage: node packages/nvterm/tools/unicode/generate-width.ts <ucd-dir> <version>
+// Usage: node --import ./packages/nvterm/tools/register.mjs packages/nvterm/tools/unicode/generate-width.ts <ucd-dir> <version>
 // Reads EastAsianWidth.txt and DerivedGeneralCategory.txt from a Unicode
 // Character Database release and writes src/widthTable.ts.
 // Spec: UAX #11 (East Asian Width), Unicode chapter 4.5 (General Category).

@@ -2,12 +2,12 @@
 // Spec references are per function below: ECMA-48 (5th ed.) section numbers,
 // DEC STD 070 / VT510 manual names for DEC private functions, xterm ctlseqs
 // for xterm extensions (alternate screen, mouse and paste modes, OSC).
-import { Buffer, Line, WIDTH_NORMAL, WIDTH_TRAILING, WIDTH_WIDE } from './buffer.ts'
-import type { CellSnapshot, ScreenSnapshot } from './snapshot.ts'
-import { Parser, type ParserHandler } from './parser.ts'
-import type { Params } from './params.ts'
-import { applySgr, colorSpec, DEFAULT_STYLE, StyleTable, type Style } from './style.ts'
-import { charWidth } from './width.ts'
+import { Buffer, Line, WIDTH_NORMAL, WIDTH_TRAILING, WIDTH_WIDE } from './buffer'
+import type { CellSnapshot, ScreenSnapshot } from './snapshot'
+import { Parser, type ParserHandler } from './parser'
+import type { Params } from './params'
+import { applySgr, colorSpec, DEFAULT_STYLE, StyleTable, type Style } from './style'
+import { charWidth } from './width'
 
 export type MouseTrackingMode = 'none' | 'x10' | 'vt200' | 'drag' | 'any'
 

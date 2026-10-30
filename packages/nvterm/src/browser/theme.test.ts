@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { PALETTE, RGB } from '../style.ts'
-import { buildPalette, cellColor, contrastRatio, ensureContrast, parseColor, resolveTheme } from './theme.ts'
+import { PALETTE, RGB } from '../style'
+import { buildPalette, cellColor, contrastRatio, ensureContrast, parseColor, resolveTheme } from './theme'
 
 describe('theme', () => {
   it.each([

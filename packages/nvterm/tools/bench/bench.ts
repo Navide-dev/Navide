@@ -1,5 +1,5 @@
-import type { StreamFactory } from '../golden/driver.ts'
-import type { Dataset } from './datasets.ts'
+import type { StreamFactory } from '../golden/driver'
+import type { Dataset } from './datasets'
 
 export interface BenchResult {
   dataset: string

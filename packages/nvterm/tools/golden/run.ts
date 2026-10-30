@@ -1,11 +1,11 @@
-// Usage: node packages/nvterm/tools/golden/run.ts [fixture-id ...]
+// Usage: node --import ./packages/nvterm/tools/register.mjs packages/nvterm/tools/golden/run.ts [fixture-id ...]
 // Compares every fixture (or the named ones) between the oracle and the
 // candidate driver and prints untriaged differences. Exits 1 if any remain.
 import { readFileSync } from 'node:fs'
-import { fixtures } from '../fixtures/fixtures.ts'
-import { compareAll, type Triage } from './compare.ts'
-import { nvtermDriver } from './nvtermDriver.ts'
-import { xtermDriver } from './xtermOracle.ts'
+import { fixtures } from '../fixtures/fixtures'
+import { compareAll, type Triage } from './compare'
+import { nvtermDriver } from './nvtermDriver'
+import { xtermDriver } from './xtermOracle'
 
 const candidate = nvtermDriver
 const triage = JSON.parse(readFileSync(new URL('./triage.json', import.meta.url), 'utf8')) as Triage

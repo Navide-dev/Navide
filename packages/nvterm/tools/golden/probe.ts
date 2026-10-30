@@ -1,7 +1,7 @@
-// Usage: node packages/nvterm/tools/golden/probe.ts '<js string literal>' [cols] [rows]
+// Usage: node --import ./packages/nvterm/tools/register.mjs packages/nvterm/tools/golden/probe.ts '<js string literal>' [cols] [rows]
 // Prints the oracle's screen for one input: a quick black-box question to xterm.js.
-import { describeCell } from '../../src/snapshot.ts'
-import { xtermDriver } from './xtermOracle.ts'
+import { describeCell } from '../../src/snapshot'
+import { xtermDriver } from './xtermOracle'
 
 const input = JSON.parse(`"${process.argv[2] ?? ''}"`) as string
 const cols = Number(process.argv[3] ?? 10)

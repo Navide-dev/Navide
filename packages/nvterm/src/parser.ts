@@ -7,8 +7,8 @@
 //     as SGR 4:3 and 38:2::r:g:b need, instead of sending CSI to ignore.
 //   - BEL (0x07) also ends an OSC string (xterm ctlseqs).
 //   - DEL (0x7F) is ignored in ground.
-import { Params } from './params.ts'
-import { REPLACEMENT, Utf8Decoder } from './utf8.ts'
+import { Params } from './params'
+import { REPLACEMENT, Utf8Decoder } from './utf8'
 
 export const State = {
   Ground: 0,

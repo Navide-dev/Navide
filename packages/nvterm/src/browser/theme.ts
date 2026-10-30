@@ -2,7 +2,7 @@
 // Spec: xterm ctlseqs "256-color" palette layout (16 system colours, a
 // 6x6x6 cube with levels 0, 95, 135, 175, 215, 255, then 24 greys from 8 in
 // steps of 10); WCAG 2.1 relative luminance and contrast ratio.
-import { DEFAULT_COLOR, PALETTE, RGB } from '../style.ts'
+import { DEFAULT_COLOR, PALETTE, RGB } from '../style'
 
 export interface Theme {
   foreground?: string

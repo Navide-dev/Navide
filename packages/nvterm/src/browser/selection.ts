@@ -1,6 +1,6 @@
 // Text selection over the buffer. Positions use stable line ids
 // (Buffer.dropped + absolute index) so a selection survives new output.
-import { WIDTH_TRAILING, type Buffer, type Line } from '../buffer.ts'
+import { WIDTH_TRAILING, type Buffer, type Line } from '../buffer'
 
 export interface CellPos {
   /** Column, 0-based. */

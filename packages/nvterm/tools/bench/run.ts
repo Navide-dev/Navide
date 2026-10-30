@@ -1,10 +1,10 @@
-// Usage: node packages/nvterm/tools/bench/run.ts [--mib N] [--rounds N]
+// Usage: node --import ./packages/nvterm/tools/register.mjs packages/nvterm/tools/bench/run.ts [--mib N] [--rounds N]
 // Prints parse throughput per dataset for xterm.js and nvterm as JSON
 // (stability gate G4: nvterm must not be slower).
-import { compare } from './bench.ts'
-import { datasets } from './datasets.ts'
-import { createNvtermStream } from '../golden/nvtermDriver.ts'
-import { createXtermStream } from '../golden/xtermOracle.ts'
+import { compare } from './bench'
+import { datasets } from './datasets'
+import { createNvtermStream } from '../golden/nvtermDriver'
+import { createXtermStream } from '../golden/xtermOracle'
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(name)

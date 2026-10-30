@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { TerminalCore } from '../terminal.ts'
-import { Selection } from './selection.ts'
+import { TerminalCore } from '../terminal'
+import { Selection } from './selection'
 
 function setup(text: string, cols = 10, rows = 4, scrollback = 100) {
   const core = new TerminalCore({ cols, rows, scrollback })

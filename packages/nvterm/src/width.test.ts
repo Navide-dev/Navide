@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { charWidth } from './width.ts'
-import { UNICODE_VERSION } from './widthTable.ts'
+import { charWidth } from './width'
+import { UNICODE_VERSION } from './widthTable'
 
 const cp = (s: string): number => s.codePointAt(0)!
 

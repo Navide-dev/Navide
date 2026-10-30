@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createXtermStream } from '../golden/xtermOracle.ts'
-import { compare, measure } from './bench.ts'
-import { createNvtermStream } from '../golden/nvtermDriver.ts'
-import { datasets } from './datasets.ts'
+import { createXtermStream } from '../golden/xtermOracle'
+import { compare, measure } from './bench'
+import { createNvtermStream } from '../golden/nvtermDriver'
+import { datasets } from './datasets'
 
 describe('throughput benchmark harness', () => {
   it('builds every dataset near the requested size', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { encodeMouse, type MouseReport } from './mouse.ts'
+import { encodeMouse, type MouseReport } from './mouse'
 
 const at = (r: Partial<MouseReport>): MouseReport => ({ action: 'down', button: 0, col: 4, row: 2, x: 40, y: 30, shift: false, alt: false, ctrl: false, ...r })
 

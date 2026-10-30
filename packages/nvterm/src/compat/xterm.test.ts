@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FitAddon, SerializeAddon, Terminal, Unicode11Addon } from './xterm.ts'
+import { FitAddon, SerializeAddon, Terminal, Unicode11Addon } from './xterm'
 
 describe('xterm compatibility layer (headless parts)', () => {
   it('constructs with Navide-style options and keeps defaults for the rest', () => {

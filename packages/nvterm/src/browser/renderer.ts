@@ -1,9 +1,9 @@
 // What every renderer shares: options, cell metrics, the frame it draws and
 // colour resolution, so the Canvas2D and WebGL2 renderers paint the same thing.
-import type { Buffer } from '../buffer.ts'
-import { CellFlag } from '../snapshot.ts'
-import type { Style } from '../style.ts'
-import { cellColor, ensureContrast, type ResolvedColors } from './theme.ts'
+import type { Buffer } from '../buffer'
+import { CellFlag } from '../snapshot'
+import type { Style } from '../style'
+import { cellColor, ensureContrast, type ResolvedColors } from './theme'
 
 export interface RendererOptions {
   fontFamily: string

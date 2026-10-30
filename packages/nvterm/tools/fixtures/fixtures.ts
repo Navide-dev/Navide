@@ -4,7 +4,7 @@
 import {
   BEL, ESC, cha, cub, cud, cuf, cup, cuu, dch, decrc, decrst, decsc, decset, decstbm, dl, ech, ed, el, ich, il,
   link, ri, rm, sd, sgr, sm, su, syncBegin, syncEnd, title, vpa,
-} from './seq.ts'
+} from './seq'
 
 export interface Fixture {
   id: string

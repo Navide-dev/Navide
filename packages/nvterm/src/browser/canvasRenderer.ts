@@ -1,11 +1,11 @@
 // Canvas2D renderer: draws the visible rows of a buffer, the selection, link
 // underlines and the cursor. It is the fallback renderer; the WebGL2
 // renderer (M3) draws the same frame.
-import { WIDTH_TRAILING, WIDTH_WIDE } from '../buffer.ts'
-import { CellFlag } from '../snapshot.ts'
-import type { Style } from '../style.ts'
-import { cellColors, fontString, measureCell, strokeUnderline, type CellMetrics, type Frame, type Renderer, type RendererOptions } from './renderer.ts'
-import { cellColor, cssColor } from './theme.ts'
+import { WIDTH_TRAILING, WIDTH_WIDE } from '../buffer'
+import { CellFlag } from '../snapshot'
+import type { Style } from '../style'
+import { cellColors, fontString, measureCell, strokeUnderline, type CellMetrics, type Frame, type Renderer, type RendererOptions } from './renderer'
+import { cellColor, cssColor } from './theme'
 
 const CURSOR_THICKNESS = 2
 

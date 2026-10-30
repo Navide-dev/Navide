@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_ENTRIES, MAX_VALUE, OMITTED, Params } from './params.ts'
+import { MAX_ENTRIES, MAX_VALUE, OMITTED, Params } from './params'
 
 function parse(text: string): Params {
   const p = new Params()

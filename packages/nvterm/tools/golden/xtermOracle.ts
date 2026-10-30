@@ -2,8 +2,8 @@
 // write(), results come out through the public buffer / modes API only.
 import { createRequire } from 'node:module'
 import type { IBufferCell, Terminal as XtermTerminal } from '@xterm/headless'
-import { CellFlag, type CellSnapshot, type ColorSpec, type LineSnapshot, type ScreenSnapshot } from '../../src/snapshot.ts'
-import type { TerminalDriver, TerminalStream } from './driver.ts'
+import { CellFlag, type CellSnapshot, type ColorSpec, type LineSnapshot, type ScreenSnapshot } from '../../src/snapshot'
+import type { TerminalDriver, TerminalStream } from './driver'
 
 // Both packages are CommonJS bundles whose named exports Node's ESM loader
 // cannot detect, so load them with require().

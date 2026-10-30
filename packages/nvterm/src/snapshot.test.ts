@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diffKey, diffSnapshots, type CellSnapshot, type ScreenSnapshot } from './snapshot.ts'
+import { diffKey, diffSnapshots, type CellSnapshot, type ScreenSnapshot } from './snapshot'
 
 const blank: CellSnapshot = { chars: '', width: 1, fg: 'd', bg: 'd', flags: 0 }
 

@@ -1,5 +1,5 @@
 // Cell width of a code point. Spec: UAX #11; rules and data in widthTable.ts.
-import { WIDE, ZERO_WIDTH } from './widthTable.ts'
+import { WIDE, ZERO_WIDTH } from './widthTable'
 
 function inRanges(table: Uint32Array, cp: number): boolean {
   let lo = 0
