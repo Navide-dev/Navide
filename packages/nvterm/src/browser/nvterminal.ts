@@ -59,6 +59,9 @@ const DEFAULTS: ResolvedOptions = {
 }
 
 const BLINK_MS = 600
+/** Quiet time after the last write before cold scrollback is packed, and the slice budget. */
+const PACK_IDLE_MS = 500
+const PACK_SLICE_MS = 8
 /** Longest a synchronized-output frame may hold back painting (mode 2026). */
 const SYNC_TIMEOUT_MS = 1000
 
@@ -81,6 +84,7 @@ export class NvTerminal implements IDisposable {
   private focused = false
   private blinkOn = true
   private blinkTimer: ReturnType<typeof setInterval> | undefined
+  private packTimer: ReturnType<typeof setTimeout> | undefined
   private composing = false
   private composition = ''
   private mouseDown: { button: number; selecting: boolean; moved: boolean } | null = null
@@ -218,6 +222,7 @@ export class NvTerminal implements IDisposable {
   write(data: string | Uint8Array, callback?: () => void): void {
     this.core.write(this.opts.convertEol ? convertEol(data) : data)
     this.queueRender()
+    this.schedulePack(PACK_IDLE_MS)
     if (callback) queueMicrotask(callback)
   }
 
@@ -372,11 +377,22 @@ export class NvTerminal implements IDisposable {
     this.listeners.length = 0
     if (this.blinkTimer) clearInterval(this.blinkTimer)
     this.blinkTimer = undefined
+    if (this.packTimer) clearTimeout(this.packTimer)
+    this.packTimer = undefined
     this.retireRenderer()
     this.element?.remove()
     this.element = undefined
     this.textarea = undefined
     for (const e of [this.dataEmitter, this.resizeEmitter, this.selectionEmitter, this.titleEmitter, this.bellEmitter, this.renderEmitter, this.rendererEmitter]) e.clear()
+  }
+
+  /** Packs cold scrollback in small slices once output has been quiet for a while. */
+  private schedulePack(delay: number): void {
+    if (this.packTimer) clearTimeout(this.packTimer)
+    this.packTimer = setTimeout(() => {
+      this.packTimer = undefined
+      if (!this.core.packScrollback(PACK_SLICE_MS)) this.schedulePack(50)
+    }, delay)
   }
 
   // ---- Rendering ------------------------------------------------------------

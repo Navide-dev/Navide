@@ -360,6 +360,11 @@ export class TerminalCore implements ParserHandler {
     }
   }
 
+  /** Packs cold scrollback lines for up to `budgetMs`; true when nothing is left to pack. */
+  packScrollback(budgetMs = Infinity): boolean {
+    return this.normal.pack(budgetMs)
+  }
+
   /**
    * Clears the scrollback and the screen except the cursor's line, which
    * becomes the first row (an explicit "clear" command, never part of resize
@@ -531,13 +536,7 @@ export class TerminalCore implements ParserHandler {
     const buf = this.active
     if (buf.y < buf.scrollTop || buf.y > buf.scrollBottom) return
     // Deleting lines never feeds the scrollback, even at the top of the screen.
-    const removed = buf.lines.splice(buf.base + buf.y, Math.min(n, buf.scrollBottom - buf.y + 1))
-    const style = this.eraseStyle()
-    for (const line of removed) {
-      line.erase(0, this.cols, style)
-      line.wrapped = false
-    }
-    buf.lines.splice(buf.base + buf.scrollBottom - removed.length + 1, 0, ...removed)
+    buf.deleteLines(buf.y, n, buf.scrollBottom, this.eraseStyle())
     buf.x = 0
   }
 

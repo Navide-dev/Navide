@@ -1,4 +1,4 @@
-// Usage: node --import ./packages/nvterm/tools/register.mjs packages/nvterm/tools/bench/run.ts [--mib N] [--rounds N]
+// Usage: node --import ./packages/nvterm/tools/register.mjs packages/nvterm/tools/bench/run.ts [--mib N] [--rounds N] [--only <dataset>]
 // Prints parse throughput per dataset for xterm.js and nvterm as JSON
 // (stability gate G4: nvterm must not be slower).
 import { compare } from './bench'
@@ -14,7 +14,9 @@ function arg(name: string, fallback: number): number {
 const mib = arg('--mib', 8)
 const rounds = arg('--rounds', 7)
 const results = []
-for (const dataset of datasets(mib * 1024 * 1024)) {
+const onlyAt = process.argv.indexOf('--only')
+const only = onlyAt >= 0 ? process.argv[onlyAt + 1] : undefined
+for (const dataset of datasets(mib * 1024 * 1024).filter((d) => !only || d.id === only)) {
   const r = await compare(createXtermStream, createNvtermStream, dataset, { rounds })
   results.push({ dataset: r.dataset, xtermMiBps: r.baselineMiBps, nvtermMiBps: r.candidateMiBps, ratio: r.ratio, ratios: r.ratios.map((x) => Number(x.toFixed(2))) })
 }

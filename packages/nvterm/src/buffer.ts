@@ -165,6 +165,112 @@ export class Line {
   }
 }
 
+/**
+ * A scrollback line in compact form: two flat strings and a few numbers.
+ * `text` holds one code point per stored lead cell (V8 keeps ASCII and
+ * Latin-1 text at one byte per character); `meta` holds the style runs and
+ * the columns of wide characters as 16-bit units. Trailing blank cells are
+ * not stored. Typed arrays are avoided on purpose: small ones cost more in
+ * fixed overhead than the cells they would hold.
+ */
+export class PackedLine {
+  readonly cols: number
+  wrapped: boolean
+  /** One code point per stored lead cell ('\0' = empty cell). */
+  private readonly text: string
+  /** The number of style runs, the runs as (low 16 bits, high 16 bits, length) triples, then the wide-character columns. */
+  private readonly meta: string
+  /** Style of the cells past the stored ones. */
+  private readonly tailStyle: number
+  private readonly extra: [number, string][] | null
+
+  private constructor(line: Line, tailStyle: number, text: string, meta: string) {
+    this.cols = line.cols
+    this.wrapped = line.wrapped
+    this.tailStyle = tailStyle
+    this.text = text
+    this.meta = meta
+    this.extra = line.extra?.size ? [...line.extra] : null
+  }
+
+  static pack(line: Line): PackedLine {
+    const cols = line.cols
+    const tailStyle = line.styles[cols - 1] ?? 0
+    let used = cols
+    while (used > 0 && line.codes[used - 1] === 0 && line.styles[used - 1] === tailStyle && line.widths[used - 1] === WIDTH_NORMAL) used--
+    const codes: number[] = []
+    const meta: number[] = [0]
+    const wide: number[] = []
+    let runStyle = -1
+    let runLength = 0
+    for (let x = 0; x < used; x++) {
+      const style = line.styles[x]!
+      if (style === runStyle && runLength < 0xffff) {
+        runLength++
+      } else {
+        if (runLength) meta.push(runStyle & 0xffff, runStyle >>> 16, runLength)
+        runStyle = style
+        runLength = 1
+      }
+      const width = line.widths[x]
+      if (width === WIDTH_TRAILING) continue
+      if (width === WIDTH_WIDE) wide.push(x)
+      codes.push(line.codes[x]!)
+    }
+    if (runLength) meta.push(runStyle & 0xffff, runStyle >>> 16, runLength)
+    meta[0] = (meta.length - 1) / 3
+    meta.push(...wide)
+    return new PackedLine(line, tailStyle, fromCodePoints(codes), fromUnits(meta))
+  }
+
+  unpack(): Line {
+    const line = new Line(this.cols, this.tailStyle)
+    line.wrapped = this.wrapped
+    const meta = this.meta
+    const runs = meta.charCodeAt(0)
+    let i = 1
+    let x = 0
+    for (let r = 0; r < runs; r++, i += 3) {
+      const style = (meta.charCodeAt(i) | (meta.charCodeAt(i + 1) << 16)) >>> 0
+      const length = meta.charCodeAt(i + 2)
+      line.styles.fill(style, x, x + length)
+      x += length
+    }
+    let nextWide = i < meta.length ? meta.charCodeAt(i) : -1
+    x = 0
+    for (const ch of this.text) {
+      line.codes[x] = ch.codePointAt(0)!
+      if (x === nextWide) {
+        line.widths[x] = WIDTH_WIDE
+        if (x + 1 < this.cols) line.widths[x + 1] = WIDTH_TRAILING
+        i++
+        nextWide = i < meta.length ? meta.charCodeAt(i) : -1
+        x += 2
+      } else {
+        x++
+      }
+    }
+    if (this.extra) line.extra = new Map(this.extra)
+    return line
+  }
+}
+
+/** A flat string from code points (0 included), built in chunks. */
+function fromCodePoints(codes: number[]): string {
+  let out = ''
+  for (let i = 0; i < codes.length; i += 4096) out += String.fromCodePoint(...codes.slice(i, i + 4096))
+  return out
+}
+
+function fromUnits(units: number[]): string {
+  let out = ''
+  for (let i = 0; i < units.length; i += 4096) out += String.fromCharCode(...units.slice(i, i + 4096))
+  return out
+}
+
+/** Scrollback lines this close to the screen stay unpacked (they are read and scrolled to most). */
+export const HOT_LINES = 256
+
 export interface SavedCursor {
   x: number
   y: number
@@ -175,8 +281,12 @@ export interface SavedCursor {
 }
 
 export class Buffer {
-  /** Scrollback followed by the viewport, from index `start`. Entries before `start` are dropped scrollback awaiting compaction. */
-  lines: Line[] = []
+  /**
+   * Scrollback followed by the viewport, from index `start`. Entries before
+   * `start` are dropped scrollback awaiting compaction. Old scrollback lines
+   * may be packed; viewport lines never are.
+   */
+  lines: (Line | PackedLine)[] = []
   /** Index in `lines` of the oldest kept scrollback line. */
   private start = 0
   /** Index in `lines` of the top viewport row. */
@@ -206,7 +316,7 @@ export class Buffer {
   }
 
   line(row: number): Line {
-    return this.lines[this.base + row]!
+    return this.lines[this.base + row] as Line
   }
 
   get scrollbackLength(): number {
@@ -218,14 +328,57 @@ export class Buffer {
     return this.scrollbackLength + this.rows
   }
 
-  /** Line `i` counting from the oldest scrollback line (scrollback first, then the viewport). */
+  /** Line `i` counting from the oldest scrollback line (scrollback first, then the viewport). Read-only for scrollback lines. */
   absoluteLine(i: number): Line | undefined {
-    return i >= 0 && i < this.length ? this.lines[this.start + i] : undefined
+    return i >= 0 && i < this.length ? this.peek(this.start + i) : undefined
   }
 
   /** The i-th scrollback line, oldest first. */
   scrollbackLine(i: number): Line | undefined {
-    return i < this.scrollbackLength ? this.lines[this.start + i] : undefined
+    return i < this.scrollbackLength ? this.peek(this.start + i) : undefined
+  }
+
+  /**
+   * The line at array index `index`. A packed line comes back as an unpacked
+   * copy and stays packed: scrollback is only ever read (rendering, selection,
+   * search, serialize), never written, so repeated reads cannot undo packing.
+   */
+  private peek(index: number): Line | undefined {
+    const entry = this.lines[index]
+    return entry instanceof PackedLine ? entry.unpack() : entry
+  }
+
+  /**
+   * Packs cold scrollback lines (older than the HOT_LINES nearest the
+   * screen) for up to `budgetMs`. Returns true when nothing is left to pack.
+   */
+  pack(budgetMs = Infinity): boolean {
+    const limit = this.base - HOT_LINES
+    const started = performance.now()
+    for (let i = this.start; i < limit; i++) {
+      const entry = this.lines[i]!
+      if (entry instanceof PackedLine) continue
+      this.lines[i] = PackedLine.pack(entry)
+      if ((i & 63) === 0 && performance.now() - started > budgetMs) return false
+    }
+    return true
+  }
+
+  /** How many scrollback lines are currently packed (diagnostics and tests). */
+  get packedCount(): number {
+    let n = 0
+    for (let i = this.start; i < this.base; i++) if (this.lines[i] instanceof PackedLine) n++
+    return n
+  }
+
+  /** Removes `n` lines at viewport row `row` and inserts blank ones at row `bottom` (DL inside a region). */
+  deleteLines(row: number, n: number, bottom: number, style: number): void {
+    const removed = this.lines.splice(this.base + row, Math.min(n, bottom - row + 1)) as Line[]
+    for (const line of removed) {
+      line.erase(0, this.cols, style)
+      line.wrapped = false
+    }
+    this.lines.splice(this.base + bottom - removed.length + 1, 0, ...removed)
   }
 
   /** Empties the buffer: one blank viewport, no scrollback, cursor home, full margins. */
@@ -256,7 +409,8 @@ export class Buffer {
           // The scrollback is full: the oldest line is dropped and reused.
           // Dropping from the front of an array is O(length), so move the
           // start instead and compact once the dead prefix is large.
-          fresh = this.lines[this.start]!
+          const oldest = this.lines[this.start]!
+          fresh = oldest instanceof Line ? oldest : new Line(this.cols, style)
           fresh.clear(style)
           this.start++
           this.dropped++
@@ -270,7 +424,7 @@ export class Buffer {
       if (this.start >= 1024 && this.start * 2 >= this.lines.length) this.compact()
       return
     }
-    const removed = this.lines.splice(this.base + top, n)
+    const removed = this.lines.splice(this.base + top, n) as Line[]
     for (const line of removed) {
       line.erase(0, this.cols, style)
       line.wrapped = false
@@ -281,7 +435,7 @@ export class Buffer {
   /** Scrolls rows [top, bottom] down by n, filling the top with empty lines. */
   scrollDown(n: number, top: number, bottom: number, style: number): void {
     n = Math.min(n, bottom - top + 1)
-    const removed = this.lines.splice(this.base + bottom - n + 1, n)
+    const removed = this.lines.splice(this.base + bottom - n + 1, n) as Line[]
     for (const line of removed) {
       line.erase(0, this.cols, style)
       line.wrapped = false
@@ -305,7 +459,8 @@ export class Buffer {
   /** Resizes without reflow (reflow is M5). Rows shrink from the bottom first, then push lines into scrollback. */
   resize(cols: number, rows: number): void {
     this.compact()
-    for (const line of this.lines) line.resize(cols, 0)
+    this.lines = this.lines.map((entry) => (entry instanceof PackedLine ? entry.unpack() : entry))
+    for (const line of this.lines as Line[]) line.resize(cols, 0)
     if (rows < this.rows) {
       const lastUsed = this.lastNonEmptyRow()
       const keepBelow = Math.max(this.y, lastUsed)
@@ -342,11 +497,13 @@ export class Buffer {
     //    counted in columns (a wide character is two), like the cursor.
     type Cell = { code: number; width: number; style: number; extra: string | undefined }
     const logical: { cells: Cell[]; columns: number; cursorAt: number; fill: number }[] = []
+    let nextLine = this.peek(0)
     for (let i = 0; i < this.lines.length; i++) {
-      const line = this.lines[i]!
+      const line = nextLine!
+      nextLine = this.peek(i + 1)
       if (!line.wrapped || logical.length === 0) logical.push({ cells: [], columns: 0, cursorAt: -1, fill: 0 })
       const current = logical[logical.length - 1]!
-      const next = this.lines[i + 1]
+      const next = nextLine
       const continues = next?.wrapped ?? false
       // Trailing empty cells are not content, whatever their background; a
       // background they share is kept as the fill of the re-wrapped line.
