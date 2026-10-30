@@ -119,6 +119,36 @@ async def test_a_chat_the_running_bot_never_saw_is_still_listed_from_its_binding
     assert [b["pane_id"] for b in chat["bindings"]] == ["pane-1"]
 
 
+def _row(res: dict, chat_id: str, pane_id: str, account: str = "default") -> dict:
+    return next(b for b in _chat(_bot(res, account=account), chat_id)["bindings"] if b["pane_id"] == pane_id)
+
+
+async def test_a_binding_in_a_dm_whose_sender_is_not_approved_needs_approval(ov: Env) -> None:
+    ov.store.remember_chat("telegram", _bot_key(ov), "42", "stranger", "direct", False, 1)
+    ov.store.bind("pane-1", Location("telegram", "default", "42", "", "api"))
+
+    assert _row(ov.m.overview(), "42", "pane-1")["needs_approval"] is True
+
+    ov.store.add_allow("telegram", "42", "stranger", 2)
+    assert "needs_approval" not in _row(ov.m.overview(), "42", "pane-1")
+
+
+async def test_a_dm_only_the_adapter_knows_is_judged_by_its_own_kind(ov: Env) -> None:
+    ov.tg.known_locations = lambda: [{"chat_id": "42", "title": "stranger", "kind": "private",  # type: ignore[attr-defined]
+                                      "supports_topics": False}]
+    ov.store.bind("pane-1", Location("telegram", "default", "42", "", "api"))
+
+    assert _row(ov.m.overview(), "42", "pane-1")["needs_approval"] is True
+
+
+async def test_a_group_binding_needs_approval_only_on_a_bot_with_nobody_allowed(ov: Env) -> None:
+    ov.store.bind("pane-1", Location("telegram", "default", "-100", "50", "api"))
+    assert "needs_approval" not in _row(ov.m.overview(), "-100", "pane-1")
+
+    assert ov.store.remove_allow("telegram", "7")
+    assert _row(ov.m.overview(), "-100", "pane-1")["needs_approval"] is True
+
+
 async def test_every_configured_bot_is_listed_even_without_chats(ov: Env) -> None:
     assert (await ov.m.configure("telegram", {"account": "b2"}, {"token": "tok-B"}, "b2"))["ok"]
     res = ov.m.overview()

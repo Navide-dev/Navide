@@ -153,6 +153,8 @@ export interface ChannelOverviewPane {
 export interface ChannelOverviewBinding extends ChannelBinding {
   created_at: number
   pane: ChannelOverviewPane
+  /** True when the sender gate refuses this chat's messages; the backend decides. */
+  needs_approval?: boolean
 }
 
 export interface ChannelOverviewChat extends ChannelLocation {

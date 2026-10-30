@@ -108,6 +108,7 @@ STATUS_POLL_S = 1.0
 DEBOUNCE_S = 0.5  # lines from one sender to one location within this window become one message
 DEBOUNCE_MAX_S = 3.0
 LONG_REPLY_MAX_CHUNKS = 3  # past this, a reply is a preview plus the whole text as a file
+TELEGRAM_DIRECT_KINDS = ("private", "direct")  # the adapter's chat type; what _remember_chat stores
 REPLY_QUOTE_MAX_CHARS = 500  # a native reply's quoted message, cut before it reaches the pane
 REPLY_QUOTE_NAME_MAX_CHARS = 64
 # Fixed wording: an untrusted author's display name is attacker-controlled text too.
@@ -134,6 +135,9 @@ MSG_TYPED_HINT = "可直接輸入：{commands}"
 BUSY_BUTTONS = [("↩️ 撤回排隊中的訊息", CANCEL_CALLBACK), ("⏹ 中斷 pane", STOP_CALLBACK)]
 MSG_UNBOUND = "🔌 這個聊天室已和 pane「{name}」中斷連接，之後的訊息不會再送進 pane。"
 MSG_BOUND = "🔗 已連接 pane「{name}」，在這裡傳的訊息會送進這個 pane；傳 stop 可以中斷。"
+MSG_BOUND_NEEDS_APPROVAL = "⚠️ 已連接 pane「{name}」，但這個聊天室的傳送者要先核准，訊息才會送進 pane。{how}"
+MSG_APPROVE_CODE = "請在 Navide 的 Settings → Channels 核准配對碼：{code}"
+MSG_APPROVE_SEND_FIRST = "請先私訊這個 bot 任一則訊息取得配對碼，再到 Navide 的 Settings → Channels 核准。"
 MSG_CHAT_TAKEN = "這個聊天室已連接到另一個 pane，請先在那個 pane 解除連接"
 MSG_LOGIN_PANE = "這個 pane 正在登入 CLI 帳號，畫面上有授權網址或代碼，不能連接到聊天室"
 MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷連接。"
@@ -1187,6 +1191,22 @@ class ChannelManager:
                 merged[str(loc.get("chat_id"))] = {**merged.get(str(loc.get("chat_id")), {}), **loc}
         return {"ok": True, "locations": list(merged.values())}
 
+    def _chat_usable(self, platform: str, account: str, chat_id: str, kind: str) -> bool:
+        """Whether a message from this chat can pass the sender gate. A Telegram DM's chat
+        id is its user's id, so that one sender is asked about. Any other chat (a group,
+        another platform's DM, a kind not known) names no sender here: all that can be
+        said is that a bot with nobody allowed refuses everyone."""
+        if platform == "telegram" and kind in TELEGRAM_DIRECT_KINDS:
+            return self.gate.is_allowed(platform, chat_id, account)
+        return self.gate.has_linked(platform, account)
+
+    def _bound_needs_approval(self, name: str, loc: Location) -> str:
+        """What a refused chat is told when bound: the code already waiting for it, else how to get one."""
+        self.gate.prune()
+        req = next((r for r in self.store.list_pairing(loc.platform, loc.account) if r.chat_id == loc.chat_id), None)
+        how = MSG_APPROVE_CODE.format(code=f"{req.code[:4]}-{req.code[4:]}") if req else MSG_APPROVE_SEND_FIRST
+        return MSG_BOUND_NEEDS_APPROVAL.format(name=name, how=how)
+
     async def bind(self, pane_id: str, pane_name: str, platform: str, mode: str,
                    chat_id: str, thread_id: str = "", title: str = "", *, verbosity: str = "",
                    account: str = DEFAULT_ACCOUNT) -> dict[str, Any]:
@@ -1241,9 +1261,13 @@ class ChannelManager:
         self.mirror.schedule_sync()  # children the pane already has get their topics now
         # Tell the chat which pane it now drives; off the request path like unbind,
         # on the chat's worker so a quick unbind's notice cannot overtake it.
-        text = MSG_BOUND.format(name=pane_name or loc.title or pane_id)
+        name = pane_name or loc.title or pane_id
+        kind = next((str(c.get("kind") or "") for c in self.locations(platform, account)["locations"]
+                     if str(c.get("chat_id")) == loc.chat_id), "")
+        usable = self._chat_usable(platform, account, loc.chat_id, kind)
+        text = MSG_BOUND.format(name=name) if usable else self._bound_needs_approval(name, loc)
         self._enqueue(loc.key(), lambda: self._notice(adapter, loc, text))
-        return {"ok": True, "binding": binding.public()}
+        return {"ok": True, "binding": binding.public(), **({} if usable else {"needs_approval": True})}
 
     async def unbind(self, pane_id: str, *, reason: str = "", pane_name: str = "") -> dict[str, Any]:
         removed = self.store.unbind(pane_id)
@@ -3331,8 +3355,10 @@ class ChannelManager:
                 "chat_id": b.chat_id, "title": "", "kind": "",
                 "supports_topics": bool(b.thread_id), "bindings": []})
             pane = self._pane_info(b, directory)
+            usable = self._chat_usable(b.platform, b.account, b.chat_id, chat["kind"])
             chat["bindings"].append({**b.public(), "pane_id": self._seams.resolve_pane(b.pane_id) or b.pane_id,
-                                     "created_at": b.created_at, "pane": pane})
+                                     "created_at": b.created_at, "pane": pane,
+                                     **({} if usable else {"needs_approval": True})})
             if not pane["exists"]:
                 entry["orphans"].append(b.pane_id)
         return {"ok": True, "bots": [{**v, "chats": list(v["chats"].values())} for v in bots.values()]}
