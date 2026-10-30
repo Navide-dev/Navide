@@ -17,6 +17,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -617,6 +618,7 @@ def test_writes_record_versions_with_their_author(backend_process: subprocess.Po
     assert not (mine / "docs" / "plans" / ".history").exists()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="creating symbolic links needs a privilege on Windows")
 @pytest.mark.parametrize("linked", [".history", ".history/doc_aaaaaa"])
 def test_history_list_read_and_restore_refuse_a_history_directory_behind_a_link(
     backend_process: subprocess.Popen[bytes], tmp_path: Path, linked: str

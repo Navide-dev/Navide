@@ -11,6 +11,7 @@ from __future__ import annotations
 import gzip
 import importlib.util
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -70,6 +71,7 @@ def test_paging_decompresses_a_version_once_and_again_after_it_changes(
     assert len(calls) == 2
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="creating symbolic links needs a privilege on Windows")
 def test_bytes_and_mtime_come_from_the_file_opened_and_a_link_is_refused(tmp_path: Path) -> None:
     plan, history = _history(tmp_path, b"text")
     os.utime(history / NAME, ns=(1, 1_700_000_000_000_000_000))
