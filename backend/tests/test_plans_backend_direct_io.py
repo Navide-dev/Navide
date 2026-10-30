@@ -17,6 +17,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -700,6 +701,7 @@ def test_a_version_with_embedded_images_lists_reads_and_restores_whole(
     assert f"data:image/png;base64,{image}" in plan.read_text(encoding="utf-8")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="creating symbolic links needs a privilege on Windows")
 @pytest.mark.parametrize("linked", [".history", ".history/doc_aaaaaa"])
 def test_history_list_read_and_restore_refuse_a_history_directory_behind_a_link(
     backend_process: subprocess.Popen[bytes], tmp_path: Path, linked: str
