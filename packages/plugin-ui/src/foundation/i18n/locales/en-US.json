@@ -1471,7 +1471,8 @@
       "notice": "App Lock is a privacy screen, not access control. It covers every Navide window while you are away. Agents, terminals, chat channels, MCP tools and schedules keep running, and someone at this computer who knows how can still get past it.",
       "section-lock": "Lock",
       "enabled": "Turn on App Lock",
-      "enabled-hint": "Set a PIN first. The PIN always unlocks, even when Touch ID is on.",
+      "enabled-hint": "Set a PIN first. The PIN always unlocks, even when {system} is on.",
+      "enabled-hint-pin-only": "Set a PIN first. It is how you unlock.",
       "lock-now": "Lock Now",
       "lock-now-hint": "Covers every window right away. Shortcut {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN removed. App Lock is off.",
       "section-unlock": "Unlock",
       "method": "Unlock with",
-      "method-system": "Touch ID, with PIN as a fallback",
+      "method-system": "{system}, with PIN as a fallback",
       "method-pin": "PIN only",
-      "system-unavailable": "Touch ID isn't available on this computer, so Navide unlocks with your PIN.",
+      "system-unavailable": "{system} isn't available on this computer, so Navide unlocks with your PIN.",
+      "pin-only": "On this system Navide unlocks with your PIN only: Touch ID needs a Mac, and Windows Hello needs Windows 11.",
       "section-auto": "Lock automatically",
       "idle": "After idle",
       "idle-hint": "Time without keyboard or mouse input anywhere on this computer.",
@@ -1503,15 +1505,16 @@
       "on-suspend": "When the computer sleeps",
       "on-start": "When Navide starts",
       "section-forgot": "Forgot your PIN?",
-      "reset-with-system": "Reset PIN with Touch ID",
-      "forgot-system": "Touch ID confirms it's you, then you choose a new PIN.",
-      "forgot-manual-title": "Without Touch ID",
+      "reset-with-system": "Reset PIN with {system}",
+      "forgot-system": "{system} confirms it's you, then you choose a new PIN.",
+      "forgot-manual-title": "Without {system}",
+      "forgot-manual-title-pin-only": "Reset it by hand",
       "forgot-manual": "Quit Navide and delete app-lock.json from Navide's data folder. That removes App Lock and its PIN, and nothing else.",
       "error-invalid-pin": "Use 4 to 12 digits.",
       "error-mismatch": "The two PINs don't match.",
       "error-wrong-pin": "The current PIN is wrong.",
       "error-cooldown": "Too many attempts. Try again in {seconds} s.",
-      "error-system-failed": "Touch ID didn't confirm it's you.",
+      "error-system-failed": "{system} didn't confirm it's you.",
       "error-generic": "That didn't work. Try again."
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "Hide every window behind a lock screen and unlock with Touch ID or a PIN"
+          "summary": "Hide every window behind a lock screen and unlock with Touch ID, Windows Hello or a PIN"
         },
         "voice-input": {
           "title": "Voice Input",

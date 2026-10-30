@@ -173,6 +173,24 @@ describe('installApplicationMenu', () => {
     expect(hooks.calls).toEqual(['lock-now'])
   })
 
+  it.each(['darwin', 'linux', 'win32'] as const)('on %s, while App Lock is up, every Navide item is greyed out and only system roles stay', (platform) => {
+    setPlatformId(platform)
+    const leaves = (items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] =>
+      items.flatMap((item) => (Array.isArray(item.submenu) ? leaves(item.submenu) : item.type === 'separator' ? [] : [item]))
+    installApplicationMenu({ ...hooks, lockNowEnabled: () => true, appLocked: () => false }, [{ path: '/w', name: 'w', exists: true }], 'en-US')
+    const unlocked = leaves(h.template)
+    expect(unlocked.filter((item) => item.enabled === false)).toEqual([])
+    installApplicationMenu({ ...hooks, appLocked: () => true }, [{ path: '/w', name: 'w', exists: true }], 'en-US')
+    const locked = leaves(h.template)
+    expect(locked).toHaveLength(unlocked.length)
+    const usable = locked.filter((item) => item.enabled !== false)
+    expect(usable.every((item) => typeof item.role === 'string' && !item.click)).toBe(true)
+    expect(usable.map((item) => item.role)).toEqual(expect.arrayContaining(['quit', 'paste', 'selectAll', 'toggleDevTools']))
+    for (const label of ['Settings…', 'Open Workspace…', 'New Window', 'Copy', 'Reload Window', 'w']) {
+      expect(locked.find((item) => item.label === label)?.enabled).toBe(false)
+    }
+  })
+
   it('File has Open Workspace… with ⌘O that invokes its hook', () => {
     const open = itemIn(submenuOf('File'), 'Open Workspace…')
     expect(open.accelerator).toBe('CmdOrCtrl+O')

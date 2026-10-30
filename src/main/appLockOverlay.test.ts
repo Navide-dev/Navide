@@ -43,7 +43,7 @@ class FakeWindow extends EventEmitter {
   id = FakeWindow.next++
   visible = true
   destroyed = false
-  webContents = { focus: vi.fn() }
+  webContents = Object.assign(new EventEmitter(), { focus: vi.fn() })
   contentView = {
     children: [] as unknown[],
     addChildView: (v: unknown) => {
@@ -129,6 +129,21 @@ describe('AppLockOverlay', () => {
     expect(lock.webContents.isDestroyed()).toBe(true)
     expect(overlay.isLockScreen(lock.webContents.id)).toBe(false)
     expect(win.webContents.focus).toHaveBeenCalled()
+  })
+
+  it('drops keyboard input to the window underneath while locked, and only then', () => {
+    const win = new FakeWindow()
+    overlay.watch(win as unknown as BrowserWindow)
+    const press = (): boolean => {
+      const event = { preventDefault: vi.fn() }
+      win.webContents.emit('before-input-event', event, { type: 'keyDown', key: 'k', meta: true })
+      return event.preventDefault.mock.calls.length > 0
+    }
+    expect(press()).toBe(false)
+    overlay.show()
+    expect(press()).toBe(true)
+    overlay.hide()
+    expect(press()).toBe(false)
   })
 
   it('does not cover anything while unlocked', () => {

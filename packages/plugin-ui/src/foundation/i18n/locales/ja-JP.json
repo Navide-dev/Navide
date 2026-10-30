@@ -1471,7 +1471,8 @@
       "notice": "App Lock はプライバシー保護の画面で、アクセス制御ではありません。席を外している間、Navide のすべてのウィンドウを覆います。エージェント、ターミナル、チャット連携、MCP ツール、スケジュールは動作を続け、このコンピューターの前にいて知識のある人なら回避できます。",
       "section-lock": "ロック",
       "enabled": "App Lock をオンにする",
-      "enabled-hint": "先に PIN を設定してください。Touch ID がオンでも PIN でいつでもロックを解除できます。",
+      "enabled-hint": "先に PIN を設定してください。{system} がオンでも PIN でいつでもロックを解除できます。",
+      "enabled-hint-pin-only": "先に PIN を設定してください。PIN でロックを解除します。",
       "lock-now": "今すぐロック",
       "lock-now-hint": "すべてのウィンドウをすぐに覆います。ショートカット {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN を削除しました。App Lock はオフです。",
       "section-unlock": "ロック解除",
       "method": "ロック解除の方法",
-      "method-system": "Touch ID（予備は PIN）",
+      "method-system": "{system}（予備は PIN）",
       "method-pin": "PIN のみ",
-      "system-unavailable": "このコンピューターでは Touch ID を使えないため、Navide は PIN でロックを解除します。",
+      "system-unavailable": "このコンピューターでは {system} を使えないため、Navide は PIN でロックを解除します。",
+      "pin-only": "このシステムでは PIN でのみロックを解除します。Touch ID には Mac、Windows Hello には Windows 11 が必要です。",
       "section-auto": "自動ロック",
       "idle": "アイドル時間",
       "idle-hint": "このコンピューター全体でキーボードやマウスの操作がない時間です。",
@@ -1503,15 +1505,16 @@
       "on-suspend": "スリープ時",
       "on-start": "Navide の起動時",
       "section-forgot": "PIN を忘れた場合",
-      "reset-with-system": "Touch ID で PIN をリセット",
-      "forgot-system": "Touch ID で本人確認してから、新しい PIN を設定します。",
-      "forgot-manual-title": "Touch ID がない場合",
+      "reset-with-system": "{system} で PIN をリセット",
+      "forgot-system": "{system} で本人確認してから、新しい PIN を設定します。",
+      "forgot-manual-title": "{system} がない場合",
+      "forgot-manual-title-pin-only": "手動でリセット",
       "forgot-manual": "Navide を終了し、Navide のデータフォルダーにある app-lock.json を削除してください。App Lock とその PIN だけが消え、ほかには影響しません。",
       "error-invalid-pin": "4〜12 桁の数字を使ってください。",
       "error-mismatch": "2 つの PIN が一致しません。",
       "error-wrong-pin": "現在の PIN が違います。",
       "error-cooldown": "試行回数が多すぎます。{seconds} 秒後にもう一度お試しください。",
-      "error-system-failed": "Touch ID で本人確認できませんでした。",
+      "error-system-failed": "{system} で本人確認できませんでした。",
       "error-generic": "うまくいきませんでした。もう一度お試しください。"
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "ロック画面ですべてのウィンドウを隠し、Touch ID または PIN で解除します"
+          "summary": "ロック画面ですべてのウィンドウを隠し、Touch ID、Windows Hello または PIN で解除します"
         },
         "voice-input": {
           "title": "音声入力",

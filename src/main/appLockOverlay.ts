@@ -61,6 +61,13 @@ export class AppLockOverlay {
   /** Hook for every new window: cover it too if it shows up while locked. */
   watch(win: BrowserWindow): void {
     win.on('show', () => this.cover(win))
+    // Keys that reach the page under the lock screen (focus slipped back to
+    // it) are dropped, shortcuts included. Only the user's own keyboard
+    // passes through here: agents and remote control never type into the
+    // window, so they carry on. The lock screen is its own webContents.
+    win.webContents.on('before-input-event', event => {
+      if (this.active) event.preventDefault()
+    })
     // A window created already visible emits no 'show'.
     setImmediate(() => this.cover(win))
   }
