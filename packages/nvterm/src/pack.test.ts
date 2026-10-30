@@ -77,11 +77,21 @@ describe('packed scrollback', () => {
     expect(serialize(b)).toBe(serialize(a))
   })
 
-  it('a time budget packs in slices until done', () => {
+  it('packs in bounded slices until done', () => {
+    // A line cap per slice makes the slice count exact on any machine; the time budget is
+    // the same loop exit taken earlier.
     const t = filled(3000)
+    const cold = t.active.scrollbackLength - HOT_LINES
     let slices = 1
-    while (!t.packScrollback(0)) slices++
-    expect(slices).toBeGreaterThan(1)
+    while (!t.packScrollback(Infinity, 500)) slices++
+    expect(slices).toBe(Math.ceil(cold / 500))
+    expect(t.active.packedCount).toBe(cold)
+  })
+
+  it('a zero time budget still makes progress and finishes', () => {
+    const t = filled(3000)
+    let calls = 0
+    while (!t.packScrollback(0) && calls < 10_000) calls++
     expect(t.active.packedCount).toBe(t.active.scrollbackLength - HOT_LINES)
   })
 })

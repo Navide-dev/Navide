@@ -36,9 +36,25 @@ export interface NvTerminalOptions {
   linkHandler?: { activate(event: MouseEvent, uri: string): void }
   /** 'auto' (default) uses WebGL2 when available and Canvas2D otherwise. */
   renderer?: RendererKind
+  /**
+   * How large writes are sliced (see write()). For tuning and for tests that
+   * need a write to stay in progress; the defaults suit normal use.
+   */
+  writeSlicing?: WriteSlicing
 }
 
-type ResolvedOptions = Required<Omit<NvTerminalOptions, 'linkHandler' | 'theme'>> & Pick<NvTerminalOptions, 'linkHandler' | 'theme'>
+export interface WriteSlicing {
+  /** Writes up to this many bytes are parsed at once. */
+  syncBytes?: number
+  /** Bytes parsed per slice. */
+  sliceBytes?: number
+  /** Time per task before yielding, in ms. */
+  budgetMs?: number
+  /** Slices per task before yielding, however fast they were (default: no limit). */
+  slicesPerTask?: number
+}
+
+type ResolvedOptions = Required<Omit<NvTerminalOptions, 'linkHandler' | 'theme' | 'writeSlicing'>> & Pick<NvTerminalOptions, 'linkHandler' | 'theme' | 'writeSlicing'>
 
 const DEFAULTS: ResolvedOptions = {
   cols: 80,
@@ -56,6 +72,7 @@ const DEFAULTS: ResolvedOptions = {
   convertEol: false,
   linkHandler: undefined,
   renderer: 'auto',
+  writeSlicing: undefined,
 }
 
 const BLINK_MS = 600
@@ -94,6 +111,7 @@ export class NvTerminal implements IDisposable {
   private blinkTimer: ReturnType<typeof setInterval> | undefined
   private packTimer: ReturnType<typeof setTimeout> | undefined
   private readonly writeQueue: { data: Uint8Array; offset: number; callback?: () => void }[] = []
+  private readonly slicing: Required<WriteSlicing>
   private draining = false
   private disposed = false
   private composing = false
@@ -127,6 +145,12 @@ export class NvTerminal implements IDisposable {
     // Options given as undefined keep their defaults.
     const given = Object.fromEntries(Object.entries(options).filter(([, v]) => v !== undefined))
     this.opts = { ...DEFAULTS, ...given }
+    this.slicing = {
+      syncBytes: this.opts.writeSlicing?.syncBytes ?? SYNC_WRITE_BYTES,
+      sliceBytes: this.opts.writeSlicing?.sliceBytes ?? WRITE_SLICE_BYTES,
+      budgetMs: this.opts.writeSlicing?.budgetMs ?? WRITE_BUDGET_MS,
+      slicesPerTask: this.opts.writeSlicing?.slicesPerTask ?? Infinity,
+    }
     this.core = new TerminalCore({
       cols: this.opts.cols,
       rows: this.opts.rows,
@@ -239,7 +263,7 @@ export class NvTerminal implements IDisposable {
     if (this.disposed) return
     const converted = this.opts.convertEol ? convertEol(data) : data
     const size = typeof converted === 'string' ? converted.length * 3 : converted.length
-    if (!this.writeQueue.length && size <= SYNC_WRITE_BYTES) {
+    if (!this.writeQueue.length && size <= this.slicing.syncBytes) {
       this.core.write(converted)
       this.afterWrite()
       if (callback) queueMicrotask(callback)
@@ -254,18 +278,20 @@ export class NvTerminal implements IDisposable {
   private drain(): void {
     this.draining = true
     const started = performance.now()
+    let slices = 0
     while (this.writeQueue.length && !this.disposed) {
       const item = this.writeQueue[0]!
       if (item.offset < item.data.length) {
-        const end = Math.min(item.data.length, item.offset + WRITE_SLICE_BYTES)
+        const end = Math.min(item.data.length, item.offset + this.slicing.sliceBytes)
         this.core.write(item.data.subarray(item.offset, end))
         item.offset = end
+        slices++
       }
       if (item.offset >= item.data.length) {
         this.writeQueue.shift()
         if (item.callback) queueMicrotask(item.callback)
       }
-      if (performance.now() - started > WRITE_BUDGET_MS) break
+      if (slices >= this.slicing.slicesPerTask || performance.now() - started > this.slicing.budgetMs) break
     }
     this.afterWrite()
     if (this.writeQueue.length && !this.disposed) setTimeout(() => this.drain(), 0)

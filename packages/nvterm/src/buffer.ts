@@ -350,15 +350,19 @@ export class Buffer {
 
   /**
    * Packs cold scrollback lines (older than the HOT_LINES nearest the
-   * screen) for up to `budgetMs`. Returns true when nothing is left to pack.
+   * screen) for up to `budgetMs`, and at most `maxLines` of them. Returns
+   * true when nothing is left to pack.
    */
-  pack(budgetMs = Infinity): boolean {
+  pack(budgetMs = Infinity, maxLines = Infinity): boolean {
     const limit = this.base - HOT_LINES
     const started = performance.now()
+    let packed = 0
     for (let i = this.start; i < limit; i++) {
       const entry = this.lines[i]!
       if (entry instanceof PackedLine) continue
+      if (packed >= maxLines) return false
       this.lines[i] = PackedLine.pack(entry)
+      packed++
       if ((i & 63) === 0 && performance.now() - started > budgetMs) return false
     }
     return true

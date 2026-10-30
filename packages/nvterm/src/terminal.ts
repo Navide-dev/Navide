@@ -360,9 +360,9 @@ export class TerminalCore implements ParserHandler {
     }
   }
 
-  /** Packs cold scrollback lines for up to `budgetMs`; true when nothing is left to pack. */
-  packScrollback(budgetMs = Infinity): boolean {
-    return this.normal.pack(budgetMs)
+  /** Packs cold scrollback lines for up to `budgetMs` (and at most `maxLines`); true when nothing is left to pack. */
+  packScrollback(budgetMs = Infinity, maxLines = Infinity): boolean {
+    return this.normal.pack(budgetMs, maxLines)
   }
 
   /**
