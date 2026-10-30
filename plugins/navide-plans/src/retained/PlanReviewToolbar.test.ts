@@ -777,7 +777,7 @@ describe('PlanReviewToolbar – history panel', () => {
     const { wrapper } = await mountToolbar(planDoc(baseMeta()), {
       history: {
         versions: [
-          { file: '20260710T120000_in-review.html.gz', stage: 'in-review', author: { kind: 'agent' }, reason: 'save' },
+          { file: '20260710T120000_in-review.html.parts.gz', stage: 'in-review', author: { kind: 'agent' }, reason: 'save' },
           { file: '20260709T120000_in-review.html.gz', stage: 'in-review', author: { kind: 'user' }, reason: 'conflict', detached: true },
           { file: '20260708T120000_draft.html.gz', stage: 'draft', author: { kind: 'external' }, reason: 'external' },
           { file: '20260601T080000_draft.html', stage: 'draft' },

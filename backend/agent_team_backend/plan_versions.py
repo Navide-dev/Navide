@@ -1,10 +1,15 @@
 """Plan document versions under ``<plans dir>/.history/<plan stem>/``.
 
 Every version is a full, gzip-compressed copy of the plan file's bytes, named
-``<YYYYMMDDTHHMMSS>_<stage><suffix>.gz``. Older stage snapshots, named the same
-without ``.gz``, stay as they are and read the same (:func:`read_version`);
-nothing is ever rewritten into the new form. ``sha256`` is always of the
-uncompressed bytes. ``index.jsonl`` in the same directory
+``<YYYYMMDDTHHMMSS>_<stage><suffix>.gz``. A plan that embeds images as
+``data:`` URIs is stored as ``<...><suffix>.parts.gz`` instead: its text with
+each large base64 payload replaced by a reference to ``blobs/<sha256>`` in the
+same directory, so an image unchanged across a hundred versions is stored
+once (see :func:`_split_blobs`). Reading puts the payloads back and returns
+the plan's bytes exactly. Older stage snapshots, named the same without
+``.gz``, and plain ``.gz`` versions stay as they are and read the same
+(:func:`read_version`); nothing is ever rewritten into a new form. ``sha256``
+is always of the plan's own bytes. ``index.jsonl`` in the same directory
 records, one JSON object per line, who made each version, when and why::
 
     {"file": "...html", "ts": "<ISO-8601>", "sha256": "<hex>", "stage": "draft",
@@ -27,12 +32,14 @@ Plans backend bundles this module.
 
 Retention (user decision 2026-10-30, g4): every version from the last 30 days
 is kept; of older ones the newest 50 are kept; stage snapshots are kept
-forever. Only snapshot files inside the history directory are ever removed;
-there is no size limit.
+forever. Only snapshot files inside the history directory, and blobs no
+remaining version refers to, are ever removed; there is no size limit.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import gzip
 import hashlib
 import json
@@ -69,8 +76,21 @@ _MERGEABLE = frozenset({"save", "external"})
 _PERMANENT = frozenset({"stage"})
 
 _TS_FORMAT = "%Y%m%dT%H%M%S"
-SNAPSHOT_NAME_RE = re.compile(r"(\d{8}T\d{6})_([a-z-]+)(\.html|\.plan\.md)(\.gz)?")
+SNAPSHOT_NAME_RE = re.compile(r"(\d{8}T\d{6})_([a-z-]+)(\.html|\.plan\.md)(\.gz|\.parts\.gz)?")
 COMPRESSED_SUFFIX = ".gz"
+PARTS_SUFFIX = ".parts.gz"
+
+# Embedded images (user decision 2026-10-30, PR6 option A).
+BLOBS_DIR_NAME = "blobs"
+# Shorter base64 payloads (icons, tiny images) stay in the version's text.
+BLOB_MIN_LENGTH = 1024
+_BLOB_NAME_RE = re.compile(r"[0-9a-f]{64}")
+_DATA_URI_RE = re.compile(rb"data:[A-Za-z0-9.+/-]+(?:;[A-Za-z0-9=.+-]+)*;base64,([A-Za-z0-9+/]+={0,2})")
+# A parts version, once uncompressed, is this line and then records:
+#   b"L<n>\n" + n literal bytes,
+#   b"D<sha256>\n" a blob holding decoded base64, put back encoded,
+#   b"B<sha256>\n" a blob holding the payload text as it was.
+_PARTS_HEADER = b"navide-plan-parts 1\n"
 
 Warn = Callable[[str], None]
 
@@ -164,7 +184,172 @@ def read_version(history_dir: Path, name: str) -> bytes:
     if path.is_symlink():
         raise OSError(f"{path} is a symbolic link")
     data = path.read_bytes()
+    if name.endswith(PARTS_SUFFIX):
+        return _join_parts(history_dir, gzip.decompress(data))
     return gzip.decompress(data) if name.endswith(COMPRESSED_SUFFIX) else data
+
+
+def _split_blobs(data: bytes) -> tuple[bytes, dict[str, bytes]] | None:
+    """``data`` as a parts version and the blobs it refers to, by sha256 of
+    their stored bytes; None when it embeds no large base64 ``data:`` URI.
+
+    A payload that decodes and encodes back to itself is stored decoded (a
+    quarter smaller); any other is stored as its text."""
+    out = [_PARTS_HEADER]
+    blobs: dict[str, bytes] = {}
+    last = 0
+    for match in _DATA_URI_RE.finditer(data):
+        payload = match.group(1)
+        if len(payload) < BLOB_MIN_LENGTH:
+            continue
+        try:
+            decoded: bytes | None = base64.b64decode(payload, validate=True)
+        except (binascii.Error, ValueError):
+            decoded = None
+        if decoded is not None and base64.b64encode(decoded) == payload:
+            kind, stored = b"D", decoded
+        else:
+            kind, stored = b"B", payload
+        sha = hashlib.sha256(stored).hexdigest()
+        blobs[sha] = stored
+        start, end = match.span(1)
+        out += [b"L%d\n" % (start - last), data[last:start], kind + sha.encode("ascii") + b"\n"]
+        last = end
+    if not blobs:
+        return None
+    out += [b"L%d\n" % (len(data) - last), data[last:]]
+    return b"".join(out), blobs
+
+
+def _parse_parts(raw: bytes) -> list[tuple[bytes, bytes]]:
+    """The records of an uncompressed parts version: (b"L", literal bytes) or
+    (b"D" | b"B", sha256). Raises ValueError for anything malformed."""
+    if not raw.startswith(_PARTS_HEADER):
+        raise ValueError("not a parts version")
+    records: list[tuple[bytes, bytes]] = []
+    pos = len(_PARTS_HEADER)
+    while pos < len(raw):
+        end = raw.find(b"\n", pos)
+        if end < 0:
+            raise ValueError("truncated parts version")
+        kind, value = raw[pos:pos + 1], raw[pos + 1:end]
+        pos = end + 1
+        if kind == b"L" and value.isdigit():
+            length = int(value)
+            if pos + length > len(raw):
+                raise ValueError("truncated parts version")
+            records.append((kind, raw[pos:pos + length]))
+            pos += length
+        elif kind in (b"D", b"B") and _BLOB_NAME_RE.fullmatch(value.decode("ascii", "replace")):
+            records.append((kind, value))
+        else:
+            raise ValueError("malformed parts version")
+    return records
+
+
+def _join_parts(history_dir: Path, raw: bytes) -> bytes:
+    out = []
+    for kind, value in _parse_parts(raw):
+        if kind == b"L":
+            out.append(value)
+            continue
+        stored = _read_blob(history_dir, value.decode("ascii"))
+        out.append(base64.b64encode(stored) if kind == b"D" else stored)
+    return b"".join(out)
+
+
+def _read_blob(history_dir: Path, sha: str) -> bytes:
+    blobs_dir = history_dir / BLOBS_DIR_NAME
+    path = blobs_dir / sha
+    if blobs_dir.is_symlink() or path.is_symlink():
+        raise OSError(f"{path} is a symbolic link")
+    stored = path.read_bytes()
+    if hashlib.sha256(stored).hexdigest() != sha:
+        raise ValueError(f"{path} is damaged")
+    return stored
+
+
+def _safe_blobs_dir(history_dir: Path) -> Path | None:
+    """``blobs/`` in ``history_dir``, created if needed, or None when it is a
+    symbolic link or would leave the history directory."""
+    blobs_dir = history_dir / BLOBS_DIR_NAME
+    try:
+        if blobs_dir.is_symlink():
+            return None
+        blobs_dir.mkdir(exist_ok=True)
+        if blobs_dir.resolve() != history_dir.resolve() / BLOBS_DIR_NAME:
+            return None
+    except OSError:
+        return None
+    return blobs_dir
+
+
+def _write_blob(blobs_dir: Path, sha: str, stored: bytes) -> None:
+    """Store a blob once; one already there is kept unless it is damaged."""
+    path = blobs_dir / sha
+    try:
+        if path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == sha:
+            return
+    except OSError:
+        pass
+    if path.is_symlink():
+        path.unlink()
+    _write_atomic(path, stored)
+
+
+def _stored_form(history_dir: Path, base: str, data: bytes) -> tuple[str, bytes]:
+    """The file name (``base`` plus its suffix) and bytes a version of ``data``
+    is written as, with any blobs it refers to already stored."""
+    split = _split_blobs(data)
+    blobs_dir = _safe_blobs_dir(history_dir) if split is not None else None
+    if split is None or blobs_dir is None:
+        # mtime=0: the same bytes always compress to the same file.
+        return base + COMPRESSED_SUFFIX, gzip.compress(data, mtime=0)
+    parts, blobs = split
+    for sha, stored in blobs.items():
+        _write_blob(blobs_dir, sha, stored)
+    return base + PARTS_SUFFIX, gzip.compress(parts, mtime=0)
+
+
+def _blob_refs(history_dir: Path, name: str) -> set[str]:
+    """The blobs a version refers to (none for any other form)."""
+    if not name.endswith(PARTS_SUFFIX):
+        return set()
+    raw = gzip.decompress((history_dir / name).read_bytes())
+    return {value.decode("ascii") for kind, value in _parse_parts(raw) if kind != b"L"}
+
+
+def _sweep_blobs(history_dir: Path, candidates: set[str] | None, warn: Warn) -> None:
+    """Remove the blobs no version in ``history_dir`` refers to, among
+    ``candidates`` (every blob when None). Nothing is removed while any parts
+    version cannot be read, since its references are unknown."""
+    blobs_dir = history_dir / BLOBS_DIR_NAME
+    if candidates == set() or blobs_dir.is_symlink() or not blobs_dir.is_dir():
+        return
+    referenced: set[str] = set()
+    for child in history_dir.iterdir():
+        if (
+            not child.name.endswith(PARTS_SUFFIX)
+            or SNAPSHOT_NAME_RE.fullmatch(child.name) is None
+            or child.is_symlink()
+            or not child.is_file()
+        ):
+            continue
+        try:
+            referenced |= _blob_refs(history_dir, child.name)
+        except (OSError, ValueError, EOFError, gzip.BadGzipFile) as error:
+            warn(f"{child}: unreadable version; no image blob removed: {error}")
+            return
+    for blob in blobs_dir.iterdir():
+        name = blob.name
+        if _BLOB_NAME_RE.fullmatch(name) is None or blob.is_symlink() or name in referenced:
+            continue
+        if candidates is not None and name not in candidates:
+            continue
+        try:
+            blob.unlink()
+        except OSError as error:
+            warn(f"{blob}: could not remove an unused image blob: {error}")
 
 
 def _plan_suffix(name: str) -> str:
@@ -374,7 +559,7 @@ def record_version(
         ):
             # The first version is the baseline, kept like a stage snapshot.
             reason = "stage"
-        target_name: str | None = None
+        merged_from: str | None = None
         if (
             not detached
             and reason in _MERGEABLE
@@ -388,17 +573,27 @@ def record_version(
         ):
             recorded = _parse_ts(newest_entry["ts"])
             if recorded is not None and timedelta(0) <= now - recorded <= MERGE_WINDOW:
-                target_name = newest_entry["file"]
-        if target_name is None:
+                merged_from = newest_entry["file"]
+        if merged_from is not None:
+            base = merged_from.removesuffix(PARTS_SUFFIX).removesuffix(COMPRESSED_SUFFIX)
+            try:
+                replaced_refs = _blob_refs(history_dir, merged_from)
+            except (OSError, ValueError, EOFError, gzip.BadGzipFile):
+                replaced_refs = set()
+        else:
             # One version per second per directory, whatever its stage or
             # form, so name order is always time order.
             taken = {version["file"].split("_", 1)[0] for version in versions}
             moment = now
             while moment.strftime(_TS_FORMAT) in taken:
                 moment += timedelta(seconds=1)
-            target_name = f"{moment.strftime(_TS_FORMAT)}_{stage}{suffix}{COMPRESSED_SUFFIX}"
-        # mtime=0: the same bytes always compress to the same file.
-        _write_atomic(history_dir / target_name, gzip.compress(data, mtime=0))
+            base = f"{moment.strftime(_TS_FORMAT)}_{stage}{suffix}"
+            replaced_refs = set()
+        target_name, stored = _stored_form(history_dir, base, data)
+        _write_atomic(history_dir / target_name, stored)
+        if merged_from is not None and merged_from != target_name:
+            # The folded-into version changed form (images added or removed).
+            (history_dir / merged_from).unlink(missing_ok=True)
         entry: dict[str, Any] = {
             "file": target_name, "ts": now.isoformat(), "sha256": sha, "stage": stage,
             "author": dict(author), "reason": reason,
@@ -408,7 +603,8 @@ def record_version(
         if detached:
             entry["detached"] = True
         _append(history_dir, entry)
-        _prune(history_dir, now, warn)
+        unused = replaced_refs - _blob_refs(history_dir, target_name) if replaced_refs else set()
+        _prune(history_dir, now, warn, unused)
         return target_name
 
 
@@ -418,6 +614,8 @@ def prune_history(history_dir: Path, now: datetime | None = None, warn: Warn = _
         return
     with _target_lock(history_dir / INDEX_NAME):
         _prune(history_dir, (now or datetime.now()).astimezone(), warn)
+        # Also clears blobs a crash left behind before their version was written.
+        _sweep_blobs(history_dir, None, warn)
 
 
 def _parse_ts(value: str) -> datetime | None:
@@ -428,8 +626,9 @@ def _parse_ts(value: str) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.astimezone()
 
 
-def _prune(history_dir: Path, now: datetime, warn: Warn) -> None:
-    """Apply retention to one history directory (caller holds its lock)."""
+def _prune(history_dir: Path, now: datetime, warn: Warn, unused: set[str] | None = None) -> None:
+    """Apply retention to one history directory (caller holds its lock), then
+    remove the blobs only removed versions, or ``unused``, referred to."""
     versions = list_versions(history_dir, warn)
     older: list[str] = []
     for version in versions:
@@ -442,10 +641,15 @@ def _prune(history_dir: Path, now: datetime, warn: Warn) -> None:
         older.append(version["file"])
     present = {version["file"] for version in versions}
     removed = False
+    candidates = set(unused or ())
     for name in older[KEEP_OLDER:]:  # versions are newest first
         target = history_dir / name
         if SNAPSHOT_NAME_RE.fullmatch(name) is None or target.parent != history_dir or target.is_symlink():
             continue
+        try:
+            candidates |= _blob_refs(history_dir, name)
+        except (OSError, ValueError, EOFError, gzip.BadGzipFile):
+            pass
         try:
             target.unlink()
         except OSError as error:
@@ -462,3 +666,4 @@ def _prune(history_dir: Path, now: datetime, warn: Warn) -> None:
         pass
     if removed or line_count > 4 * max(len(present), 16):
         _compact(history_dir, entries, present)
+    _sweep_blobs(history_dir, candidates, warn)

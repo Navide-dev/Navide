@@ -290,3 +290,156 @@ def test_retention_never_follows_a_symlinked_snapshot(tmp_path: Path) -> None:
     (history / "19990101T000000_draft.html").symlink_to(victim)
     plan_versions.prune_history(history, now=T0 + timedelta(days=400))
     assert victim.read_text(encoding="utf-8") == "keep me"
+
+
+# Embedded images (PR6): large base64 data: URIs are stored once, as blobs.
+
+def _png(seed: int, size: int = 3000) -> bytes:
+    return bytes((seed * 31 + i * 7) % 256 for i in range(size))
+
+
+def _img(payload: bytes, mime: bytes = b"image/png") -> bytes:
+    return b'<img src="data:' + mime + b";base64," + payload + b'">'
+
+
+def _with_images(text: bytes, *images: bytes, raw: bytes = b"") -> bytes:
+    """A plan embedding each of ``images`` base64-encoded, then ``raw`` as is."""
+    import base64
+
+    embedded = b"".join(_img(base64.b64encode(image)) for image in images) + raw
+    return b"<!doctype html><html><body><p>" + text + b"</p>" + embedded + b"</body></html>\n"
+
+
+def _blobs(plan: Path) -> set[str]:
+    blobs = plan_versions.history_dir_for(plan) / plan_versions.BLOBS_DIR_NAME
+    return {child.name for child in blobs.iterdir()} if blobs.is_dir() else set()
+
+
+def test_embedded_images_round_trip_byte_for_byte_from_blobs(tmp_path: Path) -> None:
+    import base64
+
+    plan = _plan(tmp_path)
+    icon = base64.b64encode(b"tiny")  # shorter than BLOB_MIN_LENGTH: stays in the text
+    # Not valid base64 (bad padding): kept as its text, still restored exactly.
+    unpadded = _img(b"A" * 1501)
+    data = _with_images(b"Text", _png(1), _png(2), raw=_img(icon) + unpadded)
+    name = _record(plan, data, at=T0)
+    assert name is not None and name.endswith(".html.parts.gz")
+    history = plan_versions.history_dir_for(plan)
+    assert plan_versions.read_version(history, name) == data
+    assert len(_blobs(plan)) == 3
+    # The version file itself holds the text, not the images.
+    assert len((history / name).read_bytes()) < 1000
+    stored = {(history / "blobs" / blob).read_bytes() for blob in _blobs(plan)}
+    assert _png(1) in stored and _png(2) in stored and b"A" * 1501 in stored
+    entry = _versions(plan)[0]["entry"]
+    assert entry["sha256"] == hashlib.sha256(data).hexdigest()
+
+
+def test_an_image_unchanged_across_versions_is_stored_once(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    for minute, text in enumerate((b"one", b"two", b"three")):
+        stage = ("draft", "in-review", "approved")[minute]
+        _record(plan, _with_images(text, _png(1)), at=T0 + timedelta(minutes=minute), stage=stage, reason="stage")
+    assert len(_versions(plan)) == 3
+    assert len(_blobs(plan)) == 1
+    history = plan_versions.history_dir_for(plan)
+    assert [plan_versions.read_version(history, v["file"]) for v in _versions(plan)] == [
+        _with_images(text, _png(1)) for text in (b"three", b"two", b"one")
+    ]
+
+
+def test_a_plan_without_large_images_stays_a_plain_compressed_version(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    name = _record(plan, b"<p>no images</p>" + _img(b"aGk="), at=T0)
+    assert name is not None and name.endswith(".html.gz") and not name.endswith(".parts.gz")
+    assert _blobs(plan) == set()
+
+
+def test_a_folded_save_drops_the_image_it_replaced_and_changes_form_when_needed(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    _record(plan, b"base", at=T0)
+    first = _record(plan, _with_images(b"a", _png(1)), at=T0 + timedelta(minutes=1))
+    second = _record(plan, _with_images(b"b", _png(2)), at=T0 + timedelta(minutes=2))
+    assert first == second  # folded into the same version
+    history = plan_versions.history_dir_for(plan)
+    assert plan_versions.read_version(history, second) == _with_images(b"b", _png(2))
+    assert _blobs(plan) == {hashlib.sha256(_png(2)).hexdigest()}
+    # The image removed: the folded version becomes a plain one and the blob goes.
+    third = _record(plan, b"no image", at=T0 + timedelta(minutes=3))
+    assert third == second.removesuffix(".parts.gz") + ".gz"
+    assert not (history / second).exists()
+    assert plan_versions.read_version(history, third) == b"no image"
+    assert _blobs(plan) == set()
+
+
+def test_retention_removes_only_blobs_no_remaining_version_refers_to(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    history = plan_versions.history_dir_for(plan)
+    old = T0 - timedelta(days=200)
+    _record(plan, _with_images(b"keep", _png(9)), at=old, stage="draft", reason="stage")
+    # 51 old saves alternate authors so none fold; the oldest one has its own image.
+    for i in range(51):
+        payloads = (_png(9),) if i else (_png(9), _png(5))
+        _record(plan, _with_images(b"save %d" % i, *payloads), at=old + timedelta(minutes=i + 1),
+                author=(USER, AGENT)[i % 2])
+    assert hashlib.sha256(_png(5)).hexdigest() in _blobs(plan)
+    _record(plan, _with_images(b"now", _png(9)), at=T0, author=AGENT)
+    assert _blobs(plan) == {hashlib.sha256(_png(9)).hexdigest()}
+    for version in _versions(plan):
+        plan_versions.read_version(history, version["file"])  # every kept version still reads
+
+
+def test_all_three_forms_list_read_and_prune_together(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    history = plan_versions.history_dir_for(plan)
+    history.mkdir(parents=True)
+    (history / "20260101T000000_draft.html").write_bytes(b"legacy")
+    _record(plan, b"plain", at=T0, stage="in-review", reason="stage")
+    _record(plan, _with_images(b"parts", _png(3)), at=T0 + timedelta(minutes=1), stage="approved", reason="stage")
+    names = [version["file"] for version in _versions(plan)]
+    assert [name.split("_", 1)[1] for name in names] == ["approved.html.parts.gz", "in-review.html.gz", "draft.html"]
+    assert [plan_versions.read_version(history, name) for name in names] == [
+        _with_images(b"parts", _png(3)), b"plain", b"legacy",
+    ]
+    # A blob a crash left behind is cleared by the full sweep; used ones stay.
+    orphan = hashlib.sha256(b"orphan").hexdigest()
+    (history / "blobs" / orphan).write_bytes(b"orphan")
+    plan_versions.prune_history(history, now=T0 + timedelta(minutes=2))
+    assert _blobs(plan) == {hashlib.sha256(_png(3)).hexdigest()}
+    assert [plan_versions.read_version(history, name) for name in names][0] == _with_images(b"parts", _png(3))
+
+
+def test_a_damaged_or_missing_blob_fails_the_read_and_an_unreadable_version_keeps_all_blobs(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    history = plan_versions.history_dir_for(plan)
+    name = _record(plan, _with_images(b"x", _png(4)), at=T0, stage="draft", reason="stage")
+    blob = history / "blobs" / hashlib.sha256(_png(4)).hexdigest()
+    blob.write_bytes(b"tampered")
+    with pytest.raises(ValueError):
+        plan_versions.read_version(history, name)
+    blob.unlink()
+    with pytest.raises(OSError):
+        plan_versions.read_version(history, name)
+    # A later save stores the image again; a corrupt parts file then stops any sweep.
+    _record(plan, _with_images(b"y", _png(4)), at=T0 + timedelta(minutes=1), stage="in-review", reason="stage")
+    (history / name).write_bytes(gzip.compress(b"navide-plan-parts 1\nZbroken\n"))
+    orphan = hashlib.sha256(b"orphan").hexdigest()
+    (history / "blobs" / orphan).write_bytes(b"orphan")
+    warnings: list[str] = []
+    plan_versions.prune_history(history, now=T0 + timedelta(minutes=2), warn=warnings.append)
+    assert orphan in _blobs(plan) and any("no image blob removed" in w for w in warnings)
+
+
+def test_a_symlinked_blobs_directory_is_never_written_through(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    history = plan_versions.history_dir_for(plan)
+    history.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (history / "blobs").symlink_to(outside, target_is_directory=True)
+    data = _with_images(b"x", _png(6))
+    name = _record(plan, data, at=T0)
+    assert name is not None and name.endswith(".html.gz") and not name.endswith(".parts.gz")
+    assert list(outside.iterdir()) == []
+    assert plan_versions.read_version(history, name) == data
