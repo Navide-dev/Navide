@@ -34,6 +34,20 @@ def audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginAuditLog:
     return log
 
 
+# 2026-10-16T00:00:30Z, 30 s into a minute.
+FIXED_NOW_MS = 1_792_108_830_000
+
+
+@pytest.fixture
+def fixed_audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginAuditLog:
+    """``audit`` on a fixed clock. Rows without ``at`` are dated one by one as
+    they arrive; on the wall clock two of them can land either side of a minute
+    boundary and are then counted as two rows instead of one."""
+    log = PluginAuditLog(Database(tmp_path / "navide.db"), clock=lambda: FIXED_NOW_MS / 1000)
+    monkeypatch.setattr(app, "plugin_audit_log", log)
+    return log
+
+
 def _session(*, host: bool) -> Any:
     session = app.Session(_FakeWebSocket())  # type: ignore[arg-type]
     session.host_authenticated = host
@@ -100,7 +114,8 @@ async def test_the_host_records_a_batch_redacted(audit: PluginAuditLog) -> None:
         {"address": None},
     ],
 )
-async def test_a_bad_row_is_skipped_and_the_rest_are_kept(audit: PluginAuditLog, bad: dict[str, Any]) -> None:
+async def test_a_bad_row_is_skipped_and_the_rest_are_kept(fixed_audit: PluginAuditLog, bad: dict[str, Any]) -> None:
+    audit = fixed_audit
     host = _session(host=True)
     broken = _row(**bad)
     await ws_handlers.plugin_activity_record(
@@ -202,8 +217,9 @@ def _minutes(audit: PluginAuditLog) -> list[dict[str, Any]]:
 
 
 async def test_backend_calls_are_added_up_per_minute_and_count_as_use_of_the_declared_method(
-    audit: PluginAuditLog,
+    fixed_audit: PluginAuditLog,
 ) -> None:
+    audit = fixed_audit
     host = _session(host=True)
     rows = [
         _backend_row(), _backend_row(count=2),
@@ -377,10 +393,10 @@ async def test_skipped_rows_are_logged_by_count_and_reason_without_their_content
     assert secret not in caplog.text
 
 
-async def test_backend_calls_fall_in_the_minute_the_host_names(audit: PluginAuditLog) -> None:
-    import time
-
-    now = int(time.time() * 1000)
+async def test_backend_calls_fall_in_the_minute_the_host_names(fixed_audit: PluginAuditLog) -> None:
+    # On the wall clock, the clamped row's minute could be the one after `now`.
+    audit = fixed_audit
+    now = FIXED_NOW_MS
     minute = now - now % 60_000 - 3 * 60_000
     host = _session(host=True)
     await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [

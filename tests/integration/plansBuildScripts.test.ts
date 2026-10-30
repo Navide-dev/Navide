@@ -256,3 +256,26 @@ describe('release workflow verifies the Plans artifact it signs', () => {
     )
   })
 })
+
+describe('the standalone packaged-Plans gate builds every package it stages', () => {
+  // release.yml's macOS gate runs `test:packaged-plans` without `--prepared`,
+  // so run-artifact-tests.mjs builds the staged packages itself; CI only runs
+  // the `--prepared` path after `bun run build` and never reaches this list.
+  const runner = readFileSync('scripts/run-artifact-tests.mjs', 'utf8')
+  const stage = readFileSync('scripts/stage-official-plugin-artifacts.mjs', 'utf8')
+  const standalone = runner.slice(runner.indexOf('if (!prepared)'), runner.indexOf('stage-official-plugin-artifacts.mjs'))
+  const staged = [...stage.matchAll(/directory: 'dist-plugins\/navide-([a-z-]+)'/g)].map((match) => match[1])
+
+  it('stages the four official packages', () => {
+    expect(staged).toEqual(['mini-ide', 'git', 'plans', 'browser'])
+  })
+
+  it.each(staged)('builds navide-%s before staging it', (name) => {
+    expect(standalone).toContain(`'build:${name}:v2'`)
+  })
+
+  it('builds the native backends the staged Plans and Browser packages list', () => {
+    expect(standalone).toContain("'build:plans:backend'")
+    expect(standalone).toContain("'build:browser:backend'")
+  })
+})
