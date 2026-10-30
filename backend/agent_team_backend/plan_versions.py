@@ -185,8 +185,8 @@ def list_versions(history_dir: Path, warn: Warn = _no_warn) -> list[dict[str, An
         if match is None or child.is_symlink() or not child.is_file():
             continue
         versions.append({"file": child.name, "stage": match.group(2), "entry": entries.get(child.name)})
-    # Newest first by timestamp; a compressed and an uncompressed name with the
-    # same timestamp keep a stable order.
+    # Newest first: names carry the time, and a directory holds one version
+    # per second (older snapshots may share one; their order stays stable).
     versions.sort(key=lambda version: (version["file"].split("_", 1)[0], version["file"]), reverse=True)
     return versions
 
@@ -390,13 +390,13 @@ def record_version(
             if recorded is not None and timedelta(0) <= now - recorded <= MERGE_WINDOW:
                 target_name = newest_entry["file"]
         if target_name is None:
+            # One version per second per directory, whatever its stage or
+            # form, so name order is always time order.
+            taken = {version["file"].split("_", 1)[0] for version in versions}
             moment = now
-            while True:
-                plain_name = f"{moment.strftime(_TS_FORMAT)}_{stage}{suffix}"
-                target_name = plain_name + COMPRESSED_SUFFIX
-                if not (history_dir / target_name).exists() and not (history_dir / plain_name).exists():
-                    break
+            while moment.strftime(_TS_FORMAT) in taken:
                 moment += timedelta(seconds=1)
+            target_name = f"{moment.strftime(_TS_FORMAT)}_{stage}{suffix}{COMPRESSED_SUFFIX}"
         # mtime=0: the same bytes always compress to the same file.
         _write_atomic(history_dir / target_name, gzip.compress(data, mtime=0))
         entry: dict[str, Any] = {
