@@ -23,7 +23,8 @@ import PlanMarkdownBody from './retained/PlanMarkdownBody.vue'
 import HtmlFilePreview from './HtmlFilePreview.vue'
 import PlanShareButton from './PlanShareButton.vue'
 import NotificationHost from './retained/NotificationHost.vue'
-import { resolvePlanStore, type SectionBody } from './retained/planStore'
+import SectionConflictDialog from './retained/SectionConflictDialog.vue'
+import { resolvePlanStore, type SectionBody, type SectionConflict, type WriteResult } from './retained/planStore'
 import { htmlPlanAwaitingUser, parseHtmlPlanMeta } from './retained/usePlanHtml'
 import { sharePlanToGit } from './retained/planShare'
 import { plansTransport } from './retained/transport'
@@ -328,9 +329,39 @@ function captureSectionTarget(): SectionTarget | null {
 function isActiveSectionTarget(target: SectionTarget): boolean {
   return selectedPath.value === target.path && activeReadGeneration === target.generation && selected.value === target.document
 }
+// The document the user saw when the current inline edit began. Section
+// writes are checked against it, so an agent's change to the same section is
+// never overwritten without the user choosing.
+let sectionEditBase: string | null = null
+// A section write waiting on the user's choice between their version and the
+// one on disk; `body` is absent for a delete.
+const pendingSectionConflict = ref<{ target: SectionTarget; conflict: SectionConflict; body?: SectionBody } | null>(null)
+const sectionConflictSaving = ref(false)
+const sectionConflictDialog = ref<InstanceType<typeof SectionConflictDialog> | null>(null)
+
+function writeSection(target: SectionTarget, anchor: string, body: SectionBody | undefined, base: string): Promise<WriteResult> {
+  const store = resolvePlanStore(target.path)
+  const ctx = { backend: plansTransport, workspacePath, relPath: target.path }
+  return body ? store.replaceSectionBody(ctx, anchor, body, base) : store.deleteSection(ctx, anchor, base)
+}
+/** Apply a section write's result; true when it was written. */
+async function settleSectionWrite(target: SectionTarget, body: SectionBody | undefined, result: WriteResult): Promise<boolean> {
+  if (result.sectionConflict) {
+    pendingSectionConflict.value = { target, conflict: result.sectionConflict, body }
+    return false
+  }
+  if (!result.ok) {
+    throw new Error(result.conflict ? t('pane.plans.section-write-busy') : result.error || t('pane.plans.review-save-failed'))
+  }
+  if (result.merged) toast(t('pane.plans.merged-others'), { type: 'success' })
+  if (isActiveSectionTarget(target)) await refreshSelected()
+  return true
+}
 async function replaceSectionBody(anchor: string, body: string): Promise<void> {
   const target = captureSectionTarget()
   if (!target) return
+  const base = sectionEditBase ?? target.document.html ?? ''
+  sectionEditBase = null
   try {
     const store = resolvePlanStore(target.path)
     // The carrier decides the payload kind: a markdown file stores the edited
@@ -338,12 +369,7 @@ async function replaceSectionBody(anchor: string, body: string): Promise<void> {
     const sectionBody: SectionBody = store.format === 'markdown'
       ? { kind: 'markdown', text: body }
       : { kind: 'html', sanitized: sanitizePlanSectionHtml(body) }
-    const result = await store.replaceSectionBody(
-      { backend: plansTransport, workspacePath, relPath: target.path },
-      anchor, sectionBody,
-    )
-    if (!result.ok) throw new Error(result.error || t('pane.plans.review-save-failed'))
-    if (isActiveSectionTarget(target)) await refreshSelected()
+    await settleSectionWrite(target, sectionBody, await writeSection(target, anchor, sectionBody, base))
   } catch (cause) { toast(formatBackendError(cause), { type: 'error' }) }
 }
 async function deleteSection(anchor: string): Promise<void> {
@@ -354,12 +380,30 @@ async function deleteSection(anchor: string): Promise<void> {
   })
   if (!accepted || !isActiveSectionTarget(target)) return
   try {
-    const result = await resolvePlanStore(target.path).deleteSection(
-      { backend: plansTransport, workspacePath, relPath: target.path }, anchor,
-    )
-    if (!result.ok) throw new Error(result.error || t('pane.plans.review-save-failed'))
-    if (isActiveSectionTarget(target)) await refreshSelected()
+    await settleSectionWrite(target, undefined, await writeSection(target, anchor, undefined, target.document.html ?? ''))
   } catch (cause) { toast(formatBackendError(cause), { type: 'error' }) }
+}
+/** Write the user's version over the document shown in the conflict. */
+async function keepMySection(): Promise<void> {
+  const pending = pendingSectionConflict.value
+  if (!pending || sectionConflictSaving.value) return
+  sectionConflictSaving.value = true
+  try {
+    const result = await writeSection(pending.target, pending.conflict.anchor, pending.body, pending.conflict.fresh)
+    // Conflicting again replaces the dialog's content with the newer disk version.
+    if (await settleSectionWrite(pending.target, pending.body, result)) sectionConflictDialog.value?.showDiscarded('theirs')
+  } catch (cause) {
+    toast(formatBackendError(cause), { type: 'error' })
+  } finally {
+    sectionConflictSaving.value = false
+  }
+}
+/** Keep the disk version; the user's text stays in the dialog to copy. */
+async function keepTheirSection(): Promise<void> {
+  const pending = pendingSectionConflict.value
+  if (!pending) return
+  sectionConflictDialog.value?.showDiscarded('mine')
+  if (isActiveSectionTarget(pending.target)) await refreshSelected()
 }
 
 const onWindowMessage = createPlanRuntimeMessageHandler({
@@ -376,7 +420,10 @@ const onWindowMessage = createPlanRuntimeMessageHandler({
   },
   onSectionEdit: (anchor, html) => { if (!snapshotPreview.value) void replaceSectionBody(anchor, html) },
   onSectionDelete: anchor => { if (!snapshotPreview.value) void deleteSection(anchor) },
-  onSectionEditing: active => { sectionEditing.value = active },
+  onSectionEditing: active => {
+    sectionEditing.value = active
+    if (active) sectionEditBase = selected.value?.html ?? null
+  },
 })
 
 function planTitle(plan: PlanSummary): string {
@@ -660,6 +707,7 @@ function isPinned(relPath: string): boolean {
 let activeReadGeneration = 0
 
 function applySelected(document: PlanDocument, relPath: string): void {
+  openDocumentChangedOnDisk.value = false
   htmlPreviewTarget.value = null
   previewAnchorCounts = countNoteAnchors(document.meta?.reviewNotes ?? [])
   selected.value = { ...document, rel_path: document.rel_path || relPath }
@@ -794,9 +842,36 @@ function schedulePlansReload(): void {
   if (plansChangedTimer !== null) clearTimeout(plansChangedTimer)
   plansChangedTimer = setTimeout(() => {
     plansChangedTimer = null
-    void loadPlans(false)
+    void loadPlans(false).then(reloadOpenDocumentIfChanged)
   }, PLANS_CHANGED_DEBOUNCE_MS)
 }
+
+// Set when the open document changed on disk while the user was editing it;
+// the document reloads once the edit (or a pending conflict) ends.
+const openDocumentChangedOnDisk = ref(false)
+
+function isEditingOpenDocument(): boolean {
+  return sectionEditing.value || pendingSectionConflict.value !== null ||
+    markdownBody.value?.isEditing() === true || markdownBody.value?.hasPendingConflict() === true
+}
+
+/** Reload the open document when the listing shows a newer copy on disk:
+ *  in place when nobody is editing it, otherwise after the edit ends. */
+async function reloadOpenDocumentIfChanged(): Promise<void> {
+  const open = selected.value
+  if (!open || open.rel_path !== selectedPath.value || typeof open.mtime !== 'number') return
+  const listed = plans.value.find(plan => plan.rel_path === open.rel_path)
+  if (typeof listed?.mtime !== 'number' || listed.mtime === open.mtime) return
+  if (isEditingOpenDocument()) {
+    openDocumentChangedOnDisk.value = true
+    return
+  }
+  await refreshSelected()
+}
+
+watch(() => isEditingOpenDocument(), (editing) => {
+  if (!editing && openDocumentChangedOnDisk.value) void refreshSelected()
+})
 
 async function loadPlans(openSelected = true): Promise<void> {
   if (!workspacePath) {
@@ -1149,6 +1224,9 @@ function confirmQuickOpen(): void {
  * left contribution — so the priority order lives in one place.
  */
 function peelOverlay(): boolean {
+  // A section conflict holds text that exists nowhere else: only its own
+  // buttons may close it, never a stray Escape.
+  if (pendingSectionConflict.value || markdownBody.value?.hasPendingConflict()) return true
   if (sectionEditing.value) {
     planDocFrame.value?.contentWindow?.postMessage({ type: 'cancel-edit' }, '*')
     sectionEditing.value = false
@@ -1683,6 +1761,9 @@ onUnmounted(() => {
             <span class="plan-snapshot-note">{{ t('pane.plans.snapshot-readonly') }}</span>
             <button class="plan-snapshot-close" @click="snapshotPreview = null">{{ t('pane.plans.snapshot-close') }}</button>
           </div>
+          <div v-if="openDocumentChangedOnDisk" class="plan-snapshot-banner plan-disk-changed-banner" role="status">
+            <span class="plan-snapshot-note">{{ t('pane.plans.external-change') }}</span>
+          </div>
 
           <div class="plan-main-body">
             <!-- HTML preview iframe -->
@@ -1768,6 +1849,16 @@ onUnmounted(() => {
         <p v-if="!quickOpenRows.length" class="muted">{{ t('pane.plans.v2.no-matching') }}</p>
       </div>
     </div>
+
+    <SectionConflictDialog
+      v-if="pendingSectionConflict"
+      ref="sectionConflictDialog"
+      :conflict="pendingSectionConflict.conflict"
+      :saving="sectionConflictSaving"
+      @keep-mine="void keepMySection()"
+      @keep-theirs="void keepTheirSection()"
+      @close="pendingSectionConflict = null"
+    />
 
     <div v-if="renameTarget" class="overlay" @click.self="cancelRename">
       <form class="rename-dialog" @submit.prevent="void submitRename()"><h2>{{ t('pane.plans.v2.rename-plan') }}</h2><input ref="renameInput" v-model="renameValue" @keydown.escape="cancelRename" /><div class="dialog-actions"><button type="button" @click="cancelRename">{{ t('action.cancel') }}</button><button type="submit">{{ t('action.rename') }}</button></div></form>

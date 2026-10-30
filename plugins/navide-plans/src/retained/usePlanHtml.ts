@@ -484,6 +484,16 @@ function rangeIsProtected(content: string, start: number, end: number): boolean 
 }
 
 /**
+ * The source of the whole section/phase identified by `anchor` (heading
+ * included), or null when the anchor is not found. Two versions of a document
+ * whose regions are equal agree on that section.
+ */
+export function sectionRegion(content: string, anchor: string): string | null {
+  const loc = locateSection(content, anchor)
+  return loc ? content.slice(loc.regionStart, loc.regionEnd) : null
+}
+
+/**
  * Replace the prose body of the section/phase identified by `anchor` with
  * host-sanitized HTML, touching no other byte. Returns the content unchanged
  * when the anchor is not found, the region is protected (plan-meta / header /
