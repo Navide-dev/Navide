@@ -62,6 +62,14 @@ const BLINK_MS = 600
 /** Quiet time after the last write before cold scrollback is packed, and the slice budget. */
 const PACK_IDLE_MS = 500
 const PACK_SLICE_MS = 8
+/**
+ * Writes up to this size are parsed at once. Larger ones (a replayed
+ * scrollback, a huge paste echo) are parsed in slices of WRITE_SLICE_BYTES
+ * for at most WRITE_BUDGET_MS per task, so the page keeps responding.
+ */
+const SYNC_WRITE_BYTES = 256 * 1024
+const WRITE_SLICE_BYTES = 64 * 1024
+const WRITE_BUDGET_MS = 12
 /** Longest a synchronized-output frame may hold back painting (mode 2026). */
 const SYNC_TIMEOUT_MS = 1000
 
@@ -85,6 +93,9 @@ export class NvTerminal implements IDisposable {
   private blinkOn = true
   private blinkTimer: ReturnType<typeof setInterval> | undefined
   private packTimer: ReturnType<typeof setTimeout> | undefined
+  private readonly writeQueue: { data: Uint8Array; offset: number; callback?: () => void }[] = []
+  private draining = false
+  private disposed = false
   private composing = false
   private composition = ''
   private mouseDown: { button: number; selecting: boolean; moved: boolean } | null = null
@@ -219,11 +230,51 @@ export class NvTerminal implements IDisposable {
     this.queueRender()
   }
 
+  /**
+   * Parses output. The callback runs once this data (and everything written
+   * before it) has been parsed. Small writes are parsed immediately; large
+   * ones in time-boxed slices, in order.
+   */
   write(data: string | Uint8Array, callback?: () => void): void {
-    this.core.write(this.opts.convertEol ? convertEol(data) : data)
+    if (this.disposed) return
+    const converted = this.opts.convertEol ? convertEol(data) : data
+    const size = typeof converted === 'string' ? converted.length * 3 : converted.length
+    if (!this.writeQueue.length && size <= SYNC_WRITE_BYTES) {
+      this.core.write(converted)
+      this.afterWrite()
+      if (callback) queueMicrotask(callback)
+      return
+    }
+    // Bytes slice safely: the UTF-8 decoder carries a character split across slices.
+    const bytes = typeof converted === 'string' ? new TextEncoder().encode(converted) : converted
+    this.writeQueue.push({ data: bytes, offset: 0, callback })
+    if (!this.draining) this.drain()
+  }
+
+  private drain(): void {
+    this.draining = true
+    const started = performance.now()
+    while (this.writeQueue.length && !this.disposed) {
+      const item = this.writeQueue[0]!
+      if (item.offset < item.data.length) {
+        const end = Math.min(item.data.length, item.offset + WRITE_SLICE_BYTES)
+        this.core.write(item.data.subarray(item.offset, end))
+        item.offset = end
+      }
+      if (item.offset >= item.data.length) {
+        this.writeQueue.shift()
+        if (item.callback) queueMicrotask(item.callback)
+      }
+      if (performance.now() - started > WRITE_BUDGET_MS) break
+    }
+    this.afterWrite()
+    if (this.writeQueue.length && !this.disposed) setTimeout(() => this.drain(), 0)
+    else this.draining = false
+  }
+
+  private afterWrite(): void {
     this.queueRender()
     this.schedulePack(PACK_IDLE_MS)
-    if (callback) queueMicrotask(callback)
   }
 
   writeln(data: string, callback?: () => void): void {
@@ -373,6 +424,8 @@ export class NvTerminal implements IDisposable {
   }
 
   dispose(): void {
+    this.disposed = true
+    this.writeQueue.length = 0
     for (const [target, type, listener, options] of this.listeners) target.removeEventListener(type, listener, options)
     this.listeners.length = 0
     if (this.blinkTimer) clearInterval(this.blinkTimer)
