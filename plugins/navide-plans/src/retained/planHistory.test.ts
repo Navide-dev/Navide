@@ -13,11 +13,17 @@ const html = (body: string, extra = '') => [
 
 describe('visible plan text', () => {
   it('keeps the prose and drops markup, the meta island and styles', () => {
-    expect(visiblePlanLines(html('Ship &amp; measure &#x2713;'))).toEqual(['Planapproved', 'Goals', 'Ship & measure ✓'])
+    expect(visiblePlanLines(html('Ship &amp; measure &#x2713;'), 'p.html')).toEqual(['Planapproved', 'Goals', 'Ship & measure ✓'])
   })
 
   it('drops the frontmatter of a markdown plan', () => {
-    expect(visiblePlanLines('---\nname: P\nstage: draft\n---\n\n## Goals\n\nShip it\n')).toEqual(['## Goals', 'Ship it'])
+    expect(visiblePlanLines('---\nname: P\nstage: draft\n---\n\n## Goals\n\nShip it\n', 'p.plan.md')).toEqual(['## Goals', 'Ship it'])
+  })
+
+  it('reads a markdown plan as markdown even when its text holds HTML tags', () => {
+    const md = '---\nname: P\nstage: draft\n---\n\n<div>Box</div>\n<p>Para</p>\n'
+    expect(visiblePlanLines(md, 'p.plan.md')).toEqual(['<div>Box</div>', '<p>Para</p>'])
+    expect(textChangedSinceApproval(md, md.replace('<p>Para</p>', '<p>Changed</p>'), 'p.plan.md')).toBe(true)
   })
 })
 
@@ -48,10 +54,10 @@ describe('changed since approval', () => {
   it('ignores todo progress and the stage badge, which move after approval', () => {
     const approved = html('Text', todos('pending'))
     const later = html('Text', todos('done')).replace('pill approved">approved', 'pill in-progress">in-progress')
-    expect(textChangedSinceApproval(approved, later)).toBe(false)
+    expect(textChangedSinceApproval(approved, later, 'p.html')).toBe(false)
   })
 
   it('reports a change to the prose', () => {
-    expect(textChangedSinceApproval(html('Text'), html('Text, changed'))).toBe(true)
+    expect(textChangedSinceApproval(html('Text'), html('Text, changed'), 'p.html')).toBe(true)
   })
 })

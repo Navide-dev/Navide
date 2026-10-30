@@ -137,12 +137,14 @@ const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"'
 /**
  * The reader-visible text of a plan, one line per block: for HTML the markup
  * is dropped (the plan-meta island, scripts and styles entirely) and common
- * entities decoded; for markdown the frontmatter is dropped. Blank lines are
- * left out, so a diff shows changed prose, not reformatting.
+ * entities decoded; for markdown the frontmatter is dropped. The format is
+ * the plan file's (`relPath`), never guessed from the text, which in a
+ * markdown plan may hold HTML tags. Blank lines are left out, so a diff shows
+ * changed prose, not reformatting.
  */
-export function visiblePlanLines(content: string): string[] {
+export function visiblePlanLines(content: string, relPath: string): string[] {
   let text: string
-  if (/<(?:html|body|section|p|h[1-6]|div)\b/i.test(content)) {
+  if (relPath.endsWith('.html')) {
     text = content
       .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
       .replace(/<style\b[\s\S]*?<\/style\s*>/gi, '')
@@ -226,11 +228,12 @@ export function diffLines(before: string[], after: string[]): DiffLine[] {
  * was approved). Todo lists and the stage badge are left out: they are meant
  * to move after approval, through the toolbar and the plan tools (g6).
  */
-export function textChangedSinceApproval(approved: string, current: string): boolean {
+export function textChangedSinceApproval(approved: string, current: string, relPath: string): boolean {
   const prose = (content: string) => visiblePlanLines(
     content
       .replace(/<ul\b[^>]*\bclass=["'][^"']*\btodos\b[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, '')
       .replace(/<span\b[^>]*\bclass=["'][^"']*\bpill\b[^"']*["'][^>]*>[\s\S]*?<\/span>/gi, ''),
+    relPath,
   ).join('\n')
   return prose(approved) !== prose(current)
 }

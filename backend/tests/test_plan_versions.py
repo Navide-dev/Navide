@@ -290,3 +290,18 @@ def test_retention_never_follows_a_symlinked_snapshot(tmp_path: Path) -> None:
     (history / "19990101T000000_draft.html").symlink_to(victim)
     plan_versions.prune_history(history, now=T0 + timedelta(days=400))
     assert victim.read_text(encoding="utf-8") == "keep me"
+
+
+def test_decoding_is_bounded_and_never_returns_a_cut_version() -> None:
+    packed = gzip.compress(b"a" * 5_000, mtime=0)
+    name = "20261030T120000_draft.html.gz"
+    assert plan_versions.decode_version(Path("."), name, packed, limit=5_000) == b"a" * 5_000
+    with pytest.raises(plan_versions.VersionTooLarge):
+        plan_versions.decode_version(Path("."), name, packed, limit=4_999)
+    # Several gzip members read as one, as gzip.decompress does.
+    two = gzip.compress(b"one ", mtime=0) + gzip.compress(b"two", mtime=0)
+    assert plan_versions.decode_version(Path("."), name, two, limit=100) == b"one two"
+    with pytest.raises(EOFError):
+        plan_versions.decode_version(Path("."), name, packed[:-12], limit=10_000)
+    # An uncompressed snapshot is returned as it is.
+    assert plan_versions.decode_version(Path("."), "20261030T120000_draft.html", b"raw", limit=1) == b"raw"
