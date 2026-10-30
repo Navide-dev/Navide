@@ -1212,6 +1212,8 @@ describe('PlansApp', () => {
 
   it('sanitizes trusted anchored section edits before the private backend adapter', async () => {
     state.documents[existingPath].html = '<html><body><section><h2>Editable section</h2><p>Original prose.</p></section></body></html>'
+    // plans.read and plans.read_document return the same bytes on disk.
+    state.documents[existingPath].raw = state.documents[existingPath].html
     const view = await mountPlans()
     const iframeEl = view.get('iframe.plan-doc-frame').element as HTMLIFrameElement
     const frameWin = {} as Window
@@ -1228,6 +1230,118 @@ describe('PlansApp', () => {
     expect(writes[0].args).toMatchObject({ rel_path: existingPath, expected_mtime: 1 })
     expect(writes[0].args.content).toContain('<p>Updated prose.</p>')
     expect(writes[0].args.content).not.toContain('evil()')
+  })
+
+  describe('section edits against a document that changed on disk', () => {
+    const page = (scope: string, risks = 'Risk prose.') =>
+      `<html><body><section><h2>Scope</h2><p>${scope}</p></section><section><h2>Risks</h2><p>${risks}</p></section></body></html>`
+
+    async function editScope(disk: string, html = '<p>Mine prose.</p>') {
+      state.documents[existingPath].html = page('Original prose.')
+      state.documents[existingPath].raw = disk
+      const view = await mountPlans({ attachTo: document.body })
+      const iframeEl = view.get('iframe.plan-doc-frame').element as HTMLIFrameElement
+      const frameWin = { postMessage: vi.fn() } as unknown as Window
+      Object.defineProperty(iframeEl, 'contentWindow', { value: frameWin, configurable: true })
+      const documentToken = (iframeEl.getAttribute('srcdoc') || '').match(/var documentToken = "([0-9a-f]{32})"/)?.[1]
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-editing', active: true, documentToken } }))
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-editing', active: false, documentToken } }))
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-edit', anchor: 'Scope', html, documentToken } }))
+      await flushPromises()
+      return view
+    }
+    const writes = () => state.calls.filter(call => call.name === 'plans.write_document')
+
+    it('merges into a document an agent changed in another section, and says so', async () => {
+      await editScope(page('Original prose.', 'Agent risks.'))
+      expect(writes()).toHaveLength(1)
+      expect(writes()[0].args.content).toContain('<p>Mine prose.</p>')
+      expect(writes()[0].args.content).toContain('Agent risks.')
+      expect(state.toast).toHaveBeenCalledWith('pane.plans.merged-others', { type: 'success' })
+    })
+
+    it('writes nothing and shows both versions when the same section changed', async () => {
+      const view = await editScope(page('Agent prose.'))
+      expect(writes()).toHaveLength(0)
+      const dialog = view.get('.scd-dialog')
+      expect(dialog.get('[data-side="mine"] textarea').element.value).toContain('Mine prose.')
+      expect(dialog.get('[data-side="theirs"] textarea').element.value).toContain('Agent prose.')
+    })
+
+    it('keeping the disk version leaves the user’s text on screen until closed', async () => {
+      const view = await editScope(page('Agent prose.'))
+      await view.get('.scd-keep-theirs').trigger('click')
+      await flushPromises()
+      expect(writes()).toHaveLength(0)
+      expect(view.get('.scd-dialog [data-side="mine"] textarea').element.value).toContain('Mine prose.')
+      await view.get('.scd-close').trigger('click')
+      expect(view.find('.scd-dialog').exists()).toBe(false)
+    })
+
+    it('keeping mine writes over the version shown and keeps theirs on screen', async () => {
+      const view = await editScope(page('Agent prose.'))
+      await view.get('.scd-keep-mine').trigger('click')
+      await flushPromises()
+      expect(writes()).toHaveLength(1)
+      expect(writes()[0].args.content).toContain('<p>Mine prose.</p>')
+      expect(writes()[0].args.content).not.toContain('Agent prose.')
+      expect(view.get('.scd-dialog [data-side="theirs"] textarea').element.value).toContain('Agent prose.')
+    })
+  })
+
+  describe('an open document changed on disk', () => {
+    async function changeOnDisk(): Promise<void> {
+      state.list[0].mtime = 2
+      state.documents[existingPath].mtime = 2
+      state.documents[existingPath].html = '<html><body><section><h2>Scope</h2><p>Agent prose.</p></section></body></html>'
+      state.subscriptionListener?.({})
+      await new Promise(resolve => setTimeout(resolve, 260))
+      await flushPromises()
+    }
+    const reads = () => state.calls.filter(call => call.name === 'plans.read' && call.args.rel_path === existingPath)
+
+    beforeEach(() => {
+      state.list[0].mtime = 1
+      state.documents[existingPath].mtime = 1
+      state.documents[existingPath].html = '<html><body><section><h2>Scope</h2><p>Original prose.</p></section></body></html>'
+    })
+
+    it('reloads in place when nobody is editing it', async () => {
+      const view = await mountPlans()
+      const before = reads().length
+      await changeOnDisk()
+      expect(reads().length).toBe(before + 1)
+      expect(view.get('iframe.plan-doc-frame').attributes('srcdoc')).toContain('Agent prose.')
+      expect(view.find('.plan-disk-changed-banner').exists()).toBe(false)
+    })
+
+    it('waits for an inline edit to end, showing a notice meanwhile', async () => {
+      const view = await mountPlans()
+      const iframeEl = view.get('iframe.plan-doc-frame').element as HTMLIFrameElement
+      const frameWin = { postMessage: vi.fn() } as unknown as Window
+      Object.defineProperty(iframeEl, 'contentWindow', { value: frameWin, configurable: true })
+      const documentToken = (iframeEl.getAttribute('srcdoc') || '').match(/var documentToken = "([0-9a-f]{32})"/)?.[1]
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-editing', active: true, documentToken } }))
+      await flushPromises()
+      const before = reads().length
+      await changeOnDisk()
+      expect(reads().length).toBe(before)
+      expect(view.find('.plan-disk-changed-banner').exists()).toBe(true)
+
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-editing', active: false, documentToken } }))
+      await flushPromises()
+      expect(reads().length).toBe(before + 1)
+      expect(view.find('.plan-disk-changed-banner').exists()).toBe(false)
+    })
+
+    it('does not reload when the listing shows the copy already open', async () => {
+      await mountPlans()
+      const before = reads().length
+      state.subscriptionListener?.({})
+      await new Promise(resolve => setTimeout(resolve, 260))
+      await flushPromises()
+      expect(reads().length).toBe(before)
+    })
   })
 
   it('safely handles todo-clicked only from the preview frame with known todo ID', async () => {

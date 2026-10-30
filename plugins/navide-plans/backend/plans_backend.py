@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import codecs
+import hashlib
 import json
 import math
 import os
@@ -567,6 +568,18 @@ def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _sha256_argument(value: Any) -> str | None:
+    """An optional ``expected_sha256``: absent, or 64 lowercase hex digits."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    return value
+
+
 def _plan_root(origin: dict[str, Any]) -> str:
     """The plan root the Host authorizes for this request.
 
@@ -710,11 +723,18 @@ def _write_failure(result: Any, *, rel_path: str | None = None) -> BridgeFailure
     return BridgeFailure("BACKEND_UNAVAILABLE")
 
 
-def _write(origin: dict[str, Any], rel_path: str, content: str, expected_mtime: float | None = None) -> float | None:
+def _write(
+    origin: dict[str, Any],
+    rel_path: str,
+    content: str,
+    expected_mtime: float | None = None,
+    expected_sha256: str | None = None,
+) -> float | None:
     """Write a document under the authorized root through the core write path.
 
     The same calls the Host's filesystem service made: the mutation guard, an
-    atomic replace, and the ``expected_mtime`` conflict check. A document past
+    atomic replace, and the ``expected_mtime`` (and ``expected_sha256``)
+    conflict check. A document past
     SINGLE_WRITE_MAX_BYTES is staged in parts and swapped in, as before.
     """
     # Plans writes deliberately have no size cap (user decision 2026-09-29:
@@ -728,16 +748,20 @@ def _write(origin: dict[str, Any], rel_path: str, content: str, expected_mtime: 
         raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION") from None
     data = content.encode("utf-8")
     if len(data) > SINGLE_WRITE_MAX_BYTES:
-        result = _write_staged(root, rel_path, data, expected_mtime)
+        result = _write_staged(root, rel_path, data, expected_mtime, expected_sha256)
     else:
-        result = write_file(root, rel_path, content, expected_mtime=expected_mtime)
+        result = write_file(
+            root, rel_path, content, expected_mtime=expected_mtime, expected_sha256=expected_sha256
+        )
     if not _is_record(result) or result.get("ok") is not True:
         raise _write_failure(result, rel_path=rel_path)
     mtime = result.get("mtime")
     return float(mtime) if isinstance(mtime, (int, float)) and not isinstance(mtime, bool) else None
 
 
-def _write_staged(root: str, rel_path: str, data: bytes, expected_mtime: float | None) -> Any:
+def _write_staged(
+    root: str, rel_path: str, data: bytes, expected_mtime: float | None, expected_sha256: str | None = None
+) -> Any:
     """Stage ``data`` part by part, then swap it in atomically.
 
     Same contract as one write_file call: the commit is refused with a
@@ -755,7 +779,7 @@ def _write_staged(root: str, rel_path: str, data: bytes, expected_mtime: float |
         offset += len(part)
         if offset >= len(data):
             break
-    return write_commit(root, rel_path, upload_id, len(data), expected_mtime)
+    return write_commit(root, rel_path, upload_id, len(data), expected_mtime, expected_sha256)
 
 
 def _plan_path(value: Any) -> str:
@@ -1730,7 +1754,7 @@ def _manual_document(origin: dict[str, Any], arguments: dict[str, Any], action: 
     sharing is limited to the retained .plans/<document> destination.
     """
     required = {"rel_path", "content"} if action == "write" else {"rel_path"}
-    optional = {"expected_mtime"} if action == "write" else {"offset"} if action == "read" else set()
+    optional = {"expected_mtime", "expected_sha256"} if action == "write" else {"offset"} if action == "read" else set()
     if not required <= set(arguments) or set(arguments) - required - optional:
         raise BridgeFailure("INVALID_ARGUMENT")
     path = arguments["rel_path"]
@@ -1760,6 +1784,12 @@ def _manual_document(origin: dict[str, Any], arguments: dict[str, Any], action: 
         result: dict[str, Any] = {"ok": True, "content": chunk["text"]}
         if chunk["mtime"] is not None:
             result["mtime"] = chunk["mtime"]
+        if offset == 0:
+            # The whole file's hash, for the writer's expected_sha256. Left out
+            # when the file changed between the two reads: mtime still guards.
+            data, _size, mtime, _eof = _read_bytes(origin, path, 0, None)
+            if mtime == chunk["mtime"]:
+                result["sha256"] = hashlib.sha256(data).hexdigest()
         if offset > 0 or not chunk["eof"]:
             result["size"] = chunk["size"]
             result["offset"] = offset
@@ -1780,8 +1810,9 @@ def _manual_document(origin: dict[str, Any], arguments: dict[str, Any], action: 
         mtime is not None and (isinstance(mtime, bool) or not isinstance(mtime, (int, float)) or not math.isfinite(mtime))
     ):
         raise BridgeFailure("INVALID_ARGUMENT")
+    sha256 = _sha256_argument(arguments.get("expected_sha256"))
     try:
-        _write(origin, path, content, mtime)
+        _write(origin, path, content, mtime, sha256)
     except BridgeFailure as error:
         if error.code == "CONFLICT":
             return {"ok": False, "conflict": True}
@@ -1819,10 +1850,10 @@ def _manual_upload(origin: dict[str, Any], arguments: dict[str, Any], action: st
     """
     allowed = {
         "part": {"rel_path", "upload_id", "offset", "data_base64"},
-        "commit": {"rel_path", "upload_id", "total_size", "expected_mtime"},
+        "commit": {"rel_path", "upload_id", "total_size", "expected_mtime", "expected_sha256"},
         "abort": {"rel_path", "upload_id"},
     }[action]
-    required = allowed - {"expected_mtime"}
+    required = allowed - {"expected_mtime", "expected_sha256"}
     if not required <= set(arguments) or set(arguments) - allowed:
         raise BridgeFailure("INVALID_ARGUMENT")
     upload_id = arguments["upload_id"]
@@ -1849,7 +1880,8 @@ def _manual_upload(origin: dict[str, Any], arguments: dict[str, Any], action: st
         and (isinstance(expected, bool) or not isinstance(expected, (int, float)) or not math.isfinite(expected))
     ):
         raise BridgeFailure("INVALID_ARGUMENT")
-    result = write_commit(_plan_root(origin), path, upload_id, total, expected)
+    sha256 = _sha256_argument(arguments.get("expected_sha256"))
+    result = write_commit(_plan_root(origin), path, upload_id, total, expected, sha256)
     if _is_record(result) and result.get("conflict") is True:
         return {"ok": False, "conflict": True}
     if not _is_record(result) or result.get("ok") is not True:

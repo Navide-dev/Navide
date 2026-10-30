@@ -36,6 +36,7 @@ import httpx
 from .base import (
     RETRY_AFTER_CAP_S,
     STALL_WATCHDOG_S,
+    TELEGRAM_SHARED_SENDER_IDS,
     AdapterStatus,
     Capabilities,
     ChannelAuthError,
@@ -438,8 +439,12 @@ class TelegramAdapter:
         attachments = _attachments(msg)
         if not (text or attachments) or (msg.get("from") or {}).get("is_bot"):
             return
+        # Sent on behalf of a chat (a channel, an anonymous admin): ``from`` is a stand-in
+        # that names no one, so the message carries no sender id the gate could admit.
+        sender_chat = msg.get("sender_chat")
+        sender = {"first_name": sender_chat.get("title") or ""} if sender_chat else msg.get("from") or {}
         await self._deliver(
-            chat=chat, sender=msg.get("from") or {}, text=text, thread=_thread_of(msg),
+            chat=chat, sender=sender, text=text, thread=_thread_of(msg),
             message_id=f"{chat.get('id')}:{msg.get('message_id')}",
             ts=float(msg.get("date") or time.time()),
             reply_to_id=str((msg.get("reply_to_message") or {}).get("message_id") or ""),
@@ -775,7 +780,7 @@ def _reply_quote(msg: dict[str, Any], bot_id: str) -> tuple[str, str, str, bool]
 
 # ``from`` ids that stand for many people: anonymous group admins, channel posts and
 # Telegram's service account. They identify no one, so they are never a quote's author.
-SHARED_SENDER_IDS = {1087968824, 136817688, 777000}
+SHARED_SENDER_IDS = {int(i) for i in TELEGRAM_SHARED_SENDER_IDS}
 
 
 def _content_author(reply: dict[str, Any]) -> tuple[dict[str, Any], bool]:

@@ -529,6 +529,38 @@ def test_write_is_atomic_and_rejects_stale_mtime(backend_process: subprocess.Pop
     assert sorted(path.name for path in plans.iterdir()) == ["doc_aaaaaa.html"]
 
 
+def test_a_read_reports_the_content_hash_a_write_can_expect(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    target = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    target.write_text(_plan_html("Original"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+
+    read = _value(_call(backend_process, host, "plans.read_document", {"rel_path": rel_path}))
+    assert read["sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
+
+    # Another writer changes the bytes and puts the mtime back.
+    before = target.stat()
+    target.write_text(_plan_html("Theirs"), encoding="utf-8")
+    os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
+    stale = _value(_write(
+        backend_process, host, rel_path, _plan_html("Mine"), expected_mtime=read["mtime"], expected_sha256=read["sha256"],
+    ))
+    assert stale == {"ok": False, "conflict": True}
+    assert "Theirs" in target.read_text(encoding="utf-8")
+
+    fresh = _value(_call(backend_process, host, "plans.read_document", {"rel_path": rel_path}))
+    assert _value(_write(
+        backend_process, host, rel_path, _plan_html("Mine"), expected_sha256=fresh["sha256"],
+    )) == {"ok": True}
+    assert "Mine" in target.read_text(encoding="utf-8")
+
+    for bad in ("ABC", "0" * 63, 7):
+        assert _error_code(_write(backend_process, host, rel_path, "x", expected_sha256=bad)) == "INVALID_ARGUMENT"
+
+
 def test_agent_changes_refuse_a_document_without_valid_plan_meta_and_leave_it_untouched(
     backend_process: subprocess.Popen[bytes], tmp_path: Path
 ) -> None:

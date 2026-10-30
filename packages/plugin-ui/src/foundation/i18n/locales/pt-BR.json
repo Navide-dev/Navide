@@ -10902,7 +10902,11 @@
     "allow": {
       "title": "Remetentes permitidos",
       "empty": "Ninguém está permitido ainda.",
-      "remove": "Remover"
+      "remove": "Remover",
+      "via-pairing": "Código de pareamento",
+      "via-invite": "Código de vínculo",
+      "shared": "ID compartilhado",
+      "shared-hint": "Este ID do Telegram representa muitas pessoas (administradores anônimos, canais, o próprio Telegram), por isso é sempre recusado. Você pode removê-lo."
     },
     "pane": {
       "connect": "Conectar a um chat",

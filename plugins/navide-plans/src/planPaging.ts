@@ -117,7 +117,7 @@ export function needsChunkedWrite(content: string): boolean {
 
 /**
  * Write `content` to `relPath` in parts: stage each part, then commit with the
- * same `expected_mtime` conflict check `plans.write_document` has. The file on
+ * same `expected_mtime` / `expected_sha256` conflict check `plans.write_document` has. The file on
  * disk changes only at the commit (one atomic swap); a failure part-way
  * discards what was staged. Resolves to what `plans.write_document` resolves to.
  */
@@ -126,6 +126,7 @@ export async function writeDocumentChunked(
   relPath: string,
   content: string,
   expectedMtime?: number,
+  expectedSha256?: string,
 ): Promise<unknown> {
   const bytes = new TextEncoder().encode(content)
   const uploadId = globalThis.crypto.randomUUID().replace(/-/g, '')
@@ -143,6 +144,7 @@ export async function writeDocumentChunked(
       upload_id: uploadId,
       total_size: bytes.length,
       ...(expectedMtime === undefined ? {} : { expected_mtime: expectedMtime }),
+      ...(expectedSha256 === undefined ? {} : { expected_sha256: expectedSha256 }),
     })
   } catch (cause) {
     await call('plans.write_document_abort', { rel_path: relPath, upload_id: uploadId }).catch(() => undefined)

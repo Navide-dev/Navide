@@ -31,6 +31,7 @@ export const plansTransport: PlansTransport = {
           String(args.rel_path),
           args.content,
           typeof args.expected_mtime === 'number' ? args.expected_mtime : undefined,
+          typeof args.expected_sha256 === 'string' ? args.expected_sha256 : undefined,
         )
         : await plansBackend.call(name, args as never)
     return { payload: (type === 'fs.delete' ? { ok: true } : result) as T }

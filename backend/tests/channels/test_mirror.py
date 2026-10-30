@@ -63,7 +63,7 @@ def test_store_v4_gives_old_bindings_the_pre_mirror_replies_level(tmp_path) -> N
     with db.transaction() as cur:
         cur.execute("INSERT INTO channel_bindings VALUES ('p1','telegram','default','-1','5','t',9)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 6
+    assert db.schema_version("channels") == 7
     assert s.bindings()[0].public() == {
         "pane_id": "p1", "platform": "telegram", "account": "default", "chat_id": "-1", "thread_id": "5",
         "title": "t", "verbosity": "replies", "parent_pane_id": "", "auto": False}
