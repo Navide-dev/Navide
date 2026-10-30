@@ -159,7 +159,7 @@ class GlyphAtlas {
   }
 }
 
-/** Growable Float32Array of instance attributes. */
+/** Growable Float32Array of instance attributes, written in place (no temporary arrays). */
 class InstanceBuffer {
   data: Float32Array
   count = 0
@@ -171,21 +171,50 @@ class InstanceBuffer {
   reset(): void {
     this.count = 0
   }
-  push(...values: number[]): void {
+  /** Index of the next free slot, growing the storage when full. */
+  private slot(): number {
     const at = this.count * this.stride
     if (at + this.stride > this.data.length) {
       const next = new Float32Array(this.data.length * 2)
       next.set(this.data)
       this.data = next
     }
-    this.data.set(values, at)
     this.count++
+    return at
+  }
+  /** A rectangle instance: x y w h, then the colour as 0..1 floats. */
+  rect(x: number, y: number, w: number, h: number, color: number, alpha: number): void {
+    const i = this.slot()
+    const out = this.data
+    out[i] = x
+    out[i + 1] = y
+    out[i + 2] = w
+    out[i + 3] = h
+    out[i + 4] = ((color >> 16) & 0xff) / 255
+    out[i + 5] = ((color >> 8) & 0xff) / 255
+    out[i + 6] = (color & 0xff) / 255
+    out[i + 7] = alpha
+  }
+  /** A glyph instance: the rectangle and colour, then the atlas rectangle and the colored flag. */
+  glyph(x: number, y: number, color: number, alpha: number, e: AtlasEntry, colored: boolean): void {
+    const i = this.slot()
+    const out = this.data
+    out[i] = x
+    out[i + 1] = y
+    out[i + 2] = e.width
+    out[i + 3] = e.height
+    out[i + 4] = ((color >> 16) & 0xff) / 255
+    out[i + 5] = ((color >> 8) & 0xff) / 255
+    out[i + 6] = (color & 0xff) / 255
+    out[i + 7] = alpha
+    out[i + 8] = e.u
+    out[i + 9] = e.v
+    out[i + 10] = e.uw
+    out[i + 11] = e.vh
+    out[i + 12] = colored ? 1 : 0
   }
 }
 
-function rgba(color: number, alpha = 1): [number, number, number, number] {
-  return [(color >> 16) / 255, ((color >> 8) & 0xff) / 255, (color & 0xff) / 255, alpha]
-}
 
 export class WebglRenderer implements Renderer {
   readonly kind = 'webgl'
@@ -205,6 +234,12 @@ export class WebglRenderer implements Renderer {
   private readonly rects = new InstanceBuffer(RECT_FLOATS)
   private readonly overlays = new InstanceBuffer(RECT_FLOATS)
   private readonly glyphs = new InstanceBuffer(GLYPH_FLOATS)
+  /** Atlas entries of single-code-point glyphs by numeric key; cleared with the atlas. */
+  private readonly glyphEntries = new Map<number, AtlasEntry>()
+  /** Effective colours per style id; valid while colorFrameKey is unchanged. */
+  private readonly fgCache = new Map<number, number>()
+  private readonly bgCache = new Map<number, number>()
+  private colorFrameKey = ''
   private cols = 0
   private rows = 0
   private disposed = false
@@ -240,7 +275,8 @@ export class WebglRenderer implements Renderer {
 
   setOptions(options: RendererOptions): void {
     this.options = options
-    this.atlas.clear()
+    this.clearAtlas()
+    this.colorFrameKey = ''
     this.measure()
     this.resize(this.cols, this.rows)
   }
@@ -275,9 +311,14 @@ export class WebglRenderer implements Renderer {
     gl.deleteVertexArray(this.glyphVao)
     gl.deleteProgram(this.rectProgram)
     gl.deleteProgram(this.glyphProgram)
-    this.atlas.clear()
+    this.clearAtlas()
     this.atlas.canvas.width = 1
     this.atlas.canvas.height = 1
+  }
+
+  private clearAtlas(): void {
+    this.atlas.clear()
+    this.glyphEntries.clear()
   }
 
   /** Glyphs currently cached (for diagnostics and tests). */
@@ -289,7 +330,7 @@ export class WebglRenderer implements Renderer {
     if (this.disposed || this.gl.isContextLost()) return
     if (!this.build(frame)) {
       // The atlas filled up mid-frame: start over with an empty atlas.
-      this.atlas.clear()
+      this.clearAtlas()
       if (!this.build(frame)) return
     }
     this.draw()
@@ -303,6 +344,13 @@ export class WebglRenderer implements Renderer {
     const { width: cw, height: ch } = this.metrics
     const defaultFg = frame.reverseVideo ? colors.background : colors.foreground
     const defaultBg = frame.reverseVideo ? colors.foreground : colors.background
+    // Style colours depend on the defaults (reverse video) and the options; recompute when they change.
+    const key = `${defaultFg},${defaultBg}`
+    if (key !== this.colorFrameKey || this.fgCache.size > 4096) {
+      this.fgCache.clear()
+      this.bgCache.clear()
+      this.colorFrameKey = key
+    }
     const buf = frame.buffer
     this.rects.reset()
     this.overlays.reset()
@@ -318,18 +366,20 @@ export class WebglRenderer implements Renderer {
       const cols = Math.min(this.cols, line.cols)
       const links = frame.linkUnderlines?.get(stableY)
       for (let x = 0; x < cols; x++) {
-        const s = frame.style(line.styles[x]!)
-        const [fg, bg] = cellColors(s, defaultFg, defaultBg, this.options)
-        if (bg !== defaultBg || s.flags & CellFlag.Inverse) this.rects.push(x * cw, y, cw, ch, ...rgba(bg))
-        if (frame.isSelected?.(x, stableY)) this.rects.push(x * cw, y, cw, ch, ...rgba(colors.selection, colors.selectionAlpha))
+        const styleId = line.styles[x]!
+        const s = frame.style(styleId)
+        const fg = this.fgOf(styleId, s, defaultFg, defaultBg)
+        const bg = this.bgOf(styleId)
+        if (bg !== defaultBg || s.flags & CellFlag.Inverse) this.rects.rect(x * cw, y, cw, ch, bg, 1)
+        if (frame.isSelected?.(x, stableY)) this.rects.rect(x * cw, y, cw, ch, colors.selection, colors.selectionAlpha)
         if (line.widths[x] === WIDTH_TRAILING) continue
         const span = line.widths[x] === WIDTH_WIDE ? 2 : 1
         const text = line.chars(x)
         if (text && !(s.flags & CellFlag.Invisible)) {
-          if (!this.pushGlyph(text, s.flags, span, x * cw, y, rgba(fg, s.flags & CellFlag.Dim ? 0.5 : 1))) return false
+          if (!this.pushGlyph(text, s.flags, span, x * cw, y, fg, s.flags & CellFlag.Dim ? 0.5 : 1)) return false
         }
         if (!this.pushDecorations(s, fg, x * cw, y, span * cw)) return false
-        if (links?.some(([a, b]) => x >= a && x < b)) this.overlays.push(x * cw, y + ch - 2, span * cw, 1, ...rgba(fg))
+        if (links?.some(([a, b]) => x >= a && x < b)) this.overlays.rect(x * cw, y + ch - 2, span * cw, 1, fg, 1)
       }
     }
 
@@ -338,22 +388,46 @@ export class WebglRenderer implements Renderer {
     return true
   }
 
-  private pushGlyph(text: string, flags: number, span: number, x: number, y: number, color: [number, number, number, number]): boolean {
+  private pushGlyph(text: string, flags: number, span: number, x: number, y: number, color: number, alpha: number): boolean {
     const { width: cw, height: ch, baseline } = this.metrics
-    const dpr = this.options.devicePixelRatio
-    const font = fontString(flags, this.options)
-    const slotW = span * cw + cw / 2 // room for italic overhang
-    const key = `g|${flags & (CellFlag.Bold | CellFlag.Italic)}|${span}|${text}`
-    const entry = this.atlas.get(key, slotW * dpr, ch * dpr, dpr, span === 2 || text.codePointAt(0)! > 0x2000, (ctx) => {
-      ctx.font = font
-      ctx.fillStyle = '#ffffff'
-      ctx.textBaseline = 'alphabetic'
-      const offset = span === 2 ? Math.max(0, (2 * cw - ctx.measureText(text).width) / 2) : 0
-      ctx.fillText(text, offset, baseline)
-    })
-    if (!entry) return false
-    this.glyphs.push(x, y, entry.width, entry.height, ...color, entry.u, entry.v, entry.uw, entry.vh, entry.colored ? 1 : 0)
+    const style = (flags & CellFlag.Bold ? 1 : 0) | (flags & CellFlag.Italic ? 2 : 0)
+    // Single code points (nearly every cell) are looked up by number, without building a key string.
+    const cp = text.codePointAt(0)!
+    const single = text.length === 1 || (text.length === 2 && cp > 0xffff)
+    const numericKey = single ? cp * 8 + style * 2 + (span - 1) : -1
+    let entry = single ? this.glyphEntries.get(numericKey) : undefined
+    if (!entry) {
+      const dpr = this.options.devicePixelRatio
+      const font = fontString(flags, this.options)
+      const slotW = span * cw + cw / 2 // room for italic overhang
+      entry = this.atlas.get(`g|${style}|${span}|${text}`, slotW * dpr, ch * dpr, dpr, span === 2 || cp > 0x2000, (ctx) => {
+        ctx.font = font
+        ctx.fillStyle = '#ffffff'
+        ctx.textBaseline = 'alphabetic'
+        const offset = span === 2 ? Math.max(0, (2 * cw - ctx.measureText(text).width) / 2) : 0
+        ctx.fillText(text, offset, baseline)
+      })
+      if (!entry) return false
+      if (single) this.glyphEntries.set(numericKey, entry)
+    }
+    this.glyphs.glyph(x, y, color, alpha, entry, entry.colored)
     return true
+  }
+
+  /** Effective foreground of a style this frame (cached per style id; see colorFrameKey). */
+  private fgOf(styleId: number, s: Readonly<Style>, defaultFg: number, defaultBg: number): number {
+    let fg = this.fgCache.get(styleId)
+    if (fg === undefined) {
+      const [f, b] = cellColors(s, defaultFg, defaultBg, this.options)
+      fg = f
+      this.fgCache.set(styleId, f)
+      this.bgCache.set(styleId, b)
+    }
+    return fg
+  }
+
+  private bgOf(styleId: number): number {
+    return this.bgCache.get(styleId)!
   }
 
   private pushDecorations(s: Readonly<Style>, fg: number, x: number, y: number, w: number): boolean {
@@ -362,17 +436,17 @@ export class WebglRenderer implements Renderer {
       const color = s.underlineColor ? cellColor(s.underlineColor, this.options.colors, fg) : fg
       const style = s.underlineStyle || 1
       if (style === 1) {
-        this.overlays.push(x, y + ch - 2, w, 1, ...rgba(color))
+        this.overlays.rect(x, y + ch - 2, w, 1, color, 1)
       } else {
         // Patterned underlines are atlas sprites one row tall, tinted like glyphs.
         const dpr = this.options.devicePixelRatio
         const entry = this.atlas.get(`u|${style}|${w}`, w * dpr, ch * dpr, dpr, false, (ctx) => strokeUnderline(ctx, '#ffffff', 0, ch - 2, w, style))
         if (!entry) return false
-        this.glyphs.push(x, y, entry.width, entry.height, ...rgba(color), entry.u, entry.v, entry.uw, entry.vh, 0)
+        this.glyphs.glyph(x, y, color, 1, entry, false)
       }
     }
-    if (s.flags & CellFlag.Strikethrough) this.overlays.push(x, y + Math.round(ch / 2), w, 1, ...rgba(fg))
-    if (s.flags & CellFlag.Overline) this.overlays.push(x, y, w, 1, ...rgba(fg))
+    if (s.flags & CellFlag.Strikethrough) this.overlays.rect(x, y + Math.round(ch / 2), w, 1, fg, 1)
+    if (s.flags & CellFlag.Overline) this.overlays.rect(x, y, w, 1, fg, 1)
     return true
   }
 
@@ -385,29 +459,29 @@ export class WebglRenderer implements Renderer {
     const span = line?.widths[x] === WIDTH_WIDE ? 2 : 1
     const px = x * cw
     const py = cursor.row * ch
-    const c = rgba(colors.cursor)
+    const c = colors.cursor
     if (!cursor.focused) {
-      this.overlays.push(px, py, span * cw, 1, ...c)
-      this.overlays.push(px, py + ch - 1, span * cw, 1, ...c)
-      this.overlays.push(px, py, 1, ch, ...c)
-      this.overlays.push(px + span * cw - 1, py, 1, ch, ...c)
+      this.overlays.rect(px, py, span * cw, 1, c, 1)
+      this.overlays.rect(px, py + ch - 1, span * cw, 1, c, 1)
+      this.overlays.rect(px, py, 1, ch, c, 1)
+      this.overlays.rect(px + span * cw - 1, py, 1, ch, c, 1)
       return true
     }
     if (cursor.shape === 'underline') {
-      this.overlays.push(px, py + ch - CURSOR_THICKNESS, span * cw, CURSOR_THICKNESS, ...c)
+      this.overlays.rect(px, py + ch - CURSOR_THICKNESS, span * cw, CURSOR_THICKNESS, c, 1)
       return true
     }
     if (cursor.shape === 'bar') {
-      this.overlays.push(px, py, CURSOR_THICKNESS, ch, ...c)
+      this.overlays.rect(px, py, CURSOR_THICKNESS, ch, c, 1)
       return true
     }
-    this.overlays.push(px, py, span * cw, ch, ...c)
+    this.overlays.rect(px, py, span * cw, ch, c, 1)
     const text = line?.chars(x)
     if (text) {
       // The glyph under a block cursor is drawn again on top, in the accent colour.
       const s = frame.style(line!.styles[x]!)
       const before = this.glyphs.count
-      if (!this.pushGlyph(text, s.flags, span, px, py, rgba(colors.cursorAccent))) return false
+      if (!this.pushGlyph(text, s.flags, span, px, py, colors.cursorAccent, 1)) return false
       this.cursorGlyphFrom = before
     }
     return true
@@ -425,8 +499,8 @@ export class WebglRenderer implements Renderer {
     const font = fontString(0, this.options)
     this.measureCtx.font = font
     const w = Math.max(cw, this.measureCtx.measureText(frame.composition).width)
-    this.overlays.push(px, py, w, ch, ...rgba(defaultBg))
-    this.overlays.push(px, py + ch - 2, w, 1, ...rgba(defaultFg))
+    this.overlays.rect(px, py, w, ch, defaultBg, 1)
+    this.overlays.rect(px, py + ch - 2, w, 1, defaultFg, 1)
     const entry = this.atlas.get(`c|${frame.composition}`, w * dpr, ch * dpr, dpr, true, (ctx) => {
       ctx.font = font
       ctx.fillStyle = '#ffffff'
@@ -434,7 +508,7 @@ export class WebglRenderer implements Renderer {
     })
     if (!entry) return false
     this.cursorGlyphFrom = this.glyphs.count
-    this.glyphs.push(px, py, entry.width, entry.height, ...rgba(defaultFg), entry.u, entry.v, entry.uw, entry.vh, entry.colored ? 1 : 0)
+    this.glyphs.glyph(px, py, defaultFg, 1, entry, entry.colored)
     return true
   }
 
@@ -444,8 +518,8 @@ export class WebglRenderer implements Renderer {
     const { gl } = this
     const { colors } = this.options
     gl.viewport(0, 0, this.canvas.width, this.canvas.height)
-    const [r, g, b] = rgba(colors.background)
-    gl.clearColor(r, g, b, colors.backgroundAlpha)
+    const bgc = colors.background
+    gl.clearColor(((bgc >> 16) & 0xff) / 255, ((bgc >> 8) & 0xff) / 255, (bgc & 0xff) / 255, colors.backgroundAlpha)
     gl.clear(gl.COLOR_BUFFER_BIT)
     gl.enable(gl.BLEND)
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
