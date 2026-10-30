@@ -181,6 +181,11 @@ export class Buffer {
   private start = 0
   /** Index in `lines` of the top viewport row. */
   base = 0
+  /**
+   * Lines ever dropped from the front (scrollback overflow, ED 3, resets).
+   * `dropped + absolute index` names a line stably while output keeps arriving.
+   */
+  dropped = 0
   /** Cursor column; equals cols while a wrap is pending after the last column. */
   x = 0
   y = 0
@@ -208,6 +213,16 @@ export class Buffer {
     return this.base - this.start
   }
 
+  /** Scrollback plus viewport rows. */
+  get length(): number {
+    return this.scrollbackLength + this.rows
+  }
+
+  /** Line `i` counting from the oldest scrollback line (scrollback first, then the viewport). */
+  absoluteLine(i: number): Line | undefined {
+    return i >= 0 && i < this.length ? this.lines[this.start + i] : undefined
+  }
+
   /** The i-th scrollback line, oldest first. */
   scrollbackLine(i: number): Line | undefined {
     return i < this.scrollbackLength ? this.lines[this.start + i] : undefined
@@ -215,6 +230,7 @@ export class Buffer {
 
   /** Empties the buffer: one blank viewport, no scrollback, cursor home, full margins. */
   reset(): void {
+    this.dropped += this.length
     this.lines = Array.from({ length: this.rows }, () => new Line(this.cols))
     this.start = 0
     this.base = 0
@@ -243,6 +259,7 @@ export class Buffer {
           fresh = this.lines[this.start]!
           fresh.clear(style)
           this.start++
+          this.dropped++
         } else {
           fresh = new Line(this.cols, style)
         }
@@ -273,6 +290,7 @@ export class Buffer {
   }
 
   clearScrollback(): void {
+    this.dropped += this.scrollbackLength
     this.lines.splice(0, this.base)
     this.base = 0
     this.start = 0
