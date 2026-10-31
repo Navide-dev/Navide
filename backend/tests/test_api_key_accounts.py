@@ -992,3 +992,21 @@ def test_an_agent_cannot_start_a_sign_in_on_a_key(store: CliProfilesStore) -> No
 
     assert answer["error_code"] == "api-key-account"
     agent_messaging._reset_for_test()
+
+
+def test_a_failed_pane_lookup_changes_nothing(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """S3: the error must end the incident, with the default left as it was."""
+    _opened_key(store)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+
+    def broken(auth_scope: str) -> list[dict]:
+        raise RuntimeError("window gone")
+
+    monkeypatch.setattr(service, "_affected_terminals", broken)
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert service.stopped == ["api-key-takeover-failed"]
+    assert store.get_pane_default("claude") is None
+    assert events == []

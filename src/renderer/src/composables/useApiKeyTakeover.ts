@@ -1,10 +1,40 @@
 import { onScopeDispose, watch, type Ref } from 'vue'
 import type { useBackend } from './useBackend'
+import { exhaustedWindow, type UsageSnapshot } from './useUsage'
 
 interface TakeoverEvent {
   profileId?: string
   name?: string
   paneIds?: string[]
+}
+
+/** Reopen one pane on the key, unless it is not ready: a pane running, waiting
+ *  on a permission prompt or holding unsent input stays, and the reason comes
+ *  back. A falsy answer means the pane moved. */
+export async function reopenOnKey(
+  paneId: string,
+  profileId: string,
+  deps: {
+    readiness: (paneId: string) => Promise<{ ready: boolean; reason?: string }>
+    rebuild: (paneId: string, profileId: string) => Promise<unknown>
+  },
+): Promise<unknown> {
+  const state = await deps.readiness(paneId)
+  return state.ready ? deps.rebuild(paneId, profileId) : (state.reason ?? 'busy')
+}
+
+/** Whether a login still has a spent window, by the clock as well as the
+ *  reading: every spent window has to have reset before it counts as back, and
+ *  one with no known reset never has. null when there is no good reading. */
+export function loginSpent(snap: UsageSnapshot | undefined, nowMs: number): boolean | null {
+  if (!snap || snap.status !== 'ok') return null
+  let rest = snap
+  for (let w = exhaustedWindow(rest); w; w = exhaustedWindow(rest)) {
+    if (!w.resetsAt || Date.parse(w.resetsAt) > nowMs) return true
+    const reset = w
+    rest = { ...rest, windows: rest.windows.filter((x) => x !== reset) }
+  }
+  return false
 }
 
 /** The backend moved claude to an API key account. Reopen this window's panes
