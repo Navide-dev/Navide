@@ -249,8 +249,9 @@ def test_a_failed_call_keeps_its_text_unless_it_is_known_to_change_nothing(tmp_p
     ]
     # READ_ONLY_ADDRESSES in src/main/plugins/pluginActivity.ts
     assert contract.PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES == (
-        "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.glob", "fs.stat", "fs.statPath",
-        "fs.listArchive", "fs.previewResource", "fs.convertOffice",
-        "fs.read_file", "fs.read_image", "fs.list_dir", "fs.list_files_flat", "fs.glob_files", "fs.stat_path",
+        "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.queryFiles", "fs.glob", "fs.stat",
+        "fs.statPath", "fs.listArchive", "fs.previewResource", "fs.convertOffice",
+        "fs.read_file", "fs.read_image", "fs.list_dir", "fs.list_files_flat", "fs.query_files", "fs.glob_files",
+        "fs.stat_path",
         "fs.list_archive", "fs.convert_office",
     )

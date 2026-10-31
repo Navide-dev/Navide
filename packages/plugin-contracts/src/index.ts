@@ -953,6 +953,17 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'fs.readImage': { path: string; selectionGrant?: string }
   'fs.listDirectory': { path: string; showHidden?: boolean }
   'fs.listFilesFlat': { query?: string; maxResults?: number }
+  'fs.queryFiles': {
+    query: string
+    matchOn?: 'name' | 'path'
+    mode?: 'substring' | 'subsequence' | 'glob'
+    exclude?: string[]
+    respectGitignore?: boolean
+    includeHidden?: boolean
+    includeNoiseDirs?: boolean
+    limit?: number
+    cursor?: string
+  }
   'fs.glob': { pattern: string }
   'fs.stat': { path: string; selectionGrant?: string }
   'fs.statPath': { path: string; selectionGrant?: string }
@@ -1001,6 +1012,15 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
     error?: string
   }
   'fs.listFilesFlat': { files?: string[]; ok?: boolean; truncated?: boolean; error?: string }
+  'fs.queryFiles': {
+    ok: boolean
+    files?: Array<{ path: string; name: string; matchSpans: Array<[number, number]>; size: number; mtime: number }>
+    nextCursor?: string
+    gitignoreApplied?: boolean
+    listingTruncated?: boolean
+    timedOut?: boolean
+    error?: string
+  }
   'fs.glob': { paths: string[] }
   'fs.stat': { kind: 'file' | 'directory'; size: number; modifiedAt: string }
   'fs.statPath': { exists: boolean }

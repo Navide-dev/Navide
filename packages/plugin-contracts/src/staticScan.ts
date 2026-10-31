@@ -569,7 +569,7 @@ function* iterTokens(text: string, deadline: Deadline): Generator<Token> {
 // ── script rules (static_scan/js_scan.py) ───────────────────────────────────
 
 const CAPABILITY_ADDRESS_RE = /^(aiCli|fs|shell|storage|ui|workspace)\.[a-z][A-Za-z0-9]{0,63}$/
-const FS_READ_ADDRESSES = new Set(['fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.glob', 'fs.stat', 'fs.statPath'])
+const FS_READ_ADDRESSES = new Set(['fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.queryFiles', 'fs.glob', 'fs.stat', 'fs.statPath'])
 const FS_WRITE_ADDRESSES = new Set(['fs.writeFile'])
 const COMMAND_EXECUTABLES = new Set([
   'git', 'gh', 'glab', 'curl', 'wget', 'ssh', 'scp', 'sftp', 'rsync', 'nc', 'ncat', 'telnet', 'ftp',
