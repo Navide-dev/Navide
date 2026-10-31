@@ -772,3 +772,72 @@ def test_macos_key_stays_out_of_argv(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert calls
     assert all(ANTHROPIC_KEY not in " ".join(args) for args, _ in calls)
     assert any(ANTHROPIC_KEY in (stdin or "") for _, stdin in calls)
+
+
+# ── Review n14 ───────────────────────────────────────────────────────────────
+
+
+def test_the_generic_delete_refuses_a_key(store: CliProfilesStore, vault: CredentialVault) -> None:
+    """S1: it archives the slot, which would leave the key behind in a .deleted dir."""
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    sent: list[dict] = []
+
+    class Session:
+        async def send_json(self, frame: dict) -> None:
+            sent.append(frame)
+
+    asyncio.run(ws_handlers.cli_profiles_delete(Session(), "m1", "cli_profiles.delete", {"id": key}))
+
+    assert "API_KEY_ACCOUNT" in json.dumps(sent)
+    assert store.get(key) is not None
+    assert ak.read_secret(store.get(key)) == ANTHROPIC_KEY
+
+
+def test_a_key_left_live_after_a_failed_switch_is_not_probed(
+    store: CliProfilesStore, vault: CredentialVault
+) -> None:
+    """S6: live holds the key while the default still names a login."""
+    profile = ak.create("codex", "a", OPENAI_KEY)
+    vault.write_live("codex", vault.read_slot("codex", profile["id"]))
+    assert ak.is_active_api_key_account("codex", store) is True
+
+
+def test_a_key_from_outside_navide_is_left_as_it_was(store: CliProfilesStore, vault: CredentialVault) -> None:
+    """Not one of our accounts: main's behaviour stands."""
+    ak.create("codex", "a", OPENAI_KEY)
+    other = OPENAI_KEY[:-4] + "ZZZZ"
+    vault.write_live("codex", LiveCredentials(secret=json.dumps({"auth_mode": "apikey", "OPENAI_API_KEY": other})))
+    assert ak.is_active_api_key_account("codex", store) is False
+
+
+def test_no_key_accounts_means_no_new_read(store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch) -> None:
+    def untouched(*args: object, **kwargs: object) -> None:
+        raise AssertionError("read live")
+
+    monkeypatch.setattr(vault, "read_live", untouched)
+    assert ak.is_active_api_key_account("codex", store) is False
+
+
+def test_the_poll_never_boots_claude_on_a_key(store: CliProfilesStore, vault: CredentialVault) -> None:
+    """B1: reading /usage there starts a whole Claude Code and calls the helper."""
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    vault.prepare_account_dir(key)
+    service = usage_service.UsageService()
+    assert asyncio.run(service._claude_account_dirs([key])) == []
+
+
+def _running_pane(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ws_handlers, "_running_account_dir_terminals", lambda slot: ["t1"])
+
+
+def test_delete_refuses_while_a_pane_runs_on_the_key(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S2: the helper is removed and that pane's next request fails."""
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    _running_pane(monkeypatch)
+    with pytest.raises(ak.ApiKeyError) as err:
+        ak.delete(key)
+    assert err.value.code == "account-in-use"
+    assert store.get(key) is not None
+    assert ak.read_secret(store.get(key)) == ANTHROPIC_KEY

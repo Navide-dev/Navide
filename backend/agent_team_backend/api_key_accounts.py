@@ -144,7 +144,22 @@ def is_active_api_key_account(agent_key: str, store: Any) -> bool:
         return False
     doc = store.list()
     active = doc["defaults"].get(agent_key)
-    return any(p.get("id") == active and is_api_key(p) for p in doc["profiles"])
+    keys = [p for p in doc["profiles"] if p.get("agentKey") == agent_key and is_api_key(p)]
+    if not keys:
+        return False
+    return any(p.get("id") == active for p in keys) or _live_key_is_ours(agent_key, keys)
+
+
+def _live_key_is_ours(agent_key: str, keys: list[dict[str, Any]]) -> bool:
+    """A switch that stopped midway leaves one of our keys live while the
+    default still names a login. A key the user set up outside Navide is not
+    ours, and stays as it always was."""
+    try:
+        data = json.loads(_vault().read_live(agent_key).secret or "")
+        live = data.get("OPENAI_API_KEY") if data.get("auth_mode") == "apikey" else None
+    except Exception:  # noqa: BLE001 - a failed read leaves the poll as it was
+        return False
+    return isinstance(live, str) and any(live[-4:] == p.get("last4") for p in keys)
 
 
 def held_from_auto_switch(slot_id: str) -> bool:
@@ -427,6 +442,10 @@ def replace_secret(profile_id: Any, secret: Any) -> dict[str, Any]:
 def delete(profile_id: Any) -> None:
     profile = _require(profile_id)
     _refuse_if_live(profile)
+    from .ws_handlers import _running_account_dir_terminals, _running_login_terminals
+
+    if _running_login_terminals(profile["agentKey"], profile["id"]) or _running_account_dir_terminals(profile["id"]):
+        raise ApiKeyError("account-in-use", "A pane is using this account. Close it before deleting the account.")
     # The secret goes first: a failure keeps the account, so the key is never
     # left behind with nothing in the app pointing at it.
     _write_key(profile["agentKey"], profile["id"], None)
