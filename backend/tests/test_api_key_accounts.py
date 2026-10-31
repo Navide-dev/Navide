@@ -549,3 +549,28 @@ def test_the_generic_delete_refuses_a_key(store: CliProfilesStore, vault: Creden
     assert "API_KEY_ACCOUNT" in json.dumps(sent)
     assert store.get(key) is not None
     assert ak.read_secret(store.get(key)) == ANTHROPIC_KEY
+
+
+def test_a_key_left_live_after_a_failed_switch_is_not_probed(
+    store: CliProfilesStore, vault: CredentialVault
+) -> None:
+    """S6: live holds the key while the default still names a login."""
+    profile = ak.create("codex", "a", OPENAI_KEY)
+    vault.write_live("codex", vault.read_slot("codex", profile["id"]))
+    assert ak.is_active_api_key_account("codex", store) is True
+
+
+def test_a_key_from_outside_navide_is_left_as_it_was(store: CliProfilesStore, vault: CredentialVault) -> None:
+    """Not one of our accounts: main's behaviour stands."""
+    ak.create("codex", "a", OPENAI_KEY)
+    other = OPENAI_KEY[:-4] + "ZZZZ"
+    vault.write_live("codex", LiveCredentials(secret=json.dumps({"auth_mode": "apikey", "OPENAI_API_KEY": other})))
+    assert ak.is_active_api_key_account("codex", store) is False
+
+
+def test_no_key_accounts_means_no_new_read(store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch) -> None:
+    def untouched(*args: object, **kwargs: object) -> None:
+        raise AssertionError("read live")
+
+    monkeypatch.setattr(vault, "read_live", untouched)
+    assert ak.is_active_api_key_account("codex", store) is False
