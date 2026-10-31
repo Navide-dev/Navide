@@ -393,8 +393,8 @@ import { useShareNotices } from './composables/useShareNotices'
 import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
-import { useApiKeyTakeover, useLoginResetNotice } from './composables/useApiKeyTakeover'
-import { exhaustedWindow, usageVersion } from './composables/useUsage'
+import { loginSpent, reopenOnKey, useApiKeyTakeover, useLoginResetNotice } from './composables/useApiKeyTakeover'
+import { usageVersion } from './composables/useUsage'
 import {
   useQuotaFailover,
   type HotSwitchedPane,
@@ -8929,9 +8929,20 @@ async function confirmBatchRebuild(count: number): Promise<boolean> {
 // live credential or any other pane.
 useApiKeyTakeover(backend, {
   ownsPane: (paneId) => panes.value.some((p) => p.id === paneId && !p.isLogin),
-  // Never forced: a pane that is running, or holds input or a prompt, stays.
+  // The readiness a quota switch asks: a pane running, parked on a prompt or
+  // holding unsent input stays. preserveScrollback re-checks just before it stops.
   reopen: (paneId, profileId) =>
-    rebuildPaneViaResume(paneId, { profileId, suppressBusyToast: true, offerContinue: true, freshWhenNoTranscript: true }),
+    reopenOnKey(paneId, profileId, {
+      readiness: (id) => quotaPaneReadiness(id, { needsResume: false }),
+      rebuild: (id, target) =>
+        rebuildPaneViaResume(id, {
+          profileId: target,
+          suppressBusyToast: true,
+          offerContinue: true,
+          freshWhenNoTranscript: true,
+          preserveScrollback: true,
+        }),
+    }),
   announce: (name, stayed) => {
     notifyRestore.toast(
       stayed > 0
@@ -8952,12 +8963,7 @@ useLoginResetNotice(usageVersion, {
     null,
     ...cliProfilesApi.profilesForAgent(agentKey).filter((p) => p.authKind !== 'api-key').map((p) => p.id),
   ],
-  isSpent: (agentKey, profileId) => {
-    const snap = accountUsageFor(agentKey, profileId)
-    if (!snap) return null
-    const resetsAt = exhaustedWindow(snap)?.resetsAt
-    return isExhausted(snap) && !(resetsAt && Date.parse(resetsAt) <= Date.now())
-  },
+  isSpent: (agentKey, profileId) => loginSpent(accountUsageFor(agentKey, profileId), Date.now()),
   announce: () => {
     notifyRestore.toast(i18n.global.t('cli-account.api-key-login-back'), { type: 'info' })
   },

@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
-import { useApiKeyTakeover, useLoginResetNotice } from '../useApiKeyTakeover'
+import { loginSpent, reopenOnKey, useApiKeyTakeover, useLoginResetNotice } from '../useApiKeyTakeover'
+import type { UsageSnapshot, UsageWindow } from '../useUsage'
 
 function harness() {
   let listener: ((raw: unknown) => void) | undefined
@@ -135,13 +136,68 @@ describe('useLoginResetNotice', () => {
   })
 })
 
+describe('reopenOnKey', () => {
+  function run(readiness: { ready: boolean; reason?: string }) {
+    const rebuild = vi.fn(async () => undefined)
+    return { rebuild, result: reopenOnKey('p1', 'k1', { readiness: async () => readiness, rebuild }) }
+  }
+
+  it.each(['permission-pending', 'input-pending', 'busy'])('leaves a pane that is %s alone', async (reason) => {
+    const { rebuild, result } = run({ ready: false, reason })
+    expect(await result).toBe(reason)
+    expect(rebuild).not.toHaveBeenCalled()
+  })
+
+  it('reopens a pane that is ready', async () => {
+    const { rebuild, result } = run({ ready: true })
+    expect(await result).toBeUndefined()
+    expect(rebuild).toHaveBeenCalledWith('p1', 'k1')
+  })
+})
+
+describe('loginSpent', () => {
+  const now = Date.parse('2026-11-01T12:00:00Z')
+  const past = '2026-11-01T11:00:00Z'
+  const future = '2026-11-03T00:00:00Z'
+
+  function snap(windows: Partial<UsageWindow>[], status = 'ok'): UsageSnapshot {
+    return { status, windows } as unknown as UsageSnapshot
+  }
+  const spent = (kind: string, resetsAt: string | null) => ({ kind, usedPercent: 100, resetsAt, expired: false })
+
+  it('has no answer without a reading', () => {
+    expect(loginSpent(undefined, now)).toBeNull()
+  })
+
+  it('has no answer for a failed reading, which says nothing about a reset', () => {
+    expect(loginSpent(snap([spent('session', past)], 'error'), now)).toBeNull()
+  })
+
+  it('stays spent while the weekly window is out, though the session one has reset', () => {
+    expect(loginSpent(snap([spent('session', past), spent('weekly', future)]), now)).toBe(true)
+  })
+
+  it('stays spent when a reset time is unknown', () => {
+    expect(loginSpent(snap([spent('session', null)]), now)).toBe(true)
+  })
+
+  it('is back when every spent window has reset', () => {
+    expect(loginSpent(snap([spent('session', past), spent('weekly', past)]), now)).toBe(false)
+  })
+
+  it('is back when nothing is spent', () => {
+    expect(loginSpent(snap([{ kind: 'session', usedPercent: 40, resetsAt: future, expired: false }]), now)).toBe(false)
+  })
+})
+
 describe('the takeover in App.vue', () => {
   const app = readFileSync(resolve('src/renderer/src/App.vue'), 'latin1')
   const start = app.indexOf('useApiKeyTakeover(backend, {')
   const block = app.slice(start, app.indexOf('useLoginResetNotice(usageVersion', start))
 
-  it('never forces a running pane, so a turn or unsent input survives', () => {
-    expect(block).toContain('rebuildPaneViaResume')
+  it('asks the same readiness a quota switch asks, and never forces', () => {
+    expect(block).toContain('quotaPaneReadiness(id, { needsResume: false })')
+    expect(block).toContain('preserveScrollback: true')
     expect(block).not.toContain('forceWhenRunning')
   })
 

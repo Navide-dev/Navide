@@ -358,15 +358,15 @@ async def take_over(service: Any, incident: Any) -> bool:
         service._stop_incident(incident, "api-key-takeover-unrecorded")
         return True
     try:
+        panes = [
+            row["paneId"] for row in service._affected_terminals(incident.auth_scope)
+            if row.get("paneId") and row.get("credentialSource") == "vault"
+        ]
         _store().set_pane_default("claude", target["id"])
     except Exception as err:  # noqa: BLE001
         log.warning("api key takeover not applied (%s)", type(err).__name__)
         service._stop_incident(incident, "api-key-takeover-failed")
         return True
-    panes = [
-        row["paneId"] for row in service._affected_terminals(incident.auth_scope)
-        if row.get("paneId") and row.get("credentialSource") == "vault"
-    ]
     service._stop_incident(incident, "api-key-takeover")
     await app.broadcast_main_windows(make_event(TAKEOVER_EVENT, {
         "agentKey": "claude", "profileId": target["id"], "name": target.get("name"), "paneIds": panes,

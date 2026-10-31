@@ -934,3 +934,21 @@ def test_a_failed_default_write_stops_cleanly(
     assert asyncio.run(ak.take_over(service, _incident())) is True
     assert service.stopped == ["api-key-takeover-failed"]
     assert events == []
+
+
+def test_a_failed_pane_lookup_changes_nothing(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """S3: the error must end the incident, with the default left as it was."""
+    _opened_key(store)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+
+    def broken(auth_scope: str) -> list[dict]:
+        raise RuntimeError("window gone")
+
+    monkeypatch.setattr(service, "_affected_terminals", broken)
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert service.stopped == ["api-key-takeover-failed"]
+    assert store.get_pane_default("claude") is None
+    assert events == []
