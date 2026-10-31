@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,7 @@ def test_create_keeps_the_key_out_of_the_metadata(store: ak.ApiKeyStore) -> None
     assert store.read_secret(row["id"]) == ANTHROPIC_KEY
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="NTFS has no POSIX mode bits")
 def test_metadata_file_is_owner_only(store: ak.ApiKeyStore) -> None:
     store.create("claude", "a", ANTHROPIC_KEY)
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
