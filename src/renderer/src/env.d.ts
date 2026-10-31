@@ -253,6 +253,9 @@ declare global {
       readKeybindings: () => Promise<{ ok: boolean; content?: string; error?: string }>
       writeKeybindings: (content: string) => Promise<{ ok: boolean; error?: string }>
       onKeybindingsChanged: (cb: (content: string) => void) => void
+      readWorkbench?: () => Promise<{ ok: boolean; content?: string; error?: string }>
+      writeWorkbench?: (content: string) => Promise<{ ok: boolean; error?: string }>
+      onWorkbenchChanged?: (cb: (content: string) => void) => void
       workbenchProject?: {
         inspect: () => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchSnapshot>
         accept: (fingerprint: string) => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
@@ -451,6 +454,8 @@ declare global {
         disabledBuiltins?: () => Promise<string[]>
         disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
+        listCommands: () => Promise<import('../../shared/pluginCommands').PluginCommandEntry[]>
+        runCommand: (args: { commandId: string; workspace_path: string }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null

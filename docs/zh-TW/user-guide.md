@@ -246,3 +246,23 @@ Claude Code、Codex、Grok、Kimi、Pi、Droid、MiniMax Code 的新帳號登入
 **App Lock**（設定 → App Lock）會用一張鎖定畫面蓋住所有 Navide 視窗，用 4～12 位數 PIN 解鎖；在 Mac 上可以先用 Touch ID，在 Windows 11 上可以先用 Windows Hello。Windows 10 與 Linux 只能用 PIN 解鎖，設定頁會註明。它是隱私遮罩，不是存取控制：底下的 agent、終端機、聊天頻道、MCP 工具、其他裝置與排程都照常執行，坐在電腦前、懂技術的人仍然可以繞過。鎖定期間，應用程式選單除了隱藏、結束、視窗控制和 PIN 輸入框需要的編輯鍵之外都會變灰，按鍵也不會送到底下的視窗，所以點選單或按快捷鍵都操作不到後面的 App。「切換開發者工具」也會變灰，鎖定時無法打開 DevTools；已經打開的 DevTools 維持原狀。可以用「立即鎖定」（⌘⌥L，Windows 與 Linux 是 Ctrl+Alt+L）手動上鎖，也可以在閒置一段時間、螢幕鎖定、電腦睡眠或 Navide 啟動時（預設關閉）自動上鎖。忘記 PIN 時，可以先用 Touch ID 或 Windows Hello 驗證再重設；兩者都沒有時，結束 Navide 後刪除 Navide 資料夾裡的 `app-lock.json`，這只會移除 App Lock 和它的 PIN，其他都不受影響。
 
 `.agent-team/` 目前不是可攜機制。未來在不同裝置間移轉時，應使用具有 Redaction 與 Retention Control 的明確本機 Export／Import，而不是透過 Git 同步。
+
+### 動作按鈕
+
+在 **Settings → Layout → 動作按鈕** 可以新增一顆執行一個或依序執行多個動作的按鈕，它會放在舞台分頁列右端。某一步失敗就會停止；會關閉或重設東西的按鈕，按下時會先詢問。每顆按鈕都由 Navide 繪製，工具提示會標明來源。按鈕存在應用程式資料夾的 `workbench.json`，只留在這台電腦。新增之前按鈕列是空的，也可以隱藏。
+
+專案可以在 `.navide/workbench.json` 建議按鈕、版面與 Navide 外掛。這個檔案不會自行生效：**Settings → Layout** 會列出每顆按鈕實際執行的動作，你接受的是自己看過的那份內容。接受紀錄只存在這台電腦，不會寫進專案。沒有這個檔案的專案，畫面與行為和原本完全一樣。
+
+- **檔案一改就全部停用。** 接受之後檔案有變更，就全部不套用，要重新檢視才恢復，所以 `git pull` 之後按鈕可能消失。同一版內容只提醒一次。
+- **按鈕只能執行按鈕允許的動作。** 步驟不能帶參數；只要有一步是按鈕不能執行的動作，那顆按鈕就會停用。來自專案的按鈕有標記，工具提示會寫出專案名稱。
+- **版面要按「套用」才會改變**，建議的外掛只會開啟 Marketplace 頁面。
+
+```json
+{
+  "schemaVersion": 1,
+  "layoutMode": "grid",
+  "plugins": [{ "id": "acme.runner", "version": "^1.0.0" }],
+  "buttons": [{ "id": "plans", "label": "Plans", "steps": [{ "action": "ui.window.openPlans" }] }]
+}
+```
+

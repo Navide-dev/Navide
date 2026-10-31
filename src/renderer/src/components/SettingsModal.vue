@@ -69,6 +69,7 @@ import {
 } from '../composables/usePushChannelPrefs'
 import { cliAgentRowChips } from '../lib/cliAgentRow'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
+import { projectWorkbenchNeedsReview } from '../lib/projectWorkbench'
 import {
   SPAWN_ENV_RESERVED_KEYS,
   cliCommandKey,
@@ -2835,7 +2836,7 @@ watch(activeTab, (tab) => {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4.5" width="13" height="7" rx="3.5"/><circle cx="5.5" cy="8" r="1.5"/></svg>
                 </template>
               </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.layout')" :active="activeTab === 'layout'" @select="activeTab = 'layout'">
+              <SettingsNavItem :label="$t('settings.nav.layout')" :active="activeTab === 'layout'" :marker="projectWorkbenchNeedsReview ? { text: '⚠', tone: 'risk', label: $t('actionBar.project-needs-review') } : null" @select="activeTab = 'layout'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M5.5 2.5v11M14.5 6h-9"/></svg>
                 </template>

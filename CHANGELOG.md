@@ -6,9 +6,13 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
+- Workbench (0.2.36): action buttons at the right end of the stage tabs run one action or several in order, from **Settings → Layout**. A repository can suggest buttons, a layout and Navide plugins in `.navide/workbench.json`; nothing applies until you review and accept that exact content, and any later change stops it applying. With no buttons and no file, nothing changes.
+
 - Mini-IDE (0.2.36): Quick Open and ⌘-click in the AI CLI terminal now search in the plugin. Pasting `app/Services/OrderService.php:137-158` or a `#L10-L20` link finds the file and opens it at the first line, results rank by how well they fit, and a clicked file opens directly when only one file fits; otherwise the Host picker still asks. On an older Navide it searches the way it did.
 
 - Plugin API (0.2.36): the Host now has a plugin API version. A package on a newer API major is refused at install and, if already installed, stays in Settings with the reason and contributes nothing. `hostApiVersion()` in `@navide/plugin-sdk` reads the version, and every capability catalog entry says which version it arrived in. Nothing changes for current packages.
+
+- Plugin API 1.2 (0.2.36): `ui.openFilePicker` accepts `targets`, locations the caller parsed itself, and `search`, the `fs.queryFiles` strategy for what the user types, so matching stays with the plugin while the Host keeps resolving, authorizing and opening. A picker search shares the plugin's one-at-a-time `fs.queryFiles` slot and its limits. A caller sending neither sees no change.
 
 - Plugin API 1.1 (0.2.36): `fs.queryFiles` finds workspace files with the matching the caller asks for (name or path, substring, subsequence or glob, its own excludes, Git ignores on or off) and returns match positions in path order, so a plugin ranks results itself. A workspace listing is reused between queries and refreshed on disk changes. `fs.listFilesFlat` is deprecated and keeps working, with removal no earlier than 2027-05-01.
 

@@ -195,6 +195,64 @@ describe('host state it cannot trust', () => {
   })
 })
 
+describe('state it could not read', () => {
+  const stateFile = () => join(userData, WORKBENCH_SOURCES_DIRECTORY, 'sources.json')
+  const corrupt = (content: string): void => {
+    write(FILE)
+    store.accept(repo, store.inspect(repo).fingerprint!)
+    writeFileSync(stateFile(), content, { mode: 0o600 })
+  }
+
+  it.each([['not JSON', 'nonsense'], ['another schema', '{"schemaVersion":2,"workspaces":{}}']])(
+    'refuses to write over %s', (_name, content) => {
+      corrupt(content)
+      const fingerprint = store.inspect(repo).fingerprint!
+      expect(store.accept(repo, fingerprint)).toMatchObject({ ok: false, reason: 'source-state-corrupt' })
+      expect(store.revoke(repo)).toMatchObject({ ok: false, reason: 'source-state-corrupt' })
+      expect(store.markNotified(repo, fingerprint)).toMatchObject({ ok: false, reason: 'source-state-corrupt' })
+      expect(readFileSync(stateFile(), 'utf8')).toBe(content)
+    },
+  )
+
+  it('refuses to write when the state file cannot be read right now', () => {
+    if (process.platform === 'win32') return
+    corrupt('{"schemaVersion":1,"workspaces":{}}')
+    chmodSync(join(userData, WORKBENCH_SOURCES_DIRECTORY), 0o000)
+    const result = store.accept(repo, store.inspect(repo).fingerprint!)
+    chmodSync(join(userData, WORKBENCH_SOURCES_DIRECTORY), 0o700)
+    expect(result).toMatchObject({ ok: false })
+    expect(readFileSync(stateFile(), 'utf8')).toBe('{"schemaVersion":1,"workspaces":{}}')
+  })
+})
+
+describe('a project with no file leaves no trace', () => {
+  it('revoke writes nothing', () => {
+    expect(store.revoke(repo).ok).toBe(true)
+    expect(readdirSync(userData)).toEqual([])
+  })
+
+  it('markNotified writes nothing', () => {
+    expect(store.markNotified(repo, 'a'.repeat(64))).toMatchObject({ ok: false, reason: 'stale' })
+    expect(readdirSync(userData)).toEqual([])
+  })
+
+  it('markNotified takes only a fingerprint, and only the one on disk', () => {
+    write(FILE)
+    expect(store.markNotified(repo, '../not-one').ok).toBe(false)
+    expect(store.markNotified(repo, 'a'.repeat(64)).ok).toBe(false)
+    expect(readdirSync(userData)).toEqual([])
+  })
+
+  it('revoke still undoes an acceptance whose file has gone', () => {
+    write(FILE)
+    store.accept(repo, store.inspect(repo).fingerprint!)
+    rmSync(join(repo, '.navide', 'workbench.json'))
+    expect(store.revoke(repo).ok).toBe(true)
+    write(FILE)
+    expect(store.inspect(repo).status).toBe('pending')
+  })
+})
+
 // The read is a copy of ExecutionPolicySourceStore's, kept apart so this feature
 // cannot disturb it. These hold the two to one verdict on the same hostile file.
 describe('the same verdict as ExecutionPolicySourceStore', () => {

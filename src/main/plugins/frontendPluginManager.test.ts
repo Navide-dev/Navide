@@ -11659,6 +11659,108 @@ describe('first-party Git private bridge', () => {
     expect(bind).not.toHaveBeenCalled()
   })
 
+  it('searches the file picker with the caller\'s strategy when it sends one', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'git-file-picker-strategy')
+    mgr.setBackendWsUrl('ws://public-file-picker-strategy-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+    const invocationRef: { current: Pick<FilePickerInvocation, 'search'> | null } = { current: null }
+    let found: string[] = []
+    mgr.setFilePickerHost({
+      open: vi.fn(async (candidate: FilePickerInvocation) => {
+        invocationRef.current = candidate
+        found = await candidate.search('foo')
+        return { opened: true }
+      }),
+      cancelInstance: vi.fn(),
+      cancelSession: vi.fn(),
+    })
+
+    const pending = mgr.executePublicCapability({
+      kind: 'public',
+      address: 'ui.openFilePicker',
+      scope: 'workspace',
+      runtime,
+      args: { query: 'foo', candidates: [], search: { matchOn: 'path', mode: 'subsequence', exclude: ['vendor/*'] } },
+    })
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+    expect(request).toMatchObject({
+      type: 'fs.query_files',
+      payload: { workspace_path: '/workspace', query: 'foo', match_on: 'path', mode: 'subsequence', exclude: ['vendor/*'], limit: 20 },
+    })
+    socket.receive({
+      id: request.id,
+      type: request.type,
+      ok: true,
+      payload: { ok: true, files: [{ path: 'z/foo.ts', name: 'foo.ts', matchSpans: [], size: 1, mtime: 1 }, { path: 'a/foo.ts', name: 'foo.ts', matchSpans: [], size: 1, mtime: 1 }] },
+      error: null,
+      timestamp: '',
+    })
+    await expect(pending).resolves.toEqual({ opened: true })
+    expect(found).toEqual(['z/foo.ts', 'a/foo.ts'])
+  })
+
+  it('queues a file picker search behind the plugin\'s own query, and holds the slot while it runs', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'file-picker-slot')
+    mgr.setBackendWsUrl('ws://public-file-picker-slot-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+    const answer = (index: number, files: unknown[]) => {
+      const request = JSON.parse(socket.sent[index]!) as { id: string; type: string }
+      socket.receive({ id: request.id, type: request.type, ok: true, payload: { ok: true, files }, error: null, timestamp: '' })
+    }
+    const query = () => mgr.executePublicCapability({
+      kind: 'public', address: 'fs.queryFiles', scope: 'workspace', runtime, args: { query: 'own' },
+    })
+    const picker: { search: FilePickerInvocation['search'] | null } = { search: null }
+    mgr.setFilePickerHost({
+      open: vi.fn(async (candidate: FilePickerInvocation) => {
+        picker.search = candidate.search
+        return { opened: true }
+      }),
+      cancelInstance: vi.fn(),
+      cancelSession: vi.fn(),
+    })
+    await mgr.executePublicCapability({
+      kind: 'public',
+      address: 'ui.openFilePicker',
+      scope: 'workspace',
+      runtime,
+      args: { query: '', candidates: [], search: { mode: 'subsequence' } },
+    })
+
+    const own = query()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const superseded = picker.search!('fo')
+    const latest = picker.search!('foo')
+    await expect(superseded).resolves.toEqual([])
+    expect(socket.sent).toHaveLength(1)
+
+    answer(0, [])
+    await own
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+    expect(JSON.parse(socket.sent[1]!)).toMatchObject({ type: 'fs.query_files', payload: { query: 'foo' } })
+    await expect(query()).resolves.toEqual({ ok: false, error: 'busy' })
+
+    answer(1, [{ path: 'foo.ts' }])
+    await expect(latest).resolves.toEqual(['foo.ts'])
+    const next = query()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(3))
+    answer(2, [])
+    await next
+  })
+
   it('answers a second fs.queryFiles from one plugin with busy at once, and leaves the first alone', async () => {
     const { mgr, instanceId } = await openGitView('/workspace', 'fs-query-busy')
     mgr.setBackendWsUrl('ws://public-fs-query-busy-test')
@@ -19096,5 +19198,137 @@ describe('a third-party window view opens without its native backend', () => {
       await mgr.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('Navide plugin commands', () => {
+  const views: PluginLaunchDescriptor['views'] = [
+    { id: 'win', contributionKey: 'acme.runner.win', kind: 'custom', location: 'window', title: 'W', entryFile: '/p/w.html' },
+    { id: 'tab', contributionKey: 'acme.runner.tab', kind: 'custom', location: 'main', title: 'M', entryFile: '/p/m.html' },
+    { id: 'side', contributionKey: 'acme.runner.side', kind: 'custom', location: 'left', title: 'L', entryFile: '/p/l.html' },
+    { id: 'more', contributionKey: 'acme.runner.more', kind: 'custom', location: 'detail', title: 'D', entryFile: '/p/d.html' },
+  ]
+  const managerWith = (hostWindow: object) => {
+    const mgr = new FrontendPluginManager()
+    mgr.registerDescriptor({
+      ...descriptor('acme.runner'),
+      views,
+      displayName: 'Runner',
+      commands: [
+        { id: 'acme.runner.win', title: 'Win', run: { view: 'win', target: { tab: 'a' } }, suggestedKey: 'cmd+alt+t' },
+        { id: 'acme.runner.tab', title: 'Tab', run: { view: 'tab', target: { tab: 'b' } } },
+        { id: 'acme.runner.side', title: 'Side', run: { view: 'side' } },
+        { id: 'acme.runner.more', title: 'More', run: { view: 'more' } },
+        { id: 'acme.runner.call', title: 'Call', run: { method: 'tests.run' } },
+      ],
+    })
+    const internals = mgr as unknown as {
+      running: Map<string, unknown>
+      sendOpenTarget: (record: unknown, params: Record<string, string>) => void
+    }
+    const sent = vi.spyOn(internals, 'sendOpenTarget').mockImplementation(() => {})
+    const mount = (contributionKey: string, visible: boolean): void => {
+      internals.running.set(contributionKey, { contributionKey, hostWindow, workspacePath: '/ws', visible })
+    }
+    return { mgr, mount, sent }
+  }
+  const host = {} as never
+
+  it('lists nothing for a package that declares none', () => {
+    const mgr = new FrontendPluginManager()
+    mgr.registerDescriptor(descriptor('acme.plain'))
+    expect(mgr.listCommandCatalog()).toEqual([])
+    expect(mgr.resolveCommandRun(host, 'acme.plain.go', '/ws')).toEqual({ ok: false, reason: 'not-installed' })
+  })
+
+  it('names the plugin and the suggested key', () => {
+    expect(managerWith(host).mgr.listCommandCatalog()[0]).toEqual({
+      commandId: 'acme.runner.win', title: 'Win', pluginId: 'acme.runner', pluginName: 'Runner', suggestedKey: 'cmd+alt+t',
+    })
+  })
+
+  it('hands a window view back to be opened with its target', () => {
+    expect(managerWith(host).mgr.resolveCommandRun(host, 'acme.runner.win', '/ws')).toEqual({
+      ok: true, window: { contributionKey: 'acme.runner.win', params: { tab: 'a' } },
+    })
+  })
+
+  it('reveals a mounted main tab and delivers the target', () => {
+    const { mgr, mount, sent } = managerWith(host)
+    mount('acme.runner.tab', false)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: true, reveal: 'acme.runner.tab' })
+    expect(sent).toHaveBeenCalledWith(expect.objectContaining({ contributionKey: 'acme.runner.tab' }), { tab: 'b' })
+  })
+
+  it('never mounts a view nobody opened', () => {
+    const { mgr, sent } = managerWith(host)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+    expect(mgr.resolveCommandRun(host, 'acme.runner.side', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+    expect(sent).not.toHaveBeenCalled()
+  })
+
+  it('leaves a hidden region alone, and uses one that is on screen', () => {
+    const { mgr, mount } = managerWith(host)
+    mount('acme.runner.side', false)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.side', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+    mount('acme.runner.side', true)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.side', '/ws')).toEqual({ ok: true })
+  })
+
+  it('ignores a view mounted in another window or workspace', () => {
+    const { mgr, mount } = managerWith({})
+    mount('acme.runner.tab', true)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+  })
+
+  it('refuses a detail view as a target', () => {
+    expect(managerWith(host).mgr.resolveCommandRun(host, 'acme.runner.more', '/ws')).toEqual({ ok: false, reason: 'view-not-openable' })
+  })
+
+  describe('a method command', () => {
+    const withHandler = (hostWindow: object, answer: { ok: boolean }) => {
+      const made = managerWith(hostWindow)
+      const internals = made.mgr as unknown as {
+        running: Map<string, unknown>
+        backendCallHandler: (plugin: unknown, payload: Record<string, unknown>) => Promise<{ ok: boolean }>
+      }
+      const handler = vi.fn(async () => answer)
+      internals.backendCallHandler = handler
+      const record = { id: 'acme.runner', contributionKey: 'acme.runner.tab', hostWindow, workspacePath: '/ws', visible: false }
+      return { ...made, handler, internals, record }
+    }
+
+    it('starts nothing when no view of the plugin is open', async () => {
+      const { mgr, handler } = withHandler(host, { ok: true })
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it("goes through the open view's own call path, as that view", async () => {
+      const { mgr, handler, internals, record } = withHandler(host, { ok: true })
+      internals.running.set('i', record)
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: true })
+      expect(handler).toHaveBeenCalledWith(record, { reqId: expect.any(String), name: 'tests.run', args: {} })
+    })
+
+    it('says so when the call fails', async () => {
+      const { mgr, internals, record } = withHandler(host, { ok: false })
+      internals.running.set('i', record)
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'method-failed' })
+    })
+
+    it('ignores a view of the plugin in another window', async () => {
+      const { mgr, handler, internals, record } = withHandler({}, { ok: true })
+      internals.running.set('i', record)
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it('leaves a view command to resolveCommandRun', async () => {
+      const { mgr } = withHandler(host, { ok: true })
+      expect(await mgr.runCommand(host, 'acme.runner.win', '/ws')).toEqual({
+        ok: true, window: { contributionKey: 'acme.runner.win', params: { tab: 'a' } },
+      })
+    })
   })
 })

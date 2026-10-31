@@ -20,6 +20,7 @@ import type {
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import type { PluginActivityReport } from '../shared/pluginActivity'
+import type { PluginCommandEntry, PluginCommandRunResult } from '../shared/pluginCommands'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
@@ -1049,6 +1050,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
   onKeybindingsChanged: (cb: (content: string) => void): void => {
     ipcRenderer.on('keybindings:changed', (_event, content: string) => cb(content))
   },
+  readWorkbench: (): Promise<{ ok: boolean; content?: string; error?: string }> =>
+    ipcRenderer.invoke('workbench:read'),
+  writeWorkbench: (content: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('workbench:write', content),
+  onWorkbenchChanged: (cb: (content: string) => void): void => {
+    ipcRenderer.on('workbench:changed', (_event, content: string) => cb(content))
+  },
   workbenchProject: {
     inspect: (): Promise<ProjectWorkbenchSnapshot> => ipcRenderer.invoke('workbench-project:inspect'),
     accept: (fingerprint: string): Promise<ProjectWorkbenchResult> =>
@@ -1449,6 +1457,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:disabledStoreStatus'),
     resetDisabledStore: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
       ipcRenderer.invoke('plugins:resetDisabledStore'),
+    listCommands: (): Promise<PluginCommandEntry[]> => ipcRenderer.invoke('plugins:listCommands'),
+    runCommand: (args: { commandId: string; workspace_path: string }): Promise<PluginCommandRunResult> =>
+      ipcRenderer.invoke('plugins:runCommand', args),
     listContributions: (): Promise<Array<{
       pluginId: string
       packageVersion: string | null

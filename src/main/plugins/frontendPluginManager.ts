@@ -9,6 +9,8 @@
 
 import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents, type WebFrameMain } from 'electron'
 import { warnMain } from '../main-log'
+import type { PluginManifestV2Command } from '../../../packages/plugin-contracts/src/index'
+import type { PluginCommandEntry, PluginCommandRunResult } from '../../shared/pluginCommands'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
 import { validateSupportedLocale, type SupportedLocale } from '../hostLocale'
@@ -268,6 +270,10 @@ export interface PluginLaunchDescriptor {
    *  omit this field and continue to use their single top-level entryFile.
    *  Issue 01 exposes validated metadata only; issue 14 owns runtime instances. */
   views?: PluginViewLaunchDescriptor[]
+  /** Commands the manifest declares; absent when it declares none. */
+  commands?: PluginManifestV2Command[]
+  /** The manifest's name, carried for the commands that show it. */
+  displayName?: string
 }
 
 export interface PluginViewLaunchDescriptor {
@@ -1013,6 +1019,10 @@ const GIT_HOST_FS_MUTATION_TYPES = new Set([
   'fs.delete',
   'fs.rename',
 ])
+
+/** How long a picker search waits for the plugin's own file query to finish. */
+const FILE_PICKER_SLOT_WAIT_MS = 5_000
+
 const PUBLIC_FS_WS_TYPES: Readonly<Record<string, string>> = {
   'fs.readFile': 'fs.read_file',
   'fs.writeFile': 'fs.write_file',
@@ -6704,6 +6714,7 @@ export class FrontendPluginManager {
         if (!plugin.hostWindow.isDestroyed()) return plugin.hostWindow.getContentBounds()
         return { x: 0, y: 0, width: 0, height: 0 }
       }
+      let latestSearch = 0
       return host.open({
         instanceId: plugin.instanceId,
         ...(sessionId ? { sessionId } : {}),
@@ -6715,16 +6726,44 @@ export class FrontendPluginManager {
         canDispatch,
         search: async (query: string): Promise<string[]> => {
           if (!canDispatch()) throw new Error('file picker capability is denied')
-          const response = await this.sendPublicBackend(
-            'fs.list_files_flat',
-            { workspace_path: workspacePath, query, max_results: 20 },
-            canDispatch,
-          )
-          if (!canDispatch()) throw new Error('file picker capability is denied')
-          const files = toPayload(response).files
-          return Array.isArray(files)
-            ? files.filter((file): file is string => typeof file === 'string')
-            : []
+          const strategy = (plan.args as unknown as FilePickerInvocation['request']).search
+          if (strategy) {
+            // The picker shares the plugin's fs.queryFiles slot. It waits rather
+            // than answering busy: the keystroke it serves may be the last one.
+            const turn = ++latestSearch
+            const giveUpAt = Date.now() + FILE_PICKER_SLOT_WAIT_MS
+            while (this.fileQueriesInFlight.has(plugin.id)) {
+              if (turn !== latestSearch || Date.now() >= giveUpAt || !canDispatch()) return []
+              await new Promise((done) => setTimeout(done, 25))
+            }
+            this.fileQueriesInFlight.add(plugin.id)
+          }
+          try {
+            const response = await this.sendPublicBackend(
+              strategy ? 'fs.query_files' : 'fs.list_files_flat',
+              strategy
+                ? {
+                    workspace_path: workspacePath,
+                    query,
+                    match_on: strategy.matchOn,
+                    mode: strategy.mode,
+                    exclude: strategy.exclude,
+                    respect_gitignore: strategy.respectGitignore,
+                    include_hidden: strategy.includeHidden,
+                    limit: 20,
+                  }
+                : { workspace_path: workspacePath, query, max_results: 20 },
+              canDispatch,
+            )
+            if (!canDispatch()) throw new Error('file picker capability is denied')
+            const files = toPayload(response).files
+            if (!Array.isArray(files)) return []
+            return files
+              .map((file: unknown) => (typeof file === 'object' && file !== null ? (file as { path?: unknown }).path : file))
+              .filter((file): file is string => typeof file === 'string')
+          } finally {
+            if (strategy) this.fileQueriesInFlight.delete(plugin.id)
+          }
         },
       })
     }
@@ -12299,6 +12338,77 @@ export class FrontendPluginManager {
    *  composition. This projection contains no live view identity. */
   listContributionCatalog(): PluginContributionCatalogEntry[] {
     return buildPluginContributionCatalog(this.enabledDescriptors())
+  }
+
+  /** The commands of enabled packages, for the shortcuts page and the keys. */
+  listCommandCatalog(): PluginCommandEntry[] {
+    return this.enabledDescriptors().flatMap((descriptor) =>
+      (descriptor.commands ?? []).map((command) => ({
+        commandId: command.id,
+        title: command.title,
+        pluginId: descriptor.id,
+        pluginName: descriptor.displayName ?? descriptor.id,
+        ...(command.suggestedKey ? { suggestedKey: command.suggestedKey } : {}),
+      }))
+    )
+  }
+
+  /** Decide what one command does in `hostWindow`, delivering its target when
+   *  the view is already there. Opening a window view needs Electron main, so
+   *  that comes back to the caller; a view nobody opened is reported, never
+   *  mounted, because a keystroke does not enable a plugin's view. */
+  resolveCommandRun(
+    hostWindow: BrowserWindow,
+    commandId: string,
+    workspacePath: string,
+  ): PluginCommandRunResult
+    | { ok: true; window: { contributionKey: string; params: Record<string, string> } }
+    | { ok: true; call: { plugin: RunningPlugin; method: string } } {
+    const descriptor = this.enabledDescriptors().find((candidate) =>
+      candidate.commands?.some((command) => command.id === commandId)
+    )
+    const run = descriptor?.commands?.find((command) => command.id === commandId)?.run
+    if (!descriptor || !run) return { ok: false, reason: 'not-installed' }
+    if ('method' in run) {
+      const isHere = (candidate: RunningPlugin): boolean => candidate.hostWindow === hostWindow &&
+        (candidate.workspacePath === null || resolve(candidate.workspacePath) === resolve(workspacePath))
+      const plugin = this.instancesForPlugin(descriptor.id).find(isHere)
+      return plugin ? { ok: true, call: { plugin, method: run.method } } : { ok: false, reason: 'view-not-open' }
+    }
+    const view = descriptor.views?.find((candidate) => candidate.id === run.view)
+    if (!view) return { ok: false, reason: 'not-installed' }
+    const params = run.target ?? {}
+    if (view.location === 'window') {
+      return { ok: true, window: { contributionKey: view.contributionKey, params } }
+    }
+    if (view.location === 'detail') return { ok: false, reason: 'view-not-openable' }
+    const record = [...this.running.values()].find((candidate) =>
+      candidate.contributionKey === view.contributionKey &&
+      candidate.hostWindow === hostWindow &&
+      (candidate.workspacePath === null || resolve(candidate.workspacePath) === resolve(workspacePath))
+    )
+    // A main tab is revealed below; any other region shows only what is up.
+    if (!record || (view.location !== 'main' && !record.visible)) {
+      return { ok: false, reason: 'view-not-open' }
+    }
+    if (Object.keys(params).length > 0) this.sendOpenTarget(record, { ...params })
+    return view.location === 'main' ? { ok: true, reveal: view.contributionKey } : { ok: true }
+  }
+
+  /** {@link resolveCommandRun}, finished. A method runs through the same handler
+   *  as a call from the plugin's own open view, with that view's identity, so
+   *  every check on a view's call applies. No view open means no call: a
+   *  keystroke does not start a backend. */
+  async runCommand(
+    hostWindow: BrowserWindow,
+    commandId: string,
+    workspacePath: string,
+  ): Promise<PluginCommandRunResult | { ok: true; window: { contributionKey: string; params: Record<string, string> } }> {
+    const outcome = this.resolveCommandRun(hostWindow, commandId, workspacePath)
+    if (!outcome.ok || !('call' in outcome)) return outcome
+    const { plugin, method } = outcome.call
+    const response = await this.backendCallHandler?.(plugin, { reqId: randomUUID(), name: method, args: {} })
+    return response?.ok ? { ok: true } : { ok: false, reason: 'method-failed' }
   }
 
   /** Host-only left/detail pairing. The Host supplies opaque live identities;
