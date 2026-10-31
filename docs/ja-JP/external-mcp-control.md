@@ -397,6 +397,7 @@ Host Wiring — だけです。Navide の CLI Pane から、その Pane 自身�
 
 | Action | Args | 効果 |
 |---|---|---|
+| `ui.actions.describe` | `{prefix?}` | 登録済みの Action、または `prefix` で始まる id のみを説明します。各 Action について `{id, title, category, args?, summary?, humanOnly?, dedicatedTool?, workspaceScoped}` を 1 行返します。`humanOnly` は `true` または適用条件で、`ui_human_only` で拒否されることを示します。`dedicatedTool` は `ui_invoke` が拒否する場合に使うツールを示します。`args` と `summary` を持つのは `ui.*` の行のみです |
 | `ui.settings.open` | `{tab?}`（`general`、`mcp`、`analyzer`、`updates`、`appearance`、`accounts`、`keybindings` のいずれか） | Settings を開く。任意で特定のタブへ |
 | `ui.settings.close` | — | Settings を閉じる |
 | `ui.settings.yolo` | `{yolo?}` | CLI の権限バイパスのグローバルスイッチを読む。`yolo` を渡した場合は設定する。`{yolo, agents}` を返し、各 agent は `{agent, mode, skipFlag}`。Workspace スコープではありません: どのウィンドウでも答えられ、ベンダーごとの答えは `yolo` ではなく `skipFlag` です |
