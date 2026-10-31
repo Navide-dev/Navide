@@ -202,12 +202,26 @@ def logins_first(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(candidates, key=lambda row: is_api_key(_store().get(str(row["slotId"]))))
 
 
+def _record_move(service: Any, incident: Any, profile_id: str) -> None:
+    from .quota_failover import Transaction
+
+    now = service._now()
+    move = Transaction(
+        incident=incident, agent_key=incident.agent_key, auth_scope=incident.auth_scope,
+        from_slot_id=incident.outgoing_slot_id, to_slot_id=profile_id, automatic=True,
+        idempotency_key=f"auto:{incident.id}:{profile_id}", switch_mode="restart",
+        restart_strategy="resume", epoch=incident.epoch, now=now,
+    )
+    move.state, move.swapped, move.committed_at = "committed", True, now
+    service.store.record(move, now=now)
+
+
 async def take_over(service: Any, incident: Any) -> bool:
     """Every login is out: move claude's panes to an API key account the user
     opened to this. Claude's live login is never swapped for a key, so instead
     of a transaction the new default goes to ``paneDefaults`` and each window
     reopens its panes through the same path as "continue with this account".
-    Once per incident, and a pane on a key reports no quota, so it cannot loop."""
+    Counts against the automatic-switch budget like any other swap."""
     from . import app
 
     if incident.agent_key != "claude":
@@ -219,6 +233,18 @@ async def take_over(service: Any, incident: Any) -> bool:
     )
     if target is None or login_policy_blocks("claude"):
         return False
+    if service._budget_retry_after("claude", incident.auth_scope) > 0:
+        service._stop_incident(incident, "auto_budget_exhausted")
+        return True
+    # The same row an automatic swap writes, so this move counts against the
+    # same 5-hour ceiling. Written first: a move that cannot be counted is not
+    # made.
+    try:
+        _record_move(service, incident, target["id"])
+    except Exception as err:  # noqa: BLE001
+        log.warning("api key takeover not recorded (%s)", type(err).__name__)
+        service._stop_incident(incident, "audit-write-failed")
+        return True
     _store().set_pane_default("claude", target["id"])
     panes = [row["paneId"] for row in service._affected_terminals(incident.auth_scope) if row.get("paneId")]
     service._stop_incident(incident, "api-key-takeover")

@@ -9656,6 +9656,7 @@
     "failed": "Não foi possível reconectar essa conversa – a transcrição dela pode não existir mais"
   },
   "cli-account": {
+    "api-key-login-back": "Sua cota de assinatura voltou. Os painéis continuam na chave de API até você voltar em Contas.",
     "api-key-takeover": "Cota esgotada. Os painéis agora usam {name}, com cobrança por uso. Volte em Contas depois que a cota for redefinida.",
     "default": "Login original",
     "switch-title": "Trocar de conta",

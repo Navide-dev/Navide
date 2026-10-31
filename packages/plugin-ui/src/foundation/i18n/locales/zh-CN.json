@@ -9656,6 +9656,7 @@
     "failed": "无法接回这段对话，其历史记录可能已不存在"
   },
   "cli-account": {
+    "api-key-login-back": "订阅额度已恢复。窗格仍在使用 API 密钥，如需切换回来请到账号页。",
     "api-key-takeover": "额度已用完，窗格已切换到 {name}，改为按用量计费。额度重置后请到账号页切换回来。",
     "default": "原始登录",
     "switch-title": "切换账号",

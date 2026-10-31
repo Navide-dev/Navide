@@ -9656,6 +9656,7 @@
     "failed": "Impossible de reconnecter cette conversation : sa transcription n’existe peut-être plus."
   },
   "cli-account": {
+    "api-key-login-back": "Votre quota d’abonnement est de retour. Les volets restent sur la clé API jusqu’à ce que vous reveniez en arrière dans Comptes.",
     "api-key-takeover": "Quota épuisé. Les volets utilisent maintenant {name}, facturé à l’usage. Revenez en arrière dans Comptes après la réinitialisation.",
     "default": "Connexion d’origine",
     "switch-title": "Changer de compte",

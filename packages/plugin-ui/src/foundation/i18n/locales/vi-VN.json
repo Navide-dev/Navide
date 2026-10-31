@@ -9656,6 +9656,7 @@
     "failed": "Không kết nối lại được cuộc hội thoại đó — bản ghi của nó có thể không còn"
   },
   "cli-account": {
+    "api-key-login-back": "Hạn mức gói đăng ký đã trở lại. Các khung vẫn dùng khóa API cho đến khi bạn chuyển lại trong Tài khoản.",
     "api-key-takeover": "Đã dùng hết hạn mức. Các khung đã chuyển sang {name}, tính phí theo mức dùng. Hãy chuyển lại trong Tài khoản sau khi hạn mức được đặt lại.",
     "default": "Đăng nhập ban đầu",
     "switch-title": "Chuyển tài khoản",

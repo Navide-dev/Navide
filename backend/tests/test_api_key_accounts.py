@@ -16,6 +16,7 @@ import agent_team_backend.app as app
 from agent_team_backend import api_key_accounts as ak
 from agent_team_backend import quota_failover
 from agent_team_backend import ws_handlers
+from agent_team_backend.db import Database
 from agent_team_backend.credential_vault import CredentialVault, CredentialVaultError, LiveCredentials
 from agent_team_backend.profiles_store import CliProfilesStore
 
@@ -132,12 +133,12 @@ def test_a_forced_login_stops_the_account(
 
 
 def test_a_forced_login_stops_the_takeover(
-    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
     ak.update(key, {"autoSwitch": True})
     monkeypatch.setattr(ak, "login_policy_blocks", lambda agent: True)
-    assert asyncio.run(ak.take_over(_Service(), _incident())) is False
+    assert asyncio.run(ak.take_over(_Service(tmp_path), _incident())) is False
     assert store.get_pane_default("claude") is None
 
 
@@ -321,8 +322,10 @@ def test_logins_come_before_keys(store: CliProfilesStore) -> None:
 
 
 class _Service:
-    def __init__(self) -> None:
+    def __init__(self, tmp_path: Path) -> None:
         self.stopped: list[str] = []
+        self.store = quota_failover.QuotaFailoverStore(Database(tmp_path / "failover.db"))
+        self._now = lambda: 1_000_000.0
 
     def _affected_terminals(self, auth_scope: str) -> list[dict]:
         return [{"paneId": "p1"}, {"paneId": "p2"}]
@@ -330,9 +333,15 @@ class _Service:
     def _stop_incident(self, incident: object, reason: str) -> None:
         self.stopped.append(reason)
 
+    def _budget_retry_after(self, agent_key: str, auth_scope: str) -> float:
+        used = self.store.automatic_swaps(agent_key, auth_scope, since=self._now() - quota_failover.AUTO_BUDGET_WINDOW_S)
+        return 1.0 if len(used) >= quota_failover.AUTO_BUDGET_MAX else 0.0
 
-def _incident(agent: str = "claude") -> SimpleNamespace:
-    return SimpleNamespace(agent_key=agent, auth_scope=agent)
+
+def _incident(agent: str = "claude", number: int = 1) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=f"i{number}", agent_key=agent, auth_scope=agent, outgoing_slot_id="__default__", epoch=0,
+    )
 
 
 def _capture_events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
@@ -347,7 +356,7 @@ def _capture_events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 
 
 def test_take_over_moves_panes_and_leaves_the_live_login(
-    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
     ak.update(key, {"autoSwitch": True})
@@ -355,7 +364,7 @@ def test_take_over_moves_panes_and_leaves_the_live_login(
     vault.write_live("claude", live)
     calls = _spy(vault, monkeypatch)
     events = _capture_events(monkeypatch)
-    service = _Service()
+    service = _Service(tmp_path)
 
     assert asyncio.run(ak.take_over(service, _incident())) is True
 
@@ -368,16 +377,57 @@ def test_take_over_moves_panes_and_leaves_the_live_login(
     assert vault.read_live("claude").secret == live.secret
 
 
-def test_take_over_needs_the_account_opened(store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_take_over_counts_against_the_budget(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    ak.update(key, {"autoSwitch": True})
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+
+    for number in range(quota_failover.AUTO_BUDGET_MAX):
+        assert asyncio.run(ak.take_over(service, _incident(number=number))) is True
+    assert len(service.store.automatic_swaps("claude", "claude", since=0.0)) == quota_failover.AUTO_BUDGET_MAX
+    moved = [e for e in events if e["type"] == ak.TAKEOVER_EVENT]
+
+    store.set_pane_default("claude", None)
+    assert asyncio.run(ak.take_over(service, _incident(number=99))) is True
+
+    assert service.stopped[-1] == "auto_budget_exhausted"
+    assert len([e for e in events if e["type"] == ak.TAKEOVER_EVENT]) == len(moved)
+    assert store.get_pane_default("claude") is None
+
+
+def test_a_move_that_cannot_be_counted_is_not_made(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    ak.update(key, {"autoSwitch": True})
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+
+    def broken(*args: object, **kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(service.store, "record", broken)
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert service.stopped == ["audit-write-failed"]
+    assert events == []
+    assert store.get_pane_default("claude") is None
+
+
+def test_take_over_needs_the_account_opened(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     ak.create("claude", "a", ANTHROPIC_KEY)
     events = _capture_events(monkeypatch)
-    service = _Service()
+    service = _Service(tmp_path)
     assert asyncio.run(ak.take_over(service, _incident())) is False
     assert events == [] and service.stopped == []
 
 
-def test_take_over_is_claude_only(store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch) -> None:
-    assert asyncio.run(ak.take_over(_Service(), _incident("codex"))) is False
+def test_take_over_is_claude_only(store: CliProfilesStore, tmp_path: Path) -> None:
+    assert asyncio.run(ak.take_over(_Service(tmp_path), _incident("codex"))) is False
 
 
 # ── A login account runs exactly as before ──────────────────────────────────

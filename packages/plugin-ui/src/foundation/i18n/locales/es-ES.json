@@ -9656,6 +9656,7 @@
     "failed": "No se pudo volver a conectar esa conversación: puede que su transcripción ya no exista"
   },
   "cli-account": {
+    "api-key-login-back": "Tu cuota de suscripción ha vuelto. Los paneles siguen con la clave de API hasta que cambies en Cuentas.",
     "api-key-takeover": "Cuota agotada. Los paneles usan ahora {name}, con facturación por uso. Vuelve a cambiar en Cuentas cuando se restablezca.",
     "default": "Inicio de sesión original",
     "switch-title": "Cambiar de cuenta",
