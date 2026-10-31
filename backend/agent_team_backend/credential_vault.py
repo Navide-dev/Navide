@@ -1147,6 +1147,22 @@ class CredentialVault:
         self.write_live(agent_key, self.read_slot(agent_key, slot_id, scope=scope), scope=scope)
         self._sign_in_pending_live_marker(agent_key, slot_id).unlink(missing_ok=True)
 
+    def _api_key_slot_marker(self, agent_key: str, slot_id: str) -> Path:
+        return self.slot_dir(agent_key, slot_id) / ".api-key"
+
+    def mark_api_key_slot(self, agent_key: str, slot_id: str) -> None:
+        """Record that this claude slot belongs to an API key account. It holds
+        no login, so restoring it would clear the live login."""
+        marker = self._api_key_slot_marker(agent_key, slot_id)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+
+    def is_api_key_slot(self, agent_key: str, slot_id: str | None) -> bool:
+        return (
+            agent_key == "claude" and bool(slot_id)
+            and self._api_key_slot_marker(agent_key, str(slot_id)).exists()
+        )
+
     def _sign_in_pending_live_marker(self, agent_key: str, slot_id: str) -> Path:
         """Set while a claude sign-in harvested into the slot has not been
         restored to live; ``capture`` keeps it over an older live token of the
@@ -1176,6 +1192,8 @@ class CredentialVault:
         bring ``to_slot_id`` live. On a restore failure the captured snapshot is
         written back so the live state is never lost. ``scope`` (per-provider
         stores) names the one provider entry both sides of the swap touch."""
+        if self.is_api_key_slot(agent_key, from_slot_id) or self.is_api_key_slot(agent_key, to_slot_id):
+            raise CredentialVaultError("a claude API key account is never swapped into the live login")
         outgoing = self.capture(agent_key, from_slot_id, scope=scope)
         try:
             self.restore(agent_key, to_slot_id, scope=scope)

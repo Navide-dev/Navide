@@ -336,6 +336,43 @@ class CliProfilesStore:
             self._write(doc)
             return profile
 
+    def create_api_key(
+        self, *, agent_key: str, name: str, last4: str, monthly_reminder_usd: float | None,
+    ) -> dict[str, Any]:
+        """An API key account: ``create`` plus the fields that mark the kind.
+        The key itself is never here; see ``api_key_accounts``."""
+        self._validate_agent_key(agent_key)
+        with self._lock:
+            doc = self._read()
+            existing = {p.get("id") for p in doc["profiles"]}
+            profile_id = uuid4().hex[:8]
+            while profile_id in existing:
+                profile_id = uuid4().hex[:8]
+            profile = {
+                "id": profile_id,
+                "agentKey": agent_key,
+                "name": name,
+                "createdAt": _now_iso(),
+                "authKind": "api-key",
+                "last4": last4,
+                "monthlyReminderUsd": monthly_reminder_usd,
+                "autoSwitch": False,
+            }
+            doc["profiles"].append(profile)
+            self._write(doc)
+            return profile
+
+    def update_api_key(self, profile_id: str, changes: dict[str, Any]) -> dict[str, Any]:
+        """Change fields of an API key account. Refuses any other account."""
+        with self._lock:
+            doc = self._read()
+            for profile in doc["profiles"]:
+                if profile.get("id") == profile_id and profile.get("authKind") == "api-key":
+                    profile.update(changes)
+                    self._write(doc)
+                    return profile
+        raise KeyError(profile_id)
+
     def rename(self, profile_id: str, name: str) -> dict[str, Any]:
         """Change the display name only — the home directory never moves.
         A blank name drops the user's alias: the profile goes back to an

@@ -2981,6 +2981,15 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
                 )
             )
             return
+        is_api_key_slot = getattr(app.credential_vault, "is_api_key_slot", None)
+        if is_api_key_slot is not None and is_api_key_slot(agent_key, profile_id):
+            await session.send_json(
+                make_error(
+                    msg_id, msg_type, "API_KEY_ACCOUNT",
+                    "an API key account is chosen per pane; it does not replace the live login",
+                )
+            )
+            return
 
     # Serialize the whole read-current → swap → persist-default sequence per
     # agent: concurrent switches (multiple windows, or a switch racing the usage
@@ -13446,3 +13455,10 @@ from . import credentials_scan  # noqa: E402
 
 for _credentials_type, _credentials_fn in credentials_scan.MESSAGE_HANDLERS.items():
     handler(_credentials_type)(_credentials_fn)
+
+# ── API key accounts (cli_profiles.api_key_*) ──
+# Renderer-only. A stored key never comes back through any of these.
+from . import api_key_accounts  # noqa: E402
+
+for _api_key_type, _api_key_fn in api_key_accounts.MESSAGE_HANDLERS.items():
+    handler(_api_key_type)(_api_key_fn)
