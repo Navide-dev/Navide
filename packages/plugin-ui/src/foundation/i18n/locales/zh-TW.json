@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "加入步驟",
+    "confirm-title": "要執行這顆按鈕嗎？",
+    "confirm-message": "「{name}」會關閉或重設某些東西，無法復原。",
+    "confirm-run": "執行",
+    "step-failed": "「{name}」停在第 {step} 步。",
     "settings-title": "動作按鈕",
-    "settings-hint": "在這裡新增的按鈕會放在舞台分頁列右端，按下就執行一個動作。",
+    "settings-hint": "在這裡新增的按鈕會放在舞台分頁列右端，按下就依序執行動作。",
     "empty": "還沒有動作按鈕。",
     "name-placeholder": "按鈕名稱",
     "action-placeholder": "選擇動作…",

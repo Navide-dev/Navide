@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "단계 추가",
+    "confirm-title": "이 버튼을 실행할까요?",
+    "confirm-message": "\"{name}\"은(는) 무언가를 닫거나 재설정해요. 되돌릴 수 없어요.",
+    "confirm-run": "실행",
+    "step-failed": "\"{name}\"이(가) {step}단계에서 멈췄어요.",
     "settings-title": "작업 버튼",
-    "settings-hint": "여기서 추가한 버튼은 스테이지 탭 오른쪽 끝에 놓이고, 누르면 작업 하나를 실행해요.",
+    "settings-hint": "여기서 추가한 버튼은 스테이지 탭 오른쪽 끝에 놓이고, 누르면 작업을 순서대로 실행해요.",
     "empty": "작업 버튼이 아직 없어요.",
     "name-placeholder": "버튼 이름",
     "action-placeholder": "작업 선택…",

@@ -87,6 +87,23 @@ const OTHER_DEDICATED_TOOLS: Readonly<Record<string, string>> = {
   'workbench.action.closeWindow': 'window_close',
 }
 
+/** Actions that end or throw away work: a button holding one asks first. This
+ *  is telling the user, not forbidding anything. uiActionCatalog.test.ts scans
+ *  the source so a new close or reset cannot arrive unclassified. */
+export const DESTRUCTIVE_ACTIONS: ReadonlySet<string> = new Set([
+  'ui.pane.close',
+  'ui.pane.reclaim',
+  'ui.pipeline.abort',
+  'ui.pipeline.reset',
+  'ui.pipeline.restart',
+  'ui.pipeline.restart_from',
+  'ui.window.close',
+  'ui.workspace.close',
+  'workbench.action.closeActivePane',
+  'workbench.action.closeWindow',
+  'workbench.action.rebuildFocusedPane',
+])
+
 export interface UiActionInfo {
   id: string
   title: string
@@ -96,6 +113,7 @@ export interface UiActionInfo {
   summary?: string
   humanOnly?: true | string
   dedicatedTool?: string
+  destructive?: true
   /** Refused when the window has switched to another project. */
   workspaceScoped: boolean
 }
@@ -112,6 +130,7 @@ export function describeUiAction(id: string): UiActionInfo {
     ...(spec ? { summary: spec.summary } : {}),
     ...(spec?.humanOnly ? { humanOnly: spec.humanOnly } : {}),
     ...(dedicatedTool ? { dedicatedTool } : {}),
+    ...(DESTRUCTIVE_ACTIONS.has(id) ? { destructive: true as const } : {}),
     workspaceScoped: WORKSPACE_SCOPED_ACTIONS.has(id),
   }
 }
@@ -129,15 +148,22 @@ const BUTTON_UI_ACTIONS = new Set([
   'ui.window.openTurnStats',
 ])
 
-/** What Settings offers for a button: keyboard commands, plugin commands and
- *  the `ui.*` actions above, never one that ui_invoke routes to its own tool. */
+/** What a button may run: keyboard commands, plugin commands and the `ui.*`
+ *  actions above, never one kept to its own tool or to the user at the prompt.
+ *  Settings offers these and the runner enforces them, because workbench.json
+ *  is a file an agent can write. */
+export function isButtonAction(id: string, isPluginCommand: (id: string) => boolean): boolean {
+  if (isPluginCommand(id)) return true
+  const { dedicatedTool, humanOnly } = describeUiAction(id)
+  if (dedicatedTool || humanOnly) return false
+  return !id.startsWith('ui.') || BUTTON_UI_ACTIONS.has(id)
+}
+
 export function buttonActions(
   ids: readonly string[],
   overlay?: (id: string) => Partial<UiActionInfo> | undefined,
 ): UiActionInfo[] {
-  return describeUiActions(ids, undefined, overlay).filter((action) =>
-    !action.dedicatedTool && (!action.id.startsWith('ui.') || BUTTON_UI_ACTIONS.has(action.id)),
-  )
+  return describeUiActions(ids.filter((id) => isButtonAction(id, (other) => overlay?.(other) !== undefined)), undefined, overlay)
 }
 
 /** `ids` is the window's registry; a prefix narrows it. `overlay` lets a

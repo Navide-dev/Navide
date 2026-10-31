@@ -1,9 +1,13 @@
 // The user's action buttons: userData/workbench.json. Plain data, never code:
 // a step names an action from the registry, and the Host draws the button.
+//
+// A step has no args, on purpose. An agent with a shell can write this file, so
+// args would let a button labelled anything call ui.settings.yolo with yolo
+// true on the user's click. Which actions may run is decided where they run
+// (runWorkbenchButton), since the file itself is not trusted.
 
 export interface WorkbenchStep {
   action: string
-  args?: Record<string, unknown>
 }
 
 export interface WorkbenchButton {
@@ -21,7 +25,7 @@ export interface WorkbenchConfig {
 
 export const MAX_WORKBENCH_BUTTONS = 12
 export const MAX_WORKBENCH_LABEL = 24
-const MAX_STEPS = 8
+export const MAX_WORKBENCH_STEPS = 8
 
 export const EMPTY_WORKBENCH: WorkbenchConfig = Object.freeze({
   schemaVersion: 1,
@@ -35,15 +39,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseStep(raw: unknown): WorkbenchStep | null {
   if (!isRecord(raw) || typeof raw.action !== 'string' || !raw.action) return null
-  if (raw.args !== undefined && !isRecord(raw.args)) return null
-  return { action: raw.action, ...(raw.args ? { args: raw.args } : {}) }
+  return { action: raw.action }
 }
 
 function parseButton(raw: unknown): WorkbenchButton | null {
   if (!isRecord(raw) || typeof raw.id !== 'string' || !raw.id || typeof raw.label !== 'string') return null
   const label = raw.label.trim()
   if (!label || label.length > MAX_WORKBENCH_LABEL || /[\r\n<>]/.test(label)) return null
-  if (!Array.isArray(raw.steps) || raw.steps.length < 1 || raw.steps.length > MAX_STEPS) return null
+  if (!Array.isArray(raw.steps) || raw.steps.length < 1 || raw.steps.length > MAX_WORKBENCH_STEPS) return null
   const steps = raw.steps.map(parseStep)
   if (steps.some((step) => step === null)) return null
   return { id: raw.id, label, steps: steps as WorkbenchStep[] }

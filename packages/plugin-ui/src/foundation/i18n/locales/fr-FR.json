@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "Ajouter une étape",
+    "confirm-title": "Exécuter ce bouton ?",
+    "confirm-message": "« {name} » va fermer ou réinitialiser quelque chose. Cette action est irréversible.",
+    "confirm-run": "Exécuter",
+    "step-failed": "« {name} » s’est arrêté à l’étape {step}.",
     "settings-title": "Boutons d’action",
-    "settings-hint": "Les boutons ajoutés ici se placent à droite des onglets de la scène et lancent une action.",
+    "settings-hint": "Les boutons ajoutés ici se placent à droite des onglets de la scène et lancent leurs actions dans l’ordre.",
     "empty": "Aucun bouton d’action pour l’instant.",
     "name-placeholder": "Nom du bouton",
     "action-placeholder": "Choisir une action…",

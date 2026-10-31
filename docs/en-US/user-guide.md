@@ -260,5 +260,5 @@ These credentials **never leave this machine**: account credentials and keys sta
 
 ### Action buttons
 
-**Settings → Layout → Action buttons** adds a button that runs one action, at the right end of the stage tabs. Navide draws every button, and its tooltip says where it came from. Buttons are stored in `workbench.json` in the app's data folder and stay on this machine. The bar is empty until you add one, and can be hidden.
+**Settings → Layout → Action buttons** adds a button that runs one action or several in order, at the right end of the stage tabs. A step that fails stops the rest, and a button that closes or resets something asks first. Navide draws every button, and its tooltip says where it came from. Buttons are stored in `workbench.json` in the app's data folder and stay on this machine. The bar is empty until you add one, and can be hidden.
 

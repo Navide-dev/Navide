@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "添加步骤",
+    "confirm-title": "要执行这个按钮吗？",
+    "confirm-message": "“{name}”会关闭或重置某些内容，无法撤销。",
+    "confirm-run": "执行",
+    "step-failed": "“{name}”停在第 {step} 步。",
     "settings-title": "操作按钮",
-    "settings-hint": "在这里添加的按钮会放在舞台标签栏右端，按下即执行一个操作。",
+    "settings-hint": "在这里添加的按钮会放在舞台标签栏右端，按下即依序执行操作。",
     "empty": "还没有操作按钮。",
     "name-placeholder": "按钮名称",
     "action-placeholder": "选择操作…",
