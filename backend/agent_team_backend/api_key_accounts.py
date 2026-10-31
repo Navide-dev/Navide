@@ -360,6 +360,10 @@ def replace_secret(profile_id: Any, secret: Any) -> dict[str, Any]:
 def delete(profile_id: Any) -> None:
     profile = _require(profile_id)
     _refuse_if_live(profile)
+    from .ws_handlers import _running_account_dir_terminals, _running_login_terminals
+
+    if _running_login_terminals(profile["agentKey"], profile["id"]) or _running_account_dir_terminals(profile["id"]):
+        raise ApiKeyError("account-in-use", "A pane is using this account. Close it before deleting the account.")
     # The secret goes first: a failure keeps the account, so the key is never
     # left behind with nothing in the app pointing at it.
     _write_key(profile["agentKey"], profile["id"], None)

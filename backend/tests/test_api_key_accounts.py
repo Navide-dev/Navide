@@ -658,3 +658,28 @@ def test_no_key_accounts_means_no_new_read(store: CliProfilesStore, vault: Crede
 
     monkeypatch.setattr(vault, "read_live", untouched)
     assert ak.is_active_api_key_account("codex", store) is False
+
+
+def test_the_poll_never_boots_claude_on_a_key(store: CliProfilesStore, vault: CredentialVault) -> None:
+    """B1: reading /usage there starts a whole Claude Code and calls the helper."""
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    vault.prepare_account_dir(key)
+    service = usage_service.UsageService()
+    assert asyncio.run(service._claude_account_dirs([key])) == []
+
+
+def _running_pane(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ws_handlers, "_running_account_dir_terminals", lambda slot: ["t1"])
+
+
+def test_delete_refuses_while_a_pane_runs_on_the_key(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S2: the helper is removed and that pane's next request fails."""
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    _running_pane(monkeypatch)
+    with pytest.raises(ak.ApiKeyError) as err:
+        ak.delete(key)
+    assert err.value.code == "account-in-use"
+    assert store.get(key) is not None
+    assert ak.read_secret(store.get(key)) == ANTHROPIC_KEY

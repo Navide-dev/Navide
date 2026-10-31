@@ -36,7 +36,7 @@ D7_LOGIN_FUNCTIONS = frozenset({
 #: failover until the user opts in.
 MAIN_DIGESTS = {
     "usage_service": (
-        "2d926336f1f25339a78b6059deb9d6b03b0cdb668b58ec67c214b2c2c9350d52", D7_LOGIN_FUNCTIONS,
+        "b210ea844793a9d6adc487a095cd2a0188cd4cc320d0e51c43d4e1ef2edc7d14", D7_LOGIN_FUNCTIONS,
     ),
     "quota_failover": (
         "a09c9b4ffae7910009c4d112cf302a5c0c869f9d299cbd6034bd8fe1e039e67b", frozenset(),
