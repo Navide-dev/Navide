@@ -7,7 +7,7 @@ import { native, revealPath } from './composables/native'
 import { parsePathLine } from './lib/pathLine'
 import type { WorkspaceFileRow } from './lib/quickOpen'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
-import { resolveWorkspaceFileLink, searchWorkspaceFiles, type WorkspaceFileSource } from './lib/workspaceFiles'
+import { resolveWorkspaceFileLink, retryWhileBusy, searchWorkspaceFiles, type WorkspaceFileSource } from './lib/workspaceFiles'
 import ExplorerPane from './components/ExplorerPane.vue'
 import WindowControls from './components/WindowControls.vue'
 import SearchPane from './components/SearchPane.vue'
@@ -1345,7 +1345,10 @@ const workspaceFiles: WorkspaceFileSource = {
       return (flat.ok && Array.isArray(flat.payload?.files) ? flat.payload.files : [])
         .map((path) => ({ path, name: path.split('/').pop() || path }))
     }
-    const res = await backend.send<{ files?: WorkspaceFileRow[] }>('fs.query_files', { query, match_on: matchOn, mode, limit })
+    const { res } = await retryWhileBusy(async () => {
+      const res = await backend.send<{ files?: WorkspaceFileRow[]; error?: string }>('fs.query_files', { query, match_on: matchOn, mode, limit })
+      return { res, error: res.payload?.error }
+    })
     return res.ok && Array.isArray(res.payload?.files) ? res.payload.files : []
   },
   async isFile(path) {

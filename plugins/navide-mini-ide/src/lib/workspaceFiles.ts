@@ -10,6 +10,23 @@ export interface WorkspaceFileSource {
   isFile(path: string): Promise<boolean>
 }
 
+const BUSY_RETRIES = 4
+const BUSY_WAIT_MS = 150
+
+/** The Host runs one query per plugin and answers `busy` to the rest. Without
+ * retrying, the query for the last keystroke would be the one lost. */
+export async function retryWhileBusy<T extends { error?: string | undefined }>(
+  send: () => Promise<T>,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<T> {
+  let answer = await send()
+  for (let attempt = 0; attempt < BUSY_RETRIES && answer.error === 'busy'; attempt++) {
+    await wait(BUSY_WAIT_MS)
+    answer = await send()
+  }
+  return answer
+}
+
 /** Workspace files for a Quick Open query, ranked. Exact text first; a loose
  * subsequence pass only when that found too little. */
 export async function searchWorkspaceFiles(source: WorkspaceFileSource, query: string): Promise<WorkspaceFileRow[]> {
