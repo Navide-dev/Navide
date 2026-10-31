@@ -6,6 +6,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
+- Workbench (0.2.36): action buttons at the right end of the stage tabs run one action or several in order, from **Settings → Layout**. A repository can suggest buttons, a layout and Navide plugins in `.navide/workbench.json`; nothing applies until you review and accept that exact content, and any later change stops it applying. With no buttons and no file, nothing changes.
+
 - Mini-IDE (0.2.36): Quick Open and ⌘-click in the AI CLI terminal now search in the plugin. Pasting `app/Services/OrderService.php:137-158` or a `#L10-L20` link finds the file and opens it at the first line, results rank by how well they fit, and a clicked file opens directly when only one file fits; otherwise the Host picker still asks. On an older Navide it searches the way it did.
 
 - Plugin API (0.2.36): the Host now has a plugin API version. A package on a newer API major is refused at install and, if already installed, stays in Settings with the reason and contributes nothing. `hostApiVersion()` in `@navide/plugin-sdk` reads the version, and every capability catalog entry says which version it arrived in. Nothing changes for current packages.

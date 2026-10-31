@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { executeCommand, registerCommand } from '@navide/plugin-ui/shared'
 import { _resetRegistry } from '@navide/plugin-ui/shared/testing'
-import { describeUiAction, describeUiActions, UI_ACTION_SPECS } from '../uiActionCatalog'
+import { DESTRUCTIVE_ACTIONS, describeUiAction, describeUiActions, UI_ACTION_SPECS } from '../uiActionCatalog'
 import { handleUiInvokeRequest, type UiInvokeRequest } from '../useUiActionBus'
 
 const RENDERER_SRC = join(process.cwd(), 'src', 'renderer', 'src')
@@ -162,5 +162,31 @@ describe('a Navide plugin command on the bus', () => {
   it('is listed as humanOnly by ui.actions.describe', () => {
     const [row] = describeUiActions(['acme.runner.go'], undefined, () => ({ title: 'Go', category: 'Runner', humanOnly: true }))
     expect(row).toMatchObject({ id: 'acme.runner.go', title: 'Go', category: 'Runner', humanOnly: true })
+  })
+})
+
+describe('DESTRUCTIVE_ACTIONS', () => {
+  /** Reviewed and left out: closing a dialog or an editor tab loses nothing the
+   *  editor would not ask about itself. */
+  const HARMLESS = new Set([
+    'ui.settings.close',
+    'workbench.action.closeModal',
+    'workbench.action.zoomUiReset',
+  ])
+  const RISKY = /close|reset|abort|restart|remove|delete|kill|rebuild|reclaim|quit|discard/i
+
+  it('classifies every close or reset the main window registers', () => {
+    const app = readFileSync(join(RENDERER_SRC, 'App.vue'), 'latin1')
+    const risky = [...app.matchAll(/registerCommand\('([\w.]+)'/g)].map((m) => m[1]).filter((id) => RISKY.test(id))
+    expect(risky.length).toBeGreaterThan(0)
+    expect(risky.filter((id) => !DESTRUCTIVE_ACTIONS.has(id) && !HARMLESS.has(id))).toEqual([])
+  })
+
+  it('lists only ids the catalog can describe', () => {
+    for (const id of DESTRUCTIVE_ACTIONS) expect(describeUiAction(id).destructive).toBe(true)
+  })
+
+  it('marks nothing else', () => {
+    expect(describeUiAction('ui.pane.focus').destructive).toBeUndefined()
   })
 })

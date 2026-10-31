@@ -257,3 +257,23 @@ These credentials **never leave this machine**: account credentials and keys sta
 **App Lock** (Settings → App Lock) puts a lock screen over every Navide window and unlocks with a 4-to-12-digit PIN, or first with Touch ID on a Mac or Windows Hello on Windows 11. Windows 10 and Linux unlock with the PIN only, and the page says so. It is a privacy screen, not access control: agents, terminals, chat channels, MCP tools, remote devices and schedules keep running underneath, and someone at the computer who knows how can still get past it. While it is up, the application menu is greyed out except for hiding, quitting, the window controls and the editing keys the PIN box needs, and keys never reach the windows underneath, so neither a click nor a shortcut works the App behind it. That includes Toggle Developer Tools: DevTools cannot be opened while locked, and DevTools already open is left as it is. Lock with **Lock Now** (⌘⌥L, or Ctrl+Alt+L on Windows and Linux), or automatically after idle time, when the screen locks, when the computer sleeps, or when Navide starts (off by default). A forgotten PIN is reset after Touch ID or Windows Hello; without either, quit Navide and delete `app-lock.json` from Navide's data folder, which removes App Lock and its PIN and nothing else.
 
 `.agent-team/` is not currently a portability mechanism. Any future migration between machines should use an explicit local export/import flow with redaction and retention controls rather than Git synchronization.
+
+### Action buttons
+
+**Settings → Layout → Action buttons** adds a button that runs one action or several in order, at the right end of the stage tabs. A step that fails stops the rest, and a button that closes or resets something asks first. Navide draws every button, and its tooltip says where it came from. Buttons are stored in `workbench.json` in the app's data folder and stay on this machine. The bar is empty until you add one, and can be hidden.
+
+A repository can suggest buttons, a layout and Navide plugins in `.navide/workbench.json`. Nothing in that file applies by itself: **Settings → Layout** shows what each button really runs, and you accept the exact content you reviewed. Acceptance stays on this computer, never in the repository. A project without the file looks and behaves exactly as before.
+
+- **A change stops everything.** If the file changes after you accepted it, none of it applies until you review it again, so buttons can disappear after `git pull`. You get one reminder per version of the file.
+- **Buttons run only what a button may run.** A step has no arguments, and a step naming an action no button may run disables that button. Buttons from a project are marked and their tooltip names the project.
+- **The layout changes only when you press Apply**, and a suggested plugin only opens its Marketplace page.
+
+```json
+{
+  "schemaVersion": 1,
+  "layoutMode": "grid",
+  "plugins": [{ "id": "acme.runner", "version": "^1.0.0" }],
+  "buttons": [{ "id": "plans", "label": "Plans", "steps": [{ "action": "ui.window.openPlans" }] }]
+}
+```
+

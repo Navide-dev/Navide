@@ -1050,6 +1050,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
   onKeybindingsChanged: (cb: (content: string) => void): void => {
     ipcRenderer.on('keybindings:changed', (_event, content: string) => cb(content))
   },
+  readWorkbench: (): Promise<{ ok: boolean; content?: string; error?: string }> =>
+    ipcRenderer.invoke('workbench:read'),
+  writeWorkbench: (content: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('workbench:write', content),
+  onWorkbenchChanged: (cb: (content: string) => void): void => {
+    ipcRenderer.on('workbench:changed', (_event, content: string) => cb(content))
+  },
   workbenchProject: {
     inspect: (): Promise<ProjectWorkbenchSnapshot> => ipcRenderer.invoke('workbench-project:inspect'),
     accept: (fingerprint: string): Promise<ProjectWorkbenchResult> =>

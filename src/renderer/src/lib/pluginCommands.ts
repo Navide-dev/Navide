@@ -10,6 +10,12 @@ export function pluginCommandEntry(id: string): PluginCommandEntry | undefined {
   return pluginCommands.value.find((command) => command.commandId === id)
 }
 
+/** How a plugin command describes itself to the action catalog. */
+export function pluginActionFacts(id: string): { title: string; category: string; humanOnly: true } | undefined {
+  const plugin = pluginCommandEntry(id)
+  return plugin ? { title: plugin.title, category: plugin.pluginName, humanOnly: true } : undefined
+}
+
 export function isPluginCommand(id: string): boolean {
   return pluginCommandEntry(id) !== undefined
 }

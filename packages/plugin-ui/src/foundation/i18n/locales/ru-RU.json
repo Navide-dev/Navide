@@ -1,4 +1,44 @@
 {
+  "actionBar": {
+    "add-step": "Добавить шаг",
+    "confirm-title": "Выполнить эту кнопку?",
+    "confirm-message": "Будет выполнено: {actions}. Это закроет или сбросит что-то, отменить нельзя.",
+    "confirm-run": "Выполнить",
+    "step-failed": "«{name}» остановилась на шаге {step}.",
+    "settings-title": "Кнопки действий",
+    "settings-hint": "Кнопки, добавленные здесь, появляются справа от вкладок сцены и выполняют свои действия по порядку.",
+    "empty": "Кнопок действий пока нет.",
+    "name-placeholder": "Название кнопки",
+    "action-placeholder": "Выберите действие…",
+    "add": "Добавить",
+    "remove": "Удалить",
+    "hide": "Скрыть панель кнопок действий",
+    "save-failed": "Не удалось сохранить кнопки действий",
+    "source-mine": "Добавлено вами",
+    "source-plugin": "Из плагина Navide {name}",
+    "unavailable": "Это действие сейчас недоступно",
+    "source-project": "Из проекта {name}",
+    "project-title": "Предложения {name}",
+    "project-needs-review": "Этот проект предлагает настройки workbench",
+    "project-reminder": "{name} предлагает настройки workbench. Проверьте их в разделе «Настройки → Макет».",
+    "project-reminder-stale": "Настройки workbench {name} изменились и больше не применяются. Проверьте их в разделе «Настройки → Макет».",
+    "project-status-pending": "Этот проект предлагает настройки ниже. Они не применяются, пока вы их не примете.",
+    "project-status-accepted": "Вы приняли эти настройки. Они действуют только для этого проекта.",
+    "project-status-stale": "Файл изменился после принятия, поэтому ничего не применяется. Проверьте его снова.",
+    "project-status-invalid": "Файл не читается как настройки workbench, поэтому ничего не применяется.",
+    "project-status-unavailable": "Сейчас файл не читается, поэтому ничего не применяется.",
+    "project-buttons": "Предложенные кнопки",
+    "project-plugins": "Предложенные плагины Navide",
+    "project-layout": "Макет: {mode}",
+    "project-apply": "Применить",
+    "project-open-plugin": "Открыть в Navide Marketplace",
+    "project-accept": "Принять",
+    "project-revoke": "Не применять",
+    "project-refused": "Запуск невозможен",
+    "project-refused-step": "{action} (нельзя запустить кнопкой)",
+    "project-destructive": "Закрывает или сбрасывает что-то",
+    "project-failed": "Не получилось: {reason}"
+  },
   "convenience": {
     "switch-back-failed": "Не удалось переключиться обратно: {detail}",
     "notice": {
@@ -7976,7 +8016,7 @@
           "not-installed": "Этот плагин Navide не установлен.",
           "view-not-open": "Сначала откройте представление этого плагина Navide, затем снова нажмите сочетание клавиш.",
           "view-not-openable": "Представление этого плагина Navide нельзя открыть сочетанием клавиш.",
-          "method-unavailable": "Эту команду плагина Navide пока нельзя выполнить."
+          "method-failed": "Не удалось выполнить эту команду плагина Navide."
         }
       },
       "reset-all": "Сбросить все",

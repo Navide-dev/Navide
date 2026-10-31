@@ -1,4 +1,44 @@
 {
+  "actionBar": {
+    "add-step": "添加步骤",
+    "confirm-title": "要执行这个按钮吗？",
+    "confirm-message": "将会执行：{actions}。这会关闭或重置某些内容，无法撤销。",
+    "confirm-run": "执行",
+    "step-failed": "“{name}”停在第 {step} 步。",
+    "settings-title": "操作按钮",
+    "settings-hint": "在这里添加的按钮会放在舞台标签栏右端，按下即依序执行操作。",
+    "empty": "还没有操作按钮。",
+    "name-placeholder": "按钮名称",
+    "action-placeholder": "选择操作…",
+    "add": "添加",
+    "remove": "移除",
+    "hide": "隐藏操作按钮栏",
+    "save-failed": "无法保存操作按钮",
+    "source-mine": "你自己添加的",
+    "source-plugin": "来自 Navide 插件 {name}",
+    "unavailable": "这个操作目前无法使用",
+    "source-project": "来自项目 {name}",
+    "project-title": "{name} 的建议",
+    "project-needs-review": "此项目建议了工作台设置",
+    "project-reminder": "{name} 建议了工作台设置，请到“设置 → 版面”查看。",
+    "project-reminder-stale": "{name} 的工作台设置已更改，已停止应用，请到“设置 → 版面”查看。",
+    "project-status-pending": "此项目建议以下设置，在你接受之前都不会生效。",
+    "project-status-accepted": "你已接受这些设置，仅对此项目生效。",
+    "project-status-stale": "接受之后文件发生了更改，因此全部不应用，请重新查看。",
+    "project-status-invalid": "文件不是有效的工作台设置，因此全部不应用。",
+    "project-status-unavailable": "目前无法读取文件，因此全部不应用。",
+    "project-buttons": "建议的按钮",
+    "project-plugins": "建议的 Navide 插件",
+    "project-layout": "版面：{mode}",
+    "project-apply": "应用",
+    "project-open-plugin": "在 Navide Marketplace 中打开",
+    "project-accept": "接受",
+    "project-revoke": "停止应用",
+    "project-refused": "无法运行",
+    "project-refused-step": "{action}（不能由按钮运行）",
+    "project-destructive": "会关闭或重置项目",
+    "project-failed": "未成功：{reason}"
+  },
   "convenience": {
     "switch-back-failed": "无法切换回原账号：{detail}",
     "notice": {
@@ -7976,7 +8016,7 @@
           "not-installed": "这个 Navide 插件未安装。",
           "view-not-open": "请先打开这个 Navide 插件的视图，再按一次快捷键。",
           "view-not-openable": "这个 Navide 插件的视图无法用快捷键打开。",
-          "method-unavailable": "这个 Navide 插件命令目前还无法执行。"
+          "method-failed": "这个 Navide 插件命令执行失败。"
         }
       },
       "reset-all": "全部还原",

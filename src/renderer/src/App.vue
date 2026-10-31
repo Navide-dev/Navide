@@ -368,7 +368,10 @@ import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, his
 import { executeCommand, formatKeySpec, initKeybindingsPort, invokeCommand, listCommands, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
 import { describeUiActions } from './composables/uiActionCatalog'
-import { isPluginCommand, pluginCommandEntry, syncPluginCommands } from './lib/pluginCommands'
+import { isPluginCommand, pluginActionFacts, syncPluginCommands } from './lib/pluginCommands'
+import { loadWorkbench } from './lib/workbench'
+import { syncProjectWorkbench, projectName } from './lib/projectWorkbench'
+import ActionBar from './components/ActionBar.vue'
 import { WINDOW_INSTANCE_ID } from './lib/windowInstanceId'
 import {
   pluginAgentCaller,
@@ -1348,8 +1351,14 @@ const workspaceSelected = ref<boolean>(
 // first window to ask gets the list and shows the restore prompt.
 watch(currentWorkspace, (v, previous) => {
   window.agentTeam?.reportWorkspace?.(v)
+  void syncProjectWorkbench(v, remindProjectWorkbench)
   if (previous !== undefined && previous !== v) gitChangesCount.value = 0
 }, { immediate: true })
+
+function remindProjectWorkbench(status: string): void {
+  const key = status === 'stale' ? 'actionBar.project-reminder-stale' : 'actionBar.project-reminder'
+  notifyRestore.toast(i18n.global.t(key, { name: projectName.value }), { type: 'info' })
+}
 
 // Record an externally opened folder in Recent once the backend accepts
 // requests — see bootWorkspaceToRecord for which boots qualify.
@@ -6585,6 +6594,9 @@ onMounted(() => {
   }) ?? null
   void refreshPluginContributions()
   void refreshPluginCommands()
+  void loadWorkbench()
+  // A pull can change the file while the window sits idle.
+  window.addEventListener('focus', () => { void syncProjectWorkbench(currentWorkspace.value, remindProjectWorkbench) })
   stopPluginContributionChanges = window.agentTeam?.plugins?.onContributionsChanged?.(() => {
     void refreshPluginContributions()
     void refreshPluginCommands()
@@ -11708,10 +11720,7 @@ registerCommand('ui.workspace.receive', async (args) => {
   notifyRestore.toast(i18n.global.t('msg.agent-moved-workspace-in', { caller, name: wsDisplayName(path) }), { type: 'info', duration: 8000 })
   return { path, prepared: 'adopted', opened, not_opened: notOpened }
 })
-registerCommand('ui.actions.describe', (args) => describeUiActions(listCommands(), (args as { prefix?: unknown } | undefined)?.prefix, (id) => {
-  const plugin = pluginCommandEntry(id)
-  return plugin ? { title: plugin.title, category: plugin.pluginName, humanOnly: true } : undefined
-}))
+registerCommand('ui.actions.describe', (args) => describeUiActions(listCommands(), (args as { prefix?: unknown } | undefined)?.prefix, pluginActionFacts))
 registerCommand('ui.layout.setMode', (args) => {
   const mode = (args as { mode?: LayoutMode } | undefined)?.mode
   if (!mode) throw new Error('ui.layout.setMode requires mode')
@@ -23872,6 +23881,7 @@ function paneIsCommander(p: ActivePane): boolean {
         @update:model-value="(key) => { leavePluginMainTab(); void onUserSelectTab(key) }"
       >
         <template #actions>
+          <ActionBar />
           <ViewPanel :model-value="layoutMode" @update:model-value="onUserChangeLayoutMode" />
         </template>
       </StageTabBar>

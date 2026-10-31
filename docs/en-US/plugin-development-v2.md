@@ -2476,9 +2476,10 @@ segments of Navide's own command ids, and a command must not read as Navide's.
 This is protection against deception, not restriction: the same plugin can do
 the same work from its view.
 
-A command appears in Settings → Shortcuts under the plugin's name, and in
-`ui_list_actions` and `ui.actions.describe`, marked `humanOnly`. It runs when
-the user presses a key bound to it:
+A command appears in Settings → Shortcuts under the plugin's name, in
+`ui_list_actions` as a plain id like every other action, and in
+`ui.actions.describe`, marked `humanOnly`. It runs when the user presses a key
+bound to it:
 
 - A `window` view opens, with `target` delivered.
 - A view already on screen, or a `main` tab already opened, is shown and gets
@@ -2486,6 +2487,10 @@ the user presses a key bound to it:
 - A view the user has not opened, or one that is not enabled, stays closed. The
   command fails and the user sees why. `detail` views cannot be a command's
   target.
+- `run.method` calls the backend through one of the plugin's open views, with
+  that view's identity and an empty `args` object, under the same checks as a
+  call from the view. With no view open the command fails: a key does not start
+  a backend. The result is discarded; a failure tells the user.
 
 **Agents do not run commands.** `ui_invoke` refuses a plugin command with
 `ui_human_only`, and this applies to `run.method` too. Opening a view with a

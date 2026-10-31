@@ -124,6 +124,7 @@ import { inAppUpdateSupported, initUpdater } from './updater'
 import { withDeadline } from './deadline'
 import { MAX_RESTORE_ATTEMPTS, onScreenBounds, WindowRegistry, type AuxWindowEntry, type AuxWindowKind, type WindowBounds, type WindowEntry } from './window-registry'
 import { registeredGitLeftWorkspace, trustedGitLeftWindow } from './gitLeftIpc'
+import { mayReportWorkspace } from './workspaceReportIpc'
 import { setWindowDockTileBadge } from './dock-tile-badge'
 import { writeTempTextArtifact } from './temp-text-artifact'
 import { BackendBroadcastTracker } from './backend-broadcast'
@@ -4031,6 +4032,9 @@ ipcMain.on('terminal:selection-changed', (event, selection: unknown) => {
 // without reloading, so main's per-window workspace map — and the crash-restore
 // registry — must be told. Empty path = the window returned to Welcome.
 ipcMain.on('window:reportWorkspace', (event, workspacePath: string) => {
+  // This decides which repository a workbench acceptance applies to: a subframe
+  // must not be able to point it somewhere else.
+  if (!mayReportWorkspace(event, mainWindows)) return
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win || !mainWindows.has(win)) return
   if (detachedWindowIds.has(win.id)) return // detached child — never registry-tracked
@@ -4698,7 +4702,7 @@ ipcMain.handle('plugins:runCommand', async (event, args: Record<string, unknown>
     ? registeredGitLeftWorkspace(requestingWindow, args?.workspace_path, mainWindowWorkspaces, normalizeWorkspacePath)
     : null
   if (!requestingWindow || !commandId || !workspacePath) return { ok: false, reason: 'view-not-open' }
-  const outcome = frontendPluginManager.resolveCommandRun(requestingWindow, commandId, workspacePath)
+  const outcome = await frontendPluginManager.runCommand(requestingWindow, commandId, workspacePath)
   if (!outcome.ok || !('window' in outcome)) return outcome
   const opened = await openCatalogContributionWindow(outcome.window.contributionKey, workspacePath, outcome.window.params)
   return opened.ok ? { ok: true } : { ok: false, reason: 'view-not-open' }
@@ -5688,6 +5692,30 @@ async function writeKeybindingsFile(
     return { ok: false, error: String(e) }
   }
 }
+
+ipcMain.handle('workbench:read', async () => {
+  try {
+    return { ok: true, content: await readFile(join(app.getPath('userData'), 'workbench.json'), 'utf-8') }
+  } catch (e) {
+    // No file is the normal case, and means no buttons.
+    if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return { ok: true, content: '' }
+    return { ok: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('workbench:write', async (event, content: string) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
+  if (typeof content !== 'string') return { ok: false, error: 'invalid content' }
+  try {
+    await writeFile(join(app.getPath('userData'), 'workbench.json'), content, 'utf-8')
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && win.webContents.id !== event.sender.id) win.webContents.send('workbench:changed', content)
+    }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+})
 
 // Read bytes from a file starting at a given offset. Used by the stage watcher
 // to scan the outputLogFile for sentinel strings — more reliable than cleanBuffer

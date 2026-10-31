@@ -1,4 +1,44 @@
 {
+  "actionBar": {
+    "add-step": "Ajouter une étape",
+    "confirm-title": "Exécuter ce bouton ?",
+    "confirm-message": "Sera exécuté : {actions}. Cela ferme ou réinitialise quelque chose, sans retour possible.",
+    "confirm-run": "Exécuter",
+    "step-failed": "« {name} » s’est arrêté à l’étape {step}.",
+    "settings-title": "Boutons d’action",
+    "settings-hint": "Les boutons ajoutés ici se placent à droite des onglets de la scène et lancent leurs actions dans l’ordre.",
+    "empty": "Aucun bouton d’action pour l’instant.",
+    "name-placeholder": "Nom du bouton",
+    "action-placeholder": "Choisir une action…",
+    "add": "Ajouter",
+    "remove": "Retirer",
+    "hide": "Masquer la barre de boutons d’action",
+    "save-failed": "Impossible d’enregistrer les boutons d’action",
+    "source-mine": "Ajouté par vous",
+    "source-plugin": "Du plugin Navide {name}",
+    "unavailable": "Cette action n’est pas disponible pour le moment",
+    "source-project": "Du projet {name}",
+    "project-title": "Suggestions de {name}",
+    "project-needs-review": "Ce projet suggère des réglages du workbench",
+    "project-reminder": "{name} suggère des réglages du workbench. Consultez-les dans Paramètres → Disposition.",
+    "project-reminder-stale": "Les réglages du workbench de {name} ont changé et ne s’appliquent plus. Consultez-les dans Paramètres → Disposition.",
+    "project-status-pending": "Ce projet suggère les réglages ci-dessous. Ils ne s’appliquent qu’une fois acceptés.",
+    "project-status-accepted": "Vous avez accepté ces réglages. Ils ne s’appliquent qu’à ce projet.",
+    "project-status-stale": "Le fichier a changé après votre acceptation, rien ne s’applique. Consultez-le à nouveau.",
+    "project-status-invalid": "Le fichier n’est pas lisible comme réglages du workbench, rien ne s’applique.",
+    "project-status-unavailable": "Le fichier est illisible pour l’instant, rien ne s’applique.",
+    "project-buttons": "Boutons suggérés",
+    "project-plugins": "Plugins Navide suggérés",
+    "project-layout": "Disposition : {mode}",
+    "project-apply": "Appliquer",
+    "project-open-plugin": "Ouvrir dans le Navide Marketplace",
+    "project-accept": "Accepter",
+    "project-revoke": "Ne plus appliquer",
+    "project-refused": "Exécution impossible",
+    "project-refused-step": "{action} (ne peut pas être lancé par un bouton)",
+    "project-destructive": "Ferme ou réinitialise quelque chose",
+    "project-failed": "Échec : {reason}"
+  },
   "convenience": {
     "switch-back-failed": "Impossible de revenir en arrière : {detail}",
     "notice": {
@@ -7976,7 +8016,7 @@
           "not-installed": "Ce plugin Navide n’est pas installé.",
           "view-not-open": "Ouvrez d’abord la vue de ce plugin Navide, puis appuyez de nouveau sur le raccourci.",
           "view-not-openable": "La vue de ce plugin Navide ne s’ouvre pas avec un raccourci.",
-          "method-unavailable": "Cette commande du plugin Navide ne peut pas encore s’exécuter."
+          "method-failed": "Cette commande du plugin Navide a échoué."
         }
       },
       "reset-all": "Tout réinitialiser",

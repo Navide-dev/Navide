@@ -1,4 +1,44 @@
 {
+  "actionBar": {
+    "add-step": "Schritt hinzufügen",
+    "confirm-title": "Diese Schaltfläche ausführen?",
+    "confirm-message": "Ausgeführt wird: {actions}. Das schließt oder setzt etwas zurück und lässt sich nicht rückgängig machen.",
+    "confirm-run": "Ausführen",
+    "step-failed": "„{name}“ wurde bei Schritt {step} angehalten.",
+    "settings-title": "Aktionsschaltflächen",
+    "settings-hint": "Hier hinzugefügte Schaltflächen stehen rechts neben den Bühnen-Tabs und führen ihre Aktionen der Reihe nach aus.",
+    "empty": "Noch keine Aktionsschaltflächen.",
+    "name-placeholder": "Name der Schaltfläche",
+    "action-placeholder": "Aktion auswählen…",
+    "add": "Hinzufügen",
+    "remove": "Entfernen",
+    "hide": "Aktionsleiste ausblenden",
+    "save-failed": "Aktionsschaltflächen konnten nicht gespeichert werden",
+    "source-mine": "Von dir hinzugefügt",
+    "source-plugin": "Vom Navide-Plugin {name}",
+    "unavailable": "Diese Aktion ist gerade nicht verfügbar",
+    "source-project": "Aus Projekt {name}",
+    "project-title": "Vorschlag von {name}",
+    "project-needs-review": "Dieses Projekt schlägt Workbench-Einstellungen vor",
+    "project-reminder": "{name} schlägt Workbench-Einstellungen vor. Prüfe sie unter Einstellungen → Layout.",
+    "project-reminder-stale": "Die Workbench-Einstellungen von {name} haben sich geändert und gelten nicht mehr. Prüfe sie unter Einstellungen → Layout.",
+    "project-status-pending": "Dieses Projekt schlägt die folgenden Einstellungen vor. Sie gelten erst, wenn du sie annimmst.",
+    "project-status-accepted": "Du hast diese Einstellungen angenommen. Sie gelten nur für dieses Projekt.",
+    "project-status-stale": "Die Datei hat sich nach dem Annehmen geändert, daher gilt nichts davon. Prüfe sie erneut.",
+    "project-status-invalid": "Die Datei lässt sich nicht als Workbench-Einstellungen lesen, daher gilt nichts davon.",
+    "project-status-unavailable": "Die Datei lässt sich gerade nicht lesen, daher gilt nichts davon.",
+    "project-buttons": "Vorgeschlagene Schaltflächen",
+    "project-plugins": "Vorgeschlagene Navide-Plugins",
+    "project-layout": "Bereichslayout: {mode}",
+    "project-apply": "Anwenden",
+    "project-open-plugin": "Im Navide Marketplace öffnen",
+    "project-accept": "Annehmen",
+    "project-revoke": "Nicht mehr anwenden",
+    "project-refused": "Nicht ausführbar",
+    "project-refused-step": "{action} (nicht per Schaltfläche ausführbar)",
+    "project-destructive": "Schließt oder setzt etwas zurück",
+    "project-failed": "Das hat nicht geklappt: {reason}"
+  },
   "convenience": {
     "switch-back-failed": "Zurückwechseln fehlgeschlagen: {detail}",
     "notice": {
@@ -7976,7 +8016,7 @@
           "not-installed": "Dieses Navide-Plugin ist nicht installiert.",
           "view-not-open": "Öffne zuerst die Ansicht dieses Navide-Plugins und drücke das Tastenkürzel dann erneut.",
           "view-not-openable": "Die Ansicht dieses Navide-Plugins lässt sich nicht per Tastenkürzel öffnen.",
-          "method-unavailable": "Dieser Befehl des Navide-Plugins kann noch nicht ausgeführt werden."
+          "method-failed": "Dieser Befehl des Navide-Plugins ist fehlgeschlagen."
         }
       },
       "reset-all": "Alle zurücksetzen",
