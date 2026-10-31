@@ -31,12 +31,15 @@ D7_LOGIN_FUNCTIONS = frozenset({
 #: portable-credential feature: credential_env_vars reads only
 #: AccountSwitchSpec.credential_env_vars (same names, same order), and
 #: pane_auth_scope loses its portable_slot_id parameter and "portable" source.
+#: Both modules were updated deliberately in 0.2.36 for API key accounts: the
+#: usage poll skips an active codex key, and _login_state holds a key back from
+#: failover until the user opts in.
 MAIN_DIGESTS = {
     "usage_service": (
-        "bdf088458f80023a085c30a88987e01c13d550a5bfff66f73f8dd9d986188943", D7_LOGIN_FUNCTIONS,
+        "2d926336f1f25339a78b6059deb9d6b03b0cdb668b58ec67c214b2c2c9350d52", D7_LOGIN_FUNCTIONS,
     ),
     "quota_failover": (
-        "d9bc71903376ba235c897520fe902ce5d5d1c1b6958f5a5d95e9296902249579", frozenset(),
+        "a09c9b4ffae7910009c4d112cf302a5c0c869f9d299cbd6034bd8fe1e039e67b", frozenset(),
     ),
 }
 

@@ -1754,8 +1754,11 @@ class QuotaFailoverService:
         the same judgement the manual switch makes (``_slot_login_reason``)
         plus the isolated login home check. Blocking — thread it."""
         from . import app
+        from .api_key_accounts import held_from_auto_switch
         from .ws_handlers import _running_login_terminals, _slot_login_reason
 
+        if held_from_auto_switch(slot_id):
+            return "api-key-auto-off"
         if slot_id != DEFAULT_SLOT_ID:
             try:
                 # A running sign-in pane for the slot means its credential is
