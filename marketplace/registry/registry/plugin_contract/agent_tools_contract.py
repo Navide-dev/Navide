@@ -761,7 +761,7 @@ PLUGIN_ACTIVITY_FAILED_TARGET = "<failed>"
 PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES = (
     "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.queryFiles", "fs.glob", "fs.stat", "fs.statPath",
     "fs.listArchive", "fs.previewResource", "fs.convertOffice",
-    "fs.read_file", "fs.read_image", "fs.list_dir", "fs.list_files_flat", "fs.glob_files", "fs.stat_path",
+    "fs.read_file", "fs.read_image", "fs.list_dir", "fs.list_files_flat", "fs.query_files", "fs.glob_files", "fs.stat_path",
     "fs.list_archive", "fs.convert_office",
 )
 #: The path of an allowed call whose result found nothing usable there
