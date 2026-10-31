@@ -393,6 +393,55 @@ describe('FilePickerHostService', () => {
     }
   })
 
+  it('takes parsed targets as they are, without reading a suffix', async () => {
+    const workspace = temporaryDirectory('navide-file-picker-targets-')
+    const target = join(workspace, 'odd:7')
+    writeFileSync(target, 'target')
+    const invocation = makeInvocation(workspace, {
+      request: { query: 'odd', candidates: ['ignored.ts'], targets: [{ path: 'odd:7', line: 12 }] },
+      search: vi.fn(async () => []),
+    })
+    const openSelected = vi.fn(async () => true)
+    const pickerService = service(openSelected)
+    try {
+      const pending = pickerService.open(invocation)
+      const view = electron.FakeWebContentsView.instances[0]
+      electron.emit('file-picker:ready', readyEvent(view.webContents))
+      const id = invocationId(view)
+      const rows = await electron.invoke('file-picker:search', readyEvent(view.webContents), id, 'odd') as Array<{ id: string; path: string }>
+      expect(rows.map(row => row.path)).toEqual([realpathSync.native(target)])
+      electron.emit('file-picker:select', readyEvent(view.webContents), id, rows[0]?.id)
+      await expect(pending).resolves.toEqual({ opened: true })
+      expect(openSelected).toHaveBeenCalledWith(expect.objectContaining({ line: 12 }))
+    } finally {
+      pickerService.dispose()
+    }
+  })
+
+  it('still reads the suffix of a string candidate when no targets are sent', async () => {
+    const workspace = temporaryDirectory('navide-file-picker-suffix-')
+    const target = join(workspace, 'a.ts')
+    writeFileSync(target, 'target')
+    const invocation = makeInvocation(workspace, {
+      request: { query: 'a.ts', candidates: ['a.ts:137-158'] },
+      search: vi.fn(async () => []),
+    })
+    const openSelected = vi.fn(async () => true)
+    const pickerService = service(openSelected)
+    try {
+      const pending = pickerService.open(invocation)
+      const view = electron.FakeWebContentsView.instances[0]
+      electron.emit('file-picker:ready', readyEvent(view.webContents))
+      const id = invocationId(view)
+      const rows = await electron.invoke('file-picker:search', readyEvent(view.webContents), id, 'a.ts') as Array<{ id: string; path: string }>
+      electron.emit('file-picker:select', readyEvent(view.webContents), id, rows[0]?.id)
+      await expect(pending).resolves.toEqual({ opened: true })
+      expect(openSelected).toHaveBeenCalledWith(expect.objectContaining({ line: 137 }))
+    } finally {
+      pickerService.dispose()
+    }
+  })
+
   it.each(['html', 'htm'])('previews the first trusted workspace .%s candidate directly', async suffix => {
     const workspace = temporaryDirectory(`navide-file-picker-preview-${suffix}-`)
     const previewPath = join(workspace, `report.${suffix}`)

@@ -13,7 +13,7 @@ import type { AgentsParams, AgentsResults } from './agents.js'
 import type { EditorPreferenceParams, EditorPreferenceResults, EditorPreferenceEvents } from './editorPreferences.js'
 import type { FilePickerRequest } from './filePicker.js'
 export { validFilePickerRequest } from './filePicker.js'
-export type { FilePickerRequest } from './filePicker.js'
+export type { FilePickerRequest, FilePickerSearch, FilePickerTarget } from './filePicker.js'
 
 export * from './archive.js'
 export * from './aiTerminal.js'

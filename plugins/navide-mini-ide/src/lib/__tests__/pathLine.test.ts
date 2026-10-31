@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePathLine, workspaceRelativePath } from '../pathLine'
+import { hostAcceptsPickerStrategy, parsePathLine, workspaceRelativePath } from '../pathLine'
 
 describe('parsePathLine', () => {
   it.each([
@@ -42,5 +42,14 @@ describe('workspaceRelativePath', () => {
 
   it.each(['/etc/passwd', '/workspace2/a.php', '~/a.php', 'C:\\a.php', '../a.php', 'a/../../b.php'])('refuses %s', (path) => {
     expect(workspaceRelativePath(path, '/work')).toBeNull()
+  })
+})
+
+describe('hostAcceptsPickerStrategy', () => {
+  it.each([
+    ['1.2.0', true], ['1.10.0', true], ['2.0.0', true],
+    ['1.1.0', false], ['1.0.0', false], [null, false],
+  ])('reads %s as %s', (version, expected) => {
+    expect(hostAcceptsPickerStrategy(version)).toBe(expected)
   })
 })

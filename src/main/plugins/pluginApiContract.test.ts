@@ -135,6 +135,34 @@ describe('fs.queryFiles', () => {
   })
 })
 
+describe('ui.openFilePicker', () => {
+  const validate = PUBLIC_CAPABILITY_CATALOG['ui.openFilePicker'].validateRequest!
+
+  it('accepts the original request and the additive fields', () => {
+    expect(validate({ query: 'a', candidates: ['a.ts:3'], line: 3 })).toBe(true)
+    expect(validate({
+      query: 'a', candidates: [], targets: [{ path: 'a.ts', line: 3 }, { path: 'b.ts' }],
+      search: { matchOn: 'path', mode: 'subsequence', exclude: ['vendor/*'], respectGitignore: false, includeHidden: true },
+    })).toBe(true)
+  })
+
+  it.each([
+    [{ query: 'a', candidates: [], targets: 'a.ts' }],
+    [{ query: 'a', candidates: [], targets: [{ line: 3 }] }],
+    [{ query: 'a', candidates: [], targets: [{ path: '' }] }],
+    [{ query: 'a', candidates: [], targets: [{ path: 'a', line: 0 }] }],
+    [{ query: 'a', candidates: [], targets: [{ path: 'a', grant: 'x' }] }],
+    [{ query: 'a', candidates: [], search: { mode: 'regex' } }],
+    [{ query: 'a', candidates: [], search: { matchOn: 'content' } }],
+    [{ query: 'a', candidates: [], search: { limit: 5 } }],
+    [{ query: 'a', candidates: [], search: { exclude: 'vendor' } }],
+    [{ query: 'a', candidates: [], search: { exclude: Array(65).fill('x') } }],
+    [{ query: 'a', candidates: [], search: { exclude: ['x'.repeat(257)] } }],
+  ])('refuses %j', (request) => {
+    expect(validate(request)).toBe(false)
+  })
+})
+
 describe('plugin API version', () => {
   it('shares its major with the public packages', () => {
     for (const name of ['plugin-contracts', 'plugin-sdk', 'plugin-ui']) {
