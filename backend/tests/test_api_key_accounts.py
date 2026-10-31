@@ -544,7 +544,7 @@ def test_the_generic_delete_refuses_a_key(store: CliProfilesStore, vault: Creden
         async def send_json(self, frame: dict) -> None:
             sent.append(frame)
 
-    asyncio.run(ws_handlers.cli_profiles_delete(Session(), "m1", "cli_profiles.delete", {"profile_id": key}))
+    asyncio.run(ws_handlers.cli_profiles_delete(Session(), "m1", "cli_profiles.delete", {"id": key}))
 
     assert "API_KEY_ACCOUNT" in json.dumps(sent)
     assert store.get(key) is not None
