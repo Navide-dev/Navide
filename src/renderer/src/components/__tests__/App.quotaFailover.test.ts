@@ -121,9 +121,10 @@ describe('quota failover wiring: commit', () => {
   it('keeps the pane\'s scrollback through the restart: serialized before the kill, replayed into the replacement', () => {
     const restart = functionBody('quotaRestartPane')
     expect(restart).toContain('preserveScrollback: true')
-    // Only the quota restart asks for it; an ordinary rebuild still relies on
-    // the CLI's own resume reprint (unchanged behaviour).
-    expect(appSource.match(/preserveScrollback: true/g)).toHaveLength(1)
+    // Only the quota restart and the API key takeover (reopenOnKey) ask for it;
+    // an ordinary rebuild still relies on the CLI's own resume reprint
+    // (unchanged behaviour).
+    expect(appSource.match(/preserveScrollback: true/g)).toHaveLength(2)
     const rebuild = functionBody('rebuildPaneViaResume')
     const serialized = rebuild.indexOf('serializeScrollback')
     const killed = rebuild.indexOf('await onKill(paneId, { markRemoved: false, force: true, keepInList: true })')
