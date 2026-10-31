@@ -483,6 +483,39 @@ describe('MiniIdeApp failure exits and Quick Open', { timeout: 30_000 }, () => {
     wrapper.unmount()
   })
 
+  it('searches through fs.queryFiles and ranks the answer itself on a Host with the plugin API version', async () => {
+    const files = [
+      { path: 'a/order-notes.md', name: 'order-notes.md', matchSpans: [], size: 1, mtime: 1 },
+      { path: 'z/order.md', name: 'order.md', matchSpans: [], size: 1, mtime: 1 },
+    ]
+    ;(nav as unknown as { apiVersion?: string }).apiVersion = '1.1.0'
+    nav.callCapability.mockImplementation(async (_ns: string, method: string) => ({
+      reqId: 'test', ok: true,
+      result: method === 'readEditorPreferences' ? { preferences: {} }
+        : method === 'queryFiles' ? { ok: true, files } : { found: false },
+    }))
+    try {
+      const wrapper = shallowMiniIde()
+      await flushPromises()
+      const input = await openQuickOpen(wrapper)
+      input.value = 'order.md:42'
+      input.dispatchEvent(new Event('input'))
+      await vi.waitFor(() => expect(document.body.textContent).toContain('order-notes.md'), { timeout: 2000 })
+      expect(nav.callCapability.mock.calls.map(call => call as unknown[]).find(call => call[1] === 'queryFiles')?.[2])
+        .toMatchObject({ query: 'order.md', matchOn: 'path', mode: 'substring' })
+      const rows = [...document.querySelectorAll<HTMLElement>('.ide-palette-item')].map(row => row.textContent ?? '')
+      expect(rows.findIndex(row => row.includes('z/order.md') || row.startsWith('order.md')))
+        .toBeLessThan(rows.findIndex(row => row.includes('order-notes.md')))
+      wrapper.unmount()
+    } finally {
+      delete (nav as unknown as { apiVersion?: string }).apiVersion
+      nav.callCapability.mockImplementation(async (_ns: string, method: string) => ({
+        reqId: 'test', ok: true,
+        result: method === 'readEditorPreferences' ? { preferences: {} } : { found: false },
+      }))
+    }
+  })
+
   it('offers workspace files that are not open, and opens one on click', async () => {
     nav.callCapability.mockImplementation(async (_ns: string, method: string) => ({
       reqId: 'test', ok: true,

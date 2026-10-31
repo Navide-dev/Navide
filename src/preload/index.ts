@@ -22,6 +22,7 @@ import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureS
 import type { PluginActivityReport } from '../shared/pluginActivity'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import type { PluginCommandEntry, PluginCommandRunResult } from '../shared/pluginCommands'
+import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
@@ -1064,6 +1065,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('workbench:write', content),
   onWorkbenchChanged: (cb: (content: string) => void): void => {
     ipcRenderer.on('workbench:changed', (_event, content: string) => cb(content))
+  },
+  workbenchProject: {
+    inspect: (): Promise<ProjectWorkbenchSnapshot> => ipcRenderer.invoke('workbench-project:inspect'),
+    accept: (fingerprint: string): Promise<ProjectWorkbenchResult> =>
+      ipcRenderer.invoke('workbench-project:accept', { fingerprint }),
+    revoke: (): Promise<ProjectWorkbenchResult> => ipcRenderer.invoke('workbench-project:revoke'),
+    markNotified: (fingerprint: string): Promise<ProjectWorkbenchResult> =>
+      ipcRenderer.invoke('workbench-project:mark-notified', { fingerprint }),
   },
   // Synchronous on purpose: seeds the renderer settings cache before first
   // paint (zero-flash theme/language). Returns the ui_settings.json text,

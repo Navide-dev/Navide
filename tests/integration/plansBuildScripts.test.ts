@@ -27,6 +27,7 @@ function fixture(): string {
   file(root, 'backend/agent_team_backend/fs_write.py', '# shared write path\n')
   file(root, 'backend/agent_team_backend/git_security.py', '# shared Git guard\n')
   file(root, 'backend/agent_team_backend/plan_versions.py', '# shared plan versions\n')
+  file(root, 'backend/navide_plugin_sdk/__init__.py', '# public plugin SDK\n')
   file(root, 'backend/pyproject.toml', '# build dependencies\n')
   file(root, 'backend/uv.lock', '# pinned toolchain\n')
   file(root, 'dist-plugins/navide-plans/manifest.json', JSON.stringify({ backend: { entry: 'backend/navide-plans' } }))
@@ -101,6 +102,9 @@ describe.skipIf(isWindows())('Plans backend build cache', { timeout: 30_000 }, (
     file(root, 'backend/agent_team_backend/plan_versions.py', '# changed shared plan versions\n')
     build(root)
     expect(buildCount(root)).toBe(6)
+    file(root, 'backend/navide_plugin_sdk/__init__.py', '# changed public plugin SDK\n')
+    build(root)
+    expect(buildCount(root)).toBe(7)
   })
 
   it('lets PyInstaller import the shared path guard from the backend source tree', () => {
