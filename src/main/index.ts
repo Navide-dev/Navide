@@ -59,6 +59,8 @@ import {
   ExecutionPolicySourceStore,
 } from './plugins/executionPolicySourceStore'
 import { registerExecutionPolicyIpc } from './plugins/executionPolicyIpc'
+import { registerWorkbenchSourceIpc } from './plugins/workbenchSourceIpc'
+import { WorkbenchSourceStore } from './plugins/workbenchSourceStore'
 import { FAIL_CLOSED_EXECUTION_POLICY, type ExecutionPolicySnapshot } from './plugins/executionPolicy'
 import { PluginFactoryOptOutStore } from './plugins/pluginFactoryOptOutStore'
 import { BuiltinRemovedEarlierStore, migrateBuiltinRemovalsToDisabled, PluginDisabledStore } from './plugins/pluginDisabledStore'
@@ -2541,6 +2543,15 @@ registerExecutionPolicyIpc(
         hostWindow.webContents.send('execution-policy:changed')
       }
     },
+  },
+)
+registerWorkbenchSourceIpc(
+  new WorkbenchSourceStore(app.getPath('userData')),
+  (event) => isTrustedPluginManagementSender(event, mainWindows),
+  (event) => {
+    const hostWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!hostWindow || !mainWindows.has(hostWindow) || detachedWindowIds.has(hostWindow.id)) return undefined
+    return mainWindowWorkspaces.get(hostWindow) ?? undefined
   },
 )
 async function refreshInstalledPluginTrust(): Promise<void> {

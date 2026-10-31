@@ -73,6 +73,10 @@ export const PLATFORM_BRANCH_ALLOWLIST: ReadonlyMap<string, string> = new Map([
     'src/main/plugins/executionPolicySourceStore.ts',
     'Same O_NOFOLLOW flag as ownerOnlyJsonPersistence: a syscall flag for the real kernel.',
   ],
+  [
+    'src/main/plugins/workbenchSourceStore.ts',
+    'The O_NOFOLLOW read copied from executionPolicySourceStore, and the same fact: a syscall flag for the real kernel.',
+  ],
 ])
 
 function offenders(files: string[]): Set<string> {
