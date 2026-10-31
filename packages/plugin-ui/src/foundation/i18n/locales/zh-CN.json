@@ -8259,6 +8259,85 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "pane": {
+          "title": "订阅额度已用完",
+          "back-at": "{time} 恢复",
+          "back-unknown": "重置时间未知",
+          "wait": "等待重置"
+        },
+        "kind": "API 密钥",
+        "list": {
+          "aria": "账号",
+          "search": "搜索账号",
+          "add": "+ 添加账号",
+          "login": "登录",
+          "empty": "没有匹配的账号。"
+        },
+        "add": {
+          "title": "{agent} 要用哪种方式连接？",
+          "agent-label": "CLI",
+          "subscription": "用订阅登录",
+          "subscription-desc": "在浏览器中授权，使用套餐的额度。",
+          "api-key": "粘贴 API 密钥",
+          "api-key-desc": "按用量计费。密钥只保留在这台电脑上。",
+          "api-key-unsupported": "这个 CLI 目前还不能使用 API 密钥。",
+          "cloud": "连接云服务",
+          "cloud-desc": "Amazon Bedrock、Google Vertex 或 Microsoft Foundry。",
+          "endpoint": "连接自定义端点",
+          "endpoint-desc": "公司网关或其他兼容服务。",
+          "coming-soon": "即将推出"
+        },
+        "form": {
+          "title": "粘贴 API 密钥",
+          "billing": "这个账号按用量计费，不会使用订阅额度。",
+          "name": "名称",
+          "key": "API 密钥",
+          "key-new": "新的 API 密钥",
+          "key-hint": "保存后不会再显示。",
+          "reminder": "每月支出提醒（USD）",
+          "reminder-hint": "这只是提醒，不是硬性上限。硬性上限请到厂商的控制台设置。",
+          "test": "测试密钥",
+          "testing": "测试中…",
+          "test-ok": "密钥可以使用。",
+          "test-rejected": "厂商拒绝了这个密钥。",
+          "test-unknown": "无法检查密钥，但仍可保存。",
+          "save": "保存账号"
+        },
+        "safe": {
+          "local": "只保存在这台电脑上",
+          "no-sync": "绝不同步到 Navide Cloud"
+        },
+        "detail": {
+          "ends-with": "结尾为 {last4}",
+          "replace": "更换密钥",
+          "replace-save": "保存新密钥",
+          "delete-title": "要删除这个 API 密钥吗？",
+          "delete-message": "{name} 将从这台电脑移除。密钥在厂商处仍然有效，直到你在那里吊销。",
+          "auto-switch": "额度用完时可自动切换到此账号",
+          "auto-switch-hint": "默认关闭。切换后的用量会计费到此密钥。",
+          "in-use": "新窗格正在使用",
+          "use-for-new-panes": "用于新窗格",
+          "stop-using": "新窗格不再使用",
+          "switch-hint": "新打开的窗格会使用此账号。已打开的窗格需要重启才会更换。",
+          "pane-unavailable": "窗格暂时无法使用此账号。"
+        },
+        "error": {
+          "subscription-token": "这是订阅令牌，不是 API 密钥。请到厂商的控制台创建 API 密钥。",
+          "wrong-vendor": "这个密钥属于其他厂商。",
+          "invalid-secret": "这看起来不是 API 密钥。",
+          "invalid-name": "请输入不超过 60 个字符的名称。",
+          "invalid-reminder": "请输入大于零的每月提醒金额。",
+          "unsupported-agent": "这个 CLI 目前还不能使用 API 密钥。",
+          "store-failed": "无法保存到这台电脑的钥匙圈。",
+          "secret-missing": "钥匙圈中已没有这个密钥，请重新粘贴。",
+          "not-found": "这个 API 密钥已不存在。",
+          "main-window-only": "API 密钥只能在设置中管理。",
+          "internal-error": "出错了，请重试。",
+          "unsupported-platform": "Claude Code 的 API 密钥账号暂不支持 Windows。",
+          "login-policy": "你的组织要求使用指定方式登录，因此无法添加 API 密钥账号。"
+        }
+      },
       "title": "Git 账号",
       "encrypted-note": "Token 会通过操作系统密钥链加密，只保存在本机。",
       "unavailable": "此系统无法使用加密功能，因此无法添加账号。通常代表操作系统密钥链无法访问。",

@@ -1,0 +1,48 @@
+/* Shared by the two API key panels. Sizes and colours are Settings tokens. */
+.ak-title { margin: 0 0 4px; font-size: var(--font-md); font-weight: 650; color: var(--text-primary); }
+.ak-lead { margin: 0 0 12px; font-size: var(--font-xs); line-height: 1.5; color: var(--text-secondary); max-width: 60ch; }
+.ak-label { display: block; margin: 12px 0 4px; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
+.ak-hint { margin: 4px 0 0; font-size: var(--font-2xs); color: var(--text-secondary); }
+.ak-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--control-h-md);
+  padding: 4px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+}
+.ak-amount { width: 120px; }
+.ak-input:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: -1px; }
+.ak-secret { display: flex; gap: 8px; align-items: center; }
+.ak-secret .ak-input { flex: 1; min-width: 0; }
+.ak-result { margin: 6px 0 0; font-size: var(--font-2xs); font-weight: 600; }
+.ak-result.ok { color: var(--success-fg); }
+.ak-result.rejected, .ak-error { color: var(--danger-fg); }
+.ak-result.unknown { color: var(--text-secondary); }
+.ak-error { margin: 8px 0 0; font-size: var(--font-2xs); font-weight: 600; }
+.ak-safe { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 14px 0 0; padding: 10px 0 0; border-top: 1px solid var(--border-muted); list-style: none; font-size: var(--font-2xs); color: var(--text-secondary); }
+.ak-safe li::before { content: "✓ "; color: var(--success-fg); }
+.ak-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.ak-actions.end { justify-content: flex-end; }
+.ak-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-h-md);
+  padding: 3px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-2xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ak-btn:hover:not(:disabled) { background: var(--bg-hover); }
+.ak-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ak-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); font-weight: 600; }
+.ak-btn.primary:hover:not(:disabled) { background: var(--accent-fg); border-color: var(--accent-fg); }
+.ak-btn.danger { color: var(--danger-fg); border-color: var(--danger-fg); }

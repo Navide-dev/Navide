@@ -8259,6 +8259,85 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "pane": {
+          "title": "Đã dùng hết hạn mức gói đăng ký",
+          "back-at": "Có lại lúc {time}",
+          "back-unknown": "Chưa rõ thời gian đặt lại",
+          "wait": "Chờ đặt lại"
+        },
+        "kind": "khóa API",
+        "list": {
+          "aria": "Tài khoản",
+          "search": "Tìm tài khoản",
+          "add": "+ Thêm tài khoản",
+          "login": "Đăng nhập",
+          "empty": "Không có tài khoản phù hợp."
+        },
+        "add": {
+          "title": "{agent} nên kết nối bằng cách nào?",
+          "agent-label": "CLI",
+          "subscription": "Đăng nhập bằng gói đăng ký",
+          "subscription-desc": "Cấp quyền trong trình duyệt. Dùng hạn mức của gói bạn đang có.",
+          "api-key": "Dán khóa API",
+          "api-key-desc": "Tính phí theo mức dùng. Khóa chỉ ở trên máy tính này.",
+          "api-key-unsupported": "CLI này chưa dùng được khóa API.",
+          "cloud": "Kết nối dịch vụ đám mây",
+          "cloud-desc": "Amazon Bedrock, Google Vertex hoặc Microsoft Foundry.",
+          "endpoint": "Kết nối endpoint tùy chỉnh",
+          "endpoint-desc": "Cổng nối của công ty hoặc dịch vụ tương thích khác.",
+          "coming-soon": "Sắp ra mắt"
+        },
+        "form": {
+          "title": "Dán khóa API",
+          "billing": "Tài khoản này tính phí theo mức dùng và không dùng hạn mức của gói đăng ký.",
+          "name": "Tên",
+          "key": "Khóa API",
+          "key-new": "Khóa API mới",
+          "key-hint": "Không hiển thị lại sau khi lưu.",
+          "reminder": "Nhắc chi tiêu hằng tháng (USD)",
+          "reminder-hint": "Đây là lời nhắc, không phải giới hạn cứng. Hãy đặt giới hạn cứng trong bảng điều khiển của nhà cung cấp.",
+          "test": "Kiểm tra khóa",
+          "testing": "Đang kiểm tra…",
+          "test-ok": "Khóa hoạt động.",
+          "test-rejected": "Nhà cung cấp đã từ chối khóa này.",
+          "test-unknown": "Không thể kiểm tra khóa. Bạn vẫn có thể lưu.",
+          "save": "Lưu tài khoản"
+        },
+        "safe": {
+          "local": "Chỉ lưu trên máy tính này",
+          "no-sync": "Không bao giờ đồng bộ lên Navide Cloud"
+        },
+        "detail": {
+          "ends-with": "Kết thúc bằng {last4}",
+          "replace": "Thay khóa",
+          "replace-save": "Lưu khóa mới",
+          "delete-title": "Xóa khóa API này?",
+          "delete-message": "{name} sẽ bị xóa khỏi máy tính này. Khóa vẫn còn hiệu lực ở nhà cung cấp cho đến khi bạn thu hồi tại đó.",
+          "auto-switch": "Tự động chuyển sang tài khoản này khi hết hạn mức",
+          "auto-switch-hint": "Mặc định tắt. Sau khi chuyển, mức dùng sẽ tính phí vào khóa này.",
+          "in-use": "Đang dùng cho khung mới",
+          "use-for-new-panes": "Dùng cho khung mới",
+          "stop-using": "Ngừng dùng cho khung mới",
+          "switch-hint": "Các khung mới sẽ khởi động bằng tài khoản này. Các khung đang mở giữ tài khoản cũ cho đến khi khởi động lại.",
+          "pane-unavailable": "Các khung chưa thể dùng tài khoản này."
+        },
+        "error": {
+          "subscription-token": "Đây là token gói đăng ký, không phải khóa API. Hãy tạo khóa API trong bảng điều khiển của nhà cung cấp.",
+          "wrong-vendor": "Khóa này thuộc về nhà cung cấp khác.",
+          "invalid-secret": "Đây có vẻ không phải là khóa API.",
+          "invalid-name": "Nhập tên tối đa 60 ký tự.",
+          "invalid-reminder": "Nhập số tiền nhắc hằng tháng lớn hơn 0.",
+          "unsupported-agent": "CLI này chưa dùng được khóa API.",
+          "store-failed": "Không thể lưu vào keychain của máy tính này.",
+          "secret-missing": "Khóa này không còn trong keychain. Hãy dán lại.",
+          "not-found": "Khóa API này không còn tồn tại.",
+          "main-window-only": "Chỉ có thể quản lý khóa API trong Cài đặt.",
+          "internal-error": "Đã xảy ra lỗi. Hãy thử lại.",
+          "unsupported-platform": "Tài khoản khóa API của Claude Code chưa hỗ trợ Windows.",
+          "login-policy": "Tổ chức của bạn yêu cầu một phương thức đăng nhập cụ thể, nên không thể thêm tài khoản khóa API."
+        }
+      },
       "title": "Tài khoản Git",
       "encrypted-note": "Token được mã hóa bằng keychain của hệ điều hành và chỉ lưu trên máy này.",
       "unavailable": "Hệ thống này không hỗ trợ mã hóa, nên không thêm được tài khoản. Thường là do không truy cập được keychain của hệ điều hành.",

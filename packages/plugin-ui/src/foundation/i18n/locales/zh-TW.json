@@ -8259,6 +8259,85 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "pane": {
+          "title": "訂閱額度已用完",
+          "back-at": "{time} 恢復",
+          "back-unknown": "重置時間不明",
+          "wait": "等待重置"
+        },
+        "kind": "API key",
+        "list": {
+          "aria": "帳號",
+          "search": "搜尋帳號",
+          "add": "+ 新增帳號",
+          "login": "登入",
+          "empty": "沒有符合的帳號。"
+        },
+        "add": {
+          "title": "{agent} 要用哪種方式連線？",
+          "agent-label": "CLI",
+          "subscription": "用訂閱登入",
+          "subscription-desc": "在瀏覽器中授權，使用方案的額度。",
+          "api-key": "貼上 API key",
+          "api-key-desc": "依用量計費。金鑰只留在這台電腦。",
+          "api-key-unsupported": "這個 CLI 目前還不能使用 API key。",
+          "cloud": "連接雲端服務",
+          "cloud-desc": "Amazon Bedrock、Google Vertex 或 Microsoft Foundry。",
+          "endpoint": "連接自訂端點",
+          "endpoint-desc": "公司閘道或其他相容服務。",
+          "coming-soon": "即將推出"
+        },
+        "form": {
+          "title": "貼上 API key",
+          "billing": "這個帳號依用量計費，不會使用訂閱額度。",
+          "name": "名稱",
+          "key": "API key",
+          "key-new": "新的 API key",
+          "key-hint": "儲存後不會再顯示。",
+          "reminder": "每月支出提醒（USD）",
+          "reminder-hint": "這只是提醒，不是硬性上限。硬性上限請到廠商的主控台設定。",
+          "test": "測試金鑰",
+          "testing": "測試中…",
+          "test-ok": "金鑰可以使用。",
+          "test-rejected": "廠商拒絕了這組金鑰。",
+          "test-unknown": "無法檢查金鑰，但仍可儲存。",
+          "save": "儲存帳號"
+        },
+        "safe": {
+          "local": "只存放在這台電腦",
+          "no-sync": "絕不同步到 Navide Cloud"
+        },
+        "detail": {
+          "ends-with": "結尾為 {last4}",
+          "replace": "更換金鑰",
+          "replace-save": "儲存新金鑰",
+          "delete-title": "要刪除這組 API key 嗎？",
+          "delete-message": "{name} 會從這台電腦移除。金鑰在廠商端仍然有效，直到你在那裡撤銷。",
+          "auto-switch": "額度用完時可自動切到這個帳號",
+          "auto-switch-hint": "預設關閉。切換後的用量會計費到這把金鑰。",
+          "in-use": "新 pane 使用中",
+          "use-for-new-panes": "用於新 pane",
+          "stop-using": "新 pane 不再使用",
+          "switch-hint": "新開的 pane 會用這個帳號。已開的 pane 要重開才會換。",
+          "pane-unavailable": "pane 目前還不能使用這個帳號。"
+        },
+        "error": {
+          "subscription-token": "這是訂閱權杖，不是 API key。請到廠商的主控台建立 API key。",
+          "wrong-vendor": "這組金鑰屬於其他廠商。",
+          "invalid-secret": "這看起來不是 API key。",
+          "invalid-name": "請輸入 60 個字元以內的名稱。",
+          "invalid-reminder": "請輸入大於零的每月提醒金額。",
+          "unsupported-agent": "這個 CLI 目前還不能使用 API key。",
+          "store-failed": "無法儲存到這台電腦的鑰匙圈。",
+          "secret-missing": "鑰匙圈裡已沒有這組金鑰，請重新貼上。",
+          "not-found": "這組 API key 已不存在。",
+          "main-window-only": "API key 只能在設定中管理。",
+          "internal-error": "發生錯誤，請再試一次。",
+          "unsupported-platform": "Claude Code 的 API key 帳號目前還不支援 Windows。",
+          "login-policy": "你的組織規定要用指定方式登入，所以不能新增 API key 帳號。"
+        }
+      },
       "title": "Git 帳號",
       "encrypted-note": "Token 會透過作業系統金鑰鏈加密，只儲存在本機。",
       "unavailable": "此系統無法使用加密功能，因此無法新增帳號。通常代表作業系統金鑰鏈無法存取。",

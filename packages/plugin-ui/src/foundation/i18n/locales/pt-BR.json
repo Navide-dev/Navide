@@ -8259,6 +8259,85 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "pane": {
+          "title": "Cota da assinatura esgotada",
+          "back-at": "Volta às {time}",
+          "back-unknown": "O horário de redefinição é desconhecido",
+          "wait": "Aguardar a redefinição"
+        },
+        "kind": "chave de API",
+        "list": {
+          "aria": "Contas",
+          "search": "Pesquisar contas",
+          "add": "+ Adicionar conta",
+          "login": "Login",
+          "empty": "Nenhuma conta encontrada."
+        },
+        "add": {
+          "title": "Como {agent} deve se conectar?",
+          "agent-label": "CLI",
+          "subscription": "Entrar com uma assinatura",
+          "subscription-desc": "Autorize no navegador. Usa a cota do seu plano.",
+          "api-key": "Colar uma chave de API",
+          "api-key-desc": "Cobrado por uso. A chave fica neste computador.",
+          "api-key-unsupported": "As chaves de API ainda não estão disponíveis para esta CLI.",
+          "cloud": "Conectar um serviço de nuvem",
+          "cloud-desc": "Amazon Bedrock, Google Vertex ou Microsoft Foundry.",
+          "endpoint": "Conectar um endpoint personalizado",
+          "endpoint-desc": "Um gateway da empresa ou outro serviço compatível.",
+          "coming-soon": "Em breve"
+        },
+        "form": {
+          "title": "Colar uma chave de API",
+          "billing": "Esta conta é cobrada por uso. Ela não usa a cota da sua assinatura.",
+          "name": "Nome",
+          "key": "Chave de API",
+          "key-new": "Nova chave de API",
+          "key-hint": "Não será mostrada novamente depois de salvar.",
+          "reminder": "Lembrete de gasto mensal (USD)",
+          "reminder-hint": "Um lembrete, não um limite rígido. Defina limites rígidos no console do fornecedor.",
+          "test": "Testar chave",
+          "testing": "Testando…",
+          "test-ok": "A chave funciona.",
+          "test-rejected": "O fornecedor rejeitou esta chave.",
+          "test-unknown": "Não foi possível verificar a chave. Você ainda pode salvá-la.",
+          "save": "Salvar conta"
+        },
+        "safe": {
+          "local": "Armazenada apenas neste computador",
+          "no-sync": "Nunca sincronizada com o Navide Cloud"
+        },
+        "detail": {
+          "ends-with": "Termina em {last4}",
+          "replace": "Substituir chave",
+          "replace-save": "Salvar nova chave",
+          "delete-title": "Excluir esta chave de API?",
+          "delete-message": "{name} será removida deste computador. A chave continua válida no fornecedor até você revogá-la lá.",
+          "auto-switch": "Mudar para esta conta automaticamente quando a cota acabar",
+          "auto-switch-hint": "Desativado por padrão. Após a troca, o uso é cobrado nesta chave.",
+          "in-use": "Em uso em novos painéis",
+          "use-for-new-panes": "Usar em novos painéis",
+          "stop-using": "Parar de usar em novos painéis",
+          "switch-hint": "Novos painéis iniciam nesta conta. Painéis abertos mantêm a conta até serem reiniciados.",
+          "pane-unavailable": "Os painéis ainda não podem usar esta conta."
+        },
+        "error": {
+          "subscription-token": "Este é um token de assinatura, não uma chave de API. Crie uma chave de API no console do fornecedor.",
+          "wrong-vendor": "Esta chave pertence a outro fornecedor.",
+          "invalid-secret": "Isto não parece uma chave de API.",
+          "invalid-name": "Digite um nome com até 60 caracteres.",
+          "invalid-reminder": "Digite um valor mensal maior que zero para o lembrete.",
+          "unsupported-agent": "As chaves de API ainda não estão disponíveis para esta CLI.",
+          "store-failed": "Não foi possível salvar no chaveiro deste computador.",
+          "secret-missing": "Esta chave não está mais no chaveiro. Cole-a novamente.",
+          "not-found": "Esta chave de API não existe mais.",
+          "main-window-only": "As chaves de API só podem ser gerenciadas em Configurações.",
+          "internal-error": "Algo deu errado. Tente novamente.",
+          "unsupported-platform": "Contas com chave de API do Claude Code ainda não estão disponíveis no Windows.",
+          "login-policy": "Sua organização exige um método de login específico, por isso não é possível adicionar contas com chave de API."
+        }
+      },
       "title": "Contas do Git",
       "encrypted-note": "Os tokens são criptografados com o chaveiro do sistema e armazenados apenas nesta máquina.",
       "unavailable": "A criptografia não está disponível neste sistema, então não é possível adicionar contas. Isso normalmente significa que o chaveiro do sistema operacional não está acessível.",
