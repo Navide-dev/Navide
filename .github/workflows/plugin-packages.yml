@@ -45,7 +45,7 @@ jobs:
       matrix:
         include:
           - target: darwin-arm64
-            runner: macos-14
+            runner: macos-15
             timeout: 45
             arch: 'Mach-O 64-bit executable arm64'
           - target: linux-x64
