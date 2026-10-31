@@ -58,9 +58,15 @@ log = logging.getLogger(__name__)
 # line on stderr when none can be made. A random name rather than
 # GetTempFileName: that creates tmpXXXX.tmp and fails for good once 65535 are
 # left behind by hooks killed mid-wait; curl creates this file itself.
+# .NET calls only, never Join-Path / Get-Content / Remove-Item: those live in
+# Microsoft.PowerShell.Management, and its first use per process autoloads the
+# module, which cost about 23 s per hook run on the windows-11-arm runner where
+# `exit 0` starts in 0.4 s (release run 40904538508). The `throw` keeps
+# Join-Path's refusal of an unset TEMP; Combine would return a relative path.
 _PS_TEMP_PATH = (
     "$TMP = $null; $TMPERR = ''; "
-    "try { $TMP = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName()) } catch { $TMPERR = \"$_\" }; "
+    "try { if (-not $env:TEMP) { throw 'TEMP is not set' }; "
+    "$TMP = [IO.Path]::Combine($env:TEMP, [IO.Path]::GetRandomFileName()) } catch { $TMPERR = \"$_\" }; "
     "if (-not $TMP) { [Console]::Error.Write('navide hook: no temp file: ' + $TMPERR + "
     "[Environment]::NewLine); exit 0 }; "
 )
@@ -1705,6 +1711,18 @@ def _ps_quote(value: str) -> str:
     return f"'{escaped}'"
 
 
+def _ps_read_port(port_file: str) -> str:
+    """`$PORT` from the port file, `$null`-ish when it cannot be read.
+
+    What `Get-Content -ErrorAction SilentlyContinue` gave, without loading the
+    module it lives in (see `_PS_TEMP_PATH`): the lines with their endings
+    stripped, falsy for a missing or empty file, and a one-line file reads and
+    interpolates as that line. The path is literal, where Get-Content's -Path
+    read `[` and `]` in it as wildcards.
+    """
+    return f"$PORT = $null; try {{ $PORT = [IO.File]::ReadAllLines({_ps_quote(port_file)}) }} catch {{}}; "
+
+
 class WindowsScripts:
     def hook_entry(self, command: str) -> dict:
         # Without `shell`, Claude Code looks for Git Bash and only falls back
@@ -1752,12 +1770,12 @@ class WindowsScripts:
                 f"{_PS_TEMP_PATH}"
                 f"{post}; "
                 f"$OUTB = $null; try {{ $OUTB = [IO.File]::ReadAllBytes($TMP) }} catch {{}}; "
-                f"Remove-Item -LiteralPath $TMP -Force -ErrorAction SilentlyContinue; "
+                f"try {{ [IO.File]::Delete($TMP) }} catch {{}}; "
                 f"if ($OUTB) {{ $OUTS = [Console]::OpenStandardOutput(); "
                 f"$OUTS.Write($OUTB, 0, $OUTB.Length); $OUTS.Flush() }}"
             )
         return (
-            f"$PORT = Get-Content -ErrorAction SilentlyContinue {_ps_quote(port_file)}; "
+            f"{_ps_read_port(port_file)}"
             f"if ($PORT) {{ {post} }}; exit 0"
         )
 
@@ -1773,7 +1791,7 @@ class WindowsScripts:
         # left the parent console on 65001 when two hooks interleaved or one
         # was killed mid-wait.
         return (
-            f"$PORT = Get-Content -ErrorAction SilentlyContinue {_ps_quote(port_file)}; "
+            f"{_ps_read_port(port_file)}"
             f"if (-not $PORT) {{ exit 0 }}; "
             f"{_PS_TEMP_PATH}"
             f"& ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m {timeout_s} -o $TMP -X POST "
@@ -1783,7 +1801,7 @@ class WindowsScripts:
             f"--data-binary '@-' "
             f'"http://127.0.0.1:$PORT{url_path}" 2>$null; '
             f"$BODY = $null; try {{ $BODY = [IO.File]::ReadAllLines($TMP, [Text.Encoding]::UTF8) }} catch {{}}; "
-            f"Remove-Item -LiteralPath $TMP -Force -ErrorAction SilentlyContinue; "
+            f"try {{ [IO.File]::Delete($TMP) }} catch {{}}; "
             f"if (($BODY -join '').Trim()) {{ "
             f"$ERRB = [Text.Encoding]::UTF8.GetBytes(($BODY -join [Environment]::NewLine) + [Environment]::NewLine); "
             f"$ERRS = [Console]::OpenStandardError(); $ERRS.Write($ERRB, 0, $ERRB.Length); $ERRS.Flush(); "

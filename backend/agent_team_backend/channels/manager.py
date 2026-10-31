@@ -41,8 +41,8 @@ from .. import error_ledger, prompt_skills
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
 )
-from .base import ChannelAdapter, InboundMessage, Location, MediaTooLarge
-from .pairing import LinkInvites, SenderGate, parse_link_code
+from .base import ChannelAdapter, InboundMessage, Location, MediaTooLarge, is_shared_sender
+from .pairing import LinkInvites, SenderGate, normalize_code, parse_link_code
 from .registry import PLATFORMS, load_module
 from .store import DEFAULT_ACCOUNT, DEFAULT_VERBOSITY, VERBOSITIES, Binding, ChannelStore
 from .text import chunk_for, msg_blocks, strip_msg_markers
@@ -108,6 +108,7 @@ STATUS_POLL_S = 1.0
 DEBOUNCE_S = 0.5  # lines from one sender to one location within this window become one message
 DEBOUNCE_MAX_S = 3.0
 LONG_REPLY_MAX_CHUNKS = 3  # past this, a reply is a preview plus the whole text as a file
+TELEGRAM_DIRECT_KINDS = ("private", "direct")  # the adapter's chat type; what _remember_chat stores
 REPLY_QUOTE_MAX_CHARS = 500  # a native reply's quoted message, cut before it reaches the pane
 REPLY_QUOTE_NAME_MAX_CHARS = 64
 # Fixed wording: an untrusted author's display name is attacker-controlled text too.
@@ -134,6 +135,9 @@ MSG_TYPED_HINT = "可直接輸入：{commands}"
 BUSY_BUTTONS = [("↩️ 撤回排隊中的訊息", CANCEL_CALLBACK), ("⏹ 中斷 pane", STOP_CALLBACK)]
 MSG_UNBOUND = "🔌 這個聊天室已和 pane「{name}」中斷連接，之後的訊息不會再送進 pane。"
 MSG_BOUND = "🔗 已連接 pane「{name}」，在這裡傳的訊息會送進這個 pane；傳 stop 可以中斷。"
+MSG_BOUND_NEEDS_APPROVAL = "⚠️ 已連接 pane「{name}」，但這個聊天室的傳送者要先核准，訊息才會送進 pane。{how}"
+MSG_APPROVE_CODE = "請在 Navide 的 Settings → Channels 核准配對碼：{code}"
+MSG_APPROVE_SEND_FIRST = "請先私訊這個 bot 任一則訊息取得配對碼，再到 Navide 的 Settings → Channels 核准。"
 MSG_CHAT_TAKEN = "這個聊天室已連接到另一個 pane，請先在那個 pane 解除連接"
 MSG_LOGIN_PANE = "這個 pane 正在登入 CLI 帳號，畫面上有授權網址或代碼，不能連接到聊天室"
 MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷連接。"
@@ -171,7 +175,12 @@ MSG_PENDING_RELISTED = "↓ 已重新列在下方"
 MSG_HELD_BY_PROMPT = "⚠️ pane 正在等確認，這則訊息沒有送出。{how}"
 MSG_LINKED = "✅ 已連結 Navide。回到 Navide 在 pane 的聊天按鈕選這個聊天室即可。"
 MSG_LINK_FAILED = "⚠️ 連結失敗，請回到 Navide 重新取得代碼"
+MSG_LINK_PENDING = "⏳ 已收到代碼，請回到 Navide 核准這個連結（配對碼：{code}）"
+MSG_LINK_DM_ONLY = "⚠️ 這個代碼只能在和 bot 的私訊裡使用，已失效，請回到 Navide 重新取得代碼"
 LINK_TARGETS = ("direct", "group")
+# Platforms whose "direct" code travels only in a DM deep link (a separate "group"
+# code exists): seeing one in a group means it leaked, so it links nothing there.
+DM_ONLY_LINK_PLATFORMS = frozenset({"telegram"})
 QUICK_ADD_TIMEOUT_S = 10.0  # how long a quick add waits for the platform to accept the credential
 QUICK_ADD_POLL_S = 0.1
 # A whole quick add, the channels lock included: under the window's 45 s (QUICK_ADD_TIMEOUT_MS)
@@ -416,6 +425,9 @@ class ChannelManager:
         self.store = store
         self.gate = SenderGate(store)
         self.invites = LinkInvites()
+        # Invite codes redeemed by someone not yet allowed, by (platform, pairing code):
+        # (the invite code, the redeeming message). Approving that pairing code links the chat.
+        self._pending_links: dict[tuple[str, str], tuple[str, InboundMessage]] = {}
         self._seams = seams
         self._factory_for = factory_for
         self._clock = clock
@@ -1088,12 +1100,27 @@ class ChannelManager:
 
     def pairing_list(self, platform: str | None) -> dict[str, Any]:
         self.gate.prune()
-        return {"ok": True, "requests": [r.public() for r in self.store.list_pairing(platform or None)]}
+        # "invite": the request came from a redeemed link code (see ``_link_chat``).
+        return {"ok": True, "requests": [
+            {**r.public(), "source": "invite" if (r.platform, r.code) in self._pending_links else "pairing"}
+            for r in self.store.list_pairing(platform or None)]}
 
     async def pairing_approve(self, platform: str, code: str) -> dict[str, Any]:
-        req = self.gate.approve(platform, code)
+        via_invite = (platform, normalize_code(code)) in self._pending_links
+        req = self.gate.approve(platform, code, "invite" if via_invite else "pairing")
         if req is None:
             return {"ok": False, "error": "配對碼不存在或已過期 (unknown or expired code)"}
+        pending_link = self._pending_links.pop((platform, req.code), None)
+        if pending_link is not None:
+            # An invite redeemed by this sender: approving it completes that link.
+            invite_code, link_msg = pending_link
+            adapter = self._adapters.get((platform, req.account))
+            if adapter is None:
+                await self._link_failed(platform, invite_code, f"{platform} is not connected")
+                await self._changed()
+            else:
+                await self._complete_link(adapter, link_msg, invite_code)
+            return {"ok": True, "sender_id": req.sender_id}
         # Only the bot the sender wrote to can DM them back (it is stored with the request).
         adapter = self._adapters.get((platform, req.account))
         # The approved sender's DM is a chat the pane picker can offer right away.
@@ -1117,11 +1144,15 @@ class ChannelManager:
 
     async def pairing_reject(self, platform: str, code: str) -> dict[str, Any]:
         req = self.gate.reject(platform, code)
+        pending_link = self._pending_links.pop((platform, req.code), None) if req else None
+        if pending_link is not None:
+            await self._link_failed(platform, pending_link[0], "the link was rejected")
         await self._changed()
         return {"ok": req is not None, **({} if req else {"error": "unknown code"})}
 
     def link_create(self, platform: str, target: str, account: str = DEFAULT_ACCOUNT) -> dict[str, Any]:
-        """A one-time code that links whoever sends it to the bot (see ``_link_chat``)."""
+        """A one-time code that links whoever sends it to the bot once the user approves
+        them (see ``_link_chat``)."""
         _check_platform(platform)
         _check_account(account)
         target = target or "direct"
@@ -1137,7 +1168,10 @@ class ChannelManager:
                 "expires_at": invite.expires_at, "url": url or None}
 
     def allow_list(self, platform: str | None) -> dict[str, Any]:
-        return {"ok": True, "entries": self.store.list_allow(platform or None)}
+        # "shared": a Telegram id that stands for many people; the gate refuses it, and the
+        # UI offers to remove a row that names one (written before that rule).
+        return {"ok": True, "entries": [{**e, "shared": is_shared_sender(e["platform"], e["sender_id"])}
+                                        for e in self.store.list_allow(platform or None)]}
 
     async def allow_remove(self, platform: str, sender_id: str, account: str = DEFAULT_ACCOUNT) -> dict[str, Any]:
         _check_account(account)
@@ -1156,6 +1190,22 @@ class ChannelManager:
             for loc in known():
                 merged[str(loc.get("chat_id"))] = {**merged.get(str(loc.get("chat_id")), {}), **loc}
         return {"ok": True, "locations": list(merged.values())}
+
+    def _chat_usable(self, platform: str, account: str, chat_id: str, kind: str) -> bool:
+        """Whether a message from this chat can pass the sender gate. A Telegram DM's chat
+        id is its user's id, so that one sender is asked about. Any other chat (a group,
+        another platform's DM, a kind not known) names no sender here: all that can be
+        said is that a bot with nobody allowed refuses everyone."""
+        if platform == "telegram" and kind in TELEGRAM_DIRECT_KINDS:
+            return self.gate.is_allowed(platform, chat_id, account)
+        return self.gate.has_linked(platform, account)
+
+    def _bound_needs_approval(self, name: str, loc: Location) -> str:
+        """What a refused chat is told when bound: the code already waiting for it, else how to get one."""
+        self.gate.prune()
+        req = next((r for r in self.store.list_pairing(loc.platform, loc.account) if r.chat_id == loc.chat_id), None)
+        how = MSG_APPROVE_CODE.format(code=f"{req.code[:4]}-{req.code[4:]}") if req else MSG_APPROVE_SEND_FIRST
+        return MSG_BOUND_NEEDS_APPROVAL.format(name=name, how=how)
 
     async def bind(self, pane_id: str, pane_name: str, platform: str, mode: str,
                    chat_id: str, thread_id: str = "", title: str = "", *, verbosity: str = "",
@@ -1211,9 +1261,13 @@ class ChannelManager:
         self.mirror.schedule_sync()  # children the pane already has get their topics now
         # Tell the chat which pane it now drives; off the request path like unbind,
         # on the chat's worker so a quick unbind's notice cannot overtake it.
-        text = MSG_BOUND.format(name=pane_name or loc.title or pane_id)
+        name = pane_name or loc.title or pane_id
+        kind = next((str(c.get("kind") or "") for c in self.locations(platform, account)["locations"]
+                     if str(c.get("chat_id")) == loc.chat_id), "")
+        usable = self._chat_usable(platform, account, loc.chat_id, kind)
+        text = MSG_BOUND.format(name=name) if usable else self._bound_needs_approval(name, loc)
         self._enqueue(loc.key(), lambda: self._notice(adapter, loc, text))
-        return {"ok": True, "binding": binding.public()}
+        return {"ok": True, "binding": binding.public(), **({} if usable else {"needs_approval": True})}
 
     async def unbind(self, pane_id: str, *, reason: str = "", pane_name: str = "") -> dict[str, Any]:
         removed = self.store.unbind(pane_id)
@@ -1641,11 +1695,12 @@ class ChannelManager:
             return
         if self._is_duplicate(msg):
             return
-        # A live invite code links its sender before the gate: that is its whole point.
+        # A live invite code is handled before the gate: its sender asks to be linked
+        # (an approval request), so the group drop below must not swallow it.
         code = parse_link_code(msg.text) if msg.text and not msg.callback_data else ""
         invite = self.invites.consume(msg.platform, code, msg.account) if code else None
         if invite is not None:
-            self._enqueue(msg.location_key(), lambda: self._link_chat(msg, invite.code))
+            self._enqueue(msg.location_key(), lambda: self._link_chat(msg, invite.code, invite.target))
             return
         if not msg.is_direct and not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
             return  # group strangers are dropped silently
@@ -2148,20 +2203,52 @@ class ChannelManager:
             workspace = ""
         return relay.screen_approval(request.pane_id, request.prompt, workspace, record=record).action != "allow"
 
-    async def _link_chat(self, msg: InboundMessage, code: str) -> None:
+    async def _link_chat(self, msg: InboundMessage, code: str, target: str = "") -> None:
+        """An invite code arrived. An allowed sender's chat is linked now; anyone else gets
+        the pairing request a stranger's DM gets, and the link completes when the user
+        approves it (``pairing_approve``). The code never admits anyone by itself."""
         # The invite is already spent, so every way out must reach the waiting UI.
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
             await self._link_failed(msg.platform, code, f"{msg.platform} is not connected")
             return
+        if not msg.sender_id or is_shared_sender(msg.platform, msg.sender_id):
+            await self._reply(msg, MSG_LINK_FAILED)
+            await self._link_failed(msg.platform, code, "the sender cannot be identified")
+            return
+        if target == "direct" and not msg.is_direct and msg.platform in DM_ONLY_LINK_PLATFORMS:
+            await self._reply(msg, MSG_LINK_DM_ONLY)
+            await self._link_failed(msg.platform, code, "a direct-message code was sent in a group")
+            return
+        if self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            await self._complete_link(adapter, msg, code)
+            return
         try:
-            if not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
-                self.store.add_allow(msg.platform, msg.sender_id, msg.sender_name, int(time.time()), msg.account)
+            outcome = self.gate.request_pairing(msg.platform, msg.sender_id, msg.sender_name, msg.chat_id,
+                                                msg.account)
         except Exception as exc:  # noqa: BLE001 — reported to the sender and the UI below
-            log.warning("channels: allowlisting linked sender on %s failed: %s", msg.platform, exc)
+            log.warning("channels: pairing request for linked sender on %s failed: %s", msg.platform, exc)
             await self._reply(msg, MSG_LINK_FAILED)
             await self._link_failed(msg.platform, code, str(exc))
             return
+        if outcome.request is None:
+            await self._reply(msg, MSG_LINK_FAILED)
+            await self._link_failed(msg.platform, code, "too many pairing requests are waiting for approval")
+            return
+        live = {(r.platform, r.code) for r in self.store.list_pairing(None)}
+        self._pending_links = {k: v for k, v in self._pending_links.items() if k in live}
+        pairing_code = outcome.request.code
+        self._pending_links[(msg.platform, pairing_code)] = (code, msg)
+        await self._reply(msg, MSG_LINK_PENDING.format(code=f"{pairing_code[:4]}-{pairing_code[4:]}"))
+        if outcome.created:
+            await self._seams.broadcast("channels.pairing_request", {
+                "platform": msg.platform, "account": msg.account, "code": pairing_code,
+                "sender_name": msg.sender_name,
+            })
+        await self._changed()
+
+    async def _complete_link(self, adapter: ChannelAdapter, msg: InboundMessage, code: str) -> None:
+        """Remember an allowed sender's chat from invite ``code``, confirm it there and tell the UI."""
         kind = "direct" if msg.is_direct else "group"
         title = msg.sender_name
         if not msg.is_direct:
@@ -3268,8 +3355,10 @@ class ChannelManager:
                 "chat_id": b.chat_id, "title": "", "kind": "",
                 "supports_topics": bool(b.thread_id), "bindings": []})
             pane = self._pane_info(b, directory)
+            usable = self._chat_usable(b.platform, b.account, b.chat_id, chat["kind"])
             chat["bindings"].append({**b.public(), "pane_id": self._seams.resolve_pane(b.pane_id) or b.pane_id,
-                                     "created_at": b.created_at, "pane": pane})
+                                     "created_at": b.created_at, "pane": pane,
+                                     **({} if usable else {"needs_approval": True})})
             if not pane["exists"]:
                 entry["orphans"].append(b.pane_id)
         return {"ok": True, "bots": [{**v, "chats": list(v["chats"].values())} for v in bots.values()]}

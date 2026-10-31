@@ -351,8 +351,8 @@ for (const key of ['TMPDIR', 'TEMP', 'TMP'] as const) {
   if (typeof value === 'string' && value.length > 0) packagedBackendEnvironment[key] = value
 }
 
-// Staged official artifacts are keyed by the running App's version.
-const appVersion = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).version as string
+// Staged official artifacts are keyed by the plugin's own version, not the App's.
+const plansVersion = JSON.parse(readFileSync(join(process.cwd(), 'plugins/navide-plans/manifest.json'), 'utf8')).version as string
 
 describe('Plans packaged backend composition', () => {
   const managers: FrontendPluginManager[] = []
@@ -1223,7 +1223,7 @@ describe('Plans packaged backend composition', () => {
       managers.push(manager)
       try {
         manager.setPlansDiagnosticsEnabled(true)
-        expect(registerBundledPlans(manager, { isPackaged: false, resourcesPath: '', artifactVersion: appVersion, devRoot: process.cwd() })).toEqual({ registered: true })
+        expect(registerBundledPlans(manager, { isPackaged: false, resourcesPath: '', artifactVersion: plansVersion, devRoot: process.cwd() })).toEqual({ registered: true })
         const descriptor = manager.getDescriptor(PLANS_PLUGIN_ID)!
         const view = descriptor.views!.find((candidate) => candidate.contributionKey === 'navide.plans.window')!
         const packageDirectory = realpathSync(join(
@@ -1232,12 +1232,12 @@ describe('Plans packaged backend composition', () => {
           'official-artifacts',
           'factory-resources',
           PLANS_PLUGIN_ID,
-          appVersion,
+          plansVersion,
           `${process.platform}-${process.arch}`,
           'package',
         ))
         const packageVersion = JSON.parse(readFileSync(join(packageDirectory, 'manifest.json'), 'utf8')).version
-        expect(packageVersion).toBe(appVersion)
+        expect(packageVersion).toBe(plansVersion)
         expect(manager.getPlansProvenance()).toMatchObject({
           descriptorSource: 'factory-bundle',
           selectionOrigin: 'factory-bundle',

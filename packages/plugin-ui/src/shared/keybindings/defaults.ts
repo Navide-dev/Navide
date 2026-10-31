@@ -338,6 +338,20 @@ export const defaults: KeybindingRule[] = [
   // its Source Control sidebar (the rule above), and this one must sit AFTER
   // that rule to win where it applies.
   { key: 'cmd+shift+g', command: 'workbench.action.openGitWindow', when: 'paneStage && !findOpen' },
+  // Navide Browser, beside the built-in plugin windows.
+  { key: 'cmd+shift+x', command: 'workbench.action.openBrowser' },
+  // Off macOS only, beside the ⌘ rules (which stay as they were): ⌘ is the
+  // Win/Super key there, so ⌘⇧D / ⌘⇧G / ⌘⇧I / ⌘⇧X never reached Plans, Git, the
+  // Mini IDE or Navide Browser. Ctrl takes the same letter, except the Mini
+  // IDE: Ctrl+Shift+I is the menu's toggleDevTools accelerator off macOS, which
+  // fires before any renderer rule, so the Mini IDE takes Ctrl+Shift+M (not
+  // Ctrl+Alt+I: Ctrl+Alt is AltGr on Windows).
+  ...(isMacPlatform() ? [] : [
+    { key: 'ctrl+shift+d', command: 'workbench.action.openPlans' },
+    { key: 'ctrl+shift+g', command: 'workbench.action.openGitWindow', when: 'paneStage && !findOpen' },
+    { key: 'ctrl+shift+m', command: 'workbench.action.openMiniIDE' },
+    { key: 'ctrl+shift+x', command: 'workbench.action.openBrowser' },
+  ]),
 
   // ── Voice input ─────────────────────────────────────────────────────────────
   // Hold to talk into the focused CLI pane; releasing any key of the chord

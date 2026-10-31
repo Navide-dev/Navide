@@ -1471,7 +1471,8 @@
       "notice": "App Lock はプライバシー保護の画面で、アクセス制御ではありません。席を外している間、Navide のすべてのウィンドウを覆います。エージェント、ターミナル、チャット連携、MCP ツール、スケジュールは動作を続け、このコンピューターの前にいて知識のある人なら回避できます。",
       "section-lock": "ロック",
       "enabled": "App Lock をオンにする",
-      "enabled-hint": "先に PIN を設定してください。Touch ID がオンでも PIN でいつでもロックを解除できます。",
+      "enabled-hint": "先に PIN を設定してください。{system} がオンでも PIN でいつでもロックを解除できます。",
+      "enabled-hint-pin-only": "先に PIN を設定してください。PIN でロックを解除します。",
       "lock-now": "今すぐロック",
       "lock-now-hint": "すべてのウィンドウをすぐに覆います。ショートカット {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN を削除しました。App Lock はオフです。",
       "section-unlock": "ロック解除",
       "method": "ロック解除の方法",
-      "method-system": "Touch ID（予備は PIN）",
+      "method-system": "{system}（予備は PIN）",
       "method-pin": "PIN のみ",
-      "system-unavailable": "このコンピューターでは Touch ID を使えないため、Navide は PIN でロックを解除します。",
+      "system-unavailable": "このコンピューターでは {system} を使えないため、Navide は PIN でロックを解除します。",
+      "pin-only": "このシステムでは PIN でのみロックを解除します。Touch ID には Mac、Windows Hello には Windows 11 が必要です。",
       "section-auto": "自動ロック",
       "idle": "アイドル時間",
       "idle-hint": "このコンピューター全体でキーボードやマウスの操作がない時間です。",
@@ -1503,15 +1505,16 @@
       "on-suspend": "スリープ時",
       "on-start": "Navide の起動時",
       "section-forgot": "PIN を忘れた場合",
-      "reset-with-system": "Touch ID で PIN をリセット",
-      "forgot-system": "Touch ID で本人確認してから、新しい PIN を設定します。",
-      "forgot-manual-title": "Touch ID がない場合",
+      "reset-with-system": "{system} で PIN をリセット",
+      "forgot-system": "{system} で本人確認してから、新しい PIN を設定します。",
+      "forgot-manual-title": "{system} がない場合",
+      "forgot-manual-title-pin-only": "手動でリセット",
       "forgot-manual": "Navide を終了し、Navide のデータフォルダーにある app-lock.json を削除してください。App Lock とその PIN だけが消え、ほかには影響しません。",
       "error-invalid-pin": "4〜12 桁の数字を使ってください。",
       "error-mismatch": "2 つの PIN が一致しません。",
       "error-wrong-pin": "現在の PIN が違います。",
       "error-cooldown": "試行回数が多すぎます。{seconds} 秒後にもう一度お試しください。",
-      "error-system-failed": "Touch ID で本人確認できませんでした。",
+      "error-system-failed": "{system} で本人確認できませんでした。",
       "error-generic": "うまくいきませんでした。もう一度お試しください。"
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "ロック画面ですべてのウィンドウを隠し、Touch ID または PIN で解除します"
+          "summary": "ロック画面ですべてのウィンドウを隠し、Touch ID、Windows Hello または PIN で解除します"
         },
         "voice-input": {
           "title": "音声入力",
@@ -1968,6 +1971,8 @@
         "offUnsaved": "サードパーティのネイティブバックエンドはいまはオフですが、Navide がこの設定を保存できなかったため、Navide を再起動するとまたオンになります。",
         "offUnsavedRetry": "もう一度試す",
         "agentTools": {
+          "firstParty": "エージェントに純正 Navide プラグインのツール呼び出しを許可",
+          "firstPartyDescription": "既定でオン。Navide Browser など Navide が作る純正 Navide プラグインのツールを、ペイン内のエージェントがバージョンごとの確認なしで呼び出せるようにします。結果は引き続き外部コンテンツとして扱われ、変更を伴うツールはワークスペースごとに一度確認します。",
           "enable": "エージェントにサードパーティ製 Navide プラグインのツール呼び出しを許可",
           "description": "許可した Navide プラグインが宣言するツールを、ペイン内のエージェントが呼び出せるようにします。ファイルを変更するツールはワークスペースごとに一度だけ確認します。",
           "externalCallers": "外部の MCP クライアントにも許可",
@@ -2016,6 +2021,7 @@
       "nativeOnMarker": "ネイティブコード オン",
       "browseMarketplace": "Navide マーケットプレイスを見る",
       "bundledGit": "同梱の Git",
+      "bundledBrowser": "同梱のブラウザー",
       "state": {
         "active": "有効",
         "removed": "削除済み",
@@ -2081,6 +2087,7 @@
       "permissionDetails": "権限と付与",
       "permissionDetailsWithActivity": "権限・付与・アクティビティ",
       "plansRiskNote": "この Navide プラグインは独自のバックエンドプログラムを持ち、あなたのユーザー権限で動作し、サンドボックスはありません。現在のプロジェクトのプランドキュメントを扱います：上方向に見つかった Git リポジトリのルート（その中のネストされたリポジトリを含む）から、任意の深さにある .agent-team・.claude・.cursor・docs 配下の plans／reports 系フォルダー、ルートの .plans、およびそれらの .history（読み取り専用）です。プランドキュメントの読み取りと書き込みはどちらもこの Navide プラグインのバックエンドが直接行い、削除と名前変更は引き続き Navide を経由します。",
+      "browserRiskNote": "この Navide プラグインは独自のバックエンドプログラムを持ち、あなたのユーザー権限で動作し、サンドボックスはありません。任意のウェブサイトを開いて閲覧できます。サイトのログイン情報はこのコンピューターに保存されます。agent はこの Navide プラグインが開いたすべてのページの内容とログイン状態を読み取れます。",
       "searchPlaceholder": "Navide プラグインを検索",
       "search": "検索",
       "install": "インストール",
@@ -8127,6 +8134,7 @@
         "workbench_action_navigateForward": "進む",
         "workbench_action_newFile": "新しいファイル",
         "workbench_action_newWindow": "新しいウィンドウ",
+        "workbench_action_openBrowser": "Navide Browser を開く",
         "workbench_action_openDebug": "デバッグを開く",
         "workbench_action_openEditorAtIndex1": "1 番目のエディターを開く",
         "workbench_action_openEditorAtIndex2": "2 番目のエディターを開く",
@@ -10815,6 +10823,7 @@
       "topic": "トピック「{title}」→",
       "gone": "pane はもうありません",
       "orphan-hint": "接続を解除せずに閉じられました · このチャットのメッセージはどこにも届きません",
+      "needs-approval": "送信者を承認するまで、このチャットのメッセージは拒否されます",
       "clear": "消去",
       "focus": "pane へ移動 ↗",
       "unbind": "接続を解除",
@@ -10894,7 +10903,11 @@
     "allow": {
       "title": "許可リスト",
       "empty": "まだ誰も許可されていません。",
-      "remove": "削除"
+      "remove": "削除",
+      "via-pairing": "ペアリングコード",
+      "via-invite": "リンクコード",
+      "shared": "共有 ID",
+      "shared-hint": "この Telegram ID は多くの人（匿名の管理者、チャンネル、Telegram 自体）を表すため、常に拒否されます。削除できます。"
     },
     "pane": {
       "connect": "チャットに接続",
@@ -10909,6 +10922,7 @@
       "manage-chats": "チャット連携の設定を管理",
       "taken-by": "接続中：{pane}",
       "taken-hint": "別の pane に接続済みです。そちらで接続を解除すると選べます。",
+      "needs-approval": "接続しましたが、設定 → チャット連携 で送信者を承認するまで、このチャットのメッセージは拒否されます。",
       "bind-level-label": "チャットに届く内容",
       "back": "戻る",
       "confirm": "接続",

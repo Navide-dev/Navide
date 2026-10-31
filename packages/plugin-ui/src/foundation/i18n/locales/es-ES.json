@@ -1471,7 +1471,8 @@
       "notice": "App Lock es una pantalla de privacidad, no un control de acceso. Cubre todas las ventanas de Navide mientras no estás. Los agentes, los terminales, los canales de chat, las herramientas MCP y las programaciones siguen en marcha, y alguien frente a este ordenador que sepa cómo puede saltárselo.",
       "section-lock": "Bloqueo",
       "enabled": "Activar App Lock",
-      "enabled-hint": "Define primero un PIN. El PIN siempre desbloquea, aunque Touch ID esté activado.",
+      "enabled-hint": "Define primero un PIN. El PIN siempre desbloquea, aunque {system} esté activado.",
+      "enabled-hint-pin-only": "Define primero un PIN. Es con lo que desbloqueas.",
       "lock-now": "Bloquear ahora",
       "lock-now-hint": "Cubre todas las ventanas al instante. Atajo {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN quitado. App Lock está desactivado.",
       "section-unlock": "Desbloqueo",
       "method": "Desbloquear con",
-      "method-system": "Touch ID, con el PIN como alternativa",
+      "method-system": "{system}, con el PIN como alternativa",
       "method-pin": "Solo PIN",
-      "system-unavailable": "Touch ID no está disponible en este ordenador, así que Navide se desbloquea con tu PIN.",
+      "system-unavailable": "{system} no está disponible en este ordenador, así que Navide se desbloquea con tu PIN.",
+      "pin-only": "En este sistema Navide se desbloquea solo con tu PIN: Touch ID requiere un Mac y Windows Hello, Windows 11.",
       "section-auto": "Bloqueo automático",
       "idle": "Tras inactividad",
       "idle-hint": "Tiempo sin usar el teclado ni el ratón en todo este ordenador.",
@@ -1503,15 +1505,16 @@
       "on-suspend": "Al entrar el ordenador en reposo",
       "on-start": "Al iniciar Navide",
       "section-forgot": "¿Has olvidado el PIN?",
-      "reset-with-system": "Restablecer PIN con Touch ID",
-      "forgot-system": "Touch ID confirma que eres tú y luego eliges un PIN nuevo.",
-      "forgot-manual-title": "Sin Touch ID",
+      "reset-with-system": "Restablecer PIN con {system}",
+      "forgot-system": "{system} confirma que eres tú y luego eliges un PIN nuevo.",
+      "forgot-manual-title": "Sin {system}",
+      "forgot-manual-title-pin-only": "Restablecerlo a mano",
       "forgot-manual": "Cierra Navide y borra app-lock.json de la carpeta de datos de Navide. Así se quitan App Lock y su PIN, y nada más.",
       "error-invalid-pin": "Usa de 4 a 12 dígitos.",
       "error-mismatch": "Los dos PIN no coinciden.",
       "error-wrong-pin": "El PIN actual es incorrecto.",
       "error-cooldown": "Demasiados intentos. Vuelve a intentarlo en {seconds} s.",
-      "error-system-failed": "Touch ID no ha confirmado que seas tú.",
+      "error-system-failed": "{system} no ha confirmado que seas tú.",
       "error-generic": "No ha funcionado. Inténtalo de nuevo."
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "Oculta todas las ventanas tras una pantalla de bloqueo y desbloquea con Touch ID o un PIN"
+          "summary": "Oculta todas las ventanas tras una pantalla de bloqueo y desbloquea con Touch ID, Windows Hello o un PIN"
         },
         "voice-input": {
           "title": "Entrada de voz",
@@ -1968,6 +1971,8 @@
         "offUnsaved": "Los backends nativos de terceros están desactivados por ahora, pero Navide no pudo guardarlo, así que volverán a estar activados al reiniciar Navide.",
         "offUnsavedRetry": "Reintentar",
         "agentTools": {
+          "firstParty": "Permitir que los agents llamen a herramientas de complementos de Navide oficiales",
+          "firstPartyDescription": "Activado de forma predeterminada. Permite que los agentes de tus panes llamen a las herramientas de los complementos de Navide oficiales, los que hace Navide como Navide Browser, sin preguntar por cada versión. Sus resultados se siguen marcando como contenido externo, y una herramienta que cambia algo sigue preguntando una vez por espacio de trabajo.",
           "enable": "Permitir que los agents llamen a herramientas de complementos de Navide de terceros",
           "description": "Permite que los agentes de tus panes llamen a las herramientas que declaran los complementos de Navide que permitiste; una herramienta que cambia archivos pregunta una vez por espacio de trabajo.",
           "externalCallers": "Permitir que también las llamen clientes MCP externos",
@@ -2016,6 +2021,7 @@
       "nativeOnMarker": "Código nativo activado",
       "browseMarketplace": "Explorar Navide Marketplace",
       "bundledGit": "Git integrado",
+      "bundledBrowser": "Navegador integrado",
       "state": {
         "active": "Activo",
         "removed": "Quitado",
@@ -2081,6 +2087,7 @@
       "permissionDetails": "Permisos y concesiones",
       "permissionDetailsWithActivity": "Permisos, concesiones y actividad",
       "plansRiskNote": "Este complemento de Navide tiene su propio programa backend, que se ejecuta con tus permisos de usuario y sin entorno aislado. Trabaja con los documentos de plan del proyecto actual, empezando por la raíz del repositorio Git que encuentra por encima (incluidos los repositorios anidados): las carpetas de planes e informes de .agent-team, .claude, .cursor y docs a cualquier profundidad, .plans en la raíz y su .history (solo lectura). Su backend las lee y escribe directamente; las eliminaciones y los cambios de nombre siguen pasando por Navide.",
+      "browserRiskNote": "Este complemento de Navide tiene su propio programa backend, que se ejecuta con tus permisos de usuario y sin entorno aislado. Puede abrir y navegar por cualquier sitio web. Los inicios de sesión en los sitios se guardan en este ordenador. Los agentes pueden leer cada página que abre este complemento de Navide y su estado de inicio de sesión.",
       "searchPlaceholder": "Buscar complementos de Navide",
       "search": "Buscar",
       "install": "Instalar",
@@ -8127,6 +8134,7 @@
         "workbench_action_navigateForward": "Ir adelante",
         "workbench_action_newFile": "Nuevo archivo",
         "workbench_action_newWindow": "Nueva ventana",
+        "workbench_action_openBrowser": "Abrir Navide Browser",
         "workbench_action_openDebug": "Abrir depuración",
         "workbench_action_openEditorAtIndex1": "Abrir editor en la posición 1",
         "workbench_action_openEditorAtIndex2": "Abrir editor en la posición 2",
@@ -10815,6 +10823,7 @@
       "topic": "Tema «{title}» →",
       "gone": "El pane ya no existe",
       "orphan-hint": "Cerrado sin desvincular · los mensajes de este chat no llegan a ningún sitio",
+      "needs-approval": "Los mensajes de este chat se rechazan hasta que apruebes a su remitente",
       "clear": "Borrar",
       "focus": "Saltar al pane ↗",
       "unbind": "Desvincular",
@@ -10894,7 +10903,11 @@
     "allow": {
       "title": "Remitentes permitidos",
       "empty": "Aún no hay nadie permitido.",
-      "remove": "Quitar"
+      "remove": "Quitar",
+      "via-pairing": "Código de emparejamiento",
+      "via-invite": "Código de vinculación",
+      "shared": "ID compartido",
+      "shared-hint": "Este ID de Telegram representa a muchas personas (administradores anónimos, canales, el propio Telegram), así que siempre se rechaza. Puedes quitarlo."
     },
     "pane": {
       "connect": "Conectar a un chat",
@@ -10909,6 +10922,7 @@
       "manage-chats": "Gestionar los ajustes de chat",
       "taken-by": "Conectado a {pane}",
       "taken-hint": "Conectado a otro pane. Desvincúlalo allí para usar este chat aquí.",
+      "needs-approval": "Conectado, pero los mensajes de este chat se rechazan hasta que apruebes a su remitente en Ajustes → Channels.",
       "bind-level-label": "Qué recibe el chat",
       "back": "Atrás",
       "confirm": "Conectar",

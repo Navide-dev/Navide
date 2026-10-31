@@ -5,7 +5,7 @@ import { guardLastWindowClose } from './last-window-close'
 import { join, dirname, basename, isAbsolute, relative, sep } from 'node:path'
 import { writeFile, readFile, mkdir } from 'node:fs/promises'
 import { readFileSync, statSync, existsSync, realpathSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { release as osRelease, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import {
   startBackend,
@@ -79,6 +79,7 @@ import {
 } from './plugins/pluginBackendSupervisor'
 import { bundledMiniIdeV2Dir, MINI_IDE_CONTRIBUTION, activateInstalledMiniIdeRecovery } from './plugins/miniIdePackage'
 import { MINI_IDE_PLUGIN_ID, MiniIdeStorageLifecycleSelector } from './plugins/miniIdeStorageLifecycle'
+import { officialPluginVersion, supersedingBundledVersions } from './plugins/officialPluginVersions'
 import { createMiniIdeStorageMigrationGate, type MiniIdeStorageAvailability } from './plugins/miniIdeStorageMigrationGate'
 import { createMiniIdeLegacyPreferences } from './plugins/miniIdeLegacyPreferences'
 import { recoverFailedGitV2Activation } from './plugins/gitV2ActivationRecovery'
@@ -192,7 +193,9 @@ import { registerSpotlightSettingsIpc } from './spotlight-settings-ipc'
 import { AppLockController } from './appLock'
 import { AppLockOverlay } from './appLockOverlay'
 import { APP_LOCK_FILE } from './appLockStore'
+import { APP_LOCK_SYSTEM_NAMES, type AppLockStatus, type AppLockSystemKind } from '../shared/appLock'
 import { appLockStrings } from './appLockStrings'
+import { hwndArg, runHelper, WindowsHello, windowsHelloHelperPath } from './windowsHello'
 import { registerAppLockIpc } from './app-lock-ipc'
 import { registerSpokenContentSettingsIpc } from './spoken-content-settings-ipc'
 import { createDeepLinkRouter, registerDeepLinkIpc } from './deep-link'
@@ -386,7 +389,7 @@ function registerForcedLegacyGit(): void {
   const recovery = registerLegacyBundledGit(frontendPluginManager, {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
-    artifactVersion: app.getVersion(),
+    artifactVersion: officialPluginVersion('navide.git'),
   })
   if (!recovery.registered) {
     warnMain(`[main] NAVIDE_GIT_RECOVERY=legacy but legacy Git bundle is unavailable: ${recovery.reason}`)
@@ -1238,6 +1241,15 @@ function refuseDisabledBuiltin(pluginId: string, target?: BrowserWindow | null, 
   }
   return true
 }
+// An installed Marketplace copy of a first-party plugin is superseded when the
+// App bundles a newer version. Only ids whose bundled copy is attempted below
+// take part: an opted-out factory copy or a forced legacy Git or Plans recovery
+// keeps the installed package in charge.
+frontendPluginManager.setBundledPluginVersions(supersedingBundledVersions({
+  optedOut: (pluginId) => pluginFactoryOptOuts.has(pluginId),
+  gitRecoveryForced,
+  plansRecoveryForced,
+}))
 const installedPluginLoad = frontendPluginManager.loadInstalledPlugins(pluginsRoot(), {
   provenance: 'official-registry',
   trust: installedPluginTrust,
@@ -1253,7 +1265,12 @@ const installedGitDescriptorPresent = frontendPluginManager.getDescriptor('navid
 const miniIdeSource = {
   isPackaged: app.isPackaged,
   resourcesPath: process.resourcesPath,
-  artifactVersion: app.getVersion(),
+  artifactVersion: officialPluginVersion(MINI_IDE_PLUGIN_ID),
+}
+const gitSource = {
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  artifactVersion: officialPluginVersion('navide.git'),
 }
 const installedMiniIdeDescriptorPresent = frontendPluginManager.getDescriptor(MINI_IDE_PLUGIN_ID) !== undefined
 frontendPluginManager.setContributionIconResolver(contributionIcon)
@@ -1484,7 +1501,10 @@ for (const activation of installedPluginLoad.activationCatalog) {
     : thirdPartyBackendActivation(activation)
   if (!spec || frontendPluginManager.hasBackendActivation(activation.pluginId, activation.packageVersion)) continue
   try {
-    frontendPluginManager.registerBackendActivation(spec)
+    // A registry-installed built-in (navide.browser) the user disabled keeps
+    // its backend for Enable instead of starting it.
+    if (isFirstPartyBackendPlugin(activation.pluginId)) frontendPluginManager.registerBuiltinBackendActivation(spec)
+    else frontendPluginManager.registerBackendActivation(spec)
   } catch (error) {
     console.warn(
       `[main] third-party backend for ${activation.pluginId} was not registered: ${
@@ -1528,7 +1548,7 @@ frontendPluginManager.setExecutionPolicyResolver((workspacePath?: string): Execu
 })
 const factoryGitActivations = installedPluginLoad.activationCatalog.slice(0, 0)
 const factoryGitDir = (): string => officialPluginArtifactPackageDir(
-  miniIdeSource,
+  gitSource,
   'navide.git',
   UNIVERSAL_PLUGIN_TARGET,
 )
@@ -1588,6 +1608,56 @@ if (!installedMiniIdeDescriptorPresent && !pluginFactoryOptOuts.has(MINI_IDE_PLU
   if (factoryMiniIde.loaded) factoryMiniIdeActivations.push(factoryMiniIde.activation)
   else warnMain(`[main] bundled Mini-IDE v2 unavailable: ${factoryMiniIde.reason}`)
 }
+// navide.browser: an App-bundled first-party package like Git, whose native
+// backend starts like Plans (pluginFirstPartyBackends.ts). Built per host
+// target, because its backend is a native program. A registry install of it
+// takes precedence, as for Git and Mini-IDE.
+const BROWSER_PLUGIN_ID = 'navide.browser'
+const browserSource = {
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  artifactVersion: officialPluginVersion(BROWSER_PLUGIN_ID),
+}
+const factoryBrowserDir = (): string => officialPluginArtifactPackageDir(
+  browserSource,
+  BROWSER_PLUGIN_ID,
+  currentPluginHostTarget(),
+)
+/** Load the bundled browser package. A build without it (no staged
+ *  dist-plugins/navide-browser) is not an error: nothing is loaded. */
+function loadFactoryBrowserPackage():
+  | { loaded: true; pluginId: string; packageVersion: string; activation: PluginActivationCatalogEntry }
+  | { loaded: false; reason: string; absent?: true } {
+  if (!existsSync(join(factoryBrowserDir(), 'manifest.json'))) {
+    return { loaded: false, reason: 'factory package is not bundled', absent: true }
+  }
+  const factoryBrowser = frontendPluginManager.loadFactoryPlugin(factoryBrowserDir(), BROWSER_PLUGIN_ID)
+  if (!factoryBrowser.loaded) return factoryBrowser
+  const descriptor = frontendPluginManager.getDescriptor(factoryBrowser.pluginId)
+  const policy = descriptor?.capabilityPolicy
+  if (policy?.kind !== 'manifest-v2') {
+    frontendPluginManager.removeInstalledPlugin(factoryBrowser.pluginId, { restoreBuiltin: false })
+    return { loaded: false as const, reason: 'factory package has no Manifest v2 policy' }
+  }
+  pluginCapabilityGrants.set(factoryBrowser.pluginId, {
+    packageVersion: factoryBrowser.packageVersion,
+    system: [...policy.system],
+    ...(policy.shell ? { shell: policy.shell } : {}),
+    storage: true,
+  })
+  const backend = factoryBrowser.activation.backend ? firstPartyBackendActivation(factoryBrowser.activation) : null
+  if (backend && !frontendPluginManager.hasBackendActivation(backend.pluginId, backend.packageVersion)) {
+    frontendPluginManager.registerBuiltinBackendActivation(backend)
+  }
+  return factoryBrowser
+}
+const installedBrowserDescriptorPresent = frontendPluginManager.getDescriptor(BROWSER_PLUGIN_ID) !== undefined
+const factoryBrowserActivations = installedPluginLoad.activationCatalog.slice(0, 0)
+if (!installedBrowserDescriptorPresent && !pluginFactoryOptOuts.has(BROWSER_PLUGIN_ID)) {
+  const factoryBrowser = loadFactoryBrowserPackage()
+  if (factoryBrowser.loaded) factoryBrowserActivations.push(factoryBrowser.activation)
+  else if (!factoryBrowser.absent) warnMain(`[main] bundled navide.browser unavailable: ${factoryBrowser.reason}`)
+}
 if (shouldAttemptFactoryGit({
   forcedLegacy: gitRecoveryEnabled,
   installedPackagePresent: installedGitDescriptorPresent,
@@ -1598,7 +1668,7 @@ if (shouldAttemptFactoryGit({
     activateLegacy: () => registerLegacyBundledGit(frontendPluginManager, {
       isPackaged: app.isPackaged,
       resourcesPath: process.resourcesPath,
-      artifactVersion: app.getVersion(),
+      artifactVersion: officialPluginVersion('navide.git'),
     }),
   })
   if (selection.mode === 'v2') factoryGitActivations.push(selection.activation)
@@ -1620,7 +1690,7 @@ frontendPluginManager.setActivationFailureHandler((failure) => {
     activateLegacy: () => registerLegacyBundledGit(frontendPluginManager, {
       isPackaged: app.isPackaged,
       resourcesPath: process.resourcesPath,
-      artifactVersion: app.getVersion(),
+      artifactVersion: officialPluginVersion('navide.git'),
     }),
     onActivated: () => {
       // The only record of *why* the session downgraded. Without it a user
@@ -1709,6 +1779,7 @@ let approvedInstalledPluginActivations = [
   ...installedPluginLoad.activationCatalog,
   ...factoryGitActivations,
   ...factoryMiniIdeActivations,
+  ...factoryBrowserActivations,
 ]
 for (const error of installedPluginLoad.errors) {
   console.warn(`[main] installed plugin quarantined: ${error}`)
@@ -1728,7 +1799,7 @@ const terminalStorageOwnerService = new TerminalStorageOwnerService({
           bundledMiniIdeDir({
             isPackaged: app.isPackaged,
             resourcesPath: process.resourcesPath,
-            artifactVersion: app.getVersion(),
+            artifactVersion: officialPluginVersion(MINI_IDE_PLUGIN_ID),
           }),
           'index.html',
         ),
@@ -1752,21 +1823,47 @@ const appLockOverlay = new AppLockOverlay({
     ? { url: process.env['ELECTRON_RENDERER_URL'] }
     : { filePath: join(__dirname, '../renderer/index.html') },
 })
+// Windows 11 unlocks with Windows Hello through navide-hello.exe; macOS with
+// Touch ID; Linux and Windows 10 with the PIN only.
+const windowsHello = new WindowsHello({
+  platform: process.platform,
+  osRelease: osRelease(),
+  helperPath: () => windowsHelloHelperPath(app.isPackaged, process.resourcesPath, app.getAppPath()),
+  run: runHelper,
+  log: logMain,
+})
+const appLockSystemKind: AppLockSystemKind | null = isMac() ? 'touch-id' : windowsHello.supported() ? 'windows-hello' : null
+const appLockSystemName = (): string => APP_LOCK_SYSTEM_NAMES[appLockSystemKind ?? 'touch-id']
+function publishAppLockStatus(status: AppLockStatus): void {
+  if (status.locked) appLockOverlay.show()
+  else appLockOverlay.hide()
+  rebuildAppMenu()
+  for (const win of mainWindows) {
+    if (!win.isDestroyed()) win.webContents.send('app-lock:status-changed', status)
+  }
+}
 const appLock = new AppLockController({
   filePath: join(app.getPath('userData'), APP_LOCK_FILE),
   now: () => Date.now(),
   systemIdleSeconds: () => powerMonitor.getSystemIdleTime(),
-  canPromptSystem: () => isMac() && systemPreferences.canPromptTouchID(),
-  promptSystem: () => systemPreferences.promptTouchID(appLockStrings(currentUiLocale()).systemReason),
-  onChange: (status) => {
-    if (status.locked) appLockOverlay.show()
-    else appLockOverlay.hide()
-    rebuildAppMenu()
-    for (const win of mainWindows) {
-      if (!win.isDestroyed()) win.webContents.send('app-lock:status-changed', status)
-    }
+  systemKind: appLockSystemKind,
+  canPromptSystem: () =>
+    appLockSystemKind === 'touch-id' ? systemPreferences.canPromptTouchID() : windowsHello.isAvailable(),
+  promptSystem: () => {
+    const reason = appLockStrings(currentUiLocale(), appLockSystemName()).systemReason
+    if (appLockSystemKind === 'touch-id') return systemPreferences.promptTouchID(reason)
+    // Parent the dialog to the window the user is looking at, so it opens in front.
+    const win = BrowserWindow.getFocusedWindow() ?? [...mainWindows].find((w) => !w.isDestroyed())
+    if (!win) return Promise.reject(new Error('no window for Windows Hello'))
+    return windowsHello.verify(hwndArg(win.getNativeWindowHandle()), reason.charAt(0).toLocaleUpperCase() + reason.slice(1))
   },
+  onChange: (status) => publishAppLockStatus(status),
 })
+// Settings reads the status again whenever it opens; this keeps "Windows Hello
+// available" current after the user sets it up or removes it.
+const refreshWindowsHello = (): void => {
+  void windowsHello.refresh().then((changed) => { if (changed) publishAppLockStatus(appLock.status()) })
+}
 app.on('browser-window-created', (_event, win) => appLockOverlay.watch(win))
 const filePickerHostService = new FilePickerHostService({
   preloadPath: join(__dirname, '../preload/file-picker-preload.js'),
@@ -1857,7 +1954,9 @@ const applyPluginActivationChange = ({
         ? firstPartyBackendActivation(activation)
         : thirdPartyBackendActivation(activation)
     if (backend && !frontendPluginManager.hasBackendActivation(pluginId, activation.packageVersion)) {
-      frontendPluginManager.registerBackendActivation(backend)
+      // A disabled built-in browser keeps its backend for Enable.
+      if (isFirstPartyAgentToolPlugin(pluginId)) frontendPluginManager.registerBuiltinBackendActivation(backend)
+      else frontendPluginManager.registerBackendActivation(backend)
     }
   }
   approvedInstalledPluginActivations = approvedInstalledPluginActivations.filter(
@@ -1967,11 +2066,11 @@ agentToolsHost = new PluginAgentToolsHost({
   listFirstPartyPackages: registeredFirstPartyAgentToolSpecs,
   // Native backends turned off globally or for the package count as disabled.
   // A first-party package is not a third-party native backend: only its own
-  // Disabled switch applies (the installed-package one: it is a Marketplace
-  // package).
+  // Disabled switch applies (the built-in one for the bundled browser, the
+  // installed-package one for a Marketplace package).
   isDisabled: (pluginId) =>
     isFirstPartyAgentToolPlugin(pluginId)
-      ? frontendPluginManager.isPluginDisabled(pluginId)
+      ? frontendPluginManager.isPluginDisabled(pluginId) || frontendPluginManager.isBuiltinPluginDisabled(pluginId)
       : !nativeBackendStore.isEnabled() ||
         frontendPluginManager.isPluginDisabled(pluginId) ||
         nativeBackendStore.record(pluginId).disabled === true,
@@ -2087,7 +2186,7 @@ const pluginTrustRefresh = registerPluginIpc(
         frontendPluginManager.setMiniIdeStorageSnapshotContext('', null)
       }
     },
-    factoryPackageIds: ['navide.git', MINI_IDE_PLUGIN_ID],
+    factoryPackageIds: ['navide.git', MINI_IDE_PLUGIN_ID, BROWSER_PLUGIN_ID],
     // loadFactoryPackage refuses the same way, but only after the open Git
     // views were drained; asking first keeps the button hidden instead.
     factoryRollbackRefusal: (pluginId) => {
@@ -2118,6 +2217,22 @@ const pluginTrustRefresh = registerPluginIpc(
         disabled: frontendPluginManager.isBuiltinPluginDisabled(pluginId),
         ...(builtinRemovedEarlier.has(pluginId) ? { dataDeletedByEarlierRemoval: true } : {}),
       })
+      // The browser row is listed only in a build that ships it, or while a
+      // copy of it is loaded.
+      const browserDescriptor = frontendPluginManager.getDescriptor(BROWSER_PLUGIN_ID)
+      const browserFactoryActive = frontendPluginManager
+        .listInstalledPackages()
+        .some((pkg) => pkg.id === BROWSER_PLUGIN_ID && pkg.provenance === 'factory-bundled') &&
+        browserDescriptor?.capabilityPolicy?.kind === 'manifest-v2'
+      const browserRows = browserDescriptor || existsSync(join(factoryBrowserDir(), 'manifest.json'))
+        ? [{
+            id: BROWSER_PLUGIN_ID,
+            version: browserFactoryActive ? browserDescriptor?.packageVersion ?? null : null,
+            active: browserFactoryActive,
+            optedOut: pluginFactoryOptOuts.has(BROWSER_PLUGIN_ID),
+            ...builtinSwitch(BROWSER_PLUGIN_ID),
+          }]
+        : []
       return [{
         id: 'navide.git',
         version: factoryActive ? descriptor?.packageVersion ?? null : null,
@@ -2133,9 +2248,19 @@ const pluginTrustRefresh = registerPluginIpc(
       }, {
         ...plansFactoryPackageSummary(frontendPluginManager, plansRecoveryEnabled),
         ...builtinSwitch('navide.plans'),
-      }]
+      }, ...browserRows]
     },
     restoreFactoryPackage: (pluginId) => {
+      if (pluginId === BROWSER_PLUGIN_ID) {
+        if (existsSync(join(pluginsRoot(), pluginId))) {
+          throw new Error('an installed package already owns this plugin id')
+        }
+        const restored = loadFactoryBrowserPackage()
+        if (!restored.loaded) throw new Error(restored.reason)
+        pluginFactoryOptOuts.remove(pluginId)
+        applyPluginActivationChange({ pluginId, activation: restored.activation })
+        return
+      }
       if (pluginId === MINI_IDE_PLUGIN_ID) {
         if (existsSync(join(pluginsRoot(), pluginId))) {
           throw new Error('an installed package already owns this plugin id')
@@ -2218,9 +2343,26 @@ const pluginTrustRefresh = registerPluginIpc(
         }
         return loaded
       }
+      if (pluginId === BROWSER_PLUGIN_ID) {
+        const loaded = loadFactoryBrowserPackage()
+        if (loaded.loaded) pluginFactoryOptOuts.remove(pluginId)
+        return loaded.loaded ? loaded : { loaded: false, reason: loaded.reason }
+      }
       return { loaded: false, reason: 'unknown factory package' }
     },
     onFactoryPackageRemoved: (pluginId) => {
+      if (pluginId === BROWSER_PLUGIN_ID) {
+        pluginFactoryOptOuts.add(pluginId)
+        for (const [key, hostWindow] of contributionWindows) {
+          if (key.startsWith(`${BROWSER_PLUGIN_ID}.`) && !hostWindow.isDestroyed()) hostWindow.close()
+        }
+        for (const hostWindow of mainWindows) {
+          if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
+            hostWindow.webContents.send('plugins:contributionsChanged')
+          }
+        }
+        return
+      }
       if (pluginId === MINI_IDE_PLUGIN_ID) {
         pluginFactoryOptOuts.add(pluginId)
         miniIdeRecoveryEnabled = false
@@ -2246,6 +2388,7 @@ const pluginTrustRefresh = registerPluginIpc(
     onPackageInstalled: (pluginId) => {
       if (pluginId === 'navide.git') pluginFactoryOptOuts.remove(pluginId)
       if (pluginId === MINI_IDE_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
+      if (pluginId === BROWSER_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
     },
     onBuiltinSwitchReset: (resumed) => {
       for (const pluginId of resumed) completeBuiltinEnable(pluginId)
@@ -2533,7 +2676,7 @@ if (selectedMiniIdeV2) {
 const bundledPlans = registerBundledPlans(frontendPluginManager, {
   isPackaged: app.isPackaged,
   resourcesPath: process.resourcesPath,
-  artifactVersion: app.getVersion(),
+  artifactVersion: officialPluginVersion('navide.plans'),
   installedActivation: installedPluginLoad.activationCatalog.find(
     (entry) => entry.pluginId === 'navide.plans'
   ),
@@ -6019,15 +6162,17 @@ app.whenReady().then(async () => {
     controller: appLock,
     isAppWindow: (event) => isAppWindowSender(event),
     isLockScreen: (event) => appLockOverlay.isLockScreen(event.sender.id),
+    onStatusRead: refreshWindowsHello,
     screenInit: () => {
       const status = appLock.status()
       return {
-        strings: appLockStrings(currentUiLocale()).screen,
+        strings: appLockStrings(currentUiLocale(), appLockSystemName()).screen,
         systemUnlockAvailable: status.systemUnlockAvailable,
         preferSystem: status.settings.unlockMethod === 'system',
       }
     },
   })
+  refreshWindowsHello()
   powerMonitor.on('lock-screen', () => appLock.handleScreenLock())
   powerMonitor.on('suspend', () => appLock.handleSuspend())
   const appLockIdleTimer = setInterval(() => appLock.tick(), 15_000)
@@ -6071,7 +6216,7 @@ app.whenReady().then(async () => {
     // has loaded one. A second backend for the same plugin id cannot be
     // registered safely, so the legacy bundle is considered only when no v2
     // package/backend pair is active.
-    const devPlansV2Package = devPlansV2PluginBundle(app.getVersion())
+    const devPlansV2Package = devPlansV2PluginBundle(officialPluginVersion('navide.plans'))
     const activePlansDescriptor = frontendPluginManager.getDescriptor('navide.plans')
     let devPlansV2Registered = Boolean(
       activePlansDescriptor?.capabilityPolicy?.kind === 'manifest-v2' &&
@@ -6139,6 +6284,7 @@ app.whenReady().then(async () => {
     onOpenLegal: (route) => void shell.openExternal(LEGAL_LINKS[route]),
     onLockNow: () => void appLock.lock(),
     lockNowEnabled: () => appLock.status().settings.enabled && !appLock.isLocked(),
+    appLocked: () => appLock.isLocked(),
     onReloadWindow: (target) => {
       void windowCloseCoordinator.prepareAndReload(target)
       // Handled synchronously from the menu's point of view whenever the target

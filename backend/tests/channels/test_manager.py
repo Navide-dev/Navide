@@ -27,7 +27,7 @@ from agent_team_backend.channels.manager import (
     ChannelManager,
     Seams,
 )
-from agent_team_backend.channels.store import ChannelStore
+from agent_team_backend.channels.store import ChannelStore, PairingRequest
 from agent_team_backend.db import Database
 
 # Unique per call: time.monotonic_ns() repeats within a ~15.6 ms tick on Windows.
@@ -802,6 +802,123 @@ async def test_bind_tells_the_chat_which_pane_it_drives(env: Env) -> None:
     assert res["ok"] is True
     await _until(lambda: any(t.startswith("🔗") for t in env.tg.texts()))
     assert "🔗 已連接 pane「api-refactor」，在這裡傳的訊息會送進這個 pane；傳 stop 可以中斷。" in env.tg.texts()
+
+
+def _seen_dm(env: Env, chat_id: str, kind: str = "private") -> None:
+    """The bot saw a DM from ``chat_id``: the adapter records it before the sender gate."""
+    env.tg.known_locations = lambda: [{"chat_id": chat_id, "title": "stranger", "kind": kind,  # type: ignore[attr-defined]
+                                       "supports_topics": False}]
+
+
+async def _bound_text(env: Env, adapter: FakeAdapter, needle: str = "pane「api-refactor」") -> str:
+    await _until(lambda: any(needle in t for t in adapter.texts()))
+    return next(t for t in adapter.texts() if needle in t)
+
+
+async def test_binding_a_stranger_dm_says_its_sender_must_be_approved_first(env: Env) -> None:
+    _seen_dm(env, "42")
+
+    res = await env.m.bind("pane-2", "api-refactor", "telegram", "existing", "42", "")
+
+    assert res["ok"] is True and res["needs_approval"] is True
+    assert any(b.pane_id == "pane-2" and b.chat_id == "42" for b in env.store.bindings())  # the bind stands
+    text = await _bound_text(env, env.tg)
+    assert text == mgr_mod.MSG_BOUND_NEEDS_APPROVAL.format(name="api-refactor", how=mgr_mod.MSG_APPROVE_SEND_FIRST)
+    assert "Settings → Channels" in text
+    assert not env.m.gate.is_allowed("telegram", "42")  # telling the truth admits nobody
+
+
+async def test_binding_quotes_the_pairing_code_already_waiting_for_that_chat(env: Env) -> None:
+    await env.inbound("hello", sender="42", chat="42", thread="", direct=True)
+    code = next(r.code for r in env.store.list_pairing("telegram") if r.sender_id == "42")
+    _seen_dm(env, "42")
+
+    res = await env.m.bind("pane-2", "api-refactor", "telegram", "existing", "42", "")
+
+    assert res["needs_approval"] is True
+    text = await _bound_text(env, env.tg)
+    assert f"{code[:4]}-{code[4:]}" in text
+    assert mgr_mod.MSG_APPROVE_SEND_FIRST not in text
+
+
+async def test_binding_does_not_quote_an_expired_code_or_another_chats(env: Env) -> None:
+    env.store.add_pairing(PairingRequest("telegram", "AAAABBBB", "42", "old", "42", 1))
+    env.store.add_pairing(PairingRequest("telegram", "CCCCDDDD", "43", "other", "43", int(time.time())))
+    _seen_dm(env, "42")
+
+    await env.m.bind("pane-2", "api-refactor", "telegram", "existing", "42", "")
+
+    text = await _bound_text(env, env.tg)
+    assert "AAAA" not in text and "CCCC" not in text
+    assert mgr_mod.MSG_APPROVE_SEND_FIRST in text
+
+
+async def test_binding_an_approved_dm_is_exactly_the_plain_confirmation(env: Env) -> None:
+    env.store.add_allow("telegram", "42", "bob", 1)
+    _seen_dm(env, "42")
+
+    res = await env.m.bind("pane-2", "api-refactor", "telegram", "existing", "42", "")
+
+    assert set(res) == {"ok", "binding"}
+    assert await _bound_text(env, env.tg) == mgr_mod.MSG_BOUND.format(name="api-refactor")
+
+
+async def test_a_dm_remembered_in_the_store_counts_as_direct(env: Env) -> None:
+    env.store.remember_chat("telegram", mgr_mod._bot_key(env.tg), "42", "bob", "direct", False, 1)  # noqa: SLF001
+
+    assert (await env.m.bind("pane-2", "api-refactor", "telegram", "existing", "42", ""))["needs_approval"] is True
+
+
+async def test_a_chat_of_unknown_kind_is_not_taken_for_a_dm(env: Env) -> None:
+    """Never seen, or seen without a type: only "nobody is allowed on this bot" can be said."""
+    res = await env.m.bind("pane-2", "api-refactor", "telegram", "existing", "42", "")
+
+    assert set(res) == {"ok", "binding"}
+    assert await _bound_text(env, env.tg) == mgr_mod.MSG_BOUND.format(name="api-refactor")
+
+
+async def test_a_group_on_a_bot_with_nobody_allowed_is_flagged(env: Env) -> None:
+    b = await _second_bot(env)
+
+    res = await env.m.bind("pane-2", "api-refactor", "telegram", "existing", "-100", "50", account="bot-b1")
+
+    assert res["needs_approval"] is True
+    assert mgr_mod.MSG_APPROVE_SEND_FIRST in await _bound_text(env, b)
+
+
+async def test_a_group_on_a_bot_with_someone_allowed_is_the_plain_confirmation(env: Env) -> None:
+    await env.m.unbind("pane-1")
+
+    res = await env.m.bind("pane-2", "api-refactor", "telegram", "existing", "-100", "50")
+
+    assert set(res) == {"ok", "binding"}
+
+
+async def test_another_platforms_dm_is_judged_by_the_bot_not_by_its_chat_id(env: Env) -> None:
+    """Off Telegram a DM's chat id is not its user's id, so ``is_allowed(chat_id)`` means nothing."""
+    assert (await env.m.configure("discord", {}, {"token": "tok-" + "D"}))["ok"]
+    d = env.adapters["discord"]
+    d.known_locations = lambda: [{"chat_id": "900", "title": "dm", "kind": "direct",  # type: ignore[attr-defined]
+                                  "supports_topics": False}]
+
+    alone = await env.m.bind("pane-2", "api-refactor", "discord", "existing", "900", "")
+    assert alone["needs_approval"] is True
+    env.store.add_allow("discord", "7", "alice", 1)
+    linked = await env.m.bind("pane-2", "api-refactor", "discord", "existing", "900", "")
+    assert "needs_approval" not in linked
+
+
+async def test_rebind_of_a_refused_chat_posts_nothing_new(env: Env) -> None:
+    _seen_dm(env, "42")
+    await env.m.bind("pane-2", "api-refactor", "telegram", "existing", "42", "")
+    await _bound_text(env, env.tg)
+    before = list(env.tg.texts())
+
+    res = await env.m.rebind("pane-2", "pane-3")
+
+    assert "needs_approval" not in res
+    await env.m.wait_idle()
+    assert env.tg.texts() == before
 
 
 async def test_a_chat_cannot_be_bound_to_a_cli_sign_in_pane(env: Env) -> None:
@@ -1726,6 +1843,9 @@ async def test_a_link_code_only_works_on_the_bot_that_issued_it(env: Env) -> Non
     await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True)
     assert not env.store.is_allowed("telegram", "99")  # the default bot does not know it
     await env.inbound(f"/start {code}", sender="99", chat="99", thread="", direct=True, account="bot-b1")
+    # The redeemed code waits for approval on the bot that issued it.
+    [req] = env.store.list_pairing("telegram", "bot-b1")
+    assert (await env.m.pairing_approve("telegram", req.code))["ok"]
     assert env.store.is_allowed("telegram", "99", "bot-b1") and not env.store.is_allowed("telegram", "99")
     assert any("已連結" in t for t in b.texts())
 
@@ -2203,3 +2323,20 @@ async def test_line_prompt_vendor_without_a_menu_is_still_relayed(clocked) -> No
     clock.t += 1
     await _until_relay_prompt(env)
     assert next(iter(env.m.relay._by_id.values())).kind == "permission"
+
+
+@pytest.mark.parametrize("sender", ["1087968824", "136817688", "777000"])
+async def test_telegram_shared_sender_ids_are_refused_at_the_gate(env: Env, sender: str) -> None:
+    """Anonymous admins, channel posts and service messages share one id: even a row allowing
+    it (written before this rule) lets nothing through, and a DM gets no pairing code."""
+    env.store._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at)"
+                    " VALUES ('telegram', 'default', ?, 'x', 1)", (sender,))
+    sent = len(env.tg.sent)
+    await env.inbound("rm -rf ~", sender=sender)  # the bound group topic
+    await env.inbound("hello", sender=sender, chat=sender, thread="", direct=True)
+    assert env.fake.delivered == []
+    assert len(env.tg.sent) == sent
+    assert env.store.list_pairing("telegram") == []
+    # An approved person in the same topic still gets through.
+    await env.inbound("hello", sender="7")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "hello")

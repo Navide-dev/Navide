@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..db import Database
-from .base import Location
+from .base import Location, is_shared_sender
 
 COMPONENT = "channels"
 KV_ENABLED = "channels.enabled"
@@ -131,6 +131,12 @@ def _v6(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE channel_bindings ADD COLUMN session_id TEXT NOT NULL DEFAULT ''")
 
 
+def _v7(cur: sqlite3.Cursor) -> None:
+    # How a sender got on the allowlist: "pairing" (a pairing code) or "invite" (a link
+    # code), shown in Settings. Rows from v6 keep NULL: nothing recorded how they came.
+    cur.execute("ALTER TABLE channel_allow ADD COLUMN source TEXT")
+
+
 DEFAULT_ACCOUNT = "default"
 
 # "replies": only answers to turns the chat started (the pre-mirror behaviour).
@@ -188,6 +194,7 @@ class ChannelStore:
         db.migrate(COMPONENT, 4, _v4)
         db.migrate(COMPONENT, 5, _v5)
         db.migrate(COMPONENT, 6, _v6)
+        db.migrate(COMPONENT, 7, _v7)
 
     def _rows(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
         with self._db.transaction() as cur:
@@ -351,11 +358,13 @@ class ChannelStore:
                                (platform, account, sender_id)))
 
     def add_allow(self, platform: str, sender_id: str, sender_name: str, added_at: int,
-                  account: str = DEFAULT_ACCOUNT) -> None:
-        self._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at)"
-                   " VALUES (?, ?, ?, ?, ?) ON CONFLICT(platform, account, sender_id)"
+                  account: str = DEFAULT_ACCOUNT, source: str | None = None) -> None:
+        if is_shared_sender(platform, sender_id):
+            raise ValueError(f"{platform} sender {sender_id} is shared by many people and cannot be allowed")
+        self._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at, source)"
+                   " VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(platform, account, sender_id)"
                    " DO UPDATE SET sender_name = excluded.sender_name",
-                   (platform, account, sender_id, sender_name, added_at))
+                   (platform, account, sender_id, sender_name, added_at, source))
 
     def list_allow(self, platform: str | None) -> list[dict[str, Any]]:
         if platform:

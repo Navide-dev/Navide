@@ -26,6 +26,7 @@ function fixture(): string {
   file(root, 'backend/agent_team_backend/path_guard.py', '# shared path guard\n')
   file(root, 'backend/agent_team_backend/fs_write.py', '# shared write path\n')
   file(root, 'backend/agent_team_backend/git_security.py', '# shared Git guard\n')
+  file(root, 'backend/agent_team_backend/plan_versions.py', '# shared plan versions\n')
   file(root, 'backend/pyproject.toml', '# build dependencies\n')
   file(root, 'backend/uv.lock', '# pinned toolchain\n')
   file(root, 'dist-plugins/navide-plans/manifest.json', JSON.stringify({ backend: { entry: 'backend/navide-plans' } }))
@@ -97,6 +98,9 @@ describe.skipIf(isWindows())('Plans backend build cache', { timeout: 30_000 }, (
     file(root, 'backend/agent_team_backend/git_security.py', '# changed shared Git guard\n')
     build(root)
     expect(buildCount(root)).toBe(5)
+    file(root, 'backend/agent_team_backend/plan_versions.py', '# changed shared plan versions\n')
+    build(root)
+    expect(buildCount(root)).toBe(6)
   })
 
   it('lets PyInstaller import the shared path guard from the backend source tree', () => {
@@ -232,12 +236,46 @@ describe('release workflow verifies the Plans artifact it signs', () => {
   })
 
   it('asserts each release artifact carries its exact official Plans package backend', () => {
-    expect(verifyStep).toContain('artifact_version="$(node -p "require(\'./package.json\').version")"')
+    expect(verifyStep).toContain('artifact_version="$(node -p "require(\'./plugins/navide-plans/manifest.json\').version")"')
     expect(verifyStep).toContain(
       'Contents/Resources/official-artifacts/navide.plans/${artifact_version}/darwin-arm64/package/backend/navide-plans',
     )
     expect(linuxValidationStep).toContain(
       'squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-x64/package/backend/navide-plans',
     )
+  })
+
+  it('asserts each release artifact carries the bundled Navide Browser backend at its own version', () => {
+    expect(verifyStep).toContain('browser_version="$(node -p "require(\'./plugins/navide-browser/manifest.json\').version")"')
+    expect(linuxValidationStep).toContain('browser_version="$(node -p "require(\'./plugins/navide-browser/manifest.json\').version")"')
+    expect(verifyStep).toContain(
+      'test -x "${app_path}/Contents/Resources/official-artifacts/navide.browser/${browser_version}/darwin-arm64/package/backend/navide-browser"',
+    )
+    expect(linuxValidationStep).toContain(
+      'test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${browser_version}/linux-x64/package/backend/navide-browser"',
+    )
+  })
+})
+
+describe('the standalone packaged-Plans gate builds every package it stages', () => {
+  // release.yml's macOS gate runs `test:packaged-plans` without `--prepared`,
+  // so run-artifact-tests.mjs builds the staged packages itself; CI only runs
+  // the `--prepared` path after `bun run build` and never reaches this list.
+  const runner = readFileSync('scripts/run-artifact-tests.mjs', 'utf8')
+  const stage = readFileSync('scripts/stage-official-plugin-artifacts.mjs', 'utf8')
+  const standalone = runner.slice(runner.indexOf('if (!prepared)'), runner.indexOf('stage-official-plugin-artifacts.mjs'))
+  const staged = [...stage.matchAll(/directory: 'dist-plugins\/navide-([a-z-]+)'/g)].map((match) => match[1])
+
+  it('stages the four official packages', () => {
+    expect(staged).toEqual(['mini-ide', 'git', 'plans', 'browser'])
+  })
+
+  it.each(staged)('builds navide-%s before staging it', (name) => {
+    expect(standalone).toContain(`'build:${name}:v2'`)
+  })
+
+  it('builds the native backends the staged Plans and Browser packages list', () => {
+    expect(standalone).toContain("'build:plans:backend'")
+    expect(standalone).toContain("'build:browser:backend'")
   })
 })

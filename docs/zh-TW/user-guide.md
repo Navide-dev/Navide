@@ -243,4 +243,6 @@ Claude Code、Codex、Grok、Kimi、Pi、Droid、MiniMax Code 的新帳號登入
 
 這些憑證**永遠不會離開這台機器**：帳號憑證與金鑰只留在本機，所以**同步**區段（設定 → 同步）沒有「憑證與金鑰」這一列，舊版留下開著的憑證開關一律視為關閉。同步區段會顯示同步金鑰的 id——用來加密你同步的資產，不是 CLI 憑證——並在你懷疑外洩時提供更換：所有記錄重新加密，已配對的裝置會收到新金鑰。
 
+**App Lock**（設定 → App Lock）會用一張鎖定畫面蓋住所有 Navide 視窗，用 4～12 位數 PIN 解鎖；在 Mac 上可以先用 Touch ID，在 Windows 11 上可以先用 Windows Hello。Windows 10 與 Linux 只能用 PIN 解鎖，設定頁會註明。它是隱私遮罩，不是存取控制：底下的 agent、終端機、聊天頻道、MCP 工具、其他裝置與排程都照常執行，坐在電腦前、懂技術的人仍然可以繞過。鎖定期間，應用程式選單除了隱藏、結束、視窗控制和 PIN 輸入框需要的編輯鍵之外都會變灰，按鍵也不會送到底下的視窗，所以點選單或按快捷鍵都操作不到後面的 App。「切換開發者工具」也會變灰，鎖定時無法打開 DevTools；已經打開的 DevTools 維持原狀。可以用「立即鎖定」（⌘⌥L，Windows 與 Linux 是 Ctrl+Alt+L）手動上鎖，也可以在閒置一段時間、螢幕鎖定、電腦睡眠或 Navide 啟動時（預設關閉）自動上鎖。忘記 PIN 時，可以先用 Touch ID 或 Windows Hello 驗證再重設；兩者都沒有時，結束 Navide 後刪除 Navide 資料夾裡的 `app-lock.json`，這只會移除 App Lock 和它的 PIN，其他都不受影響。
+
 `.agent-team/` 目前不是可攜機制。未來在不同裝置間移轉時，應使用具有 Redaction 與 Retention Control 的明確本機 Export／Import，而不是透過 Git 同步。

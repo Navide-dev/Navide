@@ -188,6 +188,7 @@ function pressUnbind(paneId: string): void {
                 <span v-if="statusLabel(row.binding)">{{ statusLabel(row.binding) }} · </span>{{ levelText(row.binding) }}<template v-if="boundAt(row.binding)"> · {{ boundAt(row.binding) }}</template>
               </template>
             </div>
+            <div v-if="!row.orphan && row.binding.needs_approval" class="ch-item-warn" role="note" data-testid="channel-binding-needs-approval">{{ t('channels.bindings.needs-approval') }}</div>
           </div>
           <div class="cb-actions">
             <template v-if="row.orphan">
@@ -317,5 +318,6 @@ function pressUnbind(paneId: string): void {
 .ch-btn.danger-ghost { color: var(--danger-fg); border-color: var(--danger-muted); }
 .ch-btn.danger-ghost:hover:not(:disabled) { border-color: var(--danger-fg); }
 .ch-btn.danger { color: var(--text-on-emphasis); background: var(--danger-emphasis, var(--danger-fg)); border-color: var(--danger-emphasis, var(--danger-fg)); }
+.ch-item-warn { font-size: var(--font-2xs); color: var(--attention-fg); }
 .ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 </style>

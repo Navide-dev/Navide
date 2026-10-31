@@ -40,7 +40,7 @@ function expectMiniIdeManifest(directory: string, version?: string): void {
 
 describe('navide.mini-ide manifest', () => {
   it('validates the checked-in source manifest through the production parser and loader', () => {
-    expectMiniIdeManifest(sourceDir, '0.1.0')
+    expectMiniIdeManifest(sourceDir, '1.0.0')
   })
 
   it('validates the actual staged v2 build manifest through the production loader', () => {

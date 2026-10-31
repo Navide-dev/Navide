@@ -1134,7 +1134,7 @@ class TestScripts:
         # build that reads a non-ASCII header file path as `???`.
         assert "& ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m 2 -o NUL -X POST" in command
         assert command.startswith(
-            "$PORT = Get-Content -ErrorAction SilentlyContinue 'C:\\Users\\a b\\navide.port'; "
+            "$PORT = $null; try { $PORT = [IO.File]::ReadAllLines('C:\\Users\\a b\\navide.port') } catch {}; "
         )
         # `@` starts a splat in PowerShell, so both curl `@` arguments are quoted.
         assert "-H '@C:\\Users\\a b\\hook.header'" in command
@@ -1173,7 +1173,7 @@ class TestScripts:
         assert "if (-not $TMP) { [Console]::Error.Write(" in command
         assert "& ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m 4 -o $TMP -X POST" in command
         assert "[IO.File]::ReadAllBytes($TMP)" in command
-        assert "Remove-Item -LiteralPath $TMP" in command
+        assert "try { [IO.File]::Delete($TMP) } catch {}" in command
         assert "[Console]::OpenStandardOutput()" in command
         assert "OutputEncoding" not in command
         assert command.endswith("exit 0")
@@ -1196,7 +1196,8 @@ class TestScripts:
         ]
         for command in commands:
             assert "GetTempFileName" not in command
-            assert "$TMP = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName())" in command
+            assert "$TMP = [IO.Path]::Combine($env:TEMP, [IO.Path]::GetRandomFileName())" in command
+            assert "if (-not $env:TEMP) { throw 'TEMP is not set' }" in command
             assert "if (-not $TMP) { [Console]::Error.Write('navide hook: no temp file: '" in command
             assert "[Console]::Error.WriteLine" not in command  # see #147 below
 
@@ -1213,7 +1214,7 @@ class TestScripts:
             timeout_s=2,
         )
         assert command == (
-            "$PORT = Get-Content -ErrorAction SilentlyContinue 'p'; "
+            "$PORT = $null; try { $PORT = [IO.File]::ReadAllLines('p') } catch {}; "
             "if ($PORT) { & ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m 2 -o NUL -X POST "
             "-H 'Content-Type: application/json' "
             "-H 'X-Agent-Team-Event: pre_tool_use' "
@@ -1254,7 +1255,7 @@ class TestScripts:
         # the parent console on 65001 when two hooks interleaved or one was
         # killed mid-wait (#147), so the hook never touches it.
         assert "OutputEncoding" not in command
-        assert "Remove-Item -LiteralPath $TMP" in command
+        assert "try { [IO.File]::Delete($TMP) } catch {}" in command
         # No temp file, no wakeup to deliver; a blank body wakes nobody.
         assert "if (-not $TMP) { [Console]::Error.Write(" in command
         assert "if (($BODY -join '').Trim()) {" in command

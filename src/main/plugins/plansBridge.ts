@@ -82,6 +82,7 @@ export type PlansBridgeErrorCode =
   | 'INTERNAL_ERROR'
   | 'USER_IN_CONTROL'
   | 'CDP_ERROR'
+  | 'LIMIT_REACHED'
 
 /** Error detail the child may see beside `data.code`: the `web` port's
  *  USER_IN_CONTROL reason and CDP_ERROR message. `message` (the Error's own)

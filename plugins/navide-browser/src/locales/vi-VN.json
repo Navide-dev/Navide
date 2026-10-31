@@ -65,6 +65,39 @@
     "errors": {
       "generic": "Đã xảy ra lỗi ({code}).",
       "invalid-address": "Hãy nhập một địa chỉ http hoặc https."
+    },
+    "layout": {
+      "label": "Bố cục",
+      "tiled": "Cạnh nhau",
+      "switch": "Từng cái một"
+    },
+    "page": {
+      "previous": "Trang trước",
+      "next": "Trang sau",
+      "status": "Trang {page}/{count}"
+    },
+    "tab": {
+      "new": "Thẻ mới",
+      "close": "Đóng thẻ",
+      "untitled": "Thẻ mới",
+      "discarded": "Đã đóng để tiết kiệm bộ nhớ; bấm để tải lại",
+      "discarded-note": "Thẻ này đã được đóng để tiết kiệm bộ nhớ sau 10 phút không hiển thị. Trang sẽ tải lại từ địa chỉ của nó.",
+      "restore": "Tải lại thẻ"
+    },
+    "dialog": {
+      "open": "Hộp thoại đang mở ({type}): {message}",
+      "type": {
+        "alert": "Cảnh báo",
+        "confirm": "Xác nhận",
+        "prompt": "Nhập liệu",
+        "beforeunload": "Rời trang"
+      }
+    },
+    "uploads": {
+      "title": "Tệp agent đã tải lên",
+      "item": "{file} → {origin}, {time}",
+      "sensitive": "Có vẻ là bí mật",
+      "sensitive-note": "Agent đã tải lên tệp có tên giống thông tin bí mật"
     }
   }
 }

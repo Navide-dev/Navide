@@ -1,5 +1,5 @@
 // App Lock state machine. Main is the only owner: it decides when to lock,
-// checks the PIN and runs Touch ID. Locking only puts a screen over the
+// checks the PIN and runs Touch ID or Windows Hello. Locking only puts a screen over the
 // windows (see appLockOverlay.ts); nothing else in Navide reads this state.
 
 import {
@@ -7,6 +7,7 @@ import {
   type AppLockResult,
   type AppLockSettings,
   type AppLockStatus,
+  type AppLockSystemKind,
 } from '../shared/appLock'
 import { hashPin, readAppLockDoc, sanitizeSettings, verifyPin, writeAppLockDoc, type AppLockDoc } from './appLockStore'
 
@@ -20,8 +21,10 @@ export interface AppLockControllerDeps {
   now: () => number
   /** Seconds since the last keyboard or mouse input anywhere on the machine. */
   systemIdleSeconds: () => number
+  /** Touch ID or Windows Hello on this platform, or null for PIN only. */
+  systemKind: AppLockSystemKind | null
   canPromptSystem: () => boolean
-  /** Resolves when the user passed Touch ID (or its password fallback). */
+  /** Resolves when the user passed Touch ID or Windows Hello (or its own fallback). */
   promptSystem: () => Promise<void>
   onChange: (status: AppLockStatus) => void
 }
@@ -44,6 +47,7 @@ export class AppLockController {
       hasPin: this.doc.pin !== null,
       locked: this.locked,
       systemUnlockAvailable: this.deps.canPromptSystem(),
+      systemUnlockKind: this.deps.systemKind,
     }
   }
 
@@ -111,7 +115,7 @@ export class AppLockController {
     return { ok: true }
   }
 
-  /** Forgot the PIN: Touch ID stands in for the current one. */
+  /** Forgot the PIN: Touch ID or Windows Hello stands in for the current one. */
   async resetPinWithSystem(newPin: unknown): Promise<AppLockResult> {
     if (!isValidAppLockPin(newPin)) return { ok: false, error: 'invalid-pin' }
     if (!this.deps.canPromptSystem()) return { ok: false, error: 'system-unavailable' }

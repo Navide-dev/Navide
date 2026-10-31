@@ -1471,7 +1471,8 @@
       "notice": "App Lock ist ein Sichtschutz, keine Zugriffskontrolle. Es verdeckt alle Navide-Fenster, solange Sie weg sind. Agents, Terminals, Chat-Kanäle, MCP-Tools und Zeitpläne laufen weiter, und wer an diesem Computer sitzt und sich auskennt, kann es umgehen.",
       "section-lock": "Sperre",
       "enabled": "App Lock aktivieren",
-      "enabled-hint": "Legen Sie zuerst eine PIN fest. Die PIN entsperrt immer, auch wenn Touch ID aktiv ist.",
+      "enabled-hint": "Legen Sie zuerst eine PIN fest. Die PIN entsperrt immer, auch wenn {system} aktiv ist.",
+      "enabled-hint-pin-only": "Legen Sie zuerst eine PIN fest. Mit ihr entsperren Sie.",
       "lock-now": "Jetzt sperren",
       "lock-now-hint": "Verdeckt sofort alle Fenster. Tastenkürzel {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN entfernt. App Lock ist deaktiviert.",
       "section-unlock": "Entsperren",
       "method": "Entsperren mit",
-      "method-system": "Touch ID, PIN als Ersatz",
+      "method-system": "{system}, PIN als Ersatz",
       "method-pin": "Nur PIN",
-      "system-unavailable": "Touch ID ist auf diesem Computer nicht verfügbar, daher entsperrt Navide mit Ihrer PIN.",
+      "system-unavailable": "{system} ist auf diesem Computer nicht verfügbar, daher entsperrt Navide mit Ihrer PIN.",
+      "pin-only": "Auf diesem System entsperrt Navide nur mit Ihrer PIN: Touch ID braucht einen Mac, Windows Hello braucht Windows 11.",
       "section-auto": "Automatisch sperren",
       "idle": "Nach Inaktivität",
       "idle-hint": "Zeit ohne Tastatur- oder Mauseingabe auf diesem Computer.",
@@ -1503,15 +1505,16 @@
       "on-suspend": "Wenn der Computer in den Ruhezustand geht",
       "on-start": "Beim Start von Navide",
       "section-forgot": "PIN vergessen?",
-      "reset-with-system": "PIN mit Touch ID zurücksetzen",
-      "forgot-system": "Touch ID bestätigt, dass Sie es sind, dann wählen Sie eine neue PIN.",
-      "forgot-manual-title": "Ohne Touch ID",
+      "reset-with-system": "PIN mit {system} zurücksetzen",
+      "forgot-system": "{system} bestätigt, dass Sie es sind, dann wählen Sie eine neue PIN.",
+      "forgot-manual-title": "Ohne {system}",
+      "forgot-manual-title-pin-only": "Von Hand zurücksetzen",
       "forgot-manual": "Beenden Sie Navide und löschen Sie app-lock.json aus dem Datenordner von Navide. Das entfernt App Lock und seine PIN, sonst nichts.",
       "error-invalid-pin": "Verwenden Sie 4 bis 12 Ziffern.",
       "error-mismatch": "Die beiden PINs stimmen nicht überein.",
       "error-wrong-pin": "Die aktuelle PIN ist falsch.",
       "error-cooldown": "Zu viele Versuche. Versuchen Sie es in {seconds} s erneut.",
-      "error-system-failed": "Touch ID hat Ihre Identität nicht bestätigt.",
+      "error-system-failed": "{system} hat Ihre Identität nicht bestätigt.",
       "error-generic": "Das hat nicht geklappt. Versuchen Sie es erneut."
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "Alle Fenster hinter einem Sperrbildschirm verbergen und mit Touch ID oder PIN entsperren"
+          "summary": "Alle Fenster hinter einem Sperrbildschirm verbergen und mit Touch ID, Windows Hello oder PIN entsperren"
         },
         "voice-input": {
           "title": "Spracheingabe",
@@ -1968,6 +1971,8 @@
         "offUnsaved": "Native Backends von Drittanbietern sind vorerst aus, aber Navide konnte das nicht speichern. Nach einem Neustart von Navide sind sie wieder an.",
         "offUnsavedRetry": "Erneut versuchen",
         "agentTools": {
+          "firstParty": "Agents erlauben, Tools aus offiziellen Navide-Plug-ins aufzurufen",
+          "firstPartyDescription": "Standardmäßig an. Lässt Agents in Ihren Bereichen die Tools offizieller Navide-Plug-ins aufrufen, also der von Navide selbst wie Navide Browser, ohne für jede Version zu fragen. Ihre Ergebnisse gelten weiterhin als externe Inhalte, und ein Tool, das etwas ändert, fragt weiterhin einmal pro Arbeitsbereich.",
           "enable": "Agents erlauben, Tools aus Navide-Plug-ins von Drittanbietern aufzurufen",
           "description": "Lässt Agents in Ihren Bereichen Tools aufrufen, die von Ihnen erlaubte Navide-Plug-ins deklarieren; ein Tool, das Dateien ändert, fragt einmal pro Arbeitsbereich.",
           "externalCallers": "Auch externen MCP-Clients den Aufruf erlauben",
@@ -2016,6 +2021,7 @@
       "nativeOnMarker": "Nativer Code an",
       "browseMarketplace": "Navide Marketplace durchsuchen",
       "bundledGit": "Mitgeliefertes Git",
+      "bundledBrowser": "Mitgelieferter Browser",
       "state": {
         "active": "Aktiv",
         "removed": "Entfernt",
@@ -2081,6 +2087,7 @@
       "permissionDetails": "Berechtigungen und Gewährungen",
       "permissionDetailsWithActivity": "Berechtigungen, Gewährungen und Aktivität",
       "plansRiskNote": "Dieses Navide-Plug-in hat ein eigenes Backend-Programm, das mit Ihren Benutzerrechten und ohne Sandbox läuft. Es arbeitet mit Plan-Dokumenten im aktuellen Projekt, ausgehend vom darüber gefundenen Stammverzeichnis des Git-Repositorys (einschließlich darin verschachtelter Repositorys): die Plan- und Berichtsordner unter .agent-team, .claude, .cursor und docs in beliebiger Tiefe, .plans im Stammverzeichnis sowie deren .history (nur lesend). Sein Backend liest und schreibt sie direkt; Löschen und Umbenennen laufen weiterhin über Navide.",
+      "browserRiskNote": "Dieses Navide-Plug-in hat ein eigenes Backend-Programm, das mit Ihren Benutzerrechten und ohne Sandbox läuft. Es kann jede Website öffnen und darin navigieren. Anmeldungen bei Websites bleiben auf diesem Computer gespeichert. Agents können jede Seite lesen, die dieses Navide-Plug-in öffnet, samt ihrem Anmeldestatus.",
       "searchPlaceholder": "Navide-Plug-ins durchsuchen",
       "search": "Suchen",
       "install": "Installieren",
@@ -8127,6 +8134,7 @@
         "workbench_action_navigateForward": "Vorwärts navigieren",
         "workbench_action_newFile": "Neue Datei",
         "workbench_action_newWindow": "Neues Fenster",
+        "workbench_action_openBrowser": "Navide Browser öffnen",
         "workbench_action_openDebug": "Debuggen öffnen",
         "workbench_action_openEditorAtIndex1": "Editor an Position 1 öffnen",
         "workbench_action_openEditorAtIndex2": "Editor an Position 2 öffnen",
@@ -10815,6 +10823,7 @@
       "topic": "Thema „{title}“ →",
       "gone": "Bereich existiert nicht mehr",
       "orphan-hint": "Geschlossen, ohne die Bindung zu lösen · Nachrichten aus diesem Chat gehen ins Leere",
+      "needs-approval": "Nachrichten aus diesem Chat werden abgelehnt, bis Sie den Absender genehmigen",
       "clear": "Entfernen",
       "focus": "Zum Bereich springen ↗",
       "unbind": "Bindung lösen",
@@ -10894,7 +10903,11 @@
     "allow": {
       "title": "Zugelassene Absender",
       "empty": "Noch niemand zugelassen.",
-      "remove": "Entfernen"
+      "remove": "Entfernen",
+      "via-pairing": "Kopplungscode",
+      "via-invite": "Verknüpfungscode",
+      "shared": "Geteilte ID",
+      "shared-hint": "Diese Telegram-ID steht für viele Personen (anonyme Admins, Kanäle, Telegram selbst) und wird daher immer abgelehnt. Sie können sie entfernen."
     },
     "pane": {
       "connect": "Mit einem Chat verbinden",
@@ -10909,6 +10922,7 @@
       "manage-chats": "Chat-Einstellungen verwalten",
       "taken-by": "Mit {pane} verbunden",
       "taken-hint": "Mit einem anderen Bereich verbunden. Lösen Sie dort die Bindung, um diesen Chat hier zu verwenden.",
+      "needs-approval": "Verbunden, aber Nachrichten aus diesem Chat werden abgelehnt, bis Sie den Absender unter Einstellungen → Kanäle genehmigen.",
       "bind-level-label": "Was der Chat empfängt",
       "back": "Zurück",
       "confirm": "Verbinden",

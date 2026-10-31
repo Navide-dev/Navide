@@ -3,7 +3,7 @@
   "apiVersion": "^1.0.0",
   "id": "navide.browser",
   "name": "Navide Browser",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "navide",
   "engines": {
     "navide": ">=0.2.27"
@@ -52,7 +52,15 @@
       "browser.screenshot",
       "browser.handoff",
       "browser.control.wait",
-      "browser.finish"
+      "browser.finish",
+      "browser.close",
+      "browser.tabs",
+      "browser.evaluate",
+      "browser.wait",
+      "browser.dialog",
+      "browser.upload",
+      "browser.takeover",
+      "browser.cdp"
     ],
     "agentTools": [
       {
@@ -60,7 +68,7 @@
         "method": "browser.list",
         "risk": "read",
         "title": "List browser Spaces",
-        "description": "List the Navide Browser Spaces: viewId, name, owner (agent or user), who is in control, state (idle, running, need-action, done), URL and title. yourSpace is the viewId of this pane's own Space, or null before browser_open.",
+        "description": "List the Navide Browser Spaces: viewId, name, owner (agent or user), who is in control, state (idle, running, need-action, done), URL and title. yourSpace is the viewId of this pane's own Space, or null before browser_open. Each entry is one tab; tabs with the same space are one Space (see browser_tabs), a tab a page opened carries openerViewId, and an open JavaScript dialog shows as dialog.",
         "timeoutMs": 10000,
         "inputSchema": {
           "type": "object",
@@ -286,6 +294,321 @@
             "space": {
               "type": "string",
               "description": "Space name given to browser_open, when it was not this pane's default."
+            }
+          }
+        }
+      },
+      {
+        "name": "browser_close",
+        "method": "browser.close",
+        "risk": "write",
+        "title": "Close a tab or the Space",
+        "description": "Close one tab of the Space (the active tab, or tab), or with all true every tab the agent owns in the Space. Tabs the user owns are never closed; they come back in skipped. The user's own Spaces cannot be closed by an agent.",
+        "timeoutMs": 10000,
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "type": "boolean",
+              "description": "Close every tab the agent owns in the Space."
+            },
+            "viewId": {
+              "type": "string",
+              "description": "Defaults to this pane's Space."
+            },
+            "space": {
+              "type": "string",
+              "description": "Space name given to browser_open, when it was not this pane's default."
+            },
+            "tab": {
+              "type": "string",
+              "description": "A tab's viewId from browser_tabs; defaults to the Space's active tab."
+            }
+          }
+        }
+      },
+      {
+        "name": "browser_tabs",
+        "method": "browser.tabs",
+        "risk": "write",
+        "title": "List, open, select or close tabs",
+        "description": "Work with the tabs of a Space. A tab is one page with its own viewId; pages a site opens in a new window arrive as new tabs with openerViewId. action list returns tabs [{viewId, url, title, active, openerViewId}]; new opens a tab (optionally loading url) and makes it active; select makes tab the one the other browser tools act on by default; close closes tab (default the active one). The user sees every tab in the Space.",
+        "timeoutMs": 30000,
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "enum": [
+                "list",
+                "new",
+                "select",
+                "close"
+              ],
+              "default": "list"
+            },
+            "url": {
+              "type": "string",
+              "description": "An http or https URL for new."
+            },
+            "viewId": {
+              "type": "string",
+              "description": "Defaults to this pane's Space."
+            },
+            "space": {
+              "type": "string",
+              "description": "Space name given to browser_open, when it was not this pane's default."
+            },
+            "tab": {
+              "type": "string",
+              "description": "A tab's viewId from browser_tabs; defaults to the Space's active tab."
+            }
+          }
+        }
+      },
+      {
+        "name": "browser_evaluate",
+        "method": "browser.evaluate",
+        "risk": "write",
+        "title": "Run a script in the page",
+        "description": "Run a JavaScript expression in the page (Runtime.evaluate) and return its value as JSON. This runs script inside the website with your sign-ins, can change the page and send requests; the Space then warns the user that agent script may still run until the page reloads. A promise is awaited unless awaitPromise is false. A result whose JSON is longer than 100000 characters comes back cut, as valueJson with truncated true. Prefer browser_snapshot and browser_act. Fails with USER_IN_CONTROL while the user controls the Space.",
+        "timeoutMs": 35000,
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expression"
+          ],
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "The JavaScript expression to evaluate."
+            },
+            "awaitPromise": {
+              "type": "boolean",
+              "default": true
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 30000,
+              "default": 10000
+            },
+            "viewId": {
+              "type": "string",
+              "description": "Defaults to this pane's Space."
+            },
+            "space": {
+              "type": "string",
+              "description": "Space name given to browser_open, when it was not this pane's default."
+            },
+            "tab": {
+              "type": "string",
+              "description": "A tab's viewId from browser_tabs; defaults to the Space's active tab."
+            }
+          }
+        }
+      },
+      {
+        "name": "browser_wait",
+        "method": "browser.wait",
+        "risk": "read",
+        "title": "Wait for the page",
+        "description": "Wait until every condition given holds, polling the page: url (a substring of the address), urlRegex (a regular expression on the address), selector (a CSS selector that matches an element) or text (visible text on the page), up to timeoutMs (at most 30000). selector and text are checked with a short script in the page. If timedOut is true, nothing matched in time.",
+        "timeoutMs": 35000,
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "Substring the address must contain."
+            },
+            "urlRegex": {
+              "type": "string",
+              "description": "Regular expression the address must match."
+            },
+            "selector": {
+              "type": "string",
+              "description": "CSS selector that must match an element."
+            },
+            "text": {
+              "type": "string",
+              "description": "Text the page must show."
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 30000,
+              "default": 10000
+            },
+            "viewId": {
+              "type": "string",
+              "description": "Defaults to this pane's Space."
+            },
+            "space": {
+              "type": "string",
+              "description": "Space name given to browser_open, when it was not this pane's default."
+            },
+            "tab": {
+              "type": "string",
+              "description": "A tab's viewId from browser_tabs; defaults to the Space's active tab."
+            }
+          }
+        }
+      },
+      {
+        "name": "browser_dialog",
+        "method": "browser.dialog",
+        "risk": "write",
+        "title": "Answer a page dialog",
+        "description": "Accept or dismiss the alert, confirm, prompt or leave-page dialog open in the tab (Page.handleJavaScriptDialog). promptText fills a prompt. Fails with NO_DIALOG when none is open; the dialog's type and message show in browser_list and on the Space card. Fails with USER_IN_CONTROL while the user controls the Space.",
+        "timeoutMs": 10000,
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "enum": [
+                "accept",
+                "dismiss"
+              ]
+            },
+            "promptText": {
+              "type": "string",
+              "description": "Text to answer a prompt dialog with."
+            },
+            "viewId": {
+              "type": "string",
+              "description": "Defaults to this pane's Space."
+            },
+            "space": {
+              "type": "string",
+              "description": "Space name given to browser_open, when it was not this pane's default."
+            },
+            "tab": {
+              "type": "string",
+              "description": "A tab's viewId from browser_tabs; defaults to the Space's active tab."
+            }
+          }
+        }
+      },
+      {
+        "name": "browser_upload",
+        "method": "browser.upload",
+        "risk": "write",
+        "title": "Upload files to a file input",
+        "description": "Set the files of a file input, by its ref from browser_snapshot, to 1 to 16 files inside this pane's workspace (relative paths are read from the workspace). The page gets a copy of each file. Every upload is recorded and shown to the user on the Space: file, website origin and time, with files whose names look like secrets (such as .env or *.pem) highlighted. The result's uploaded and warning come from Navide unchanged.",
+        "timeoutMs": 30000,
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ref",
+            "files"
+          ],
+          "properties": {
+            "ref": {
+              "type": "string",
+              "description": "The file input's ref such as @123, from the latest browser_snapshot."
+            },
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "type": "string"
+              },
+              "description": "File paths inside this pane's workspace."
+            },
+            "viewId": {
+              "type": "string",
+              "description": "Defaults to this pane's Space."
+            },
+            "space": {
+              "type": "string",
+              "description": "Space name given to browser_open, when it was not this pane's default."
+            },
+            "tab": {
+              "type": "string",
+              "description": "A tab's viewId from browser_tabs; defaults to the Space's active tab."
+            }
+          }
+        }
+      },
+      {
+        "name": "browser_take_over",
+        "method": "browser.takeover",
+        "risk": "write",
+        "title": "Ask the user for control back",
+        "description": "After the user took over the Space, ask to continue: the Space shows Agent asks to continue (plus note) and this call waits, up to timeoutMs (at most 50000), until the user chooses Hand Back to Agent. It never takes control itself. If timedOut is true, call it again or tell the user what you are waiting for.",
+        "timeoutMs": 55000,
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "note": {
+              "type": "string",
+              "description": "Why the agent wants to continue, shown on the Space card."
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 50000,
+              "default": 50000
+            },
+            "viewId": {
+              "type": "string",
+              "description": "Defaults to this pane's Space."
+            },
+            "space": {
+              "type": "string",
+              "description": "Space name given to browser_open, when it was not this pane's default."
+            },
+            "tab": {
+              "type": "string",
+              "description": "A tab's viewId from browser_tabs; defaults to the Space's active tab."
+            }
+          }
+        }
+      },
+      {
+        "name": "browser_cdp",
+        "method": "browser.cdp",
+        "risk": "write",
+        "title": "Send a raw DevTools command",
+        "description": "High risk escape hatch: send one Chrome DevTools Protocol command {method, params} to the tab and get its raw result. Navide allows only these methods and refuses every other one with METHOD_NOT_ALLOWED: Accessibility.getFullAXTree, DOM.focus, DOM.getBoxModel, DOM.resolveNode, DOM.scrollIntoViewIfNeeded, DOM.setFileInputFiles, DOMSnapshot.captureSnapshot, Input.dispatchKeyEvent, Input.dispatchMouseEvent, Input.insertText, Page.captureScreenshot, Page.getNavigationHistory, Page.handleJavaScriptDialog, Page.navigate, Page.navigateToHistoryEntry, Runtime.callFunctionOn, Runtime.evaluate. These can run script, type, click and navigate with your sign-ins. Prefer the other browser tools. A result whose JSON is longer than 400000 characters comes back cut. Fails with USER_IN_CONTROL while the user controls the Space.",
+        "timeoutMs": 30000,
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method"
+          ],
+          "properties": {
+            "method": {
+              "type": "string",
+              "description": "A CDP method such as DOM.getBoxModel."
+            },
+            "params": {
+              "type": "object",
+              "description": "The method's parameters."
+            },
+            "viewId": {
+              "type": "string",
+              "description": "Defaults to this pane's Space."
+            },
+            "space": {
+              "type": "string",
+              "description": "Space name given to browser_open, when it was not this pane's default."
+            },
+            "tab": {
+              "type": "string",
+              "description": "A tab's viewId from browser_tabs; defaults to the Space's active tab."
             }
           }
         }

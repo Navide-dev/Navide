@@ -14,9 +14,13 @@ import {
   syncTodoMarkup,
 } from './usePlanHtml'
 import {
+  diffLines,
   diffPlanContents,
   parseSnapshotName,
   planHistoryDirRelPath,
+  textChangedSinceApproval,
+  visiblePlanLines,
+  type DiffLine,
   type PlanDiffSummary,
 } from './planHistory'
 import type { PlanMeta, ReviewNote, PlanTodo, TodoStatus, PlanStage } from './planModel'
@@ -60,7 +64,7 @@ const emit = defineEmits<{
   (e: 'updated'): void
   (e: 'metadata', meta: PlanMeta): void
   (e: 'scroll-to-anchor', anchor: string): void
-  (e: 'preview-snapshot', payload: { relPath: string; label: string }): void
+  (e: 'preview-snapshot', payload: { relPath: string; label: string; file: string }): void
   (e: 'deleted', relPath: string): void
 }>()
 
@@ -220,6 +224,8 @@ watch(
     historyEntries.value = []
     diffFor.value = null
     diffSummary.value = null
+    diffText.value = []
+    approvedModified.value = null
     // Reset composer/editing state so a draft or edit-in-progress on the
     // previous plan cannot leak into — or be written against — the new one
     // (note/todo ids can collide across plans). Defensive: the parent also
@@ -727,51 +733,116 @@ function closeActiveOverlay(): boolean {
 }
 
 // ── History panel ─────────────────────────────────────────────────────────
-// Stage-transition snapshots written by the backend to
-// `.agent-team/plans/.history/<stem>/`. Missing directory = empty history.
+// Versions of the plan in `.agent-team/plans/.history/<stem>/`, listed and
+// read through the backend (which decompresses them and reads the index of
+// who made each one). Missing directory = empty history.
 interface HistorySnapshot {
+  /** Version file name; also the key the backend reads it by. */
+  file: string
   relPath: string
   ts: string
   stage: string
   date: Date
+  author?: 'user' | 'agent' | 'external'
+  /** The agent's pane (name or id), when the Host named it. */
+  pane?: string
+  reason?: 'save' | 'stage' | 'restore' | 'conflict' | 'external'
+  restoredFrom?: string
+  detached?: boolean
+}
+
+interface HistoryVersionResp {
+  file: string
+  stage: string
+  ts?: string
+  author?: { kind?: string; pane?: string }
+  reason?: string
+  restoredFrom?: string
+  detached?: boolean
 }
 
 const historyOpen = ref(false)
 const historyEntries = ref<HistorySnapshot[]>([])
-// Snapshot relPath whose diff summary is shown inline (null = none).
+// Snapshot whose diff is shown inline (null = none).
 const diffFor = ref<string | null>(null)
 const diffSummary = ref<PlanDiffSummary | null>(null)
+const diffText = ref<DiffLine[]>([])
+const restoring = ref(false)
+// The approved version, when the plan's text changed since it (g6).
+const approvedModified = ref<HistorySnapshot | null>(null)
 
 async function toggleHistory(): Promise<void> {
   historyOpen.value = !historyOpen.value
   if (historyOpen.value) await loadHistory()
 }
 
+async function fetchHistory(): Promise<HistorySnapshot[]> {
+  const dir = planHistoryDirRelPath(props.relPath)
+  const resp = await props.backend.send<{ ok: boolean; versions?: HistoryVersionResp[] }>('history.list', {
+    workspace_path: props.workspacePath,
+    rel_path: props.relPath,
+  })
+  const versions = resp.payload?.ok ? (resp.payload.versions ?? []) : []
+  // A history dir can hold versions of both an `.html` and a same-stem
+  // `.plan.md` plan; only the open plan's format is shown.
+  const isHtml = props.relPath.endsWith('.html')
+  return versions.flatMap((version) => {
+    // `.gz` and `.parts.gz` (embedded images stored once) are stored forms.
+    const name = version.file.replace(/(?:\.parts)?\.gz$/, '')
+    if (name.endsWith('.html') !== isHtml) return []
+    const parsed = parseSnapshotName(name)
+    if (!parsed) return []
+    const kind = version.author?.kind
+    const author: HistorySnapshot['author'] = kind === 'user' || kind === 'agent' || kind === 'external' ? kind : undefined
+    const pane = author === 'agent' && typeof version.author?.pane === 'string' && version.author.pane.trim()
+      ? version.author.pane
+      : undefined
+    return [{
+      file: version.file,
+      relPath: `${dir}/${version.file}`,
+      ...parsed,
+      ...(author ? { author } : {}),
+      ...(pane ? { pane } : {}),
+      ...(version.reason ? { reason: version.reason as HistorySnapshot['reason'] } : {}),
+      ...(version.restoredFrom ? { restoredFrom: version.restoredFrom } : {}),
+      ...(version.detached ? { detached: true } : {}),
+    }]
+  }).sort((a, b) => b.ts.localeCompare(a.ts))
+}
+
 async function loadHistory(): Promise<void> {
   diffFor.value = null
   diffSummary.value = null
-  const dir = planHistoryDirRelPath(props.relPath)
+  diffText.value = []
   try {
-    const resp = await props.backend.send<{
-      ok: boolean
-      entries?: { name: string; is_dir: boolean }[]
-      error?: string
-    }>('fs.list_dir', { workspace_path: props.workspacePath, rel_path: dir })
-    const entries = resp.payload?.ok ? (resp.payload.entries ?? []) : []
-    // A history dir can hold snapshots of both an `.html` and a same-stem
-    // `.plan.md` plan; only show the ones matching the open plan's format so
-    // parseSnapshotName / diff never mix formats.
-    const isHtml = props.relPath.endsWith('.html')
-    historyEntries.value = entries
-      .flatMap((entry) => {
-        if (entry.is_dir) return []
-        if (entry.name.endsWith('.html') !== isHtml) return []
-        const parsed = parseSnapshotName(entry.name)
-        return parsed ? [{ relPath: `${dir}/${entry.name}`, ...parsed }] : []
-      })
-      .sort((a, b) => b.ts.localeCompare(a.ts))
+    historyEntries.value = await fetchHistory()
   } catch {
     historyEntries.value = []
+  }
+}
+
+async function readVersion(snap: HistorySnapshot): Promise<string | null> {
+  const resp = await props.backend.send<{ ok: boolean; content?: string }>('history.read', {
+    workspace_path: props.workspacePath,
+    rel_path: props.relPath,
+    file: snap.file,
+  })
+  return resp.payload?.ok && resp.payload.content !== undefined ? resp.payload.content : null
+}
+
+// sha256 of the plan the shown diff was computed against; a restore sends it
+// so it never overwrites a plan that changed after the user looked.
+let diffBaseSha256: string | undefined
+
+async function readCurrent(): Promise<{ content: string; sha256?: string } | null> {
+  const resp = await props.backend.send<{ ok: boolean; content?: string; sha256?: string }>('fs.read_file', {
+    workspace_path: props.workspacePath,
+    rel_path: props.relPath,
+  })
+  if (!resp.payload?.ok || resp.payload.content === undefined) return null
+  return {
+    content: resp.payload.content,
+    ...(typeof resp.payload.sha256 === 'string' ? { sha256: resp.payload.sha256 } : {}),
   }
 }
 
@@ -779,30 +850,34 @@ function snapshotLabel(snap: HistorySnapshot): string {
   return `${snap.date.toLocaleString()} · ${snap.stage}`
 }
 
+function authorLabel(snap: HistorySnapshot): string {
+  if (snap.pane) return t('pane.plans.history-author-agent-pane', { pane: snap.pane })
+  return t(`pane.plans.history-author-${snap.author ?? 'unknown'}`)
+}
+
+function reasonLabel(snap: HistorySnapshot): string {
+  return t(`pane.plans.history-reason-${snap.reason ?? 'stage'}`)
+}
+
 async function showDiff(snap: HistorySnapshot): Promise<void> {
-  if (diffFor.value === snap.relPath) {
+  if (diffFor.value === snap.file) {
     diffFor.value = null
     diffSummary.value = null
+    diffText.value = []
     return
   }
   try {
-    const read = (relPath: string) =>
-      props.backend.send<{ ok: boolean; content?: string; error?: string }>('fs.read_file', {
-        workspace_path: props.workspacePath,
-        rel_path: relPath,
-      })
-    const [snapResp, currentResp] = await Promise.all([read(snap.relPath), read(props.relPath)])
-    if (
-      !snapResp.payload?.ok ||
-      snapResp.payload.content === undefined ||
-      !currentResp.payload?.ok ||
-      currentResp.payload.content === undefined
-    ) {
+    const [version, read] = await Promise.all([readVersion(snap), readCurrent()])
+    if (version === null || read === null) {
       toast(t('pane.plans.history-diff-failed'))
       return
     }
-    diffSummary.value = diffPlanContents(snapResp.payload.content, currentResp.payload.content)
-    diffFor.value = snap.relPath
+    const current = read.content
+    diffBaseSha256 = read.sha256
+    diffSummary.value = diffPlanContents(version, current)
+    diffText.value = diffLines(visiblePlanLines(version, props.relPath), visiblePlanLines(current, props.relPath))
+      .filter(line => line.kind !== 'same')
+    diffFor.value = snap.file
   } catch {
     toast(t('pane.plans.history-diff-failed'))
   }
@@ -823,7 +898,86 @@ const diffIsEmpty = computed(() => {
 })
 
 function previewSnapshot(snap: HistorySnapshot): void {
-  emit('preview-snapshot', { relPath: snap.relPath, label: snapshotLabel(snap) })
+  emit('preview-snapshot', { relPath: snap.relPath, label: snapshotLabel(snap), file: snap.file })
+}
+
+/** Bring back a version's text. The stage, approval, todos and review notes
+ *  stay as they are now (g5), and the restore is itself a new version. */
+async function restoreVersion(snap: HistorySnapshot): Promise<void> {
+  if (restoring.value) return
+  const ok = await confirm(t('pane.plans.history-restore-confirm', { when: snapshotLabel(snap) }), {
+    title: t('pane.plans.history-restore'),
+    confirmText: t('pane.plans.history-restore'),
+  })
+  if (!ok) return
+  restoring.value = true
+  try {
+    const resp = await props.backend.send<{ ok: boolean; conflict?: boolean }>('history.restore', {
+      workspace_path: props.workspacePath,
+      rel_path: props.relPath,
+      file: snap.file,
+      ...(diffFor.value === snap.file && diffBaseSha256 ? { expected_sha256: diffBaseSha256 } : {}),
+    })
+    if (resp.payload?.ok) {
+      toast(t('pane.plans.history-restored'), { type: 'success' })
+      emit('updated')
+      await loadHistory()
+    } else {
+      toast(resp.payload?.conflict ? t('pane.plans.history-restore-conflict') : t('pane.plans.review-save-failed'))
+    }
+  } catch {
+    toast(t('pane.plans.review-save-failed'))
+  } finally {
+    restoring.value = false
+  }
+}
+
+const APPROVED_OR_LATER = new Set(['approved', 'in-progress', 'done'])
+
+/** The version the plan was approved as: the earliest of the newest run of
+ *  approved versions (saves made while approved add to that run), preferring
+ *  the stage change itself or an older snapshot without a reason. */
+function approvalVersion(history: HistorySnapshot[]): HistorySnapshot | null {
+  const attached = history.filter(snap => !snap.detached)
+  const start = attached.findIndex(snap => snap.stage === 'approved')
+  if (start < 0) return null
+  let end = start
+  while (end + 1 < attached.length && attached[end + 1].stage === 'approved') end++
+  const run = attached.slice(start, end + 1)
+  return [...run].reverse().find(snap => snap.reason === 'stage' || snap.reason === undefined) ?? run[run.length - 1]
+}
+
+// Only the newest check may set the badge.
+let approvedCheck = 0
+
+/** Find whether the text changed after approval; quiet on any failure. */
+async function checkApprovedModified(): Promise<void> {
+  const check = ++approvedCheck
+  approvedModified.value = null
+  if (!meta.value || !APPROVED_OR_LATER.has(meta.value.stage)) return
+  const relPath = props.relPath
+  try {
+    const approved = approvalVersion(await fetchHistory())
+    if (!approved || check !== approvedCheck) return
+    const [version, current] = await Promise.all([readVersion(approved), readCurrent()])
+    if (check !== approvedCheck || props.relPath !== relPath || version === null || current === null) return
+    if (textChangedSinceApproval(version, current.content, relPath)) approvedModified.value = approved
+  } catch {
+    if (check === approvedCheck) approvedModified.value = null
+  }
+}
+
+// Rechecked whenever the open plan, its stage or its text changes.
+watch(() => [props.relPath, meta.value?.stage, rawContent.value] as const, () => { void checkApprovedModified() })
+
+async function showApprovedDiff(): Promise<void> {
+  const approved = approvedModified.value
+  if (!approved) return
+  if (!historyOpen.value) {
+    historyOpen.value = true
+    await loadHistory()
+  }
+  if (diffFor.value !== approved.file) await showDiff(approved)
 }
 
 const sharing = ref(false)
@@ -967,6 +1121,14 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
   <div v-if="meta" ref="rootEl" class="prt">
     <div ref="barEl" class="prt-bar">
       <span class="prt-stage" :class="`prt-stage--${meta.stage}`">{{ t(`pane.plans.stage-${meta.stage}`) }}</span>
+      <button
+        v-if="approvedModified"
+        type="button"
+        class="prt-approved-modified"
+        data-test="approved-modified"
+        :title="t('pane.plans.approved-modified-title')"
+        @click="void showApprovedDiff()"
+      >{{ t('pane.plans.approved-modified') }}</button>
       <span v-if="isArchived" class="prt-archived-pill">{{ t('pane.plans.archived') }}</span>
       <span class="prt-progress plan-toolbar-progress">{{ t('pane.plans.progress-done', { done: progress.done, total: progress.total }) }}</span>
       <span
@@ -1193,22 +1355,31 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
 
     <div v-if="historyOpen" class="prt-panel">
       <div v-if="historyEntries.length === 0" class="prt-empty">{{ t('pane.plans.history-empty') }}</div>
-      <template v-for="snap in historyEntries" :key="snap.relPath">
-        <div class="prt-history-row">
+      <template v-for="snap in historyEntries" :key="snap.file">
+        <div class="prt-history-row" :data-file="snap.file">
           <span class="prt-history-time">{{ snap.date.toLocaleString() }}</span>
           <span class="prt-history-stage">{{ snap.stage }}</span>
+          <span class="prt-history-author">{{ authorLabel(snap) }}</span>
+          <span class="prt-history-reason" :class="{ 'prt-history-reason--detached': snap.detached }">
+            {{ snap.detached ? t('pane.plans.history-detached') : reasonLabel(snap) }}
+          </span>
           <span class="prt-spacer" />
           <button class="prt-history-action" @click="previewSnapshot(snap)">
             {{ t('pane.plans.history-preview') }}
           </button>
           <button
             class="prt-history-action"
-            :class="{ 'prt-history-action--open': diffFor === snap.relPath }"
+            :class="{ 'prt-history-action--open': diffFor === snap.file }"
             @click="showDiff(snap)"
           >{{ t('pane.plans.history-diff') }}</button>
+          <button
+            class="prt-history-action prt-history-restore"
+            :disabled="restoring"
+            @click="void restoreVersion(snap)"
+          >{{ t('pane.plans.history-restore') }}</button>
         </div>
-        <div v-if="diffFor === snap.relPath && diffSummary" class="prt-history-diff">
-          <div v-if="diffIsEmpty">{{ t('pane.plans.history-no-differences') }}</div>
+        <div v-if="diffFor === snap.file && diffSummary" class="prt-history-diff">
+          <div v-if="diffIsEmpty && diffText.length === 0">{{ t('pane.plans.history-no-differences') }}</div>
           <template v-else>
             <div v-if="diffSummary.stageFrom !== diffSummary.stageTo">
               {{ t('pane.plans.history-diff-stage', { from: diffSummary.stageFrom ?? '—', to: diffSummary.stageTo ?? '—' }) }}
@@ -1227,6 +1398,14 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
             </div>
             <div v-if="diffSummary.linesAdded > 0 || diffSummary.linesRemoved > 0">
               {{ t('pane.plans.history-diff-lines', { added: diffSummary.linesAdded, removed: diffSummary.linesRemoved }) }}
+            </div>
+            <div v-if="diffText.length" class="prt-history-text" :aria-label="t('pane.plans.history-text-diff')">
+              <div
+                v-for="(line, index) in diffText"
+                :key="index"
+                class="prt-history-line"
+                :class="`prt-history-line--${line.kind}`"
+              ><span class="prt-history-mark">{{ line.kind === 'add' ? '+' : '−' }}</span>{{ line.text }}</div>
             </div>
           </template>
         </div>
@@ -1637,6 +1816,51 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
   font-weight: 600;
   padding: 1px 8px;
   text-transform: uppercase;
+}
+
+.prt-approved-modified {
+  background: transparent;
+  border: 1px solid var(--accent-focus);
+  border-radius: 99px;
+  color: var(--accent-fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-2xs);
+  padding: 1px 8px;
+}
+
+.prt-history-author,
+.prt-history-reason {
+  color: var(--text-muted);
+  font-size: var(--font-2xs);
+}
+
+.prt-history-reason--detached {
+  color: var(--accent-fg);
+}
+
+.prt-history-text {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-2xs);
+  margin-top: 4px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prt-history-line--add {
+  background: var(--diff-add-bg, rgb(46 160 67 / 14%));
+}
+
+.prt-history-line--del {
+  background: var(--diff-del-bg, rgb(248 81 73 / 14%));
+}
+
+.prt-history-mark {
+  display: inline-block;
+  user-select: none;
+  width: 1.4em;
 }
 
 .prt-history-diff {

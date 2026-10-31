@@ -168,7 +168,7 @@ def lookup(msg_type: str) -> Handler | None:
 # ── Editor AI (editor.*) ────────────────────────────────────────────────────
 #: The Navide plugins whose Disabled switch the Host reports (sent only while
 #: one is disabled).
-_DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide"})
+_DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide", "navide.browser"})
 
 
 def _valid_disabled_plugins(value: object) -> bool:

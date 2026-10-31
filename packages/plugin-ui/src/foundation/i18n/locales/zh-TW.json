@@ -1471,7 +1471,8 @@
       "notice": "App Lock 是隱私遮罩，不是存取控制。你離開時，它會蓋住 Navide 的每個視窗；agent、終端機、聊天室、MCP 工具與排程都照常執行，坐在這台電腦前又懂技術的人仍然可以繞過它。",
       "section-lock": "鎖定",
       "enabled": "開啟 App Lock",
-      "enabled-hint": "請先設定 PIN。即使開了 Touch ID，PIN 也一律可以解鎖。",
+      "enabled-hint": "請先設定 PIN。即使開了 {system}，PIN 也一律可以解鎖。",
+      "enabled-hint-pin-only": "請先設定 PIN，解鎖要靠它。",
       "lock-now": "立即鎖定",
       "lock-now-hint": "馬上蓋住所有視窗。快捷鍵 {shortcut}",
       "section-pin": "PIN",
@@ -1491,9 +1492,10 @@
       "pin-removed": "PIN 已移除，App Lock 已關閉。",
       "section-unlock": "解鎖",
       "method": "解鎖方式",
-      "method-system": "Touch ID，PIN 作為備用",
+      "method-system": "{system}，PIN 作為備用",
       "method-pin": "只用 PIN",
-      "system-unavailable": "這台電腦無法使用 Touch ID，Navide 會用 PIN 解鎖。",
+      "system-unavailable": "這台電腦無法使用 {system}，Navide 會用 PIN 解鎖。",
+      "pin-only": "這個系統上 Navide 只能用 PIN 解鎖：Touch ID 需要 Mac，Windows Hello 需要 Windows 11。",
       "section-auto": "自動鎖定",
       "idle": "閒置後",
       "idle-hint": "以整台電腦沒有鍵盤或滑鼠操作的時間計算。",
@@ -1503,15 +1505,16 @@
       "on-suspend": "電腦休眠時",
       "on-start": "Navide 啟動時",
       "section-forgot": "忘記 PIN？",
-      "reset-with-system": "用 Touch ID 重設 PIN",
-      "forgot-system": "先用 Touch ID 確認是你本人，再設定新的 PIN。",
-      "forgot-manual-title": "沒有 Touch ID 時",
+      "reset-with-system": "用 {system} 重設 PIN",
+      "forgot-system": "先用 {system} 確認是你本人，再設定新的 PIN。",
+      "forgot-manual-title": "沒有 {system} 時",
+      "forgot-manual-title-pin-only": "手動重設",
       "forgot-manual": "結束 Navide，然後刪除 Navide 資料資料夾裡的 app-lock.json。這只會移除 App Lock 與它的 PIN，其他都不受影響。",
       "error-invalid-pin": "請用 4 到 12 位數字。",
       "error-mismatch": "兩次輸入的 PIN 不一致。",
       "error-wrong-pin": "目前的 PIN 不正確。",
       "error-cooldown": "嘗試次數過多，請在 {seconds} 秒後再試。",
-      "error-system-failed": "Touch ID 未能確認是你本人。",
+      "error-system-failed": "{system} 未能確認是你本人。",
       "error-generic": "沒有成功，請再試一次。"
     },
     "cliExtensions": {
@@ -1694,7 +1697,7 @@
         },
         "app-lock": {
           "title": "App Lock",
-          "summary": "用鎖定畫面蓋住所有視窗，以 Touch ID 或 PIN 解鎖"
+          "summary": "用鎖定畫面蓋住所有視窗，以 Touch ID、Windows Hello 或 PIN 解鎖"
         },
         "voice-input": {
           "title": "語音輸入",
@@ -1968,6 +1971,8 @@
         "offUnsaved": "第三方原生後端目前已關閉，但 Navide 無法儲存這個設定，重新啟動 Navide 後會再變回開啟。",
         "offUnsavedRetry": "再試一次",
         "agentTools": {
+          "firstParty": "允許 agent 呼叫官方 Navide 外掛的工具",
+          "firstPartyDescription": "預設開啟。讓 pane 裡的 agent 呼叫官方 Navide 外掛（Navide 自己做的，例如 Navide Browser）的工具，不必每個版本都詢問。結果仍會標示為外部內容，會改動東西的工具在每個工作區仍會詢問一次。",
           "enable": "允許 agent 呼叫第三方 Navide 外掛的工具",
           "description": "讓 pane 裡的 agent 呼叫你已允許的 Navide 外掛所宣告的工具；會改動檔案的工具在每個工作區詢問一次。",
           "externalCallers": "外部 MCP 客戶端也能呼叫",
@@ -2016,6 +2021,7 @@
       "nativeOnMarker": "原生程式碼已開啟",
       "browseMarketplace": "瀏覽 Navide 市集",
       "bundledGit": "內建 Git",
+      "bundledBrowser": "內建瀏覽器",
       "state": {
         "active": "啟用中",
         "removed": "已移除",
@@ -2081,6 +2087,7 @@
       "permissionDetails": "權限與授予",
       "permissionDetailsWithActivity": "權限、授予與活動",
       "plansRiskNote": "此 Navide 外掛有自己的後端程式，以您的使用者權限執行，沒有沙盒。它處理目前專案的計畫文件：從往上找到的 Git 儲存庫根目錄起（含其下的巢狀儲存庫），任何深度的 .agent-team、.claude、.cursor 與 docs 底下的 plans／reports 類資料夾、根目錄的 .plans，以及這些資料夾的 .history（只讀）。讀取與寫入計畫文件都由此 Navide 外掛的後端直接進行；刪除與改名仍經由 Navide 進行。",
+      "browserRiskNote": "此 Navide 外掛有自己的後端程式，以您的使用者權限執行，沒有沙盒。它可開啟並瀏覽任何網站；網站登入資料會保存在本機；agent 可讀取此 Navide 外掛開啟的所有網頁內容與登入狀態。",
       "searchPlaceholder": "搜尋 Navide 外掛",
       "search": "搜尋",
       "install": "安裝",
@@ -8127,6 +8134,7 @@
         "workbench_action_navigateForward": "前往下一個位置",
         "workbench_action_newFile": "新增檔案",
         "workbench_action_newWindow": "開新視窗",
+        "workbench_action_openBrowser": "開啟 Navide Browser",
         "workbench_action_openDebug": "開啟 Debug 視窗",
         "workbench_action_openEditorAtIndex1": "開啟第 1 個編輯器分頁",
         "workbench_action_openEditorAtIndex2": "開啟第 2 個編輯器分頁",
@@ -10815,6 +10823,7 @@
       "topic": "主題「{title}」→",
       "gone": "pane 已不存在",
       "orphan-hint": "關閉時沒有解除綁定 · 聊天室的訊息不會送到任何地方",
+      "needs-approval": "核准傳送者之前，這個聊天室的訊息都會被拒絕",
       "clear": "清除",
       "focus": "跳到 pane ↗",
       "unbind": "解除綁定",
@@ -10894,7 +10903,11 @@
     "allow": {
       "title": "允許名單",
       "empty": "尚未允許任何人。",
-      "remove": "移除"
+      "remove": "移除",
+      "via-pairing": "配對碼",
+      "via-invite": "連結代碼",
+      "shared": "共用 ID",
+      "shared-hint": "這個 Telegram ID 代表許多人（匿名管理員、頻道、Telegram 本身），一律會被拒絕，可以將它移除。"
     },
     "pane": {
       "connect": "連接聊天室",
@@ -10909,6 +10922,7 @@
       "manage-chats": "管理聊天室設定",
       "taken-by": "已連接：{pane}",
       "taken-hint": "已連接到另一個 pane，請先在那個 pane 解除連接才能選。",
+      "needs-approval": "已連接，但在設定 → 聊天室核准傳送者之前，這個聊天室的訊息都會被拒絕。",
       "bind-level-label": "聊天室會收到什麼",
       "back": "返回",
       "confirm": "連接",

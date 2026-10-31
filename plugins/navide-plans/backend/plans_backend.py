@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import codecs
+import hashlib
 import json
 import math
 import os
@@ -29,12 +30,14 @@ import yaml
 from agent_team_backend.fs_write import (
     _WRITE_PART_MAX_BYTES,
     _resolve_mutation_safe,
+    _staging_path,
     write_abort,
     write_commit,
     write_file,
     write_part,
 )
 from agent_team_backend.path_guard import FsError, _resolve_safe
+from agent_team_backend import plan_versions
 
 PROTOCOL_REVISION = "2026-07-28"
 SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo"
@@ -224,13 +227,20 @@ def _is_initiator(value: Any) -> bool:
         return False
     if value.get("kind") == "user":
         return _exact_keys(value, ("kind", "id")) and isinstance(value["id"], str) and bool(value["id"])
+    # ``pane`` (Host 0.2.35 and later) is optional: the calling pane's name or id.
     return (
         value.get("kind") == "agent"
         and value.get("source") == "mcp"
-        and _exact_keys(value, ("kind", "source", "id"))
+        and (_exact_keys(value, ("kind", "source", "id")) or (
+            _exact_keys(value, ("kind", "source", "id", "pane")) and _is_pane(value["pane"])
+        ))
         and isinstance(value["id"], str)
         and bool(value["id"])
     )
+
+
+def _is_pane(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= 200
 
 
 def _is_runtime(value: Any) -> bool:
@@ -567,6 +577,18 @@ def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _sha256_argument(value: Any) -> str | None:
+    """An optional ``expected_sha256``: absent, or 64 lowercase hex digits."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    return value
+
+
 def _plan_root(origin: dict[str, Any]) -> str:
     """The plan root the Host authorizes for this request.
 
@@ -710,11 +732,21 @@ def _write_failure(result: Any, *, rel_path: str | None = None) -> BridgeFailure
     return BridgeFailure("BACKEND_UNAVAILABLE")
 
 
-def _write(origin: dict[str, Any], rel_path: str, content: str, expected_mtime: float | None = None) -> float | None:
+def _write(
+    origin: dict[str, Any],
+    rel_path: str,
+    content: str,
+    expected_mtime: float | None = None,
+    expected_sha256: str | None = None,
+    *,
+    version_reason: str = "save",
+    restored_from: str | None = None,
+) -> float | None:
     """Write a document under the authorized root through the core write path.
 
     The same calls the Host's filesystem service made: the mutation guard, an
-    atomic replace, and the ``expected_mtime`` conflict check. A document past
+    atomic replace, and the ``expected_mtime`` (and ``expected_sha256``)
+    conflict check. A document past
     SINGLE_WRITE_MAX_BYTES is staged in parts and swapped in, as before.
     """
     # Plans writes deliberately have no size cap (user decision 2026-09-29:
@@ -727,17 +759,316 @@ def _write(origin: dict[str, Any], rel_path: str, content: str, expected_mtime: 
         _log(f"write {rel_path} refused: {exc}")
         raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION") from None
     data = content.encode("utf-8")
+    _announce_version(origin, rel_path, data, reason=version_reason)
     if len(data) > SINGLE_WRITE_MAX_BYTES:
-        result = _write_staged(root, rel_path, data, expected_mtime)
+        result = _write_staged(root, rel_path, data, expected_mtime, expected_sha256)
     else:
-        result = write_file(root, rel_path, content, expected_mtime=expected_mtime)
+        result = write_file(
+            root, rel_path, content, expected_mtime=expected_mtime, expected_sha256=expected_sha256
+        )
     if not _is_record(result) or result.get("ok") is not True:
         raise _write_failure(result, rel_path=rel_path)
+    _record_version(origin, rel_path, data, reason=version_reason, restored_from=restored_from)
     mtime = result.get("mtime")
     return float(mtime) if isinstance(mtime, (int, float)) and not isinstance(mtime, bool) else None
 
 
-def _write_staged(root: str, rel_path: str, data: bytes, expected_mtime: float | None) -> Any:
+def _versioned_plan(origin: dict[str, Any], rel_path: str) -> Path | None:
+    """The plan file behind ``rel_path`` when it keeps versions: a plan
+    document directly in a ``.agent-team/plans`` directory (the workspace's or
+    a nested root's), as the core watcher snapshots them. Anything else, the
+    other plan directories included, has no history."""
+    segments = rel_path.split("/")
+    name = segments[-1]
+    if segments[-3:-1] != [".agent-team", "plans"] or name.startswith(("_", ".")):
+        return None
+    if not (name.endswith(".html") or name.endswith(".plan.md")):
+        return None
+    try:
+        return _resolve_mutation_safe(_plan_root(origin), rel_path)
+    except FsError:
+        return None
+
+
+def _version_author(origin: dict[str, Any]) -> dict[str, str]:
+    """Who wrote, as the Host authenticated the call: the user, or an agent
+    with the pane it ran in when the Host names one."""
+    initiator = origin.get("initiator")
+    kind = initiator.get("kind") if isinstance(initiator, dict) else None
+    if kind != "agent":
+        return {"kind": "user"}
+    pane = initiator.get("pane")
+    return {"kind": "agent", "pane": pane} if _is_pane(pane) else {"kind": "agent"}
+
+
+def _versioned_stage(origin: dict[str, Any], rel_path: str, data: bytes) -> tuple[Path, str] | None:
+    """The plan file and the stage of ``data`` when this write keeps a version."""
+    plan = _versioned_plan(origin, rel_path)
+    if plan is None:
+        return None
+    try:
+        meta = _parse_plan_meta(data.decode("utf-8"))
+    except UnicodeDecodeError:
+        return None
+    stage = meta.get("stage") if isinstance(meta, dict) else None
+    return (plan, stage) if stage in PLAN_STAGES else None
+
+
+def _announce_version(origin: dict[str, Any], rel_path: str, data: bytes, *, reason: str) -> None:
+    """Tell the version history whose bytes are about to be written, so the
+    core watcher, should it see them first, records this author too."""
+    target = _versioned_stage(origin, rel_path, data)
+    if target is None:
+        return
+    try:
+        plan_versions.announce_write(target[0], data, author=_version_author(origin), reason=reason, warn=_log)
+    except (OSError, ValueError, FsError) as exc:
+        _log(f"write of {rel_path} not announced: {exc}")
+
+
+def _record_version(
+    origin: dict[str, Any], rel_path: str, data: bytes, *, reason: str, detached: bool = False,
+    restored_from: str | None = None,
+) -> str | None:
+    """Record ``data`` (the bytes just written, or a conflict's other side) as
+    a version. Never fails the write it follows: a problem is logged. Like
+    the watcher, a document without a stage keeps no versions."""
+    target = _versioned_stage(origin, rel_path, data)
+    if target is None:
+        return None
+    plan, stage = target
+    try:
+        return plan_versions.record_version(
+            plan, data, stage=stage, author=_version_author(origin), reason=reason, detached=detached,
+            restored_from=restored_from, warn=_log,
+        )
+    except (OSError, ValueError, FsError) as exc:
+        _log(f"version of {rel_path} not recorded: {exc}")
+        return None
+
+
+def _history_target(origin: dict[str, Any], arguments: dict[str, Any], keys: set[str]) -> tuple[str, Path, Path]:
+    """Validated (rel_path, plan file, history dir) of a history operation."""
+    if not {"rel_path"} <= set(arguments) or set(arguments) - keys:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    rel_path = _manual_write_path(arguments["rel_path"])
+    plan = _versioned_plan(origin, rel_path)
+    if plan is None:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    return rel_path, plan, _contained_history_dir(plan)
+
+
+def _contained_history_dir(plan: Path) -> Path:
+    """The plan's history directory, refused when ``.history`` or its stem is
+    a symbolic link or it resolves anywhere but under the plan's directory.
+    Nothing is created: a plan without history simply has none."""
+    history_root = plan.parent / plan_versions.HISTORY_DIR_NAME
+    history_dir = plan_versions.history_dir_for(plan)
+    try:
+        if history_root.is_symlink() or history_dir.is_symlink():
+            raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION")
+        expected = plan.parent.resolve() / plan_versions.HISTORY_DIR_NAME / history_dir.name
+        if history_dir.exists() and history_dir.resolve() != expected:
+            raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION")
+    except OSError:
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    return history_dir
+
+
+#: A version may decompress to at most this, or to 8 times the current plan
+#: when that is larger: a ceiling against a planted gzip bomb that never
+#: limits how large a plan, or its history, may grow.
+VERSION_READ_MIN_LIMIT = 256 * 1024 * 1024
+VERSION_READ_PLAN_FACTOR = 8
+
+# The last version read, by (path, mtime_ns, size, inode): paging through one
+# decompresses it once.
+_version_cache: tuple[tuple[str, int, int, int], bytes] | None = None
+
+
+def _read_version(history_dir: Path, name: str, plan: Path) -> tuple[bytes, float]:
+    """A version's plan bytes and its file's mtime, both from one open file
+    (a symbolic link is refused), decompressed with a ceiling."""
+    global _version_cache
+    path = history_dir / name
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+    except OSError as exc:
+        _log(f"version {name}: {exc}")
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    with os.fdopen(fd, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise BridgeFailure("BACKEND_UNAVAILABLE")
+        key = (str(path), info.st_mtime_ns, info.st_size, info.st_ino)
+        if _version_cache is not None and _version_cache[0] == key:
+            return _version_cache[1], info.st_mtime
+        raw = handle.read()
+    try:
+        plan_size = plan.stat().st_size
+    except OSError:
+        plan_size = 0
+    limit = max(VERSION_READ_MIN_LIMIT, VERSION_READ_PLAN_FACTOR * plan_size)
+    try:
+        data = plan_versions.decode_version(history_dir, name, raw, limit=limit)
+    except plan_versions.VersionTooLarge:
+        _log(f"version {name}: decompresses to more than {limit} bytes; refused")
+        raise BridgeFailure("RESOURCE_LIMIT") from None
+    except (OSError, ValueError, EOFError) as exc:
+        _log(f"version {name}: {exc}")
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    _version_cache = (key, data)
+    return data, info.st_mtime
+
+
+def _history_file(arguments: dict[str, Any], plan: Path) -> str:
+    """A version name of this plan's format, never a path."""
+    name = arguments.get("file")
+    if (
+        not isinstance(name, str)
+        or plan_versions.SNAPSHOT_NAME_RE.fullmatch(name) is None
+        or plan_versions.suffix_for(plan) != plan_versions.SNAPSHOT_NAME_RE.fullmatch(name).group(3)
+    ):
+        raise BridgeFailure("INVALID_ARGUMENT")
+    return name
+
+
+def _read_version_bytes(history_dir: Path, name: str, plan: Path) -> bytes:
+    return _read_version(history_dir, name, plan)[0]
+
+
+def _history_list(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """The plan's versions, newest first, with who made each one and why.
+    Older snapshots without an index line carry their file name only."""
+    try:
+        _rel_path, plan, history_dir = _history_target(origin, arguments, {"rel_path"})
+    except BridgeFailure as error:
+        if error.code != "INVALID_ARGUMENT" or not isinstance(arguments.get("rel_path"), str):
+            raise
+        return {"ok": True, "versions": []}  # a document that keeps no history
+    suffix = plan_versions.suffix_for(plan)
+    versions = []
+    for version in plan_versions.list_versions(history_dir, _log):
+        match = plan_versions.SNAPSHOT_NAME_RE.fullmatch(version["file"])
+        if match is None or match.group(3) != suffix:
+            continue
+        entry = version["entry"] or {}
+        item: dict[str, Any] = {"file": version["file"], "stage": version["stage"]}
+        for key in ("ts", "author", "reason", "restoredFrom", "detached"):
+            if key in entry:
+                item[key] = entry[key]
+        versions.append(item)
+    return {"ok": True, "versions": versions}
+
+
+def _history_read(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """One page of a version's text, uncompressed, paged like read_document."""
+    _rel_path, plan, history_dir = _history_target(origin, arguments, {"rel_path", "file", "offset"})
+    name = _history_file(arguments, plan)
+    offset = _read_offset(arguments)
+    data, mtime = _read_version(history_dir, name, plan)
+    chunk = data[offset : offset + TEXT_CHUNK_BYTES]
+    reached_end = offset + len(chunk) >= len(data)
+    text, consumed = _decode_chunk(chunk, reached_end)
+    while consumed > 4096 and len(_wire_json(text).encode("utf-8")) > FRAME_TEXT_BUDGET_BYTES:
+        text, consumed = _decode_chunk(chunk[: consumed // 2], False)
+        reached_end = False
+    result: dict[str, Any] = {"ok": True, "content": text, "mtime": mtime}
+    next_offset = offset + consumed
+    if offset > 0 or next_offset < len(data):
+        result.update({"size": len(data), "offset": offset, "eof": next_offset >= len(data)})
+        if next_offset < len(data):
+            result["next_offset"] = next_offset
+    return result
+
+
+def _restored_content(rel_path: str, current: str, version: str) -> str:
+    """The version's body under the current plan-meta (g5: a restore brings
+    back the text, never an older stage, approval, todos or review notes)."""
+    if rel_path.endswith(".html"):
+        current_island = PLAN_META_RE.search(current)
+        version_island = PLAN_META_RE.search(version)
+        if current_island is None or version_island is None:
+            raise BridgeFailure("INVALID_ARGUMENT")
+        restored = version[: version_island.start()] + current_island.group(0) + version[version_island.end():]
+        meta = _parse_plan_meta(current) or {}
+        stage = meta.get("stage")
+        if isinstance(stage, str) and stage in PLAN_STAGES:
+            restored = _sync_stage_markup(restored, stage)
+        for todo in meta.get("todos") or []:
+            if isinstance(todo, dict) and isinstance(todo.get("id"), str) and isinstance(todo.get("status"), str):
+                restored = _sync_todo_markup(restored, todo["id"], todo["status"])
+        return restored
+    current_end = current.find("\n---", 3) if current.startswith("---") else -1
+    version_end = version.find("\n---", 3) if version.startswith("---") else -1
+    if current_end < 0 or version_end < 0:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    return current[: current_end + 4] + version[version_end + 4 :]
+
+
+def _history_restore(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Bring back a version's text; the restore is itself a new version."""
+    rel_path, plan, history_dir = _history_target(origin, arguments, {"rel_path", "file", "expected_sha256"})
+    name = _history_file(arguments, plan)
+    expected = _sha256_argument(arguments.get("expected_sha256"))
+    try:
+        version = _read_version_bytes(history_dir, name, plan).decode("utf-8")
+    except UnicodeDecodeError:
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    data, _size, mtime, _eof = _read_bytes(origin, rel_path, 0, None)
+    if expected is not None and hashlib.sha256(data).hexdigest() != expected:
+        return {"ok": False, "conflict": True}
+    try:
+        current = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    restored = _restored_content(rel_path, current, version)
+    try:
+        _write(
+            origin, rel_path, restored, mtime, hashlib.sha256(data).hexdigest(),
+            version_reason="restore", restored_from=name,
+        )
+    except BridgeFailure as error:
+        if error.code == "CONFLICT":
+            return {"ok": False, "conflict": True}
+        raise
+    return {"ok": True}
+
+
+_EXECUTABLE_SCRIPT_RE = re.compile(
+    r"<script\b(?![^>]*\btype=[\"']application/json[\"'])[\s\S]*?</script\s*>", re.IGNORECASE
+)
+
+
+def _history_preserve(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Keep both sides of a section conflict as versions.
+
+    Without ``content``: the document on disk is about to be overwritten by
+    the user's side, so its exact bytes are pinned as a ``conflict`` version
+    (read here, never taken from the caller). With ``content``: the user kept
+    the disk version, and ``content`` is the document as the user had it (the
+    disk bytes with their sanitized section). It is stored as a detached
+    ``conflict`` version with executable scripts removed, so no caller can
+    plant code in the history. Never writes the plan itself.
+    """
+    if set(arguments) - {"rel_path", "content"} or "rel_path" not in arguments:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    rel_path = _manual_write_path(arguments["rel_path"])
+    content = arguments.get("content")
+    if content is not None and not isinstance(content, str):
+        raise BridgeFailure("INVALID_ARGUMENT")
+    if _versioned_plan(origin, rel_path) is None:
+        return {"ok": True, "version": None}
+    if content is None:
+        data, _size, _mtime, _eof = _read_bytes(origin, rel_path, 0, None)
+        return {"ok": True, "version": _record_version(origin, rel_path, data, reason="conflict")}
+    data = _EXECUTABLE_SCRIPT_RE.sub("", content).encode("utf-8")
+    return {"ok": True, "version": _record_version(origin, rel_path, data, reason="conflict", detached=True)}
+
+
+def _write_staged(
+    root: str, rel_path: str, data: bytes, expected_mtime: float | None, expected_sha256: str | None = None
+) -> Any:
     """Stage ``data`` part by part, then swap it in atomically.
 
     Same contract as one write_file call: the commit is refused with a
@@ -755,7 +1086,7 @@ def _write_staged(root: str, rel_path: str, data: bytes, expected_mtime: float |
         offset += len(part)
         if offset >= len(data):
             break
-    return write_commit(root, rel_path, upload_id, len(data), expected_mtime)
+    return write_commit(root, rel_path, upload_id, len(data), expected_mtime, expected_sha256)
 
 
 def _plan_path(value: Any) -> str:
@@ -1730,7 +2061,7 @@ def _manual_document(origin: dict[str, Any], arguments: dict[str, Any], action: 
     sharing is limited to the retained .plans/<document> destination.
     """
     required = {"rel_path", "content"} if action == "write" else {"rel_path"}
-    optional = {"expected_mtime"} if action == "write" else {"offset"} if action == "read" else set()
+    optional = {"expected_mtime", "expected_sha256"} if action == "write" else {"offset"} if action == "read" else set()
     if not required <= set(arguments) or set(arguments) - required - optional:
         raise BridgeFailure("INVALID_ARGUMENT")
     path = arguments["rel_path"]
@@ -1760,6 +2091,12 @@ def _manual_document(origin: dict[str, Any], arguments: dict[str, Any], action: 
         result: dict[str, Any] = {"ok": True, "content": chunk["text"]}
         if chunk["mtime"] is not None:
             result["mtime"] = chunk["mtime"]
+        if offset == 0:
+            # The whole file's hash, for the writer's expected_sha256. Left out
+            # when the file changed between the two reads: mtime still guards.
+            data, _size, mtime, _eof = _read_bytes(origin, path, 0, None)
+            if mtime == chunk["mtime"]:
+                result["sha256"] = hashlib.sha256(data).hexdigest()
         if offset > 0 or not chunk["eof"]:
             result["size"] = chunk["size"]
             result["offset"] = offset
@@ -1780,8 +2117,9 @@ def _manual_document(origin: dict[str, Any], arguments: dict[str, Any], action: 
         mtime is not None and (isinstance(mtime, bool) or not isinstance(mtime, (int, float)) or not math.isfinite(mtime))
     ):
         raise BridgeFailure("INVALID_ARGUMENT")
+    sha256 = _sha256_argument(arguments.get("expected_sha256"))
     try:
-        _write(origin, path, content, mtime)
+        _write(origin, path, content, mtime, sha256)
     except BridgeFailure as error:
         if error.code == "CONFLICT":
             return {"ok": False, "conflict": True}
@@ -1819,10 +2157,10 @@ def _manual_upload(origin: dict[str, Any], arguments: dict[str, Any], action: st
     """
     allowed = {
         "part": {"rel_path", "upload_id", "offset", "data_base64"},
-        "commit": {"rel_path", "upload_id", "total_size", "expected_mtime"},
+        "commit": {"rel_path", "upload_id", "total_size", "expected_mtime", "expected_sha256"},
         "abort": {"rel_path", "upload_id"},
     }[action]
-    required = allowed - {"expected_mtime"}
+    required = allowed - {"expected_mtime", "expected_sha256"}
     if not required <= set(arguments) or set(arguments) - allowed:
         raise BridgeFailure("INVALID_ARGUMENT")
     upload_id = arguments["upload_id"]
@@ -1849,11 +2187,26 @@ def _manual_upload(origin: dict[str, Any], arguments: dict[str, Any], action: st
         and (isinstance(expected, bool) or not isinstance(expected, (int, float)) or not math.isfinite(expected))
     ):
         raise BridgeFailure("INVALID_ARGUMENT")
-    result = write_commit(_plan_root(origin), path, upload_id, total, expected)
+    sha256 = _sha256_argument(arguments.get("expected_sha256"))
+    # The staged bytes are exactly what the commit swaps in: read them first,
+    # so the version recorded is this write's, not whatever lands after it.
+    staged: bytes | None = None
+    if _versioned_plan(origin, path) is not None:
+        try:
+            _target, staging = _staging_path(_plan_root(origin), path, upload_id)
+            if not staging.is_symlink():
+                staged = staging.read_bytes()
+        except (FsError, OSError):
+            staged = None
+    if staged is not None and len(staged) == total:
+        _announce_version(origin, path, staged, reason="save")
+    result = write_commit(_plan_root(origin), path, upload_id, total, expected, sha256)
     if _is_record(result) and result.get("conflict") is True:
         return {"ok": False, "conflict": True}
     if not _is_record(result) or result.get("ok") is not True:
         raise _write_failure(result)
+    if staged is not None and len(staged) == total:
+        _record_version(origin, path, staged, reason="save")
     mtime = result.get("mtime")
     return {"ok": True, **({"mtime": float(mtime)} if isinstance(mtime, (int, float)) and not isinstance(mtime, bool) else {})}
 
@@ -2014,7 +2367,10 @@ def _handle(frame: Any) -> None:
     if not _is_method_name(name) or not _is_runtime(runtime) or not _is_json_value(arguments) or not _is_record(arguments):
         _protocol_error(frame["id"])
         return
-    origin = {"kind": "call", "requestId": frame["id"], "instance": runtime["instanceId"]}
+    origin = {
+        "kind": "call", "requestId": frame["id"], "instance": runtime["instanceId"],
+        "initiator": runtime["initiator"],
+    }
     try:
         if name == "plans.resolve_root":
             if set(arguments) - {"workspace_path"}:
@@ -2038,6 +2394,14 @@ def _handle(frame: Any) -> None:
             result = _manual_document(origin, arguments, "read")
         elif name == "plans.write_document":
             result = _manual_document(origin, arguments, "write")
+        elif name == "plans.history_preserve":
+            result = _history_preserve(origin, arguments)
+        elif name == "plans.history_list":
+            result = _history_list(origin, arguments)
+        elif name == "plans.history_read":
+            result = _history_read(origin, arguments)
+        elif name == "plans.history_restore":
+            result = _history_restore(origin, arguments)
         elif name == "plans.write_document_part":
             result = _manual_upload(origin, arguments, "part")
         elif name == "plans.write_document_commit":

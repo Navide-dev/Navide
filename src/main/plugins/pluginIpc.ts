@@ -4808,11 +4808,11 @@ export function registerPluginIpc(
 
   const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown): Promise<{ ok: true }> => {
     const id = assertPluginRemovalTarget(pluginsRoot, rawId)
-    // Plans, Git and Mini-IDE ship with Navide and can only be disabled; no
-    // other `navide.` package is removable, so its storage and grant always
-    // stay. A Marketplace first-party package (navide.browser) is the one
-    // exception: it installs from the Official Registry and is removed like
-    // any Marketplace package.
+    // Plans, Git, Mini-IDE and Browser ship with Navide and can only be
+    // disabled; no other `navide.` package is removable, so its storage and
+    // grant always stay. A Marketplace first-party package that is not bundled
+    // is the one exception: it installs from the Official Registry and is
+    // removed like any Marketplace package.
     if (isReservedPluginId(id) && !manager.isMarketplaceFirstPartyPackage(id)) {
       throw new Error(`first-party plugin ${id} cannot be removed or restored`)
     }
