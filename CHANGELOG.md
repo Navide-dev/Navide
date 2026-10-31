@@ -14,6 +14,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Plugin API 1.1 (0.2.36): `fs.queryFiles` finds workspace files with the matching the caller asks for (name or path, substring, subsequence or glob, its own excludes, Git ignores on or off) and returns match positions in path order, so a plugin ranks results itself. A workspace listing is reused between queries and refreshed on disk changes. `fs.listFilesFlat` is deprecated and keeps working, with removal no earlier than 2027-05-01.
 
+### Changed
+
+- Plans (0.2.36): its backend now reaches shared file and version code through `navide_plugin_sdk`, a small versioned Python surface, instead of private names in the core backend. Nothing changes for users; a rename inside the core backend can no longer break Plans.
+
 ### Fixed
 
 - Pipelines (0.2.36): n8n import is honest about nodes with several outputs that are neither IF nor Switch, such as Compare Datasets. A small region folds into one step whose kickoff follows every output that has items, not just one. A region too large to fold marks that node and the Merge after it as needs review, since every output runs in Navide, also one n8n would leave without items. Workflows without such a node convert as before. Four new strings in all 11 interface languages.
