@@ -81,6 +81,39 @@ def _load_wire_frame(path: Path) -> Any:
     return json.loads(raw, object_pairs_hook=_unique_object)
 
 
+RESERVED_COMMAND_HEADS = {"workbench", "ui", "editor", "git", "navide"}
+
+
+def _validate_commands(manifest: dict[str, Any], view_ids: list[Any]) -> None:
+    """contributes.commands: the rules that need the rest of the manifest.
+
+    The same rules as parseCommands (packages/plugin-contracts) and
+    ManifestV2._check_commands (marketplace/registry).
+    """
+    commands = manifest["contributes"].get("commands")
+    if not isinstance(commands, list):
+        return
+    package_id = str(manifest.get("id"))
+    if package_id.split(".", 1)[0] in RESERVED_COMMAND_HEADS:
+        raise ValueError("contributes.commands cannot be declared under a namespace of Navide's own commands")
+    backend = manifest.get("backend")
+    methods = (backend.get("methods") or []) if isinstance(backend, dict) else []
+    seen: set[str] = set()
+    for command in commands:
+        command_id = str(command.get("id"))
+        name = command_id[len(package_id) + 1:] if command_id.startswith(f"{package_id}.") else ""
+        if not re.fullmatch(r"[a-z][a-zA-Z0-9]*", name):
+            raise ValueError(f"contributes.commands id {command_id!r} must be the package id, a dot and a name")
+        if command_id in seen:
+            raise ValueError(f"contributes.commands id {command_id!r} is declared twice")
+        seen.add(command_id)
+        run = command.get("run")
+        if "view" in run and run["view"] not in view_ids:
+            raise ValueError(f"contributes.commands run.view {run['view']!r} is not a declared view")
+        if "method" in run and run["method"] not in methods:
+            raise ValueError(f"contributes.commands run.method {run['method']!r} is not in backend.methods")
+
+
 def _validate_manifest_semantics(manifest: Any) -> None:
     """Validate invariants that Draft 2020-12 cannot express by itself.
 
@@ -111,6 +144,7 @@ def _validate_manifest_semantics(manifest: Any) -> None:
     view_ids = [view.get("id") for view in views if isinstance(view, dict)]
     if len(view_ids) != len(set(view_ids)):
         raise ValueError("contributes.views must contain unique ids")
+    _validate_commands(manifest, view_ids)
     by_id = {view["id"]: view for view in views if isinstance(view, dict) and isinstance(view.get("id"), str)}
     for view in views:
         if not isinstance(view, dict):

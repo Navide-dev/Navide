@@ -862,3 +862,36 @@ describe('createPluginViewState', () => {
     expect(() => createPluginViewState('', 0, { context: { capabilities: { invoke } } as unknown as Pick<PluginContext, 'capabilities'> })).toThrow(TypeError)
   })
 })
+
+const SDK_EXPORTS = [
+  'PluginBackendError',
+  'PluginError',
+  'createPluginBackendClient',
+  'createPluginCapabilityClient',
+  'createPluginSettingsStore',
+  'createPluginViewRuntimeClient',
+  'createPluginViewState',
+  'definePlugin',
+  'hideView',
+  'hostApiVersion',
+  'onBackendStatus',
+  'onOpenTarget',
+  'openContributionWindow',
+  'viewReady',
+]
+
+describe('public surface', () => {
+  it('keeps its exports', async () => {
+    expect(Object.keys(await import('./index')).sort()).toEqual(SDK_EXPORTS)
+  })
+
+  it('reads the Host API version, and null from a Host too old to say', async () => {
+    const { hostApiVersion } = await import('./index')
+    const nav = (globalThis as { nav?: unknown }).nav
+    ;(globalThis as { nav?: unknown }).nav = { apiVersion: '1.0.0' }
+    expect(hostApiVersion()).toBe('1.0.0')
+    ;(globalThis as { nav?: unknown }).nav = {}
+    expect(hostApiVersion()).toBeNull()
+    ;(globalThis as { nav?: unknown }).nav = nav
+  })
+})

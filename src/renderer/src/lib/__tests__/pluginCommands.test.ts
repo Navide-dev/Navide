@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { executeCommand, listCommands, registerCommand } from '@navide/plugin-ui/shared'
+import { COMMAND_IDS, executeCommand, listCommands, registerCommand, reviewImportedRules } from '@navide/plugin-ui/shared'
 import { _resetRegistry } from '@navide/plugin-ui/shared/testing'
 import {
   isPluginCommand,
@@ -56,4 +56,25 @@ describe('isPluginShapedCommand', () => {
   it.each(['acme.runner.go', 'acme.a.b.go'])('accepts %s', (id) => expect(isPluginShapedCommand(id)).toBe(true))
   it.each(['nope', 'acme.go', 'workbench.action.quickOpen', 'ui.pane.close', 'navide.plans.open', 'controlPane.x.y'])(
     'refuses %s', (id) => expect(isPluginShapedCommand(id)).toBe(false))
+})
+
+// A difference from before plugin commands existed: with no plugin installed, an
+// unknown id of this shape used to be rejected on import. It is kept now, so a
+// file exported with a plugin installed survives a machine without it.
+describe('importing shortcuts with no plugin installed', () => {
+  const file = (command: string) => JSON.stringify([{ key: 'cmd+alt+t', command }])
+
+  it('keeps an unknown id shaped like a plugin command, and names it', () => {
+    const report = reviewImportedRules(file('gone.runner.go'), COMMAND_IDS, isPluginShapedCommand)
+    expect(report.rules).toEqual([{ key: 'cmd+alt+t', command: 'gone.runner.go' }])
+    expect(report.rejected).toEqual([])
+    expect(report.deferred).toEqual(['gone.runner.go'])
+  })
+
+  it.each(['nope', 'gone.go', 'workbench.action.nope', 'ui.pane.nope', 'navide.plans.nope'])(
+    'still rejects %s', (command) => {
+      const report = reviewImportedRules(file(command), COMMAND_IDS, isPluginShapedCommand)
+      expect(report.rules).toEqual([])
+      expect(report.rejected).toEqual([`#1: unknown command "${command}"`])
+    })
 })
