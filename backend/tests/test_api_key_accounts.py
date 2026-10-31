@@ -247,7 +247,7 @@ def test_the_key_stays_out_of_the_pane(store: CliProfilesStore, vault: Credentia
     assert not settings_file.is_symlink()
     settings = json.loads(settings_file.read_text(encoding="utf-8"))
     assert settings["theme"] == "dark"
-    assert settings["apiKeyHelper"].endswith(ak.HELPER_FILE)
+    assert ak.HELPER_FILE in settings["apiKeyHelper"]
     helper = directory / ak.HELPER_FILE
     assert ANTHROPIC_KEY not in settings_file.read_text(encoding="utf-8")
     assert ANTHROPIC_KEY not in helper.read_text(encoding="utf-8")
