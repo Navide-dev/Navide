@@ -87,6 +87,23 @@ const OTHER_DEDICATED_TOOLS: Readonly<Record<string, string>> = {
   'workbench.action.closeWindow': 'window_close',
 }
 
+/** Actions that end or throw away work: a button holding one asks first. This
+ *  is telling the user, not forbidding anything. uiActionCatalog.test.ts scans
+ *  the source so a new close or reset cannot arrive unclassified. */
+export const DESTRUCTIVE_ACTIONS: ReadonlySet<string> = new Set([
+  'ui.pane.close',
+  'ui.pane.reclaim',
+  'ui.pipeline.abort',
+  'ui.pipeline.reset',
+  'ui.pipeline.restart',
+  'ui.pipeline.restart_from',
+  'ui.window.close',
+  'ui.workspace.close',
+  'workbench.action.closeActivePane',
+  'workbench.action.closeWindow',
+  'workbench.action.rebuildFocusedPane',
+])
+
 export interface UiActionInfo {
   id: string
   title: string
@@ -96,6 +113,7 @@ export interface UiActionInfo {
   summary?: string
   humanOnly?: true | string
   dedicatedTool?: string
+  destructive?: true
   /** Refused when the window has switched to another project. */
   workspaceScoped: boolean
 }
@@ -112,6 +130,7 @@ export function describeUiAction(id: string): UiActionInfo {
     ...(spec ? { summary: spec.summary } : {}),
     ...(spec?.humanOnly ? { humanOnly: spec.humanOnly } : {}),
     ...(dedicatedTool ? { dedicatedTool } : {}),
+    ...(DESTRUCTIVE_ACTIONS.has(id) ? { destructive: true as const } : {}),
     workspaceScoped: WORKSPACE_SCOPED_ACTIONS.has(id),
   }
 }

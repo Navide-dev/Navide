@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "Thêm bước",
+    "confirm-title": "Chạy nút này?",
+    "confirm-message": "Sẽ chạy: {actions}. Thao tác này đóng hoặc đặt lại một thứ gì đó và không thể hoàn tác.",
+    "confirm-run": "Chạy",
+    "step-failed": "\"{name}\" đã dừng ở bước {step}.",
     "settings-title": "Nút hành động",
-    "settings-hint": "Các nút thêm ở đây nằm ở đầu phải của thanh tab sân khấu và chạy một hành động.",
+    "settings-hint": "Các nút thêm ở đây nằm ở đầu phải của thanh tab sân khấu và chạy các hành động theo thứ tự.",
     "empty": "Chưa có nút hành động nào.",
     "name-placeholder": "Tên nút",
     "action-placeholder": "Chọn hành động…",

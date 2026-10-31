@@ -7,8 +7,14 @@ import { _resetRegistry } from '@navide/plugin-ui/shared/testing'
 import ActionBar from '../ActionBar.vue'
 import ActionButtonsSection from '../../layout/ActionButtonsSection.vue'
 import { pluginCommands } from '../../lib/pluginCommands'
-import { loadWorkbench, runWorkbenchButton, saveWorkbench, workbench } from '../../lib/workbench'
+import { isDestructiveButton, loadWorkbench, runWorkbenchButton, saveWorkbench, workbench } from '../../lib/workbench'
 import { EMPTY_WORKBENCH } from '../../../../shared/workbench'
+
+const confirm = vi.hoisted(() => vi.fn())
+vi.mock('@navide/plugin-ui/foundation', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useNotify: () => ({ confirm, toast: vi.fn() }),
+}))
 
 const global = { plugins: [i18n] }
 const bar = () => mount(ActionBar, { global })
@@ -124,6 +130,96 @@ describe('Settings > Layout', () => {
     await w.vm.$nextTick()
     await w.find('.abs-row button').trigger('click')
     await vi.waitFor(() => expect(workbench.value.buttons).toEqual([]))
+  })
+})
+
+describe('a button with several steps', () => {
+  const group = (...actions: string[]) => ({ id: 'g', label: 'Group', steps: actions.map((action) => ({ action })) })
+
+  it('runs them in order, waiting for each', async () => {
+    const order: string[] = []
+    registerCommand('a.one', async () => { await Promise.resolve(); order.push('one') })
+    registerCommand('a.two', () => { order.push('two') })
+    expect(await runWorkbenchButton(group('a.one', 'a.two'))).toBeNull()
+    expect(order).toEqual(['one', 'two'])
+  })
+
+  it('stops at the step that fails', async () => {
+    const later = vi.fn()
+    registerCommand('a.one', () => { throw new Error('nope') })
+    registerCommand('a.two', later)
+    expect(await runWorkbenchButton(group('a.one', 'a.two'))).toEqual({ failedAt: 0, error: 'nope' })
+    expect(later).not.toHaveBeenCalled()
+  })
+
+  it('stops at an action that is gone', async () => {
+    expect((await runWorkbenchButton(group('gone.action')))?.failedAt).toBe(0)
+  })
+
+  it('counts as destructive if any step is', () => {
+    expect(isDestructiveButton(group('a.one', 'workbench.action.closeActivePane'))).toBe(true)
+    expect(isDestructiveButton(group('a.one'))).toBe(false)
+  })
+})
+
+describe('a button that closes something', () => {
+  const pressWith = async (answer: boolean) => {
+    confirm.mockReset().mockResolvedValue(answer)
+    const run = vi.fn()
+    registerCommand('workbench.action.closeActivePane', run)
+    set([button('workbench.action.closeActivePane', 'Open Plans')])
+    await bar().find('button').trigger('click')
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve))
+    return run
+  }
+
+  it('asks first and does nothing on no', async () => {
+    expect(await pressWith(false)).not.toHaveBeenCalled()
+  })
+
+  it('runs on yes', async () => {
+    expect(await pressWith(true)).toHaveBeenCalled()
+  })
+
+  it('names the real action in the warning, not the label', async () => {
+    await pressWith(false)
+    const message = confirm.mock.calls[0][0] as string
+    expect(message).toContain('Close')
+    expect(message).not.toContain('Open Plans')
+  })
+})
+
+describe('a harmless button', () => {
+  it('asks nothing', async () => {
+    confirm.mockReset()
+    const run = vi.fn()
+    registerCommand('a.b', run)
+    set([button('a.b')])
+    await bar().find('button').trigger('click')
+    await vi.waitFor(() => expect(run).toHaveBeenCalled())
+    expect(confirm).not.toHaveBeenCalled()
+  })
+})
+
+describe('building a group in Settings', () => {
+  it('saves the steps in order, counting the one still in the picker', async () => {
+    const write = vi.fn().mockResolvedValue({ ok: true })
+    ;(window as unknown as { agentTeam: unknown }).agentTeam = { writeWorkbench: write }
+    registerCommand('workbench.action.quickOpen', () => {})
+    registerCommand('ui.window.openPlans', () => {})
+    const w = mount(ActionButtonsSection, { global })
+    await w.find('input.abs-name').setValue('Morning')
+    await w.find('select').setValue('workbench.action.quickOpen')
+    await w.findAll('.abs-add button')[0].trigger('click')
+    expect(w.findAll('.abs-step')).toHaveLength(1)
+    await w.find('select').setValue('ui.window.openPlans')
+    await w.find('form').trigger('submit')
+    await vi.waitFor(() => expect(workbench.value.buttons).toHaveLength(1))
+    expect(workbench.value.buttons[0].steps).toEqual([
+      { action: 'workbench.action.quickOpen' },
+      { action: 'ui.window.openPlans' },
+    ])
   })
 })
 

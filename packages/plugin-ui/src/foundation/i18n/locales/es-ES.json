@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "Añadir paso",
+    "confirm-title": "¿Ejecutar este botón?",
+    "confirm-message": "Se ejecutará: {actions}. Cierra o restablece algo y no se puede deshacer.",
+    "confirm-run": "Ejecutar",
+    "step-failed": "«{name}» se detuvo en el paso {step}.",
     "settings-title": "Botones de acción",
-    "settings-hint": "Los botones que añadas aquí se colocan a la derecha de las pestañas del escenario y ejecutan una acción.",
+    "settings-hint": "Los botones que añadas aquí se colocan a la derecha de las pestañas del escenario y ejecutan sus acciones en orden.",
     "empty": "Aún no hay botones de acción.",
     "name-placeholder": "Nombre del botón",
     "action-placeholder": "Elige una acción…",

@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "Add step",
+    "confirm-title": "Run this button?",
+    "confirm-message": "This will run: {actions}. It closes or resets something and can't be undone.",
+    "confirm-run": "Run",
+    "step-failed": "\"{name}\" stopped at step {step}.",
     "settings-title": "Action buttons",
-    "settings-hint": "Buttons you add here sit at the right end of the stage tabs and run one action.",
+    "settings-hint": "Buttons you add here sit at the right end of the stage tabs and run their actions in order.",
     "empty": "No action buttons yet.",
     "name-placeholder": "Button name",
     "action-placeholder": "Choose an action…",

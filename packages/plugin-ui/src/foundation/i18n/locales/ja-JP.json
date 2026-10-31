@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "ステップを追加",
+    "confirm-title": "このボタンを実行しますか？",
+    "confirm-message": "実行される内容：{actions}。何かを閉じるかリセットするため、元に戻せません。",
+    "confirm-run": "実行",
+    "step-failed": "「{name}」はステップ {step} で停止しました。",
     "settings-title": "アクションボタン",
-    "settings-hint": "ここで追加したボタンはステージタブの右端に並び、押すと 1 つのアクションを実行します。",
+    "settings-hint": "ここで追加したボタンはステージタブの右端に並び、押すとアクションを順に実行します。",
     "empty": "アクションボタンはまだありません。",
     "name-placeholder": "ボタン名",
     "action-placeholder": "アクションを選択…",

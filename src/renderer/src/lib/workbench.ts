@@ -2,7 +2,7 @@
 import { computed, shallowRef } from 'vue'
 import { invokeCommand } from '@navide/plugin-ui/shared'
 import { EMPTY_WORKBENCH, parseWorkbench, type WorkbenchButton, type WorkbenchConfig } from '../../../shared/workbench'
-import { isButtonAction } from '../composables/uiActionCatalog'
+import { DESTRUCTIVE_ACTIONS, isButtonAction } from '../composables/uiActionCatalog'
 import { isPluginCommand } from './pluginCommands'
 
 export const workbench = shallowRef<WorkbenchConfig>(EMPTY_WORKBENCH)
@@ -22,6 +22,10 @@ export async function loadWorkbench(): Promise<void> {
  *  by hand, or by something other than Settings. */
 export function isPermittedButton(button: WorkbenchButton): boolean {
   return button.steps.every((step) => isButtonAction(step.action, isPluginCommand))
+}
+
+export function isDestructiveButton(button: WorkbenchButton): boolean {
+  return button.steps.some((step) => DESTRUCTIVE_ACTIONS.has(step.action))
 }
 
 /** Runs the steps in order and stops at the first that fails: a later step was

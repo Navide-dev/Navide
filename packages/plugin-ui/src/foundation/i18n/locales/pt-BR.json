@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "Adicionar etapa",
+    "confirm-title": "Executar este botão?",
+    "confirm-message": "Será executado: {actions}. Isso fecha ou redefine algo e não pode ser desfeito.",
+    "confirm-run": "Executar",
+    "step-failed": "\"{name}\" parou na etapa {step}.",
     "settings-title": "Botões de ação",
-    "settings-hint": "Os botões adicionados aqui ficam à direita das abas do palco e executam uma ação.",
+    "settings-hint": "Os botões adicionados aqui ficam à direita das abas do palco e executam suas ações em ordem.",
     "empty": "Ainda não há botões de ação.",
     "name-placeholder": "Nome do botão",
     "action-placeholder": "Escolha uma ação…",

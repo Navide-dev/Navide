@@ -1,7 +1,12 @@
 {
   "actionBar": {
+    "add-step": "Schritt hinzufügen",
+    "confirm-title": "Diese Schaltfläche ausführen?",
+    "confirm-message": "Ausgeführt wird: {actions}. Das schließt oder setzt etwas zurück und lässt sich nicht rückgängig machen.",
+    "confirm-run": "Ausführen",
+    "step-failed": "„{name}“ wurde bei Schritt {step} angehalten.",
     "settings-title": "Aktionsschaltflächen",
-    "settings-hint": "Hier hinzugefügte Schaltflächen stehen rechts neben den Bühnen-Tabs und führen eine Aktion aus.",
+    "settings-hint": "Hier hinzugefügte Schaltflächen stehen rechts neben den Bühnen-Tabs und führen ihre Aktionen der Reihe nach aus.",
     "empty": "Noch keine Aktionsschaltflächen.",
     "name-placeholder": "Name der Schaltfläche",
     "action-placeholder": "Aktion auswählen…",
