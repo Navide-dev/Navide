@@ -256,6 +256,12 @@ declare global {
       readWorkbench?: () => Promise<{ ok: boolean; content?: string; error?: string }>
       writeWorkbench?: (content: string) => Promise<{ ok: boolean; error?: string }>
       onWorkbenchChanged?: (cb: (content: string) => void) => void
+      workbenchProject?: {
+        inspect: () => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchSnapshot>
+        accept: (fingerprint: string) => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
+        revoke: () => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
+        markNotified: (fingerprint: string) => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
+      }
       getBootstrapSettings: () => string
       broadcastLanguageChange: (locale: string) => void
       onLanguageChanged: (cb: (locale: string) => void) => void

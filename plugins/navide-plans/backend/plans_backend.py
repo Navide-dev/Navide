@@ -27,17 +27,18 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from agent_team_backend.fs_write import (
-    _WRITE_PART_MAX_BYTES,
-    _resolve_mutation_safe,
-    _staging_path,
+from navide_plugin_sdk import (
+    FsError,
+    WRITE_PART_MAX_BYTES as _WRITE_PART_MAX_BYTES,
+    plan_versions,
+    resolve_mutation_safe as _resolve_mutation_safe,
+    resolve_safe as _resolve_safe,
+    staging_path as _staging_path,
     write_abort,
     write_commit,
     write_file,
     write_part,
 )
-from agent_team_backend.path_guard import FsError, _resolve_safe
-from agent_team_backend import plan_versions
 
 PROTOCOL_REVISION = "2026-07-28"
 SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo"
