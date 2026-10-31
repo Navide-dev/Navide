@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { terminalKit } from '../lib/terminalKit'
 import '@xterm/xterm/css/xterm.css'
 import { bufferTail, createRedrawGuard, dropTuiNoise, stripAnsi } from '../lib/buffer'
 import { createResizeController, type ResizeController } from './useTerminalResize'
@@ -669,7 +670,9 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   const agentProfile = (agentKey?: string): TerminalAgentProfile | undefined =>
     terminalSpecFor(agentKey, opts?.agentProfileFor)
 
-  const term = new Terminal({
+  // xterm.js classes, unless a development flag builds this pane from nvterm.
+  const kit = terminalKit(paneId)
+  const term = new kit.Terminal({
     // Option+drag forces normal text selection even while a TUI has mouse
     // reporting on (vim/htop/tmux/less). Without it, xterm's macOS branch of
     // shouldForceSelection() is `altKey && macOptionClickForcesSelection`, so
@@ -696,13 +699,13 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // the whole pane renders blank.
     allowProposedApi: true
   })
-  const fit = new FitAddon()
+  const fit = new kit.FitAddon()
   term.loadAddon(fit)
   // Unicode 11 width tables (VS Code parity: unicodeVersion defaults to "11").
   // xterm's built-in tables are Unicode 6; agent CLIs measure display width
   // with newer Unicode (string-width), so emoji/symbol widths disagree and
   // mid-line input repaints land at the wrong column (overlapping text).
-  term.loadAddon(new Unicode11Addon())
+  term.loadAddon(new kit.Unicode11Addon())
   term.unicode.activeVersion = '11'
   // Scrollback is persisted by serializing xterm's own buffer, NOT by hoarding
   // the raw PTY bytes. Claude Code paints its whole screen with absolute cursor
@@ -712,7 +715,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // wrong cells — text lands on top of text and the leftovers stay on screen.
   // Serializing emits the RESULT (glyphs + SGR) instead of the drawing
   // instructions, so a replay only ever re-wraps.
-  const serializer = new SerializeAddon()
+  const serializer = new kit.SerializeAddon()
   term.loadAddon(serializer)
 
   term.onResize(({ cols, rows }) => {
@@ -1706,7 +1709,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     if (webglAddon || !containerRef.value) return
     if (!isOnScreen() || !webglAvailable()) return
     try {
-      const addon = new WebglAddon()
+      const addon = new kit.WebglAddon()
       // Context loss (GPU reset, driver recovery, or eviction because too many
       // contexts are live) leaves a dead canvas behind — fall back to DOM.
       addon.onContextLoss(() => { detachWebgl() })

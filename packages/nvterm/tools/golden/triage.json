@@ -1,0 +1,22 @@
+{
+  "osc8-hyperlink": {
+    "cell:*": {
+      "category": "accepted",
+      "reason": "xterm.js reports isUnderline() for cells inside an OSC 8 hyperlink. nvterm keeps hyperlinks out of the SGR flags (a link is not an underline attribute) and the renderer draws the link underline, so the cells differ only in the Underline flag."
+    }
+  },
+  "ich-on-wide-trailing-half": {
+    "cell:0:2": {
+      "category": "oracle-bug",
+      "reason": "xterm.js empties the leading half of the split wide character but shifts its trailing half right, leaving an orphan width-0 cell at column 2. A trailing half without its leading half is not a valid cell; nvterm empties both halves (ECMA-48 8.3.64 ICH shifts characters, it cannot create half characters)."
+    }
+  },
+  "cuu-origin-mode-top": {
+    "cursor": {
+      "category": "oracle-bug",
+      "reason": "DEC STD 070 (CUU): the cursor stops at the top margin when it starts inside the scroll region. With DECOM set, xterm.js moves it from the top margin (row 5) down to row 9 instead."
+    },
+    "cell:4:0": { "category": "oracle-bug", "reason": "Same CUU defect: nvterm prints at the top margin, row 5." },
+    "cell:8:0": { "category": "oracle-bug", "reason": "Same CUU defect: xterm.js prints at row 9." }
+  }
+}

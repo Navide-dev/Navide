@@ -14,6 +14,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import type { useOnboarding } from '../composables/useOnboarding'
+import { terminalKit } from '../platform/terminal/lib/terminalKit'
 
 const props = defineProps<{
   onboarding: ReturnType<typeof useOnboarding>
@@ -61,14 +62,15 @@ function fit(): void {
 function ensureTerminal(): Terminal | null {
   if (terminal) return terminal
   if (!host.value) return null
-  terminal = new Terminal({
+  const kit = terminalKit('install')
+  terminal = new kit.Terminal({
     cursorBlink: true,
     scrollback: 5_000,
     fontFamily: 'var(--font-mono, ui-monospace, monospace)',
     fontSize: 12,
     rows: 14,
   })
-  fitAddon = new FitAddon()
+  fitAddon = new kit.FitAddon()
   terminal.loadAddon(fitAddon)
   terminal.open(host.value)
   terminal.onData((data) => props.onboarding.runInput(data))

@@ -11,6 +11,7 @@
       "@navide/plugin-ui/file-picker": ["packages/plugin-ui/src/terminalFilePicker.ts"],
       "@navide/plugin-contracts": ["packages/plugin-contracts/src/index.ts"],
       "@navide/plugin-sdk": ["packages/plugin-sdk/src/index.ts"],
+      "@navide/nvterm": ["packages/nvterm/src/index.ts"],
       "@navide/plugin-ui": ["packages/plugin-ui/src/index.ts"],
       "@navide/plugin-ui/shared": ["packages/plugin-ui/src/shared/index.ts"],
       "@navide/plugin-ui/editor": ["packages/plugin-ui/src/editor/index.ts"],

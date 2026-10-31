@@ -1,0 +1,21 @@
+{
+  "name": "@navide/nvterm",
+  "version": "0.0.0",
+  "description": "A terminal emulator component for the web: VT parser, screen model, renderer and input layer, written from public specifications.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  }
+}
