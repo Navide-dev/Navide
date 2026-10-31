@@ -5,9 +5,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
-import { hasCommand } from '@navide/plugin-ui/shared'
 import { pluginCommandEntry } from '../lib/pluginCommands'
-import { isDestructiveButton, isPermittedButton, runWorkbenchButton, visibleWorkbenchButtons, workbenchActionName } from '../lib/workbench'
+import { isAvailableButton, isDestructiveButton, runWorkbenchButton, visibleWorkbenchButtons, workbenchActionName } from '../lib/workbench'
 import { projectName, visibleProjectButtons } from '../lib/projectWorkbench'
 import type { WorkbenchButton } from '../../../shared/workbench'
 
@@ -22,7 +21,7 @@ const entries = computed(() => [
 ])
 
 function isAvailable(button: WorkbenchButton): boolean {
-  return isPermittedButton(button) && button.steps.every((step) => hasCommand(step.action))
+  return isAvailableButton(button)
 }
 
 function pluginOf(button: WorkbenchButton): string | undefined {

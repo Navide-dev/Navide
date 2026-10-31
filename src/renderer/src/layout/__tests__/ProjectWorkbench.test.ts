@@ -213,6 +213,22 @@ describe('the review in Settings', () => {
     expect(forged).not.toContain(i18n.global.t('actionBar.project-destructive'))
   })
 
+  it('marks a step that exists nowhere, and shows its id instead of a made-up name', () => {
+    projectWorkbench.value = pending
+    const [unknown] = section().findAll('.pws-row').map((row) => row.text())
+    expect(unknown).toContain('a.open')
+    expect(unknown).toContain(i18n.global.t('actionBar.unavailable'))
+    expect(unknown).not.toContain(i18n.global.t('actionBar.project-refused'))
+  })
+
+  it('leaves a step that exists unmarked, and names it', () => {
+    registerCommand('a.open', () => {})
+    projectWorkbench.value = pending
+    const [known] = section().findAll('.pws-row').map((row) => row.text())
+    expect(known).not.toContain(i18n.global.t('actionBar.unavailable'))
+    expect(known).not.toContain('a.open')
+  })
+
   it('accepts exactly the fingerprint it showed', async () => {
     const remote = api()
     projectWorkbench.value = pending

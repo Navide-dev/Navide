@@ -124,6 +124,7 @@ import { inAppUpdateSupported, initUpdater } from './updater'
 import { withDeadline } from './deadline'
 import { MAX_RESTORE_ATTEMPTS, onScreenBounds, WindowRegistry, type AuxWindowEntry, type AuxWindowKind, type WindowBounds, type WindowEntry } from './window-registry'
 import { registeredGitLeftWorkspace, trustedGitLeftWindow } from './gitLeftIpc'
+import { mayReportWorkspace } from './workspaceReportIpc'
 import { setWindowDockTileBadge } from './dock-tile-badge'
 import { writeTempTextArtifact } from './temp-text-artifact'
 import { BackendBroadcastTracker } from './backend-broadcast'
@@ -4033,7 +4034,7 @@ ipcMain.on('terminal:selection-changed', (event, selection: unknown) => {
 ipcMain.on('window:reportWorkspace', (event, workspacePath: string) => {
   // This decides which repository a workbench acceptance applies to: a subframe
   // must not be able to point it somewhere else.
-  if (!isTrustedPluginManagementSender(event, mainWindows)) return
+  if (!mayReportWorkspace(event, mainWindows)) return
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win || !mainWindows.has(win)) return
   if (detachedWindowIds.has(win.id)) return // detached child — never registry-tracked

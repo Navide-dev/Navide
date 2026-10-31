@@ -1,7 +1,7 @@
 // The action buttons of this app: one list shared by the bar and Settings.
 import { computed, shallowRef } from 'vue'
 import { i18n } from '@navide/plugin-ui/foundation'
-import { commandI18nKey, invokeCommand } from '@navide/plugin-ui/shared'
+import { commandI18nKey, hasCommand, invokeCommand } from '@navide/plugin-ui/shared'
 import { EMPTY_WORKBENCH, parseWorkbench, type WorkbenchButton, type WorkbenchConfig } from '../../../shared/workbench'
 import { DESTRUCTIVE_ACTIONS, describeUiAction, isButtonAction } from '../composables/uiActionCatalog'
 import { isPluginCommand, pluginActionFacts } from './pluginCommands'
@@ -23,6 +23,12 @@ export async function loadWorkbench(): Promise<void> {
  *  by hand, or by something other than Settings. */
 export function isPermittedButton(button: WorkbenchButton): boolean {
   return button.steps.every((step) => isButtonAction(step.action, isPluginCommand))
+}
+
+/** False when a step names nothing registered here: a plugin that is not
+ *  installed, or an id that never existed. */
+export function isAvailableButton(button: WorkbenchButton): boolean {
+  return isPermittedButton(button) && button.steps.every((step) => hasCommand(step.action))
 }
 
 /** The action's own name, translated where it can be. Never a button's label:

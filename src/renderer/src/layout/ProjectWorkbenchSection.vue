@@ -4,9 +4,9 @@
 // names what each button really runs: the labels are free text from the repository.
 import { computed, ref } from 'vue'
 import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
-import { invokeCommand } from '@navide/plugin-ui/shared'
+import { hasCommand, invokeCommand } from '@navide/plugin-ui/shared'
 import SettingsSection from '../components/settings/SettingsSection.vue'
-import { isDestructiveButton, isPermittedButton, workbenchActionName } from '../lib/workbench'
+import { isAvailableButton, isDestructiveButton, isPermittedButton, workbenchActionName } from '../lib/workbench'
 import {
   acceptProjectWorkbench,
   projectName,
@@ -32,11 +32,11 @@ const LAYOUT_LABELS: Record<ProjectLayoutMode, string> = {
 }
 
 function stepNames(button: ProjectWorkbenchButton): string {
-  return button.steps.map((step) => (
-    isButtonAction(step.action, isPluginCommand)
-      ? workbenchActionName(step.action)
-      : t('actionBar.project-refused-step', { action: step.action })
-  )).join(' → ')
+  return button.steps.map((step) => {
+    if (!isButtonAction(step.action, isPluginCommand)) return t('actionBar.project-refused-step', { action: step.action })
+    // A title spelled from an unknown id would read like a real action.
+    return hasCommand(step.action) ? workbenchActionName(step.action) : step.action
+  }).join(' → ')
 }
 
 async function settle(run: () => Promise<boolean | string>): Promise<void> {
@@ -77,6 +77,7 @@ async function openPlugin(id: string): Promise<void> {
           <span class="pws-actions">{{ stepNames(button) }}</span>
           <span v-if="!isPermittedButton(button)" class="pws-flag pws-flag--risk">{{ $t('actionBar.project-refused') }}</span>
           <span v-else-if="isDestructiveButton(button)" class="pws-flag pws-flag--risk">{{ $t('actionBar.project-destructive') }}</span>
+          <span v-else-if="!isAvailableButton(button)" class="pws-flag">{{ $t('actionBar.unavailable') }}</span>
         </li>
       </ul>
 
