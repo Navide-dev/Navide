@@ -1057,3 +1057,4 @@ export interface Disposable {
 }
 
 export { manifestV2Schema, capabilitiesV1, executionPolicyV1Schema }
+export { PLUGIN_API_VERSION, isPluginApiSupported, pluginApiMajor } from './apiVersion.js'

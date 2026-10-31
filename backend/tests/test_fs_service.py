@@ -808,6 +808,21 @@ def test_list_files_flat_accepts_windows_separators(tmp_path: Path) -> None:
     ]
 
 
+def test_list_files_flat_skips_what_its_catalog_entry_says(tmp_path: Path) -> None:
+    # The behavior the `fs.listFilesFlat` catalog description promises plugins.
+    for rel in ("src/a.ts", "src/.hidden.ts", "src/a.png", ".git/a.ts", "node_modules/a.ts"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x", encoding="utf-8")
+    assert _flat(str(tmp_path), "a") == ["src/a.ts"]
+
+
+def test_list_files_flat_stops_at_max_results(tmp_path: Path) -> None:
+    for name in ("a.ts", "b.ts", "c.ts"):
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    res = fs_service.list_files_flat(str(tmp_path), "", max_results=2)
+    assert res == {"ok": True, "files": ["a.ts", "b.ts"], "truncated": True}
+
+
 def test_list_files_flat_sorts_exact_matches_first(tmp_path: Path) -> None:
     # Within one directory the walk is alphabetical, so the partial match
     # (AFoo.ts / Foo.ts.orig) comes up before the exact one unless sorted.

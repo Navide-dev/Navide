@@ -4,9 +4,13 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Plugin API (0.2.36): the Host now has a plugin API version. A package on a newer API major is refused at install and, if already installed, stays in Settings with the reason and contributes nothing. `hostApiVersion()` in `@navide/plugin-sdk` reads the version, and every capability catalog entry says which version it arrived in. Nothing changes for current packages.
+
 ### Fixed
 
-- Pipelines (0.2.36): n8n import is honest about nodes with several outputs that are neither IF nor Switch, such as Compare Datasets. A small region folds into one step whose kickoff follows every output that has items, not just one. A region too large to fold marks that node and the Merge after it as needs review, since every output runs in Navide, also one n8n would leave without items. Workflows without such a node convert as before. Two new strings in all 11 interface languages.
+- Pipelines (0.2.36): n8n import is honest about nodes with several outputs that are neither IF nor Switch, such as Compare Datasets. A small region folds into one step whose kickoff follows every output that has items, not just one. A region too large to fold marks that node and the Merge after it as needs review, since every output runs in Navide, also one n8n would leave without items. Workflows without such a node convert as before. Four new strings in all 11 interface languages.
 
 ## [0.2.35] — 2026-10-31
 
