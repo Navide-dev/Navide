@@ -29,7 +29,8 @@ export function isDestructiveButton(button: WorkbenchButton): boolean {
 }
 
 /** Runs the steps in order and stops at the first that fails: a later step was
- *  written assuming the earlier one happened. Answers the step that failed. */
+ *  written assuming the earlier one happened. A step no button may run stops
+ *  the whole button before any step does. Answers the step that failed. */
 export async function runWorkbenchButton(button: WorkbenchButton): Promise<{ failedAt: number; error?: string } | null> {
   const refused = button.steps.findIndex((step) => !isButtonAction(step.action, isPluginCommand))
   if (refused !== -1) return { failedAt: refused, error: `${button.steps[refused].action} cannot run from a button` }

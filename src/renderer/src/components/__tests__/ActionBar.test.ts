@@ -217,29 +217,53 @@ describe('building a group in Settings', () => {
 })
 
 describe('a workbench.json edited outside Settings', () => {
+  const load = async (content: string) => {
+    ;(window as unknown as { agentTeam: unknown }).agentTeam = {
+      readWorkbench: vi.fn().mockResolvedValue({ ok: true, content }),
+      onWorkbenchChanged: vi.fn(),
+    }
+    await loadWorkbench()
+  }
+  const file = (steps: unknown[], label = 'Open Plans') =>
+    JSON.stringify({ schemaVersion: 1, buttons: [{ id: 'x', label, steps }] })
+
   it.each(['ui.settings.yolo', 'ui.pane.sendKeys', 'ui.window.close', 'ui.pane.close', 'workbench.action.closeWindow'])(
     'cannot run %s from a button', async (action) => {
       const run = vi.fn()
       registerCommand(action, run)
       set([button(action, 'Open Plans')])
-      const w = bar()
-      expect(w.find('button').attributes('disabled')).toBeDefined()
+      expect(bar().find('button').attributes('disabled')).toBeDefined()
       expect(await runWorkbenchButton(button(action))).toMatchObject({ failedAt: 0 })
       expect(run).not.toHaveBeenCalled()
     })
 
-  it('stops a group before its first step when a later step is forbidden', async () => {
+  it('loads a forbidden action greyed out, and a press runs no step of it', async () => {
     const first = vi.fn()
+    const forbidden = vi.fn()
     registerCommand('a.b', first)
-    registerCommand('ui.settings.yolo', () => {})
-    const group = { id: 'g', label: 'G', steps: [{ action: 'a.b' }, { action: 'ui.settings.yolo' }] }
-    expect(await runWorkbenchButton(group)).toMatchObject({ failedAt: 1 })
+    registerCommand('ui.settings.yolo', forbidden)
+    await load(file([{ action: 'a.b' }, { action: 'ui.settings.yolo', args: { yolo: true } }]))
+    const w = bar()
+    expect(w.find('button').attributes('disabled')).toBeDefined()
+    await w.find('button').trigger('click')
+    expect(await runWorkbenchButton(workbench.value.buttons[0])).toMatchObject({ failedAt: 1 })
     expect(first).not.toHaveBeenCalled()
+    expect(forbidden).not.toHaveBeenCalled()
   })
 
-  it('shows the real action, whatever the label says', () => {
+  it('runs a legal action from the same kind of file', async () => {
+    const run = vi.fn()
+    registerCommand('workbench.action.quickOpen', run)
+    await load(file([{ action: 'workbench.action.quickOpen' }]))
+    const w = bar()
+    expect(w.find('button').attributes('disabled')).toBeUndefined()
+    await w.find('button').trigger('click')
+    await vi.waitFor(() => expect(run).toHaveBeenCalled())
+  })
+
+  it('shows the real action, whatever the label says', async () => {
     registerCommand('workbench.action.quickOpen', () => {})
-    set([button('workbench.action.quickOpen', 'Open Plans')])
+    await load(file([{ action: 'workbench.action.quickOpen' }]))
     expect(bar().find('button').attributes('title')).toContain('Quick Open File')
   })
 })
