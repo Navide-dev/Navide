@@ -57,6 +57,15 @@ describe('TerminalPane – quota switch-account button', () => {
     vi.restoreAllMocks()
   })
 
+  it('shows the pane bar only while out of quota, and its switch asks the app', async () => {
+    wrapper = mountPane({ usageLimitHit: false, usageLimitUntil: null, quotaSwitchOffered: true })
+    expect(wrapper.find('[data-testid="pane-account-bar"]').exists()).toBe(false)
+    wrapper.unmount()
+    wrapper = mountPane({ usageLimitHit: true, usageLimitUntil: null, quotaSwitchOffered: true })
+    await wrapper.get('[data-testid="pane-account-bar-switch"]').trigger('click')
+    expect(wrapper.emitted('quota-switch-account')).toHaveLength(1)
+  })
+
   it('is absent when not offered (flag off): the header is unchanged', () => {
     wrapper = mountPane({ usageLimitHit: true, usageLimitUntil: null })
     expect(wrapper.find('[data-testid="usage-limit-switch"]').exists()).toBe(false)

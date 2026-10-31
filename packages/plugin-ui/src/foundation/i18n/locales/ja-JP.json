@@ -8260,6 +8260,12 @@
     },
     "accounts": {
       "api-keys": {
+        "pane": {
+          "title": "サブスクリプションの利用枠を使い切りました",
+          "back-at": "{time} に再開",
+          "back-unknown": "リセット時刻は不明です",
+          "wait": "リセットを待つ"
+        },
         "kind": "API キー",
         "list": {
           "aria": "アカウント",

@@ -8260,6 +8260,12 @@
     },
     "accounts": {
       "api-keys": {
+        "pane": {
+          "title": "Đã dùng hết hạn mức gói đăng ký",
+          "back-at": "Có lại lúc {time}",
+          "back-unknown": "Chưa rõ thời gian đặt lại",
+          "wait": "Chờ đặt lại"
+        },
         "kind": "khóa API",
         "list": {
           "aria": "Tài khoản",

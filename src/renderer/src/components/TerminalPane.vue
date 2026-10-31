@@ -26,6 +26,7 @@ import UsageBadge from './UsageBadge.vue'
 import PaneChannelButton from './PaneChannelButton.vue'
 import PaneGuardBadge from './PaneGuardBadge.vue'
 import CliRiskPill from './CliRiskPill.vue'
+import PaneAccountBar from './accounts/PaneAccountBar.vue'
 import { cliRiskKey } from '../composables/useResourceUsage'
 import type { CliRiskAnalysisSpawn } from '../lib/cliRiskAnalysisPrompt'
 import RestoredPanePlaceholder from './RestoredPanePlaceholder.vue'
@@ -814,6 +815,12 @@ onMounted(() => {
       </div>
       <div v-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
     </header>
+    <PaneAccountBar
+      v-if="usageLimitHit"
+      :back-at="usageLimitUntil != null ? formatLoopTime(usageLimitUntil) : null"
+      :switch-offered="quotaSwitchOffered === true"
+      @switch-account="emit('quota-switch-account')"
+    />
     <div
       ref="containerRef"
       class="xterm-host"

@@ -8260,6 +8260,12 @@
     },
     "accounts": {
       "api-keys": {
+        "pane": {
+          "title": "Abonnement-Kontingent aufgebraucht",
+          "back-at": "Wieder verfügbar um {time}",
+          "back-unknown": "Der Zeitpunkt des Zurücksetzens ist nicht bekannt",
+          "wait": "Auf Zurücksetzen warten"
+        },
         "kind": "API-Schlüssel",
         "list": {
           "aria": "Konten",

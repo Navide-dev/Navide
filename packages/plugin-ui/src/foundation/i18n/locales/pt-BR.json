@@ -8260,6 +8260,12 @@
     },
     "accounts": {
       "api-keys": {
+        "pane": {
+          "title": "Cota da assinatura esgotada",
+          "back-at": "Volta às {time}",
+          "back-unknown": "O horário de redefinição é desconhecido",
+          "wait": "Aguardar a redefinição"
+        },
         "kind": "chave de API",
         "list": {
           "aria": "Contas",

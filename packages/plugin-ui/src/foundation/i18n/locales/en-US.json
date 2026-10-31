@@ -8260,6 +8260,12 @@
     },
     "accounts": {
       "api-keys": {
+        "pane": {
+          "title": "Subscription quota used up",
+          "back-at": "Back at {time}",
+          "back-unknown": "The reset time is not known",
+          "wait": "Wait for reset"
+        },
         "kind": "API key",
         "list": {
           "aria": "Accounts",

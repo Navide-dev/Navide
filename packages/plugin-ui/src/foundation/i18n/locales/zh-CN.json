@@ -8260,6 +8260,12 @@
     },
     "accounts": {
       "api-keys": {
+        "pane": {
+          "title": "订阅额度已用完",
+          "back-at": "{time} 恢复",
+          "back-unknown": "重置时间未知",
+          "wait": "等待重置"
+        },
         "kind": "API 密钥",
         "list": {
           "aria": "账号",

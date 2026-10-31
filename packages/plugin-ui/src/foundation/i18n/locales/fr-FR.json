@@ -8260,6 +8260,12 @@
     },
     "accounts": {
       "api-keys": {
+        "pane": {
+          "title": "Quota de l’abonnement épuisé",
+          "back-at": "De retour à {time}",
+          "back-unknown": "L’heure de réinitialisation est inconnue",
+          "wait": "Attendre la réinitialisation"
+        },
         "kind": "clé API",
         "list": {
           "aria": "Comptes",

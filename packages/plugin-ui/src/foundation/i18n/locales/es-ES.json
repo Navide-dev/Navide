@@ -8260,6 +8260,12 @@
     },
     "accounts": {
       "api-keys": {
+        "pane": {
+          "title": "Cuota de suscripción agotada",
+          "back-at": "Disponible de nuevo a las {time}",
+          "back-unknown": "No se conoce la hora de restablecimiento",
+          "wait": "Esperar al restablecimiento"
+        },
         "kind": "clave de API",
         "list": {
           "aria": "Cuentas",
