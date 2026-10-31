@@ -491,3 +491,44 @@ def test_macos_key_stays_out_of_argv(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert calls
     assert all(ANTHROPIC_KEY not in " ".join(args) for args, _ in calls)
     assert any(ANTHROPIC_KEY in (stdin or "") for _, stdin in calls)
+
+
+# ── Agents ──────────────────────────────────────────────────────────────────
+
+
+def test_an_agent_cannot_open_a_pane_on_a_key(store: CliProfilesStore) -> None:
+    from agent_team_backend.mcp_server import open_agent_account
+
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    refusal = open_agent_account.resolve("claude", key, "", "")
+    assert refusal["error_code"] == "unsupported"
+    assert ANTHROPIC_KEY not in json.dumps(refusal)
+
+
+def test_cli_accounts_list_names_the_kind_only_for_a_key() -> None:
+    from agent_team_backend.mcp_server import server
+
+    login = server._pick({"id": "a", "agentKey": "claude", "name": "Work"}, server._ACCOUNT_FIELDS)
+    key = server._pick(
+        {"id": "b", "agentKey": "claude", "name": "Key", "authKind": "api-key", "last4": "7F2A"},
+        server._ACCOUNT_FIELDS,
+    )
+    assert "authKind" not in login
+    assert key["authKind"] == "api-key"
+    assert "last4" not in key
+
+
+def test_an_agent_cannot_switch_to_a_key(store: CliProfilesStore) -> None:
+    from agent_team_backend import agent_messaging
+    from agent_team_backend.mcp_server import server, wiring
+
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    agent_messaging._reset_for_test()
+    agent_messaging.register("pa", "caller", "ws", agent_key="claude")
+    params = {"pane": "pa", "t": wiring.caller_token("pa")}
+    ctx = SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
+
+    answer = asyncio.run(server.cli_account_switch(ctx, agent="claude", profile_id=key, reason="out of quota"))
+
+    assert answer["error_code"] == "api-key-account"
+    agent_messaging._reset_for_test()
