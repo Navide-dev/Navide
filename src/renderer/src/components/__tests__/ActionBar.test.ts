@@ -157,7 +157,7 @@ describe('a button with several steps', () => {
   })
 
   it('counts as destructive if any step is', () => {
-    expect(isDestructiveButton(group('a.one', 'ui.pane.close'))).toBe(true)
+    expect(isDestructiveButton(group('a.one', 'workbench.action.closeActivePane'))).toBe(true)
     expect(isDestructiveButton(group('a.one'))).toBe(false)
   })
 })
@@ -166,8 +166,8 @@ describe('a button that closes something', () => {
   const pressWith = async (answer: boolean) => {
     confirm.mockReset().mockResolvedValue(answer)
     const run = vi.fn()
-    registerCommand('ui.pane.close', run)
-    set([button('ui.pane.close')])
+    registerCommand('workbench.action.closeActivePane', run)
+    set([button('workbench.action.closeActivePane', 'Open Plans')])
     await bar().find('button').trigger('click')
     await vi.waitFor(() => expect(confirm).toHaveBeenCalled())
     await new Promise((resolve) => setTimeout(resolve))
@@ -180,6 +180,13 @@ describe('a button that closes something', () => {
 
   it('runs on yes', async () => {
     expect(await pressWith(true)).toHaveBeenCalled()
+  })
+
+  it('names the real action in the warning, not the label', async () => {
+    await pressWith(false)
+    const message = confirm.mock.calls[0][0] as string
+    expect(message).toContain('Close')
+    expect(message).not.toContain('Open Plans')
   })
 })
 

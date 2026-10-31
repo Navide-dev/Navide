@@ -2,7 +2,7 @@
   "actionBar": {
     "add-step": "Adicionar etapa",
     "confirm-title": "Executar este botão?",
-    "confirm-message": "\"{name}\" vai fechar ou redefinir algo. Isso não pode ser desfeito.",
+    "confirm-message": "Será executado: {actions}. Isso fecha ou redefine algo e não pode ser desfeito.",
     "confirm-run": "Executar",
     "step-failed": "\"{name}\" parou na etapa {step}.",
     "settings-title": "Botões de ação",

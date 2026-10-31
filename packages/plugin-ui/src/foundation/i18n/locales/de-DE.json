@@ -2,7 +2,7 @@
   "actionBar": {
     "add-step": "Schritt hinzufügen",
     "confirm-title": "Diese Schaltfläche ausführen?",
-    "confirm-message": "„{name}“ schließt oder setzt etwas zurück. Das lässt sich nicht rückgängig machen.",
+    "confirm-message": "Ausgeführt wird: {actions}. Das schließt oder setzt etwas zurück und lässt sich nicht rückgängig machen.",
     "confirm-run": "Ausführen",
     "step-failed": "„{name}“ wurde bei Schritt {step} angehalten.",
     "settings-title": "Aktionsschaltflächen",

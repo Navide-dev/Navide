@@ -4,13 +4,13 @@
 // a built-in control. With no buttons this renders nothing.
 import { useI18n } from 'vue-i18n'
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
-import { hasCommand } from '@navide/plugin-ui/shared'
+import { commandI18nKey, hasCommand } from '@navide/plugin-ui/shared'
 import { pluginActionFacts, pluginCommandEntry } from '../lib/pluginCommands'
 import { describeUiAction } from '../composables/uiActionCatalog'
 import { isDestructiveButton, isPermittedButton, runWorkbenchButton, visibleWorkbenchButtons } from '../lib/workbench'
 import type { WorkbenchButton } from '../../../shared/workbench'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const notify = useNotify()
 
 function isAvailable(button: WorkbenchButton): boolean {
@@ -25,18 +25,25 @@ function pluginOf(button: WorkbenchButton): string | undefined {
   return undefined
 }
 
+/** The action's own name, translated where it can be. Never the button's
+ *  label: that is free text, and a warning has to say what will really happen. */
+function actionName(id: string): string {
+  const key = commandI18nKey(id)
+  return te(key) ? t(key) : pluginActionFacts(id)?.title ?? describeUiAction(id).title
+}
+
 function titleFor(button: WorkbenchButton): string {
   if (!isAvailable(button)) return t('actionBar.unavailable')
   const plugin = pluginOf(button)
   const source = plugin ? t('actionBar.source-plugin', { name: plugin }) : t('actionBar.source-mine')
   // What it will really do: the label is free text and proves nothing.
-  const actions = button.steps.map((step) => pluginActionFacts(step.action)?.title ?? describeUiAction(step.action).title)
-  return `${source} — ${actions.join(' → ')}`
+  return `${source} — ${button.steps.map((step) => actionName(step.action)).join(' → ')}`
 }
 
 async function run(button: WorkbenchButton): Promise<void> {
   if (isDestructiveButton(button)) {
-    const ok = await notify.confirm(t('actionBar.confirm-message', { name: button.label }), {
+    const actions = button.steps.map((step) => actionName(step.action)).join(' → ')
+    const ok = await notify.confirm(t('actionBar.confirm-message', { actions }), {
       title: t('actionBar.confirm-title'),
       confirmText: t('actionBar.confirm-run'),
       danger: true,

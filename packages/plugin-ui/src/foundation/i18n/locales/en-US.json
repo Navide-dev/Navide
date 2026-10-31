@@ -2,7 +2,7 @@
   "actionBar": {
     "add-step": "Add step",
     "confirm-title": "Run this button?",
-    "confirm-message": "\"{name}\" will close or reset something. It can't be undone.",
+    "confirm-message": "This will run: {actions}. It closes or resets something and can't be undone.",
     "confirm-run": "Run",
     "step-failed": "\"{name}\" stopped at step {step}.",
     "settings-title": "Action buttons",

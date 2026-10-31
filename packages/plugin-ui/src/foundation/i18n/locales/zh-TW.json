@@ -2,7 +2,7 @@
   "actionBar": {
     "add-step": "加入步驟",
     "confirm-title": "要執行這顆按鈕嗎？",
-    "confirm-message": "「{name}」會關閉或重設某些東西，無法復原。",
+    "confirm-message": "將會執行：{actions}。這會關閉或重設某些東西，無法復原。",
     "confirm-run": "執行",
     "step-failed": "「{name}」停在第 {step} 步。",
     "settings-title": "動作按鈕",

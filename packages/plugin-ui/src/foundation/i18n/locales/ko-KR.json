@@ -2,7 +2,7 @@
   "actionBar": {
     "add-step": "단계 추가",
     "confirm-title": "이 버튼을 실행할까요?",
-    "confirm-message": "\"{name}\"은(는) 무언가를 닫거나 재설정해요. 되돌릴 수 없어요.",
+    "confirm-message": "실행할 작업: {actions}. 무언가를 닫거나 재설정하며 되돌릴 수 없어요.",
     "confirm-run": "실행",
     "step-failed": "\"{name}\"이(가) {step}단계에서 멈췄어요.",
     "settings-title": "작업 버튼",

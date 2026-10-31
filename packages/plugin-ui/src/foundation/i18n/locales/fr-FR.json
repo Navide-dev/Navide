@@ -2,7 +2,7 @@
   "actionBar": {
     "add-step": "Ajouter une étape",
     "confirm-title": "Exécuter ce bouton ?",
-    "confirm-message": "« {name} » va fermer ou réinitialiser quelque chose. Cette action est irréversible.",
+    "confirm-message": "Sera exécuté : {actions}. Cela ferme ou réinitialise quelque chose, sans retour possible.",
     "confirm-run": "Exécuter",
     "step-failed": "« {name} » s’est arrêté à l’étape {step}.",
     "settings-title": "Boutons d’action",
