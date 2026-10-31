@@ -4,10 +4,14 @@ import { useBackend, viewRuntime } from './composables/useBackend'
 import { createMiniIdeEditorPort } from './composables/editorPort'
 import { createMiniIdeSettingsPort, createMiniIdeKeybindingsPort } from './composables/surfacePorts'
 import { native, revealPath } from './composables/native'
+import { parsePathLine } from './lib/pathLine'
+import type { WorkspaceFileRow } from './lib/quickOpen'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
+import { resolveWorkspaceFileLink, searchWorkspaceFiles, type WorkspaceFileSource } from './lib/workspaceFiles'
 import ExplorerPane from './components/ExplorerPane.vue'
 import WindowControls from './components/WindowControls.vue'
 import SearchPane from './components/SearchPane.vue'
+import { hostApiVersion } from '@navide/plugin-sdk'
 import { EditorPane } from '@navide/plugin-ui/editor'
 import type { PluginDetailCloseDecision, PluginEditorFileTarget, PluginEditorTargetOpenResult, PluginReceiverCloseGuardReason, PluginReceiverLeftContribution } from '@navide/plugin-sdk'
 import NotificationHost from './components/NotificationHost.vue'
@@ -1310,7 +1314,7 @@ watch(paletteQuery, () => { paletteIdx.value = 0 })
 registerCommand('workbench.action.showCommands', openPalette)
 
 // ── Quick Open (⌘P) ─────────────────────────────────────────────────────────
-type QoFileItem   = { qoKind: 'file';   name: string; relPath: string; wsPath?: string; key: string }
+type QoFileItem   = { qoKind: 'file';   name: string; relPath: string; wsPath?: string; key: string; line?: number }
 type QoLineItem   = { qoKind: 'line';   line: number }
 type QoSymbolItem = { qoKind: 'symbol'; name: string; line: number; kind: string }
 type QoHeaderItem = { qoKind: 'header'; label: string }
@@ -1329,20 +1333,43 @@ const qoPlaceholder = computed(() => {
 })
 // Workspace files matching the query, so ⌘P reaches beyond the open tabs.
 // `qoRepoSeq` drops answers that arrive after the query has moved on.
-const qoRepoFiles = ref<string[]>([])
+const qoRepoFiles = ref<WorkspaceFileRow[]>([])
 let qoRepoSeq = 0
 let qoRepoTimer: ReturnType<typeof setTimeout> | undefined
 const qoIsPlainQuery = (q: string): boolean => q.trim() !== '' && !/^[:@>]/.test(q)
+const workspaceFiles: WorkspaceFileSource = {
+  async query({ query, matchOn, mode, limit }) {
+    // A Host before plugin API 1.1 has no fs.queryFiles and reports no version.
+    if (hostApiVersion() === null) {
+      const flat = await backend.send<{ files?: string[] }>('fs.list_files_flat', { query, max_results: limit })
+      return (flat.ok && Array.isArray(flat.payload?.files) ? flat.payload.files : [])
+        .map((path) => ({ path, name: path.split('/').pop() || path }))
+    }
+    const res = await backend.send<{ files?: WorkspaceFileRow[] }>('fs.query_files', { query, match_on: matchOn, mode, limit })
+    return res.ok && Array.isArray(res.payload?.files) ? res.payload.files : []
+  },
+  async isFile(path) {
+    const res = await backend.send<{ exists?: boolean }>('fs.stat_path', { workspace_path: workspacePath, rel_path: path })
+    return res.ok && res.payload?.exists === true
+  },
+}
 watch(qoQuery, (q) => {
   clearTimeout(qoRepoTimer)
   const seq = ++qoRepoSeq
   if (!qoIsPlainQuery(q)) { qoRepoFiles.value = []; return }
   qoRepoTimer = setTimeout(async () => {
-    const res = await backend.send<{ files?: string[] }>('fs.list_files_flat', { query: q.trim(), max_results: 20 })
+    const rows = await searchWorkspaceFiles(workspaceFiles, parsePathLine(q).path)
     if (seq !== qoRepoSeq) return
-    qoRepoFiles.value = res.ok && Array.isArray(res.payload?.files) ? res.payload.files : []
+    qoRepoFiles.value = rows
   }, 150)
 })
+// A terminal link this window can settle opens here; the rest go to the Host picker.
+async function resolveTerminalFileLink(request: { candidates: string[]; line?: number }): Promise<boolean> {
+  const target = await resolveWorkspaceFileLink(workspaceFiles, request.candidates, workspacePath)
+  if (!target) return false
+  openFile({ filepath: target.path, line: target.line ?? request.line })
+  return true
+}
 const qoItems = computed((): QoItem[] => {
   const q = qoQuery.value
   // :N → jump to line in current file
@@ -1374,13 +1401,14 @@ const qoItems = computed((): QoItem[] => {
     return out
   }
   // default: fuzzy-filter open + recently-closed files (subsequence match)
-  const ql = q.toLowerCase()
+  const { path: qPath, line: qLine } = parsePathLine(q)
+  const ql = qPath.toLowerCase()
   const files = openFiles.value.filter((f) => f.kind === 'file')
   const openSet = new Set(files.map(tabKey))
   const recentClosed = [...closedHistory].reverse().filter((r) => !openSet.has(tabKey(r))).slice(0, 20)
     .map((r) => ({ name: r.name, relPath: r.relPath, wsPath: r.wsPath, kind: 'file' as const, isDir: false }))
   const item = (f: { name: string; relPath: string; wsPath?: string }): QoFileItem =>
-    ({ qoKind: 'file', name: f.name, relPath: f.relPath, wsPath: f.wsPath, key: tabKey(f) })
+    ({ qoKind: 'file', name: f.name, relPath: f.relPath, wsPath: f.wsPath, key: tabKey(f), ...(qLine ? { line: qLine } : {}) })
   if (!ql) {
     return [...files.map(item), ...recentClosed.slice(0, 8).map(item)]
   }
@@ -1397,8 +1425,8 @@ const qoItems = computed((): QoItem[] => {
   scored.sort((a, b) => b.score - a.score)
   const listed = new Set(scored.map(({ f }) => tabKey(f)))
   const repo = qoRepoFiles.value
-    .filter((rel) => !listed.has(tabKeyOf(undefined, rel)))
-    .map((rel) => item({ name: rel.split('/').pop() || rel, relPath: rel }))
+    .filter((row) => !listed.has(tabKeyOf(undefined, row.path)))
+    .map((row) => item({ name: row.name, relPath: row.path }))
   return [...scored.map(({ f }) => item(f)), ...repo]
 })
 function openQuickOpen(): void {
@@ -1415,8 +1443,8 @@ function confirmQuickOpen(index: number = qoIdx.value): void {
   if (!item || item.qoKind === 'header') { closeQuickOpen(); return }
   if (item.qoKind === 'file') {
     // Recently-closed and workspace hits have no tab yet.
-    if (findTab(item.key)) activeKey.value = item.key
-    else openFile({ filepath: item.relPath, wsPath: item.wsPath, name: item.name })
+    if (findTab(item.key) && !item.line) activeKey.value = item.key
+    else openFile({ filepath: item.relPath, wsPath: item.wsPath, name: item.name, line: item.line })
   }
   else if (item.qoKind === 'line') { activeEditor()?.jumpToLine(item.line) }
   else if (item.qoKind === 'symbol') { activeEditor()?.jumpToLine(item.line) }
@@ -2823,6 +2851,7 @@ if (workspacePath && initialRel) openFile({ filepath: initialRel, name: initialN
       origin="mini-ide"
       :workspace-path="workspacePath"
       :build-context="buildEditorContext"
+      :resolve-file-link="resolveTerminalFileLink"
     />
     </div><!-- end ide-body -->
   </div>
