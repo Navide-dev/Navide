@@ -116,6 +116,37 @@ export function describeUiAction(id: string): UiActionInfo {
   }
 }
 
+/** The `ui.*` actions worth a button: they open something and need no args. */
+const BUTTON_UI_ACTIONS = new Set([
+  'ui.plugins.openDeveloperMode',
+  'ui.plugins.openInstallFromFile',
+  'ui.plugins.openMarketplace',
+  'ui.settings.open',
+  'ui.window.openGit',
+  'ui.window.openPipeline',
+  'ui.window.openPlans',
+  'ui.window.openResourceManager',
+  'ui.window.openTurnStats',
+])
+
+/** What a button may run: keyboard commands, plugin commands and the `ui.*`
+ *  actions above, never one kept to its own tool or to the user at the prompt.
+ *  Settings offers these and the runner enforces them, because workbench.json
+ *  is a file an agent can write. */
+export function isButtonAction(id: string, isPluginCommand: (id: string) => boolean): boolean {
+  if (isPluginCommand(id)) return true
+  const { dedicatedTool, humanOnly } = describeUiAction(id)
+  if (dedicatedTool || humanOnly) return false
+  return !id.startsWith('ui.') || BUTTON_UI_ACTIONS.has(id)
+}
+
+export function buttonActions(
+  ids: readonly string[],
+  overlay?: (id: string) => Partial<UiActionInfo> | undefined,
+): UiActionInfo[] {
+  return describeUiActions(ids.filter((id) => isButtonAction(id, (other) => overlay?.(other) !== undefined)), undefined, overlay)
+}
+
 /** `ids` is the window's registry; a prefix narrows it. `overlay` lets a
  *  command the table cannot know, a Navide plugin's, describe itself. */
 export function describeUiActions(

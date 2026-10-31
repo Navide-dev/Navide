@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "アクションボタン",
+    "settings-hint": "ここで追加したボタンはステージタブの右端に並び、押すと 1 つのアクションを実行します。",
+    "empty": "アクションボタンはまだありません。",
+    "name-placeholder": "ボタン名",
+    "action-placeholder": "アクションを選択…",
+    "add": "追加",
+    "remove": "削除",
+    "hide": "アクションボタンバーを隠す",
+    "save-failed": "アクションボタンを保存できませんでした",
+    "source-mine": "自分で追加",
+    "source-plugin": "Navide プラグイン {name} から",
+    "unavailable": "このアクションは現在使用できません"
+  },
   "convenience": {
     "switch-back-failed": "元のアカウントに戻せませんでした：{detail}",
     "notice": {

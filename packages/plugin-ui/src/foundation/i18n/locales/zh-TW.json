@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "動作按鈕",
+    "settings-hint": "在這裡新增的按鈕會放在舞台分頁列右端，按下就執行一個動作。",
+    "empty": "還沒有動作按鈕。",
+    "name-placeholder": "按鈕名稱",
+    "action-placeholder": "選擇動作…",
+    "add": "新增",
+    "remove": "移除",
+    "hide": "隱藏動作按鈕列",
+    "save-failed": "無法儲存動作按鈕",
+    "source-mine": "你自己新增的",
+    "source-plugin": "來自 Navide 外掛 {name}",
+    "unavailable": "這個動作目前無法使用"
+  },
   "convenience": {
     "switch-back-failed": "無法切換回原帳號：{detail}",
     "notice": {

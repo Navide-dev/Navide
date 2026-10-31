@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "Action buttons",
+    "settings-hint": "Buttons you add here sit at the right end of the stage tabs and run one action.",
+    "empty": "No action buttons yet.",
+    "name-placeholder": "Button name",
+    "action-placeholder": "Choose an action…",
+    "add": "Add",
+    "remove": "Remove",
+    "hide": "Hide the action button bar",
+    "save-failed": "Couldn't save the action buttons",
+    "source-mine": "Added by you",
+    "source-plugin": "From Navide plugin {name}",
+    "unavailable": "This action isn't available right now"
+  },
   "convenience": {
     "switch-back-failed": "Couldn't switch back: {detail}",
     "notice": {

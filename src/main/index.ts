@@ -5678,6 +5678,30 @@ async function writeKeybindingsFile(
   }
 }
 
+ipcMain.handle('workbench:read', async () => {
+  try {
+    return { ok: true, content: await readFile(join(app.getPath('userData'), 'workbench.json'), 'utf-8') }
+  } catch (e) {
+    // No file is the normal case, and means no buttons.
+    if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return { ok: true, content: '' }
+    return { ok: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('workbench:write', async (event, content: string) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
+  if (typeof content !== 'string') return { ok: false, error: 'invalid content' }
+  try {
+    await writeFile(join(app.getPath('userData'), 'workbench.json'), content, 'utf-8')
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && win.webContents.id !== event.sender.id) win.webContents.send('workbench:changed', content)
+    }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+})
+
 // Read bytes from a file starting at a given offset. Used by the stage watcher
 // to scan the outputLogFile for sentinel strings — more reliable than cleanBuffer
 // which can be truncated or have scanFrom issues from Q&A injections.
