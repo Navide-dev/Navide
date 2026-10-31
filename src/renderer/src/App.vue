@@ -393,7 +393,7 @@ import { useShareNotices } from './composables/useShareNotices'
 import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
-import { keyMoveRebuild, loginSpent, reopenOnKey, useApiKeyTakeover, useLoginResetNotice } from './composables/useApiKeyTakeover'
+import { loginSpent, reopenOnKey, useApiKeyTakeover, useLoginResetNotice } from './composables/useApiKeyTakeover'
 import { usageVersion } from './composables/useUsage'
 import {
   useQuotaFailover,
@@ -8934,7 +8934,14 @@ useApiKeyTakeover(backend, {
   reopen: (paneId, profileId) =>
     reopenOnKey(paneId, profileId, {
       readiness: (id) => quotaPaneReadiness(id, { needsResume: false }),
-      rebuild: (id, target) => rebuildPaneViaResume(id, keyMoveRebuild(target)),
+      rebuild: (id, target) =>
+        rebuildPaneViaResume(id, {
+          profileId: target,
+          suppressBusyToast: true,
+          offerContinue: true,
+          freshWhenNoTranscript: true,
+          preserveScrollback: true,
+        }),
     }),
   announce: (name, stayed) => {
     notifyRestore.toast(
