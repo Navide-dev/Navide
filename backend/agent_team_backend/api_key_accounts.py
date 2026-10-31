@@ -4,8 +4,10 @@ An API key is one more kind of account in ``cli_profiles``. A profile carrying
 ``authKind: "api-key"`` is that kind; a profile without the field is a login
 account and none of this code touches it.
 
-The key itself goes to the OS secret store through ``cloud_secrets.write``,
-under a backend-owned name. The profile holds only its last four characters,
+A Claude key goes to the OS secret store through ``cloud_secrets.write``, under
+a backend-owned name: the Keychain on macOS, an owner-only file on Linux. A
+Codex key lives in the account's slot, as the ``auth.json`` ``codex login
+--with-api-key`` writes. The profile holds only the key's last four characters,
 the spend reminder and the automatic-switch opt-in. Secrets are not a sync
 scope, so a key never reaches Navide Cloud, a shared bundle or a settings
 export, and no message here returns one.
@@ -412,8 +414,6 @@ def create(agent_key: Any, name: Any, secret: Any, monthly_reminder: Any = None)
     agent = _validate_agent(agent_key)
     if agent == "claude" and osplat.impl_name == "_windows":
         raise ApiKeyError("unsupported-platform", "API key accounts for Claude Code are not available on Windows yet.")
-    if login_policy_blocks(agent):
-        raise ApiKeyError("login-policy", "Your organization requires a specific sign-in for this CLI.")
     clean_name = _validate_name(name)
     reminder = _validate_reminder(monthly_reminder)
     clean_secret = validate_secret(agent, secret)
