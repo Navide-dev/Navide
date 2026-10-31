@@ -86,7 +86,7 @@ Unknown fields are refused at every level, and so is an explicit `null`.
 | `engines` | object | no | `{ "navide": "<range>" }`, the lowest Navide release the version supports; see [`engines.navide`](#enginesnavide). |
 | `permissions` | object | yes | `{}` or the grants below. |
 | `marketplace` | object | yes | Listing metadata, below. |
-| `contributes` | object | one of | `{ "views": [...] }`, 1-16 views. |
+| `contributes` | object | one of | `{ "views": [...], "commands"?: [...] }`, 1-16 views, 1-32 commands. Commands follow `docs/en-US/plugin-development-v2.md`, "Commands". |
 | `backend` | object | one of | The native backend, below. |
 | `extensionPack` | string[] | one of | An [Extension Pack](#extension-packs): 1-20 member ids. |
 
