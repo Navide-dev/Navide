@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Pipelines (0.2.36): n8n import is honest about nodes with several outputs that are neither IF nor Switch, such as Compare Datasets. A small region folds into one step whose kickoff follows every output that has items, not just one. A region too large to fold marks that node and the Merge after it as needs review, since every output runs in Navide, also one n8n would leave without items. Workflows without such a node convert as before. Two new strings in all 11 interface languages.
+
 ## [0.2.35] — 2026-10-31
 
 ### Added

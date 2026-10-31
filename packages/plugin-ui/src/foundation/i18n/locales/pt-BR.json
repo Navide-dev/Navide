@@ -12593,6 +12593,10 @@
       "cluster-other": "Incorporado ao passo do agent.",
       "branch-if": "Ligações de ramificação: o agent informa para que lado a condição foi, e só esse ramo roda.",
       "branch-switch": "Ligações de ramificação, uma por regra: o agent informa qual regra correspondeu, e só esse ramo roda.",
+      "branch-too-large": "No Navide cada saída roda, até uma que o n8n deixaria sem itens. As saídas eram grandes demais, ou tinham um agente ou um ponto de aprovação, para virar um só passo.",
+      "merge-after-branch": "Espera cada entrada, porque cada saída anterior roda. O n8n o executa com as saídas que tiveram itens.",
+      "trigger-start": "Inicia o pipeline quando você o executa.",
+      "gate-approval": "A execução para aqui até você aprovar.",
       "merge-join": "Espera as entradas que rodam. Uma entrada cujo ramo não foi seguido é pulada.",
       "agent-step": "Um agent o executa a partir dos parâmetros originais."
     },
