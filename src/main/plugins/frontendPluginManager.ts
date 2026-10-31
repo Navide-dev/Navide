@@ -1592,6 +1592,9 @@ export class FrontendPluginManager {
   /** Validated packages installed under userData/plugins, including packages
    *  with no frontend descriptor. */
   private readonly installedPackages = new Map<string, InstalledPluginPackageSummary>()
+  /** Plugins with an `fs.queryFiles` running. One slow query per plugin: the
+   *  backend's worker threads are shared with Git and file reads. */
+  private readonly fileQueriesInFlight = new Set<string>()
   /** Canonical roots for installed packages. Backend-only packages have no
    *  descriptor, so their Host-approved backend activation is matched here. */
   private readonly installedPackageDirectories = new Map<string, string>()
@@ -6850,6 +6853,15 @@ export class FrontendPluginManager {
       if (wsType === 'fs.write_file') {
         if (typeof args.encoding === 'string') payload.encoding = args.encoding
         if (args.expectedMtime !== undefined) payload.expected_mtime = args.expectedMtime
+      }
+      if (wsType === 'fs.query_files') {
+        if (this.fileQueriesInFlight.has(plugin.id)) return { ok: false, error: 'busy' }
+        this.fileQueriesInFlight.add(plugin.id)
+        try {
+          return toPayload(await this.sendPublicBackend(wsType, payload, () => this.publicPlanCanDispatch(plan, plugin)))
+        } finally {
+          this.fileQueriesInFlight.delete(plugin.id)
+        }
       }
       const response = await this.sendPublicBackend(
         wsType,
