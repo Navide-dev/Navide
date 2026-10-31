@@ -10823,6 +10823,7 @@
       "topic": "Chủ đề “{title}” →",
       "gone": "Pane không còn tồn tại",
       "orphan-hint": "Đã đóng mà chưa gỡ gắn · tin nhắn từ cuộc trò chuyện này không đi đâu cả",
+      "needs-approval": "Tin nhắn từ cuộc trò chuyện này bị từ chối cho đến khi bạn phê duyệt người gửi",
       "clear": "Xóa",
       "focus": "Đi tới pane ↗",
       "unbind": "Gỡ gắn",
@@ -10902,7 +10903,11 @@
     "allow": {
       "title": "Người gửi được phép",
       "empty": "Chưa cho phép ai cả.",
-      "remove": "Gỡ"
+      "remove": "Gỡ",
+      "via-pairing": "Mã ghép đôi",
+      "via-invite": "Mã liên kết",
+      "shared": "ID dùng chung",
+      "shared-hint": "ID Telegram này đại diện cho nhiều người (quản trị viên ẩn danh, kênh, chính Telegram) nên luôn bị từ chối. Bạn có thể gỡ nó."
     },
     "pane": {
       "connect": "Kết nối với cuộc trò chuyện",
@@ -10917,6 +10922,7 @@
       "manage-chats": "Quản lý cài đặt trò chuyện",
       "taken-by": "Đã kết nối với {pane}",
       "taken-hint": "Đã kết nối với pane khác. Hãy gỡ gắn ở đó để dùng cuộc trò chuyện này ở đây.",
+      "needs-approval": "Đã kết nối, nhưng tin nhắn từ cuộc trò chuyện này bị từ chối cho đến khi bạn phê duyệt người gửi trong Cài đặt → Kênh.",
       "bind-level-label": "Cuộc trò chuyện nhận gì",
       "back": "Quay lại",
       "confirm": "Kết nối",

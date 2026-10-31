@@ -251,3 +251,13 @@ async def test_discord_webhook_and_forward_references_are_not_trusted() -> None:
                                                       "author": {"id": "42", "username": "a"}}})
     assert [(m.reply_to_text, m.reply_to_sender_id, m.reply_to_self) for m in got] == [
         ("hook words", "", False), ("", "", False)]
+
+
+async def test_telegram_message_sent_on_behalf_of_a_chat_has_no_sender_id() -> None:
+    """``sender_chat``: a channel or an anonymous admin posted it; ``from`` is a stand-in, so the
+    message names no sender the gate could admit. Ordinary messages keep theirs."""
+    ad = TelegramAdapter(TOKEN)
+    got = _collect(ad)
+    await ad._handle_update(_tg_update(**{"from": {"id": 7, "username": "alice"}, "sender_chat": {"id": -100}}))
+    await ad._handle_update(_tg_update())
+    assert [m.sender_id for m in got] == ["", "7"]

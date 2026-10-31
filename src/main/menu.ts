@@ -423,12 +423,13 @@ export function installApplicationMenu(
  * Roles that stay usable under the App Lock screen. The Edit roles act on the
  * focused page, which is the lock screen itself (it holds the focus), so the
  * PIN box keeps paste and select-all; the rest only hide, size or quit the app.
- * `toggleDevTools` stays as it was: App Lock does not change DevTools.
+ * Toggle Developer Tools is greyed out too, so DevTools cannot be opened onto
+ * the window underneath; DevTools already open is left as it is.
  */
 const ROLES_KEPT_WHILE_LOCKED = new Set<string>([
   'about', 'services', 'hide', 'hideOthers', 'unhide', 'quit',
   'undo', 'redo', 'cut', 'paste', 'pasteAndMatchStyle', 'delete', 'selectAll',
-  'toggleDevTools', 'togglefullscreen', 'minimize', 'zoom', 'front', 'close',
+  'togglefullscreen', 'minimize', 'zoom', 'front', 'close',
 ])
 
 /**

@@ -45,6 +45,7 @@ export const OFFICIAL_PLUGIN_SOURCES = {
       'backend/agent_team_backend/fs_write.py',
       'backend/agent_team_backend/git_security.py',
       'backend/agent_team_backend/path_guard.py',
+      'backend/agent_team_backend/plan_versions.py',
     ],
   },
 }

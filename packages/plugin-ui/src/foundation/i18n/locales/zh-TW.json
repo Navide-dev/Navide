@@ -10823,6 +10823,7 @@
       "topic": "主題「{title}」→",
       "gone": "pane 已不存在",
       "orphan-hint": "關閉時沒有解除綁定 · 聊天室的訊息不會送到任何地方",
+      "needs-approval": "核准傳送者之前，這個聊天室的訊息都會被拒絕",
       "clear": "清除",
       "focus": "跳到 pane ↗",
       "unbind": "解除綁定",
@@ -10902,7 +10903,11 @@
     "allow": {
       "title": "允許名單",
       "empty": "尚未允許任何人。",
-      "remove": "移除"
+      "remove": "移除",
+      "via-pairing": "配對碼",
+      "via-invite": "連結代碼",
+      "shared": "共用 ID",
+      "shared-hint": "這個 Telegram ID 代表許多人（匿名管理員、頻道、Telegram 本身），一律會被拒絕，可以將它移除。"
     },
     "pane": {
       "connect": "連接聊天室",
@@ -10917,6 +10922,7 @@
       "manage-chats": "管理聊天室設定",
       "taken-by": "已連接：{pane}",
       "taken-hint": "已連接到另一個 pane，請先在那個 pane 解除連接才能選。",
+      "needs-approval": "已連接，但在設定 → 聊天室核准傳送者之前，這個聊天室的訊息都會被拒絕。",
       "bind-level-label": "聊天室會收到什麼",
       "back": "返回",
       "confirm": "連接",

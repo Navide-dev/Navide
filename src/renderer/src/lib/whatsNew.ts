@@ -121,6 +121,41 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.35',
+    title: {
+      'zh-TW': 'Navide Browser 隨 App 內建，Plans 可以直接編輯，App 上鎖支援 Windows Hello，Telegram 更安全',
+      'en-US': 'Navide Browser Built In, Plans You Can Edit, Windows Hello for App Lock and Safer Telegram',
+      'ja-JP': 'Navide Browser を標準搭載、プランを直接編集、App Lock は Windows Hello に対応、Telegram はより安全に',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Navide Browser：現在隨 App 內建並預設啟用，不必再到 Navide Marketplace 安裝，按 ⌘⇧X（Windows 和 Linux 是 Ctrl+Shift+X）就能開啟。Space 現在有分頁，可以「並排顯示」最多 9 個 Space，或「一次一個」全尺寸顯示；每個 Space 會顯示開啟中的對話框和 agent 上傳過的每個檔案。agent 多了 8 個工具，包括分頁、等待、回應對話框和上傳工作區內的檔案。agent 工具由「設定 → Navide 外掛」的「允許 agent 呼叫官方 Navide 外掛的工具」控制，預設開啟；整個 Navide Browser 也可以在同一頁停用。',
+        'en-US': 'Navide Browser: it now ships with the App and is on by default, with no Navide Marketplace install, and ⌘⇧X (Ctrl+Shift+X on Windows and Linux) opens it. Spaces have tabs and can run Side by Side, up to 9 at once, or One at a Time at full size; each Space shows an open dialog and every file the agent uploaded. Agents gain 8 tools, including tabs, waiting, answering dialogs and uploading files from the workspace. Let agents call tools from first-party Navide plugins, on by default in Settings → Navide Plugins, controls those tools, and Navide Browser can be disabled on the same page.',
+        'ja-JP': 'Navide Browser：App に標準搭載され、既定で有効になりました。Navide Marketplace からのインストールは不要で、⌘⇧X（Windows と Linux では Ctrl+Shift+X）で開けます。Space にタブが付き、最大 9 個を「並べて表示」するか、「1 つずつ表示」で全画面に表示できます。各 Space には、開いているダイアログと agent がアップロードしたすべてのファイルが表示されます。agent のツールは 8 つ増え、タブ操作、待機、ダイアログへの応答、ワークスペース内のファイルのアップロードなどができます。これらのツールは「設定 → Navide プラグイン」の「エージェントに純正 Navide プラグインのツール呼び出しを許可」で切り替えられ、既定でオンです。Navide Browser 自体も同じページで無効にできます。',
+      },
+      {
+        'zh-TW': 'Plans：在 Plan 視圖按 HTML 計畫上方的「編輯文件」，就能直接修改整份文件，變更會自動存檔。agent 改到你正在編輯的段落時，會跳出對話框讓你選要保留哪一版，不會互相覆蓋。每次變更都會留下版本：「歷史」列出修改者（你、哪個 agent pane，或 Plans 以外的修改）和原因，可以看「差異」或「還原」。還原只換內文，階段、核准狀態、待辦和審查留言都維持現在的樣子。已核准的計畫內文被改過時會顯示「核准後已修改」，點一下就能比對。',
+        'en-US': 'Plans: Edit document above an HTML plan in the Plan view makes the whole document editable, and changes save by themselves. If an agent changes the section you are editing, a dialog lets you choose which version to keep, so neither overwrites the other. Every change now keeps a version: History shows who made it (you, a named agent pane, or a change outside Plans) and why, with Diff and Restore. Restore brings back the text only and keeps the stage, approval, todos and review notes. An approved plan whose text changed shows Changed since approval; click it to compare.',
+        'ja-JP': 'プラン：Plan ビューで HTML プランの上にある「ドキュメントを編集」を押すと、ドキュメント全体を直接編集でき、変更は自動で保存されます。編集中のセクションを agent が変更したときは、ダイアログでどちらの版を残すかを選べるので、互いに上書きされることはありません。変更のたびに版が残ります。「履歴」には、変更した人（あなた、どの agent pane か、または Plans の外での変更）と理由が表示され、「差分」と「復元」が使えます。復元で戻るのは本文だけで、ステージ、承認、ToDo、レビューノートは現在のまま残ります。承認済みのプランの本文が変更されると「承認後に変更あり」と表示され、クリックすると比較できます。',
+      },
+      {
+        'zh-TW': 'App 上鎖：Windows 11 現在可以用 Windows Hello 解鎖，PIN 仍可當備用，忘記 PIN 時可以在通過 Windows Hello 後重設。Windows 10 和 Linux 只能用 PIN 解鎖，「設定 → App Lock」會直接說明。鎖定畫面顯示時，應用程式選單會變灰，只留下隱藏、結束、視窗控制和輸入 PIN 需要的編輯鍵，快捷鍵也碰不到畫面後方的 App；agent、終端機和排程仍照常執行。',
+        'en-US': 'App Lock: Windows 11 now unlocks with Windows Hello, with the PIN as the fallback, and a forgotten PIN can be reset after Windows Hello. Windows 10 and Linux unlock with the PIN only, and Settings → App Lock says so. While the lock screen is up, the application menu is greyed out except for Hide, Quit, the window controls and the editing keys the PIN box needs, and shortcuts cannot reach the App behind it. Agents, terminals and schedules keep running.',
+        'ja-JP': 'App Lock：Windows 11 で Windows Hello による解除ができるようになりました。PIN は予備として使え、忘れた PIN は Windows Hello のあとでリセットできます。Windows 10 と Linux は PIN でのみ解除し、「設定 → App Lock」にもそう表示されます。ロック画面の表示中は、アプリケーションメニューのうち、隠す、終了、ウィンドウ操作、PIN 入力に必要な編集キー以外はグレーアウトし、ショートカットも背後の App に届きません。agent、ターミナル、スケジュールはそのまま動き続けます。',
+      },
+      {
+        'zh-TW': 'Telegram：用連結代碼不會再直接加入允許名單，還沒獲准的人要先由你在「設定 → 聊天室」核准。Telegram 的共用 ID（例如匿名管理員）一律拒絕，舊的名單列會標上警告，由你決定是否移除。允許名單會顯示每個人怎麼加入、何時加入。pane 綁定到發送者還沒獲准的聊天時，聊天裡和「設定 → 聊天室」都會提醒，不再看起來已連線卻只收到配對回覆。',
+        'en-US': 'Telegram: redeeming a link code no longer adds someone straight to the allowed list; a new sender waits for your approval in Settings → Channels. Telegram’s shared IDs, such as anonymous admins, are always refused, and an older row holding one gets a warning for you to remove. The allowed list shows how and when each sender was added. A pane bound to a chat whose sender is not allowed now says so, in the chat and in Settings → Channels, instead of looking connected while the chat only gets pairing replies.',
+        'ja-JP': 'Telegram：リンクコードを使っても、すぐには許可リストに追加されなくなりました。まだ許可されていない人は、「設定 → チャット連携」であなたの承認を待ちます。匿名管理者などの Telegram の共有 ID は常に拒否され、それを含む既存の行には警告が付くので、削除するかどうかを判断できます。許可リストには、各送信者が追加された方法と日時が表示されます。送信者が許可されていないチャットに pane を紐づけると、接続済みに見えるのにペアリングの返信しか届かない状態にはならず、チャットと「設定 → チャット連携」で知らせます。',
+      },
+      {
+        'zh-TW': '快捷鍵與 Windows：在 Windows 和 Linux 上，開啟 Plans、Git 視窗和 Mini IDE 有能用的預設快捷鍵（Ctrl+Shift+D、Ctrl+Shift+G、Ctrl+Shift+M）。在開著 Defender 的 Windows 11 arm64 電腦上，每次 hook 不再多等約 23 秒。',
+        'en-US': 'Shortcuts and Windows: on Windows and Linux, Open Plans, the Git window and the Mini IDE have working default keys (Ctrl+Shift+D, Ctrl+Shift+G and Ctrl+Shift+M). On a Windows 11 arm64 machine with Defender on, a hook run no longer waits about 23 seconds.',
+        'ja-JP': 'ショートカットと Windows：Windows と Linux で、プランを開く、Git ウィンドウ、Mini IDE に使える既定のショートカット（Ctrl+Shift+D、Ctrl+Shift+G、Ctrl+Shift+M）が付きました。Defender が有効な Windows 11 arm64 のマシンでは、hook の実行ごとに約 23 秒待たなくなりました。',
+      },
+    ],
+  },
+  {
     version: '0.2.34',
     title: {
       'zh-TW': 'App 上鎖遮住畫面保護隱私，Pipeline 可以從 n8n 匯入',

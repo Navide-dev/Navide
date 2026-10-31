@@ -10823,6 +10823,7 @@
       "topic": "Topic “{title}” →",
       "gone": "Pane no longer exists",
       "orphan-hint": "Closed without being unbound · messages from this chat go nowhere",
+      "needs-approval": "Messages from this chat are refused until you approve its sender",
       "clear": "Clear",
       "focus": "Jump to Pane ↗",
       "unbind": "Unbind",
@@ -10902,7 +10903,11 @@
     "allow": {
       "title": "Allowed senders",
       "empty": "No one is allowed yet.",
-      "remove": "Remove"
+      "remove": "Remove",
+      "via-pairing": "Pairing code",
+      "via-invite": "Link code",
+      "shared": "Shared ID",
+      "shared-hint": "This Telegram ID stands for many people (anonymous admins, channels, Telegram itself), so it is always refused. You can remove it."
     },
     "pane": {
       "connect": "Connect to a Chat",
@@ -10917,6 +10922,7 @@
       "manage-chats": "Manage chat settings",
       "taken-by": "Connected to {pane}",
       "taken-hint": "Connected to another pane. Unbind it there to use this chat here.",
+      "needs-approval": "Connected, but messages from this chat are refused until you approve its sender in Settings → Channels.",
       "bind-level-label": "What the chat receives",
       "back": "Back",
       "confirm": "Connect",

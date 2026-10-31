@@ -745,7 +745,18 @@ or the person behind it); `caller-kind` means only that the caller was an
 external MCP client or the Host, which share one credential each. Use it for
 display and your own records, not as an authorization decision; the Host has
 already made that one. `caller` is additive and optional, and only packages
-that declare agent tools ever receive it. `initiator`
+that declare agent tools ever receive it. An agent initiator may also carry
+`initiator.pane`: the calling pane's name, or its id when it has none or its
+name would not pass, resolved the same way from the pane's own MCP token. The
+Host accepts a string of at most 200 UTF-16 code units (JavaScript `length`)
+that is not empty after JavaScript `trim()` (which also removes U+FEFF and
+Unicode spaces); anything else refuses the request, so the core checks a name
+the same way and sends the id, or no `pane`, instead. It is never a credential, token or profile. Like
+`caller` it is for display and records (Plans 1.1.0 stores it as the author
+of a version), not for authorization; it is additive and optional, absent for
+external clients and the Host, and the Host sends it only to Plans 1.1.0 and
+later, so an older package receives exactly the three agent keys it always
+did. `initiator`
 was added after Backend Wire v1 shipped, so the v1 schema keeps it an additive
 optional field: the Host always sends it, and a v1 backend must accept a
 `runtime` both with and without it. Optional view/workspace fields are `null`

@@ -160,13 +160,59 @@ describe('ChannelsPane', () => {
     expect(w.find('[data-platform="slack"] [data-testid="channel-pending"]').exists()).toBe(false)
   })
 
-  it('hides the pairing and allowlist sections when they are empty', async () => {
+  it('hides an empty pairing section but always shows the allowlist, saying when no one is allowed', async () => {
     mock.setResponse('channels.pairing.list', { ok: true, requests: [] })
     mock.setResponse('channels.allow.list', { ok: true, entries: [] })
     const w = await render()
     expect(w.text()).not.toContain('Pending pairing requests')
-    expect(w.text()).not.toContain('Allowed senders')
+    expect(w.text()).toContain('Allowed senders')
+    expect(w.get('[data-testid="allow-empty"]').text()).toBe('No one is allowed yet.')
+    expect(w.find('[data-testid="allow-row"]').exists()).toBe(false)
     expect(w.find('[data-testid="channel-pending"]').exists()).toBe(false)
+  })
+
+  it('says how and when each allowed sender was added, with a dash for older rows', async () => {
+    mock.setResponse('channels.allow.list', {
+      ok: true,
+      entries: [
+        { platform: 'telegram', sender_id: '7', sender_name: 'amy', added_at: 1_700_000_000, source: 'pairing', shared: false },
+        { platform: 'telegram', sender_id: '8', sender_name: 'bob', added_at: 1_700_000_100, source: 'invite', shared: false },
+        { platform: 'telegram', sender_id: '9', sender_name: 'cy', added_at: 0, source: null, shared: false },
+      ],
+    })
+    const w = await render()
+    const sources = w.findAll('[data-testid="allow-source"]').map((e) => e.text())
+    const added = w.findAll('[data-testid="allow-added"]').map((e) => e.text())
+    expect(sources).toEqual(['Pairing code', 'Link code', '—'])
+    expect(added).toEqual([new Date(1_700_000_000_000).toLocaleString(), new Date(1_700_000_100_000).toLocaleString(), '—'])
+    expect(w.find('[data-testid="allow-shared"]').exists()).toBe(false)
+  })
+
+  it('flags a shared Telegram id on the allowlist and offers the usual remove', async () => {
+    mock.setResponse('channels.allow.list', {
+      ok: true,
+      entries: [{ platform: 'telegram', sender_id: '1087968824', sender_name: 'GroupAnonymousBot', added_at: 1, shared: true }],
+    })
+    const w = await render()
+    const row = w.get('[data-testid="allow-row"]')
+    expect(row.get('[data-testid="allow-shared"]').text()).toBe('Shared ID')
+    expect(row.get('[data-testid="allow-shared-hint"]').text()).toContain('always refused')
+    await row.get('[data-testid="allow-remove"]').trigger('click')
+    await flushPromises()
+    expect(mock.sent.find((s) => s.type === 'channels.allow.remove')?.payload).toEqual({ platform: 'telegram', sender_id: '1087968824' })
+  })
+
+  it('labels a pending request made by a link code apart from a pairing code', async () => {
+    mock.setResponse('channels.pairing.list', {
+      ok: true,
+      requests: [
+        { platform: 'telegram', code: 'K7Q2M9XA', sender_id: '42', sender_name: 'neil', created_at: 1, source: 'invite' },
+        { platform: 'telegram', code: 'Q2M9XAK7', sender_id: '43', sender_name: 'ann', created_at: 1, source: 'pairing' },
+        { platform: 'telegram', code: 'M9XAK7Q2', sender_id: '44', sender_name: 'old', created_at: 1 },
+      ],
+    })
+    const w = await render()
+    expect(w.findAll('[data-testid="pairing-source"]').map((e) => e.text())).toEqual(['Link code', 'Pairing code', 'Pairing code'])
   })
 
   it('never shows a stored secret — only a masked placeholder — and omits an unchanged secret on save', async () => {
@@ -1157,6 +1203,28 @@ describe('ChannelsPane', () => {
       const again = await render()
       expect(again.find('[data-testid="channel-managed-enable"]').exists()).toBe(false)
       localStorage.removeItem('navide.channels.managedHintDismissed')
+    })
+
+    it('warns on a binding whose chat is refused, and not on a healthy or orphan row', async () => {
+      seedBots()
+      const gone = { exists: false, name: 'old', qualified_name: '', workspace_path: '', display_status: '', agent_key: '' }
+      mock.setResponse('channels.overview', {
+        ok: true,
+        bots: [{ platform: 'telegram', account: 'default', orphans: ['gone'], chats: [
+          { chat_id: '42', title: 'stranger', kind: 'private', supports_topics: false, bindings: [
+            binding('p1', { chat_id: '42', needs_approval: true }),
+          ] },
+          { chat_id: '-100', title: 'Dev group', kind: 'supergroup', supports_topics: true, bindings: [
+            binding('p2', { thread_id: '50' }),
+            binding('gone', { thread_id: '51', needs_approval: true, pane: gone }),
+          ] },
+        ] }],
+      })
+      const w = await render()
+      const note = '[data-testid="channel-binding-needs-approval"]'
+      expect(row(w, 'p1').get(note).text()).toBe('Messages from this chat are refused until you approve its sender')
+      expect(row(w, 'p2').find(note).exists()).toBe(false)
+      expect(row(w, 'gone').find(note).exists()).toBe(false)
     })
 
     it('fetches the overview afresh each time the page shows', async () => {

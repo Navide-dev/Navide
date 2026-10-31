@@ -392,8 +392,9 @@ describe('PlansApp', () => {
     reviewFixture()
     const original = (window as any).nav.callBackend
     ;(window as any).nav.callBackend = async (reqId: string, name: string, args: Record<string, unknown>) => {
-      if (name === 'plans.list_directory') return { reqId, ok: true, result: { ok: true, entries: [{ name: '20260905T010203_draft.html', is_dir: false }] } }
-      if (name === 'plans.read_document' && String(args.rel_path).includes('/.history/')) return { reqId, ok: true, result: { ok: true, content: `<html><body><script id="plan-meta" type="application/json">${JSON.stringify({ schemaVersion: 1, name: 'Snapshot', stage: 'draft', todos: [], reviewNotes: [{ id: 's1', author: 'user', text: 'One', resolved: false, anchor: 'Snapshot scope' }, { id: 's2', author: 'user', text: 'Two', resolved: false, anchor: 'Snapshot scope' }] })}</script><h2>Snapshot scope</h2><p>Earlier snapshot</p></body></html>`, mtime: 1 } }
+      // Versions are listed and read through the backend (compressed or not).
+      if (name === 'plans.history_list') return { reqId, ok: true, result: { ok: true, versions: [{ file: '20260905T010203_draft.html.gz', stage: 'draft', author: { kind: 'user' }, reason: 'save' }] } }
+      if (name === 'plans.history_read' && args.file === '20260905T010203_draft.html.gz' && args.rel_path === existingPath) return { reqId, ok: true, result: { ok: true, content: `<html><body><script id="plan-meta" type="application/json">${JSON.stringify({ schemaVersion: 1, name: 'Snapshot', stage: 'draft', todos: [], reviewNotes: [{ id: 's1', author: 'user', text: 'One', resolved: false, anchor: 'Snapshot scope' }, { id: 's2', author: 'user', text: 'Two', resolved: false, anchor: 'Snapshot scope' }] })}</script><h2>Snapshot scope</h2><p>Earlier snapshot</p></body></html>`, mtime: 1 } }
       return original(reqId, name, args)
     }
     const view = await mountPlans({ attachTo: document.body })
@@ -1212,6 +1213,8 @@ describe('PlansApp', () => {
 
   it('sanitizes trusted anchored section edits before the private backend adapter', async () => {
     state.documents[existingPath].html = '<html><body><section><h2>Editable section</h2><p>Original prose.</p></section></body></html>'
+    // plans.read and plans.read_document return the same bytes on disk.
+    state.documents[existingPath].raw = state.documents[existingPath].html
     const view = await mountPlans()
     const iframeEl = view.get('iframe.plan-doc-frame').element as HTMLIFrameElement
     const frameWin = {} as Window
@@ -1228,6 +1231,203 @@ describe('PlansApp', () => {
     expect(writes[0].args).toMatchObject({ rel_path: existingPath, expected_mtime: 1 })
     expect(writes[0].args.content).toContain('<p>Updated prose.</p>')
     expect(writes[0].args.content).not.toContain('evil()')
+  })
+
+  describe('section edits against a document that changed on disk', () => {
+    const page = (scope: string, risks = 'Risk prose.') =>
+      `<html><body><section><h2>Scope</h2><p>${scope}</p></section><section><h2>Risks</h2><p>${risks}</p></section></body></html>`
+
+    async function editScope(disk: string, html = '<p>Mine prose.</p>') {
+      state.documents[existingPath].html = page('Original prose.')
+      state.documents[existingPath].raw = disk
+      const view = await mountPlans({ attachTo: document.body })
+      const iframeEl = view.get('iframe.plan-doc-frame').element as HTMLIFrameElement
+      const frameWin = { postMessage: vi.fn() } as unknown as Window
+      Object.defineProperty(iframeEl, 'contentWindow', { value: frameWin, configurable: true })
+      const documentToken = (iframeEl.getAttribute('srcdoc') || '').match(/var documentToken = "([0-9a-f]{32})"/)?.[1]
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-editing', active: true, documentToken } }))
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-editing', active: false, documentToken } }))
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-edit', anchor: 'Scope', html, documentToken } }))
+      await flushPromises()
+      return view
+    }
+    const writes = () => state.calls.filter(call => call.name === 'plans.write_document')
+
+    it('merges into a document an agent changed in another section, and says so', async () => {
+      await editScope(page('Original prose.', 'Agent risks.'))
+      expect(writes()).toHaveLength(1)
+      expect(writes()[0].args.content).toContain('<p>Mine prose.</p>')
+      expect(writes()[0].args.content).toContain('Agent risks.')
+      expect(state.toast).toHaveBeenCalledWith('pane.plans.merged-others', { type: 'success' })
+    })
+
+    it('writes nothing and shows both versions when the same section changed', async () => {
+      const view = await editScope(page('Agent prose.'))
+      expect(writes()).toHaveLength(0)
+      const dialog = view.get('.scd-dialog')
+      expect(dialog.get('[data-side="mine"] textarea').element.value).toContain('Mine prose.')
+      expect(dialog.get('[data-side="theirs"] textarea').element.value).toContain('Agent prose.')
+    })
+
+    it('keeping the disk version leaves the user’s text on screen until closed', async () => {
+      const view = await editScope(page('Agent prose.'))
+      await view.get('.scd-keep-theirs').trigger('click')
+      await flushPromises()
+      expect(writes()).toHaveLength(0)
+      // The user's side is kept as a version: the disk document with their section.
+      const preserved = state.calls.filter(call => call.name === 'plans.history_preserve')
+      expect(preserved).toHaveLength(1)
+      expect(preserved[0].args.rel_path).toBe(existingPath)
+      expect(String(preserved[0].args.content)).toContain('<p>Mine prose.</p>')
+      expect(String(preserved[0].args.content)).toContain('Risk prose.')
+      expect(view.get('.scd-dialog [data-side="mine"] textarea').element.value).toContain('Mine prose.')
+      await view.get('.scd-close').trigger('click')
+      expect(view.find('.scd-dialog').exists()).toBe(false)
+    })
+
+    it('keeping mine writes over the version shown and keeps theirs on screen', async () => {
+      const view = await editScope(page('Agent prose.'))
+      await view.get('.scd-keep-mine').trigger('click')
+      await flushPromises()
+      expect(writes()).toHaveLength(1)
+      // The disk side is pinned (by the backend, from disk) before it is overwritten.
+      const order = state.calls.map(call => call.name).filter(name => name === 'plans.history_preserve' || name === 'plans.write_document')
+      expect(order).toEqual(['plans.history_preserve', 'plans.write_document'])
+      expect(state.calls.find(call => call.name === 'plans.history_preserve')?.args).toEqual({ rel_path: existingPath })
+      expect(writes()[0].args.content).toContain('<p>Mine prose.</p>')
+      expect(writes()[0].args.content).not.toContain('Agent prose.')
+      expect(view.get('.scd-dialog [data-side="theirs"] textarea').element.value).toContain('Agent prose.')
+    })
+  })
+
+  describe('edit mode', () => {
+    const meta = { schemaVersion: 1, name: 'Existing plan', overview: 'Existing overview', stage: 'approved', todos: [], reviewNotes: [] }
+    const page = (goals: string, risks: string) => [
+      '<html><body>',
+      `<script type="application/json" id="plan-meta">${JSON.stringify(meta)}</script>`,
+      '<header><h1>Existing plan<span class="pill approved">approved</span></h1><p class="overview">Existing overview</p></header>',
+      `<section><h2>Goals</h2><p>${goals}</p></section>`,
+      `<section><h2>Risks</h2><p>${risks}</p></section>`,
+      '</body></html>',
+    ].join('')
+
+    async function enterEditMode() {
+      state.documents[existingPath].html = page('Goals 0', 'Risks 0')
+      state.documents[existingPath].raw = state.documents[existingPath].html
+      const view = await mountPlans({ attachTo: document.body })
+      const iframeEl = view.get('iframe.plan-doc-frame').element as HTMLIFrameElement
+      const frameWin = { postMessage: vi.fn() } as unknown as Window
+      Object.defineProperty(iframeEl, 'contentWindow', { value: frameWin, configurable: true })
+      const documentToken = (iframeEl.getAttribute('srcdoc') || '').match(/var documentToken = "([0-9a-f]{32})"/)?.[1]
+      const send = async (data: Record<string, unknown>) => {
+        window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { ...data, documentToken } }))
+        await flushPromises()
+      }
+      await view.get('.plan-edit-toggle').trigger('click')
+      expect(frameWin.postMessage).toHaveBeenCalledWith({ type: 'edit-mode', active: true, documentToken }, '*')
+      await send({ type: 'section-editing', active: true })
+      await send({ type: 'edit-mode-changed', active: true })
+      return { view, send, iframeEl }
+    }
+    const writes = () => state.calls.filter(call => call.name === 'plans.write_document')
+    const reads = () => state.calls.filter(call => call.name === 'plans.read')
+
+    it('saves each section without re-rendering the document', async () => {
+      const { view, send, iframeEl } = await enterEditMode()
+      const srcdoc = iframeEl.getAttribute('srcdoc')
+      const readsBefore = reads().length
+      await send({ type: 'section-edit', anchor: 'Goals', html: '<p>Goals 1</p>' })
+      expect(writes()).toHaveLength(1)
+      expect(writes()[0].args.content).toContain('<p>Goals 1</p>')
+      expect(reads().length).toBe(readsBefore)
+      expect(view.get('iframe.plan-doc-frame').attributes('srcdoc')).toBe(srcdoc)
+      expect(view.get('.plan-edit-status').text()).toContain('pane.plans.edit-saved')
+      expect(state.toast).not.toHaveBeenCalled()
+    })
+
+    it('never overwrites a section an agent changed after the frame rendered', async () => {
+      const { view, send } = await enterEditMode()
+      await send({ type: 'section-edit', anchor: 'Goals', html: '<p>Goals 1</p>' })
+      // An agent rewrites Risks on disk; the frame still shows "Risks 0".
+      state.documents[existingPath].raw = String(state.documents[existingPath].raw).replace('Risks 0', 'Agent risks')
+      await send({ type: 'section-edit', anchor: 'Risks', html: '<p>Risks 0 and mine</p>' })
+      expect(writes()).toHaveLength(1)
+      expect(view.get('.scd-dialog [data-side="theirs"] textarea').element.value).toContain('Agent risks')
+      expect(String(state.documents[existingPath].raw)).toContain('Agent risks')
+    })
+
+    it('saves the name to plan-meta and the header together', async () => {
+      const { send } = await enterEditMode()
+      await send({ type: 'header-edit', field: 'name', text: 'Renamed <plan>' })
+      expect(writes()).toHaveLength(1)
+      const content = String(writes()[0].args.content)
+      expect(parseHtmlPlanMeta(content)?.meta.name).toBe('Renamed <plan>')
+      expect(content).toContain('<h1>Renamed &lt;plan&gt;<span class="pill approved">approved</span></h1>')
+    })
+
+    it('shows the saved document once edit mode ends', async () => {
+      const { send } = await enterEditMode()
+      await send({ type: 'section-edit', anchor: 'Goals', html: '<p>Goals 1</p>' })
+      const readsBefore = reads().length
+      await send({ type: 'section-editing', active: false })
+      await send({ type: 'edit-mode-changed', active: false })
+      expect(reads().length).toBe(readsBefore + 1)
+    })
+  })
+
+  describe('an open document changed on disk', () => {
+    async function changeOnDisk(): Promise<void> {
+      state.list[0].mtime = 2
+      state.documents[existingPath].mtime = 2
+      state.documents[existingPath].html = '<html><body><section><h2>Scope</h2><p>Agent prose.</p></section></body></html>'
+      state.subscriptionListener?.({})
+      await new Promise(resolve => setTimeout(resolve, 260))
+      await flushPromises()
+    }
+    const reads = () => state.calls.filter(call => call.name === 'plans.read' && call.args.rel_path === existingPath)
+
+    beforeEach(() => {
+      state.list[0].mtime = 1
+      state.documents[existingPath].mtime = 1
+      state.documents[existingPath].html = '<html><body><section><h2>Scope</h2><p>Original prose.</p></section></body></html>'
+    })
+
+    it('reloads in place when nobody is editing it', async () => {
+      const view = await mountPlans()
+      const before = reads().length
+      await changeOnDisk()
+      expect(reads().length).toBe(before + 1)
+      expect(view.get('iframe.plan-doc-frame').attributes('srcdoc')).toContain('Agent prose.')
+      expect(view.find('.plan-disk-changed-banner').exists()).toBe(false)
+    })
+
+    it('waits for an inline edit to end, showing a notice meanwhile', async () => {
+      const view = await mountPlans()
+      const iframeEl = view.get('iframe.plan-doc-frame').element as HTMLIFrameElement
+      const frameWin = { postMessage: vi.fn() } as unknown as Window
+      Object.defineProperty(iframeEl, 'contentWindow', { value: frameWin, configurable: true })
+      const documentToken = (iframeEl.getAttribute('srcdoc') || '').match(/var documentToken = "([0-9a-f]{32})"/)?.[1]
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-editing', active: true, documentToken } }))
+      await flushPromises()
+      const before = reads().length
+      await changeOnDisk()
+      expect(reads().length).toBe(before)
+      expect(view.find('.plan-disk-changed-banner').exists()).toBe(true)
+
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, data: { type: 'section-editing', active: false, documentToken } }))
+      await flushPromises()
+      expect(reads().length).toBe(before + 1)
+      expect(view.find('.plan-disk-changed-banner').exists()).toBe(false)
+    })
+
+    it('does not reload when the listing shows the copy already open', async () => {
+      await mountPlans()
+      const before = reads().length
+      state.subscriptionListener?.({})
+      await new Promise(resolve => setTimeout(resolve, 260))
+      await flushPromises()
+      expect(reads().length).toBe(before)
+    })
   })
 
   it('safely handles todo-clicked only from the preview frame with known todo ID', async () => {

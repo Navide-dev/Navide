@@ -10823,6 +10823,7 @@
       "topic": "トピック「{title}」→",
       "gone": "pane はもうありません",
       "orphan-hint": "接続を解除せずに閉じられました · このチャットのメッセージはどこにも届きません",
+      "needs-approval": "送信者を承認するまで、このチャットのメッセージは拒否されます",
       "clear": "消去",
       "focus": "pane へ移動 ↗",
       "unbind": "接続を解除",
@@ -10902,7 +10903,11 @@
     "allow": {
       "title": "許可リスト",
       "empty": "まだ誰も許可されていません。",
-      "remove": "削除"
+      "remove": "削除",
+      "via-pairing": "ペアリングコード",
+      "via-invite": "リンクコード",
+      "shared": "共有 ID",
+      "shared-hint": "この Telegram ID は多くの人（匿名の管理者、チャンネル、Telegram 自体）を表すため、常に拒否されます。削除できます。"
     },
     "pane": {
       "connect": "チャットに接続",
@@ -10917,6 +10922,7 @@
       "manage-chats": "チャット連携の設定を管理",
       "taken-by": "接続中：{pane}",
       "taken-hint": "別の pane に接続済みです。そちらで接続を解除すると選べます。",
+      "needs-approval": "接続しましたが、設定 → チャット連携 で送信者を承認するまで、このチャットのメッセージは拒否されます。",
       "bind-level-label": "チャットに届く内容",
       "back": "戻る",
       "confirm": "接続",

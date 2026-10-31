@@ -14,7 +14,8 @@ import { useI18n } from 'vue-i18n'
 import { parsePlanFile } from './usePlanFile'
 import type { PlanSection } from './usePlanFile'
 import type { PlansTransport } from './transport'
-import { resolvePlanStore, type PlanCtx } from './planStore'
+import { preserveConflictSide, resolvePlanStore, type PlanCtx, type SectionConflict, type WriteResult } from './planStore'
+import SectionConflictDialog from './SectionConflictDialog.vue'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { renderLines, InlineText } from './markdownRender'
 
@@ -119,10 +120,17 @@ const MermaidBlock = defineComponent({
 // ── Inline section body editing ───────────────────────────────────────────
 const editingSection = ref<string | null>(null)
 const editSectionText = ref('')
+// The file the user saw when the edit began: a section that changed on disk
+// since then is offered as a conflict instead of being overwritten.
+const editBase = ref('')
+// A section write waiting on the user's choice; `text` is absent for a delete.
+const sectionConflict = ref<{ conflict: SectionConflict; text?: string } | null>(null)
+const conflictDialog = ref<InstanceType<typeof SectionConflictDialog> | null>(null)
 
 function startEditSection(section: PlanSection): void {
   editingSection.value = section.heading
   editSectionText.value = section.body
+  editBase.value = rawContent.value
 }
 
 function cancelEditSection(): void {
@@ -136,36 +144,91 @@ function reportResult(result: { ok: boolean; conflict?: boolean; error?: string 
   return false
 }
 
+/** Settle a section write; true when it was written. */
+function reportSectionResult(result: WriteResult, text: string | undefined): boolean {
+  if (result.sectionConflict) {
+    sectionConflict.value = { conflict: result.sectionConflict, text }
+    return false
+  }
+  if (!result.ok && result.conflict) {
+    toast(t('pane.plans.section-write-busy'))
+    return false
+  }
+  if (result.merged) toast(t('pane.plans.merged-others'), { type: 'success' })
+  return reportResult(result)
+}
+
+function writeSection(heading: string, text: string | undefined, base: string): Promise<WriteResult> {
+  return text === undefined
+    ? store.value.deleteSection(ctx.value, heading, base)
+    : store.value.replaceSectionBody(ctx.value, heading, { kind: 'markdown', text }, base)
+}
+
+async function afterSectionWrite(heading: string): Promise<void> {
+  if (editingSection.value === heading) cancelEditSection()
+  await loadContent()
+  emit('updated')
+}
+
 async function saveEditSection(heading: string): Promise<void> {
   if (saving.value) return
   saving.value = true
-  const result = await store.value.replaceSectionBody(ctx.value, heading, {
-    kind: 'markdown',
-    text: editSectionText.value,
-  })
+  const text = editSectionText.value
+  const result = await writeSection(heading, text, editBase.value)
   saving.value = false
-  if (reportResult(result)) {
-    cancelEditSection()
-    await loadContent()
-    emit('updated')
-  }
+  if (reportSectionResult(result, text)) await afterSectionWrite(heading)
 }
 
 async function deleteSection(heading: string): Promise<void> {
   if (saving.value) return
+  const base = rawContent.value
   const ok = await confirm(t('pane.plans.doc-delete-confirm'), {
     title: t('pane.plans.delete'),
     confirmText: t('pane.plans.delete'),
   })
   if (!ok) return
   saving.value = true
-  const result = await store.value.deleteSection(ctx.value, heading)
+  const result = await writeSection(heading, undefined, base)
   saving.value = false
-  if (reportResult(result)) {
-    if (editingSection.value === heading) cancelEditSection()
-    await loadContent()
-    emit('updated')
+  if (reportSectionResult(result, undefined)) await afterSectionWrite(heading)
+}
+
+/** Keep the side the user did not choose as a version of the plan. */
+async function preserveDiscarded(mine?: string): Promise<boolean> {
+  try {
+    return await preserveConflictSide(ctx.value, mine)
+  } catch (err) {
+    toast(err instanceof Error ? err.message : t('pane.plans.review-save-failed'))
+    return false
   }
+}
+
+/** Write the user's version over the file shown in the conflict. */
+async function keepMySection(): Promise<void> {
+  const pending = sectionConflict.value
+  if (!pending || saving.value) return
+  saving.value = true
+  // The file on disk is about to be overwritten: pin it as a version first.
+  const kept = await preserveDiscarded()
+  const result = await writeSection(pending.conflict.anchor, pending.text, pending.conflict.fresh)
+  saving.value = false
+  if (reportSectionResult(result, pending.text)) {
+    conflictDialog.value?.showDiscarded('theirs', kept)
+    await afterSectionWrite(pending.conflict.anchor)
+  }
+}
+
+/** Keep the file on disk; the user's version is kept as a version of the
+ *  plan and stays in the dialog to copy. */
+async function keepTheirSection(): Promise<void> {
+  const pending = sectionConflict.value
+  if (!pending || saving.value) return
+  saving.value = true
+  const body = pending.text === undefined ? undefined : { kind: 'markdown' as const, text: pending.text }
+  const kept = await preserveDiscarded(store.value.withSection(pending.conflict.fresh, pending.conflict.anchor, body))
+  saving.value = false
+  conflictDialog.value?.showDiscarded('mine', kept)
+  await afterSectionWrite(pending.conflict.anchor)
 }
 
 // ── Inline todo editing — writes to frontmatter via the store ──────────────
@@ -228,6 +291,11 @@ function isEditing(): boolean {
   return editingSection.value !== null || editingTodoId.value !== null
 }
 
+/** True while a section conflict waits on the user's choice. */
+function hasPendingConflict(): boolean {
+  return sectionConflict.value !== null
+}
+
 /** Ask to discard the in-progress section or todo edit (ESC from the host). */
 function cancelEdit(): void {
   cancelEditSection()
@@ -240,11 +308,20 @@ function scrollToAnchor(anchor: string): void {
   el?.scrollIntoView({ block: 'start' })
 }
 
-defineExpose({ isEditing, cancelEdit, scrollToAnchor })
+defineExpose({ isEditing, hasPendingConflict, cancelEdit, scrollToAnchor })
 </script>
 
 <template>
   <div ref="root" class="pmb">
+    <SectionConflictDialog
+      v-if="sectionConflict"
+      ref="conflictDialog"
+      :conflict="sectionConflict.conflict"
+      :saving="saving"
+      @keep-mine="void keepMySection()"
+      @keep-theirs="void keepTheirSection()"
+      @close="sectionConflict = null"
+    />
     <div v-if="loading" class="pmb-state">{{ t('label.loading') }}</div>
     <div v-else-if="loadError" class="pmb-state pmb-state--error">{{ loadError }}</div>
 

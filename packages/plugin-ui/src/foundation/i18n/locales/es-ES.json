@@ -10823,6 +10823,7 @@
       "topic": "Tema «{title}» →",
       "gone": "El pane ya no existe",
       "orphan-hint": "Cerrado sin desvincular · los mensajes de este chat no llegan a ningún sitio",
+      "needs-approval": "Los mensajes de este chat se rechazan hasta que apruebes a su remitente",
       "clear": "Borrar",
       "focus": "Saltar al pane ↗",
       "unbind": "Desvincular",
@@ -10902,7 +10903,11 @@
     "allow": {
       "title": "Remitentes permitidos",
       "empty": "Aún no hay nadie permitido.",
-      "remove": "Quitar"
+      "remove": "Quitar",
+      "via-pairing": "Código de emparejamiento",
+      "via-invite": "Código de vinculación",
+      "shared": "ID compartido",
+      "shared-hint": "Este ID de Telegram representa a muchas personas (administradores anónimos, canales, el propio Telegram), así que siempre se rechaza. Puedes quitarlo."
     },
     "pane": {
       "connect": "Conectar a un chat",
@@ -10917,6 +10922,7 @@
       "manage-chats": "Gestionar los ajustes de chat",
       "taken-by": "Conectado a {pane}",
       "taken-hint": "Conectado a otro pane. Desvincúlalo allí para usar este chat aquí.",
+      "needs-approval": "Conectado, pero los mensajes de este chat se rechazan hasta que apruebes a su remitente en Ajustes → Channels.",
       "bind-level-label": "Qué recibe el chat",
       "back": "Atrás",
       "confirm": "Conectar",

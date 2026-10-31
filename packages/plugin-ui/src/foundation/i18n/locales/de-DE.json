@@ -10823,6 +10823,7 @@
       "topic": "Thema „{title}“ →",
       "gone": "Bereich existiert nicht mehr",
       "orphan-hint": "Geschlossen, ohne die Bindung zu lösen · Nachrichten aus diesem Chat gehen ins Leere",
+      "needs-approval": "Nachrichten aus diesem Chat werden abgelehnt, bis Sie den Absender genehmigen",
       "clear": "Entfernen",
       "focus": "Zum Bereich springen ↗",
       "unbind": "Bindung lösen",
@@ -10902,7 +10903,11 @@
     "allow": {
       "title": "Zugelassene Absender",
       "empty": "Noch niemand zugelassen.",
-      "remove": "Entfernen"
+      "remove": "Entfernen",
+      "via-pairing": "Kopplungscode",
+      "via-invite": "Verknüpfungscode",
+      "shared": "Geteilte ID",
+      "shared-hint": "Diese Telegram-ID steht für viele Personen (anonyme Admins, Kanäle, Telegram selbst) und wird daher immer abgelehnt. Sie können sie entfernen."
     },
     "pane": {
       "connect": "Mit einem Chat verbinden",
@@ -10917,6 +10922,7 @@
       "manage-chats": "Chat-Einstellungen verwalten",
       "taken-by": "Mit {pane} verbunden",
       "taken-hint": "Mit einem anderen Bereich verbunden. Lösen Sie dort die Bindung, um diesen Chat hier zu verwenden.",
+      "needs-approval": "Verbunden, aber Nachrichten aus diesem Chat werden abgelehnt, bis Sie den Absender unter Einstellungen → Kanäle genehmigen.",
       "bind-level-label": "Was der Chat empfängt",
       "back": "Zurück",
       "confirm": "Verbinden",

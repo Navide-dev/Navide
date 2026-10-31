@@ -34,14 +34,14 @@ describe('Plans Host provenance query', () => {
       expect(registerBundledPlans(manager, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '1.0.0',
+        artifactVersion: '1.1.0',
         devRoot: root,
         installedActivation: { ...scanned.activation!, provenance },
       })).toEqual({ registered: true })
       expect(manager.getPlansProvenance()).toMatchObject({
         descriptorSource: 'installed-catalog', selectionOrigin: 'installed-catalog',
         acquisitionProvenance: provenance, packageDirectory: installedDirectory,
-        packageVersion: '1.0.0', frontendEntry: join(installedDirectory, 'frontend/left/index.html'),
+        packageVersion: '1.1.0', frontendEntry: join(installedDirectory, 'frontend/left/index.html'),
         backendExecutable: join(installedDirectory, PLANS_BACKEND),
         frontendEntries: { 'navide.plans.window': join(installedDirectory, 'frontend/window/index.html') },
       })
@@ -58,20 +58,20 @@ describe('Plans Host provenance query', () => {
       const directory = packageFixture(join(
         root,
         'dist-plugins',
-        'official-artifacts/factory-resources/navide.plans/1.0.0',
+        'official-artifacts/factory-resources/navide.plans/1.1.0',
         `${process.platform}-${process.arch}`,
         'package',
       ))
       expect(registerBundledPlans(manager, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '1.0.0',
+        artifactVersion: '1.1.0',
         devRoot: root,
       })).toEqual({ registered: true })
       expect(manager.getPlansProvenance()).toMatchObject({
         descriptorSource: 'factory-bundle', selectionOrigin: 'factory-bundle',
         acquisitionProvenance: 'factory-bundled', packageDirectory: directory,
-        packageVersion: '1.0.0', backendExecutable: join(directory, PLANS_BACKEND),
+        packageVersion: '1.1.0', backendExecutable: join(directory, PLANS_BACKEND),
       })
       manager.replaceBuiltinForRecovery({ id: 'navide.plans', requires: [], devUrl: '', entryFile: '/legacy.html' })
       expect(manager.getPlansProvenance()).toMatchObject({ selectionOrigin: 'host-bundled', backendExecutable: null })
@@ -91,7 +91,7 @@ describe('Plans Host provenance query', () => {
       expect(registerBundledPlans(manager, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '1.0.0',
+        artifactVersion: '1.1.0',
         devRoot: root,
         installedActivation: other.activation!,
       })).toEqual({

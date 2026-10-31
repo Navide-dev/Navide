@@ -699,7 +699,14 @@ describe('Manifest v2 filesystem scope declarations', () => {
             ...PLANS_DOC_DIRS.map((dir) => `**/${dir}/.history/**`),
             '.plans/*',
           ],
-          write: [...PLANS_DOC_DIRS.map((dir) => `**/${dir}/*`), '.plans/*'],
+          // Versions are written only by the backend's dedicated history
+          // path, and only under the Plans directory.
+          write: [
+            ...PLANS_DOC_DIRS.flatMap((dir) => dir === '.agent-team/plans'
+              ? [`**/${dir}/*`, `**/${dir}/.history/**`]
+              : [`**/${dir}/*`]),
+            '.plans/*',
+          ],
         },
       },
     })
