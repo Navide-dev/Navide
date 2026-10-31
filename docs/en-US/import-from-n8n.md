@@ -69,6 +69,11 @@ secrets were removed, and how many steps need review. None of this blocks
   way Navide's signal instructions at the end of its kickoff say, and only
   that branch runs; an Append or Choose Branch
   Merge after it runs on the inputs that arrived.
+- Any other node with several outputs, such as Compare Datasets: a small
+  region becomes one step that follows every output that has items. A region
+  too large for that, or holding an agent or approval gate, stays as separate
+  steps. Every output then runs, also one n8n would leave without items, so
+  that node and the Merge after it show as **Needs review**.
 - A node with **On Error → Continue (using error output)** gets an error
   edge: the next step runs only when it fails. A workflow that is its own
   error workflow (Settings → Error Workflow) has its Error Trigger steps

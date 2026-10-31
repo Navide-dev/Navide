@@ -229,6 +229,7 @@ describe('Manifest v2 contract corpus', () => {
       requires: ['fs', 'ui', 'shell'],
       packageVersion: '1.0.0',
       manifestPermissions: { system: ['fs', 'ui'], shell: 'allowlist' },
+      apiVersion: '^1.0.0',
     })
   })
 

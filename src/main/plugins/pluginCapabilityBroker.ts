@@ -5,6 +5,7 @@
 // `frontendPluginManager.ts`.
 
 import { eventNamespace, resolveWsType } from './capabilityMap'
+import { warnDeprecatedCapability } from './pluginCapabilityDeprecation'
 import { EDITOR_AI_EVENTS, validateEditorAiEvent } from './editorAiCapability'
 import { isPreferenceJsonValue, validateEditorPreferencesEvent } from './editorPreferenceCapability'
 import { validateWebChangedEvent } from './webCapability'
@@ -1211,6 +1212,7 @@ export function planCapabilityCall(
       }
     }
     const decision = planPublicCapabilityCall(call, policy, authorization)
+    if (decision.kind === 'allow') warnDeprecatedCapability(call.pluginId, `${call.ns}.${call.method}`)
     return decision.kind === 'allow'
       ? decision.plan
       : { kind: 'respond', response: undispatched(decision.response) }
