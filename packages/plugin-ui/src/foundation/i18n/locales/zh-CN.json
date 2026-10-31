@@ -7976,7 +7976,7 @@
           "not-installed": "这个 Navide 插件未安装。",
           "view-not-open": "请先打开这个 Navide 插件的视图，再按一次快捷键。",
           "view-not-openable": "这个 Navide 插件的视图无法用快捷键打开。",
-          "method-unavailable": "这个 Navide 插件命令目前还无法执行。"
+          "method-failed": "这个 Navide 插件命令执行失败。"
         }
       },
       "reset-all": "全部还原",

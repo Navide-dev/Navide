@@ -7976,7 +7976,7 @@
           "not-installed": "이 Navide 플러그인이 설치되어 있지 않아요.",
           "view-not-open": "이 Navide 플러그인의 뷰를 먼저 연 다음 단축키를 다시 눌러 주세요.",
           "view-not-openable": "이 Navide 플러그인의 뷰는 단축키로 열 수 없어요.",
-          "method-unavailable": "이 Navide 플러그인 명령은 아직 실행할 수 없어요."
+          "method-failed": "이 Navide 플러그인 명령을 실행하지 못했어요."
         }
       },
       "reset-all": "모두 초기화",

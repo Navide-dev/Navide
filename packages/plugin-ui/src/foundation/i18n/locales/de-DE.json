@@ -7976,7 +7976,7 @@
           "not-installed": "Dieses Navide-Plugin ist nicht installiert.",
           "view-not-open": "Öffne zuerst die Ansicht dieses Navide-Plugins und drücke das Tastenkürzel dann erneut.",
           "view-not-openable": "Die Ansicht dieses Navide-Plugins lässt sich nicht per Tastenkürzel öffnen.",
-          "method-unavailable": "Dieser Befehl des Navide-Plugins kann noch nicht ausgeführt werden."
+          "method-failed": "Dieser Befehl des Navide-Plugins ist fehlgeschlagen."
         }
       },
       "reset-all": "Alle zurücksetzen",

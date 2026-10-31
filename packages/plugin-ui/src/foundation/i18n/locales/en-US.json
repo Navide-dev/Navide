@@ -7976,7 +7976,7 @@
           "not-installed": "That Navide plugin is not installed.",
           "view-not-open": "Open that Navide plugin's view first, then press the shortcut again.",
           "view-not-openable": "This Navide plugin's view can't be opened by a shortcut.",
-          "method-unavailable": "This Navide plugin command can't run yet."
+          "method-failed": "This Navide plugin command failed."
         }
       },
       "reset-all": "Reset All",

@@ -7976,7 +7976,7 @@
           "not-installed": "Ce plugin Navide n’est pas installé.",
           "view-not-open": "Ouvrez d’abord la vue de ce plugin Navide, puis appuyez de nouveau sur le raccourci.",
           "view-not-openable": "La vue de ce plugin Navide ne s’ouvre pas avec un raccourci.",
-          "method-unavailable": "Cette commande du plugin Navide ne peut pas encore s’exécuter."
+          "method-failed": "Cette commande du plugin Navide a échoué."
         }
       },
       "reset-all": "Tout réinitialiser",
