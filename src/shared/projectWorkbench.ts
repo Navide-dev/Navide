@@ -130,4 +130,4 @@ export interface ProjectWorkbenchSnapshot {
 
 export type ProjectWorkbenchResult =
   | { ok: true; snapshot: ProjectWorkbenchSnapshot }
-  | { ok: false; reason: 'stale' | 'unavailable'; snapshot: ProjectWorkbenchSnapshot }
+  | { ok: false; reason: 'stale' | 'unavailable' | 'source-state-corrupt'; snapshot: ProjectWorkbenchSnapshot }

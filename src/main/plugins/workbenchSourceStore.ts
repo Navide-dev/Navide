@@ -35,6 +35,7 @@ const REPOSITORY_FILE = 'workbench.json'
 const MAX_REPOSITORY_BYTES = 256 * 1024
 const MAX_STATE_BYTES = 256 * 1024
 const NO_FOLLOW_FLAG = process.platform === 'win32' ? 0 : constants.O_NOFOLLOW
+const FINGERPRINT = /^[0-9a-f]{64}$/
 
 type Recommendation =
   | { state: 'missing' | 'invalid' | 'unavailable' }
@@ -51,6 +52,10 @@ interface SourcesState {
   schemaVersion: 1
   workspaces: Record<string, WorkspaceSelection>
 }
+
+/** `unreadable`: there may be state, and it could not be read. Reads as nothing
+ *  accepted, and must not be written over: that would lose what is in it. */
+type StateRead = { kind: 'ready'; state: SourcesState } | { kind: 'unreadable' }
 
 class FileTooLargeError extends Error {}
 
@@ -162,11 +167,10 @@ function readRecommendation(workspace: string): Recommendation {
   }
 }
 
-function parseState(value: unknown): SourcesState {
-  const empty: SourcesState = { schemaVersion: 1, workspaces: {} }
-  if (typeof value !== 'object' || value === null) return empty
+function parseState(value: unknown): SourcesState | null {
+  if (typeof value !== 'object' || value === null) return null
   const { schemaVersion, workspaces } = value as Partial<SourcesState>
-  if (schemaVersion !== 1 || typeof workspaces !== 'object' || workspaces === null) return empty
+  if (schemaVersion !== 1 || typeof workspaces !== 'object' || workspaces === null) return null
   return { schemaVersion: 1, workspaces }
 }
 
@@ -184,7 +188,9 @@ export class WorkbenchSourceStore {
   inspect(workspacePath: string): ProjectWorkbenchSnapshot {
     const workspace = canonicalExistingDirectory(workspacePath)
     if (!workspace) return this.snapshot({ state: 'missing' }, {})
-    return this.snapshot(readRecommendation(workspace), this.readState().workspaces[workspace] ?? {})
+    const read = this.readState()
+    const selection = read.kind === 'ready' ? read.state.workspaces[workspace] ?? {} : {}
+    return this.snapshot(readRecommendation(workspace), selection)
   }
 
   /** Accepts exactly what the user reviewed: a file that changed meanwhile is
@@ -203,6 +209,11 @@ export class WorkbenchSourceStore {
   revoke(workspacePath: string): ProjectWorkbenchResult {
     const workspace = canonicalExistingDirectory(workspacePath)
     if (!workspace) return { ok: false, reason: 'unavailable', snapshot: this.inspect(workspacePath) }
+    const read = this.readState()
+    // Nothing accepted, nothing to undo: a project with no file leaves no trace.
+    if (read.kind === 'ready' && !read.state.workspaces[workspace]?.accepted) {
+      return { ok: true, snapshot: this.inspect(workspace) }
+    }
     return this.update(workspace, { accepted: undefined })
   }
 
@@ -210,6 +221,11 @@ export class WorkbenchSourceStore {
   markNotified(workspacePath: string, fingerprint: string): ProjectWorkbenchResult {
     const workspace = canonicalExistingDirectory(workspacePath)
     if (!workspace) return { ok: false, reason: 'unavailable', snapshot: this.inspect(workspacePath) }
+    if (!FINGERPRINT.test(fingerprint)) return { ok: false, reason: 'stale', snapshot: this.inspect(workspace) }
+    const recommendation = readRecommendation(workspace)
+    if (recommendation.state !== 'valid' || recommendation.fingerprint !== fingerprint) {
+      return { ok: false, reason: 'stale', snapshot: this.inspect(workspace) }
+    }
     return this.update(workspace, { notified: fingerprint })
   }
 
@@ -231,15 +247,21 @@ export class WorkbenchSourceStore {
     }
   }
 
-  private readState(): SourcesState {
-    if (this.persistence.ensureDirectory(false) !== 'ready') return { schemaVersion: 1, workspaces: {} }
+  private readState(): StateRead {
+    const empty: StateRead = { kind: 'ready', state: { schemaVersion: 1, workspaces: {} } }
+    const directory = this.persistence.ensureDirectory(false)
+    if (directory === 'missing') return empty
+    if (directory !== 'ready') return { kind: 'unreadable' }
     const read = this.persistence.read(this.stateFile, 'workbench sources')
-    // Unreadable means nothing was accepted, which is the safe reading.
-    return read.kind === 'present' ? parseState(read.value) : { schemaVersion: 1, workspaces: {} }
+    if (read.kind === 'missing') return empty
+    const state = read.kind === 'present' ? parseState(read.value) : null
+    return state ? { kind: 'ready', state } : { kind: 'unreadable' }
   }
 
   private update(workspace: string, change: Partial<WorkspaceSelection>): ProjectWorkbenchResult {
-    const state = this.readState()
+    const read = this.readState()
+    if (read.kind !== 'ready') return { ok: false, reason: 'source-state-corrupt', snapshot: this.inspect(workspace) }
+    const { state } = read
     const next: WorkspaceSelection = { ...state.workspaces[workspace], ...change }
     if (next.accepted === undefined) delete next.accepted
     state.workspaces[workspace] = next

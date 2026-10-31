@@ -11,6 +11,7 @@ import { LAYOUT_PRESETS, SLOT_LIMITS, type SlotId } from './slots'
 import { isMovable, moveTargetsFor, viewById, type ViewDescriptor } from './viewRegistry'
 import SettingsSection from '../components/settings/SettingsSection.vue'
 import ActionButtonsSection from './ActionButtonsSection.vue'
+import ProjectWorkbenchSection from './ProjectWorkbenchSection.vue'
 
 const {
   layout,
@@ -192,6 +193,7 @@ function onSize(id: SlotId, raw: string): void {
     </div>
 
     <ActionButtonsSection />
+    <ProjectWorkbenchSection />
   </div>
 </template>
 

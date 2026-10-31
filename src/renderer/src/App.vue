@@ -370,6 +370,7 @@ import { useUiActionBus } from './composables/useUiActionBus'
 import { describeUiActions } from './composables/uiActionCatalog'
 import { isPluginCommand, pluginActionFacts, syncPluginCommands } from './lib/pluginCommands'
 import { loadWorkbench } from './lib/workbench'
+import { syncProjectWorkbench, projectName } from './lib/projectWorkbench'
 import ActionBar from './components/ActionBar.vue'
 import { WINDOW_INSTANCE_ID } from './lib/windowInstanceId'
 import {
@@ -1350,8 +1351,14 @@ const workspaceSelected = ref<boolean>(
 // first window to ask gets the list and shows the restore prompt.
 watch(currentWorkspace, (v, previous) => {
   window.agentTeam?.reportWorkspace?.(v)
+  void syncProjectWorkbench(v, remindProjectWorkbench)
   if (previous !== undefined && previous !== v) gitChangesCount.value = 0
 }, { immediate: true })
+
+function remindProjectWorkbench(status: string): void {
+  const key = status === 'stale' ? 'actionBar.project-reminder-stale' : 'actionBar.project-reminder'
+  notifyRestore.toast(i18n.global.t(key, { name: projectName.value }), { type: 'info' })
+}
 
 // Record an externally opened folder in Recent once the backend accepts
 // requests — see bootWorkspaceToRecord for which boots qualify.
@@ -6588,6 +6595,8 @@ onMounted(() => {
   void refreshPluginContributions()
   void refreshPluginCommands()
   void loadWorkbench()
+  // A pull can change the file while the window sits idle.
+  window.addEventListener('focus', () => { void syncProjectWorkbench(currentWorkspace.value, remindProjectWorkbench) })
   stopPluginContributionChanges = window.agentTeam?.plugins?.onContributionsChanged?.(() => {
     void refreshPluginContributions()
     void refreshPluginCommands()

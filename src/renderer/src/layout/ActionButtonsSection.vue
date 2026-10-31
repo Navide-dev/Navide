@@ -8,6 +8,7 @@ import SettingsEmptyState from '../components/settings/SettingsEmptyState.vue'
 import { buttonActions, type UiActionInfo } from '../composables/uiActionCatalog'
 import { pluginActionFacts, pluginCommands } from '../lib/pluginCommands'
 import { saveWorkbench, workbench } from '../lib/workbench'
+import { visibleProjectButtons } from '../lib/projectWorkbench'
 import { MAX_WORKBENCH_BUTTONS, MAX_WORKBENCH_LABEL, MAX_WORKBENCH_STEPS, type WorkbenchButton } from '../../../shared/workbench'
 
 const { t, te } = i18n.global
@@ -123,7 +124,7 @@ function remove(id: string): Promise<void> {
       <button type="button" class="nv-btn nv-btn--sm" :disabled="!canAddStep" @click="addStep">{{ $t('actionBar.add-step') }}</button>
       <button type="submit" class="nv-btn nv-btn--sm" :disabled="!canAdd">{{ $t('actionBar.add') }}</button>
     </form>
-    <label v-if="workbench.buttons.length" class="abs-hide">
+    <label v-if="workbench.buttons.length || workbench.hidden || visibleProjectButtons.length" class="abs-hide">
       <input type="checkbox" :checked="workbench.hidden" @change="commit(workbench.buttons, ($event.target as HTMLInputElement).checked)" />
       {{ $t('actionBar.hide') }}
     </label>

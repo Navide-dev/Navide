@@ -1,9 +1,10 @@
 // The action buttons of this app: one list shared by the bar and Settings.
 import { computed, shallowRef } from 'vue'
-import { invokeCommand } from '@navide/plugin-ui/shared'
+import { i18n } from '@navide/plugin-ui/foundation'
+import { commandI18nKey, invokeCommand } from '@navide/plugin-ui/shared'
 import { EMPTY_WORKBENCH, parseWorkbench, type WorkbenchButton, type WorkbenchConfig } from '../../../shared/workbench'
-import { DESTRUCTIVE_ACTIONS, isButtonAction } from '../composables/uiActionCatalog'
-import { isPluginCommand } from './pluginCommands'
+import { DESTRUCTIVE_ACTIONS, describeUiAction, isButtonAction } from '../composables/uiActionCatalog'
+import { isPluginCommand, pluginActionFacts } from './pluginCommands'
 
 export const workbench = shallowRef<WorkbenchConfig>(EMPTY_WORKBENCH)
 
@@ -22,6 +23,14 @@ export async function loadWorkbench(): Promise<void> {
  *  by hand, or by something other than Settings. */
 export function isPermittedButton(button: WorkbenchButton): boolean {
   return button.steps.every((step) => isButtonAction(step.action, isPluginCommand))
+}
+
+/** The action's own name, translated where it can be. Never a button's label:
+ *  that is free text, and a warning has to say what will really happen. */
+export function workbenchActionName(id: string): string {
+  const { t, te } = i18n.global
+  const key = commandI18nKey(id)
+  return te(key) ? t(key) : pluginActionFacts(id)?.title ?? describeUiAction(id).title
 }
 
 export function isDestructiveButton(button: WorkbenchButton): boolean {

@@ -251,3 +251,18 @@ Claude Code、Codex、Grok、Kimi、Pi、Droid、MiniMax Code 的新帳號登入
 
 在 **Settings → Layout → 動作按鈕** 可以新增一顆執行一個或依序執行多個動作的按鈕，它會放在舞台分頁列右端。某一步失敗就會停止；會關閉或重設東西的按鈕，按下時會先詢問。每顆按鈕都由 Navide 繪製，工具提示會標明來源。按鈕存在應用程式資料夾的 `workbench.json`，只留在這台電腦。新增之前按鈕列是空的，也可以隱藏。
 
+專案可以在 `.navide/workbench.json` 建議按鈕、版面與 Navide 外掛。這個檔案不會自行生效：**Settings → Layout** 會列出每顆按鈕實際執行的動作，你接受的是自己看過的那份內容。接受紀錄只存在這台電腦，不會寫進專案。沒有這個檔案的專案，畫面與行為和原本完全一樣。
+
+- **檔案一改就全部停用。** 接受之後檔案有變更，就全部不套用，要重新檢視才恢復，所以 `git pull` 之後按鈕可能消失。同一版內容只提醒一次。
+- **按鈕只能執行按鈕允許的動作。** 步驟不能帶參數；只要有一步是按鈕不能執行的動作，那顆按鈕就會停用。來自專案的按鈕有標記，工具提示會寫出專案名稱。
+- **版面要按「套用」才會改變**，建議的外掛只會開啟 Marketplace 頁面。
+
+```json
+{
+  "schemaVersion": 1,
+  "layoutMode": "grid",
+  "plugins": [{ "id": "acme.runner", "version": "^1.0.0" }],
+  "buttons": [{ "id": "plans", "label": "Plans", "steps": [{ "action": "ui.window.openPlans" }] }]
+}
+```
+

@@ -262,3 +262,18 @@ These credentials **never leave this machine**: account credentials and keys sta
 
 **Settings → Layout → Action buttons** adds a button that runs one action or several in order, at the right end of the stage tabs. A step that fails stops the rest, and a button that closes or resets something asks first. Navide draws every button, and its tooltip says where it came from. Buttons are stored in `workbench.json` in the app's data folder and stay on this machine. The bar is empty until you add one, and can be hidden.
 
+A repository can suggest buttons, a layout and Navide plugins in `.navide/workbench.json`. Nothing in that file applies by itself: **Settings → Layout** shows what each button really runs, and you accept the exact content you reviewed. Acceptance stays on this computer, never in the repository. A project without the file looks and behaves exactly as before.
+
+- **A change stops everything.** If the file changes after you accepted it, none of it applies until you review it again, so buttons can disappear after `git pull`. You get one reminder per version of the file.
+- **Buttons run only what a button may run.** A step has no arguments, and a step naming an action no button may run disables that button. Buttons from a project are marked and their tooltip names the project.
+- **The layout changes only when you press Apply**, and a suggested plugin only opens its Marketplace page.
+
+```json
+{
+  "schemaVersion": 1,
+  "layoutMode": "grid",
+  "plugins": [{ "id": "acme.runner", "version": "^1.0.0" }],
+  "buttons": [{ "id": "plans", "label": "Plans", "steps": [{ "action": "ui.window.openPlans" }] }]
+}
+```
+

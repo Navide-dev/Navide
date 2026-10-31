@@ -4031,6 +4031,9 @@ ipcMain.on('terminal:selection-changed', (event, selection: unknown) => {
 // without reloading, so main's per-window workspace map — and the crash-restore
 // registry — must be told. Empty path = the window returned to Welcome.
 ipcMain.on('window:reportWorkspace', (event, workspacePath: string) => {
+  // This decides which repository a workbench acceptance applies to: a subframe
+  // must not be able to point it somewhere else.
+  if (!isTrustedPluginManagementSender(event, mainWindows)) return
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win || !mainWindows.has(win)) return
   if (detachedWindowIds.has(win.id)) return // detached child — never registry-tracked
