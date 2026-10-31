@@ -8259,6 +8259,72 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "kind": "API キー",
+        "list": {
+          "aria": "アカウント",
+          "search": "アカウントを検索",
+          "add": "+ アカウントを追加",
+          "subscription": "サブスクリプション",
+          "empty": "一致するアカウントはありません。"
+        },
+        "add": {
+          "title": "{agent} の接続方法を選んでください",
+          "agent-label": "CLI",
+          "subscription": "サブスクリプションでサインイン",
+          "subscription-desc": "ブラウザーで承認します。プランの利用枠を使います。",
+          "api-key": "API キーを貼り付け",
+          "api-key-desc": "使用量に応じて課金されます。キーはこのコンピューターに保存されます。",
+          "api-key-unsupported": "この CLI ではまだ API キーを使えません。",
+          "cloud": "クラウドサービスに接続",
+          "cloud-desc": "Amazon Bedrock、Google Vertex、Microsoft Foundry。",
+          "endpoint": "カスタムエンドポイントに接続",
+          "endpoint-desc": "社内ゲートウェイやその他の互換サービス。",
+          "coming-soon": "近日公開"
+        },
+        "form": {
+          "title": "API キーを貼り付け",
+          "billing": "このアカウントは使用量に応じて課金され、サブスクリプションの利用枠は使いません。",
+          "name": "名前",
+          "key": "API キー",
+          "key-new": "新しい API キー",
+          "key-hint": "保存後は再表示されません。",
+          "reminder": "毎月の支出リマインダー（USD）",
+          "reminder-hint": "これはリマインダーで、上限ではありません。上限はベンダーのコンソールで設定してください。",
+          "test": "キーをテスト",
+          "testing": "テスト中…",
+          "test-ok": "キーは有効です。",
+          "test-rejected": "ベンダーがこのキーを拒否しました。",
+          "test-unknown": "キーを確認できませんでした。このまま保存することもできます。",
+          "save": "アカウントを保存"
+        },
+        "safe": {
+          "local": "このコンピューターにのみ保存",
+          "no-sync": "Navide Cloud には同期されません",
+          "agent": "エージェントには表示されません"
+        },
+        "detail": {
+          "ends-with": "末尾 {last4}",
+          "not-in-use": "このキーは保存済みです。ペインではまだ API キーを使えないため、課金は発生しません。",
+          "replace": "キーを置き換え",
+          "replace-save": "新しいキーを保存",
+          "delete-title": "この API キーを削除しますか？",
+          "delete-message": "{name} をこのコンピューターから削除します。キーはベンダー側で無効にするまで有効なままです。"
+        },
+        "error": {
+          "subscription-token": "これはサブスクリプションのトークンで、API キーではありません。ベンダーのコンソールで API キーを作成してください。",
+          "wrong-vendor": "このキーは別のベンダーのものです。",
+          "invalid-secret": "API キーではないようです。",
+          "invalid-name": "60 文字以内で名前を入力してください。",
+          "invalid-reminder": "毎月のリマインダーには 0 より大きい金額を入力してください。",
+          "unsupported-agent": "この CLI ではまだ API キーを使えません。",
+          "store-failed": "このコンピューターのキーチェーンに保存できませんでした。",
+          "secret-missing": "このキーはキーチェーンにありません。もう一度貼り付けてください。",
+          "not-found": "この API キーはもう存在しません。",
+          "main-window-only": "API キーは設定でのみ管理できます。",
+          "internal-error": "問題が発生しました。もう一度お試しください。"
+        }
+      },
       "title": "Git アカウント",
       "encrypted-note": "トークンは OS のキーチェーンで暗号化され、このマシンにのみ保存されます。",
       "unavailable": "このシステムでは暗号化を利用できないため、アカウントを追加できません。通常は OS のキーチェーンにアクセスできないことが原因です。",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import {
   cliAccountDirActionsKey,
@@ -25,6 +25,10 @@ import {
 } from '../composables/useUsage'
 import { i18n } from '@navide/plugin-ui/foundation'
 import SettingsNotice from './settings/SettingsNotice.vue'
+import AddAccountPanel from './accounts/AddAccountPanel.vue'
+import ApiKeyDetail from './accounts/ApiKeyDetail.vue'
+import { useApiKeys, type ApiKeyRow } from '../composables/useApiKeys'
+import type { useBackend } from '../composables/useBackend'
 
 const props = defineProps<{
   api: ReturnType<typeof useCliProfiles>
@@ -32,6 +36,9 @@ const props = defineProps<{
    *  workspace, so without one the flow dead-ends — block it up front
    *  (before the profile row is created) instead of leaving an orphan row. */
   workspaceOpen?: boolean
+  /** API keys live in their own store. Without a backend the page lists
+   *  subscription accounts only. */
+  backend?: ReturnType<typeof useBackend>
 }>()
 
 // Asks the app shell to open a terminal pane running the agent's CLI so the
@@ -43,6 +50,84 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'login', agentKey: string, loginProfileId?: string): void }>()
 
 const { error } = props.api
+
+// ── Two columns: the list on the left, the selected item on the right ────────
+// Every account card stays mounted and the unselected ones are hidden, so the
+// cards and everything they do are the same as before.
+type AccountSelection =
+  | { type: 'account'; agentKey: string; profileId: string | null }
+  | { type: 'key'; id: string }
+  | { type: 'add' }
+
+const apiKeys = props.backend ? useApiKeys(props.backend) : null
+const selection = ref<AccountSelection | null>(null)
+const listQuery = ref('')
+const addAgent = ref('')
+
+const listAgents = computed(() => CLI_AGENT_SPECS.filter((s) => supported(s.agentKey)))
+
+function agentLabel(agentKey: string): string {
+  return CLI_AGENT_SPECS.find((s) => s.agentKey === agentKey)?.label ?? agentKey
+}
+
+// With nothing chosen yet, the first CLI's active account is showing.
+const effectiveSelection = computed<AccountSelection | null>(() => {
+  const chosen = selection.value
+  if (chosen?.type === 'key' && !apiKeys?.keys.value.some((key) => key.id === chosen.id)) return firstAccount()
+  if (chosen?.type === 'account' && chosen.profileId && !props.api.findProfile(chosen.profileId)) return firstAccount()
+  return chosen ?? firstAccount()
+})
+
+function firstAccount(): AccountSelection | null {
+  const agent = listAgents.value[0]
+  return agent ? { type: 'account', agentKey: agent.agentKey, profileId: props.api.defaultProfileId(agent.agentKey) } : null
+}
+
+function isSelectedAccount(agentKey: string, profileId: string | null): boolean {
+  const chosen = effectiveSelection.value
+  return chosen?.type === 'account' && chosen.agentKey === agentKey && chosen.profileId === profileId
+}
+
+function agentSelected(agentKey: string): boolean {
+  const chosen = effectiveSelection.value
+  return chosen?.type === 'account' && chosen.agentKey === agentKey
+}
+
+const selectedKey = computed<ApiKeyRow | undefined>(() => {
+  const chosen = effectiveSelection.value
+  return chosen?.type === 'key' ? apiKeys?.keys.value.find((key) => key.id === chosen.id) : undefined
+})
+
+function matchesQuery(...parts: string[]): boolean {
+  const query = listQuery.value.trim().toLowerCase()
+  return !query || parts.some((part) => part.toLowerCase().includes(query))
+}
+
+function listProfiles(agentKey: string): (CliProfile | null)[] {
+  return [null, ...props.api.profilesForAgent(agentKey)].filter((p) =>
+    matchesQuery(cardTitle(agentKey, p), agentLabel(agentKey)),
+  )
+}
+
+function listKeys(agentKey: string): ApiKeyRow[] {
+  return (apiKeys?.keysForAgent(agentKey) ?? []).filter((key) => matchesQuery(key.name, agentLabel(agentKey)))
+}
+
+function rowValue(agentKey: string, profileId: string | null): { text: string; tier: string } {
+  const usage = cardUsage(agentKey, profileId)
+  return usage && !usage.noData ? { text: usage.big, tier: usage.tier } : { text: '', tier: '' }
+}
+
+function startAdd(): void {
+  const chosen = effectiveSelection.value
+  const current = chosen?.type === 'account' ? chosen.agentKey : selectedKey.value?.agentKey
+  addAgent.value = current ?? listAgents.value[0]?.agentKey ?? ''
+  selection.value = { type: 'add' }
+}
+
+function keySaved(key: ApiKeyRow): void {
+  selection.value = { type: 'key', id: key.id }
+}
 
 function supported(agentKey: string): boolean {
   return props.api.supportedAgents.value.includes(agentKey)
@@ -621,6 +706,9 @@ onUnmounted(() => {
 
 // Fresh numbers when the pane opens (same nudge UsageBadge sends on switch).
 onMounted(() => refreshUsage())
+onMounted(() => {
+  void apiKeys?.refresh()
+})
 </script>
 
 <template>
@@ -650,9 +738,94 @@ onMounted(() => refreshUsage())
 
     <SettingsNotice v-if="error" class="cli-banner danger" tone="danger" role="alert" :message="error" />
 
+    <div class="acct-md">
+      <nav class="acct-list" :aria-label="$t('settings.accounts.api-keys.list.aria')">
+        <input
+          v-model="listQuery"
+          class="acct-search"
+          type="search"
+          :placeholder="$t('settings.accounts.api-keys.list.search')"
+          :aria-label="$t('settings.accounts.api-keys.list.search')"
+        />
+        <div class="acct-rows">
+          <template v-for="spec in listAgents" :key="spec.agentKey">
+            <template v-if="listProfiles(spec.agentKey).length + listKeys(spec.agentKey).length > 0">
+              <div class="acct-group">{{ spec.label }}</div>
+              <button
+                v-for="p in listProfiles(spec.agentKey)"
+                :key="p?.id ?? '__default__'"
+                type="button"
+                class="acct-row"
+                :class="{ on: isSelectedAccount(spec.agentKey, p?.id ?? null), dim: cardSaysSignedOut(spec.agentKey, p) }"
+                :aria-current="isSelectedAccount(spec.agentKey, p?.id ?? null) ? 'true' : undefined"
+                :data-account="slotKey(spec.agentKey, p)"
+                @click="selection = { type: 'account', agentKey: spec.agentKey, profileId: p?.id ?? null }"
+              >
+                <span class="acct-row-text">
+                  <b v-truncate>{{ cardTitle(spec.agentKey, p) }}</b>
+                  <span>{{
+                    cardSaysSignedOut(spec.agentKey, p)
+                      ? $t('settings.accounts.cli.not-signed-in')
+                      : $t('settings.accounts.api-keys.list.subscription')
+                  }}</span>
+                </span>
+                <span class="acct-row-value" :class="rowValue(spec.agentKey, p?.id ?? null).tier">{{
+                  rowValue(spec.agentKey, p?.id ?? null).text
+                }}</span>
+              </button>
+              <button
+                v-for="key in listKeys(spec.agentKey)"
+                :key="key.id"
+                type="button"
+                class="acct-row"
+                :class="{ on: selectedKey?.id === key.id }"
+                :aria-current="selectedKey?.id === key.id ? 'true' : undefined"
+                :data-api-key="key.id"
+                @click="selection = { type: 'key', id: key.id }"
+              >
+                <span class="acct-row-text">
+                  <b v-truncate>{{ key.name }}</b>
+                  <span>{{ $t('settings.accounts.api-keys.kind') }}</span>
+                </span>
+              </button>
+            </template>
+          </template>
+          <p v-if="listAgents.every((s) => listProfiles(s.agentKey).length + listKeys(s.agentKey).length === 0)" class="acct-empty">
+            {{ $t('settings.accounts.api-keys.list.empty') }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="cli-btn ghost sm acct-add"
+          :class="{ on: effectiveSelection?.type === 'add' }"
+          :disabled="!apiKeys"
+          @click="startAdd"
+        >
+          {{ $t('settings.accounts.api-keys.list.add') }}
+        </button>
+      </nav>
+
+      <div class="acct-detail">
+        <AddAccountPanel
+          v-if="apiKeys && effectiveSelection?.type === 'add'"
+          v-model:agent-key="addAgent"
+          :api-keys="apiKeys"
+          :agents="listAgents.map((s) => ({ agentKey: s.agentKey, label: s.label }))"
+          @subscribe="addAccount"
+          @saved="keySaved"
+          @cancel="selection = null"
+        />
+        <ApiKeyDetail
+          v-else-if="apiKeys && selectedKey"
+          :api-keys="apiKeys"
+          :row="selectedKey"
+          :agent-label="agentLabel(selectedKey.agentKey)"
+          @deleted="selection = null"
+        />
+
     <!-- Multi-account CLIs first; the rest share one line at the end
          instead of repeating the same sentence under each name. -->
-    <section v-for="spec in CLI_AGENT_SPECS.filter((s) => supported(s.agentKey))" :key="spec.agentKey" class="cli-agent">
+    <section v-for="spec in CLI_AGENT_SPECS.filter((s) => supported(s.agentKey))" v-show="agentSelected(spec.agentKey)" :key="spec.agentKey" class="cli-agent">
       <div class="cli-agent-head">
         <span class="cli-agent-name cli-group-label">{{ spec.label }}</span>
         <select
@@ -667,7 +840,7 @@ onMounted(() => refreshUsage())
         </select>
         <button
           v-if="supported(spec.agentKey)"
-          class="cli-btn ghost sm"
+          class="cli-btn ghost sm cli-agent-add"
           :disabled="saving"
           @click="addAccount(spec.agentKey)"
         >
@@ -678,7 +851,7 @@ onMounted(() => refreshUsage())
       <div class="cli-card-grid">
         <!-- First card is the built-in Default (the user's real home). -->
         <template v-for="p in [null, ...api.profilesForAgent(spec.agentKey)]" :key="p?.id ?? '__default__'">
-        <div v-if="!p && defaultCollapsed(spec.agentKey)" class="cli-card cli-card-collapsed">
+        <div v-if="!p && defaultCollapsed(spec.agentKey)" v-show="isSelectedAccount(spec.agentKey, null)" class="cli-card cli-card-collapsed">
           <span class="cli-card-collapsed-text" v-truncate>{{
             $t('settings.accounts.cli.default-collapsed')
           }}</span>
@@ -692,6 +865,7 @@ onMounted(() => refreshUsage())
         </div>
         <div
           v-else
+          v-show="isSelectedAccount(spec.agentKey, p?.id ?? null)"
           class="cli-card"
           :class="{ active: api.defaultProfileId(spec.agentKey) === (p?.id ?? null) }"
         >
@@ -934,6 +1108,8 @@ onMounted(() => refreshUsage())
 
       </div>
     </section>
+      </div>
+    </div>
 
     <!-- Agents that cannot isolate multiple accounts (e.g. antigravity). -->
     <section v-if="CLI_AGENT_SPECS.some((s) => !supported(s.agentKey))" class="cli-agent cli-unsupported-group">
@@ -946,7 +1122,43 @@ onMounted(() => refreshUsage())
 </template>
 
 <style scoped>
-.cli-pane { display: flex; flex-direction: column; }
+.cli-pane { display: flex; flex-direction: column; container-type: inline-size; }
+.acct-md {
+  display: grid;
+  grid-template-columns: minmax(200px, 268px) minmax(0, 1fr);
+  min-height: 460px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.acct-list { display: flex; flex-direction: column; gap: 6px; min-width: 0; max-height: 620px; padding: 8px; background: var(--bg-subtle); border-right: 1px solid var(--border-muted); }
+.acct-search { box-sizing: border-box; width: 100%; min-height: var(--control-h-md); padding: 3px 8px; border: 1px solid var(--border-default); border-radius: 6px; background: var(--bg-canvas); color: var(--text-primary); font-size: var(--font-2xs); }
+.acct-search:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: -1px; }
+.acct-rows { flex: 1; min-height: 0; overflow-y: auto; }
+.acct-group { padding: 8px 6px 3px; font-size: var(--font-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+.acct-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; padding: 5px 7px; border: none; border-radius: 6px; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
+.acct-row:hover { background: var(--bg-hover); }
+.acct-row.on { background: var(--accent-subtle, var(--bg-hover)); }
+.acct-row:focus-visible, .acct-add:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: -2px; }
+.acct-row.dim .acct-row-text b { color: var(--text-secondary); font-weight: 500; }
+.acct-row-text { min-width: 0; }
+.acct-row-text b { display: block; font-size: var(--font-xs); font-weight: 600; line-height: 1.35; }
+.acct-row-text span { display: block; font-size: var(--font-2xs); line-height: 1.3; color: var(--text-secondary); }
+.acct-row-value { font-size: var(--font-xs); font-weight: 700; white-space: nowrap; }
+.acct-row-value.ok { color: var(--success-fg); }
+.acct-row-value.warn { color: var(--attention-fg); }
+.acct-row-value.crit { color: var(--danger-fg); }
+.acct-empty { margin: 12px 6px; font-size: var(--font-2xs); color: var(--text-secondary); }
+.acct-add { width: 100%; }
+.acct-detail { min-width: 0; padding: 14px 16px; }
+.acct-detail .cli-agent { margin-bottom: 0; }
+/* Adding moved to the list: its panel offers the same action next to the others. */
+.acct-detail .cli-btn.cli-agent-add { display: none; }
+@container (max-width: 620px) {
+  .acct-md { grid-template-columns: minmax(0, 1fr); }
+  .acct-list { max-height: 260px; border-right: none; border-bottom: 1px solid var(--border-muted); }
+}
 .cli-head {
   display: flex;
   flex-wrap: wrap;

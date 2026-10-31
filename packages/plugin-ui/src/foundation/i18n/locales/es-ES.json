@@ -8259,6 +8259,72 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "kind": "clave de API",
+        "list": {
+          "aria": "Cuentas",
+          "search": "Buscar cuentas",
+          "add": "+ Añadir cuenta",
+          "subscription": "Suscripción",
+          "empty": "Ninguna cuenta coincide."
+        },
+        "add": {
+          "title": "¿Cómo debe conectarse {agent}?",
+          "agent-label": "CLI",
+          "subscription": "Iniciar sesión con una suscripción",
+          "subscription-desc": "Autoriza en el navegador. Usa la cuota de tu plan.",
+          "api-key": "Pegar una clave de API",
+          "api-key-desc": "Se factura por uso. La clave se queda en este ordenador.",
+          "api-key-unsupported": "Las claves de API aún no están disponibles para esta CLI.",
+          "cloud": "Conectar un servicio en la nube",
+          "cloud-desc": "Amazon Bedrock, Google Vertex o Microsoft Foundry.",
+          "endpoint": "Conectar un endpoint personalizado",
+          "endpoint-desc": "Una pasarela de empresa u otro servicio compatible.",
+          "coming-soon": "Próximamente"
+        },
+        "form": {
+          "title": "Pegar una clave de API",
+          "billing": "Esta cuenta se factura por uso. No usa la cuota de tu suscripción.",
+          "name": "Nombre",
+          "key": "Clave de API",
+          "key-new": "Nueva clave de API",
+          "key-hint": "No se vuelve a mostrar después de guardarla.",
+          "reminder": "Recordatorio de gasto mensual (USD)",
+          "reminder-hint": "Es un recordatorio, no un límite estricto. Define los límites estrictos en la consola del proveedor.",
+          "test": "Probar clave",
+          "testing": "Probando…",
+          "test-ok": "La clave funciona.",
+          "test-rejected": "El proveedor ha rechazado esta clave.",
+          "test-unknown": "No se pudo comprobar la clave. Aun así, puedes guardarla.",
+          "save": "Guardar cuenta"
+        },
+        "safe": {
+          "local": "Se guarda solo en este ordenador",
+          "no-sync": "Nunca se sincroniza con Navide Cloud",
+          "agent": "No se muestra a los agents"
+        },
+        "detail": {
+          "ends-with": "Termina en {last4}",
+          "not-in-use": "Esta clave está guardada. Los panes aún no pueden usar claves de API, así que no se le factura nada.",
+          "replace": "Reemplazar clave",
+          "replace-save": "Guardar nueva clave",
+          "delete-title": "¿Eliminar esta clave de API?",
+          "delete-message": "{name} se eliminará de este ordenador. La clave sigue siendo válida en el proveedor hasta que la revoques allí."
+        },
+        "error": {
+          "subscription-token": "Este es un token de suscripción, no una clave de API. Crea una clave de API en la consola del proveedor.",
+          "wrong-vendor": "Esta clave pertenece a otro proveedor.",
+          "invalid-secret": "Esto no parece una clave de API.",
+          "invalid-name": "Introduce un nombre de hasta 60 caracteres.",
+          "invalid-reminder": "Introduce un importe mensual superior a cero para el recordatorio.",
+          "unsupported-agent": "Las claves de API aún no están disponibles para esta CLI.",
+          "store-failed": "No se pudo guardar en el llavero de este ordenador.",
+          "secret-missing": "Esta clave ya no está en el llavero. Pégala de nuevo.",
+          "not-found": "Esta clave de API ya no existe.",
+          "main-window-only": "Las claves de API solo se pueden gestionar en Ajustes.",
+          "internal-error": "Algo ha salido mal. Inténtalo de nuevo."
+        }
+      },
       "title": "Cuentas de Git",
       "encrypted-note": "Los tokens se cifran con el llavero del sistema y solo se guardan en este equipo.",
       "unavailable": "El cifrado no está disponible en este sistema, así que no se pueden añadir cuentas. Normalmente significa que no se puede acceder al llavero del sistema operativo.",

@@ -8259,6 +8259,72 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "kind": "clé API",
+        "list": {
+          "aria": "Comptes",
+          "search": "Rechercher des comptes",
+          "add": "+ Ajouter un compte",
+          "subscription": "Abonnement",
+          "empty": "Aucun compte correspondant."
+        },
+        "add": {
+          "title": "Comment connecter {agent} ?",
+          "agent-label": "CLI",
+          "subscription": "Se connecter avec un abonnement",
+          "subscription-desc": "Autorisez dans votre navigateur. Utilise le quota de votre forfait.",
+          "api-key": "Coller une clé API",
+          "api-key-desc": "Facturé à l’usage. La clé reste sur cet ordinateur.",
+          "api-key-unsupported": "Les clés API ne sont pas encore disponibles pour cette CLI.",
+          "cloud": "Connecter un service cloud",
+          "cloud-desc": "Amazon Bedrock, Google Vertex ou Microsoft Foundry.",
+          "endpoint": "Connecter un point de terminaison personnalisé",
+          "endpoint-desc": "Une passerelle d’entreprise ou un autre service compatible.",
+          "coming-soon": "Bientôt disponible"
+        },
+        "form": {
+          "title": "Coller une clé API",
+          "billing": "Ce compte est facturé à l’usage. Il n’utilise pas le quota de votre abonnement.",
+          "name": "Nom",
+          "key": "Clé API",
+          "key-new": "Nouvelle clé API",
+          "key-hint": "Plus affichée après l’enregistrement.",
+          "reminder": "Rappel de dépenses mensuelles (USD)",
+          "reminder-hint": "Un rappel, pas une limite stricte. Définissez les limites strictes dans la console du fournisseur.",
+          "test": "Tester la clé",
+          "testing": "Test en cours…",
+          "test-ok": "La clé fonctionne.",
+          "test-rejected": "Le fournisseur a refusé cette clé.",
+          "test-unknown": "Impossible de vérifier la clé. Vous pouvez tout de même l’enregistrer.",
+          "save": "Enregistrer le compte"
+        },
+        "safe": {
+          "local": "Stockée uniquement sur cet ordinateur",
+          "no-sync": "Jamais synchronisée avec Navide Cloud",
+          "agent": "Non visible par les agents"
+        },
+        "detail": {
+          "ends-with": "Se termine par {last4}",
+          "not-in-use": "Cette clé est enregistrée. Les panes ne peuvent pas encore utiliser de clés API, donc rien ne lui est facturé.",
+          "replace": "Remplacer la clé",
+          "replace-save": "Enregistrer la nouvelle clé",
+          "delete-title": "Supprimer cette clé API ?",
+          "delete-message": "{name} sera supprimée de cet ordinateur. La clé reste valide chez le fournisseur jusqu’à ce que vous l’y révoquiez."
+        },
+        "error": {
+          "subscription-token": "Ceci est un jeton d’abonnement, pas une clé API. Créez une clé API dans la console du fournisseur.",
+          "wrong-vendor": "Cette clé appartient à un autre fournisseur.",
+          "invalid-secret": "Ceci ne ressemble pas à une clé API.",
+          "invalid-name": "Saisissez un nom de 60 caractères maximum.",
+          "invalid-reminder": "Saisissez un montant de rappel mensuel supérieur à zéro.",
+          "unsupported-agent": "Les clés API ne sont pas encore disponibles pour cette CLI.",
+          "store-failed": "Impossible d’enregistrer dans le trousseau de cet ordinateur.",
+          "secret-missing": "Cette clé n’est plus dans le trousseau. Collez-la de nouveau.",
+          "not-found": "Cette clé API n’existe plus.",
+          "main-window-only": "Les clés API ne peuvent être gérées que dans les paramètres.",
+          "internal-error": "Une erreur s’est produite. Réessayez."
+        }
+      },
       "title": "Comptes Git",
       "encrypted-note": "Les tokens sont chiffrés avec le trousseau de votre système et stockés uniquement sur cette machine.",
       "unavailable": "Le chiffrement n’est pas disponible sur ce système ; il est donc impossible d’ajouter des comptes. Cela signifie généralement que le trousseau du système est inaccessible.",
