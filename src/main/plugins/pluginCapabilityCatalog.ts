@@ -1,5 +1,5 @@
 import type { JsonValue, StoragePartitionScope } from '../../../packages/plugin-contracts/src/index'
-import { validFilePickerRequest } from '../../../packages/plugin-contracts/src/filePicker'
+import { MAX_EXCLUDE_CHARS, MAX_EXCLUDES, validFilePickerRequest } from '../../../packages/plugin-contracts/src/filePicker'
 import { normalizeJsonValue, utf8ByteLength } from './pluginStorageJson'
 import { EDITOR_FILESYSTEM_METHODS, validateEditorFilesystemRequest } from './editorFilesystemCapability'
 import { EDITOR_AI_METHODS, EDITOR_AI_EVENTS, validateEditorAiRequest } from './editorAiCapability'
@@ -219,8 +219,6 @@ function validateListFilesRequest(value: unknown): value is Record<string, unkno
 
 /** Search work grows with query length and paths × patterns; the backend holds the same limits. */
 const MAX_QUERY_CHARS = 1024
-const MAX_EXCLUDES = 64
-const MAX_EXCLUDE_CHARS = 256
 
 function validateQueryFilesRequest(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value) || !hasOnlyKeys(value, [

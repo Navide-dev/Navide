@@ -35,3 +35,9 @@ export function workspaceRelativePath(path: string, workspacePath: string): stri
   if (/^(?:\/|[A-Za-z]:\/|~)/.test(normalized) || normalized.split('/').includes('..')) return null
   return normalized
 }
+
+/** `ui.openFilePicker` takes `targets` and `search` from plugin API 1.2. */
+export function hostAcceptsPickerStrategy(hostApi: string | null): boolean {
+  const [major, minor] = (hostApi ?? '').split('.').map(Number)
+  return major > 1 || (major === 1 && minor >= 2)
+}
