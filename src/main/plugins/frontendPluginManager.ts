@@ -6712,16 +6712,29 @@ export class FrontendPluginManager {
         canDispatch,
         search: async (query: string): Promise<string[]> => {
           if (!canDispatch()) throw new Error('file picker capability is denied')
+          const strategy = (plan.args as unknown as FilePickerInvocation['request']).search
           const response = await this.sendPublicBackend(
-            'fs.list_files_flat',
-            { workspace_path: workspacePath, query, max_results: 20 },
+            strategy ? 'fs.query_files' : 'fs.list_files_flat',
+            strategy
+              ? {
+                  workspace_path: workspacePath,
+                  query,
+                  match_on: strategy.matchOn,
+                  mode: strategy.mode,
+                  exclude: strategy.exclude,
+                  respect_gitignore: strategy.respectGitignore,
+                  include_hidden: strategy.includeHidden,
+                  limit: 20,
+                }
+              : { workspace_path: workspacePath, query, max_results: 20 },
             canDispatch,
           )
           if (!canDispatch()) throw new Error('file picker capability is denied')
           const files = toPayload(response).files
-          return Array.isArray(files)
-            ? files.filter((file): file is string => typeof file === 'string')
-            : []
+          if (!Array.isArray(files)) return []
+          return files
+            .map((file: unknown) => (typeof file === 'object' && file !== null ? (file as { path?: unknown }).path : file))
+            .filter((file): file is string => typeof file === 'string')
         },
       })
     }

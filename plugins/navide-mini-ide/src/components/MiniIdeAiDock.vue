@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { createPluginCapabilityClient } from '@navide/plugin-sdk'
+import { createPluginCapabilityClient, hostApiVersion } from '@navide/plugin-sdk'
 import { SafeAiCliPanel, createAiCliSessionController, createAiCliTerminalView, createAiCliTerminalResources, type AiCliTerminalResources, type SafeAiCliPanelHandle } from '@navide/plugin-ui'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import { useBackend } from '../composables/useBackend'
+import { hostAcceptsPickerStrategy, parsePathLine } from '../lib/pathLine'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = withDefaults(defineProps<{
@@ -21,9 +22,21 @@ const open = defineModel<boolean>('open', { default: false })
 const client = createPluginCapabilityClient()
 const controller = createAiCliSessionController(client, { persistView: true })
 const terminalView = createAiCliTerminalView(client, controller)
+const hostResources = createAiCliTerminalResources(client, controller)
 const terminalResources: AiCliTerminalResources = {
-  ...createAiCliTerminalResources(client, controller),
+  ...hostResources,
   ...(props.resolveFileLink ? { resolveFileLink: props.resolveFileLink } : {}),
+  // On a Host that accepts them, the picker gets this plugin's parsing and matching.
+  async openFilePicker(request) {
+    await hostResources.openFilePicker!(hostAcceptsPickerStrategy(hostApiVersion()) ? {
+      ...request,
+      targets: request.candidates.map((candidate) => {
+        const { path, line } = parsePathLine(candidate)
+        return { path, ...(line ? { line } : {}) }
+      }),
+      search: { matchOn: 'path', mode: 'substring' },
+    } : request)
+  },
 }
 const profilePreference = {
   async read() { return (await client.capabilities.invoke('aiCli.getEditorProfile', {})).profileId },

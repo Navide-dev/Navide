@@ -2341,6 +2341,18 @@ migration: that gesture belongs to the separate Host TerminalPane surface.
 through a Host-owned picker-only view. Its request contains `query`, untrusted
 `candidates`, optional `line`, and an optional owned `sessionId`. A candidate or
 a renderer's user Initiator classification does not authorize an external file.
+
+The Host owns resolution, authorization and opening; matching belongs to the
+caller. A caller that parses locations itself sends `targets`
+(`{ path, line? }`), which replace `candidates` and are just as untrusted, and
+`search`, the `fs.queryFiles` strategy (`matchOn`, `mode`, `exclude`,
+`respectGitignore`, `includeHidden`) the picker uses when the user types. Rows
+keep the order the search returned. Without these fields the Host reads a
+`path:line` suffix from each candidate and searches as `fs.listFilesFlat` does;
+that string form is deprecated. A package inside its workspace does not need
+this picker at all: `system:fs` already lets it find a file and
+`ui.openInEditor` open it.
+
 The Host performs lookup internally; the isolated picker returns an opaque row
 identifier on actual selection. The public result is only `{ opened: boolean }`.
 Neither filesystem lookup results nor a selected-file grant are returned to

@@ -11659,6 +11659,53 @@ describe('first-party Git private bridge', () => {
     expect(bind).not.toHaveBeenCalled()
   })
 
+  it('searches the file picker with the caller\'s strategy when it sends one', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'git-file-picker-strategy')
+    mgr.setBackendWsUrl('ws://public-file-picker-strategy-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+    const invocationRef: { current: Pick<FilePickerInvocation, 'search'> | null } = { current: null }
+    let found: string[] = []
+    mgr.setFilePickerHost({
+      open: vi.fn(async (candidate: FilePickerInvocation) => {
+        invocationRef.current = candidate
+        found = await candidate.search('foo')
+        return { opened: true }
+      }),
+      cancelInstance: vi.fn(),
+      cancelSession: vi.fn(),
+    })
+
+    const pending = mgr.executePublicCapability({
+      kind: 'public',
+      address: 'ui.openFilePicker',
+      scope: 'workspace',
+      runtime,
+      args: { query: 'foo', candidates: [], search: { matchOn: 'path', mode: 'subsequence', exclude: ['vendor/*'] } },
+    })
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+    expect(request).toMatchObject({
+      type: 'fs.query_files',
+      payload: { workspace_path: '/workspace', query: 'foo', match_on: 'path', mode: 'subsequence', exclude: ['vendor/*'], limit: 20 },
+    })
+    socket.receive({
+      id: request.id,
+      type: request.type,
+      ok: true,
+      payload: { ok: true, files: [{ path: 'z/foo.ts', name: 'foo.ts', matchSpans: [], size: 1, mtime: 1 }, { path: 'a/foo.ts', name: 'foo.ts', matchSpans: [], size: 1, mtime: 1 }] },
+      error: null,
+      timestamp: '',
+    })
+    await expect(pending).resolves.toEqual({ opened: true })
+    expect(found).toEqual(['z/foo.ts', 'a/foo.ts'])
+  })
+
   it('forwards fs.queryFiles to the backend under the bound workspace, with the caller\'s strategy', async () => {
     const { mgr, instanceId } = await openGitView('/workspace', 'fs-query-files')
     mgr.setBackendWsUrl('ws://public-fs-query-test')
