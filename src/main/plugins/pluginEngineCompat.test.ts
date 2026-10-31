@@ -57,17 +57,28 @@ describe('pluginEngineCompat', () => {
 
 describe('the first-party manifests', () => {
   // The bundled copies and the Registry builds come from these files. The
-  // floor is the oldest Navide the build runs on (0.2.30: Git and Plans are
-  // the same source as its bundled build, Mini-IDE adds only a view icon,
-  // which Hosts read since 0.2.9), with no upper bound, so 0.3.0 keeps them.
+  // floor is the oldest Navide the build runs on (0.2.30: Git is the same
+  // source as its bundled build, Mini-IDE adds only a view icon, which Hosts
+  // read since 0.2.9; 0.2.35 for Plans, the App its 1.1 line first shipped
+  // with), with no upper bound, so 0.3.0 keeps them.
   const appVersion = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).version as string
-  const manifests = ['navide-git', 'navide-plans', 'navide-mini-ide'].map((dir) =>
+  const readManifest = (dir: string) =>
     JSON.parse(readFileSync(join(process.cwd(), 'plugins', dir, 'manifest.json'), 'utf8')) as {
       id: string
       version: string
       engines?: { navide?: string }
-    },
-  )
+    }
+  const manifests = ['navide-git', 'navide-mini-ide'].map(readManifest)
+
+  it('navide.plans passes on this build, on 0.2.35 and on 0.3.0, and is refused below 0.2.35', () => {
+    const manifest = readManifest('navide-plans')
+    expect(engineRequirement(manifest)).toBe('>=0.2.35')
+    for (const version of [appVersion, '0.2.35', '0.3.0']) {
+      expect(() => assertEngineCompatible(manifest.id, manifest.version, manifest, version)).not.toThrow()
+    }
+    expect(() => assertEngineCompatible(manifest.id, manifest.version, manifest, '0.2.34'))
+      .toThrow(`${manifest.id} ${manifest.version} requires Navide 0.2.35 or newer; this is Navide 0.2.34`)
+  })
 
   it.each(manifests.map((m) => [m.id, m] as const))('%s passes on this build, on 0.2.31 and on 0.3.0', (_id, manifest) => {
     expect(engineRequirement(manifest)).toBe('>=0.2.30')

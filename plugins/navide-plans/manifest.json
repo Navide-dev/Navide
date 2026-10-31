@@ -5,7 +5,7 @@
   "name": "Plans",
   "version": "1.1.1",
   "publisher": "navide",
-  "engines": { "navide": ">=0.2.30" },
+  "engines": { "navide": ">=0.2.35" },
   "permissions": {
     "system": ["fs", "ui", "aiCli"],
     "scopes": {
