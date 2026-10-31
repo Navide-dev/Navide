@@ -6247,7 +6247,7 @@ app.whenReady().then(async () => {
         frontendPluginManager.registerDeveloperDescriptor(devPlansDescriptor)
       } else {
         console.warn(
-          '[main] AGENT_TEAM_PLUGIN_DEV=1 but Plans dev bundle is missing — run `pnpm run build:plans`'
+          '[main] AGENT_TEAM_PLUGIN_DEV=1 but Plans dev bundle is missing — run `bun run build:plans`'
         )
       }
     }

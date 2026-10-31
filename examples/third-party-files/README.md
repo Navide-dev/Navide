@@ -21,13 +21,16 @@ Before the public packages are published to npm, run the external workspace
 smoke test from the Navide repository root:
 
 ```text
-pnpm test:run src/main/plugins/pluginExternalWorkspace.test.ts
+bun run test:run src/main/plugins/pluginExternalWorkspace.test.ts
 ```
 
 The smoke test copies this example into a temporary project outside the Navide
 workspace and replaces only the three unpublished public packages with local
-tarballs. It installs those package tarballs from the repository's populated
-pnpm store with `pnpm install --offline`, supplies the Host's already-installed
+tarballs. The test plays an external author who uses pnpm, so it needs a real
+`pnpm` (10.x) on `PATH`; without one it fails with
+`Executable not found in $PATH: "pnpm"`. It installs those package tarballs
+from the repository's populated pnpm store with `pnpm install --offline`,
+supplies the Host's already-installed
 Vue peer runtime, then uses the repository's TypeScript and Vite CLI entries to
 typecheck and build the external project. The smoke test does not install
 TypeScript, Vite, Vue, or vue-i18n tarballs offline.

@@ -25,7 +25,7 @@ const packagedGoFixture = join(process.cwd(), 'dist-test-fixtures/plans/backend/
 const packagedFixtureEnabled = process.env.NAVIDE_TEST_PACKAGED_PLANS === '1'
 if (packagedFixtureEnabled && (!existsSync(packagedFixture) || !existsSync(packagedGoFixture))) {
   throw new Error(
-    `NAVIDE_TEST_PACKAGED_PLANS=1 requires packaged fixtures at ${packagedFixture} and ${packagedGoFixture}; run pnpm run build:plans:fixture first.`,
+    `NAVIDE_TEST_PACKAGED_PLANS=1 requires packaged fixtures at ${packagedFixture} and ${packagedGoFixture}; run bun run build:plans:fixture first.`,
   )
 }
 const packagedBackendEnvironment: Record<string, string> = {}

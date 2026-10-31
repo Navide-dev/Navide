@@ -188,7 +188,7 @@ describe('navide.plans production package boundary', () => {
     ]))
   })
 
-  it('prepares the versioned factory artifact during pnpm dev', () => {
+  it('prepares the versioned factory artifact during bun run dev', () => {
     const rootPackage = JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8')) as {
       scripts?: Record<string, string>
     }

@@ -195,7 +195,8 @@ temporary project outside the Navide workspace for the release smoke test. Its
 package manifest declares SemVer ranges for the three public packages. The
 smoke test replaces only those three public package ranges with local packed
 tarballs and installs them with `pnpm --offline` in an isolated temporary
-store. It uses the repository's installed TypeScript and Vite CLI entries for
+store (the test plays an external author who uses pnpm, so it needs a real
+`pnpm` on `PATH`). It uses the repository's installed TypeScript and Vite CLI entries for
 the external project's typecheck and build; it does not install TypeScript or
 Vite tarballs offline. The example itself contains no `workspace:` or private
 feature dependency.

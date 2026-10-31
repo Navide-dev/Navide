@@ -45,48 +45,59 @@ Describe the problem you are trying to solve and the solution you have in mind.
 
 ## Development Setup / 開發環境設定
 
-**Requirements:** Node.js 22.12+ (22.x), pnpm 10+, Python 3.12+, uv 0.11+, Go 1.27.x
-for the packaged Plans fixture, and macOS 13+ on Apple silicon, Linux x64, or Windows x64
+**Requirements:** Bun (the version pinned in `.bun-version`), Python 3.12+, uv 0.11+, Go 1.27.x
+for the packaged Plans fixture, and macOS 13+ on Apple silicon, Linux x64, or Windows x64.
+Node.js 22.12+ (22.x) and pnpm 10+ are still needed for `./release.sh`, `./build.sh`
+and the one test that plays an external plugin author who uses pnpm
 
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 
-pnpm install
+bun install
 uv --project backend sync
 
-pnpm dev
+bun run dev
 ```
 
-The `pnpm dev` command starts Electron, Vite dev server, and the Python FastAPI backend together.
+Daily development — install, `bun run dev`, typecheck, tests and builds — runs on
+Bun. pnpm still works for all of it (`pnpm install`, `pnpm dev`, …), and the local
+release scripts `./release.sh` and `./build.sh` still use pnpm and Node.js 22.
+Electron 44 downloads its binary lazily and electron-vite does not trigger that
+download, so after a fresh `bun install` run `bun node_modules/electron/install.js`
+once before the first `bun run dev`; otherwise it fails with `Electron uninstall`.
+Do not mix `bun install` and `pnpm install` in one `node_modules`; if you did,
+delete `node_modules` and reinstall with one of them.
+
+The `bun run dev` command starts Electron, Vite dev server, and the Python FastAPI backend together.
 
 The first development start packages the production Plans backend with
 `uv`/PyInstaller. Later starts reuse it when the Python sources, build script,
 dependency files, resolved interpreter, platform, architecture, and executable
 contents are unchanged. Missing or changed output is rebuilt automatically.
-`pnpm run build:plans:backend` always rebuilds it explicitly; production and CI
-builds remain unconditional — only `pnpm dev` passes `--if-needed`, and the
+`bun run build:plans:backend` always rebuilds it explicitly; production and CI
+builds remain unconditional — only `bun run dev` passes `--if-needed`, and the
 build script honours the opt-out below on that invocation alone.
 
-Without `uv`/PyInstaller that build fails and `pnpm dev` stops before Electron
+Without `uv`/PyInstaller that build fails and `bun run dev` stops before Electron
 starts. To work on anything else in the meantime, skip it:
 
 ```bash
-NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 pnpm dev
+NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 bun run dev
 ```
 
 The app then starts without the packaged Plans backend: the Host finds no
 backend entry on disk, so the Plans v2 package is not registered and Plans runs
 through its legacy recovery window instead. Every other surface — terminals,
 Git, the editor — is unaffected. Never set this for a production or CI build:
-invoked without `--if-needed` (`pnpm build`, `pnpm dist`, the CI gates) the
+invoked without `--if-needed` (`bun run build`, `bun run dist`, the CI gates) the
 script fails with a message naming the variable rather than shipping a release
 with no packaged Plans backend.
 
-> 沒有 `uv`/PyInstaller 時用 `NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 pnpm dev` 跳過打包，
+> 沒有 `uv`/PyInstaller 時用 `NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 bun run dev` 跳過打包，
 > Plans 會以 legacy recovery 視窗運作，其他功能不受影響。
 
-> `pnpm dev` 會同時啟動 Electron、Vite dev server 和 Python FastAPI backend。
+> `bun run dev` 會同時啟動 Electron、Vite dev server 和 Python FastAPI backend。
 
 ### Git hooks
 
@@ -126,13 +137,22 @@ by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
 2. Make your changes.
 3. Run the test suite:
    ```bash
-   pnpm test:run
+   bun run test:run
    uv --project backend run pytest backend/tests
    ```
+   > **`bun test` is not `bun run test:run`.** Bare `bun test` starts Bun's own
+   > test runner, not Vitest, and ignores `vitest.config.ts` (projects, aliases,
+   > global setup), so its results mean nothing. Always use `bun run test:run`;
+   > never `bun run test` either, which starts Vitest in watch mode and hangs.
+   >
+   > `src/main/plugins/pluginExternalWorkspace.test.ts` plays an external plugin
+   > author who uses pnpm, so it needs a real `pnpm` (10.x) on `PATH`. It is not
+   > skipped without one: it fails with `Executable not found in $PATH: "pnpm"`.
+   > CI installs pnpm for that test.
    While iterating, run only what your change can affect, then the full suites
    above before you push (CI and the release gates always run them in full):
    ```bash
-   pnpm vitest run --changed origin/main           # tests importing changed files
+   bun run vitest run --changed origin/main        # tests importing changed files
    node scripts/changed-backend-tests.mjs           # backend tests for changed files
    node scripts/changed-backend-tests.mjs --list    # just print the selection
    scripts/isolated-pytest.sh backend/tests --lf    # re-run last failures
@@ -149,7 +169,7 @@ by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
    breakage the full suite catches.
 4. Run type checks:
    ```bash
-   pnpm typecheck
+   bun run typecheck
    ```
 5. If you touched the cross-device path (`server_link.py`, `remote_roster.py`,
    `trust_store.py`, or the Navide-Server wire protocol), run the end-to-end
@@ -178,14 +198,16 @@ jobs, and a change confined to `backend/tests/` skips the frontend and build
 jobs; `scripts/ci-changed-scopes.mjs` holds the rules, runs everything when
 unsure, and pushes to `main` always run everything. CI does not run Electron
 UI automation; test UI changes manually. To reproduce the build check locally,
-run `pnpm build`. See [CI and CLI regression infrastructure](docs/en-US/ci-and-cli-regression.md)
+run `bun run build`. See [CI and CLI regression infrastructure](docs/en-US/ci-and-cli-regression.md)
 for suite ownership, provider isolation, contract coverage and diagnostics.
 
-CI runs its install, typecheck and test jobs on Bun (`bun install --frozen-lockfile`, version pinned in `.bun-version`); releases and local development still use pnpm. When you change a dependency, run `pnpm install` and `bun install` so `bun.lock` and `pnpm-lock.yaml` resolve the same versions; CI fails on a stale `bun.lock` and, via `scripts/check-lockfile-parity.mjs`, whenever the two locks resolve different packages.
+CI installs, typechecks, tests and builds on Bun (`bun install --frozen-lockfile`, version pinned in `.bun-version`), and the release workflow builds and packages on Bun (electron-builder on Windows runs on Node.js). Local development can use Bun or pnpm; `./release.sh` and `./build.sh` use pnpm. Both lockfiles are kept: when you change a dependency, run `bun install` and `pnpm install` so `bun.lock` and `pnpm-lock.yaml` resolve the same versions; CI fails on a stale `bun.lock` and, via `scripts/check-lockfile-parity.mjs`, whenever the two locks resolve different packages.
 
 > Fork 後建立 feature branch，跑測試與型別檢查無誤後，依照下方 commit 格式提交，並開 PR 至 `main`。
 >
-> CI 的安裝、型別檢查與測試 job 以 Bun 執行（`bun install --frozen-lockfile`，版本固定於 `.bun-version`）；發佈與本機開發仍使用 pnpm。變更依賴時請同時執行 `pnpm install` 與 `bun install`，讓 `bun.lock` 與 `pnpm-lock.yaml` 解析出相同版本；`bun.lock` 過期、或兩份 lock 解析出不同套件時（由 `scripts/check-lockfile-parity.mjs` 檢查）CI 會失敗。
+> CI 以 Bun 安裝、型別檢查、測試與建置（`bun install --frozen-lockfile`，版本固定於 `.bun-version`），release workflow 也以 Bun 建置與打包（Windows 上的 electron-builder 以 Node.js 執行）。本機開發可用 Bun 或 pnpm；`./release.sh` 與 `./build.sh` 使用 pnpm。兩份 lockfile 都保留：變更依賴時請同時執行 `bun install` 與 `pnpm install`，讓 `bun.lock` 與 `pnpm-lock.yaml` 解析出相同版本；`bun.lock` 過期、或兩份 lock 解析出不同套件時（由 `scripts/check-lockfile-parity.mjs` 檢查）CI 會失敗。
+>
+> **`bun test` 不等於 `bun run test:run`。** 直接執行 `bun test` 會啟動 Bun 自己的測試執行器而不是 Vitest，並忽略 `vitest.config.ts`，結果沒有意義；請一律使用 `bun run test:run`，也不要用 `bun run test`（會以 watch 模式啟動 Vitest 而卡住）。`pluginExternalWorkspace.test.ts` 模擬使用 pnpm 的外部外掛開發者，本機需要在 `PATH` 上有真正的 `pnpm`（10.x）；沒有時它不會被略過，而是以 `Executable not found in $PATH: "pnpm"` 失敗。
 
 ---
 

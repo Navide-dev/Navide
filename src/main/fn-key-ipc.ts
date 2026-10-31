@@ -12,7 +12,7 @@ const INPUT_MONITORING_URL = 'x-apple.systempreferences:com.apple.preference.sec
 // Keyboard settings, where "Press 🌐 key to" lives.
 const KEYBOARD_SETTINGS_URL = 'x-apple.systempreferences:com.apple.Keyboard-Settings.extension'
 
-/** Packaged: Contents/Resources/bin; checkout: build/fn-key (pnpm build:fn-key). */
+/** Packaged: Contents/Resources/bin; checkout: build/fn-key (bun run build:fn-key). */
 function helperPath(): string | null {
   const path = app.isPackaged
     ? join(process.resourcesPath, 'bin', HELPER_NAME)
