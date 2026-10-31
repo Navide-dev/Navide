@@ -8,6 +8,7 @@ import WindowControls from './components/WindowControls.vue'
 import RestoredPanePlaceholder from './components/RestoredPanePlaceholder.vue'
 import VoiceCapsule from './components/VoiceCapsule.vue'
 import ReadbackCapsule from './components/ReadbackCapsule.vue'
+import PaneAccountBars, { type PaneAccountBarItem } from './components/accounts/PaneAccountBars.vue'
 import { setupVoiceInput } from './voice/voiceWiring'
 import { useVoiceSettings } from './voice/voiceSettings'
 import {
@@ -9214,6 +9215,17 @@ async function offerFollowSwitch(outgoingId: string | null, targetId: string | n
   if (!choice || choice.paneIds.length === 0) return
   await moveFollowPanes(choice.paneIds, target, sessions)
 }
+
+/** The panes out of quota, read the same way the pane block reads them. */
+const paneAccountBarItems = computed<PaneAccountBarItem[]>(() =>
+  panes.value
+    .filter((p) => p.realized && p.usageLimitAt != null && !acp.owns(p.id))
+    .map((p) => ({
+      paneId: p.id,
+      usageLimitUntil: p.usageLimitUntil ?? null,
+      switchOffered: followSwitchFlag.value && p.agentKey === FOLLOW_SWITCH_AGENT && paneCanRebuild(p),
+    })),
+)
 
 /** The quota badge's "Switch account": pick an account this pane can land
  *  on, optionally taking the other panes that ran out on the same account. */
@@ -24108,6 +24120,7 @@ function paneIsCommander(p: ActivePane): boolean {
         />
         </template><!-- the TUI branch of acp.owns(p.id) -->
         </template>
+        <PaneAccountBars :items="paneAccountBarItems" @switch-account="onQuotaSwitchAccount" />
         <VoiceCapsule :state="voiceInput.state" @dismiss="voiceInput.dismiss" />
         <ReadbackCapsule :state="readback.current.value" @stop="readback.stop()" />
         <!-- Auto/sidebar mode: meeting-style agent list on the right -->

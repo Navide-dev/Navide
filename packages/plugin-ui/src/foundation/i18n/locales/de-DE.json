@@ -8259,6 +8259,86 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "pane": {
+          "title": "Abonnement-Kontingent aufgebraucht",
+          "back-at": "Wieder verfügbar um {time}",
+          "back-unknown": "Der Zeitpunkt des Zurücksetzens ist nicht bekannt",
+          "wait": "Auf Zurücksetzen warten"
+        },
+        "kind": "API-Schlüssel",
+        "list": {
+          "aria": "Konten",
+          "search": "Konten suchen",
+          "add": "+ Konto hinzufügen",
+          "login": "Anmeldung",
+          "empty": "Keine passenden Konten."
+        },
+        "add": {
+          "title": "Wie soll sich {agent} verbinden?",
+          "agent-label": "CLI",
+          "subscription": "Mit einem Abonnement anmelden",
+          "subscription-desc": "Autorisieren Sie im Browser. Verwendet das Kontingent Ihres Tarifs.",
+          "api-key": "API-Schlüssel einfügen",
+          "api-key-desc": "Abrechnung nach Nutzung. Der Schlüssel bleibt auf diesem Computer.",
+          "api-key-unsupported": "API-Schlüssel sind für diese CLI noch nicht verfügbar.",
+          "cloud": "Cloud-Dienst verbinden",
+          "cloud-desc": "Amazon Bedrock, Google Vertex oder Microsoft Foundry.",
+          "endpoint": "Benutzerdefinierten Endpunkt verbinden",
+          "endpoint-desc": "Ein Unternehmens-Gateway oder ein anderer kompatibler Dienst.",
+          "coming-soon": "Demnächst verfügbar"
+        },
+        "form": {
+          "title": "API-Schlüssel einfügen",
+          "billing": "Dieses Konto wird nach Nutzung abgerechnet. Es verwendet nicht Ihr Abonnement-Kontingent.",
+          "name": "Bezeichnung",
+          "key": "API-Schlüssel",
+          "key-new": "Neuer API-Schlüssel",
+          "key-hint": "Wird nach dem Speichern nicht mehr angezeigt.",
+          "reminder": "Monatliche Ausgabenerinnerung (USD)",
+          "reminder-hint": "Eine Erinnerung, kein festes Limit. Feste Limits legen Sie in der Konsole des Anbieters fest.",
+          "test": "Schlüssel testen",
+          "testing": "Wird getestet…",
+          "test-ok": "Der Schlüssel funktioniert.",
+          "test-rejected": "Der Anbieter hat diesen Schlüssel abgelehnt.",
+          "test-unknown": "Der Schlüssel konnte nicht geprüft werden. Sie können ihn trotzdem speichern.",
+          "save": "Konto speichern"
+        },
+        "safe": {
+          "local": "Nur auf diesem Computer gespeichert",
+          "no-sync": "Wird nie mit Navide Cloud synchronisiert"
+        },
+        "detail": {
+          "ends-with": "Endet auf {last4}",
+          "replace": "Schlüssel ersetzen",
+          "replace-save": "Neuen Schlüssel speichern",
+          "delete-title": "Diesen API-Schlüssel löschen?",
+          "delete-message": "{name} wird von diesem Computer entfernt. Der Schlüssel bleibt beim Anbieter gültig, bis Sie ihn dort widerrufen.",
+          "auto-switch": "Bei aufgebrauchtem Kontingent automatisch zu diesem Konto wechseln",
+          "auto-switch-hint": "Standardmäßig aus. Nach dem Wechsel wird die Nutzung über diesen Schlüssel abgerechnet.",
+          "in-use": "Für neue Bereiche aktiv",
+          "use-for-new-panes": "Für neue Bereiche verwenden",
+          "stop-using": "Nicht mehr für neue Bereiche verwenden",
+          "switch-hint": "Neue Bereiche starten mit diesem Konto. Geöffnete Bereiche behalten ihr Konto bis zum Neustart.",
+          "pane-unavailable": "Bereiche können dieses Konto noch nicht verwenden."
+        },
+        "error": {
+          "subscription-token": "Das ist ein Abonnement-Token, kein API-Schlüssel. Erstellen Sie einen API-Schlüssel in der Konsole des Anbieters.",
+          "wrong-vendor": "Dieser Schlüssel gehört zu einem anderen Anbieter.",
+          "invalid-secret": "Das sieht nicht nach einem API-Schlüssel aus.",
+          "invalid-name": "Geben Sie einen Namen mit höchstens 60 Zeichen ein.",
+          "invalid-reminder": "Geben Sie für die monatliche Erinnerung einen Betrag über null ein.",
+          "unsupported-agent": "API-Schlüssel sind für diese CLI noch nicht verfügbar.",
+          "store-failed": "Speichern im Schlüsselbund dieses Computers fehlgeschlagen.",
+          "secret-missing": "Dieser Schlüssel ist nicht mehr im Schlüsselbund. Fügen Sie ihn erneut ein.",
+          "not-found": "Dieser API-Schlüssel existiert nicht mehr.",
+          "main-window-only": "API-Schlüssel können nur in den Einstellungen verwaltet werden.",
+          "internal-error": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
+          "unsupported-platform": "API-Schlüssel-Konten für Claude Code sind unter Windows noch nicht verfügbar.",
+          "login-policy": "Ihre Organisation schreibt eine bestimmte Anmeldemethode vor, daher können keine API-Schlüssel-Konten hinzugefügt werden.",
+          "account-in-use": "Ein Bereich verwendet dieses Konto. Schließen Sie ihn, bevor Sie das Konto löschen."
+        }
+      },
       "title": "Git-Konten",
       "encrypted-note": "Tokens werden mit dem Schlüsselbund Ihres Betriebssystems verschlüsselt und nur auf diesem Rechner gespeichert.",
       "unavailable": "Verschlüsselung ist auf diesem System nicht verfügbar, daher können keine Konten hinzugefügt werden. Das bedeutet meist, dass der Schlüsselbund des Betriebssystems nicht zugänglich ist.",
