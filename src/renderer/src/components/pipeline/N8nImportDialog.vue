@@ -86,6 +86,7 @@ const CATEGORIES: Category[] = ['native', 'agent', 'pending', 'unsupported']
 const agentOptions = CLI_AGENT_SPECS.map((s) => ({ key: s.agentKey, label: s.label }))
 const agentLabels = Object.fromEntries(agentOptions.map((a) => [a.key, a.label]))
 
+const canvas = ref<InstanceType<typeof PipelineCanvas> | null>(null)
 const jsonText = ref('')
 const agent = ref('claude')
 const busy = ref<'preview' | 'import' | 'file' | null>(null)
@@ -232,6 +233,9 @@ async function chooseFile(): Promise<void> {
   }
 }
 
+/** The node type without the prefix nearly every row repeats. */
+const shortType = (type: string): string => type.replace(/^n8n-nodes-base\.|^@n8n\/n8n-nodes-/, '')
+
 function swatch(category: Category | undefined): string {
   return category && CATEGORIES.includes(category) ? category : 'pending'
 }
@@ -338,10 +342,13 @@ useDialogFocus(card, () => textarea.value)
             <h5>{{ t('pipelineImport.canvas-title') }}</h5>
             <div class="n8n-canvas">
               <PipelineCanvas
+                ref="canvas"
+                :key="previewedText"
                 flow-id="n8n-import-preview"
                 :graph="preview.graph" :role-labels="{}" :agent-labels="agentLabels"
                 :run-nodes="{}" :now="0" :selected-id="null" :locked="true"
                 :node-class="nodeClass"
+                @ready="canvas?.fitAll()"
               />
             </div>
             <ul class="n8n-legend" :aria-label="t('pipelineImport.legend')">
@@ -386,19 +393,22 @@ useDialogFocus(card, () => textarea.value)
                       {{ r.name }}
                       <span v-if="r.needsReview" class="n8n-review-mark">{{ t('pipelineImport.review-mark') }}</span>
                     </td>
-                    <td><code>{{ r.type }}@{{ r.typeVersion }}</code></td>
+                    <td><code :title="r.type">{{ shortType(r.type) }}@{{ r.typeVersion }}</code></td>
                     <td>
                       {{ t(`pipelineImport.result.${r.result}`) }}
+                      <template v-if="r.node && mergedNodes.has(r.node)">·</template>
                       <details v-if="r.node && mergedNodes.has(r.node)" class="n8n-merged">
-                        <summary class="n8n-target">· {{ graphLabels.get(r.node) ?? r.node }}</summary>
+                        <summary class="n8n-target">{{ graphLabels.get(r.node) ?? r.node }}</summary>
                         <span class="nv-hint">{{ t('pipelineImport.merged-nodes', { n: mergedNodes.get(r.node)!.length }, mergedNodes.get(r.node)!.length) }}</span>
                         <ul><li v-for="m in mergedNodes.get(r.node)" :key="m">{{ m }}</li></ul>
                       </details>
-                      <span v-else-if="r.node" class="n8n-target">· {{ graphLabels.get(r.node) ?? r.node }}</span>
+                      <span v-else-if="r.node && graphLabels.get(r.node) !== r.name" class="n8n-target">· {{ graphLabels.get(r.node) ?? r.node }}</span>
                     </td>
                     <td>
-                      <span class="n8n-swatch" :class="`n8n-swatch--${swatch(r.category)}`" aria-hidden="true"></span>
-                      {{ t(`pipelineImport.category.${r.category}`) }}
+                      <span class="n8n-cat-cell">
+                        <span class="n8n-swatch" :class="`n8n-swatch--${swatch(r.category)}`" aria-hidden="true"></span>
+                        <span>{{ t(`pipelineImport.category.${r.category}`) }}</span>
+                      </span>
                     </td>
                     <td class="n8n-detail">{{ detailText(r) }}</td>
                     <td>
@@ -603,11 +613,13 @@ useDialogFocus(card, () => textarea.value)
   color: var(--warning-fg);
 }
 .n8n-canvas {
-  height: 300px;
+  height: 360px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
+/* The preview fits the whole graph, so the minimap would only cover it. */
+.n8n-canvas :deep(.pcv-minimap) { display: none; }
 .n8n-canvas :deep(.vue-flow__node.n8n-cat--native) { box-shadow: 0 0 0 2px var(--success-fg); }
 .n8n-canvas :deep(.vue-flow__node.n8n-cat--agent) { box-shadow: 0 0 0 2px var(--accent-fg); }
 .n8n-canvas :deep(.vue-flow__node.n8n-cat--pending) { box-shadow: 0 0 0 2px var(--attention-fg); }
@@ -653,6 +665,18 @@ useDialogFocus(card, () => textarea.value)
 }
 .n8n-detail {
   overflow-wrap: anywhere;
+}
+.n8n-cat-cell {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.n8n-cat-cell .n8n-swatch {
+  flex: none;
+}
+.n8n-merged {
+  display: inline-block;
+  vertical-align: top;
 }
 .n8n-merged summary {
   cursor: pointer;
