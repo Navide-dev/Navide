@@ -612,6 +612,7 @@ def test_macos_key_stays_out_of_argv(tmp_path: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(app, "credential_vault", vault)
     store = CliProfilesStore(path=tmp_path / "cli-profiles.json", profiles_root=tmp_path / "root")
     monkeypatch.setattr(app, "cli_profiles_store", store)
+    monkeypatch.setattr(ak.osplat, "impl_name", "_darwin")
     ak.create("claude", "a", ANTHROPIC_KEY)
 
     assert calls
