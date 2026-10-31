@@ -13,6 +13,12 @@ export, and no message here returns one.
 A claude API key account has no login in its slot, and restoring an empty slot
 clears the live login. ``CredentialVault.mark_api_key_slot`` records the slot so
 the vault refuses to swap it.
+
+A codex API key account is the opposite: its slot holds the ``auth.json`` that
+``codex login --with-api-key`` writes, so the existing switch swaps it like any
+login and the pane restarts onto it. Live and slot are the same file content
+then, and the next switch captures live back over the slot, so the slot of the
+active account is not written or removed here.
 """
 
 from __future__ import annotations
@@ -21,14 +27,16 @@ import asyncio
 import getpass
 import json
 import logging
+import os
 import shlex
-import sys
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Mapping
 
 import httpx
 
 from . import cloud_secrets, osplat
+from .credential_vault import LiveCredentials, vault_to_thread
 from .http_ssl import default_ssl_context
 from .ipc import make_event, make_response
 
@@ -47,7 +55,10 @@ MANAGED_CLAUDE_SETTINGS = (
 )
 #: The CLIs that take an API key account. Each needs its own way into a pane, so
 #: the list grows one vendor at a time.
-SUPPORTED_AGENT_KEYS = ("claude",)
+SUPPORTED_AGENT_KEYS = ("claude", "codex")
+#: The CLIs whose key lives in the account's slot, swapped by the existing
+#: switch. The others keep it in the OS secret store.
+_SLOT_KEY_AGENTS = ("codex",)
 NAME_MAX_CHARS = 60
 SECRET_MAX_CHARS = 512
 MONTHLY_REMINDER_MAX_USD = 1_000_000
@@ -125,6 +136,24 @@ def is_api_key(profile: Mapping[str, Any] | None) -> bool:
     return bool(profile) and profile.get("authKind") == AUTH_KIND
 
 
+def is_active_api_key_account(agent_key: str, store: Any) -> bool:
+    """Is the live credential of this slot-keyed CLI an API key account's? The
+    usage poll stops here: its endpoint is the subscription's, and the key must
+    not be sent there."""
+    if agent_key not in _SLOT_KEY_AGENTS or store is None:
+        return False
+    doc = store.list()
+    active = doc["defaults"].get(agent_key)
+    return any(p.get("id") == active and is_api_key(p) for p in doc["profiles"])
+
+
+def held_from_auto_switch(slot_id: str) -> bool:
+    """An API key account spends money, so failover leaves it alone until the
+    user turns on ``autoSwitch`` for it."""
+    profile = _store().get(slot_id)
+    return is_api_key(profile) and not profile.get("autoSwitch")
+
+
 def _vault() -> Any:
     from . import app
 
@@ -145,8 +174,78 @@ def _store_secret(profile_id: str, secret: str | None) -> None:
         raise ApiKeyError("store-failed", "Could not save to this computer's keychain.") from None
 
 
+def _sets_forced_login(path: Path) -> bool:
+    """Does this Codex config set ``forced_login_method``? A file that exists
+    and cannot be read may set it, so it counts as setting it."""
+    try:
+        return "forced_login_method" in tomllib.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return False
+    except (OSError, ValueError):
+        return True
+
+
+def _codex_system_config() -> Path:
+    """``ProgramData`` is set on Windows and nowhere else."""
+    program_data = os.environ.get("ProgramData")
+    if program_data:
+        return Path(program_data, "OpenAI", "Codex", "config.toml")
+    return Path("/etc/codex/config.toml")
+
+
+def login_policy_blocks(agent_key: str) -> bool:
+    """Whoever set the CLI's login policy decides how it signs in, so no API key
+    account is added under one. Read once and never worked around."""
+    return _claude_login_policy() if agent_key == "claude" else _codex_login_policy()
+
+
+def _codex_login_policy() -> bool:
+    user_config = _vault()._live_file("codex").with_name("config.toml")
+    return _sets_forced_login(user_config) or _sets_forced_login(_codex_system_config())
+
+
+def _auth_json(secret: str) -> str:
+    """What ``codex login --with-api-key`` writes. Codex serializes its AuthMode
+    in lowercase and leaves out the empty ``tokens`` and ``last_refresh``."""
+    return json.dumps({"auth_mode": "apikey", "OPENAI_API_KEY": secret})
+
+
+def _write_key(agent_key: str, profile_id: str, secret: str | None) -> None:
+    if agent_key not in _SLOT_KEY_AGENTS:
+        _store_secret(profile_id, secret)
+        return
+    try:
+        _vault().write_slot(
+            agent_key, profile_id, LiveCredentials(secret=None if secret is None else _auth_json(secret)),
+        )
+    except Exception as err:  # noqa: BLE001 - the message may quote the path, never the key
+        log.warning("api key slot write failed (%s)", type(err).__name__)
+        raise ApiKeyError("store-failed", "Could not save the API key on this computer.") from None
+
+
+def _read_slot_key(profile: Mapping[str, Any]) -> str:
+    try:
+        stored = _vault().read_slot(str(profile["agentKey"]), str(profile["id"])).secret
+        data = json.loads(stored) if stored is not None else None
+    except Exception as err:  # noqa: BLE001
+        log.warning("api key slot read failed (%s)", type(err).__name__)
+        raise ApiKeyError("store-failed", "Could not read the API key on this computer.") from None
+    secret = data.get("OPENAI_API_KEY") if isinstance(data, dict) else None
+    if not isinstance(secret, str) or not secret:
+        raise ApiKeyError("secret-missing", "This account no longer holds its API key. Paste it again.")
+    return secret
+
+
+def _refuse_if_live(profile: Mapping[str, Any]) -> None:
+    agent_key = profile["agentKey"]
+    if agent_key in _SLOT_KEY_AGENTS and _store().list()["defaults"].get(agent_key) == profile["id"]:
+        raise ApiKeyError("account-active", "This account is in use. Switch to another account first.")
+
+
 def read_secret(profile: Mapping[str, Any]) -> str:
     """Backend use only. No message handler may return this value."""
+    if profile.get("agentKey") in _SLOT_KEY_AGENTS:
+        return _read_slot_key(profile)
     try:
         secret = _vault().read_app_secret(SECRET_NAME_PREFIX + str(profile["id"]))
     except Exception as err:  # noqa: BLE001
@@ -164,13 +263,8 @@ def _require(profile_id: Any) -> dict[str, Any]:
     return profile
 
 
-def login_policy_blocks(agent_key: str) -> bool:
-    """A forced login method means the user's organization decided how this
-    CLI signs in, so an API key is not Navide's to add. Read once and never
-    worked around."""
-    if agent_key != "claude":
-        return False
-    for path in (Path.home() / ".claude" / "settings.json", *MANAGED_CLAUDE_SETTINGS):
+def _claude_login_policy() -> bool:
+    for path in (_vault()._real_home / ".claude" / "settings.json", *MANAGED_CLAUDE_SETTINGS):
         try:
             settings = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -188,12 +282,6 @@ def pane_default_slot(agent_key: str) -> str:
     getter = getattr(app.cli_profiles_store, "get_pane_default", None)
     chosen = getter(agent_key) if callable(getter) else None
     return str(chosen) if chosen and is_api_key(app.cli_profiles_store.get(chosen)) else ""
-
-
-def auto_switch_off(slot_id: str) -> bool:
-    """An API key account the user has not opened to automatic switching."""
-    profile = _store().get(slot_id)
-    return is_api_key(profile) and profile.get("autoSwitch") is not True
 
 
 def logins_first(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -292,19 +380,22 @@ def write_account_dir_settings(vault: Any, directory: Path, profile_id: str) -> 
 
 def create(agent_key: Any, name: Any, secret: Any, monthly_reminder: Any = None) -> dict[str, Any]:
     agent = _validate_agent(agent_key)
-    if agent == "claude" and sys.platform == "win32":
+    if agent == "claude" and osplat.impl_name == "_windows":
         raise ApiKeyError("unsupported-platform", "API key accounts for Claude Code are not available on Windows yet.")
     if login_policy_blocks(agent):
         raise ApiKeyError("login-policy", "Your organization requires a specific sign-in for this CLI.")
     clean_name = _validate_name(name)
     reminder = _validate_reminder(monthly_reminder)
     clean_secret = validate_secret(agent, secret)
+    if login_policy_blocks(agent):
+        raise ApiKeyError("login-policy", "This CLI's login policy does not allow adding an API key account.")
     profile = _store().create_api_key(
         agent_key=agent, name=clean_name, last4=clean_secret[-4:], monthly_reminder_usd=reminder,
     )
     try:
-        _vault().mark_api_key_slot(agent, profile["id"])
-        _store_secret(profile["id"], clean_secret)
+        if agent not in _SLOT_KEY_AGENTS:
+            _vault().mark_api_key_slot(agent, profile["id"])
+        _write_key(agent, profile["id"], clean_secret)
     except Exception:
         _store().delete(profile["id"])
         raise
@@ -327,16 +418,18 @@ def update(profile_id: Any, fields: Mapping[str, Any]) -> dict[str, Any]:
 
 def replace_secret(profile_id: Any, secret: Any) -> dict[str, Any]:
     profile = _require(profile_id)
+    _refuse_if_live(profile)
     clean_secret = validate_secret(profile["agentKey"], secret)
-    _store_secret(profile["id"], clean_secret)
+    _write_key(profile["agentKey"], profile["id"], clean_secret)
     return _store().update_api_key(profile["id"], {"last4": clean_secret[-4:]})
 
 
 def delete(profile_id: Any) -> None:
     profile = _require(profile_id)
+    _refuse_if_live(profile)
     # The secret goes first: a failure keeps the account, so the key is never
     # left behind with nothing in the app pointing at it.
-    _store_secret(profile["id"], None)
+    _write_key(profile["agentKey"], profile["id"], None)
     (_vault().account_dir_path(profile["id"]) / HELPER_FILE).unlink(missing_ok=True)
     _store().delete(profile["id"])
 
@@ -393,6 +486,14 @@ async def _answer(session: "Session", msg_id: str, msg_type: str, work: Callable
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+async def _under_switch_lock(profile_id: Any, work: Callable[..., Any], *args: Any) -> Any:
+    """A switch reads who is active and captures that slot, so a change to a
+    slot must not land in between."""
+    profile = await asyncio.to_thread(_require, profile_id)
+    async with _vault().switch_lock(str(profile["agentKey"])):
+        return await vault_to_thread(work, *args)
+
+
 async def ws_create(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     async def work() -> dict[str, Any]:
         profile = await asyncio.to_thread(
@@ -417,7 +518,7 @@ async def ws_update(session: "Session", msg_id: str, msg_type: str, payload: dic
 
 async def ws_replace_secret(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     async def work() -> dict[str, Any]:
-        profile = await asyncio.to_thread(replace_secret, payload.get("id"), payload.get("secret"))
+        profile = await _under_switch_lock(payload.get("id"), replace_secret, payload.get("id"), payload.get("secret"))
         await _broadcast("api-key")
         return {"ok": True, "profile": profile}
 
@@ -426,7 +527,7 @@ async def ws_replace_secret(session: "Session", msg_id: str, msg_type: str, payl
 
 async def ws_delete(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     async def work() -> dict[str, Any]:
-        await asyncio.to_thread(delete, payload.get("id"))
+        await _under_switch_lock(payload.get("id"), delete, payload.get("id"))
         await _broadcast("api-key")
         return {"ok": True}
 

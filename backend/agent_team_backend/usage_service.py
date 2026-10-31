@@ -159,6 +159,7 @@ from .cli_vendors.claude import (  # noqa: E402,F401
     read_claude_credentials,
     read_claude_credentials_file,
 )
+from .api_key_accounts import is_active_api_key_account  # noqa: E402
 from .cli_vendors.codex import (  # noqa: E402,F401
     codex_base_url,
     fetch_codex,
@@ -1387,6 +1388,8 @@ class UsageService:
             if provider == "claude":  # claude polls per-slot above
                 continue
             if spec.fetch_usage is None:
+                continue
+            if is_active_api_key_account(provider, _get_profiles_store()):
                 continue
             if self._blocked_until.get(provider, 0) > now:
                 continue
