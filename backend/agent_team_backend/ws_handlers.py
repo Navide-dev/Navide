@@ -806,6 +806,29 @@ async def fs_list_files_flat(session: "Session", msg_id: str, msg_type: str, pay
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("fs.query_files")
+async def fs_query_files(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app, file_query
+
+    ws_path = payload.get("workspace_path") or ""
+    # A disk change drops the listing, so the workspace needs a watcher.
+    await asyncio.to_thread(app._watch_plans_workspace_now, ws_path)
+    result = await asyncio.to_thread(
+        file_query.query_files,
+        ws_path,
+        payload.get("query") or "",
+        match_on=payload.get("match_on") or "name",
+        mode=payload.get("mode") or "substring",
+        exclude=payload.get("exclude") or [],
+        respect_gitignore=payload.get("respect_gitignore", True),
+        include_hidden=payload.get("include_hidden", False),
+        include_noise_dirs=payload.get("include_noise_dirs", False),
+        limit=int(payload.get("limit") or file_query.DEFAULT_LIMIT),
+        cursor=payload.get("cursor") or "",
+    )
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 @handler("fs.glob_files")
 async def fs_glob_files(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app

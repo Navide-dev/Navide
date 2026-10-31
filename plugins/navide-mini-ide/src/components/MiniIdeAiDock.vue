@@ -2,7 +2,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createPluginCapabilityClient } from '@navide/plugin-sdk'
-import { SafeAiCliPanel, createAiCliSessionController, createAiCliTerminalView, createAiCliTerminalResources, type SafeAiCliPanelHandle } from '@navide/plugin-ui'
+import { SafeAiCliPanel, createAiCliSessionController, createAiCliTerminalView, createAiCliTerminalResources, type AiCliTerminalResources, type SafeAiCliPanelHandle } from '@navide/plugin-ui'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import { useBackend } from '../composables/useBackend'
 import { vTruncate } from '@navide/plugin-ui/foundation'
@@ -14,13 +14,17 @@ const props = withDefaults(defineProps<{
   origin: string
   defaultWidth?: number
   buildContext?: () => string | Promise<string>
+  resolveFileLink?: AiCliTerminalResources['resolveFileLink']
 }>(), { defaultWidth: 320 })
 const { t } = useI18n()
 const open = defineModel<boolean>('open', { default: false })
 const client = createPluginCapabilityClient()
 const controller = createAiCliSessionController(client, { persistView: true })
 const terminalView = createAiCliTerminalView(client, controller)
-const terminalResources = createAiCliTerminalResources(client, controller)
+const terminalResources: AiCliTerminalResources = {
+  ...createAiCliTerminalResources(client, controller),
+  ...(props.resolveFileLink ? { resolveFileLink: props.resolveFileLink } : {}),
+}
 const profilePreference = {
   async read() { return (await client.capabilities.invoke('aiCli.getEditorProfile', {})).profileId },
   async write(profileId: string) { await client.capabilities.invoke('aiCli.setEditorProfile', { profileId }) },

@@ -60,9 +60,9 @@ function plainText(value: string): string {
  *  before it failed. One answered before dispatch, or of an unknown address,
  *  ran nothing. */
 export const READ_ONLY_ADDRESSES: ReadonlySet<string> = new Set([
-  'fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.glob', 'fs.stat', 'fs.statPath',
+  'fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.queryFiles', 'fs.glob', 'fs.stat', 'fs.statPath',
   'fs.listArchive', 'fs.previewResource', 'fs.convertOffice',
-  'fs.read_file', 'fs.read_image', 'fs.list_dir', 'fs.list_files_flat', 'fs.glob_files', 'fs.stat_path',
+  'fs.read_file', 'fs.read_image', 'fs.list_dir', 'fs.list_files_flat', 'fs.query_files', 'fs.glob_files', 'fs.stat_path',
   'fs.list_archive', 'fs.convert_office',
 ])
 

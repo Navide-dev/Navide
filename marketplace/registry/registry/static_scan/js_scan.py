@@ -20,7 +20,7 @@ from .limits import NO_DEADLINE, Deadline
 CAPABILITY_NAMESPACES = frozenset({"agentMessages", "agents", "aiCli", "fs", "shell", "storage", "ui", "web", "workspace"})
 CAPABILITY_ADDRESS_RE = _ADDRESS_RE = re.compile(r"^(agentMessages|agents|aiCli|fs|shell|storage|ui|web|workspace)\.[a-z][A-Za-z0-9]{0,63}$")
 FS_READ_ADDRESSES = frozenset({
-    "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.glob", "fs.stat", "fs.statPath",
+    "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.queryFiles", "fs.glob", "fs.stat", "fs.statPath",
 })
 FS_WRITE_ADDRESSES = frozenset({"fs.writeFile"})
 #: Executables a string literal must start with to count as "reads as a command".

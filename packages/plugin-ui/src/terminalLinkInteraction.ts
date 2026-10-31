@@ -231,6 +231,25 @@ export function isTerminalLinkModifierKey(key: string): boolean {
   return key === 'Meta' || (!isMacPlatform() && key === 'Control')
 }
 
+export interface TerminalFilePick {
+  query: string
+  candidates: string[]
+  line?: number
+}
+
+/** A clicked file goes to the embedding plugin first, when it asks to see one,
+ * and to the Host picker unless the plugin handled it. */
+export async function openTerminalFileLink(
+  resources: {
+    resolveFileLink?(request: TerminalFilePick): Promise<boolean>
+    openFilePicker?(request: TerminalFilePick): Promise<void>
+  },
+  request: TerminalFilePick,
+): Promise<void> {
+  if (await resources.resolveFileLink?.(request)) return
+  await resources.openFilePicker?.(request)
+}
+
 export interface InstalledTerminalLinks {
   handler: (event: MouseEvent) => void
   dispose(): void

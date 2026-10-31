@@ -217,6 +217,29 @@ function validateListFilesRequest(value: unknown): value is Record<string, unkno
   )
 }
 
+/** Search work grows with query length and paths × patterns; the backend holds the same limits. */
+const MAX_QUERY_CHARS = 1024
+const MAX_EXCLUDES = 64
+const MAX_EXCLUDE_CHARS = 256
+
+function validateQueryFilesRequest(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value) || !hasOnlyKeys(value, [
+    'query', 'matchOn', 'mode', 'exclude', 'respectGitignore', 'includeHidden', 'includeNoiseDirs', 'limit', 'cursor',
+  ])) return false
+  return (
+    typeof value.query === 'string' && value.query.length <= MAX_QUERY_CHARS &&
+    (value.matchOn === undefined || value.matchOn === 'name' || value.matchOn === 'path') &&
+    (value.mode === undefined || value.mode === 'substring' || value.mode === 'subsequence' || value.mode === 'glob') &&
+    (value.exclude === undefined || (
+      Array.isArray(value.exclude) && value.exclude.length <= MAX_EXCLUDES &&
+      value.exclude.every((item) => typeof item === 'string' && item.length <= MAX_EXCLUDE_CHARS)
+    )) &&
+    ['respectGitignore', 'includeHidden', 'includeNoiseDirs'].every((key) => value[key] === undefined || typeof value[key] === 'boolean') &&
+    (value.limit === undefined || (positiveInteger(value.limit) && (value.limit as number) <= 1000)) &&
+    (value.cursor === undefined || (typeof value.cursor === 'string' && /^\d*$/.test(value.cursor)))
+  )
+}
+
 function validateSessionRequest(value: unknown): value is Record<string, unknown> {
   return requestWithString('sessionId', value)
 }
@@ -349,6 +372,7 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
     requestWithString('path', value, ['showHidden']) &&
     (value.showHidden === undefined || typeof value.showHidden === 'boolean')),
   'fs.listFilesFlat': systemMethod('fs.listFilesFlat', 'fs', validateListFilesRequest),
+  'fs.queryFiles': systemMethod('fs.queryFiles', 'fs', validateQueryFilesRequest),
   'fs.glob': systemMethod('fs.glob', 'fs', (value) => requestWithString('pattern', value)),
   'fs.stat': systemMethod('fs.stat', 'fs', validateSelectedPathRequest),
   'fs.statPath': systemMethod('fs.statPath', 'fs', validateSelectedPathRequest),
