@@ -365,8 +365,9 @@ import {
   screenShowsHookTrustPrompt
 } from './lib/sessionMarkerTurn'
 import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
-import { executeCommand, formatKeySpec, initKeybindingsPort, invokeCommand, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
+import { executeCommand, formatKeySpec, initKeybindingsPort, invokeCommand, listCommands, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
+import { describeUiActions } from './composables/uiActionCatalog'
 import { WINDOW_INSTANCE_ID } from './lib/windowInstanceId'
 import {
   pluginAgentCaller,
@@ -11686,6 +11687,7 @@ registerCommand('ui.workspace.receive', async (args) => {
   notifyRestore.toast(i18n.global.t('msg.agent-moved-workspace-in', { caller, name: wsDisplayName(path) }), { type: 'info', duration: 8000 })
   return { path, prepared: 'adopted', opened, not_opened: notOpened }
 })
+registerCommand('ui.actions.describe', (args) => describeUiActions(listCommands(), (args as { prefix?: unknown } | undefined)?.prefix))
 registerCommand('ui.layout.setMode', (args) => {
   const mode = (args as { mode?: LayoutMode } | undefined)?.mode
   if (!mode) throw new Error('ui.layout.setMode requires mode')

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resolveWorkspaceFileLink, searchWorkspaceFiles, type WorkspaceFileSource } from '../workspaceFiles'
+import { resolveWorkspaceFileLink, retryWhileBusy, searchWorkspaceFiles, type WorkspaceFileSource } from '../workspaceFiles'
 
 function sourceOf(files: string[], existing: string[] = []): WorkspaceFileSource & { query: ReturnType<typeof vi.fn> } {
   const query = vi.fn(async ({ query: text, mode, limit }: { query: string; mode: string; limit: number }) => {
@@ -63,5 +63,28 @@ describe('resolveWorkspaceFileLink', () => {
     const source = sourceOf([])
     await expect(resolveWorkspaceFileLink(source, ['src/none.ts', '/etc/hosts', '../x.ts'], '/work')).resolves.toBeNull()
     expect(source.query).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('retryWhileBusy', () => {
+  const wait = async () => undefined
+
+  it('keeps the first answer that is not busy', async () => {
+    const send = vi.fn(async () => ({ error: 'busy' }) as { error?: string })
+    send.mockResolvedValueOnce({ error: 'busy' }).mockResolvedValueOnce({})
+    await expect(retryWhileBusy(send, wait)).resolves.toEqual({})
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry another failure', async () => {
+    const send = vi.fn(async () => ({ error: 'workspace not found' }))
+    await expect(retryWhileBusy(send, wait)).resolves.toEqual({ error: 'workspace not found' })
+    expect(send).toHaveBeenCalledOnce()
+  })
+
+  it('gives up and returns busy after its retries', async () => {
+    const send = vi.fn(async () => ({ error: 'busy' }))
+    await expect(retryWhileBusy(send, wait)).resolves.toEqual({ error: 'busy' })
+    expect(send).toHaveBeenCalledTimes(5)
   })
 })

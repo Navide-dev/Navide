@@ -19,6 +19,10 @@ _V2_DISPLAY_TEXT_RE = r"^[^\r\n<>]+$"
 # Main's rule, unchanged (the App loads installed packages with it);
 # agentTools[].method has the stricter supervisor rule. Pinned by test_backend_name_rule.py.
 _V2_BACKEND_NAME_RE = re.compile(r"^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$")
+# Command rules: the App's, word for word (parseCommands, packages/plugin-contracts).
+_V2_COMMAND_NAME_RE = re.compile(r"^[a-z][a-zA-Z0-9]*$")
+_V2_COMMAND_TARGET_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
+V2_RESERVED_COMMAND_HEADS: frozenset[str] = frozenset({"workbench", "ui", "editor", "git", "navide"})
 # The App's backend supervisor accepts only these method names (isMethodName,
 # src/main/plugins/pluginBackendSupervisor.ts); an agent tool forwarded to any
 # other name could never be served, so publish refuses it.
@@ -174,8 +178,35 @@ class ManifestV2View(ManifestV2Model):
         return self
 
 
+class ManifestV2CommandViewRun(ManifestV2Model):
+    view: str = Field(pattern=r"^[a-z][a-z0-9-]*$")
+    target: dict[str, str] | None = Field(default=None, min_length=1, max_length=16)
+
+    @field_validator("target")
+    @classmethod
+    def _check_target(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        for key, text in (value or {}).items():
+            if _V2_COMMAND_TARGET_KEY_RE.fullmatch(key) is None:
+                raise ValueError(f"target key {key!r} is invalid")
+            if len(text) > 256:
+                raise ValueError(f"target value of {key!r} exceeds 256 characters")
+        return value
+
+
+class ManifestV2CommandMethodRun(ManifestV2Model):
+    method: str = Field(min_length=1)
+
+
+class ManifestV2Command(ManifestV2Model):
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=80, pattern=_V2_DISPLAY_TEXT_RE)
+    run: ManifestV2CommandViewRun | ManifestV2CommandMethodRun
+    suggestedKey: str | None = Field(default=None, min_length=1, max_length=64)
+
+
 class ManifestV2Contributes(ManifestV2Model):
     views: list[ManifestV2View] = Field(min_length=1, max_length=16)
+    commands: list[ManifestV2Command] | None = Field(default=None, min_length=1, max_length=32)
 
     @model_validator(mode="after")
     def _check_unique_view_ids(self) -> ManifestV2Contributes:
@@ -369,7 +400,37 @@ class ManifestV2(ManifestV2Model):
             raise ValueError("manifest must declare contributes or backend")
         if self.publisher != self.namespace:
             raise ValueError("publisher must match id namespace")
+        self._check_commands()
         return self
+
+    def _check_commands(self) -> None:
+        contributes = self.contributes
+        if contributes is None or contributes.commands is None:
+            return
+        if self.namespace in V2_RESERVED_COMMAND_HEADS:
+            raise ValueError(
+                f"contributes.commands cannot be declared under {self.namespace!r}, "
+                "which is a namespace of Navide's own commands"
+            )
+        view_ids = {view.id for view in contributes.views}
+        methods = set(self.backend.methods or []) if self.backend is not None else set()
+        prefix = f"{self.id}."
+        seen: set[str] = set()
+        for index, command in enumerate(contributes.commands):
+            name = command.id[len(prefix):] if command.id.startswith(prefix) else ""
+            if _V2_COMMAND_NAME_RE.fullmatch(name) is None:
+                raise ValueError(
+                    f"contributes.commands[{index}].id {command.id!r} must be the package id, "
+                    "a dot, then a name of letters and digits starting with a lower-case letter"
+                )
+            if command.id in seen:
+                raise ValueError(f"contributes.commands[{index}].id {command.id!r} is declared twice")
+            seen.add(command.id)
+            run = command.run
+            if isinstance(run, ManifestV2CommandViewRun) and run.view not in view_ids:
+                raise ValueError(f"contributes.commands[{index}].run.view {run.view!r} is not a declared view")
+            if isinstance(run, ManifestV2CommandMethodRun) and run.method not in methods:
+                raise ValueError(f"contributes.commands[{index}].run.method {run.method!r} is not in backend.methods")
 
     @property
     def namespace(self) -> str:

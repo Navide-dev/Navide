@@ -12593,6 +12593,10 @@
       "cluster-other": "Đã gộp vào bước của agent.",
       "branch-if": "Cạnh rẽ nhánh: agent báo điều kiện đi theo hướng nào, và chỉ nhánh đó chạy.",
       "branch-switch": "Cạnh rẽ nhánh, mỗi quy tắc một cạnh: agent báo quy tắc nào khớp, và chỉ nhánh đó chạy.",
+      "branch-too-large": "Trong Navide mọi đầu ra đều chạy, kể cả đầu ra mà n8n sẽ không có mục nào. Các đầu ra quá lớn, hoặc có agent hay điểm phê duyệt, nên không gộp được thành một bước.",
+      "merge-after-branch": "Chờ mọi đầu vào, vì mọi đầu ra phía trước đều chạy. n8n chạy nút này với các đầu ra có mục.",
+      "trigger-start": "Bắt đầu pipeline khi bạn chạy nó.",
+      "gate-approval": "Lần chạy dừng ở đây cho đến khi bạn phê duyệt.",
       "merge-join": "Chờ các đầu vào có chạy. Đầu vào thuộc nhánh không được chọn sẽ bị bỏ qua.",
       "agent-step": "Một agent thực hiện nó theo các tham số gốc."
     },

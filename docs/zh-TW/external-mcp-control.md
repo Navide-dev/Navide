@@ -345,6 +345,7 @@ Action —— `ui.pane.create`、`ui.preview.show`、`ui.window.openGit` —— 
 
 | Action | 參數 | 效果 |
 |---|---|---|
+| `ui.actions.describe` | `{prefix?}` | 描述已登記的 Action，或只列出以 `prefix` 開頭的 id。每個 Action 回傳一列：`{id, title, category, args?, summary?, humanOnly?, dedicatedTool?, workspaceScoped}`。`humanOnly` 為 `true` 或其適用條件，代表會以 `ui_human_only` 拒絕；`dedicatedTool` 指出 `ui_invoke` 拒絕時該改用的工具。只有 `ui.*` 列帶 `args` 與 `summary` |
 | `ui.settings.open` | `{tab?}`（`general`、`mcp`、`analyzer`、`updates`、`appearance`、`accounts`、`keybindings` 之一） | 開啟 Settings，可指定切到特定分頁 |
 | `ui.settings.close` | — | 關閉 Settings |
 | `ui.settings.yolo` | `{yolo?}` | 讀取全域的 CLI 權限略過開關；有給 `yolo` 就設定它。回傳 `{yolo, agents}`，每個 agent 是 `{agent, mode, skipFlag}`。它不是 Workspace 範圍的：任何視窗都能回答，而且單一廠商的答案是 `skipFlag`，不是 `yolo` |

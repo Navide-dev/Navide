@@ -403,11 +403,14 @@ its keybindings, not only the `ui.*` ids below — internal ids (e.g.
 `workbench.action.*`) exist for keyboard shortcuts and are not a documented
 external contract; only the `ui.*` actions in the table below have stable,
 documented argument shapes.
+Call `ui_invoke` with `ui.actions.describe` to get those shapes from the
+window itself instead of this table.
 
 #### `ui.*` action reference
 
 | Action | Args | Effect |
 |---|---|---|
+| `ui.actions.describe` | `{prefix?}` | Describe the registered actions, or only the ids starting with `prefix`. Returns one row per action: `{id, title, category, args?, summary?, humanOnly?, dedicatedTool?, workspaceScoped}`. `humanOnly` is `true`, or the condition it applies under, for what is refused with `ui_human_only`; `dedicatedTool` names the tool to use for what `ui_invoke` refuses. Only `ui.*` rows carry `args` and `summary` |
 | `ui.settings.open` | `{tab?}` (one of `general`, `mcp`, `analyzer`, `updates`, `appearance`, `accounts`, `keybindings`) | Open Settings, optionally to a specific tab |
 | `ui.settings.close` | — | Close Settings |
 | `ui.settings.yolo` | `{yolo?}` | Read the global CLI permission-bypass switch, or set it when `yolo` is passed. Returns `{yolo, agents}`, each agent being `{agent, mode, skipFlag}`. Not workspace-scoped: any window answers it, and `skipFlag` — not `yolo` — is the per-vendor answer |

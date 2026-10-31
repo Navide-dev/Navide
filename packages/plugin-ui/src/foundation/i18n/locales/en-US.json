@@ -12593,6 +12593,10 @@
       "cluster-other": "Merged into the agent's step.",
       "branch-if": "Branch edges: the agent reports which way the condition went, and only that branch runs.",
       "branch-switch": "Branch edges, one per rule: the agent reports which rule matched, and only that branch runs.",
+      "branch-too-large": "Every output runs in Navide, also one n8n would leave without items. The outputs were too large, or held an agent or approval gate, to fold into one step.",
+      "merge-after-branch": "Waits for every input, because each output before it runs. n8n runs it on the outputs that had items.",
+      "trigger-start": "Starts the pipeline when you run it.",
+      "gate-approval": "The run pauses here until you approve.",
       "merge-join": "Waits for the inputs that run. An input whose branch was not taken is skipped.",
       "agent-step": "An agent carries it out from the original parameters."
     },
