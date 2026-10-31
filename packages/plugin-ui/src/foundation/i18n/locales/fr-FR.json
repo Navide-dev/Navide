@@ -12607,6 +12607,10 @@
       "cluster-other": "Fusionné dans l’étape de l’agent.",
       "branch-if": "Liens de branche : l’agent indique dans quel sens la condition a tourné, et seule cette branche s’exécute.",
       "branch-switch": "Liens de branche, un par règle : l’agent indique quelle règle a correspondu, et seule cette branche s’exécute.",
+      "branch-too-large": "Dans Navide, chaque sortie s’exécute, même celle que n8n laisserait sans éléments. Les sorties étaient trop grandes, ou contenaient un agent ou une validation, pour tenir en une étape.",
+      "merge-after-branch": "Attend chaque entrée, car chaque sortie en amont s’exécute. n8n l’exécute avec les sorties qui avaient des éléments.",
+      "trigger-start": "Démarre le pipeline quand vous l’exécutez.",
+      "gate-approval": "L’exécution s’arrête ici jusqu’à votre validation.",
       "merge-join": "Attend les entrées qui s’exécutent. Une entrée dont la branche n’a pas été prise est ignorée.",
       "agent-step": "Un agent l’exécute à partir des paramètres d’origine."
     },

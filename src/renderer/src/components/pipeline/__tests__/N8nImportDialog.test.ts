@@ -59,6 +59,8 @@ function payload(overrides: { needsReview?: number; subworkflow?: boolean } = {}
   }
 }
 
+const fitAll = vi.fn()
+
 describe('N8nImportDialog', () => {
   let wrapper: VueWrapper | undefined
   afterEach(() => {
@@ -73,7 +75,7 @@ describe('N8nImportDialog', () => {
       props: { backend: mock.backend, open: true, workspacePath: '/ws' },
       global: {
         plugins: [i18n],
-        stubs: { PipelineCanvas: { name: 'PipelineCanvas', props: ['graph', 'nodeClass'], template: '<div class="canvas-stub" />' } },
+        stubs: { PipelineCanvas: { name: 'PipelineCanvas', props: ['graph', 'nodeClass'], emits: ['ready'], methods: { fitAll: () => { fitAll() } }, template: '<div class="canvas-stub" />' } },
       },
       attachTo: document.body,
     })
@@ -104,7 +106,9 @@ describe('N8nImportDialog', () => {
     const rows = w.findAll('.n8n-row')
     expect(rows).toHaveLength(5)
     expect(rows[2].text()).toContain('Gmail')
-    expect(rows[2].text()).toContain('n8n-nodes-base.gmail@2')
+    expect(rows[2].text()).toContain('gmail@2')
+    expect(rows[2].text()).not.toContain('n8n-nodes-base')
+    expect(rows[2].find('code').attributes('title')).toBe('n8n-nodes-base.gmail')
     expect(rows[2].text()).toContain('Summarize mail')
     expect(rows[2].text()).toContain(i18n.global.t('pipelineImport.action-code.choose-mcp'))
     expect(rows[4].text()).toContain(i18n.global.t('pipelineImport.category.unsupported'))
@@ -116,6 +120,20 @@ describe('N8nImportDialog', () => {
     expect(w.find('.n8n-secrets').text()).toContain('parameters.apiKey')
     expect(w.text()).toContain('Pinned data was dropped.')
     expect(w.find('[data-testid="n8n-external"]').exists()).toBe(true)
+  })
+
+  it('shows the whole graph once the canvas is ready, and again for a new preview', async () => {
+    const { w, mock } = mountDialog()
+    await previewWith(w, mock, payload())
+    fitAll.mockClear()
+    const first = w.findComponent({ name: 'PipelineCanvas' })
+    first.vm.$emit('ready')
+    await flushPromises()
+    expect(fitAll).toHaveBeenCalledTimes(1)
+    await w.find('textarea').setValue('{"name":"other","nodes":[],"connections":{}}')
+    await w.find('.n8n-preview').trigger('click')
+    await flushPromises()
+    expect(w.findComponent({ name: 'PipelineCanvas' }).vm).not.toBe(first.vm)
   })
 
   it('colors canvas nodes by category, unsupported apart from pending', async () => {
@@ -144,7 +162,7 @@ describe('N8nImportDialog', () => {
     const p = payload()
     p.report.slots[0] = { ...p.report.slots[0], label: 'Summarize mail (+1)', nodes: ['Gmail', 'Format'] }
     await previewWith(w, mock, p)
-    const row = w.findAll('.n8n-row').find((r) => r.text().includes('n8n-nodes-base.gmail'))!
+    const row = w.findAll('.n8n-row').find((r) => r.text().includes('gmail@2'))!
     const merged = row.find('details.n8n-merged')
     expect(merged.find('summary').text()).toContain('Summarize mail')
     expect(merged.text()).toContain(i18n.global.t('pipelineImport.merged-nodes', { n: 2 }, 2))

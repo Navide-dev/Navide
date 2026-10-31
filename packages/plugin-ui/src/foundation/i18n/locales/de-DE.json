@@ -12607,6 +12607,10 @@
       "cluster-other": "In den Schritt des Agents zusammengeführt.",
       "branch-if": "Verzweigungskanten: Der Agent meldet, wie die Bedingung ausgefallen ist, und nur dieser Zweig läuft.",
       "branch-switch": "Verzweigungskanten, eine pro Regel: Der Agent meldet, welche Regel zutraf, und nur dieser Zweig läuft.",
+      "branch-too-large": "In Navide läuft jeder Ausgang, auch einer, den n8n ohne Elemente ließe. Die Ausgänge waren zu groß oder enthielten einen Agent oder eine Genehmigungsschranke, um sie zu einem Schritt zusammenzufassen.",
+      "merge-after-branch": "Wartet auf jeden Eingang, weil jeder Ausgang davor läuft. n8n führt ihn mit den Ausgängen aus, die Elemente hatten.",
+      "trigger-start": "Startet die Pipeline, wenn Sie sie ausführen.",
+      "gate-approval": "Der Lauf wartet hier auf Ihre Genehmigung.",
       "merge-join": "Wartet auf die Eingänge, die laufen. Ein Eingang, dessen Zweig nicht genommen wurde, wird übersprungen.",
       "agent-step": "Ein Agent führt ihn anhand der ursprünglichen Parameter aus."
     },
