@@ -20,7 +20,7 @@ export interface ApiKeyAnswer {
 }
 
 /** Same list as the backend's api_key_accounts.SUPPORTED_AGENT_KEYS. */
-export const API_KEY_AGENTS: readonly string[] = ['claude']
+export const API_KEY_AGENTS: readonly string[] = ['claude', 'codex']
 
 export function isApiKeyProfile(profile: CliProfile | null | undefined): profile is ApiKeyProfile {
   return (profile as Partial<ApiKeyProfile> | null | undefined)?.authKind === 'api-key'

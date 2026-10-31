@@ -108,6 +108,11 @@ describe('AddAccountPanel', () => {
     expect(way.text()).toContain(i18n.global.t('settings.accounts.api-keys.error.unsupported-platform'))
   })
 
+  it('leaves Codex API keys on, on Windows too', () => {
+    platform.windows = true
+    expect(mountAdd(fakeCalls(), 'codex').get('[data-way="api-key"]').attributes('disabled')).toBeUndefined()
+  })
+
   it('saves and forgets the pasted key', async () => {
     const calls = fakeCalls()
     const w = mountAdd(calls)
