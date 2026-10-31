@@ -1,4 +1,23 @@
 {
+  "actionBar": {
+    "add-step": "Añadir paso",
+    "confirm-title": "¿Ejecutar este botón?",
+    "confirm-message": "Se ejecutará: {actions}. Cierra o restablece algo y no se puede deshacer.",
+    "confirm-run": "Ejecutar",
+    "step-failed": "«{name}» se detuvo en el paso {step}.",
+    "settings-title": "Botones de acción",
+    "settings-hint": "Los botones que añadas aquí se colocan a la derecha de las pestañas del escenario y ejecutan sus acciones en orden.",
+    "empty": "Aún no hay botones de acción.",
+    "name-placeholder": "Nombre del botón",
+    "action-placeholder": "Elige una acción…",
+    "add": "Añadir",
+    "remove": "Quitar",
+    "hide": "Ocultar la barra de botones de acción",
+    "save-failed": "No se pudieron guardar los botones de acción",
+    "source-mine": "Añadido por ti",
+    "source-plugin": "Del plugin de Navide {name}",
+    "unavailable": "Esta acción no está disponible ahora"
+  },
   "convenience": {
     "switch-back-failed": "No se pudo volver a cambiar: {detail}",
     "notice": {
@@ -7965,6 +7984,20 @@
       "import-failed": "No se pudo importar",
       "import-done": "Se importó {count} regla, {rejected} rechazadas | Se importaron {count} reglas, {rejected} rechazadas",
       "import-rejected": "Entradas rechazadas que no se importaron ({count}):",
+      "plugin": {
+        "mark": "Plugin de Navide",
+        "not-installed": "Plugin de Navide no instalado",
+        "suggested": "Sugerido: {key}",
+        "use-suggested": "Usar",
+        "suggested-taken": "ya en uso",
+        "import-deferred": "Atajos a la espera de un plugin de Navide no instalado: {count}.",
+        "run": {
+          "not-installed": "Este plugin de Navide no está instalado.",
+          "view-not-open": "Abre primero la vista de este plugin de Navide y vuelve a pulsar el atajo.",
+          "view-not-openable": "La vista de este plugin de Navide no se puede abrir con un atajo.",
+          "method-failed": "Este comando del plugin de Navide ha fallado."
+        }
+      },
       "reset-all": "Restablecer todo",
       "reset-row": "Restablecer valor predeterminado",
       "customized-count": "{count} atajo personalizado | {count} atajos personalizados",
@@ -12593,6 +12626,10 @@
       "cluster-other": "Fusionado en el paso del agent.",
       "branch-if": "Enlaces de rama: el agent informa hacia dónde fue la condición y solo se ejecuta esa rama.",
       "branch-switch": "Enlaces de rama, uno por regla: el agent informa qué regla coincidió y solo se ejecuta esa rama.",
+      "branch-too-large": "En Navide se ejecuta cada salida, también una que n8n dejaría sin elementos. Las salidas eran demasiado grandes, o tenían un agente o una puerta de aprobación, para unirlas en un paso.",
+      "merge-after-branch": "Espera cada entrada, porque cada salida anterior se ejecuta. n8n lo ejecuta con las salidas que tuvieron elementos.",
+      "trigger-start": "Inicia la pipeline cuando la ejecutas.",
+      "gate-approval": "La ejecución se detiene aquí hasta que apruebes.",
       "merge-join": "Espera las entradas que se ejecutan. Se omite una entrada cuya rama no se tomó.",
       "agent-step": "Un agent lo ejecuta a partir de los parámetros originales."
     },

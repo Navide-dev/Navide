@@ -21,6 +21,7 @@ import type {
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import type { PluginActivityReport } from '../shared/pluginActivity'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
+import type { PluginCommandEntry, PluginCommandRunResult } from '../shared/pluginCommands'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
@@ -1057,6 +1058,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
     markNotified: (fingerprint: string): Promise<ProjectWorkbenchResult> =>
       ipcRenderer.invoke('workbench-project:mark-notified', { fingerprint }),
   },
+  readWorkbench: (): Promise<{ ok: boolean; content?: string; error?: string }> =>
+    ipcRenderer.invoke('workbench:read'),
+  writeWorkbench: (content: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('workbench:write', content),
+  onWorkbenchChanged: (cb: (content: string) => void): void => {
+    ipcRenderer.on('workbench:changed', (_event, content: string) => cb(content))
+  },
   // Synchronous on purpose: seeds the renderer settings cache before first
   // paint (zero-flash theme/language). Returns the ui_settings.json text,
   // '{}' when missing/corrupt.
@@ -1449,6 +1457,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:disabledStoreStatus'),
     resetDisabledStore: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
       ipcRenderer.invoke('plugins:resetDisabledStore'),
+    listCommands: (): Promise<PluginCommandEntry[]> => ipcRenderer.invoke('plugins:listCommands'),
+    runCommand: (args: { commandId: string; workspace_path: string }): Promise<PluginCommandRunResult> =>
+      ipcRenderer.invoke('plugins:runCommand', args),
     listContributions: (): Promise<Array<{
       pluginId: string
       packageVersion: string | null

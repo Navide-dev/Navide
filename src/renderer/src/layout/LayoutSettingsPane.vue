@@ -10,6 +10,7 @@ import { useLayoutStore } from './useLayoutStore'
 import { LAYOUT_PRESETS, SLOT_LIMITS, type SlotId } from './slots'
 import { isMovable, moveTargetsFor, viewById, type ViewDescriptor } from './viewRegistry'
 import SettingsSection from '../components/settings/SettingsSection.vue'
+import ActionButtonsSection from './ActionButtonsSection.vue'
 
 const {
   layout,
@@ -189,6 +190,8 @@ function onSize(id: SlotId, raw: string): void {
       <button class="nv-btn nv-btn--sm ls-reset" @click="resetLayout">{{ $t('layout.reset') }}</button>
       <span class="ls-reset-note">{{ $t('layout.reset-note') }}</span>
     </div>
+
+    <ActionButtonsSection />
   </div>
 </template>
 

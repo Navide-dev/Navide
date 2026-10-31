@@ -1,4 +1,23 @@
 {
+  "actionBar": {
+    "add-step": "添加步骤",
+    "confirm-title": "要执行这个按钮吗？",
+    "confirm-message": "将会执行：{actions}。这会关闭或重置某些内容，无法撤销。",
+    "confirm-run": "执行",
+    "step-failed": "“{name}”停在第 {step} 步。",
+    "settings-title": "操作按钮",
+    "settings-hint": "在这里添加的按钮会放在舞台标签栏右端，按下即依序执行操作。",
+    "empty": "还没有操作按钮。",
+    "name-placeholder": "按钮名称",
+    "action-placeholder": "选择操作…",
+    "add": "添加",
+    "remove": "移除",
+    "hide": "隐藏操作按钮栏",
+    "save-failed": "无法保存操作按钮",
+    "source-mine": "你自己添加的",
+    "source-plugin": "来自 Navide 插件 {name}",
+    "unavailable": "这个操作目前无法使用"
+  },
   "convenience": {
     "switch-back-failed": "无法切换回原账号：{detail}",
     "notice": {
@@ -7965,6 +7984,20 @@
       "import-failed": "导入失败",
       "import-done": "已导入 {count} 条规则，{rejected} 条被拒绝",
       "import-rejected": "有 {count} 笔被拒绝、未导入：",
+      "plugin": {
+        "mark": "Navide 插件",
+        "not-installed": "未安装的 Navide 插件",
+        "suggested": "建议：{key}",
+        "use-suggested": "应用",
+        "suggested-taken": "已被占用",
+        "import-deferred": "有 {count} 个快捷键要等 Navide 插件安装后才会生效。",
+        "run": {
+          "not-installed": "这个 Navide 插件未安装。",
+          "view-not-open": "请先打开这个 Navide 插件的视图，再按一次快捷键。",
+          "view-not-openable": "这个 Navide 插件的视图无法用快捷键打开。",
+          "method-failed": "这个 Navide 插件命令执行失败。"
+        }
+      },
       "reset-all": "全部还原",
       "reset-row": "还原成默认",
       "customized-count": "已自订 {count} 个快捷键",
@@ -12593,6 +12626,10 @@
       "cluster-other": "已并入 agent 的步骤。",
       "branch-if": "分支连线：agent 会报告条件走向哪一边，只有那个分支会运行。",
       "branch-switch": "分支连线，每条规则一条：agent 会报告匹配了哪条规则，只有那个分支会运行。",
+      "branch-too-large": "Navide 会运行每个输出，包括 n8n 不会送出项目的输出。这些输出太大，或含有 Agent 或核准闸门，无法并成一个步骤。",
+      "merge-after-branch": "等待每个输入，因为前面的每个输出都会运行。n8n 只按有项目的输出运行它。",
+      "trigger-start": "你运行 Pipeline 时从这里开始。",
+      "gate-approval": "运行会停在这里，等你核准。",
       "merge-join": "等待实际会运行的输入。所属分支没有走到的输入会被跳过。",
       "agent-step": "由 agent 按原来的参数执行。"
     },

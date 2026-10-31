@@ -1,4 +1,23 @@
 {
+  "actionBar": {
+    "add-step": "Add step",
+    "confirm-title": "Run this button?",
+    "confirm-message": "This will run: {actions}. It closes or resets something and can't be undone.",
+    "confirm-run": "Run",
+    "step-failed": "\"{name}\" stopped at step {step}.",
+    "settings-title": "Action buttons",
+    "settings-hint": "Buttons you add here sit at the right end of the stage tabs and run their actions in order.",
+    "empty": "No action buttons yet.",
+    "name-placeholder": "Button name",
+    "action-placeholder": "Choose an action…",
+    "add": "Add",
+    "remove": "Remove",
+    "hide": "Hide the action button bar",
+    "save-failed": "Couldn't save the action buttons",
+    "source-mine": "Added by you",
+    "source-plugin": "From Navide plugin {name}",
+    "unavailable": "This action isn't available right now"
+  },
   "convenience": {
     "switch-back-failed": "Couldn't switch back: {detail}",
     "notice": {
@@ -7965,6 +7984,20 @@
       "import-failed": "Import failed",
       "import-done": "Imported {count} rule, {rejected} rejected | Imported {count} rules, {rejected} rejected",
       "import-rejected": "{count} entr(ies) were rejected and not imported:",
+      "plugin": {
+        "mark": "Navide plugin",
+        "not-installed": "Navide plugin not installed",
+        "suggested": "Suggested: {key}",
+        "use-suggested": "Use",
+        "suggested-taken": "already in use",
+        "import-deferred": "{count} shortcut(s) wait for a Navide plugin that is not installed.",
+        "run": {
+          "not-installed": "That Navide plugin is not installed.",
+          "view-not-open": "Open that Navide plugin's view first, then press the shortcut again.",
+          "view-not-openable": "This Navide plugin's view can't be opened by a shortcut.",
+          "method-failed": "This Navide plugin command failed."
+        }
+      },
       "reset-all": "Reset All",
       "reset-row": "Reset to Default",
       "customized-count": "{count} shortcut customized | {count} shortcuts customized",
@@ -12593,6 +12626,10 @@
       "cluster-other": "Merged into the agent's step.",
       "branch-if": "Branch edges: the agent reports which way the condition went, and only that branch runs.",
       "branch-switch": "Branch edges, one per rule: the agent reports which rule matched, and only that branch runs.",
+      "branch-too-large": "Every output runs in Navide, also one n8n would leave without items. The outputs were too large, or held an agent or approval gate, to fold into one step.",
+      "merge-after-branch": "Waits for every input, because each output before it runs. n8n runs it on the outputs that had items.",
+      "trigger-start": "Starts the pipeline when you run it.",
+      "gate-approval": "The run pauses here until you approve.",
       "merge-join": "Waits for the inputs that run. An input whose branch was not taken is skipped.",
       "agent-step": "An agent carries it out from the original parameters."
     },

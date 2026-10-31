@@ -1091,10 +1091,10 @@ startup:
 }
 ```
 
-Manifest v2 rejects `requires`, `activationEvents`, and
-`contributes.commands`. The migration adapter maps legacy `onStartup` to
-backend startup and `onView:*` to view contributions. Commands and
-`onCommand:*` are not public until a separate command contract is specified.
+Manifest v2 rejects `requires` and `activationEvents`. The migration adapter
+maps legacy `onStartup` to backend startup and `onView:*` to view
+contributions. `onCommand:*` stays private; commands are declared as described
+in [Commands](#commands).
 
 All entries are package-relative regular files. Absolute paths, empty, `.`, or
 `..` segments, Windows backslashes, symlink escapes, and shell command strings
@@ -2419,6 +2419,71 @@ confirmation. There is no package-ID auto-grant.
 The legacy `git.changed` event is unusually authorized by `fs`. The v2 public
 replacement is `workspace.filesChanged`; third-party code must not subscribe to
 the legacy address.
+
+### Commands
+
+`contributes.commands` names what a user can bind to a key and an agent can
+list. It grants nothing: a command does only what the plugin could already do,
+so it adds no permission and no disclosure row.
+
+```json
+{
+  "engines": { "navide": ">=0.2.36" },
+  "contributes": {
+    "views": [{ "id": "main", "kind": "custom", "location": "main", "title": "Runner", "entry": "frontend/main/index.html" }],
+    "commands": [
+      {
+        "id": "acme.runner.runTests",
+        "title": "Run tests",
+        "run": { "view": "main", "target": { "tab": "tests" } },
+        "suggestedKey": "cmd+alt+t"
+      }
+    ]
+  }
+}
+```
+
+**A package declaring commands must set `engines.navide` to `>=0.2.36`.** An
+older Navide refuses the field as unknown and the package does not load.
+
+| Field | Required | Rule |
+|---|---|---|
+| `id` | yes | The plugin id, a dot, then letters and digits starting with a lower-case letter. Unique in the manifest |
+| `title` | yes | Display text, 1-80 characters, the same rule as a view title |
+| `run` | yes | Either `{view, target?}` or `{method}` |
+| `run.view` | | A view this manifest declares. `target` is 1-16 string values, delivered through `onOpenTarget` |
+| `run.method` | | A name listed in `backend.methods` |
+| `suggestedKey` | no | A suggestion the user can accept in Settings. It is never bound on its own, and a key already taken is shown as a conflict, not taken over |
+
+A manifest holds at most 32 commands. A plugin whose publisher is `workbench`,
+`ui`, `editor`, `git` or `navide` cannot declare commands: those are the first
+segments of Navide's own command ids, and a command must not read as Navide's.
+This is protection against deception, not restriction: the same plugin can do
+the same work from its view.
+
+A command appears in Settings → Shortcuts under the plugin's name, in
+`ui_list_actions` as a plain id like every other action, and in
+`ui.actions.describe`, marked `humanOnly`. It runs when the user presses a key
+bound to it:
+
+- A `window` view opens, with `target` delivered.
+- A view already on screen, or a `main` tab already opened, is shown and gets
+  `target`.
+- A view the user has not opened, or one that is not enabled, stays closed. The
+  command fails and the user sees why. `detail` views cannot be a command's
+  target.
+- `run.method` calls the backend through one of the plugin's open views, with
+  that view's identity and an empty `args` object, under the same checks as a
+  call from the view. With no view open the command fails: a key does not start
+  a backend. The result is discarded; a failure tells the user.
+
+**Agents do not run commands.** `ui_invoke` refuses a plugin command with
+`ui_human_only`, and this applies to `run.method` too. Opening a view with a
+target would otherwise let an agent act through a view's user-initiated
+capabilities, outside the [Agent Execution Policy](#agent-execution-policy). To
+give an agent the same action, declare it in
+[`backend.agentTools`](#agent-tools-backendagenttools), which the user consents
+to.
 
 ## Errors
 

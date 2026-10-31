@@ -766,8 +766,10 @@ def convert_n8n_workflow(
                 info[n].update(detail=detail, detailCode=code, detailParams={})
 
     # 2. IF and Switch become branch edges; any other node with several
-    # outputs has its small region folded into one slot.
+    # outputs has its small region folded into one slot. A region too large to
+    # fold keeps plain edges, so every output runs, and the report says so.
     branch_src: dict[str, list[str]] = {}
+    open_outputs: set[str] = set()
     for b in bfs:
         outs = {oi for s, oi, d in main if s == b}
         if kind_of(b) != "step" or group_note.get(b) in ("loop", "branch"):
@@ -792,6 +794,20 @@ def convert_n8n_workflow(
                 uf.union(b, n)
                 group_note.setdefault(n, "branch")
             group_note.setdefault(b, "branch")
+        else:
+            open_outputs.add(b)
+            info[b].update(category="pending", needsReview=True, reason="branch-too-large",
+                           detailCode="branch-too-large", detailParams={},
+                           detail="every output runs in Navide, also one n8n would leave without items: the outputs "
+                                  "were too large or held an agent or gate to fold into one step")
+
+    # A merge after those waits for all of its inputs, not just those with items.
+    for n in flow:
+        if info[n]["role"] == "merge" and group_note.get(n) is None and any(n in _reach(succ, b) for b in open_outputs):
+            info[n].update(category="pending", needsReview=True, reason="merge-after-branch",
+                           detailCode="merge-after-branch", detailParams={},
+                           detail="waits for every input, since each output before it runs; n8n runs it on the "
+                                  "outputs that had items")
 
     # 3. Chains of steps with no branching collapse.
     def is_step_group(g: str) -> bool:
@@ -1109,12 +1125,14 @@ def convert_n8n_workflow(
                     "if": "branch", "switch": "branch", "merge": "merge",
                 }.get(i["role"], "agent-step")
             if not entry["detail"]:
-                entry["detailCode"] = {"if": "branch-if", "switch": "branch-switch", "merge": "merge-join"}.get(
-                    i["role"], "agent-step")
+                entry["detailCode"] = {"if": "branch-if", "switch": "branch-switch", "merge": "merge-join",
+                                       "trigger": "trigger-start", "gate": "gate-approval"}.get(i["role"], "agent-step")
                 entry["detail"] = entry["detail"] or {
                     "if": "branch edges: the agent reports which way the condition went and only that branch runs",
                     "switch": "branch edges, one per rule: the agent reports which rule matched and only that branch runs",
                     "merge": "waits for the inputs that run; an input whose branch was not taken is skipped",
+                    "trigger": "starts the pipeline when you run it",
+                    "gate": "the run pauses here until you approve",
                 }.get(i["role"], "an agent carries it out from the original parameters")
             if name in branch_src and node_of[name] == gnode:
                 entry["branches"] = list(branch_src[name])
@@ -1280,7 +1298,7 @@ def _kickoff(
     else:
         if len(mem) > 1:
             parts.append(f"This step stands in for {len(mem)} n8n nodes. Carry them out in order"
-                         + (", taking only the branch whose condition holds" if any(group_note.get(m) == "branch" for m in mem) else "")
+                         + (", following every output that has items" if any(group_note.get(m) == "branch" for m in mem) else "")
                          + ".")
         looped = [m for m in mem if group_note.get(m) == "loop"]
         if looped and any(info[m]["role"] == "loop" for m in looped):

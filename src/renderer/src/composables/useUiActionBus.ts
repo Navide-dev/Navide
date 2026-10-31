@@ -82,6 +82,10 @@ export interface UseUiActionBusOptions {
    *  one. A focus re-announces with focused true, so the backend prefers the
    *  window the user touched last. */
   focusTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>
+  /** Commands only a person may run, however they are registered: this bus
+   *  serves agents, so it refuses them with ui_human_only. A keystroke does
+   *  not come through here. Absent: nothing extra is refused. */
+  isHumanOnlyCommand?: (action: string) => boolean
   /** The window's account actions (ui.accounts.*), reached from MCP through
    *  their dedicated tools only. They are deliberately NOT in the command
    *  registry: a keybinding or anything else that runs registered commands
@@ -295,6 +299,10 @@ export async function handleUiInvokeRequest(
       if (!req.action) {
         ok = false
         error = 'action is required for op "invoke"'
+      } else if (opts.isHumanOnlyCommand?.(req.action)) {
+        ok = false
+        error = `${req.action} is a Navide plugin command; only the user can run it. An agent reaches a plugin through the agent tools it declares.`
+        coded = { code: 'ui_human_only' }
       } else if (req.action.startsWith(ACCOUNT_ACTION_PREFIX)) {
         const handler = req.action === 'ui.accounts.signIn'
           ? opts.accountActions?.signIn

@@ -20,6 +20,7 @@ import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './
 import { abandonPendingBackends } from './backend-pending'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
+import type { PluginCommandRunResult } from '../shared/pluginCommands'
 import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, openGitPluginView, openGitLeftPluginView, updateGitLeftPluginView, closeGitLeftPluginView, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, registerLegacyBundledGit, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
@@ -4688,6 +4689,21 @@ ipcMain.handle('plugins:prepareContribution', async (event, args: Record<string,
   return result
 })
 
+/** Run a Navide plugin command for the main window. A keystroke is the only
+ * thing that gets here: ui_invoke refuses these commands in the renderer. */
+ipcMain.handle('plugins:runCommand', async (event, args: Record<string, unknown>): Promise<PluginCommandRunResult> => {
+  const requestingWindow = trustedPluginRegionHost(event)
+  const commandId = typeof args?.commandId === 'string' ? args.commandId : ''
+  const workspacePath = requestingWindow
+    ? registeredGitLeftWorkspace(requestingWindow, args?.workspace_path, mainWindowWorkspaces, normalizeWorkspacePath)
+    : null
+  if (!requestingWindow || !commandId || !workspacePath) return { ok: false, reason: 'view-not-open' }
+  const outcome = await frontendPluginManager.runCommand(requestingWindow, commandId, workspacePath)
+  if (!outcome.ok || !('window' in outcome)) return outcome
+  const opened = await openCatalogContributionWindow(outcome.window.contributionKey, workspacePath, outcome.window.params)
+  return opened.ok ? { ok: true } : { ok: false, reason: 'view-not-open' }
+})
+
 /** Open a catalog window contribution in a dedicated BrowserWindow. Only the
  * trusted main renderer may request this; the opaque plugin instance remains
  * entirely in the main process. */
@@ -5672,6 +5688,30 @@ async function writeKeybindingsFile(
     return { ok: false, error: String(e) }
   }
 }
+
+ipcMain.handle('workbench:read', async () => {
+  try {
+    return { ok: true, content: await readFile(join(app.getPath('userData'), 'workbench.json'), 'utf-8') }
+  } catch (e) {
+    // No file is the normal case, and means no buttons.
+    if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return { ok: true, content: '' }
+    return { ok: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('workbench:write', async (event, content: string) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
+  if (typeof content !== 'string') return { ok: false, error: 'invalid content' }
+  try {
+    await writeFile(join(app.getPath('userData'), 'workbench.json'), content, 'utf-8')
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && win.webContents.id !== event.sender.id) win.webContents.send('workbench:changed', content)
+    }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+})
 
 // Read bytes from a file starting at a given offset. Used by the stage watcher
 // to scan the outputLogFile for sentinel strings — more reliable than cleanBuffer

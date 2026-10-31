@@ -259,6 +259,9 @@ declare global {
         revoke: () => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
         markNotified: (fingerprint: string) => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
       }
+      readWorkbench?: () => Promise<{ ok: boolean; content?: string; error?: string }>
+      writeWorkbench?: (content: string) => Promise<{ ok: boolean; error?: string }>
+      onWorkbenchChanged?: (cb: (content: string) => void) => void
       getBootstrapSettings: () => string
       broadcastLanguageChange: (locale: string) => void
       onLanguageChanged: (cb: (locale: string) => void) => void
@@ -451,6 +454,8 @@ declare global {
         disabledBuiltins?: () => Promise<string[]>
         disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
+        listCommands: () => Promise<import('../../shared/pluginCommands').PluginCommandEntry[]>
+        runCommand: (args: { commandId: string; workspace_path: string }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null

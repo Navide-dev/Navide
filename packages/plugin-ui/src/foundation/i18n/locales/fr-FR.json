@@ -1,4 +1,23 @@
 {
+  "actionBar": {
+    "add-step": "Ajouter une étape",
+    "confirm-title": "Exécuter ce bouton ?",
+    "confirm-message": "Sera exécuté : {actions}. Cela ferme ou réinitialise quelque chose, sans retour possible.",
+    "confirm-run": "Exécuter",
+    "step-failed": "« {name} » s’est arrêté à l’étape {step}.",
+    "settings-title": "Boutons d’action",
+    "settings-hint": "Les boutons ajoutés ici se placent à droite des onglets de la scène et lancent leurs actions dans l’ordre.",
+    "empty": "Aucun bouton d’action pour l’instant.",
+    "name-placeholder": "Nom du bouton",
+    "action-placeholder": "Choisir une action…",
+    "add": "Ajouter",
+    "remove": "Retirer",
+    "hide": "Masquer la barre de boutons d’action",
+    "save-failed": "Impossible d’enregistrer les boutons d’action",
+    "source-mine": "Ajouté par vous",
+    "source-plugin": "Du plugin Navide {name}",
+    "unavailable": "Cette action n’est pas disponible pour le moment"
+  },
   "convenience": {
     "switch-back-failed": "Impossible de revenir en arrière : {detail}",
     "notice": {
@@ -7965,6 +7984,20 @@
       "import-failed": "Échec de l’importation",
       "import-done": "{count} règle importée (rejets : {rejected}) | {count} règles importées (rejets : {rejected})",
       "import-rejected": "Entrées rejetées et non importées ({count}) :",
+      "plugin": {
+        "mark": "Plugin Navide",
+        "not-installed": "Plugin Navide non installé",
+        "suggested": "Suggéré : {key}",
+        "use-suggested": "Utiliser",
+        "suggested-taken": "déjà utilisé",
+        "import-deferred": "Raccourcis en attente d’un plugin Navide non installé : {count}.",
+        "run": {
+          "not-installed": "Ce plugin Navide n’est pas installé.",
+          "view-not-open": "Ouvrez d’abord la vue de ce plugin Navide, puis appuyez de nouveau sur le raccourci.",
+          "view-not-openable": "La vue de ce plugin Navide ne s’ouvre pas avec un raccourci.",
+          "method-failed": "Cette commande du plugin Navide a échoué."
+        }
+      },
       "reset-all": "Tout réinitialiser",
       "reset-row": "Rétablir la valeur par défaut",
       "customized-count": "{count} raccourci personnalisé | {count} raccourcis personnalisés",
@@ -12593,6 +12626,10 @@
       "cluster-other": "Fusionné dans l’étape de l’agent.",
       "branch-if": "Liens de branche : l’agent indique dans quel sens la condition a tourné, et seule cette branche s’exécute.",
       "branch-switch": "Liens de branche, un par règle : l’agent indique quelle règle a correspondu, et seule cette branche s’exécute.",
+      "branch-too-large": "Dans Navide, chaque sortie s’exécute, même celle que n8n laisserait sans éléments. Les sorties étaient trop grandes, ou contenaient un agent ou une validation, pour tenir en une étape.",
+      "merge-after-branch": "Attend chaque entrée, car chaque sortie en amont s’exécute. n8n l’exécute avec les sorties qui avaient des éléments.",
+      "trigger-start": "Démarre le pipeline quand vous l’exécutez.",
+      "gate-approval": "L’exécution s’arrête ici jusqu’à votre validation.",
       "merge-join": "Attend les entrées qui s’exécutent. Une entrée dont la branche n’a pas été prise est ignorée.",
       "agent-step": "Un agent l’exécute à partir des paramètres d’origine."
     },

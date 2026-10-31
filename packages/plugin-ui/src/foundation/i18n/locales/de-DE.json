@@ -1,4 +1,23 @@
 {
+  "actionBar": {
+    "add-step": "Schritt hinzufügen",
+    "confirm-title": "Diese Schaltfläche ausführen?",
+    "confirm-message": "Ausgeführt wird: {actions}. Das schließt oder setzt etwas zurück und lässt sich nicht rückgängig machen.",
+    "confirm-run": "Ausführen",
+    "step-failed": "„{name}“ wurde bei Schritt {step} angehalten.",
+    "settings-title": "Aktionsschaltflächen",
+    "settings-hint": "Hier hinzugefügte Schaltflächen stehen rechts neben den Bühnen-Tabs und führen ihre Aktionen der Reihe nach aus.",
+    "empty": "Noch keine Aktionsschaltflächen.",
+    "name-placeholder": "Name der Schaltfläche",
+    "action-placeholder": "Aktion auswählen…",
+    "add": "Hinzufügen",
+    "remove": "Entfernen",
+    "hide": "Aktionsleiste ausblenden",
+    "save-failed": "Aktionsschaltflächen konnten nicht gespeichert werden",
+    "source-mine": "Von dir hinzugefügt",
+    "source-plugin": "Vom Navide-Plugin {name}",
+    "unavailable": "Diese Aktion ist gerade nicht verfügbar"
+  },
   "convenience": {
     "switch-back-failed": "Zurückwechseln fehlgeschlagen: {detail}",
     "notice": {
@@ -7965,6 +7984,20 @@
       "import-failed": "Import fehlgeschlagen",
       "import-done": "{count} Regel importiert, {rejected} abgelehnt | {count} Regeln importiert, {rejected} abgelehnt",
       "import-rejected": "{count} Eintrag/Einträge wurde(n) abgelehnt und nicht importiert:",
+      "plugin": {
+        "mark": "Navide-Plugin",
+        "not-installed": "Navide-Plugin nicht installiert",
+        "suggested": "Vorschlag: {key}",
+        "use-suggested": "Übernehmen",
+        "suggested-taken": "bereits belegt",
+        "import-deferred": "{count} Tastenkürzel warten auf ein nicht installiertes Navide-Plugin.",
+        "run": {
+          "not-installed": "Dieses Navide-Plugin ist nicht installiert.",
+          "view-not-open": "Öffne zuerst die Ansicht dieses Navide-Plugins und drücke das Tastenkürzel dann erneut.",
+          "view-not-openable": "Die Ansicht dieses Navide-Plugins lässt sich nicht per Tastenkürzel öffnen.",
+          "method-failed": "Dieser Befehl des Navide-Plugins ist fehlgeschlagen."
+        }
+      },
       "reset-all": "Alle zurücksetzen",
       "reset-row": "Auf Standard zurücksetzen",
       "customized-count": "{count} Tastenkombination angepasst | {count} Tastenkombinationen angepasst",
@@ -12593,6 +12626,10 @@
       "cluster-other": "In den Schritt des Agents zusammengeführt.",
       "branch-if": "Verzweigungskanten: Der Agent meldet, wie die Bedingung ausgefallen ist, und nur dieser Zweig läuft.",
       "branch-switch": "Verzweigungskanten, eine pro Regel: Der Agent meldet, welche Regel zutraf, und nur dieser Zweig läuft.",
+      "branch-too-large": "In Navide läuft jeder Ausgang, auch einer, den n8n ohne Elemente ließe. Die Ausgänge waren zu groß oder enthielten einen Agent oder eine Genehmigungsschranke, um sie zu einem Schritt zusammenzufassen.",
+      "merge-after-branch": "Wartet auf jeden Eingang, weil jeder Ausgang davor läuft. n8n führt ihn mit den Ausgängen aus, die Elemente hatten.",
+      "trigger-start": "Startet die Pipeline, wenn Sie sie ausführen.",
+      "gate-approval": "Der Lauf wartet hier auf Ihre Genehmigung.",
       "merge-join": "Wartet auf die Eingänge, die laufen. Ein Eingang, dessen Zweig nicht genommen wurde, wird übersprungen.",
       "agent-step": "Ein Agent führt ihn anhand der ursprünglichen Parameter aus."
     },

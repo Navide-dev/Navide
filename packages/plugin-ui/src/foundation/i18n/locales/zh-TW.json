@@ -1,4 +1,23 @@
 {
+  "actionBar": {
+    "add-step": "加入步驟",
+    "confirm-title": "要執行這顆按鈕嗎？",
+    "confirm-message": "將會執行：{actions}。這會關閉或重設某些東西，無法復原。",
+    "confirm-run": "執行",
+    "step-failed": "「{name}」停在第 {step} 步。",
+    "settings-title": "動作按鈕",
+    "settings-hint": "在這裡新增的按鈕會放在舞台分頁列右端，按下就依序執行動作。",
+    "empty": "還沒有動作按鈕。",
+    "name-placeholder": "按鈕名稱",
+    "action-placeholder": "選擇動作…",
+    "add": "新增",
+    "remove": "移除",
+    "hide": "隱藏動作按鈕列",
+    "save-failed": "無法儲存動作按鈕",
+    "source-mine": "你自己新增的",
+    "source-plugin": "來自 Navide 外掛 {name}",
+    "unavailable": "這個動作目前無法使用"
+  },
   "convenience": {
     "switch-back-failed": "無法切換回原帳號：{detail}",
     "notice": {
@@ -7965,6 +7984,20 @@
       "import-failed": "匯入失敗",
       "import-done": "已匯入 {count} 條規則，{rejected} 條被拒絕",
       "import-rejected": "有 {count} 筆被拒絕、未匯入：",
+      "plugin": {
+        "mark": "Navide 外掛",
+        "not-installed": "未安裝的 Navide 外掛",
+        "suggested": "建議：{key}",
+        "use-suggested": "套用",
+        "suggested-taken": "已被使用",
+        "import-deferred": "有 {count} 個快捷鍵要等 Navide 外掛安裝後才會生效。",
+        "run": {
+          "not-installed": "這個 Navide 外掛未安裝。",
+          "view-not-open": "請先打開這個 Navide 外掛的視圖，再按一次快捷鍵。",
+          "view-not-openable": "這個 Navide 外掛的視圖無法用快捷鍵開啟。",
+          "method-failed": "這個 Navide 外掛指令執行失敗。"
+        }
+      },
       "reset-all": "全部還原",
       "reset-row": "還原成預設",
       "customized-count": "已自訂 {count} 個快捷鍵",
@@ -12593,6 +12626,10 @@
       "cluster-other": "已併入 agent 的步驟。",
       "branch-if": "分支連線：agent 會回報條件走向哪一邊，只有那個分支會執行。",
       "branch-switch": "分支連線，每條規則一條：agent 會回報符合哪條規則，只有那個分支會執行。",
+      "branch-too-large": "Navide 會執行每個輸出，包括 n8n 不會送出項目的輸出。這些輸出太大，或含有 Agent 或核准閘門，無法併成一個步驟。",
+      "merge-after-branch": "等待每個輸入，因為前面的每個輸出都會執行。n8n 只依有項目的輸出執行它。",
+      "trigger-start": "你執行 Pipeline 時由這裡開始。",
+      "gate-approval": "執行會停在這裡，等你核准。",
       "merge-join": "等待實際會執行的輸入。所屬分支沒有被走到的輸入會略過。",
       "agent-step": "由 agent 依原本的參數執行。"
     },

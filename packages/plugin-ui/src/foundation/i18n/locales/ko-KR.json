@@ -1,4 +1,23 @@
 {
+  "actionBar": {
+    "add-step": "단계 추가",
+    "confirm-title": "이 버튼을 실행할까요?",
+    "confirm-message": "실행할 작업: {actions}. 무언가를 닫거나 재설정하며 되돌릴 수 없어요.",
+    "confirm-run": "실행",
+    "step-failed": "\"{name}\"이(가) {step}단계에서 멈췄어요.",
+    "settings-title": "작업 버튼",
+    "settings-hint": "여기서 추가한 버튼은 스테이지 탭 오른쪽 끝에 놓이고, 누르면 작업을 순서대로 실행해요.",
+    "empty": "작업 버튼이 아직 없어요.",
+    "name-placeholder": "버튼 이름",
+    "action-placeholder": "작업 선택…",
+    "add": "추가",
+    "remove": "제거",
+    "hide": "작업 버튼 막대 숨기기",
+    "save-failed": "작업 버튼을 저장하지 못했어요",
+    "source-mine": "직접 추가함",
+    "source-plugin": "Navide 플러그인 {name}에서 추가",
+    "unavailable": "이 작업은 지금 사용할 수 없어요"
+  },
   "convenience": {
     "switch-back-failed": "되돌리지 못했어요: {detail}",
     "notice": {
@@ -7965,6 +7984,20 @@
       "import-failed": "가져오기 실패",
       "import-done": "규칙 {count}개를 가져왔어요. {rejected}개 거부됨",
       "import-rejected": "항목 {count}개가 거부되어 가져오지 않았어요:",
+      "plugin": {
+        "mark": "Navide 플러그인",
+        "not-installed": "설치되지 않은 Navide 플러그인",
+        "suggested": "추천: {key}",
+        "use-suggested": "사용",
+        "suggested-taken": "이미 사용 중",
+        "import-deferred": "단축키 {count}개는 Navide 플러그인을 설치하면 작동해요.",
+        "run": {
+          "not-installed": "이 Navide 플러그인이 설치되어 있지 않아요.",
+          "view-not-open": "이 Navide 플러그인의 뷰를 먼저 연 다음 단축키를 다시 눌러 주세요.",
+          "view-not-openable": "이 Navide 플러그인의 뷰는 단축키로 열 수 없어요.",
+          "method-failed": "이 Navide 플러그인 명령을 실행하지 못했어요."
+        }
+      },
       "reset-all": "모두 초기화",
       "reset-row": "기본값으로 초기화",
       "customized-count": "단축키 {count}개 사용자 지정됨",
@@ -12593,6 +12626,10 @@
       "cluster-other": "Agent의 단계에 합쳐졌어요.",
       "branch-if": "분기 연결: Agent가 조건이 어느 쪽으로 갔는지 보고하고, 그 분기만 실행돼요.",
       "branch-switch": "규칙마다 하나씩 있는 분기 연결: Agent가 어떤 규칙과 일치했는지 보고하고, 그 분기만 실행돼요.",
+      "branch-too-large": "Navide는 모든 출력을 실행해요. n8n이 항목을 보내지 않을 출력도 포함돼요. 출력이 너무 크거나 Agent 또는 승인 게이트가 있어 한 단계로 합칠 수 없었어요.",
+      "merge-after-branch": "앞의 출력이 모두 실행되므로 모든 입력을 기다려요. n8n은 항목이 있는 출력으로만 실행해요.",
+      "trigger-start": "Pipeline을 실행하면 여기서 시작해요.",
+      "gate-approval": "승인할 때까지 실행이 여기서 멈춰요.",
       "merge-join": "실행되는 입력을 기다려요. 분기가 선택되지 않은 입력은 건너뛰어요.",
       "agent-step": "Agent가 원래 파라미터에 따라 실행해요."
     },
