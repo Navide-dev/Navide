@@ -43,6 +43,11 @@ _IDLE_S = 300.0
 _LIST_DEADLINE_S = 6.0
 _QUERY_DEADLINE_S = 3.0
 _DEADLINE_CHECK_EVERY = 1_024
+# Queries running in this process, whoever asked. The Host holds one per plugin
+# but lets go when its own wait times out; this counts the work itself, on
+# worker threads it shares with Git and file reads.
+_MAX_RUNNING_QUERIES = 4
+_running_queries = threading.BoundedSemaphore(_MAX_RUNNING_QUERIES)
 
 
 @dataclass
@@ -156,18 +161,23 @@ def _evict(now: float) -> None:
                 del _entries[key]
 
 
-def _listing(root: Path, respect_gitignore: bool, include_hidden: bool, include_noise: bool) -> _Listing:
+def _listing(root: Path, respect_gitignore: bool, include_hidden: bool, include_noise: bool) -> _Listing | None:
+    """The listing, built if needed; None when another build held it past the deadline."""
     key = (str(root), respect_gitignore, include_hidden, include_noise)
     now = time.monotonic()
     with _entries_lock:
         entry = _entries.setdefault(key, _Entry())
         entry.used_at = now
     # One build per listing: keystrokes queue here rather than each walking.
-    with entry.lock:
+    if not entry.lock.acquire(timeout=_LIST_DEADLINE_S):
+        return None
+    try:
         listing = entry.listing
         if listing is None or now - listing.built_at > _MAX_AGE_S:
             listing = _build_listing(root, respect_gitignore, include_hidden, include_noise)
             entry.listing = listing
+    finally:
+        entry.lock.release()
     _evict(now)
     return listing
 
@@ -247,11 +257,34 @@ def query_files(
         or any(len(pattern) > MAX_EXCLUDE_CHARS for pattern in excludes)
     ):
         return {"ok": False, "error": "query or exclude is too long"}
-    limit = max(1, min(limit, MAX_LIMIT))
+    if not _running_queries.acquire(blocking=False):
+        return {"ok": False, "error": "busy"}
+    try:
+        return _run_query(
+            root, query, match_on, mode, excludes, respect_gitignore, include_hidden,
+            include_noise_dirs, max(1, min(limit, MAX_LIMIT)), int(cursor or 0),
+        )
+    finally:
+        _running_queries.release()
+
+
+def _run_query(
+    root: Path,
+    query: str,
+    match_on: str,
+    mode: str,
+    excludes: list[str],
+    respect_gitignore: bool,
+    include_hidden: bool,
+    include_noise_dirs: bool,
+    limit: int,
+    start: int,
+) -> dict[str, Any]:
     listing = _listing(root, respect_gitignore, include_hidden, include_noise_dirs)
+    if listing is None:
+        return {"ok": False, "error": "busy"}
     deadline = time.monotonic() + _QUERY_DEADLINE_S
     needle = query.replace("\\", "/")
-    start = int(cursor or 0)
     files: list[dict[str, Any]] = []
     next_cursor: str | None = None
     timed_out = False
@@ -272,6 +305,11 @@ def query_files(
         row = _row(root, rel, spans)
         if row is not None:
             files.append(row)
+        # A slow disk spends its time here, between the periodic checks.
+        if time.monotonic() > deadline:
+            next_cursor = str(index + 1)
+            timed_out = True
+            break
     result: dict[str, Any] = {
         "ok": True,
         "files": files,
