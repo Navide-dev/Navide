@@ -7965,6 +7965,20 @@
       "import-failed": "No se pudo importar",
       "import-done": "Se importó {count} regla, {rejected} rechazadas | Se importaron {count} reglas, {rejected} rechazadas",
       "import-rejected": "Entradas rechazadas que no se importaron ({count}):",
+      "plugin": {
+        "mark": "Plugin de Navide",
+        "not-installed": "Plugin de Navide no instalado",
+        "suggested": "Sugerido: {key}",
+        "use-suggested": "Usar",
+        "suggested-taken": "ya en uso",
+        "import-deferred": "Atajos a la espera de un plugin de Navide no instalado: {count}.",
+        "run": {
+          "not-installed": "Este plugin de Navide no está instalado.",
+          "view-not-open": "Abre primero la vista de este plugin de Navide y vuelve a pulsar el atajo.",
+          "view-not-openable": "La vista de este plugin de Navide no se puede abrir con un atajo.",
+          "method-unavailable": "Este comando del plugin de Navide aún no se puede ejecutar."
+        }
+      },
       "reset-all": "Restablecer todo",
       "reset-row": "Restablecer valor predeterminado",
       "customized-count": "{count} atajo personalizado | {count} atajos personalizados",

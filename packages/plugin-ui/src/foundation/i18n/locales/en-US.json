@@ -7965,6 +7965,20 @@
       "import-failed": "Import failed",
       "import-done": "Imported {count} rule, {rejected} rejected | Imported {count} rules, {rejected} rejected",
       "import-rejected": "{count} entr(ies) were rejected and not imported:",
+      "plugin": {
+        "mark": "Navide plugin",
+        "not-installed": "Navide plugin not installed",
+        "suggested": "Suggested: {key}",
+        "use-suggested": "Use",
+        "suggested-taken": "already in use",
+        "import-deferred": "{count} shortcut(s) wait for a Navide plugin that is not installed.",
+        "run": {
+          "not-installed": "That Navide plugin is not installed.",
+          "view-not-open": "Open that Navide plugin's view first, then press the shortcut again.",
+          "view-not-openable": "This Navide plugin's view can't be opened by a shortcut.",
+          "method-unavailable": "This Navide plugin command can't run yet."
+        }
+      },
       "reset-all": "Reset All",
       "reset-row": "Reset to Default",
       "customized-count": "{count} shortcut customized | {count} shortcuts customized",

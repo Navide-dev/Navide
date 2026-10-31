@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import SettingsOverflowActions from './settings/SettingsOverflowActions.vue'
 import {
+  COMMAND_IDS,
   buildRows,
   classifyRow,
   conflictsByRow,
@@ -41,6 +42,7 @@ import { useFnKeyRecorder } from '../voice/fnKeyRecorder'
 import { HOLD_TO_TALK_COMMAND } from '../voice/voiceSettings'
 import KeyRecorderFeedback from './settings/KeyRecorderFeedback.vue'
 import SettingsEmptyState from './settings/SettingsEmptyState.vue'
+import { isPluginShapedCommand, pluginCommandEntry, pluginCommands } from '../lib/pluginCommands'
 
 type FilterMode = 'all' | 'customized' | 'conflicts'
 
@@ -94,7 +96,34 @@ onUnmounted(() => {
   if (recording.value) stopRecording()
 })
 
-const rows = computed(() => buildRows(userRules.value))
+const catalog = computed<readonly string[]>(() =>
+  pluginCommands.value.length
+    ? [...COMMAND_IDS, ...pluginCommands.value.map((command) => command.commandId)]
+    : COMMAND_IDS,
+)
+const missingPluginGroup = computed(() => t('settings.keybindings.plugin.not-installed'))
+
+/** A binding whose Navide plugin is not here keeps its row and says so. The
+ *  file still holds it, so reinstalling the plugin brings the key back. */
+function isMissingPluginRow(row: BindingRow): boolean {
+  return !COMMAND_IDS.includes(row.command) && !pluginCommandEntry(row.command) && isPluginShapedCommand(row.command)
+}
+
+const rows = computed(() => {
+  const all = buildRows(userRules.value, undefined, catalog.value)
+  const plain: BindingRow[] = []
+  const plugin: BindingRow[] = []
+  for (const row of all) {
+    const entry = pluginCommandEntry(row.command)
+    if (entry) plugin.push({ ...row, label: entry.title, category: entry.pluginName })
+    else if (isMissingPluginRow(row)) plugin.push({ ...row, label: row.command, category: missingPluginGroup.value })
+    else plain.push(row)
+  }
+  if (!plugin.length) return all
+  // Keeps each plugin's rows together: a row with a key would otherwise sit
+  // apart from the plugin's unbound rows and split its group in two.
+  return [...plain, ...plugin.sort((a, b) => a.category.localeCompare(b.category))]
+})
 const conflicts = computed(() => conflictsByRow(rows.value))
 const customizedCount = computed(() => rows.value.filter((r) => r.customized).length)
 
@@ -129,6 +158,22 @@ const groupedRows = computed(() => {
   }
   return groups
 })
+
+function isPluginRow(row: BindingRow): boolean {
+  return pluginCommandEntry(row.command) !== undefined || isMissingPluginRow(row)
+}
+
+/** The key a plugin suggests, while the row has none. Nothing binds it but the
+ *  user's click, and a key that is taken is shown as taken. */
+function suggestionFor(row: BindingRow): { key: string; taken: boolean } | null {
+  const key = pluginCommandEntry(row.command)?.suggestedKey
+  if (!key || row.keys.length > 0 || !validateKeySpec(key).ok) return null
+  return { key, taken: rows.value.some((other) => other.keys.some((chip) => chip.key === key)) }
+}
+
+function useSuggestion(row: BindingRow, key: string): Promise<void> {
+  return applyKeys(row, [key])
+}
 
 function hardConflict(row: BindingRow): boolean {
   return (conflicts.value.get(row.id) ?? []).some((c) => c.hard)
@@ -244,6 +289,7 @@ function clearRecording(): void {
 const ioBusy = ref(false)
 const ioMessage = ref('')
 const ioRejected = ref<string[]>([])
+const ioDeferred = ref(0)
 
 interface FileBridge {
   saveJson?: (a: { defaultName?: string; content: string; title?: string })
@@ -290,8 +336,9 @@ async function onImport(): Promise<void> {
     }
     // Replaces the current set, so the file has to be reviewed first: anything
     // rejected is listed rather than quietly discarded.
-    const review = reviewImportedRules(result.content)
+    const review = reviewImportedRules(result.content, catalog.value, isPluginShapedCommand)
     ioRejected.value = review.rejected
+    ioDeferred.value = review.deferred?.length ?? 0
     if (!review.rules.length && review.rejected.length) {
       ioMessage.value = t('settings.keybindings.import-failed')
       return
@@ -397,6 +444,9 @@ const visibleReference = computed(() => {
       {{ $t('settings.keybindings.customized-count', { count: customizedCount }) }}
     </p>
     <p v-if="ioMessage" class="kse-status">{{ ioMessage }}</p>
+    <p v-if="ioDeferred" class="kse-status">
+      {{ $t('settings.keybindings.plugin.import-deferred', { count: ioDeferred }) }}
+    </p>
     <div v-if="ioRejected.length" class="kse-rejected">
       <p>{{ $t('settings.keybindings.import-rejected', { count: ioRejected.length }) }}</p>
       <ul><li v-for="(r, i) in ioRejected" :key="i">{{ r }}</li></ul>
@@ -406,7 +456,10 @@ const visibleReference = computed(() => {
     </p>
 
     <div v-for="group in groupedRows" :key="group.category" class="kse-group">
-      <h3 class="kse-group-title">{{ categoryLabel(group.rows[0]) }}</h3>
+      <h3 class="kse-group-title">
+        {{ categoryLabel(group.rows[0]) }}
+        <span v-if="pluginCommandEntry(group.rows[0].command)" class="kse-plugin-mark">{{ $t('settings.keybindings.plugin.mark') }}</span>
+      </h3>
       <div class="kse-table-scroll kse-bindings-scroll">
         <table class="kse-table kse-bindings">
           <thead>
@@ -513,6 +566,11 @@ const visibleReference = computed(() => {
                     ? $t('settings.keybindings.conflict-hard')
                     : $t('settings.keybindings.conflict-soft') }}</span>
                 </div>
+                <div v-if="suggestionFor(row) && !isRecordingRow(row)" class="kse-suggestion">
+                  <span>{{ $t('settings.keybindings.plugin.suggested', { key: formatKeySpec(suggestionFor(row)!.key) }) }}</span>
+                  <span v-if="suggestionFor(row)!.taken" class="kse-suggestion-taken">{{ $t('settings.keybindings.plugin.suggested-taken') }}</span>
+                  <button v-else type="button" class="kse-suggestion-use" @click="useSuggestion(row, suggestionFor(row)!.key)">{{ $t('settings.keybindings.plugin.use-suggested') }}</button>
+                </div>
               </td>
 
               <td class="kse-td-when" :data-label="$t('settings.keybindings.col.when')">
@@ -526,7 +584,10 @@ const visibleReference = computed(() => {
               </td>
 
               <td class="kse-td-source" :data-label="$t('settings.keybindings.col.source')">
-                <span class="kse-source" :class="classifyRow(row)">
+                <span v-if="isPluginRow(row) && !row.keys.length" class="kse-source">
+                  {{ $t('settings.keybindings.plugin.mark') }}
+                </span>
+                <span v-else class="kse-source" :class="classifyRow(row)">
                   {{ $t('settings.keybindings.source.' + classifyRow(row)) }}
                 </span>
               </td>
@@ -726,6 +787,41 @@ const visibleReference = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.kse-plugin-mark {
+  margin-left: 8px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+.kse-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+.kse-suggestion-taken {
+  color: var(--text-muted);
+}
+.kse-suggestion-use {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent-fg);
+  cursor: pointer;
+}
+.kse-suggestion-use:hover {
+  text-decoration: underline;
+}
+.kse-suggestion-use:focus-visible {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 .kse-group-title {
   margin: 0;

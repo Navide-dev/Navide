@@ -7965,6 +7965,20 @@
       "import-failed": "Không nhập được",
       "import-done": "Đã nhập {count} quy tắc, {rejected} bị từ chối",
       "import-rejected": "{count} mục bị từ chối và không được nhập:",
+      "plugin": {
+        "mark": "Plugin Navide",
+        "not-installed": "Plugin Navide chưa cài đặt",
+        "suggested": "Gợi ý: {key}",
+        "use-suggested": "Dùng",
+        "suggested-taken": "đã được dùng",
+        "import-deferred": "{count} phím tắt đang chờ plugin Navide chưa cài đặt.",
+        "run": {
+          "not-installed": "Plugin Navide này chưa được cài đặt.",
+          "view-not-open": "Hãy mở chế độ xem của plugin Navide này trước, rồi nhấn lại phím tắt.",
+          "view-not-openable": "Không thể mở chế độ xem của plugin Navide này bằng phím tắt.",
+          "method-unavailable": "Lệnh của plugin Navide này chưa thể chạy."
+        }
+      },
       "reset-all": "Đặt lại tất cả",
       "reset-row": "Đặt lại mặc định",
       "customized-count": "{count} phím tắt đã tùy chỉnh",

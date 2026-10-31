@@ -35,6 +35,8 @@ export {
   invokeCommand,
   listCommands,
   registerCommand,
+  registerPluginCommand,
+  unregisterCommand,
 } from './keybindings/commandRegistry'
 export type { InvokeCommandResult } from './keybindings/commandRegistry'
 

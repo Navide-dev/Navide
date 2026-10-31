@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { registerCommand } from '@navide/plugin-ui/shared'
+import { executeCommand, registerCommand } from '@navide/plugin-ui/shared'
 import { _resetRegistry } from '@navide/plugin-ui/shared/testing'
 import { describeUiAction, describeUiActions, UI_ACTION_SPECS } from '../uiActionCatalog'
 import { handleUiInvokeRequest, type UiInvokeRequest } from '../useUiActionBus'
@@ -106,5 +106,61 @@ describe('ui_list_actions is unchanged', () => {
     expect(send).toHaveBeenCalledWith('ui.invoke.result', {
       request_id: 'r', ok: true, result: ['a.one'], error: null,
     })
+  })
+})
+
+describe('a Navide plugin command on the bus', () => {
+  beforeEach(() => _resetRegistry())
+
+  const request = (action: string, caller_pane_id = 'pane-1'): UiInvokeRequest => ({
+    request_id: 'r', workspace_path: '/ws', op: 'invoke', action, args: null, global: false, caller_pane_id,
+  })
+  const deps = (isHumanOnlyCommand?: (action: string) => boolean) => {
+    const send = vi.fn(async () => undefined)
+    return {
+      send,
+      opts: {
+        backend: { send, on: () => {} },
+        currentWorkspace: { value: '/ws' },
+        buildSnapshot: () => ({}),
+        isHumanOnlyCommand,
+      },
+    }
+  }
+  const isPlugin = (action: string) => action.startsWith('acme.')
+
+  it('is refused with ui_human_only and never runs', async () => {
+    const handler = vi.fn()
+    registerCommand('acme.runner.go', handler)
+    const { send, opts } = deps(isPlugin)
+    await handleUiInvokeRequest(request('acme.runner.go'), opts)
+    expect(handler).not.toHaveBeenCalled()
+    expect(send).toHaveBeenCalledWith('ui.invoke.result', expect.objectContaining({ ok: false, code: 'ui_human_only' }))
+  })
+
+  it('is refused for a caller with no pane too', async () => {
+    registerCommand('acme.runner.go', () => {})
+    const { send, opts } = deps(isPlugin)
+    await handleUiInvokeRequest(request('acme.runner.go', ''), opts)
+    expect(send).toHaveBeenCalledWith('ui.invoke.result', expect.objectContaining({ ok: false, code: 'ui_human_only' }))
+  })
+
+  it('still runs from a key', () => {
+    const handler = vi.fn()
+    registerCommand('acme.runner.go', handler)
+    expect(executeCommand('acme.runner.go')).toBe(true)
+    expect(handler).toHaveBeenCalled()
+  })
+
+  it.each([[undefined], [isPlugin]])('leaves a ui.* action exactly as it was (%#)', async (rule) => {
+    registerCommand('ui.tab.switch', () => 'switched')
+    const { send, opts } = deps(rule)
+    await handleUiInvokeRequest(request('ui.tab.switch'), opts)
+    expect(send).toHaveBeenCalledWith('ui.invoke.result', { request_id: 'r', ok: true, result: 'switched', error: null })
+  })
+
+  it('is listed as humanOnly by ui.actions.describe', () => {
+    const [row] = describeUiActions(['acme.runner.go'], undefined, () => ({ title: 'Go', category: 'Runner', humanOnly: true }))
+    expect(row).toMatchObject({ id: 'acme.runner.go', title: 'Go', category: 'Runner', humanOnly: true })
   })
 })

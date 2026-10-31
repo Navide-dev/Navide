@@ -7965,6 +7965,20 @@
       "import-failed": "Falha ao importar",
       "import-done": "{count} regra importada, {rejected} rejeitadas | {count} regras importadas, {rejected} rejeitadas",
       "import-rejected": "Entradas rejeitadas e não importadas ({count}):",
+      "plugin": {
+        "mark": "Plugin do Navide",
+        "not-installed": "Plugin do Navide não instalado",
+        "suggested": "Sugerido: {key}",
+        "use-suggested": "Usar",
+        "suggested-taken": "já em uso",
+        "import-deferred": "Atalhos aguardando um plugin do Navide não instalado: {count}.",
+        "run": {
+          "not-installed": "Este plugin do Navide não está instalado.",
+          "view-not-open": "Abra primeiro a visualização deste plugin do Navide e pressione o atalho de novo.",
+          "view-not-openable": "A visualização deste plugin do Navide não abre com um atalho.",
+          "method-unavailable": "Este comando do plugin do Navide ainda não pode ser executado."
+        }
+      },
       "reset-all": "Restaurar tudo",
       "reset-row": "Restaurar padrão",
       "customized-count": "{count} atalho personalizado | {count} atalhos personalizados",

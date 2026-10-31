@@ -116,8 +116,13 @@ export function describeUiAction(id: string): UiActionInfo {
   }
 }
 
-/** `ids` is the window's registry; a prefix narrows it. */
-export function describeUiActions(ids: readonly string[], prefix?: unknown): UiActionInfo[] {
+/** `ids` is the window's registry; a prefix narrows it. `overlay` lets a
+ *  command the table cannot know, a Navide plugin's, describe itself. */
+export function describeUiActions(
+  ids: readonly string[],
+  prefix?: unknown,
+  overlay?: (id: string) => Partial<UiActionInfo> | undefined,
+): UiActionInfo[] {
   const wanted = typeof prefix === 'string' ? ids.filter((id) => id.startsWith(prefix)) : ids
-  return wanted.map(describeUiAction)
+  return wanted.map((id) => ({ ...describeUiAction(id), ...overlay?.(id) }))
 }
