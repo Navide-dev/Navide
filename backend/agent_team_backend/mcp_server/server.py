@@ -11753,6 +11753,10 @@ async def cli_account_sign_in(
             "error": 'agent and profile_id are required, and mode is "isolated" or "folder"',
             "error_code": "bad-request",
         }
+    from agent_team_backend import api_key_accounts
+
+    if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):
+        return {"ok": False, "error": "this is an API key account; it has no sign-in", "error_code": "api-key-account"}
     reason = " ".join(str(reason or "").split())
     # The cut is disclosed to the user too, not only in this docstring.
     reason_truncated = len(reason) > _SIGN_IN_REASON_MAX

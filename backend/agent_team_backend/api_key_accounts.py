@@ -144,7 +144,22 @@ def is_active_api_key_account(agent_key: str, store: Any) -> bool:
         return False
     doc = store.list()
     active = doc["defaults"].get(agent_key)
-    return any(p.get("id") == active and is_api_key(p) for p in doc["profiles"])
+    keys = [p for p in doc["profiles"] if p.get("agentKey") == agent_key and is_api_key(p)]
+    if not keys:
+        return False
+    return any(p.get("id") == active for p in keys) or _live_key_is_ours(agent_key, keys)
+
+
+def _live_key_is_ours(agent_key: str, keys: list[dict[str, Any]]) -> bool:
+    """A switch that stopped midway leaves one of our keys live while the
+    default still names a login. A key the user set up outside Navide is not
+    ours, and stays as it always was."""
+    try:
+        data = json.loads(_vault().read_live(agent_key).secret or "")
+        live = data.get("OPENAI_API_KEY") if data.get("auth_mode") == "apikey" else None
+    except Exception:  # noqa: BLE001 - a failed read leaves the poll as it was
+        return False
+    return isinstance(live, str) and any(live[-4:] == p.get("last4") for p in keys)
 
 
 def held_from_auto_switch(slot_id: str) -> bool:
@@ -305,22 +320,29 @@ def _record_move(service: Any, incident: Any, profile_id: str) -> None:
 
 
 async def take_over(service: Any, incident: Any) -> bool:
-    """Every login is out: move claude's panes to an API key account the user
-    opened to this. Claude's live login is never swapped for a key, so instead
-    of a transaction the new default goes to ``paneDefaults`` and each window
-    reopens its panes through the same path as "continue with this account".
-    Counts against the automatic-switch budget like any other swap."""
+    """Every login is out: move the panes on claude's live login to an API key
+    account the user opened to this. Claude's live login is never swapped for a
+    key, so instead of a transaction the new default goes to ``paneDefaults``
+    and each window reopens its panes, leaving any that are busy.
+
+    Runs only when the live login itself ran out: a pinned account running out
+    leaves the live login's quota unspent, and that must cost nothing. Counts
+    against the automatic-switch budget like any other swap."""
     from . import app
 
-    if incident.agent_key != "claude":
+    if incident.agent_key != "claude" or incident.outgoing_slot_id != service._current_slot("claude"):
         return False
     target = next(
         (p for p in _store().list()["profiles"]
-         if p.get("agentKey") == "claude" and is_api_key(p) and p.get("autoSwitch") is True),
+         if p.get("agentKey") == "claude" and is_api_key(p) and p.get("autoSwitch") is True
+         and p.get("id") != incident.outgoing_slot_id),
         None,
     )
     if target is None or login_policy_blocks("claude"):
         return False
+    if service.audit_degraded:
+        service._stop_incident(incident, "api-key-takeover-paused")
+        return True
     if service._budget_retry_after("claude", incident.auth_scope) > 0:
         service._stop_incident(incident, "auto_budget_exhausted")
         return True
@@ -331,10 +353,18 @@ async def take_over(service: Any, incident: Any) -> bool:
         _record_move(service, incident, target["id"])
     except Exception as err:  # noqa: BLE001
         log.warning("api key takeover not recorded (%s)", type(err).__name__)
-        service._stop_incident(incident, "audit-write-failed")
+        service._stop_incident(incident, "api-key-takeover-unrecorded")
         return True
-    _store().set_pane_default("claude", target["id"])
-    panes = [row["paneId"] for row in service._affected_terminals(incident.auth_scope) if row.get("paneId")]
+    try:
+        _store().set_pane_default("claude", target["id"])
+    except Exception as err:  # noqa: BLE001
+        log.warning("api key takeover not applied (%s)", type(err).__name__)
+        service._stop_incident(incident, "api-key-takeover-failed")
+        return True
+    panes = [
+        row["paneId"] for row in service._affected_terminals(incident.auth_scope)
+        if row.get("paneId") and row.get("credentialSource") == "vault"
+    ]
     service._stop_incident(incident, "api-key-takeover")
     await app.broadcast_main_windows(make_event(TAKEOVER_EVENT, {
         "agentKey": "claude", "profileId": target["id"], "name": target.get("name"), "paneIds": panes,
@@ -427,6 +457,10 @@ def replace_secret(profile_id: Any, secret: Any) -> dict[str, Any]:
 def delete(profile_id: Any) -> None:
     profile = _require(profile_id)
     _refuse_if_live(profile)
+    from .ws_handlers import _running_account_dir_terminals, _running_login_terminals
+
+    if _running_login_terminals(profile["agentKey"], profile["id"]) or _running_account_dir_terminals(profile["id"]):
+        raise ApiKeyError("account-in-use", "A pane is using this account. Close it before deleting the account.")
     # The secret goes first: a failure keeps the account, so the key is never
     # left behind with nothing in the app pointing at it.
     _write_key(profile["agentKey"], profile["id"], None)

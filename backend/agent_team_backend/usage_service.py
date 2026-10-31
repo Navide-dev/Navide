@@ -1312,6 +1312,7 @@ class UsageService:
         vault = _get_credential_vault()
         signed_in = getattr(vault, "account_dir_signed_in", None)
         path_of = getattr(vault, "account_dir_path", None)
+        is_api_key_slot = getattr(vault, "is_api_key_slot", None)
         if not callable(signed_in) or not callable(path_of):
             return []
 
@@ -1320,6 +1321,8 @@ class UsageService:
             for slot_id in slot_ids:
                 if slot_id == "__default__":
                     continue
+                if is_api_key_slot is not None and is_api_key_slot("claude", slot_id):
+                    continue  # Reading /usage there would boot a CLI on the key.
                 try:
                     if signed_in(slot_id):
                         found.append((slot_id, path_of(slot_id)))

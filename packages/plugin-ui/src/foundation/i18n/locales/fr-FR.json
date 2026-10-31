@@ -9301,6 +9301,10 @@
         "manual-only": "{agent} ne peut être changé que manuellement.",
         "unverified-adapter": "Le changement de compte de {agent} n’est pas vérifié sur cette plateforme ; changez manuellement.",
         "no-resume": "{agent} ne peut pas reprendre sa conversation automatiquement. Changez manuellement pour conserver cette fenêtre et ouvrir une nouvelle conversation.",
+        "api-key-takeover": "Les volets utilisent maintenant un compte à clé API, facturé à l’usage.",
+        "api-key-takeover-paused": "L’historique des bascules ne peut pas être écrit : la bascule automatique est suspendue. Rien n’est passé sur le compte à clé API.",
+        "api-key-takeover-unrecorded": "Le passage au compte à clé API n’a pas pu être enregistré : rien n’a changé.",
+        "api-key-takeover-failed": "Le passage au compte à clé API a échoué. Rien n’a changé, mais il compte dans la limite de bascules automatiques.",
         "no-candidate": "Aucun compte vers lequel basculer. Connectez-vous à un autre compte ou attendez la réinitialisation.",
         "auto_budget_exhausted": "Limite de changements automatiques atteinte. Changez manuellement ou attendez la fin de la fenêtre.",
         "chained-exhaustion": "{target} est aussi épuisé. Rien d’autre n’a été tenté.",
@@ -9656,6 +9660,7 @@
     "failed": "Impossible de reconnecter cette conversation : sa transcription n’existe peut-être plus."
   },
   "cli-account": {
+    "api-key-takeover-partial": "Quota épuisé. Les nouveaux volets utilisent {name}, facturé à l’usage. {count} volets occupés restent inchangés.",
     "api-key-login-back": "Votre quota d’abonnement est de retour. Les volets restent sur la clé API jusqu’à ce que vous reveniez en arrière dans Comptes.",
     "api-key-takeover": "Quota épuisé. Les volets utilisent maintenant {name}, facturé à l’usage. Revenez en arrière dans Comptes après la réinitialisation.",
     "default": "Connexion d’origine",

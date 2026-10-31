@@ -9301,6 +9301,10 @@
         "manual-only": "{agent} solo se puede cambiar manualmente.",
         "unverified-adapter": "El cambio de cuenta de {agent} no está verificado en esta plataforma; cámbiala manualmente.",
         "no-resume": "{agent} no puede reanudar su conversación automáticamente. Cámbiala manualmente para conservar esta ventana y abrir una conversación nueva.",
+        "api-key-takeover": "Los paneles usan ahora una cuenta con clave de API, con facturación por uso.",
+        "api-key-takeover-paused": "No se puede escribir el historial de cambios, así que el cambio automático está en pausa. No se cambió a la cuenta con clave de API.",
+        "api-key-takeover-unrecorded": "No se pudo registrar el cambio a la cuenta con clave de API, así que no se cambió.",
+        "api-key-takeover-failed": "El cambio a la cuenta con clave de API falló. No se cambió, pero cuenta para el límite de cambios automáticos.",
         "no-candidate": "No hay ninguna cuenta a la que cambiar. Inicia sesión en otra cuenta o espera al restablecimiento.",
         "auto_budget_exhausted": "Se ha alcanzado el límite de cambios automáticos. Cambia manualmente o espera a que pase la ventana.",
         "chained-exhaustion": "{target} también se ha agotado. No se ha probado nada más.",
@@ -9656,6 +9660,7 @@
     "failed": "No se pudo volver a conectar esa conversación: puede que su transcripción ya no exista"
   },
   "cli-account": {
+    "api-key-takeover-partial": "Cuota agotada. Los paneles nuevos usan {name}, con facturación por uso. {count} paneles ocupados siguen igual.",
     "api-key-login-back": "Tu cuota de suscripción ha vuelto. Los paneles siguen con la clave de API hasta que cambies en Cuentas.",
     "api-key-takeover": "Cuota agotada. Los paneles usan ahora {name}, con facturación por uso. Vuelve a cambiar en Cuentas cuando se restablezca.",
     "default": "Inicio de sesión original",

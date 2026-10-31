@@ -394,7 +394,7 @@ import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import { useApiKeyTakeover, useLoginResetNotice } from './composables/useApiKeyTakeover'
-import { usageVersion } from './composables/useUsage'
+import { exhaustedWindow, usageVersion } from './composables/useUsage'
 import {
   useQuotaFailover,
   type HotSwitchedPane,
@@ -8928,11 +8928,17 @@ async function confirmBatchRebuild(count: number): Promise<boolean> {
 // conversation, or sign an account in inside its own dir. Neither touches the
 // live credential or any other pane.
 useApiKeyTakeover(backend, {
-  ownsPane: (paneId) => panes.value.some((p) => p.id === paneId),
+  ownsPane: (paneId) => panes.value.some((p) => p.id === paneId && !p.isLogin),
+  // Never forced: a pane that is running, or holds input or a prompt, stays.
   reopen: (paneId, profileId) =>
-    rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true }),
-  announce: (name) => {
-    notifyRestore.toast(i18n.global.t('cli-account.api-key-takeover', { name }), { type: 'info' })
+    rebuildPaneViaResume(paneId, { profileId, suppressBusyToast: true, offerContinue: true, freshWhenNoTranscript: true }),
+  announce: (name, stayed) => {
+    notifyRestore.toast(
+      stayed > 0
+        ? i18n.global.t('cli-account.api-key-takeover-partial', { name, count: stayed })
+        : i18n.global.t('cli-account.api-key-takeover', { name }),
+      { type: 'info' }
+    )
   },
 })
 
@@ -8948,7 +8954,9 @@ useLoginResetNotice(usageVersion, {
   ],
   isSpent: (agentKey, profileId) => {
     const snap = accountUsageFor(agentKey, profileId)
-    return snap ? isExhausted(snap) : null
+    if (!snap) return null
+    const resetsAt = exhaustedWindow(snap)?.resetsAt
+    return isExhausted(snap) && !(resetsAt && Date.parse(resetsAt) <= Date.now())
   },
   announce: () => {
     notifyRestore.toast(i18n.global.t('cli-account.api-key-login-back'), { type: 'info' })

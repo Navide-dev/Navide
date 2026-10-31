@@ -9301,6 +9301,10 @@
         "manual-only": "{agent} 只能手動切換帳號。",
         "unverified-adapter": "{agent} 的帳號切換在此平台尚未驗證；請手動切換。",
         "no-resume": "{agent} 無法自動接續對話。請手動切換：保留此視窗並另開新對話。",
+        "api-key-takeover": "pane 已換到 API key 帳號，改為依用量計費。",
+        "api-key-takeover-paused": "切換紀錄暫時寫不進去，自動切換已暫停，沒有換到 API key 帳號。",
+        "api-key-takeover-unrecorded": "無法記錄換到 API key 帳號的動作，所以沒有換。",
+        "api-key-takeover-failed": "換到 API key 帳號失敗，沒有換。這次仍計入自動切換次數。",
         "no-candidate": "沒有可切換的帳號。可登入其他帳號，或等待重置。",
         "auto_budget_exhausted": "已達自動切換上限。可手動切換，或等窗口過期。",
         "chained-exhaustion": "{target} 也已耗盡。未再嘗試其他帳號。",
@@ -9656,6 +9660,7 @@
     "failed": "無法接回這段對話，其歷史紀錄可能已不存在"
   },
   "cli-account": {
+    "api-key-takeover-partial": "額度已用完，新 pane 會用 {name}，改為依用量計費。有 {count} 個忙碌中的 pane 維持原狀。",
     "api-key-login-back": "訂閱額度已恢復。pane 仍在使用 API key，要換回請到帳號頁。",
     "api-key-takeover": "額度已用完，pane 已換到 {name}，改為依用量計費。額度重置後請到帳號頁換回。",
     "default": "原始登入",

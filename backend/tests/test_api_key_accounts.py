@@ -324,13 +324,20 @@ def test_logins_come_before_keys(store: CliProfilesStore) -> None:
 
 
 class _Service:
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, panes: list[dict] | None = None) -> None:
         self.stopped: list[str] = []
         self.store = quota_failover.QuotaFailoverStore(Database(tmp_path / "failover.db"))
         self._now = lambda: 1_000_000.0
+        self.audit_degraded: str | None = None
+        self.panes = panes if panes is not None else [
+            {"paneId": "p1", "credentialSource": "vault"}, {"paneId": "p2", "credentialSource": "vault"},
+        ]
+
+    def _current_slot(self, agent_key: str) -> str:
+        return str(app.cli_profiles_store.list()["defaults"].get(agent_key) or "__default__")
 
     def _affected_terminals(self, auth_scope: str) -> list[dict]:
-        return [{"paneId": "p1"}, {"paneId": "p2"}]
+        return self.panes
 
     def _stop_incident(self, incident: object, reason: str) -> None:
         self.stopped.append(reason)
@@ -340,9 +347,9 @@ class _Service:
         return 1.0 if len(used) >= quota_failover.AUTO_BUDGET_MAX else 0.0
 
 
-def _incident(agent: str = "claude", number: int = 1) -> SimpleNamespace:
+def _incident(agent: str = "claude", number: int = 1, outgoing: str = "__default__") -> SimpleNamespace:
     return SimpleNamespace(
-        id=f"i{number}", agent_key=agent, auth_scope=agent, outgoing_slot_id="__default__", epoch=0,
+        id=f"i{number}", agent_key=agent, auth_scope=agent, outgoing_slot_id=outgoing, epoch=0,
     )
 
 
@@ -413,7 +420,7 @@ def test_a_move_that_cannot_be_counted_is_not_made(
 
     monkeypatch.setattr(service.store, "record", broken)
     assert asyncio.run(ak.take_over(service, _incident())) is True
-    assert service.stopped == ["audit-write-failed"]
+    assert service.stopped == ["api-key-takeover-unrecorded"]
     assert events == []
     assert store.get_pane_default("claude") is None
 
@@ -810,6 +817,178 @@ def test_an_agent_cannot_switch_to_a_key(store: CliProfilesStore) -> None:
     ctx = SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
 
     answer = asyncio.run(server.cli_account_switch(ctx, agent="claude", profile_id=key, reason="out of quota"))
+
+    assert answer["error_code"] == "api-key-account"
+    agent_messaging._reset_for_test()
+
+
+# ── Review n14 ───────────────────────────────────────────────────────────────
+
+
+def test_the_generic_delete_refuses_a_key(store: CliProfilesStore, vault: CredentialVault) -> None:
+    """S1: it archives the slot, which would leave the key behind in a .deleted dir."""
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    sent: list[dict] = []
+
+    class Session:
+        async def send_json(self, frame: dict) -> None:
+            sent.append(frame)
+
+    asyncio.run(ws_handlers.cli_profiles_delete(Session(), "m1", "cli_profiles.delete", {"id": key}))
+
+    assert "API_KEY_ACCOUNT" in json.dumps(sent)
+    assert store.get(key) is not None
+    assert ak.read_secret(store.get(key)) == ANTHROPIC_KEY
+
+
+def test_a_key_left_live_after_a_failed_switch_is_not_probed(
+    store: CliProfilesStore, vault: CredentialVault
+) -> None:
+    """S6: live holds the key while the default still names a login."""
+    profile = ak.create("codex", "a", OPENAI_KEY)
+    vault.write_live("codex", vault.read_slot("codex", profile["id"]))
+    assert ak.is_active_api_key_account("codex", store) is True
+
+
+def test_a_key_from_outside_navide_is_left_as_it_was(store: CliProfilesStore, vault: CredentialVault) -> None:
+    """Not one of our accounts: main's behaviour stands."""
+    ak.create("codex", "a", OPENAI_KEY)
+    other = OPENAI_KEY[:-4] + "ZZZZ"
+    vault.write_live("codex", LiveCredentials(secret=json.dumps({"auth_mode": "apikey", "OPENAI_API_KEY": other})))
+    assert ak.is_active_api_key_account("codex", store) is False
+
+
+def test_no_key_accounts_means_no_new_read(store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch) -> None:
+    def untouched(*args: object, **kwargs: object) -> None:
+        raise AssertionError("read live")
+
+    monkeypatch.setattr(vault, "read_live", untouched)
+    assert ak.is_active_api_key_account("codex", store) is False
+
+
+def test_the_poll_never_boots_claude_on_a_key(store: CliProfilesStore, vault: CredentialVault) -> None:
+    """B1: reading /usage there starts a whole Claude Code and calls the helper."""
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    vault.prepare_account_dir(key)
+    service = usage_service.UsageService()
+    assert asyncio.run(service._claude_account_dirs([key])) == []
+
+
+def _running_pane(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ws_handlers, "_running_account_dir_terminals", lambda slot: ["t1"])
+
+
+def test_delete_refuses_while_a_pane_runs_on_the_key(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S2: the helper is removed and that pane's next request fails."""
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    _running_pane(monkeypatch)
+    with pytest.raises(ak.ApiKeyError) as err:
+        ak.delete(key)
+    assert err.value.code == "account-in-use"
+    assert store.get(key) is not None
+    assert ak.read_secret(store.get(key)) == ANTHROPIC_KEY
+
+
+def _opened_key(store: CliProfilesStore) -> str:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    ak.update(key, {"autoSwitch": True})
+    return key
+
+
+def test_a_pinned_account_running_out_spends_nothing(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """B2: the live login still has quota, so no money moves."""
+    _opened_key(store)
+    work = store.create(agent_key="claude", name="Work")["id"]
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+
+    assert asyncio.run(ak.take_over(service, _incident(outgoing=work))) is False
+
+    assert events == []
+    assert store.get_pane_default("claude") is None
+    assert service.store.automatic_swaps("claude", "claude", since=0.0) == []
+
+
+def test_take_over_moves_only_panes_on_the_live_login(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """B2: a pane on a pinned account or already on a key stays where it is."""
+    _opened_key(store)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path, panes=[
+        {"paneId": "live", "credentialSource": "vault"},
+        {"paneId": "pinned", "credentialSource": "account-dir"},
+        {"paneId": "env", "credentialSource": "env-override"},
+    ])
+
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+
+    takeover = next(e for e in events if e["type"] == ak.TAKEOVER_EVENT)
+    assert takeover["payload"]["paneIds"] == ["live"]
+
+
+def test_take_over_never_targets_the_account_that_ran_out(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """B2: a key that reported the incident is not its own way out."""
+    key = _opened_key(store)
+    store.set_default("claude", None)
+    monkeypatch.setattr(store, "list", lambda real=store.list: {**real(), "defaults": {"claude": key}})
+    events = _capture_events(monkeypatch)
+
+    assert asyncio.run(ak.take_over(_Service(tmp_path), _incident(outgoing=key))) is False
+    assert events == []
+
+
+def test_take_over_stops_while_the_audit_is_paused(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """S3(b): begin_switch refuses here, so this path must too."""
+    _opened_key(store)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.audit_degraded = "disk full"
+
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+
+    assert service.stopped == ["api-key-takeover-paused"]
+    assert events == []
+    assert store.get_pane_default("claude") is None
+
+
+def test_a_failed_default_write_stops_cleanly(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """S3(a): the error must end the incident, not escape from report()."""
+    _opened_key(store)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+
+    def broken(*args: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(store, "set_pane_default", broken)
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert service.stopped == ["api-key-takeover-failed"]
+    assert events == []
+
+
+def test_an_agent_cannot_start_a_sign_in_on_a_key(store: CliProfilesStore) -> None:
+    """S5: a login over the slot would replace the key and leave authKind behind."""
+    from agent_team_backend import agent_messaging
+    from agent_team_backend.mcp_server import server, wiring
+
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    agent_messaging._reset_for_test()
+    agent_messaging.register("pa", "caller", "ws", agent_key="claude")
+    params = {"pane": "pa", "t": wiring.caller_token("pa")}
+    ctx = SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
+
+    answer = asyncio.run(server.cli_account_sign_in(ctx, agent="claude", profile_id=key, reason="sign in"))
 
     assert answer["error_code"] == "api-key-account"
     agent_messaging._reset_for_test()

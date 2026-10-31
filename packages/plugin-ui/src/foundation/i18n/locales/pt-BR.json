@@ -9301,6 +9301,10 @@
         "manual-only": "{agent} só pode ser trocado manualmente.",
         "unverified-adapter": "A troca de conta de {agent} não foi verificada nesta plataforma; troque manualmente.",
         "no-resume": "{agent} não consegue retomar a conversa automaticamente. Troque manualmente para manter esta janela e abrir uma nova conversa.",
+        "api-key-takeover": "Os painéis agora usam uma conta de chave de API, com cobrança por uso.",
+        "api-key-takeover-paused": "Não foi possível gravar o histórico de trocas, então a troca automática está pausada. Nada foi movido para a conta de chave de API.",
+        "api-key-takeover-unrecorded": "Não foi possível registrar a troca para a conta de chave de API, então nada mudou.",
+        "api-key-takeover-failed": "A troca para a conta de chave de API falhou. Nada mudou, mas ela conta para o limite de trocas automáticas.",
         "no-candidate": "Não há conta para a qual trocar. Entre em outra conta ou aguarde a redefinição.",
         "auto_budget_exhausted": "Limite de trocas automáticas atingido. Troque manualmente ou aguarde o fim da janela.",
         "chained-exhaustion": "{target} também ficou sem cota. Nada mais foi tentado.",
@@ -9656,6 +9660,7 @@
     "failed": "Não foi possível reconectar essa conversa – a transcrição dela pode não existir mais"
   },
   "cli-account": {
+    "api-key-takeover-partial": "Cota esgotada. Novos painéis usam {name}, com cobrança por uso. {count} painéis ocupados continuam como estavam.",
     "api-key-login-back": "Sua cota de assinatura voltou. Os painéis continuam na chave de API até você voltar em Contas.",
     "api-key-takeover": "Cota esgotada. Os painéis agora usam {name}, com cobrança por uso. Volte em Contas depois que a cota for redefinida.",
     "default": "Login original",
