@@ -6,6 +6,7 @@ from mcp.server.fastmcp import FastMCP
 
 from agent_team_backend.mcp_server import server as plan_mcp
 from agent_team_backend.plugins.builtin.navide_plans import plan_tools
+from agent_team_backend.plugins.builtin.navide_skills import skills_tools
 
 MCP_TOOLS = [
     "cli_account_sign_in",
@@ -103,7 +104,12 @@ MCP_TOOLS = [
     "share_create",
     "share_list",
     "share_revoke",
+    "skills_inspect",
+    "skills_install",
+    "skills_install_status",
     "skills_list",
+    "skills_prepare_install",
+    "skills_set_delivery",
     "stage_define",
     "ui_diagnostics",
     "ui_invoke",
@@ -121,8 +127,11 @@ MCP_TOOLS = [
 
 
 async def test_mcp_tool_names_are_pinned() -> None:
-    plans = FastMCP("plan-tools")
-    plan_tools.install(plans)
+    # The built-in plugins install onto the server at startup; other tests in
+    # the run may have done so too, so install them on a fresh one and union.
+    builtin = FastMCP("builtin-tools")
+    plan_tools.install(builtin)
+    skills_tools.install(builtin)
     names = {tool.name for tool in await plan_mcp.server.list_tools()}
-    names |= {tool.name for tool in await plans.list_tools()}
+    names |= {tool.name for tool in await builtin.list_tools()}
     assert sorted(names) == MCP_TOOLS
