@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "Botones de acción",
+    "settings-hint": "Los botones que añadas aquí se colocan a la derecha de las pestañas del escenario y ejecutan una acción.",
+    "empty": "Aún no hay botones de acción.",
+    "name-placeholder": "Nombre del botón",
+    "action-placeholder": "Elige una acción…",
+    "add": "Añadir",
+    "remove": "Quitar",
+    "hide": "Ocultar la barra de botones de acción",
+    "save-failed": "No se pudieron guardar los botones de acción",
+    "source-mine": "Añadido por ti",
+    "source-plugin": "Del plugin de Navide {name}",
+    "unavailable": "Esta acción no está disponible ahora"
+  },
   "convenience": {
     "switch-back-failed": "No se pudo volver a cambiar: {detail}",
     "notice": {

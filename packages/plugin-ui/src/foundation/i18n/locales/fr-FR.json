@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "Boutons d’action",
+    "settings-hint": "Les boutons ajoutés ici se placent à droite des onglets de la scène et lancent une action.",
+    "empty": "Aucun bouton d’action pour l’instant.",
+    "name-placeholder": "Nom du bouton",
+    "action-placeholder": "Choisir une action…",
+    "add": "Ajouter",
+    "remove": "Retirer",
+    "hide": "Masquer la barre de boutons d’action",
+    "save-failed": "Impossible d’enregistrer les boutons d’action",
+    "source-mine": "Ajouté par vous",
+    "source-plugin": "Du plugin Navide {name}",
+    "unavailable": "Cette action n’est pas disponible pour le moment"
+  },
   "convenience": {
     "switch-back-failed": "Impossible de revenir en arrière : {detail}",
     "notice": {

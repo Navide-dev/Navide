@@ -116,6 +116,30 @@ export function describeUiAction(id: string): UiActionInfo {
   }
 }
 
+/** The `ui.*` actions worth a button: they open something and need no args. */
+const BUTTON_UI_ACTIONS = new Set([
+  'ui.plugins.openDeveloperMode',
+  'ui.plugins.openInstallFromFile',
+  'ui.plugins.openMarketplace',
+  'ui.settings.open',
+  'ui.window.openGit',
+  'ui.window.openPipeline',
+  'ui.window.openPlans',
+  'ui.window.openResourceManager',
+  'ui.window.openTurnStats',
+])
+
+/** What Settings offers for a button: keyboard commands, plugin commands and
+ *  the `ui.*` actions above, never one that ui_invoke routes to its own tool. */
+export function buttonActions(
+  ids: readonly string[],
+  overlay?: (id: string) => Partial<UiActionInfo> | undefined,
+): UiActionInfo[] {
+  return describeUiActions(ids, undefined, overlay).filter((action) =>
+    !action.dedicatedTool && (!action.id.startsWith('ui.') || BUTTON_UI_ACTIONS.has(action.id)),
+  )
+}
+
 /** `ids` is the window's registry; a prefix narrows it. `overlay` lets a
  *  command the table cannot know, a Navide plugin's, describe itself. */
 export function describeUiActions(

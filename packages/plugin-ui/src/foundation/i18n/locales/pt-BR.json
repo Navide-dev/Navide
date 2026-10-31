@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "Botões de ação",
+    "settings-hint": "Os botões adicionados aqui ficam à direita das abas do palco e executam uma ação.",
+    "empty": "Ainda não há botões de ação.",
+    "name-placeholder": "Nome do botão",
+    "action-placeholder": "Escolha uma ação…",
+    "add": "Adicionar",
+    "remove": "Remover",
+    "hide": "Ocultar a barra de botões de ação",
+    "save-failed": "Não foi possível salvar os botões de ação",
+    "source-mine": "Adicionado por você",
+    "source-plugin": "Do plugin do Navide {name}",
+    "unavailable": "Esta ação não está disponível agora"
+  },
   "convenience": {
     "switch-back-failed": "Não foi possível voltar: {detail}",
     "notice": {

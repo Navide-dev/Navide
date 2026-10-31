@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "操作按钮",
+    "settings-hint": "在这里添加的按钮会放在舞台标签栏右端，按下即执行一个操作。",
+    "empty": "还没有操作按钮。",
+    "name-placeholder": "按钮名称",
+    "action-placeholder": "选择操作…",
+    "add": "添加",
+    "remove": "移除",
+    "hide": "隐藏操作按钮栏",
+    "save-failed": "无法保存操作按钮",
+    "source-mine": "你自己添加的",
+    "source-plugin": "来自 Navide 插件 {name}",
+    "unavailable": "这个操作目前无法使用"
+  },
   "convenience": {
     "switch-back-failed": "无法切换回原账号：{detail}",
     "notice": {

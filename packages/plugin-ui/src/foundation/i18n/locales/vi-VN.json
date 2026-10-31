@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "Nút hành động",
+    "settings-hint": "Các nút thêm ở đây nằm ở đầu phải của thanh tab sân khấu và chạy một hành động.",
+    "empty": "Chưa có nút hành động nào.",
+    "name-placeholder": "Tên nút",
+    "action-placeholder": "Chọn hành động…",
+    "add": "Thêm",
+    "remove": "Xóa",
+    "hide": "Ẩn thanh nút hành động",
+    "save-failed": "Không thể lưu các nút hành động",
+    "source-mine": "Do bạn thêm",
+    "source-plugin": "Từ plugin Navide {name}",
+    "unavailable": "Hành động này hiện không khả dụng"
+  },
   "convenience": {
     "switch-back-failed": "Không chuyển lại được: {detail}",
     "notice": {

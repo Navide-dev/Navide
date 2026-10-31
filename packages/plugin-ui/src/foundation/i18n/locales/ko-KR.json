@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "작업 버튼",
+    "settings-hint": "여기서 추가한 버튼은 스테이지 탭 오른쪽 끝에 놓이고, 누르면 작업 하나를 실행해요.",
+    "empty": "작업 버튼이 아직 없어요.",
+    "name-placeholder": "버튼 이름",
+    "action-placeholder": "작업 선택…",
+    "add": "추가",
+    "remove": "제거",
+    "hide": "작업 버튼 막대 숨기기",
+    "save-failed": "작업 버튼을 저장하지 못했어요",
+    "source-mine": "직접 추가함",
+    "source-plugin": "Navide 플러그인 {name}에서 추가",
+    "unavailable": "이 작업은 지금 사용할 수 없어요"
+  },
   "convenience": {
     "switch-back-failed": "되돌리지 못했어요: {detail}",
     "notice": {

@@ -1,4 +1,18 @@
 {
+  "actionBar": {
+    "settings-title": "Aktionsschaltflächen",
+    "settings-hint": "Hier hinzugefügte Schaltflächen stehen rechts neben den Bühnen-Tabs und führen eine Aktion aus.",
+    "empty": "Noch keine Aktionsschaltflächen.",
+    "name-placeholder": "Name der Schaltfläche",
+    "action-placeholder": "Aktion auswählen…",
+    "add": "Hinzufügen",
+    "remove": "Entfernen",
+    "hide": "Aktionsleiste ausblenden",
+    "save-failed": "Aktionsschaltflächen konnten nicht gespeichert werden",
+    "source-mine": "Von dir hinzugefügt",
+    "source-plugin": "Vom Navide-Plugin {name}",
+    "unavailable": "Diese Aktion ist gerade nicht verfügbar"
+  },
   "convenience": {
     "switch-back-failed": "Zurückwechseln fehlgeschlagen: {detail}",
     "notice": {
