@@ -64,7 +64,7 @@ jobs:
       matrix:
         include:
           - target: darwin-arm64
-            runner: macos-14
+            runner: macos-15
             timeout: 45
           - target: darwin-x64
             # Intel macOS image; release.yml has no darwin-x64 job to copy.
