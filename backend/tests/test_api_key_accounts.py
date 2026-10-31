@@ -8,12 +8,13 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import agent_team_backend.app as app
 from agent_team_backend import api_key_accounts as ak
-from agent_team_backend import ws_handlers
+from agent_team_backend import quota_failover, usage_service, ws_handlers
 from agent_team_backend.credential_vault import CredentialVault, CredentialVaultError, LiveCredentials
 from agent_team_backend.profiles_store import CliProfilesStore
 
@@ -32,6 +33,7 @@ def vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> CredentialVault:
         platform="linux",
     )
     monkeypatch.setattr(app, "credential_vault", v)
+    monkeypatch.setattr(ak, "_codex_system_config", lambda: tmp_path / "system-config.toml")
     return v
 
 
@@ -302,6 +304,213 @@ def test_a_login_profile_has_no_kind_and_no_marker(store: CliProfilesStore, vaul
     assert vault.is_api_key_slot("codex", login["id"]) is False
 
 
+# ── Codex: the key lives in the slot and takes the existing switch ───────────
+
+
+def _slot_doc(vault: CredentialVault, slot_id: str) -> dict | None:
+    secret = vault.read_slot("codex", slot_id).secret
+    return None if secret is None else json.loads(secret)
+
+
+def _login_auth(token: str) -> str:
+    return json.dumps({"auth_mode": "chatgpt", "tokens": {"access_token": token}})
+
+
+def test_codex_key_is_the_auth_json_codex_writes(store: CliProfilesStore, vault: CredentialVault) -> None:
+    profile = ak.create("codex", "專案", OPENAI_KEY, 20)
+
+    assert _slot_doc(vault, profile["id"]) == {"auth_mode": "apikey", "OPENAI_API_KEY": OPENAI_KEY}
+    assert profile["last4"] == "9C1B"
+    assert OPENAI_KEY not in json.dumps(store.list())
+    assert ak.read_secret(profile) == OPENAI_KEY
+    assert vault.read_app_secret(ak.SECRET_NAME_PREFIX + profile["id"]) is None
+    assert vault.identity("codex", profile["id"]) == {"email": None, "signedIn": True}
+    assert not vault._api_key_slot_marker("codex", profile["id"]).exists()
+
+
+def test_codex_failed_slot_write_leaves_no_account(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError(OPENAI_KEY)
+
+    monkeypatch.setattr(vault, "write_slot", boom)
+    with pytest.raises(ak.ApiKeyError) as err:
+        ak.create("codex", "a", OPENAI_KEY)
+    assert err.value.code == "store-failed"
+    assert OPENAI_KEY not in err.value.message
+    assert store.list()["profiles"] == []
+
+
+def test_codex_anthropic_key_is_refused(store: CliProfilesStore) -> None:
+    with pytest.raises(ak.ApiKeyError) as err:
+        ak.create("codex", "a", ANTHROPIC_KEY)
+    assert err.value.code == "wrong-vendor"
+    assert store.list()["profiles"] == []
+
+
+def test_codex_switch_captures_then_restores_both_ways(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    login = store.create(agent_key="codex", name="Login")["id"]
+    key = ak.create("codex", "Key", OPENAI_KEY)["id"]
+    login_auth = _login_auth("fake-login-token")
+    vault.write_live("codex", LiveCredentials(secret=login_auth))
+    calls = _spy(vault, monkeypatch)
+
+    vault.switch("codex", login, key)
+
+    assert calls == ["capture", "restore"]
+    assert json.loads(vault.read_live("codex").secret)["OPENAI_API_KEY"] == OPENAI_KEY
+    assert vault.read_slot("codex", login).secret == login_auth
+
+    vault.switch("codex", key, login)
+
+    assert calls == ["capture", "restore"] * 2
+    assert vault.read_live("codex").secret == login_auth
+    assert _slot_doc(vault, key)["OPENAI_API_KEY"] == OPENAI_KEY
+
+
+def test_codex_replace_and_delete_go_through_the_slot(store: CliProfilesStore, vault: CredentialVault) -> None:
+    profile = ak.create("codex", "a", OPENAI_KEY)
+    fresh = "sk-" + "proj-" + "otherfakeother" + "D4E5"
+
+    assert ak.replace_secret(profile["id"], fresh)["last4"] == "D4E5"
+    assert _slot_doc(vault, profile["id"])["OPENAI_API_KEY"] == fresh
+
+    auth_file = vault.slot_dir("codex", profile["id"]) / "auth.json"
+    assert auth_file.exists()
+    ak.delete(profile["id"])
+    assert store.list()["profiles"] == []
+    assert not auth_file.exists()
+
+
+def test_codex_active_key_is_neither_replaced_nor_deleted(store: CliProfilesStore, vault: CredentialVault) -> None:
+    profile = ak.create("codex", "a", OPENAI_KEY)
+    store.set_default("codex", profile["id"])
+
+    for change in (lambda: ak.replace_secret(profile["id"], OPENAI_KEY), lambda: ak.delete(profile["id"])):
+        with pytest.raises(ak.ApiKeyError) as err:
+            change()
+        assert err.value.code == "account-active"
+    assert _slot_doc(vault, profile["id"])["OPENAI_API_KEY"] == OPENAI_KEY
+    assert store.get(profile["id"]) is not None
+
+
+def test_codex_a_slot_without_the_key_says_so(store: CliProfilesStore, vault: CredentialVault) -> None:
+    profile = ak.create("codex", "a", OPENAI_KEY)
+    vault.write_slot("codex", profile["id"], LiveCredentials(secret=_login_auth("fake-login-token")))
+
+    with pytest.raises(ak.ApiKeyError) as err:
+        ak.read_secret(profile)
+    assert err.value.code == "secret-missing"
+
+
+def _user_config(vault: CredentialVault) -> Path:
+    path = vault._live_file("codex").with_name("config.toml")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+@pytest.mark.parametrize("layer", ["user", "system"])
+@pytest.mark.parametrize(
+    "text", ['forced_login_method = "chatgpt"\n', 'forced_login_method = "api"\n', "not toml ["],
+)
+def test_codex_login_policy_stops_the_new_account(
+    store: CliProfilesStore, vault: CredentialVault, tmp_path: Path, layer: str, text: str
+) -> None:
+    config = _user_config(vault) if layer == "user" else tmp_path / "system-config.toml"
+    config.write_text(text, encoding="utf-8")
+
+    with pytest.raises(ak.ApiKeyError) as err:
+        ak.create("codex", "a", OPENAI_KEY)
+
+    assert err.value.code == "login-policy"
+    assert store.list()["profiles"] == []
+
+
+def test_codex_system_config_location(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ProgramData", raising=False)
+    assert ak._codex_system_config() == Path("/etc/codex/config.toml")
+    monkeypatch.setenv("ProgramData", "D:\\Data")
+    assert ak._codex_system_config() == Path("D:\\Data", "OpenAI", "Codex", "config.toml")
+
+
+def test_codex_config_without_a_login_policy_adds_the_account(store: CliProfilesStore, vault: CredentialVault) -> None:
+    _user_config(vault).write_text('model = "x"\n[profiles.a]\nmodel = "y"\n', encoding="utf-8")
+
+    assert ak.create("codex", "a", OPENAI_KEY)["authKind"] == "api-key"
+
+
+def test_codex_login_policy_leaves_claude_alone(store: CliProfilesStore, vault: CredentialVault) -> None:
+    _user_config(vault).write_text('forced_login_method = "chatgpt"\n', encoding="utf-8")
+
+    assert ak.create("claude", "a", ANTHROPIC_KEY)["authKind"] == "api-key"
+
+
+# ── Quota: a key is not probed, and failover needs the opt-in ────────────────
+
+
+def _poll_codex(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[Path]:
+    """One poll cycle with codex as the only vendor; the homes it read."""
+    read: list[Path] = []
+
+    async def fetch(home: Path) -> dict:
+        read.append(home)
+        return usage_service._snapshot("codex", "ok")
+
+    async def fetch_claude(home: Path) -> dict:
+        return usage_service._snapshot("claude", "no-credentials")
+
+    async def nothing(*args: object) -> None:
+        return None
+
+    spec = SimpleNamespace(fetch_usage=fetch, fetch_usage_from_context=None)
+    monkeypatch.setattr(usage_service, "_CLI_VENDORS", {"codex": spec})
+    monkeypatch.setattr(usage_service, "fetch_claude", fetch_claude)
+    service = usage_service.UsageService()
+    monkeypatch.setattr(service, "_harvest_active_slots", nothing)
+    monkeypatch.setattr(service, "_claude_credentials_by_slot", nothing)
+    monkeypatch.setattr(service, "_file_quota_samples", nothing)
+    asyncio.run(service.poll_once(tmp_path))
+    return read
+
+
+def test_active_codex_key_is_not_probed(
+    store: CliProfilesStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store.set_default("codex", ak.create("codex", "a", OPENAI_KEY)["id"])
+
+    assert _poll_codex(monkeypatch, tmp_path) == []
+
+
+def test_codex_login_is_still_probed_beside_a_parked_key(
+    store: CliProfilesStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ak.create("codex", "a", OPENAI_KEY)
+    store.set_default("codex", store.create(agent_key="codex", name="Login")["id"])
+
+    assert _poll_codex(monkeypatch, tmp_path) == [tmp_path]
+
+
+def test_failover_leaves_a_key_alone_until_opted_in(store: CliProfilesStore, vault: CredentialVault) -> None:
+    key = ak.create("codex", "a", OPENAI_KEY)["id"]
+    state = quota_failover.QuotaFailoverService._login_state
+
+    assert state("codex", key) == "api-key-auto-off"
+    ak.update(key, {"autoSwitch": True})
+    assert state("codex", key) == "ok"
+
+
+def test_failover_reads_a_login_as_before(store: CliProfilesStore, vault: CredentialVault) -> None:
+    login = store.create(agent_key="codex", name="Login")["id"]
+    state = quota_failover.QuotaFailoverService._login_state
+
+    assert state("codex", login) == "signed-out"
+    vault.write_slot("codex", login, LiveCredentials(secret=_login_auth("fake-login-token")))
+    assert state("codex", login) == "ok"
+
+
 # ── Messages ─────────────────────────────────────────────────────────────────
 
 
@@ -361,6 +570,28 @@ def test_test_message_probes_a_stored_key(store: CliProfilesStore, monkeypatch: 
     answer, _ = _call(monkeypatch, "cli_profiles.api_key_test", {"id": profile["id"]})
     assert answer["payload"] == {"ok": True, "result": "ok"}
     assert seen == [("claude", ANTHROPIC_KEY)]
+
+
+def test_codex_messages_refuse_the_active_key_under_the_switch_lock(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    profile = ak.create("codex", "a", OPENAI_KEY)
+    store.set_default("codex", profile["id"])
+
+    frame, _ = _call(monkeypatch, "cli_profiles.api_key_delete", {"id": profile["id"]})
+
+    assert frame["payload"]["error_code"] == "account-active"
+    assert not vault.switch_lock("codex").locked()
+    assert OPENAI_KEY not in json.dumps(frame)
+
+
+def test_codex_messages_delete_a_parked_key(store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = ak.create("codex", "a", OPENAI_KEY)
+
+    frame, _ = _call(monkeypatch, "cli_profiles.api_key_delete", {"id": profile["id"]})
+
+    assert frame["payload"]["ok"] is True
+    assert store.list()["profiles"] == []
 
 
 def test_handlers_are_registered() -> None:
