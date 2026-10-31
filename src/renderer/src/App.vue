@@ -393,7 +393,8 @@ import { useShareNotices } from './composables/useShareNotices'
 import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
-import { useApiKeyTakeover } from './composables/useApiKeyTakeover'
+import { useApiKeyTakeover, useLoginResetNotice } from './composables/useApiKeyTakeover'
+import { usageVersion } from './composables/useUsage'
 import {
   useQuotaFailover,
   type HotSwitchedPane,
@@ -8932,6 +8933,25 @@ useApiKeyTakeover(backend, {
     rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true }),
   announce: (name) => {
     notifyRestore.toast(i18n.global.t('cli-account.api-key-takeover', { name }), { type: 'info' })
+  },
+})
+
+useLoginResetNotice(usageVersion, {
+  agents: ['claude', 'codex'],
+  spendingKey: (agentKey) => {
+    const id = cliProfilesApi.newPaneProfileId(agentKey)
+    return (id ? cliProfilesApi.findProfile(id)?.authKind : undefined) === 'api-key'
+  },
+  logins: (agentKey) => [
+    null,
+    ...cliProfilesApi.profilesForAgent(agentKey).filter((p) => p.authKind !== 'api-key').map((p) => p.id),
+  ],
+  isSpent: (agentKey, profileId) => {
+    const snap = accountUsageFor(agentKey, profileId)
+    return snap ? isExhausted(snap) : null
+  },
+  announce: () => {
+    notifyRestore.toast(i18n.global.t('cli-account.api-key-login-back'), { type: 'info' })
   },
 })
 
