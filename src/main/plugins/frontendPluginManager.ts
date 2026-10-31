@@ -9,6 +9,8 @@
 
 import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents, type WebFrameMain } from 'electron'
 import { warnMain } from '../main-log'
+import type { PluginManifestV2Command } from '../../../packages/plugin-contracts/src/index'
+import type { PluginCommandEntry, PluginCommandRunResult } from '../../shared/pluginCommands'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
 import { validateSupportedLocale, type SupportedLocale } from '../hostLocale'
@@ -268,6 +270,10 @@ export interface PluginLaunchDescriptor {
    *  omit this field and continue to use their single top-level entryFile.
    *  Issue 01 exposes validated metadata only; issue 14 owns runtime instances. */
   views?: PluginViewLaunchDescriptor[]
+  /** Commands the manifest declares; absent when it declares none. */
+  commands?: PluginManifestV2Command[]
+  /** The manifest's name, carried for the commands that show it. */
+  displayName?: string
 }
 
 export interface PluginViewLaunchDescriptor {
@@ -12274,6 +12280,54 @@ export class FrontendPluginManager {
    *  composition. This projection contains no live view identity. */
   listContributionCatalog(): PluginContributionCatalogEntry[] {
     return buildPluginContributionCatalog(this.enabledDescriptors())
+  }
+
+  /** The commands of enabled packages, for the shortcuts page and the keys. */
+  listCommandCatalog(): PluginCommandEntry[] {
+    return this.enabledDescriptors().flatMap((descriptor) =>
+      (descriptor.commands ?? []).map((command) => ({
+        commandId: command.id,
+        title: command.title,
+        pluginId: descriptor.id,
+        pluginName: descriptor.displayName ?? descriptor.id,
+        ...(command.suggestedKey ? { suggestedKey: command.suggestedKey } : {}),
+      }))
+    )
+  }
+
+  /** Decide what one command does in `hostWindow`, delivering its target when
+   *  the view is already there. Opening a window view needs Electron main, so
+   *  that comes back to the caller; a view nobody opened is reported, never
+   *  mounted, because a keystroke does not enable a plugin's view. */
+  resolveCommandRun(
+    hostWindow: BrowserWindow,
+    commandId: string,
+    workspacePath: string,
+  ): PluginCommandRunResult | { ok: true; window: { contributionKey: string; params: Record<string, string> } } {
+    const descriptor = this.enabledDescriptors().find((candidate) =>
+      candidate.commands?.some((command) => command.id === commandId)
+    )
+    const run = descriptor?.commands?.find((command) => command.id === commandId)?.run
+    if (!descriptor || !run) return { ok: false, reason: 'not-installed' }
+    if ('method' in run) return { ok: false, reason: 'method-unavailable' }
+    const view = descriptor.views?.find((candidate) => candidate.id === run.view)
+    if (!view) return { ok: false, reason: 'not-installed' }
+    const params = run.target ?? {}
+    if (view.location === 'window') {
+      return { ok: true, window: { contributionKey: view.contributionKey, params } }
+    }
+    if (view.location === 'detail') return { ok: false, reason: 'view-not-openable' }
+    const record = [...this.running.values()].find((candidate) =>
+      candidate.contributionKey === view.contributionKey &&
+      candidate.hostWindow === hostWindow &&
+      (candidate.workspacePath === null || resolve(candidate.workspacePath) === resolve(workspacePath))
+    )
+    // A main tab is revealed below; any other region shows only what is up.
+    if (!record || (view.location !== 'main' && !record.visible)) {
+      return { ok: false, reason: 'view-not-open' }
+    }
+    if (Object.keys(params).length > 0) this.sendOpenTarget(record, { ...params })
+    return view.location === 'main' ? { ok: true, reveal: view.contributionKey } : { ok: true }
   }
 
   /** Host-only left/detail pairing. The Host supplies opaque live identities;

@@ -20,6 +20,7 @@ import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './
 import { abandonPendingBackends } from './backend-pending'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
+import type { PluginCommandRunResult } from '../shared/pluginCommands'
 import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, openGitPluginView, openGitLeftPluginView, updateGitLeftPluginView, closeGitLeftPluginView, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, registerLegacyBundledGit, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
@@ -4675,6 +4676,21 @@ ipcMain.handle('plugins:prepareContribution', async (event, args: Record<string,
     enterPlansRecovery('guest-prepare-failure')
   }
   return result
+})
+
+/** Run a Navide plugin command for the main window. A keystroke is the only
+ * thing that gets here: ui_invoke refuses these commands in the renderer. */
+ipcMain.handle('plugins:runCommand', async (event, args: Record<string, unknown>): Promise<PluginCommandRunResult> => {
+  const requestingWindow = trustedPluginRegionHost(event)
+  const commandId = typeof args?.commandId === 'string' ? args.commandId : ''
+  const workspacePath = requestingWindow
+    ? registeredGitLeftWorkspace(requestingWindow, args?.workspace_path, mainWindowWorkspaces, normalizeWorkspacePath)
+    : null
+  if (!requestingWindow || !commandId || !workspacePath) return { ok: false, reason: 'view-not-open' }
+  const outcome = frontendPluginManager.resolveCommandRun(requestingWindow, commandId, workspacePath)
+  if (!outcome.ok || !('window' in outcome)) return outcome
+  const opened = await openCatalogContributionWindow(outcome.window.contributionKey, workspacePath, outcome.window.params)
+  return opened.ok ? { ok: true } : { ok: false, reason: 'view-not-open' }
 })
 
 /** Open a catalog window contribution in a dedicated BrowserWindow. Only the

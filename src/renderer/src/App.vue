@@ -368,6 +368,7 @@ import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, his
 import { executeCommand, formatKeySpec, initKeybindingsPort, invokeCommand, listCommands, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
 import { describeUiActions } from './composables/uiActionCatalog'
+import { isPluginCommand, pluginCommandEntry, syncPluginCommands } from './lib/pluginCommands'
 import { WINDOW_INSTANCE_ID } from './lib/windowInstanceId'
 import {
   pluginAgentCaller,
@@ -1262,6 +1263,24 @@ function markPluginIconFailed(entry: Pick<PluginRegionContribution, 'contributio
   const failures = new Set(failedPluginIcons.value)
   failures.add(pluginIconFailureKey(entry))
   failedPluginIcons.value = failures
+}
+
+async function runPluginCommand(commandId: string): Promise<void> {
+  const result = await window.agentTeam?.plugins?.runCommand?.({
+    commandId,
+    workspace_path: currentWorkspace.value.trim(),
+  })
+  if (!result) return
+  if (result.ok) {
+    if (result.reveal) openPluginMainTab(result.reveal)
+    return
+  }
+  notifyRestore.toast(i18n.global.t(`settings.keybindings.plugin.run.${result.reason}`), { type: 'error' })
+}
+
+async function refreshPluginCommands(): Promise<void> {
+  const commands = await window.agentTeam?.plugins?.listCommands?.()
+  syncPluginCommands(commands ?? [], (commandId) => { void runPluginCommand(commandId) })
 }
 
 async function openPluginContributionWindow(contribution: PluginRegionContribution): Promise<void> {
@@ -6565,8 +6584,10 @@ onMounted(() => {
     }
   }) ?? null
   void refreshPluginContributions()
+  void refreshPluginCommands()
   stopPluginContributionChanges = window.agentTeam?.plugins?.onContributionsChanged?.(() => {
     void refreshPluginContributions()
+    void refreshPluginCommands()
   }) ?? null
 })
 onUnmounted(() => {
@@ -11687,7 +11708,10 @@ registerCommand('ui.workspace.receive', async (args) => {
   notifyRestore.toast(i18n.global.t('msg.agent-moved-workspace-in', { caller, name: wsDisplayName(path) }), { type: 'info', duration: 8000 })
   return { path, prepared: 'adopted', opened, not_opened: notOpened }
 })
-registerCommand('ui.actions.describe', (args) => describeUiActions(listCommands(), (args as { prefix?: unknown } | undefined)?.prefix))
+registerCommand('ui.actions.describe', (args) => describeUiActions(listCommands(), (args as { prefix?: unknown } | undefined)?.prefix, (id) => {
+  const plugin = pluginCommandEntry(id)
+  return plugin ? { title: plugin.title, category: plugin.pluginName, humanOnly: true } : undefined
+}))
 registerCommand('ui.layout.setMode', (args) => {
   const mode = (args as { mode?: LayoutMode } | undefined)?.mode
   if (!mode) throw new Error('ui.layout.setMode requires mode')
@@ -11732,6 +11756,7 @@ useUiActionBus({
   currentWorkspace,
   buildSnapshot: buildUiActionSnapshot,
   ownsWorkspace: isLocalWorkspace,
+  isHumanOnlyCommand: isPluginCommand,
   hostsPane: (id) => panes.value.some((p) => p.id === id),
   // What closeActivePane / rebuildFocusedPane would act on, so neither can be
   // aimed at the calling pane by way of the user's focus.

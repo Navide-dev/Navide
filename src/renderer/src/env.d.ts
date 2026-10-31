@@ -445,6 +445,8 @@ declare global {
         disabledBuiltins?: () => Promise<string[]>
         disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
+        listCommands: () => Promise<import('../../shared/pluginCommands').PluginCommandEntry[]>
+        runCommand: (args: { commandId: string; workspace_path: string }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null

@@ -192,6 +192,9 @@ export function manifestToDescriptor(
       entryFile: launchViews[0].entryFile,
       query,
       views: launchViews,
+      ...(manifest.contributes?.commands
+        ? { commands: manifest.contributes.commands, displayName: manifest.name }
+        : {}),
     }
   }
   return {

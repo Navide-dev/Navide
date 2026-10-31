@@ -364,6 +364,8 @@ export interface ImportReport {
   rules: KeybindingRule[]
   /** Human-readable reason per rejected entry, in file order. */
   rejected: string[]
+  /** Commands kept in `rules` though nothing answers them yet. */
+  deferred?: string[]
 }
 
 /**
@@ -378,6 +380,9 @@ export interface ImportReport {
 export function reviewImportedRules(
   text: string,
   catalog: readonly string[] = COMMAND_IDS,
+  /** A command this build may gain later, such as a Navide plugin's that is
+   *  not installed: its rule is kept and named in `deferred`, not rejected. */
+  isDeferred?: (command: string) => boolean,
 ): ImportReport {
   let raw: unknown
   try {
@@ -390,6 +395,7 @@ export function reviewImportedRules(
   const known = new Set(catalog)
   const rules: KeybindingRule[] = []
   const rejected: string[] = []
+  let deferred: string[] | undefined
 
   raw.forEach((item, i) => {
     const at = `#${i + 1}`
@@ -407,16 +413,18 @@ export function reviewImportedRules(
     }
     const target = command.startsWith('-') ? command.slice(1) : command
     if (!target) { rejected.push(`${at}: "-" is not a command`); return }
-    if (!known.has(target)) {
+    const deferredCommand = !known.has(target) && isDeferred?.(target) === true
+    if (!known.has(target) && !deferredCommand) {
       rejected.push(`${at}: unknown command "${target}"`); return
     }
     if (when !== undefined && typeof when !== 'string') {
       rejected.push(`${at}: "when" must be a string`); return
     }
+    if (deferredCommand) (deferred ??= []).push(target)
     rules.push({ key, command, ...(when ? { when } : {}), ...(args !== undefined ? { args } : {}) })
   })
 
-  return { rules, rejected }
+  return { rules, rejected, ...(deferred ? { deferred } : {}) }
 }
 
 export function serializeUserRules(rules: KeybindingRule[]): string {

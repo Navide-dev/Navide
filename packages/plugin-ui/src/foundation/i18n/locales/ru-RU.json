@@ -7965,6 +7965,20 @@
       "import-failed": "Не удалось импортировать",
       "import-done": "Импортировано {count} правило, отклонено: {rejected} | Импортировано {count} правила, отклонено: {rejected} | Импортировано {count} правил, отклонено: {rejected}",
       "import-rejected": "Записи, которые отклонены и не импортированы ({count}):",
+      "plugin": {
+        "mark": "Плагин Navide",
+        "not-installed": "Плагин Navide не установлен",
+        "suggested": "Рекомендуется: {key}",
+        "use-suggested": "Применить",
+        "suggested-taken": "уже занято",
+        "import-deferred": "Сочетания, ожидающие установки плагина Navide: {count}.",
+        "run": {
+          "not-installed": "Этот плагин Navide не установлен.",
+          "view-not-open": "Сначала откройте представление этого плагина Navide, затем снова нажмите сочетание клавиш.",
+          "view-not-openable": "Представление этого плагина Navide нельзя открыть сочетанием клавиш.",
+          "method-unavailable": "Эту команду плагина Navide пока нельзя выполнить."
+        }
+      },
       "reset-all": "Сбросить все",
       "reset-row": "Сбросить по умолчанию",
       "customized-count": "Изменено {count} сочетание | Изменено {count} сочетания | Изменено {count} сочетаний",

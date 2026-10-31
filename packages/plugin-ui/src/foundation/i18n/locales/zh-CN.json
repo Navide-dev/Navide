@@ -7965,6 +7965,20 @@
       "import-failed": "导入失败",
       "import-done": "已导入 {count} 条规则，{rejected} 条被拒绝",
       "import-rejected": "有 {count} 笔被拒绝、未导入：",
+      "plugin": {
+        "mark": "Navide 插件",
+        "not-installed": "未安装的 Navide 插件",
+        "suggested": "建议：{key}",
+        "use-suggested": "应用",
+        "suggested-taken": "已被占用",
+        "import-deferred": "有 {count} 个快捷键要等 Navide 插件安装后才会生效。",
+        "run": {
+          "not-installed": "这个 Navide 插件未安装。",
+          "view-not-open": "请先打开这个 Navide 插件的视图，再按一次快捷键。",
+          "view-not-openable": "这个 Navide 插件的视图无法用快捷键打开。",
+          "method-unavailable": "这个 Navide 插件命令目前还无法执行。"
+        }
+      },
       "reset-all": "全部还原",
       "reset-row": "还原成默认",
       "customized-count": "已自订 {count} 个快捷键",

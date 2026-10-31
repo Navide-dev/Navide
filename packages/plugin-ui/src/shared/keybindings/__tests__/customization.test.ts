@@ -626,3 +626,18 @@ describe('conflict severity across windows', () => {
     expect(findKeyConflicts(rows).find((x) => x.key === 'cmd+j')?.hard).toBe(false)
   })
 })
+
+describe('reviewImportedRules with deferred commands', () => {
+  const file = JSON.stringify([{ key: 'cmd+alt+t', command: 'acme.runner.go' }])
+
+  it('still rejects an unknown command when the caller defers nothing', () => {
+    expect(reviewImportedRules(file)).toEqual({ rules: [], rejected: ['#1: unknown command "acme.runner.go"'] })
+  })
+
+  it('keeps a deferred command and names it', () => {
+    const report = reviewImportedRules(file, [], (id) => id.startsWith('acme.'))
+    expect(report.rules).toEqual([{ key: 'cmd+alt+t', command: 'acme.runner.go' }])
+    expect(report.rejected).toEqual([])
+    expect(report.deferred).toEqual(['acme.runner.go'])
+  })
+})
