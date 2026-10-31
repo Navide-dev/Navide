@@ -29,7 +29,6 @@ import json
 import logging
 import os
 import shlex
-import sys
 import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Mapping
@@ -301,7 +300,7 @@ def write_account_dir_settings(vault: Any, directory: Path, profile_id: str) -> 
 
 def create(agent_key: Any, name: Any, secret: Any, monthly_reminder: Any = None) -> dict[str, Any]:
     agent = _validate_agent(agent_key)
-    if agent == "claude" and sys.platform == "win32":
+    if agent == "claude" and osplat.impl_name == "_windows":
         raise ApiKeyError("unsupported-platform", "API key accounts for Claude Code are not available on Windows yet.")
     clean_name = _validate_name(name)
     reminder = _validate_reminder(monthly_reminder)

@@ -244,7 +244,7 @@ def test_macos_helper_reads_the_keychain_item(tmp_path: Path) -> None:
 
 
 def test_windows_refuses_a_claude_key(store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ak.sys, "platform", "win32")
+    monkeypatch.setattr(ak.osplat, "impl_name", "_windows")
     with pytest.raises(ak.ApiKeyError) as err:
         ak.create("claude", "a", ANTHROPIC_KEY)
     assert err.value.code == "unsupported-platform"
