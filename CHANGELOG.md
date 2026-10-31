@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- Plans (0.2.36): its backend now reaches shared file and version code through `navide_plugin_sdk`, a small versioned Python surface, instead of private names in the core backend. Nothing changes for users; a rename inside the core backend can no longer break Plans.
+
 ## [0.2.35] — 2026-10-31
 
 ### Added
