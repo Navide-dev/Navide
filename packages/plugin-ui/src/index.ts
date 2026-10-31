@@ -54,6 +54,9 @@ export interface AiCliTerminalView {
 
 export interface AiCliTerminalResources {
   openFilePicker?(request: { query: string; candidates: string[]; line?: number }): Promise<void>
+  /** Lets a plugin open a clicked terminal file itself. True means handled;
+   * otherwise the Host picker opens as it would without this. */
+  resolveFileLink?(request: { query: string; candidates: string[]; line?: number }): Promise<boolean>
   openExternal?(url: string): Promise<void>
   openPlan?(path: string): Promise<void>
   listMentionTargets(): Promise<Array<{ address: string; group?: string }>>
