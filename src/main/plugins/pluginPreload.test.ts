@@ -1,8 +1,33 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
 import capabilitiesV1 from '../../../packages/plugin-contracts/src/schemas/capabilities-v1.json'
+import { PLUGIN_API_VERSION } from '../../../packages/plugin-contracts/src/apiVersion'
 import { USER_GESTURE_CAPABILITY_ADDRESSES } from '../../../packages/plugin-contracts/src/userGesture'
 import { PUBLIC_CAPABILITY_CATALOG } from './pluginCapabilityCatalog'
+
+const NAV_SURFACE = [
+  'abortReceiverItem',
+  'acceptExistingReceiverOffer',
+  'apiVersion',
+  'callCapability',
+  'callHostAction',
+  'castCapability',
+  'disposeReceiver',
+  'hideSelf',
+  'listReceiverLeftContributions',
+  'mountReceiver',
+  'on',
+  'onOpenTarget',
+  'onReceiverCloseGuard',
+  'onReceiverEditorTarget',
+  'onReceiverItemClosed',
+  'onReceiverOffer',
+  'openReceiverLeft',
+  'ready',
+  'registerReceiver',
+  'requestCloseReceiver',
+  'requestCloseReceiverTransaction',
+]
 
 const state = vi.hoisted(() => ({
   exposed: null as Record<string, unknown> | null,
@@ -191,6 +216,11 @@ describe('plugin preload Host channels', () => {
       now.mockRestore()
       addEventListener.mockRestore()
     }
+  })
+  it('keeps the bridge a plugin page can reach', async () => {
+    const nav = await loadPreload(true)
+    expect(Object.keys(nav).sort()).toEqual(NAV_SURFACE)
+    expect(nav.apiVersion).toBe(PLUGIN_API_VERSION)
   })
   it('gates exactly the capability addresses the catalog declares as gesture-required', () => {
     const declared = (capabilitiesV1.methods as Array<{ address: string; requiresUserGesture?: boolean }>)

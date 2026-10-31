@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Plugin API (0.2.36): the Host now has a plugin API version. A package on a newer API major is refused at install and, if already installed, stays in Settings with the reason and contributes nothing. `hostApiVersion()` in `@navide/plugin-sdk` reads the version, and every capability catalog entry says which version it arrived in. Nothing changes for current packages.
+
 ## [0.2.35] — 2026-10-31
 
 ### Added
