@@ -111,7 +111,7 @@ function errorMessage(err: unknown): string {
  *  is either read-only (snapshot, list_actions, ui.pane.getStatus,
  *  ui.diagnostics.read — they describe the window as it is), window-scoped
  *  (settings), or keyed by pane id, and stays on the wider rule. */
-const WORKSPACE_SCOPED_ACTIONS = new Set([
+export const WORKSPACE_SCOPED_ACTIONS = new Set([
   'ui.pane.create',
   'ui.window.openGit',
   'ui.preview.show',
