@@ -3,7 +3,7 @@
  * the major changes only with the deprecation window in the Compatibility
  * policy. Kept as a tiny module so the sandboxed plugin preload can share it
  * without bundling the full capability catalog. */
-export const PLUGIN_API_VERSION = '1.0.0'
+export const PLUGIN_API_VERSION = '1.1.0'
 
 const API_RANGE = /^[~^]?(\d+)\.\d+\.\d+$/
 
