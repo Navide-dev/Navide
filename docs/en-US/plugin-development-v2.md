@@ -2461,9 +2461,10 @@ segments of Navide's own command ids, and a command must not read as Navide's.
 This is protection against deception, not restriction: the same plugin can do
 the same work from its view.
 
-A command appears in Settings → Shortcuts under the plugin's name, and in
-`ui_list_actions` and `ui.actions.describe`, marked `humanOnly`. It runs when
-the user presses a key bound to it:
+A command appears in Settings → Shortcuts under the plugin's name, in
+`ui_list_actions` as a plain id like every other action, and in
+`ui.actions.describe`, marked `humanOnly`. It runs when the user presses a key
+bound to it:
 
 - A `window` view opens, with `target` delivered.
 - A view already on screen, or a `main` tab already opened, is shown and gets
