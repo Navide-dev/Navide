@@ -6,6 +6,7 @@ import asyncio
 import os
 import shutil
 import subprocess
+import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -300,3 +301,52 @@ def test_the_walk_keeps_the_same_deadline(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(file_query, "_LIST_DEADLINE_S", -1.0)
     res = file_query.query_files(str(tmp_path), respect_gitignore=False)
     assert (res["files"], res["listingTruncated"]) == ([], True)
+
+
+def test_past_the_running_limit_a_query_is_busy_and_the_slot_comes_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write(tmp_path, "a.ts")
+    monkeypatch.setattr(file_query, "_running_queries", threading.BoundedSemaphore(1))
+    assert file_query._running_queries.acquire(blocking=False)
+    assert file_query.query_files(str(tmp_path)) == {"ok": False, "error": "busy"}
+    assert file_query._entries == {}
+    file_query._running_queries.release()
+    assert _paths(file_query.query_files(str(tmp_path))) == ["a.ts"]
+
+
+def test_a_failed_query_gives_its_slot_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(file_query, "_running_queries", threading.BoundedSemaphore(1))
+
+    def boom(*_args: object) -> None:
+        raise OSError("boom")
+
+    monkeypatch.setattr(file_query, "_listing", boom)
+    with pytest.raises(OSError):
+        file_query.query_files(str(tmp_path))
+    assert file_query._running_queries.acquire(blocking=False)
+    file_query._running_queries.release()
+
+
+def test_waiting_on_another_build_gives_up_at_the_deadline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write(tmp_path, "a.ts")
+    file_query.query_files(str(tmp_path))
+    entry = next(iter(file_query._entries.values()))
+    monkeypatch.setattr(file_query, "_LIST_DEADLINE_S", 0.05)
+    assert entry.lock.acquire(blocking=False)
+    try:
+        assert file_query.query_files(str(tmp_path)) == {"ok": False, "error": "busy"}
+    finally:
+        entry.lock.release()
+
+
+def test_slow_metadata_reads_stop_at_the_deadline_and_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write(tmp_path, "a.ts", "b.ts", "c.ts")
+    real_row = file_query._row
+
+    def slow_row(root: Path, rel: str, spans: list[list[int]]) -> dict | None:
+        time.sleep(0.03)
+        return real_row(root, rel, spans)
+
+    monkeypatch.setattr(file_query, "_row", slow_row)
+    monkeypatch.setattr(file_query, "_QUERY_DEADLINE_S", 0.01)
+    res = file_query.query_files(str(tmp_path))
+    assert (_paths(res), res["nextCursor"], res["timedOut"]) == (["a.ts"], "1", True)
