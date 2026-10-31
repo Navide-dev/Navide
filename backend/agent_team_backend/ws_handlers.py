@@ -2590,6 +2590,12 @@ async def cli_profiles_delete(session: "Session", msg_id: str, msg_type: str, pa
             )
         )
         return
+    if profile.get("authKind") == "api-key":
+        # Archiving the slot would leave the key behind in the .deleted copy.
+        await session.send_json(
+            make_error(msg_id, msg_type, "API_KEY_ACCOUNT", "an API key account is deleted with cli_profiles.api_key_delete")
+        )
+        return
     agent_key = str(profile.get("agentKey") or "")
     if _running_login_terminals(agent_key, profile_id):
         # Deleting the login home under a running login CLI breaks it; the

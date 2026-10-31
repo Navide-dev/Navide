@@ -299,3 +299,22 @@ def test_macos_key_stays_out_of_argv(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert calls
     assert all(ANTHROPIC_KEY not in " ".join(args) for args, _ in calls)
     assert any(ANTHROPIC_KEY in (stdin or "") for _, stdin in calls)
+
+
+# ── Review n14 ───────────────────────────────────────────────────────────────
+
+
+def test_the_generic_delete_refuses_a_key(store: CliProfilesStore, vault: CredentialVault) -> None:
+    """S1: it archives the slot, which would leave the key behind in a .deleted dir."""
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    sent: list[dict] = []
+
+    class Session:
+        async def send_json(self, frame: dict) -> None:
+            sent.append(frame)
+
+    asyncio.run(ws_handlers.cli_profiles_delete(Session(), "m1", "cli_profiles.delete", {"profile_id": key}))
+
+    assert "API_KEY_ACCOUNT" in json.dumps(sent)
+    assert store.get(key) is not None
+    assert ak.read_secret(store.get(key)) == ANTHROPIC_KEY
