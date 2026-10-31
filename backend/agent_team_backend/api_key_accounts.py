@@ -18,12 +18,17 @@ the vault refuses to swap it.
 from __future__ import annotations
 
 import asyncio
+import getpass
+import json
 import logging
+import shlex
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Mapping
 
 import httpx
 
-from . import cloud_secrets
+from . import cloud_secrets, osplat
 from .http_ssl import default_ssl_context
 from .ipc import make_response
 
@@ -33,6 +38,7 @@ if TYPE_CHECKING:
 log = logging.getLogger("agent_team_backend.api_keys")
 
 AUTH_KIND = "api-key"
+HELPER_FILE = "navide-api-key-helper"
 #: The CLIs that take an API key account. Each needs its own way into a pane, so
 #: the list grows one vendor at a time.
 SUPPORTED_AGENT_KEYS = ("claude",)
@@ -152,8 +158,53 @@ def _require(profile_id: Any) -> dict[str, Any]:
     return profile
 
 
+def pane_default_slot(agent_key: str) -> str:
+    """The pane default when it is an API key account, else "". Reads the same
+    choice ``cli_profiles.set_pane_default`` stores."""
+    from . import app
+
+    getter = getattr(app.cli_profiles_store, "get_pane_default", None)
+    chosen = getter(agent_key) if callable(getter) else None
+    return str(chosen) if chosen and is_api_key(app.cli_profiles_store.get(chosen)) else ""
+
+
+def _helper_script(vault: Any, profile_id: str) -> str:
+    name = SECRET_NAME_PREFIX + profile_id
+    if vault._is_macos:
+        read = (
+            f"/usr/bin/security find-generic-password -a {shlex.quote(getpass.getuser())} "
+            f"-s {shlex.quote(vault.app_secret_service(name))} -w"
+        )
+    else:
+        read = f"cat {shlex.quote(str(vault.app_secret_path(name)))}"
+    return f"#!/bin/sh\nexec {read}\n"
+
+
+def write_account_dir_settings(vault: Any, directory: Path, profile_id: str) -> None:
+    """Point this account dir at a helper that prints the key on demand, so the
+    key never sits in a pane's environment or in a file Claude Code reads.
+
+    ``settings.json`` is the user's own, copied rather than linked, plus
+    ``apiKeyHelper``. It is refreshed on every spawn. The helper holds no key:
+    it only names where the key is stored."""
+    helper = directory / HELPER_FILE
+    osplat.secret_files.write_private_plain(helper, _helper_script(vault, profile_id).encode("utf-8"))
+    helper.chmod(0o700)
+    try:
+        user = json.loads((vault._real_home / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        user = {}
+    settings = {**(user if isinstance(user, dict) else {}), "apiKeyHelper": shlex.quote(str(helper))}
+    target = directory / "settings.json"
+    if target.is_symlink():
+        target.unlink()
+    osplat.secret_files.write_private_plain(target, json.dumps(settings, indent=2).encode("utf-8"))
+
+
 def create(agent_key: Any, name: Any, secret: Any, monthly_reminder: Any = None) -> dict[str, Any]:
     agent = _validate_agent(agent_key)
+    if agent == "claude" and sys.platform == "win32":
+        raise ApiKeyError("unsupported-platform", "API key accounts for Claude Code are not available on Windows yet.")
     clean_name = _validate_name(name)
     reminder = _validate_reminder(monthly_reminder)
     clean_secret = validate_secret(agent, secret)
@@ -195,6 +246,7 @@ def delete(profile_id: Any) -> None:
     # The secret goes first: a failure keeps the account, so the key is never
     # left behind with nothing in the app pointing at it.
     _store_secret(profile["id"], None)
+    (_vault().account_dir_path(profile["id"]) / HELPER_FILE).unlink(missing_ok=True)
     _store().delete(profile["id"])
 
 

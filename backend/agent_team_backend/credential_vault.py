@@ -1643,6 +1643,8 @@ class CredentialVault:
         so Navide never reads it. A login a pane reported expired does not
         count until it changes — a new sign-in rewrites it. Blocking (a
         ``security`` call on macOS)."""
+        if self.is_api_key_slot("claude", slot_id):
+            return True
         present, stamp = self._account_dir_login_stamp(slot_id)
         if not present:
             return False
@@ -1687,10 +1689,17 @@ class CredentialVault:
         directory = self.account_dir_path(slot_id)
         secret_files.make_private_dir(directory)
         real = self._real_home / ".claude"
+        api_key = self.is_api_key_slot("claude", slot_id)
         for name, is_dir in CLAUDE_SHARED_ENTRIES:
+            if api_key and name == "settings.json":
+                continue  # Its own copy names the key's helper.
             target = real / name
             if name in _CLAUDE_ALWAYS_SHARED or target.exists() or target.is_symlink():
                 self._link_shared(directory / name, target, is_dir=is_dir)
+        if api_key:
+            from . import api_key_accounts
+
+            api_key_accounts.write_account_dir_settings(self, directory, slot_id)
         self._seed_account_dir_config(directory)
         return directory
 

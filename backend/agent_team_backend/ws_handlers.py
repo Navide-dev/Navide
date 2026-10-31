@@ -2354,6 +2354,11 @@ def _account_dir_for_spawn(
     if agent_key != "claude":
         return ""
     slot = str(payload_profile_id or "")
+    if not slot:
+        # An API key account has no live credential to follow.
+        from . import api_key_accounts
+
+        slot = api_key_accounts.pane_default_slot(agent_key)
     if not slot or slot == DEFAULT_SLOT_ID:
         return ""
     profile = app.cli_profiles_store.get(slot)

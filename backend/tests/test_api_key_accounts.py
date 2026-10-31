@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -186,6 +188,88 @@ def test_failover_sees_no_login_in_its_slot(store: CliProfilesStore, vault: Cred
     key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
     assert vault.identity("claude", key) == {"email": None, "signedIn": False}
     assert ws_handlers._slot_login_reason("claude", key) == "signed-out"
+
+
+# ── A pane on an API key account ─────────────────────────────────────────────
+
+
+def test_a_pane_default_runs_on_the_account_dir(store: CliProfilesStore, vault: CredentialVault) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    store.set_pane_default("claude", key)
+
+    assert vault.account_dir_signed_in(key) is True
+    assert ws_handlers._account_dir_for_spawn("claude", "", login=False) == key
+    env_set, env_remove = vault.account_dir_spawn_env(key)
+    assert set(env_set) == {"CLAUDE_CONFIG_DIR"}
+    assert "ANTHROPIC_API_KEY" in env_remove
+
+
+def test_the_key_stays_out_of_the_pane(store: CliProfilesStore, vault: CredentialVault) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    home = vault._real_home / ".claude"
+    home.mkdir(parents=True)
+    (home / "settings.json").write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+
+    directory = vault.prepare_account_dir(key)
+
+    settings_file = directory / "settings.json"
+    assert not settings_file.is_symlink()
+    settings = json.loads(settings_file.read_text(encoding="utf-8"))
+    assert settings["theme"] == "dark"
+    assert settings["apiKeyHelper"].endswith(ak.HELPER_FILE)
+    helper = directory / ak.HELPER_FILE
+    assert ANTHROPIC_KEY not in settings_file.read_text(encoding="utf-8")
+    assert ANTHROPIC_KEY not in helper.read_text(encoding="utf-8")
+    assert json.loads((home / "settings.json").read_text(encoding="utf-8")) == {"theme": "dark"}
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Claude API key accounts are refused on Windows")
+def test_the_helper_prints_the_key(store: CliProfilesStore, vault: CredentialVault) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    directory = vault.prepare_account_dir(key)
+    output = subprocess.run([str(directory / ak.HELPER_FILE)], capture_output=True, text=True, check=True)
+    assert output.stdout == ANTHROPIC_KEY
+
+
+def test_macos_helper_reads_the_keychain_item(tmp_path: Path) -> None:
+    vault = CredentialVault(
+        root=tmp_path / "root", real_home=tmp_path / "home",
+        security_runner=lambda args, input_text=None: (0, ""), platform="darwin",
+    )
+    script = ak._helper_script(vault, "abc")
+    assert "find-generic-password" in script
+    assert "cli-api-key-abc" in script
+
+
+def test_windows_refuses_a_claude_key(store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ak.sys, "platform", "win32")
+    with pytest.raises(ak.ApiKeyError) as err:
+        ak.create("claude", "a", ANTHROPIC_KEY)
+    assert err.value.code == "unsupported-platform"
+
+
+def test_delete_removes_the_helper(store: CliProfilesStore, vault: CredentialVault) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    directory = vault.prepare_account_dir(key)
+    ak.delete(key)
+    assert not (directory / ak.HELPER_FILE).exists()
+
+
+def test_a_login_pane_default_still_follows_the_live_login(store: CliProfilesStore, vault: CredentialVault) -> None:
+    login = store.create(agent_key="claude", name="Work")["id"]
+    store.set_pane_default("claude", login)
+    assert ak.pane_default_slot("claude") == ""
+    assert ws_handlers._account_dir_for_spawn("claude", "", login=False) == ""
+
+
+def test_a_login_account_dir_keeps_the_shared_settings(store: CliProfilesStore, vault: CredentialVault) -> None:
+    login = store.create(agent_key="claude", name="Work")["id"]
+    home = vault._real_home / ".claude"
+    home.mkdir(parents=True)
+    (home / "settings.json").write_text("{}", encoding="utf-8")
+    directory = vault.prepare_account_dir(login)
+    assert (directory / "settings.json").is_symlink()
+    assert not (directory / ak.HELPER_FILE).exists()
 
 
 # ── A login account runs exactly as before ──────────────────────────────────
