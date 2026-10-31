@@ -8280,7 +8280,7 @@
           "subscription": "Se connecter avec un abonnement",
           "subscription-desc": "Autorisez dans votre navigateur. Utilise le quota de votre forfait.",
           "api-key": "Coller une clé API",
-          "api-key-desc": "Facturé à l’usage. La clé reste sur cet ordinateur.",
+          "api-key-desc": "Facturé à l’usage. La clé est stockée sur cet ordinateur.",
           "api-key-unsupported": "Les clés API ne sont pas encore disponibles pour cette CLI.",
           "cloud": "Connecter un service cloud",
           "cloud-desc": "Amazon Bedrock, Google Vertex ou Microsoft Foundry.",
@@ -8336,6 +8336,7 @@
           "internal-error": "Une erreur s’est produite. Réessayez.",
           "unsupported-platform": "Les comptes à clé API de Claude Code ne sont pas encore disponibles sous Windows.",
           "login-policy": "Votre organisation impose une méthode de connexion précise, les comptes à clé API ne peuvent donc pas être ajoutés.",
+          "account-active": "Ce compte est en cours d’utilisation. Passez d’abord à un autre compte.",
           "account-in-use": "Un panneau utilise ce compte. Fermez-le avant de le supprimer."
         }
       },

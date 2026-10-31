@@ -8280,7 +8280,7 @@
           "subscription": "구독으로 로그인",
           "subscription-desc": "브라우저에서 승인해요. 요금제 할당량을 사용해요.",
           "api-key": "API 키 붙여넣기",
-          "api-key-desc": "사용량에 따라 청구돼요. 키는 이 컴퓨터에만 보관돼요.",
+          "api-key-desc": "사용량에 따라 청구돼요. 키는 이 컴퓨터에 저장돼요.",
           "api-key-unsupported": "이 CLI에서는 아직 API 키를 사용할 수 없어요.",
           "cloud": "클라우드 서비스 연결",
           "cloud-desc": "Amazon Bedrock, Google Vertex 또는 Microsoft Foundry.",
@@ -8336,6 +8336,7 @@
           "internal-error": "문제가 발생했어요. 다시 시도하세요.",
           "unsupported-platform": "Claude Code API 키 계정은 아직 Windows를 지원하지 않습니다.",
           "login-policy": "조직에서 지정한 로그인 방식을 사용해야 하므로 API 키 계정을 추가할 수 없습니다.",
+          "account-active": "이 계정은 사용 중입니다. 먼저 다른 계정으로 전환하세요.",
           "account-in-use": "이 계정을 사용 중인 패널이 있습니다. 먼저 닫은 후 삭제하세요."
         }
       },

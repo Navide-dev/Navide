@@ -8280,7 +8280,7 @@
           "subscription": "用訂閱登入",
           "subscription-desc": "在瀏覽器中授權，使用方案的額度。",
           "api-key": "貼上 API key",
-          "api-key-desc": "依用量計費。金鑰只留在這台電腦。",
+          "api-key-desc": "依用量計費。金鑰存放在這台電腦。",
           "api-key-unsupported": "這個 CLI 目前還不能使用 API key。",
           "cloud": "連接雲端服務",
           "cloud-desc": "Amazon Bedrock、Google Vertex 或 Microsoft Foundry。",
@@ -8336,6 +8336,7 @@
           "internal-error": "發生錯誤，請再試一次。",
           "unsupported-platform": "Claude Code 的 API key 帳號目前還不支援 Windows。",
           "login-policy": "你的組織規定要用指定方式登入，所以不能新增 API key 帳號。",
+          "account-active": "這個帳號正在使用中，請先切換到其他帳號。",
           "account-in-use": "有 pane 正在使用這個帳號，請先關閉再刪除。"
         }
       },

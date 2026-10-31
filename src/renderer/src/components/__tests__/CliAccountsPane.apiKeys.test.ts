@@ -156,7 +156,7 @@ describe('AddAccountPanel', () => {
     expect(save()).toBeUndefined()
   })
 
-  it.each(['subscription-token', 'unsupported-platform', 'login-policy'])('shows the %s error the backend sent', async (code) => {
+  it.each(['subscription-token', 'unsupported-platform', 'login-policy', 'account-active'])('shows the %s error the backend sent', async (code) => {
     const calls = fakeCalls({ create: vi.fn(async () => ({ ok: false, error_code: code })) })
     const w = mountAdd(calls)
     await openForm(w)

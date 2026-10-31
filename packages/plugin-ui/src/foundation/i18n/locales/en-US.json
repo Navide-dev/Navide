@@ -8280,7 +8280,7 @@
           "subscription": "Sign in with a subscription",
           "subscription-desc": "Authorize in your browser. Uses your plan's quota.",
           "api-key": "Paste an API key",
-          "api-key-desc": "Billed by usage. The key stays on this computer.",
+          "api-key-desc": "Billed by usage. The key is stored on this computer.",
           "api-key-unsupported": "API keys are not available for this CLI yet.",
           "cloud": "Connect a cloud service",
           "cloud-desc": "Amazon Bedrock, Google Vertex or Microsoft Foundry.",
@@ -8336,6 +8336,7 @@
           "internal-error": "Something went wrong. Try again.",
           "unsupported-platform": "Claude Code API key accounts are not available on Windows yet.",
           "login-policy": "Your organization requires a specific sign-in method, so API key accounts cannot be added.",
+          "account-active": "This account is in use. Switch to another account first.",
           "account-in-use": "A pane is using this account. Close it before deleting."
         }
       },

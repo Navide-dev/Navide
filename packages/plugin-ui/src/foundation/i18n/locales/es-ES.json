@@ -8280,7 +8280,7 @@
           "subscription": "Iniciar sesión con una suscripción",
           "subscription-desc": "Autoriza en el navegador. Usa la cuota de tu plan.",
           "api-key": "Pegar una clave de API",
-          "api-key-desc": "Se factura por uso. La clave se queda en este ordenador.",
+          "api-key-desc": "Se factura por uso. La clave se guarda en este ordenador.",
           "api-key-unsupported": "Las claves de API aún no están disponibles para esta CLI.",
           "cloud": "Conectar un servicio en la nube",
           "cloud-desc": "Amazon Bedrock, Google Vertex o Microsoft Foundry.",
@@ -8336,6 +8336,7 @@
           "internal-error": "Algo ha salido mal. Inténtalo de nuevo.",
           "unsupported-platform": "Las cuentas con clave de API de Claude Code aún no están disponibles en Windows.",
           "login-policy": "Tu organización exige un método de inicio de sesión concreto, por lo que no se pueden añadir cuentas con clave de API.",
+          "account-active": "Esta cuenta está en uso. Cambia primero a otra cuenta.",
           "account-in-use": "Un panel está usando esta cuenta. Ciérralo antes de eliminarla."
         }
       },

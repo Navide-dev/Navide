@@ -8280,7 +8280,7 @@
           "subscription": "用订阅登录",
           "subscription-desc": "在浏览器中授权，使用套餐的额度。",
           "api-key": "粘贴 API 密钥",
-          "api-key-desc": "按用量计费。密钥只保留在这台电脑上。",
+          "api-key-desc": "按用量计费。密钥存放在这台电脑上。",
           "api-key-unsupported": "这个 CLI 目前还不能使用 API 密钥。",
           "cloud": "连接云服务",
           "cloud-desc": "Amazon Bedrock、Google Vertex 或 Microsoft Foundry。",
@@ -8336,6 +8336,7 @@
           "internal-error": "出错了，请重试。",
           "unsupported-platform": "Claude Code 的 API 密钥账号暂不支持 Windows。",
           "login-policy": "你的组织要求使用指定方式登录，因此无法添加 API 密钥账号。",
+          "account-active": "此账号正在使用中，请先切换到其他账号。",
           "account-in-use": "有窗格正在使用此账号，请先关闭再删除。"
         }
       },

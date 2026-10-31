@@ -8280,7 +8280,7 @@
           "subscription": "Mit einem Abonnement anmelden",
           "subscription-desc": "Autorisieren Sie im Browser. Verwendet das Kontingent Ihres Tarifs.",
           "api-key": "API-Schlüssel einfügen",
-          "api-key-desc": "Abrechnung nach Nutzung. Der Schlüssel bleibt auf diesem Computer.",
+          "api-key-desc": "Abrechnung nach Nutzung. Der Schlüssel wird auf diesem Computer gespeichert.",
           "api-key-unsupported": "API-Schlüssel sind für diese CLI noch nicht verfügbar.",
           "cloud": "Cloud-Dienst verbinden",
           "cloud-desc": "Amazon Bedrock, Google Vertex oder Microsoft Foundry.",
@@ -8336,6 +8336,7 @@
           "internal-error": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
           "unsupported-platform": "API-Schlüssel-Konten für Claude Code sind unter Windows noch nicht verfügbar.",
           "login-policy": "Ihre Organisation schreibt eine bestimmte Anmeldemethode vor, daher können keine API-Schlüssel-Konten hinzugefügt werden.",
+          "account-active": "Dieses Konto wird gerade verwendet. Wechseln Sie zuerst zu einem anderen Konto.",
           "account-in-use": "Ein Bereich verwendet dieses Konto. Schließen Sie ihn, bevor Sie das Konto löschen."
         }
       },

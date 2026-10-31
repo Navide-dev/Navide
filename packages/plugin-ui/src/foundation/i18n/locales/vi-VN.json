@@ -8280,7 +8280,7 @@
           "subscription": "Đăng nhập bằng gói đăng ký",
           "subscription-desc": "Cấp quyền trong trình duyệt. Dùng hạn mức của gói bạn đang có.",
           "api-key": "Dán khóa API",
-          "api-key-desc": "Tính phí theo mức dùng. Khóa chỉ ở trên máy tính này.",
+          "api-key-desc": "Tính phí theo mức dùng. Khóa được lưu trên máy tính này.",
           "api-key-unsupported": "CLI này chưa dùng được khóa API.",
           "cloud": "Kết nối dịch vụ đám mây",
           "cloud-desc": "Amazon Bedrock, Google Vertex hoặc Microsoft Foundry.",
@@ -8336,6 +8336,7 @@
           "internal-error": "Đã xảy ra lỗi. Hãy thử lại.",
           "unsupported-platform": "Tài khoản khóa API của Claude Code chưa hỗ trợ Windows.",
           "login-policy": "Tổ chức của bạn yêu cầu một phương thức đăng nhập cụ thể, nên không thể thêm tài khoản khóa API.",
+          "account-active": "Tài khoản này đang được dùng. Hãy chuyển sang tài khoản khác trước.",
           "account-in-use": "Có khung đang dùng tài khoản này. Hãy đóng khung đó trước khi xóa."
         }
       },
