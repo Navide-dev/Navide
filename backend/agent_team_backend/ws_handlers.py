@@ -13446,3 +13446,11 @@ from . import credentials_scan  # noqa: E402
 
 for _credentials_type, _credentials_fn in credentials_scan.MESSAGE_HANDLERS.items():
     handler(_credentials_type)(_credentials_fn)
+
+# ── API keys (api_keys.*) ──
+# Renderer-only, and kept apart from cli_profiles.*: logic in api_keys. A stored
+# key never comes back through any of these.
+from . import api_keys  # noqa: E402
+
+for _api_keys_type, _api_keys_fn in api_keys.MESSAGE_HANDLERS.items():
+    handler(_api_keys_type)(_api_keys_fn)
