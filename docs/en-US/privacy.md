@@ -31,7 +31,7 @@ Depending on enabled features, Navide stores:
   the chat is unbound, or when its bot is removed; while that bot stays
   disabled they wait for it. They never leave this machine
 - Optional AI provider API keys in a local settings file protected with restrictive file permissions (`0600` on supported systems)
-- API key accounts for Claude Code and Codex: the keys, and a local record of each account's name, the key's last four characters, the monthly reminder amount and the automatic-switch choice. See [Credentials](#credentials) for where each key is kept
+- API key accounts for Claude Code and Codex: the keys, and a local record of each account's name, the key's last four characters, the monthly budget note and the automatic-switch choice. See [Credentials](#credentials) for where each key is kept
 - Action buttons in `workbench.json` in the app's data folder, and which version of a repository's `.navide/workbench.json` you accepted. Neither is written to the repository
 
 Navide does not operate a project telemetry service and does not require a Navide account.
@@ -153,7 +153,7 @@ Agent CLI credentials remain in each CLI's own configuration, except API key acc
 | Codex on Windows | The same file, encrypted with DPAPI for your Windows account |
 | Codex, while the account is active | Also in Codex's own `auth.json`, owner-only and not encrypted, which is where Codex reads it |
 
-Navide's local account record holds the name, the key's last four characters, the monthly reminder amount and the automatic-switch choice, never the key.
+Navide's local account record holds the name, the key's last four characters, the monthly budget note and the automatic-switch choice, never the key.
 
 A key is sent to one place, the vendor that issued it:
 
