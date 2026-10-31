@@ -13,7 +13,7 @@ import { createTerminalMentionMenu } from './terminalMentionMenu'
 import { readXtermTheme } from './terminalTheme'
 import { createTerminalInputHandlers, encodeShiftEnter } from './terminalInput'
 import { createResizeController, type ResizeController } from './terminalResize'
-import { installTerminalLinks, extractPlanDocRelPath, isTerminalLinkModifier, isTerminalLinkModifierKey } from './terminalLinkInteraction'
+import { installTerminalLinks, extractPlanDocRelPath, isTerminalLinkModifier, isTerminalLinkModifierKey, openTerminalFileLink } from './terminalLinkInteraction'
 import { buildMentionPickData, clusterMentionCandidates, shouldOpenMentionMenu, type MentionCandidate } from './terminalMentionModel'
 import { setContext, settingsGet, settingsReadiness, settingsReady, settingsSet } from './shared'
 
@@ -459,7 +459,7 @@ onMounted(() => {
           extractPlanDocRelPath,
           openExternal: url => props.terminalResources!.openExternal!(url).catch(cause => reportError(cause, 'ai-cli.send-failed')),
           openFilePicker: request => {
-            void props.terminalResources!.openFilePicker!({ query: request.query, candidates: request.candidates, ...(request.line !== undefined ? { line: request.line } : {}) })
+            void openTerminalFileLink(props.terminalResources!, { query: request.query, candidates: request.candidates, ...(request.line !== undefined ? { line: request.line } : {}) })
               .catch(cause => reportError(cause, 'ai-cli.send-failed'))
           },
           ...(props.terminalResources.openPlan ? { openPlan: ({ relPath }: { relPath: string }) => props.terminalResources!.openPlan!(relPath).catch(cause => reportError(cause, 'ai-cli.send-failed')) } : {}),

@@ -1383,7 +1383,8 @@ the counts stay exact:
   way); it is `<failed>` only when it is known to have changed nothing:
   - its address is read-only (`PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES`, each
     checked to write nothing to disk and start no process: `fs.readFile`,
-    `fs.readImage`, `fs.listDirectory`, `fs.listFilesFlat`, `fs.glob`,
+    `fs.readImage`, `fs.listDirectory`, `fs.listFilesFlat`, `fs.queryFiles`,
+    `fs.glob`,
     `fs.stat`, `fs.statPath`, `fs.listArchive`, `fs.previewResource`,
     `fs.convertOffice` and their legacy snake_case names; `fs.findInFiles`
     runs a search process and is not in it);
