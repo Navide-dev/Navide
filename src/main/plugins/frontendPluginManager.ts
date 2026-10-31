@@ -1019,6 +1019,7 @@ const PUBLIC_FS_WS_TYPES: Readonly<Record<string, string>> = {
   'fs.readImage': 'fs.read_image',
   'fs.listDirectory': 'fs.list_dir',
   'fs.listFilesFlat': 'fs.list_files_flat',
+  'fs.queryFiles': 'fs.query_files',
   'fs.glob': 'fs.glob_files',
   'fs.statPath': 'fs.stat_path',
   'fs.stat': 'fs.stat_path',
@@ -6814,6 +6815,18 @@ export class FrontendPluginManager {
       else if (wsType === 'fs.list_files_flat') {
         payload.query = typeof args.query === 'string' ? args.query : ''
         payload.max_results = typeof args.maxResults === 'number' ? args.maxResults : 100
+      } else if (wsType === 'fs.query_files') {
+        Object.assign(payload, {
+          query: args.query,
+          match_on: args.matchOn,
+          mode: args.mode,
+          exclude: args.exclude,
+          respect_gitignore: args.respectGitignore,
+          include_hidden: args.includeHidden,
+          include_noise_dirs: args.includeNoiseDirs,
+          limit: args.limit,
+          cursor: args.cursor,
+        })
       } else if (wsType === 'fs.glob_files') payload.pattern = args.pattern
       else if (wsType === 'fs.stat_path') payload.path = path
       else payload.rel_path = path

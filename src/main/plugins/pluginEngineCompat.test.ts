@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { PLUGIN_API_VERSION } from '../../../packages/plugin-contracts/src/apiVersion'
 import {
   apiVersionProblem,
   assertEngineCompatible,
@@ -91,7 +92,7 @@ describe('the first-party manifests', () => {
 
   it('refuses a package on a newer API major', () => {
     expect(apiVersionProblem('acme.files', '2.0.0', '^2.0.0')).toBe(
-      'acme.files 2.0.0 requires plugin API ^2.0.0; this Navide provides 1.0.0',
+      `acme.files 2.0.0 requires plugin API ^2.0.0; this Navide provides ${PLUGIN_API_VERSION}`,
     )
     expect(() => assertEngineCompatible('acme.files', '2.0.0', { apiVersion: '~2.1.0' }, '0.2.36')).toThrow(/plugin API ~2\.1\.0/)
   })

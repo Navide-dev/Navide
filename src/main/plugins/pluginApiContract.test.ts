@@ -96,6 +96,38 @@ describe('deprecation notices', () => {
   })
 })
 
+describe('fs.queryFiles', () => {
+  const validate = PUBLIC_CAPABILITY_CATALOG['fs.queryFiles'].validateRequest!
+
+  it('accepts what its catalog entry declares', () => {
+    expect(validate({ query: '' })).toBe(true)
+    expect(validate({
+      query: 'a', matchOn: 'path', mode: 'glob', exclude: ['vendor/*'], respectGitignore: false,
+      includeHidden: true, includeNoiseDirs: true, limit: 1000, cursor: '10',
+    })).toBe(true)
+  })
+
+  it.each([
+    [{}],
+    [{ query: 1 }],
+    [{ query: '', matchOn: 'content' }],
+    [{ query: '', mode: 'regex' }],
+    [{ query: '', exclude: 'vendor' }],
+    [{ query: '', limit: 0 }],
+    [{ query: '', limit: 1001 }],
+    [{ query: '', cursor: 'abc' }],
+    [{ query: '', workspace_path: '/elsewhere' }],
+  ])('refuses %j', (request) => {
+    expect(validate(request)).toBe(false)
+  })
+
+  it('replaces fs.listFilesFlat, which keeps its own entry and validator', () => {
+    const flat = methods.find((entry) => entry.address === 'fs.listFilesFlat')
+    expect(flat?.deprecated).toEqual({ since: '1.1.0', removeAfter: '2027-05-01', replacement: 'fs.queryFiles' })
+    expect(PUBLIC_CAPABILITY_CATALOG['fs.listFilesFlat'].validateRequest!({ query: 'a', maxResults: 1 })).toBe(true)
+  })
+})
+
 describe('plugin API version', () => {
   it('shares its major with the public packages', () => {
     for (const name of ['plugin-contracts', 'plugin-sdk', 'plugin-ui']) {

@@ -11659,6 +11659,43 @@ describe('first-party Git private bridge', () => {
     expect(bind).not.toHaveBeenCalled()
   })
 
+  it('forwards fs.queryFiles to the backend under the bound workspace, with the caller\'s strategy', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'fs-query-files')
+    mgr.setBackendWsUrl('ws://public-fs-query-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+
+    const pending = mgr.executePublicCapability({
+      kind: 'public',
+      address: 'fs.queryFiles',
+      scope: 'workspace',
+      runtime,
+      args: { query: 'app/Foo', matchOn: 'path', mode: 'subsequence', exclude: ['vendor/*'], limit: 5, cursor: '7' },
+    })
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+    expect(request).toMatchObject({
+      type: 'fs.query_files',
+      payload: {
+        workspace_path: '/workspace',
+        query: 'app/Foo',
+        match_on: 'path',
+        mode: 'subsequence',
+        exclude: ['vendor/*'],
+        limit: 5,
+        cursor: '7',
+      },
+    })
+    const result = { ok: true, files: [], gitignoreApplied: true, listingTruncated: false }
+    socket.receive({ id: request.id, type: request.type, ok: true, payload: result, error: null, timestamp: '' })
+    await expect(pending).resolves.toEqual(result)
+  })
+
   it('opens the Host file picker with bound view context and Host-owned search', async () => {
     const { mgr, instanceId } = await openGitView('/workspace', 'git-file-picker')
     mgr.setBackendWsUrl('ws://public-file-picker-test')
