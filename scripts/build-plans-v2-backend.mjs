@@ -16,9 +16,9 @@ import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceDirectory = resolve(repositoryRoot, 'plugins/navide-plans/backend')
-// The backend imports the core path guard, write path and plan versions
-// (standard library only) from the core backend's source tree; these are every
-// core module the bundle carries.
+// The backend imports `navide_plugin_sdk`, whose public names sit on the core
+// path guard, write path and plan versions (standard library only); these are
+// every source the bundle carries from the core backend's tree.
 const sharedSourceRoot = resolve(repositoryRoot, 'backend')
 const sharedSourceFiles = [
   resolve(sharedSourceRoot, 'agent_team_backend/__init__.py'),
@@ -26,6 +26,7 @@ const sharedSourceFiles = [
   resolve(sharedSourceRoot, 'agent_team_backend/git_security.py'),
   resolve(sharedSourceRoot, 'agent_team_backend/path_guard.py'),
   resolve(sharedSourceRoot, 'agent_team_backend/plan_versions.py'),
+  resolve(sharedSourceRoot, 'navide_plugin_sdk/__init__.py'),
 ]
 const source = join(sourceDirectory, 'plans_backend.py')
 const backendDirectory = resolve(repositoryRoot, 'dist-plugins/navide-plans/backend')
