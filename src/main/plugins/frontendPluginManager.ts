@@ -13366,9 +13366,12 @@ export class FrontendPluginManager {
             continue
           }
           scanned.packageSummary.warning = apiProblem
-          apiBlocked.add(pluginId)
+          apiBlocked.add(scanned.dir)
         }
       } else if (source?.provenance === 'developer-local-unpacked') {
+        // No API check here, as with `engines.navide`: a Developer Mode folder
+        // is the author's own build, and one written against a coming API
+        // major has to load so it can be tested. Its calls fail on their own.
         if (isReservedPluginId(pluginId)) {
           errors.push(
             `${scanned.dir}: Developer Mode cannot claim reserved plugin id '${pluginId}'`
@@ -13420,8 +13423,10 @@ export class FrontendPluginManager {
     }
     const uniqueApproved: typeof approved = []
     for (const [pluginId, entries] of packageGroups) {
-      if (entries.length === 1) {
-        uniqueApproved.push(entries[0])
+      // A directory this Host cannot run does not contest the id with one it can.
+      const runnable = entries.filter(({ scanned }) => !apiBlocked.has(scanned.dir))
+      if (entries.length === 1 || runnable.length === 1) {
+        uniqueApproved.push(entries.length === 1 ? entries[0] : runnable[0])
         continue
       }
       const directories = entries.map(({ scanned }) => scanned.dir).join(', ')
@@ -13435,7 +13440,7 @@ export class FrontendPluginManager {
 
     for (const { scanned, packageSummary, opts } of uniqueApproved) {
       try {
-        const blocked = apiBlocked.has(packageSummary.id)
+        const blocked = apiBlocked.has(scanned.dir)
         this.registerInstalledPackage(packageSummary, blocked ? undefined : scanned.descriptor, opts, scanned.dir)
         // A disabled package was verified like any other and stays in the
         // inventory; it contributes no view and no backend activation.
