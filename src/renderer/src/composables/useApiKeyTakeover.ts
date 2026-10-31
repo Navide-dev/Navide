@@ -7,31 +7,41 @@ interface TakeoverEvent {
   paneIds?: string[]
 }
 
-/** Every login ran out and the user opened an API key account to automatic
- *  switching: reopen this window's panes on it, resuming their conversations.
- *  The backend decided; this only carries it out on the panes it owns. */
+/** The backend moved claude to an API key account. Reopen this window's panes
+ *  on it, resuming their conversations. A pane that is busy or cannot be
+ *  reopened stays as it is, and `announce` says how many did. `reopen` answers
+ *  a falsy value when the pane moved. */
 export function useApiKeyTakeover(
   backend: Pick<ReturnType<typeof useBackend>, 'on'>,
   deps: {
     ownsPane: (paneId: string) => boolean
     reopen: (paneId: string, profileId: string) => Promise<unknown>
-    announce: (name: string) => void
+    announce: (name: string, stayed: number) => void
   },
 ): void {
   const unsubscribe = backend.on('quota_failover.api_key_takeover', (raw) => {
     const { profileId, name, paneIds } = raw as TakeoverEvent
     if (!profileId) return
-    const mine = (paneIds ?? []).filter(deps.ownsPane)
-    if (mine.length === 0) return
-    deps.announce(name ?? '')
-    for (const paneId of mine) void deps.reopen(paneId, profileId)
+    const all = paneIds ?? []
+    const mine = all.filter(deps.ownsPane)
+    // With panes elsewhere only, the window that owns them says it. With none
+    // at all, the new default still has to be said once.
+    if (all.length > 0 && mine.length === 0) return
+    void (async () => {
+      const results = await Promise.all(
+        mine.map((paneId) => deps.reopen(paneId, profileId).catch(() => 'failed')),
+      )
+      deps.announce(name ?? '', results.filter(Boolean).length)
+    })()
   })
   onScopeDispose(unsubscribe)
 }
 
 /** Tells the user once when a login's quota comes back while the CLI is
  *  spending an API key. Nothing switches back on its own. `isSpent` is the
- *  existing reading; null means there is no reading, which changes nothing. */
+ *  existing reading, judged against the clock as well: nothing polls a parked
+ *  Codex login while a key is live, so the reading alone would never change.
+ *  null means there is no reading, which changes nothing. */
 export function useLoginResetNotice(
   usageVersion: Ref<number>,
   deps: {
@@ -41,9 +51,10 @@ export function useLoginResetNotice(
     isSpent: (agentKey: string, profileId: string | null) => boolean | null
     announce: (agentKey: string) => void
   },
+  checkEveryMs = 60_000,
 ): void {
   const wasSpent = new Map<string, boolean>()
-  watch(usageVersion, () => {
+  function check(): void {
     for (const agentKey of deps.agents) {
       let cameBack = false
       for (const id of deps.logins(agentKey)) {
@@ -55,5 +66,8 @@ export function useLoginResetNotice(
       }
       if (cameBack && deps.spendingKey(agentKey)) deps.announce(agentKey)
     }
-  })
+  }
+  watch(usageVersion, check)
+  const timer = setInterval(check, checkEveryMs)
+  onScopeDispose(() => clearInterval(timer))
 }

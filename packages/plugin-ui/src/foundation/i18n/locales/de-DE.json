@@ -9301,6 +9301,10 @@
         "manual-only": "{agent} kann nur manuell gewechselt werden.",
         "unverified-adapter": "Der Kontowechsel von {agent} ist auf dieser Plattform nicht verifiziert; wechseln Sie manuell.",
         "no-resume": "{agent} kann seine Unterhaltung nicht automatisch fortsetzen. Wechseln Sie manuell, um dieses Fenster zu behalten und eine neue Unterhaltung zu öffnen.",
+        "api-key-takeover": "Bereiche laufen jetzt auf einem API-Schlüssel-Konto und werden nach Nutzung abgerechnet.",
+        "api-key-takeover-paused": "Der Wechselverlauf lässt sich nicht schreiben, daher ist der automatische Wechsel pausiert. Es wurde nicht zum API-Schlüssel-Konto gewechselt.",
+        "api-key-takeover-unrecorded": "Der Wechsel zum API-Schlüssel-Konto ließ sich nicht protokollieren, daher wurde nicht gewechselt.",
+        "api-key-takeover-failed": "Der Wechsel zum API-Schlüssel-Konto ist fehlgeschlagen. Er zählt trotzdem zum Limit für automatische Wechsel.",
         "no-candidate": "Kein Konto zum Wechseln vorhanden. Melden Sie sich bei einem anderen Konto an oder warten Sie auf das Zurücksetzen.",
         "auto_budget_exhausted": "Grenze für automatische Wechsel erreicht. Wechseln Sie manuell oder warten Sie, bis das Zeitfenster abgelaufen ist.",
         "chained-exhaustion": "Auch {target} ist aufgebraucht. Es wurde nichts weiter versucht.",
@@ -9656,6 +9660,7 @@
     "failed": "Diese Unterhaltung konnte nicht wieder verbunden werden – ihr Transkript existiert möglicherweise nicht mehr"
   },
   "cli-account": {
+    "api-key-takeover-partial": "Kontingent aufgebraucht. Neue Bereiche nutzen {name} und werden nach Nutzung abgerechnet. {count} beschäftigte Bereiche bleiben unverändert.",
     "api-key-login-back": "Dein Abo-Kontingent ist wieder da. Bereiche bleiben beim API-Schlüssel, bis du unter Konten zurückwechselst.",
     "api-key-takeover": "Kontingent aufgebraucht. Bereiche laufen jetzt auf {name} und werden nach Nutzung abgerechnet. Wechsle nach dem Zurücksetzen unter Konten zurück.",
     "default": "Ursprüngliche Anmeldung",

@@ -320,22 +320,29 @@ def _record_move(service: Any, incident: Any, profile_id: str) -> None:
 
 
 async def take_over(service: Any, incident: Any) -> bool:
-    """Every login is out: move claude's panes to an API key account the user
-    opened to this. Claude's live login is never swapped for a key, so instead
-    of a transaction the new default goes to ``paneDefaults`` and each window
-    reopens its panes through the same path as "continue with this account".
-    Counts against the automatic-switch budget like any other swap."""
+    """Every login is out: move the panes on claude's live login to an API key
+    account the user opened to this. Claude's live login is never swapped for a
+    key, so instead of a transaction the new default goes to ``paneDefaults``
+    and each window reopens its panes, leaving any that are busy.
+
+    Runs only when the live login itself ran out: a pinned account running out
+    leaves the live login's quota unspent, and that must cost nothing. Counts
+    against the automatic-switch budget like any other swap."""
     from . import app
 
-    if incident.agent_key != "claude":
+    if incident.agent_key != "claude" or incident.outgoing_slot_id != service._current_slot("claude"):
         return False
     target = next(
         (p for p in _store().list()["profiles"]
-         if p.get("agentKey") == "claude" and is_api_key(p) and p.get("autoSwitch") is True),
+         if p.get("agentKey") == "claude" and is_api_key(p) and p.get("autoSwitch") is True
+         and p.get("id") != incident.outgoing_slot_id),
         None,
     )
     if target is None or login_policy_blocks("claude"):
         return False
+    if service.audit_degraded:
+        service._stop_incident(incident, "api-key-takeover-paused")
+        return True
     if service._budget_retry_after("claude", incident.auth_scope) > 0:
         service._stop_incident(incident, "auto_budget_exhausted")
         return True
@@ -346,10 +353,18 @@ async def take_over(service: Any, incident: Any) -> bool:
         _record_move(service, incident, target["id"])
     except Exception as err:  # noqa: BLE001
         log.warning("api key takeover not recorded (%s)", type(err).__name__)
-        service._stop_incident(incident, "audit-write-failed")
+        service._stop_incident(incident, "api-key-takeover-unrecorded")
         return True
-    _store().set_pane_default("claude", target["id"])
-    panes = [row["paneId"] for row in service._affected_terminals(incident.auth_scope) if row.get("paneId")]
+    try:
+        _store().set_pane_default("claude", target["id"])
+    except Exception as err:  # noqa: BLE001
+        log.warning("api key takeover not applied (%s)", type(err).__name__)
+        service._stop_incident(incident, "api-key-takeover-failed")
+        return True
+    panes = [
+        row["paneId"] for row in service._affected_terminals(incident.auth_scope)
+        if row.get("paneId") and row.get("credentialSource") == "vault"
+    ]
     service._stop_incident(incident, "api-key-takeover")
     await app.broadcast_main_windows(make_event(TAKEOVER_EVENT, {
         "agentKey": "claude", "profileId": target["id"], "name": target.get("name"), "paneIds": panes,
