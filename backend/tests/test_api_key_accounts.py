@@ -37,6 +37,9 @@ def vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> CredentialVault:
     )
     monkeypatch.setattr(app, "credential_vault", v)
     monkeypatch.setattr(ak, "_codex_system_config", lambda: tmp_path / "system-config.toml")
+    # These tests drive the account logic. Windows refuses Claude keys before
+    # that logic runs, and test_windows_refuses_a_claude_key pins the refusal.
+    monkeypatch.setattr(ak.osplat, "impl_name", "_linux")
     return v
 
 
@@ -774,6 +777,7 @@ def test_macos_key_stays_out_of_argv(tmp_path: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(app, "credential_vault", vault)
     store = CliProfilesStore(path=tmp_path / "cli-profiles.json", profiles_root=tmp_path / "root")
     monkeypatch.setattr(app, "cli_profiles_store", store)
+    monkeypatch.setattr(ak.osplat, "impl_name", "_darwin")
     ak.create("claude", "a", ANTHROPIC_KEY)
 
     assert calls

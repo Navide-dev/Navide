@@ -23,6 +23,18 @@ export async function reopenOnKey(
   return state.ready ? deps.rebuild(paneId, profileId) : (state.reason ?? 'busy')
 }
 
+/** How the takeover rebuilds a pane: the same restart a quota switch does,
+ *  keeping the scrollback and offering continue, since nobody asked for it. */
+export function keyMoveRebuild(profileId: string) {
+  return {
+    profileId,
+    suppressBusyToast: true,
+    offerContinue: true,
+    freshWhenNoTranscript: true,
+    preserveScrollback: true,
+  }
+}
+
 /** Whether a login still has a spent window, by the clock as well as the
  *  reading: every spent window has to have reset before it counts as back, and
  *  one with no known reset never has. null when there is no good reading. */
