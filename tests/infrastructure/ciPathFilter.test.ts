@@ -141,6 +141,8 @@ describe('path filter allowlists match what the suites read', () => {
       // filter never skips.
       'scripts/changed-backend-tests.mjs',
       'tests/infrastructure/changedBackendTests.test.ts',
+      // A local pre-push runner; no CI job runs it.
+      'scripts/pre-push-check.mjs',
     ])
     const offenders = sources.filter((source) => {
       if (allowed.has(source)) return false
