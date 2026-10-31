@@ -122,6 +122,7 @@ from .agent_message_log import AgentMessageLog
 from .preview_log import MAX_ROWS as PREVIEW_MAX_ROWS, PreviewLog
 from . import git_service
 from . import issue_service
+from . import file_query
 from . import fs_service
 from . import pty_registry
 from . import search_service
@@ -862,6 +863,7 @@ async def _broadcast_git_changed(
     `paths` is additive — `workspace_path` stays exactly as the existing
     `git.changed` consumers read it."""
     git_service.pane_git_snapshots.invalidate(ws_path)
+    file_query.invalidate(ws_path)
     entries = [
         {"rel_path": rel_path, "change": _GIT_EVENT_CHANGES[event_type]}
         for rel_path, event_type in (paths or [])

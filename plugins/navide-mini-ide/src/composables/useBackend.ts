@@ -82,6 +82,12 @@ async function request(type: string, payload: Record<string, unknown>): Promise<
     case 'fs.read_image': return invoke('fs.readImage', selectedPath)
     case 'fs.list_dir': return invoke('fs.listDirectory', { path: path || '.', showHidden: Boolean(payload.show_hidden) })
     case 'fs.list_files_flat': return invoke('fs.listFilesFlat', { query: String(payload.query ?? ''), ...(typeof payload.max_results === 'number' ? { maxResults: payload.max_results } : {}) })
+    case 'fs.query_files': return invoke('fs.queryFiles', {
+      query: String(payload.query ?? ''),
+      matchOn: payload.match_on as 'name' | 'path',
+      mode: payload.mode as 'substring' | 'subsequence',
+      limit: Number(payload.limit),
+    })
     case 'fs.stat_path': return invoke('fs.statPath', selectedPath)
     case 'fs.mkdir': return invoke('fs.createDirectory', { path })
     case 'fs.create_file': return invoke('fs.createFile', { path, content: String(payload.content ?? '') })
