@@ -20,6 +20,7 @@ import type {
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import type { PluginActivityReport } from '../shared/pluginActivity'
+import type { PluginCommandEntry, PluginCommandRunResult } from '../shared/pluginCommands'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
@@ -1440,6 +1441,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:disabledStoreStatus'),
     resetDisabledStore: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
       ipcRenderer.invoke('plugins:resetDisabledStore'),
+    listCommands: (): Promise<PluginCommandEntry[]> => ipcRenderer.invoke('plugins:listCommands'),
+    runCommand: (args: { commandId: string; workspace_path: string }): Promise<PluginCommandRunResult> =>
+      ipcRenderer.invoke('plugins:runCommand', args),
     listContributions: (): Promise<Array<{
       pluginId: string
       packageVersion: string | null

@@ -654,6 +654,15 @@ that page replaced the old reference:
   shortcuts. `⌘R`, `⇧⌘R` and `⌘W` are **not** on this list: their menu roles
   were dropped precisely so the rule table could have them.
 
+### Navide plugin commands
+
+A Navide plugin that declares commands gets its own group here, under the
+plugin's name. A suggested key is offered on the row and is bound only when
+you press **Use**; a key that is already taken is shown as taken. Removing or
+disabling the plugin keeps your binding in `keybindings.json` and shows it
+under **Navide plugin not installed**; reinstalling brings it back. Importing
+a file with such a binding keeps it instead of rejecting it.
+
 ---
 
 ## Implementation Architecture

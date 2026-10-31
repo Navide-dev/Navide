@@ -7965,6 +7965,20 @@
       "import-failed": "インポートに失敗しました",
       "import-done": "{count} 件のルールをインポートし、{rejected} 件を拒否しました",
       "import-rejected": "次の {count} 件は拒否され、インポートされませんでした：",
+      "plugin": {
+        "mark": "Navide プラグイン",
+        "not-installed": "未インストールの Navide プラグイン",
+        "suggested": "推奨：{key}",
+        "use-suggested": "使用",
+        "suggested-taken": "使用中",
+        "import-deferred": "{count} 件のショートカットは、Navide プラグインをインストールすると有効になります。",
+        "run": {
+          "not-installed": "この Navide プラグインはインストールされていません。",
+          "view-not-open": "先にこの Navide プラグインのビューを開いてから、もう一度ショートカットを押してください。",
+          "view-not-openable": "この Navide プラグインのビューはショートカットで開けません。",
+          "method-unavailable": "この Navide プラグインのコマンドはまだ実行できません。"
+        }
+      },
       "reset-all": "すべてリセット",
       "reset-row": "既定値に戻す",
       "customized-count": "{count} 件のショートカットをカスタマイズ済み",

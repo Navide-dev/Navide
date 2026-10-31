@@ -7965,6 +7965,20 @@
       "import-failed": "匯入失敗",
       "import-done": "已匯入 {count} 條規則，{rejected} 條被拒絕",
       "import-rejected": "有 {count} 筆被拒絕、未匯入：",
+      "plugin": {
+        "mark": "Navide 外掛",
+        "not-installed": "未安裝的 Navide 外掛",
+        "suggested": "建議：{key}",
+        "use-suggested": "套用",
+        "suggested-taken": "已被使用",
+        "import-deferred": "有 {count} 個快捷鍵要等 Navide 外掛安裝後才會生效。",
+        "run": {
+          "not-installed": "這個 Navide 外掛未安裝。",
+          "view-not-open": "請先打開這個 Navide 外掛的視圖，再按一次快捷鍵。",
+          "view-not-openable": "這個 Navide 外掛的視圖無法用快捷鍵開啟。",
+          "method-unavailable": "這個 Navide 外掛指令目前還無法執行。"
+        }
+      },
       "reset-all": "全部還原",
       "reset-row": "還原成預設",
       "customized-count": "已自訂 {count} 個快捷鍵",

@@ -7965,6 +7965,20 @@
       "import-failed": "가져오기 실패",
       "import-done": "규칙 {count}개를 가져왔어요. {rejected}개 거부됨",
       "import-rejected": "항목 {count}개가 거부되어 가져오지 않았어요:",
+      "plugin": {
+        "mark": "Navide 플러그인",
+        "not-installed": "설치되지 않은 Navide 플러그인",
+        "suggested": "추천: {key}",
+        "use-suggested": "사용",
+        "suggested-taken": "이미 사용 중",
+        "import-deferred": "단축키 {count}개는 Navide 플러그인을 설치하면 작동해요.",
+        "run": {
+          "not-installed": "이 Navide 플러그인이 설치되어 있지 않아요.",
+          "view-not-open": "이 Navide 플러그인의 뷰를 먼저 연 다음 단축키를 다시 눌러 주세요.",
+          "view-not-openable": "이 Navide 플러그인의 뷰는 단축키로 열 수 없어요.",
+          "method-unavailable": "이 Navide 플러그인 명령은 아직 실행할 수 없어요."
+        }
+      },
       "reset-all": "모두 초기화",
       "reset-row": "기본값으로 초기화",
       "customized-count": "단축키 {count}개 사용자 지정됨",

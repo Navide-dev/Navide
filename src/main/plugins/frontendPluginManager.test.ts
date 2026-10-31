@@ -19003,3 +19003,90 @@ describe('a third-party window view opens without its native backend', () => {
     }
   })
 })
+
+describe('Navide plugin commands', () => {
+  const views: PluginLaunchDescriptor['views'] = [
+    { id: 'win', contributionKey: 'acme.runner.win', kind: 'custom', location: 'window', title: 'W', entryFile: '/p/w.html' },
+    { id: 'tab', contributionKey: 'acme.runner.tab', kind: 'custom', location: 'main', title: 'M', entryFile: '/p/m.html' },
+    { id: 'side', contributionKey: 'acme.runner.side', kind: 'custom', location: 'left', title: 'L', entryFile: '/p/l.html' },
+    { id: 'more', contributionKey: 'acme.runner.more', kind: 'custom', location: 'detail', title: 'D', entryFile: '/p/d.html' },
+  ]
+  const managerWith = (hostWindow: object) => {
+    const mgr = new FrontendPluginManager()
+    mgr.registerDescriptor({
+      ...descriptor('acme.runner'),
+      views,
+      displayName: 'Runner',
+      commands: [
+        { id: 'acme.runner.win', title: 'Win', run: { view: 'win', target: { tab: 'a' } }, suggestedKey: 'cmd+alt+t' },
+        { id: 'acme.runner.tab', title: 'Tab', run: { view: 'tab', target: { tab: 'b' } } },
+        { id: 'acme.runner.side', title: 'Side', run: { view: 'side' } },
+        { id: 'acme.runner.more', title: 'More', run: { view: 'more' } },
+        { id: 'acme.runner.call', title: 'Call', run: { method: 'tests.run' } },
+      ],
+    })
+    const internals = mgr as unknown as {
+      running: Map<string, unknown>
+      sendOpenTarget: (record: unknown, params: Record<string, string>) => void
+    }
+    const sent = vi.spyOn(internals, 'sendOpenTarget').mockImplementation(() => {})
+    const mount = (contributionKey: string, visible: boolean): void => {
+      internals.running.set(contributionKey, { contributionKey, hostWindow, workspacePath: '/ws', visible })
+    }
+    return { mgr, mount, sent }
+  }
+  const host = {} as never
+
+  it('lists nothing for a package that declares none', () => {
+    const mgr = new FrontendPluginManager()
+    mgr.registerDescriptor(descriptor('acme.plain'))
+    expect(mgr.listCommandCatalog()).toEqual([])
+    expect(mgr.resolveCommandRun(host, 'acme.plain.go', '/ws')).toEqual({ ok: false, reason: 'not-installed' })
+  })
+
+  it('names the plugin and the suggested key', () => {
+    expect(managerWith(host).mgr.listCommandCatalog()[0]).toEqual({
+      commandId: 'acme.runner.win', title: 'Win', pluginId: 'acme.runner', pluginName: 'Runner', suggestedKey: 'cmd+alt+t',
+    })
+  })
+
+  it('hands a window view back to be opened with its target', () => {
+    expect(managerWith(host).mgr.resolveCommandRun(host, 'acme.runner.win', '/ws')).toEqual({
+      ok: true, window: { contributionKey: 'acme.runner.win', params: { tab: 'a' } },
+    })
+  })
+
+  it('reveals a mounted main tab and delivers the target', () => {
+    const { mgr, mount, sent } = managerWith(host)
+    mount('acme.runner.tab', false)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: true, reveal: 'acme.runner.tab' })
+    expect(sent).toHaveBeenCalledWith(expect.objectContaining({ contributionKey: 'acme.runner.tab' }), { tab: 'b' })
+  })
+
+  it('never mounts a view nobody opened', () => {
+    const { mgr, sent } = managerWith(host)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+    expect(mgr.resolveCommandRun(host, 'acme.runner.side', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+    expect(sent).not.toHaveBeenCalled()
+  })
+
+  it('leaves a hidden region alone, and uses one that is on screen', () => {
+    const { mgr, mount } = managerWith(host)
+    mount('acme.runner.side', false)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.side', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+    mount('acme.runner.side', true)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.side', '/ws')).toEqual({ ok: true })
+  })
+
+  it('ignores a view mounted in another window or workspace', () => {
+    const { mgr, mount } = managerWith({})
+    mount('acme.runner.tab', true)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+  })
+
+  it('reports what it cannot do yet', () => {
+    const { mgr } = managerWith(host)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.more', '/ws')).toEqual({ ok: false, reason: 'view-not-openable' })
+    expect(mgr.resolveCommandRun(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'method-unavailable' })
+  })
+})

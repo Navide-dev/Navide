@@ -7965,6 +7965,20 @@
       "import-failed": "Échec de l’importation",
       "import-done": "{count} règle importée (rejets : {rejected}) | {count} règles importées (rejets : {rejected})",
       "import-rejected": "Entrées rejetées et non importées ({count}) :",
+      "plugin": {
+        "mark": "Plugin Navide",
+        "not-installed": "Plugin Navide non installé",
+        "suggested": "Suggéré : {key}",
+        "use-suggested": "Utiliser",
+        "suggested-taken": "déjà utilisé",
+        "import-deferred": "Raccourcis en attente d’un plugin Navide non installé : {count}.",
+        "run": {
+          "not-installed": "Ce plugin Navide n’est pas installé.",
+          "view-not-open": "Ouvrez d’abord la vue de ce plugin Navide, puis appuyez de nouveau sur le raccourci.",
+          "view-not-openable": "La vue de ce plugin Navide ne s’ouvre pas avec un raccourci.",
+          "method-unavailable": "Cette commande du plugin Navide ne peut pas encore s’exécuter."
+        }
+      },
       "reset-all": "Tout réinitialiser",
       "reset-row": "Rétablir la valeur par défaut",
       "customized-count": "{count} raccourci personnalisé | {count} raccourcis personnalisés",
