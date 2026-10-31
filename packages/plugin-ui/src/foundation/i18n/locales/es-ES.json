@@ -2848,7 +2848,7 @@
               "more": "la sección 2 de esta página"
             },
             "layout": {
-              "what": "La estructura de cinco huecos, en qué hueco aparece cada vista, diseños predefinidos",
+              "what": "La estructura de cinco huecos, en qué hueco aparece cada vista, diseños predefinidos, botones de acción y el archivo de espacio de trabajo de un proyecto",
               "more": "la sección 4 del tema «Áreas de trabajo y panes»"
             },
             "notifications": {
@@ -4551,6 +4551,13 @@
           "callout1": {
             "title": "Los panes abiertos conservan la cuenta anterior",
             "text": "El propio panel lo dice: «los panes ya abiertos conservan la cuenta anterior hasta que se vuelvan a abrir». Todas las cuentas comparten tu carpeta personal real (las sessions y el historial se comparten); cambiar de cuenta <strong>intercambia en el sitio las credenciales guardadas</strong>."
+          },
+          "apiKeys": {
+            "title": "Cuentas con clave de API",
+            "p1": "<strong>Claude Code y Codex</strong> también pueden funcionar con una clave de API, con facturación por uso en lugar de la cuota de la suscripción. Elige <strong>+ Añadir cuenta</strong> y luego <strong>Pegar una clave de API</strong>. Después de guardar solo se muestran los cuatro últimos caracteres. Las cuentas con clave de API de Claude no admiten Windows en esta primera versión. Las de Codex aún no se han probado con una clave real, así que avísanos de cualquier problema.",
+            "p2": "En Claude Code, <strong>Usar en paneles nuevos</strong> hace que los paneles nuevos usen la clave; los que ya están abiertos conservan su cuenta hasta reiniciarse. Codex tiene una sola credencial activa, así que cambiar a su clave reinicia todos los paneles de Codex. Los agentes no pueden elegir por sí mismos una cuenta con clave de API, pero los paneles que abren siguen tu valor predeterminado con clave de API, y también sus paneles hijos.",
+            "p3": "<strong>El límite real de gasto es el de la consola del proveedor.</strong> El recordatorio mensual no es un límite estricto y, en esta versión, solo guarda el importe: Navide no mide el gasto ni avisa. El cambio automático está desactivado hasta que lo actives para esa cuenta, y cuando vuelve la cuota de la suscripción Navide solo te avisa. Una cuenta de suscripción iniciada solo en su propia carpeta no es candidata al agotarse la cuota, así que Navide aún puede cambiar a una clave de API.",
+            "p4": "La clave se queda en este ordenador, no pasa por Navide Cloud y solo se envía al proveedor que la emitió. Un programa que se ejecute en un panel puede obtener la clave, así que considera que el panel puede usarla. Tras volver a una versión anterior de Navide, hacer clic en una cuenta con clave de API borra el inicio de sesión actual; al volver a tu cuenta original se recupera. Elimina las cuentas con clave de API antes de volver atrás."
           },
           "h2": "Si inicias sesión fuera de Navide, se da cuenta",
           "p8": "Si ejecutas <code>claude /login</code> o algo parecido en tu propio terminal, el vigilante de credenciales de Navide está observando la carpeta de credenciales de cada CLI. Unos <strong>0,8 segundos</strong> después de que cambie un archivo, lee una «huella de identidad»; si no ha cambiado, no pasa nada; si no, el indicador «Predeterminada» pasa a la cuenta correspondiente y se vuelve a leer la cuota. El correo, la etiqueta <em>Predeterminada</em> y la insignia de cuota del panel Cuentas se actualizan en directo.",

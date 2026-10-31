@@ -2461,6 +2461,16 @@ so it adds no permission and no disclosure row.
 **A package declaring commands must set `engines.navide` to `>=0.2.36`.** An
 older Navide refuses the field as unknown and the package does not load.
 
+Two limits apply in 0.2.36:
+
+- Neither the App nor the Registry checks this requirement. A package that
+  declares commands with a lower `engines.navide` passes validation, and an
+  older Navide then offers it and fails to load it. Set the value yourself.
+- A Registry that has not been updated to the 0.2.36 manifest rules rejects a
+  package declaring commands at publish, whatever its `engines.navide`. Until
+  the production Registry has them, such a package can be loaded from a local
+  file or a developer folder but cannot be published.
+
 | Field | Required | Rule |
 |---|---|---|
 | `id` | yes | The plugin id, a dot, then letters and digits starting with a lower-case letter. Unique in the manifest |

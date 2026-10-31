@@ -2848,7 +2848,7 @@
               "more": "section 2 de cette page"
             },
             "layout": {
-              "what": "La structure à cinq emplacements, l’emplacement de chaque vue, les dispositions prédéfinies",
+              "what": "La structure à cinq emplacements, l’emplacement de chaque vue, les dispositions prédéfinies, les boutons d’action et le fichier d’espace de travail d’un projet",
               "more": "section 4 de la rubrique « Espaces de travail et panes »"
             },
             "notifications": {
@@ -4551,6 +4551,13 @@
           "callout1": {
             "title": "Les panes ouverts conservent le compte précédent",
             "text": "Le panneau le dit lui-même : « les panes déjà ouverts conservent le compte précédent jusqu’à leur réouverture ». Tous les comptes partagent votre véritable dossier personnel (les sessions et l’historique sont partagés) ; changer de compte <strong>remplace sur place les identifiants enregistrés</strong>."
+          },
+          "apiKeys": {
+            "title": "Comptes à clé API",
+            "p1": "<strong>Claude Code et Codex</strong> peuvent aussi fonctionner avec une clé API, facturée à l’usage plutôt que sur le quota de l’abonnement. Choisissez <strong>+ Ajouter un compte</strong>, puis <strong>Coller une clé API</strong>. Après l’enregistrement, seuls les quatre derniers caractères sont affichés. Les comptes à clé API Claude ne prennent pas en charge Windows dans cette première version. Ceux de Codex n’ont pas encore été testés avec une vraie clé, signalez-nous tout problème.",
+            "p2": "Pour Claude Code, <strong>Utiliser pour les nouveaux panneaux</strong> fait démarrer les nouveaux panneaux sur la clé ; les panneaux déjà ouverts gardent leur compte jusqu’à leur redémarrage. Codex n’a qu’un seul identifiant actif, donc passer à sa clé redémarre tous les panneaux Codex. Les agents ne peuvent pas choisir eux-mêmes un compte à clé API, mais les panneaux qu’ils ouvrent suivent votre réglage par défaut à clé API, tout comme leurs panneaux enfants.",
+            "p3": "<strong>La vraie limite de dépense est celle de la console du fournisseur.</strong> Le rappel mensuel n’est pas une limite stricte et, dans cette version, il enregistre seulement le montant : Navide ne suit pas les dépenses et n’envoie aucune alerte. Le basculement automatique reste désactivé tant que vous ne l’activez pas pour ce compte, et quand le quota de l’abonnement revient, Navide vous prévient seulement. Un compte d’abonnement connecté uniquement dans son propre dossier n’est pas candidat à l’épuisement du quota, donc Navide peut quand même basculer vers une clé API.",
+            "p4": "La clé reste sur cet ordinateur, ne passe pas par Navide Cloud et n’est envoyée qu’au fournisseur qui l’a émise. Un programme exécuté dans un panneau peut obtenir la clé, considérez donc que le panneau peut l’utiliser. Après un retour à une ancienne version de Navide, cliquer sur un compte à clé API efface la connexion actuelle ; revenir à votre compte d’origine la restaure. Supprimez les comptes à clé API avant de revenir en arrière."
           },
           "h2": "Connectez-vous en dehors de Navide, il s’en aperçoit",
           "p8": "Si vous exécutez <code>claude /login</code> ou une commande équivalente dans votre propre terminal, l’observateur d’identifiants de Navide surveille le dossier d’identifiants de chaque CLI. Environ <strong>0,8 seconde</strong> après la modification d’un fichier, il lit une « empreinte d’identité » ; si elle est inchangée, rien ne se passe, sinon le repère « Par défaut » passe au compte correspondant et le quota est relu. L’adresse e-mail, l’étiquette <em>Par défaut</em> et le badge de quota du panneau Comptes se mettent à jour en direct.",

@@ -2848,7 +2848,7 @@
               "more": "seção 2 desta página"
             },
             "layout": {
-              "what": "A estrutura de cinco espaços, em qual espaço cada visualização aparece, layouts predefinidos",
+              "what": "A estrutura de cinco espaços, em qual espaço cada visualização aparece, layouts predefinidos, botões de ação e o arquivo de ambiente de trabalho de um projeto",
               "more": "seção 4 do tópico “Workspaces e panes”"
             },
             "notifications": {
@@ -4551,6 +4551,13 @@
           "callout1": {
             "title": "Os panes abertos mantêm a conta anterior",
             "text": "O próprio painel diz: “os panes já abertos mantêm a conta anterior até serem reabertos”. Todas as contas compartilham sua pasta pessoal real (sessions e histórico são compartilhados); trocar de conta <strong>substitui as credenciais guardadas no lugar</strong>."
+          },
+          "apiKeys": {
+            "title": "Contas com chave de API",
+            "p1": "O <strong>Claude Code e o Codex</strong> também podem usar uma chave de API, com cobrança por uso em vez da cota da assinatura. Escolha <strong>+ Adicionar conta</strong> e depois <strong>Colar uma chave de API</strong>. Depois de salvar, só os quatro últimos caracteres aparecem. As contas com chave de API do Claude não têm suporte a Windows nesta primeira versão. As do Codex ainda não foram testadas com uma chave real, então avise se encontrar problemas.",
+            "p2": "No Claude Code, <strong>Usar em novos painéis</strong> faz os novos painéis usarem a chave; os que já estão abertos mantêm a conta até reiniciar. O Codex tem uma única credencial ativa, então trocar para a chave reinicia todos os painéis do Codex. Os agentes não podem escolher sozinhos uma conta com chave de API, mas os painéis que eles abrem seguem o seu padrão com chave de API, assim como os painéis filhos.",
+            "p3": "<strong>O limite real de gastos é o do console do fornecedor.</strong> O lembrete mensal não é um limite rígido e, nesta versão, apenas guarda o valor: o Navide não acompanha gastos nem avisa. A troca automática fica desligada até você ativá-la para essa conta, e quando a cota da assinatura volta o Navide apenas avisa. Uma conta de assinatura conectada apenas na própria pasta não é candidata quando a cota acaba, então o Navide ainda pode trocar para uma chave de API.",
+            "p4": "A chave fica neste computador, não passa pelo Navide Cloud e vai apenas para o fornecedor que a emitiu. Um programa em execução em um painel pode obter a chave, então considere que o painel pode usá-la. Depois de voltar a uma versão anterior do Navide, clicar em uma conta com chave de API apaga o login atual; voltar à conta original o restaura. Exclua as contas com chave de API antes de voltar de versão."
           },
           "h2": "Se você entrar fora do Navide, ele percebe",
           "p8": "Se você executar <code>claude /login</code> ou algo parecido no seu próprio terminal, o observador de credenciais do Navide está acompanhando a pasta de credenciais de cada CLI. Cerca de <strong>0,8 segundo</strong> depois que um arquivo muda, ele lê uma “impressão digital da identidade”; se ela não mudou, nada acontece; caso contrário, o indicador “Padrão” passa para a conta correspondente e a cota é lida de novo. O e-mail, a etiqueta <em>Padrão</em> e o selo de cota no painel Contas são atualizados ao vivo.",

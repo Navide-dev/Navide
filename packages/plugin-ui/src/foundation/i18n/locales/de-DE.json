@@ -2848,7 +2848,7 @@
               "more": "Abschnitt 2 dieser Seite"
             },
             "layout": {
-              "what": "Die Oberfläche mit fünf Plätzen, welche Ansicht auf welchem Platz landet, Layoutvorlagen",
+              "what": "Die Oberfläche mit fünf Plätzen, welche Ansicht auf welchem Platz landet, Layoutvorlagen, Aktionsschaltflächen und die Arbeitsflächen-Datei eines Projekts",
               "more": "Abschnitt 4 des Themas „Arbeitsbereiche und Bereiche“"
             },
             "notifications": {
@@ -4551,6 +4551,13 @@
           "callout1": {
             "title": "Geöffnete Bereiche behalten das vorherige Konto",
             "text": "Das Panel sagt es selbst: „Bereits geöffnete Bereiche behalten das vorherige Konto, bis sie neu geöffnet werden“. Alle Konten teilen sich Ihr echtes Home-Verzeichnis (Sessions und Verlauf werden geteilt); ein Kontowechsel <strong>tauscht die gespeicherten Anmeldeinformationen an Ort und Stelle</strong>."
+          },
+          "apiKeys": {
+            "title": "API-Schlüssel-Konten",
+            "p1": "<strong>Claude Code und Codex</strong> laufen auch mit einem API-Schlüssel, abgerechnet nach Nutzung statt über das Abo-Kontingent. Wähle <strong>+ Konto hinzufügen</strong> und dann <strong>API-Schlüssel einfügen</strong>. Nach dem Speichern sind nur noch die letzten vier Zeichen sichtbar. Claude-API-Schlüssel-Konten unterstützen Windows in dieser ersten Version nicht. Codex-API-Schlüssel-Konten wurden noch nicht mit einem echten Schlüssel getestet, melde Probleme also gern.",
+            "p2": "Bei Claude Code startet <strong>Für neue Bereiche verwenden</strong> neue Bereiche mit dem Schlüssel; offene Bereiche behalten ihr Konto bis zum Neustart. Codex hat nur eine aktive Anmeldung, daher startet der Wechsel zum Schlüssel alle Codex-Bereiche neu. Agents können ein API-Schlüssel-Konto nicht selbst wählen, aber die von ihnen geöffneten Bereiche folgen deiner API-Schlüssel-Vorgabe, ebenso deren Unterbereiche.",
+            "p3": "<strong>Die echte Ausgabengrenze ist die in der Konsole des Anbieters.</strong> Die monatliche Erinnerung ist keine harte Grenze und speichert in dieser Version nur den Betrag: Navide erfasst keine Ausgaben und warnt nicht. Der automatische Wechsel bleibt aus, bis du ihn für das Konto einschaltest, und kommt das Abo-Kontingent zurück, weist Navide nur darauf hin. Ein Abo-Konto, das nur in seinem eigenen Ordner angemeldet ist, zählt bei aufgebrauchtem Kontingent nicht als Kandidat, Navide kann also trotzdem zu einem API-Schlüssel wechseln.",
+            "p4": "Der Schlüssel bleibt auf diesem Computer, läuft nicht über Navide Cloud und geht nur an den Anbieter, der ihn ausgestellt hat. Ein Programm in einem Bereich kann den Schlüssel abrufen, geh also davon aus, dass der Bereich ihn nutzen kann. Nach der Rückkehr zu einer älteren Navide-Version löscht ein Klick auf ein API-Schlüssel-Konto die aktuelle Anmeldung; der Wechsel zurück zum ursprünglichen Konto stellt sie wieder her. Lösche API-Schlüssel-Konten vor einem Downgrade."
           },
           "h2": "Melden Sie sich außerhalb von Navide an, bemerkt Navide es",
           "p8": "Führen Sie <code>claude /login</code> oder Ähnliches in Ihrem eigenen Terminal aus, beobachtet der Anmeldeinformationen-Watcher von Navide das Anmeldeverzeichnis jeder CLI. Etwa <strong>0,8 Sekunden</strong> nach einer Dateiänderung liest er einen „Identitätsfingerabdruck“; ist dieser unverändert, passiert nichts, andernfalls wandert der Zeiger „Standard“ zum passenden Konto, und das Kontingent wird neu gelesen. E-Mail-Adresse, Kennzeichnung <em>Standard</em> und Kontingent-Badge im Panel „Konten“ aktualisieren sich live.",

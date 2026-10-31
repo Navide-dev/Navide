@@ -2848,7 +2848,7 @@
               "more": "section 2 of this page"
             },
             "layout": {
-              "what": "The five-slot shell, which slot each view lands in, layout presets",
+              "what": "The five-slot shell, which slot each view lands in, layout presets, action buttons and a project's workbench file",
               "more": "section 4 of the \"Workspaces & panes\" topic"
             },
             "notifications": {
@@ -4551,6 +4551,13 @@
           "callout1": {
             "title": "Open panes keep the previous account",
             "text": "The panel says it itself: \"already-open panes keep the previous account until reopened\". All accounts share your real home directory (sessions and history are shared); switching accounts <strong>swaps the stored credentials in place</strong>."
+          },
+          "apiKeys": {
+            "title": "API key accounts",
+            "p1": "<strong>Claude Code and Codex</strong> can also run on an API key, billed by usage instead of your subscription quota. Choose <strong>+ Add account</strong>, then <strong>Paste an API key</strong>. After saving, only the last four characters are shown. Claude API key accounts do not support Windows in this first version. Codex API key accounts have not been tested with a real key yet, so please report any problems.",
+            "p2": "For Claude Code, <strong>Use for new panes</strong> starts new panes on the key; panes already open keep their account until they restart. Codex has one live credential, so switching to its key restarts every Codex pane. Agents cannot pick an API key account themselves, but panes they open follow your API key default, and so do their child panes.",
+            "p3": "<strong>The real spending limit is the one in the vendor's console.</strong> The monthly reminder is not a hard limit, and in this version it only saves the amount: Navide does not track spending or alert you. Automatic switching is off until you turn it on for that account, and when subscription quota returns Navide only tells you. A subscription account signed in only in its own folder is not a candidate when quota runs out, so Navide may still switch to an API key.",
+            "p4": "The key stays on this computer and does not go through Navide Cloud. It goes only to the vendor that issued it. A program running in a pane can obtain the key, so treat a pane as able to use it. After going back to an older Navide, clicking an API key account clears the current login; switching back to your original account restores it. Delete API key accounts before you downgrade."
           },
           "h2": "Sign in outside Navide and it notices",
           "p8": "If you run <code>claude /login</code> or similar in your own terminal, Navide's credential watcher is watching each CLI's credential directory. About <strong>0.8 seconds</strong> after a file changes it reads an \"identity fingerprint\"; if the fingerprint is unchanged nothing happens, otherwise the \"Default\" pointer moves to the matching account and a quota re-read is triggered. The email, <em>Default</em> tag and quota badge on the Accounts panel update live.",
