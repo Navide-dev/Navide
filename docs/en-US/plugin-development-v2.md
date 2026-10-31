@@ -2346,8 +2346,11 @@ The Host owns resolution, authorization and opening; matching belongs to the
 caller. A caller that parses locations itself sends `targets`
 (`{ path, line? }`), which replace `candidates` and are just as untrusted, and
 `search`, the `fs.queryFiles` strategy (`matchOn`, `mode`, `exclude`,
-`respectGitignore`, `includeHidden`) the picker uses when the user types. Rows
-keep the order the search returned. Without these fields the Host reads a
+`respectGitignore`, `includeHidden`) the picker uses when the user types. Its
+`exclude` has the `fs.queryFiles` limits, and a picker search shares that
+method's one-at-a-time slot: it waits for the plugin's own query, and while it
+runs the plugin's `fs.queryFiles` answers `busy`. Rows keep the order the search
+returned. Without these fields the Host reads a
 `path:line` suffix from each candidate and searches as `fs.listFilesFlat` does;
 that string form is deprecated. A package inside its workspace does not need
 this picker at all: `system:fs` already lets it find a file and

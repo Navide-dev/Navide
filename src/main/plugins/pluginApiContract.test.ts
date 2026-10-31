@@ -156,6 +156,8 @@ describe('ui.openFilePicker', () => {
     [{ query: 'a', candidates: [], search: { matchOn: 'content' } }],
     [{ query: 'a', candidates: [], search: { limit: 5 } }],
     [{ query: 'a', candidates: [], search: { exclude: 'vendor' } }],
+    [{ query: 'a', candidates: [], search: { exclude: Array(65).fill('x') } }],
+    [{ query: 'a', candidates: [], search: { exclude: ['x'.repeat(257)] } }],
   ])('refuses %j', (request) => {
     expect(validate(request)).toBe(false)
   })

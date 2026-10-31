@@ -1013,6 +1013,10 @@ const GIT_HOST_FS_MUTATION_TYPES = new Set([
   'fs.delete',
   'fs.rename',
 ])
+
+/** How long a picker search waits for the plugin's own file query to finish. */
+const FILE_PICKER_SLOT_WAIT_MS = 5_000
+
 const PUBLIC_FS_WS_TYPES: Readonly<Record<string, string>> = {
   'fs.readFile': 'fs.read_file',
   'fs.writeFile': 'fs.write_file',
@@ -6704,6 +6708,7 @@ export class FrontendPluginManager {
         if (!plugin.hostWindow.isDestroyed()) return plugin.hostWindow.getContentBounds()
         return { x: 0, y: 0, width: 0, height: 0 }
       }
+      let latestSearch = 0
       return host.open({
         instanceId: plugin.instanceId,
         ...(sessionId ? { sessionId } : {}),
@@ -6716,28 +6721,43 @@ export class FrontendPluginManager {
         search: async (query: string): Promise<string[]> => {
           if (!canDispatch()) throw new Error('file picker capability is denied')
           const strategy = (plan.args as unknown as FilePickerInvocation['request']).search
-          const response = await this.sendPublicBackend(
-            strategy ? 'fs.query_files' : 'fs.list_files_flat',
-            strategy
-              ? {
-                  workspace_path: workspacePath,
-                  query,
-                  match_on: strategy.matchOn,
-                  mode: strategy.mode,
-                  exclude: strategy.exclude,
-                  respect_gitignore: strategy.respectGitignore,
-                  include_hidden: strategy.includeHidden,
-                  limit: 20,
-                }
-              : { workspace_path: workspacePath, query, max_results: 20 },
-            canDispatch,
-          )
-          if (!canDispatch()) throw new Error('file picker capability is denied')
-          const files = toPayload(response).files
-          if (!Array.isArray(files)) return []
-          return files
-            .map((file: unknown) => (typeof file === 'object' && file !== null ? (file as { path?: unknown }).path : file))
-            .filter((file): file is string => typeof file === 'string')
+          if (strategy) {
+            // The picker shares the plugin's fs.queryFiles slot. It waits rather
+            // than answering busy: the keystroke it serves may be the last one.
+            const turn = ++latestSearch
+            const giveUpAt = Date.now() + FILE_PICKER_SLOT_WAIT_MS
+            while (this.fileQueriesInFlight.has(plugin.id)) {
+              if (turn !== latestSearch || Date.now() >= giveUpAt || !canDispatch()) return []
+              await new Promise((done) => setTimeout(done, 25))
+            }
+            this.fileQueriesInFlight.add(plugin.id)
+          }
+          try {
+            const response = await this.sendPublicBackend(
+              strategy ? 'fs.query_files' : 'fs.list_files_flat',
+              strategy
+                ? {
+                    workspace_path: workspacePath,
+                    query,
+                    match_on: strategy.matchOn,
+                    mode: strategy.mode,
+                    exclude: strategy.exclude,
+                    respect_gitignore: strategy.respectGitignore,
+                    include_hidden: strategy.includeHidden,
+                    limit: 20,
+                  }
+                : { workspace_path: workspacePath, query, max_results: 20 },
+              canDispatch,
+            )
+            if (!canDispatch()) throw new Error('file picker capability is denied')
+            const files = toPayload(response).files
+            if (!Array.isArray(files)) return []
+            return files
+              .map((file: unknown) => (typeof file === 'object' && file !== null ? (file as { path?: unknown }).path : file))
+              .filter((file): file is string => typeof file === 'string')
+          } finally {
+            if (strategy) this.fileQueriesInFlight.delete(plugin.id)
+          }
         },
       })
     }

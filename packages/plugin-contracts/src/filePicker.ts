@@ -1,3 +1,7 @@
+/** Shared with fs.queryFiles: a picker search is the same backend query. */
+export const MAX_EXCLUDES = 64
+export const MAX_EXCLUDE_CHARS = 256
+
 /** Candidates are untrusted presentation input. They confer no
  * filesystem authority; only selection in the Host picker can open a target. */
 export interface FilePickerRequest {
@@ -55,7 +59,10 @@ function validSearch(value: unknown): value is FilePickerSearch {
   if (Object.keys(search).some(key => !['matchOn', 'mode', 'exclude', 'respectGitignore', 'includeHidden'].includes(key))) return false
   if (search.matchOn !== undefined && search.matchOn !== 'name' && search.matchOn !== 'path') return false
   if (search.mode !== undefined && !['substring', 'subsequence', 'glob'].includes(search.mode as string)) return false
-  if (search.exclude !== undefined && !(Array.isArray(search.exclude) && search.exclude.every(item => typeof item === 'string'))) return false
+  if (search.exclude !== undefined && !(
+    Array.isArray(search.exclude) && search.exclude.length <= MAX_EXCLUDES &&
+    search.exclude.every(item => typeof item === 'string' && item.length <= MAX_EXCLUDE_CHARS)
+  )) return false
   return ['respectGitignore', 'includeHidden'].every(key => search[key] === undefined || typeof search[key] === 'boolean')
 }
 

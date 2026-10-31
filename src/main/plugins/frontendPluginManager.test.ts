@@ -11706,6 +11706,61 @@ describe('first-party Git private bridge', () => {
     expect(found).toEqual(['z/foo.ts', 'a/foo.ts'])
   })
 
+  it('queues a file picker search behind the plugin\'s own query, and holds the slot while it runs', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'file-picker-slot')
+    mgr.setBackendWsUrl('ws://public-file-picker-slot-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+    const answer = (index: number, files: unknown[]) => {
+      const request = JSON.parse(socket.sent[index]!) as { id: string; type: string }
+      socket.receive({ id: request.id, type: request.type, ok: true, payload: { ok: true, files }, error: null, timestamp: '' })
+    }
+    const query = () => mgr.executePublicCapability({
+      kind: 'public', address: 'fs.queryFiles', scope: 'workspace', runtime, args: { query: 'own' },
+    })
+    const picker: { search: FilePickerInvocation['search'] | null } = { search: null }
+    mgr.setFilePickerHost({
+      open: vi.fn(async (candidate: FilePickerInvocation) => {
+        picker.search = candidate.search
+        return { opened: true }
+      }),
+      cancelInstance: vi.fn(),
+      cancelSession: vi.fn(),
+    })
+    await mgr.executePublicCapability({
+      kind: 'public',
+      address: 'ui.openFilePicker',
+      scope: 'workspace',
+      runtime,
+      args: { query: '', candidates: [], search: { mode: 'subsequence' } },
+    })
+
+    const own = query()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const superseded = picker.search!('fo')
+    const latest = picker.search!('foo')
+    await expect(superseded).resolves.toEqual([])
+    expect(socket.sent).toHaveLength(1)
+
+    answer(0, [])
+    await own
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+    expect(JSON.parse(socket.sent[1]!)).toMatchObject({ type: 'fs.query_files', payload: { query: 'foo' } })
+    await expect(query()).resolves.toEqual({ ok: false, error: 'busy' })
+
+    answer(1, [{ path: 'foo.ts' }])
+    await expect(latest).resolves.toEqual(['foo.ts'])
+    const next = query()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(3))
+    answer(2, [])
+    await next
+  })
+
   it('answers a second fs.queryFiles from one plugin with busy at once, and leaves the first alone', async () => {
     const { mgr, instanceId } = await openGitView('/workspace', 'fs-query-busy')
     mgr.setBackendWsUrl('ws://public-fs-query-busy-test')
