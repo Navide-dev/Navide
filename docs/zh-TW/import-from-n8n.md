@@ -28,6 +28,7 @@ Agent 也能透過 MCP 工具 `pipeline_import_n8n` 做同樣的事，預設是 
 ### 分支、錯誤、重試與步驟之間的資料
 
 - **IF** 會變成 `true`／`false` 兩條分支邊；**Switch** 每條規則一條分支（有重新命名就用輸出名稱，否則用編號），fallback 輸出對到 `default`。該步驟的 Agent 會依 Kickoff 結尾 Navide 加上的訊號說明回報走了哪條分支，只有那條分支會執行；之後的 Append 或 Choose Branch 模式 Merge 會用實際到達的輸入執行。
+- 其他有多個輸出的節點，例如 Compare Datasets：範圍小時併成一個步驟，依有項目的每個輸出執行。範圍太大，或含有 Agent 或核准閘門時，會維持分開的步驟。這時每個輸出都會執行，包括 n8n 不會送出項目的輸出，所以該節點和之後的 Merge 會顯示為**需要確認**。
 - 設成 **On Error → Continue (using error output)** 的節點會有一條錯誤邊：只有它失敗時才會執行下一步。自己就是自己的 error workflow（Settings → Error Workflow）的 workflow，其 Error Trigger 之後的步驟會接成每個步驟的錯誤邊。
 - **Retry On Fail** 會變成該步驟的重試：總共最多 5 次，間隔最多 300000 ms。n8n 原設定超過這個上限的節點，報告會標出來。
 - 迴圈（Loop Over Items，或繞回前面節點的 IF）會併成一個步驟：逐筆處理項目，或重複到離開迴圈的條件成立為止。迴圈裡的 Wait 會讓那個步驟在每一輪之間暫停，它不是核准閘門。
