@@ -28,11 +28,21 @@ MODES = ("substring", "subsequence", "glob")
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1_000
 
+# Request limits. The catalog validator holds the same numbers; these keep a
+# caller that reaches the handler another way just as bounded.
+MAX_QUERY_CHARS = 1_024
+MAX_EXCLUDES = 64
+MAX_EXCLUDE_CHARS = 256
+
 _MAX_PATHS = 300_000
 _MAX_WORKSPACES = 4
 _MAX_AGE_S = 30.0
 _IDLE_S = 300.0
-_RG_TIMEOUT_S = 30.0
+# Both sit under the Host's 10 s capability timeout, past which nobody is
+# waiting for the answer and the work would only stack up.
+_LIST_DEADLINE_S = 6.0
+_QUERY_DEADLINE_S = 3.0
+_DEADLINE_CHECK_EVERY = 1_024
 
 
 @dataclass
@@ -69,21 +79,33 @@ def _list_with_rg(rg: str, root: Path, include_hidden: bool, include_noise: bool
         )
     except OSError:
         return None
-    deadline = time.monotonic() + _RG_TIMEOUT_S
+    # A timer, not a check per line: a stuck rg prints no next line to check on.
+    expired = threading.Event()
+
+    def stop() -> None:
+        expired.set()
+        proc.kill()
+
+    timer = threading.Timer(_LIST_DEADLINE_S, stop)
+    timer.daemon = True
+    timer.start()
     paths: list[str] = []
     truncated = False
     assert proc.stdout is not None
     try:
         for line in proc.stdout:
             paths.append(line.rstrip("\r\n").replace("\\", "/"))
-            if len(paths) >= _MAX_PATHS or time.monotonic() > deadline:
+            if len(paths) >= _MAX_PATHS:
                 truncated = True
                 break
     finally:
+        timer.cancel()
         proc.stdout.close()
         if truncated:
             proc.kill()
         returncode = proc.wait()
+    if expired.is_set():
+        return paths, True
     # rg exits 1 for "no files", 2 for an unreadable entry it skipped.
     if not truncated and returncode not in (0, 1, 2):
         return None
@@ -91,8 +113,11 @@ def _list_with_rg(rg: str, root: Path, include_hidden: bool, include_noise: bool
 
 
 def _list_with_walk(root: Path, include_hidden: bool, include_noise: bool) -> tuple[list[str], bool]:
+    deadline = time.monotonic() + _LIST_DEADLINE_S
     paths: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
+        if time.monotonic() > deadline:
+            return paths, True
         dirnames[:] = [
             d for d in dirnames
             if d != ".git"
@@ -215,14 +240,26 @@ def query_files(
         return {"ok": False, "error": "invalid matchOn or mode"}
     if cursor and not cursor.isdecimal():
         return {"ok": False, "error": "invalid cursor"}
+    excludes = exclude or []
+    if (
+        len(query) > MAX_QUERY_CHARS
+        or len(excludes) > MAX_EXCLUDES
+        or any(len(pattern) > MAX_EXCLUDE_CHARS for pattern in excludes)
+    ):
+        return {"ok": False, "error": "query or exclude is too long"}
     limit = max(1, min(limit, MAX_LIMIT))
     listing = _listing(root, respect_gitignore, include_hidden, include_noise_dirs)
-    excludes = exclude or []
+    deadline = time.monotonic() + _QUERY_DEADLINE_S
     needle = query.replace("\\", "/")
     start = int(cursor or 0)
     files: list[dict[str, Any]] = []
     next_cursor: str | None = None
+    timed_out = False
     for index in range(start, len(listing.paths)):
+        if index % _DEADLINE_CHECK_EVERY == 0 and time.monotonic() > deadline:
+            next_cursor = str(index)
+            timed_out = True
+            break
         rel = listing.paths[index]
         if any(fnmatch.fnmatchcase(rel, pattern) for pattern in excludes):
             continue
@@ -243,4 +280,6 @@ def query_files(
     }
     if next_cursor is not None:
         result["nextCursor"] = next_cursor
+    if timed_out:
+        result["timedOut"] = True
     return result

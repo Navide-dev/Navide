@@ -102,6 +102,10 @@ describe('fs.queryFiles', () => {
   it('accepts what its catalog entry declares', () => {
     expect(validate({ query: '' })).toBe(true)
     expect(validate({
+      query: 'x'.repeat(1024),
+      exclude: Array.from({ length: 64 }, () => 'x'.repeat(256)),
+    })).toBe(true)
+    expect(validate({
       query: 'a', matchOn: 'path', mode: 'glob', exclude: ['vendor/*'], respectGitignore: false,
       includeHidden: true, includeNoiseDirs: true, limit: 1000, cursor: '10',
     })).toBe(true)
@@ -117,6 +121,9 @@ describe('fs.queryFiles', () => {
     [{ query: '', limit: 1001 }],
     [{ query: '', cursor: 'abc' }],
     [{ query: '', workspace_path: '/elsewhere' }],
+    [{ query: 'x'.repeat(1025) }],
+    [{ query: '', exclude: Array.from({ length: 65 }, () => 'a') }],
+    [{ query: '', exclude: ['x'.repeat(257)] }],
   ])('refuses %j', (request) => {
     expect(validate(request)).toBe(false)
   })

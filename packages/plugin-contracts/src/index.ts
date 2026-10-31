@@ -1018,6 +1018,7 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
     nextCursor?: string
     gitignoreApplied?: boolean
     listingTruncated?: boolean
+    timedOut?: boolean
     error?: string
   }
   'fs.glob': { paths: string[] }

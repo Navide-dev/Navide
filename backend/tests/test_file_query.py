@@ -6,6 +6,7 @@ import asyncio
 import os
 import shutil
 import subprocess
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -227,3 +228,75 @@ async def test_ws_handler_defaults_match_the_catalog(tmp_path: Path) -> None:
 async def test_ws_handler_reports_a_bad_mode_instead_of_failing(tmp_path: Path) -> None:
     res = await _ws_query({"workspace_path": str(tmp_path), "query": "", "mode": "regex"})
     assert res == {"ok": False, "error": "invalid matchOn or mode"}
+
+
+@pytest.mark.parametrize(
+    "request_kwargs",
+    [
+        {"query": "x" * (file_query.MAX_QUERY_CHARS + 1)},
+        {"exclude": ["a"] * (file_query.MAX_EXCLUDES + 1)},
+        {"exclude": ["x" * (file_query.MAX_EXCLUDE_CHARS + 1)]},
+    ],
+    ids=["long-query", "many-excludes", "long-exclude"],
+)
+def test_oversized_requests_are_refused_before_any_listing(tmp_path: Path, request_kwargs: dict) -> None:
+    res = file_query.query_files(str(tmp_path), **request_kwargs)
+    assert res == {"ok": False, "error": "query or exclude is too long"}
+    assert file_query._entries == {}
+
+
+def test_requests_at_the_limits_are_served(tmp_path: Path) -> None:
+    _write(tmp_path, "a.ts")
+    res = file_query.query_files(
+        str(tmp_path),
+        "x" * file_query.MAX_QUERY_CHARS,
+        exclude=["y" * file_query.MAX_EXCLUDE_CHARS] * file_query.MAX_EXCLUDES,
+    )
+    assert res["ok"] is True
+
+
+def test_many_paths_times_many_patterns_returns_inside_the_deadline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The 300k × patterns case, against a seeded listing so no tree has to exist.
+    paths = [f"dir{i % 1000}/file{i}.ts" for i in range(300_000)]
+    listing = file_query._Listing(paths, True, False, time.monotonic())
+    monkeypatch.setattr(file_query, "_listing", lambda *_args: listing)
+    monkeypatch.setattr(file_query, "_QUERY_DEADLINE_S", 0.05)
+    started = time.monotonic()
+    res = file_query.query_files(str(tmp_path), "nomatch", exclude=[f"a{i}*b*c*d*e" for i in range(file_query.MAX_EXCLUDES)])
+    elapsed = time.monotonic() - started
+    assert elapsed < 2.0
+    assert res["ok"] is True and res["timedOut"] is True
+    assert res["files"] == []
+    assert 0 < int(res["nextCursor"]) < len(paths)
+
+
+def test_a_timed_out_query_resumes_from_its_cursor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write(tmp_path, "a.ts")
+    monkeypatch.setattr(file_query, "_QUERY_DEADLINE_S", -1.0)
+    res = file_query.query_files(str(tmp_path))
+    assert (res["files"], res["nextCursor"], res["timedOut"]) == ([], "0", True)
+    monkeypatch.setattr(file_query, "_QUERY_DEADLINE_S", 3.0)
+    res = file_query.query_files(str(tmp_path), cursor=res["nextCursor"])
+    assert _paths(res) == ["a.ts"] and "timedOut" not in res
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX shell script as a stuck rg")
+def test_a_stuck_rg_is_stopped_at_the_deadline_with_no_output_to_check_on(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    stuck = tmp_path / "stuck-rg"
+    stuck.write_text("#!/bin/sh\nexec sleep 60\n", encoding="utf-8")
+    stuck.chmod(0o755)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(file_query, "_rg_bin", lambda: str(stuck))
+    monkeypatch.setattr(file_query, "_LIST_DEADLINE_S", 0.2)
+    started = time.monotonic()
+    res = file_query.query_files(str(ws))
+    assert time.monotonic() - started < 5.0
+    assert (res["ok"], res["files"], res["listingTruncated"], res["gitignoreApplied"]) == (True, [], True, True)
+
+
+def test_the_walk_keeps_the_same_deadline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write(tmp_path, "a/a.ts", "b/b.ts")
+    monkeypatch.setattr(file_query, "_LIST_DEADLINE_S", -1.0)
+    res = file_query.query_files(str(tmp_path), respect_gitignore=False)
+    assert (res["files"], res["listingTruncated"]) == ([], True)
