@@ -182,7 +182,7 @@ jobs:
       matrix:
         include:
           - platform: macOS
-            runner: macos-14
+            runner: macos-15
           - platform: Linux
             runner: ubuntu-22.04
           - platform: Windows
@@ -240,7 +240,7 @@ jobs:
       matrix:
         include:
           - platform: macOS
-            runner: macos-14
+            runner: macos-15
           - platform: Linux
             runner: ubuntu-22.04
           - platform: Windows
@@ -359,7 +359,7 @@ jobs:
       matrix:
         include:
           - platform: macOS
-            runner: macos-14
+            runner: macos-15
             shard: 1/1
             artifact: macos
             timeout: 25
@@ -491,7 +491,7 @@ jobs:
   # The native speech sidecar uses the macOS Metal toolchain.
   stt-sidecar:
     name: Speech-to-text sidecar tests
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - name: Check out the repository
