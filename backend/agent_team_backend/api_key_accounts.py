@@ -27,7 +27,6 @@ import asyncio
 import json
 import logging
 import os
-import sys
 import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Mapping
@@ -178,8 +177,10 @@ def _sets_forced_login(path: Path) -> bool:
 
 
 def _codex_system_config() -> Path:
-    if sys.platform == "win32":
-        return Path(os.environ.get("ProgramData", r"C:\ProgramData"), "OpenAI", "Codex", "config.toml")
+    """``ProgramData`` is set on Windows and nowhere else."""
+    program_data = os.environ.get("ProgramData")
+    if program_data:
+        return Path(program_data, "OpenAI", "Codex", "config.toml")
     return Path("/etc/codex/config.toml")
 
 

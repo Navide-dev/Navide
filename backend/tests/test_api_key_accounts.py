@@ -345,6 +345,13 @@ def test_codex_login_policy_stops_the_new_account(
     assert store.list()["profiles"] == []
 
 
+def test_codex_system_config_location(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ProgramData", raising=False)
+    assert ak._codex_system_config() == Path("/etc/codex/config.toml")
+    monkeypatch.setenv("ProgramData", "D:\\Data")
+    assert ak._codex_system_config() == Path("D:\\Data", "OpenAI", "Codex", "config.toml")
+
+
 def test_codex_config_without_a_login_policy_adds_the_account(store: CliProfilesStore, vault: CredentialVault) -> None:
     _user_config(vault).write_text('model = "x"\n[profiles.a]\nmodel = "y"\n', encoding="utf-8")
 
