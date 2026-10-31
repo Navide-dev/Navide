@@ -4687,7 +4687,7 @@ ipcMain.handle('plugins:runCommand', async (event, args: Record<string, unknown>
     ? registeredGitLeftWorkspace(requestingWindow, args?.workspace_path, mainWindowWorkspaces, normalizeWorkspacePath)
     : null
   if (!requestingWindow || !commandId || !workspacePath) return { ok: false, reason: 'view-not-open' }
-  const outcome = frontendPluginManager.resolveCommandRun(requestingWindow, commandId, workspacePath)
+  const outcome = await frontendPluginManager.runCommand(requestingWindow, commandId, workspacePath)
   if (!outcome.ok || !('window' in outcome)) return outcome
   const opened = await openCatalogContributionWindow(outcome.window.contributionKey, workspacePath, outcome.window.params)
   return opened.ok ? { ok: true } : { ok: false, reason: 'view-not-open' }

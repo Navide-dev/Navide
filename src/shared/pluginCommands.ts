@@ -14,7 +14,7 @@ export type PluginCommandFailure =
   | 'not-installed'
   | 'view-not-open'
   | 'view-not-openable'
-  | 'method-unavailable'
+  | 'method-failed'
 
 export type PluginCommandRunResult =
   | { ok: true; /** The main stage tab the renderer should switch to. */ reveal?: string }

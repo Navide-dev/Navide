@@ -7976,7 +7976,7 @@
           "not-installed": "Este plugin do Navide não está instalado.",
           "view-not-open": "Abra primeiro a visualização deste plugin do Navide e pressione o atalho de novo.",
           "view-not-openable": "A visualização deste plugin do Navide não abre com um atalho.",
-          "method-unavailable": "Este comando do plugin do Navide ainda não pode ser executado."
+          "method-failed": "Este comando do plugin do Navide falhou."
         }
       },
       "reset-all": "Restaurar tudo",

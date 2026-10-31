@@ -19084,9 +19084,54 @@ describe('Navide plugin commands', () => {
     expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
   })
 
-  it('reports what it cannot do yet', () => {
-    const { mgr } = managerWith(host)
-    expect(mgr.resolveCommandRun(host, 'acme.runner.more', '/ws')).toEqual({ ok: false, reason: 'view-not-openable' })
-    expect(mgr.resolveCommandRun(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'method-unavailable' })
+  it('refuses a detail view as a target', () => {
+    expect(managerWith(host).mgr.resolveCommandRun(host, 'acme.runner.more', '/ws')).toEqual({ ok: false, reason: 'view-not-openable' })
+  })
+
+  describe('a method command', () => {
+    const withHandler = (hostWindow: object, answer: { ok: boolean }) => {
+      const made = managerWith(hostWindow)
+      const internals = made.mgr as unknown as {
+        running: Map<string, unknown>
+        backendCallHandler: (plugin: unknown, payload: Record<string, unknown>) => Promise<{ ok: boolean }>
+      }
+      const handler = vi.fn(async () => answer)
+      internals.backendCallHandler = handler
+      const record = { id: 'acme.runner', contributionKey: 'acme.runner.tab', hostWindow, workspacePath: '/ws', visible: false }
+      return { ...made, handler, internals, record }
+    }
+
+    it('starts nothing when no view of the plugin is open', async () => {
+      const { mgr, handler } = withHandler(host, { ok: true })
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it("goes through the open view's own call path, as that view", async () => {
+      const { mgr, handler, internals, record } = withHandler(host, { ok: true })
+      internals.running.set('i', record)
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: true })
+      expect(handler).toHaveBeenCalledWith(record, { reqId: expect.any(String), name: 'tests.run', args: {} })
+    })
+
+    it('says so when the call fails', async () => {
+      const { mgr, internals, record } = withHandler(host, { ok: false })
+      internals.running.set('i', record)
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'method-failed' })
+    })
+
+    it('ignores a view of the plugin in another window', async () => {
+      const { mgr, handler, internals, record } = withHandler({}, { ok: true })
+      internals.running.set('i', record)
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it('leaves a view command to resolveCommandRun', async () => {
+      const { mgr } = withHandler(host, { ok: true })
+      expect(await mgr.runCommand(host, 'acme.runner.win', '/ws')).toEqual({
+        ok: true, window: { contributionKey: 'acme.runner.win', params: { tab: 'a' } },
+      })
+    })
   })
 })

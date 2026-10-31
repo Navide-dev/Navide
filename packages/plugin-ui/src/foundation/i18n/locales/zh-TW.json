@@ -7976,7 +7976,7 @@
           "not-installed": "這個 Navide 外掛未安裝。",
           "view-not-open": "請先打開這個 Navide 外掛的視圖，再按一次快捷鍵。",
           "view-not-openable": "這個 Navide 外掛的視圖無法用快捷鍵開啟。",
-          "method-unavailable": "這個 Navide 外掛指令目前還無法執行。"
+          "method-failed": "這個 Navide 外掛指令執行失敗。"
         }
       },
       "reset-all": "全部還原",

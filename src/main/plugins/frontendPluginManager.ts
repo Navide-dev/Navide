@@ -12302,13 +12302,20 @@ export class FrontendPluginManager {
     hostWindow: BrowserWindow,
     commandId: string,
     workspacePath: string,
-  ): PluginCommandRunResult | { ok: true; window: { contributionKey: string; params: Record<string, string> } } {
+  ): PluginCommandRunResult
+    | { ok: true; window: { contributionKey: string; params: Record<string, string> } }
+    | { ok: true; call: { plugin: RunningPlugin; method: string } } {
     const descriptor = this.enabledDescriptors().find((candidate) =>
       candidate.commands?.some((command) => command.id === commandId)
     )
     const run = descriptor?.commands?.find((command) => command.id === commandId)?.run
     if (!descriptor || !run) return { ok: false, reason: 'not-installed' }
-    if ('method' in run) return { ok: false, reason: 'method-unavailable' }
+    if ('method' in run) {
+      const isHere = (candidate: RunningPlugin): boolean => candidate.hostWindow === hostWindow &&
+        (candidate.workspacePath === null || resolve(candidate.workspacePath) === resolve(workspacePath))
+      const plugin = this.instancesForPlugin(descriptor.id).find(isHere)
+      return plugin ? { ok: true, call: { plugin, method: run.method } } : { ok: false, reason: 'view-not-open' }
+    }
     const view = descriptor.views?.find((candidate) => candidate.id === run.view)
     if (!view) return { ok: false, reason: 'not-installed' }
     const params = run.target ?? {}
@@ -12327,6 +12334,22 @@ export class FrontendPluginManager {
     }
     if (Object.keys(params).length > 0) this.sendOpenTarget(record, { ...params })
     return view.location === 'main' ? { ok: true, reveal: view.contributionKey } : { ok: true }
+  }
+
+  /** {@link resolveCommandRun}, finished. A method runs through the same handler
+   *  as a call from the plugin's own open view, with that view's identity, so
+   *  every check on a view's call applies. No view open means no call: a
+   *  keystroke does not start a backend. */
+  async runCommand(
+    hostWindow: BrowserWindow,
+    commandId: string,
+    workspacePath: string,
+  ): Promise<PluginCommandRunResult | { ok: true; window: { contributionKey: string; params: Record<string, string> } }> {
+    const outcome = this.resolveCommandRun(hostWindow, commandId, workspacePath)
+    if (!outcome.ok || !('call' in outcome)) return outcome
+    const { plugin, method } = outcome.call
+    const response = await this.backendCallHandler?.(plugin, { reqId: randomUUID(), name: method, args: {} })
+    return response?.ok ? { ok: true } : { ok: false, reason: 'method-failed' }
   }
 
   /** Host-only left/detail pairing. The Host supplies opaque live identities;

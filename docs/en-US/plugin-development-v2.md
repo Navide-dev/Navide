@@ -2471,6 +2471,10 @@ the user presses a key bound to it:
 - A view the user has not opened, or one that is not enabled, stays closed. The
   command fails and the user sees why. `detail` views cannot be a command's
   target.
+- `run.method` calls the backend through one of the plugin's open views, with
+  that view's identity and an empty `args` object, under the same checks as a
+  call from the view. With no view open the command fails: a key does not start
+  a backend. The result is discarded; a failure tells the user.
 
 **Agents do not run commands.** `ui_invoke` refuses a plugin command with
 `ui_human_only`, and this applies to `run.method` too. Opening a view with a

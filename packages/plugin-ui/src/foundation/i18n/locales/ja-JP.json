@@ -7976,7 +7976,7 @@
           "not-installed": "この Navide プラグインはインストールされていません。",
           "view-not-open": "先にこの Navide プラグインのビューを開いてから、もう一度ショートカットを押してください。",
           "view-not-openable": "この Navide プラグインのビューはショートカットで開けません。",
-          "method-unavailable": "この Navide プラグインのコマンドはまだ実行できません。"
+          "method-failed": "この Navide プラグインのコマンドは失敗しました。"
         }
       },
       "reset-all": "すべてリセット",

@@ -7976,7 +7976,7 @@
           "not-installed": "Plugin Navide này chưa được cài đặt.",
           "view-not-open": "Hãy mở chế độ xem của plugin Navide này trước, rồi nhấn lại phím tắt.",
           "view-not-openable": "Không thể mở chế độ xem của plugin Navide này bằng phím tắt.",
-          "method-unavailable": "Lệnh của plugin Navide này chưa thể chạy."
+          "method-failed": "Lệnh của plugin Navide này đã thất bại."
         }
       },
       "reset-all": "Đặt lại tất cả",
