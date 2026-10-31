@@ -1,9 +1,13 @@
 // The user's action buttons: userData/workbench.json. Plain data, never code:
 // a step names an action from the registry, and the Host draws the button.
+//
+// A step has no args, on purpose. An agent with a shell can write this file, so
+// args would let a button labelled anything call ui.settings.yolo with yolo
+// true on the user's click. Which actions may run is decided where they run
+// (runWorkbenchButton), since the file itself is not trusted.
 
 export interface WorkbenchStep {
   action: string
-  args?: Record<string, unknown>
 }
 
 export interface WorkbenchButton {
@@ -35,8 +39,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseStep(raw: unknown): WorkbenchStep | null {
   if (!isRecord(raw) || typeof raw.action !== 'string' || !raw.action) return null
-  if (raw.args !== undefined && !isRecord(raw.args)) return null
-  return { action: raw.action, ...(raw.args ? { args: raw.args } : {}) }
+  return { action: raw.action }
 }
 
 function parseButton(raw: unknown): WorkbenchButton | null {

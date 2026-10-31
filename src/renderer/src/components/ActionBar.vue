@@ -4,15 +4,16 @@
 // a built-in control. With no buttons this renders nothing.
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
-import { executeCommand, hasCommand } from '@navide/plugin-ui/shared'
-import { pluginCommandEntry } from '../lib/pluginCommands'
-import { visibleWorkbenchButtons } from '../lib/workbench'
+import { hasCommand } from '@navide/plugin-ui/shared'
+import { describeUiAction } from '../composables/uiActionCatalog'
+import { pluginActionFacts, pluginCommandEntry } from '../lib/pluginCommands'
+import { isPermittedButton, runWorkbenchButton, visibleWorkbenchButtons } from '../lib/workbench'
 import type { WorkbenchButton } from '../../../shared/workbench'
 
 const { t } = useI18n()
 
 function isAvailable(button: WorkbenchButton): boolean {
-  return button.steps.every((step) => hasCommand(step.action))
+  return isPermittedButton(button) && button.steps.every((step) => hasCommand(step.action))
 }
 
 function pluginOf(button: WorkbenchButton): string | undefined {
@@ -26,11 +27,14 @@ function pluginOf(button: WorkbenchButton): string | undefined {
 function titleFor(button: WorkbenchButton): string {
   if (!isAvailable(button)) return t('actionBar.unavailable')
   const plugin = pluginOf(button)
-  return plugin ? t('actionBar.source-plugin', { name: plugin }) : t('actionBar.source-mine')
+  const source = plugin ? t('actionBar.source-plugin', { name: plugin }) : t('actionBar.source-mine')
+  // What it will really do: the label is free text and proves nothing.
+  const actions = button.steps.map((step) => pluginActionFacts(step.action)?.title ?? describeUiAction(step.action).title)
+  return `${source} — ${actions.join(' → ')}`
 }
 
 function run(button: WorkbenchButton): void {
-  for (const step of button.steps) executeCommand(step.action, step.args)
+  void runWorkbenchButton(button)
 }
 </script>
 

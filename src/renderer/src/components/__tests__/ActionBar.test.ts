@@ -7,7 +7,7 @@ import { _resetRegistry } from '@navide/plugin-ui/shared/testing'
 import ActionBar from '../ActionBar.vue'
 import ActionButtonsSection from '../../layout/ActionButtonsSection.vue'
 import { pluginCommands } from '../../lib/pluginCommands'
-import { loadWorkbench, saveWorkbench, workbench } from '../../lib/workbench'
+import { loadWorkbench, runWorkbenchButton, saveWorkbench, workbench } from '../../lib/workbench'
 import { EMPTY_WORKBENCH } from '../../../../shared/workbench'
 
 const global = { plugins: [i18n] }
@@ -53,7 +53,7 @@ describe('a button', () => {
     registerCommand('a.b', run)
     set([button('a.b')])
     await bar().find('button').trigger('click')
-    expect(run).toHaveBeenCalled()
+    await vi.waitFor(() => expect(run).toHaveBeenCalled())
   })
 
   it('is disabled and does nothing when its action is gone', async () => {
@@ -69,9 +69,9 @@ describe('a button', () => {
     pluginCommands.value = [{ commandId: 'acme.runner.go', title: 'Go', pluginId: 'acme.runner', pluginName: 'Runner' }]
     set([button('a.b'), button('acme.runner.go')])
     const [mine, plugin] = bar().findAll('button')
-    expect(mine.attributes('title')).toBe('Added by you')
+    expect(mine.attributes('title')).toContain('Added by you')
     expect(mine.find('.action-bar-mark').exists()).toBe(false)
-    expect(plugin.attributes('title')).toBe('From Navide plugin Runner')
+    expect(plugin.attributes('title')).toBe('From Navide plugin Runner — Go')
     expect(plugin.find('.action-bar-mark').exists()).toBe(true)
   })
 })
@@ -124,5 +124,57 @@ describe('Settings > Layout', () => {
     await w.vm.$nextTick()
     await w.find('.abs-row button').trigger('click')
     await vi.waitFor(() => expect(workbench.value.buttons).toEqual([]))
+  })
+})
+
+describe('a workbench.json edited outside Settings', () => {
+  const load = async (content: string) => {
+    ;(window as unknown as { agentTeam: unknown }).agentTeam = {
+      readWorkbench: vi.fn().mockResolvedValue({ ok: true, content }),
+      onWorkbenchChanged: vi.fn(),
+    }
+    await loadWorkbench()
+  }
+  const file = (steps: unknown[], label = 'Open Plans') =>
+    JSON.stringify({ schemaVersion: 1, buttons: [{ id: 'x', label, steps }] })
+
+  it.each(['ui.settings.yolo', 'ui.pane.sendKeys', 'ui.window.close', 'ui.pane.close', 'workbench.action.closeWindow'])(
+    'cannot run %s from a button', async (action) => {
+      const run = vi.fn()
+      registerCommand(action, run)
+      set([button(action, 'Open Plans')])
+      expect(bar().find('button').attributes('disabled')).toBeDefined()
+      expect(await runWorkbenchButton(button(action))).toMatchObject({ failedAt: 0 })
+      expect(run).not.toHaveBeenCalled()
+    })
+
+  it('loads a forbidden action greyed out, and a press runs no step of it', async () => {
+    const first = vi.fn()
+    const forbidden = vi.fn()
+    registerCommand('a.b', first)
+    registerCommand('ui.settings.yolo', forbidden)
+    await load(file([{ action: 'a.b' }, { action: 'ui.settings.yolo', args: { yolo: true } }]))
+    const w = bar()
+    expect(w.find('button').attributes('disabled')).toBeDefined()
+    await w.find('button').trigger('click')
+    expect(await runWorkbenchButton(workbench.value.buttons[0])).toMatchObject({ failedAt: 1 })
+    expect(first).not.toHaveBeenCalled()
+    expect(forbidden).not.toHaveBeenCalled()
+  })
+
+  it('runs a legal action from the same kind of file', async () => {
+    const run = vi.fn()
+    registerCommand('workbench.action.quickOpen', run)
+    await load(file([{ action: 'workbench.action.quickOpen' }]))
+    const w = bar()
+    expect(w.find('button').attributes('disabled')).toBeUndefined()
+    await w.find('button').trigger('click')
+    await vi.waitFor(() => expect(run).toHaveBeenCalled())
+  })
+
+  it('shows the real action, whatever the label says', async () => {
+    registerCommand('workbench.action.quickOpen', () => {})
+    await load(file([{ action: 'workbench.action.quickOpen' }]))
+    expect(bar().find('button').attributes('title')).toContain('Quick Open File')
   })
 })

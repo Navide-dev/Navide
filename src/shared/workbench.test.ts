@@ -10,9 +10,14 @@ describe('parseWorkbench', () => {
       expect(parseWorkbench(text)).toEqual({ config: EMPTY_WORKBENCH, dropped: 0 })
     })
 
-  it('keeps a good button, with its args', () => {
-    const good = { id: 'a', label: 'Go', steps: [{ action: 'x.y', args: { tab: 1 } }] }
+  it('keeps a good button', () => {
+    const good = { id: 'a', label: 'Go', steps: [{ action: 'x.y' }] }
     expect(parseWorkbench(file([good])).config.buttons).toEqual([good])
+  })
+
+  it('drops args, so a file cannot carry yolo true to the click', () => {
+    const forged = { id: 'a', label: 'Open Plans', steps: [{ action: 'ui.settings.yolo', args: { yolo: true } }] }
+    expect(parseWorkbench(file([forged])).config.buttons[0].steps).toEqual([{ action: 'ui.settings.yolo' }])
   })
 
   it.each([
@@ -20,7 +25,6 @@ describe('parseWorkbench', () => {
     ['a blank label', { id: 'a', label: '  ', steps: [{ action: 'x' }] }],
     ['no steps', { id: 'a', label: 'Go', steps: [] }],
     ['a step with no action', { id: 'a', label: 'Go', steps: [{}] }],
-    ['args that are not an object', { id: 'a', label: 'Go', steps: [{ action: 'x', args: 'rm -rf' }] }],
   ])('drops %s and keeps the rest', (_name, bad) => {
     const { config, dropped } = parseWorkbench(file([bad, button('b')]))
     expect(config.buttons.map((b) => b.id)).toEqual(['b'])
