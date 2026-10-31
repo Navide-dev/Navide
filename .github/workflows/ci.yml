@@ -504,6 +504,10 @@ jobs:
           workspaces: native/navide-stt
       # The model-backed transcribe test is explicitly ignored by default.
       - name: Cargo tests
+        env:
+          # Same as scripts/build-stt.mjs: without it ggml detects the host CPU
+          # and fails on runners with i8mm (macos-15).
+          CMAKE_PROJECT_INCLUDE_BEFORE: ${{ github.workspace }}/native/navide-stt/portable.cmake
         run: cargo test --locked --manifest-path native/navide-stt/Cargo.toml
 
   # App Lock's Windows Hello helper: it must build, and asking the runner (no
