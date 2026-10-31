@@ -11613,6 +11613,8 @@ async def cli_failover_state(ctx: Context, agent: str = "") -> dict[str, Any]:
 #: The fields of an account row this tool passes on: what the account store
 #: file holds about it, nothing read from its credentials.
 _ACCOUNT_FIELDS = ("id", "agentKey", "name", "scope", "createdAt")
+# Says which kind an account is, so an agent can tell a key that costs money.
+_ACCOUNT_FIELDS = (*_ACCOUNT_FIELDS, "authKind")
 #: The built-in Default row's id (cli_profiles' DEFAULT_SLOT_ID).
 _DEFAULT_ACCOUNT_ID = "__default__"
 
@@ -11751,6 +11753,10 @@ async def cli_account_sign_in(
             "error": 'agent and profile_id are required, and mode is "isolated" or "folder"',
             "error_code": "bad-request",
         }
+    from agent_team_backend import api_key_accounts
+
+    if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):
+        return {"ok": False, "error": "this is an API key account; it has no sign-in", "error_code": "api-key-account"}
     reason = " ".join(str(reason or "").split())
     # The cut is disclosed to the user too, not only in this docstring.
     reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
@@ -11808,6 +11814,12 @@ async def cli_account_sign_in(
 
 
 # ── CLI account switch (plan mcp_614482 P3) ─────────────────────────────────
+
+
+def _app_store_get(profile_id: str) -> dict[str, Any] | None:
+    from agent_team_backend import app as _app
+
+    return _app.cli_profiles_store.get(profile_id)
 
 
 @server.tool()
@@ -11882,6 +11894,14 @@ async def cli_account_switch(
     profile_id = str(profile_id or "").strip()
     if not agent or not profile_id:
         return {"ok": False, "error": "agent and profile_id are required", "error_code": "bad-request"}
+    from agent_team_backend import api_key_accounts
+
+    if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):
+        return {
+            "ok": False,
+            "error": "this is an API key account; only the user chooses to spend it",
+            "error_code": "api-key-account",
+        }
     reason = " ".join(str(reason or "").split())
     reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
     reason = reason[:_SIGN_IN_REASON_MAX]

@@ -8313,6 +8313,87 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "pane": {
+          "title": "Cuota de suscripción agotada",
+          "back-at": "Disponible de nuevo a las {time}",
+          "back-unknown": "No se conoce la hora de restablecimiento",
+          "wait": "Esperar al restablecimiento"
+        },
+        "kind": "clave de API",
+        "list": {
+          "aria": "Cuentas",
+          "search": "Buscar cuentas",
+          "add": "+ Añadir cuenta",
+          "login": "Inicio de sesión",
+          "empty": "Ninguna cuenta coincide."
+        },
+        "add": {
+          "title": "¿Cómo debe conectarse {agent}?",
+          "agent-label": "CLI",
+          "subscription": "Iniciar sesión con una suscripción",
+          "subscription-desc": "Autoriza en el navegador. Usa la cuota de tu plan.",
+          "api-key": "Pegar una clave de API",
+          "api-key-desc": "Se factura por uso. La clave se guarda en este ordenador.",
+          "api-key-unsupported": "Las claves de API aún no están disponibles para esta CLI.",
+          "cloud": "Conectar un servicio en la nube",
+          "cloud-desc": "Amazon Bedrock, Google Vertex o Microsoft Foundry.",
+          "endpoint": "Conectar un endpoint personalizado",
+          "endpoint-desc": "Una pasarela de empresa u otro servicio compatible.",
+          "coming-soon": "Próximamente"
+        },
+        "form": {
+          "title": "Pegar una clave de API",
+          "billing": "Esta cuenta se factura por uso. No usa la cuota de tu suscripción.",
+          "name": "Nombre",
+          "key": "Clave de API",
+          "key-new": "Nueva clave de API",
+          "key-hint": "No se vuelve a mostrar después de guardarla.",
+          "reminder": "Recordatorio de gasto mensual (USD)",
+          "reminder-hint": "Es un recordatorio, no un límite estricto. Define los límites estrictos en la consola del proveedor.",
+          "test": "Probar clave",
+          "testing": "Probando…",
+          "test-ok": "La clave funciona.",
+          "test-rejected": "El proveedor ha rechazado esta clave.",
+          "test-unknown": "No se pudo comprobar la clave. Aun así, puedes guardarla.",
+          "save": "Guardar cuenta"
+        },
+        "safe": {
+          "local": "Se guarda solo en este ordenador",
+          "no-sync": "Nunca se sincroniza con Navide Cloud"
+        },
+        "detail": {
+          "ends-with": "Termina en {last4}",
+          "replace": "Reemplazar clave",
+          "replace-save": "Guardar nueva clave",
+          "delete-title": "¿Eliminar esta clave de API?",
+          "delete-message": "{name} se eliminará de este ordenador. La clave sigue siendo válida en el proveedor hasta que la revoques allí.",
+          "auto-switch": "Cambiar a esta cuenta automáticamente cuando se agote la cuota",
+          "auto-switch-hint": "Desactivado de forma predeterminada. Tras el cambio, el uso se factura a esta clave.",
+          "in-use": "En uso en paneles nuevos",
+          "use-for-new-panes": "Usar en paneles nuevos",
+          "stop-using": "Dejar de usar en paneles nuevos",
+          "switch-hint": "Los paneles nuevos se inician con esta cuenta. Los paneles abiertos conservan su cuenta hasta que se reinician.",
+          "pane-unavailable": "Los paneles aún no pueden usar esta cuenta."
+        },
+        "error": {
+          "subscription-token": "Este es un token de suscripción, no una clave de API. Crea una clave de API en la consola del proveedor.",
+          "wrong-vendor": "Esta clave pertenece a otro proveedor.",
+          "invalid-secret": "Esto no parece una clave de API.",
+          "invalid-name": "Introduce un nombre de hasta 60 caracteres.",
+          "invalid-reminder": "Introduce un importe mensual superior a cero para el recordatorio.",
+          "unsupported-agent": "Las claves de API aún no están disponibles para esta CLI.",
+          "store-failed": "No se pudo guardar en el llavero de este ordenador.",
+          "secret-missing": "Esta clave ya no está en el llavero. Pégala de nuevo.",
+          "not-found": "Esta clave de API ya no existe.",
+          "main-window-only": "Las claves de API solo se pueden gestionar en Ajustes.",
+          "internal-error": "Algo ha salido mal. Inténtalo de nuevo.",
+          "unsupported-platform": "Las cuentas con clave de API de Claude Code aún no están disponibles en Windows.",
+          "login-policy": "Tu organización exige un método de inicio de sesión concreto, por lo que no se pueden añadir cuentas con clave de API.",
+          "account-active": "Esta cuenta está en uso. Cambia primero a otra cuenta.",
+          "account-in-use": "Un panel está usando esta cuenta. Ciérralo antes de eliminarla."
+        }
+      },
       "title": "Cuentas de Git",
       "encrypted-note": "Los tokens se cifran con el llavero del sistema y solo se guardan en este equipo.",
       "unavailable": "El cifrado no está disponible en este sistema, así que no se pueden añadir cuentas. Normalmente significa que no se puede acceder al llavero del sistema operativo.",
@@ -9355,6 +9436,10 @@
         "manual-only": "{agent} solo se puede cambiar manualmente.",
         "unverified-adapter": "El cambio de cuenta de {agent} no está verificado en esta plataforma; cámbiala manualmente.",
         "no-resume": "{agent} no puede reanudar su conversación automáticamente. Cámbiala manualmente para conservar esta ventana y abrir una conversación nueva.",
+        "api-key-takeover": "Los paneles usan ahora una cuenta con clave de API, con facturación por uso.",
+        "api-key-takeover-paused": "No se puede escribir el historial de cambios, así que el cambio automático está en pausa. No se cambió a la cuenta con clave de API.",
+        "api-key-takeover-unrecorded": "No se pudo registrar el cambio a la cuenta con clave de API, así que no se cambió.",
+        "api-key-takeover-failed": "El cambio a la cuenta con clave de API falló. No se cambió, pero cuenta para el límite de cambios automáticos.",
         "no-candidate": "No hay ninguna cuenta a la que cambiar. Inicia sesión en otra cuenta o espera al restablecimiento.",
         "auto_budget_exhausted": "Se ha alcanzado el límite de cambios automáticos. Cambia manualmente o espera a que pase la ventana.",
         "chained-exhaustion": "{target} también se ha agotado. No se ha probado nada más.",
@@ -9710,6 +9795,9 @@
     "failed": "No se pudo volver a conectar esa conversación: puede que su transcripción ya no exista"
   },
   "cli-account": {
+    "api-key-takeover-partial": "Cuota agotada. Los paneles nuevos usan {name}, con facturación por uso. {count} paneles ocupados siguen igual.",
+    "api-key-login-back": "Tu cuota de suscripción ha vuelto. Los paneles siguen con la clave de API hasta que cambies en Cuentas.",
+    "api-key-takeover": "Cuota agotada. Los paneles usan ahora {name}, con facturación por uso. Vuelve a cambiar en Cuentas cuando se restablezca.",
     "default": "Inicio de sesión original",
     "switch-title": "Cambiar de cuenta",
     "swap-failed": "No se pudo cambiar de cuenta: la cuenta anterior sigue activa.",

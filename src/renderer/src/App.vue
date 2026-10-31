@@ -8,6 +8,7 @@ import WindowControls from './components/WindowControls.vue'
 import RestoredPanePlaceholder from './components/RestoredPanePlaceholder.vue'
 import VoiceCapsule from './components/VoiceCapsule.vue'
 import ReadbackCapsule from './components/ReadbackCapsule.vue'
+import PaneAccountBars, { type PaneAccountBarItem } from './components/accounts/PaneAccountBars.vue'
 import { setupVoiceInput } from './voice/voiceWiring'
 import { useVoiceSettings } from './voice/voiceSettings'
 import {
@@ -397,6 +398,8 @@ import { useShareNotices } from './composables/useShareNotices'
 import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
+import { loginSpent, reopenOnKey, useApiKeyTakeover, useLoginResetNotice } from './composables/useApiKeyTakeover'
+import { usageVersion } from './composables/useUsage'
 import {
   useQuotaFailover,
   type HotSwitchedPane,
@@ -8958,6 +8961,48 @@ async function confirmBatchRebuild(count: number): Promise<boolean> {
 // badge's account list): reopen one pane on another account, resuming its
 // conversation, or sign an account in inside its own dir. Neither touches the
 // live credential or any other pane.
+useApiKeyTakeover(backend, {
+  ownsPane: (paneId) => panes.value.some((p) => p.id === paneId && !p.isLogin),
+  // The readiness a quota switch asks: a pane running, parked on a prompt or
+  // holding unsent input stays. preserveScrollback re-checks just before it stops.
+  reopen: (paneId, profileId) =>
+    reopenOnKey(paneId, profileId, {
+      readiness: (id) => quotaPaneReadiness(id, { needsResume: false }),
+      rebuild: (id, target) =>
+        rebuildPaneViaResume(id, {
+          profileId: target,
+          suppressBusyToast: true,
+          offerContinue: true,
+          freshWhenNoTranscript: true,
+          preserveScrollback: true,
+        }),
+    }),
+  announce: (name, stayed) => {
+    notifyRestore.toast(
+      stayed > 0
+        ? i18n.global.t('cli-account.api-key-takeover-partial', { name, count: stayed })
+        : i18n.global.t('cli-account.api-key-takeover', { name }),
+      { type: 'info' }
+    )
+  },
+})
+
+useLoginResetNotice(usageVersion, {
+  agents: ['claude', 'codex'],
+  spendingKey: (agentKey) => {
+    const id = cliProfilesApi.newPaneProfileId(agentKey)
+    return (id ? cliProfilesApi.findProfile(id)?.authKind : undefined) === 'api-key'
+  },
+  logins: (agentKey) => [
+    null,
+    ...cliProfilesApi.profilesForAgent(agentKey).filter((p) => p.authKind !== 'api-key').map((p) => p.id),
+  ],
+  isSpent: (agentKey, profileId) => loginSpent(accountUsageFor(agentKey, profileId), Date.now()),
+  announce: () => {
+    notifyRestore.toast(i18n.global.t('cli-account.api-key-login-back'), { type: 'info' })
+  },
+})
+
 provide(cliAccountDirActionsKey, {
   continueWith: async (paneId, profileId) => {
     // A sign-in pane has no conversation to carry over: reopening it would
@@ -9203,6 +9248,17 @@ async function offerFollowSwitch(outgoingId: string | null, targetId: string | n
   if (!choice || choice.paneIds.length === 0) return
   await moveFollowPanes(choice.paneIds, target, sessions)
 }
+
+/** The panes out of quota, read the same way the pane block reads them. */
+const paneAccountBarItems = computed<PaneAccountBarItem[]>(() =>
+  panes.value
+    .filter((p) => p.realized && p.usageLimitAt != null && !acp.owns(p.id))
+    .map((p) => ({
+      paneId: p.id,
+      usageLimitUntil: p.usageLimitUntil ?? null,
+      switchOffered: followSwitchFlag.value && p.agentKey === FOLLOW_SWITCH_AGENT && paneCanRebuild(p),
+    })),
+)
 
 /** The quota badge's "Switch account": pick an account this pane can land
  *  on, optionally taking the other panes that ran out on the same account. */
@@ -24099,6 +24155,7 @@ function paneIsCommander(p: ActivePane): boolean {
         />
         </template><!-- the TUI branch of acp.owns(p.id) -->
         </template>
+        <PaneAccountBars :items="paneAccountBarItems" @switch-account="onQuotaSwitchAccount" />
         <VoiceCapsule :state="voiceInput.state" @dismiss="voiceInput.dismiss" />
         <ReadbackCapsule :state="readback.current.value" @stop="readback.stop()" />
         <!-- Auto/sidebar mode: meeting-style agent list on the right -->

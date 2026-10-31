@@ -2377,6 +2377,11 @@ def _account_dir_for_spawn(
     if agent_key != "claude":
         return ""
     slot = str(payload_profile_id or "")
+    if not slot:
+        # An API key account has no live credential to follow.
+        from . import api_key_accounts
+
+        slot = api_key_accounts.pane_default_slot(agent_key)
     if not slot or slot == DEFAULT_SLOT_ID:
         return ""
     profile = app.cli_profiles_store.get(slot)
@@ -2611,6 +2616,12 @@ async def cli_profiles_delete(session: "Session", msg_id: str, msg_type: str, pa
             make_error(
                 msg_id, msg_type, "BAD_REQUEST", f"profile not found: {profile_id}"
             )
+        )
+        return
+    if profile.get("authKind") == "api-key":
+        # Archiving the slot would leave the key behind in the .deleted copy.
+        await session.send_json(
+            make_error(msg_id, msg_type, "API_KEY_ACCOUNT", "an API key account is deleted with cli_profiles.api_key_delete")
         )
         return
     agent_key = str(profile.get("agentKey") or "")
@@ -3001,6 +3012,15 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
                 make_error(
                     msg_id, msg_type, "BAD_REQUEST",
                     f"profile {profile_id} does not belong to agent {agent_key!r}",
+                )
+            )
+            return
+        is_api_key_slot = getattr(app.credential_vault, "is_api_key_slot", None)
+        if is_api_key_slot is not None and is_api_key_slot(agent_key, profile_id):
+            await session.send_json(
+                make_error(
+                    msg_id, msg_type, "API_KEY_ACCOUNT",
+                    "an API key account is chosen per pane; it does not replace the live login",
                 )
             )
             return
@@ -13469,3 +13489,10 @@ from . import credentials_scan  # noqa: E402
 
 for _credentials_type, _credentials_fn in credentials_scan.MESSAGE_HANDLERS.items():
     handler(_credentials_type)(_credentials_fn)
+
+# ── API key accounts (cli_profiles.api_key_*) ──
+# Renderer-only. A stored key never comes back through any of these.
+from . import api_key_accounts  # noqa: E402
+
+for _api_key_type, _api_key_fn in api_key_accounts.MESSAGE_HANDLERS.items():
+    handler(_api_key_type)(_api_key_fn)

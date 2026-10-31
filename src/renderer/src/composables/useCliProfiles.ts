@@ -13,6 +13,8 @@ export interface CliProfile {
   agentKey: string
   name: string
   createdAt: string
+  /** Absent on a login account. */
+  authKind?: 'api-key'
   /** True once the user renamed this slot. `name` also holds the generated
    *  "Account N", so the flag is what tells a user's alias from a placeholder
    *  — never the shape of the string. Absent = auto-named. */

@@ -8313,6 +8313,87 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "pane": {
+          "title": "Subscription quota used up",
+          "back-at": "Back at {time}",
+          "back-unknown": "The reset time is not known",
+          "wait": "Wait for reset"
+        },
+        "kind": "API key",
+        "list": {
+          "aria": "Accounts",
+          "search": "Search accounts",
+          "add": "+ Add account",
+          "login": "Sign-in",
+          "empty": "No accounts match."
+        },
+        "add": {
+          "title": "How should {agent} connect?",
+          "agent-label": "CLI",
+          "subscription": "Sign in with a subscription",
+          "subscription-desc": "Authorize in your browser. Uses your plan's quota.",
+          "api-key": "Paste an API key",
+          "api-key-desc": "Billed by usage. The key is stored on this computer.",
+          "api-key-unsupported": "API keys are not available for this CLI yet.",
+          "cloud": "Connect a cloud service",
+          "cloud-desc": "Amazon Bedrock, Google Vertex or Microsoft Foundry.",
+          "endpoint": "Connect a custom endpoint",
+          "endpoint-desc": "A company gateway or another compatible service.",
+          "coming-soon": "Coming soon"
+        },
+        "form": {
+          "title": "Paste an API key",
+          "billing": "This account is billed by usage. It does not use your subscription quota.",
+          "name": "Name",
+          "key": "API key",
+          "key-new": "New API key",
+          "key-hint": "Not shown again after you save.",
+          "reminder": "Monthly spend reminder (USD)",
+          "reminder-hint": "A reminder, not a hard limit. Set hard limits in the vendor's console.",
+          "test": "Test key",
+          "testing": "Testing…",
+          "test-ok": "The key works.",
+          "test-rejected": "The vendor rejected this key.",
+          "test-unknown": "Could not check the key. You can still save it.",
+          "save": "Save account"
+        },
+        "safe": {
+          "local": "Stored only on this computer",
+          "no-sync": "Never synced to Navide Cloud"
+        },
+        "detail": {
+          "ends-with": "Ends in {last4}",
+          "replace": "Replace key",
+          "replace-save": "Save new key",
+          "delete-title": "Delete this API key?",
+          "delete-message": "{name} will be removed from this computer. The key stays valid at the vendor until you revoke it there.",
+          "auto-switch": "Switch to this account automatically when quota runs out",
+          "auto-switch-hint": "Off by default. When it switches, usage is billed to this key.",
+          "in-use": "New panes use this",
+          "use-for-new-panes": "Use for new panes",
+          "stop-using": "Stop using for new panes",
+          "switch-hint": "New panes start on this account. Panes already open keep their account until they restart.",
+          "pane-unavailable": "Panes cannot use this account yet."
+        },
+        "error": {
+          "subscription-token": "This is a subscription token, not an API key. Create an API key in the vendor's console.",
+          "wrong-vendor": "This key belongs to a different vendor.",
+          "invalid-secret": "This does not look like an API key.",
+          "invalid-name": "Enter a name of up to 60 characters.",
+          "invalid-reminder": "Enter the monthly reminder as an amount above zero.",
+          "unsupported-agent": "API keys are not available for this CLI yet.",
+          "store-failed": "Could not save to this computer's keychain.",
+          "secret-missing": "This key is no longer in the keychain. Paste it again.",
+          "not-found": "This API key no longer exists.",
+          "main-window-only": "API keys can only be managed in Settings.",
+          "internal-error": "Something went wrong. Try again.",
+          "unsupported-platform": "Claude Code API key accounts are not available on Windows yet.",
+          "login-policy": "Your organization requires a specific sign-in method, so API key accounts cannot be added.",
+          "account-active": "This account is in use. Switch to another account first.",
+          "account-in-use": "A pane is using this account. Close it before deleting."
+        }
+      },
       "title": "Git accounts",
       "encrypted-note": "Tokens are encrypted with your system keychain and stored only on this computer.",
       "unavailable": "Encryption is unavailable on this system, so accounts cannot be added. This usually means the OS keychain is not accessible.",
@@ -9355,6 +9436,10 @@
         "manual-only": "{agent} can only be switched manually.",
         "unverified-adapter": "{agent}'s account switching is not verified on this platform; switch manually.",
         "no-resume": "{agent} cannot resume its conversation automatically. Switch manually to keep this window and open a new conversation.",
+        "api-key-takeover": "Panes moved to an API key account, billed by usage.",
+        "api-key-takeover-paused": "Automatic switching is paused until the switch history can be written. Nothing moved to the API key account.",
+        "api-key-takeover-unrecorded": "The move to the API key account could not be recorded, so nothing moved.",
+        "api-key-takeover-failed": "The move to the API key account failed. Nothing moved. It still counts toward the automatic switch limit.",
         "no-candidate": "No account to switch to. Sign in to another account or wait for the reset.",
         "auto_budget_exhausted": "Automatic switch limit reached. Switch manually or wait for the window to pass.",
         "chained-exhaustion": "{target} ran out as well. Nothing else was tried.",
@@ -9710,6 +9795,9 @@
     "failed": "Could not reconnect that conversation — its transcript may no longer exist"
   },
   "cli-account": {
+    "api-key-takeover-partial": "Quota used up. New panes use {name}, billed by usage. {count} busy panes stayed where they were.",
+    "api-key-login-back": "Your subscription quota is back. Panes stay on the API key until you switch back in Accounts.",
+    "api-key-takeover": "Quota used up. Panes moved to {name}, billed by usage. Switch back in Accounts after the quota resets.",
     "default": "Original login",
     "switch-title": "Switch account",
     "swap-failed": "Account switch failed — the previous account is still active.",

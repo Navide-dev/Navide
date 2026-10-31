@@ -159,6 +159,7 @@ from .cli_vendors.claude import (  # noqa: E402,F401
     read_claude_credentials,
     read_claude_credentials_file,
 )
+from .api_key_accounts import is_active_api_key_account  # noqa: E402
 from .cli_vendors.codex import (  # noqa: E402,F401
     codex_base_url,
     fetch_codex,
@@ -1311,6 +1312,7 @@ class UsageService:
         vault = _get_credential_vault()
         signed_in = getattr(vault, "account_dir_signed_in", None)
         path_of = getattr(vault, "account_dir_path", None)
+        is_api_key_slot = getattr(vault, "is_api_key_slot", None)
         if not callable(signed_in) or not callable(path_of):
             return []
 
@@ -1319,6 +1321,8 @@ class UsageService:
             for slot_id in slot_ids:
                 if slot_id == "__default__":
                     continue
+                if is_api_key_slot is not None and is_api_key_slot("claude", slot_id):
+                    continue  # Reading /usage there would boot a CLI on the key.
                 try:
                     if signed_in(slot_id):
                         found.append((slot_id, path_of(slot_id)))
@@ -1387,6 +1391,8 @@ class UsageService:
             if provider == "claude":  # claude polls per-slot above
                 continue
             if spec.fetch_usage is None:
+                continue
+            if is_active_api_key_account(provider, _get_profiles_store()):
                 continue
             if self._blocked_until.get(provider, 0) > now:
                 continue

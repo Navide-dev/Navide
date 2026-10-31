@@ -100,6 +100,8 @@ def resolve(agent_key: str, account: str, caller_pane_id: str, caller_agent_key:
             f"{agent_key} panes all run on its live login; only claude can run one pane on another "
             "account. Use account \"active\", or cli_account_switch to change the live login"
         ))
+    if row.get("authKind") == "api-key":
+        return _refusal("unsupported", f'account "{asked}" is an API key account; only the user chooses to spend it')
     if asked == live:
         # The live login already is that account: a pin would only stop the
         # pane following a later switch, which nobody asked for.

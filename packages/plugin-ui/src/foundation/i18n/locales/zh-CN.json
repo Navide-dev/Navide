@@ -8313,6 +8313,87 @@
       }
     },
     "accounts": {
+      "api-keys": {
+        "pane": {
+          "title": "订阅额度已用完",
+          "back-at": "{time} 恢复",
+          "back-unknown": "重置时间未知",
+          "wait": "等待重置"
+        },
+        "kind": "API 密钥",
+        "list": {
+          "aria": "账号",
+          "search": "搜索账号",
+          "add": "+ 添加账号",
+          "login": "登录",
+          "empty": "没有匹配的账号。"
+        },
+        "add": {
+          "title": "{agent} 要用哪种方式连接？",
+          "agent-label": "CLI",
+          "subscription": "用订阅登录",
+          "subscription-desc": "在浏览器中授权，使用套餐的额度。",
+          "api-key": "粘贴 API 密钥",
+          "api-key-desc": "按用量计费。密钥存放在这台电脑上。",
+          "api-key-unsupported": "这个 CLI 目前还不能使用 API 密钥。",
+          "cloud": "连接云服务",
+          "cloud-desc": "Amazon Bedrock、Google Vertex 或 Microsoft Foundry。",
+          "endpoint": "连接自定义端点",
+          "endpoint-desc": "公司网关或其他兼容服务。",
+          "coming-soon": "即将推出"
+        },
+        "form": {
+          "title": "粘贴 API 密钥",
+          "billing": "这个账号按用量计费，不会使用订阅额度。",
+          "name": "名称",
+          "key": "API 密钥",
+          "key-new": "新的 API 密钥",
+          "key-hint": "保存后不会再显示。",
+          "reminder": "每月支出提醒（USD）",
+          "reminder-hint": "这只是提醒，不是硬性上限。硬性上限请到厂商的控制台设置。",
+          "test": "测试密钥",
+          "testing": "测试中…",
+          "test-ok": "密钥可以使用。",
+          "test-rejected": "厂商拒绝了这个密钥。",
+          "test-unknown": "无法检查密钥，但仍可保存。",
+          "save": "保存账号"
+        },
+        "safe": {
+          "local": "只保存在这台电脑上",
+          "no-sync": "绝不同步到 Navide Cloud"
+        },
+        "detail": {
+          "ends-with": "结尾为 {last4}",
+          "replace": "更换密钥",
+          "replace-save": "保存新密钥",
+          "delete-title": "要删除这个 API 密钥吗？",
+          "delete-message": "{name} 将从这台电脑移除。密钥在厂商处仍然有效，直到你在那里吊销。",
+          "auto-switch": "额度用完时可自动切换到此账号",
+          "auto-switch-hint": "默认关闭。切换后的用量会计费到此密钥。",
+          "in-use": "新窗格正在使用",
+          "use-for-new-panes": "用于新窗格",
+          "stop-using": "新窗格不再使用",
+          "switch-hint": "新打开的窗格会使用此账号。已打开的窗格需要重启才会更换。",
+          "pane-unavailable": "窗格暂时无法使用此账号。"
+        },
+        "error": {
+          "subscription-token": "这是订阅令牌，不是 API 密钥。请到厂商的控制台创建 API 密钥。",
+          "wrong-vendor": "这个密钥属于其他厂商。",
+          "invalid-secret": "这看起来不是 API 密钥。",
+          "invalid-name": "请输入不超过 60 个字符的名称。",
+          "invalid-reminder": "请输入大于零的每月提醒金额。",
+          "unsupported-agent": "这个 CLI 目前还不能使用 API 密钥。",
+          "store-failed": "无法保存到这台电脑的钥匙圈。",
+          "secret-missing": "钥匙圈中已没有这个密钥，请重新粘贴。",
+          "not-found": "这个 API 密钥已不存在。",
+          "main-window-only": "API 密钥只能在设置中管理。",
+          "internal-error": "出错了，请重试。",
+          "unsupported-platform": "Claude Code 的 API 密钥账号暂不支持 Windows。",
+          "login-policy": "你的组织要求使用指定方式登录，因此无法添加 API 密钥账号。",
+          "account-active": "此账号正在使用中，请先切换到其他账号。",
+          "account-in-use": "有窗格正在使用此账号，请先关闭再删除。"
+        }
+      },
       "title": "Git 账号",
       "encrypted-note": "Token 会通过操作系统密钥链加密，只保存在本机。",
       "unavailable": "此系统无法使用加密功能，因此无法添加账号。通常代表操作系统密钥链无法访问。",
@@ -9355,6 +9436,10 @@
         "manual-only": "{agent} 只能手动切换账号。",
         "unverified-adapter": "{agent} 的账号切换在此平台尚未验证；请手动切换。",
         "no-resume": "{agent} 无法自动接续对话。请手动切换：保留此窗口并另开新对话。",
+        "api-key-takeover": "窗格已切换到 API 密钥账号，改为按用量计费。",
+        "api-key-takeover-paused": "切换记录暂时无法写入，自动切换已暂停，没有切换到 API 密钥账号。",
+        "api-key-takeover-unrecorded": "无法记录切换到 API 密钥账号的操作，因此没有切换。",
+        "api-key-takeover-failed": "切换到 API 密钥账号失败，没有切换。这次仍计入自动切换次数。",
         "no-candidate": "没有可切换的账号。可登录其他账号，或等待重置。",
         "auto_budget_exhausted": "已达自动切换上限。可手动切换，或等窗口过期。",
         "chained-exhaustion": "{target} 也已耗尽。未再尝试其他账号。",
@@ -9710,6 +9795,9 @@
     "failed": "无法接回这段对话，其历史记录可能已不存在"
   },
   "cli-account": {
+    "api-key-takeover-partial": "额度已用完，新窗格将使用 {name}，改为按用量计费。有 {count} 个忙碌的窗格保持不变。",
+    "api-key-login-back": "订阅额度已恢复。窗格仍在使用 API 密钥，如需切换回来请到账号页。",
+    "api-key-takeover": "额度已用完，窗格已切换到 {name}，改为按用量计费。额度重置后请到账号页切换回来。",
     "default": "原始登录",
     "switch-title": "切换账号",
     "swap-failed": "账号切换失败，仍使用原本的账号。",

@@ -82,15 +82,16 @@ describe('the flag lifecycle', () => {
   it('is not offered for a rebuild the user asked for', () => {
     // ⌘R, the rebuild button, the account-switch batch and the post-install
     // relaunch are all deliberate actions; none of them needs a second one.
-    // The two that DO offer it are rebuilds nobody asked for: the backend
-    // outage (flushPtyLostResumes) and the quota-failover switch that stopped
+    // The three that DO offer it are rebuilds nobody asked for: the backend
+    // outage (flushPtyLostResumes), the quota-failover switch that stopped
     // the pane at a turn boundary (quotaRestartPane) — that switch sends no
-    // prompt or continue of its own, so the button is its only continuation.
+    // prompt or continue of its own, so the button is its only continuation —
+    // and the API key takeover (reopenOnKey), which stops panes the same way.
     const calls = (appSource.match(/rebuildPaneViaResume\([^)]*\{[^}]*\}/gs) ?? []).filter(
       (c) => !c.includes('paneId: string') // drop the declaration itself
     )
     expect(calls.length).toBeGreaterThan(2)
-    expect(calls.filter((c) => c.includes('offerContinue'))).toHaveLength(2)
+    expect(calls.filter((c) => c.includes('offerContinue'))).toHaveLength(3)
     expect(fn('flushPtyLostResumes')).toContain('offerContinue: true')
     expect(fn('quotaRestartPane')).toContain('offerContinue: true')
   })
