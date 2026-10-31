@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
-import { loginSpent, reopenOnKey, useApiKeyTakeover, useLoginResetNotice } from '../useApiKeyTakeover'
+import { keyMoveRebuild, loginSpent, reopenOnKey, useApiKeyTakeover, useLoginResetNotice } from '../useApiKeyTakeover'
 import type { UsageSnapshot, UsageWindow } from '../useUsage'
 
 function harness() {
@@ -136,6 +136,18 @@ describe('useLoginResetNotice', () => {
   })
 })
 
+describe('keyMoveRebuild', () => {
+  it('restarts the way a quota switch does and never forces a running pane', () => {
+    expect(keyMoveRebuild('k1')).toEqual({
+      profileId: 'k1',
+      suppressBusyToast: true,
+      offerContinue: true,
+      freshWhenNoTranscript: true,
+      preserveScrollback: true,
+    })
+  })
+})
+
 describe('reopenOnKey', () => {
   function run(readiness: { ready: boolean; reason?: string }) {
     const rebuild = vi.fn(async () => undefined)
@@ -197,12 +209,8 @@ describe('the takeover in App.vue', () => {
 
   it('asks the same readiness a quota switch asks, and never forces', () => {
     expect(block).toContain('quotaPaneReadiness(id, { needsResume: false })')
-    expect(block).toContain('preserveScrollback: true')
+    expect(block).toContain('rebuildPaneViaResume(id, keyMoveRebuild(target))')
     expect(block).not.toContain('forceWhenRunning')
-  })
-
-  it('offers continue, since nobody asked for this reopen', () => {
-    expect(block).toContain('offerContinue: true')
   })
 
   it('leaves sign-in panes alone', () => {
