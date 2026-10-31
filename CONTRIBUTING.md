@@ -147,6 +147,24 @@ by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
    change to conftest, test helpers, `pyproject.toml` or the lock runs the
    whole suite. It does not follow indirect imports, so it can miss a
    breakage the full suite catches.
+
+   Before pushing, one command runs what most often turns CI red, in minutes
+   rather than a 20-30 minute CI round trip:
+   ```bash
+   git add -A                             # the fingerprint checks read the index
+   node scripts/pre-push-check.mjs        # macOS and Linux
+   node scripts/pre-push-check.mjs --list # just print what would run
+   ```
+   It always runs the repository-scanning guards `vitest --changed` cannot
+   select, `tests/infrastructure` and the official plugin fingerprints; then
+   what the change calls for (Python compile and ruff, lockfile parity,
+   typecheck, the i18n test folder, the contract fixtures, the marketplace
+   checks); then `vitest --changed` and `changed-backend-tests.mjs`. It warns
+   when the branch is behind `origin/main` but never merges, waits while the
+   1-minute load is 60 or above, queues behind any other run in this clone's
+   worktrees, and prints each check's result and time. Any failure exits
+   non-zero. It does not replace CI: other platforms, the full suites and the
+   build still run only there.
 4. Run type checks:
    ```bash
    pnpm typecheck
