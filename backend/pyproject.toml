@@ -32,6 +32,10 @@ dependencies = [
     # been migrated to.
     "mcp>=1.28.1,<2",
     "openpyxl>=3.1.5",
+    # Imported by plugins/host.py for version comparison. It used to arrive
+    # only through the dev group (pytest, pyinstaller), so an install with
+    # runtime dependencies alone could not start the backend.
+    "packaging",
     # Process-tree walking and per-process counters for the Windows
     # implementation of osplat.process_tree / resource_probe (psutil has
     # binary wheels for every platform the backend ships on, so it costs the
