@@ -100,9 +100,9 @@ def ai_cluster(model: str = "lmChatAnthropic") -> dict:
     )
 
 
-def if_merge(big: bool = False) -> dict:
+def if_merge(big: bool = False, check: tuple[str, float] = ("if", 2)) -> dict:
     nodes = [node("Start", "manualTrigger"),
-             node("Check", "if", 2, 200, parameters={"conditions": {"combinator": "and", "conditions": []}}),
+             node("Check", *check, 200, parameters={"conditions": {"combinator": "and", "conditions": []}}),
              node("Yes", "set", 3.4, 400, -100),
              node("No", "code", 2, 400, 100, parameters={"jsCode": "return [];"}),
              node("Join", "merge", 3, 600),
@@ -233,6 +233,50 @@ def test_if_becomes_branch_edges_and_the_merge_is_native():
     assert (entry(out, "Check")["category"], entry(out, "Check")["reason"]) == ("native", "branch")
     assert entry(out, "Check")["branches"] == ["true", "false"]
     assert (entry(out, "Join")["category"], entry(out, "Join")["reason"]) == ("native", "merge")
+
+
+# IF and Switch are branch edges now; these two cover what a node with several
+# outputs that is neither does, where every output may hold items.
+COMPARE = ("compareDatasets", 2.3)
+
+
+def test_small_if_and_merge_collapse_into_one_agent_slot():
+    out = convert(if_merge(check=COMPARE))
+    assert shape(out) == {
+        "nodes": [("trigger", "trigger", "Start"), ("n8n-check", "slot", "Check (+4)")],
+        "edges": [("trigger", "n8n-check")],
+    }
+    kick = slot(out, "n8n-check")["slot"]["kickoffBody"]
+    assert "following every output that has items" in kick
+    assert "Next: output 0 → \"Yes\"; output 1 → \"No\"" in kick
+    assert entry(out, "Check")["category"] == "agent"
+
+
+def test_large_branch_is_pending_and_the_merge_after_it_too():
+    out = convert(if_merge(big=True, check=COMPARE))
+    ids = [n[0] for n in shape(out)["nodes"]]
+    assert ids == ["trigger", "n8n-check", "n8n-yes", "n8n-no", "n8n-think", "n8n-join"]
+    assert ("n8n-check", "n8n-yes") in shape(out)["edges"] and ("n8n-check", "n8n-no") in shape(out)["edges"]
+    assert entry(out, "Check")["category"] == "pending" and entry(out, "Check")["reason"] == "branch-too-large"
+    assert entry(out, "Check")["detailCode"] == "branch-too-large"
+    assert entry(out, "Join")["category"] == "pending" and entry(out, "Join")["reason"] == "merge-after-branch"
+    assert entry(out, "Join")["detailCode"] == "merge-after-branch"
+    assert out["report"]["nodeCategories"]["n8n-join"] == "pending"
+    assert entry(out, "Think")["result"] == "slot"
+
+
+def test_no_agent_is_named_for_a_trigger_or_an_approval_gate():
+    out = convert(linear())
+    assert entry(out, "Start")["detailCode"] == "trigger-start"
+    w = wf([node("Start", "manualTrigger"), node("Ok", "wait", 1.1, 200)], link(("Start", "Ok")))
+    assert entry(convert(w), "Ok")["detailCode"] == "gate-approval"
+
+
+def test_a_workflow_without_such_a_node_reports_neither_reason():
+    # IF and Switch regions of any size, and every other golden, are as before.
+    for w in (linear(), ai_cluster(), if_merge(), if_merge(True), loop(), webhook(), schedule(), subworkflow()):
+        reasons = {e["reason"] for e in convert(w)["report"]["nodes"]}
+        assert not reasons & {"branch-too-large", "merge-after-branch"}
 
 
 @pytest.mark.parametrize("mode", ["append", "chooseBranch", None])
@@ -959,6 +1003,7 @@ def _report_corpus() -> list[dict]:
                     node("A", "set", 3.4, 400), node("B", "set", 3.4, 400, 100)],
                    link(("Start", "Route"), ("Route", "A", 0), ("Route", "B", 1)))
     outs.append(convert(switch_v2))
+    outs.append(convert(if_merge(big=True, check=COMPARE)))
     return outs
 
 
