@@ -306,6 +306,16 @@ failure instead of being hidden by the factory or legacy copy.
 Neither recovery path mutates Plugin Storage snapshots or legacy seeds. This
 is a compatibility recovery path, not a generic version lifecycle.
 
+## Plugin backends and core sources
+
+A first-party Python backend does not import `agent_team_backend`. It imports
+`navide_plugin_sdk` (`backend/navide_plugin_sdk/`), whose names are versioned
+with the plugin API; `backend/tests/test_plugin_sdk_surface.py` pins them. The
+sources behind those names are bundled into the backend at build time, so a
+Host update does not reach a published package, and a rename inside core needs
+only the SDK module updated. The SDK is not published for third-party authors
+yet, because it still needs the core sources at build time.
+
 ## Architectural direction
 
 Long-term architecture work must turn the current control plane and engineering surfaces into a complete AI-native engineering environment. It should not copy traditional IDE interfaces uncritically, but it must eventually cover the full professional workflow. The primary seams are:
