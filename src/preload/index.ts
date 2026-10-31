@@ -20,7 +20,6 @@ import type {
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import type { PluginActivityReport } from '../shared/pluginActivity'
-import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import type { PluginCommandEntry, PluginCommandRunResult } from '../shared/pluginCommands'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
@@ -1050,14 +1049,6 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('keybindings:write', content),
   onKeybindingsChanged: (cb: (content: string) => void): void => {
     ipcRenderer.on('keybindings:changed', (_event, content: string) => cb(content))
-  },
-  workbenchProject: {
-    inspect: (): Promise<ProjectWorkbenchSnapshot> => ipcRenderer.invoke('workbench-project:inspect'),
-    accept: (fingerprint: string): Promise<ProjectWorkbenchResult> =>
-      ipcRenderer.invoke('workbench-project:accept', { fingerprint }),
-    revoke: (): Promise<ProjectWorkbenchResult> => ipcRenderer.invoke('workbench-project:revoke'),
-    markNotified: (fingerprint: string): Promise<ProjectWorkbenchResult> =>
-      ipcRenderer.invoke('workbench-project:mark-notified', { fingerprint }),
   },
   readWorkbench: (): Promise<{ ok: boolean; content?: string; error?: string }> =>
     ipcRenderer.invoke('workbench:read'),

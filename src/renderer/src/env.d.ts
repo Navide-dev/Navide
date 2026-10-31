@@ -253,12 +253,6 @@ declare global {
       readKeybindings: () => Promise<{ ok: boolean; content?: string; error?: string }>
       writeKeybindings: (content: string) => Promise<{ ok: boolean; error?: string }>
       onKeybindingsChanged: (cb: (content: string) => void) => void
-      workbenchProject?: {
-        inspect: () => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchSnapshot>
-        accept: (fingerprint: string) => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
-        revoke: () => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
-        markNotified: (fingerprint: string) => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
-      }
       readWorkbench?: () => Promise<{ ok: boolean; content?: string; error?: string }>
       writeWorkbench?: (content: string) => Promise<{ ok: boolean; error?: string }>
       onWorkbenchChanged?: (cb: (content: string) => void) => void
