@@ -8335,7 +8335,8 @@
           "main-window-only": "API-Schlüssel können nur in den Einstellungen verwaltet werden.",
           "internal-error": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
           "unsupported-platform": "API-Schlüssel-Konten für Claude Code sind unter Windows noch nicht verfügbar.",
-          "login-policy": "Ihre Organisation schreibt eine bestimmte Anmeldemethode vor, daher können keine API-Schlüssel-Konten hinzugefügt werden."
+          "login-policy": "Ihre Organisation schreibt eine bestimmte Anmeldemethode vor, daher können keine API-Schlüssel-Konten hinzugefügt werden.",
+          "account-in-use": "Ein Bereich verwendet dieses Konto. Schließen Sie ihn, bevor Sie das Konto löschen."
         }
       },
       "title": "Git-Konten",

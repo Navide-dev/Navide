@@ -8335,7 +8335,8 @@
           "main-window-only": "API keys can only be managed in Settings.",
           "internal-error": "Something went wrong. Try again.",
           "unsupported-platform": "Claude Code API key accounts are not available on Windows yet.",
-          "login-policy": "Your organization requires a specific sign-in method, so API key accounts cannot be added."
+          "login-policy": "Your organization requires a specific sign-in method, so API key accounts cannot be added.",
+          "account-in-use": "A pane is using this account. Close it before deleting."
         }
       },
       "title": "Git accounts",

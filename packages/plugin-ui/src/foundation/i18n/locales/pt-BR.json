@@ -8335,7 +8335,8 @@
           "main-window-only": "As chaves de API só podem ser gerenciadas em Configurações.",
           "internal-error": "Algo deu errado. Tente novamente.",
           "unsupported-platform": "Contas com chave de API do Claude Code ainda não estão disponíveis no Windows.",
-          "login-policy": "Sua organização exige um método de login específico, por isso não é possível adicionar contas com chave de API."
+          "login-policy": "Sua organização exige um método de login específico, por isso não é possível adicionar contas com chave de API.",
+          "account-in-use": "Um painel está usando esta conta. Feche-o antes de excluí-la."
         }
       },
       "title": "Contas do Git",

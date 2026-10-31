@@ -8335,7 +8335,8 @@
           "main-window-only": "API 密钥只能在设置中管理。",
           "internal-error": "出错了，请重试。",
           "unsupported-platform": "Claude Code 的 API 密钥账号暂不支持 Windows。",
-          "login-policy": "你的组织要求使用指定方式登录，因此无法添加 API 密钥账号。"
+          "login-policy": "你的组织要求使用指定方式登录，因此无法添加 API 密钥账号。",
+          "account-in-use": "有窗格正在使用此账号，请先关闭再删除。"
         }
       },
       "title": "Git 账号",

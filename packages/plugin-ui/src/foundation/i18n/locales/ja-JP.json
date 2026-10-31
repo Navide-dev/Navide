@@ -8335,7 +8335,8 @@
           "main-window-only": "API キーは設定でのみ管理できます。",
           "internal-error": "問題が発生しました。もう一度お試しください。",
           "unsupported-platform": "Claude Code の API キーアカウントはまだ Windows に対応していません。",
-          "login-policy": "組織で指定のログイン方法が必須のため、API キーアカウントは追加できません。"
+          "login-policy": "組織で指定のログイン方法が必須のため、API キーアカウントは追加できません。",
+          "account-in-use": "このアカウントを使用中のペインがあります。閉じてから削除してください。"
         }
       },
       "title": "Git アカウント",

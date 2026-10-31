@@ -8335,7 +8335,8 @@
           "main-window-only": "Les clés API ne peuvent être gérées que dans les paramètres.",
           "internal-error": "Une erreur s’est produite. Réessayez.",
           "unsupported-platform": "Les comptes à clé API de Claude Code ne sont pas encore disponibles sous Windows.",
-          "login-policy": "Votre organisation impose une méthode de connexion précise, les comptes à clé API ne peuvent donc pas être ajoutés."
+          "login-policy": "Votre organisation impose une méthode de connexion précise, les comptes à clé API ne peuvent donc pas être ajoutés.",
+          "account-in-use": "Un panneau utilise ce compte. Fermez-le avant de le supprimer."
         }
       },
       "title": "Comptes Git",

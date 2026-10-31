@@ -14,6 +14,11 @@ vi.mock('../../../../shared/osplat', async (original) => ({
   isWindows: () => platform.windows,
 }))
 
+vi.mock('@navide/plugin-ui/foundation', async (original) => ({
+  ...(await original<object>()),
+  useNotify: () => ({ confirm: async () => true, toast: vi.fn() }),
+}))
+
 const FAKE_KEY = 'sk-ant-' + 'api03-' + 'fake7F2A'
 const ROW: ApiKeyProfile = {
   id: 'k1',
@@ -151,7 +156,7 @@ describe('AddAccountPanel', () => {
     expect(save()).toBeUndefined()
   })
 
-  it.each(['subscription-token', 'unsupported-platform'])('shows the %s error the backend sent', async (code) => {
+  it.each(['subscription-token', 'unsupported-platform', 'login-policy'])('shows the %s error the backend sent', async (code) => {
     const calls = fakeCalls({ create: vi.fn(async () => ({ ok: false, error_code: code })) })
     const w = mountAdd(calls)
     await openForm(w)
@@ -304,6 +309,21 @@ describe('CliAccountsPane with an API key account', () => {
     await flushPromises()
     expect(api.setDefault).toHaveBeenCalledWith('codex', ROW.id)
     expect(api.setPaneDefault).not.toHaveBeenCalled()
+  })
+
+  it('deletes through api_key_delete, never the generic delete, and says when a pane holds the account', async () => {
+    const api = fakeApi([ROW])
+    const send = vi.fn(async () => ({ payload: { ok: false, error_code: 'account-in-use' } }))
+    const w = mount(CliAccountsPane, {
+      props: { api: api as never, backend: { send } as never, workspaceOpen: true },
+      global: { plugins: [i18n] },
+    })
+    await w.get(`[data-account="claude/${ROW.id}"]`).trigger('click')
+    await w.get('[data-testid="api-key-delete"]').trigger('click')
+    await flushPromises()
+    expect(send).toHaveBeenCalledWith('cli_profiles.api_key_delete', { id: ROW.id })
+    expect(api.remove).not.toHaveBeenCalled()
+    expect(w.get('.ak-error').text()).toBe(i18n.global.t('settings.accounts.api-keys.error.account-in-use'))
   })
 
   it('clears the pane default when a Claude account stops being used', async () => {

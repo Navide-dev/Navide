@@ -8335,7 +8335,8 @@
           "main-window-only": "API key 只能在設定中管理。",
           "internal-error": "發生錯誤，請再試一次。",
           "unsupported-platform": "Claude Code 的 API key 帳號目前還不支援 Windows。",
-          "login-policy": "你的組織規定要用指定方式登入，所以不能新增 API key 帳號。"
+          "login-policy": "你的組織規定要用指定方式登入，所以不能新增 API key 帳號。",
+          "account-in-use": "有 pane 正在使用這個帳號，請先關閉再刪除。"
         }
       },
       "title": "Git 帳號",

@@ -8335,7 +8335,8 @@
           "main-window-only": "Chỉ có thể quản lý khóa API trong Cài đặt.",
           "internal-error": "Đã xảy ra lỗi. Hãy thử lại.",
           "unsupported-platform": "Tài khoản khóa API của Claude Code chưa hỗ trợ Windows.",
-          "login-policy": "Tổ chức của bạn yêu cầu một phương thức đăng nhập cụ thể, nên không thể thêm tài khoản khóa API."
+          "login-policy": "Tổ chức của bạn yêu cầu một phương thức đăng nhập cụ thể, nên không thể thêm tài khoản khóa API.",
+          "account-in-use": "Có khung đang dùng tài khoản này. Hãy đóng khung đó trước khi xóa."
         }
       },
       "title": "Tài khoản Git",

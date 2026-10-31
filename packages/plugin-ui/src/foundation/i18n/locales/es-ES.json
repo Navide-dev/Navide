@@ -8335,7 +8335,8 @@
           "main-window-only": "Las claves de API solo se pueden gestionar en Ajustes.",
           "internal-error": "Algo ha salido mal. Inténtalo de nuevo.",
           "unsupported-platform": "Las cuentas con clave de API de Claude Code aún no están disponibles en Windows.",
-          "login-policy": "Tu organización exige un método de inicio de sesión concreto, por lo que no se pueden añadir cuentas con clave de API."
+          "login-policy": "Tu organización exige un método de inicio de sesión concreto, por lo que no se pueden añadir cuentas con clave de API.",
+          "account-in-use": "Un panel está usando esta cuenta. Ciérralo antes de eliminarla."
         }
       },
       "title": "Cuentas de Git",
