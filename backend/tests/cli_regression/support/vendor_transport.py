@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import socketserver
 import sys
 import time
 
@@ -34,6 +35,14 @@ def _raw_console_input() -> None:
     if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
         # ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT
         kernel32.SetConsoleMode(handle, mode.value & ~0x0007)
+
+
+class _Server(HTTPServer):
+    def server_bind(self) -> None:
+        # HTTPServer.server_bind looks up the host name, which can outlast the
+        # harness's wait for TRANSPORT_READY on macos-15 runners.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 def main() -> None:
@@ -88,7 +97,7 @@ def main() -> None:
             def log_message(self, *_args):
                 pass
 
-        server = HTTPServer((option("--hostname"), int(option("--port"))), Handler)
+        server = _Server((option("--hostname"), int(option("--port"))), Handler)
         print("TRANSPORT_READY", flush=True)
         server.serve_forever()
     elif "--input-file" in args:
