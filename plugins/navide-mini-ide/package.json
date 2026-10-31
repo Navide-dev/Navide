@@ -2,7 +2,7 @@
   "name": "@navide/navide-mini-ide",
   "private": true,
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "dependencies": {
     "@navide/plugin-contracts": "^1.0.0",
     "@navide/plugin-sdk": "^1.0.0",

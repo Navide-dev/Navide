@@ -355,6 +355,8 @@ export interface InstalledPluginPackageSummary {
   warning?: string
   /** The v2 manifest's `engines.navide`, verbatim, when it declares one. */
   enginesNavide?: string
+  /** The v2 manifest's `apiVersion`, verbatim. */
+  apiVersion?: string
   /** True when the v2 manifest declares a native `backend`; absent otherwise. */
   hasBackend?: true
 }
@@ -375,6 +377,7 @@ export function manifestToInstalledPackageSummary(
             ...(manifest.permissions.scopes ? { scopes: manifest.permissions.scopes } : {}),
           }),
           ...(manifest.engines ? { enginesNavide: manifest.engines.navide } : {}),
+          apiVersion: manifest.apiVersion,
           ...(manifest.backend ? { hasBackend: true as const } : {}),
         }
       : {}),

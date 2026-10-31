@@ -355,6 +355,12 @@ function runtimeCapabilityBridge(): RuntimeCapabilityBridge {
   return bridge as RuntimeCapabilityBridge
 }
 
+/** The plugin API the running Host provides, or null on a Host too old to say. */
+export function hostApiVersion(): string | null {
+  const version = (globalThis as unknown as { nav?: { apiVersion?: unknown } }).nav?.apiVersion
+  return typeof version === 'string' ? version : null
+}
+
 function isJsonValue(value: unknown): value is JsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
   if (typeof value === 'number') return Number.isFinite(value)

@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Plugin API (0.2.36): the Host now has a plugin API version. A package on a newer API major is refused at install and, if already installed, stays in Settings with the reason and contributes nothing. `hostApiVersion()` in `@navide/plugin-sdk` reads the version, and every capability catalog entry says which version it arrived in. Nothing changes for current packages.
+
 ### Changed
 
 - Plans (0.2.36): its backend now reaches shared file and version code through `navide_plugin_sdk`, a small versioned Python surface, instead of private names in the core backend. Nothing changes for users; a rename inside the core backend can no longer break Plans.

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  apiVersionProblem,
   assertEngineCompatible,
   engineRequirement,
   isEngineCompatible,
@@ -90,5 +91,19 @@ describe('the first-party manifests', () => {
     expect(isEngineCompatible(engineRequirement(manifest), '0.2.29')).toBe(false)
     expect(() => assertEngineCompatible(manifest.id, '0.2.31', manifest, '0.2.29'))
       .toThrow(`${manifest.id} 0.2.31 requires Navide 0.2.30 or newer; this is Navide 0.2.29`)
+  })
+
+  it('passes every apiVersion on the current major or an older one', () => {
+    for (const apiVersion of ['^1.0.0', '~1.0.0', '1.0.0', '^1.9.0', '^0.1.0', 'not-a-range', undefined]) {
+      expect(apiVersionProblem('acme.files', '1.0.0', apiVersion)).toBeNull()
+      expect(() => assertEngineCompatible('acme.files', '1.0.0', { apiVersion }, '0.2.36')).not.toThrow()
+    }
+  })
+
+  it('refuses a package on a newer API major', () => {
+    expect(apiVersionProblem('acme.files', '2.0.0', '^2.0.0')).toBe(
+      'acme.files 2.0.0 requires plugin API ^2.0.0; this Navide provides 1.0.0',
+    )
+    expect(() => assertEngineCompatible('acme.files', '2.0.0', { apiVersion: '~2.1.0' }, '0.2.36')).toThrow(/plugin API ~2\.1\.0/)
   })
 })
