@@ -165,8 +165,8 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[9].version).toBe('0.2.26')
-    expect(WHATS_NEW[10].version).toBe('0.2.25')
+    expect(WHATS_NEW[10].version).toBe('0.2.26')
+    expect(WHATS_NEW[11].version).toBe('0.2.25')
   })
 })
 
@@ -192,7 +192,7 @@ describe('0.2.27 — Navide Browser and blocked local installs', () => {
   it('shows once to someone updating from 0.2.26, and not to a build still running 0.2.26', () => {
     expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
-    expect(WHATS_NEW[8].version).toBe('0.2.27')
+    expect(WHATS_NEW[9].version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
   })
 })
@@ -241,7 +241,7 @@ describe('0.2.29 — six more languages', () => {
   it('shows once to someone updating from 0.2.28, and not to a build still running 0.2.28', () => {
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.29', '0.2.29')).toBeNull()
-    expect(WHATS_NEW[6].version).toBe('0.2.29')
+    expect(WHATS_NEW[7].version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
   })
 })
@@ -269,7 +269,7 @@ describe('0.2.30 — pipelines no longer stall silently', () => {
   it('shows once to someone updating from 0.2.29, and not to a build still running 0.2.29', () => {
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.30', '0.2.30')).toBeNull()
-    expect(WHATS_NEW[5].version).toBe('0.2.30')
+    expect(WHATS_NEW[6].version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
   })
 })
@@ -277,6 +277,41 @@ describe('0.2.30 — pipelines no longer stall silently', () => {
 // The 0.2.31 entry: the Linux memory growth from #622, Navide Plugins settings
 // as four pages, agent data for plugins, the clock message and the Anthropic
 // commit-message fix.
+describe('0.2.36 — API key accounts, workbench and plugin commands', () => {
+  const entry = whatsNewFor('0.2.36')
+  const all = () => entry!.highlights.map((text) => text['en-US']).join('\n')
+
+  it('is authored in every UI language', () => {
+    expect(entry).toBeDefined()
+    const locales = ['zh-TW', 'en-US', 'ja-JP', 'zh-CN', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ru-RU', 'vi-VN'] as const
+    for (const text of [entry!.title, ...entry!.highlights]) {
+      for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
+    }
+  })
+
+  it('states the limits of API key accounts', () => {
+    expect(all()).toContain('does not go through Navide Cloud')
+    expect(all()).toContain('do not support Windows')
+    expect(all()).toContain('have not been tested with a real key yet')
+    expect(all()).toContain('follow that default')
+    expect(all()).toContain('not a hard limit')
+    expect(all()).toContain('it does not track spending or alert you')
+    expect(all()).toContain('clears the current login')
+    expect(all()).toContain('does not count as a candidate')
+  })
+
+  it('shows once to someone updating from 0.2.35, as the newest entry, and not to a build still running 0.2.35', () => {
+    expect(pickWhatsNew('0.2.36', '0.2.35')?.version).toBe('0.2.36')
+    expect(pickWhatsNew('0.2.36', '0.2.36')).toBeNull()
+    expect(WHATS_NEW[0].version).toBe('0.2.36')
+    expect(pickWhatsNew('0.2.35', '0.2.34')?.version).toBe('0.2.35')
+  })
+
+  it('claims nothing the feature does not establish', () => {
+    expect(all()).not.toMatch(/complian|officially allowed|not shown to agents|never shown to/i)
+  })
+})
+
 describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () => {
   const entry = whatsNewFor('0.2.31')
 
@@ -320,7 +355,7 @@ describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () 
   it('shows once to someone updating from 0.2.30, and not to a build still running 0.2.30', () => {
     expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.31', '0.2.31')).toBeNull()
-    expect(WHATS_NEW[4].version).toBe('0.2.31')
+    expect(WHATS_NEW[5].version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
   })
 })
@@ -364,7 +399,7 @@ describe('0.2.32 — secrets stay on this machine, Paste Credential removed', ()
   it('shows once to someone updating from 0.2.31, and not to a build still running 0.2.31', () => {
     expect(pickWhatsNew('0.2.32', '0.2.31')?.version).toBe('0.2.32')
     expect(pickWhatsNew('0.2.32', '0.2.32')).toBeNull()
-    expect(WHATS_NEW[3].version).toBe('0.2.32')
+    expect(WHATS_NEW[4].version).toBe('0.2.32')
     expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
   })
 })
@@ -402,7 +437,7 @@ describe('0.2.33 — chat wake brings back the conversation, in all 11 languages
   it('shows once to someone updating from 0.2.32, and not to a build still running 0.2.32', () => {
     expect(pickWhatsNew('0.2.33', '0.2.32')?.version).toBe('0.2.33')
     expect(pickWhatsNew('0.2.33', '0.2.33')).toBeNull()
-    expect(WHATS_NEW[2].version).toBe('0.2.33')
+    expect(WHATS_NEW[3].version).toBe('0.2.33')
     expect(pickWhatsNew('0.2.32', '0.2.31')?.version).toBe('0.2.32')
   })
 })
@@ -437,7 +472,7 @@ describe('0.2.34 — App Lock and Import from n8n', () => {
   it('shows once to someone updating from 0.2.33, and not to a build still running 0.2.33', () => {
     expect(pickWhatsNew('0.2.34', '0.2.33')?.version).toBe('0.2.34')
     expect(pickWhatsNew('0.2.34', '0.2.34')).toBeNull()
-    expect(WHATS_NEW[1].version).toBe('0.2.34')
+    expect(WHATS_NEW[2].version).toBe('0.2.34')
     expect(pickWhatsNew('0.2.33', '0.2.32')?.version).toBe('0.2.33')
   })
 })
@@ -482,10 +517,10 @@ describe('0.2.35 — Navide Browser built in, Plans editing, Windows Hello and T
     expect(telegram['ja-JP']).toContain('設定 → チャット連携')
   })
 
-  it('shows once to someone updating from 0.2.34, as the newest entry, and not to a build still running 0.2.34', () => {
+  it('shows once to someone updating from 0.2.34, and not to a build still running 0.2.34', () => {
     expect(pickWhatsNew('0.2.35', '0.2.34')?.version).toBe('0.2.35')
     expect(pickWhatsNew('0.2.35', '0.2.35')).toBeNull()
-    expect(WHATS_NEW[0].version).toBe('0.2.35')
+    expect(WHATS_NEW[1].version).toBe('0.2.35')
     expect(pickWhatsNew('0.2.34', '0.2.33')?.version).toBe('0.2.34')
   })
 })

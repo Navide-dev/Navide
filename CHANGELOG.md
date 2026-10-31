@@ -4,21 +4,31 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+## [0.2.36] — unreleased
+
 ### Added
 
+- Accounts (0.2.36): Claude Code and Codex can run on an API key, billed by usage. In Settings → Accounts, **+ Add account** then **Paste an API key** adds one, **Test key** asks the vendor whether it works, and after saving only its last four characters are shown. A Claude key is chosen with **Use for new panes**, per pane and never in place of the live login; a Codex key is an ordinary account switch, which applies to every Codex pane and restarts them. Switching to a key when quota runs out is off by default and turned on per account, subscription accounts are tried first, and a Claude move counts toward the automatic-switch limit. When subscription quota comes back Navide only says so. Agents cannot pick an API key account (`cli_open_agent`, `cli_account_switch` and `cli_account_sign_in` refuse one), but the panes they open follow your API key default, and so do their child panes. The key is stored only on this computer and does not go through Navide Cloud; `docs/en-US/privacy.md` says where it is kept on each platform, where it is sent, and that a program in the pane can obtain it. Known limits: Claude API key accounts do not support Windows in this first version; Codex API key accounts have not been tested with a real key yet, and reports are welcome; the real spending limit is the one in the vendor's console, and Navide's monthly reminder is not a hard limit and in this version only saves the amount, with no spend tracking or alert; a subscription account signed in only in its own folder is not a failover candidate, so Navide may still switch to an API key; after going back to an older Navide, clicking an API key account clears the current login, and switching back to your original account restores it. New strings in all 11 interface languages.
+
 - Workbench (0.2.36): action buttons at the right end of the stage tabs run one action or several in order, from **Settings → Layout**. A repository can suggest buttons, a layout and Navide plugins in `.navide/workbench.json`; nothing applies until you review and accept that exact content, and any later change stops it applying. With no buttons and no file, nothing changes.
+
+- Navide plugin commands (0.2.36): a package can declare `contributes.commands`, which you bind to keys in Settings → Shortcuts. A suggested key is bound only when you accept it. A command opens the plugin's view or calls its backend through an open view, adds no permission, and is refused to agents with `ui_human_only`. Known limits: a package declaring commands must set `engines.navide` to `>=0.2.36`, which neither the App nor the Registry checks yet, and a Registry without the 0.2.36 manifest rules rejects such a package at publish.
+
+- MCP (0.2.36): `ui.actions.describe` through `ui_invoke` describes the registered UI actions, or only those starting with a prefix, so an agent can see what an action takes before invoking it.
 
 - Mini-IDE (0.2.36): Quick Open and ⌘-click in the AI CLI terminal now search in the plugin. Pasting `app/Services/OrderService.php:137-158` or a `#L10-L20` link finds the file and opens it at the first line, results rank by how well they fit, and a clicked file opens directly when only one file fits; otherwise the Host picker still asks. On an older Navide it searches the way it did.
 
 - Plugin API (0.2.36): the Host now has a plugin API version. A package on a newer API major is refused at install and, if already installed, stays in Settings with the reason and contributes nothing. `hostApiVersion()` in `@navide/plugin-sdk` reads the version, and every capability catalog entry says which version it arrived in. Nothing changes for current packages.
 
-- Plugin API 1.2 (0.2.36): `ui.openFilePicker` accepts `targets`, locations the caller parsed itself, and `search`, the `fs.queryFiles` strategy for what the user types, so matching stays with the plugin while the Host keeps resolving, authorizing and opening. A picker search shares the plugin's one-at-a-time `fs.queryFiles` slot and its limits. A caller sending neither sees no change.
-
 - Plugin API 1.1 (0.2.36): `fs.queryFiles` finds workspace files with the matching the caller asks for (name or path, substring, subsequence or glob, its own excludes, Git ignores on or off) and returns match positions in path order, so a plugin ranks results itself. A workspace listing is reused between queries and refreshed on disk changes. `fs.listFilesFlat` is deprecated and keeps working, with removal no earlier than 2027-05-01.
+
+- Plugin API 1.2 (0.2.36): `ui.openFilePicker` accepts `targets`, locations the caller parsed itself, and `search`, the `fs.queryFiles` strategy for what the user types, so matching stays with the plugin while the Host keeps resolving, authorizing and opening. A picker search shares the plugin's one-at-a-time `fs.queryFiles` slot and its limits. A caller sending neither sees no change.
 
 ### Changed
 
 - Plans (0.2.36): its backend now reaches shared file and version code through `navide_plugin_sdk`, a small versioned Python surface, instead of private names in the core backend. Nothing changes for users; a rename inside the core backend can no longer break Plans.
+
+- Plans (0.2.36, Plans 1.1.1): Plans now needs Navide 0.2.35 or newer.
 
 ### Fixed
 

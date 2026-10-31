@@ -2848,7 +2848,7 @@
               "more": "本頁第 2 章"
             },
             "layout": {
-              "what": "五槽外殼、每個 view 落在哪一槽、版面 preset",
+              "what": "五槽外殼、每個 view 落在哪一槽、版面 preset、動作按鈕和專案的工作台檔案",
               "more": "本面板的「工作區與面板」分頁第 4 章"
             },
             "notifications": {
@@ -4551,6 +4551,13 @@
           "callout1": {
             "title": "已開著的面板保留原帳號",
             "text": "面板上的說明就寫著：「已開啟的 pane 在重開前仍使用原帳號」。所有帳號共用你真實的家目錄（session 與歷史是共通的），切換帳號是<strong>就地替換儲存的憑證</strong>。"
+          },
+          "apiKeys": {
+            "title": "API key 帳號",
+            "p1": "<strong>Claude Code 和 Codex</strong> 也能用 API key 執行，按用量計費，不用訂閱額度。按<strong>「+ 新增帳號」</strong>，再選<strong>「貼上 API key」</strong>。儲存後只會顯示最後四碼。Claude API key 帳號第一版不支援 Windows。Codex API key 帳號尚未經真 key 實測，歡迎回報問題。",
+            "p2": "Claude Code 用<strong>「用於新 pane」</strong>讓新 pane 改用這把金鑰，已開啟的 pane 會維持原帳號，直到重新啟動。Codex 只有一份使用中的憑證，切到金鑰會重新啟動所有 Codex pane。Agent 不能自己選 API key 帳號，但 Agent 開的 pane 會跟隨你的 API key 預設，子 pane 也會繼承。",
+            "p3": "<strong>花費的真正上限是官方後台的設定。</strong>每月提醒不是硬上限，這一版也只會記下金額，Navide 不會統計花費或發出通知。自動切換要逐帳號開啟；訂閱額度恢復時只會提示。額度用完時，只在自己資料夾登入的訂閱帳號不算候選，所以仍可能切到 API key。",
+            "p4": "金鑰只存在這台電腦，不經 Navide Cloud，只會送到發行它的廠商。pane 裡執行的程式取得得到金鑰，請把 pane 視為能使用這把金鑰。降回舊版後，點 API key 帳號會清掉目前的登入，切回原帳號可以恢復；建議降版前先刪除 API key 帳號。"
           },
           "h2": "在終端機外部登入，Navide 會知道",
           "p8": "你在自己的終端機直接跑 <code>claude /login</code> 之類的指令，Navide 有一個憑證監看器盯著各家 CLI 的憑證檔目錄。檔案變動後約 <strong>0.8 秒</strong>讀一次「身分指紋」，指紋沒變就什麼都不做；變了就把「預設」指標移到對應的帳號，並順手觸發一次額度重讀。帳號 面板上的 email、<em>預設</em> 標籤與額度徽章會跟著即時更新。",

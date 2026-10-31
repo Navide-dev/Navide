@@ -21,6 +21,25 @@ that reproduce each table, so a stale entry is always cheap to catch.
 
 ---
 
+## API key accounts
+
+Added in 0.2.36. A CLI account can pay by usage with an API key instead of a
+subscription login. `SUPPORTED_AGENT_KEYS` in
+`backend/agent_team_backend/api_key_accounts.py` lists the CLIs that take one;
+every other vendor has no API key account.
+
+| Vendor | Platforms | How a pane gets the key | Reach | Live key check on record |
+|---|---|---|---|---|
+| `claude` | macOS, Linux; refused on Windows (`unsupported-platform`) | `apiKeyHelper` in the account's own config dir (`CLAUDE_CONFIG_DIR`); the key stays in the Keychain or an owner-only file | New panes, per the pane default; the live login is never swapped | None |
+| `codex` | macOS, Linux, Windows | `auth.json` in the account slot, as `codex login --with-api-key` writes it, swapped in by the existing switch | Every Codex pane, restarted by the switch | None. Not tested with a real key |
+
+Cloud services and custom endpoints appear in the add-account panel as coming
+soon, for no vendor yet. No spend figure is read or estimated for either vendor.
+Storage and data flow per platform are in
+[Privacy and Data Flows](privacy.md#credentials).
+
+---
+
 ## The count
 
 | Side | Count | Source of truth |

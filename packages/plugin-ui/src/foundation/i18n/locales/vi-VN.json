@@ -2848,7 +2848,7 @@
               "more": "mục 2 của trang này"
             },
             "layout": {
-              "what": "Khung năm vị trí, mỗi chế độ xem nằm ở vị trí nào, các bố cục dựng sẵn",
+              "what": "Khung năm vị trí, mỗi chế độ xem nằm ở vị trí nào, các bố cục dựng sẵn, nút hành động và tệp bàn làm việc của dự án",
               "more": "mục 4 của chủ đề “Workspace và pane”"
             },
             "notifications": {
@@ -4551,6 +4551,13 @@
           "callout1": {
             "title": "Pane đang mở giữ tài khoản cũ",
             "text": "Chính bảng này cũng nói: “các pane đã mở vẫn giữ tài khoản cũ cho đến khi mở lại”. Mọi tài khoản dùng chung thư mục chính thật của bạn (session và lịch sử được dùng chung); chuyển tài khoản <strong>hoán đổi thông tin xác thực đã lưu ngay tại chỗ</strong>."
+          },
+          "apiKeys": {
+            "title": "Tài khoản khóa API",
+            "p1": "<strong>Claude Code và Codex</strong> cũng có thể chạy bằng khóa API, tính phí theo mức dùng thay vì hạn mức gói đăng ký. Chọn <strong>+ Thêm tài khoản</strong>, rồi <strong>Dán khóa API</strong>. Sau khi lưu, chỉ hiện bốn ký tự cuối. Tài khoản khóa API của Claude chưa hỗ trợ Windows ở phiên bản đầu tiên. Tài khoản khóa API của Codex chưa được kiểm thử bằng khóa thật, hãy báo lại nếu gặp sự cố.",
+            "p2": "Với Claude Code, <strong>Dùng cho khung mới</strong> khiến các khung mới chạy bằng khóa này; các khung đang mở giữ tài khoản cũ cho tới khi khởi động lại. Codex chỉ có một thông tin xác thực đang dùng, nên chuyển sang khóa sẽ khởi động lại mọi khung Codex. Agent không thể tự chọn tài khoản khóa API, nhưng các khung do agent mở sẽ theo mặc định khóa API của bạn, và khung con cũng kế thừa.",
+            "p3": "<strong>Giới hạn chi tiêu thực sự nằm trong bảng điều khiển của nhà cung cấp.</strong> Lời nhắc hằng tháng không phải giới hạn cứng, và ở phiên bản này chỉ lưu số tiền: Navide không theo dõi chi tiêu cũng không cảnh báo. Tự động chuyển vẫn tắt cho tới khi bạn bật cho tài khoản đó, và khi hạn mức gói đăng ký trở lại Navide chỉ thông báo. Tài khoản gói đăng ký chỉ đăng nhập trong thư mục riêng không phải ứng viên khi hết hạn mức, nên Navide vẫn có thể chuyển sang khóa API.",
+            "p4": "Khóa ở lại trên máy tính này, không đi qua Navide Cloud và chỉ được gửi tới nhà cung cấp đã cấp nó. Chương trình chạy trong khung có thể lấy được khóa, vì vậy hãy coi khung đó có thể dùng khóa. Sau khi quay lại phiên bản Navide cũ, nhấp vào tài khoản khóa API sẽ xóa đăng nhập hiện tại; chuyển lại tài khoản ban đầu sẽ khôi phục. Hãy xóa tài khoản khóa API trước khi hạ phiên bản."
           },
           "h2": "Đăng nhập bên ngoài Navide, Navide vẫn nhận ra",
           "p8": "Nếu bạn chạy <code>claude /login</code> hoặc lệnh tương tự trong terminal của mình, trình theo dõi thông tin xác thực của Navide đang theo dõi thư mục thông tin xác thực của từng CLI. Khoảng <strong>0,8 giây</strong> sau khi một tệp thay đổi, nó đọc “dấu vân tay danh tính”; nếu không đổi thì không có gì xảy ra, ngược lại con trỏ “Mặc định” chuyển sang tài khoản tương ứng và hạn mức được đọc lại. Email, nhãn <em>Mặc định</em> và huy hiệu hạn mức trên bảng Tài khoản cập nhật tức thì.",
