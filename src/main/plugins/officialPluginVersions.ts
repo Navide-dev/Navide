@@ -5,10 +5,10 @@
  * the staged artifact. Bundled artifacts are looked up at
  * `official-artifacts/<id>/<this version>/<target>`, never by scanning. */
 export const OFFICIAL_PLUGIN_VERSIONS: Readonly<Record<string, string>> = Object.freeze({
-  'navide.browser': '1.0.0',
-  'navide.git': '1.0.0',
-  'navide.mini-ide': '1.0.0',
-  'navide.plans': '1.1.0',
+  'navide.browser': '1.0.1',
+  'navide.git': '1.0.1',
+  'navide.mini-ide': '1.0.1',
+  'navide.plans': '1.1.1',
 })
 
 /** The bundled versions that may supersede an older installed copy this

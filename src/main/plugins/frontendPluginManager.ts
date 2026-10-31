@@ -175,6 +175,7 @@ import type { AgentToolCallErrorCode, AgentToolUnavailableReason } from '../../s
 import type { MiniIdeLegacyPreferences } from './miniIdeLegacyPreferences'
 import type { FilePickerHost, FilePickerInvocation } from '../filePicker'
 import { PluginActivationSelector } from './pluginActivationSelector'
+import { apiVersionProblem } from './pluginEngineCompat'
 import { compareSemver } from './pluginManifestV2'
 import {
   PluginFrameBindingRegistry,
@@ -13292,6 +13293,7 @@ export class FrontendPluginManager {
       packageSummary: InstalledPluginPackageSummary
       opts: { official?: boolean }
     }> = []
+    const apiBlocked = new Set<string>()
 
     for (const scanned of scannedPlugins) {
       if (scanned.error) {
@@ -13353,7 +13355,23 @@ export class FrontendPluginManager {
           this.supersededInstalledPackages.set(pluginId, installedVersion)
           continue
         }
+        // A package on a newer API major than this Host stays in the inventory
+        // with the reason, and contributes nothing; the App-bundled copy of a
+        // first-party id serves instead.
+        const apiProblem = apiVersionProblem(pluginId, installedVersion ?? '', scanned.packageSummary.apiVersion)
+        if (apiProblem) {
+          errors.push(`${scanned.dir}: ${apiProblem}`)
+          if (bundledVersion !== undefined) {
+            if (installedVersion !== undefined) this.supersededInstalledPackages.set(pluginId, installedVersion)
+            continue
+          }
+          scanned.packageSummary.warning = apiProblem
+          apiBlocked.add(scanned.dir)
+        }
       } else if (source?.provenance === 'developer-local-unpacked') {
+        // No API check here, as with `engines.navide`: a Developer Mode folder
+        // is the author's own build, and one written against a coming API
+        // major has to load so it can be tested. Its calls fail on their own.
         if (isReservedPluginId(pluginId)) {
           errors.push(
             `${scanned.dir}: Developer Mode cannot claim reserved plugin id '${pluginId}'`
@@ -13405,8 +13423,10 @@ export class FrontendPluginManager {
     }
     const uniqueApproved: typeof approved = []
     for (const [pluginId, entries] of packageGroups) {
-      if (entries.length === 1) {
-        uniqueApproved.push(entries[0])
+      // A directory this Host cannot run does not contest the id with one it can.
+      const runnable = entries.filter(({ scanned }) => !apiBlocked.has(scanned.dir))
+      if (entries.length === 1 || runnable.length === 1) {
+        uniqueApproved.push(entries.length === 1 ? entries[0] : runnable[0])
         continue
       }
       const directories = entries.map(({ scanned }) => scanned.dir).join(', ')
@@ -13420,10 +13440,11 @@ export class FrontendPluginManager {
 
     for (const { scanned, packageSummary, opts } of uniqueApproved) {
       try {
-        this.registerInstalledPackage(packageSummary, scanned.descriptor, opts, scanned.dir)
+        const blocked = apiBlocked.has(scanned.dir)
+        this.registerInstalledPackage(packageSummary, blocked ? undefined : scanned.descriptor, opts, scanned.dir)
         // A disabled package was verified like any other and stays in the
         // inventory; it contributes no view and no backend activation.
-        if (this.isPluginDisabled(packageSummary.id)) {
+        if (blocked || this.isPluginDisabled(packageSummary.id)) {
           if (scanned.activation) {
             activationCatalog = activationCatalog.filter((entry) => entry !== scanned.activation)
           }

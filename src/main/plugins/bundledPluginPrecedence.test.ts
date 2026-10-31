@@ -38,10 +38,10 @@ function tempRoot(): string {
   return root
 }
 
-function manifestFor(pluginId: string, version: string): string {
+function manifestFor(pluginId: string, version: string, apiVersion = '^1.0.0'): string {
   return JSON.stringify({
     schemaVersion: 2,
-    apiVersion: '^1.0.0',
+    apiVersion,
     id: pluginId,
     name: 'Precedence',
     version,
@@ -56,10 +56,10 @@ function manifestFor(pluginId: string, version: string): string {
 
 /** An installed, Registry-verified package selected by the durable lifecycle
  *  record, with an Official Registry trust context (reserved ids need it). */
-function installRegistryPackage(root: string, pluginId: string, version: string): InstalledRegistryTrustContext {
+function installRegistryPackage(root: string, pluginId: string, version: string, apiVersion?: string): InstalledRegistryTrustContext {
   const packageDir = join(root, pluginId, version, TARGET, 'package')
   mkdirSync(join(packageDir, 'frontend'), { recursive: true })
-  const manifest = manifestFor(pluginId, version)
+  const manifest = manifestFor(pluginId, version, apiVersion)
   const archive = new Uint8Array(makeZip([
     { name: 'manifest.json', data: manifest },
     { name: 'frontend/index.html', data: '<!doctype html>' },
@@ -235,5 +235,52 @@ describe('installed Registry copy vs App-bundled copy of a first-party plugin', 
     expect(decisions.filter((decision) => decision.pluginId === PLUGIN_ID)).toEqual([])
     expect(mgr.getDescriptor(PLUGIN_ID)?.packageVersion).toBe('1.0.0')
     expect(mgr.listInstalledPackages()).toMatchObject([{ id: PLUGIN_ID, provenance: 'factory-bundled' }])
+  })
+})
+
+describe('installed Registry package on a newer plugin API major', () => {
+  it('stays in the inventory with the reason and contributes nothing', () => {
+    const plugins = tempRoot()
+    const trust = installRegistryPackage(plugins, 'acme.future', '2.0.0', '^2.0.0')
+    const mgr = new FrontendPluginManager()
+
+    const result = mgr.loadInstalledPlugins(plugins, { provenance: 'official-registry', trust })
+
+    expect(result.loaded).toEqual([])
+    expect(result.activationCatalog).toEqual([])
+    expect(result.errors).toEqual([expect.stringContaining('requires plugin API ^2.0.0')])
+    expect(mgr.getDescriptor('acme.future')).toBeUndefined()
+    expect(mgr.listInstalledPackages()).toMatchObject([{
+      id: 'acme.future',
+      warning: 'acme.future 2.0.0 requires plugin API ^2.0.0; this Navide provides 1.0.0',
+    }])
+  })
+
+  it('leaves a first-party id to its bundled copy', () => {
+    const plugins = tempRoot()
+    const factoryRoot = tempRoot()
+    const trust = installRegistryPackage(plugins, PLUGIN_ID, '2.0.0', '^2.0.0')
+    const mgr = new FrontendPluginManager()
+    mgr.setBundledPluginVersions({ [PLUGIN_ID]: '1.0.0' })
+
+    const result = mgr.loadInstalledPlugins(plugins, { provenance: 'official-registry', trust })
+
+    expect(result.loaded).toEqual([])
+    expect(mgr.supersededInstalledPackageVersion(PLUGIN_ID)).toBe('2.0.0')
+    expect(mgr.loadFactoryPlugin(writeFactoryPackage(factoryRoot, PLUGIN_ID, '1.0.0'), PLUGIN_ID))
+      .toMatchObject({ loaded: true, packageVersion: '1.0.0' })
+  })
+
+  it.each(['^1.0.0', '~1.0.0', '1.0.0', '^1.9.0', '^0.1.0'])('changes nothing for %s', (apiVersion) => {
+    const plugins = tempRoot()
+    const trust = installRegistryPackage(plugins, 'acme.today', '1.0.0', apiVersion)
+    const mgr = new FrontendPluginManager()
+
+    const result = mgr.loadInstalledPlugins(plugins, { provenance: 'official-registry', trust })
+
+    expect(result).toMatchObject({ loaded: ['acme.today'], errors: [] })
+    expect(result.activationCatalog.some((entry) => entry.pluginId === 'acme.today')).toBe(true)
+    expect(mgr.getDescriptor('acme.today')?.packageVersion).toBe('1.0.0')
+    expect(mgr.listInstalledPackages()[0].warning).toBeUndefined()
   })
 })

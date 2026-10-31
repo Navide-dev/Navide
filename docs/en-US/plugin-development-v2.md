@@ -2839,6 +2839,27 @@ previous public API major; the previous major remains supported for at least 12
 months. Public deprecations are announced for at least 6 months and span at
 least two Navide minor releases before removal.
 
+The Host provides one API version, `PLUGIN_API_VERSION` in
+`@navide/plugin-contracts`, and a plugin reads it at run time with
+`hostApiVersion()` from `@navide/plugin-sdk` (`null` on a Host too old to report
+one). Install and load both compare a package's `apiVersion` major with it: a
+package on a newer major is refused at install, and one already installed stays
+in Settings with the reason and contributes no view and no backend. `engines.navide`
+is refused at install too; an installed package that no longer meets it keeps
+running, and Settings marks it incompatible.
+
+Every entry in `capabilities-v1.json` carries `since`, the API version it
+arrived in. A deprecated entry also carries
+`deprecated: { since, removeAfter, replacement? }`, where `removeAfter` is the
+earliest removal date (`YYYY-MM-DD`). The Host keeps serving it and writes one
+notice per plugin and address to its log.
+
+Package code runs at the version it was built with: Vue, `@navide/plugin-ui`,
+`@navide/plugin-sdk` and `@navide/plugin-contracts` are bundled into each
+package, so a Host update does not change them. What a Host update can change is
+what runs behind a capability, so the behavior a plugin may rely on is stated
+in the catalog entry's `description`.
+
 The migration plan's one-minor compatibility window applies only to Navide's
 internal v1 loader/adapter. It is not the third-party API support policy.
 
