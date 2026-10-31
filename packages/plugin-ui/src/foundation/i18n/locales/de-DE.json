@@ -9656,6 +9656,7 @@
     "failed": "Diese Unterhaltung konnte nicht wieder verbunden werden – ihr Transkript existiert möglicherweise nicht mehr"
   },
   "cli-account": {
+    "api-key-takeover": "Kontingent aufgebraucht. Bereiche laufen jetzt auf {name} und werden nach Nutzung abgerechnet. Wechsle nach dem Zurücksetzen unter Konten zurück.",
     "default": "Ursprüngliche Anmeldung",
     "switch-title": "Konto wechseln",
     "swap-failed": "Kontowechsel fehlgeschlagen – das vorherige Konto ist weiterhin aktiv.",

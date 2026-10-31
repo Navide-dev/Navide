@@ -393,6 +393,7 @@ import { useShareNotices } from './composables/useShareNotices'
 import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
+import { useApiKeyTakeover } from './composables/useApiKeyTakeover'
 import {
   useQuotaFailover,
   type HotSwitchedPane,
@@ -8925,6 +8926,15 @@ async function confirmBatchRebuild(count: number): Promise<boolean> {
 // badge's account list): reopen one pane on another account, resuming its
 // conversation, or sign an account in inside its own dir. Neither touches the
 // live credential or any other pane.
+useApiKeyTakeover(backend, {
+  ownsPane: (paneId) => panes.value.some((p) => p.id === paneId),
+  reopen: (paneId, profileId) =>
+    rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true }),
+  announce: (name) => {
+    notifyRestore.toast(i18n.global.t('cli-account.api-key-takeover', { name }), { type: 'info' })
+  },
+})
+
 provide(cliAccountDirActionsKey, {
   continueWith: async (paneId, profileId) => {
     // A sign-in pane has no conversation to carry over: reopening it would

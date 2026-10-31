@@ -8,11 +8,13 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import agent_team_backend.app as app
 from agent_team_backend import api_key_accounts as ak
+from agent_team_backend import quota_failover
 from agent_team_backend import ws_handlers
 from agent_team_backend.credential_vault import CredentialVault, CredentialVaultError, LiveCredentials
 from agent_team_backend.profiles_store import CliProfilesStore
@@ -114,6 +116,29 @@ def test_refused_secrets_leave_no_account(store: CliProfilesStore, secret: objec
         ak.create("claude", "a", secret)
     assert err.value.code == code
     assert store.list()["profiles"] == []
+
+
+@pytest.mark.parametrize("key", ak.CLAUDE_LOGIN_POLICY_KEYS)
+def test_a_forced_login_stops_the_account(
+    store: CliProfilesStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    policy = tmp_path / "managed-settings.json"
+    policy.write_text(json.dumps({key: "x"}), encoding="utf-8")
+    monkeypatch.setattr(ak, "MANAGED_CLAUDE_SETTINGS", (policy,))
+    with pytest.raises(ak.ApiKeyError) as err:
+        ak.create("claude", "a", ANTHROPIC_KEY)
+    assert err.value.code == "login-policy"
+    assert store.list()["profiles"] == []
+
+
+def test_a_forced_login_stops_the_takeover(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    ak.update(key, {"autoSwitch": True})
+    monkeypatch.setattr(ak, "login_policy_blocks", lambda agent: True)
+    assert asyncio.run(ak.take_over(_Service(), _incident())) is False
+    assert store.get_pane_default("claude") is None
 
 
 def test_unsupported_agent_is_refused(store: CliProfilesStore) -> None:
@@ -270,6 +295,89 @@ def test_a_login_account_dir_keeps_the_shared_settings(store: CliProfilesStore, 
     directory = vault.prepare_account_dir(login)
     assert (directory / "settings.json").is_symlink()
     assert not (directory / ak.HELPER_FILE).exists()
+
+
+# ── Quota failover ───────────────────────────────────────────────────────────
+
+
+def test_an_account_stays_out_of_failover_until_opened(store: CliProfilesStore) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    assert quota_failover.QuotaFailoverService._login_state("claude", key) == "auto-switch-off"
+    ak.update(key, {"autoSwitch": True})
+    assert ak.auto_switch_off(key) is False
+
+
+def test_a_login_account_is_never_auto_switch_off(store: CliProfilesStore) -> None:
+    login = store.create(agent_key="claude", name="Work")["id"]
+    assert ak.auto_switch_off(login) is False
+    assert ak.auto_switch_off("__default__") is False
+
+
+def test_logins_come_before_keys(store: CliProfilesStore) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    login = store.create(agent_key="claude", name="Work")["id"]
+    rows = [{"slotId": key}, {"slotId": "__default__"}, {"slotId": login}]
+    assert [r["slotId"] for r in ak.logins_first(rows)] == ["__default__", login, key]
+
+
+class _Service:
+    def __init__(self) -> None:
+        self.stopped: list[str] = []
+
+    def _affected_terminals(self, auth_scope: str) -> list[dict]:
+        return [{"paneId": "p1"}, {"paneId": "p2"}]
+
+    def _stop_incident(self, incident: object, reason: str) -> None:
+        self.stopped.append(reason)
+
+
+def _incident(agent: str = "claude") -> SimpleNamespace:
+    return SimpleNamespace(agent_key=agent, auth_scope=agent)
+
+
+def _capture_events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    events: list[dict] = []
+
+    async def record(event: dict, **_: object) -> None:
+        events.append(event)
+
+    monkeypatch.setattr(app, "broadcast", record)
+    monkeypatch.setattr(app, "broadcast_main_windows", record)
+    return events
+
+
+def test_take_over_moves_panes_and_leaves_the_live_login(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = ak.create("claude", "a", ANTHROPIC_KEY)["id"]
+    ak.update(key, {"autoSwitch": True})
+    live = LiveCredentials(secret='{"claudeAiOauth":{"accessToken":"t"}}', account=None)
+    vault.write_live("claude", live)
+    calls = _spy(vault, monkeypatch)
+    events = _capture_events(monkeypatch)
+    service = _Service()
+
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+
+    assert store.get_pane_default("claude") == key
+    assert service.stopped == ["api-key-takeover"]
+    takeover = next(e for e in events if e["type"] == ak.TAKEOVER_EVENT)
+    assert takeover["payload"]["paneIds"] == ["p1", "p2"]
+    assert ANTHROPIC_KEY not in json.dumps(events)
+    assert calls == []
+    assert vault.read_live("claude").secret == live.secret
+
+
+def test_take_over_needs_the_account_opened(store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    ak.create("claude", "a", ANTHROPIC_KEY)
+    events = _capture_events(monkeypatch)
+    service = _Service()
+    assert asyncio.run(ak.take_over(service, _incident())) is False
+    assert events == [] and service.stopped == []
+
+
+def test_take_over_is_claude_only(store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    assert asyncio.run(ak.take_over(_Service(), _incident("codex"))) is False
 
 
 # ── A login account runs exactly as before ──────────────────────────────────

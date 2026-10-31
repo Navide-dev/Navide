@@ -36,7 +36,7 @@ MAIN_DIGESTS = {
         "bdf088458f80023a085c30a88987e01c13d550a5bfff66f73f8dd9d986188943", D7_LOGIN_FUNCTIONS,
     ),
     "quota_failover": (
-        "d9bc71903376ba235c897520fe902ce5d5d1c1b6958f5a5d95e9296902249579", frozenset(),
+        "1b4842c26af959c2a45b9e1030a81dd8d889f2887a9f59940a8f6c887e8e3e84", frozenset(),
     ),
 }
 

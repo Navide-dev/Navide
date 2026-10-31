@@ -30,7 +30,7 @@ import httpx
 
 from . import cloud_secrets, osplat
 from .http_ssl import default_ssl_context
-from .ipc import make_response
+from .ipc import make_event, make_response
 
 if TYPE_CHECKING:
     from .app import Session
@@ -39,6 +39,12 @@ log = logging.getLogger("agent_team_backend.api_keys")
 
 AUTH_KIND = "api-key"
 HELPER_FILE = "navide-api-key-helper"
+TAKEOVER_EVENT = "quota_failover.api_key_takeover"
+CLAUDE_LOGIN_POLICY_KEYS = ("forceLoginOrgUUID", "forceLoginMethod")
+MANAGED_CLAUDE_SETTINGS = (
+    Path("/Library/Application Support/ClaudeCode/managed-settings.json"),
+    Path("/etc/claude-code/managed-settings.json"),
+)
 #: The CLIs that take an API key account. Each needs its own way into a pane, so
 #: the list grows one vendor at a time.
 SUPPORTED_AGENT_KEYS = ("claude",)
@@ -158,6 +164,22 @@ def _require(profile_id: Any) -> dict[str, Any]:
     return profile
 
 
+def login_policy_blocks(agent_key: str) -> bool:
+    """A forced login method means the user's organization decided how this
+    CLI signs in, so an API key is not Navide's to add. Read once and never
+    worked around."""
+    if agent_key != "claude":
+        return False
+    for path in (Path.home() / ".claude" / "settings.json", *MANAGED_CLAUDE_SETTINGS):
+        try:
+            settings = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(settings, dict) and any(key in settings for key in CLAUDE_LOGIN_POLICY_KEYS):
+            return True
+    return False
+
+
 def pane_default_slot(agent_key: str) -> str:
     """The pane default when it is an API key account, else "". Reads the same
     choice ``cli_profiles.set_pane_default`` stores."""
@@ -166,6 +188,47 @@ def pane_default_slot(agent_key: str) -> str:
     getter = getattr(app.cli_profiles_store, "get_pane_default", None)
     chosen = getter(agent_key) if callable(getter) else None
     return str(chosen) if chosen and is_api_key(app.cli_profiles_store.get(chosen)) else ""
+
+
+def auto_switch_off(slot_id: str) -> bool:
+    """An API key account the user has not opened to automatic switching."""
+    profile = _store().get(slot_id)
+    return is_api_key(profile) and profile.get("autoSwitch") is not True
+
+
+def logins_first(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The same ranking with API key accounts last: an account that costs
+    nothing more is always tried before one that charges by use."""
+    return sorted(candidates, key=lambda row: is_api_key(_store().get(str(row["slotId"]))))
+
+
+async def take_over(service: Any, incident: Any) -> bool:
+    """Every login is out: move claude's panes to an API key account the user
+    opened to this. Claude's live login is never swapped for a key, so instead
+    of a transaction the new default goes to ``paneDefaults`` and each window
+    reopens its panes through the same path as "continue with this account".
+    Once per incident, and a pane on a key reports no quota, so it cannot loop."""
+    from . import app
+
+    if incident.agent_key != "claude":
+        return False
+    target = next(
+        (p for p in _store().list()["profiles"]
+         if p.get("agentKey") == "claude" and is_api_key(p) and p.get("autoSwitch") is True),
+        None,
+    )
+    if target is None or login_policy_blocks("claude"):
+        return False
+    _store().set_pane_default("claude", target["id"])
+    panes = [row["paneId"] for row in service._affected_terminals(incident.auth_scope) if row.get("paneId")]
+    service._stop_incident(incident, "api-key-takeover")
+    await app.broadcast_main_windows(make_event(TAKEOVER_EVENT, {
+        "agentKey": "claude", "profileId": target["id"], "name": target.get("name"), "paneIds": panes,
+    }))
+    from .ws_handlers import _broadcast_profiles_changed
+
+    await _broadcast_profiles_changed("api-key")
+    return True
 
 
 def _helper_script(vault: Any, profile_id: str) -> str:
@@ -205,6 +268,8 @@ def create(agent_key: Any, name: Any, secret: Any, monthly_reminder: Any = None)
     agent = _validate_agent(agent_key)
     if agent == "claude" and sys.platform == "win32":
         raise ApiKeyError("unsupported-platform", "API key accounts for Claude Code are not available on Windows yet.")
+    if login_policy_blocks(agent):
+        raise ApiKeyError("login-policy", "Your organization requires a specific sign-in for this CLI.")
     clean_name = _validate_name(name)
     reminder = _validate_reminder(monthly_reminder)
     clean_secret = validate_secret(agent, secret)

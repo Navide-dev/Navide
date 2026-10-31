@@ -1641,7 +1641,12 @@ class QuotaFailoverService:
             self._stop_incident(incident, refused.code.lower())
             return
         eligible = [c for c in ranked if c["excluded"] is None and c["slotId"] not in incident.tried]
+        from . import api_key_accounts
+
+        eligible = api_key_accounts.logins_first(eligible)
         if not eligible:
+            if await api_key_accounts.take_over(self, incident):
+                return
             self._stop_incident(incident, "no-candidate")
             return
         target = eligible[0]
@@ -1755,7 +1760,10 @@ class QuotaFailoverService:
         plus the isolated login home check. Blocking — thread it."""
         from . import app
         from .ws_handlers import _running_login_terminals, _slot_login_reason
+        from . import api_key_accounts
 
+        if api_key_accounts.auto_switch_off(slot_id):
+            return "auto-switch-off"
         if slot_id != DEFAULT_SLOT_ID:
             try:
                 # A running sign-in pane for the slot means its credential is

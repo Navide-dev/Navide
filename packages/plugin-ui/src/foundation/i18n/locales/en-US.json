@@ -9656,6 +9656,7 @@
     "failed": "Could not reconnect that conversation — its transcript may no longer exist"
   },
   "cli-account": {
+    "api-key-takeover": "Quota used up. Panes moved to {name}, billed by usage. Switch back in Accounts after the quota resets.",
     "default": "Original login",
     "switch-title": "Switch account",
     "swap-failed": "Account switch failed — the previous account is still active.",
