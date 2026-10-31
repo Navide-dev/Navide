@@ -7,6 +7,7 @@ import { generateKeyPairSync, sign as edSign } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { PLUGIN_API_VERSION } from '../../../packages/plugin-contracts/src/apiVersion'
 import { FrontendPluginManager } from './frontendPluginManager'
 import { PluginActivationSelector } from './pluginActivationSelector'
 import {
@@ -252,7 +253,7 @@ describe('installed Registry package on a newer plugin API major', () => {
     expect(mgr.getDescriptor('acme.future')).toBeUndefined()
     expect(mgr.listInstalledPackages()).toMatchObject([{
       id: 'acme.future',
-      warning: 'acme.future 2.0.0 requires plugin API ^2.0.0; this Navide provides 1.0.0',
+      warning: `acme.future 2.0.0 requires plugin API ^2.0.0; this Navide provides ${PLUGIN_API_VERSION}`,
     }])
   })
 
