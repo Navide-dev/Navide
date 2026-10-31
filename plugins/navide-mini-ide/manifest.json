@@ -3,7 +3,7 @@
   "apiVersion": "^1.0.0",
   "id": "navide.mini-ide",
   "name": "Mini-IDE",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "navide",
   "engines": { "navide": ">=0.2.30" },
   "permissions": { "system": ["fs", "ui", "aiCli"], "shell": "allowlist" },

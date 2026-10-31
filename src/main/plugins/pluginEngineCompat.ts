@@ -4,6 +4,7 @@
 // "0.2.9 or newer", and `*` means any release. Upper bounds are not enforced,
 // so `^0.1.0` stays installable on 0.2.x and `>=0.2.30` on 0.3.0. The Registry
 // applies the same rule (marketplace/registry/registry/discovery.py).
+import { isPluginApiSupported, PLUGIN_API_VERSION } from '../../../packages/plugin-contracts/src/apiVersion'
 import { compareSemver } from './pluginManifestV2'
 
 const ENGINE_RANGE_RE = /^\s*(?:\^|~|>=)?\s*(\S+)\s*$/
@@ -36,6 +37,12 @@ export function engineRequirement(manifest: unknown): string | null {
   return typeof navide === 'string' ? navide : null
 }
 
+/** The refusal for an `apiVersion` range on a newer major than this Host, if any. */
+export function apiVersionProblem(id: string, version: string, apiVersion: unknown): string | null {
+  if (typeof apiVersion !== 'string' || isPluginApiSupported(apiVersion)) return null
+  return `${id} ${version} requires plugin API ${apiVersion}; this Navide provides ${PLUGIN_API_VERSION}`
+}
+
 /** Refuse a verified package this Navide release is too old to run. Unknown
  *  requirements pass: they were never enforced and stay installable. */
 export function assertEngineCompatible(
@@ -50,4 +57,6 @@ export function assertEngineCompatible(
       `${id} ${version} requires Navide ${minNavideVersion(requirement)} or newer; this is Navide ${appVersion}`
     )
   }
+  const problem = apiVersionProblem(id, version, (manifest as { apiVersion?: unknown } | null)?.apiVersion)
+  if (problem) throw new Error(problem)
 }

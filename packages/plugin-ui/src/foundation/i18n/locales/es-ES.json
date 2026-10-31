@@ -12607,6 +12607,10 @@
       "cluster-other": "Fusionado en el paso del agent.",
       "branch-if": "Enlaces de rama: el agent informa hacia dónde fue la condición y solo se ejecuta esa rama.",
       "branch-switch": "Enlaces de rama, uno por regla: el agent informa qué regla coincidió y solo se ejecuta esa rama.",
+      "branch-too-large": "En Navide se ejecuta cada salida, también una que n8n dejaría sin elementos. Las salidas eran demasiado grandes, o tenían un agente o una puerta de aprobación, para unirlas en un paso.",
+      "merge-after-branch": "Espera cada entrada, porque cada salida anterior se ejecuta. n8n lo ejecuta con las salidas que tuvieron elementos.",
+      "trigger-start": "Inicia la pipeline cuando la ejecutas.",
+      "gate-approval": "La ejecución se detiene aquí hasta que apruebes.",
       "merge-join": "Espera las entradas que se ejecutan. Se omite una entrada cuya rama no se tomó.",
       "agent-step": "Un agent lo ejecuta a partir de los parámetros originales."
     },

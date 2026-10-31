@@ -8,6 +8,7 @@
 // `sandbox: true`.
 
 import { contextBridge, ipcRenderer, webFrame, type IpcRendererEvent } from 'electron'
+import { PLUGIN_API_VERSION } from '../../packages/plugin-contracts/src/apiVersion'
 import { USER_GESTURE_CAPABILITY_ADDRESSES } from '../../packages/plugin-contracts/src/userGesture'
 
 // The manager injects `--plugin-id=<id>` via webPreferences.additionalArguments,
@@ -255,6 +256,7 @@ ipcRenderer.on('plugin:receiver:item-closed', (_event, payload: unknown) => {
 })
 
 const nav = {
+  apiVersion: PLUGIN_API_VERSION,
   /** Call a host capability. Resolves with the response envelope. */
   callCapability(ns: string, method: string, args?: unknown): Promise<CapabilityResponse> {
     return ipcRenderer.invoke('plugin:cap:call', {
@@ -921,6 +923,7 @@ function frameRequest(channel: string, payload: unknown, cast = false): Promise<
 }
 
 const frameNav = {
+  apiVersion: PLUGIN_API_VERSION,
   callCapability(ns: string, method: string, args?: unknown): Promise<CapabilityResponse> {
     return frameRequest('plugin:cap:call', { ns, method, args, reqId: globalThis.crypto.randomUUID() })
   },

@@ -12607,6 +12607,10 @@
       "cluster-other": "已并入 agent 的步骤。",
       "branch-if": "分支连线：agent 会报告条件走向哪一边，只有那个分支会运行。",
       "branch-switch": "分支连线，每条规则一条：agent 会报告匹配了哪条规则，只有那个分支会运行。",
+      "branch-too-large": "Navide 会运行每个输出，包括 n8n 不会送出项目的输出。这些输出太大，或含有 Agent 或核准闸门，无法并成一个步骤。",
+      "merge-after-branch": "等待每个输入，因为前面的每个输出都会运行。n8n 只按有项目的输出运行它。",
+      "trigger-start": "你运行 Pipeline 时从这里开始。",
+      "gate-approval": "运行会停在这里，等你核准。",
       "merge-join": "等待实际会运行的输入。所属分支没有走到的输入会被跳过。",
       "agent-step": "由 agent 按原来的参数执行。"
     },
