@@ -10259,8 +10259,10 @@
         "pane-hint": "개인정보 보호 및 보안 → 전체 디스크 접근 권한에서 Navide를 켜세요."
       }
     },
-    "blocked-by": "먼저 {names}을(를) 설치하세요. 여기에 설치하려면 먼저 필요해요.",
+    "blocked-by": "Navide는 이 컴퓨터에 {names}을(를) 설치할 수 없어요. 직접 설치한 뒤 '{action}'을(를) 누르세요.",
     "installs-first": "설치하면 {names}도 먼저 함께 설치합니다.",
+    "manual-guide": "{name} 설치 방법",
+    "needs-prereq": "{names} 필요",
     "go-install": "먼저 {name} 설치",
     "complete-failed": "설정 진행 상황을 저장하지 못했어요: {error}. 다시 시도하세요.",
     "ollama-start-failed": "Ollama 서비스를 시작하지 못했어요. 로그에서 자세한 내용을 확인하거나 터미널에서 `ollama serve`를 실행하세요.",

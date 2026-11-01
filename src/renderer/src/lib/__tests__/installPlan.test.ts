@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { missingProviders, orderInstalls, providerFor } from '../installPlan'
+import { manualPrerequisites, missingProviders, orderInstalls, providerFor } from '../installPlan'
 import type { OnboardDep } from '../../composables/useOnboarding'
 
 const base = {
@@ -114,5 +114,52 @@ describe('orderInstalls', () => {
 
   it('returns nothing when there is nothing left to install', () => {
     expect(orderInstalls([dep({ id: 'claude', status: 'ok' })], [])).toEqual([])
+  })
+})
+
+describe('manualPrerequisites', () => {
+  it('has nothing to say when the whole chain can run', () => {
+    const { claude, all } = bareMac()
+    expect(manualPrerequisites(claude, all)).toEqual([])
+  })
+
+  it('has nothing to say when every requirement is met', () => {
+    const claude = dep({ id: 'claude', requirements: [{ name: 'npm', ok: true }] })
+    expect(manualPrerequisites(claude, [claude])).toEqual([])
+  })
+
+  it('names a provider with no install command, with its docs', () => {
+    const node = dep({ id: 'node', label: 'Node.js', can_install: false, docs_url: 'https://nodejs.org' })
+    const claude = dep({ id: 'claude', requirements: [{ name: 'npm', ok: false }] })
+    expect(manualPrerequisites(claude, [node, claude])).toEqual([{ name: 'Node.js', url: 'https://nodejs.org' }])
+  })
+
+  it('names a binary no dep provides, with no url to offer', () => {
+    const aider = dep({ id: 'aider', requirements: [{ name: 'curl', ok: false }] })
+    expect(manualPrerequisites(aider, [aider])).toEqual([{ name: 'curl', url: '' }])
+  })
+
+  it('reports a link that cannot run as itself, further down the chain', () => {
+    // brew install node on a machine that could not get Homebrew: the user needs
+    // Homebrew, whose own installer is what needs the missing curl.
+    const homebrew = dep({ id: 'homebrew', label: 'Homebrew', docs_url: 'https://brew.sh',
+      requirements: [{ name: 'curl', ok: false }] })
+    const node = dep({ id: 'node', requirements: [{ name: 'brew', ok: false }] })
+    const claude = dep({ id: 'claude', requirements: [{ name: 'npm', ok: false }] })
+    expect(manualPrerequisites(claude, [homebrew, node, claude])).toEqual([
+      { name: 'Homebrew', url: 'https://brew.sh' },
+    ])
+  })
+
+  it('ignores a provider that is already installed', () => {
+    const node = dep({ id: 'node', status: 'ok', can_install: false })
+    const claude = dep({ id: 'claude', requirements: [{ name: 'npm', ok: false }] })
+    expect(manualPrerequisites(claude, [node, claude])).toEqual([])
+  })
+
+  it('lists a shared blocker once and survives a circular declaration', () => {
+    const a = dep({ id: 'homebrew', requirements: [{ name: 'npm', ok: false }, { name: 'curl', ok: false }] })
+    const b = dep({ id: 'node', requirements: [{ name: 'brew', ok: false }, { name: 'curl', ok: false }] })
+    expect(manualPrerequisites(b, [a, b]).map((m) => m.name)).toEqual(['homebrew', 'curl'])
   })
 })

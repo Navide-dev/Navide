@@ -10259,8 +10259,10 @@
         "pane-hint": "「プライバシーとセキュリティ」→「フルディスクアクセス」で Navide をオンにしてください。"
       }
     },
-    "blocked-by": "先に {names} をインストールしてください。ここでインストールするための前提条件です。",
+    "blocked-by": "Navide はこのコンピューターに {names} をインストールできません。ご自身でインストールしてから「{action}」を押してください。",
     "installs-first": "インストール時に {names} も先にセットアップします。",
+    "manual-guide": "{name} のインストール方法",
+    "needs-prereq": "{names} が必要",
     "go-install": "先に {name} をインストール",
     "complete-failed": "セットアップの進捗を保存できませんでした：{error}。もう一度お試しください。",
     "ollama-start-failed": "Ollama サービスを起動できませんでした。詳細はログを確認するか、ターミナルで `ollama serve` を実行してください。",
