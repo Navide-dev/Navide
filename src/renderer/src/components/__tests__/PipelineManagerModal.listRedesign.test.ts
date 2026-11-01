@@ -350,5 +350,5 @@ describe('PipelineManagerModal — list view redesign', () => {
     // untouched — the redesign added keys rather than repurposing that one.
     expect(en.label['no-pipelines']).toBe('No pipelines loaded…')
     expect(en.label['backend-status']).toBe('backend {status}')
-  })
+  }, 30_000) // Parses all 11 locale files; 5s is not enough on a loaded machine.
 })
