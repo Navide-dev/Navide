@@ -10,6 +10,12 @@
 
 import { kickoffVerified, type EchoEvidence, type SubmitEvidence } from './injectEcho'
 
+/** Whether a pane without a role still owes its slot the kickoff it carries.
+ *  A manual pane's kickoff belongs to whoever spawned it. */
+export function rolelessPaneAwaitsKickoff(pane: { origin: string; kickoffStatus: string }): boolean {
+  return pane.origin === 'pipeline' && pane.kickoffStatus === 'pending'
+}
+
 /** How a pane's spawn-time task injection ended. `unverified` is the honest
  *  middle: bytes written, nothing observed — which is also the state where a
  *  resend would submit two copies as one prompt. */
