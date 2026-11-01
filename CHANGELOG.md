@@ -6,6 +6,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Accounts (0.2.37): when a quota switch moves panes to an API key and the account list then fails to refresh, the quota report no longer ends in an error. The panes still move; the list catches up on its next read.
+
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 
 ### Changed
