@@ -10259,8 +10259,10 @@
         "pane-hint": "Toggle Navide on in Privacy & Security → Full Disk Access."
       }
     },
-    "blocked-by": "Install {names} first — it is required before this can be installed here.",
+    "blocked-by": "Navide can't install {names} on this system. Install it yourself, then choose {action}.",
     "installs-first": "Install also sets up {names} first.",
+    "manual-guide": "How to install {name}",
+    "needs-prereq": "Needs {names}",
     "go-install": "Install {name} First",
     "complete-failed": "Could not save your setup progress: {error}. Try again.",
     "ollama-start-failed": "Could not start the Ollama service. See the log for details, or run `ollama serve` in a terminal.",

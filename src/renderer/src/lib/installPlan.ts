@@ -28,6 +28,44 @@ export function missingProviders(dep: OnboardDep, all: OnboardDep[]): OnboardDep
     .filter((provider): provider is OnboardDep => !!provider && provider.status !== 'ok')
 }
 
+/** Something the user has to install themselves; `url` is '' when none is known. */
+export interface ManualPrerequisite {
+  name: string
+  url: string
+}
+
+/**
+ * What stops `dep`'s install chain from running to the end. Each entry is what
+ * the user can go and get: a provider with no install command, or a binary no
+ * dep provides. When that binary is needed further down the chain, the link
+ * needing it is the entry instead: on Windows without winget the way out is
+ * Node's own installer, not winget.
+ */
+export function manualPrerequisites(dep: OnboardDep, all: OnboardDep[]): ManualPrerequisite[] {
+  const found = new Map<string, ManualPrerequisite>()
+  const seen = new Set<string>()
+  const report = (name: string, url: string): void => void found.set(name, { name, url })
+
+  const visit = (link: OnboardDep): void => {
+    if (seen.has(link.id)) return // cycle guard
+    seen.add(link.id)
+    for (const requirement of link.requirements ?? []) {
+      if (requirement.ok) continue
+      const provider = providerFor(requirement.name, all)
+      if (!provider) {
+        if (link === dep) report(requirement.name, '')
+        else report(link.label, link.docs_url)
+      } else if (provider.status !== 'ok') {
+        if (provider.can_install) visit(provider)
+        else report(provider.label, provider.docs_url)
+      }
+    }
+  }
+
+  visit(dep)
+  return [...found.values()]
+}
+
 /**
  * `targets` in install order, with any installable prerequisite pulled in ahead
  * of whatever needs it — including prerequisites that were not in `targets` at

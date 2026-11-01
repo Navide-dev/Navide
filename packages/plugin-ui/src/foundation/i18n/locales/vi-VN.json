@@ -10259,8 +10259,10 @@
         "pane-hint": "Bật Navide trong Quyền riêng tư & Bảo mật → Truy cập toàn bộ ổ đĩa."
       }
     },
-    "blocked-by": "Hãy cài {names} trước — nó là điều kiện để cài mục này ở đây.",
+    "blocked-by": "Navide không thể cài {names} trên hệ thống này. Hãy tự cài đặt, rồi chọn “{action}”.",
     "installs-first": "Khi cài đặt, {names} cũng sẽ được thiết lập trước.",
+    "manual-guide": "Cách cài {name}",
+    "needs-prereq": "Cần {names}",
     "go-install": "Cài {name} trước",
     "complete-failed": "Không lưu được tiến độ thiết lập: {error}. Hãy thử lại.",
     "ollama-start-failed": "Không khởi động được dịch vụ Ollama. Xem nhật ký để biết chi tiết, hoặc chạy `ollama serve` trong terminal.",
