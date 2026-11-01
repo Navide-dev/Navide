@@ -297,6 +297,9 @@ class LinuxLayout(LinuxPaths):
     def shell_command(self, command: str) -> list[str]:
         return _posix_paths.shell_command(command)
 
+    def needs_loopback_dns_proxy(self) -> bool:
+        return _posix_paths.static_binaries_lack_resolver()
+
     def quote_arg(self, arg: str) -> str:
         return _posix_paths.quote_arg(arg)
 

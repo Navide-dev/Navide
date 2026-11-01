@@ -152,7 +152,7 @@ def login_path_probe(*, interactive_bash: bool = False) -> list[str]:
     an interactive-but-headless shell in mind, and that is what shipped there.
     Same split as `loginShellFlags` in src/shared/osplat.ts.
     """
-    shell = os.environ.get("SHELL") or "/bin/bash"
+    shell = os.environ.get("SHELL") or _default_login_shell()
     name = os.path.basename(shell)
     interactive = name == "zsh" or (interactive_bash and name == "bash")
     return [shell, "-ilc" if interactive else "-lc", LOGIN_PATH_PROBE_SCRIPT]
@@ -254,8 +254,33 @@ def symlinks_available() -> bool:
     return True
 
 
+def _system_sh() -> str:
+    """`/bin/sh`, or where `sh` lives on a system without `/bin` (Android has
+    only `/system/bin/sh`; Termux puts its own under its prefix)."""
+    if os.path.exists("/bin/sh"):
+        return "/bin/sh"
+    return shutil.which("sh") or "/system/bin/sh"
+
+
+def _default_login_shell() -> str:
+    """`/bin/bash` when $SHELL is unset, falling back the same way as `sh`."""
+    if os.path.exists("/bin/bash"):
+        return "/bin/bash"
+    return shutil.which("bash") or _system_sh()
+
+
 def shell_command(command: str) -> list[str]:
-    return ["/bin/sh", "-c", command]
+    return [_system_sh(), "-c", command]
+
+
+def static_binaries_lack_resolver() -> bool:
+    """Whether a statically linked (musl) binary cannot resolve host names here.
+
+    musl reads `/etc/resolv.conf` and nothing else; Android has no such file,
+    so a static CLI such as Codex fails every lookup unless it is pointed at a
+    loopback proxy that resolves through the system. Never true on a desktop.
+    """
+    return sys.platform == "android" and not os.path.exists("/etc/resolv.conf")
 
 
 def quote_arg(arg: str) -> str:

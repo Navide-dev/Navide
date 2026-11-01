@@ -62,8 +62,12 @@ class TestOtherDiscoveryAnswers:
         assert win.enforces_posix_modes() is False
         assert _posix_paths.enforces_posix_modes() is True
 
-    def test_shell_command_goes_through_cmd_exe(self, win) -> None:
+    def test_shell_command_goes_through_cmd_exe(self, win, monkeypatch) -> None:
         assert win.shell_command("echo hi") == ["cmd.exe", "/d", "/s", "/c", "echo hi"]
+        # The POSIX answer on a host that has /bin/sh; a Windows runner has none
+        # and would otherwise resolve Git's sh.exe instead.
+        real_exists = _posix_paths.os.path.exists
+        monkeypatch.setattr(_posix_paths.os.path, "exists", lambda p: p == "/bin/sh" or real_exists(p))
         assert _posix_paths.shell_command("echo hi") == ["/bin/sh", "-c", "echo hi"]
 
     def test_symlink_probe_is_asked_once_and_cached(self, win, monkeypatch) -> None:

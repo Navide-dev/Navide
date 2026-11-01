@@ -1512,6 +1512,9 @@ class WindowsDiscoveryLayout(WindowsLayout):
     def shell_command(self, command: str) -> list[str]:
         return ["cmd.exe", "/d", "/s", "/c", command]
 
+    def needs_loopback_dns_proxy(self) -> bool:
+        return False
+
     def quote_arg(self, arg: str) -> str:
         return subprocess.list2cmdline([arg])
 

@@ -334,6 +334,28 @@ class PosixTerminalHandle:
             pass
 
 
+# Linux pty ioctls, for interpreters built without os.openpty (Chaquopy's
+# CPython on Android lacks it and os.forkpty): unlock the master, ask for the
+# slave's number. Values are the asm-generic ones every Android ABI uses.
+_TIOCSPTLCK = getattr(termios, "TIOCSPTLCK", 0x40045431)
+_TIOCGPTN = getattr(termios, "TIOCGPTN", 0x80045430)
+
+
+def _openpty() -> tuple[int, int]:
+    """`pty.openpty`, or the same pair opened from `/dev/ptmx` by hand."""
+    if hasattr(os, "openpty"):
+        return pty.openpty()
+    master = os.open("/dev/ptmx", os.O_RDWR | os.O_NOCTTY)
+    try:
+        fcntl.ioctl(master, _TIOCSPTLCK, struct.pack("i", 0))
+        number = struct.unpack("I", fcntl.ioctl(master, _TIOCGPTN, b"\0" * 4))[0]
+        slave = os.open(f"/dev/pts/{number}", os.O_RDWR | os.O_NOCTTY)
+    except BaseException:
+        os.close(master)
+        raise
+    return master, slave
+
+
 class PosixTerminalBackend:
     """`pty.openpty` + `Popen(start_new_session=True, preexec_fn=_claim_ctty)`."""
 
@@ -359,7 +381,7 @@ class PosixTerminalBackend:
     ) -> PosixTerminalHandle:
         if isinstance(argv, str):
             argv = self.parse_command(argv)
-        master, slave = pty.openpty()
+        master, slave = _openpty()
         _set_winsize(master, rows, cols)
         flags = fcntl.fcntl(master, fcntl.F_GETFL)
         fcntl.fcntl(master, fcntl.F_SETFL, flags | os.O_NONBLOCK)

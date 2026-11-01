@@ -475,6 +475,10 @@ LAZY_BACKREFS: dict[tuple[str, str, str], str] = {
         "symlink target normalisation; lazy because credential_vault imports "
         "the vendor registry; debt: private name, see plan 61b423 n16 B/C"
     ),
+    ("codex", "loopback_connect_proxy", "loopback_connect_proxy"): (
+        "Android-only spawn env (proxy URL and CA bundle); lazy so desktop "
+        "spawns never start the proxy; vendor→app edge kept lazy"
+    ),
     ("copilot", "copilot_hooks", "install_hooks"): (
         "spec.install_hooks delegates to the app-side hook installer; "
         "vendor→app edge kept lazy"

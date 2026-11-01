@@ -50,14 +50,35 @@ SKILL_FILE_SIZE_LIMIT = 1_000_000
 _STATE_FILE_SIZE_LIMIT = 1_000_000
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _AGENT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+#: Android's CPython has no os.link; publishing falls back to an exclusive copy.
+_HARD_LINKS = hasattr(os, "link")
 _DIRECTORY_FDS = hasattr(os, "O_DIRECTORY") and all(
     operation in os.supports_dir_fd
-    for operation in (os.open, os.mkdir, os.link, os.stat, os.unlink, os.rmdir)
-)
+    for operation in (os.open, os.mkdir, os.stat, os.unlink, os.rmdir)
+) and (not _HARD_LINKS or os.link in os.supports_dir_fd)
 _FRONTMATTER_RE = re.compile(
     r"\A---[ \t]*\r?\n(?P<yaml>.*?)^---[ \t]*(?:\r?\n|\Z)(?P<body>.*)\Z",
     re.MULTILINE | re.DOTALL,
 )
+
+
+def _copy_exclusive(source: Path, target: Path, dir_fd: int | None) -> os.stat_result:
+    """Publish ``source`` at ``target`` without hard links.
+
+    Still refuses to replace an entry that raced us (O_EXCL), but the bytes
+    land with a write, not atomically. Returns the new entry's stat, which is
+    what rollback compares against.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    mode = stat.S_IMODE(source.stat().st_mode)
+    if dir_fd is None:
+        fd = os.open(target, flags, mode)
+    else:
+        fd = os.open(target.name, flags, mode, dir_fd=dir_fd)
+    with os.fdopen(fd, "wb") as out, source.open("rb") as data:
+        os.fchmod(out.fileno(), mode)
+        shutil.copyfileobj(data, out)
+        return os.fstat(out.fileno())
 
 
 def agent_targets() -> list[dict[str, Any]]:
@@ -874,11 +895,16 @@ class SkillsStore:
                     else:
                         # Same-filesystem hard links publish complete file
                         # bytes atomically and fail if an entry raced us.
-                        if _DIRECTORY_FDS:
+                        if not _HARD_LINKS:
+                            published.append((target, _copy_exclusive(
+                                child, target, directory_fds[target.parent] if _DIRECTORY_FDS else None,
+                            )))
+                        elif _DIRECTORY_FDS:
                             os.link(child, target.name, dst_dir_fd=directory_fds[target.parent])
+                            published.append((target, child.stat()))
                         else:
                             os.link(child, target)
-                        published.append((target, child.stat()))
+                            published.append((target, child.stat()))
                         check_directories()
                 state[name] = True
                 if targets is not None:
