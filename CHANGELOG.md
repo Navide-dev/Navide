@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Pipelines (0.2.37): groundwork for starting a pipeline from a webhook: a listener on its own loopback port, keys kept only as hashes, limits and an audit trail. Nothing uses it yet, so nothing listens and nothing changes.
+
 ## [0.2.36] — 2026-11-01
 
 ### Added
