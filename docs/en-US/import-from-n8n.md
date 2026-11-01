@@ -48,9 +48,11 @@ The canvas colors each step by how it was converted:
   n8n's. Runs of these steps with no branching become one step, so a
   workflow does not open one pane per node.
 - **Needs review** — imported, but it needs something Navide does not have yet:
-  Schedule, Webhook, Form and app triggers (start the pipeline by hand, or
-  schedule it in **Turn Stats ▸ Schedule**),
-  Respond to Webhook, Execute Workflow calling a workflow Navide does not
+  Schedule and app triggers (start the pipeline by hand, or schedule it in
+  **Turn Stats ▸ Schedule**), Webhook and Form triggers (create one in
+  [Settings ▸ Webhooks](pipeline-webhooks.md); the import does not make one
+  for you), Respond to Webhook (a Navide trigger answers `202` and sends no
+  result back), Execute Workflow calling a workflow Navide does not
   have, Call n8n Workflow Tool (see below), and steps best left in n8n (see
   below), shown as **Not supported**.
 

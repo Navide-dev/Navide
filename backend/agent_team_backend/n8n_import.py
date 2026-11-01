@@ -205,11 +205,11 @@ _JOIN_MERGE_V1_MODES = ("passThrough", "wait")
 _ROLE_DETAIL = {
     "trigger_schedule": ("runs on a schedule in n8n: start the pipeline by hand, or schedule a pipeline_start job "
                          "(Turn Stats > Schedule, or the MCP tool scheduler_upsert)"),
-    "trigger_webhook": "starts from an HTTP request in n8n: Navide has no webhook trigger yet",
+    "trigger_webhook": "starts from an HTTP request in n8n: set one up in Settings > Webhooks",
     "trigger_error": "n8n error workflows have no Navide equivalent yet",
     "trigger_app": "starts from an app event in n8n: Navide has no app triggers yet",
     "subworkflow": "calls another n8n workflow that is not imported: paste that workflow too, or import it first",
-    "respond": "answers an n8n webhook: Navide has no webhook trigger yet",
+    "respond": "answers an n8n webhook: a Navide trigger answers 202 and sends no result back",
 }
 
 
