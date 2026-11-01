@@ -117,6 +117,19 @@ describe('ChannelsPane two columns', () => {
     expect(detail(w, 'bot-b1').isVisible()).toBe(false)
   })
 
+  it('keeps the picked row in sight in a long list', async () => {
+    const scroll = vi.fn()
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = scroll
+    seed({ requests: [{ platform: 'telegram', account: 'bot-c2', code: 'K7Q2M9XA', sender_id: '42', sender_name: 'neil', created_at: 1 }] })
+    const w = await render()
+    expect(scroll.mock.contexts.at(-1)).toBe(navItem(w, 'telegram:bot-c2').element)
+    await navItem(w, 'telegram:default').trigger('click')
+    await flushPromises()
+    expect(scroll.mock.contexts.at(-1)).toBe(navItem(w, 'telegram:default').element)
+    Element.prototype.scrollIntoView = original
+  })
+
   it('keeps the shared flag and hint in sight on the bot', async () => {
     seed({ entries: [{ platform: 'telegram', account: 'default', sender_id: '1087968824', sender_name: 'GroupAnonymousBot', added_at: 1, shared: true }] })
     const w = await render()

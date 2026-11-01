@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 
@@ -26,7 +27,7 @@ export interface ChannelNavGroup {
  * people, chats and waiting requests, grouped by platform when there are several,
  * and the way to add another under the list. Picking a row shows it on the right.
  */
-defineProps<{
+const props = defineProps<{
   groups: ChannelNavGroup[]
   active: string
   addActive: boolean
@@ -38,11 +39,18 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+// The page can open on a row far down a long list: the picked row stays in sight.
+const list = ref<HTMLElement | null>(null)
+watch(() => props.active, async (key) => {
+  await nextTick()
+  list.value?.querySelector(`[data-key="${CSS.escape(key)}"]`)?.scrollIntoView?.({ block: 'nearest' })
+}, { immediate: true, flush: 'post' })
 </script>
 
 <template>
   <nav class="ch-nav" :aria-label="t('channels.bot.list')" data-testid="channel-nav">
-    <div v-if="groups.length" class="ch-nav-list">
+    <div v-if="groups.length" ref="list" class="ch-nav-list">
       <template v-for="group in groups" :key="group.id">
         <div v-if="group.label" class="ch-nav-group" data-testid="channel-nav-group">{{ group.label }}</div>
         <button
