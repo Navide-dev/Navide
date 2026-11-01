@@ -301,6 +301,30 @@ def pane_default_slot(agent_key: str) -> str:
     return str(chosen) if chosen and is_api_key(app.cli_profiles_store.get(chosen)) else ""
 
 
+def wake_verdict(agent_key: str, recorded_pin: str) -> str:
+    """What an API key means for a chat's wake of a pane recorded on
+    ``recorded_pin``: "key" when it can only come back on that key, "unclear"
+    when it might come back on a key it was not on, or off the one it was on,
+    and "" when no key is involved.
+
+    The key a new spawn lands on is claude's pane default or codex's live
+    account. Whether a restored claude pane keeps its pin or follows that
+    default is the window's to say (``accountFollow``), and a pane reopened
+    without a placeholder always follows it. So only a pin equal to that key
+    gives the same answer both ways."""
+    if agent_key not in SUPPORTED_AGENT_KEYS:
+        return ""
+    target = pane_default_slot(agent_key)
+    if agent_key in _SLOT_KEY_AGENTS:
+        active = _store().list()["defaults"].get(agent_key)
+        target = active if active and is_api_key(_store().get(active)) else ""
+        if not target and is_active_api_key_account(agent_key, _store()):
+            return "unclear"  # A switch that stopped midway left a key live.
+    if not target and not is_api_key(_store().get(recorded_pin)):
+        return ""
+    return "key" if recorded_pin == target else "unclear"
+
+
 def logins_first(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The same ranking with API key accounts last: an account that costs
     nothing more is always tried before one that charges by use."""
