@@ -12,7 +12,15 @@ import secrets
 import time
 from typing import Any
 
-from . import guard_fail_closed, webhook_github, webhook_keystore, webhook_listener, webhook_service, webhook_triggers
+from . import (
+    guard_fail_closed,
+    webhook_form,
+    webhook_github,
+    webhook_keystore,
+    webhook_listener,
+    webhook_service,
+    webhook_triggers,
+)
 from .ipc import make_error, make_response
 
 log = logging.getLogger(__name__)
@@ -216,6 +224,18 @@ async def webhook_trigger_create(session: Any, msg_id: str, msg_type: str, paylo
             await asyncio.to_thread(service.store.delete, trigger["id"])
             await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
             return
+        trigger = next(t for t in await asyncio.to_thread(service.store.list) if t["id"] == trigger["id"])
+    if trigger["kind"] == "form":
+        try:
+            fields = webhook_form.normalize_fields(payload.get("fields"))
+        except webhook_form.FormInvalid as err:
+            await asyncio.to_thread(service.store.delete, trigger["id"])
+            await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+            return
+        public = payload.get("form_public") is True
+        await asyncio.to_thread(service.store.set_form, trigger["id"], fields, public)
+        if public:
+            service.audit([{"trigger_id": trigger["id"], "outcome": "form-public", "status": 0}])
         trigger = next(t for t in await asyncio.to_thread(service.store.list) if t["id"] == trigger["id"])
     problem = await asyncio.to_thread(service.binding_problem, trigger)
     if trigger["no_gate_ack"]:
