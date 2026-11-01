@@ -15,7 +15,11 @@ defineProps<{
   optional?: boolean
   meta?: string
   warning?: string
-  /** A blocker or failure for this step. Shown in the card because the wizard's
+  /** Neutral information ahead of the action. Nothing has gone wrong. */
+  notice?: string
+  /** What keeps this step from running, readable while the card is collapsed. */
+  blockedTag?: string
+  /** A failure for this step. Shown in the card because the wizard's
    *  log pane sits below the fold and dies with the modal — a fast failure that
    *  only reached the log made the action button look like it did nothing. */
   error?: string
@@ -30,6 +34,7 @@ defineEmits<{ (e: 'toggle'): void }>()
       <span class="oc-title">
         {{ title }}
         <span v-if="optional" class="oc-tag">{{ $t('label.optional') }}</span>
+        <span v-if="blockedTag" class="oc-tag oc-tag-blocked">{{ blockedTag }}</span>
         <span v-if="meta" class="oc-meta">{{ meta }}</span>
       </span>
       <span v-if="done" class="oc-check" aria-hidden="true">
@@ -52,7 +57,8 @@ defineEmits<{ (e: 'toggle'): void }>()
          dead click was the only feedback when a user re-checked a green step. -->
     <div v-if="expanded" class="oc-body">
       <p v-if="description" class="oc-desc">{{ description }}</p>
-      <p v-if="warning" class="oc-warn">{{ warning }}</p>
+      <p v-if="notice" class="oc-notice">{{ notice }}</p>
+      <p v-if="warning" class="oc-warn" :class="{ 'oc-warn-box': blockedTag }">{{ warning }}</p>
       <p v-if="error" class="oc-error" role="alert">{{ error }}</p>
       <div class="oc-actions">
         <slot name="actions" />
@@ -117,6 +123,10 @@ defineEmits<{ (e: 'toggle'): void }>()
   border-radius: 4px;
   padding: 1px 5px;
 }
+.oc-tag-blocked {
+  color: var(--attention-fg);
+  border-color: currentColor;
+}
 .oc-meta {
   font: 11px/1 ui-monospace, Menlo, monospace;
   color: var(--text-muted);
@@ -148,6 +158,22 @@ defineEmits<{ (e: 'toggle'): void }>()
   font-size: var(--font-xs);
   line-height: var(--lh-base);
   color: var(--attention-fg);
+}
+.oc-warn-box {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--attention-emphasis);
+  background: var(--attention-subtle);
+}
+.oc-notice {
+  margin: -6px 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  line-height: var(--lh-base);
 }
 .oc-error {
   margin: -6px 0 14px;

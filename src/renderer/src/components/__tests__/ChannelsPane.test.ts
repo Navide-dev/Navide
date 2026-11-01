@@ -160,12 +160,12 @@ describe('ChannelsPane', () => {
     expect(w.find('[data-platform="slack"] [data-testid="channel-pending"]').exists()).toBe(false)
   })
 
-  it('hides an empty pairing section but always shows the allowlist, saying when no one is allowed', async () => {
+  it('hides an empty pending block on a bot but always shows its people, saying when no one is allowed', async () => {
     mock.setResponse('channels.pairing.list', { ok: true, requests: [] })
     mock.setResponse('channels.allow.list', { ok: true, entries: [] })
     const w = await render()
-    expect(w.text()).not.toContain('Pending pairing requests')
-    expect(w.text()).toContain('Allowed senders')
+    expect(w.find('[data-testid="channel-bot-pending"]').exists()).toBe(false)
+    expect(w.get('[data-testid="channel-bot-people"]').text()).toContain('People who can talk')
     expect(w.get('[data-testid="allow-empty"]').text()).toBe('No one is allowed yet.')
     expect(w.find('[data-testid="allow-row"]').exists()).toBe(false)
     expect(w.find('[data-testid="channel-pending"]').exists()).toBe(false)
@@ -280,11 +280,11 @@ describe('ChannelsPane', () => {
     expect(mock.sent.find((s) => s.type === 'channels.allow.remove')?.payload).toEqual({ platform: 'telegram', sender_id: '7' })
   })
 
-  it('a single bot names no bot on pairing requests or allowed senders', async () => {
+  it('names no bot on pairing requests or allowed senders under their own bot', async () => {
     const w = await render()
     expect(w.find('[data-testid="pairing-bot"]').exists()).toBe(false)
     expect(w.find('[data-testid="allow-bot"]').exists()).toBe(false)
-    expect(w.get('[data-testid="allow-row"]').text()).toContain('Telegram · 7')
+    expect(w.get('[data-testid="allow-row"]').text()).toContain('7 · —')
   })
 
   it('the kill switch turns every channel off', async () => {
@@ -410,7 +410,7 @@ describe('ChannelsPane', () => {
       expect(mock.sent.find((s) => s.type === 'channels.remove')?.payload).toEqual({ platform: 'telegram', account: 'bot-b1' })
     })
 
-    it('names the bot of each pairing request and allowed sender, and removes per bot', async () => {
+    it('lists each pairing request and allowed sender under its bot, and removes per bot', async () => {
       seedTwoBots()
       mock.setResponse('channels.pairing.list', {
         ok: true,
@@ -424,9 +424,9 @@ describe('ChannelsPane', () => {
         ],
       })
       const w = await render()
-      expect(w.get('[data-testid="pairing-bot"]').text()).toBe('Ops')
-      expect(w.findAll('[data-testid="allow-bot"]').map((e) => e.text())).toEqual(['Main bot', 'Ops'])
-      await w.findAll('[data-testid="allow-remove"]')[1].trigger('click')
+      expect(bot(w, 'bot-b1').get('[data-testid="pairing-row"]').text()).toContain('neil')
+      expect(bot(w, 'default').get('[data-testid="allow-row"]').text()).toContain('amy')
+      await bot(w, 'bot-b1').get('[data-testid="allow-remove"]').trigger('click')
       await flushPromises()
       expect(mock.sent.find((s) => s.type === 'channels.allow.remove')?.payload).toEqual({
         platform: 'telegram', sender_id: '8', account: 'bot-b1',
