@@ -14874,8 +14874,13 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       sessionMarkerLine(pane.sessionMarker)
     pipelineLog(`${tag} ➜ injecting kickoff (${kickoff.length} chars)`)
     let held = false
+    // The watcher's arm time: taken before the injection, because the watcher
+    // itself arms two backend round trips after it, and a turn that ends in
+    // between must still count as this stage's. See startStageWatcher.
+    let kickoffStartedAt = Date.now()
     const kickoffResult = await runPipelineKickoff({
       inject: async () => {
+        kickoffStartedAt = Date.now()
         const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
         const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence)
         return { injected, echo: evidence.echo }
@@ -14981,7 +14986,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       return
     }
     if (runMovedOn()) return
-    startStageWatcher(index, pane.id, kickoffScanFrom)
+    startStageWatcher(index, pane.id, kickoffScanFrom, kickoffStartedAt)
   }))
 
   // A run failed by one of this stage's kickoffs is over: no router poll, and
@@ -18751,7 +18756,7 @@ function releaseStageSlot(stageIndex: number, slotKey: string, why: string): voi
   void onPipelineNext()
 }
 
-function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?: number): void {
+function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?: number, kickoffStartedAt?: number): void {
   cancelWatcher(paneId)   // cancel only THIS pane's previous watcher
   const stage = stagesApi.stages.value[stageIndex]
   if (!stage) return
@@ -18805,7 +18810,9 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
     cancelled: false,
     waitingForAnswer: false,
     answeredAt: 0,
-    armedAt: Date.now(),
+    // Nothing re-sends a turn_complete, so one that lands before this armedAt
+    // leaves the run `running` with a finished agent.
+    armedAt: kickoffStartedAt ?? Date.now(),
     analyzerBusy: false,
     analyzerCooldownUntil: 0,
     lastAnalyzedBufferLen: 0,

@@ -254,7 +254,7 @@ describe('the Manager router does not read its own kickoff echo as a result', ()
       expect(failed, 'the failed-kickoff exit').toBeGreaterThan(-1)
       expect(act.lastIndexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'", failed)).toBeGreaterThan(inject)
       expect(act.indexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'", failed)).toBe(-1)
-      expect(act.indexOf('startStageWatcher(index, pane.id, kickoffScanFrom)', failed)).toBeGreaterThan(failed)
+      expect(act.indexOf('startStageWatcher(index, pane.id, kickoffScanFrom, kickoffStartedAt)', failed)).toBeGreaterThan(failed)
       const roleFailed = act.indexOf('await failRunOnKickoff(index, slot.label, roleFailure)')
       expect(roleFailed, 'the failed-role exit').toBeGreaterThan(-1)
       expect(roleFailed, 'the failed-role exit sends no kickoff').toBeLessThan(inject)
@@ -283,6 +283,26 @@ describe('the Manager router does not read its own kickoff echo as a result', ()
     expect(scan.slice(Math.max(0, at - 400), at)).toContain(
       'const cursor = router.armedCursors.get(router.managerPaneId) ?? 0'
     )
+  })
+})
+
+describe('a turn that ends before the watcher arms still finishes the slot', () => {
+  it('counts from the injection, not from the arm two round trips later', () => {
+    const act = body('async function activateStage(', '\nasync function spawnPipelineStage(')
+    const started = act.indexOf('let kickoffStartedAt = Date.now()')
+    expect(started, 'stamped before the kickoff').toBeGreaterThan(-1)
+    expect(started).toBeLessThan(act.indexOf('await runPipelineKickoff('))
+    // A retry is a new injection, so the stamp follows it.
+    const inject = act.indexOf('inject: async () => {')
+    expect(act.slice(inject, act.indexOf('await injectPane(', inject))).toContain('kickoffStartedAt = Date.now()')
+
+    const watcher = body('function startStageWatcher(', '\nfunction handleAnalyzerResult(')
+    expect(watcher).toContain('armedAt: kickoffStartedAt ?? Date.now()')
+    expect(watcher).toContain('paneArmedAt.set(paneId, watcher.armedAt)')
+  })
+
+  it('keeps arming at now for a restart, which injects no kickoff of its own', () => {
+    expect(appSource).toContain('startStageWatcher(p.stageIndex, p.paneId)')
   })
 })
 
