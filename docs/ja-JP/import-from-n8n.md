@@ -21,7 +21,7 @@ Agent は MCP ツール `pipeline_import_n8n` で同じことができます。�
 
 - **そのまま変換**：Navide がワークフローの意図どおりに実行します。Manual・Chat・Execute Workflow トリガー、AI Agent クラスター（モデル、メモリ、ツール、出力パーサーは一つのステップにまとまります）、Wait と send-and-wait の承認（Gate）、IF と Switch（分岐）、Append または Choose Branch モードの Merge、エラー出力とリトライ、Navide にあるワークフローを呼ぶ Execute Workflow（サブ Pipeline、下記）です。
 - **エージェントが実行**：HTTP Request、Code、Set、データを結合する Merge（フィールド、位置、全組み合わせ、SQL。Agent がその結合ルールに従います）、アプリのノード（Google Sheets、Slack、Gmail…）、コミュニティノード、未知のノード種別やバージョンです。CLI Agent がノードの元のパラメータからステップを実行し、expression と Code はそのまま渡されます。結果は n8n と異なることがあります。分岐のない連続したステップは一つのステップにまとまるため、ノードごとに Pane が開くことはありません。
-- **要確認**：インポートされますが、Navide にまだ無い機能が必要です。Schedule・Webhook・Form・アプリのトリガー（Pipeline は手動で開始するか、**ターン統計 ▸ スケジュール**で予約してください）、Respond to Webhook、Navide にないワークフローを呼ぶ Execute Workflow、Call n8n Workflow Tool（下記）、n8n に残すべきステップ（下記。**未対応** と表示されます）です。
+- **要確認**：インポートされますが、Navide にまだ無い機能が必要です。Webhook・Form のトリガー（[設定 ▸ Webhook](../en-US/pipeline-webhooks.md) で作成します。インポートでは作成されません）、Schedule・アプリのトリガー（Pipeline は手動で開始するか、**ターン統計 ▸ スケジュール**で予約してください）、Respond to Webhook、Navide にないワークフローを呼ぶ Execute Workflow、Call n8n Workflow Tool（下記）、n8n に残すべきステップ（下記。**未対応** と表示されます）です。
 
 キャンバスの下のレポートには、各 n8n ノードが何になり何をすべきか（確認が必要な行が先頭に並び、複数の n8n ノードをまとめたステップにはその数が表示されます）、各ステップの Kickoff 全文と各 Gate のプロンプト（各 Pane が受け取る文面そのもの）、設定が必要な認証情報、秘密が取り除かれた場所、確認が必要なステップ数が並びます。どれも **インポート** を妨げません。実行前に把握するためのものです。
 

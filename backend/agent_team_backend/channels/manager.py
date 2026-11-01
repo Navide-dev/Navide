@@ -146,6 +146,7 @@ MSG_CHAT_RATE = "⚠️ 1 分鐘內傳了超過 {max} 則，這則沒有送進 p
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
 MSG_READING_REPLY = "✅ 回合已結束，正在讀取回覆…"
 MSG_REPLY_LATE = "⏳ 回合已結束，但還沒讀到回覆文字；讀到後會補送。"
+MSG_REPLY_LOST = "⚠️ 一直讀不到這回合的回覆文字，先不等了；請到電腦上的視窗查看。"
 MSG_LATE_PREFIX = "（補送）"
 MSG_STILL_RUNNING = "⏳ 仍在執行，完成時會再回覆"
 MSG_USAGE_LIMIT = "⚠️ {agent} 額度已用完，{reset} 重置"
@@ -207,6 +208,10 @@ def _secret_name(platform: str, account: str = DEFAULT_ACCOUNT) -> str:
 def _legacy_secret_name(platform: str) -> str:
     """Where the one bot per platform kept its secret before accounts; still read for "default"."""
     return f"channel-{platform}"
+
+
+async def _no_turn_text() -> str:
+    return ""
 
 
 @dataclass
@@ -275,6 +280,9 @@ class Seams:
     # conversation, or {ok: False, code, started, detail?, agent?}; never a fresh conversation.
     # `started` is False when it was refused before anything was opened
     wake: Callable[[str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_wake()
+    # The text the pane's own log holds for its last turn since a wall-clock time ("" when
+    # it holds none): a direct read, for a run whose log events never came.
+    turn_text: Callable[[str, float], Awaitable[str]] = lambda *_a: _no_turn_text()
 
 
 async def _no_limit() -> dict[str, Any]:
@@ -1455,7 +1463,8 @@ class ChannelManager:
 
     async def _watch_await(self, pane_id: str, held: _AwaitText) -> None:
         """While a hook-ended run waits for its text: say it is being read, then that it
-        will follow; give up quietly once RUN_WATCH_MAX_S has passed."""
+        will follow. Once RUN_WATCH_MAX_S has passed, read the log directly; if that finds
+        nothing either, stop waiting and tell the chat, since it was promised the text."""
         pending = held.pending
 
         def still() -> bool:
@@ -1481,11 +1490,34 @@ class ChannelManager:
         if adapter is not None and not pending.silent:
             await self._notice(adapter, pending.loc, MSG_REPLY_LATE)
         await asyncio.sleep(max(0.0, RUN_WATCH_MAX_S - EMPTY_TURN_GRACE_S))
-        waiting = self._await_text.get(pane_id)
-        if waiting and held in waiting:
-            waiting.remove(held)
-            if not waiting:
-                del self._await_text[pane_id]
+        if not still():
+            return
+        text = await self._reread_turn(pane_id, held)
+        if not still():
+            return
+        if text.strip():
+            self._settle_held(pane_id, held, text)
+            return
+        waiting = self._await_text[pane_id]
+        waiting.remove(held)
+        if not waiting:
+            del self._await_text[pane_id]
+        adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
+        if adapter is not None and not pending.silent:
+            await self._notice(adapter, pending.loc, MSG_REPLY_LOST)
+
+    async def _reread_turn(self, pane_id: str, held: _AwaitText) -> str:
+        """The held run's text straight from the pane's log. With several runs waiting the
+        last text could be any of theirs, so the oldest ones are not answered from it."""
+        if len(self._await_text.get(pane_id, [])) != 1:
+            return ""
+        armed = held.pending.armed_at or held.pending.started
+        since = time.time() - (self._clock() - armed)
+        try:
+            return await self._seams.turn_text(pane_id, since)
+        except Exception as exc:  # noqa: BLE001 — the chat is told either way
+            log.warning("channels: could not read the turn of %s from its log: %s", pane_id, exc)
+            return ""
 
     def _mirror_unclaimed_turn(self, pane_id: str, text: str) -> None:
         """A turn end no chat message asked for (typed at the keyboard, delegated by
@@ -1879,6 +1911,8 @@ class ChannelManager:
         current = self._binding_for(msg) or binding
         kept = await self._live_kept(msg, key, lang)
         await self._reply(msg, wake.text(lang, "woke_sent", count=len(kept)) if kept else wake.text(lang, "woke"))
+        if result.get("paid"):
+            await self._reply(msg, wake.text(lang, "woke_paid"))
         await self._deliver_kept(msg, current, pane_id, lang, reserve=0)
 
     def _set_kept(self, key: str, kept: list[tuple[float, InboundMessage]]) -> None:

@@ -19,6 +19,7 @@ function harness() {
     ownsPane: (id: string) => id !== 'other-window',
     reopen: vi.fn(async (_paneId: string, _profileId: string): Promise<unknown> => undefined),
     announce: vi.fn(),
+    announceFolderLogin: vi.fn(),
   }
   const scope = effectScope()
   scope.run(() => useApiKeyTakeover(backend as never, deps))
@@ -31,6 +32,15 @@ describe('useApiKeyTakeover', () => {
     fire({ profileId: 'k1', name: 'Project', paneIds: ['p1', 'other-window', 'p2'] })
     await vi.waitFor(() => expect(deps.announce).toHaveBeenCalledWith('Project', 0))
     expect(deps.reopen.mock.calls).toEqual([['p1', 'k1'], ['p2', 'k1']])
+  })
+
+  it('reopens on a folder login the same way, and does not call it paid', async () => {
+    const { fire, deps } = harness()
+    deps.reopen.mockImplementation(async (paneId: string) => (paneId === 'p2' ? 'busy' : undefined))
+    fire({ profileId: 'w1', name: 'Work', paneIds: ['p1', 'p2'], paid: false })
+    await vi.waitFor(() => expect(deps.announceFolderLogin).toHaveBeenCalledWith('Work', 1))
+    expect(deps.reopen.mock.calls).toEqual([['p1', 'w1'], ['p2', 'w1']])
+    expect(deps.announce).not.toHaveBeenCalled()
   })
 
   it('counts a busy pane that stayed', async () => {

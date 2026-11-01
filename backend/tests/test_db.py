@@ -206,13 +206,16 @@ def test_commits_empty_the_journal_instead_of_deleting_it(db, tmp_path):
         assert journal.stat().st_size == 0
 
 
-#: Below the Windows shard's `--timeout=90`, so a run that slows down fails
-#: with the measurements below rather than as a bare pytest-timeout.
+#: Below the Windows shard's `--timeout=90`. Reaching it ends the sampling, it
+#: does not fail the run: a runner's disk can pay seconds for commits nobody
+#: blocks (38 commits took 60s on one run, the usual 100 take 4-5s).
 _JOURNAL_BUDGET_S = 60.0
+#: Fewer pairs than this in the budget means commits were stuck, not slow.
+_JOURNAL_MIN_PAIRS = 5
 
 
 def _commit_report(commits, journal, handle) -> str:
-    """The slowest commits and the journal's state, for a run over budget."""
+    """The slowest commits and the journal's state, for a run that failed."""
     slowest = sorted(commits, key=lambda c: c[2], reverse=True)[:10]
     lines = [f"  #{index} {kind}: {seconds:.3f}s" for index, kind, seconds in slowest]
     size = journal.stat().st_size if journal.exists() else None
@@ -230,22 +233,17 @@ def test_commits_are_not_blocked_by_a_reader_holding_the_journal(db, tmp_path):
     # handle an antivirus or indexer scan leaves on a freshly written file.
     journal = tmp_path / "navide.db-journal"
     db.kv_set("seed", 0, now=0)
-    # Every commit is timed, and the run fails itself past the budget with
-    # the slowest ones: a CI run once hit pytest-timeout here with nothing to
-    # tell one stuck commit (which the timeout's thread dump shows) from a
-    # cost every commit paid.
+    # Every commit is timed, and a failing run reports the slowest ones: a CI
+    # run once hit pytest-timeout here with nothing to tell one stuck commit
+    # (which the timeout's thread dump shows) from a cost every commit paid.
     commits: list[tuple[int, str, float]] = []
     began = time.perf_counter()
 
-    def commit(index, kind, key, handle=None) -> float:
+    def commit(index, kind, key) -> float:
         started = time.perf_counter()
         db.kv_set(key, index, now=index)
         took = time.perf_counter() - started
         commits.append((index, kind, took))
-        if time.perf_counter() - began > _JOURNAL_BUDGET_S:
-            pytest.fail(
-                f"over the {_JOURNAL_BUDGET_S:.0f}s budget\n" + _commit_report(commits, journal, handle)
-            )
         return took
 
     # Each commit under the reader is paired with one just before it without:
@@ -254,16 +252,21 @@ def test_commits_are_not_blocked_by_a_reader_holding_the_journal(db, tmp_path):
     # baseline phase at 5.4s and the held phase at 19s), so only neighbours
     # are comparable. A reader stalling deletes costs ~1.4s of SQLite retry
     # sleeps per commit or fails it outright; the median pair shrugs off a
-    # one-off hiccup but not a cost every commit pays.
-    extra = []
+    # one-off hiccup but not a cost every commit pays. The allowance grows with
+    # what a free commit costs on this run, since a pair's noise does too.
+    frees, extra = [], []
     for i in range(50):
-        free = commit(i, "free", f"base{i}")
+        frees.append(commit(i, "free", f"base{i}"))
         journal.touch()  # DELETE mode has no journal between commits
         with open(journal, "rb") as handle:
-            held = commit(i, "held", f"k{i}", handle)
-        extra.append(held - free)
-    assert statistics.median(extra) < 0.1
-    assert db.kv_get("k49") == 49
+            extra.append(commit(i, "held", f"k{i}") - frees[-1])
+        if time.perf_counter() - began > _JOURNAL_BUDGET_S:
+            break
+    report = _commit_report(commits, journal, handle)
+    assert len(extra) >= _JOURNAL_MIN_PAIRS, report
+    assert statistics.median(extra) < max(0.1, statistics.median(frees) / 2), report
+    last = len(extra) - 1
+    assert db.kv_get(f"k{last}") == last
 
 
 # ── schema migrations ────────────────────────────────────────────────

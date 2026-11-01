@@ -162,6 +162,7 @@
     "settings.search.item.general-p2p.title",
     "settings.search.item.marketplace.title",
     "settings.search.item.prompts.title",
+    "settings.search.item.webhooks.title",
     "settings.sync.approval-size",
     "settings.sync.scope-prompts",
     "settings.tab.general",
@@ -172,7 +173,12 @@
     "turn-stats.col-total",
     "turn-stats.row-total",
     "turn-stats.session",
-    "turn-stats.title"
+    "turn-stats.title",
+    "webhooks.form.pipeline",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github",
+    "webhooks.kind.webhook",
+    "webhooks.nav"
   ],
   "fr-FR": [
     "account.title",
@@ -388,6 +394,7 @@
     "settings.search.item.general-p2p.title",
     "settings.search.item.marketplace.title",
     "settings.search.item.prompts.title",
+    "settings.search.item.webhooks.title",
     "settings.sharing.bundle.description-label",
     "settings.sharing.cloud.col-remote",
     "settings.skills.description",
@@ -412,7 +419,18 @@
     "turn-stats.session",
     "turn-stats.title",
     "updater.channel-stable",
-    "usage.failover-col-resume"
+    "usage.failover-col-resume",
+    "webhooks.form.pipeline",
+    "webhooks.form.source",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github",
+    "webhooks.kind.webhook",
+    "webhooks.minutesUnit",
+    "webhooks.more",
+    "webhooks.nav",
+    "webhooks.reveal.secret",
+    "webhooks.form.fieldType",
+    "webhooks.fieldType.date"
   ],
   "de-DE": [
     "account.title",
@@ -574,6 +592,7 @@
     "settings.search.item.general-p2p.title",
     "settings.search.item.marketplace.title",
     "settings.search.item.prompts.title",
+    "settings.search.item.webhooks.title",
     "settings.skills.name",
     "settings.sync.scope-prompts",
     "settings.tab.pipelines",
@@ -583,7 +602,16 @@
     "statusBadges.color.pink",
     "turn-stats.col-version",
     "turn-stats.session",
-    "turn-stats.title"
+    "turn-stats.title",
+    "webhooks.form.name",
+    "webhooks.form.pipeline",
+    "webhooks.form.workspace",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github",
+    "webhooks.kind.webhook",
+    "webhooks.nav",
+    "webhooks.reveal.secret",
+    "webhooks.fieldType.text"
   ],
   "pt-BR": [
     "account.title",
@@ -760,6 +788,7 @@
     "settings.search.item.general-p2p.title",
     "settings.search.item.marketplace.title",
     "settings.search.item.prompts.title",
+    "settings.search.item.webhooks.title",
     "settings.sharing.cloud.col-item",
     "settings.sync.approval-size",
     "settings.sync.history-item",
@@ -772,7 +801,13 @@
     "turn-stats.row-total",
     "turn-stats.session",
     "turn-stats.title",
-    "updater.stage.download"
+    "updater.stage.download",
+    "webhooks.form.pipeline",
+    "webhooks.form.workspace",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github",
+    "webhooks.kind.webhook",
+    "webhooks.nav"
   ],
   "ru-RU": [
     "account.title",
@@ -874,7 +909,9 @@
     "settings.search.item.general-p2p.title",
     "settings.search.item.marketplace.title",
     "settings.tab.pipelines",
-    "turn-stats.title"
+    "turn-stats.title",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github"
   ],
   "vi-VN": [
     "account.title",
@@ -1015,6 +1052,45 @@
     "settings.voice.download-progress",
     "skill-approval.script",
     "turn-stats.session",
-    "turn-stats.title"
+    "turn-stats.title",
+    "webhooks.form.pipeline",
+    "webhooks.form.workspace",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github",
+    "webhooks.kind.webhook",
+    "webhooks.outcome.ping",
+    "webhooks.reveal.secret",
+    "webhooks.fieldType.email"
+  ],
+  "ja-JP": [
+    "webhooks.form.pipeline",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github",
+    "webhooks.kind.webhook",
+    "webhooks.outcome.ping"
+  ],
+  "ko-KR": [
+    "webhooks.form.pipeline",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github",
+    "webhooks.kind.webhook",
+    "webhooks.outcome.ping"
+  ],
+  "zh-CN": [
+    "webhooks.form.pipeline",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github",
+    "webhooks.kind.webhook",
+    "webhooks.outcome.ping",
+    "webhooks.reveal.secret"
+  ],
+  "zh-TW": [
+    "webhooks.fieldType.email",
+    "webhooks.form.pipeline",
+    "webhooks.host.placeholder",
+    "webhooks.kind.github",
+    "webhooks.kind.webhook",
+    "webhooks.outcome.ping",
+    "webhooks.reveal.secret"
   ]
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  createKickoffReporter, kickoffAttemptOutcome, paneStillStarting, promptReadyNow, runKickoffAttempts,
+  createKickoffReporter, kickoffAttemptOutcome, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff, runKickoffAttempts,
   submitHeldCopy, terminalKickoffOutcome, type KickoffAttemptEvidence,
 } from '../spawnKickoff'
 
@@ -466,5 +466,21 @@ describe('createKickoffReporter', () => {
     expect(() => report('sent')).not.toThrow()
     report('failed')
     expect(send).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('rolelessPaneAwaitsKickoff', () => {
+  it('is true for a pipeline slot whose kickoff is still to be sent', () => {
+    expect(rolelessPaneAwaitsKickoff({ origin: 'pipeline', kickoffStatus: 'pending' })).toBe(true)
+  })
+
+  it('is false for a pipeline slot with no kickoff yet, or one already settled', () => {
+    expect(rolelessPaneAwaitsKickoff({ origin: 'pipeline', kickoffStatus: 'none' })).toBe(false)
+    expect(rolelessPaneAwaitsKickoff({ origin: 'pipeline', kickoffStatus: 'sent' })).toBe(false)
+    expect(rolelessPaneAwaitsKickoff({ origin: 'pipeline', kickoffStatus: 'failed' })).toBe(false)
+  })
+
+  it('leaves a manual pane to the caller that spawned it', () => {
+    expect(rolelessPaneAwaitsKickoff({ origin: 'manual', kickoffStatus: 'pending' })).toBe(false)
   })
 })

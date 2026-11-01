@@ -150,7 +150,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned again for PR-E's window error codes (previous pin 703c1dbf…):
 #: ui_invoke and pipeline_start say a window refusal that names its reason
 #: carries `error_code` and `params` next to `error`. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "65ad36fefaa999ccc3033f5800ab4dfa2ae5a6bdd3ce1c32d7fecf34b473428e"
+#: Re-pinned for the absent windows (previous pin 65ad36fe…): cli_usage says what
+#: `absentWindows` means, so an agent can tell no limit from no data. No other
+#: tool changed.
+MAIN_TOOLS_LIST_SHA256 = "94228b18a612e6bee9a7839c4a7d96a4fba2392dcef6f8b32d57b814cb5f1637"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

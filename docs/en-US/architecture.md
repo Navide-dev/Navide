@@ -257,6 +257,11 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   `agentMessages`. Neither reads session transcripts, account or quota data,
   other workspaces or other devices; the Host binds the workspace and the
   backend (`agents_host_api.py`) returns fixed field lists only.
+- Webhook triggers take requests from outside. The listener is separate from
+  the backend's own port, binds loopback only and is off by default; reaching
+  it from elsewhere is a tunnel the user runs. A run it starts is Guard-tainted
+  and its panes lose the permission bypass unless the trigger is explicitly
+  unattended. Claude Code is the only CLI a webhook run can use. See [Pipeline webhooks](pipeline-webhooks.md).
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is

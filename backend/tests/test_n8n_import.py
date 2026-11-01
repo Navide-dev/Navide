@@ -576,7 +576,7 @@ def test_webhook_trigger_is_pending_and_says_start_manually():
     assert (hook["category"], hook["reason"], hook["result"]) == ("pending", "webhook-trigger", "trigger")
     assert "start-manually" in hook["actions"]
     assert entry(out, "Reply")["category"] == "pending"
-    assert "Navide has no webhook trigger yet" in slot(out, "n8n-save")["slot"]["kickoffBody"]
+    assert "a Navide trigger answers 202" in slot(out, "n8n-save")["slot"]["kickoffBody"]
 
 
 def test_schedule_trigger_is_pending():

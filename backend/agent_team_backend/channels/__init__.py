@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from ..pane_account_history import parse_event_time
 from . import relay, wake
 from .manager import ChannelManager, Seams
 
@@ -270,6 +272,23 @@ def default_seams() -> Seams:
     async def wake(pane_id: str, workspace_path: str, session_id: str) -> dict[str, Any]:
         return await wake_pane(pane_id, workspace_path, session_id)
 
+    async def turn_text(pane_id: str, since_s: float) -> str:
+        from .. import app
+
+        target = wake_target(pane_id)
+        agent = pane_agent(pane_id)
+        # Line readers only: a shared-db reader scanned with an empty bag would walk
+        # every session in its store.
+        reader = next((r for r in app._readers if r.vendor == agent and r.activity_resumes_by_line), None)
+        if reader is None or not target.get("session_id"):
+            return ""
+
+        def read() -> str:
+            path = app._resolve_session_log(reader, target["workspace_path"], target["session_id"], "")
+            return _last_turn_text(reader, path, since_s) if path is not None else ""
+
+        return await asyncio.to_thread(read)
+
     return Seams(
         deliver=deliver, await_verdict=await_verdict, interrupt=interrupt, pane_state=pane_state,
         awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, resolve_pane=resolve_pane, broadcast=broadcast,
@@ -277,9 +296,19 @@ def default_seams() -> Seams:
         pane_directory=pane_directory, inherit_taint=inherit_taint,
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
         agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
-        wake_target=wake_target, windows_open=windows_open, wake=wake,
+        wake_target=wake_target, windows_open=windows_open, wake=wake, turn_text=turn_text,
         is_login_pane=login_panes.is_login_pane,
     )
+
+
+def _last_turn_text(reader: Any, path: Path, since_s: float) -> str:
+    """Text of the last turn in ``path`` that ended at or after ``since_s`` ("" when none)."""
+    text = ""
+    for event in reader.parse_activity(path, set()):
+        when = parse_event_time(event.timestamp)
+        if event.event_type == "turn_complete" and event.text.strip() and when is not None and when >= since_s:
+            text = event.text
+    return text
 
 
 def _host_ctx() -> Any:
@@ -351,12 +380,13 @@ async def wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict[
     return result
 
 
-def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> None:
+def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> list[str]:
     """Retire the records the woken pane replaced: the ones of the same conversation that no
     window holds. Left in place, the next restore of the workspace would bring the
-    conversation back a second time."""
+    conversation back a second time. Returns the retired pane ids."""
     from .. import agent_messaging, app
 
+    retired: list[str] = []
     project = app.project_store.peek(workspace_path)
     for record in list(project.panes if project else []):
         if record.pane_id == keep or getattr(record, "spawn_status", "") == "removed" \
@@ -364,6 +394,23 @@ def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> None:
                 or agent_messaging.current(record.pane_id) is not None:
             continue
         app.project_store.record_pane_unspawn_by_id(workspace_path, pane_id=record.pane_id)
+        retired.append(record.pane_id)
+    return retired
+
+
+async def _hand_over_jobs(retired: list[str], pane_id: str, session_id: str) -> None:
+    """Move the scheduled jobs of the panes a wake replaced onto the woken pane.
+
+    The spawn itself cannot: its records were still live when it was recorded, and it names
+    no previous pane. The session check already passed, so this is the same hop a rebuild
+    makes. The wake succeeded either way."""
+    from .. import scheduler
+
+    for previous in retired:
+        try:
+            await scheduler.get_service().rebind_after_rebuild(previous, pane_id, session_id, session_id)
+        except Exception:  # noqa: BLE001
+            log.exception("channels: scheduled jobs of %s did not follow the wake", previous)
 
 
 async def _open_onto_session(record: Any, workspace_path: str, session_id: str) -> dict[str, Any]:
@@ -386,7 +433,8 @@ async def _open_onto_session(record: Any, workspace_path: str, session_id: str) 
     # disk before the spawn; a window that answers otherwise is not taken on trust.
     if not new_pane_id or opened.get("resumed_session_id") != session_id:
         return {"ok": False, "code": "session-mismatch", "started": True}
-    await asyncio.to_thread(_retire_superseded, workspace_path, session_id, new_pane_id)
+    retired = await asyncio.to_thread(_retire_superseded, workspace_path, session_id, new_pane_id)
+    await _hand_over_jobs(retired, new_pane_id, session_id)
     return {"ok": True, "pane_id": new_pane_id}
 
 
@@ -394,14 +442,15 @@ async def _wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict
     """Bring a pane that is not online back onto its own conversation (the chat's wake).
 
     Refused before anything opens, with ``started`` False: no Navide window, no record of
-    the conversation, a conversation the CLI cannot resume, a CLI out of quota (the cached
-    reading only), or Navide set never to resume (opening the window would start every pane
-    of the workspace fresh). Then the workspace's window is opened if needed, and the pane is
+    the conversation, a conversation the CLI cannot resume, an API key that might not be the
+    pane's own, a CLI out of quota (the cached reading only; a pane on a key does not spend
+    it), or Navide set never to resume (opening the window would start every pane of the
+    workspace fresh). Then the workspace's window is opened if needed, and the pane is
     opened in place onto that same session: its placeholder when the window restored one,
     otherwise a pane the window opens onto the session. It succeeds only when the pane was
     launched on exactly ``session_id``; a conversation open in another pane is never opened
     a second time."""
-    from .. import app, quota_failover
+    from .. import api_key_accounts, app, quota_failover
     from ..mcp_server import server as mcp
 
     if not app.live_main_window_ids():
@@ -413,8 +462,12 @@ async def _wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict
     refusal = await asyncio.to_thread(mcp._refuse_unresumable_session, agent_key, workspace_path, session_id)
     if refusal:
         return {"ok": False, "code": str(refusal.get("error_code") or "no-record"), "started": False}
-    if quota_failover.snapshot_exhausted(await mcp._cached_usage_snapshot(agent_key)):
+    key = await asyncio.to_thread(api_key_accounts.wake_verdict, agent_key, getattr(record, "profile_id", "") or "")
+    if key == "unclear":
+        return {"ok": False, "code": "key-account-unclear", "started": False}
+    if key != "key" and quota_failover.snapshot_exhausted(await mcp._cached_usage_snapshot(agent_key)):
         return {"ok": False, "code": "quota", "agent": agent_key, "started": False}
+    billed = {"paid": True} if key == "key" else {}
     settings = await asyncio.to_thread(app.ui_settings_store.get)
     behavior = (settings or {}).get(RESUME_BEHAVIOR_KEY)
     if behavior == "never":
@@ -442,7 +495,8 @@ async def _wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict
         # in case the conversation came back in a pane under another record meanwhile.
         if await asyncio.to_thread(_session_open_elsewhere, pane_id, workspace_path, session_id):
             return {"ok": False, "code": "session-open-elsewhere", "started": True}
-        return await _open_onto_session(record, workspace_path, session_id)
+        result = await _open_onto_session(record, workspace_path, session_id)
+        return {**result, **billed} if result["ok"] else result
     # The window's own restore may have brought the conversation back in another pane.
     if await asyncio.to_thread(_session_open_elsewhere, entry.pane_id, workspace_path, session_id):
         return {"ok": False, "code": "session-open-elsewhere", "started": True}
@@ -455,7 +509,7 @@ async def _wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict
         return {"ok": False, "code": "fresh-refused", "started": True}
     if opened.get("launched_session_id") != session_id:
         return {"ok": False, "code": "session-mismatch", "started": True}
-    return {"ok": True, "pane_id": opened["pane"].pane_id}
+    return {"ok": True, "pane_id": opened["pane"].pane_id, **billed}
 
 
 async def start() -> None:

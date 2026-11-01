@@ -75,6 +75,8 @@ interface Props {
   /** Epoch ms of the heuristic quota-reset estimate (loop start + 5h Claude
    *  session window) shown on the running badge as an approximate time. */
   loopEstimateResetAt?: number | null
+  /** The estimate is the account's weekly reset, not the 5-hour guess. */
+  loopEstimateWeekly?: boolean
   /** Runtime-only login-expired badge — lit when the pane's CLI reported an
    *  expired login; clicking it asks App.vue to re-send the login command. */
   loginExpired?: boolean
@@ -616,7 +618,9 @@ const loopBadge = computed(() => {
   if (props.loopEstimateResetAt != null) {
     return {
       textKey: 'pane.terminal.loop-badge-estimate' as string | null,
-      titleKey: 'pane.terminal.loop-estimate-tooltip',
+      titleKey: props.loopEstimateWeekly
+        ? 'pane.terminal.loop-estimate-weekly-tooltip'
+        : 'pane.terminal.loop-estimate-tooltip',
       time: formatLoopTime(props.loopEstimateResetAt)
     }
   }

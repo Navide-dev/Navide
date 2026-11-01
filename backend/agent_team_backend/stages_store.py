@@ -717,6 +717,10 @@ class StagesStore:
             ],
         }
 
+    def pipeline_record(self, pipeline_id: str) -> dict[str, Any]:
+        """One pipeline as stored, graph included. StoreNotFound when absent."""
+        return self._get_pipeline(self._read_doc(), pipeline_id)
+
     def imported_from(self, pipeline_id: str | None) -> dict[str, Any] | None:
         """The import record of a pipeline ({kind, importedAt, workflow}), or
         None for one made in Navide or not found."""

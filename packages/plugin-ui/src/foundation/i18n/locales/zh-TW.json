@@ -1021,6 +1021,7 @@
       "loop-badge-estimate": "∞ Loop · ~{time}",
       "loop-badge-resume": "∞ {time} 續跑",
       "loop-estimate-tooltip": "額度重置時間估計約 {time}（依 5 小時工作階段視窗推算）；若撞到上限訊息會換成準確時間。點擊標籤可關閉 Loop",
+      "loop-estimate-weekly-tooltip": "週額度於 {time} 重置；此帳號沒有 5 小時窗口。點擊標籤可關閉 Loop",
       "loop-paused-notify-title": "Loop 已暫停",
       "loop-paused-notify-body": "已達工作階段上限，預計 {time} 自動續跑（點擊 Loop 標籤可立即續跑）",
       "loop-unparseable-notify-title": "Loop 已達工作階段上限",
@@ -1735,7 +1736,11 @@
           "title": "狀態徽章",
           "summary": "替九種面板狀態各自重新命名並選顏色，中文、英文與日文名稱可分開填。"
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhook",
+        "summary": "讓其他系統用 HTTP 啟動 Pipeline，以金鑰或 GitHub 簽章驗證。"
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "用鎖定畫面蓋住所有視窗，以 Touch ID、Windows Hello 或 PIN 解鎖"
         },
@@ -2653,9 +2658,9 @@
       "custom-colors": "自訂顏色",
       "reset-to-defaults": "↺ 重設為預設值",
       "tweaks-hint": "自訂調整會疊加在目前主題上，切換主題時仍會保留。",
-      "environment": "環境",
-      "environment-hint": "重新執行首次啟動的環境偵測精靈（檢查 Homebrew / Node / CLI / Ollama 等）。",
-      "rerun-env-check": "↻ 重新執行環境檢測",
+      "environment": "設定精靈",
+      "environment-hint": "重新開啟首次啟動精靈，安裝 Agent CLI 並檢視權限。",
+      "rerun-env-check": "↻ 重新開啟設定精靈",
       "backend-timeout": "後端啟動逾時",
       "backend-timeout-hint": "啟動或重啟時等待後端變為健康狀態的時間，逾時就放棄。較慢的機器可拉長此值（15–120 秒）。",
       "backend-timeout-label": "逾時秒數",
@@ -2816,14 +2821,14 @@
         "intro": "設定視窗的十九個分頁分別管什麼、Navide Cloud 怎麼把幾台機器接成一個私有網路，以及選單、獨立視窗、用量統計與資源維護這些散在主畫面之外的系統面。",
         "s1": {
           "title": "設定總覽",
-          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>25 個分頁</strong>。",
+          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>26 個分頁</strong>。",
           "h1": "搜尋框",
           "p2": "側欄標題底下有一個搜尋框，提示字是 <code>搜尋設定…</code>。它<strong>跨分頁</strong>比對設定項的標題、所屬區塊與關鍵字（使用目前介面語言與已收錄的關鍵字），最多列 8 筆；點一筆會切到那個分頁並捲到對應區塊（「儲存空間」那筆例外：它會關掉設定、直接開「資源控管」），沒命中時顯示 <code>找不到相符設定</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜尋索引不是全覆蓋",
             "text": "索引是一份人工維護的清單，<strong>{layout}、{notifications}、{security}、{channels} 這四個分頁沒有任何條目</strong>，搜尋不到它們裡面的東西，得自己點進去。CLI Agents 的條目點下去會直接開啟某一家的設定抽屜（見「CLI Agent 與帳號」分頁）。"
           },
-          "h2": "二十五個分頁",
+          "h2": "二十六個分頁",
           "tabTable": {
             "group": "分組",
             "tab": "分頁",
@@ -2886,6 +2891,10 @@
             "analyzer": {
               "what": "本機推論後端、模型下載、模型評測",
               "more": "本頁第 4 章"
+            },
+            "webhooks": {
+              "what": "讓其他系統用 HTTP 或從 GitHub 啟動 Pipeline 的觸發，包含金鑰、上限和活動紀錄",
+              "more": "無人值守和 Linux 金鑰的影響，會在開啟當下說明。"
             },
             "security": {
               "what": "Navide Guard 的規則與等級、受保護分支、自訂規則，以及一般終端機的指令防護",
@@ -8322,7 +8331,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "訂閱額度已用完",
+          "title": "已達用量上限",
           "back-at": "{time} 恢復",
           "back-unknown": "重置時間不明",
           "wait": "等待重置"
@@ -8390,8 +8399,8 @@
           "invalid-name": "請輸入 60 個字元以內的名稱。",
           "invalid-reminder": "請輸入大於零的每月預算備註金額。",
           "unsupported-agent": "這個 CLI 目前還不能使用 API key。",
-          "store-failed": "無法儲存到這台電腦的鑰匙圈。",
-          "secret-missing": "鑰匙圈裡已沒有這組金鑰，請重新貼上。",
+          "store-failed": "無法儲存到這台電腦。",
+          "secret-missing": "這台電腦上已沒有這組金鑰，請重新貼上。",
           "not-found": "這組 API key 已不存在。",
           "main-window-only": "API key 只能在設定中管理。",
           "internal-error": "發生錯誤，請再試一次。",
@@ -9297,7 +9306,7 @@
     "install-foundation-tools": "安裝所有 Agent 運作所需的基礎工具…",
     "agent-cli-required": "至少需要一個 Agent CLI…",
     "analyzer-requires-ollama": "分析器需要 Ollama…",
-    "download-model": "下載任意一個模型；所有已安裝的模型都可使用…",
+    "download-model": "下載任意一個模型即可；所有已安裝的模型都可使用。",
     "review-instructions": "點擊「開始審查」以分析…",
     "match-case": "區分大小寫（Aa）",
     "replace-all-truncated": "結果已截斷，請先縮小搜尋範圍再執行全部取代",
@@ -9447,6 +9456,9 @@
         "api-key-takeover-paused": "切換紀錄暫時寫不進去，自動切換已暫停，沒有換到 API key 帳號。",
         "api-key-takeover-unrecorded": "無法記錄換到 API key 帳號的動作，所以沒有換。",
         "api-key-takeover-failed": "換到 API key 帳號失敗，沒有換。這次仍計入自動切換次數。",
+        "folder-login-takeover": "pane 已換到另一個訂閱帳號。",
+        "folder-login-takeover-unrecorded": "無法記錄換到另一個訂閱帳號的動作，所以沒有換。",
+        "folder-login-takeover-failed": "換到另一個訂閱帳號失敗，沒有換。這次仍計入自動切換次數。",
         "no-candidate": "沒有可切換的帳號。可登入其他帳號，或等待重置。",
         "auto_budget_exhausted": "已達自動切換上限。可手動切換，或等窗口過期。",
         "chained-exhaustion": "{target} 也已耗盡。未再嘗試其他帳號。",
@@ -9802,9 +9814,11 @@
     "failed": "無法接回這段對話，其歷史紀錄可能已不存在"
   },
   "cli-account": {
-    "api-key-takeover-partial": "額度已用完，新 pane 會用 {name}，改為依用量計費。有 {count} 個忙碌中的 pane 維持原狀。",
+    "api-key-takeover-partial": "額度已用完，新 pane 會用 {name}，改為依用量計費。維持原狀的 pane：{count} 個。",
     "api-key-login-back": "訂閱額度已恢復。pane 仍在使用 API key，要換回請到帳號頁。",
     "api-key-takeover": "額度已用完，pane 已換到 {name}，改為依用量計費。額度重置後請到帳號頁換回。",
+    "folder-login-takeover": "額度已用完，pane 已換到 {name}，這個訂閱帳號還有額度。",
+    "folder-login-takeover-partial": "額度已用完，新 pane 會用 {name}，這個訂閱帳號還有額度。維持原狀的 pane：{count} 個。",
     "default": "原始登入",
     "switch-title": "切換帳號",
     "swap-failed": "帳號切換失敗，仍使用原本的帳號。",
@@ -10136,6 +10150,8 @@
     "window-left-pct": "{label} 剩 {pct}",
     "window-left-used": "{label}：剩 {pct}（已用 {used}）",
     "window-claude-session": "工作階段（5 小時）",
+    "window-unlimited": "無限",
+    "window-not-reported": "未回報",
     "window-claude-weekly": "每週（所有模型）",
     "window-claude-weekly-model": "每週（{scope}）",
     "parked-not-measured-hint": "停放中：Claude Code 只回報目前使用的帳號。把這個帳號登入到自己的資料夾，就能即時讀取額度。",
@@ -10208,13 +10224,15 @@
       "environment": "設定你的開發環境",
       "agents": "接上你的 Agent CLI",
       "permissions": "在這台電腦上設定 Navide",
-      "ready": "一切就緒"
+      "ready": "一切就緒",
+      "ready-locked": "還差一步"
     },
     "aside": {
       "environment": "Navide 會在真實終端機裡驅動真實的 CLI，這些工具就是它的基礎。",
       "agents": "你開的每個面板都會跑其中一個 agent，先裝一個就能開始。",
       "permissions": "授予 Navide 操作這台電腦所需要的權限。",
-      "ready": "檢查都通過了。第一次使用時，接著會有一段可以隨時略過的簡短導覽，帶你挑工作區、開出第一個 Agent。"
+      "ready": "檢查都通過了。第一次使用時，接著會有一段可以隨時略過的簡短導覽，帶你挑工作區、開出第一個 Agent。",
+      "ready-locked": "至少安裝一個 Agent CLI 才能開啟 Navide。也可以先略過，之後再安裝。"
     },
     "install": "安裝",
     "installing": "安裝中…",
@@ -10231,9 +10249,9 @@
     "notif-test-body": "通知已開啟，agent 有動靜就會通知你。",
     "perm": {
       "automation": {
-        "title": "允許 Navide 在終端機執行安裝指令",
-        "desc": "有些 CLI 必須在真正的終端機裡安裝。開啟後，Navide 能替你開啟終端機並輸入指令。",
-        "why": "macOS 稱之為「自動化」。Navide 只會送出你按下安裝的那道指令，不會讀取終端機視窗裡的內容。",
+        "title": "允許 Navide 在 Terminal 開啟指令",
+        "desc": "少數動作（例如 CLI 診斷，或內建終端機無法啟動時的安裝）會開啟 Terminal 並替你輸入指令。",
+        "why": "macOS 稱這項權限為「自動化」。Navide 只會傳送你按下的指令，絕不會讀取終端機視窗的內容。",
         "denied": "終端機控制被拒絕。請到系統設定開啟後重新偵測。",
         "pane-hint": "在「隱私權與安全性 → 自動化」的 Navide 下開啟 Terminal。"
       },
@@ -12727,11 +12745,11 @@
       "community-node": "社群節點，由 agent 依它的參數執行。",
       "merge-combine": "「{mode}」模式的 Merge 會合併資料，由 agent 依它的合併規則執行。",
       "role-trigger-schedule": "在 n8n 裡依排程執行。請手動啟動流程，或在每輪消耗 ▸ 排程新增動作為「啟動 Pipeline」的排程。",
-      "role-trigger-webhook": "在 n8n 裡由 HTTP 請求啟動。Navide 還沒有 webhook 觸發。",
+      "role-trigger-webhook": "在 n8n 裡由 HTTP 請求啟動。請到「設定 → Webhook」建立觸發。",
       "role-trigger-error": "n8n 的錯誤工作流在 Navide 還沒有對應的功能。",
       "role-trigger-app": "在 n8n 裡由應用程式事件啟動。Navide 還沒有應用程式觸發。",
       "role-subworkflow": "會呼叫另一個尚未匯入的 n8n 工作流。請把那個工作流也一起貼上，或先匯入它。",
-      "role-respond": "回應 n8n 的 webhook。Navide 還沒有 webhook 觸發。",
+      "role-respond": "回應 n8n 的 webhook。Navide 的觸發只回 202，不會回傳結果。",
       "error-workflow": "這個工作流就是它自己的錯誤工作流。某個步驟失敗時，後面的步驟會經由錯誤連線執行。",
       "recursive-subworkflow": "會呼叫 n8n 工作流 {workflowId}，而它又會回頭呼叫這個工作流。子 Pipeline 不能執行自己，所以這個呼叫保留待確認。",
       "tool-pipeline": "這是會呼叫 n8n 工作流 {workflowId} 的 agent 工具，該工作流已匯入為流程 {pipelineId}。流程不能當成工具呼叫，所以改在步驟指示裡寫明它。",
@@ -12781,6 +12799,167 @@
       "internal": "轉換後的流程圖無效。這是匯入器的錯誤。",
       "too-large": "這個工作流有 {sizeMb} MB，一次匯入最多 {limitMb} MB。",
       "store-refused": "無法儲存工作流「{workflow}」，所以沒有匯入任何內容：{problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhook",
+    "guardOff": "請先到「設定 → 安全性」開啟 Navide Guard。沒開就無法啟用 webhook，Guard 關閉時收到的請求一律拒絕。",
+    "portTaken": "Navide 無法開始監聽：{error}。請釋放這個 port 後再開啟一次。Navide 不會換 port，因為呼叫端用的就是這個。",
+    "enabled": {
+      "title": "接受 webhook",
+      "desc": "讓其他系統用 HTTP 啟動 Pipeline。這裡開啟、而且有啟用中的觸發時才會監聽。Navide 只在這台電腦上監聽，要從外部連進來請自己架 tunnel。Navide 要開著，而且有視窗開著該工作區。"
+    },
+    "host": {
+      "title": "對外主機名稱",
+      "desc": "tunnel 使用的名稱。其他 Host 的請求一律拒絕。只有這台電腦會呼叫時請留空。",
+      "placeholder": "hook.example.com",
+      "warning": "架了 tunnel 之後，網路上任何人都打得到這個位址，能擋住他們的就只有每個觸發的金鑰或簽章。"
+    },
+    "save": "儲存",
+    "cancel": "取消",
+    "create": "建立觸發",
+    "copy": "複製",
+    "copied": "已複製",
+    "delete": "刪除",
+    "deleteConfirm": "確定永久刪除？",
+    "turnOn": "開啟",
+    "more": "選項",
+    "triggers": "觸發",
+    "new": "新增觸發",
+    "needsWorkspace": "請先開啟工作區，觸發要在工作區裡執行。",
+    "empty": {
+      "title": "還沒有觸發",
+      "desc": "觸發把一個位址接到一條 Pipeline：呼叫這個位址就開始一次 run。"
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "表單"
+    },
+    "form": {
+      "name": "名稱",
+      "source": "來源",
+      "pipeline": "Pipeline",
+      "workspace": "工作區",
+      "events": "事件",
+      "limits": "上限",
+      "timeout": "等你確認",
+      "eventsHint": "只有勾選的事件會開跑。GitHub 的 ping 測試會回應，但不開跑。",
+      "noGate": "不經核准就開跑。第一步不是核准 Gate，所以請求一到就會啟動 agent，外部內容會在沒有人看過的情況下送到它手上。",
+      "default": "這個觸發開跑的 run，每個工具呼叫都會等你確認。逾時沒有回應，run 就會中止，不會自動放行。手機和聊天頻道無法核准 webhook run。只支援 Claude Code。",
+      "fields": "欄位",
+      "fieldLabel": "標籤",
+      "fieldType": "類型",
+      "required": "必填",
+      "removeField": "移除",
+      "addField": "新增欄位",
+      "options": "選項，用逗號分隔",
+      "fieldsHint": "不支援檔案、密碼和自訂 HTML。",
+      "public": "允許從這台電腦以外開啟這張表單。位址會留在瀏覽紀錄和 tunnel 的 log，拿到的人都能開跑。不勾選時只有這台電腦能開。"
+    },
+    "perMinute": "次／分鐘",
+    "perDay": "次／天",
+    "minutes": "分鐘等待",
+    "minutesUnit": "分鐘",
+    "rate": "{minute} 次／分・{day} 次／天",
+    "enable": "啟用 {name}",
+    "state": {
+      "off": "關閉",
+      "listener-off": "已啟用，未監聽",
+      "ready": "就緒",
+      "running": "執行中",
+      "waiting": "等你確認・{minutes} 分鐘後中止"
+    },
+    "reveal": {
+      "titleKey": "{name} 的金鑰",
+      "titleSecret": "{name} 的 secret",
+      "once": "請現在複製。Navide 不保留可讀的金鑰，之後不會再顯示。",
+      "noAddress": "啟用觸發後，位址會顯示在它的列上。",
+      "url": "位址",
+      "key": "金鑰",
+      "secret": "Secret",
+      "copyCurl": "複製測試指令",
+      "done": "我已保存",
+      "githubHint": "到 GitHub 儲存庫的 Settings → Webhooks 貼上這兩項，Content type 選 application/json。位址必須是公開的，請先在上方設定主機名稱。",
+      "titleForm": "{name} 的位址",
+      "formHint": "這個位址就是唯一的金鑰，拿到的人都能開啟表單。請像密碼一樣分享。"
+    },
+    "rotateKey": "更換金鑰",
+    "rotateSecret": "更換 secret",
+    "unattended": {
+      "chip": "無人值守",
+      "title": "無人值守",
+      "desc": "預設關閉。這個觸發開跑的 pane 會跳過權限確認。開啟時會說明影響。",
+      "unsupported": "Windows 目前還不支援。",
+      "confirmTitle": "開啟無人值守之前",
+      "skips": "agent 會跳過權限確認，沒有人會確認它的工具呼叫。",
+      "external": "它處理的是外部內容，這些內容可能試圖操控它。",
+      "scripts": "Guard 只攔得到認得的指令，擋不住 agent 先寫腳本再執行。",
+      "hook": "Guard 的 hook 無法回應時會拒絕這次呼叫；但 hook 程序本身被殺掉或卡住時，呼叫會直接放行。",
+      "tick": "我了解 agent 會在沒有確認的情況下處理外部內容。"
+    },
+    "weakKey": {
+      "title": "在 Linux 上，這個 secret 的保護較弱",
+      "body": "它的金鑰放在只靠檔案權限保護的檔案裡，以你的身分執行的程式都讀得到。macOS 和 Windows 則放在系統的保護區。",
+      "tick": "我了解，要啟用這個觸發。"
+    },
+    "log": {
+      "title": "活動紀錄",
+      "empty": "還沒有紀錄。"
+    },
+    "refused": {
+      "vendor-refused": "這個版本的 webhook 只能用 Claude Code，每個步驟都要用它。Codex 沒有每個工具呼叫都詢問的模式，其他 CLI 還沒有用 Guard 實測過。",
+      "no-gate": "這條 Pipeline 的第一步不是核准 Gate。請加上 Gate，或重新建立觸發並勾選「不經核准就開跑」。",
+      "pipeline-missing": "這個觸發綁定的 Pipeline 已不存在。"
+    },
+    "error": {
+      "GUARD_OFF": "請先開啟 Navide Guard。",
+      "KEY_UNAVAILABLE": "連不上系統的金鑰保護區，請解鎖後再試一次。",
+      "UNATTENDED_UNSUPPORTED": "Windows 目前還不支援。",
+      "NOT_FOUND": "這個觸發已不存在。",
+      "BAD_REQUEST": "請檢查數值。上限是每分鐘 60 次、每天 500 次，等待時間是 5 到 240 分鐘。",
+      "generic": "操作沒有成功，請再試一次。"
+    },
+    "outcome": {
+      "accepted": "已接受",
+      "started": "已開跑",
+      "start-failed": "沒有開跑",
+      "duplicate": "與之前相同的投遞，未開跑",
+      "ping": "GitHub ping",
+      "event-ignored": "事件未勾選",
+      "daily-limit": "已達每日上限",
+      "rate-limited": "請求過多",
+      "bad-key": "金鑰錯誤",
+      "bad-signature": "簽章錯誤",
+      "run-active": "已有 run 在執行",
+      "no-window": "沒有視窗開著工作區",
+      "app-locked": "App Lock 鎖定中",
+      "guard-off": "Guard 關閉中",
+      "vendor-refused": "Pipeline 使用不支援的 CLI",
+      "no-gate": "沒有核准 Gate",
+      "awaiting-approval": "等你確認",
+      "approval-timeout": "沒有人回應，run 已中止",
+      "run-timeout": "run 達到 4 小時上限",
+      "interrupted": "run 被中斷",
+      "secret-lost": "secret 已無法讀取，觸發已關閉。更換 secret 後才能再用。",
+      "key-unavailable": "連不上金鑰保護區",
+      "unattended-on": "已開啟無人值守",
+      "unattended-off": "已關閉無人值守",
+      "no-gate-acknowledged": "已勾選不經核准就開跑",
+      "form-invalid": "表單內容不正確",
+      "form-public": "表單已設為公開",
+      "bad-csrf": "表單沒有有效的 token",
+      "cross-site": "表單來自其他網站"
+    },
+    "rotateForm": "更換位址",
+    "fieldType": {
+      "text": "文字",
+      "textarea": "多行文字",
+      "number": "數字",
+      "email": "Email",
+      "date": "日期",
+      "select": "下拉選單",
+      "checkbox": "勾選"
     }
   }
 }

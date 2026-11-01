@@ -131,6 +131,9 @@ async function exitRun(
   await flushPromises()
 }
 
+const listOf = (...names: string[]): string =>
+  new Intl.ListFormat(i18n.global.locale.value, { style: 'long', type: 'conjunction' }).format(names)
+
 describe('OnboardingWizard', () => {
   let wrapper: VueWrapper | undefined
 
@@ -353,8 +356,9 @@ describe('OnboardingWizard', () => {
     mock.setResponse('onboarding.status', bareMac())
     wrapper = await open(mock)
 
+    // The whole chain Install runs, not only the nearest link.
     expect(wrapper.get('.oc-card.expanded .oc-notice').text()).toBe(
-      i18n.global.t('onboard.installs-first', { names: 'Node.js' })
+      i18n.global.t('onboard.installs-first', { names: listOf('Homebrew', 'Node.js') })
     )
     // No install has been attempted, and there is no card to jump to.
     expect(installCount(mock)).toBe(0)
@@ -400,6 +404,79 @@ describe('OnboardingWizard', () => {
     await flushPromises()
 
     expect(wrapper.findAll('.oc-card')[0].find('.oc-alert').exists()).toBe(true)
+  })
+
+  it('reports a shared prerequisite failure only on the card that ran it', async () => {
+    const s = bareMac()
+    s.deps.push(dep({ id: 'qwen', label: 'Qwen', group: 'agent_cli', optional: true,
+      requirements: [{ name: 'npm', ok: false }] }))
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', s)
+    withRunsExiting(mock, { exitCode: () => 1 })
+    wrapper = await open(mock)
+
+    await installButton(wrapper).trigger('click')
+    await flushPromises()
+    await wrapper.findAll('.oc-head')[1].trigger('click')
+    await flushPromises()
+
+    // Qwen was never installed: it still offers its own Install, no red "!".
+    expect(wrapper.findAll('.oc-card')[1].find('.oc-error').exists()).toBe(false)
+    expect(wrapper.findAll('.oc-card')[0].find('.oc-alert').exists()).toBe(true)
+    expect(wrapper.findAll('.oc-alert')).toHaveLength(1)
+  })
+
+  it('announces nothing on a CLI that is already installed', async () => {
+    const s = bareMac()
+    s.deps = s.deps.map((d) => (d.id === 'claude' ? { ...d, status: 'ok' as const, version: '2.1.0' } : d))
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', s)
+    wrapper = await open(mock)
+
+    await wrapper.findAll('.oc-head')[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('.oc-card.expanded').classes()).toContain('done')
+    expect(wrapper.find('.oc-notice').exists()).toBe(false)
+  })
+
+  it('does not call a CLI optional on the step that needs one', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', bareMac())
+    wrapper = await open(mock)
+
+    expect(wrapper.find('.oc-tag').exists()).toBe(false)
+  })
+
+  describe('the Ready aside', () => {
+    const goToReady = async (w: VueWrapper) => {
+      const steps = w.findAll('.ob-steps button')
+      await steps[steps.length - 1].trigger('click')
+      await flushPromises()
+    }
+
+    it('says what is missing while Open App is locked', async () => {
+      const mock = createMockBackend('connected')
+      mock.setResponse('onboarding.status', status())
+      wrapper = await open(mock)
+      await goToReady(wrapper)
+
+      expect(wrapper.text()).toContain(i18n.global.t('onboard.aside.ready-locked'))
+      expect(wrapper.get('.ob-head').text()).toBe(i18n.global.t('onboard.head.ready-locked'))
+      expect(wrapper.text()).not.toContain(i18n.global.t('onboard.aside.ready'))
+    })
+
+    it('keeps its message once Open App is available', async () => {
+      const s = status()
+      s.gate = { ...s.gate, has_any_cli: true, all_required_ready: true }
+      const mock = createMockBackend('connected')
+      mock.setResponse('onboarding.status', s)
+      wrapper = await open(mock)
+      await goToReady(wrapper)
+
+      expect(wrapper.text()).toContain(i18n.global.t('onboard.aside.ready'))
+      expect(wrapper.get('.ob-head').text()).toBe(i18n.global.t('onboard.head.ready'))
+    })
   })
 
   // ── A prerequisite this app cannot install ──────────────────────────────────

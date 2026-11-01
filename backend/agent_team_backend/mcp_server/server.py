@@ -7405,6 +7405,12 @@ async def cli_usage(ctx: Context, agent: str = "") -> dict[str, Any]:
     error: no standard pane has verified that vendor's credential store yet,
     so nothing is read until the user opens one; its quota is unknown.
 
+    `absentWindows` lists the window kinds a reading proved the account does
+    not have, and is left out otherwise. `["session"]` on a Claude snapshot
+    means no 5-hour limit: read the weekly window as the account's limit. On
+    another vendor it only says the vendor's answer holds no such window. A
+    kind in neither `windows` nor `absentWindows` means no data, not no limit.
+
     This call only reads what Navide already holds and never contacts a
     vendor: each snapshot is what the background poll last read (about every
     `intervalSec` seconds), and its `fetchedAt` says when. A connection error

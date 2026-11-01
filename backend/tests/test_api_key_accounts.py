@@ -335,6 +335,14 @@ class _Service:
         self.panes = panes if panes is not None else [
             {"paneId": "p1", "credentialSource": "vault"}, {"paneId": "p2", "credentialSource": "vault"},
         ]
+        self.ranked: list[dict] = []
+        self.vetoed: set[str] = set()
+
+    async def candidates(self, agent_key: str) -> list[dict]:
+        return self.ranked
+
+    def _ledger_vetoes(self, agent_key: str, slot_ids: list[str]) -> set[str]:
+        return self.vetoed & set(slot_ids)
 
     def _current_slot(self, agent_key: str) -> str:
         return str(app.cli_profiles_store.list()["defaults"].get(agent_key) or "__default__")
@@ -387,6 +395,23 @@ def test_take_over_moves_panes_and_leaves_the_live_login(
     assert ANTHROPIC_KEY not in json.dumps(events)
     assert calls == []
     assert vault.read_live("claude").secret == live.secret
+
+
+def test_take_over_survives_a_failed_accounts_refresh(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    key = _opened_key(store)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+
+    async def broken(reason: str) -> None:
+        raise RuntimeError("no account view")
+
+    monkeypatch.setattr(ws_handlers, "_broadcast_profiles_changed", broken)
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert service.stopped == ["api-key-takeover"]
+    assert store.get_pane_default("claude") == key
+    assert any(e["type"] == ak.TAKEOVER_EVENT for e in events)
 
 
 def test_take_over_counts_against_the_budget(
@@ -933,6 +958,217 @@ def test_take_over_moves_only_panes_on_the_live_login(
 
     takeover = next(e for e in events if e["type"] == ak.TAKEOVER_EVENT)
     assert takeover["payload"]["paneIds"] == ["live"]
+
+
+# ── A subscription account signed in only in its own folder ──────────────────
+
+
+def _folder_login(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, name: str = "Work",
+) -> str:
+    login = store.create(agent_key="claude", name=name)["id"]
+    signed_in = vault.account_dir_signed_in
+    monkeypatch.setattr(vault, "account_dir_signed_in", lambda slot: slot == login or signed_in(slot))
+    return login
+
+
+def _row(slot: str, tier: str = "fresh-headroom", excluded: str | None = "signed-out", headroom: float = 40.0) -> dict:
+    return {"slotId": slot, "tier": tier, "excluded": excluded, "headroom": headroom}
+
+
+def test_a_folder_login_with_quota_comes_before_the_key(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    _opened_key(store)
+    login = _folder_login(store, vault, monkeypatch)
+    live = LiveCredentials(secret='{"claudeAiOauth":{"accessToken":"t"}}', account=None)
+    vault.write_live("claude", live)
+    calls = _spy(vault, monkeypatch)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(login)]
+
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+
+    assert service.stopped == ["folder-login-takeover"]
+    assert store.get_pane_default("claude") == login
+    takeover = next(e for e in events if e["type"] == ak.TAKEOVER_EVENT)["payload"]
+    assert takeover["profileId"] == login
+    assert takeover["paid"] is False
+    assert takeover["paneIds"] == ["p1", "p2"]
+    assert len(service.store.automatic_swaps("claude", "claude", since=0.0)) == 1
+    # Its slot is empty: a swap would sign the live login out. The pane runs on
+    # the folder instead, reached by the pin the reopen carries.
+    assert calls == []
+    assert vault.read_live("claude").secret == live.secret
+    assert ws_handlers._account_dir_for_spawn("claude", login, login=False) == login
+    env_set, _ = vault.account_dir_spawn_env(login)
+    assert env_set == {"CLAUDE_CONFIG_DIR": str(vault.account_dir_path(login))}
+
+
+def test_the_move_to_a_key_says_it_is_paid(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    _opened_key(store)
+    events = _capture_events(monkeypatch)
+    assert asyncio.run(ak.take_over(_Service(tmp_path), _incident())) is True
+    assert next(e for e in events if e["type"] == ak.TAKEOVER_EVENT)["payload"]["paid"] is True
+
+
+def test_the_folder_login_with_the_most_quota_wins(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    _opened_key(store)
+    low = _folder_login(store, vault, monkeypatch, "Low")
+    high = _folder_login(store, vault, monkeypatch, "High")
+    _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(low, headroom=10.0), _row(high, headroom=70.0)]
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert store.get_pane_default("claude") == high
+
+
+@pytest.mark.parametrize("tier", ["stale-headroom", "reset-expected", "unknown"])
+def test_quota_that_is_not_confirmed_leaves_the_key(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tier: str,
+) -> None:
+    key = _opened_key(store)
+    login = _folder_login(store, vault, monkeypatch)
+    _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(login, tier=tier)]
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert service.stopped == ["api-key-takeover"]
+    assert store.get_pane_default("claude") == key
+
+
+@pytest.mark.parametrize("excluded", ["tried", "expired", "login-pending", "exhausted", "current"])
+def test_a_row_refused_for_another_reason_leaves_the_key(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, excluded: str,
+) -> None:
+    key = _opened_key(store)
+    login = _folder_login(store, vault, monkeypatch)
+    _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(login, excluded=excluded)]
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert store.get_pane_default("claude") == key
+
+
+def test_a_login_with_no_folder_sign_in_leaves_the_key(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    key = _opened_key(store)
+    login = store.create(agent_key="claude", name="Work")["id"]
+    _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(login)]
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert store.get_pane_default("claude") == key
+
+
+def test_a_ledger_that_says_spent_leaves_the_key(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    key = _opened_key(store)
+    login = _folder_login(store, vault, monkeypatch)
+    _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(login)]
+    service.vetoed = {login}
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert store.get_pane_default("claude") == key
+
+
+def test_the_account_that_ran_out_is_not_its_own_rescue(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    key = _opened_key(store)
+    login = _folder_login(store, vault, monkeypatch)
+    store.set_default("claude", login)
+    _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(login)]
+    assert asyncio.run(ak.take_over(service, _incident(outgoing=login))) is True
+    assert store.get_pane_default("claude") == key
+
+
+def test_a_key_row_is_never_taken_for_a_folder_login(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    first = _opened_key(store)
+    other = ak.create("claude", "b", ANTHROPIC_KEY)["id"]
+    _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(other)]
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert store.get_pane_default("claude") == first
+
+
+def test_with_no_key_opened_a_folder_login_changes_nothing(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    login = _folder_login(store, vault, monkeypatch)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(login)]
+    assert asyncio.run(ak.take_over(service, _incident())) is False
+    assert service.stopped == []
+    assert store.get_pane_default("claude") is None
+    assert events == []
+
+
+def test_a_failed_candidate_read_leaves_the_key(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    key = _opened_key(store)
+    _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+
+    async def broken(agent_key: str) -> list[dict]:
+        raise RuntimeError("keychain")
+
+    monkeypatch.setattr(service, "candidates", broken)
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert store.get_pane_default("claude") == key
+
+
+def test_a_folder_move_that_cannot_be_recorded_is_not_made(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    _opened_key(store)
+    login = _folder_login(store, vault, monkeypatch)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(login)]
+
+    def broken(*_: object, **__: object) -> None:
+        raise RuntimeError("disk")
+
+    monkeypatch.setattr(service.store, "record", broken)
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert service.stopped == ["folder-login-takeover-unrecorded"]
+    assert store.get_pane_default("claude") is None
+    assert events == []
+
+
+def test_a_folder_move_that_fails_says_so_as_a_folder_move(
+    store: CliProfilesStore, vault: CredentialVault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    _opened_key(store)
+    login = _folder_login(store, vault, monkeypatch)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+    service.ranked = [_row(login)]
+
+    def broken(auth_scope: str) -> list[dict]:
+        raise RuntimeError("window gone")
+
+    monkeypatch.setattr(service, "_affected_terminals", broken)
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert service.stopped == ["folder-login-takeover-failed"]
+    assert store.get_pane_default("claude") is None
+    assert events == []
 
 
 def test_take_over_never_targets_the_account_that_ran_out(

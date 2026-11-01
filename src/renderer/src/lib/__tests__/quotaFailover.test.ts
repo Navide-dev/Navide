@@ -129,6 +129,47 @@ describe('vendor quota semantics and judgeReading', () => {
     expect(spent.weakestRemaining).toBe(0)
   })
 
+  describe('a window the reading confirms is absent', () => {
+    const claude = quotaSemanticsFor('claude')
+    const absent = { absentWindows: ['session'] }
+
+    it('no longer blocks a positive reading, for either vendor', () => {
+      const v = judgeReading(snap([win('weekly', 30)], absent), claude)
+      expect(v.positive).toBe(true)
+      expect(v.missing).toEqual([])
+      expect(judgeReading(snap([win('weekly', 41)], { ...absent, provider: 'codex' }), quotaSemanticsFor('codex')).positive).toBe(true)
+    })
+
+    it('stays unknown when nobody confirmed it', () => {
+      const v = judgeReading(snap([win('weekly', 30)]), claude)
+      expect(v.positive).toBe(false)
+      expect(v.missing).toEqual(['session'])
+    })
+
+    it('does not lift a spent window', () => {
+      expect(judgeReading(snap([win('weekly', 100)], absent), claude).spent.map((w) => w.kind)).toEqual(['weekly'])
+      const session = judgeReading(snap([win('session', 100), win('weekly', 30)], absent), claude)
+      expect(session.positive).toBe(false)
+      expect(session.spent.map((w) => w.kind)).toEqual(['session'])
+    })
+
+    it('does not excuse a different required window', () => {
+      expect(judgeReading(snap([win('session', 30)], absent), claude).missing).toEqual(['weekly'])
+    })
+
+    it('counts only on a successful read', () => {
+      expect(judgeReading(snap([win('weekly', 30)], { ...absent, status: 'error' }), claude).positive).toBe(false)
+    })
+
+    it('ranks such an account above a stale one', () => {
+      const r = rankCandidates(ctx(), [
+        cand('stale', { reading: fresh('stale', [win('session', 10), win('weekly', 10)], { snapshot: snap([win('session', 10), win('weekly', 10)], { stale: true }) }) }),
+        cand('ultra', { reading: fresh('ultra', [], { snapshot: snap([win('weekly', 30)], absent) }) }),
+      ])
+      expect(r.eligible.map((c) => [c.slotId, c.tier])).toEqual([['ultra', 'fresh-headroom'], ['stale', 'stale-headroom']])
+    })
+  })
+
   it('ignores per-model buckets both ways (a spent Fable-only bucket is not exhaustion)', () => {
     const claude = quotaSemanticsFor('claude')
     const v = judgeReading(snap([win('session', 40), win('weekly', 60), win('weekly-model', 100)]), claude)

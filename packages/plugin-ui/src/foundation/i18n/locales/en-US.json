@@ -1021,6 +1021,7 @@
       "loop-badge-estimate": "∞ Loop · ~{time}",
       "loop-badge-resume": "∞ resumes {time}",
       "loop-estimate-tooltip": "Quota reset estimated around {time} (5-hour session window heuristic); replaced by the exact time if a limit message appears. Click to turn the loop off",
+      "loop-estimate-weekly-tooltip": "Weekly quota resets at {time}; this account has no 5-hour window. Click to turn off Loop",
       "loop-paused-notify-title": "Loop paused",
       "loop-paused-notify-body": "Session limit hit — auto-resume at {time} (click the loop badge to resume now)",
       "loop-unparseable-notify-title": "Loop hit a session limit",
@@ -1735,7 +1736,11 @@
           "title": "Status Badges",
           "summary": "Rename each pane status and pick its colour, per language."
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhooks",
+        "summary": "Start a pipeline from another system over HTTP, with a key or a GitHub signature."
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "Hide every window behind a lock screen and unlock with Touch ID, Windows Hello or a PIN"
         },
@@ -2653,9 +2658,9 @@
       "custom-colors": "Custom colors",
       "reset-to-defaults": "↺ Reset to Defaults",
       "tweaks-hint": "Tweaks are layered on top of the current theme and preserved when switching themes.",
-      "environment": "Environment",
-      "environment-hint": "Re-run the first-launch environment detection wizard (checks Homebrew / Node / CLI / Ollama, etc.).",
-      "rerun-env-check": "↻ Re-run Environment Check",
+      "environment": "Setup Wizard",
+      "environment-hint": "Reopen the first-launch wizard to install agent CLIs and review permissions.",
+      "rerun-env-check": "↻ Reopen Setup Wizard",
       "backend-timeout": "Backend startup timeout",
       "backend-timeout-hint": "How long to wait for the backend to become healthy on startup or restart before giving up. Raise this on slower machines (15–120 seconds).",
       "backend-timeout-label": "Timeout (seconds)",
@@ -2816,14 +2821,14 @@
         "intro": "What each of the nineteen settings tabs controls, how Navide Cloud links several machines into one private network, and the system surfaces that live outside the main screen — the menus, the standalone windows, the usage views and resource upkeep.",
         "s1": {
           "title": "Settings overview",
-          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>25 tabs</strong> in total.",
+          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>26 tabs</strong> in total.",
           "h1": "The search field",
           "p2": "Below the sidebar heading is a search field with the placeholder <code>Search settings…</code>. It matches setting titles, their section and their keywords <strong>across tabs</strong> (using the current interface language and indexed keywords), listing at most 8 results; clicking one switches to that tab and scrolls to the section (with one exception: \"Storage\" closes settings and opens the Resource Manager directly). With no match it shows <code>No matching settings</code>. <kbd class=\"syh-kbd\">Esc</kbd> clears it.",
           "callout": {
             "title": "The search index is not exhaustive",
             "text": "The index is a hand-maintained list, and <strong>the {layout}, {notifications}, {security} and {channels} tabs have no entries at all</strong>, so nothing inside them is searchable — you have to open them yourself. A CLI Agents entry opens one CLI's settings drawer directly (see the \"CLI Agents & Accounts\" topic)."
           },
-          "h2": "The twenty-five tabs",
+          "h2": "The twenty-six tabs",
           "tabTable": {
             "group": "Group",
             "tab": "Tab",
@@ -2886,6 +2891,10 @@
             "analyzer": {
               "what": "The local inference backend, model downloads, model benchmarks",
               "more": "section 4 of this page"
+            },
+            "webhooks": {
+              "what": "Triggers that let another system start a pipeline over HTTP or from GitHub, with their keys, limits and activity",
+              "more": "Unattended runs and the Linux key warning are explained when you turn them on."
             },
             "security": {
               "what": "Navide Guard's rules and levels, protected branches, custom rules, and command protection for plain terminals",
@@ -8322,7 +8331,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "Subscription quota used up",
+          "title": "Usage limit reached",
           "back-at": "Back at {time}",
           "back-unknown": "The reset time is not known",
           "wait": "Wait for reset"
@@ -8390,8 +8399,8 @@
           "invalid-name": "Enter a name of up to 60 characters.",
           "invalid-reminder": "Enter the monthly budget note as an amount above zero.",
           "unsupported-agent": "API keys are not available for this CLI yet.",
-          "store-failed": "Could not save to this computer's keychain.",
-          "secret-missing": "This key is no longer in the keychain. Paste it again.",
+          "store-failed": "Could not save on this computer.",
+          "secret-missing": "This key is no longer on this computer. Paste it again.",
           "not-found": "This API key no longer exists.",
           "main-window-only": "API keys can only be managed in Settings.",
           "internal-error": "Something went wrong. Try again.",
@@ -9297,7 +9306,7 @@
     "install-foundation-tools": "Install the foundational tools required...",
     "agent-cli-required": "At least one Agent CLI...",
     "analyzer-requires-ollama": "Analyzer requires Ollama...",
-    "download-model": "Download any one; any installed model...",
+    "download-model": "Download any one. Navide can use any model you have installed.",
     "review-instructions": "Click Start Review to analyse...",
     "match-case": "Match Case (Aa)",
     "replace-all-truncated": "Results are truncated — narrow the search before replacing all",
@@ -9447,6 +9456,9 @@
         "api-key-takeover-paused": "Automatic switching is paused until the switch history can be written. Nothing moved to the API key account.",
         "api-key-takeover-unrecorded": "The move to the API key account could not be recorded, so nothing moved.",
         "api-key-takeover-failed": "The move to the API key account failed. Nothing moved. It still counts toward the automatic switch limit.",
+        "folder-login-takeover": "Panes moved to another subscription account.",
+        "folder-login-takeover-unrecorded": "The move to the other subscription account could not be recorded, so nothing moved.",
+        "folder-login-takeover-failed": "The move to the other subscription account failed. Nothing moved. It still counts toward the automatic switch limit.",
         "no-candidate": "No account to switch to. Sign in to another account or wait for the reset.",
         "auto_budget_exhausted": "Automatic switch limit reached. Switch manually or wait for the window to pass.",
         "chained-exhaustion": "{target} ran out as well. Nothing else was tried.",
@@ -9802,9 +9814,11 @@
     "failed": "Could not reconnect that conversation — its transcript may no longer exist"
   },
   "cli-account": {
-    "api-key-takeover-partial": "Quota used up. New panes use {name}, billed by usage. {count} busy panes stayed where they were.",
+    "api-key-takeover-partial": "Quota used up. New panes use {name}, billed by usage. Panes that stayed where they were: {count}.",
     "api-key-login-back": "Your subscription quota is back. Panes stay on the API key until you switch back in Accounts.",
     "api-key-takeover": "Quota used up. Panes moved to {name}, billed by usage. Switch back in Accounts after the quota resets.",
+    "folder-login-takeover": "Quota used up. Panes moved to {name}, a subscription account with quota left.",
+    "folder-login-takeover-partial": "Quota used up. New panes use {name}, a subscription account with quota left. Panes that stayed where they were: {count}.",
     "default": "Original login",
     "switch-title": "Switch account",
     "swap-failed": "Account switch failed — the previous account is still active.",
@@ -10136,6 +10150,8 @@
     "window-left-pct": "{label} {pct} left",
     "window-left-used": "{label}: {pct} left ({used} used)",
     "window-claude-session": "Session (5h)",
+    "window-unlimited": "Unlimited",
+    "window-not-reported": "Not reported",
     "window-claude-weekly": "Weekly (all models)",
     "window-claude-weekly-model": "Weekly ({scope})",
     "parked-not-measured-hint": "Parked: Claude Code only reports the account it runs as. Sign this account in to its own folder to read its quota live.",
@@ -10208,13 +10224,15 @@
       "environment": "Set up your development environment",
       "agents": "Bring in your agent CLIs",
       "permissions": "Set up Navide on your computer",
-      "ready": "You're ready to go"
+      "ready": "You're ready to go",
+      "ready-locked": "One more step"
     },
     "aside": {
       "environment": "Navide drives real CLIs in real terminals — these tools are what it runs on.",
       "agents": "Every pane you open runs one of these agents. One is enough to start.",
       "permissions": "Grant the access Navide needs to drive your machine.",
-      "ready": "Everything checks out. The first time through, a short tour you can skip at any point helps you pick a workspace and open your first agent."
+      "ready": "Everything checks out. The first time through, a short tour you can skip at any point helps you pick a workspace and open your first agent.",
+      "ready-locked": "Install at least one agent CLI to open Navide. You can also skip for now and add one later."
     },
     "install": "Install",
     "installing": "Installing…",
@@ -10231,9 +10249,9 @@
     "notif-test-body": "Notifications are on — you'll hear from your agents here.",
     "perm": {
       "automation": {
-        "title": "Allow Navide to run install commands in Terminal",
-        "desc": "Some CLIs must be installed in a real terminal. This lets Navide open Terminal and type the command for you.",
-        "why": "macOS calls this Automation. Navide only ever sends the install command you clicked — it never reads what is in your terminal windows.",
+        "title": "Allow Navide to open commands in Terminal",
+        "desc": "A few actions, such as CLI diagnostics, or installs when the built-in terminal cannot start, open Terminal and type the command for you.",
+        "why": "macOS calls this Automation. Navide only ever sends a command you clicked — it never reads what is in your terminal windows.",
         "denied": "Terminal control was denied. Turn it on in System Settings, then re-detect.",
         "pane-hint": "Enable Terminal under Navide in Privacy & Security → Automation."
       },
@@ -12727,11 +12745,11 @@
       "community-node": "Community node. An agent carries it out from its parameters.",
       "merge-combine": "Merge in “{mode}” mode combines data. An agent carries it out by its merge rule.",
       "role-trigger-schedule": "Runs on a schedule in n8n. Start the pipeline by hand, or schedule it in Turn Stats ▸ Schedule with a “Start a pipeline” job.",
-      "role-trigger-webhook": "Starts from an HTTP request in n8n. Navide has no webhook trigger yet.",
+      "role-trigger-webhook": "Starts from an HTTP request in n8n. Set one up in Settings → Webhooks.",
       "role-trigger-error": "n8n error workflows have no Navide equivalent yet.",
       "role-trigger-app": "Starts from an app event in n8n. Navide has no app triggers yet.",
       "role-subworkflow": "Calls another n8n workflow that is not imported. Paste that workflow too, or import it first.",
-      "role-respond": "Answers an n8n webhook. Navide has no webhook trigger yet.",
+      "role-respond": "Answers an n8n webhook. A Navide trigger answers 202 and sends no result back.",
       "error-workflow": "This workflow is its own error workflow. The steps after it run through error edges when a step fails.",
       "recursive-subworkflow": "Calls the n8n workflow {workflowId}, which calls this workflow back. A sub-pipeline cannot run itself, so this call stays for review.",
       "tool-pipeline": "An agent tool that calls the n8n workflow {workflowId}, imported as the pipeline {pipelineId}. A pipeline cannot be called as a tool, so the step's instructions name it instead.",
@@ -12781,6 +12799,167 @@
       "internal": "The converted graph is invalid. This is a bug in the importer.",
       "too-large": "The workflow is {sizeMb} MB. An import takes at most {limitMb} MB.",
       "store-refused": "The workflow “{workflow}” could not be stored, so nothing was imported: {problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhooks",
+    "guardOff": "Turn on Navide Guard in Settings → Security first. Webhooks stay off without it, and a request that arrives while it is off is refused.",
+    "portTaken": "Navide could not start listening: {error}. Free that port, then turn this on again. Navide does not move to another port, because your callers use this one.",
+    "enabled": {
+      "title": "Accept webhooks",
+      "desc": "Lets another system start a pipeline over HTTP. Nothing listens until this is on and a trigger is enabled. Navide listens on this computer only. To reach it from outside, run your own tunnel to it. Navide has to be open, with a window on the workspace."
+    },
+    "host": {
+      "title": "Public hostname",
+      "desc": "The name your tunnel answers on. Requests naming any other host are refused. Leave empty if only this computer calls Navide.",
+      "placeholder": "hook.example.com",
+      "warning": "With a tunnel, anyone on the internet can reach this address. The key or signature on each trigger is then the only thing stopping them."
+    },
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create trigger",
+    "copy": "Copy",
+    "copied": "Copied",
+    "delete": "Delete",
+    "deleteConfirm": "Delete for good?",
+    "turnOn": "Turn on",
+    "more": "Options",
+    "triggers": "Triggers",
+    "new": "New trigger",
+    "needsWorkspace": "Open a workspace first. A trigger runs in a workspace.",
+    "empty": {
+      "title": "No triggers yet",
+      "desc": "A trigger connects an address to a pipeline: a call to the address starts a run."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "Form"
+    },
+    "form": {
+      "name": "Name",
+      "source": "Source",
+      "pipeline": "Pipeline",
+      "workspace": "Workspace",
+      "events": "Events",
+      "limits": "Limits",
+      "timeout": "Wait for you",
+      "eventsHint": "Only events you tick start a run. GitHub's ping test is answered without one.",
+      "noGate": "Start without approval. The first step is not an approval gate, so a request starts the agent right away. External content reaches it without anyone looking first.",
+      "default": "Every tool call in a run this trigger starts waits for you. If nobody answers in time, the run stops and nothing is approved. Phone and chat channels cannot approve for a webhook run. Claude Code only.",
+      "fields": "Fields",
+      "fieldLabel": "Label",
+      "fieldType": "Type",
+      "required": "Required",
+      "removeField": "Remove",
+      "addField": "Add field",
+      "options": "Choices, separated by commas",
+      "fieldsHint": "Files, passwords and custom HTML are not available.",
+      "public": "Let this form open from outside this computer. Its address will reach browser history and your tunnel's logs, and anyone holding it can start a run. Off, it opens on this computer only."
+    },
+    "perMinute": "per minute",
+    "perDay": "per day",
+    "minutes": "min wait",
+    "minutesUnit": "minutes",
+    "rate": "{minute}/min · {day}/day",
+    "enable": "Enable {name}",
+    "state": {
+      "off": "Off",
+      "listener-off": "Enabled, not listening",
+      "ready": "Ready",
+      "running": "Run in progress",
+      "waiting": "Waiting for you · stops in {minutes} min"
+    },
+    "reveal": {
+      "titleKey": "Key for {name}",
+      "titleSecret": "Secret for {name}",
+      "once": "Copy it now. Navide keeps no readable copy of a key and will not show this one again.",
+      "noAddress": "Turn the trigger on and its address appears in its row.",
+      "url": "Address",
+      "key": "Key",
+      "secret": "Secret",
+      "copyCurl": "Copy a test call",
+      "done": "I have saved it",
+      "githubHint": "In GitHub, open the repository's Settings → Webhooks, paste both, and choose application/json. The address has to be public, so set a hostname above first.",
+      "titleForm": "Address of {name}",
+      "formHint": "This address is the only key: anyone who has it can open the form. Share it the way you would a password."
+    },
+    "rotateKey": "Replace key",
+    "rotateSecret": "Replace secret",
+    "unattended": {
+      "chip": "Unattended",
+      "title": "Run unattended",
+      "desc": "Off by default. Panes of this trigger's runs skip permission prompts. Turning it on explains what that means.",
+      "unsupported": "Not available on Windows yet.",
+      "confirmTitle": "Before running unattended",
+      "skips": "The agent skips permission prompts. Nobody confirms its tool calls.",
+      "external": "It works on external content, and that content can try to steer it.",
+      "scripts": "Guard stops only commands it recognises. It cannot stop an agent that writes a script and then runs it.",
+      "hook": "If Guard's hook cannot answer, the call is refused. If the hook process itself is killed or hangs, the call goes through.",
+      "tick": "I understand the agent runs without confirmation on content from outside."
+    },
+    "weakKey": {
+      "title": "On Linux this secret has weaker protection",
+      "body": "Its key is in a file only permissions protect, so any program running as you can read it. macOS and Windows keep it in the system's protected store.",
+      "tick": "I understand and want to enable this trigger."
+    },
+    "log": {
+      "title": "Activity",
+      "empty": "Nothing recorded yet."
+    },
+    "refused": {
+      "vendor-refused": "Only Claude Code can run from a webhook in this version. Every step has to use it. Codex has no mode that asks before every tool call, and other CLIs have not been tested with Guard.",
+      "no-gate": "The first step of this pipeline is not an approval gate. Add one, or create the trigger again and tick Start without approval.",
+      "pipeline-missing": "This trigger's pipeline no longer exists."
+    },
+    "error": {
+      "GUARD_OFF": "Turn on Navide Guard first.",
+      "KEY_UNAVAILABLE": "The system's key store could not be reached. Unlock it and try again.",
+      "UNATTENDED_UNSUPPORTED": "Not available on Windows yet.",
+      "NOT_FOUND": "This trigger no longer exists.",
+      "BAD_REQUEST": "Check the values. Limits go up to 60 per minute and 500 per day, and the wait from 5 to 240 minutes.",
+      "generic": "That did not work. Try again."
+    },
+    "outcome": {
+      "accepted": "Accepted",
+      "started": "Run started",
+      "start-failed": "Run did not start",
+      "duplicate": "Same delivery as before, not run",
+      "ping": "GitHub ping",
+      "event-ignored": "Event not ticked",
+      "daily-limit": "Daily limit reached",
+      "rate-limited": "Too many requests",
+      "bad-key": "Wrong key",
+      "bad-signature": "Wrong signature",
+      "run-active": "A run was already going",
+      "no-window": "No window on the workspace",
+      "app-locked": "App Lock was on",
+      "guard-off": "Guard was off",
+      "vendor-refused": "Pipeline uses an unsupported CLI",
+      "no-gate": "No approval gate",
+      "awaiting-approval": "Waiting for you",
+      "approval-timeout": "Nobody answered, run stopped",
+      "run-timeout": "Run reached its 4-hour limit",
+      "interrupted": "Run interrupted",
+      "secret-lost": "Secret can no longer be read, trigger turned off. Replace the secret to use it again.",
+      "key-unavailable": "Key store could not be reached",
+      "unattended-on": "Unattended turned on",
+      "unattended-off": "Unattended turned off",
+      "no-gate-acknowledged": "Start without approval ticked",
+      "form-invalid": "Form sent with invalid values",
+      "form-public": "Form made public",
+      "bad-csrf": "Form sent without a valid token",
+      "cross-site": "Form sent from another site"
+    },
+    "rotateForm": "Replace address",
+    "fieldType": {
+      "text": "Text",
+      "textarea": "Long text",
+      "number": "Number",
+      "email": "Email",
+      "date": "Date",
+      "select": "List",
+      "checkbox": "Checkbox"
     }
   }
 }

@@ -187,7 +187,12 @@ def _index_path() -> Path:
 
 def _index() -> dict[str, dict[str, dict[str, Any]]]:
     try:
-        raw = json.loads(_index_path().read_text(encoding="utf-8"))
+        # Under the lock every write holds: on Windows, replacing a file
+        # another thread has open fails with WinError 5, and that thread's
+        # read can fail the same way, which would read as no holds at all.
+        with _lock:
+            text = _index_path().read_text(encoding="utf-8")
+        raw = json.loads(text)
     except FileNotFoundError:
         return {}
     except (OSError, ValueError) as err:
@@ -481,7 +486,8 @@ def held_payload(scope: str, item_id: str) -> Any | None:
     """The held payload, or None when there is none or it will not open here."""
     path = _stash_path(scope, item_id)
     try:
-        sealed = path.read_text(encoding="utf-8")
+        with _lock:  # see _index: hold() replaces this file
+            sealed = path.read_text(encoding="utf-8")
         return json.loads(sync_keyring.decrypt(sealed, scope=scope, item_id=item_id))
     except FileNotFoundError:
         return None

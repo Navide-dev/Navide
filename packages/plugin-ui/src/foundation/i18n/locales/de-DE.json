@@ -1021,6 +1021,7 @@
       "loop-badge-estimate": "∞ Loop · ~{time}",
       "loop-badge-resume": "∞ weiter um {time}",
       "loop-estimate-tooltip": "Zurücksetzen des Kontingents voraussichtlich gegen {time} (Schätzung anhand des 5-Stunden-Session-Fensters); wird durch die genaue Zeit ersetzt, sobald eine Limit-Meldung erscheint. Klicken, um den Loop auszuschalten",
+      "loop-estimate-weekly-tooltip": "Das Wochenkontingent wird um {time} zurückgesetzt; dieses Konto hat kein 5-Stunden-Fenster. Klicken, um Loop zu deaktivieren",
       "loop-paused-notify-title": "Loop pausiert",
       "loop-paused-notify-body": "Session-Limit erreicht – automatische Fortsetzung um {time} (klicken Sie auf das Loop-Badge, um jetzt fortzusetzen)",
       "loop-unparseable-notify-title": "Loop hat ein Session-Limit erreicht",
@@ -1735,7 +1736,11 @@
           "title": "Status-Badges",
           "summary": "Jeden Bereichsstatus umbenennen und seine Farbe wählen, pro Sprache."
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhooks",
+        "summary": "Eine Pipeline per HTTP aus einem anderen System starten, mit Schlüssel oder GitHub-Signatur."
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "Alle Fenster hinter einem Sperrbildschirm verbergen und mit Touch ID, Windows Hello oder PIN entsperren"
         },
@@ -2653,9 +2658,9 @@
       "custom-colors": "Eigene Farben",
       "reset-to-defaults": "↺ Auf Standard zurücksetzen",
       "tweaks-hint": "Anpassungen werden über das aktuelle Design gelegt und beim Designwechsel beibehalten.",
-      "environment": "Umgebung",
-      "environment-hint": "Den Assistenten zur Umgebungserkennung beim ersten Start erneut ausführen (prüft Homebrew / Node / CLI / Ollama usw.).",
-      "rerun-env-check": "↻ Umgebungsprüfung erneut ausführen",
+      "environment": "Einrichtungsassistent",
+      "environment-hint": "Öffnet den Assistenten des ersten Starts erneut, um Agent-CLIs zu installieren und Berechtigungen zu prüfen.",
+      "rerun-env-check": "↻ Einrichtungsassistent erneut öffnen",
       "backend-timeout": "Zeitlimit für den Backend-Start",
       "backend-timeout-hint": "Wie lange beim Start oder Neustart darauf gewartet wird, dass das Backend betriebsbereit ist, bevor aufgegeben wird. Erhöhen Sie den Wert auf langsameren Rechnern (15–120 Sekunden).",
       "backend-timeout-label": "Zeitlimit (Sekunden)",
@@ -2816,14 +2821,14 @@
         "intro": "Was jeder der neunzehn Einstellungs-Tabs steuert, wie Navide Cloud mehrere Rechner zu einem privaten Netzwerk verbindet, und die Systemoberflächen außerhalb des Hauptbildschirms – die Menüs, die eigenständigen Fenster, die Nutzungsansichten und die Ressourcenpflege.",
         "s1": {
           "title": "Einstellungen im Überblick",
-          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>25 Tabs</strong>.",
+          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>26 Tabs</strong>.",
           "h1": "Das Suchfeld",
           "p2": "Unter der Überschrift der Seitenleiste befindet sich ein Suchfeld mit dem Platzhalter <code>Einstellungen durchsuchen …</code>. Es durchsucht Titel, Abschnitte und Stichwörter der Einstellungen <strong>über alle Tabs hinweg</strong> (in der aktuellen Oberflächensprache und mit den indizierten Stichwörtern) und listet höchstens 8 Ergebnisse auf; ein Klick auf ein Ergebnis wechselt zu dessen Tab und scrollt zum Abschnitt (mit einer Ausnahme: „Speicher“ schließt die Einstellungen und öffnet direkt die Ressourcenverwaltung). Ohne Treffer erscheint <code>Keine passenden Einstellungen</code>. <kbd class=\"syh-kbd\">Esc</kbd> leert das Feld.",
           "callout": {
             "title": "Der Suchindex ist nicht vollständig",
             "text": "Der Index ist eine von Hand gepflegte Liste, und <strong>die Tabs {layout}, {notifications}, {security} und {channels} haben überhaupt keine Einträge</strong>, sodass sich darin nichts suchen lässt – Sie müssen sie selbst öffnen. Ein Eintrag unter „CLI-Agents“ öffnet direkt die Einstellungsleiste einer CLI (siehe das Thema „CLI-Agents und Konten“)."
           },
-          "h2": "Die fünfundzwanzig Tabs",
+          "h2": "Die sechsundzwanzig Tabs",
           "tabTable": {
             "group": "Gruppe",
             "tab": "Tab",
@@ -2886,6 +2891,10 @@
             "analyzer": {
               "what": "Das lokale Inferenz-Backend, Modelldownloads, Modell-Benchmarks",
               "more": "Abschnitt 4 dieser Seite"
+            },
+            "webhooks": {
+              "what": "Trigger, mit denen ein anderes System per HTTP oder GitHub eine Pipeline startet, samt Schlüsseln, Grenzen und Aktivität",
+              "more": "Unbeaufsichtigte Läufe und der Linux-Schlüsselhinweis werden beim Einschalten erklärt."
             },
             "security": {
               "what": "Regeln und Stufen von Navide Guard, geschützte Branches, eigene Regeln und Befehlsschutz für einfache Terminals",
@@ -8322,7 +8331,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "Abonnement-Kontingent aufgebraucht",
+          "title": "Nutzungslimit erreicht",
           "back-at": "Wieder verfügbar um {time}",
           "back-unknown": "Der Zeitpunkt des Zurücksetzens ist nicht bekannt",
           "wait": "Auf Zurücksetzen warten"
@@ -8390,8 +8399,8 @@
           "invalid-name": "Geben Sie einen Namen mit höchstens 60 Zeichen ein.",
           "invalid-reminder": "Geben Sie für die monatliche Budgetnotiz einen Betrag über null ein.",
           "unsupported-agent": "API-Schlüssel sind für diese CLI noch nicht verfügbar.",
-          "store-failed": "Speichern im Schlüsselbund dieses Computers fehlgeschlagen.",
-          "secret-missing": "Dieser Schlüssel ist nicht mehr im Schlüsselbund. Fügen Sie ihn erneut ein.",
+          "store-failed": "Speichern auf diesem Computer fehlgeschlagen.",
+          "secret-missing": "Dieser Schlüssel ist nicht mehr auf diesem Computer. Fügen Sie ihn erneut ein.",
           "not-found": "Dieser API-Schlüssel existiert nicht mehr.",
           "main-window-only": "API-Schlüssel können nur in den Einstellungen verwaltet werden.",
           "internal-error": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
@@ -9297,7 +9306,7 @@
     "install-foundation-tools": "Installieren Sie die erforderlichen Basiswerkzeuge …",
     "agent-cli-required": "Mindestens eine Agent-CLI …",
     "analyzer-requires-ollama": "Der Analysator erfordert Ollama …",
-    "download-model": "Laden Sie ein beliebiges herunter; jedes installierte Modell …",
+    "download-model": "Laden Sie ein beliebiges Modell herunter. Navide kann jedes installierte Modell verwenden.",
     "review-instructions": "Klicken Sie auf „Review starten“, um zu analysieren …",
     "match-case": "Groß-/Kleinschreibung beachten (Aa)",
     "replace-all-truncated": "Die Ergebnisse sind gekürzt – grenzen Sie die Suche ein, bevor Sie alle ersetzen",
@@ -9447,6 +9456,9 @@
         "api-key-takeover-paused": "Der Wechselverlauf lässt sich nicht schreiben, daher ist der automatische Wechsel pausiert. Es wurde nicht zum API-Schlüssel-Konto gewechselt.",
         "api-key-takeover-unrecorded": "Der Wechsel zum API-Schlüssel-Konto ließ sich nicht protokollieren, daher wurde nicht gewechselt.",
         "api-key-takeover-failed": "Der Wechsel zum API-Schlüssel-Konto ist fehlgeschlagen. Er zählt trotzdem zum Limit für automatische Wechsel.",
+        "folder-login-takeover": "Bereiche wurden auf ein anderes Abonnementkonto verschoben.",
+        "folder-login-takeover-unrecorded": "Der Wechsel zum anderen Abonnementkonto konnte nicht aufgezeichnet werden, daher wurde nichts verschoben.",
+        "folder-login-takeover-failed": "Der Wechsel zum anderen Abonnementkonto ist fehlgeschlagen. Nichts wurde verschoben. Er zählt trotzdem zum Limit für automatische Wechsel.",
         "no-candidate": "Kein Konto zum Wechseln vorhanden. Melden Sie sich bei einem anderen Konto an oder warten Sie auf das Zurücksetzen.",
         "auto_budget_exhausted": "Grenze für automatische Wechsel erreicht. Wechseln Sie manuell oder warten Sie, bis das Zeitfenster abgelaufen ist.",
         "chained-exhaustion": "Auch {target} ist aufgebraucht. Es wurde nichts weiter versucht.",
@@ -9802,9 +9814,11 @@
     "failed": "Diese Unterhaltung konnte nicht wieder verbunden werden – ihr Transkript existiert möglicherweise nicht mehr"
   },
   "cli-account": {
-    "api-key-takeover-partial": "Kontingent aufgebraucht. Neue Bereiche nutzen {name} und werden nach Nutzung abgerechnet. {count} beschäftigte Bereiche bleiben unverändert.",
+    "api-key-takeover-partial": "Kontingent aufgebraucht. Neue Bereiche nutzen {name} und werden nach Nutzung abgerechnet. Unverändert gebliebene Bereiche: {count}.",
     "api-key-login-back": "Dein Abo-Kontingent ist wieder da. Bereiche bleiben beim API-Schlüssel, bis du unter Konten zurückwechselst.",
     "api-key-takeover": "Kontingent aufgebraucht. Bereiche laufen jetzt auf {name} und werden nach Nutzung abgerechnet. Wechsle nach dem Zurücksetzen unter Konten zurück.",
+    "folder-login-takeover": "Kontingent aufgebraucht. Bereiche wurden auf {name} verschoben, ein Abonnementkonto mit verbleibendem Kontingent.",
+    "folder-login-takeover-partial": "Kontingent aufgebraucht. Neue Bereiche nutzen {name}, ein Abonnementkonto mit verbleibendem Kontingent. Unverändert gebliebene Bereiche: {count}.",
     "default": "Ursprüngliche Anmeldung",
     "switch-title": "Konto wechseln",
     "swap-failed": "Kontowechsel fehlgeschlagen – das vorherige Konto ist weiterhin aktiv.",
@@ -10136,6 +10150,8 @@
     "window-left-pct": "{label} {pct} übrig",
     "window-left-used": "{label}: {pct} übrig ({used} verbraucht)",
     "window-claude-session": "Session (5 Std.)",
+    "window-unlimited": "Unbegrenzt",
+    "window-not-reported": "Nicht gemeldet",
     "window-claude-weekly": "Wöchentlich (alle Modelle)",
     "window-claude-weekly-model": "Wöchentlich ({scope})",
     "parked-not-measured-hint": "Geparkt: Claude Code meldet nur das Konto, unter dem es läuft. Melden Sie dieses Konto in seinem eigenen Ordner an, um sein Kontingent live zu lesen.",
@@ -10208,13 +10224,15 @@
       "environment": "Entwicklungsumgebung einrichten",
       "agents": "Agent-CLIs einbinden",
       "permissions": "Navide auf Ihrem Computer einrichten",
-      "ready": "Sie können loslegen"
+      "ready": "Sie können loslegen",
+      "ready-locked": "Noch ein Schritt"
     },
     "aside": {
       "environment": "Navide steuert echte CLIs in echten Terminals – auf diesen Werkzeugen läuft es.",
       "agents": "Jeder Bereich, den Sie öffnen, führt einen dieser Agents aus. Für den Anfang genügt einer.",
       "permissions": "Erteilen Sie die Zugriffe, die Navide zum Steuern Ihres Computers benötigt.",
-      "ready": "Alles in Ordnung. Beim ersten Mal hilft Ihnen eine kurze Tour, die Sie jederzeit überspringen können, einen Arbeitsbereich zu wählen und Ihren ersten Agent zu öffnen."
+      "ready": "Alles in Ordnung. Beim ersten Mal hilft Ihnen eine kurze Tour, die Sie jederzeit überspringen können, einen Arbeitsbereich zu wählen und Ihren ersten Agent zu öffnen.",
+      "ready-locked": "Installieren Sie mindestens eine Agent-CLI, um Navide zu öffnen. Sie können auch vorerst überspringen und später eine hinzufügen."
     },
     "install": "Installieren",
     "installing": "Wird installiert …",
@@ -10231,9 +10249,9 @@
     "notif-test-body": "Benachrichtigungen sind an – hier hören Sie von Ihren Agents.",
     "perm": {
       "automation": {
-        "title": "Navide erlauben, Installationsbefehle im Terminal auszuführen",
-        "desc": "Manche CLIs müssen in einem echten Terminal installiert werden. Damit kann Navide das Terminal öffnen und den Befehl für Sie eingeben.",
-        "why": "macOS nennt das „Automation“. Navide sendet immer nur den Installationsbefehl, auf den Sie geklickt haben – es liest nie, was in Ihren Terminalfenstern steht.",
+        "title": "Navide erlauben, Befehle im Terminal zu öffnen",
+        "desc": "Einige Aktionen, etwa CLI-Diagnosen oder Installationen, wenn das integrierte Terminal nicht starten kann, öffnen das Terminal und geben den Befehl für Sie ein.",
+        "why": "macOS nennt dies „Automation“. Navide sendet nur den Befehl, den Sie angeklickt haben, und liest niemals den Inhalt Ihrer Terminalfenster.",
         "denied": "Die Terminalsteuerung wurde verweigert. Schalten Sie sie in den Systemeinstellungen ein und erkennen Sie dann erneut.",
         "pane-hint": "Aktivieren Sie „Terminal“ unter Navide in „Datenschutz & Sicherheit → Automation“."
       },
@@ -12727,11 +12745,11 @@
       "community-node": "Community-Knoten. Ein Agent führt ihn anhand seiner Parameter aus.",
       "merge-combine": "Merge im Modus „{mode}“ kombiniert Daten. Ein Agent führt ihn nach seiner Merge-Regel aus.",
       "role-trigger-schedule": "Läuft in n8n nach Zeitplan. Starten Sie die Pipeline manuell oder planen Sie sie unter Turn Stats ▸ Zeitplan mit einem Auftrag „Eine Pipeline starten“.",
-      "role-trigger-webhook": "Startet in n8n durch eine HTTP-Anfrage. Navide hat noch keinen Webhook-Auslöser.",
+      "role-trigger-webhook": "Startet in n8n durch eine HTTP-Anfrage. Richte einen unter Einstellungen → Webhooks ein.",
       "role-trigger-error": "Für n8n-Fehler-Workflows gibt es in Navide noch keine Entsprechung.",
       "role-trigger-app": "Startet in n8n durch ein App-Ereignis. Navide hat noch keine App-Auslöser.",
       "role-subworkflow": "Ruft einen anderen n8n-Workflow auf, der nicht importiert ist. Fügen Sie diesen Workflow ebenfalls ein oder importieren Sie ihn zuerst.",
-      "role-respond": "Antwortet auf einen n8n-Webhook. Navide hat noch keinen Webhook-Auslöser.",
+      "role-respond": "Antwortet auf einen n8n-Webhook. Ein Navide-Trigger antwortet mit 202 und sendet kein Ergebnis zurück.",
       "error-workflow": "Dieser Workflow ist sein eigener Fehler-Workflow. Schlägt ein Schritt fehl, laufen die folgenden Schritte über Fehlerkanten.",
       "recursive-subworkflow": "Ruft den n8n-Workflow {workflowId} auf, der diesen Workflow wieder aufruft. Eine Unter-Pipeline kann sich nicht selbst ausführen, daher bleibt dieser Aufruf zur Prüfung.",
       "tool-pipeline": "Ein Agent-Werkzeug, das den n8n-Workflow {workflowId} aufruft, importiert als Pipeline {pipelineId}. Eine Pipeline kann nicht als Werkzeug aufgerufen werden, deshalb nennen die Schrittanweisungen sie stattdessen.",
@@ -12781,6 +12799,167 @@
       "internal": "Der umgewandelte Graph ist ungültig. Das ist ein Fehler im Importer.",
       "too-large": "Der Workflow ist {sizeMb} MB groß. Ein Import darf höchstens {limitMb} MB umfassen.",
       "store-refused": "Der Workflow „{workflow}“ konnte nicht gespeichert werden, daher wurde nichts importiert: {problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhooks",
+    "guardOff": "Schalte zuerst Navide Guard unter Einstellungen → Sicherheit ein. Ohne Guard bleiben Webhooks aus, und eingehende Anfragen werden abgelehnt.",
+    "portTaken": "Navide konnte nicht lauschen: {error}. Gib den Port frei und schalte dies erneut ein. Navide wechselt nicht den Port, weil deine Aufrufer genau diesen nutzen.",
+    "enabled": {
+      "title": "Webhooks annehmen",
+      "desc": "Erlaubt einem anderen System, per HTTP eine Pipeline zu starten. Es wird nur gelauscht, wenn dies an ist und ein Trigger aktiv ist. Navide lauscht nur auf diesem Computer. Für Zugriff von außen richte selbst einen Tunnel ein. Navide muss geöffnet sein, mit einem Fenster auf dem Workspace."
+    },
+    "host": {
+      "title": "Öffentlicher Hostname",
+      "desc": "Der Name, unter dem dein Tunnel antwortet. Anfragen an andere Hosts werden abgelehnt. Leer lassen, wenn nur dieser Computer Navide aufruft.",
+      "placeholder": "hook.example.com",
+      "warning": "Mit einem Tunnel erreicht jeder im Internet diese Adresse. Nur der Schlüssel oder die Signatur jedes Triggers hält ihn dann auf."
+    },
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "create": "Trigger erstellen",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "delete": "Löschen",
+    "deleteConfirm": "Endgültig löschen?",
+    "turnOn": "Einschalten",
+    "more": "Optionen",
+    "triggers": "Trigger",
+    "new": "Neuer Trigger",
+    "needsWorkspace": "Öffne zuerst einen Workspace. Ein Trigger läuft in einem Workspace.",
+    "empty": {
+      "title": "Noch keine Trigger",
+      "desc": "Ein Trigger verbindet eine Adresse mit einer Pipeline: Ein Aufruf der Adresse startet einen Lauf."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "Formular"
+    },
+    "form": {
+      "name": "Name",
+      "source": "Quelle",
+      "pipeline": "Pipeline",
+      "workspace": "Workspace",
+      "events": "Ereignisse",
+      "limits": "Grenzen",
+      "timeout": "Auf dich warten",
+      "eventsHint": "Nur angehakte Ereignisse starten einen Lauf. GitHubs Ping-Test wird beantwortet, ohne einen zu starten.",
+      "noGate": "Ohne Freigabe starten. Der erste Schritt ist kein Freigabe-Gate, also startet eine Anfrage den Agenten sofort. Externe Inhalte erreichen ihn, ohne dass jemand sie zuerst sieht.",
+      "default": "In Läufen dieses Triggers wartet jeder Tool-Aufruf auf dich. Antwortet niemand rechtzeitig, stoppt der Lauf, und nichts wird freigegeben. Über Telefon und Chat-Kanäle lässt sich ein Webhook-Lauf nicht freigeben. Nur Claude Code.",
+      "fields": "Felder",
+      "fieldLabel": "Beschriftung",
+      "fieldType": "Typ",
+      "required": "Pflichtfeld",
+      "removeField": "Entfernen",
+      "addField": "Feld hinzufügen",
+      "options": "Auswahl, durch Kommas getrennt",
+      "fieldsHint": "Dateien, Passwörter und eigenes HTML sind nicht verfügbar.",
+      "public": "Dieses Formular auch außerhalb dieses Computers öffnen lassen. Die Adresse landet im Browserverlauf und in den Logs deines Tunnels, und wer sie hat, kann einen Lauf starten. Aus: Es öffnet sich nur auf diesem Computer."
+    },
+    "perMinute": "pro Minute",
+    "perDay": "pro Tag",
+    "minutes": "Min. Wartezeit",
+    "minutesUnit": "Minuten",
+    "rate": "{minute}/Min. · {day}/Tag",
+    "enable": "{name} aktivieren",
+    "state": {
+      "off": "Aus",
+      "listener-off": "Aktiv, lauscht nicht",
+      "ready": "Bereit",
+      "running": "Lauf aktiv",
+      "waiting": "Wartet auf dich · Stopp in {minutes} Min."
+    },
+    "reveal": {
+      "titleKey": "Schlüssel für {name}",
+      "titleSecret": "Secret für {name}",
+      "once": "Kopiere ihn jetzt. Navide behält keine lesbare Kopie und zeigt ihn nicht erneut.",
+      "noAddress": "Schalte den Trigger ein, dann erscheint seine Adresse in seiner Zeile.",
+      "url": "Adresse",
+      "key": "Schlüssel",
+      "secret": "Secret",
+      "copyCurl": "Testaufruf kopieren",
+      "done": "Ich habe ihn gespeichert",
+      "githubHint": "Öffne in GitHub die Settings → Webhooks des Repositorys, füge beides ein und wähle application/json. Die Adresse muss öffentlich sein, lege also zuerst oben einen Hostnamen fest.",
+      "titleForm": "Adresse von {name}",
+      "formHint": "Diese Adresse ist der einzige Schlüssel: Wer sie hat, kann das Formular öffnen. Teile sie wie ein Passwort."
+    },
+    "rotateKey": "Schlüssel ersetzen",
+    "rotateSecret": "Secret ersetzen",
+    "unattended": {
+      "chip": "Unbeaufsichtigt",
+      "title": "Unbeaufsichtigt ausführen",
+      "desc": "Standardmäßig aus. Panes der Läufe dieses Triggers überspringen Berechtigungsabfragen. Beim Einschalten wird erklärt, was das bedeutet.",
+      "unsupported": "Unter Windows noch nicht verfügbar.",
+      "confirmTitle": "Bevor du unbeaufsichtigt ausführst",
+      "skips": "Der Agent überspringt Berechtigungsabfragen. Niemand bestätigt seine Tool-Aufrufe.",
+      "external": "Er arbeitet mit externen Inhalten, und diese können versuchen, ihn zu steuern.",
+      "scripts": "Guard stoppt nur Befehle, die es erkennt. Es kann keinen Agenten stoppen, der ein Skript schreibt und dann ausführt.",
+      "hook": "Kann Guards Hook nicht antworten, wird der Aufruf abgelehnt. Wird der Hook-Prozess selbst beendet oder hängt er, geht der Aufruf durch.",
+      "tick": "Ich verstehe, dass der Agent ohne Bestätigung mit externen Inhalten arbeitet."
+    },
+    "weakKey": {
+      "title": "Unter Linux ist dieses Secret schwächer geschützt",
+      "body": "Sein Schlüssel liegt in einer Datei, die nur Dateirechte schützen, also kann jedes Programm unter deinem Konto sie lesen. macOS und Windows nutzen den geschützten Speicher des Systems.",
+      "tick": "Ich verstehe das und möchte diesen Trigger aktivieren."
+    },
+    "log": {
+      "title": "Aktivität",
+      "empty": "Noch nichts aufgezeichnet."
+    },
+    "refused": {
+      "vendor-refused": "In dieser Version kann nur Claude Code über einen Webhook laufen, und zwar in jedem Schritt. Codex hat keinen Modus, der vor jedem Tool-Aufruf fragt, und andere CLIs sind mit Guard noch nicht getestet.",
+      "no-gate": "Der erste Schritt dieser Pipeline ist kein Freigabe-Gate. Füge eines hinzu oder erstelle den Trigger neu und hake „Ohne Freigabe starten“ an.",
+      "pipeline-missing": "Die Pipeline dieses Triggers existiert nicht mehr."
+    },
+    "error": {
+      "GUARD_OFF": "Schalte zuerst Navide Guard ein.",
+      "KEY_UNAVAILABLE": "Der Schlüsselspeicher des Systems ist nicht erreichbar. Entsperre ihn und versuche es erneut.",
+      "UNATTENDED_UNSUPPORTED": "Unter Windows noch nicht verfügbar.",
+      "NOT_FOUND": "Dieser Trigger existiert nicht mehr.",
+      "BAD_REQUEST": "Prüfe die Werte. Die Grenzen liegen bei 60 pro Minute und 500 pro Tag, die Wartezeit bei 5 bis 240 Minuten.",
+      "generic": "Das hat nicht geklappt. Versuche es erneut."
+    },
+    "outcome": {
+      "accepted": "Angenommen",
+      "started": "Lauf gestartet",
+      "start-failed": "Lauf nicht gestartet",
+      "duplicate": "Gleiche Zustellung wie zuvor, nicht ausgeführt",
+      "ping": "GitHub-Ping",
+      "event-ignored": "Ereignis nicht angehakt",
+      "daily-limit": "Tageslimit erreicht",
+      "rate-limited": "Zu viele Anfragen",
+      "bad-key": "Falscher Schlüssel",
+      "bad-signature": "Falsche Signatur",
+      "run-active": "Es lief bereits ein Lauf",
+      "no-window": "Kein Fenster auf dem Workspace",
+      "app-locked": "App Lock war aktiv",
+      "guard-off": "Guard war aus",
+      "vendor-refused": "Pipeline nutzt eine nicht unterstützte CLI",
+      "no-gate": "Kein Freigabe-Gate",
+      "awaiting-approval": "Wartet auf dich",
+      "approval-timeout": "Niemand antwortete, Lauf gestoppt",
+      "run-timeout": "Lauf erreichte das 4-Stunden-Limit",
+      "interrupted": "Lauf unterbrochen",
+      "secret-lost": "Secret nicht mehr lesbar, Trigger ausgeschaltet. Ersetze das Secret, um ihn wieder zu nutzen.",
+      "key-unavailable": "Schlüsselspeicher nicht erreichbar",
+      "unattended-on": "Unbeaufsichtigt eingeschaltet",
+      "unattended-off": "Unbeaufsichtigt ausgeschaltet",
+      "no-gate-acknowledged": "Ohne Freigabe starten angehakt",
+      "form-invalid": "Formular mit ungültigen Werten",
+      "form-public": "Formular öffentlich gemacht",
+      "bad-csrf": "Formular ohne gültiges Token",
+      "cross-site": "Formular von einer anderen Website"
+    },
+    "rotateForm": "Adresse ersetzen",
+    "fieldType": {
+      "text": "Text",
+      "textarea": "Langer Text",
+      "number": "Zahl",
+      "email": "E-Mail",
+      "date": "Datum",
+      "select": "Liste",
+      "checkbox": "Kontrollkästchen"
     }
   }
 }

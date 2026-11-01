@@ -564,7 +564,7 @@ class DevTimeStore:
             # Late import: the vendor module is heavy and app.py imports us early.
             from .cli_vendors.claude import ClaudeLogReader
 
-            session_files = ClaudeLogReader().session_files_for_workspace(workspace_path)
+            session_files = ClaudeLogReader().own_session_files(workspace_path)
         cutoff = wall - BACKFILL_DAYS * 86400
         rows: list[tuple[str, float, float]] = []
         for path in session_files:

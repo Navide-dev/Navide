@@ -34,6 +34,7 @@ from . import (
     confirm_token,
     device_trust,
     executions_service,
+    guard_fail_closed,
     launch_id,
     native_mcp,
     native_memory,
@@ -46,6 +47,7 @@ from . import (
     server_link,
     storage_service,
     trust_store,
+    webhook_service,
 )
 from .cli_vendors.codex import command_with_resume_id as codex_command_with_resume_id
 from .cli_vendors.registry import VENDORS as CLI_VENDORS
@@ -8320,6 +8322,11 @@ async def terminal_create(session: "Session", msg_id: str, msg_type: str, payloa
             session._terminal_create_transactions.pop(key, None)
             if not session.dead:
                 await session.send_json(make_error(msg_id, msg_type, err.code, str(err), err.details))
+        except webhook_service.LaunchRefused as err:
+            await _rollback_terminal_create(session, transaction)
+            session._terminal_create_transactions.pop(key, None)
+            if not session.dead:
+                await session.send_json(make_error(msg_id, msg_type, "WEBHOOK_LAUNCH_REFUSED", str(err)))
         except BaseException:
             await _rollback_terminal_create(session, transaction)
             session._terminal_create_transactions.pop(key, None)
@@ -8644,6 +8651,18 @@ async def _terminal_create_impl(
     payload["command"] = app._command_with_installed_cli_alias(
         agent_key, payload.get("command")
     )
+    if (webhooks := webhook_service.current()) is not None:
+        payload["command"] = webhooks.launch_command(
+            agent_key, payload.get("command"), pane_id=str(payload.get("pane_id") or ""), metadata=metadata,
+        )
+        env.pop(guard_fail_closed.ENV, None)
+        unattended_env = webhooks.launch_env(str(payload.get("pane_id") or ""))
+        env.update(unattended_env)
+        if unattended_env and agent_key == "claude":
+            from . import claude_hooks
+
+            settings = guard_fail_closed.claude_settings(str(app.backend_port_file()))
+            payload["command"] = claude_hooks.append_settings(payload["command"], settings)
     try:
         startup_probe = await asyncio.get_running_loop().run_in_executor(
             _CLI_PROBE_EXECUTOR,
@@ -8914,6 +8933,15 @@ async def _terminal_create_impl(
                 Path(env.get("CODEX_HOME") or app.codex_home_manager.real_home),
                 app.backend_port_file(), hook_auth.header_file(),
             )
+            webhooks = webhook_service.current()
+            if (
+                webhooks is not None
+                and webhooks.is_run_pane(str(payload.get("pane_id") or ""))
+                and "hooks.PreToolUse" not in app._command_text(payload["command"])
+            ):
+                # wire() leaves the hooks out once Codex has shown its trust
+                # screen: a webhook pane would then run with no Guard at all.
+                raise webhook_service.LaunchRefused("codex has not trusted Navide's hooks, so no Guard would run")
     from . import guard_hooks
 
     if agent_key in guard_hooks.PANE_TOKEN_VENDORS:
@@ -11169,7 +11197,7 @@ async def pipeline_child_finished(session: "Session", msg_id: str, msg_type: str
     # taint the child run carries stays on the parent too.
     restore_pipeline_run_taint(ws, str(frame.get("taint") or "") or pipeline_run_taint(ws))
     # The parent itself imported: tainted even after a restart emptied the table.
-    pipeline_run_resumed(ws, _imported_taint_detail(getattr(project, "pipeline_id", "")))
+    pipeline_run_resumed(ws, _run_taint_detail(getattr(project, "pipeline_id", "")))
     _mirror_pipeline_state(project)
     resp = app._project_payload(project)
     resp.update({"popped": True, "node_id": frame["node_id"], "next_index": frame["next_index"]})
@@ -11209,6 +11237,16 @@ def _imported_taint_detail(pipeline_id: str) -> str:
     return import_detail(record) if record else ""
 
 
+def _run_taint_detail(pipeline_id: str) -> str:
+    """Guard taint detail a run of this pipeline carries whoever starts it: an
+    import, or a webhook trigger ever bound to it, deleted ones included."""
+    imported = _imported_taint_detail(pipeline_id)
+    if imported or not pipeline_id:
+        return imported
+    webhooks = webhook_service.current()
+    return "pipeline bound to a webhook trigger" if webhooks and webhooks.store.is_bound(pipeline_id) else ""
+
+
 @handler("pipeline.claim")
 async def pipeline_claim(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """A window's claim of the pipeline runs it drives, sent on every
@@ -11245,7 +11283,7 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     from .guard.taint import pipeline_run_resumed, restore_pipeline_run_taint
 
     restore_pipeline_run_taint(payload["workspace_path"], frame_taint)
-    pipeline_run_resumed(payload["workspace_path"], _imported_taint_detail(getattr(project, "pipeline_id", "")))
+    pipeline_run_resumed(payload["workspace_path"], _run_taint_detail(getattr(project, "pipeline_id", "")))
     pipeline_liveness.claim_run(session, project.workspace_path)
     _mirror_pipeline_state(project)
     resp = app._project_payload(project)
@@ -11295,7 +11333,9 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
     if child_of and frame is not None and frame.get("taint"):
         # A child run carries its parent's taint, task text included.
         arm_pipeline_run(payload["workspace_path"], str(frame["taint"]))
-    pipeline_run_started(payload["workspace_path"], _imported_taint_detail(getattr(project, "pipeline_id", "")))
+    pipeline_run_started(payload["workspace_path"], _run_taint_detail(getattr(project, "pipeline_id", "")))
+    if (webhooks := webhook_service.current()) is not None:
+        webhooks.run_started(project, child=bool(child_of))
     pipeline_liveness.claim_run(session, project.workspace_path)
     app._register_workspace_and_backfill(project.workspace_path)
     _mirror_pipeline_state(project)
@@ -11936,7 +11976,7 @@ def _collect_orphan_sessions(workspace_path: str) -> list[dict]:
     """
     from . import app
 
-    files = ClaudeLogReader().session_files_for_workspace(workspace_path)
+    files = ClaudeLogReader().own_session_files(workspace_path)
     project = app.project_store.peek(workspace_path)
     live_ids: set[str] = set()
     history_names: dict[str, str] = {}
@@ -13448,6 +13488,15 @@ async def convenience_upgrade_ack(session: "Session", msg_id: str, msg_type: str
     await asyncio.to_thread(app.convenience_gate.acknowledge_upgrade, source=_convenience_source(session))
     await session.send_json(make_response(msg_id, msg_type, {}))
     await app.broadcast(make_event("convenience.changed", {}))
+
+
+# ── Webhook triggers (webhook.*) ────────────────────────────────────────────
+# The window's own management surface. Deliberately not an MCP tool, a ui.*
+# action or a plugin capability: an agent must not open a door for itself.
+from . import webhook_ws  # noqa: E402
+
+for _name, _webhook_handler in webhook_ws.HANDLERS.items():
+    handler(_name)(_webhook_handler)
 
 
 # ── Voice input (voice.*) ───────────────────────────────────────────────────

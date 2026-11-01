@@ -1021,6 +1021,7 @@
       "loop-badge-estimate": "∞ Loop · ~{time}",
       "loop-badge-resume": "∞ tiếp tục lúc {time}",
       "loop-estimate-tooltip": "Ước tính hạn mức đặt lại vào khoảng {time} (dựa trên cửa sổ session 5 giờ); sẽ được thay bằng thời gian chính xác nếu xuất hiện thông báo giới hạn. Nhấp để tắt loop",
+      "loop-estimate-weekly-tooltip": "Hạn mức tuần đặt lại lúc {time}; tài khoản này không có cửa sổ 5 giờ. Nhấp để tắt Loop",
       "loop-paused-notify-title": "Loop tạm dừng",
       "loop-paused-notify-body": "Đã chạm giới hạn session — tự động tiếp tục lúc {time} (nhấp vào huy hiệu loop để tiếp tục ngay)",
       "loop-unparseable-notify-title": "Loop đã chạm giới hạn session",
@@ -1735,7 +1736,11 @@
           "title": "Huy hiệu trạng thái",
           "summary": "Đổi tên từng trạng thái pane và chọn màu cho nó, theo từng ngôn ngữ."
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhook",
+        "summary": "Khởi động pipeline từ hệ thống khác qua HTTP, bằng khóa hoặc chữ ký GitHub."
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "Ẩn mọi cửa sổ sau màn hình khóa và mở khóa bằng Touch ID, Windows Hello hoặc PIN"
         },
@@ -2653,9 +2658,9 @@
       "custom-colors": "Màu tùy chỉnh",
       "reset-to-defaults": "↺ Đặt lại mặc định",
       "tweaks-hint": "Các tinh chỉnh được áp lên trên chủ đề hiện tại và được giữ lại khi đổi chủ đề.",
-      "environment": "Môi trường",
-      "environment-hint": "Chạy lại trình hướng dẫn phát hiện môi trường lần đầu (kiểm tra Homebrew / Node / CLI / Ollama, v.v.).",
-      "rerun-env-check": "↻ Chạy lại kiểm tra môi trường",
+      "environment": "Trình hướng dẫn thiết lập",
+      "environment-hint": "Mở lại trình hướng dẫn lần chạy đầu để cài Agent CLI và xem lại quyền.",
+      "rerun-env-check": "↻ Mở lại trình hướng dẫn thiết lập",
       "backend-timeout": "Thời gian chờ khởi động backend",
       "backend-timeout-hint": "Thời gian chờ backend hoạt động bình thường khi khởi động hoặc khởi động lại trước khi bỏ cuộc. Hãy tăng giá trị này trên máy chậm (15–120 giây).",
       "backend-timeout-label": "Thời gian chờ (giây)",
@@ -2816,14 +2821,14 @@
         "intro": "Mỗi tab trong mười chín tab cài đặt điều khiển gì, Navide Cloud nối nhiều máy thành một mạng riêng như thế nào, và các thành phần hệ thống nằm ngoài màn hình chính — các menu, các cửa sổ độc lập, các chế độ xem mức sử dụng và việc bảo trì tài nguyên.",
         "s1": {
           "title": "Tổng quan về cài đặt",
-          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>25 tab</strong>.",
+          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>26 tab</strong>.",
           "h1": "Ô tìm kiếm",
           "p2": "Dưới tiêu đề thanh bên có một ô tìm kiếm với chữ gợi ý <code>Tìm cài đặt…</code>. Ô này tìm theo tên cài đặt, mục chứa cài đặt và từ khóa <strong>trên mọi tab</strong> (theo ngôn ngữ giao diện hiện tại và các từ khóa đã lập chỉ mục), hiển thị tối đa 8 kết quả; nhấp vào một kết quả sẽ chuyển sang tab đó và cuộn tới mục tương ứng (có một ngoại lệ: “Lưu trữ” đóng cài đặt và mở thẳng Resource Manager). Khi không có kết quả, ô hiển thị <code>Không có cài đặt phù hợp</code>. <kbd class=\"syh-kbd\">Esc</kbd> xóa nội dung ô.",
           "callout": {
             "title": "Chỉ mục tìm kiếm chưa đầy đủ",
             "text": "Chỉ mục là một danh sách được duy trì thủ công, và <strong>các tab {layout}, {notifications}, {security} và {channels} hoàn toàn không có mục nào</strong>, nên không tìm được gì bên trong các tab này — bạn phải tự mở. Một mục CLI agent sẽ mở thẳng ngăn cài đặt của một CLI (xem chủ đề “CLI agent và tài khoản”)."
           },
-          "h2": "Hai mươi lăm tab",
+          "h2": "Hai mươi sáu tab",
           "tabTable": {
             "group": "Nhóm",
             "tab": "Tab",
@@ -2886,6 +2891,10 @@
             "analyzer": {
               "what": "Backend suy luận cục bộ, tải model, đo hiệu năng model",
               "more": "mục 4 của trang này"
+            },
+            "webhooks": {
+              "what": "Trigger cho phép hệ thống khác khởi động pipeline qua HTTP hoặc từ GitHub, cùng khóa, giới hạn và hoạt động",
+              "more": "Chạy không giám sát và cảnh báo khóa trên Linux được giải thích khi bật."
             },
             "security": {
               "what": "Quy tắc và mức độ của Navide Guard, nhánh được bảo vệ, quy tắc tùy chỉnh và bảo vệ lệnh cho terminal thường",
@@ -8322,7 +8331,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "Đã dùng hết hạn mức gói đăng ký",
+          "title": "Đã đạt giới hạn sử dụng",
           "back-at": "Có lại lúc {time}",
           "back-unknown": "Chưa rõ thời gian đặt lại",
           "wait": "Chờ đặt lại"
@@ -8390,8 +8399,8 @@
           "invalid-name": "Nhập tên tối đa 60 ký tự.",
           "invalid-reminder": "Nhập số tiền ghi chú ngân sách hằng tháng lớn hơn 0.",
           "unsupported-agent": "CLI này chưa dùng được khóa API.",
-          "store-failed": "Không thể lưu vào keychain của máy tính này.",
-          "secret-missing": "Khóa này không còn trong keychain. Hãy dán lại.",
+          "store-failed": "Không thể lưu vào máy tính này.",
+          "secret-missing": "Khóa này không còn trên máy tính này. Hãy dán lại.",
           "not-found": "Khóa API này không còn tồn tại.",
           "main-window-only": "Chỉ có thể quản lý khóa API trong Cài đặt.",
           "internal-error": "Đã xảy ra lỗi. Hãy thử lại.",
@@ -9297,7 +9306,7 @@
     "install-foundation-tools": "Cài các công cụ nền tảng cần thiết...",
     "agent-cli-required": "Ít nhất một CLI agent...",
     "analyzer-requires-ollama": "Trình phân tích cần Ollama...",
-    "download-model": "Tải một model bất kỳ; model nào đã cài...",
+    "download-model": "Tải một model bất kỳ. Navide có thể dùng mọi model đã cài.",
     "review-instructions": "Nhấp Bắt đầu xem xét để phân tích...",
     "match-case": "Phân biệt chữ hoa/thường (Aa)",
     "replace-all-truncated": "Kết quả đã bị cắt bớt — hãy thu hẹp tìm kiếm trước khi thay thế tất cả",
@@ -9447,6 +9456,9 @@
         "api-key-takeover-paused": "Không ghi được lịch sử chuyển nên tự động chuyển đang tạm dừng. Chưa chuyển sang tài khoản khóa API.",
         "api-key-takeover-unrecorded": "Không ghi lại được việc chuyển sang tài khoản khóa API nên chưa chuyển.",
         "api-key-takeover-failed": "Chuyển sang tài khoản khóa API thất bại. Chưa chuyển, nhưng vẫn tính vào giới hạn tự động chuyển.",
+        "folder-login-takeover": "Đã chuyển các khung sang một tài khoản gói đăng ký khác.",
+        "folder-login-takeover-unrecorded": "Không thể ghi lại việc chuyển sang tài khoản gói đăng ký khác nên chưa có gì được chuyển.",
+        "folder-login-takeover-failed": "Chuyển sang tài khoản gói đăng ký khác không thành công. Chưa có gì được chuyển. Lần này vẫn được tính vào giới hạn chuyển tự động.",
         "no-candidate": "Không có tài khoản nào để chuyển sang. Hãy đăng nhập tài khoản khác hoặc chờ đặt lại.",
         "auto_budget_exhausted": "Đã chạm giới hạn số lần tự động chuyển. Hãy chuyển thủ công hoặc chờ hết khung thời gian.",
         "chained-exhaustion": "{target} cũng đã hết. Không thử thêm tài khoản nào khác.",
@@ -9802,9 +9814,11 @@
     "failed": "Không kết nối lại được cuộc hội thoại đó — bản ghi của nó có thể không còn"
   },
   "cli-account": {
-    "api-key-takeover-partial": "Đã dùng hết hạn mức. Các khung mới dùng {name}, tính phí theo mức dùng. {count} khung đang bận được giữ nguyên.",
+    "api-key-takeover-partial": "Đã dùng hết hạn mức. Các khung mới dùng {name}, tính phí theo mức dùng. Số khung được giữ nguyên: {count}.",
     "api-key-login-back": "Hạn mức gói đăng ký đã trở lại. Các khung vẫn dùng khóa API cho đến khi bạn chuyển lại trong Tài khoản.",
     "api-key-takeover": "Đã dùng hết hạn mức. Các khung đã chuyển sang {name}, tính phí theo mức dùng. Hãy chuyển lại trong Tài khoản sau khi hạn mức được đặt lại.",
+    "folder-login-takeover": "Đã dùng hết hạn mức. Đã chuyển các khung sang {name}, một tài khoản gói đăng ký còn hạn mức.",
+    "folder-login-takeover-partial": "Đã dùng hết hạn mức. Các khung mới dùng {name}, một tài khoản gói đăng ký còn hạn mức. Số khung được giữ nguyên: {count}.",
     "default": "Đăng nhập ban đầu",
     "switch-title": "Chuyển tài khoản",
     "swap-failed": "Không chuyển tài khoản được — tài khoản trước vẫn đang dùng.",
@@ -10136,6 +10150,8 @@
     "window-left-pct": "{label} còn {pct}",
     "window-left-used": "{label}: còn {pct} (đã dùng {used})",
     "window-claude-session": "Session (5 giờ)",
+    "window-unlimited": "Không giới hạn",
+    "window-not-reported": "Không báo cáo",
     "window-claude-weekly": "Hằng tuần (mọi model)",
     "window-claude-weekly-model": "Hằng tuần ({scope})",
     "parked-not-measured-hint": "Đang để không: Claude Code chỉ báo cáo tài khoản mà nó đang chạy. Hãy đăng nhập tài khoản này vào thư mục riêng của nó để đọc hạn mức trực tiếp.",
@@ -10208,13 +10224,15 @@
       "environment": "Thiết lập môi trường phát triển",
       "agents": "Đưa các agent CLI của bạn vào",
       "permissions": "Thiết lập Navide trên máy tính của bạn",
-      "ready": "Bạn đã sẵn sàng"
+      "ready": "Bạn đã sẵn sàng",
+      "ready-locked": "Còn một bước nữa"
     },
     "aside": {
       "environment": "Navide điều khiển CLI thật trong terminal thật — đây là những công cụ nó chạy trên đó.",
       "agents": "Mỗi pane bạn mở chạy một trong các agent này. Chỉ cần một là đủ để bắt đầu.",
       "permissions": "Cấp những quyền truy cập Navide cần để điều khiển máy của bạn.",
-      "ready": "Mọi thứ đều ổn. Ở lần đầu, một chuyến tham quan ngắn (có thể bỏ qua bất cứ lúc nào) sẽ giúp bạn chọn workspace và mở agent đầu tiên."
+      "ready": "Mọi thứ đều ổn. Ở lần đầu, một chuyến tham quan ngắn (có thể bỏ qua bất cứ lúc nào) sẽ giúp bạn chọn workspace và mở agent đầu tiên.",
+      "ready-locked": "Hãy cài ít nhất một Agent CLI để mở Navide. Bạn cũng có thể bỏ qua lúc này và thêm sau."
     },
     "install": "Cài đặt",
     "installing": "Đang cài…",
@@ -10231,9 +10249,9 @@
     "notif-test-body": "Thông báo đã bật — bạn sẽ nhận tin từ các agent của mình ở đây.",
     "perm": {
       "automation": {
-        "title": "Cho phép Navide chạy lệnh cài đặt trong Terminal",
-        "desc": "Một số CLI phải được cài trong terminal thật. Quyền này cho Navide mở Terminal và gõ lệnh giúp bạn.",
-        "why": "macOS gọi quyền này là Tự động hóa. Navide chỉ gửi đúng lệnh cài đặt bạn đã nhấp — không bao giờ đọc nội dung trong các cửa sổ terminal của bạn.",
+        "title": "Cho phép Navide mở lệnh trong Terminal",
+        "desc": "Một số thao tác, như chẩn đoán CLI hoặc cài đặt khi terminal tích hợp không khởi động được, sẽ mở Terminal và nhập lệnh giúp bạn.",
+        "why": "macOS gọi quyền này là Automation. Navide chỉ gửi lệnh bạn đã bấm và không bao giờ đọc nội dung cửa sổ terminal.",
         "denied": "Quyền điều khiển Terminal bị từ chối. Hãy bật nó trong Cài đặt hệ thống, rồi phát hiện lại.",
         "pane-hint": "Bật Terminal dưới mục Navide trong Quyền riêng tư & Bảo mật → Tự động hóa."
       },
@@ -12727,11 +12745,11 @@
       "community-node": "Nút cộng đồng. Một agent thực hiện nó theo các tham số của nó.",
       "merge-combine": "Merge ở chế độ “{mode}” kết hợp dữ liệu. Một agent thực hiện nó theo quy tắc gộp của nó.",
       "role-trigger-schedule": "Trong n8n, nút này chạy theo lịch. Hãy khởi động pipeline thủ công, hoặc lên lịch trong Turn Stats ▸ Lịch bằng một tác vụ “Khởi động pipeline”.",
-      "role-trigger-webhook": "Trong n8n, nút này bắt đầu từ một yêu cầu HTTP. Navide chưa có trình kích hoạt webhook.",
+      "role-trigger-webhook": "Trong n8n, nút này bắt đầu từ một yêu cầu HTTP. Hãy tạo trong Cài đặt → Webhook.",
       "role-trigger-error": "Workflow lỗi của n8n chưa có tính năng tương đương trong Navide.",
       "role-trigger-app": "Trong n8n, nút này bắt đầu từ một sự kiện ứng dụng. Navide chưa có trình kích hoạt ứng dụng.",
       "role-subworkflow": "Gọi một workflow n8n khác chưa được nhập. Hãy dán cả workflow đó, hoặc nhập nó trước.",
-      "role-respond": "Trả lời một webhook của n8n. Navide chưa có trình kích hoạt webhook.",
+      "role-respond": "Trả lời một webhook của n8n. Trigger của Navide trả về 202 và không gửi lại kết quả.",
       "error-workflow": "Workflow này là workflow lỗi của chính nó. Khi một bước thất bại, các bước sau sẽ chạy qua các cạnh lỗi.",
       "recursive-subworkflow": "Gọi workflow n8n {workflowId}, và workflow đó lại gọi ngược workflow này. Pipeline con không thể tự chạy chính nó, nên lệnh gọi này được giữ lại để xem lại.",
       "tool-pipeline": "Một công cụ của agent gọi workflow n8n {workflowId}, đã được nhập thành pipeline {pipelineId}. Pipeline không thể được gọi như một công cụ, nên hướng dẫn của bước sẽ nêu tên nó thay vào đó.",
@@ -12781,6 +12799,167 @@
       "internal": "Đồ thị đã chuyển đổi không hợp lệ. Đây là lỗi của trình nhập.",
       "too-large": "Workflow có dung lượng {sizeMb} MB. Mỗi lần nhập tối đa {limitMb} MB.",
       "store-refused": "Không thể lưu workflow “{workflow}”, nên không có gì được nhập: {problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhook",
+    "guardOff": "Hãy bật Navide Guard trong Cài đặt → Bảo mật trước. Nếu không, webhook vẫn tắt và các yêu cầu đến sẽ bị từ chối.",
+    "portTaken": "Navide không thể bắt đầu lắng nghe: {error}. Hãy giải phóng cổng này rồi bật lại. Navide không đổi cổng vì bên gọi đang dùng cổng này.",
+    "enabled": {
+      "title": "Nhận webhook",
+      "desc": "Cho phép hệ thống khác khởi động pipeline qua HTTP. Chỉ lắng nghe khi mục này bật và có trigger đang bật. Navide chỉ lắng nghe trên máy này. Để truy cập từ bên ngoài, hãy tự thiết lập tunnel. Navide phải đang mở, với một cửa sổ của workspace."
+    },
+    "host": {
+      "title": "Tên máy chủ công khai",
+      "desc": "Tên mà tunnel của bạn trả lời. Yêu cầu tới máy chủ khác sẽ bị từ chối. Để trống nếu chỉ máy này gọi Navide.",
+      "placeholder": "hook.example.com",
+      "warning": "Với tunnel, bất kỳ ai trên internet cũng tới được địa chỉ này. Khi đó chỉ khóa hoặc chữ ký của mỗi trigger ngăn được họ."
+    },
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "create": "Tạo trigger",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép",
+    "delete": "Xóa",
+    "deleteConfirm": "Xóa vĩnh viễn?",
+    "turnOn": "Bật",
+    "more": "Tùy chọn",
+    "triggers": "Trigger",
+    "new": "Trigger mới",
+    "needsWorkspace": "Hãy mở workspace trước. Trigger chạy trong workspace.",
+    "empty": {
+      "title": "Chưa có trigger",
+      "desc": "Trigger nối một địa chỉ với một pipeline: gọi địa chỉ đó sẽ bắt đầu một lượt chạy."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "Biểu mẫu"
+    },
+    "form": {
+      "name": "Tên",
+      "source": "Nguồn",
+      "pipeline": "Pipeline",
+      "workspace": "Workspace",
+      "events": "Sự kiện",
+      "limits": "Giới hạn",
+      "timeout": "Chờ bạn",
+      "eventsHint": "Chỉ sự kiện được chọn mới bắt đầu lượt chạy. Kiểm tra ping của GitHub được trả lời mà không chạy.",
+      "noGate": "Bắt đầu không cần duyệt. Bước đầu không phải cổng phê duyệt, nên yêu cầu sẽ khởi động agent ngay. Nội dung bên ngoài tới agent mà không ai xem trước.",
+      "default": "Trong các lượt chạy của trigger này, mọi lệnh gọi công cụ đều chờ bạn xác nhận. Nếu không ai trả lời kịp, lượt chạy dừng và không có gì được duyệt. Điện thoại và kênh chat không thể duyệt lượt chạy webhook. Chỉ Claude Code.",
+      "fields": "Trường",
+      "fieldLabel": "Nhãn",
+      "fieldType": "Loại",
+      "required": "Bắt buộc",
+      "removeField": "Gỡ",
+      "addField": "Thêm trường",
+      "options": "Lựa chọn, cách nhau bằng dấu phẩy",
+      "fieldsHint": "Không hỗ trợ tệp, mật khẩu và HTML tùy chỉnh.",
+      "public": "Cho phép mở biểu mẫu này từ ngoài máy tính này. Địa chỉ sẽ nằm trong lịch sử trình duyệt và nhật ký tunnel, và ai có nó đều có thể bắt đầu lượt chạy. Khi tắt, chỉ mở được trên máy này."
+    },
+    "perMinute": "mỗi phút",
+    "perDay": "mỗi ngày",
+    "minutes": "phút chờ",
+    "minutesUnit": "phút",
+    "rate": "{minute}/phút · {day}/ngày",
+    "enable": "Bật {name}",
+    "state": {
+      "off": "Tắt",
+      "listener-off": "Đã bật, không lắng nghe",
+      "ready": "Sẵn sàng",
+      "running": "Đang chạy",
+      "waiting": "Đang chờ bạn · dừng sau {minutes} phút"
+    },
+    "reveal": {
+      "titleKey": "Khóa của {name}",
+      "titleSecret": "Secret của {name}",
+      "once": "Hãy sao chép ngay. Navide không giữ bản đọc được và sẽ không hiện lại.",
+      "noAddress": "Bật trigger và địa chỉ sẽ hiện ở hàng của nó.",
+      "url": "Địa chỉ",
+      "key": "Khóa",
+      "secret": "Secret",
+      "copyCurl": "Sao chép lệnh gọi thử",
+      "done": "Tôi đã lưu",
+      "githubHint": "Trong GitHub, mở Settings → Webhooks của kho, dán cả hai và chọn application/json. Địa chỉ phải công khai, nên hãy đặt tên máy chủ ở trên trước.",
+      "titleForm": "Địa chỉ của {name}",
+      "formHint": "Địa chỉ này là khóa duy nhất: ai có nó đều mở được biểu mẫu. Hãy chia sẻ như mật khẩu."
+    },
+    "rotateKey": "Thay khóa",
+    "rotateSecret": "Thay secret",
+    "unattended": {
+      "chip": "Không giám sát",
+      "title": "Chạy không giám sát",
+      "desc": "Mặc định tắt. Các pane của lượt chạy từ trigger này bỏ qua hỏi quyền. Khi bật sẽ giải thích ý nghĩa.",
+      "unsupported": "Chưa có trên Windows.",
+      "confirmTitle": "Trước khi chạy không giám sát",
+      "skips": "Agent bỏ qua hỏi quyền. Không ai xác nhận các lệnh gọi công cụ của nó.",
+      "external": "Nó làm việc với nội dung bên ngoài, và nội dung đó có thể tìm cách điều khiển nó.",
+      "scripts": "Guard chỉ chặn lệnh mà nó nhận ra. Nó không thể chặn agent viết script rồi chạy script đó.",
+      "hook": "Nếu hook của Guard không trả lời được, lệnh gọi bị từ chối. Nếu chính tiến trình hook bị kill hoặc treo, lệnh gọi sẽ được cho qua.",
+      "tick": "Tôi hiểu agent xử lý nội dung bên ngoài mà không cần xác nhận."
+    },
+    "weakKey": {
+      "title": "Trên Linux, secret này được bảo vệ yếu hơn",
+      "body": "Khóa nằm trong tệp chỉ được bảo vệ bằng quyền truy cập, nên mọi chương trình chạy dưới tài khoản của bạn đều đọc được. macOS và Windows lưu trong kho bảo vệ của hệ thống.",
+      "tick": "Tôi hiểu và muốn bật trigger này."
+    },
+    "log": {
+      "title": "Hoạt động",
+      "empty": "Chưa có ghi nhận."
+    },
+    "refused": {
+      "vendor-refused": "Ở phiên bản này, chỉ Claude Code chạy được từ webhook và mọi bước đều phải dùng nó. Codex không có chế độ hỏi trước mỗi lệnh gọi công cụ, và các CLI khác chưa được kiểm thử với Guard.",
+      "no-gate": "Bước đầu của pipeline này không phải cổng phê duyệt. Hãy thêm cổng, hoặc tạo lại trigger và chọn Bắt đầu không cần duyệt.",
+      "pipeline-missing": "Pipeline của trigger này không còn tồn tại."
+    },
+    "error": {
+      "GUARD_OFF": "Hãy bật Navide Guard trước.",
+      "KEY_UNAVAILABLE": "Không kết nối được kho khóa của hệ thống. Hãy mở khóa rồi thử lại.",
+      "UNATTENDED_UNSUPPORTED": "Chưa có trên Windows.",
+      "NOT_FOUND": "Trigger này không còn tồn tại.",
+      "BAD_REQUEST": "Hãy kiểm tra giá trị. Giới hạn tối đa 60 mỗi phút và 500 mỗi ngày, thời gian chờ từ 5 đến 240 phút.",
+      "generic": "Không thành công. Hãy thử lại."
+    },
+    "outcome": {
+      "accepted": "Đã nhận",
+      "started": "Đã bắt đầu chạy",
+      "start-failed": "Không bắt đầu chạy",
+      "duplicate": "Trùng lần gửi trước, không chạy",
+      "ping": "GitHub ping",
+      "event-ignored": "Sự kiện chưa chọn",
+      "daily-limit": "Đã đạt giới hạn ngày",
+      "rate-limited": "Quá nhiều yêu cầu",
+      "bad-key": "Sai khóa",
+      "bad-signature": "Sai chữ ký",
+      "run-active": "Đã có lượt chạy",
+      "no-window": "Không có cửa sổ workspace",
+      "app-locked": "App Lock đang bật",
+      "guard-off": "Guard đang tắt",
+      "vendor-refused": "Pipeline dùng CLI không hỗ trợ",
+      "no-gate": "Không có cổng phê duyệt",
+      "awaiting-approval": "Đang chờ bạn",
+      "approval-timeout": "Không ai trả lời, đã dừng lượt chạy",
+      "run-timeout": "Lượt chạy đạt giới hạn 4 giờ",
+      "interrupted": "Lượt chạy bị gián đoạn",
+      "secret-lost": "Không còn đọc được secret, đã tắt trigger. Hãy thay secret để dùng lại.",
+      "key-unavailable": "Không kết nối được kho khóa",
+      "unattended-on": "Đã bật không giám sát",
+      "unattended-off": "Đã tắt không giám sát",
+      "no-gate-acknowledged": "Đã chọn Bắt đầu không cần duyệt",
+      "form-invalid": "Biểu mẫu có giá trị không hợp lệ",
+      "form-public": "Đã công khai biểu mẫu",
+      "bad-csrf": "Biểu mẫu không có token hợp lệ",
+      "cross-site": "Biểu mẫu gửi từ trang khác"
+    },
+    "rotateForm": "Thay địa chỉ",
+    "fieldType": {
+      "text": "Văn bản",
+      "textarea": "Văn bản dài",
+      "number": "Số",
+      "email": "Email",
+      "date": "Ngày",
+      "select": "Danh sách",
+      "checkbox": "Hộp chọn"
     }
   }
 }

@@ -205,8 +205,8 @@ import {
   awaitEcho, awaitInputUnblocked, createInputBlockTracker, needsInputWait, PROBE_SESSION_GONE
 } from './lib/ptyInputBlock'
 import {
-  TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, runKickoffAttempts,
-  submitHeldCopy, terminalKickoffOutcome,
+  TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
+  runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { terminalMultilineRefusal } from './lib/terminalInput'
@@ -331,7 +331,6 @@ import { judgeReading, quotaSemanticsFor } from './lib/quotaFailover'
 import {
   LOOP_RESUME_SETTING_KEY,
   DEFAULT_LOOP_RESUME,
-  LOOP_ESTIMATE_WINDOW_MS,
   LIMIT_RESET_BUFFER_MS,
   LOOP_DONE_MARKER,
   LOOP_WAIT_MARKER,
@@ -347,7 +346,7 @@ import {
 import { isLoopSkill, resolvePromptSkill } from './lib/promptSkills'
 import { usePromptSkills } from './composables/usePromptSkills'
 import { loginCommandFor, matchLoginExpired } from './lib/cliLoginExpired'
-import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, quotaExhaustedPayload, usageLimitDue } from './lib/cliUsageLimit'
+import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, loopEstimate, quotaExhaustedPayload, usageLimitDue } from './lib/cliUsageLimit'
 import {
   applyScreenWatch,
   hasAwaitingPattern,
@@ -1935,6 +1934,7 @@ interface ActivePane {
   /** Epoch ms of the heuristic quota-reset estimate (runtime-only): loop start
    *  + 5h Claude session window, shown on the running badge as approximate. */
   loopEstimateResetAt?: number | null
+  loopEstimateWeekly?: boolean
   /** Prompt skill this loop was cast with (runtime-only). Null / absent means
    *  the default skill, i.e. what a plain ∞ click sends. */
   loopSkillId?: string | null
@@ -5304,7 +5304,7 @@ async function togglePaneLoop(paneId: string, skillId?: string): Promise<void> {
   pane.loopSkillId = skill.id
   pane.loopTurnCount = 0
   pane.loopMaxTurns = skill.maxTurns
-  pane.loopEstimateResetAt = Date.now() + LOOP_ESTIMATE_WINDOW_MS
+  setLoopEstimate(pane)
   const gen = bumpLoopGen(paneId)
   startLoopLimitWatcher(paneId)
   // Global injection semaphore: synchronized multi-pane loop starts must not
@@ -5385,7 +5385,7 @@ async function fireLoopResume(paneId: string, logLabel: string, manual = false):
   }
   // Resume landed: a fresh quota window starts now, so refresh the badge's
   // pre-limit estimate (otherwise it reverts to the already-elapsed one).
-  pane.loopEstimateResetAt = Date.now() + LOOP_ESTIMATE_WINDOW_MS
+  setLoopEstimate(pane)
   // Re-arm turn-complete: the pre-limit turn's signal must not trigger an
   // instant continue right after the quota resumes.
   armLoopTurn(paneId)
@@ -5468,7 +5468,7 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   // count this one against the hard cap.
   watcher.continues += 1
   watcher.nextContinueAt = Date.now() + loopBackoffMs(watcher.stalledRuns)
-  pane.loopEstimateResetAt = Date.now() + LOOP_ESTIMATE_WINDOW_MS
+  setLoopEstimate(pane)
 }
 
 /** A completed turn's text decides whether the loop is getting anywhere. A
@@ -5927,6 +5927,12 @@ function paneQuotaReading(pane: ActivePane) {
   // account happens to be active now for a retained or unknown pane.
   if (pane.profileId === undefined || pane.profileId === '') return undefined
   return accountUsageFor(pane.agentKey, pane.profileId)
+}
+
+function setLoopEstimate(pane: ActivePane): void {
+  const estimate = loopEstimate(paneQuotaReading(pane), Date.now())
+  pane.loopEstimateResetAt = estimate.at
+  pane.loopEstimateWeekly = estimate.weekly
 }
 
 /** The quota half of the pane health watch: light `usageLimitAt/Until` on a
@@ -7064,7 +7070,9 @@ function scheduleInjection(pane: ActivePane): void {
       if (pane.origin !== 'pipeline' && pinsSessionAtLaunch(pane.agentKey) && pane.pinnedSessionId) {
         void persistPaneSession(pane, pane.pinnedSessionId)
       }
-      return
+      // A slot spawned at activation (behind a gate or a branch) carries its
+      // kickoff on this pane, and nothing else will send it.
+      if (!rolelessPaneAwaitsKickoff(pane)) return
     }
     if (pane.skipRoleInjection) {
       pane.injectionStatus = 'skipped'
@@ -7099,74 +7107,80 @@ function scheduleInjection(pane: ActivePane): void {
         if (!paneAlive(pane.id)) return
       }
     }
-    const role = rolesApi.find(pane.roleKey)
-    if (!role) {
-      pane.injectionStatus = 'failed'
-      setPrepStatus(pane, 'failed')
-      syncViews()
-      pipelineLog(`${tag} ✕ role '${pane.roleKey}' not found in registry`)
-      return
-    }
-    // Embed the session marker in the role prompt too (Codex/Antigravity), not just
-    // the kickoff — the role is injected at pre-spawn, so the marker lands in
-    // the session file (and gets detected) within seconds, instead of waiting
-    // for this slot's stage to activate (which for late stages is much later).
-    const roleContent = role.system_prompt + ROLE_STANDBY_SUFFIX + sessionMarkerLine(pane.sessionMarker)
-    pipelineLog(`${tag} ➜ injecting role '${role.label}' (${roleContent.length} chars)`)
-    setPrepStatus(pane, 'injecting-role')
-    syncViews()
-    await acquireInjectionSlot()
-    let ok: boolean
-    try {
-      // bracketed paste (preserveNewlines) — same as kickoff — so the multi-line
-      // role prompt isn't sent as a raw keystroke burst that floods the PTY
-      // input buffer (EAGAIN drops) and re-renders on every embedded newline.
-      ok = await injectPane(pane.id, roleContent, `role:${role.label}`, true)
-    } finally {
-      releaseInjectionSlot()
-    }
-    pane.injectionStatus = ok ? 'sent' : 'failed'
-    setPrepStatus(pane, ok ? 'ready' : 'failed')
-    syncViews()
-    if (ok && pane.origin !== 'pipeline' && pinsSessionAtLaunch(pane.agentKey) && pane.pinnedSessionId) {
-      void persistPaneSession(pane, pane.pinnedSessionId)
-    }
-    if (!ok) {
-      // Honest record: role injection didn't land (e.g. truncated mid-text).
-      // A pipeline slot about to take its kickoff fails the run instead: with
-      // the kickoff sent anyway it ran as `running` without its role (#448).
-      // A pre-spawned slot has no kickoff yet; activateStage retries its role.
-      const roleStageIndex = pane.origin === 'pipeline'
-        ? stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
-        : -1
-      if (pane.kickoffStatus === 'pending' && roleStageIndex >= 0) {
-        pipelineLog(`${tag} ✕ role injection failed (agent didn't react) — not sending the kickoff`)
-        pane.kickoffStatus = 'failed'
+    const injectRole = async (): Promise<boolean> => {
+      const role = rolesApi.find(pane.roleKey)
+      if (!role) {
+        pane.injectionStatus = 'failed'
+        setPrepStatus(pane, 'failed')
         syncViews()
-        await failRunOnKickoff(roleStageIndex, pane.slotLabel ?? '', 'role prompt never reached the agent')
-        return
+        pipelineLog(`${tag} ✕ role '${pane.roleKey}' not found in registry`)
+        return false
       }
-      pipelineLog(`${tag} ✕ role injection failed (agent didn't react) — ${pane.origin === 'pipeline' ? 'retrying at stage activation' : 'continuing to kickoff anyway'}`)
-    } else {
-      pipelineLog(`${tag} ✓ role prompt sent`)
+      // Embed the session marker in the role prompt too (Codex/Antigravity), not just
+      // the kickoff — the role is injected at pre-spawn, so the marker lands in
+      // the session file (and gets detected) within seconds, instead of waiting
+      // for this slot's stage to activate (which for late stages is much later).
+      const roleContent = role.system_prompt + ROLE_STANDBY_SUFFIX + sessionMarkerLine(pane.sessionMarker)
+      pipelineLog(`${tag} ➜ injecting role '${role.label}' (${roleContent.length} chars)`)
+      setPrepStatus(pane, 'injecting-role')
+      syncViews()
+      await acquireInjectionSlot()
+      let ok: boolean
+      try {
+        // bracketed paste (preserveNewlines) — same as kickoff — so the multi-line
+        // role prompt isn't sent as a raw keystroke burst that floods the PTY
+        // input buffer (EAGAIN drops) and re-renders on every embedded newline.
+        ok = await injectPane(pane.id, roleContent, `role:${role.label}`, true)
+      } finally {
+        releaseInjectionSlot()
+      }
+      pane.injectionStatus = ok ? 'sent' : 'failed'
+      setPrepStatus(pane, ok ? 'ready' : 'failed')
+      syncViews()
+      if (ok && pane.origin !== 'pipeline' && pinsSessionAtLaunch(pane.agentKey) && pane.pinnedSessionId) {
+        void persistPaneSession(pane, pane.pinnedSessionId)
+      }
+      if (!ok) {
+        // Honest record: role injection didn't land (e.g. truncated mid-text).
+        // A pipeline slot about to take its kickoff fails the run instead: with
+        // the kickoff sent anyway it ran as `running` without its role (#448).
+        // A pre-spawned slot has no kickoff yet; activateStage retries its role.
+        const roleStageIndex = pane.origin === 'pipeline'
+          ? stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
+          : -1
+        if (pane.kickoffStatus === 'pending' && roleStageIndex >= 0) {
+          pipelineLog(`${tag} ✕ role injection failed (agent didn't react) — not sending the kickoff`)
+          pane.kickoffStatus = 'failed'
+          syncViews()
+          await failRunOnKickoff(roleStageIndex, pane.slotLabel ?? '', 'role prompt never reached the agent')
+          return false
+        }
+        pipelineLog(`${tag} ✕ role injection failed (agent didn't react) — ${pane.origin === 'pipeline' ? 'retrying at stage activation' : 'continuing to kickoff anyway'}`)
+      } else {
+        pipelineLog(`${tag} ✓ role prompt sent`)
+      }
+      return true
     }
+    if (pane.roleKey && !(await injectRole())) return
 
     // 4. Inject kickoff prompt (pipeline panes only) — but only AFTER the
     //    agent has acknowledged the role prompt (started responding, then
     //    settled). This prevents the kickoff from being interleaved into
     //    the agent's role-acknowledgement output.
     if (pane.kickoffStatus === 'pending') {
-      pipelineLog(`${tag} waiting for agent to acknowledge role (up to 30s)`)
-      setPrepStatus(pane, 'waiting-agent')
-      syncViews()
-      const result = await waitForActivityThenSettle(pane.id, 2500, 30_000)
-      if (!paneAlive(pane.id)) return
-      if (result === 'no-activity') {
-        pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
-      } else if (result === 'timeout') {
-        pipelineLog(`${tag} ⚠ agent still streaming — sending kickoff anyway`)
-      } else {
-        pipelineLog(`${tag} ✓ agent settled — proceeding`)
+      if (pane.roleKey) {
+        pipelineLog(`${tag} waiting for agent to acknowledge role (up to 30s)`)
+        setPrepStatus(pane, 'waiting-agent')
+        syncViews()
+        const result = await waitForActivityThenSettle(pane.id, 2500, 30_000)
+        if (!paneAlive(pane.id)) return
+        if (result === 'no-activity') {
+          pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
+        } else if (result === 'timeout') {
+          pipelineLog(`${tag} ⚠ agent still streaming — sending kickoff anyway`)
+        } else {
+          pipelineLog(`${tag} ✓ agent settled — proceeding`)
+        }
       }
       pipelineLog(`${tag} ➜ injecting kickoff (${pane.kickoffPrompt.length} chars)`)
       // Use bracketed-paste so newlines in the context header (prior-stage
@@ -7663,6 +7677,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
         stageId: opts.stageId,
         stage_id: opts.stageId,                 // snake_case alias for backend token sink
         origin: opts.origin,
+        spawned_by: opts.spawnedBy ?? '',        // a webhook run's panes pass their launch policy on
         workspace_path: opts.workspacePath ?? '',
         explicit_session_id: pinnedSessionId || explicitSessionId,  // Claude/Antigravity --session-id → precise pane attribution
         session_marker: sessionMarker,           // Codex → marker fallback session detection
@@ -8982,6 +8997,14 @@ useApiKeyTakeover(backend, {
       stayed > 0
         ? i18n.global.t('cli-account.api-key-takeover-partial', { name, count: stayed })
         : i18n.global.t('cli-account.api-key-takeover', { name }),
+      { type: 'info' }
+    )
+  },
+  announceFolderLogin: (name, stayed) => {
+    notifyRestore.toast(
+      stayed > 0
+        ? i18n.global.t('cli-account.folder-login-takeover-partial', { name, count: stayed })
+        : i18n.global.t('cli-account.folder-login-takeover', { name }),
       { type: 'info' }
     )
   },
@@ -11508,7 +11531,18 @@ registerCommand('ui.workspace.switch', async (args) => {
 })
 // MCP window_list (DESIGN-C S3): this window describes itself, under the
 // page-load id the backend knows it by. Read-only.
-registerCommand('ui.window.describe', () => {
+/** For the backend's webhook start: a window that cannot tell is "unknown",
+ *  which the backend refuses. Dev web has no main process, so it says unknown. */
+async function appLockState(): Promise<'locked' | 'unlocked' | 'unknown'> {
+  try {
+    const status = await window.agentTeam?.appLock?.status()
+    if (status) return status.locked ? 'locked' : 'unlocked'
+  } catch {
+    // Reported as unknown below.
+  }
+  return 'unknown'
+}
+registerCommand('ui.window.describe', async () => {
   const held = [...workspaceOrder.value]
   if (currentWorkspace.value && !held.some((w) => normWs(w) === normWs(currentWorkspace.value))) {
     held.unshift(currentWorkspace.value)
@@ -11521,6 +11555,7 @@ registerCommand('ui.window.describe', () => {
     ...(isDetachedWindow ? { detached_group: detachedGroupId } : {}),
     focused: document.hasFocus(),
     panes: panes.value.map((p) => ({ pane_id: p.id, name: p.messagingName ?? '', workspace_path: p.workspacePath })),
+    app_lock: await appLockState(),
   }
 })
 // MCP window_focus (DESIGN-C S3): optionally switch to a project this window
@@ -14762,7 +14797,8 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     // A role that failed at pre-spawn gets the same one more try. A slot whose
     // role never landed takes no kickoff and fails the run below: it used to get
     // the kickoff anyway and run as `running` without its role (#448).
-    if (pane.injectionStatus === 'skipped' || pane.injectionStatus === 'failed') {
+    // A slot with no role has nothing to inject and goes straight to its kickoff.
+    if (pane.roleKey && (pane.injectionStatus === 'skipped' || pane.injectionStatus === 'failed')) {
       const retry = pane.injectionStatus === 'failed'
       const role = rolesApi.find(pane.roleKey)
       if (!role) {
@@ -23954,13 +23990,14 @@ function paneIsCommander(p: ActivePane): boolean {
             <br />{{ $t('hint.pipeline-starting-log') }}
           </p>
         </div>
-        <!-- One sentence and one way forward. The button only surfaces the
-             sidebar's Agents tab, where the spawn card already lives — the same
-             programmatic entry Cmd+1 uses — so nothing spawns from here. -->
+        <!-- One sentence and one way forward. The button surfaces the sidebar's
+             Agents tab and opens the picked CLI, the same spawn the sidebar's
+             button runs: with that tab already showing, surfacing it alone did
+             nothing at all. -->
         <div v-else class="empty-card empty-card--idle">
           <img class="empty-mark" :src="navideMark" alt="" />
           <p class="empty-lead">{{ $t('label.empty-stage-lead') }}</p>
-          <button type="button" class="empty-primary" @click="controlPaneRef?.selectSidebarTab('agents')">
+          <button type="button" class="empty-primary" @click="controlPaneRef?.selectSidebarTab('agents'); controlPaneRef?.spawn()">
             {{ $t('action.add-to-grid') }}
           </button>
           <!-- The sidebar's own Run button, guard and all: disabled exactly
@@ -24100,6 +24137,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-active="p.loopActive"
           :loop-wait-until="p.loopWaitUntil"
           :loop-estimate-reset-at="p.loopEstimateResetAt"
+          :loop-estimate-weekly="p.loopEstimateWeekly"
           :login-expired="p.loginExpired"
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"

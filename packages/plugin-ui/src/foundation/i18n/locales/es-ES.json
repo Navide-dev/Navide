@@ -1021,6 +1021,7 @@
       "loop-badge-estimate": "∞ Loop · ~{time}",
       "loop-badge-resume": "∞ se reanuda {time}",
       "loop-estimate-tooltip": "Restablecimiento de la cuota estimado hacia las {time} (heurística de la ventana de session de 5 horas); se sustituye por la hora exacta si aparece un mensaje de límite. Haz clic para desactivar el loop",
+      "loop-estimate-weekly-tooltip": "La cuota semanal se restablece a las {time}; esta cuenta no tiene ventana de 5 horas. Haz clic para desactivar Loop",
       "loop-paused-notify-title": "Loop en pausa",
       "loop-paused-notify-body": "Se alcanzó el límite de la session: se reanudará automáticamente a las {time} (haz clic en la insignia del loop para reanudarlo ahora)",
       "loop-unparseable-notify-title": "El loop alcanzó un límite de session",
@@ -1735,7 +1736,11 @@
           "title": "Insignias de estado",
           "summary": "Cambia el nombre de cada estado de pane y elige su color, por idioma."
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhooks",
+        "summary": "Inicia una pipeline desde otro sistema por HTTP, con una clave o una firma de GitHub."
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "Oculta todas las ventanas tras una pantalla de bloqueo y desbloquea con Touch ID, Windows Hello o un PIN"
         },
@@ -2653,9 +2658,9 @@
       "custom-colors": "Colores personalizados",
       "reset-to-defaults": "↺ Restablecer valores predeterminados",
       "tweaks-hint": "Los retoques se superponen al tema actual y se conservan al cambiar de tema.",
-      "environment": "Entorno",
-      "environment-hint": "Vuelve a ejecutar el asistente de detección del entorno del primer inicio (comprueba Homebrew / Node / CLI / Ollama, etc.).",
-      "rerun-env-check": "↻ Volver a comprobar el entorno",
+      "environment": "Asistente de configuración",
+      "environment-hint": "Vuelve a abrir el asistente del primer inicio para instalar CLI de agentes y revisar los permisos.",
+      "rerun-env-check": "↻ Reabrir el asistente de configuración",
       "backend-timeout": "Tiempo de espera de inicio del backend",
       "backend-timeout-hint": "Cuánto esperar a que el backend esté en buen estado al iniciar o reiniciar antes de desistir. Auméntalo en equipos más lentos (15–120 segundos).",
       "backend-timeout-label": "Tiempo de espera (segundos)",
@@ -2816,14 +2821,14 @@
         "intro": "Qué controla cada una de las diecinueve pestañas de ajustes, cómo Navide Cloud une varias máquinas en una red privada y las superficies del sistema que viven fuera de la pantalla principal: los menús, las ventanas independientes, las vistas de uso y el mantenimiento de recursos.",
         "s1": {
           "title": "Resumen de los ajustes",
-          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>25 pestañas</strong> en total.",
+          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>26 pestañas</strong> en total.",
           "h1": "El campo de búsqueda",
           "p2": "Debajo del encabezado de la barra lateral hay un campo de búsqueda con el texto de ejemplo <code>Buscar en los ajustes…</code>. Busca en los títulos de los ajustes, su sección y sus palabras clave <strong>en todas las pestañas</strong> (con el idioma actual de la interfaz y las palabras clave indexadas) y muestra como máximo 8 resultados; al hacer clic en uno se cambia a esa pestaña y se desplaza hasta la sección (con una excepción: «Almacenamiento» cierra los ajustes y abre directamente el Administrador de recursos). Si no hay coincidencias, muestra <code>No hay ajustes que coincidan</code>. <kbd class=\"syh-kbd\">Esc</kbd> lo vacía.",
           "callout": {
             "title": "El índice de búsqueda no es exhaustivo",
             "text": "El índice es una lista mantenida a mano, y <strong>las pestañas {layout}, {notifications}, {security} y {channels} no tienen ninguna entrada</strong>, así que nada de su contenido se puede buscar: tienes que abrirlas tú. Una entrada de CLI Agents abre directamente el panel lateral de ajustes de una CLI (consulta el tema «Agents de CLI y cuentas»)."
           },
-          "h2": "Las veinticinco pestañas",
+          "h2": "Las veintiséis pestañas",
           "tabTable": {
             "group": "Grupo",
             "tab": "Pestaña",
@@ -2886,6 +2891,10 @@
             "analyzer": {
               "what": "El backend de inferencia local, descargas de modelos, pruebas de rendimiento de modelos",
               "more": "la sección 4 de esta página"
+            },
+            "webhooks": {
+              "what": "Disparadores con los que otro sistema inicia una pipeline por HTTP o desde GitHub, con sus claves, límites y actividad",
+              "more": "Las ejecuciones desatendidas y el aviso de la clave en Linux se explican al activarlos."
             },
             "security": {
               "what": "Las reglas y niveles de Navide Guard, ramas protegidas, reglas personalizadas y protección de comandos para terminales normales",
@@ -8322,7 +8331,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "Cuota de suscripción agotada",
+          "title": "Límite de uso alcanzado",
           "back-at": "Disponible de nuevo a las {time}",
           "back-unknown": "No se conoce la hora de restablecimiento",
           "wait": "Esperar al restablecimiento"
@@ -8390,8 +8399,8 @@
           "invalid-name": "Introduce un nombre de hasta 60 caracteres.",
           "invalid-reminder": "Introduce un importe mensual superior a cero para la nota de presupuesto.",
           "unsupported-agent": "Las claves de API aún no están disponibles para esta CLI.",
-          "store-failed": "No se pudo guardar en el llavero de este ordenador.",
-          "secret-missing": "Esta clave ya no está en el llavero. Pégala de nuevo.",
+          "store-failed": "No se pudo guardar en este ordenador.",
+          "secret-missing": "Esta clave ya no está en este ordenador. Pégala de nuevo.",
           "not-found": "Esta clave de API ya no existe.",
           "main-window-only": "Las claves de API solo se pueden gestionar en Ajustes.",
           "internal-error": "Algo ha salido mal. Inténtalo de nuevo.",
@@ -9297,7 +9306,7 @@
     "install-foundation-tools": "Instala las herramientas básicas necesarias...",
     "agent-cli-required": "Al menos una CLI de agent...",
     "analyzer-requires-ollama": "El analizador requiere Ollama...",
-    "download-model": "Descarga cualquiera; cualquier modelo instalado...",
+    "download-model": "Descarga cualquiera. Navide puede usar cualquier modelo instalado.",
     "review-instructions": "Haz clic en Iniciar revisión para analizar...",
     "match-case": "Coincidir mayúsculas y minúsculas (Aa)",
     "replace-all-truncated": "Los resultados están truncados: acota la búsqueda antes de reemplazar todo",
@@ -9447,6 +9456,9 @@
         "api-key-takeover-paused": "No se puede escribir el historial de cambios, así que el cambio automático está en pausa. No se cambió a la cuenta con clave de API.",
         "api-key-takeover-unrecorded": "No se pudo registrar el cambio a la cuenta con clave de API, así que no se cambió.",
         "api-key-takeover-failed": "El cambio a la cuenta con clave de API falló. No se cambió, pero cuenta para el límite de cambios automáticos.",
+        "folder-login-takeover": "Los paneles pasaron a otra cuenta de suscripción.",
+        "folder-login-takeover-unrecorded": "No se pudo registrar el cambio a la otra cuenta de suscripción, así que no se movió nada.",
+        "folder-login-takeover-failed": "El cambio a la otra cuenta de suscripción falló. No se movió nada. Aun así cuenta para el límite de cambios automáticos.",
         "no-candidate": "No hay ninguna cuenta a la que cambiar. Inicia sesión en otra cuenta o espera al restablecimiento.",
         "auto_budget_exhausted": "Se ha alcanzado el límite de cambios automáticos. Cambia manualmente o espera a que pase la ventana.",
         "chained-exhaustion": "{target} también se ha agotado. No se ha probado nada más.",
@@ -9802,9 +9814,11 @@
     "failed": "No se pudo volver a conectar esa conversación: puede que su transcripción ya no exista"
   },
   "cli-account": {
-    "api-key-takeover-partial": "Cuota agotada. Los paneles nuevos usan {name}, con facturación por uso. {count} paneles ocupados siguen igual.",
+    "api-key-takeover-partial": "Cuota agotada. Los paneles nuevos usan {name}, con facturación por uso. Paneles que siguen igual: {count}.",
     "api-key-login-back": "Tu cuota de suscripción ha vuelto. Los paneles siguen con la clave de API hasta que cambies en Cuentas.",
     "api-key-takeover": "Cuota agotada. Los paneles usan ahora {name}, con facturación por uso. Vuelve a cambiar en Cuentas cuando se restablezca.",
+    "folder-login-takeover": "Cuota agotada. Los paneles pasaron a {name}, una cuenta de suscripción con cuota disponible.",
+    "folder-login-takeover-partial": "Cuota agotada. Los paneles nuevos usan {name}, una cuenta de suscripción con cuota disponible. Paneles que siguen igual: {count}.",
     "default": "Inicio de sesión original",
     "switch-title": "Cambiar de cuenta",
     "swap-failed": "No se pudo cambiar de cuenta: la cuenta anterior sigue activa.",
@@ -10136,6 +10150,8 @@
     "window-left-pct": "{label}: queda {pct}",
     "window-left-used": "{label}: queda {pct} ({used} usado)",
     "window-claude-session": "Session (5 h)",
+    "window-unlimited": "Ilimitado",
+    "window-not-reported": "No informado",
     "window-claude-weekly": "Semanal (todos los modelos)",
     "window-claude-weekly-model": "Semanal ({scope})",
     "parked-not-measured-hint": "Aparcada: Claude Code solo informa de la cuenta con la que se ejecuta. Inicia sesión con esta cuenta en su propia carpeta para leer su cuota en vivo.",
@@ -10208,13 +10224,15 @@
       "environment": "Configura tu entorno de desarrollo",
       "agents": "Añade tus CLI de agent",
       "permissions": "Configura Navide en tu ordenador",
-      "ready": "Ya está todo listo"
+      "ready": "Ya está todo listo",
+      "ready-locked": "Falta un paso"
     },
     "aside": {
       "environment": "Navide controla CLI reales en terminales reales: estas herramientas son la base sobre la que funciona.",
       "agents": "Cada pane que abras ejecuta uno de estos agents. Con uno basta para empezar.",
       "permissions": "Concede el acceso que Navide necesita para controlar tu equipo.",
-      "ready": "Todo está en orden. La primera vez, un breve recorrido que puedes saltarte en cualquier momento te ayuda a elegir un área de trabajo y abrir tu primer agent."
+      "ready": "Todo está en orden. La primera vez, un breve recorrido que puedes saltarte en cualquier momento te ayuda a elegir un área de trabajo y abrir tu primer agent.",
+      "ready-locked": "Instala al menos una CLI de agente para abrir Navide. También puedes omitirlo por ahora y añadirla más tarde."
     },
     "install": "Instalar",
     "installing": "Instalando…",
@@ -10231,9 +10249,9 @@
     "notif-test-body": "Las notificaciones están activadas: aquí recibirás avisos de tus agents.",
     "perm": {
       "automation": {
-        "title": "Permitir que Navide ejecute comandos de instalación en Terminal",
-        "desc": "Algunas CLI deben instalarse en un terminal real. Esto permite que Navide abra Terminal y escriba el comando por ti.",
-        "why": "macOS lo llama Automatización. Navide solo envía el comando de instalación en el que hiciste clic; nunca lee lo que hay en tus ventanas de terminal.",
+        "title": "Permitir que Navide abra comandos en Terminal",
+        "desc": "Algunas acciones, como los diagnósticos de CLI o las instalaciones cuando la terminal integrada no puede iniciarse, abren Terminal y escriben el comando por ti.",
+        "why": "macOS lo llama Automatización. Navide solo envía el comando en el que hiciste clic y nunca lee el contenido de tus ventanas de terminal.",
         "denied": "Se denegó el control de Terminal. Actívalo en Ajustes del Sistema y vuelve a detectar.",
         "pane-hint": "Activa Terminal bajo Navide en Privacidad y seguridad → Automatización."
       },
@@ -12727,11 +12745,11 @@
       "community-node": "Nodo de la comunidad. Un agent lo ejecuta a partir de sus parámetros.",
       "merge-combine": "Merge en modo «{mode}» combina datos. Un agent lo ejecuta según su regla de combinación.",
       "role-trigger-schedule": "En n8n se ejecuta según una programación. Inicia la pipeline manualmente o prográmala en Turn Stats ▸ Programación con una tarea «Iniciar una pipeline».",
-      "role-trigger-webhook": "En n8n se inicia con una petición HTTP. Navide aún no tiene disparador de webhook.",
+      "role-trigger-webhook": "En n8n se inicia con una petición HTTP. Créalo en Ajustes → Webhooks.",
       "role-trigger-error": "Los flujos de trabajo de error de n8n aún no tienen equivalente en Navide.",
       "role-trigger-app": "En n8n se inicia con un evento de una aplicación. Navide aún no tiene disparadores de aplicaciones.",
       "role-subworkflow": "Llama a otro flujo de trabajo de n8n que no está importado. Pega también ese flujo de trabajo o impórtalo antes.",
-      "role-respond": "Responde a un webhook de n8n. Navide aún no tiene disparador de webhook.",
+      "role-respond": "Responde a un webhook de n8n. Un disparador de Navide responde 202 y no devuelve ningún resultado.",
       "error-workflow": "Este flujo de trabajo es su propio flujo de error. Cuando un paso falla, los pasos siguientes se ejecutan por enlaces de error.",
       "recursive-subworkflow": "Llama al flujo de trabajo de n8n {workflowId}, que a su vez vuelve a llamar a este. Una subpipeline no puede ejecutarse a sí misma, así que esta llamada queda pendiente de revisión.",
       "tool-pipeline": "Una herramienta del agent que llama al flujo de trabajo de n8n {workflowId}, importado como la pipeline {pipelineId}. Una pipeline no se puede llamar como herramienta, así que las instrucciones del paso la nombran en su lugar.",
@@ -12781,6 +12799,167 @@
       "internal": "El grafo convertido no es válido. Es un error del importador.",
       "too-large": "El flujo de trabajo ocupa {sizeMb} MB. Una importación admite como máximo {limitMb} MB.",
       "store-refused": "No se pudo guardar el flujo de trabajo «{workflow}», así que no se importó nada: {problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhooks",
+    "guardOff": "Activa primero Navide Guard en Ajustes → Seguridad. Sin él, los webhooks siguen desactivados y se rechazan las solicitudes que lleguen.",
+    "portTaken": "Navide no pudo empezar a escuchar: {error}. Libera ese puerto y vuelve a activarlo. Navide no cambia de puerto porque tus llamadas usan este.",
+    "enabled": {
+      "title": "Aceptar webhooks",
+      "desc": "Permite que otro sistema inicie una pipeline por HTTP. Solo se escucha con esto activado y un disparador habilitado. Navide escucha solo en este equipo. Para llegar desde fuera, monta tu propio túnel. Navide debe estar abierto, con una ventana en el espacio de trabajo."
+    },
+    "host": {
+      "title": "Nombre de host público",
+      "desc": "El nombre en el que responde tu túnel. Se rechazan las solicitudes a cualquier otro host. Déjalo vacío si solo este equipo llama a Navide.",
+      "placeholder": "hook.example.com",
+      "warning": "Con un túnel, cualquiera en internet puede llegar a esta dirección. Lo único que lo detiene es la clave o la firma de cada disparador."
+    },
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "create": "Crear disparador",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Eliminar para siempre?",
+    "turnOn": "Activar",
+    "more": "Opciones",
+    "triggers": "Disparadores",
+    "new": "Nuevo disparador",
+    "needsWorkspace": "Abre primero un espacio de trabajo. Un disparador se ejecuta en él.",
+    "empty": {
+      "title": "Aún no hay disparadores",
+      "desc": "Un disparador conecta una dirección con una pipeline: una llamada a la dirección inicia una ejecución."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "Formulario"
+    },
+    "form": {
+      "name": "Nombre",
+      "source": "Origen",
+      "pipeline": "Pipeline",
+      "workspace": "Espacio de trabajo",
+      "events": "Eventos",
+      "limits": "Límites",
+      "timeout": "Esperar por ti",
+      "eventsHint": "Solo los eventos marcados inician una ejecución. La prueba ping de GitHub se responde sin iniciar ninguna.",
+      "noGate": "Iniciar sin aprobación. El primer paso no es una puerta de aprobación, así que una solicitud inicia el agente de inmediato. El contenido externo le llega sin que nadie lo vea antes.",
+      "default": "En las ejecuciones de este disparador, cada llamada a herramienta espera tu confirmación. Si nadie responde a tiempo, la ejecución se detiene y no se aprueba nada. El móvil y los canales de chat no pueden aprobar una ejecución de webhook. Solo Claude Code.",
+      "fields": "Campos",
+      "fieldLabel": "Etiqueta",
+      "fieldType": "Tipo",
+      "required": "Obligatorio",
+      "removeField": "Quitar",
+      "addField": "Añadir campo",
+      "options": "Opciones, separadas por comas",
+      "fieldsHint": "No hay archivos, contraseñas ni HTML personalizado.",
+      "public": "Permite abrir este formulario desde fuera de este equipo. Su dirección quedará en el historial del navegador y en los registros de tu túnel, y quien la tenga podrá iniciar una ejecución. Desactivado, solo se abre en este equipo."
+    },
+    "perMinute": "por minuto",
+    "perDay": "por día",
+    "minutes": "min de espera",
+    "minutesUnit": "minutos",
+    "rate": "{minute}/min · {day}/día",
+    "enable": "Habilitar {name}",
+    "state": {
+      "off": "Desactivado",
+      "listener-off": "Habilitado, sin escuchar",
+      "ready": "Listo",
+      "running": "En ejecución",
+      "waiting": "Esperando por ti · se detiene en {minutes} min"
+    },
+    "reveal": {
+      "titleKey": "Clave de {name}",
+      "titleSecret": "Secreto de {name}",
+      "once": "Cópialo ahora. Navide no guarda una copia legible y no volverá a mostrarlo.",
+      "noAddress": "Activa el disparador y su dirección aparecerá en su fila.",
+      "url": "Dirección",
+      "key": "Clave",
+      "secret": "Secreto",
+      "copyCurl": "Copiar llamada de prueba",
+      "done": "Ya lo he guardado",
+      "githubHint": "En GitHub, abre Settings → Webhooks del repositorio, pega ambos y elige application/json. La dirección debe ser pública, así que define antes un nombre de host arriba.",
+      "titleForm": "Dirección de {name}",
+      "formHint": "Esta dirección es la única clave: quien la tenga puede abrir el formulario. Compártela como una contraseña."
+    },
+    "rotateKey": "Sustituir clave",
+    "rotateSecret": "Sustituir secreto",
+    "unattended": {
+      "chip": "Desatendido",
+      "title": "Ejecutar desatendido",
+      "desc": "Desactivado por defecto. Los paneles de las ejecuciones de este disparador omiten las solicitudes de permiso. Al activarlo se explica qué implica.",
+      "unsupported": "Aún no disponible en Windows.",
+      "confirmTitle": "Antes de ejecutar desatendido",
+      "skips": "El agente omite las solicitudes de permiso. Nadie confirma sus llamadas a herramientas.",
+      "external": "Trabaja con contenido externo, y ese contenido puede intentar dirigirlo.",
+      "scripts": "Guard solo detiene los comandos que reconoce. No puede detener a un agente que escribe un script y luego lo ejecuta.",
+      "hook": "Si el hook de Guard no puede responder, la llamada se rechaza. Si el propio proceso del hook muere o se cuelga, la llamada pasa.",
+      "tick": "Entiendo que el agente trabaja sin confirmación con contenido externo."
+    },
+    "weakKey": {
+      "title": "En Linux este secreto tiene menos protección",
+      "body": "Su clave está en un archivo protegido solo por permisos, así que cualquier programa que se ejecute con tu usuario puede leerla. macOS y Windows la guardan en el almacén protegido del sistema.",
+      "tick": "Lo entiendo y quiero habilitar este disparador."
+    },
+    "log": {
+      "title": "Actividad",
+      "empty": "Aún no hay registros."
+    },
+    "refused": {
+      "vendor-refused": "En esta versión solo Claude Code puede ejecutarse desde un webhook, y todos los pasos deben usarlo. Codex no tiene un modo que pregunte antes de cada llamada a herramienta, y otras CLI aún no se han probado con Guard.",
+      "no-gate": "El primer paso de esta pipeline no es una puerta de aprobación. Añade una, o vuelve a crear el disparador y marca Iniciar sin aprobación.",
+      "pipeline-missing": "La pipeline de este disparador ya no existe."
+    },
+    "error": {
+      "GUARD_OFF": "Activa primero Navide Guard.",
+      "KEY_UNAVAILABLE": "No se pudo acceder al almacén de claves del sistema. Desbloquéalo e inténtalo de nuevo.",
+      "UNATTENDED_UNSUPPORTED": "Aún no disponible en Windows.",
+      "NOT_FOUND": "Este disparador ya no existe.",
+      "BAD_REQUEST": "Revisa los valores. Los límites llegan a 60 por minuto y 500 por día, y la espera va de 5 a 240 minutos.",
+      "generic": "No ha funcionado. Inténtalo de nuevo."
+    },
+    "outcome": {
+      "accepted": "Aceptado",
+      "started": "Ejecución iniciada",
+      "start-failed": "La ejecución no se inició",
+      "duplicate": "Misma entrega que antes, no ejecutada",
+      "ping": "Ping de GitHub",
+      "event-ignored": "Evento sin marcar",
+      "daily-limit": "Límite diario alcanzado",
+      "rate-limited": "Demasiadas solicitudes",
+      "bad-key": "Clave incorrecta",
+      "bad-signature": "Firma incorrecta",
+      "run-active": "Ya había una ejecución",
+      "no-window": "Sin ventana en el espacio de trabajo",
+      "app-locked": "App Lock activo",
+      "guard-off": "Guard desactivado",
+      "vendor-refused": "La pipeline usa una CLI no admitida",
+      "no-gate": "Sin puerta de aprobación",
+      "awaiting-approval": "Esperando por ti",
+      "approval-timeout": "Nadie respondió, ejecución detenida",
+      "run-timeout": "La ejecución alcanzó el límite de 4 horas",
+      "interrupted": "Ejecución interrumpida",
+      "secret-lost": "El secreto ya no se puede leer y el disparador se desactivó. Sustituye el secreto para volver a usarlo.",
+      "key-unavailable": "No se pudo acceder al almacén de claves",
+      "unattended-on": "Desatendido activado",
+      "unattended-off": "Desatendido desactivado",
+      "no-gate-acknowledged": "Iniciar sin aprobación marcado",
+      "form-invalid": "Formulario con valores no válidos",
+      "form-public": "Formulario hecho público",
+      "bad-csrf": "Formulario sin un token válido",
+      "cross-site": "Formulario enviado desde otro sitio"
+    },
+    "rotateForm": "Sustituir dirección",
+    "fieldType": {
+      "text": "Texto",
+      "textarea": "Texto largo",
+      "number": "Número",
+      "email": "Correo",
+      "date": "Fecha",
+      "select": "Lista",
+      "checkbox": "Casilla"
     }
   }
 }

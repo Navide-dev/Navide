@@ -32,9 +32,15 @@ describe('backendErrorText', () => {
 
 // ── Pipeline UX PR-B: every refusal says why, in the UI language ──────────────
 const ALL_LOCALES = ['en-US', 'zh-TW', 'zh-CN', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU', 'vi-VN']
+// Parsed once per locale: re-parsing a 1 MB file for every key took a locale
+// past the 5s test timeout on a loaded machine.
+const parsedLocales = new Map<string, unknown>()
 function lookup(locale: string, key: string): unknown {
-  const raw = readFileSync(resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`), 'utf8')
-  return key.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], JSON.parse(raw))
+  if (!parsedLocales.has(locale)) {
+    const raw = readFileSync(resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`), 'utf8')
+    parsedLocales.set(locale, JSON.parse(raw))
+  }
+  return key.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], parsedLocales.get(locale))
 }
 const tp = (key: string, p?: Record<string, unknown>) => `t:${key}${p && Object.keys(p).length ? ` ${JSON.stringify(p)}` : ''}`
 

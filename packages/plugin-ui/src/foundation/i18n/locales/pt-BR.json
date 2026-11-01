@@ -1021,6 +1021,7 @@
       "loop-badge-estimate": "∞ Loop · ~{time}",
       "loop-badge-resume": "∞ retoma {time}",
       "loop-estimate-tooltip": "Redefinição da cota estimada por volta de {time} (heurística da janela de session de 5 horas); substituída pelo horário exato se aparecer uma mensagem de limite. Clique para desativar o loop",
+      "loop-estimate-weekly-tooltip": "A cota semanal é redefinida às {time}; esta conta não tem janela de 5 horas. Clique para desativar o Loop",
       "loop-paused-notify-title": "Loop pausado",
       "loop-paused-notify-body": "Limite da session atingido: retomada automática às {time} (clique no selo do loop para retomar agora)",
       "loop-unparseable-notify-title": "O loop atingiu um limite de session",
@@ -1735,7 +1736,11 @@
           "title": "Selos de status",
           "summary": "Renomeie cada status de pane e escolha a cor dele, por idioma."
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhooks",
+        "summary": "Inicie um pipeline de outro sistema por HTTP, com uma chave ou assinatura do GitHub."
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "Esconda todas as janelas atrás de uma tela de bloqueio e desbloqueie com Touch ID, Windows Hello ou um PIN"
         },
@@ -2653,9 +2658,9 @@
       "custom-colors": "Cores personalizadas",
       "reset-to-defaults": "↺ Restaurar padrões",
       "tweaks-hint": "Os ajustes ficam por cima do tema atual e são mantidos ao trocar de tema.",
-      "environment": "Ambiente",
-      "environment-hint": "Execute novamente o assistente de detecção de ambiente da primeira inicialização (verifica Homebrew / Node / CLI / Ollama etc.).",
-      "rerun-env-check": "↻ Verificar o ambiente novamente",
+      "environment": "Assistente de configuração",
+      "environment-hint": "Reabre o assistente da primeira execução para instalar CLIs de agentes e revisar as permissões.",
+      "rerun-env-check": "↻ Reabrir o assistente de configuração",
       "backend-timeout": "Tempo limite de inicialização do back-end",
       "backend-timeout-hint": "Quanto tempo esperar o back-end ficar íntegro na inicialização ou reinicialização antes de desistir. Aumente em máquinas mais lentas (15–120 segundos).",
       "backend-timeout-label": "Tempo limite (segundos)",
@@ -2816,14 +2821,14 @@
         "intro": "O que cada uma das dezenove guias de configurações controla, como o Navide Cloud liga várias máquinas em uma rede privada e as partes do sistema que ficam fora da tela principal: os menus, as janelas independentes, as visualizações de uso e a manutenção de recursos.",
         "s1": {
           "title": "Visão geral das configurações",
-          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">⌘,</kbd>; o botão de engrenagem na barra de título é o mesmo ponto de entrada. A barra lateral esquerda é dividida em cinco grupos, com <strong>25 guias</strong> no total.",
+          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">⌘,</kbd>; o botão de engrenagem na barra de título é o mesmo ponto de entrada. A barra lateral esquerda é dividida em cinco grupos, com <strong>26 guias</strong> no total.",
           "h1": "O campo de pesquisa",
           "p2": "Abaixo do título da barra lateral há um campo de pesquisa com o texto de exemplo <code>Pesquisar configurações…</code>. Ele procura nos títulos das configurações, na seção e nas palavras-chave <strong>em todas as guias</strong> (no idioma atual da interface e com as palavras-chave indexadas) e mostra no máximo 8 resultados; clicar em um deles abre a guia correspondente e rola até a seção (com uma exceção: “Armazenamento” fecha as configurações e abre diretamente o Resource Manager). Sem resultados, aparece <code>Nenhuma configuração correspondente</code>. <kbd class=\"syh-kbd\">Esc</kbd> limpa o campo.",
           "callout": {
             "title": "O índice de pesquisa não é completo",
             "text": "O índice é uma lista mantida à mão, e <strong>as guias {layout}, {notifications}, {security} e {channels} não têm nenhuma entrada</strong>, então nada dentro delas pode ser pesquisado: é preciso abri-las manualmente. Uma entrada de Agents de CLI abre diretamente o painel lateral de configurações de uma CLI (veja o tópico “Agents de CLI e contas”)."
           },
-          "h2": "As vinte e cinco guias",
+          "h2": "As vinte e seis guias",
           "tabTable": {
             "group": "Grupo",
             "tab": "Guia",
@@ -2886,6 +2891,10 @@
             "analyzer": {
               "what": "O back-end de inferência local, downloads de modelos, benchmarks de modelos",
               "more": "seção 4 desta página"
+            },
+            "webhooks": {
+              "what": "Gatilhos com que outro sistema inicia um pipeline por HTTP ou pelo GitHub, com chaves, limites e atividade",
+              "more": "Execuções sem supervisão e o aviso da chave no Linux são explicados ao ligar."
             },
             "security": {
               "what": "As regras e os níveis do Navide Guard, branches protegidos, regras personalizadas e proteção de comandos para terminais simples",
@@ -8322,7 +8331,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "Cota da assinatura esgotada",
+          "title": "Limite de uso atingido",
           "back-at": "Volta às {time}",
           "back-unknown": "O horário de redefinição é desconhecido",
           "wait": "Aguardar a redefinição"
@@ -8390,8 +8399,8 @@
           "invalid-name": "Digite um nome com até 60 caracteres.",
           "invalid-reminder": "Digite um valor mensal maior que zero para a nota de orçamento.",
           "unsupported-agent": "As chaves de API ainda não estão disponíveis para esta CLI.",
-          "store-failed": "Não foi possível salvar no chaveiro deste computador.",
-          "secret-missing": "Esta chave não está mais no chaveiro. Cole-a novamente.",
+          "store-failed": "Não foi possível salvar neste computador.",
+          "secret-missing": "Esta chave não está mais neste computador. Cole-a novamente.",
           "not-found": "Esta chave de API não existe mais.",
           "main-window-only": "As chaves de API só podem ser gerenciadas em Configurações.",
           "internal-error": "Algo deu errado. Tente novamente.",
@@ -9297,7 +9306,7 @@
     "install-foundation-tools": "Instale as ferramentas básicas necessárias…",
     "agent-cli-required": "Pelo menos uma CLI de agent…",
     "analyzer-requires-ollama": "O analisador requer o Ollama…",
-    "download-model": "Baixe qualquer um; qualquer modelo instalado…",
+    "download-model": "Baixe qualquer um. O Navide pode usar qualquer modelo instalado.",
     "review-instructions": "Clique em “Iniciar revisão” para analisar…",
     "match-case": "Diferenciar maiúsculas e minúsculas (Aa)",
     "replace-all-truncated": "Os resultados estão truncados – restrinja a pesquisa antes de substituir tudo",
@@ -9447,6 +9456,9 @@
         "api-key-takeover-paused": "Não foi possível gravar o histórico de trocas, então a troca automática está pausada. Nada foi movido para a conta de chave de API.",
         "api-key-takeover-unrecorded": "Não foi possível registrar a troca para a conta de chave de API, então nada mudou.",
         "api-key-takeover-failed": "A troca para a conta de chave de API falhou. Nada mudou, mas ela conta para o limite de trocas automáticas.",
+        "folder-login-takeover": "Os painéis foram movidos para outra conta de assinatura.",
+        "folder-login-takeover-unrecorded": "Não foi possível registrar a mudança para a outra conta de assinatura, então nada foi movido.",
+        "folder-login-takeover-failed": "A mudança para a outra conta de assinatura falhou. Nada foi movido. Ela ainda conta para o limite de trocas automáticas.",
         "no-candidate": "Não há conta para a qual trocar. Entre em outra conta ou aguarde a redefinição.",
         "auto_budget_exhausted": "Limite de trocas automáticas atingido. Troque manualmente ou aguarde o fim da janela.",
         "chained-exhaustion": "{target} também ficou sem cota. Nada mais foi tentado.",
@@ -9802,9 +9814,11 @@
     "failed": "Não foi possível reconectar essa conversa – a transcrição dela pode não existir mais"
   },
   "cli-account": {
-    "api-key-takeover-partial": "Cota esgotada. Novos painéis usam {name}, com cobrança por uso. {count} painéis ocupados continuam como estavam.",
+    "api-key-takeover-partial": "Cota esgotada. Novos painéis usam {name}, com cobrança por uso. Painéis que continuam como estavam: {count}.",
     "api-key-login-back": "Sua cota de assinatura voltou. Os painéis continuam na chave de API até você voltar em Contas.",
     "api-key-takeover": "Cota esgotada. Os painéis agora usam {name}, com cobrança por uso. Volte em Contas depois que a cota for redefinida.",
+    "folder-login-takeover": "Cota esgotada. Os painéis foram movidos para {name}, uma conta de assinatura com cota restante.",
+    "folder-login-takeover-partial": "Cota esgotada. Novos painéis usam {name}, uma conta de assinatura com cota restante. Painéis que continuam como estavam: {count}.",
     "default": "Login original",
     "switch-title": "Trocar de conta",
     "swap-failed": "Falha na troca de conta – a conta anterior continua ativa.",
@@ -10136,6 +10150,8 @@
     "window-left-pct": "{label}: {pct} restantes",
     "window-left-used": "{label}: {pct} restantes ({used} usados)",
     "window-claude-session": "Session (5 h)",
+    "window-unlimited": "Ilimitado",
+    "window-not-reported": "Não informado",
     "window-claude-weekly": "Semanal (todos os modelos)",
     "window-claude-weekly-model": "Semanal ({scope})",
     "parked-not-measured-hint": "Em espera: o Claude Code só informa a conta com a qual está rodando. Entre com esta conta na própria pasta dela para ler a cota em tempo real.",
@@ -10208,13 +10224,15 @@
       "environment": "Configure seu ambiente de desenvolvimento",
       "agents": "Traga suas CLIs de agent",
       "permissions": "Configure o Navide no seu computador",
-      "ready": "Tudo pronto para começar"
+      "ready": "Tudo pronto para começar",
+      "ready-locked": "Falta uma etapa"
     },
     "aside": {
       "environment": "O Navide controla CLIs reais em terminais reais – estas ferramentas são a base em que ele roda.",
       "agents": "Cada pane que você abre executa um destes agents. Um basta para começar.",
       "permissions": "Conceda o acesso de que o Navide precisa para controlar sua máquina.",
-      "ready": "Tudo verificado. Na primeira vez, um tour curto, que pode ser pulado a qualquer momento, ajuda você a escolher um workspace e abrir seu primeiro agent."
+      "ready": "Tudo verificado. Na primeira vez, um tour curto, que pode ser pulado a qualquer momento, ajuda você a escolher um workspace e abrir seu primeiro agent.",
+      "ready-locked": "Instale pelo menos uma CLI de agente para abrir o Navide. Você também pode pular por enquanto e adicionar uma depois."
     },
     "install": "Instalar",
     "installing": "Instalando…",
@@ -10231,9 +10249,9 @@
     "notif-test-body": "As notificações estão ativadas – é aqui que seus agents vão avisar você.",
     "perm": {
       "automation": {
-        "title": "Permitir que o Navide execute comandos de instalação no Terminal",
-        "desc": "Algumas CLIs precisam ser instaladas em um terminal de verdade. Isso permite que o Navide abra o Terminal e digite o comando por você.",
-        "why": "O macOS chama isso de Automação. O Navide só envia o comando de instalação em que você clicou – ele nunca lê o que está nas suas janelas de terminal.",
+        "title": "Permitir que o Navide abra comandos no Terminal",
+        "desc": "Algumas ações, como diagnósticos de CLI ou instalações quando o terminal integrado não consegue iniciar, abrem o Terminal e digitam o comando para você.",
+        "why": "O macOS chama isso de Automação. O Navide envia apenas o comando em que você clicou e nunca lê o conteúdo das janelas do terminal.",
         "denied": "O controle do Terminal foi negado. Ative-o em Ajustes do Sistema e depois detecte novamente.",
         "pane-hint": "Ative o Terminal sob o Navide em Privacidade e Segurança → Automação."
       },
@@ -12727,11 +12745,11 @@
       "community-node": "Nó da comunidade. Um agent o executa a partir dos parâmetros dele.",
       "merge-combine": "Merge no modo “{mode}” combina dados. Um agent o executa pela regra de combinação dele.",
       "role-trigger-schedule": "Roda por agendamento no n8n. Inicie o pipeline manualmente ou agende-o em Turn Stats ▸ Agendamento com uma tarefa “Iniciar um pipeline”.",
-      "role-trigger-webhook": "Começa com uma requisição HTTP no n8n. O Navide ainda não tem gatilho de webhook.",
+      "role-trigger-webhook": "Começa com uma requisição HTTP no n8n. Crie um em Configurações → Webhooks.",
       "role-trigger-error": "Workflows de erro do n8n ainda não têm equivalente no Navide.",
       "role-trigger-app": "Começa com um evento de aplicativo no n8n. O Navide ainda não tem gatilhos de aplicativo.",
       "role-subworkflow": "Chama outro workflow do n8n que não foi importado. Cole esse workflow também, ou importe-o antes.",
-      "role-respond": "Responde a um webhook do n8n. O Navide ainda não tem gatilho de webhook.",
+      "role-respond": "Responde a um webhook do n8n. Um gatilho do Navide responde 202 e não devolve resultado.",
       "error-workflow": "Este workflow é o próprio workflow de erro. Quando um passo falha, os passos seguintes rodam pelas ligações de erro.",
       "recursive-subworkflow": "Chama o workflow do n8n {workflowId}, que chama este workflow de volta. Um subpipeline não pode executar a si mesmo, então esta chamada fica para revisão.",
       "tool-pipeline": "Uma ferramenta de agent que chama o workflow do n8n {workflowId}, importado como o pipeline {pipelineId}. Um pipeline não pode ser chamado como ferramenta, então as instruções do passo o citam no lugar.",
@@ -12781,6 +12799,167 @@
       "internal": "O grafo convertido é inválido. Isso é um bug do importador.",
       "too-large": "O workflow tem {sizeMb} MB. Uma importação aceita no máximo {limitMb} MB.",
       "store-refused": "Não foi possível salvar o workflow “{workflow}”, então nada foi importado: {problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhooks",
+    "guardOff": "Ative primeiro o Navide Guard em Configurações → Segurança. Sem ele, os webhooks ficam desligados e as solicitações recebidas são recusadas.",
+    "portTaken": "O Navide não conseguiu escutar: {error}. Libere essa porta e ative de novo. O Navide não muda de porta, porque quem chama usa esta.",
+    "enabled": {
+      "title": "Aceitar webhooks",
+      "desc": "Permite que outro sistema inicie um pipeline por HTTP. Só há escuta com isto ligado e um gatilho ativo. O Navide escuta apenas neste computador. Para acessar de fora, use seu próprio túnel. O Navide precisa estar aberto, com uma janela no workspace."
+    },
+    "host": {
+      "title": "Nome de host público",
+      "desc": "O nome em que seu túnel responde. Solicitações para qualquer outro host são recusadas. Deixe vazio se só este computador chamar o Navide.",
+      "placeholder": "hook.example.com",
+      "warning": "Com um túnel, qualquer pessoa na internet alcança este endereço. Só a chave ou a assinatura de cada gatilho impede o acesso."
+    },
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "create": "Criar gatilho",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "delete": "Excluir",
+    "deleteConfirm": "Excluir de vez?",
+    "turnOn": "Ativar",
+    "more": "Opções",
+    "triggers": "Gatilhos",
+    "new": "Novo gatilho",
+    "needsWorkspace": "Abra primeiro um workspace. Um gatilho roda em um workspace.",
+    "empty": {
+      "title": "Nenhum gatilho ainda",
+      "desc": "Um gatilho liga um endereço a um pipeline: uma chamada ao endereço inicia uma execução."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "Formulário"
+    },
+    "form": {
+      "name": "Nome",
+      "source": "Origem",
+      "pipeline": "Pipeline",
+      "workspace": "Workspace",
+      "events": "Eventos",
+      "limits": "Limites",
+      "timeout": "Esperar por você",
+      "eventsHint": "Só os eventos marcados iniciam uma execução. O teste ping do GitHub recebe resposta sem iniciar nada.",
+      "noGate": "Iniciar sem aprovação. A primeira etapa não é um portão de aprovação, então uma solicitação inicia o agente na hora. O conteúdo externo chega a ele sem ninguém ver antes.",
+      "default": "Nas execuções deste gatilho, cada chamada de ferramenta espera sua confirmação. Se ninguém responder a tempo, a execução para e nada é aprovado. Celular e canais de chat não aprovam uma execução de webhook. Apenas Claude Code.",
+      "fields": "Campos",
+      "fieldLabel": "Rótulo",
+      "fieldType": "Tipo",
+      "required": "Obrigatório",
+      "removeField": "Remover",
+      "addField": "Adicionar campo",
+      "options": "Opções, separadas por vírgulas",
+      "fieldsHint": "Arquivos, senhas e HTML personalizado não estão disponíveis.",
+      "public": "Permite abrir este formulário fora deste computador. O endereço fica no histórico do navegador e nos logs do túnel, e quem o tiver pode iniciar uma execução. Desligado, abre só neste computador."
+    },
+    "perMinute": "por minuto",
+    "perDay": "por dia",
+    "minutes": "min de espera",
+    "minutesUnit": "minutos",
+    "rate": "{minute}/min · {day}/dia",
+    "enable": "Ativar {name}",
+    "state": {
+      "off": "Desligado",
+      "listener-off": "Ativo, sem escuta",
+      "ready": "Pronto",
+      "running": "Em execução",
+      "waiting": "Esperando por você · para em {minutes} min"
+    },
+    "reveal": {
+      "titleKey": "Chave de {name}",
+      "titleSecret": "Segredo de {name}",
+      "once": "Copie agora. O Navide não guarda uma cópia legível e não vai mostrar de novo.",
+      "noAddress": "Ative o gatilho e o endereço aparece na linha dele.",
+      "url": "Endereço",
+      "key": "Chave",
+      "secret": "Segredo",
+      "copyCurl": "Copiar chamada de teste",
+      "done": "Já salvei",
+      "githubHint": "No GitHub, abra Settings → Webhooks do repositório, cole os dois e escolha application/json. O endereço precisa ser público, então defina antes um nome de host acima.",
+      "titleForm": "Endereço de {name}",
+      "formHint": "Este endereço é a única chave: quem o tiver pode abrir o formulário. Compartilhe como uma senha."
+    },
+    "rotateKey": "Trocar chave",
+    "rotateSecret": "Trocar segredo",
+    "unattended": {
+      "chip": "Sem supervisão",
+      "title": "Executar sem supervisão",
+      "desc": "Desligado por padrão. Os painéis das execuções deste gatilho pulam os pedidos de permissão. Ao ligar, explicamos o que isso significa.",
+      "unsupported": "Ainda não disponível no Windows.",
+      "confirmTitle": "Antes de executar sem supervisão",
+      "skips": "O agente pula os pedidos de permissão. Ninguém confirma as chamadas de ferramenta dele.",
+      "external": "Ele trabalha com conteúdo externo, e esse conteúdo pode tentar direcioná-lo.",
+      "scripts": "O Guard só bloqueia comandos que reconhece. Ele não impede um agente que escreve um script e depois o executa.",
+      "hook": "Se o hook do Guard não puder responder, a chamada é recusada. Se o próprio processo do hook morrer ou travar, a chamada passa.",
+      "tick": "Entendo que o agente trabalha sem confirmação com conteúdo externo."
+    },
+    "weakKey": {
+      "title": "No Linux este segredo tem proteção mais fraca",
+      "body": "A chave fica em um arquivo protegido só por permissões, então qualquer programa rodando com seu usuário pode lê-la. macOS e Windows a guardam no armazenamento protegido do sistema.",
+      "tick": "Entendo e quero ativar este gatilho."
+    },
+    "log": {
+      "title": "Atividade",
+      "empty": "Nada registrado ainda."
+    },
+    "refused": {
+      "vendor-refused": "Nesta versão, só o Claude Code pode rodar a partir de um webhook, e todas as etapas precisam usá-lo. O Codex não tem um modo que pergunte antes de cada chamada de ferramenta, e outras CLIs ainda não foram testadas com o Guard.",
+      "no-gate": "A primeira etapa deste pipeline não é um portão de aprovação. Adicione um, ou crie o gatilho de novo marcando Iniciar sem aprovação.",
+      "pipeline-missing": "O pipeline deste gatilho não existe mais."
+    },
+    "error": {
+      "GUARD_OFF": "Ative primeiro o Navide Guard.",
+      "KEY_UNAVAILABLE": "Não foi possível acessar o armazenamento de chaves do sistema. Desbloqueie e tente de novo.",
+      "UNATTENDED_UNSUPPORTED": "Ainda não disponível no Windows.",
+      "NOT_FOUND": "Este gatilho não existe mais.",
+      "BAD_REQUEST": "Confira os valores. Os limites vão até 60 por minuto e 500 por dia, e a espera de 5 a 240 minutos.",
+      "generic": "Não funcionou. Tente de novo."
+    },
+    "outcome": {
+      "accepted": "Aceito",
+      "started": "Execução iniciada",
+      "start-failed": "Execução não iniciada",
+      "duplicate": "Mesma entrega de antes, não executada",
+      "ping": "Ping do GitHub",
+      "event-ignored": "Evento não marcado",
+      "daily-limit": "Limite diário atingido",
+      "rate-limited": "Solicitações demais",
+      "bad-key": "Chave errada",
+      "bad-signature": "Assinatura errada",
+      "run-active": "Já havia uma execução",
+      "no-window": "Sem janela no workspace",
+      "app-locked": "App Lock ativo",
+      "guard-off": "Guard desligado",
+      "vendor-refused": "Pipeline usa uma CLI não aceita",
+      "no-gate": "Sem portão de aprovação",
+      "awaiting-approval": "Esperando por você",
+      "approval-timeout": "Ninguém respondeu, execução parada",
+      "run-timeout": "Execução atingiu o limite de 4 horas",
+      "interrupted": "Execução interrompida",
+      "secret-lost": "O segredo não pode mais ser lido e o gatilho foi desligado. Troque o segredo para usar de novo.",
+      "key-unavailable": "Armazenamento de chaves inacessível",
+      "unattended-on": "Sem supervisão ligado",
+      "unattended-off": "Sem supervisão desligado",
+      "no-gate-acknowledged": "Iniciar sem aprovação marcado",
+      "form-invalid": "Formulário com valores inválidos",
+      "form-public": "Formulário tornado público",
+      "bad-csrf": "Formulário sem token válido",
+      "cross-site": "Formulário enviado de outro site"
+    },
+    "rotateForm": "Trocar endereço",
+    "fieldType": {
+      "text": "Texto",
+      "textarea": "Texto longo",
+      "number": "Número",
+      "email": "E-mail",
+      "date": "Data",
+      "select": "Lista",
+      "checkbox": "Caixa de seleção"
     }
   }
 }

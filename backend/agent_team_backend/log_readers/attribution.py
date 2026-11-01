@@ -846,6 +846,7 @@ class Attribution:
         owner = self._session_owner.get(usage.session_id) if usage.session_id else None
         owner_reg = self._panes.get(owner) if owner else None
         owner_ws = owner_reg.workspace_path if owner_reg is not None else None
+        claude_hits: list[str] = []
         for ws_path, mapping in self._workspaces.items():
             # Migrated vendors answer through their reader; None falls to the
             # legacy chain below, deleted one vendor at a time.
@@ -865,8 +866,25 @@ class Attribution:
                     or file_path.startswith(mapping.claude_dir + "/")
                     or file_path.startswith(mapping.claude_dir + os.sep)
                 ):
-                    return ws_path
-        return None
+                    claude_hits.append(ws_path)
+        return self._pick_claude_workspace(usage, claude_hits, owner_ws)
+
+    def _pick_claude_workspace(
+        self, usage: TokenUsage, hits: list[str], owner_ws: str | None
+    ) -> str | None:
+        """Workspaces whose names encode alike share a project folder, so ``hits``
+        can hold several. Only then is the transcript's own cwd read. A session the
+        file cannot place stays on the first hit, as it always did: dropping it here
+        would take its usage out of the global and account totals as well."""
+        if len(hits) < 2:
+            return hits[0] if hits else None
+        if owner_ws in hits:
+            return owner_ws
+        reader = self._readers["claude"]
+        return next(
+            (ws for ws in hits if reader.session_in_workspace(usage.file_path, ws)),
+            hits[0],
+        )
 
     def _lookup_pane_for(
         self, usage: TokenUsage

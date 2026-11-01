@@ -86,3 +86,42 @@ describe('usePipelineDag gate notice', () => {
     expect(gates).toHaveLength(1)
   })
 })
+
+describe('usePipelineDag kickoff hints', () => {
+  const TWO = [
+    { ...STAGES[0], id: '01', slots: [{ agentKey: 'claude', roleKey: '', label: 'a', kickoffBody: '' }] },
+    { ...STAGES[0], id: '02', slots: [{ agentKey: 'claude', roleKey: '', label: 'b', kickoffBody: '' }] },
+  ] as unknown as Stage[]
+
+  async function branching() {
+    const graph = deriveGraphFromStages(TWO)
+    graph.edges = graph.edges.map((e) => (e.from === 'n-01-0' ? { ...e, kind: 'branch', when: 'yes' } : e))
+    const dag = usePipelineDag({
+      send: async (type) => (type === 'pipelines.graph.get' ? { graph } : {}),
+      log: () => {},
+      workspacePath: () => '/ws',
+    })
+    await dag.begin('p1', TWO)
+    await new Promise((r) => setTimeout(r, 0))
+    return dag
+  }
+
+  it('an ordinary kickoff keeps its hints at the end', async () => {
+    const out = (await branching()).expandKickoff('do the work', 0, 'a')
+    expect(out.startsWith('do the work')).toBe(true)
+    expect(out).toContain('[分支回報]')
+  })
+
+  it('a webhook kickoff has them ahead of the data', async () => {
+    const data = 'Webhook trigger "x" started this run.\n<<<NAVIDE-WEBHOOK-DATA-abc\npayload\nNAVIDE-WEBHOOK-DATA-abc>>>\n'
+    const out = (await branching()).expandKickoff(data, 0, 'a')
+    expect(out.indexOf('[分支回報]')).toBe(0)
+    expect(out.indexOf('[分支回報]')).toBeLessThan(out.indexOf('<<<NAVIDE-WEBHOOK-DATA-'))
+    expect(out.endsWith('NAVIDE-WEBHOOK-DATA-abc>>>\n')).toBe(true)
+  })
+
+  it('a webhook kickoff of a node with no hints is the text alone', async () => {
+    const data = '<<<NAVIDE-WEBHOOK-DATA-abc\npayload'
+    expect((await branching()).expandKickoff(data, 1, 'b')).toBe(data)
+  })
+})

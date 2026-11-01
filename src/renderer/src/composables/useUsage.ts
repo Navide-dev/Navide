@@ -61,6 +61,10 @@ export interface UsageSnapshot {
   windows: UsageWindow[]
   fetchedAt: string
   error: string | null
+  /** Window kinds the vendor's own answer proves this account does not have
+   *  (a verified Ultra account has no session window). Absent from the list
+   *  and absent from `windows` means unknown, not missing. */
+  absentWindows?: string[]
   stale?: boolean
   lastSuccessAt?: string | null
   refreshStatus?: UsageStatus | 'not-refreshed'
@@ -214,6 +218,32 @@ export function accountUsageFor(
 /** Kinds that represent a GENERAL account limit (not a per-model bucket). */
 const HEADLINE_KINDS = new Set(['session', 'weekly', 'monthly'])
 
+/** True when a successful reading proved the account has no `kind` window.
+ *  Merely missing from `windows` proves nothing. */
+export function windowAbsent(snap: UsageSnapshot | undefined, kind: string): boolean {
+  if (!snap || snap.status !== 'ok' || !snap.absentWindows?.includes(kind)) return false
+  return !snap.windows.some((w) => w.kind === kind)
+}
+
+/** Per vendor, until when a pane's limit sentence named the session window of
+ *  an account whose reading says it has none. */
+const sessionLimitNamedUntil = reactive<Record<string, number>>({})
+
+export function noteSessionLimitNamed(agentKey: string, until: number): void {
+  sessionLimitNamedUntil[agentKey] = until
+}
+
+/** What the session row says for an account with no session window, or null
+ *  to show the windows alone. Claude's plan removes the limit, so it reads as
+ *  unlimited; other vendors only left the window out of their answer, which
+ *  nobody has shown to mean the same thing. A pane's own limit sentence
+ *  outranks the reading: while one stands, "unlimited" would contradict it. */
+export function absentSessionNote(snap: UsageSnapshot | undefined): 'unlimited' | 'not-reported' | null {
+  if (!windowAbsent(snap, 'session')) return null
+  if (Date.now() < (sessionLimitNamedUntil[snap!.provider] ?? 0)) return null
+  return snap!.provider === 'claude' ? 'unlimited' : 'not-reported'
+}
+
 /** Remaining percentage of the snapshot's headline window. Per-model windows
  *  (kind 'weekly-model', e.g. an exhausted promotional "Fable only" bucket that
  *  Anthropic reports at 100% used but does not actually enforce) must never
@@ -330,5 +360,6 @@ export function __resetUsageForTest(): void {
   backend = null
   state.providers = {}
   state.accounts = {}
+  for (const key of Object.keys(sessionLimitNamedUntil)) delete sessionLimitNamedUntil[key]
   usageVersion.value = 0
 }

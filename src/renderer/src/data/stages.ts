@@ -281,6 +281,17 @@ export function stageToBackend(s: Stage): Record<string, unknown> {
   }
 }
 
+/** How the n8n importer opens every step it writes (n8n_import.py). A step has
+ *  no {{task}} there, so the task someone typed at Run would go nowhere. Read
+ *  off the text so a pipeline already imported needs no change to its saved
+ *  data. A step that lost this line reads as one a person wrote, where leaving
+ *  {{task}} out can be the point. */
+const IMPORTED_STEP = '[External content: imported from the n8n workflow "'
+
+function isImportedWithoutTask(kickoffBody: string): boolean {
+  return kickoffBody.startsWith(IMPORTED_STEP) && !kickoffBody.includes('{{task}}')
+}
+
 /** Render a kickoff for one slot.
  *  - opts.isManager=true → Manager protocol (3 phases)
  *  - hasManager=true (and isManager=false) → Worker protocol
@@ -290,6 +301,13 @@ export function stageToBackend(s: Stage): Record<string, unknown> {
  *  `slotRoster` is the list of OTHER slots in the same stage (used by the
  *  Manager protocol to tell the Manager who it's coordinating).
  *  `managerLabel` is the Manager slot's label (used by Worker protocol). */
+/** Whether a run's task is a webhook's: the boundary the backend wraps external
+ *  data in (webhook_payload). The task text is all a resumed run has. A task
+ *  that merely quotes the boundary changes nothing but its own kickoff. */
+export function holdsWebhookData(text: string): boolean {
+  return text.includes('<<<NAVIDE-WEBHOOK-DATA-')
+}
+
 export function renderSlotKickoff(
   slot: StageSlot,
   task: string,
@@ -301,10 +319,21 @@ export function renderSlotKickoff(
     slotRoster?: { label: string; agentLabel: string; roleLabel: string }[]
   } = {},
 ): string {
-  const body = slot.kickoffBody.replaceAll(
+  const placed = slot.kickoffBody.replaceAll(
     '{{task}}',
     task.trim() || '(no task description provided)'
   )
+  // A step imported from n8n has no {{task}} of its own. A webhook's data is what
+  // such a step exists to work on, and it comes wrapped and is not someone's word.
+  let body = placed
+  if (holdsWebhookData(task) && !slot.kickoffBody.includes('{{task}}')) {
+    body = `${placed}\n\n${task.trim()}`
+  } else if (isImportedWithoutTask(slot.kickoffBody) && task.trim()) {
+    // Ahead of the header, which says everything below it came from the
+    // workflow file. Worded for what is known: a schedule or an agent can start
+    // a run too, so this does not claim a person typed it.
+    body = `[Task given when this run started]\n${task.trim()}\n\n${placed}`
+  }
   let protocol: string
   if (opts.isCommander) {
     protocol = renderManagerProtocol(opts.slotRoster ?? [])

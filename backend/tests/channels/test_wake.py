@@ -20,6 +20,7 @@ from agent_team_backend.channels.base import Capabilities, Location
 from agent_team_backend.channels.manager import WAKE_BUTTONS, WAKE_CALLBACK
 from agent_team_backend.channels.store import ChannelStore
 from agent_team_backend.db import Database
+from agent_team_backend.profiles_store import CliProfilesStore
 
 from .test_manager import Env, FakeClock, _make_env, _until, env, fast_timers  # noqa: F401 — pytest fixtures
 
@@ -226,6 +227,7 @@ async def test_stop_on_an_offline_pane_is_not_kept(env: Env) -> None:
     ({"ok": False, "code": "fresh-refused", "started": True}, _zh("unresumable", reason=_zh("reason_fresh"))),
     ({"ok": False, "code": "window-not-ready", "started": True}, _zh("failed", reason=_zh("reason_window"))),
     ({"ok": False, "code": "session-open-elsewhere", "started": False}, _zh("open_elsewhere")),
+    ({"ok": False, "code": "key-account-unclear", "started": False}, _zh("key_account")),
     ({"ok": False, "code": "ask-refused", "started": False}, _zh("unresumable", reason=_zh("reason_ask"))),
 ])
 async def test_a_refused_wake_says_why_and_sends_nothing(env: Env, result, expected) -> None:
@@ -235,6 +237,20 @@ async def test_a_refused_wake_says_why_and_sends_nothing(env: Env, result, expec
     await _press_wake(env)
     assert env.tg.texts()[-1] == expected
     assert env.fake.delivered == [] and [b.pane_id for b in env.store.bindings()] == ["pane-1"]
+
+
+async def test_a_wake_onto_an_api_key_says_it_is_billed(env: Env) -> None:
+    fw = _wakeable(env)
+    fw.result = {"ok": True, "pane_id": "pane-1b", "paid": True}
+    await _press_wake(env)
+    assert _zh("woke_paid") in env.tg.texts()
+
+
+async def test_any_other_wake_says_nothing_about_billing(env: Env) -> None:
+    _wakeable(env)
+    await _press_wake(env)
+    assert _zh("woke") in env.tg.texts()
+    assert _zh("woke_paid") not in env.tg.texts()
 
 
 async def test_a_wake_refused_up_front_does_not_start_the_cooldown(env: Env) -> None:
@@ -402,7 +418,7 @@ class _Record(SimpleNamespace):
 
 
 @pytest.fixture
-def seam(monkeypatch):
+def seam(monkeypatch, tmp_path):
     """wake_pane against fakes for the window, the registry, the pane records and the MCP tools."""
     from agent_team_backend import agent_messaging, app, quota_failover
     from agent_team_backend.mcp_server import server as mcp
@@ -425,6 +441,8 @@ def seam(monkeypatch):
         record_pane_unspawn_by_id=unspawn), raising=False)
     monkeypatch.setattr(app, "ui_settings_store", SimpleNamespace(get=lambda: dict(state.settings)),
                         raising=False)
+    monkeypatch.setattr(app, "cli_profiles_store", CliProfilesStore(
+        path=tmp_path / "cli-profiles.json", profiles_root=tmp_path / "root"))
     monkeypatch.setattr(agent_messaging, "current", lambda pid: state.registry.get(pid))
     monkeypatch.setattr(mcp, "_refuse_unresumable_session", lambda *a: state.refusal)
 
@@ -478,6 +496,131 @@ async def test_seam_refuses_up_front_without_opening_anything(seam) -> None:
     assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
         "ok": False, "code": "quota", "agent": "claude", "started": False}
     assert seam.opened_ws == [] and seam.placeholder_calls == [] and seam.spawns == []
+
+
+def _key(agent: str = "claude", name: str = "key") -> str:
+    from agent_team_backend import app
+
+    return app.cli_profiles_store.create_api_key(
+        agent_key=agent, name=name, last4="7F2A", monthly_reminder_usd=None)["id"]
+
+
+def _login(agent: str = "claude") -> str:
+    from agent_team_backend import app
+
+    return app.cli_profiles_store.create(agent_key=agent, name="Work")["id"]
+
+
+def _pane_on(seam, pin: str, agent: str = "claude") -> None:
+    seam.records[0].profile_id = pin
+    seam.records[0].agent = agent
+    seam.registry["old-1"] = SimpleNamespace(pane_id="old-1", realized=False)
+
+
+def _pane_default(profile_id: str) -> None:
+    from agent_team_backend import app
+
+    app.cli_profiles_store.set_pane_default("claude", profile_id)
+
+
+def _nothing_opened(seam) -> bool:
+    return seam.opened_ws == [] and seam.placeholder_calls == [] and seam.spawns == []
+
+
+UNCLEAR = {"ok": False, "code": "key-account-unclear", "started": False}
+
+
+async def test_seam_wakes_a_key_pane_though_the_subscription_ran_out(seam) -> None:
+    key = _key()
+    _pane_default(key)
+    _pane_on(seam, key)
+    seam.exhausted = True
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": True, "pane_id": "new-1", "paid": True}
+
+
+async def test_seam_says_billed_when_a_key_pane_comes_back_without_a_placeholder(seam) -> None:
+    key = _key()
+    _pane_default(key)
+    _pane_on(seam, key)
+    seam.registry.clear()
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": True, "pane_id": "spawned-1", "paid": True}
+
+
+async def test_seam_refuses_a_key_pane_whose_key_is_no_longer_the_pane_default(seam) -> None:
+    # Pinned, it lands on the key; following, on the live login. Only the window knows which.
+    _pane_on(seam, _key())
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == UNCLEAR
+    _pane_default(_key(name="other"))
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == UNCLEAR
+    assert _nothing_opened(seam)
+
+
+@pytest.mark.parametrize("pin", ["login", "__default__", ""])
+async def test_seam_never_wakes_a_subscription_pane_onto_a_key(seam, pin: str) -> None:
+    _pane_default(_key())
+    _pane_on(seam, _login() if pin == "login" else pin)
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == UNCLEAR
+    assert _nothing_opened(seam)
+
+
+async def test_seam_wakes_a_codex_pane_on_the_key_in_use(seam) -> None:
+    from agent_team_backend import app
+
+    key = _key("codex")
+    app.cli_profiles_store.set_default("codex", key)
+    _pane_on(seam, key, "codex")
+    seam.exhausted = True  # the reading of the parked login, which nothing polls any more
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": True, "pane_id": "new-1", "paid": True}
+
+
+async def test_seam_never_wakes_a_codex_login_pane_onto_the_key_in_use(seam) -> None:
+    from agent_team_backend import app
+
+    app.cli_profiles_store.set_default("codex", _key("codex"))
+    _pane_on(seam, _login("codex"), "codex")
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == UNCLEAR
+    assert _nothing_opened(seam)
+
+
+async def test_seam_refuses_a_codex_pane_while_a_stopped_switch_left_a_key_live(seam, monkeypatch) -> None:
+    from agent_team_backend import api_key_accounts as ak
+
+    _key("codex")
+    monkeypatch.setattr(ak, "_live_key_is_ours", lambda agent_key, keys: True)
+    _pane_on(seam, _login("codex"), "codex")
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == UNCLEAR
+    assert _nothing_opened(seam)
+
+
+async def test_seam_refuses_a_codex_key_pane_once_a_login_is_in_use(seam) -> None:
+    _pane_on(seam, _key("codex"), "codex")
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == UNCLEAR
+    assert _nothing_opened(seam)
+
+
+@pytest.mark.parametrize("pin", ["login", "__default__", ""])
+async def test_seam_leaves_a_pane_with_no_key_in_sight_as_it_was(seam, pin: str) -> None:
+    _pane_on(seam, _login() if pin == "login" else pin)
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "new-1"}
+    seam.exhausted = True
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": False, "code": "quota", "agent": "claude", "started": False}
+
+
+async def test_seam_ignores_a_login_pane_default(seam) -> None:
+    login = _login()
+    _pane_default(login)
+    _pane_on(seam, "__default__")
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "new-1"}
+
+
+async def test_seam_leaves_a_cli_with_no_accounts_as_it_was(seam) -> None:
+    _pane_default(_key())
+    _pane_on(seam, "", "gemini")
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "new-1"}
 
 
 async def test_seam_refuses_resume_behavior_never_before_opening_the_window(seam) -> None:
@@ -549,6 +692,30 @@ async def test_seam_opens_the_conversation_when_the_window_holds_no_placeholder(
     assert seam.placeholder_calls == [] and seam.opened_ws == []
     # The record it replaced would otherwise come back on the next restore.
     assert seam.retired == ["old-1"]
+
+
+async def test_seam_scheduled_jobs_follow_a_pane_opened_onto_the_conversation(seam, monkeypatch) -> None:
+    from agent_team_backend import scheduler
+
+    hops = []
+
+    async def rebind(*args):
+        hops.append(args)
+        return []
+
+    monkeypatch.setattr(scheduler, "get_service", lambda: SimpleNamespace(rebind_after_rebuild=rebind))
+    assert (await channels_pkg.wake_pane("old-1", "/ws", "sess-1"))["ok"] is True
+    assert hops == [("old-1", "spawned-1", "sess-1", "sess-1")]
+
+
+async def test_seam_a_failed_job_hand_over_does_not_fail_the_wake(seam, monkeypatch) -> None:
+    from agent_team_backend import scheduler
+
+    def boom():
+        raise RuntimeError("scheduler down")
+
+    monkeypatch.setattr(scheduler, "get_service", boom)
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "spawned-1"}
 
 
 async def test_seam_opens_the_workspace_then_the_conversation(seam) -> None:

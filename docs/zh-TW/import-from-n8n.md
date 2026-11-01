@@ -21,7 +21,7 @@ Agent 也能透過 MCP 工具 `pipeline_import_n8n` 做同樣的事，預設是 
 
 - **直接轉換**：Navide 照 workflow 原意執行。包括 Manual、Chat、Execute Workflow 觸發；AI Agent 叢集（模型、記憶、工具、輸出解析器併成一個步驟）；Wait 與 send-and-wait 核准（Gate）；IF 與 Switch（分支）；Append 或 Choose Branch 模式的 Merge；錯誤輸出與重試；以及呼叫 Navide 已有 workflow 的 Execute Workflow（子 Pipeline，見下文）。
 - **由 agent 執行**：HTTP Request、Code、Set、會合併資料的 Merge（依欄位、位置、所有組合或 SQL；Agent 照它的合併規則做）、應用程式節點（Google Sheets、Slack、Gmail……）、社群節點，以及不認得的節點類型或版本。由 CLI Agent 依節點原本的參數執行，expression 與 Code 原樣傳過去，結果可能和 n8n 不同。沒有分支的連續步驟會併成一個步驟，所以不會一個節點開一個 Pane。
-- **需要確認**：已匯入，但需要 Navide 目前還沒有的能力。包括 Schedule、Webhook、Form 與應用程式觸發（請手動啟動 Pipeline，或在**每輪消耗 ▸ 排程**排定）、Respond to Webhook、呼叫 Navide 還沒有的 workflow 的 Execute Workflow、Call n8n Workflow Tool（見下文），以及建議留在 n8n 的步驟（見下文，標成 **不支援**）。
+- **需要確認**：已匯入，但需要 Navide 目前還沒有的能力。包括 Webhook 與 Form 觸發（請到[設定 ▸ Webhook](../en-US/pipeline-webhooks.md)建立，匯入不會自動建立）、Schedule 與應用程式觸發（請手動啟動 Pipeline，或在**每輪消耗 ▸ 排程**排定）、Respond to Webhook、呼叫 Navide 還沒有的 workflow 的 Execute Workflow、Call n8n Workflow Tool（見下文），以及建議留在 n8n 的步驟（見下文，標成 **不支援**）。
 
 畫布下方的報告會逐一列出：每個 n8n 節點變成什麼、你要做什麼（需要確認的列排在最前面；合併了多個 n8n 節點的步驟會寫出合併了幾個）；每個步驟完整的 Kickoff 與每個 Gate 的提示（也就是每個 Pane 會收到的原文）；要補的憑證；秘密在哪裡被移除；有幾個步驟需要確認。這些都不會擋住 **匯入**，只是讓你在執行前先知道。
 

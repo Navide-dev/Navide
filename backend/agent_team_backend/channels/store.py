@@ -374,8 +374,11 @@ class ChannelStore:
         return [dict(r) for r in rows]
 
     def remove_allow(self, platform: str, sender_id: str, account: str = DEFAULT_ACCOUNT) -> bool:
-        return self._exec("DELETE FROM channel_allow WHERE platform = ? AND account = ? AND sender_id = ?",
-                          (platform, account, sender_id)) > 0
+        # Nothing writes a blank account now, but Settings files such a row under the default
+        # bot, so removing it there has to reach it.
+        accounts = (account, "") if account == DEFAULT_ACCOUNT else (account, account)
+        return self._exec("DELETE FROM channel_allow WHERE platform = ? AND account IN (?, ?) AND sender_id = ?",
+                          (platform, *accounts, sender_id)) > 0
 
     # --- bindings -------------------------------------------------------------
 

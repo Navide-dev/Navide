@@ -1,5 +1,5 @@
 import { ref, shallowRef } from 'vue'
-import type { Stage } from '../data/stages'
+import { holdsWebhookData, type Stage } from '../data/stages'
 import type { NodeRunState, PipelineGraph } from '../lib/pipelineGraph'
 import {
   approveGate,
@@ -544,7 +544,8 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     const hints = kickoffHints(p, id, nonce)
     if (hints) nonces.set(id, nonce)
     else nonces.delete(id)
-    return expandFor(id, text) + hints
+    const expanded = expandFor(id, text)
+    return hints && holdsWebhookData(text) ? `${hints.trimStart()}\n\n${expanded}` : expanded + hints
   }
 
   /** {{prev.summary}} and {{node.<id>.output}} as node `id` sees them. */

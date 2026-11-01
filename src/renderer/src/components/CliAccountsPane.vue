@@ -11,6 +11,7 @@ import {
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import {
   accountUsageFor,
+  absentSessionNote,
   formatRemaining,
   formatResetAbsolute,
   formatResetCountdown,
@@ -641,6 +642,9 @@ function cardFoot(snap: UsageSnapshot, head: UsageWindow): string {
     )
   const countdown = formatResetCountdown(head.resetsAt)
   if (countdown) parts.push(t('usage.resets-in', { time: countdown }))
+  // After the countdown, which belongs to the headline, not to this row.
+  const note = absentSessionNote(snap)
+  if (note) parts.push(`${t('usage.window-claude-session')} ${t(`usage.window-${note}`)}`)
   return parts.join(' · ')
 }
 
@@ -1193,6 +1197,7 @@ onMounted(() => refreshUsage())
 .acct-detail .cli-agent { margin-bottom: 0; }
 /* Adding moved to the list: its panel offers the same action next to the others. */
 .acct-detail .cli-btn.cli-agent-add { display: none; }
+.acct-detail .cli-scope-select { display: none; }
 @container (max-width: 620px) {
   .acct-md { grid-template-columns: minmax(0, 1fr); }
   .acct-list { max-height: 260px; border-right: none; border-bottom: 1px solid var(--border-muted); }

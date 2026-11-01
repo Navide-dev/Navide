@@ -91,7 +91,7 @@ function harness(opts: { loopFailoverResume?: boolean } = {}) {
     VENDORS_WITHOUT_TURN_END: new Set(), TURN_COMPLETE_SETTLE_MS: 2000,
     loopGen: new Map([['p1', 1]]), acquireInjectionSlot: acquire, releaseInjectionSlot: vi.fn(),
     injectPane: inject, withLoopDoneInstruction: (s: string) => s, loopResumeTextFor: () => 'continue',
-    LOOP_ESTIMATE_WINDOW_MS: 18000000, armLoopTurn: vi.fn(), stopLoopComplete: vi.fn(),
+    setLoopEstimate: vi.fn(), armLoopTurn: vi.fn(), stopLoopComplete: vi.fn(),
     continueInFlight: new Set(), messagingHoldKey: () => null,
     LOOP_RESUME_SETTING_KEY: 'loop-resume', DEFAULT_LOOP_RESUME: 'continue',
     loopFailoverResumeArmed: new Map<string, number>(),

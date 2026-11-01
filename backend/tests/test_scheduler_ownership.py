@@ -181,6 +181,18 @@ async def test_closed_creator_leaves_the_job_to_the_user(env) -> None:
     assert (await env.service.set_enabled(mine["id"], False))["ok"] is True
 
 
+async def test_a_gone_owner_passes_to_the_pane_resuming_its_session(env) -> None:
+    # The wake's hop: the old id is gone from the registry, and it was never aliased.
+    mine = await by_agent(env)
+    agent_messaging.unregister("a-1")
+    agent_messaging.register("a-2", "alpha", env.ws, "claude")
+    await env.service.rebind_after_rebuild("a-1", "a-2", "sess", "sess")
+    listed = await plan_mcp.scheduler_list(pane("a-2"))
+    assert listed["jobs"][0]["owner"]["pane_id"] == "a-2"
+    assert listed["jobs"][0]["editable"] is True and listed["jobs"][0]["owner_gone"] is False
+    assert await plan_mcp.scheduler_set_enabled(mine["id"], False, pane("a-2")) == {"ok": True}
+
+
 async def test_list_marks_what_the_caller_may_change(env) -> None:
     mine = await by_agent(env)
     user_job = await by_user(env)

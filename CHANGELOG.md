@@ -4,17 +4,60 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Pipelines (0.2.37): a webhook can start a pipeline. Off by default; nothing listens until you turn it on and enable a trigger. A run a webhook starts carries Guard taint, keeps its panes out of permission bypass, so Claude Code asks before every tool call, and refuses to start while App Lock is on. Webhook runs use Claude Code only in this version. The request's body goes to the agent as marked data and stays out of the run log, which records only its size and hash. GitHub can start a run too: a signed delivery of an event you picked, with only a short list of its fields passed on. Its secret is shown once, kept encrypted, and on Linux protected only by file permissions, which you confirm when you enable the trigger. Set it up in Settings → Webhooks, which also shows each trigger's state, how long a waiting run has left, and its activity. A form can start a run too: a page with the fields you choose, reachable from this computer only unless you tick it public, with no file uploads. A trigger can run unattended if you turn that on for it: the page says what that gives up before it lets you. New strings in all 11 interface languages.
+
 ### Fixed
 
+- Startup (0.2.37): the backend now keeps the free port it picks until it starts serving on it. If another program took the port in that gap, the backend exited at startup.
+
+- Channels (0.2.37): an old allowlist row with no bot recorded can now be removed in Settings → Channels; removing it answered "not found".
+
+- Scheduler (0.2.37): a pane that a chat woke by opening a new pane onto its conversation now keeps its scheduled jobs. Before, the jobs kept running but their old owner was gone, so the agent could no longer change or renew them, and they stopped after 7 days.
+
+- Terminal activity (0.2.37): a pane that started fresh on a session id whose old transcript was gone stopped reporting its turns, so Telegram said "the reply text has not been read yet" and the reply never came. The saved read position pointed past the end of the new file; Navide now spots that once per file and reads on from the end, without resending earlier turns.
+
+- Accounts (0.2.37): a **Test key** answer no longer lands on a different key. Changing the pasted key, opening another account or replacing the key while a test is running now drops that test, so a stale result is not shown and a stale "rejected" no longer blocks saving. Errors about saving or finding a key say "this computer" instead of "keychain", because only Claude Code on macOS keeps its key there. The bar on a pane that hit a limit now reads **Usage limit reached**, since that pane may be on an API key, and it steps aside while the disconnected banner shows. When panes stay behind after a move to an API key, the notice counts them without calling them busy, because a pane with no session stays too. The right column of Accounts no longer shows a leftover provider picker for multi-provider CLIs; **+ Add account** has its own. Four reworded strings in all 11 interface languages.
+
+- Channels (0.2.37): when a chat is told a reply will follow and the text never arrives, Navide now reads the conversation log itself before it stops waiting, and says so in the chat if it still finds nothing. Before, the chat heard nothing more.
+
+- Token statistics (0.2.37): Claude sessions in folders whose Chinese names have the same length were all counted under one of them, because Claude stores those folders under the same name. Each session now counts under the workspace it ran in, and Reconnect and development time no longer pick up a neighbour's sessions. Global and per-account totals do not change, and earlier workspace figures are not recalculated.
+
+- Token statistics (0.2.37): Claude sessions in folders whose Chinese names have the same length were all counted under one of them, because Claude stores those folders under the same name. Each session now counts under the workspace it ran in, a new session can no longer be claimed by a pane in the other folder, and Reconnect and development time no longer pick up a neighbour's sessions. Global and per-account totals do not change, and earlier workspace figures are not recalculated.
+
+- Accounts (0.2.37): when a quota switch moves panes to an API key and the account list then fails to refresh, the quota report no longer ends in an error. The panes still move; the list catches up on its next read.
+
+- Accounts (0.2.37): when Claude Code's live login runs out and an API key is set to take over, a subscription account signed in only in its own folder now comes first if its quota reading is current and has room. Panes reopen on that account at no charge, and the move counts toward the automatic-switch limit like any other. Before, Navide went straight to the key while subscription quota was still available. Nothing changes without an API key account opened to automatic switching. Known limit: when that folder account later runs out, panes wait for a reset instead of moving to the key. Five new strings in all 11 interface languages.
+
+- Pipelines (0.2.37): the task you type when you run a pipeline imported from n8n now reaches its steps. It was dropped without a word, because imported steps have no place for it. Pipelines you already imported get it too, nothing in them is rewritten, and leaving the task empty changes nothing.
+- Pipelines (0.2.37): a step with no role now gets its task. Every step of a workflow imported from n8n has no role, so such a run stopped at once with "every slot is gone", or stayed Running forever when the step came after an approval gate or a branch. Steps with a role run as before.
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
+- Sync on Windows (0.2.37): a large skill held for approval could stay on "downloading its files for review" until the next sync, and then download again, when its finished review was saved at the moment something else read the approval list (`WinError 5`). A read that overlapped a save could also briefly show no held records. Reads of the approval list and of held records now wait for the save to finish.
+
+- First-run wizard (0.2.37): the rest of the wizard's review. The prerequisite note lists everything Install will set up, an installed CLI no longer announces one, and a failed shared prerequisite shows only on the card that ran it. The Ready step no longer says you are ready while Open Navide is locked, and says what is missing, CLI cards are no longer marked Optional on the step that needs one, and the wizard uses the app's font instead of Times. The install dialog shows the command its button runs next. On Linux, GitHub Copilot CLI and Droid no longer offer a Homebrew cask that cannot install there and link their own instructions instead.
+
+- Settings (0.2.37): the Environment Check entry is now the Setup Wizard, Settings → Analyzer no longer says to run `ollama serve` when Ollama is not installed, and the model hint is a complete sentence. The Automation permission describes what it is used for now.
+
+- Workspace (0.2.37): **Open Agent** on the empty stage opens an agent. With the Agents tab already showing, it did nothing. Nine strings changed or added in all 11 interface languages.
+
+- Accounts (0.2.37): an account with no 5-hour window, such as a verified Claude Ultra account or a Codex account that reports only a weekly limit, no longer counts as "no quota data". When an account's quota runs out it now ranks by its weekly headroom, and switching to it ends confirmed instead of "quota unconfirmed". Navide treats the window as absent only when the vendor's complete answer shows that; a reading it cannot be sure of stays unknown, as before.
+
+- Channels (0.2.37): waking a pane from a chat now looks at the account the pane is on. A pane on an API key wakes even when subscription quota is used up, instead of being refused with a message that does not apply to it, and the chat is told it is billed by usage. A subscription pane is no longer woken onto an API key: while new panes default to a key, or Codex is on one, a subscription pane is refused from the chat and opens on the computer. A pane whose key is no longer the current one is refused the same way, because Navide cannot tell which account it would come back on. Panes with no API key involved wake as before. Two new strings in all 11 chat languages.
 
 ### Changed
 
 - Settings → Channels (0.2.37): the page is now two columns. Every bot is listed on the left with its platform, state, people, chats and pending requests, grouped by platform when there are several, with **Add Bot** under the list. The right column shows the picked bot whole: its connection and switch, the ⋯ menu, requests waiting for approval, the people who can talk, and its chats and panes. The separate pending and allowed sections are gone, and their rows, including the shared ID flag and hint, moved under each bot. The page opens on the first bot with a request waiting. Requests and people whose bot is not set up here get a **No matching bot** row, so they can still be approved, rejected or removed. In a narrow window the list and the picked bot take turns, with a way back. Global switches stay above the columns, and backend APIs and stored data do not change. New strings in all 11 interface languages.
 
+- Accounts (0.2.37): an account with no 5-hour window keeps its 5-hour row, which reads Unlimited on Claude and Not reported on other vendors, and every wait on it now uses the weekly reset: a limit sentence with only a clock, the loop's resume, and its estimate. `cli_usage` documents `absentWindows`, so an agent can tell no limit from no data.
+
 ### Security
 
 - Dependencies: Electron 44.10.1 (Node 24.22.1, Chromium 152.0.7977.169; was 44.9.1 with Node 24.22.0, Chromium 152.0.7977.167). Node 24.22.1 is the Node.js security release of October 21, the one the 0.2.30 notes said Navide would pick up. Electron's own notes also list File System Access blocklist fixes and fixes for malformed asar archives and asar path handling, plus upstream Chromium, V8, Skia, Dawn, ANGLE and PDFium backports, which they do not tie to a CVE or an advisory.
+
+### Documentation
+
+- Accounts (0.2.37): the user guide now says the monthly API credits included with a Claude Max or Ultra plan do not pay for panes on an API key.
 
 ## [0.2.36] — 2026-11-01
 
