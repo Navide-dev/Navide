@@ -12846,8 +12846,7 @@
       "timeout": "等你確認",
       "eventsHint": "只有勾選的事件會開跑。GitHub 的 ping 測試會回應，但不開跑。",
       "noGate": "不經核准就開跑。第一步不是核准 Gate，所以請求一到就會啟動 agent，外部內容會在沒有人看過的情況下送到它手上。",
-      "default": "Claude Code 每個工具呼叫都會等你確認。Codex 沒有這種模式，所以在唯讀 sandbox 裡執行：讀取不必確認，寫入和網路要你核准。逾時沒有回應，run 就會中止，不會自動放行。手機和聊天頻道無法核准 webhook run。只支援 Claude Code 和 Codex。",
-      "codexTrust": "Codex：第一次會詢問是否信任 Navide 的 hook，要有人在 pane 回答，否則 run 會失敗。使用前請先看說明文件。",
+      "default": "這個觸發開跑的 run，每個工具呼叫都會等你確認。逾時沒有回應，run 就會中止，不會自動放行。手機和聊天頻道無法核准 webhook run。只支援 Claude Code。",
       "fields": "欄位",
       "fieldLabel": "標籤",
       "fieldType": "類型",
@@ -12909,7 +12908,7 @@
       "empty": "還沒有紀錄。"
     },
     "refused": {
-      "vendor-refused": "這條 Pipeline 有步驟使用 webhook run 不支援的 CLI。只支援實測過 Guard 的 Claude Code 和 Codex。",
+      "vendor-refused": "這個版本的 webhook 只能用 Claude Code，每個步驟都要用它。Codex 沒有每個工具呼叫都詢問的模式，其他 CLI 還沒有用 Guard 實測過。",
       "no-gate": "這條 Pipeline 的第一步不是核准 Gate。請加上 Gate，或重新建立觸發並勾選「不經核准就開跑」。",
       "pipeline-missing": "這個觸發綁定的 Pipeline 已不存在。"
     },

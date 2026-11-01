@@ -102,8 +102,10 @@ def claude_settings(port_file: str) -> Path:
 
 
 def codex_hook_command() -> str:
-    """The Guard hook of an unattended Codex pane, in the regular one's place:
-    same environment, same identity (see codex_session_hooks)."""
+    """The Guard hook an unattended Codex pane would use: same environment, same
+    identity as the regular one (see codex_session_hooks). Not wired in. Codex keeps
+    one trust entry per hook position, so launching this would replace the trust
+    the regular hook holds and ask again in the user's ordinary panes."""
     return hook_command(
         vendor="codex",
         port_expr='$(cat "$NAVIDE_CODEX_PORT_FILE" 2>/dev/null)',

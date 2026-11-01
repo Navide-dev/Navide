@@ -12846,8 +12846,7 @@
       "timeout": "Esperar por ti",
       "eventsHint": "Solo los eventos marcados inician una ejecución. La prueba ping de GitHub se responde sin iniciar ninguna.",
       "noGate": "Iniciar sin aprobación. El primer paso no es una puerta de aprobación, así que una solicitud inicia el agente de inmediato. El contenido externo le llega sin que nadie lo vea antes.",
-      "default": "Claude Code espera tu confirmación en cada llamada a herramienta. Codex no tiene ese modo, así que se ejecuta en un sandbox de solo lectura: lee sin preguntar, y la escritura y la red necesitan tu aprobación. Si nadie responde a tiempo, la ejecución se detiene y no se aprueba nada. El móvil y los canales de chat no pueden aprobar una ejecución de webhook. Solo Claude Code y Codex.",
-      "codexTrust": "Codex: la primera vez pregunta si confiar en los hooks de Navide. Alguien debe responder en el panel o la ejecución fallará. Consulta la guía antes de usarlo.",
+      "default": "En las ejecuciones de este disparador, cada llamada a herramienta espera tu confirmación. Si nadie responde a tiempo, la ejecución se detiene y no se aprueba nada. El móvil y los canales de chat no pueden aprobar una ejecución de webhook. Solo Claude Code.",
       "fields": "Campos",
       "fieldLabel": "Etiqueta",
       "fieldType": "Tipo",
@@ -12909,7 +12908,7 @@
       "empty": "Aún no hay registros."
     },
     "refused": {
-      "vendor-refused": "Esta pipeline tiene un paso con una CLI que las ejecuciones de webhook no pueden usar. Solo se admiten Claude Code y Codex, donde Guard está probado.",
+      "vendor-refused": "En esta versión solo Claude Code puede ejecutarse desde un webhook, y todos los pasos deben usarlo. Codex no tiene un modo que pregunte antes de cada llamada a herramienta, y otras CLI aún no se han probado con Guard.",
       "no-gate": "El primer paso de esta pipeline no es una puerta de aprobación. Añade una, o vuelve a crear el disparador y marca Iniciar sin aprobación.",
       "pipeline-missing": "La pipeline de este disparador ya no existe."
     },

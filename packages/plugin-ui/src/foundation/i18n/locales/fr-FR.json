@@ -12846,8 +12846,7 @@
       "timeout": "Vous attendre",
       "eventsHint": "Seuls les événements cochés lancent une exécution. Le test ping de GitHub reçoit une réponse sans en lancer.",
       "noGate": "Démarrer sans approbation. La première étape n’est pas une porte d’approbation : une requête lance donc l’agent aussitôt. Le contenu externe lui parvient sans que personne l’ait vu.",
-      "default": "Claude Code attend votre confirmation à chaque appel d’outil. Codex n’a pas ce mode et s’exécute donc dans un bac à sable en lecture seule : il lit sans demander, et l’écriture et le réseau exigent votre approbation. Sans réponse à temps, l’exécution s’arrête et rien n’est approuvé. Le téléphone et les canaux de discussion ne peuvent pas approuver une exécution de webhook. Claude Code et Codex uniquement.",
-      "codexTrust": "Codex : la première fois, il demande s’il doit faire confiance aux hooks de Navide. Quelqu’un doit répondre dans le panneau, sinon l’exécution échoue. Consultez le guide avant de l’utiliser.",
+      "default": "Dans les exécutions de ce déclencheur, chaque appel d’outil attend votre confirmation. Sans réponse à temps, l’exécution s’arrête et rien n’est approuvé. Le téléphone et les canaux de discussion ne peuvent pas approuver une exécution de webhook. Claude Code uniquement.",
       "fields": "Champs",
       "fieldLabel": "Libellé",
       "fieldType": "Type",
@@ -12909,7 +12908,7 @@
       "empty": "Rien d’enregistré pour l’instant."
     },
     "refused": {
-      "vendor-refused": "Cette pipeline a une étape avec une CLI que les exécutions de webhook ne peuvent pas utiliser. Seuls Claude Code et Codex sont pris en charge, car Guard y a été testé.",
+      "vendor-refused": "Dans cette version, seul Claude Code peut s’exécuter depuis un webhook, et chaque étape doit l’utiliser. Codex n’a pas de mode qui demande avant chaque appel d’outil, et les autres CLI n’ont pas encore été testées avec Guard.",
       "no-gate": "La première étape de cette pipeline n’est pas une porte d’approbation. Ajoutez-en une, ou recréez le déclencheur en cochant Démarrer sans approbation.",
       "pipeline-missing": "La pipeline de ce déclencheur n’existe plus."
     },

@@ -169,9 +169,12 @@ class TestNothingElseChanges:
         monkeypatch.setattr(guard_hooks, "decide", boom)
         assert asyncio.run(guard_hooks.respond("claude", call, pane_id="p", cwd="/w", workspace="/w")) is None
 
-    def test_the_codex_wiring_picks_the_hook_by_the_variable(self) -> None:
-        assert gfc.ENV not in codex_session_hooks.guard_hook_command()
-        assert gfc.ENV in gfc.codex_hook_command()
+    def test_no_codex_launch_carries_the_unattended_hook(self, monkeypatch, tmp_path) -> None:
+        # Its trust entry would replace the regular hook's, and ordinary panes
+        # would ask again, so not even a stray variable may bring it in.
+        monkeypatch.setattr(codex_session_hooks, "trust_gate_blocks_injection", lambda: False)
+        wired = codex_session_hooks.wire("codex", {gfc.ENV: "1"}, {}, tmp_path, tmp_path / "port", tmp_path / "auth")
+        assert "hooks.PreToolUse" in wired and gfc.ENV not in wired and gfc.HEADER not in wired
 
 
 def test_the_codex_hook_survives_toml() -> None:

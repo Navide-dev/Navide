@@ -11,10 +11,11 @@ a trigger is enabled.
   arrives while Guard is off gets `503`.
 - **Navide open, with a window on the workspace.** Without one a request gets
   `503`; Navide does not open a window for it.
-- **A pipeline whose steps use Claude Code or Codex.** Guard's hook has been
-  tested on those two. Copilot and Qwen have a hook that has not been measured
-  yet, and other CLIs have none, so a pipeline using them is refused when you
-  enable the trigger and on every request.
+- **A pipeline whose steps all use Claude Code,** sub-pipelines included. Other
+  CLIs are refused when you enable the trigger and on every request, and a pane a
+  run opens cannot use one either. Guard's hook is tested on Claude Code only.
+  Codex has no mode that asks before every call, and Copilot and Qwen have not
+  been measured.
 - **An approval gate as the first step,** or tick **Start without approval**.
 
 App Lock on means a request gets `503`.
@@ -85,33 +86,14 @@ form opens on this computer only unless you tick it public. A public form's
 address ends up in browser history and tunnel logs, and anyone holding it can
 start a run.
 
-## Codex and hook trust
-
-Navide does not skip Codex's own check of the hooks it adds. The first time, a
-Codex pane stops at **Hooks need review**. Until someone answers it in the pane
-(**2. Trust all and continue**), the run cannot go on and it fails.
-
-- Trust is kept in Codex's `config.toml`, so later panes do not ask again.
-- Codex keeps one trust entry for this hook position. The regular hook and the
-  unattended hook have different content, so trusting one replaces the other,
-  and whichever was replaced asks again. This also reaches your ordinary Codex
-  panes. On a machine that uses both, expect to be asked each time the kind of
-  pane changes.
-- Do not choose **Continue without trusting**: Guard's hook then does not run.
-
 ## How a run behaves
 
 - **Everything the request sent is untrusted.** It reaches the agent as marked
   data, with control characters and `{{` neutralised. That wording only asks the
   agent not to obey it. What limits an agent that does is the rest of this list.
-- **Claude Code: every tool call waits for you.** Panes start with the CLI's own
-  prompts on, whatever your permission settings say, and so does any pane they
-  open. A custom launch command is refused.
-- **Codex: a read-only sandbox instead.** Codex has no mode that asks before every
-  call, so it runs with `--sandbox read-only --ask-for-approval on-request`.
-  Commands can read files without asking, including ones outside the workspace.
-  Writes and network are blocked unless Codex asks and you approve, and Guard's
-  asks become refusals, because Codex hooks cannot ask.
+- **Every tool call waits for you.** Panes start with the CLI's own prompts on,
+  whatever your permission settings say, and so does any pane they open. A custom
+  launch command is refused.
 - **Nobody there means it stops.** A gate or a prompt nobody answers stops the
   run after the trigger's wait, 30 minutes by default, and a run stops after 4
   hours whatever it is doing. Nothing is approved on anyone's behalf. Phone and
