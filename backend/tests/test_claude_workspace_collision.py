@@ -165,3 +165,68 @@ def test_own_session_files_leave_out_the_neighbour(reader) -> None:
     assert set(reader.own_session_files(SECOND)) == {mine, below, bare}
     # The folder-wide listing keeps everything: pane baselines depend on it.
     assert len(reader.session_files_for_workspace(SECOND)) == 4
+
+
+# ── who claims a session no id has tied to a pane yet ──────────────────────
+
+
+def _pane(attribution: Attribution, pane_id: str, ws: str, **kwargs) -> None:
+    attribution.register_pane(pane_id, vendor="claude", cwd=ws, workspace_path=ws, **kwargs)
+
+
+def test_a_new_session_is_not_claimed_by_the_pane_next_door(attribution, reader) -> None:
+    _pane(attribution, "next-door", FIRST)
+    path = _session(reader, SECOND, "new")
+    assert attribution.attribute(_usage(path)).pane_id is None
+
+
+def test_a_new_session_goes_to_the_pane_it_ran_in(attribution, reader) -> None:
+    """With a pane in each folder the old match saw two candidates and gave up."""
+    _pane(attribution, "next-door", FIRST)
+    _pane(attribution, "mine", SECOND)
+    path = _session(reader, SECOND, "new")
+    assert attribution.attribute(_usage(path)).pane_id == "mine"
+
+
+def test_a_session_already_tied_to_a_pane_stays_with_it(attribution, reader) -> None:
+    path = _session(reader, SECOND, "owned", cwd=FIRST)
+    _pane(attribution, "owner", SECOND, explicit_session_id="owned")
+    assert attribution.attribute(_usage(path)).pane_id == "owner"
+
+
+def test_a_path_with_no_neighbour_claims_as_before_and_reads_once(attribution, reader) -> None:
+    _pane(attribution, "lone-pane", LONE)
+    path = _session(reader, LONE, "fresh")
+    for i in range(5):
+        assert attribution.attribute(_usage(path, str(i))).pane_id == "lone-pane"
+    assert len(reader.opened) == 1
+
+
+def test_a_transcript_with_no_cwd_yet_claims_as_before(attribution, reader) -> None:
+    _pane(attribution, "only", SECOND)
+    path = _session(reader, SECOND, "bare", cwd="")
+    assert attribution.attribute(_usage(path)).pane_id == "only"
+
+
+def test_the_pane_claim_keeps_totals_and_accounts(tmp_path, attribution, reader) -> None:
+    """A claim decides which pane an event names, and through it the account. The
+    number of events that are counted, and their sum, must not move."""
+    store = TokensStore(
+        global_path=tmp_path / "tokens.json",
+        workspace_base_dir=tmp_path / "workspaces",
+        ingestion_state_path=tmp_path / "token-ingestion-state.json",
+    )
+    _pane(attribution, "next-door", FIRST)
+    for i, ws in enumerate([FIRST, SECOND]):
+        path = _session(reader, ws, f"c{i}")
+        usage = _usage(path, f"k{i}")
+        attributed = attribution.attribute(usage)
+        store.record(
+            attributed.workspace_path, source="cli", vendor="claude", agent_key="claude",
+            pane_id=attributed.pane_id or "", session_id=usage.session_id, stage_id=None,
+            input_tokens=10, output_tokens=5, dedup_key=f"claude::{path}::k{i}",
+            profile_id="acct", timestamp=usage.timestamp,
+        )
+    world = store.snapshot(FIRST)["global"]
+    assert world["all_time"]["input"] == 20
+    assert world["by_account"]["acct"]["input"] == 20

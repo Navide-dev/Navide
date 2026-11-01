@@ -727,9 +727,12 @@ class ClaudeLogReader(LogReader):
 
 def _pane_cwd_match(self, usage, pane_cwd, pane_id):
     # Claude names its per-project dir after the encoded cwd; the file path
-    # carries it.
+    # carries it. The encoding is lossy, so a neighbour's folder can match too:
+    # the transcript's own cwd rules it out. One with no cwd yet stays a match.
     expected_dir = encode_claude_cwd(pane_cwd)
-    return expected_dir in Path(usage.file_path).parts
+    if expected_dir not in Path(usage.file_path).parts:
+        return False
+    return self.session_in_workspace(usage.file_path, pane_cwd) is not False
 
 
 ClaudeLogReader.pane_cwd_match = _pane_cwd_match
