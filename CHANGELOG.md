@@ -8,6 +8,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 
+### Changed
+
+- Settings → Channels (0.2.37): the page is now two columns. Every bot is listed on the left with its platform, state, people, chats and pending requests, grouped by platform when there are several, with **Add Bot** under the list. The right column shows the picked bot whole: its connection and switch, the ⋯ menu, requests waiting for approval, the people who can talk, and its chats and panes. The separate pending and allowed sections are gone, and their rows, including the shared ID flag and hint, moved under each bot. The page opens on the first bot with a request waiting. Requests and people whose bot is not set up here get a **No matching bot** row, so they can still be approved, rejected or removed. In a narrow window the list and the picked bot take turns, with a way back. Global switches stay above the columns, and backend APIs and stored data do not change. New strings in all 11 interface languages.
+
 ### Security
 
 - Dependencies: Electron 44.10.1 (Node 24.22.1, Chromium 152.0.7977.169; was 44.9.1 with Node 24.22.0, Chromium 152.0.7977.167). Node 24.22.1 is the Node.js security release of October 21, the one the 0.2.30 notes said Navide would pick up. Electron's own notes also list File System Access blocklist fixes and fixes for malformed asar archives and asar path handling, plus upstream Chromium, V8, Skia, Dawn, ANGLE and PDFium backports, which they do not tie to a CVE or an advisory.
