@@ -1289,7 +1289,8 @@ async def test_retro_records_come_from_this_workspace_only(env) -> None:
     tools = task.split("REPEATED MANUAL WORK RECORDS — BEGIN")[1].split("REPEATED MANUAL WORK RECORDS — END")[0]
     corr = task.split("USER CORRECTION RECORDS — BEGIN")[1].split("USER CORRECTION RECORDS — END")[0]
     assert "run the release gate for pr #" in tools.lower() and ": 4" in tools
-    assert "700" not in tools and "abcdef" not in tools
+    # Anchored: the block opens with a random hex nonce, which can hold "700".
+    assert "#700" not in tools and "sha abcdef" not in tools
     assert '(another workspace) -> 指揮 "sync the shared beta notes": 3' in tools
     assert "Nightly lint (alpha)" in tools
     for absent in ("Rebuild the docs index", "Ancient chore", "Unstamped chore", "Self-evolution"):
