@@ -144,7 +144,9 @@ describe('renderSlotKickoff with a step imported from n8n', () => {
     const out = renderSlotKickoff(slot(imported), 'fix the login page')
     expect(out).toContain('### Step 1')
     expect(out).toContain('fix the login page')
-    expect(out.indexOf('### Step 1')).toBeLessThan(out.indexOf('fix the login page'))
+    // Outside the part the header says came from the workflow file.
+    expect(out.indexOf('fix the login page')).toBeLessThan(out.indexOf('[External content'))
+    expect(out).not.toContain('person')
   })
 
   it('gets it once when the step places it', () => {
@@ -156,6 +158,7 @@ describe('renderSlotKickoff with a step imported from n8n', () => {
     const alone = renderSlotKickoff(slot(imported), '')
     const blank = renderSlotKickoff(slot(imported), '   ')
     expect(alone.endsWith('### Step 1')).toBe(true)
+    expect(alone).not.toContain('[Task given')
     expect(blank).toBe(alone)
   })
 
@@ -190,6 +193,6 @@ describe('renderSlotKickoff with a webhook task', () => {
     const imported = '[External content: imported from the n8n workflow "wf".]\n\n### Step 1'
     const out = renderSlotKickoff(slot(imported), task)
     expect(out.split('<<<NAVIDE-WEBHOOK-DATA-').length).toBe(2)
-    expect(out).not.toContain('[Task from the person who started this run]')
+    expect(out).not.toContain('[Task given when this run started]')
   })
 })

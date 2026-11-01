@@ -329,7 +329,10 @@ export function renderSlotKickoff(
   if (holdsWebhookData(task) && !slot.kickoffBody.includes('{{task}}')) {
     body = `${placed}\n\n${task.trim()}`
   } else if (isImportedWithoutTask(slot.kickoffBody) && task.trim()) {
-    body = `${placed}\n\n---\n\n[Task from the person who started this run]\n${task.trim()}`
+    // Ahead of the header, which says everything below it came from the
+    // workflow file. Worded for what is known: a schedule or an agent can start
+    // a run too, so this does not claim a person typed it.
+    body = `[Task given when this run started]\n${task.trim()}\n\n${placed}`
   }
   let protocol: string
   if (opts.isCommander) {
