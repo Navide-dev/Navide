@@ -10259,8 +10259,10 @@
         "pane-hint": "Ative o Navide em Privacidade e Segurança → Acesso Total ao Disco."
       }
     },
-    "blocked-by": "Instale {names} primeiro – é necessário antes que isto possa ser instalado aqui.",
+    "blocked-by": "O Navide não consegue instalar {names} neste sistema. Instale por conta própria e depois escolha “{action}”.",
     "installs-first": "A instalação também configura {names} primeiro.",
+    "manual-guide": "Como instalar {name}",
+    "needs-prereq": "Requer {names}",
     "go-install": "Instalar {name} primeiro",
     "complete-failed": "Não foi possível salvar o progresso da configuração: {error}. Tente novamente.",
     "ollama-start-failed": "Não foi possível iniciar o serviço do Ollama. Veja o registro para mais detalhes ou execute `ollama serve` em um terminal.",

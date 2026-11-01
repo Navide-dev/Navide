@@ -10259,8 +10259,10 @@
         "pane-hint": "在「隱私權與安全性 → 完全取用磁碟」中開啟 Navide。"
       }
     },
-    "blocked-by": "需要先安裝 {names}，才能從這裡安裝。",
+    "blocked-by": "Navide 無法在這台電腦上安裝 {names}。請先自行安裝，完成後按「{action}」。",
     "installs-first": "安裝時會先一併安裝 {names}。",
+    "manual-guide": "如何安裝 {name}",
+    "needs-prereq": "需要 {names}",
     "go-install": "先安裝 {name}",
     "complete-failed": "無法儲存設定進度：{error}。請再試一次。",
     "ollama-start-failed": "無法啟動 Ollama 服務。詳情請見記錄，或在終端機執行 `ollama serve`。",

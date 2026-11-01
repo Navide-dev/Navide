@@ -353,7 +353,7 @@ describe('OnboardingWizard', () => {
     mock.setResponse('onboarding.status', bareMac())
     wrapper = await open(mock)
 
-    expect(wrapper.get('.oc-card.expanded .oc-error').text()).toBe(
+    expect(wrapper.get('.oc-card.expanded .oc-notice').text()).toBe(
       i18n.global.t('onboard.installs-first', { names: 'Node.js' })
     )
     // No install has been attempted, and there is no card to jump to.
@@ -363,28 +363,182 @@ describe('OnboardingWizard', () => {
     ])
   })
 
-  it('reports a prerequisite with no install command as a block, not as part of the chain', async () => {
-    // Linux: the registry has no install command for Node.
+  // ── A notice is not an error ────────────────────────────────────────────────
+
+  it('never dresses an announcement as a failure, expanded or collapsed', async () => {
     const s = bareMac()
-    s.deps = s.deps.map((d) => (d.id === 'node' ? { ...d, can_install: false } : d))
+    s.deps.push(dep({ id: 'qwen', label: 'Qwen', group: 'agent_cli', optional: true,
+      requirements: [{ name: 'npm', ok: false }] }))
     const mock = createMockBackend('connected')
     mock.setResponse('onboarding.status', s)
     wrapper = await open(mock)
 
-    expect(wrapper.get('.oc-card.expanded .oc-error').text()).toBe(
-      i18n.global.t('onboard.blocked-by', { names: 'Node.js' })
-    )
+    // A bare machine is the normal first run: nothing here has gone wrong.
+    expect(wrapper.find('.oc-error').exists()).toBe(false)
+    expect(wrapper.find('.oc-alert').exists()).toBe(false)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(installButton(wrapper).text()).toBe(i18n.global.t('onboard.install'))
   })
 
-  it('still names a prerequisite this app cannot install', async () => {
+  it('keeps a real failure red, and flags it on the card once collapsed', async () => {
+    const s = bareMac()
+    s.deps.push(dep({ id: 'grok', label: 'Grok', group: 'agent_cli', optional: true }))
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', s)
+    withRunsExiting(mock, { exitCode: () => 1 })
+    wrapper = await open(mock)
+
+    await installButton(wrapper).trigger('click')
+    await flushPromises()
+
+    const card = wrapper.get('.oc-card.expanded')
+    expect(card.get('.oc-error').attributes('role')).toBe('alert')
+    expect(card.get('.oc-error').text()).toContain('Exited with code 1')
+    expect(card.find('.oc-notice').exists()).toBe(false)
+
+    await wrapper.findAll('.oc-head')[1].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.oc-card')[0].find('.oc-alert').exists()).toBe(true)
+  })
+
+  // ── A prerequisite this app cannot install ──────────────────────────────────
+
+  /** Linux: the registry has no install command for Node. */
+  function bareLinux(): OnboardStatus {
+    const s = bareMac()
+    s.deps = s.deps
+      .filter((d) => d.id !== 'homebrew')
+      .map((d) => (d.id === 'node'
+        ? { ...d, can_install: false, install_cmd: '', requirements: [], docs_url: 'https://nodejs.org' }
+        : d))
+    s.deps.find((d) => d.id === 'claude')!.docs_url = 'https://example.test/claude'
+    return s
+  }
+
+  it('tells the user what to do about a prerequisite it cannot install', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', bareLinux())
+    wrapper = await open(mock)
+
+    const card = wrapper.get('.oc-card.expanded')
+    expect(card.get('.oc-warn').text()).toBe(
+      i18n.global.t('onboard.blocked-by', { names: 'Node.js', action: i18n.global.t('action.re-detect') })
+    )
+    expect(card.find('.oc-error').exists()).toBe(false)
+    const guide = card.get('a.ob-btn.primary')
+    expect(guide.text()).toBe(i18n.global.t('onboard.manual-guide', { name: 'Node.js' }))
+    expect(guide.attributes('href')).toBe('https://nodejs.org')
+    expect(guide.attributes('target')).toBe('_blank')
+  })
+
+  it('has no Install to press while a prerequisite blocks it', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', bareLinux())
+    wrapper = await open(mock)
+
+    const card = wrapper.get('.oc-card.expanded')
+    const install = i18n.global.t('onboard.install')
+    expect(card.findAll('button').map((b) => b.text())).not.toContain(install)
+    // The vendor's own guide stays reachable: it may list a route without Node.
+    expect(card.findAll('a.ob-btn.ghost').map((a) => a.attributes('href'))).toEqual(['https://example.test/claude'])
+    expect(installCount(mock)).toBe(0)
+  })
+
+  it('marks a blocked card while collapsed, without calling it a failure', async () => {
+    const s = bareLinux()
+    s.deps.push(dep({ id: 'grok', label: 'Grok', group: 'agent_cli', optional: true }))
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', s)
+    wrapper = await open(mock)
+
+    await wrapper.findAll('.oc-head')[1].trigger('click')
+    await flushPromises()
+
+    const collapsed = wrapper.findAll('.oc-card')[0]
+    expect(collapsed.get('.oc-tag-blocked').text()).toBe(
+      i18n.global.t('onboard.needs-prereq', { names: 'Node.js' })
+    )
+    expect(collapsed.find('.oc-alert').exists()).toBe(false)
+  })
+
+  it('re-probes the login shell PATH on Re-detect, and offers Install once Node is there', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', bareLinux())
+    wrapper = await open(mock)
+
+    // Node installed by hand: nvm and friends only reach PATH via the login shell.
+    const fixed = bareLinux()
+    fixed.deps = fixed.deps.map((d) => {
+      if (d.id === 'node') return { ...d, status: 'ok' as const, version: '24.0.0' }
+      return d.id === 'claude' ? { ...d, requirements: [{ name: 'npm', ok: true }] } : d
+    })
+    mock.setResponse('onboarding.status', fixed)
+    await wrapper.get('.oc-card.expanded .ob-btn.ghost:not(a)').trigger('click')
+    await flushPromises()
+
+    expect(mock.sent.filter((m) => m.type === 'onboarding.status').at(-1)?.payload).toEqual({ fresh: true })
+    expect(wrapper.find('.oc-warn').exists()).toBe(false)
+    expect(wrapper.find('.oc-tag-blocked').exists()).toBe(false)
+    expect(installButton(wrapper).text()).toBe(i18n.global.t('onboard.install'))
+  })
+
+  it('leaves Re-detect as it was on a card with nothing blocking it', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', bareMac())
+    wrapper = await open(mock)
+
+    await wrapper.get('.oc-card.expanded .ob-btn.ghost').trigger('click')
+    await flushPromises()
+
+    expect(mock.sent.filter((m) => m.type === 'onboarding.status').at(-1)?.payload).toEqual({})
+  })
+
+  it('says nothing about a prerequisite an installed CLI got by without', async () => {
+    // Claude Code from the native installer, on a machine with no Node.
+    const s = bareLinux()
+    s.deps = s.deps.map((d) => (d.id === 'claude' ? { ...d, status: 'ok' as const, version: '2.1.0' } : d))
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', s)
+    wrapper = await open(mock)
+
+    await wrapper.findAll('.oc-head')[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('.oc-card.expanded').classes()).toContain('done')
+    expect(wrapper.find('.oc-warn').exists()).toBe(false)
+    expect(wrapper.find('.oc-tag-blocked').exists()).toBe(false)
+  })
+
+  it('names a binary with no dep behind it, with no Install and no invented link', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('onboarding.status', status({
       deps: [dep({ id: 'aider', label: 'Aider', group: 'agent_cli', requirements: [{ name: 'curl', ok: false }] })],
     }))
     wrapper = await open(mock)
 
-    expect(wrapper.get('.oc-card.expanded .oc-error').text()).toBe(
-      i18n.global.t('onboard.blocked-by', { names: 'curl' })
+    const card = wrapper.get('.oc-card.expanded')
+    expect(card.get('.oc-warn').text()).toBe(
+      i18n.global.t('onboard.blocked-by', { names: 'curl', action: i18n.global.t('action.re-detect') })
+    )
+    expect(card.findAll('.ob-btn').map((b) => b.text())).toEqual([i18n.global.t('action.re-detect')])
+  })
+
+  it('blocks on Node, not on its package manager, when the chain cannot start', async () => {
+    // Windows without winget: Node has an install command nothing can run.
+    const s = bareMac()
+    s.deps = s.deps
+      .filter((d) => d.id !== 'homebrew')
+      .map((d) => (d.id === 'node'
+        ? { ...d, docs_url: 'https://nodejs.org', requirements: [{ name: 'winget', ok: false }] }
+        : d))
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', s)
+    wrapper = await open(mock)
+
+    expect(wrapper.get('.oc-card.expanded a.ob-btn.primary').attributes('href')).toBe('https://nodejs.org')
+    expect(wrapper.find('.oc-card.expanded .oc-tag-blocked').text()).toBe(
+      i18n.global.t('onboard.needs-prereq', { names: 'Node.js' })
     )
   })
 
