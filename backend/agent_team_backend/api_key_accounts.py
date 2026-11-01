@@ -373,7 +373,12 @@ async def take_over(service: Any, incident: Any) -> bool:
     }))
     from .ws_handlers import _broadcast_profiles_changed
 
-    await _broadcast_profiles_changed("api-key")
+    # The move is done and told; a list that stays stale until the next read
+    # must not turn it into a failed quota report.
+    try:
+        await _broadcast_profiles_changed("api-key")
+    except Exception as err:  # noqa: BLE001
+        log.warning("api key takeover: accounts refresh failed (%s)", type(err).__name__)
     return True
 
 

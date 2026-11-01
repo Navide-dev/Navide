@@ -389,6 +389,23 @@ def test_take_over_moves_panes_and_leaves_the_live_login(
     assert vault.read_live("claude").secret == live.secret
 
 
+def test_take_over_survives_a_failed_accounts_refresh(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    key = _opened_key(store)
+    events = _capture_events(monkeypatch)
+    service = _Service(tmp_path)
+
+    async def broken(reason: str) -> None:
+        raise RuntimeError("no account view")
+
+    monkeypatch.setattr(ws_handlers, "_broadcast_profiles_changed", broken)
+    assert asyncio.run(ak.take_over(service, _incident())) is True
+    assert service.stopped == ["api-key-takeover"]
+    assert store.get_pane_default("claude") == key
+    assert any(e["type"] == ak.TAKEOVER_EVENT for e in events)
+
+
 def test_take_over_counts_against_the_budget(
     store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
