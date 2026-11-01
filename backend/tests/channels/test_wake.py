@@ -585,6 +585,16 @@ async def test_seam_never_wakes_a_codex_login_pane_onto_the_key_in_use(seam) -> 
     assert _nothing_opened(seam)
 
 
+async def test_seam_refuses_a_codex_pane_while_a_stopped_switch_left_a_key_live(seam, monkeypatch) -> None:
+    from agent_team_backend import api_key_accounts as ak
+
+    _key("codex")
+    monkeypatch.setattr(ak, "_live_key_is_ours", lambda agent_key, keys: True)
+    _pane_on(seam, _login("codex"), "codex")
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == UNCLEAR
+    assert _nothing_opened(seam)
+
+
 async def test_seam_refuses_a_codex_key_pane_once_a_login_is_in_use(seam) -> None:
     _pane_on(seam, _key("codex"), "codex")
     assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == UNCLEAR

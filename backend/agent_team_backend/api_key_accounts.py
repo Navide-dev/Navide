@@ -318,6 +318,8 @@ def wake_verdict(agent_key: str, recorded_pin: str) -> str:
     if agent_key in _SLOT_KEY_AGENTS:
         active = _store().list()["defaults"].get(agent_key)
         target = active if active and is_api_key(_store().get(active)) else ""
+        if not target and is_active_api_key_account(agent_key, _store()):
+            return "unclear"  # A switch that stopped midway left a key live.
     if not target and not is_api_key(_store().get(recorded_pin)):
         return ""
     return "key" if recorded_pin == target else "unclear"
