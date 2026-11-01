@@ -18,6 +18,7 @@ import asyncio
 import datetime
 import logging
 import re
+import time
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -31,6 +32,12 @@ log = logging.getLogger(__name__)
 VENDORS = frozenset({"claude", "codex"})
 
 PROBE_S = 2.0
+WATCH_EVERY_S = 15.0
+#: A run ends here whatever it is doing.
+RUN_CAP_S = 4 * 60 * 60
+#: Between interrupting a pane and reclaiming it: a CLI needs a moment to leave
+#: its prompt, and reclaim refuses a pane that is still awaiting.
+SETTLE_S = 3.0
 
 _SHELL_SYNTAX = re.compile(r"[;&|`<>]|\$\(|\$\{")
 _FIRST_TOKEN = re.compile(r"^\s*(?:'([^']*)'|\"([^\"]*)\"|(\S+))")
@@ -66,6 +73,11 @@ class Window(Protocol):
     async def app_lock(self, workspace: str) -> str: ...
     async def run_active(self, workspace: str) -> bool: ...
     async def start(self, workspace: str, task: str, pipeline_id: str, taint_detail: str) -> dict[str, Any]: ...
+    async def run_status(self, workspace: str) -> dict[str, Any]: ...
+    async def pane_awaiting(self, workspace: str, pane_id: str) -> bool: ...
+    async def abort(self, workspace: str) -> None: ...
+    async def interrupt(self, workspace: str, pane_id: str) -> None: ...
+    async def reclaim(self, workspace: str, pane_id: str) -> bool: ...
 
 
 class LiveWindow:
@@ -96,6 +108,42 @@ class LiveWindow:
         return await mcp._start_pipeline_run(
             mcp._Caller(kind="host"), workspace, task, pipeline_id, taint_detail=taint_detail,
         )
+
+
+    async def run_status(self, workspace: str) -> dict[str, Any]:
+        from .mcp_server import server as mcp
+
+        return await asyncio.to_thread(mcp._pipeline_status_of, workspace)
+
+    async def pane_awaiting(self, workspace: str, pane_id: str) -> bool:
+        from .mcp_server import server as mcp
+
+        reply = await mcp._ui_request(
+            workspace, "invoke", caller=mcp._pane_caller(pane_id), action="ui.pane.getStatus", args={"paneId": pane_id},
+        )
+        result = reply.get("result") if reply.get("ok") else None
+        return isinstance(result, dict) and result.get("status") == "awaiting"
+
+    async def abort(self, workspace: str) -> None:
+        from .mcp_server import server as mcp
+
+        await mcp._ui_request(workspace, "invoke", caller=mcp._Caller(kind="host"), action="ui.pipeline.abort", args={})
+
+    async def interrupt(self, workspace: str, pane_id: str) -> None:
+        from .mcp_server import server as mcp
+
+        await mcp._ui_request(
+            workspace, "invoke", caller=mcp._pane_caller(pane_id), action="ui.pane.interrupt", args={"paneId": pane_id},
+        )
+
+    async def reclaim(self, workspace: str, pane_id: str) -> bool:
+        from .mcp_server import server as mcp
+
+        reply = await mcp._ui_request(
+            workspace, "invoke", caller=mcp._Caller(kind="host"), route_pane_id=pane_id,
+            action="ui.pane.reclaim", args={"paneId": pane_id},
+        )
+        return bool(reply.get("ok"))
 
 
 def today() -> str:
@@ -150,6 +198,9 @@ class WebhookService:
         self._starting: set[str] = set()
         self._checks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task[None]] = set()
+        self._waiting_since: dict[str, float] = {}
+        self._watchdog: asyncio.Task[None] | None = None
+        self._clock = time.time
 
     # ── what a pipeline may be bound to ──────────────────────────────────
 
@@ -255,8 +306,6 @@ class WebhookService:
         }])
 
     def audit(self, events: list[dict[str, Any]]) -> None:
-        import time
-
         now = int(time.time())
         try:
             self.store.record_events([{"ts": now, **event} for event in events])
@@ -305,6 +354,87 @@ class WebhookService:
             self._guarded[pane_id] = run_id
             self.store.add_run_pane(pane_id, run_id)
         return _rewrite(command, lambda text: _without_bypass(agent_key, text))
+
+
+    # ── nobody at the computer ───────────────────────────────────────────
+
+    def start_watchdog(self) -> None:
+        self._watchdog = asyncio.create_task(self._watch())
+
+    async def stop_watchdog(self) -> None:
+        task, self._watchdog = self._watchdog, None
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    async def _watch(self) -> None:
+        while True:
+            await asyncio.sleep(WATCH_EVERY_S)
+            try:
+                await self.tick()
+            except Exception:  # noqa: BLE001 - the next tick tries again
+                log.exception("webhook: watchdog tick failed")
+
+    async def tick(self) -> None:
+        """One look at every open run. A run that waited too long for a person
+        is stopped: nothing is ever approved on anyone's behalf."""
+        for workspace, run in list(self._active.items()):
+            await self._check_run(workspace, run)
+
+    async def _awaiting(self, workspace: str, run: dict[str, Any], status: dict[str, Any]) -> bool:
+        if status.get("gate"):
+            return True
+        panes = [pane for pane, run_id in self._guarded.items() if run_id == run["id"]]
+        return any([await self.window.pane_awaiting(workspace, pane) for pane in panes])
+
+    async def _check_run(self, workspace: str, run: dict[str, Any]) -> None:
+        status = await self.window.run_status(workspace)
+        state = status.get("state")
+        if state == "interrupted":
+            self._ended(workspace, "interrupted")
+            return
+        if not status.get("active"):
+            self._ended(workspace, "finished")
+            return
+        now = self._clock()
+        if now - run["started_at"] >= RUN_CAP_S:
+            await self._stop_run(workspace, run, "run-timeout")
+            return
+        if not await self._awaiting(workspace, run, status):
+            self._waiting_since.pop(run["id"], None)
+            return
+        since = self._waiting_since.get(run["id"])
+        if since is None:
+            self._waiting_since[run["id"]] = now
+            self.audit([{"trigger_id": run["trigger_id"], "outcome": "awaiting-approval", "status": 0}])
+            return
+        limit = await asyncio.to_thread(self.store.approval_timeout_s, run["trigger_id"])
+        if now - since >= limit:
+            await self._stop_run(workspace, run, "approval-timeout")
+
+    def _ended(self, workspace: str, state: str) -> None:
+        run = self._active.get(workspace)
+        if run is not None:
+            self._waiting_since.pop(run["id"], None)
+            if state != "finished":
+                self.audit([{"trigger_id": run["trigger_id"], "outcome": state, "status": 0}])
+        self.finish_run(workspace, state)
+
+    async def _stop_run(self, workspace: str, run: dict[str, Any], outcome: str) -> None:
+        """Abort, take the panes off whatever prompt holds them, and free them.
+        The prompt is cancelled, which refuses the call that was waiting."""
+        await self.window.abort(workspace)
+        panes = [pane for pane, run_id in self._guarded.items() if run_id == run["id"]]
+        for pane in panes:
+            await self.window.interrupt(workspace, pane)
+        if panes:
+            await asyncio.sleep(SETTLE_S)
+        kept = [pane for pane in panes if not await self.window.reclaim(workspace, pane)]
+        self.audit([{
+            "trigger_id": run["trigger_id"], "outcome": outcome, "status": 0,
+            "detail": f"{len(kept)} pane(s) not reclaimed" if kept else None,
+        }])
+        self._ended(workspace, "stopped")
 
 
 _service: WebhookService | None = None

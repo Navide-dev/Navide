@@ -38,6 +38,10 @@ class Window:
         self.answer: dict[str, Any] = {"ok": True}
         self.started: list[dict[str, Any]] = []
         self.hold: asyncio.Event | None = None
+        self.status: dict[str, Any] = {"active": True, "state": "running", "gate": {}}
+        self.awaiting: set[str] = set()
+        self.stuck: set[str] = set()
+        self.calls: list[str] = []
 
     async def probe(self, workspace: str) -> bool:
         return self.has_window
@@ -47,6 +51,23 @@ class Window:
 
     async def run_active(self, workspace: str) -> bool:
         return self.active
+
+    async def run_status(self, workspace: str) -> dict[str, Any]:
+        self.calls.append("status")
+        return self.status
+
+    async def pane_awaiting(self, workspace: str, pane_id: str) -> bool:
+        return pane_id in self.awaiting
+
+    async def abort(self, workspace: str) -> None:
+        self.calls.append("abort")
+
+    async def interrupt(self, workspace: str, pane_id: str) -> None:
+        self.calls.append(f"interrupt {pane_id}")
+
+    async def reclaim(self, workspace: str, pane_id: str) -> bool:
+        self.calls.append(f"reclaim {pane_id}")
+        return pane_id not in self.stuck
 
     async def start(self, workspace: str, task: str, pipeline_id: str, taint_detail: str) -> dict[str, Any]:
         self.started.append({"workspace": workspace, "task": task, "pipeline_id": pipeline_id, "detail": taint_detail})
@@ -273,3 +294,131 @@ class TestLaunch:
         run_started(env, "by-hand")
         command = f"claude {CLAUDE_BYPASS}"
         assert launch(env, command, pane="fresh") is command
+
+
+class Clock:
+    def __init__(self, env, monkeypatch) -> None:
+        self.now = 1_000_000.0
+        env.service._clock = lambda: self.now
+        monkeypatch.setattr(svc, "SETTLE_S", 0)
+
+
+@pytest.fixture
+async def watched(env, monkeypatch):
+    await started_run(env)
+    launch(env, "claude", pane="p")
+    clock = Clock(env, monkeypatch)
+    run = next(iter(env.service._active.values()))
+    run["started_at"] = clock.now
+    return SimpleNamespace(env=env, clock=clock, run=run)
+
+
+def outcomes(env) -> list[str]:
+    return [e["outcome"] for e in env.store.events(env.trigger["id"])]
+
+
+class TestWatchdog:
+    async def test_a_working_run_is_left_alone(self, watched) -> None:
+        await watched.env.service.tick()
+        watched.clock.now += 60 * 60
+        await watched.env.service.tick()
+        assert "abort" not in watched.env.window.calls
+
+    async def test_a_gate_nobody_answers_stops_the_run_and_approves_nothing(self, watched) -> None:
+        env, clock = watched.env, watched.clock
+        env.window.status["gate"] = {"nodeId": "g"}
+        await env.service.tick()
+        assert "awaiting-approval" in outcomes(env)
+        clock.now += 30 * 60 - 1
+        await env.service.tick()
+        assert "abort" not in env.window.calls
+        clock.now += 1
+        await env.service.tick()
+        calls = [c for c in env.window.calls if c != "status"]
+        assert calls == ["abort", "interrupt p", "reclaim p"]
+        assert "approval-timeout" in outcomes(env) and env.service._active == {}
+
+    async def test_a_pane_at_a_prompt_counts_too(self, watched) -> None:
+        env, clock = watched.env, watched.clock
+        env.window.awaiting = {"p"}
+        await env.service.tick()
+        clock.now += 30 * 60
+        await env.service.tick()
+        assert "abort" in env.window.calls
+
+    async def test_every_new_wait_counts_from_its_own_start(self, watched) -> None:
+        env, clock = watched.env, watched.clock
+        env.window.awaiting = {"p"}
+        await env.service.tick()
+        clock.now += 29 * 60
+        env.window.awaiting = set()
+        await env.service.tick()
+        env.window.awaiting = {"p"}
+        await env.service.tick()
+        clock.now += 29 * 60
+        await env.service.tick()
+        assert "abort" not in env.window.calls
+
+    async def test_the_trigger_sets_the_wait(self, watched) -> None:
+        env, clock = watched.env, watched.clock
+        short, _ = env.store.create(name="short", workspace=WS, pipeline_id=PIPE, approval_timeout_min=5)
+        watched.run["trigger_id"] = short["id"]
+        env.window.awaiting = {"p"}
+        await env.service.tick()
+        clock.now += 5 * 60
+        await env.service.tick()
+        assert "abort" in env.window.calls
+
+    async def test_a_run_has_a_cap_whatever_it_does(self, watched) -> None:
+        watched.clock.now += svc.RUN_CAP_S
+        await watched.env.service.tick()
+        assert "run-timeout" in outcomes(watched.env) and "abort" in watched.env.window.calls
+
+    async def test_a_pane_that_will_not_free_is_reported(self, watched) -> None:
+        env = watched.env
+        env.window.stuck = {"p"}
+        env.window.awaiting = {"p"}
+        await env.service.tick()
+        watched.clock.now += 30 * 60
+        await env.service.tick()
+        assert any(e["detail"] == "1 pane(s) not reclaimed" for e in env.store.events(env.trigger["id"]))
+
+    async def test_a_finished_run_closes_without_a_word(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "completed"}
+        await env.service.tick()
+        assert env.service._active == {} and env.store.open_runs() == []
+        assert "abort" not in env.window.calls
+
+    async def test_an_interrupted_run_is_recorded_and_not_resumed(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        assert "interrupted" in outcomes(env) and "abort" not in env.window.calls
+
+    async def test_a_restart_rebuilds_the_watch_from_the_table(self, watched) -> None:
+        env = watched.env
+        again = svc.WebhookService(store=env.store, db=env.store.db, window=env.window, pipeline=env.pipelines.get,
+                                   known_program=lambda agent, program: program == agent)
+        assert WS in again._active
+
+    async def test_one_failing_tick_does_not_end_the_loop(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc, "WATCH_EVERY_S", 0)
+        ticks: list[int] = []
+
+        async def tick() -> None:
+            ticks.append(1)
+            if len(ticks) == 1:
+                raise RuntimeError("boom")
+
+        env.service.tick = tick
+        env.service.start_watchdog()
+        while len(ticks) < 3:
+            await asyncio.sleep(0)
+        await env.service.stop_watchdog()
+
+
+def test_the_wait_has_bounds(env) -> None:
+    for minutes in (4, 241):
+        with pytest.raises(wt.WebhookInvalid):
+            env.store.create(name="x", workspace=WS, pipeline_id=PIPE, approval_timeout_min=minutes)

@@ -51,7 +51,9 @@ async def startup() -> None:
             known_program=_known_program,
         )
 
-    webhook_service.configure(await asyncio.to_thread(build))
+    service = await asyncio.to_thread(build)
+    webhook_service.configure(service)
+    service.start_watchdog()
     await reconcile()
 
 
@@ -82,6 +84,9 @@ async def shutdown() -> None:
     listener, _listener = _listener, None
     if listener is not None:
         await asyncio.to_thread(listener.stop)
+    service = webhook_service.current()
+    if service is not None:
+        await service.stop_watchdog()
     webhook_service.configure(None)
 
 
@@ -189,6 +194,9 @@ async def webhook_trigger_create(session: Any, msg_id: str, msg_type: str, paylo
             per_minute=int(payload.get("per_minute") or webhook_triggers.DEFAULT_PER_MINUTE),
             per_day=int(payload.get("per_day") or webhook_triggers.DEFAULT_PER_DAY),
             no_gate_ack=payload.get("no_gate_ack") is True,
+            approval_timeout_min=int(
+                payload.get("approval_timeout_min") or webhook_triggers.DEFAULT_APPROVAL_TIMEOUT_MIN
+            ),
         )
     except (webhook_triggers.WebhookInvalid, TypeError, ValueError) as err:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))

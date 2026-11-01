@@ -38,6 +38,9 @@ DEFAULT_PER_MINUTE = 6
 DEFAULT_PER_DAY = 20
 MAX_PER_MINUTE = 60
 MAX_PER_DAY = 500
+DEFAULT_APPROVAL_TIMEOUT_MIN = 30
+MIN_APPROVAL_TIMEOUT_MIN = 5
+MAX_APPROVAL_TIMEOUT_MIN = 240
 #: Audit rows kept per trigger; older rows are pruned on write.
 EVENTS_PER_TRIGGER = 1000
 
@@ -147,7 +150,9 @@ def _public(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
-def _check(name: str, workspace: str, pipeline_id: str, kind: str, per_minute: int, per_day: int) -> None:
+def _check(
+    name: str, workspace: str, pipeline_id: str, kind: str, per_minute: int, per_day: int, approval_timeout_min: int,
+) -> None:
     if not name.strip():
         raise WebhookInvalid("a trigger needs a name")
     if not os.path.isabs(workspace or ""):
@@ -160,6 +165,8 @@ def _check(name: str, workspace: str, pipeline_id: str, kind: str, per_minute: i
         raise WebhookInvalid(f"per_minute must be 1..{MAX_PER_MINUTE}")
     if not 1 <= per_day <= MAX_PER_DAY:
         raise WebhookInvalid(f"per_day must be 1..{MAX_PER_DAY}")
+    if not MIN_APPROVAL_TIMEOUT_MIN <= approval_timeout_min <= MAX_APPROVAL_TIMEOUT_MIN:
+        raise WebhookInvalid(f"approval_timeout_min must be {MIN_APPROVAL_TIMEOUT_MIN}..{MAX_APPROVAL_TIMEOUT_MIN}")
 
 
 class WebhookStore:
@@ -180,17 +187,18 @@ class WebhookStore:
         per_minute: int = DEFAULT_PER_MINUTE,
         per_day: int = DEFAULT_PER_DAY,
         no_gate_ack: bool = False,
+        approval_timeout_min: int = DEFAULT_APPROVAL_TIMEOUT_MIN,
     ) -> tuple[dict[str, Any], str]:
         """A new, disabled trigger and its key, which is not stored."""
-        _check(name, workspace, pipeline_id, kind, per_minute, per_day)
+        _check(name, workspace, pipeline_id, kind, per_minute, per_day, approval_timeout_min)
         trigger_id, token, now = secrets.token_hex(16), new_token(), int(time.time())
         with self.db.transaction() as cur:
             cur.execute(
                 "INSERT INTO webhook_triggers (id, name, workspace, pipeline_id, kind, enabled, token_hash,"
-                " per_minute, per_day, no_gate_ack, created_at, updated_at, deleted_at)"
-                " VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, NULL)",
+                " per_minute, per_day, no_gate_ack, approval_timeout_min, created_at, updated_at, deleted_at)"
+                " VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, NULL)",
                 (trigger_id, name.strip(), workspace, pipeline_id, kind, hash_token(token),
-                 per_minute, per_day, int(no_gate_ack), now, now),
+                 per_minute, per_day, int(no_gate_ack), approval_timeout_min, now, now),
             )
             row = cur.execute("SELECT * FROM webhook_triggers WHERE id = ?", (trigger_id,)).fetchone()
         return _public(row), token
@@ -308,6 +316,14 @@ class WebhookStore:
         with self.db.transaction() as cur:
             rows = cur.execute("SELECT * FROM webhook_runs WHERE state = 'running'").fetchall()
         return [dict(row) for row in rows]
+
+    def approval_timeout_s(self, trigger_id: str) -> int:
+        """From the row, deleted triggers too: a run outlives its trigger."""
+        with self.db.transaction() as cur:
+            row = cur.execute(
+                "SELECT approval_timeout_min FROM webhook_triggers WHERE id = ?", (trigger_id,)
+            ).fetchone()
+        return (row["approval_timeout_min"] if row else DEFAULT_APPROVAL_TIMEOUT_MIN) * 60
 
     def add_run_pane(self, pane_id: str, run_id: str) -> None:
         with self.db.transaction() as cur:
