@@ -205,8 +205,8 @@ import {
   awaitEcho, awaitInputUnblocked, createInputBlockTracker, needsInputWait, PROBE_SESSION_GONE
 } from './lib/ptyInputBlock'
 import {
-  TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, runKickoffAttempts,
-  submitHeldCopy, terminalKickoffOutcome,
+  TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
+  runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { terminalMultilineRefusal } from './lib/terminalInput'
@@ -7064,7 +7064,9 @@ function scheduleInjection(pane: ActivePane): void {
       if (pane.origin !== 'pipeline' && pinsSessionAtLaunch(pane.agentKey) && pane.pinnedSessionId) {
         void persistPaneSession(pane, pane.pinnedSessionId)
       }
-      return
+      // A slot spawned at activation (behind a gate or a branch) carries its
+      // kickoff on this pane, and nothing else will send it.
+      if (!rolelessPaneAwaitsKickoff(pane)) return
     }
     if (pane.skipRoleInjection) {
       pane.injectionStatus = 'skipped'
@@ -7099,74 +7101,80 @@ function scheduleInjection(pane: ActivePane): void {
         if (!paneAlive(pane.id)) return
       }
     }
-    const role = rolesApi.find(pane.roleKey)
-    if (!role) {
-      pane.injectionStatus = 'failed'
-      setPrepStatus(pane, 'failed')
-      syncViews()
-      pipelineLog(`${tag} ✕ role '${pane.roleKey}' not found in registry`)
-      return
-    }
-    // Embed the session marker in the role prompt too (Codex/Antigravity), not just
-    // the kickoff — the role is injected at pre-spawn, so the marker lands in
-    // the session file (and gets detected) within seconds, instead of waiting
-    // for this slot's stage to activate (which for late stages is much later).
-    const roleContent = role.system_prompt + ROLE_STANDBY_SUFFIX + sessionMarkerLine(pane.sessionMarker)
-    pipelineLog(`${tag} ➜ injecting role '${role.label}' (${roleContent.length} chars)`)
-    setPrepStatus(pane, 'injecting-role')
-    syncViews()
-    await acquireInjectionSlot()
-    let ok: boolean
-    try {
-      // bracketed paste (preserveNewlines) — same as kickoff — so the multi-line
-      // role prompt isn't sent as a raw keystroke burst that floods the PTY
-      // input buffer (EAGAIN drops) and re-renders on every embedded newline.
-      ok = await injectPane(pane.id, roleContent, `role:${role.label}`, true)
-    } finally {
-      releaseInjectionSlot()
-    }
-    pane.injectionStatus = ok ? 'sent' : 'failed'
-    setPrepStatus(pane, ok ? 'ready' : 'failed')
-    syncViews()
-    if (ok && pane.origin !== 'pipeline' && pinsSessionAtLaunch(pane.agentKey) && pane.pinnedSessionId) {
-      void persistPaneSession(pane, pane.pinnedSessionId)
-    }
-    if (!ok) {
-      // Honest record: role injection didn't land (e.g. truncated mid-text).
-      // A pipeline slot about to take its kickoff fails the run instead: with
-      // the kickoff sent anyway it ran as `running` without its role (#448).
-      // A pre-spawned slot has no kickoff yet; activateStage retries its role.
-      const roleStageIndex = pane.origin === 'pipeline'
-        ? stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
-        : -1
-      if (pane.kickoffStatus === 'pending' && roleStageIndex >= 0) {
-        pipelineLog(`${tag} ✕ role injection failed (agent didn't react) — not sending the kickoff`)
-        pane.kickoffStatus = 'failed'
+    const injectRole = async (): Promise<boolean> => {
+      const role = rolesApi.find(pane.roleKey)
+      if (!role) {
+        pane.injectionStatus = 'failed'
+        setPrepStatus(pane, 'failed')
         syncViews()
-        await failRunOnKickoff(roleStageIndex, pane.slotLabel ?? '', 'role prompt never reached the agent')
-        return
+        pipelineLog(`${tag} ✕ role '${pane.roleKey}' not found in registry`)
+        return false
       }
-      pipelineLog(`${tag} ✕ role injection failed (agent didn't react) — ${pane.origin === 'pipeline' ? 'retrying at stage activation' : 'continuing to kickoff anyway'}`)
-    } else {
-      pipelineLog(`${tag} ✓ role prompt sent`)
+      // Embed the session marker in the role prompt too (Codex/Antigravity), not just
+      // the kickoff — the role is injected at pre-spawn, so the marker lands in
+      // the session file (and gets detected) within seconds, instead of waiting
+      // for this slot's stage to activate (which for late stages is much later).
+      const roleContent = role.system_prompt + ROLE_STANDBY_SUFFIX + sessionMarkerLine(pane.sessionMarker)
+      pipelineLog(`${tag} ➜ injecting role '${role.label}' (${roleContent.length} chars)`)
+      setPrepStatus(pane, 'injecting-role')
+      syncViews()
+      await acquireInjectionSlot()
+      let ok: boolean
+      try {
+        // bracketed paste (preserveNewlines) — same as kickoff — so the multi-line
+        // role prompt isn't sent as a raw keystroke burst that floods the PTY
+        // input buffer (EAGAIN drops) and re-renders on every embedded newline.
+        ok = await injectPane(pane.id, roleContent, `role:${role.label}`, true)
+      } finally {
+        releaseInjectionSlot()
+      }
+      pane.injectionStatus = ok ? 'sent' : 'failed'
+      setPrepStatus(pane, ok ? 'ready' : 'failed')
+      syncViews()
+      if (ok && pane.origin !== 'pipeline' && pinsSessionAtLaunch(pane.agentKey) && pane.pinnedSessionId) {
+        void persistPaneSession(pane, pane.pinnedSessionId)
+      }
+      if (!ok) {
+        // Honest record: role injection didn't land (e.g. truncated mid-text).
+        // A pipeline slot about to take its kickoff fails the run instead: with
+        // the kickoff sent anyway it ran as `running` without its role (#448).
+        // A pre-spawned slot has no kickoff yet; activateStage retries its role.
+        const roleStageIndex = pane.origin === 'pipeline'
+          ? stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
+          : -1
+        if (pane.kickoffStatus === 'pending' && roleStageIndex >= 0) {
+          pipelineLog(`${tag} ✕ role injection failed (agent didn't react) — not sending the kickoff`)
+          pane.kickoffStatus = 'failed'
+          syncViews()
+          await failRunOnKickoff(roleStageIndex, pane.slotLabel ?? '', 'role prompt never reached the agent')
+          return false
+        }
+        pipelineLog(`${tag} ✕ role injection failed (agent didn't react) — ${pane.origin === 'pipeline' ? 'retrying at stage activation' : 'continuing to kickoff anyway'}`)
+      } else {
+        pipelineLog(`${tag} ✓ role prompt sent`)
+      }
+      return true
     }
+    if (pane.roleKey && !(await injectRole())) return
 
     // 4. Inject kickoff prompt (pipeline panes only) — but only AFTER the
     //    agent has acknowledged the role prompt (started responding, then
     //    settled). This prevents the kickoff from being interleaved into
     //    the agent's role-acknowledgement output.
     if (pane.kickoffStatus === 'pending') {
-      pipelineLog(`${tag} waiting for agent to acknowledge role (up to 30s)`)
-      setPrepStatus(pane, 'waiting-agent')
-      syncViews()
-      const result = await waitForActivityThenSettle(pane.id, 2500, 30_000)
-      if (!paneAlive(pane.id)) return
-      if (result === 'no-activity') {
-        pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
-      } else if (result === 'timeout') {
-        pipelineLog(`${tag} ⚠ agent still streaming — sending kickoff anyway`)
-      } else {
-        pipelineLog(`${tag} ✓ agent settled — proceeding`)
+      if (pane.roleKey) {
+        pipelineLog(`${tag} waiting for agent to acknowledge role (up to 30s)`)
+        setPrepStatus(pane, 'waiting-agent')
+        syncViews()
+        const result = await waitForActivityThenSettle(pane.id, 2500, 30_000)
+        if (!paneAlive(pane.id)) return
+        if (result === 'no-activity') {
+          pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
+        } else if (result === 'timeout') {
+          pipelineLog(`${tag} ⚠ agent still streaming — sending kickoff anyway`)
+        } else {
+          pipelineLog(`${tag} ✓ agent settled — proceeding`)
+        }
       }
       pipelineLog(`${tag} ➜ injecting kickoff (${pane.kickoffPrompt.length} chars)`)
       // Use bracketed-paste so newlines in the context header (prior-stage
@@ -14762,7 +14770,8 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     // A role that failed at pre-spawn gets the same one more try. A slot whose
     // role never landed takes no kickoff and fails the run below: it used to get
     // the kickoff anyway and run as `running` without its role (#448).
-    if (pane.injectionStatus === 'skipped' || pane.injectionStatus === 'failed') {
+    // A slot with no role has nothing to inject and goes straight to its kickoff.
+    if (pane.roleKey && (pane.injectionStatus === 'skipped' || pane.injectionStatus === 'failed')) {
       const retry = pane.injectionStatus === 'failed'
       const role = rolesApi.find(pane.roleKey)
       if (!role) {

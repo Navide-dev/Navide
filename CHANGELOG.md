@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Pipelines (0.2.37): a step with no role now gets its task. Every step of a workflow imported from n8n has no role, so such a run stopped at once with "every slot is gone", or stayed Running forever when the step came after an approval gate or a branch. Steps with a role run as before.
+
 ## [0.2.36] — 2026-11-01
 
 ### Added
