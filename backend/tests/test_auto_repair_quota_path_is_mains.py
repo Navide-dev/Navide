@@ -34,12 +34,16 @@ D7_LOGIN_FUNCTIONS = frozenset({
 #: Both modules were updated deliberately in 0.2.36 for API key accounts: the
 #: usage poll skips an active codex key, and _login_state holds a key back from
 #: failover until the user opts in.
+#: Both modules were updated deliberately in 0.2.37 for accounts with no 5-hour
+#: window: _quota_verdict accepts a window a successful read proved absent, and
+#: _cache_safe_snapshot keeps that field. An account that reports its windows is
+#: judged as before (test_quota_verdict_unchanged.py).
 MAIN_DIGESTS = {
     "usage_service": (
-        "b210ea844793a9d6adc487a095cd2a0188cd4cc320d0e51c43d4e1ef2edc7d14", D7_LOGIN_FUNCTIONS,
+        "e5672d4b14a3bc7e0674f42c8710bbe4920e6bb1be242da276563b06dd6b49e1", D7_LOGIN_FUNCTIONS,
     ),
     "quota_failover": (
-        "f821eb97f98b73ccbbe7369e5dc9124f6231a40521bfd9868d42e554a7d1aa36", frozenset(),
+        "f4e256d8bb62785fbf918a235841001123869b620020281b7f5737e5a09ad59a", frozenset(),
     ),
 }
 

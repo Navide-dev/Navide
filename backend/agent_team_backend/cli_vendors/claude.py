@@ -859,6 +859,9 @@ _SESSION_LINE = re.compile(r"^Current session\s*:\s*(.*)$", re.I)
 _WEEK_LINE = re.compile(r"^Current week\s*\((.+?)\)\s*:\s*(.*)$", re.I)
 _PERCENT = re.compile(r"(\d+(?:\.\d+)?)%\s+used", re.I)
 _RESETS = re.compile(r"\bresets\s+(.+?)\s*$", re.I)
+# Both wordings of the report's first line: "...your subscription to power..."
+# and "...your overages to power...".
+_REPORT_HEADER = "You are currently using your"
 
 
 def _parse_reset(phrase: str, now: datetime) -> str | None:
@@ -945,6 +948,33 @@ def parse_usage_panel(text: str, *, now: datetime | None = None) -> list[dict]:
 
     order = {"session": 0, "weekly": 1}
     return [found[k] for k in sorted(found, key=lambda k: (order.get(k, 2), k))]
+
+
+def usage_panel_absent_windows(text: str) -> list[str]:
+    """``["session"]`` when the report proves this account has no session
+    window, else ``[]``.
+
+    A verified Ultra account has no 5-hour limit, and Claude Code prints no
+    session row for it. That has to be told apart from a row we failed to read,
+    so the proof is a report that is whole and leaves nothing unaccounted for:
+    the header above the weekly rows, the all-models figure, something after
+    the weekly rows, no session row in any form, and no percentage in a row we
+    do not recognise (the shape a renamed session row would take). Anything less
+    says nothing, which leaves the window unknown, as a reading missing it
+    always has been."""
+    lines = [line.strip() for line in text.splitlines()]
+    week_rows = [i for i, line in enumerate(lines) if _WEEK_LINE.match(line)]
+    if not week_rows or "current session" in text.lower():
+        return []
+    if not any(line.startswith(_REPORT_HEADER) for line in lines[:week_rows[0]]):
+        return []
+    if not any(lines[week_rows[-1] + 1:]):
+        return []
+    if any(_PERCENT.search(line) and not _WEEK_LINE.match(line) for line in lines):
+        return []
+    if not any(window["kind"] == "weekly" for window in parse_usage_panel(text)):
+        return []
+    return ["session"]
 
 
 def _panel_probe_env(config_dir: str | None = None) -> dict[str, str]:
@@ -1097,7 +1127,11 @@ async def fetch_claude_usage_via_cli(
     if not windows:
         log.info("claude /usage produced no readable windows")
         return _costly("claude -p /usage printed no usage windows")
-    return _snapshot("claude", "ok", windows=windows)
+    snap = _snapshot("claude", "ok", windows=windows)
+    absent = usage_panel_absent_windows(raw)
+    if absent:
+        snap["absentWindows"] = absent
+    return snap
 
 
 # ---- delegated OAuth refresh (merged from claude_delegated_refresh.py) -----

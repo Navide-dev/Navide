@@ -331,7 +331,6 @@ import { judgeReading, quotaSemanticsFor } from './lib/quotaFailover'
 import {
   LOOP_RESUME_SETTING_KEY,
   DEFAULT_LOOP_RESUME,
-  LOOP_ESTIMATE_WINDOW_MS,
   LIMIT_RESET_BUFFER_MS,
   LOOP_DONE_MARKER,
   LOOP_WAIT_MARKER,
@@ -347,7 +346,7 @@ import {
 import { isLoopSkill, resolvePromptSkill } from './lib/promptSkills'
 import { usePromptSkills } from './composables/usePromptSkills'
 import { loginCommandFor, matchLoginExpired } from './lib/cliLoginExpired'
-import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, quotaExhaustedPayload, usageLimitDue } from './lib/cliUsageLimit'
+import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, loopEstimate, quotaExhaustedPayload, usageLimitDue } from './lib/cliUsageLimit'
 import {
   applyScreenWatch,
   hasAwaitingPattern,
@@ -1935,6 +1934,7 @@ interface ActivePane {
   /** Epoch ms of the heuristic quota-reset estimate (runtime-only): loop start
    *  + 5h Claude session window, shown on the running badge as approximate. */
   loopEstimateResetAt?: number | null
+  loopEstimateWeekly?: boolean
   /** Prompt skill this loop was cast with (runtime-only). Null / absent means
    *  the default skill, i.e. what a plain ∞ click sends. */
   loopSkillId?: string | null
@@ -5304,7 +5304,7 @@ async function togglePaneLoop(paneId: string, skillId?: string): Promise<void> {
   pane.loopSkillId = skill.id
   pane.loopTurnCount = 0
   pane.loopMaxTurns = skill.maxTurns
-  pane.loopEstimateResetAt = Date.now() + LOOP_ESTIMATE_WINDOW_MS
+  setLoopEstimate(pane)
   const gen = bumpLoopGen(paneId)
   startLoopLimitWatcher(paneId)
   // Global injection semaphore: synchronized multi-pane loop starts must not
@@ -5385,7 +5385,7 @@ async function fireLoopResume(paneId: string, logLabel: string, manual = false):
   }
   // Resume landed: a fresh quota window starts now, so refresh the badge's
   // pre-limit estimate (otherwise it reverts to the already-elapsed one).
-  pane.loopEstimateResetAt = Date.now() + LOOP_ESTIMATE_WINDOW_MS
+  setLoopEstimate(pane)
   // Re-arm turn-complete: the pre-limit turn's signal must not trigger an
   // instant continue right after the quota resumes.
   armLoopTurn(paneId)
@@ -5468,7 +5468,7 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   // count this one against the hard cap.
   watcher.continues += 1
   watcher.nextContinueAt = Date.now() + loopBackoffMs(watcher.stalledRuns)
-  pane.loopEstimateResetAt = Date.now() + LOOP_ESTIMATE_WINDOW_MS
+  setLoopEstimate(pane)
 }
 
 /** A completed turn's text decides whether the loop is getting anywhere. A
@@ -5927,6 +5927,12 @@ function paneQuotaReading(pane: ActivePane) {
   // account happens to be active now for a retained or unknown pane.
   if (pane.profileId === undefined || pane.profileId === '') return undefined
   return accountUsageFor(pane.agentKey, pane.profileId)
+}
+
+function setLoopEstimate(pane: ActivePane): void {
+  const estimate = loopEstimate(paneQuotaReading(pane), Date.now())
+  pane.loopEstimateResetAt = estimate.at
+  pane.loopEstimateWeekly = estimate.weekly
 }
 
 /** The quota half of the pane health watch: light `usageLimitAt/Until` on a
@@ -24101,6 +24107,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-active="p.loopActive"
           :loop-wait-until="p.loopWaitUntil"
           :loop-estimate-reset-at="p.loopEstimateResetAt"
+          :loop-estimate-weekly="p.loopEstimateWeekly"
           :login-expired="p.loginExpired"
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"

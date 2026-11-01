@@ -29,9 +29,16 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Settings → Channels (0.2.37): the page is now two columns. Every bot is listed on the left with its platform, state, people, chats and pending requests, grouped by platform when there are several, with **Add Bot** under the list. The right column shows the picked bot whole: its connection and switch, the ⋯ menu, requests waiting for approval, the people who can talk, and its chats and panes. The separate pending and allowed sections are gone, and their rows, including the shared ID flag and hint, moved under each bot. The page opens on the first bot with a request waiting. Requests and people whose bot is not set up here get a **No matching bot** row, so they can still be approved, rejected or removed. In a narrow window the list and the picked bot take turns, with a way back. Global switches stay above the columns, and backend APIs and stored data do not change. New strings in all 11 interface languages.
 
+- Accounts (0.2.37): an account with no 5-hour window, such as a verified Claude Ultra account or a Codex account that reports only a weekly limit, no longer counts as "no quota data". When an account's quota runs out it now ranks by its weekly headroom, and switching to it ends confirmed instead of "quota unconfirmed". Navide treats the window as absent only when the vendor's complete answer shows that; a reading it cannot be sure of stays unknown, as before.
+- Accounts (0.2.37): an account with no 5-hour window keeps its 5-hour row, which reads Unlimited on Claude and Not reported on other vendors, and every wait on it now uses the weekly reset: a limit sentence with only a clock, the loop's resume, and its estimate. `cli_usage` documents `absentWindows`, so an agent can tell no limit from no data.
+
 ### Security
 
 - Dependencies: Electron 44.10.1 (Node 24.22.1, Chromium 152.0.7977.169; was 44.9.1 with Node 24.22.0, Chromium 152.0.7977.167). Node 24.22.1 is the Node.js security release of October 21, the one the 0.2.30 notes said Navide would pick up. Electron's own notes also list File System Access blocklist fixes and fixes for malformed asar archives and asar path handling, plus upstream Chromium, V8, Skia, Dawn, ANGLE and PDFium backports, which they do not tie to a CVE or an advisory.
+
+### Documentation
+
+- Accounts (0.2.37): the user guide now says the monthly API credits included with a Claude Max or Ultra plan do not pay for panes on an API key.
 
 ## [0.2.36] — 2026-11-01
 

@@ -48,7 +48,7 @@ function harness() {
     panes, loopLimitWatchers, loopGen,
     acquireInjectionSlot: acquire, releaseInjectionSlot: vi.fn(), injectPane: inject,
     withLoopDoneInstruction: (s: string) => s, loopResumeTextFor: () => '繼續',
-    stopLoopComplete: vi.fn(), loopBackoffMs, LOOP_ESTIMATE_WINDOW_MS: 18_000_000,
+    stopLoopComplete: vi.fn(), loopBackoffMs, setLoopEstimate: vi.fn(),
     loopInjectFailures, LOOP_INJECT_FAIL_LIMIT,
     bumpLoopGen: (id: string) => { const g = (loopGen.get(id) ?? 0) + 1; loopGen.set(id, g); return g },
     stopLoopLimitWatcher: (id: string) => { loopLimitWatchers.delete(id) },

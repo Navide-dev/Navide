@@ -180,6 +180,38 @@ describe('UsageBadge – badge rendering', () => {
     expect(badge.classes()).toContain('ok')
   })
 
+  describe('session row', () => {
+    const weekly = { kind: 'weekly', label: 'Weekly', usedPercent: 25, resetsAt: null }
+
+    async function openedRows(snap: UsageSnapshot): Promise<VueWrapper> {
+      usage.usageFor.mockReturnValue(snap)
+      wrapper = mountBadge(makeCliProfiles().fake)
+      await openPopover(wrapper)
+      return wrapper
+    }
+
+    it('keeps a 5H row saying unlimited for a confirmed account, on a weekly headline', async () => {
+      const w = await openedRows(snapshot({ windows: [weekly], absentWindows: ['session'] }))
+      expect(w.get('.usage-badge').text()).toBe('75%')
+      expect(w.get('[data-part="session-note"]').text()).toContain(i18n.global.t('usage.window-unlimited'))
+      expect(w.findAll('.usage-bar')).toHaveLength(1)
+    })
+
+    it('stays neutral for Codex', async () => {
+      const w = await openedRows(snapshot({ provider: 'codex', windows: [weekly], absentWindows: ['session'] }))
+      expect(w.get('[data-part="session-note"]').text()).toContain(i18n.global.t('usage.window-not-reported'))
+      expect(w.get('[data-part="session-note"]').text()).not.toContain(i18n.global.t('usage.window-unlimited'))
+    })
+
+    it('adds nothing when the account has the window or absence is not proved', async () => {
+      const w = await openedRows(snapshot())
+      expect(w.find('[data-part="session-note"]').exists()).toBe(false)
+      w.unmount()
+      const u = await openedRows(snapshot({ windows: [weekly] }))
+      expect(u.find('[data-part="session-note"]').exists()).toBe(false)
+    })
+  })
+
   it('applies the crit tier class when remaining quota is low', () => {
     usage.usageFor.mockReturnValue(
       snapshot({ windows: [{ kind: 'session', label: 'Session', usedPercent: 92, resetsAt: null }] }),

@@ -1,0 +1,5210 @@
+{
+ "none/unset/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/unset/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/unset/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/unset/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/unset/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/unset/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/unset/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "none/unset/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/unset/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/unset/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/unset/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/unset/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/unset/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/unset/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "none/unset/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/unset/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/unset/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/unset/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/unset/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/unset/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/unset/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "none/empty/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/empty/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/empty/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/empty/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/empty/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/empty/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/empty/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "none/empty/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/empty/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/empty/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/empty/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/empty/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/empty/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/empty/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "none/empty/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/empty/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/empty/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/empty/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/empty/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/empty/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/empty/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "none/other/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/other/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/other/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/other/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/other/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/other/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/other/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "none/other/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/other/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/other/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/other/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/other/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/other/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/other/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "none/other/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/other/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/other/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/other/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/other/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/other/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/other/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-low/unset/ok/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/unset/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/unset/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/unset/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/unset/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/unset/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/unset/ok/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/unset/stale/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/unset/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/stale/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/unset/pending/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/unset/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-low/unset/pending/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/empty/ok/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/empty/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/empty/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/empty/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/empty/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/empty/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/empty/ok/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/empty/stale/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/empty/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/stale/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/empty/pending/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/empty/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-low/empty/pending/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/other/ok/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/other/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/other/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/other/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/other/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/other/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/other/ok/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/other/stale/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/other/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/stale/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/other/pending/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/other/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-low/other/pending/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/unset/ok/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/unset/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/ok/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/stale/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/unset/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/stale/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/pending/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/unset/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/unset/pending/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/ok/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/empty/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/ok/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/stale/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/empty/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/stale/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/pending/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/empty/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/empty/pending/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/ok/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/other/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/ok/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/stale/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/other/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/stale/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/pending/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/other/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/other/pending/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "weekly-spent/unset/ok/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/ok/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/stale/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/stale/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/pending/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/unset/pending/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/ok/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/ok/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/stale/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/stale/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/pending/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/empty/pending/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/ok/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/ok/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/stale/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/stale/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/pending/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/other/pending/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "session-expired/unset/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/unset/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/unset/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/unset/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/unset/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/unset/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/unset/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/unset/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/unset/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-expired/unset/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/unset/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/unset/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/unset/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-expired/unset/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/unset/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/unset/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-expired/unset/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/unset/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/unset/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/unset/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-expired/unset/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/empty/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/empty/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/empty/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/empty/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/empty/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/empty/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/empty/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/empty/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/empty/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-expired/empty/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/empty/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/empty/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/empty/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-expired/empty/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/empty/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/empty/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-expired/empty/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/empty/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/empty/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/empty/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-expired/empty/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/other/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/other/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/other/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/other/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/other/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/other/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/other/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/other/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/other/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-expired/other/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/other/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/other/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/other/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-expired/other/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/other/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/other/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-expired/other/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/other/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/other/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-expired/other/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-expired/other/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/unset/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/unset/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/unset/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/unset/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/unset/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/unset/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/unset/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/unset/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/unset/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/unset/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/unset/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-no-reset/unset/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/empty/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/empty/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/empty/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/empty/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/empty/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/empty/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/empty/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/empty/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/empty/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/empty/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/empty/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-no-reset/empty/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/other/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/other/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/other/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/other/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/other/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/other/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/other/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/other/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/other/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-no-reset/other/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/other/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/other/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/other/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-no-reset/other/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/other/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/other/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "session-no-reset/other/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/other/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/other/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "session-no-reset/other/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "session-no-reset/other/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/unset/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/empty/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/ok/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/ok/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/stale/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/stale/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/pending/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/other/pending/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-spent-unconfirmed/unset/ok/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/ok/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/stale/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/stale/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/pending/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/unset/pending/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/ok/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/ok/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/stale/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/stale/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/pending/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/empty/pending/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/ok/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/ok/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/ok/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/ok/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/ok/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/ok/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/ok/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/stale/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/stale/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/pending/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-only-spent-unconfirmed/other/pending/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "model-spent/unset/ok/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/unset/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/unset/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/unset/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/unset/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/unset/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/unset/ok/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/unset/stale/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/unset/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/stale/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/unset/pending/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/unset/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/unset/pending/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/empty/ok/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/empty/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/empty/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/empty/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/empty/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/empty/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/empty/ok/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/empty/stale/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/empty/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/stale/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/empty/pending/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/empty/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/empty/pending/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/other/ok/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/other/ok/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/other/ok/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/other/ok/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/other/ok/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/other/ok/dated": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/other/ok/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/other/stale/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/other/stale/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/stale/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/stale/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/stale/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/stale/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/stale/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/other/pending/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/other/pending/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/pending/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/pending/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/pending/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/pending/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "model-spent/other/pending/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "none/contradicted/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "none/contradicted/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "none/contradicted/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/contradicted/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/contradicted/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "none/contradicted/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "none/contradicted/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-low/contradicted/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-low/contradicted/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/contradicted/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/contradicted/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/contradicted/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/contradicted/dated": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "session-low/contradicted/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/contradicted/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "session-spent/contradicted/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/contradicted/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/contradicted/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/contradicted/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/contradicted/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793527320000
+ },
+ "session-spent/contradicted/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793527320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793527320000
+ },
+ "weekly-spent/contradicted/nothing": {
+  "hit": null,
+  "resume": 1793869320000
+ },
+ "weekly-spent/contradicted/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/contradicted/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/contradicted/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/contradicted/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/contradicted/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": 1793869320000
+ },
+ "weekly-spent/contradicted/bare": {
+  "hit": {
+   "message": "hit your usage limit",
+   "resumeAt": 1793869320000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "unknown",
+   "resetAt": null
+  },
+  "resume": 1793869320000
+ },
+ "session-expired/contradicted/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-expired/contradicted/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/contradicted/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/contradicted/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/contradicted/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/contradicted/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-expired/contradicted/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/contradicted/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "session-no-reset/contradicted/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/contradicted/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/contradicted/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/contradicted/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/contradicted/dated": {
+  "hit": "quota-reading-veto",
+  "resume": null
+ },
+ "session-no-reset/contradicted/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/contradicted/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-unconfirmed/contradicted/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/contradicted/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/contradicted/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/contradicted/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/contradicted/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "weekly-only-unconfirmed/contradicted/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-spent-unconfirmed/contradicted/nothing": {
+  "hit": null,
+  "resume": null
+ },
+ "weekly-only-spent-unconfirmed/contradicted/session-clock": {
+  "hit": {
+   "message": "hit your session limit · resets 4:30pm (Asia/Taipei)",
+   "resumeAt": 1793521920000,
+   "windowKind": "session",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": 1793521800000
+  },
+  "resume": null
+ },
+ "weekly-only-spent-unconfirmed/contradicted/generic-clock": {
+  "hit": {
+   "message": "hit your limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": null,
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-spent-unconfirmed/contradicted/weekly-clock": {
+  "hit": {
+   "message": "hit your weekly limit · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-spent-unconfirmed/contradicted/model-clock": {
+  "hit": {
+   "message": "hit your weekly limit (Opus) · resets 5pm (Asia/Taipei)",
+   "resumeAt": 1793523720000,
+   "windowKind": "weekly",
+   "modelScope": "Opus",
+   "resetPrecision": "clock_only",
+   "resetAt": null
+  },
+  "resume": null
+ },
+ "weekly-only-spent-unconfirmed/contradicted/dated": {
+  "hit": {
+   "message": "hit your weekly limit · resets 2026-11-05 5pm (Asia/Taipei)",
+   "resumeAt": 1793869320000,
+   "windowKind": "weekly",
+   "modelScope": null,
+   "resetAt": 1793869200000,
+   "resetPrecision": "hour"
+  },
+  "resume": null
+ },
+ "weekly-only-spent-unconfirmed/contradicted/bare": {
+  "hit": null,
+  "resume": null
+ },
+ "model-spent/contradicted/nothing": {
+  "hit": null,
+  "resume": 1793527320000
+ },
+ "model-spent/contradicted/session-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/contradicted/generic-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/contradicted/weekly-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/contradicted/model-clock": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/contradicted/dated": {
+  "hit": "quota-reading-veto",
+  "resume": 1793527320000
+ },
+ "model-spent/contradicted/bare": {
+  "hit": null,
+  "resume": 1793527320000
+ }
+}
