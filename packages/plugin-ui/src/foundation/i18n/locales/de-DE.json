@@ -10259,8 +10259,10 @@
         "pane-hint": "Schalten Sie Navide unter „Datenschutz & Sicherheit → Festplattenvollzugriff“ ein."
       }
     },
-    "blocked-by": "Installieren Sie zuerst {names} – das ist Voraussetzung, bevor dies hier installiert werden kann.",
+    "blocked-by": "Navide kann {names} auf diesem System nicht installieren. Installieren Sie es selbst und wählen Sie dann „{action}“.",
     "installs-first": "Bei der Installation wird zuerst auch {names} eingerichtet.",
+    "manual-guide": "So installieren Sie {name}",
+    "needs-prereq": "Benötigt {names}",
     "go-install": "Zuerst {name} installieren",
     "complete-failed": "Ihr Einrichtungsfortschritt konnte nicht gespeichert werden: {error}. Versuchen Sie es erneut.",
     "ollama-start-failed": "Der Ollama-Dienst konnte nicht gestartet werden. Details finden Sie im Protokoll, oder führen Sie `ollama serve` in einem Terminal aus.",
