@@ -30,7 +30,7 @@ from . import __version__
 from . import agent_messaging
 from . import hook_auth
 from . import hook_drain
-from . import guard_hooks
+from . import guard_fail_closed, guard_hooks
 from .guard import runtime as guard_runtime
 from . import ws_auth
 from . import error_ledger
@@ -2543,6 +2543,14 @@ async def _start_log_watcher() -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("scheduler startup failed: %s", err)
 
+    # Webhook triggers: empty tables and no listener until the user turns them on.
+    from . import webhook_ws
+
+    try:
+        await webhook_ws.startup()
+    except Exception as err:  # noqa: BLE001
+        log.warning("webhook startup failed: %s", err)
+
     # Each workspace's self-evolution: its watchdog notices runs that ran past
     # their time or budget, and runs a missed slot once its workspace opens.
     from . import evolve_service
@@ -2698,6 +2706,9 @@ async def _stop_log_watcher() -> None:
         from . import scheduler
 
         await scheduler.shutdown()
+        from . import webhook_ws
+
+        await webhook_ws.shutdown()
         from . import evolve_service
 
         await evolve_service.shutdown()
@@ -3069,11 +3080,14 @@ async def cli_pretooluse_guard_hook(vendor: str, request: Request) -> Response:
         return Response(status_code=404)
     if not hook_auth.presented(request.headers.get(hook_auth.HEADER)):
         return Response(status_code=403)
+    fail_closed = request.headers.get(guard_fail_closed.HEADER) == "1"
     try:
         payload = await request.json()
     except ValueError:
         payload = None
     if not isinstance(payload, dict):
+        if fail_closed:
+            return JSONResponse(guard_fail_closed.deny(vendor, "the call could not be read"))
         return Response(status_code=200)
     cwd = str(payload.get("cwd") or "")
     pane_id, ws_path = "", ""
@@ -3094,6 +3108,10 @@ async def cli_pretooluse_guard_hook(vendor: str, request: Request) -> Response:
         pane_id = _pane_for_guard_token(request.headers.get(guard_hooks.PANE_TOKEN_HEADER, ""))
         pane = agent_messaging.current(pane_id) if pane_id else None
         ws_path = pane.workspace_path if pane is not None else ws_path
+    if fail_closed:
+        return JSONResponse(await guard_fail_closed.respond(
+            vendor, payload, pane_id=pane_id or "", cwd=cwd, workspace=ws_path or cwd
+        ))
     answer = await guard_hooks.respond(
         vendor, payload, pane_id=pane_id or "", cwd=cwd, workspace=ws_path or cwd
     )
