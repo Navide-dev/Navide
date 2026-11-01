@@ -640,10 +640,11 @@ function cardFoot(snap: UsageSnapshot, head: UsageWindow): string {
     .map((w) =>
       t('usage.window-left-pct', { label: windowLabel(w), pct: formatRemaining(windowRemaining(w)) }),
     )
-  const note = absentSessionNote(snap)
-  if (note) parts.unshift(`${t('usage.window-claude-session')} ${t(`usage.window-${note}`)}`)
   const countdown = formatResetCountdown(head.resetsAt)
   if (countdown) parts.push(t('usage.resets-in', { time: countdown }))
+  // After the countdown, which belongs to the headline, not to this row.
+  const note = absentSessionNote(snap)
+  if (note) parts.push(`${t('usage.window-claude-session')} ${t(`usage.window-${note}`)}`)
   return parts.join(' · ')
 }
 
