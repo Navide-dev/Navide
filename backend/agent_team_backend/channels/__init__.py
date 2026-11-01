@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from ..pane_account_history import parse_event_time
 from . import relay, wake
 from .manager import ChannelManager, Seams
 
@@ -270,6 +272,23 @@ def default_seams() -> Seams:
     async def wake(pane_id: str, workspace_path: str, session_id: str) -> dict[str, Any]:
         return await wake_pane(pane_id, workspace_path, session_id)
 
+    async def turn_text(pane_id: str, since_s: float) -> str:
+        from .. import app
+
+        target = wake_target(pane_id)
+        agent = pane_agent(pane_id)
+        # Line readers only: a shared-db reader scanned with an empty bag would walk
+        # every session in its store.
+        reader = next((r for r in app._readers if r.vendor == agent and r.activity_resumes_by_line), None)
+        if reader is None or not target.get("session_id"):
+            return ""
+
+        def read() -> str:
+            path = app._resolve_session_log(reader, target["workspace_path"], target["session_id"], "")
+            return _last_turn_text(reader, path, since_s) if path is not None else ""
+
+        return await asyncio.to_thread(read)
+
     return Seams(
         deliver=deliver, await_verdict=await_verdict, interrupt=interrupt, pane_state=pane_state,
         awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, resolve_pane=resolve_pane, broadcast=broadcast,
@@ -277,9 +296,19 @@ def default_seams() -> Seams:
         pane_directory=pane_directory, inherit_taint=inherit_taint,
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
         agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
-        wake_target=wake_target, windows_open=windows_open, wake=wake,
+        wake_target=wake_target, windows_open=windows_open, wake=wake, turn_text=turn_text,
         is_login_pane=login_panes.is_login_pane,
     )
+
+
+def _last_turn_text(reader: Any, path: Path, since_s: float) -> str:
+    """Text of the last turn in ``path`` that ended at or after ``since_s`` ("" when none)."""
+    text = ""
+    for event in reader.parse_activity(path, set()):
+        when = parse_event_time(event.timestamp)
+        if event.event_type == "turn_complete" and event.text.strip() and when is not None and when >= since_s:
+            text = event.text
+    return text
 
 
 def _host_ctx() -> Any:

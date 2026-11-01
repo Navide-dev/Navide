@@ -6,6 +6,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Channels (0.2.37): when a chat is told a reply will follow and the text never arrives, Navide now reads the conversation log itself before it stops waiting, and says so in the chat if it still finds nothing. Before, the chat heard nothing more.
+
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 
 ### Changed
