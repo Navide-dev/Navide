@@ -6,7 +6,13 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
-- Terminal activity: a pane that started fresh on a session id whose old transcript was gone stopped reporting its turns, so Telegram said "the reply text has not been read yet" and the reply never came. The saved read position pointed past the end of the new file; Navide now spots that once per file and reads on from the end, without resending earlier turns.
+- Terminal activity (0.2.37): a pane that started fresh on a session id whose old transcript was gone stopped reporting its turns, so Telegram said "the reply text has not been read yet" and the reply never came. The saved read position pointed past the end of the new file; Navide now spots that once per file and reads on from the end, without resending earlier turns.
+
+- First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
+
+### Changed
+
+- Settings → Channels (0.2.37): the page is now two columns. Every bot is listed on the left with its platform, state, people, chats and pending requests, grouped by platform when there are several, with **Add Bot** under the list. The right column shows the picked bot whole: its connection and switch, the ⋯ menu, requests waiting for approval, the people who can talk, and its chats and panes. The separate pending and allowed sections are gone, and their rows, including the shared ID flag and hint, moved under each bot. The page opens on the first bot with a request waiting. Requests and people whose bot is not set up here get a **No matching bot** row, so they can still be approved, rejected or removed. In a narrow window the list and the picked bot take turns, with a way back. Global switches stay above the columns, and backend APIs and stored data do not change. New strings in all 11 interface languages.
 
 ### Security
 
