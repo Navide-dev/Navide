@@ -2820,14 +2820,14 @@
         "intro": "Ce que contrôle chacun des dix-neuf onglets des paramètres, comment Navide Cloud relie plusieurs machines en un réseau privé, et les éléments du système situés hors de l’écran principal : les menus, les fenêtres autonomes, les vues d’utilisation et l’entretien des ressources.",
         "s1": {
           "title": "Vue d’ensemble des paramètres",
-          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>25 onglets</strong> au total.",
+          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>26 onglets</strong> au total.",
           "h1": "Le champ de recherche",
           "p2": "Sous l’en-tête de la barre latérale se trouve un champ de recherche dont le texte indicatif est <code>Rechercher dans les paramètres…</code>. Il recherche dans les titres des paramètres, leur section et leurs mots-clés <strong>dans tous les onglets</strong> (dans la langue actuelle de l’interface et avec les mots-clés indexés), et affiche au plus 8 résultats ; cliquer sur l’un d’eux ouvre l’onglet correspondant et fait défiler jusqu’à la section (à une exception près : « Stockage » ferme les paramètres et ouvre directement le Resource Manager). Sans résultat, il affiche <code>Aucun paramètre correspondant</code>. <kbd class=\"syh-kbd\">Esc</kbd> le vide.",
           "callout": {
             "title": "L’index de recherche n’est pas exhaustif",
             "text": "L’index est une liste tenue à la main, et <strong>les onglets {layout}, {notifications}, {security} et {channels} n’y ont aucune entrée</strong> : rien de ce qu’ils contiennent n’est donc trouvable, il faut les ouvrir vous-même. Une entrée CLI Agents ouvre directement le panneau de réglages d’une CLI (voir la rubrique « Agents CLI et comptes »)."
           },
-          "h2": "Les vingt-cinq onglets",
+          "h2": "Les vingt-six onglets",
           "tabTable": {
             "group": "Groupe",
             "tab": "Onglet",
@@ -2890,6 +2890,10 @@
             "analyzer": {
               "what": "Le backend d’inférence local, les téléchargements de modèles, les bancs d’essai de modèles",
               "more": "section 4 de cette page"
+            },
+            "webhooks": {
+              "what": "Déclencheurs permettant à un autre système de lancer une pipeline par HTTP ou depuis GitHub, avec leurs clés, limites et activité",
+              "more": "Les exécutions sans surveillance et l’avertissement sur la clé Linux sont expliqués à l’activation."
             },
             "security": {
               "what": "Les règles et niveaux de Navide Guard, les branches protégées, les règles personnalisées et la protection des commandes pour les terminaux simples",

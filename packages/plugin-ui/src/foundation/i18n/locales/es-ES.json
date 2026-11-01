@@ -2820,14 +2820,14 @@
         "intro": "Qué controla cada una de las diecinueve pestañas de ajustes, cómo Navide Cloud une varias máquinas en una red privada y las superficies del sistema que viven fuera de la pantalla principal: los menús, las ventanas independientes, las vistas de uso y el mantenimiento de recursos.",
         "s1": {
           "title": "Resumen de los ajustes",
-          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>25 pestañas</strong> en total.",
+          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>26 pestañas</strong> en total.",
           "h1": "El campo de búsqueda",
           "p2": "Debajo del encabezado de la barra lateral hay un campo de búsqueda con el texto de ejemplo <code>Buscar en los ajustes…</code>. Busca en los títulos de los ajustes, su sección y sus palabras clave <strong>en todas las pestañas</strong> (con el idioma actual de la interfaz y las palabras clave indexadas) y muestra como máximo 8 resultados; al hacer clic en uno se cambia a esa pestaña y se desplaza hasta la sección (con una excepción: «Almacenamiento» cierra los ajustes y abre directamente el Administrador de recursos). Si no hay coincidencias, muestra <code>No hay ajustes que coincidan</code>. <kbd class=\"syh-kbd\">Esc</kbd> lo vacía.",
           "callout": {
             "title": "El índice de búsqueda no es exhaustivo",
             "text": "El índice es una lista mantenida a mano, y <strong>las pestañas {layout}, {notifications}, {security} y {channels} no tienen ninguna entrada</strong>, así que nada de su contenido se puede buscar: tienes que abrirlas tú. Una entrada de CLI Agents abre directamente el panel lateral de ajustes de una CLI (consulta el tema «Agents de CLI y cuentas»)."
           },
-          "h2": "Las veinticinco pestañas",
+          "h2": "Las veintiséis pestañas",
           "tabTable": {
             "group": "Grupo",
             "tab": "Pestaña",
@@ -2890,6 +2890,10 @@
             "analyzer": {
               "what": "El backend de inferencia local, descargas de modelos, pruebas de rendimiento de modelos",
               "more": "la sección 4 de esta página"
+            },
+            "webhooks": {
+              "what": "Disparadores con los que otro sistema inicia una pipeline por HTTP o desde GitHub, con sus claves, límites y actividad",
+              "more": "Las ejecuciones desatendidas y el aviso de la clave en Linux se explican al activarlos."
             },
             "security": {
               "what": "Las reglas y niveles de Navide Guard, ramas protegidas, reglas personalizadas y protección de comandos para terminales normales",

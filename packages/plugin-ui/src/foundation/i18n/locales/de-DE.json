@@ -2820,14 +2820,14 @@
         "intro": "Was jeder der neunzehn Einstellungs-Tabs steuert, wie Navide Cloud mehrere Rechner zu einem privaten Netzwerk verbindet, und die Systemoberflächen außerhalb des Hauptbildschirms – die Menüs, die eigenständigen Fenster, die Nutzungsansichten und die Ressourcenpflege.",
         "s1": {
           "title": "Einstellungen im Überblick",
-          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>25 Tabs</strong>.",
+          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>26 Tabs</strong>.",
           "h1": "Das Suchfeld",
           "p2": "Unter der Überschrift der Seitenleiste befindet sich ein Suchfeld mit dem Platzhalter <code>Einstellungen durchsuchen …</code>. Es durchsucht Titel, Abschnitte und Stichwörter der Einstellungen <strong>über alle Tabs hinweg</strong> (in der aktuellen Oberflächensprache und mit den indizierten Stichwörtern) und listet höchstens 8 Ergebnisse auf; ein Klick auf ein Ergebnis wechselt zu dessen Tab und scrollt zum Abschnitt (mit einer Ausnahme: „Speicher“ schließt die Einstellungen und öffnet direkt die Ressourcenverwaltung). Ohne Treffer erscheint <code>Keine passenden Einstellungen</code>. <kbd class=\"syh-kbd\">Esc</kbd> leert das Feld.",
           "callout": {
             "title": "Der Suchindex ist nicht vollständig",
             "text": "Der Index ist eine von Hand gepflegte Liste, und <strong>die Tabs {layout}, {notifications}, {security} und {channels} haben überhaupt keine Einträge</strong>, sodass sich darin nichts suchen lässt – Sie müssen sie selbst öffnen. Ein Eintrag unter „CLI-Agents“ öffnet direkt die Einstellungsleiste einer CLI (siehe das Thema „CLI-Agents und Konten“)."
           },
-          "h2": "Die fünfundzwanzig Tabs",
+          "h2": "Die sechsundzwanzig Tabs",
           "tabTable": {
             "group": "Gruppe",
             "tab": "Tab",
@@ -2890,6 +2890,10 @@
             "analyzer": {
               "what": "Das lokale Inferenz-Backend, Modelldownloads, Modell-Benchmarks",
               "more": "Abschnitt 4 dieser Seite"
+            },
+            "webhooks": {
+              "what": "Trigger, mit denen ein anderes System per HTTP oder GitHub eine Pipeline startet, samt Schlüsseln, Grenzen und Aktivität",
+              "more": "Unbeaufsichtigte Läufe und der Linux-Schlüsselhinweis werden beim Einschalten erklärt."
             },
             "security": {
               "what": "Regeln und Stufen von Navide Guard, geschützte Branches, eigene Regeln und Befehlsschutz für einfache Terminals",
