@@ -1735,7 +1735,11 @@
           "title": "Insignias de estado",
           "summary": "Cambia el nombre de cada estado de pane y elige su color, por idioma."
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhooks",
+        "summary": "Inicia una pipeline desde otro sistema por HTTP, con una clave o una firma de GitHub."
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "Oculta todas las ventanas tras una pantalla de bloqueo y desbloquea con Touch ID, Windows Hello o un PIN"
         },
@@ -12781,6 +12785,142 @@
       "internal": "El grafo convertido no es válido. Es un error del importador.",
       "too-large": "El flujo de trabajo ocupa {sizeMb} MB. Una importación admite como máximo {limitMb} MB.",
       "store-refused": "No se pudo guardar el flujo de trabajo «{workflow}», así que no se importó nada: {problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhooks",
+    "guardOff": "Activa primero Navide Guard en Ajustes → Seguridad. Sin él, los webhooks siguen desactivados y se rechazan las solicitudes que lleguen.",
+    "portTaken": "Navide no pudo empezar a escuchar: {error}. Libera ese puerto y vuelve a activarlo. Navide no cambia de puerto porque tus llamadas usan este.",
+    "enabled": {
+      "title": "Aceptar webhooks",
+      "desc": "Permite que otro sistema inicie una pipeline por HTTP. Solo se escucha con esto activado y un disparador habilitado. Navide escucha solo en este equipo. Para llegar desde fuera, monta tu propio túnel. Navide debe estar abierto, con una ventana en el espacio de trabajo."
+    },
+    "host": {
+      "title": "Nombre de host público",
+      "desc": "El nombre en el que responde tu túnel. Se rechazan las solicitudes a cualquier otro host. Déjalo vacío si solo este equipo llama a Navide.",
+      "placeholder": "hook.example.com",
+      "warning": "Con un túnel, cualquiera en internet puede llegar a esta dirección. Lo único que lo detiene es la clave o la firma de cada disparador."
+    },
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "create": "Crear disparador",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Eliminar para siempre?",
+    "turnOn": "Activar",
+    "more": "Opciones",
+    "triggers": "Disparadores",
+    "new": "Nuevo disparador",
+    "needsWorkspace": "Abre primero un espacio de trabajo. Un disparador se ejecuta en él.",
+    "empty": {
+      "title": "Aún no hay disparadores",
+      "desc": "Un disparador conecta una dirección con una pipeline: una llamada a la dirección inicia una ejecución."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "Formulario"
+    },
+    "form": {
+      "name": "Nombre",
+      "source": "Origen",
+      "pipeline": "Pipeline",
+      "workspace": "Espacio de trabajo",
+      "events": "Eventos",
+      "limits": "Límites",
+      "timeout": "Esperar por ti",
+      "eventsHint": "Solo los eventos marcados inician una ejecución. La prueba ping de GitHub se responde sin iniciar ninguna.",
+      "noGate": "Iniciar sin aprobación. El primer paso no es una puerta de aprobación, así que una solicitud inicia el agente de inmediato. El contenido externo le llega sin que nadie lo vea antes.",
+      "default": "En las ejecuciones de este disparador, cada llamada a herramienta espera tu confirmación. Si nadie responde a tiempo, la ejecución se detiene y no se aprueba nada. El móvil y los canales de chat no pueden aprobar una ejecución de webhook. Solo Claude Code y Codex."
+    },
+    "perMinute": "por minuto",
+    "perDay": "por día",
+    "minutes": "min de espera",
+    "minutesUnit": "minutos",
+    "rate": "{minute}/min · {day}/día",
+    "enable": "Habilitar {name}",
+    "state": {
+      "off": "Desactivado",
+      "listener-off": "Habilitado, sin escuchar",
+      "ready": "Listo",
+      "running": "En ejecución",
+      "waiting": "Esperando por ti · se detiene en {minutes} min"
+    },
+    "reveal": {
+      "titleKey": "Clave de {name}",
+      "titleSecret": "Secreto de {name}",
+      "once": "Cópialo ahora. Navide no guarda una copia legible y no volverá a mostrarlo.",
+      "noAddress": "Activa el disparador y su dirección aparecerá en su fila.",
+      "url": "Dirección",
+      "key": "Clave",
+      "secret": "Secreto",
+      "copyCurl": "Copiar llamada de prueba",
+      "done": "Ya lo he guardado",
+      "githubHint": "En GitHub, abre Settings → Webhooks del repositorio, pega ambos y elige application/json. La dirección debe ser pública, así que define antes un nombre de host arriba."
+    },
+    "rotateKey": "Sustituir clave",
+    "rotateSecret": "Sustituir secreto",
+    "unattended": {
+      "chip": "Desatendido",
+      "title": "Ejecutar desatendido",
+      "desc": "Desactivado por defecto. Los paneles de las ejecuciones de este disparador omiten las solicitudes de permiso. Al activarlo se explica qué implica.",
+      "unsupported": "Aún no disponible en Windows.",
+      "confirmTitle": "Antes de ejecutar desatendido",
+      "skips": "El agente omite las solicitudes de permiso. Nadie confirma sus llamadas a herramientas.",
+      "external": "Trabaja con contenido externo, y ese contenido puede intentar dirigirlo.",
+      "scripts": "Guard solo detiene los comandos que reconoce. No puede detener a un agente que escribe un script y luego lo ejecuta.",
+      "hook": "Si el hook de Guard no puede responder, la llamada se rechaza. Si el propio proceso del hook muere o se cuelga, la llamada pasa.",
+      "tick": "Entiendo que el agente trabaja sin confirmación con contenido externo."
+    },
+    "weakKey": {
+      "title": "En Linux este secreto tiene menos protección",
+      "body": "Su clave está en un archivo protegido solo por permisos, así que cualquier programa que se ejecute con tu usuario puede leerla. macOS y Windows la guardan en el almacén protegido del sistema.",
+      "tick": "Lo entiendo y quiero habilitar este disparador."
+    },
+    "log": {
+      "title": "Actividad",
+      "empty": "Aún no hay registros."
+    },
+    "refused": {
+      "vendor-refused": "Esta pipeline tiene un paso con una CLI que las ejecuciones de webhook no pueden usar. Solo se admiten Claude Code y Codex, donde Guard está probado.",
+      "no-gate": "El primer paso de esta pipeline no es una puerta de aprobación. Añade una, o vuelve a crear el disparador y marca Iniciar sin aprobación.",
+      "pipeline-missing": "La pipeline de este disparador ya no existe."
+    },
+    "error": {
+      "GUARD_OFF": "Activa primero Navide Guard.",
+      "KEY_UNAVAILABLE": "No se pudo acceder al almacén de claves del sistema. Desbloquéalo e inténtalo de nuevo.",
+      "UNATTENDED_UNSUPPORTED": "Aún no disponible en Windows.",
+      "NOT_FOUND": "Este disparador ya no existe.",
+      "BAD_REQUEST": "Revisa los valores. Los límites llegan a 60 por minuto y 500 por día, y la espera va de 5 a 240 minutos.",
+      "generic": "No ha funcionado. Inténtalo de nuevo."
+    },
+    "outcome": {
+      "accepted": "Aceptado",
+      "started": "Ejecución iniciada",
+      "start-failed": "La ejecución no se inició",
+      "duplicate": "Misma entrega que antes, no ejecutada",
+      "ping": "Ping de GitHub",
+      "event-ignored": "Evento sin marcar",
+      "daily-limit": "Límite diario alcanzado",
+      "rate-limited": "Demasiadas solicitudes",
+      "bad-key": "Clave incorrecta",
+      "bad-signature": "Firma incorrecta",
+      "run-active": "Ya había una ejecución",
+      "no-window": "Sin ventana en el espacio de trabajo",
+      "app-locked": "App Lock activo",
+      "guard-off": "Guard desactivado",
+      "vendor-refused": "La pipeline usa una CLI no admitida",
+      "no-gate": "Sin puerta de aprobación",
+      "awaiting-approval": "Esperando por ti",
+      "approval-timeout": "Nadie respondió, ejecución detenida",
+      "run-timeout": "La ejecución alcanzó el límite de 4 horas",
+      "interrupted": "Ejecución interrumpida",
+      "secret-lost": "El secreto ya no se puede leer y el disparador se desactivó. Sustituye el secreto para volver a usarlo.",
+      "key-unavailable": "No se pudo acceder al almacén de claves",
+      "unattended-on": "Desatendido activado",
+      "unattended-off": "Desatendido desactivado",
+      "no-gate-acknowledged": "Iniciar sin aprobación marcado"
     }
   }
 }

@@ -150,6 +150,7 @@ import StatusBadgeSettingsPane from './StatusBadgeSettingsPane.vue'
 import ChannelsPane from './settings/ChannelsPane.vue'
 import SecurityPane from './settings/SecurityPane.vue'
 import AppLockPane from './settings/AppLockPane.vue'
+import WebhooksPane from './settings/WebhooksPane.vue'
 import NavideCloudMark from './NavideCloudMark.vue'
 import SettingsNavItem from './settings/SettingsNavItem.vue'
 import SettingsNavSubItem from './settings/SettingsNavSubItem.vue'
@@ -253,7 +254,7 @@ const reclaimNowSize = computed(() => formatBytes(props.reclaimableNowBytes ?? 0
 /** Active high-risk credential findings, shown as the nav badge. */
 const credentialsHighCount = ref(0)
 
-type Tab = 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'appLock' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help'
+type Tab = 'webhooks' | 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'appLock' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help'
 
 /** Topics inside the Help tab — read-only reference material, no settings. */
 type HelpTopic =
@@ -1146,6 +1147,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     keywords: 'status badge badges colour color rename label idle running awaiting starting stopped exited error 狀態 徽章 顏色 名稱 重新命名 閒置 執行中 等待回應 啟動中 已停止 已結束 錯誤',
   },
   {
+    id: 'webhooks',
+    tab: 'webhooks',
+    section: 'webhooks',
+    title: t('settings.search.item.webhooks.title'),
+    group: t('settings.nav.group.integration'),
+    summary: t('settings.search.item.webhooks.summary'),
+    keywords: 'webhook webhooks trigger http github hmac tunnel pipeline 觸發 外部 簽章',
+  },
+  {
     id: 'app-lock',
     tab: 'appLock',
     section: 'appLock',
@@ -1801,6 +1811,8 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
   voice: { scope: 'user', storage: 'localStorage' },
   // Settings and the PIN's scrypt hash are one owner-only file main keeps.
   appLock: { scope: 'user', storage: 'mainProcess' },
+  // Triggers, hashes and ciphertext stay in navide.db on this machine.
+  webhooks: { scope: 'user', storage: 'app_data_dir' },
   accounts: { scope: 'userWorkspaceBindings', storage: 'safeStorage' },
   extensions: { scope: 'user', storage: 'mainProcess' },
   // Browsing the registry reads nothing of the user's, so this page has no
@@ -2878,6 +2890,11 @@ watch(activeTab, (tab) => {
               <SettingsNavItem :label="$t('guard.nav')" :active="activeTab === 'security'" @select="activeTab = 'security'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8 13 3.6v4c0 3.1-2.1 5.4-5 6.6-2.9-1.2-5-3.5-5-6.6v-4Z"/><path d="M5.8 8l1.6 1.6 2.9-3"/></svg>
+                </template>
+              </SettingsNavItem>
+              <SettingsNavItem :label="$t('webhooks.nav')" :active="activeTab === 'webhooks'" @select="activeTab = 'webhooks'">
+                <template #icon>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="4" cy="11.5" r="2"/><circle cx="12" cy="11.5" r="2"/><circle cx="8" cy="4" r="2"/><path d="M6 11.5h4M7 5.8 5 9.7M9 5.8l2 3.9"/></svg>
                 </template>
               </SettingsNavItem>
               <SettingsNavItem :label="$t('channels.nav')" :active="activeTab === 'channels'" @select="activeTab = 'channels'">
@@ -4964,6 +4981,10 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.appLock') }}</h1>
           <AppLockPane v-if="activeTab === 'appLock'" />
         </div>
+        <div v-show="activeTab === 'webhooks'" class="s-body webhooks-body" data-settings-section="webhooks">
+          <h1 class="s-page-title">{{ $t('webhooks.nav') }}</h1>
+          <WebhooksPane v-if="activeTab === 'webhooks'" :backend="props.backend" :workspace-path="props.workspacePath" />
+        </div>
 
         <!-- ── VOICE TAB ─────────────────────────────────────────────────── -->
         <div v-show="activeTab === 'voice'" class="s-body voice-body" data-settings-section="voice">
@@ -5685,6 +5706,7 @@ watch(activeTab, (tab) => {
 .voice-body { overflow-y: auto; padding: 18px 22px; }
 .channels-body { overflow-y: auto; padding: 18px 22px; }
 .security-body { overflow-y: auto; padding: 18px 22px; }
+.webhooks-body { overflow-y: auto; padding: 18px 22px; }
 /* Same reason: a scrolling list of status rows needs the gutter and its own
    scroll, which the bare .s-body does not give. */
 .status-badges-body { overflow-y: auto; padding: 18px 22px; }

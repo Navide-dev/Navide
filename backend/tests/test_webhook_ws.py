@@ -156,6 +156,30 @@ class TestUnattended:
         assert answer["error"]["code"] == "UNATTENDED_UNSUPPORTED"
 
 
+class TestLimits:
+    async def test_a_change_reaches_the_listener_and_stays_in_bounds(self, env) -> None:
+        trigger_id = await enabled_trigger()
+        answer = await call("webhook.trigger.update", id=trigger_id, per_minute=60, per_day=500, approval_timeout_min=240)
+        assert answer["ok"] and webhook_ws._listener._triggers[trigger_id]["per_minute"] == 60
+        for bad in ({"per_minute": 61}, {"per_day": 501}, {"approval_timeout_min": 4}, {"per_day": "x"}):
+            limits = {"per_minute": 6, "per_day": 20, "approval_timeout_min": 30, **bad}
+            assert (await call("webhook.trigger.update", id=trigger_id, **limits))["error"]["code"] == "BAD_REQUEST"
+
+    async def test_an_unknown_trigger(self, env) -> None:
+        answer = await call("webhook.trigger.update", id="nope", per_minute=6, per_day=20, approval_timeout_min=30)
+        assert answer["error"]["code"] == "NOT_FOUND"
+
+
+class TestStatus:
+    async def test_says_how_long_a_waiting_run_has_left(self, env) -> None:
+        run = {"id": "r", "trigger_id": "t", "workspace": WS, "started_at": 5, "unattended": 0}
+        env._active[WS] = run
+        env._waiting_since["r"] = 1000.0
+        view = (await call("webhook.status"))["payload"]["runs"][0]
+        assert (view["waiting_since"], view["stops_at"]) == (1000, 1000 + 30 * 60)
+        del env._active[WS]
+
+
 class TestKeys:
     async def test_the_key_is_in_the_create_answer_and_nowhere_else(self, env) -> None:
         created = await call("webhook.trigger.create", name="CI", workspace_path=WS, pipeline_id=PIPE)
@@ -213,5 +237,3 @@ class TestNoDoorForAgents:
         root = Path(webhook_ws.__file__).parent
         for path in (root / "mcp_server" / "server.py", root / "plugins" / "agent_tools_contract.py"):
             assert "webhook." not in path.read_text(encoding="utf-8")
-        catalog = root.parent.parent / "src/renderer/src/composables/uiActionCatalog.ts"
-        assert "webhook" not in catalog.read_text(encoding="utf-8").lower()

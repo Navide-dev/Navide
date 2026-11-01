@@ -1735,7 +1735,11 @@
           "title": "ステータスバッジ",
           "summary": "ペインの各ステータスの名前と色を、言語ごとに設定します。"
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhook",
+        "summary": "他のシステムから HTTP で Pipeline を開始します。キーまたは GitHub の署名で検証します。"
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "ロック画面ですべてのウィンドウを隠し、Touch ID、Windows Hello または PIN で解除します"
         },
@@ -12781,6 +12785,142 @@
       "internal": "変換後のグラフが無効です。インポーターの不具合です。",
       "too-large": "このワークフローは {sizeMb} MB です。一度にインポートできるのは最大 {limitMb} MB です。",
       "store-refused": "ワークフロー「{workflow}」を保存できなかったため、何もインポートしていません：{problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhook",
+    "guardOff": "先に「設定 → セキュリティ」で Navide Guard をオンにしてください。オフの間は Webhook を有効にできず、届いたリクエストも拒否されます。",
+    "portTaken": "待ち受けを開始できません：{error}。このポートを空けてから、もう一度オンにしてください。呼び出し側が使っているポートなので、Navide は別のポートに移りません。",
+    "enabled": {
+      "title": "Webhook を受け付ける",
+      "desc": "他のシステムから HTTP で Pipeline を開始できます。ここがオンで、有効なトリガーがあるときだけ待ち受けます。待ち受けるのはこのコンピューター上だけです。外部から接続するには自分でトンネルを用意してください。Navide が起動していて、そのワークスペースのウィンドウが開いている必要があります。"
+    },
+    "host": {
+      "title": "公開ホスト名",
+      "desc": "トンネルが応答する名前です。それ以外の Host へのリクエストは拒否します。このコンピューターからしか呼び出さない場合は空のままにしてください。",
+      "placeholder": "hook.example.com",
+      "warning": "トンネルを使うと、インターネット上の誰でもこのアドレスに届きます。止められるのは各トリガーのキーや署名だけです。"
+    },
+    "save": "保存",
+    "cancel": "キャンセル",
+    "create": "トリガーを作成",
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "delete": "削除",
+    "deleteConfirm": "完全に削除しますか？",
+    "turnOn": "オンにする",
+    "more": "オプション",
+    "triggers": "トリガー",
+    "new": "新しいトリガー",
+    "needsWorkspace": "先にワークスペースを開いてください。トリガーはワークスペース内で実行されます。",
+    "empty": {
+      "title": "トリガーはまだありません",
+      "desc": "トリガーはアドレスを Pipeline につなぎます。アドレスを呼び出すと実行が始まります。"
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "フォーム"
+    },
+    "form": {
+      "name": "名前",
+      "source": "ソース",
+      "pipeline": "Pipeline",
+      "workspace": "ワークスペース",
+      "events": "イベント",
+      "limits": "上限",
+      "timeout": "確認の待ち時間",
+      "eventsHint": "チェックしたイベントだけが実行を開始します。GitHub の ping テストには応答しますが、実行はしません。",
+      "noGate": "承認なしで開始する。最初のステップが承認ゲートではないため、リクエストが届くとすぐにエージェントが動きます。外部の内容は誰も確認しないまま渡されます。",
+      "default": "このトリガーで始まる実行では、すべてのツール呼び出しがあなたの確認を待ちます。時間内に応答がなければ実行は止まり、何も承認されません。スマートフォンやチャットチャネルからは承認できません。対応は Claude Code と Codex のみです。"
+    },
+    "perMinute": "回／分",
+    "perDay": "回／日",
+    "minutes": "分待機",
+    "minutesUnit": "分",
+    "rate": "{minute} 回/分・{day} 回/日",
+    "enable": "{name} を有効にする",
+    "state": {
+      "off": "オフ",
+      "listener-off": "有効、待ち受けなし",
+      "ready": "準備完了",
+      "running": "実行中",
+      "waiting": "確認待ち・{minutes} 分後に停止"
+    },
+    "reveal": {
+      "titleKey": "{name} のキー",
+      "titleSecret": "{name} のシークレット",
+      "once": "今すぐコピーしてください。Navide は読み取れるキーを保持しないため、再表示はできません。",
+      "noAddress": "トリガーを有効にすると、その行にアドレスが表示されます。",
+      "url": "アドレス",
+      "key": "キー",
+      "secret": "シークレット",
+      "copyCurl": "テスト呼び出しをコピー",
+      "done": "保存しました",
+      "githubHint": "GitHub のリポジトリの Settings → Webhooks に両方を貼り付け、application/json を選びます。アドレスは公開されている必要があるので、先に上でホスト名を設定してください。"
+    },
+    "rotateKey": "キーを交換",
+    "rotateSecret": "シークレットを交換",
+    "unattended": {
+      "chip": "無人実行",
+      "title": "無人実行",
+      "desc": "既定はオフです。このトリガーの実行のペインは権限確認をスキップします。オンにするときに影響を説明します。",
+      "unsupported": "Windows ではまだ使えません。",
+      "confirmTitle": "無人実行をオンにする前に",
+      "skips": "エージェントは権限確認をスキップします。ツール呼び出しを確認する人はいません。",
+      "external": "エージェントは外部の内容を扱い、その内容がエージェントを操ろうとする場合があります。",
+      "scripts": "Guard が止めるのは認識できるコマンドだけです。エージェントがスクリプトを書いてから実行するのは止められません。",
+      "hook": "Guard のフックが応答できないときは呼び出しを拒否します。ただし、フックのプロセス自体が強制終了されたり固まったりすると、呼び出しは通ります。",
+      "tick": "エージェントが確認なしで外部の内容を処理することを理解しました。"
+    },
+    "weakKey": {
+      "title": "Linux ではこのシークレットの保護が弱くなります",
+      "body": "キーはファイル権限だけで守られたファイルにあるため、あなたの権限で動くプログラムなら読み取れます。macOS と Windows ではシステムの保護領域に保存します。",
+      "tick": "理解したうえで、このトリガーを有効にします。"
+    },
+    "log": {
+      "title": "アクティビティ",
+      "empty": "記録はまだありません。"
+    },
+    "refused": {
+      "vendor-refused": "この Pipeline には Webhook の実行で使えない CLI のステップがあります。対応しているのは Guard を検証済みの Claude Code と Codex だけです。",
+      "no-gate": "この Pipeline の最初のステップは承認ゲートではありません。ゲートを追加するか、「承認なしで開始する」をチェックしてトリガーを作り直してください。",
+      "pipeline-missing": "このトリガーの Pipeline はもうありません。"
+    },
+    "error": {
+      "GUARD_OFF": "先に Navide Guard をオンにしてください。",
+      "KEY_UNAVAILABLE": "システムのキー保管場所に接続できません。ロックを解除してからもう一度お試しください。",
+      "UNATTENDED_UNSUPPORTED": "Windows ではまだ使えません。",
+      "NOT_FOUND": "このトリガーはもうありません。",
+      "BAD_REQUEST": "値を確認してください。上限は毎分 60 回、毎日 500 回、待ち時間は 5〜240 分です。",
+      "generic": "うまくいきませんでした。もう一度お試しください。"
+    },
+    "outcome": {
+      "accepted": "受付",
+      "started": "実行開始",
+      "start-failed": "実行できず",
+      "duplicate": "同じ配信のため実行せず",
+      "ping": "GitHub ping",
+      "event-ignored": "チェックしていないイベント",
+      "daily-limit": "1 日の上限に到達",
+      "rate-limited": "リクエスト過多",
+      "bad-key": "キーが違います",
+      "bad-signature": "署名が違います",
+      "run-active": "すでに実行中",
+      "no-window": "ワークスペースのウィンドウなし",
+      "app-locked": "App Lock 中",
+      "guard-off": "Guard がオフ",
+      "vendor-refused": "未対応の CLI を使用",
+      "no-gate": "承認ゲートなし",
+      "awaiting-approval": "確認待ち",
+      "approval-timeout": "応答がなく実行を停止",
+      "run-timeout": "実行が 4 時間の上限に到達",
+      "interrupted": "実行が中断されました",
+      "secret-lost": "シークレットを読み取れないためトリガーをオフにしました。シークレットを交換すると再び使えます。",
+      "key-unavailable": "キー保管場所に接続できません",
+      "unattended-on": "無人実行をオン",
+      "unattended-off": "無人実行をオフ",
+      "no-gate-acknowledged": "承認なしで開始をチェック"
     }
   }
 }

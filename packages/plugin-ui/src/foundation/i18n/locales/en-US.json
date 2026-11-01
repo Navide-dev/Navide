@@ -1735,7 +1735,11 @@
           "title": "Status Badges",
           "summary": "Rename each pane status and pick its colour, per language."
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhooks",
+        "summary": "Start a pipeline from another system over HTTP, with a key or a GitHub signature."
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "Hide every window behind a lock screen and unlock with Touch ID, Windows Hello or a PIN"
         },
@@ -12781,6 +12785,142 @@
       "internal": "The converted graph is invalid. This is a bug in the importer.",
       "too-large": "The workflow is {sizeMb} MB. An import takes at most {limitMb} MB.",
       "store-refused": "The workflow “{workflow}” could not be stored, so nothing was imported: {problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhooks",
+    "guardOff": "Turn on Navide Guard in Settings → Security first. Webhooks stay off without it, and a request that arrives while it is off is refused.",
+    "portTaken": "Navide could not start listening: {error}. Free that port, then turn this on again. Navide does not move to another port, because your callers use this one.",
+    "enabled": {
+      "title": "Accept webhooks",
+      "desc": "Lets another system start a pipeline over HTTP. Nothing listens until this is on and a trigger is enabled. Navide listens on this computer only. To reach it from outside, run your own tunnel to it. Navide has to be open, with a window on the workspace."
+    },
+    "host": {
+      "title": "Public hostname",
+      "desc": "The name your tunnel answers on. Requests naming any other host are refused. Leave empty if only this computer calls Navide.",
+      "placeholder": "hook.example.com",
+      "warning": "With a tunnel, anyone on the internet can reach this address. The key or signature on each trigger is then the only thing stopping them."
+    },
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create trigger",
+    "copy": "Copy",
+    "copied": "Copied",
+    "delete": "Delete",
+    "deleteConfirm": "Delete for good?",
+    "turnOn": "Turn on",
+    "more": "Options",
+    "triggers": "Triggers",
+    "new": "New trigger",
+    "needsWorkspace": "Open a workspace first. A trigger runs in a workspace.",
+    "empty": {
+      "title": "No triggers yet",
+      "desc": "A trigger connects an address to a pipeline: a call to the address starts a run."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "Form"
+    },
+    "form": {
+      "name": "Name",
+      "source": "Source",
+      "pipeline": "Pipeline",
+      "workspace": "Workspace",
+      "events": "Events",
+      "limits": "Limits",
+      "timeout": "Wait for you",
+      "eventsHint": "Only events you tick start a run. GitHub's ping test is answered without one.",
+      "noGate": "Start without approval. The first step is not an approval gate, so a request starts the agent right away. External content reaches it without anyone looking first.",
+      "default": "Every tool call in a run this trigger starts waits for you. If nobody answers in time, the run stops and nothing is approved. Phone and chat channels cannot approve for a webhook run. Claude Code and Codex only."
+    },
+    "perMinute": "per minute",
+    "perDay": "per day",
+    "minutes": "min wait",
+    "minutesUnit": "minutes",
+    "rate": "{minute}/min · {day}/day",
+    "enable": "Enable {name}",
+    "state": {
+      "off": "Off",
+      "listener-off": "Enabled, not listening",
+      "ready": "Ready",
+      "running": "Run in progress",
+      "waiting": "Waiting for you · stops in {minutes} min"
+    },
+    "reveal": {
+      "titleKey": "Key for {name}",
+      "titleSecret": "Secret for {name}",
+      "once": "Copy it now. Navide keeps no readable copy of a key and will not show this one again.",
+      "noAddress": "Turn the trigger on and its address appears in its row.",
+      "url": "Address",
+      "key": "Key",
+      "secret": "Secret",
+      "copyCurl": "Copy a test call",
+      "done": "I have saved it",
+      "githubHint": "In GitHub, open the repository's Settings → Webhooks, paste both, and choose application/json. The address has to be public, so set a hostname above first."
+    },
+    "rotateKey": "Replace key",
+    "rotateSecret": "Replace secret",
+    "unattended": {
+      "chip": "Unattended",
+      "title": "Run unattended",
+      "desc": "Off by default. Panes of this trigger's runs skip permission prompts. Turning it on explains what that means.",
+      "unsupported": "Not available on Windows yet.",
+      "confirmTitle": "Before running unattended",
+      "skips": "The agent skips permission prompts. Nobody confirms its tool calls.",
+      "external": "It works on external content, and that content can try to steer it.",
+      "scripts": "Guard stops only commands it recognises. It cannot stop an agent that writes a script and then runs it.",
+      "hook": "If Guard's hook cannot answer, the call is refused. If the hook process itself is killed or hangs, the call goes through.",
+      "tick": "I understand the agent runs without confirmation on content from outside."
+    },
+    "weakKey": {
+      "title": "On Linux this secret has weaker protection",
+      "body": "Its key is in a file only permissions protect, so any program running as you can read it. macOS and Windows keep it in the system's protected store.",
+      "tick": "I understand and want to enable this trigger."
+    },
+    "log": {
+      "title": "Activity",
+      "empty": "Nothing recorded yet."
+    },
+    "refused": {
+      "vendor-refused": "This pipeline has a step on a CLI that webhook runs cannot use. Only Claude Code and Codex are supported, because Guard has been tested on them.",
+      "no-gate": "The first step of this pipeline is not an approval gate. Add one, or create the trigger again and tick Start without approval.",
+      "pipeline-missing": "This trigger's pipeline no longer exists."
+    },
+    "error": {
+      "GUARD_OFF": "Turn on Navide Guard first.",
+      "KEY_UNAVAILABLE": "The system's key store could not be reached. Unlock it and try again.",
+      "UNATTENDED_UNSUPPORTED": "Not available on Windows yet.",
+      "NOT_FOUND": "This trigger no longer exists.",
+      "BAD_REQUEST": "Check the values. Limits go up to 60 per minute and 500 per day, and the wait from 5 to 240 minutes.",
+      "generic": "That did not work. Try again."
+    },
+    "outcome": {
+      "accepted": "Accepted",
+      "started": "Run started",
+      "start-failed": "Run did not start",
+      "duplicate": "Same delivery as before, not run",
+      "ping": "GitHub ping",
+      "event-ignored": "Event not ticked",
+      "daily-limit": "Daily limit reached",
+      "rate-limited": "Too many requests",
+      "bad-key": "Wrong key",
+      "bad-signature": "Wrong signature",
+      "run-active": "A run was already going",
+      "no-window": "No window on the workspace",
+      "app-locked": "App Lock was on",
+      "guard-off": "Guard was off",
+      "vendor-refused": "Pipeline uses an unsupported CLI",
+      "no-gate": "No approval gate",
+      "awaiting-approval": "Waiting for you",
+      "approval-timeout": "Nobody answered, run stopped",
+      "run-timeout": "Run reached its 4-hour limit",
+      "interrupted": "Run interrupted",
+      "secret-lost": "Secret can no longer be read, trigger turned off. Replace the secret to use it again.",
+      "key-unavailable": "Key store could not be reached",
+      "unattended-on": "Unattended turned on",
+      "unattended-off": "Unattended turned off",
+      "no-gate-acknowledged": "Start without approval ticked"
     }
   }
 }

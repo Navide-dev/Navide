@@ -280,6 +280,17 @@ class WebhookStore:
                 (trigger_id, body_sha256, now),
             )
 
+    def set_limits(self, trigger_id: str, per_minute: int, per_day: int, approval_timeout_min: int) -> None:
+        current = next((t for t in self.list() if t["id"] == trigger_id), None)
+        if current is None:
+            raise WebhookNotFound(trigger_id)
+        _check(current["name"], current["workspace"], current["pipeline_id"], current["kind"],
+               per_minute, per_day, approval_timeout_min)
+        self._update_live(
+            trigger_id, "per_minute = ?, per_day = ?, approval_timeout_min = ?",
+            per_minute, per_day, approval_timeout_min,
+        )
+
     def set_unattended(self, trigger_id: str, unattended: bool) -> None:
         self._update_live(trigger_id, "unattended = ?", int(unattended))
 
