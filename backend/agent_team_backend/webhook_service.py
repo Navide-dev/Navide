@@ -62,9 +62,11 @@ _BYPASS = {
 }
 _ASK = {
     "claude": "--permission-mode default",
-    # untrusted: anything beyond plain reads asks. on-request would leave the
-    # decision to the model, which is what a payload is trying to steer.
-    "codex": "--ask-for-approval untrusted --sandbox workspace-write",
+    # Codex 0.166 has no ask-every-call mode: the flag takes only on-request and
+    # never, and config refuses untrusted. on-request alone lets the model decide,
+    # and in workspace-write a command then runs unasked, so the sandbox is what
+    # holds here: read-only stops writes and network whatever the model decides.
+    "codex": "--ask-for-approval on-request --sandbox read-only",
 }
 
 

@@ -12846,7 +12846,7 @@
       "timeout": "Esperar por ti",
       "eventsHint": "Solo los eventos marcados inician una ejecución. La prueba ping de GitHub se responde sin iniciar ninguna.",
       "noGate": "Iniciar sin aprobación. El primer paso no es una puerta de aprobación, así que una solicitud inicia el agente de inmediato. El contenido externo le llega sin que nadie lo vea antes.",
-      "default": "En las ejecuciones de este disparador, cada llamada a herramienta espera tu confirmación. Si nadie responde a tiempo, la ejecución se detiene y no se aprueba nada. El móvil y los canales de chat no pueden aprobar una ejecución de webhook. Solo Claude Code y Codex.",
+      "default": "Claude Code espera tu confirmación en cada llamada a herramienta. Codex no tiene ese modo, así que se ejecuta en un sandbox de solo lectura: lee sin preguntar, y la escritura y la red necesitan tu aprobación. Si nadie responde a tiempo, la ejecución se detiene y no se aprueba nada. El móvil y los canales de chat no pueden aprobar una ejecución de webhook. Solo Claude Code y Codex.",
       "fields": "Campos",
       "fieldLabel": "Etiqueta",
       "fieldType": "Tipo",
