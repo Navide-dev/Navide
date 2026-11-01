@@ -281,6 +281,17 @@ export function stageToBackend(s: Stage): Record<string, unknown> {
   }
 }
 
+/** How the n8n importer opens every step it writes (n8n_import.py). A step has
+ *  no {{task}} there, so the task someone typed at Run would go nowhere. Read
+ *  off the text so a pipeline already imported needs no change to its saved
+ *  data. A step that lost this line reads as one a person wrote, where leaving
+ *  {{task}} out can be the point. */
+const IMPORTED_STEP = '[External content: imported from the n8n workflow "'
+
+function isImportedWithoutTask(kickoffBody: string): boolean {
+  return kickoffBody.startsWith(IMPORTED_STEP) && !kickoffBody.includes('{{task}}')
+}
+
 /** Render a kickoff for one slot.
  *  - opts.isManager=true → Manager protocol (3 phases)
  *  - hasManager=true (and isManager=false) → Worker protocol
@@ -301,10 +312,13 @@ export function renderSlotKickoff(
     slotRoster?: { label: string; agentLabel: string; roleLabel: string }[]
   } = {},
 ): string {
-  const body = slot.kickoffBody.replaceAll(
+  const placed = slot.kickoffBody.replaceAll(
     '{{task}}',
     task.trim() || '(no task description provided)'
   )
+  const body = isImportedWithoutTask(slot.kickoffBody) && task.trim()
+    ? `${placed}\n\n---\n\n[Task from the person who started this run]\n${task.trim()}`
+    : placed
   let protocol: string
   if (opts.isCommander) {
     protocol = renderManagerProtocol(opts.slotRoster ?? [])
