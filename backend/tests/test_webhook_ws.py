@@ -7,6 +7,7 @@ import json
 import socket
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -137,6 +138,32 @@ class TestRefusals:
         created = await call("webhook.trigger.create", name="CI", workspace_path=WS, pipeline_id=PIPE, no_gate_ack=True)
         rows = env.store.events(created["payload"]["trigger"]["id"])
         assert [r["outcome"] for r in rows] == ["no-gate-acknowledged"]
+
+
+class Sink:
+    async def send_json(self, _: Any) -> None:
+        return None
+
+
+async def _noop_broadcast(_: Any) -> None:
+    return None
+
+
+class TestKickoffFailure:
+    async def test_a_failed_kickoff_reaches_the_activity_list(self, env, monkeypatch) -> None:
+        created = await call("webhook.trigger.create", name="CI", workspace_path=WS, pipeline_id=PIPE)
+        trigger_id = created["payload"]["trigger"]["id"]
+        run = env.store.open_run(trigger_id=trigger_id, workspace=WS, project_id="p", pipeline_id=PIPE, unattended=False)
+        env._active[WS] = run
+        monkeypatch.setattr(app_module.project_store, "abort_pipeline", lambda *_, **__: SimpleNamespace(workspace_path=WS, node_states={}))
+        monkeypatch.setattr(ws_handlers, "_mirror_pipeline_state", lambda _: None)
+        monkeypatch.setattr(app_module.tokens_store, "end_run", lambda *_, **__: None)
+        monkeypatch.setattr(app_module.tokens_store, "snapshot", lambda _: {})
+        monkeypatch.setattr(app_module, "_project_payload", lambda _: {})
+        monkeypatch.setattr(app_module, "broadcast", _noop_broadcast)
+        session = Sink()
+        await ws_handlers.pipeline_abort(session, "1", "pipeline.abort", {"workspace_path": WS, "reason": "failed", "kickoff_failed": True})
+        assert [e["detail"] for e in env.store.events(trigger_id)][0] == "kickoff"
 
 
 class TestUnattended:

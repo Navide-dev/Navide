@@ -11554,6 +11554,8 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
     reason = payload.get("reason", "user")
     project = app.project_store.abort_pipeline(payload["workspace_path"], reason=reason)
     _mirror_pipeline_state(project)
+    if reason == "failed" and payload.get("kickoff_failed") is True and (webhooks := webhook_service.current()) is not None:
+        webhooks.note_kickoff_failed(payload["workspace_path"])
     app.tokens_store.end_run(
         project.workspace_path,
         # The engine aborts with reason "failed" when a run cannot go on (a

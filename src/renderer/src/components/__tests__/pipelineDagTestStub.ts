@@ -15,3 +15,12 @@ export function linearPipelineDag(workspacePath: () => string = () => '/ws') {
   })
   return { dag, sent }
 }
+
+/** Prepended to lifted App.vue source that names the run's slot record. These
+ *  tests seed `panes` directly, so a slot's pane is the one they put there;
+ *  App.pipelineSecondRun.test.ts runs the real record. */
+export const RUN_SLOT_STUB = `
+const runSlots = { current: () => new Map(), record() {}, startRun() {}, endChildRun() {}, adopt() {}, rekey() {} }
+const runSlotPane = (stageId, slotLabel) => panes.value.find((p) => p.stageId === stageId && p.slotLabel === slotLabel && p.origin === 'pipeline')
+const isPriorRunPane = () => false
+`

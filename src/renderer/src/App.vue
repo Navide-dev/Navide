@@ -269,6 +269,7 @@ import {
   groupPeers,
   savedGroupToRecreate,
 } from './lib/runGroups'
+import { createRunSlotPanes } from './lib/runSlotPanes'
 import {
   ALL_SCOPE_RESTORE_CONCURRENCY,
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
@@ -8287,6 +8288,7 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
       ? savedStageIndex
       : stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
     if (stageIndex >= 0) cancelWatcher(paneId)
+    if (isPriorRunPane(paneId)) stageIndex = -1
   }
   if (activeQuestion.value?.paneId === paneId) activeQuestion.value = null
   const ref = paneRefs[paneId]
@@ -12540,6 +12542,7 @@ interface RestoredPaneSpawnResult {
  *  dropped: a pane that became its own parent would make the walk loop. */
 function rekeyLineage(oldId: string, newId: string): void {
   if (!oldId || oldId === newId) return
+  runSlots.rekey(oldId, newId)
   // The follow-the-default-account flag rides the same id hand-offs.
   accountFollow.rekey(oldId, newId)
   for (const p of panes.value) {
@@ -14188,6 +14191,8 @@ async function runPipelineResume(): Promise<void> {
   }
   applyProjectPaths(resp)
   pipelineDag.setRunStack(resp.project?.run_stack)
+  // Before the realize below: it re-keys a restored pane through rekeyLineage.
+  runSlots.adopt(resp.project?.panes)
   // Refresh the peek so the banner disappears now that we're running.
   existingProject.value = null
   // Cold restore keeps pipeline panes as placeholders; an explicit pipeline
@@ -14537,13 +14542,12 @@ async function preSpawnStage(index: number): Promise<void> {
   // Slots behind a branch or error edge may never run; activateStage spawns
   // them once their inputs have decided.
   const conditional = pipelineDag.conditionalLabels(index)
+  const slots = runSlots.current()
   await Promise.all(stage.slots.map(async (slot) => {
     if (pinned.has(slot.label) || conditional.has(slot.label)) return
     // A reject loop re-enters stages whose panes may still be alive; reuse
     // them (activateStage injects the kickoff) instead of spawning twins.
-    if (pipelineDag.looped() && panes.value.some(
-      (p) => p.stageId === stage.id && p.slotLabel === slot.label && p.origin === 'pipeline' && p.realized
-    )) return
+    if (pipelineDag.looped() && runSlotPane(stage.id, slot.label)?.realized) return
     pipelineLog(`Stage ${stage.id}/${slot.label} → pre-spawn ${slot.agentKey} as ${slot.roleKey}`)
     const paneId = await spawnPane({
       agentKey: slot.agentKey as AgentKey,
@@ -14557,6 +14561,7 @@ async function preSpawnStage(index: number): Promise<void> {
       // No kickoffPrompt → kickoffStatus='none' → scheduleInjection stops after role
     })
     if (paneId) {
+      runSlots.record(slots, stage.id, slot.label, paneId)
       await sendQuiet<ProjectPayload>('pipeline.slot_spawn', {
         workspace_path: pipeline.workspacePath,
         stage_index: index,
@@ -14599,7 +14604,7 @@ function buildStageContext(index: number, forManager: boolean): string {
     const prevStage = stagesApi.stages.value[i]
     if (!prevStage) continue
     const prevPanes = panes.value.filter(
-      (p) => p.stageId === prevStage.id && p.origin === 'pipeline'
+      (p) => p.stageId === prevStage.id && p.origin === 'pipeline' && !isPriorRunPane(p.id)
     )
     for (const prevPane of prevPanes) {
       const label = prevPane.slotLabel
@@ -14704,6 +14709,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
   const untaken = pipelineDag.untakenLabels(index)
   const dagPrefix = (only ? (opts.note ? `${opts.note}\n\n` : '') : pipelineDag.takeNote(index)) + pipelineDag.frozenContext(index)
 
+  const activation = runSlots.current()
   await Promise.all(stage.slots.filter((slot) => !only || slot.label === only).map(async (slot) => {
     if (pinned.has(slot.label)) {
       pipelineLog(`Stage ${stage.id}/${slot.label} 📌 pinned — reusing its frozen output`)
@@ -14717,9 +14723,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     // gets the full prior-output file roster (it coordinates, needs everything).
     const contextHeader = buildStageContext(index, slot === managerSlot) + dagPrefix
     // Find the pre-spawned pane for this slot
-    const pane = panes.value.find(
-      (p) => p.stageId === stage.id && p.slotLabel === slot.label && p.origin === 'pipeline'
-    )
+    const pane = runSlotPane(stage.id, slot.label)
 
     // Unrealized panes were ruled out above, so this is the genuine
     // never-pre-spawned case.
@@ -14748,6 +14752,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         kickoffPrompt: kickoff
       })
       if (paneId) {
+        runSlots.record(activation, stage.id, slot.label, paneId)
         pipelineDag.slotStarted(index, slot.label, paneId)
         await sendQuiet<ProjectPayload>('pipeline.stage_spawn', {
           workspace_path: pipeline.workspacePath,
@@ -15198,6 +15203,7 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   // task prompt and should not become a tab/group label. Made once the backend
   // has the run, so a refused start leaves no empty group behind.
   createRunGroup(pipelineRunGroupName(pid))
+  runSlots.startRun(!!payload.childOf)
   applyProjectPaths(resp ?? undefined)
   pipelineDag.setRunStack(resp?.project?.run_stack)
   pipelineDag.adoptOutputs(resp?.project?.node_outputs)
@@ -15267,7 +15273,7 @@ async function waitForStagePanesSettled(
   const stage = stagesApi.stages.value[stageIndex]
   if (!stage) return
   const stagePanes = panes.value.filter(
-    (p) => p.stageId === stage.id && p.origin === 'pipeline'
+    (p) => p.stageId === stage.id && p.origin === 'pipeline' && !isPriorRunPane(p.id)
   )
   if (stagePanes.length === 0) return
 
@@ -15298,15 +15304,29 @@ async function waitForStagePanesSettled(
   )
 }
 
+const runSlots = createRunSlotPanes()
+
+/** This run's pane for a stage slot. Never a pane of an earlier run: a slot with
+ *  no record has no pane yet, so the caller spawns one rather than writing a new
+ *  run's data into an old conversation. */
+function runSlotPane(stageId: string, slotLabel: string): ActivePane | undefined {
+  const id = runSlots.paneId(stageId, slotLabel)
+  return id ? panes.value.find((p) => p.id === id) : undefined
+}
+
+/** A pipeline pane left open by an earlier run. A window with no record of a run
+ *  has nothing to compare with, so nothing counts as earlier. */
+function isPriorRunPane(paneId: string): boolean {
+  return !runSlots.isEmpty() && !runSlots.has(paneId)
+}
+
 /** Resolve the live pane id for the global Manager (null if not configured or
  *  not yet spawned). Used by the cross-stage router to inject messages. */
 function globalManagerPaneId(): string | null {
   const gm = pipeline.globalManager
   if (!gm) return null
-  const pane = panes.value.find(
-    (p) => p.realized && p.stageId === gm.stageId && p.slotLabel === gm.slotLabel && p.origin === 'pipeline'
-  )
-  return pane?.id ?? null
+  const pane = runSlotPane(gm.stageId, gm.slotLabel)
+  return pane?.realized ? pane.id : null
 }
 
 /** The Manager pane can still receive ---STAGE-DONE--- only while it has a live
@@ -15500,7 +15520,7 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   // slot counts as finished and the run goes on.
   if (pipeline.state === 'running' && pipelineDag.routeFailure(stageIndex, slotLabel, reason)) {
     const stageId = stagesApi.stages.value[stageIndex]?.id
-    const pane = panes.value.find((p) => p.stageId === stageId && p.slotLabel === slotLabel && p.origin === 'pipeline')
+    const pane = stageId === undefined ? undefined : runSlotPane(stageId, slotLabel)
     onStageSlotCompleted(stageIndex, pane?.id ?? `failed:${slotLabel}`, 'error-edge')
     return
   }
@@ -15512,7 +15532,8 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   await pipelineDag.end('failed', `run stopped: slot "${slotLabel}" failed (${reason})`)
   const resp = await sendQuiet<ProjectPayload>('pipeline.abort', {
     workspace_path: pipeline.workspacePath,
-    reason: 'failed'
+    reason: 'failed',
+    kickoff_failed: !reported,
   })
   applyProjectPaths(resp ?? undefined)
   // A held kickoff is left for resume to submit: one sent by hand would be
@@ -15659,6 +15680,7 @@ async function returnToParent(outcome: 'completed' | 'failed', result: { summary
     workspace_path: ws, outcome, summary: result.summary, output: result.output, error,
   })
   if (!resp?.popped || !resp.node_id) return false
+  runSlots.endChildRun()
   pipelineDag.setRunStack(resp.project?.run_stack)
   const recorded = resp.project?.node_states?.[resp.node_id]
   pipelineDag.expectCallResult(
@@ -17422,7 +17444,7 @@ function computeStageSlotSignals(stageIndex: number): SlotSignal[] {
   const tracker = stageCompletions.get(stageIndex)
   if (!stage || !tracker) return []
   const stagePanes = panes.value.filter(
-    (p) => p.stageId === stage.id && p.origin === 'pipeline'
+    (p) => p.stageId === stage.id && p.origin === 'pipeline' && !isPriorRunPane(p.id)
   )
   // Fewer live panes than slots → some slot never spawned; never "all finished".
   if (stagePanes.length < tracker.expected) return []
@@ -18472,7 +18494,7 @@ async function globalManagerRouterScan(): Promise<void> {
 
   // Scan all active Worker panes (any stage, not the Manager itself) for ASK/REPORT
   const workerPanes = panes.value.filter(
-    (p) => p.realized && p.origin === 'pipeline' && p.id !== managerPaneId &&
+    (p) => p.realized && p.origin === 'pipeline' && p.id !== managerPaneId && !isPriorRunPane(p.id) &&
            !(p.stageId === gm.stageId && p.slotLabel === gm.slotLabel)
   )
   for (const wp of workerPanes) {
@@ -18506,7 +18528,7 @@ async function globalManagerRouterScan(): Promise<void> {
   if (mNew > mCursor) globalRouterCursors.set(managerPaneId, mNew)
   for (const d of dispatches) {
     const target = panes.value.find(
-      (p) => p.realized && p.origin === 'pipeline' && p.id !== managerPaneId &&
+      (p) => p.realized && p.origin === 'pipeline' && p.id !== managerPaneId && !isPriorRunPane(p.id) &&
              p.slotLabel.toLowerCase() === d.to.toLowerCase()
     )
     if (target && ownedByStage.has(target.id)) continue
@@ -18623,6 +18645,7 @@ function onStageSlotCompleted(
           p.realized &&
           p.stageId === stage.id &&
           p.origin === 'pipeline' &&
+          !isPriorRunPane(p.id) &&
           p.id !== paneId &&
           !tracker.done.has(p.id)
       )
