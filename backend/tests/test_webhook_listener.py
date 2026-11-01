@@ -31,7 +31,7 @@ class Host:
         self.thread.start()
         self.accepted = []
         self.audit = []
-        self.answer = (202, 0)
+        self.answer = (202, 0, "accepted")
         self.guard_on = True
 
     async def accept(self, trigger, text, body_sha256):
@@ -313,7 +313,7 @@ def test_forged_forwarding_headers_do_not_get_around_a_limit(host):
         server.stop()
 
 
-@pytest.mark.parametrize("answer", [(409, 30), (503, 0), (429, 3600)])
+@pytest.mark.parametrize("answer", [(409, 30, "run-active"), (503, 0, "no-window"), (429, 3600, "daily-limit")])
 def test_the_hosts_answer_is_passed_on(listener, host, answer):
     host.answer = answer
     status, data, headers = request(listener.port)

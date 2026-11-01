@@ -62,7 +62,7 @@ _SECURITY_HEADERS = [
     (b"connection", b"close"),
 ]
 
-Accept = Callable[[dict[str, Any], str, str], Awaitable[tuple[int, int]]]
+Accept = Callable[[dict[str, Any], str, str], Awaitable[tuple[int, int, str]]]
 
 
 class ListenerError(RuntimeError):
@@ -306,10 +306,8 @@ class WebhookListener:
         except webhook_payload.PayloadError as err:
             raise _Refused(err.status, err.reason, trigger_id=trigger_id) from None
         body_sha256 = hashlib.sha256(raw).hexdigest()
-        status, retry_after = await self._hand_over(trigger, text, body_sha256)
-        self._audit.add(
-            trigger_id, "accepted" if status == 202 else "refused", status, size=len(raw), body_sha256=body_sha256,
-        )
+        status, retry_after, outcome = await self._hand_over(trigger, text, body_sha256)
+        self._audit.add(trigger_id, outcome, status, size=len(raw), body_sha256=body_sha256)
         return status, retry_after, b'{"ok":true}' if status == 202 else b""
 
     async def _read_body(self, receive: Any, trigger_id: str) -> bytes:
@@ -333,10 +331,10 @@ class WebhookListener:
         except TimeoutError:
             raise _Refused(408, "body-timeout", trigger_id=trigger_id) from None
 
-    async def _hand_over(self, trigger: dict[str, Any], text: str, body_sha256: str) -> tuple[int, int]:
+    async def _hand_over(self, trigger: dict[str, Any], text: str, body_sha256: str) -> tuple[int, int, str]:
         """Run `accept` on the main loop, where the store and the window live."""
         future = asyncio.run_coroutine_threadsafe(self._accept(trigger, text, body_sha256), self._main_loop)
         try:
             return await asyncio.wait_for(asyncio.wrap_future(future), ACCEPT_TIMEOUT_S)
         except TimeoutError:
-            return 503, 0
+            return 503, 0, "accept-timeout"

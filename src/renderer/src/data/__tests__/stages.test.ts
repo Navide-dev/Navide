@@ -133,3 +133,21 @@ describe('renderSlotKickoff', () => {
     expect(out).toContain('---MSG-START---')
   })
 })
+
+describe('renderSlotKickoff with a webhook task', () => {
+  const task = 'Webhook trigger "x" started this run.\n<<<NAVIDE-WEBHOOK-DATA-abc\npayload\nNAVIDE-WEBHOOK-DATA-abc>>>\n'
+  const slot = (kickoffBody: string) => ({ agentKey: 'claude', roleKey: '', label: 'a', kickoffBody }) as unknown as Parameters<typeof renderSlotKickoff>[0]
+
+  it('reaches a step with no {{task}} of its own, as an imported one is', () => {
+    expect(renderSlotKickoff(slot('### Step 1'), task)).toMatch(/### Step 1\n\nWebhook trigger[\s\S]*payload/)
+  })
+
+  it('appears once in a step that places it', () => {
+    const out = renderSlotKickoff(slot('Do: {{task}} now'), task)
+    expect(out.split('<<<NAVIDE-WEBHOOK-DATA-').length).toBe(2)
+  })
+
+  it('leaves any other task out of a step with no {{task}}, as before', () => {
+    expect(renderSlotKickoff(slot('### Step 1'), 'fix the login page')).not.toContain('fix the login page')
+  })
+})

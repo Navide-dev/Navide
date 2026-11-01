@@ -6,7 +6,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
-- Pipelines (0.2.37): groundwork for starting a pipeline from a webhook: a listener on its own loopback port, keys kept only as hashes, limits and an audit trail. Nothing uses it yet, so nothing listens and nothing changes.
+- Pipelines (0.2.37): a webhook can start a pipeline. Off by default; nothing listens until you turn it on and enable a trigger. A run a webhook starts carries Guard taint, keeps its panes out of permission bypass so every tool call waits for you, refuses to start while App Lock is on, and accepts only Claude Code and Codex. The request's body goes to the agent as marked data and stays out of the run log, which records only its size and hash. There is no screen for this yet.
 
 ### Fixed
 

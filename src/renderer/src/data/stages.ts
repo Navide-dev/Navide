@@ -290,6 +290,13 @@ export function stageToBackend(s: Stage): Record<string, unknown> {
  *  `slotRoster` is the list of OTHER slots in the same stage (used by the
  *  Manager protocol to tell the Manager who it's coordinating).
  *  `managerLabel` is the Manager slot's label (used by Worker protocol). */
+/** Whether a run's task is a webhook's: the boundary the backend wraps external
+ *  data in (webhook_payload). The task text is all a resumed run has. A task
+ *  that merely quotes the boundary changes nothing but its own kickoff. */
+export function holdsWebhookData(text: string): boolean {
+  return text.includes('<<<NAVIDE-WEBHOOK-DATA-')
+}
+
 export function renderSlotKickoff(
   slot: StageSlot,
   task: string,
@@ -301,10 +308,15 @@ export function renderSlotKickoff(
     slotRoster?: { label: string; agentLabel: string; roleLabel: string }[]
   } = {},
 ): string {
-  const body = slot.kickoffBody.replaceAll(
+  const placed = slot.kickoffBody.replaceAll(
     '{{task}}',
     task.trim() || '(no task description provided)'
   )
+  // A step imported from n8n has no {{task}} of its own, and a webhook's data
+  // is what such a step exists to work on.
+  const body = holdsWebhookData(task) && !slot.kickoffBody.includes('{{task}}')
+    ? `${placed}\n\n${task.trim()}`
+    : placed
   let protocol: string
   if (opts.isCommander) {
     protocol = renderManagerProtocol(opts.slotRoster ?? [])

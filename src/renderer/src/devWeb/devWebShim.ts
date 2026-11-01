@@ -76,6 +76,7 @@ const EMPTY_RESULTS: Record<string, unknown> = {
   'permissions.status': { automation: 'unknown', notifications: 'unknown', folders: 'unknown', fullDisk: 'unknown' },
   'gitAccounts.isAvailable': { ok: false },
   'gitAccounts.list': { ok: true, accounts: [] },
+  'appLock.status': { locked: false },
   'updater.getState': { status: 'unsupported', currentVersion: 'dev-web' },
   'updater.getSettings': {
     autoCheck: false,

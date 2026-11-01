@@ -7663,6 +7663,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
         stageId: opts.stageId,
         stage_id: opts.stageId,                 // snake_case alias for backend token sink
         origin: opts.origin,
+        spawned_by: opts.spawnedBy ?? '',        // a webhook run's panes pass their launch policy on
         workspace_path: opts.workspacePath ?? '',
         explicit_session_id: pinnedSessionId || explicitSessionId,  // Claude/Antigravity --session-id → precise pane attribution
         session_marker: sessionMarker,           // Codex → marker fallback session detection
@@ -11508,7 +11509,18 @@ registerCommand('ui.workspace.switch', async (args) => {
 })
 // MCP window_list (DESIGN-C S3): this window describes itself, under the
 // page-load id the backend knows it by. Read-only.
-registerCommand('ui.window.describe', () => {
+/** For the backend's webhook start: a window that cannot tell is "unknown",
+ *  which the backend refuses. Dev web has no main process, so it says unknown. */
+async function appLockState(): Promise<'locked' | 'unlocked' | 'unknown'> {
+  try {
+    const status = await window.agentTeam?.appLock?.status()
+    if (status) return status.locked ? 'locked' : 'unlocked'
+  } catch {
+    // Reported as unknown below.
+  }
+  return 'unknown'
+}
+registerCommand('ui.window.describe', async () => {
   const held = [...workspaceOrder.value]
   if (currentWorkspace.value && !held.some((w) => normWs(w) === normWs(currentWorkspace.value))) {
     held.unshift(currentWorkspace.value)
@@ -11521,6 +11533,7 @@ registerCommand('ui.window.describe', () => {
     ...(isDetachedWindow ? { detached_group: detachedGroupId } : {}),
     focused: document.hasFocus(),
     panes: panes.value.map((p) => ({ pane_id: p.id, name: p.messagingName ?? '', workspace_path: p.workspacePath })),
+    app_lock: await appLockState(),
   }
 })
 // MCP window_focus (DESIGN-C S3): optionally switch to a project this window

@@ -2543,6 +2543,14 @@ async def _start_log_watcher() -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("scheduler startup failed: %s", err)
 
+    # Webhook triggers: empty tables and no listener until the user turns them on.
+    from . import webhook_ws
+
+    try:
+        await webhook_ws.startup()
+    except Exception as err:  # noqa: BLE001
+        log.warning("webhook startup failed: %s", err)
+
     # Each workspace's self-evolution: its watchdog notices runs that ran past
     # their time or budget, and runs a missed slot once its workspace opens.
     from . import evolve_service
@@ -2698,6 +2706,9 @@ async def _stop_log_watcher() -> None:
         from . import scheduler
 
         await scheduler.shutdown()
+        from . import webhook_ws
+
+        await webhook_ws.shutdown()
         from . import evolve_service
 
         await evolve_service.shutdown()
