@@ -1399,6 +1399,72 @@ async def test_kilo_legacy_and_explicit_profiles_share_one_pool_and_one_budget(h
     assert h.service.state()["budget"]["kilo:kilo"]["used"] == 1
 
 
+# ── an account with no session window ───────────────────────────────────────
+
+def _weekly_only(agent: str = "claude", used: float = 30, **extra: Any) -> dict:
+    return {**snap(agent, [window("weekly", used, 86400)], **extra), "absentWindows": ["session"]}
+
+
+@pytest.mark.parametrize("agent", ["claude", "codex"])
+def test_a_confirmed_absent_window_no_longer_blocks_a_positive_reading(agent: str) -> None:
+    assert qf.classify_candidate(_weekly_only(agent), now=NOW)[0] == "fresh-headroom"
+
+
+@pytest.mark.parametrize("agent", ["claude", "codex"])
+def test_a_missing_window_nobody_confirmed_stays_unknown(agent: str) -> None:
+    reading = _weekly_only(agent)
+    del reading["absentWindows"]
+
+    assert qf.classify_candidate(reading, now=NOW)[0] == "unknown"
+
+
+def test_a_confirmed_absent_window_does_not_lift_a_spent_weekly_one() -> None:
+    assert qf.classify_candidate(_weekly_only(used=100), now=NOW)[0] == "exhausted"
+
+
+def test_a_spent_session_window_still_blocks_whatever_the_reading_claims() -> None:
+    reading = {
+        **snap("claude", [window("session", 100, 3600), window("weekly", 30, 86400)]),
+        "absentWindows": ["session"],
+    }
+
+    assert qf.classify_candidate(reading, now=NOW)[0] == "exhausted"
+
+
+def test_a_confirmed_absent_window_does_not_excuse_a_missing_weekly_one() -> None:
+    reading = {**snap("claude", [window("session", 30, 3600)]), "absentWindows": ["session"]}
+
+    assert qf.classify_candidate(reading, now=NOW)[0] == "unknown"
+
+
+def test_only_a_successful_read_can_confirm_a_window_is_absent() -> None:
+    assert qf.classify_candidate(_weekly_only(status="error"), now=NOW)[0] == "unknown"
+
+
+def test_a_stale_confirmed_reading_ranks_as_stale_headroom() -> None:
+    reading = {**_weekly_only(), "stale": True}
+
+    assert qf.classify_candidate(reading, now=NOW)[0] == "stale-headroom"
+
+
+@pytest.mark.asyncio
+async def test_settling_accepts_a_reading_with_a_confirmed_absent_window(h: Harness) -> None:
+    await h.service.set_policy("auto")
+    b = await _claude_two_accounts(h)
+    s = h.session()
+    h.pane(s, "t1", "claude", "pane-1", pin="__default__", auth_scope="claude")
+    h.exhausted_reading("claude", "__default__")
+    h.headroom_reading("claude", b)
+    incident, _ = await h.service.report(h.report_payload("claude", "pane-1"))
+    assert incident.state == "settling"
+    h.clock.advance(5)
+    h.service.observe_usage("claude", b, {
+        **snap("claude", [window("weekly", 30, 86400, now=h.clock.now())], fetched_at=h.clock.now()),
+        "absentWindows": ["session"],
+    })
+    assert incident.state == "ready" and incident.reason == "quota-confirmed"
+
+
 # ── settling ────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
