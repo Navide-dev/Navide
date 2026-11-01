@@ -239,7 +239,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "cooldown": "⚠️ Réveillé il y a un instant\u00a0; réessayez dans {wait} s",
         "daily": "⚠️ Ce chat a réveillé son pane {max} fois aujourd’hui, la limite quotidienne\u00a0; réessayez demain",
         "quota": "⚠️ Le quota de {agent} est épuisé et il ne pourrait pas répondre, le pane n’a donc pas été réveillé",
-        "key_account": "⚠️ Réveiller ce pane maintenant pourrait le faire passer sur une clé API ou le sortir de son compte, il n’a donc pas été réveillé ; ouvrez-le sur l’ordinateur",
+        "key_account": "⚠️ Réveiller ce pane maintenant pourrait le faire passer sur une clé API ou le sortir de son compte, il n’a donc pas été réveillé ; ouvrez-le sur l’ordinateur",
         "unresumable": "⚠️ Sa propre conversation ne peut pas être reprise ({reason}), le pane n’a donc pas été réveillé\u00a0; Navide n’ouvre jamais une nouvelle conversation à la place",
         "failed": "⚠️ Échec du réveil ({reason})\u00a0; le pane n’est toujours pas en ligne",
         "reason_missing": "aucune trace de la conversation n’a été trouvée",
