@@ -83,6 +83,8 @@ def test_any_other_type_is_refused(ctype):
         (b'{"a":' * 33 + b"1" + b"}" * 33, "application/json"),
         (b"[" * 200000, "application/json"),
     ],
+    # pytest puts the id in an environment variable, and Windows caps those at 32767 characters.
+    ids=lambda value: repr(value)[:40],
 )
 def test_a_malformed_body_is_refused(raw, ctype):
     with pytest.raises(wp.PayloadError) as err:

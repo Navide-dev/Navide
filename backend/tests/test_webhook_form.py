@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import http.client
 import json
 import re
 from types import SimpleNamespace
@@ -18,6 +17,7 @@ from agent_team_backend import webhook_listener, webhook_triggers
 from .test_webhook_github import Host
 from .test_webhook_service import PIPE, WS
 from .test_webhook_ws import call, env  # noqa: F401
+from .webhook_client import OneWriteConnection
 
 FIELDS = wf.normalize_fields([
     {"type": "text", "label": "Name", "required": True},
@@ -110,7 +110,7 @@ async def server():
     await asyncio.to_thread(listener.start)
 
     def request(method: str, *, token: str = TOKEN, host_header: str = "", body: bytes = b"", headers: dict | None = None) -> tuple[int, str, dict]:
-        conn = http.client.HTTPConnection("127.0.0.1", listener.port, timeout=10)
+        conn = OneWriteConnection("127.0.0.1", listener.port, timeout=10)
         sent = {"Host": host_header or f"127.0.0.1:{listener.port}", **(headers or {})}
         conn.request(method, f"/form/{token}", body=body, headers=sent)
         res = conn.getresponse()
@@ -192,7 +192,7 @@ class TestListener:
         assert status == 409 and "cannot take a response" in page
 
     async def test_the_form_token_is_no_bearer_key_for_the_webhook_path(self, server) -> None:
-        conn = http.client.HTTPConnection("127.0.0.1", server.listener.port, timeout=10)
+        conn = OneWriteConnection("127.0.0.1", server.listener.port, timeout=10)
         conn.request("POST", f"/webhook/{server.trigger['id']}", body=b"{}", headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
         status = conn.getresponse().status
         conn.close()

@@ -2,7 +2,6 @@
 
 import asyncio
 import hashlib
-import http.client
 import socket
 import threading
 
@@ -10,6 +9,8 @@ import pytest
 
 from agent_team_backend import webhook_listener as wl
 from agent_team_backend import webhook_triggers as wt
+
+from .webhook_client import OneWriteConnection
 
 TRIGGER_ID = "ab" * 16
 TOKEN = "nvwh_" + "fixture-key-" + "x" * 31
@@ -67,7 +68,7 @@ def listener(host):
 
 
 def request(port, method="POST", path=f"/webhook/{TRIGGER_ID}", body=b'{"a": 1}', token=TOKEN, headers=None):
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    conn = OneWriteConnection("127.0.0.1", port, timeout=10)
     send = {"Content-Type": "application/json"} if body is not None else {}
     if token:
         send["Authorization"] = "Bearer " + token
@@ -204,7 +205,7 @@ def test_a_body_at_the_limit_passes(listener):
 
 def test_a_chunked_body_over_the_limit_is_413(listener, host):
     chunks = (b"y" * 8192 for _ in range(wl.MAX_BODY // 8192 + 2))
-    conn = http.client.HTTPConnection("127.0.0.1", listener.port, timeout=10)
+    conn = OneWriteConnection("127.0.0.1", listener.port, timeout=10)
 
     def send():
         conn.request("POST", f"/webhook/{TRIGGER_ID}", body=chunks, encode_chunked=True, headers={
