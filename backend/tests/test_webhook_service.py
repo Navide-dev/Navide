@@ -159,14 +159,13 @@ class TestAccept:
 
 
 class TestBinding:
-    @pytest.mark.parametrize("agent", ["copilot", "qwen", "kimi", "cursor", ""])
-    async def test_only_claude_and_codex_run(self, env, agent) -> None:
+    @pytest.mark.parametrize("agent", ["codex", "copilot", "qwen", "kimi", "cursor", ""])
+    async def test_only_claude_runs(self, env, agent) -> None:
         env.pipelines[PIPE]["graph"] = graph(GATE, slot("a", agent))
         assert await accept(env) == (409, 0, "vendor-refused")
         assert env.window.started == []
 
-    async def test_codex_runs(self, env) -> None:
-        env.pipelines[PIPE]["graph"] = graph(GATE, slot("a", "codex"))
+    async def test_claude_runs(self, env) -> None:
         assert (await accept(env))[0] == 202
 
     async def test_a_subpipeline_counts(self, env) -> None:
@@ -243,14 +242,24 @@ class TestLaunch:
                      f"claude --allow-dangerously-skip-permissions {CLAUDE_BYPASS}"):
             assert launch(env, text) == "claude --permission-mode default"
 
-    async def test_codex_is_held_by_a_read_only_sandbox(self, env) -> None:
+    async def test_codex_is_refused_at_the_spawn(self, env) -> None:
         await started_run(env)
-        got = launch(env, "codex --dangerously-bypass-approvals-and-sandbox -a never -s danger-full-access resume abc", agent="codex")
+        with pytest.raises(svc.LaunchRefused):
+            launch(env, "codex", agent="codex")
+        assert not env.service.is_run_pane("p")
+
+    async def test_a_run_pane_cannot_open_codex(self, env) -> None:
+        await started_run(env)
+        launch(env, "claude", pane="parent")
+        with pytest.raises(svc.LaunchRefused):
+            launch(env, "codex", agent="codex", pane="child", origin="mcp", spawned_by="parent")
+
+    def test_the_kept_codex_row_is_a_read_only_sandbox(self) -> None:
+        got = svc._with_mode("codex", "codex --dangerously-bypass-approvals-and-sandbox -a never -s danger-full-access resume abc", unattended=False)
         assert got == "codex --ask-for-approval on-request --sandbox read-only resume abc"
 
-    async def test_codex_config_overrides_go_too(self, env) -> None:
-        await started_run(env)
-        got = launch(env, "codex -c approval_policy=never --config sandbox_mode=danger-full-access -c model=x", agent="codex")
+    def test_the_kept_codex_row_drops_config_overrides(self) -> None:
+        got = svc._with_mode("codex", "codex -c approval_policy=never --config sandbox_mode=danger-full-access -c model=x", unattended=False)
         assert got == "codex --ask-for-approval on-request --sandbox read-only -c model=x"
 
     async def test_a_wrapped_launch_command_is_refused(self, env) -> None:
@@ -449,9 +458,11 @@ class TestUnattended:
         assert launch(env, "claude --session-id a") == "claude --dangerously-skip-permissions --session-id a"
         assert env.service.launch_env("p") == {svc.guard_fail_closed.ENV: "1"}
 
-    async def test_codex_too(self, env) -> None:
+    async def test_codex_never_gets_the_variable(self, env) -> None:
         await self.run(env)
-        assert launch(env, "codex -a never resume x", agent="codex") == "codex --dangerously-bypass-approvals-and-sandbox resume x"
+        with pytest.raises(svc.LaunchRefused):
+            launch(env, "codex", agent="codex")
+        assert env.service.launch_env("p") == {}
 
     async def test_a_child_gets_neither(self, env) -> None:
         await self.run(env)

@@ -261,8 +261,7 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   the backend's own port, binds loopback only and is off by default; reaching
   it from elsewhere is a tunnel the user runs. A run it starts is Guard-tainted
   and its panes lose the permission bypass unless the trigger is explicitly
-  unattended: Claude Code asks before every tool call, and Codex, which has no
-  such mode, runs in a read-only sandbox. See [Pipeline webhooks](pipeline-webhooks.md).
+  unattended. Claude Code is the only CLI a webhook run can use. See [Pipeline webhooks](pipeline-webhooks.md).
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is

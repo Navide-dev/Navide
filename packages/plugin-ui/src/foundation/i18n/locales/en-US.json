@@ -12846,7 +12846,7 @@
       "timeout": "Wait for you",
       "eventsHint": "Only events you tick start a run. GitHub's ping test is answered without one.",
       "noGate": "Start without approval. The first step is not an approval gate, so a request starts the agent right away. External content reaches it without anyone looking first.",
-      "default": "Claude Code asks you before every tool call. Codex has no such mode, so it runs in a read-only sandbox: it can read without asking, and writes and network need your approval. If nobody answers in time, the run stops and nothing is approved. Phone and chat channels cannot approve for a webhook run. Claude Code and Codex only.",
+      "default": "Every tool call in a run this trigger starts waits for you. If nobody answers in time, the run stops and nothing is approved. Phone and chat channels cannot approve for a webhook run. Claude Code only.",
       "fields": "Fields",
       "fieldLabel": "Label",
       "fieldType": "Type",
@@ -12908,7 +12908,7 @@
       "empty": "Nothing recorded yet."
     },
     "refused": {
-      "vendor-refused": "This pipeline has a step on a CLI that webhook runs cannot use. Only Claude Code and Codex are supported, because Guard has been tested on them.",
+      "vendor-refused": "Only Claude Code can run from a webhook in this version. Every step has to use it. Codex has no mode that asks before every tool call, and other CLIs have not been tested with Guard.",
       "no-gate": "The first step of this pipeline is not an approval gate. Add one, or create the trigger again and tick Start without approval.",
       "pipeline-missing": "This trigger's pipeline no longer exists."
     },

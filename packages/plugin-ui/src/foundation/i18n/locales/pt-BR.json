@@ -12846,7 +12846,7 @@
       "timeout": "Esperar por você",
       "eventsHint": "Só os eventos marcados iniciam uma execução. O teste ping do GitHub recebe resposta sem iniciar nada.",
       "noGate": "Iniciar sem aprovação. A primeira etapa não é um portão de aprovação, então uma solicitação inicia o agente na hora. O conteúdo externo chega a ele sem ninguém ver antes.",
-      "default": "O Claude Code espera sua confirmação a cada chamada de ferramenta. O Codex não tem esse modo, então roda em um sandbox somente leitura: lê sem perguntar, e escrita e rede precisam da sua aprovação. Se ninguém responder a tempo, a execução para e nada é aprovado. Celular e canais de chat não aprovam uma execução de webhook. Apenas Claude Code e Codex.",
+      "default": "Nas execuções deste gatilho, cada chamada de ferramenta espera sua confirmação. Se ninguém responder a tempo, a execução para e nada é aprovado. Celular e canais de chat não aprovam uma execução de webhook. Apenas Claude Code.",
       "fields": "Campos",
       "fieldLabel": "Rótulo",
       "fieldType": "Tipo",
@@ -12908,7 +12908,7 @@
       "empty": "Nada registrado ainda."
     },
     "refused": {
-      "vendor-refused": "Este pipeline tem uma etapa com uma CLI que execuções de webhook não podem usar. Só Claude Code e Codex são aceitos, porque o Guard foi testado neles.",
+      "vendor-refused": "Nesta versão, só o Claude Code pode rodar a partir de um webhook, e todas as etapas precisam usá-lo. O Codex não tem um modo que pergunte antes de cada chamada de ferramenta, e outras CLIs ainda não foram testadas com o Guard.",
       "no-gate": "A primeira etapa deste pipeline não é um portão de aprovação. Adicione um, ou crie o gatilho de novo marcando Iniciar sem aprovação.",
       "pipeline-missing": "O pipeline deste gatilho não existe mais."
     },

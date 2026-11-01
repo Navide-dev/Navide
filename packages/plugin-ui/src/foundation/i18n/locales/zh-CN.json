@@ -12846,7 +12846,7 @@
       "timeout": "等待确认",
       "eventsHint": "只有勾选的事件才会开始运行。GitHub 的 ping 测试会得到响应，但不会运行。",
       "noGate": "不经批准直接开始。第一步不是批准关卡，所以请求一到就会启动智能体，外部内容会在无人查看的情况下交给它。",
-      "default": "Claude Code 每次工具调用都会等你确认。Codex 没有这种模式，所以在只读沙箱中运行：读取无需确认，写入和网络需要你批准。超时无人响应，运行就会中止，不会自动放行。手机和聊天频道无法批准 Webhook 运行。只支持 Claude Code 和 Codex。",
+      "default": "这个触发器启动的运行中，每次工具调用都会等你确认。超时无人响应，运行就会中止，不会自动放行。手机和聊天频道无法批准 Webhook 运行。只支持 Claude Code。",
       "fields": "字段",
       "fieldLabel": "标签",
       "fieldType": "类型",
@@ -12908,7 +12908,7 @@
       "empty": "还没有记录。"
     },
     "refused": {
-      "vendor-refused": "这条 Pipeline 有步骤使用了 Webhook 运行不支持的 CLI。只支持已验证过 Guard 的 Claude Code 和 Codex。",
+      "vendor-refused": "这个版本的 Webhook 只能使用 Claude Code，每个步骤都要用它。Codex 没有每次工具调用都询问的模式，其他 CLI 还没有用 Guard 实测过。",
       "no-gate": "这条 Pipeline 的第一步不是批准关卡。请添加关卡，或重新创建触发器并勾选“不经批准直接开始”。",
       "pipeline-missing": "这个触发器绑定的 Pipeline 已不存在。"
     },

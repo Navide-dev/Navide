@@ -27,9 +27,11 @@ from .db import Database
 
 log = logging.getLogger(__name__)
 
-#: Vendors with a measured Guard hook. Copilot and Qwen have one too, but its
-#: ask and deny have not been tested, so they stay out until they are.
-VENDORS = frozenset({"claude", "codex"})
+#: Vendors a webhook run may use. Copilot and Qwen have a Guard hook whose ask and
+#: deny have not been tested. Codex 0.166 was measured and stays out for now: it
+#: has no mode that asks before every call, and its hook trust screen stopped the
+#: run. The Codex rows below are kept for when it comes back; nothing reaches them.
+VENDORS = frozenset({"claude"})
 
 PROBE_S = 2.0
 WATCH_EVERY_S = 15.0

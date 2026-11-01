@@ -12846,7 +12846,7 @@
       "timeout": "Auf dich warten",
       "eventsHint": "Nur angehakte Ereignisse starten einen Lauf. GitHubs Ping-Test wird beantwortet, ohne einen zu starten.",
       "noGate": "Ohne Freigabe starten. Der erste Schritt ist kein Freigabe-Gate, also startet eine Anfrage den Agenten sofort. Externe Inhalte erreichen ihn, ohne dass jemand sie zuerst sieht.",
-      "default": "Claude Code wartet bei jedem Tool-Aufruf auf dich. Codex hat diesen Modus nicht und läuft deshalb in einer schreibgeschützten Sandbox: Lesen geschieht ohne Rückfrage, Schreiben und Netzwerk brauchen deine Freigabe. Antwortet niemand rechtzeitig, stoppt der Lauf, und nichts wird freigegeben. Über Telefon und Chat-Kanäle lässt sich ein Webhook-Lauf nicht freigeben. Nur Claude Code und Codex.",
+      "default": "In Läufen dieses Triggers wartet jeder Tool-Aufruf auf dich. Antwortet niemand rechtzeitig, stoppt der Lauf, und nichts wird freigegeben. Über Telefon und Chat-Kanäle lässt sich ein Webhook-Lauf nicht freigeben. Nur Claude Code.",
       "fields": "Felder",
       "fieldLabel": "Beschriftung",
       "fieldType": "Typ",
@@ -12908,7 +12908,7 @@
       "empty": "Noch nichts aufgezeichnet."
     },
     "refused": {
-      "vendor-refused": "Diese Pipeline hat einen Schritt mit einer CLI, die Webhook-Läufe nicht nutzen können. Unterstützt werden nur Claude Code und Codex, weil Guard dort getestet ist.",
+      "vendor-refused": "In dieser Version kann nur Claude Code über einen Webhook laufen, und zwar in jedem Schritt. Codex hat keinen Modus, der vor jedem Tool-Aufruf fragt, und andere CLIs sind mit Guard noch nicht getestet.",
       "no-gate": "Der erste Schritt dieser Pipeline ist kein Freigabe-Gate. Füge eines hinzu oder erstelle den Trigger neu und hake „Ohne Freigabe starten“ an.",
       "pipeline-missing": "Die Pipeline dieses Triggers existiert nicht mehr."
     },

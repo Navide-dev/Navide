@@ -12846,7 +12846,7 @@
       "timeout": "Chờ bạn",
       "eventsHint": "Chỉ sự kiện được chọn mới bắt đầu lượt chạy. Kiểm tra ping của GitHub được trả lời mà không chạy.",
       "noGate": "Bắt đầu không cần duyệt. Bước đầu không phải cổng phê duyệt, nên yêu cầu sẽ khởi động agent ngay. Nội dung bên ngoài tới agent mà không ai xem trước.",
-      "default": "Claude Code chờ bạn xác nhận ở mọi lệnh gọi công cụ. Codex không có chế độ này nên chạy trong sandbox chỉ đọc: đọc không cần hỏi, còn ghi và mạng cần bạn duyệt. Nếu không ai trả lời kịp, lượt chạy dừng và không có gì được duyệt. Điện thoại và kênh chat không thể duyệt lượt chạy webhook. Chỉ Claude Code và Codex.",
+      "default": "Trong các lượt chạy của trigger này, mọi lệnh gọi công cụ đều chờ bạn xác nhận. Nếu không ai trả lời kịp, lượt chạy dừng và không có gì được duyệt. Điện thoại và kênh chat không thể duyệt lượt chạy webhook. Chỉ Claude Code.",
       "fields": "Trường",
       "fieldLabel": "Nhãn",
       "fieldType": "Loại",
@@ -12908,7 +12908,7 @@
       "empty": "Chưa có ghi nhận."
     },
     "refused": {
-      "vendor-refused": "Pipeline này có bước dùng CLI mà lượt chạy webhook không dùng được. Chỉ hỗ trợ Claude Code và Codex, nơi Guard đã được kiểm thử.",
+      "vendor-refused": "Ở phiên bản này, chỉ Claude Code chạy được từ webhook và mọi bước đều phải dùng nó. Codex không có chế độ hỏi trước mỗi lệnh gọi công cụ, và các CLI khác chưa được kiểm thử với Guard.",
       "no-gate": "Bước đầu của pipeline này không phải cổng phê duyệt. Hãy thêm cổng, hoặc tạo lại trigger và chọn Bắt đầu không cần duyệt.",
       "pipeline-missing": "Pipeline của trigger này không còn tồn tại."
     },
