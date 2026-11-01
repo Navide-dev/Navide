@@ -6,7 +6,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
-- Token statistics (0.2.37): Claude sessions in folders whose Chinese names have the same length were all counted under one of them, because Claude stores those folders under the same name. Each session now counts under the workspace it ran in, and Reconnect and development time no longer pick up a neighbour's sessions. Global and per-account totals do not change, and earlier workspace figures are not recalculated.
+- Token statistics (0.2.37): Claude sessions in folders whose Chinese names have the same length were all counted under one of them, because Claude stores those folders under the same name. Each session now counts under the workspace it ran in, a new session can no longer be claimed by a pane in the other folder, and Reconnect and development time no longer pick up a neighbour's sessions. Global and per-account totals do not change, and earlier workspace figures are not recalculated.
 
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 
