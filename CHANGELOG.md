@@ -11,6 +11,8 @@ All notable released changes to Navide will be documented in this file. The form
 ### Fixed
 
 - Pipelines (0.2.37): a webhook run's conversation no longer comes back in permission bypass. A pane reopened after a restart, a Rebuild, a channel wake or an account switch has a new id, so it lost the run's rule. Navide now remembers the run's sessions, keeps a pane that cannot be identified out of bypass, and ends unattended as soon as the trigger is deleted or no longer unattended. This never shipped: webhooks are new in this version.
+
+- Pipelines: a second run of a pipeline no longer reaches into the first run's panes. An aborted or finished run leaves its panes open, and the next run sent its task, and messages between stages, to those old panes instead of its own: the new pane sat empty and the task went into the previous conversation, or the run failed if that pane was waiting on a prompt. Runs started by a webhook, a schedule or an agent were affected. A slot with no pane in the current run now gets a new one. A webhook trigger's activity now shows a run whose task never arrived as failed.
 - Startup (0.2.37): the backend now keeps the free port it picks until it starts serving on it. If another program took the port in that gap, the backend exited at startup.
 
 - Channels (0.2.37): an old allowlist row with no bot recorded can now be removed in Settings → Channels; removing it answered "not found".

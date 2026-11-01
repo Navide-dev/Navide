@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
-import { linearPipelineDag } from './pipelineDagTestStub'
+import { linearPipelineDag, RUN_SLOT_STUB } from './pipelineDagTestStub'
 
 // A pipeline used to pre-spawn EVERY stage the moment Start was pressed, so an
 // N-stage run held N×M CLIs at once and paid the ~190MB-per-claude floor for
@@ -82,7 +82,7 @@ type SpawnCall = { stageId: string; slotLabel: string }
  *  spawns here is what Start itself decided to spawn. */
 async function loadStart(over: { stageCount?: number } = {}) {
   const { code } = await transformWithEsbuild(
-    `${preSpawnSource}\n${startSource}\nreturn { onPipelineStart, preSpawnStage }`,
+    `${RUN_SLOT_STUB}\n${preSpawnSource}\n${startSource}\nreturn { onPipelineStart, preSpawnStage }`,
     'AppPipelineStart.ts',
     { loader: 'ts' },
   )
@@ -190,7 +190,7 @@ async function loadActivate(over: {
   findRole?: (key: string) => unknown
 } = {}) {
   const { code } = await transformWithEsbuild(
-    `${prewarmSource}\n${activateSource}\nreturn { activateStage, awaitStagePrewarm, prewarmNextStage }`,
+    `${RUN_SLOT_STUB}\n${prewarmSource}\n${activateSource}\nreturn { activateStage, awaitStagePrewarm, prewarmNextStage }`,
     'AppPipelineActivate.ts',
     { loader: 'ts' },
   )

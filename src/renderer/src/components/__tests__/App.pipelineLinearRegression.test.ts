@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
 import { registerStage } from '../../lib/stageTracker'
-import { linearPipelineDag } from './pipelineDagTestStub'
+import { linearPipelineDag, RUN_SLOT_STUB } from './pipelineDagTestStub'
 import { usePipelineDag } from '../../composables/usePipelineDag'
 import { applyGraphOps, deriveGraphFromStages, type PipelineGraph } from '../../lib/pipelineGraph'
 import type { Stage as StageDef } from '../../data/stages'
@@ -59,7 +59,7 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
 
 async function load(extraDeps: Record<string, unknown> = {}) {
   const { code } = await transformWithEsbuild(
-    `${sources.join('\n')}\nreturn { onPipelineStart, onPipelineNext }`,
+    `${RUN_SLOT_STUB}\n${sources.join('\n')}\nreturn { onPipelineStart, onPipelineNext }`,
     'AppPipelineLinear.ts',
     { loader: 'ts' },
   )
@@ -214,7 +214,7 @@ const gateSource = block(
 
 async function loadGraphRun(graph: PipelineGraph) {
   const { code } = await transformWithEsbuild(
-    `${sources.join('\n')}\n${gateSource}\nreturn { onPipelineStart, onPipelineNext, onPipelineGateApprove, onPipelineGateReject, onPipelineGateRejectFromPanel }`,
+    `${RUN_SLOT_STUB}\n${sources.join('\n')}\n${gateSource}\nreturn { onPipelineStart, onPipelineNext, onPipelineGateApprove, onPipelineGateReject, onPipelineGateRejectFromPanel }`,
     'AppPipelineDag.ts',
     { loader: 'ts' },
   )
@@ -417,7 +417,7 @@ describe('a run aborted while paused at a gate', () => {
     expect(run.dag.awaitingGate.value?.gateId).toBe('gate')
 
     // Abort through the real handler.
-    const { code: abortCode } = await transformWithEsbuild(`${abortSource}\nreturn { onPipelineAbort }`, 'AppAbort.ts', { loader: 'ts' })
+    const { code: abortCode } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${abortSource}\nreturn { onPipelineAbort }`, 'AppAbort.ts', { loader: 'ts' })
     const abortDeps: Record<string, unknown> = {
       pipeline: run.pipeline,
       pipelineLog: () => {},
@@ -438,7 +438,7 @@ describe('a run aborted while paused at a gate', () => {
       workspacePath: '/ws', pipelineId: 'pl-1',
       nodeGate: persisted.gate, nodeStates: persisted.nodes,
     }
-    const { code: resumeCode } = await transformWithEsbuild(`${resumeSource}\nreturn { runPipelineResume }`, 'AppResume.ts', { loader: 'ts' })
+    const { code: resumeCode } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${resumeSource}\nreturn { runPipelineResume }`, 'AppResume.ts', { loader: 'ts' })
     const activated: number[] = []
     const resumeDeps: Record<string, unknown> = {
       existingProject: { value: info },
@@ -526,7 +526,7 @@ const restartSource = block(
 
 describe('restart from a node', () => {
   it('a node id that is not in the pipeline is refused before any pane is closed', async () => {
-    const { code } = await transformWithEsbuild(`${restartSource}\nreturn { onPipelineRestart }`, 'AppRestart.ts', { loader: 'ts' })
+    const { code } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${restartSource}\nreturn { onPipelineRestart }`, 'AppRestart.ts', { loader: 'ts' })
     const dag = usePipelineDag({
       send: async (type) => (type === 'pipelines.graph.get' ? { derived: false, graph: gatedGraph() } : {}),
       log: () => {},

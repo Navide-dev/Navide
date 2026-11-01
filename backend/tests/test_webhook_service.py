@@ -537,6 +537,28 @@ class TestNeverUsed:
         assert not env.service.is_run_pane("new-id")
 
 
+class TestKickoffFailure:
+    async def test_a_run_reported_started_records_the_failure(self, env) -> None:
+        await started_run(env)
+        env.service.note_kickoff_failed(WS)
+        latest = env.store.events(env.trigger["id"])[0]
+        assert (latest["outcome"], latest["detail"]) == ("start-failed", "kickoff")
+
+    async def test_while_starting_only_the_start_reports_it(self, env) -> None:
+        env.window.hold = asyncio.Event()
+        await accept(env)
+        await asyncio.sleep(0)
+        run_started(env)
+        env.service.note_kickoff_failed(WS)
+        assert "kickoff" not in [e["detail"] for e in env.store.events(env.trigger["id"])]
+        env.window.hold.set()
+        await settle(env)
+
+    def test_a_workspace_with_no_webhook_run_records_nothing(self, env) -> None:
+        env.service.note_kickoff_failed("/ws/other")
+        assert env.store.events(env.trigger["id"]) == []
+
+
 class Clock:
     def __init__(self, env, monkeypatch) -> None:
         self.now = 1_000_000.0

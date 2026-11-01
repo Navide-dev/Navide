@@ -416,6 +416,13 @@ class WebhookService:
             "detail": None if started else str(answer.get("error_code") or "start-refused")[:80],
         }])
 
+    def note_kickoff_failed(self, workspace: str) -> None:
+        """A run that had been reported started never got its task. While the
+        start is still in progress its own answer reports this."""
+        active = self._active.get(workspace)
+        if active is not None and workspace not in self._starting:
+            self.audit([{"trigger_id": active["trigger_id"], "outcome": "start-failed", "status": 0, "detail": "kickoff"}])
+
     def audit(self, events: list[dict[str, Any]]) -> None:
         now = int(time.time())
         try:
