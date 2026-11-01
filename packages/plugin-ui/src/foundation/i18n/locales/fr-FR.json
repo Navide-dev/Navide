@@ -5056,7 +5056,7 @@
             "global": "En haut de Paramètres ▸ {nav} se trouve l’interrupteur général, « {global} ».",
             "bots": "Chaque plateforme peut accueillir <strong>plusieurs bots</strong> : le premier est marqué comme bot principal, et une fois la plateforme configurée, « {botAdd} » en ajoute d’autres. Chaque bot peut être renommé, activé ou désactivé séparément, et supprimé (après confirmation, en indiquant combien de panes il déconnecte) ; chacun conserve sa propre liste d’autorisation, ses demandes d’appairage et ses codes de liaison.",
             "quick": "Pour les plateformes qui nécessitent un secret (toutes sauf iMessage), « {quickAdd} » configure un nouveau bot : le presse-papiers n’est lu que lorsque vous cliquez sur le bouton, un token n’est prérempli que s’il a la bonne forme, et le bot n’est conservé qu’une fois son identifiant accepté par la plateforme.",
-            "link": "Une fois un bot connecté, un guide sous la plateforme relie votre propre compte (« {linkAccount} ») : ouvrez un message privé Telegram ou ajoutez le bot à un groupe, ajoutez-le à un serveur Discord, ouvrez un message privé Slack, ou, sur les autres plateformes, obtenez un code à usage unique à envoyer au bot. Le code fonctionne une fois dans les 10 minutes ; s’il expire, ne peut pas être enregistré, ou si la connexion au backend tombe, le guide s’arrête et en indique la raison.",
+            "link": "Une fois un bot connecté, un guide sur le bot relie votre propre compte (« {linkAccount} ») : ouvrez un message privé Telegram ou ajoutez le bot à un groupe, ajoutez-le à un serveur Discord, ouvrez un message privé Slack, ou, sur les autres plateformes, obtenez un code à usage unique à envoyer au bot. Le code fonctionne une fois dans les 10 minutes ; s’il expire, ne peut pas être enregistré, ou si la connexion au backend tombe, le guide s’arrête et en indique la raison.",
             "pairing": "Un inconnu qui écrit au bot reçoit un code d’appairage (valable 1 heure) qui attend votre approbation sous « {pairing} » ; les personnes approuvées apparaissent sous « {allow} »."
           },
           "h2": "Lier un pane à un chat",
@@ -10259,8 +10259,10 @@
         "pane-hint": "Activez Navide dans Confidentialité et sécurité → Accès complet au disque."
       }
     },
-    "blocked-by": "Installez d’abord {names} : c’est nécessaire avant de pouvoir installer ceci ici.",
+    "blocked-by": "Navide ne peut pas installer {names} sur ce système. Installez-le vous-même, puis choisissez « {action} ».",
     "installs-first": "L’installation configure d’abord aussi {names}.",
+    "manual-guide": "Comment installer {name}",
+    "needs-prereq": "Nécessite {names}",
     "go-install": "Installer d’abord {name}",
     "complete-failed": "Impossible d’enregistrer la progression de la configuration : {error}. Réessayez.",
     "ollama-start-failed": "Impossible de démarrer le service Ollama. Consultez le journal pour plus de détails, ou exécutez `ollama serve` dans un terminal.",
@@ -10956,6 +10958,16 @@
       "new": "Nouveau bot",
       "name": "Nom du bot",
       "rename": "Renommer",
+      "list": "Liste des bots",
+      "summary": "Personnes : {people} · Chats : {chats}",
+      "people": "Personnes : {n}",
+      "orphans": "Aucun bot correspondant",
+      "orphans-hint": "Ces demandes et personnes renvoient à un bot qui n’est pas configuré ici. Vous pouvez les supprimer.",
+      "section-pending": "En attente d’approbation",
+      "section-people": "Personnes autorisées",
+      "section-chats": "Chats et panes",
+      "chats-empty": "Aucun chat pour le moment. Associez-en un ici une fois le bot connecté.",
+      "choose-platform": "Choisissez une plateforme pour le nouveau bot.",
       "remove-ask": "Supprimer ce bot ? {n} pane connecté par son intermédiaire sera déconnecté. | Supprimer ce bot ? {n} panes connectés par son intermédiaire seront déconnectés."
     },
     "platform-summary": "Bots : {bots} · Chats : {chats} · Panes liés : {panes}",

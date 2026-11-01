@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
 import { useOnboarding, type InstallFailure, type OnboardDep } from '../composables/useOnboarding'
-import { missingProviders, orderInstalls, providerFor } from '../lib/installPlan'
+import { manualPrerequisites, missingProviders, orderInstalls, type ManualPrerequisite } from '../lib/installPlan'
 import { usePermissions, PERMISSION_KEYS } from '../composables/usePermissions'
 import OnboardingStepCard from './OnboardingStepCard.vue'
 import OnboardingPreview from './OnboardingPreview.vue'
@@ -57,12 +57,11 @@ function blockers(dep: OnboardDep): OnboardDep[] {
   return missingProviders(dep, ob.deps.value)
 }
 
-/** Prerequisite binaries with no dep behind them (curl) — the user installs
- *  these; naming them is still better than a button that just fails. */
-function manualBlockers(dep: OnboardDep): string[] {
-  return (dep.requirements ?? [])
-    .filter((r) => !r.ok && !providerFor(r.name, ob.deps.value))
-    .map((r) => r.name)
+/** Prerequisites the user has to install: the backend refuses Install until
+ *  they are there, so the card offers a way to get them instead of the button.
+ *  An installed CLI got here some other way and needs none of this. */
+function manualBlockers(dep: OnboardDep): ManualPrerequisite[] {
+  return dep.status === 'ok' ? [] : manualPrerequisites(dep, ob.deps.value)
 }
 
 /**
@@ -80,7 +79,7 @@ function failureFor(dep: OnboardDep): { dep: OnboardDep; failure: InstallFailure
   return null
 }
 
-/** What the card must say before the user clicks, or after a click failed. */
+/** What the card must say after a click failed. */
 function cardError(card: OnboardDep): string {
   const failed = failureFor(card)
   const dep = failed?.dep ?? card
@@ -102,15 +101,25 @@ function cardError(card: OnboardDep): string {
     const head = t('onboard.install-failed', { reason: failure.message })
     return failure.command ? `${head}\n\n${t('onboard.run-by-hand', { cmd: failure.command })}` : head
   }
-  // No click yet: name the blocker up front rather than after a dead-looking
-  // button press. A prerequisite this app can install joins the chain the
-  // Install button runs, so it is announced rather than reported as a block;
-  // one it cannot (Node on Linux has no install command) still blocks.
-  const providers = blockers(card)
-  const manual = [...providers.filter((p) => !p.can_install).map((p) => p.label), ...manualBlockers(card)]
-  const names = providers.map((p) => p.label)
-  if (manual.length) return t('onboard.blocked-by', { names: [...new Set([...names, ...manual])].join('、') })
+  return ''
+}
+
+/** A prerequisite this app can install joins the chain the Install button runs,
+ *  so it is announced up front: a fresh machine has failed at nothing yet. */
+function cardNotice(card: OnboardDep): string {
+  if (failureFor(card) || manualBlockers(card).length) return ''
+  const names = blockers(card).map((p) => p.label)
   return names.length ? t('onboard.installs-first', { names: names.join('、') }) : ''
+}
+
+function blockedNames(card: OnboardDep): string {
+  return manualBlockers(card).map((m) => m.name).join('、')
+}
+
+/** One it cannot install (Node on Linux has no install command) blocks the card. */
+function cardBlock(card: OnboardDep): string {
+  const names = blockedNames(card)
+  return names ? t('onboard.blocked-by', { names, action: t('action.re-detect') }) : ''
 }
 
 /** Jump the accordion to the prerequisite's own card so it can be installed. */
@@ -308,24 +317,50 @@ async function saveComplete(): Promise<boolean> {
             :optional="d.optional"
             :done="d.status === 'ok'"
             :expanded="activeKey === d.id"
+            :notice="cardNotice(d)"
+            :warning="cardBlock(d)"
+            :blocked-tag="blockedNames(d) && $t('onboard.needs-prereq', { names: blockedNames(d) })"
             :error="cardError(d)"
             @toggle="togglePick(d.id)"
           >
             <template #actions>
               <!-- Prerequisites (Homebrew, Node) have no card of their own any
                    more: Install runs them first, in order. -->
+              <a
+                v-for="m in manualBlockers(d).filter((b) => b.url)"
+                :key="m.name"
+                class="ob-btn primary"
+                :href="m.url"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {{ $t('onboard.manual-guide', { name: m.name }) }}
+              </a>
               <button
-                v-if="d.can_install && d.status !== 'ok'"
+                v-if="d.can_install && d.status !== 'ok' && !manualBlockers(d).length"
                 class="ob-btn primary"
                 :disabled="busy"
                 @click="installMissing([d])"
               >
                 {{ installLabel(d) }}
               </button>
-              <a v-else-if="d.docs_url && d.status !== 'ok'" class="ob-btn primary" :href="d.docs_url" target="_blank" rel="noreferrer">
+              <a
+                v-else-if="d.docs_url && d.status !== 'ok'"
+                class="ob-btn"
+                :class="manualBlockers(d).some((b) => b.url) ? 'ghost' : 'primary'"
+                :href="d.docs_url"
+                target="_blank"
+                rel="noreferrer"
+              >
                 {{ $t('onboard.install-guide') }}
               </a>
-              <button class="ob-btn ghost" :disabled="detectBusy" @click="ob.refresh()">
+              <!-- Installed by hand, the prerequisite may only be on the login
+                   shell's PATH (nvm), which a plain status read reuses for 5 min. -->
+              <button
+                class="ob-btn ghost"
+                :disabled="detectBusy"
+                @click="ob.refresh(manualBlockers(d).length ? { fresh: true } : undefined)"
+              >
                 {{ ob.loading.value ? $t('label.detecting') : $t('action.re-detect') }}
               </button>
             </template>

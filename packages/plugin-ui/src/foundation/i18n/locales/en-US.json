@@ -5056,7 +5056,7 @@
             "global": "At the top of Settings ▸ {nav} is the master switch, \"{global}\".",
             "bots": "Each platform can hold <strong>several bots</strong>: the first is marked as the main bot, and once the platform is set up \"{botAdd}\" adds more. Each bot can be renamed, switched on or off on its own, and removed (which asks first and says how many panes it disconnects), and each keeps its own allowlist, pairing requests and link codes.",
             "quick": "For platforms that need a secret (all but iMessage), \"{quickAdd}\" sets up a new bot: the clipboard is read only when you press the button, a token is pre-filled only if it has the right shape, and the bot is kept only once the platform accepts its credential.",
-            "link": "Once a bot is connected, a guide under the platform links your own account (\"{linkAccount}\"): open a Telegram DM or add the bot to a group, add it to a Discord server, open a Slack DM, or on the other platforms get a one-time code to send to the bot. The code works once within 10 minutes; when it expires, cannot be saved, or the backend connection drops, the guide stops and says why.",
+            "link": "Once a bot is connected, a guide on the bot links your own account (\"{linkAccount}\"): open a Telegram DM or add the bot to a group, add it to a Discord server, open a Slack DM, or on the other platforms get a one-time code to send to the bot. The code works once within 10 minutes; when it expires, cannot be saved, or the backend connection drops, the guide stops and says why.",
             "pairing": "A stranger messaging the bot gets a pairing code (valid for 1 hour) that waits under \"{pairing}\" for your approval; approved people appear under \"{allow}\"."
           },
           "h2": "Binding a pane to a chat",
@@ -10259,8 +10259,10 @@
         "pane-hint": "Toggle Navide on in Privacy & Security → Full Disk Access."
       }
     },
-    "blocked-by": "Install {names} first — it is required before this can be installed here.",
+    "blocked-by": "Navide can't install {names} on this system. Install it yourself, then choose {action}.",
     "installs-first": "Install also sets up {names} first.",
+    "manual-guide": "How to install {name}",
+    "needs-prereq": "Needs {names}",
     "go-install": "Install {name} First",
     "complete-failed": "Could not save your setup progress: {error}. Try again.",
     "ollama-start-failed": "Could not start the Ollama service. See the log for details, or run `ollama serve` in a terminal.",
@@ -10956,6 +10958,16 @@
       "new": "New bot",
       "name": "Bot name",
       "rename": "Rename",
+      "list": "Bot list",
+      "summary": "People: {people} · Chats: {chats}",
+      "people": "People: {n}",
+      "orphans": "No matching bot",
+      "orphans-hint": "These requests and people point to a bot that is not set up here. You can remove them.",
+      "section-pending": "Waiting for approval",
+      "section-people": "People who can talk",
+      "section-chats": "Chats and panes",
+      "chats-empty": "No chats yet. Link one here once the bot is connected.",
+      "choose-platform": "Choose a platform for the new bot.",
       "remove-ask": "Remove this bot? {n} pane connected through it will be disconnected. | Remove this bot? {n} panes connected through it will be disconnected."
     },
     "platform-summary": "Bots: {bots} · Chats: {chats} · Bound panes: {panes}",
