@@ -8322,7 +8322,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "Abonnement-Kontingent aufgebraucht",
+          "title": "Nutzungslimit erreicht",
           "back-at": "Wieder verfügbar um {time}",
           "back-unknown": "Der Zeitpunkt des Zurücksetzens ist nicht bekannt",
           "wait": "Auf Zurücksetzen warten"
@@ -8390,8 +8390,8 @@
           "invalid-name": "Geben Sie einen Namen mit höchstens 60 Zeichen ein.",
           "invalid-reminder": "Geben Sie für die monatliche Budgetnotiz einen Betrag über null ein.",
           "unsupported-agent": "API-Schlüssel sind für diese CLI noch nicht verfügbar.",
-          "store-failed": "Speichern im Schlüsselbund dieses Computers fehlgeschlagen.",
-          "secret-missing": "Dieser Schlüssel ist nicht mehr im Schlüsselbund. Fügen Sie ihn erneut ein.",
+          "store-failed": "Speichern auf diesem Computer fehlgeschlagen.",
+          "secret-missing": "Dieser Schlüssel ist nicht mehr auf diesem Computer. Fügen Sie ihn erneut ein.",
           "not-found": "Dieser API-Schlüssel existiert nicht mehr.",
           "main-window-only": "API-Schlüssel können nur in den Einstellungen verwaltet werden.",
           "internal-error": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
@@ -9802,7 +9802,7 @@
     "failed": "Diese Unterhaltung konnte nicht wieder verbunden werden – ihr Transkript existiert möglicherweise nicht mehr"
   },
   "cli-account": {
-    "api-key-takeover-partial": "Kontingent aufgebraucht. Neue Bereiche nutzen {name} und werden nach Nutzung abgerechnet. {count} beschäftigte Bereiche bleiben unverändert.",
+    "api-key-takeover-partial": "Kontingent aufgebraucht. Neue Bereiche nutzen {name} und werden nach Nutzung abgerechnet. Unverändert gebliebene Bereiche: {count}.",
     "api-key-login-back": "Dein Abo-Kontingent ist wieder da. Bereiche bleiben beim API-Schlüssel, bis du unter Konten zurückwechselst.",
     "api-key-takeover": "Kontingent aufgebraucht. Bereiche laufen jetzt auf {name} und werden nach Nutzung abgerechnet. Wechsle nach dem Zurücksetzen unter Konten zurück.",
     "default": "Ursprüngliche Anmeldung",

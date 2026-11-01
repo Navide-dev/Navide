@@ -8322,7 +8322,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "订阅额度已用完",
+          "title": "已达到用量上限",
           "back-at": "{time} 恢复",
           "back-unknown": "重置时间未知",
           "wait": "等待重置"
@@ -8390,8 +8390,8 @@
           "invalid-name": "请输入不超过 60 个字符的名称。",
           "invalid-reminder": "请输入大于零的每月预算备注金额。",
           "unsupported-agent": "这个 CLI 目前还不能使用 API 密钥。",
-          "store-failed": "无法保存到这台电脑的钥匙圈。",
-          "secret-missing": "钥匙圈中已没有这个密钥，请重新粘贴。",
+          "store-failed": "无法保存到这台电脑。",
+          "secret-missing": "这台电脑上已没有这个密钥，请重新粘贴。",
           "not-found": "这个 API 密钥已不存在。",
           "main-window-only": "API 密钥只能在设置中管理。",
           "internal-error": "出错了，请重试。",
@@ -9802,7 +9802,7 @@
     "failed": "无法接回这段对话，其历史记录可能已不存在"
   },
   "cli-account": {
-    "api-key-takeover-partial": "额度已用完，新窗格将使用 {name}，改为按用量计费。有 {count} 个忙碌的窗格保持不变。",
+    "api-key-takeover-partial": "额度已用完，新窗格将使用 {name}，改为按用量计费。保持不变的窗格：{count} 个。",
     "api-key-login-back": "订阅额度已恢复。窗格仍在使用 API 密钥，如需切换回来请到账号页。",
     "api-key-takeover": "额度已用完，窗格已切换到 {name}，改为按用量计费。额度重置后请到账号页切换回来。",
     "default": "原始登录",

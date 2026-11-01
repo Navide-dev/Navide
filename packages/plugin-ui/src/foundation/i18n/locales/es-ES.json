@@ -8322,7 +8322,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "Cuota de suscripción agotada",
+          "title": "Límite de uso alcanzado",
           "back-at": "Disponible de nuevo a las {time}",
           "back-unknown": "No se conoce la hora de restablecimiento",
           "wait": "Esperar al restablecimiento"
@@ -8390,8 +8390,8 @@
           "invalid-name": "Introduce un nombre de hasta 60 caracteres.",
           "invalid-reminder": "Introduce un importe mensual superior a cero para la nota de presupuesto.",
           "unsupported-agent": "Las claves de API aún no están disponibles para esta CLI.",
-          "store-failed": "No se pudo guardar en el llavero de este ordenador.",
-          "secret-missing": "Esta clave ya no está en el llavero. Pégala de nuevo.",
+          "store-failed": "No se pudo guardar en este ordenador.",
+          "secret-missing": "Esta clave ya no está en este ordenador. Pégala de nuevo.",
           "not-found": "Esta clave de API ya no existe.",
           "main-window-only": "Las claves de API solo se pueden gestionar en Ajustes.",
           "internal-error": "Algo ha salido mal. Inténtalo de nuevo.",
@@ -9802,7 +9802,7 @@
     "failed": "No se pudo volver a conectar esa conversación: puede que su transcripción ya no exista"
   },
   "cli-account": {
-    "api-key-takeover-partial": "Cuota agotada. Los paneles nuevos usan {name}, con facturación por uso. {count} paneles ocupados siguen igual.",
+    "api-key-takeover-partial": "Cuota agotada. Los paneles nuevos usan {name}, con facturación por uso. Paneles que siguen igual: {count}.",
     "api-key-login-back": "Tu cuota de suscripción ha vuelto. Los paneles siguen con la clave de API hasta que cambies en Cuentas.",
     "api-key-takeover": "Cuota agotada. Los paneles usan ahora {name}, con facturación por uso. Vuelve a cambiar en Cuentas cuando se restablezca.",
     "default": "Inicio de sesión original",

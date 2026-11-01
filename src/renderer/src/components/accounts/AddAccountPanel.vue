@@ -36,6 +36,8 @@ const testing = ref(false)
 const testResult = ref<ApiKeyTestResult | null>(null)
 const saving = ref(false)
 const errorCode = ref<string | null>(null)
+// Which test may still report: an answer is about the key it was asked about.
+let testRun = 0
 
 const agentLabel = computed(() => props.agents.find((a) => a.agentKey === props.agentKey)?.label ?? '')
 const keysSupported = computed(() => API_KEY_AGENTS.includes(props.agentKey))
@@ -56,15 +58,19 @@ function back(): void {
 }
 
 watch(secret, () => {
+  testRun += 1
+  testing.value = false
   testResult.value = null
 })
 watch(() => props.agentKey, back)
 onBeforeUnmount(reset)
 
 async function test(): Promise<void> {
+  const run = ++testRun
   testing.value = true
   errorCode.value = null
   const answer = await props.calls.testPasted(props.agentKey, secret.value)
+  if (run !== testRun) return
   testing.value = false
   if (answer.ok) testResult.value = answer.result ?? 'unknown'
   else errorCode.value = answer.error_code ?? 'internal-error'

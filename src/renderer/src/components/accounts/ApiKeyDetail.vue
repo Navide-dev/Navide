@@ -31,10 +31,17 @@ const testing = ref(false)
 const testResult = ref<ApiKeyTestResult | null>(null)
 const storedResult = ref<ApiKeyTestResult | null>(null)
 const errorCode = ref<string | null>(null)
+// Which test may still report: an answer is about the key it was asked about.
+let testRun = 0
 
 // A Claude API key account is chosen per pane; a Codex one replaces the live
 // login like any other account, so "stop" has no meaning there.
 const perPane = computed(() => props.row.agentKey === 'claude')
+
+function dropTest(): void {
+  testRun += 1
+  testing.value = false
+}
 
 function closeReplace(): void {
   replacing.value = false
@@ -49,10 +56,12 @@ watch(
     reminder.value = props.row.monthlyReminderUsd ?? ''
     storedResult.value = null
     errorCode.value = null
+    dropTest()
     closeReplace()
   },
 )
 watch(secret, () => {
+  dropTest()
   testResult.value = null
 })
 onBeforeUnmount(closeReplace)
@@ -80,18 +89,22 @@ function setAutoSwitch(autoSwitch: boolean): void {
 }
 
 async function testStored(): Promise<void> {
+  const run = ++testRun
   testing.value = true
   errorCode.value = null
   const answer = await props.calls.testStored(props.row.id)
+  if (run !== testRun) return
   testing.value = false
   if (answer.ok) storedResult.value = answer.result ?? 'unknown'
   else errorCode.value = answer.error_code ?? 'internal-error'
 }
 
 async function testPasted(): Promise<void> {
+  const run = ++testRun
   testing.value = true
   errorCode.value = null
   const answer = await props.calls.testPasted(props.row.agentKey, secret.value)
+  if (run !== testRun) return
   testing.value = false
   if (answer.ok) testResult.value = answer.result ?? 'unknown'
   else errorCode.value = answer.error_code ?? 'internal-error'
@@ -99,6 +112,7 @@ async function testPasted(): Promise<void> {
 
 async function replace(): Promise<void> {
   if (await run(props.calls.replaceSecret(props.row.id, secret.value))) {
+    dropTest()
     storedResult.value = null
     closeReplace()
   }

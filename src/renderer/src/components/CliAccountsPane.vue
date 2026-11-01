@@ -1193,6 +1193,7 @@ onMounted(() => refreshUsage())
 .acct-detail .cli-agent { margin-bottom: 0; }
 /* Adding moved to the list: its panel offers the same action next to the others. */
 .acct-detail .cli-btn.cli-agent-add { display: none; }
+.acct-detail .cli-scope-select { display: none; }
 @container (max-width: 620px) {
   .acct-md { grid-template-columns: minmax(0, 1fr); }
   .acct-list { max-height: 260px; border-right: none; border-bottom: 1px solid var(--border-muted); }
