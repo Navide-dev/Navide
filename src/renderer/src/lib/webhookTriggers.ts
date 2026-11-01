@@ -15,6 +15,17 @@ export interface WebhookTrigger {
   unattended: boolean
   approval_timeout_min: number
   github_events: string[]
+  form_fields: FormField[]
+  form_public: boolean
+}
+
+export type FormFieldType = 'text' | 'textarea' | 'number' | 'email' | 'date' | 'select' | 'checkbox'
+
+export interface FormField {
+  label: string
+  type: FormFieldType
+  required: boolean
+  options?: string[]
 }
 
 export interface WebhookRunView {
@@ -48,6 +59,8 @@ export interface WebhookEvent {
   detail: string | null
 }
 
+export const FORM_FIELD_TYPES: FormFieldType[] = ['text', 'textarea', 'number', 'email', 'date', 'select', 'checkbox']
+
 export const GITHUB_EVENTS = ['push', 'pull_request', 'issues', 'issue_comment', 'release', 'workflow_run', 'check_suite']
 
 /** The address to give the caller: the declared public host once there is one,
@@ -56,6 +69,14 @@ export function triggerUrl(status: Pick<WebhookStatus, 'port' | 'settings'>, tri
   const host = status.settings.public_host
   if (host) return `https://${host}/webhook/${triggerId}`
   return `http://127.0.0.1:${status.port || status.settings.port}/webhook/${triggerId}`
+}
+
+/** A form's address, token included, which is why it is shown once. Loopback
+ *  unless the form was ticked public and a public host is declared. */
+export function formUrl(status: Pick<WebhookStatus, 'port' | 'settings'>, token: string, isPublic: boolean): string {
+  const host = status.settings.public_host
+  if (isPublic && host) return `https://${host}/form/${token}`
+  return `http://127.0.0.1:${status.port || status.settings.port}/form/${token}`
 }
 
 /** A call that works when pasted, with the key the page is showing. */
@@ -88,7 +109,7 @@ const OUTCOMES = new Set([
   'accepted', 'started', 'start-failed', 'duplicate', 'ping', 'event-ignored', 'daily-limit', 'rate-limited',
   'bad-key', 'bad-signature', 'run-active', 'no-window', 'app-locked', 'guard-off', 'vendor-refused', 'no-gate',
   'awaiting-approval', 'approval-timeout', 'run-timeout', 'interrupted', 'secret-lost', 'key-unavailable',
-  'unattended-on', 'unattended-off', 'no-gate-acknowledged',
+  'unattended-on', 'unattended-off', 'no-gate-acknowledged', 'form-invalid', 'form-public', 'bad-csrf', 'cross-site',
 ])
 
 export function outcomeKey(outcome: string): string {

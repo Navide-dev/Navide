@@ -139,7 +139,7 @@ class TestListener:
         assert "default-src 'none'" in headers["content-security-policy"]
         assert "form-action 'self'" in headers["content-security-policy"]
         assert "frame-ancestors 'none'" in headers["content-security-policy"]
-        assert headers["cache-control"] == "no-store" and headers["referrer-policy"] == "no-referrer"
+        assert headers["cache-control"] == "no-store" and headers["referrer-policy"] == "same-origin"
 
     async def test_a_wrong_token_is_nothing(self, server) -> None:
         assert (await server.get(token="x" * 30))[0] == 404
@@ -168,6 +168,9 @@ class TestListener:
 
     async def test_another_origin(self, server) -> None:
         assert (await server.post({"f0": "Ann"}, origin="https://evil.example"))[0] == 403
+
+    async def test_an_opaque_origin(self, server) -> None:
+        assert (await server.post({"f0": "Ann"}, origin="null"))[0] == 403
 
     async def test_no_origin(self, server) -> None:
         assert (await server.post({"f0": "Ann"}, origin=""))[0] == 403

@@ -12836,7 +12836,16 @@
       "timeout": "Esperar por ti",
       "eventsHint": "Solo los eventos marcados inician una ejecución. La prueba ping de GitHub se responde sin iniciar ninguna.",
       "noGate": "Iniciar sin aprobación. El primer paso no es una puerta de aprobación, así que una solicitud inicia el agente de inmediato. El contenido externo le llega sin que nadie lo vea antes.",
-      "default": "En las ejecuciones de este disparador, cada llamada a herramienta espera tu confirmación. Si nadie responde a tiempo, la ejecución se detiene y no se aprueba nada. El móvil y los canales de chat no pueden aprobar una ejecución de webhook. Solo Claude Code y Codex."
+      "default": "En las ejecuciones de este disparador, cada llamada a herramienta espera tu confirmación. Si nadie responde a tiempo, la ejecución se detiene y no se aprueba nada. El móvil y los canales de chat no pueden aprobar una ejecución de webhook. Solo Claude Code y Codex.",
+      "fields": "Campos",
+      "fieldLabel": "Etiqueta",
+      "fieldType": "Tipo",
+      "required": "Obligatorio",
+      "removeField": "Quitar",
+      "addField": "Añadir campo",
+      "options": "Opciones, separadas por comas",
+      "fieldsHint": "No hay archivos, contraseñas ni HTML personalizado.",
+      "public": "Permite abrir este formulario desde fuera de este equipo. Su dirección quedará en el historial del navegador y en los registros de tu túnel, y quien la tenga podrá iniciar una ejecución. Desactivado, solo se abre en este equipo."
     },
     "perMinute": "por minuto",
     "perDay": "por día",
@@ -12861,7 +12870,9 @@
       "secret": "Secreto",
       "copyCurl": "Copiar llamada de prueba",
       "done": "Ya lo he guardado",
-      "githubHint": "En GitHub, abre Settings → Webhooks del repositorio, pega ambos y elige application/json. La dirección debe ser pública, así que define antes un nombre de host arriba."
+      "githubHint": "En GitHub, abre Settings → Webhooks del repositorio, pega ambos y elige application/json. La dirección debe ser pública, así que define antes un nombre de host arriba.",
+      "titleForm": "Dirección de {name}",
+      "formHint": "Esta dirección es la única clave: quien la tenga puede abrir el formulario. Compártela como una contraseña."
     },
     "rotateKey": "Sustituir clave",
     "rotateSecret": "Sustituir secreto",
@@ -12924,7 +12935,21 @@
       "key-unavailable": "No se pudo acceder al almacén de claves",
       "unattended-on": "Desatendido activado",
       "unattended-off": "Desatendido desactivado",
-      "no-gate-acknowledged": "Iniciar sin aprobación marcado"
+      "no-gate-acknowledged": "Iniciar sin aprobación marcado",
+      "form-invalid": "Formulario con valores no válidos",
+      "form-public": "Formulario hecho público",
+      "bad-csrf": "Formulario sin un token válido",
+      "cross-site": "Formulario enviado desde otro sitio"
+    },
+    "rotateForm": "Sustituir dirección",
+    "fieldType": {
+      "text": "Texto",
+      "textarea": "Texto largo",
+      "number": "Número",
+      "email": "Correo",
+      "date": "Fecha",
+      "select": "Lista",
+      "checkbox": "Casilla"
     }
   }
 }

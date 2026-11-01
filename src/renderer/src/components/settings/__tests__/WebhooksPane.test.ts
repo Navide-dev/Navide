@@ -7,7 +7,7 @@ import type { WebhookStatus, WebhookTrigger } from '../../../lib/webhookTriggers
 
 const trigger = (over: Partial<WebhookTrigger> = {}): WebhookTrigger => ({
   id: 't1', name: 'CI', workspace: '/w', pipeline_id: 'p', kind: 'webhook', enabled: true, per_minute: 6, per_day: 20,
-  no_gate_ack: false, unattended: false, approval_timeout_min: 30, github_events: [], ...over,
+  no_gate_ack: false, unattended: false, approval_timeout_min: 30, github_events: [], form_fields: [], form_public: false, ...over,
 })
 
 const status = (over: Partial<WebhookStatus> = {}): WebhookStatus => ({
@@ -89,6 +89,29 @@ describe('WebhooksPane keys', () => {
     await wrapper.find(q('webhooks-reveal-done')).trigger('click')
     await flushPromises()
     expect(wrapper.html()).not.toContain(value)
+  })
+
+  it('a form sends its fields, stays private unless ticked, and shows its address once', async () => {
+    const value = 'nv' + 'wh_form'
+    const { wrapper, sent } = await mountPane(status({ triggers: [] }), {
+      'webhook.trigger.create': { ok: true, payload: { trigger: trigger({ kind: 'form' }), token: value, problem: '' } },
+    })
+    await wrapper.find(q('webhooks-new')).trigger('click')
+    await wrapper.find(q('webhooks-form-name')).setValue('Ask')
+    await wrapper.find(q('webhooks-form-kind')).setValue('form')
+    expect(wrapper.find(q('webhooks-form-create')).attributes('disabled')).toBeDefined()
+    await wrapper.find(`${q('webhooks-form-field')} input`).setValue('Your name')
+    await wrapper.find(q('webhooks-form-create')).trigger('click')
+    await flushPromises()
+    const payload = sent.find((m) => m.type === 'webhook.trigger.create')?.payload
+    expect(payload).toMatchObject({ kind: 'form', form_public: false })
+    expect((payload?.fields as Array<{ label: string }>)[0].label).toBe('Your name')
+    expect(wrapper.find(q('webhooks-reveal')).text()).toContain(`/form/${value}`)
+  })
+
+  it('a form row keeps no address on screen', async () => {
+    const { wrapper } = await mountPane(status({ triggers: [trigger({ kind: 'form' })] }))
+    expect(wrapper.html()).not.toContain('/webhook/t1')
   })
 
   it('offers no address before a port exists', async () => {

@@ -12836,7 +12836,16 @@
       "timeout": "Esperar por você",
       "eventsHint": "Só os eventos marcados iniciam uma execução. O teste ping do GitHub recebe resposta sem iniciar nada.",
       "noGate": "Iniciar sem aprovação. A primeira etapa não é um portão de aprovação, então uma solicitação inicia o agente na hora. O conteúdo externo chega a ele sem ninguém ver antes.",
-      "default": "Nas execuções deste gatilho, cada chamada de ferramenta espera sua confirmação. Se ninguém responder a tempo, a execução para e nada é aprovado. Celular e canais de chat não aprovam uma execução de webhook. Apenas Claude Code e Codex."
+      "default": "Nas execuções deste gatilho, cada chamada de ferramenta espera sua confirmação. Se ninguém responder a tempo, a execução para e nada é aprovado. Celular e canais de chat não aprovam uma execução de webhook. Apenas Claude Code e Codex.",
+      "fields": "Campos",
+      "fieldLabel": "Rótulo",
+      "fieldType": "Tipo",
+      "required": "Obrigatório",
+      "removeField": "Remover",
+      "addField": "Adicionar campo",
+      "options": "Opções, separadas por vírgulas",
+      "fieldsHint": "Arquivos, senhas e HTML personalizado não estão disponíveis.",
+      "public": "Permite abrir este formulário fora deste computador. O endereço fica no histórico do navegador e nos logs do túnel, e quem o tiver pode iniciar uma execução. Desligado, abre só neste computador."
     },
     "perMinute": "por minuto",
     "perDay": "por dia",
@@ -12861,7 +12870,9 @@
       "secret": "Segredo",
       "copyCurl": "Copiar chamada de teste",
       "done": "Já salvei",
-      "githubHint": "No GitHub, abra Settings → Webhooks do repositório, cole os dois e escolha application/json. O endereço precisa ser público, então defina antes um nome de host acima."
+      "githubHint": "No GitHub, abra Settings → Webhooks do repositório, cole os dois e escolha application/json. O endereço precisa ser público, então defina antes um nome de host acima.",
+      "titleForm": "Endereço de {name}",
+      "formHint": "Este endereço é a única chave: quem o tiver pode abrir o formulário. Compartilhe como uma senha."
     },
     "rotateKey": "Trocar chave",
     "rotateSecret": "Trocar segredo",
@@ -12924,7 +12935,21 @@
       "key-unavailable": "Armazenamento de chaves inacessível",
       "unattended-on": "Sem supervisão ligado",
       "unattended-off": "Sem supervisão desligado",
-      "no-gate-acknowledged": "Iniciar sem aprovação marcado"
+      "no-gate-acknowledged": "Iniciar sem aprovação marcado",
+      "form-invalid": "Formulário com valores inválidos",
+      "form-public": "Formulário tornado público",
+      "bad-csrf": "Formulário sem token válido",
+      "cross-site": "Formulário enviado de outro site"
+    },
+    "rotateForm": "Trocar endereço",
+    "fieldType": {
+      "text": "Texto",
+      "textarea": "Texto longo",
+      "number": "Número",
+      "email": "E-mail",
+      "date": "Data",
+      "select": "Lista",
+      "checkbox": "Caixa de seleção"
     }
   }
 }

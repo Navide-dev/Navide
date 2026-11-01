@@ -12836,7 +12836,16 @@
       "timeout": "Chờ bạn",
       "eventsHint": "Chỉ sự kiện được chọn mới bắt đầu lượt chạy. Kiểm tra ping của GitHub được trả lời mà không chạy.",
       "noGate": "Bắt đầu không cần duyệt. Bước đầu không phải cổng phê duyệt, nên yêu cầu sẽ khởi động agent ngay. Nội dung bên ngoài tới agent mà không ai xem trước.",
-      "default": "Trong các lượt chạy của trigger này, mọi lệnh gọi công cụ đều chờ bạn xác nhận. Nếu không ai trả lời kịp, lượt chạy dừng và không có gì được duyệt. Điện thoại và kênh chat không thể duyệt lượt chạy webhook. Chỉ Claude Code và Codex."
+      "default": "Trong các lượt chạy của trigger này, mọi lệnh gọi công cụ đều chờ bạn xác nhận. Nếu không ai trả lời kịp, lượt chạy dừng và không có gì được duyệt. Điện thoại và kênh chat không thể duyệt lượt chạy webhook. Chỉ Claude Code và Codex.",
+      "fields": "Trường",
+      "fieldLabel": "Nhãn",
+      "fieldType": "Loại",
+      "required": "Bắt buộc",
+      "removeField": "Gỡ",
+      "addField": "Thêm trường",
+      "options": "Lựa chọn, cách nhau bằng dấu phẩy",
+      "fieldsHint": "Không hỗ trợ tệp, mật khẩu và HTML tùy chỉnh.",
+      "public": "Cho phép mở biểu mẫu này từ ngoài máy tính này. Địa chỉ sẽ nằm trong lịch sử trình duyệt và nhật ký tunnel, và ai có nó đều có thể bắt đầu lượt chạy. Khi tắt, chỉ mở được trên máy này."
     },
     "perMinute": "mỗi phút",
     "perDay": "mỗi ngày",
@@ -12861,7 +12870,9 @@
       "secret": "Secret",
       "copyCurl": "Sao chép lệnh gọi thử",
       "done": "Tôi đã lưu",
-      "githubHint": "Trong GitHub, mở Settings → Webhooks của kho, dán cả hai và chọn application/json. Địa chỉ phải công khai, nên hãy đặt tên máy chủ ở trên trước."
+      "githubHint": "Trong GitHub, mở Settings → Webhooks của kho, dán cả hai và chọn application/json. Địa chỉ phải công khai, nên hãy đặt tên máy chủ ở trên trước.",
+      "titleForm": "Địa chỉ của {name}",
+      "formHint": "Địa chỉ này là khóa duy nhất: ai có nó đều mở được biểu mẫu. Hãy chia sẻ như mật khẩu."
     },
     "rotateKey": "Thay khóa",
     "rotateSecret": "Thay secret",
@@ -12924,7 +12935,21 @@
       "key-unavailable": "Không kết nối được kho khóa",
       "unattended-on": "Đã bật không giám sát",
       "unattended-off": "Đã tắt không giám sát",
-      "no-gate-acknowledged": "Đã chọn Bắt đầu không cần duyệt"
+      "no-gate-acknowledged": "Đã chọn Bắt đầu không cần duyệt",
+      "form-invalid": "Biểu mẫu có giá trị không hợp lệ",
+      "form-public": "Đã công khai biểu mẫu",
+      "bad-csrf": "Biểu mẫu không có token hợp lệ",
+      "cross-site": "Biểu mẫu gửi từ trang khác"
+    },
+    "rotateForm": "Thay địa chỉ",
+    "fieldType": {
+      "text": "Văn bản",
+      "textarea": "Văn bản dài",
+      "number": "Số",
+      "email": "Email",
+      "date": "Ngày",
+      "select": "Danh sách",
+      "checkbox": "Hộp chọn"
     }
   }
 }

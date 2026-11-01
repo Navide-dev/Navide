@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { curlExample, minutesLeft, outcomeKey, refusalKey, triggerState, triggerUrl, type WebhookStatus, type WebhookTrigger } from '../webhookTriggers'
+import { curlExample, formUrl, minutesLeft, outcomeKey, refusalKey, triggerState, triggerUrl, type WebhookStatus, type WebhookTrigger } from '../webhookTriggers'
 
 const trigger = { id: 't', enabled: true } as WebhookTrigger
 const status = (over: Partial<WebhookStatus> = {}): WebhookStatus =>
@@ -15,6 +15,17 @@ describe('triggerUrl', () => {
   })
   it('falls back to the stored port while nothing listens', () => {
     expect(triggerUrl(status({ port: 0 }), 'abc')).toContain(':4000/')
+  })
+})
+
+describe('formUrl', () => {
+  const pub = status({ settings: { enabled: true, port: 4000, public_host: 'form.example.com' } })
+  it('stays on loopback until the form is public', () => {
+    expect(formUrl(pub, 'tok', false)).toBe('http://127.0.0.1:4000/form/tok')
+    expect(formUrl(pub, 'tok', true)).toBe('https://form.example.com/form/tok')
+  })
+  it('stays on loopback with no host to publish it on', () => {
+    expect(formUrl(status(), 'tok', true)).toBe('http://127.0.0.1:4000/form/tok')
   })
 })
 

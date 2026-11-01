@@ -63,7 +63,9 @@ _FORM_PATH = re.compile(r"^/form/([A-Za-z0-9_-]{20,80})$")
 _PAGE_HEADERS = [
     (b"content-type", b"text/html; charset=utf-8"),
     (b"content-security-policy", webhook_form.CONTENT_SECURITY_POLICY.encode()),
-    (b"referrer-policy", b"no-referrer"),
+    # Not no-referrer: a browser then sends Origin: null with the page's own POST.
+    # The page links to nothing and loads nothing, so the token still stays here.
+    (b"referrer-policy", b"same-origin"),
     (b"x-frame-options", b"DENY"),
 ]
 _SECURITY_HEADERS = [

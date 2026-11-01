@@ -12836,7 +12836,16 @@
       "timeout": "等你確認",
       "eventsHint": "只有勾選的事件會開跑。GitHub 的 ping 測試會回應，但不開跑。",
       "noGate": "不經核准就開跑。第一步不是核准 Gate，所以請求一到就會啟動 agent，外部內容會在沒有人看過的情況下送到它手上。",
-      "default": "這個觸發開跑的 run，每個工具呼叫都會等你確認。逾時沒有回應，run 就會中止，不會自動放行。手機和聊天頻道無法核准 webhook run。只支援 Claude Code 和 Codex。"
+      "default": "這個觸發開跑的 run，每個工具呼叫都會等你確認。逾時沒有回應，run 就會中止，不會自動放行。手機和聊天頻道無法核准 webhook run。只支援 Claude Code 和 Codex。",
+      "fields": "欄位",
+      "fieldLabel": "標籤",
+      "fieldType": "類型",
+      "required": "必填",
+      "removeField": "移除",
+      "addField": "新增欄位",
+      "options": "選項，用逗號分隔",
+      "fieldsHint": "不支援檔案、密碼和自訂 HTML。",
+      "public": "允許從這台電腦以外開啟這張表單。位址會留在瀏覽紀錄和 tunnel 的 log，拿到的人都能開跑。不勾選時只有這台電腦能開。"
     },
     "perMinute": "次／分鐘",
     "perDay": "次／天",
@@ -12861,7 +12870,9 @@
       "secret": "Secret",
       "copyCurl": "複製測試指令",
       "done": "我已保存",
-      "githubHint": "到 GitHub 儲存庫的 Settings → Webhooks 貼上這兩項，Content type 選 application/json。位址必須是公開的，請先在上方設定主機名稱。"
+      "githubHint": "到 GitHub 儲存庫的 Settings → Webhooks 貼上這兩項，Content type 選 application/json。位址必須是公開的，請先在上方設定主機名稱。",
+      "titleForm": "{name} 的位址",
+      "formHint": "這個位址就是唯一的金鑰，拿到的人都能開啟表單。請像密碼一樣分享。"
     },
     "rotateKey": "更換金鑰",
     "rotateSecret": "更換 secret",
@@ -12924,7 +12935,21 @@
       "key-unavailable": "連不上金鑰保護區",
       "unattended-on": "已開啟無人值守",
       "unattended-off": "已關閉無人值守",
-      "no-gate-acknowledged": "已勾選不經核准就開跑"
+      "no-gate-acknowledged": "已勾選不經核准就開跑",
+      "form-invalid": "表單內容不正確",
+      "form-public": "表單已設為公開",
+      "bad-csrf": "表單沒有有效的 token",
+      "cross-site": "表單來自其他網站"
+    },
+    "rotateForm": "更換位址",
+    "fieldType": {
+      "text": "文字",
+      "textarea": "多行文字",
+      "number": "數字",
+      "email": "Email",
+      "date": "日期",
+      "select": "下拉選單",
+      "checkbox": "勾選"
     }
   }
 }

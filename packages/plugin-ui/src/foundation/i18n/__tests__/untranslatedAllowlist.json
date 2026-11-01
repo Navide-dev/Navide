@@ -428,7 +428,9 @@
     "webhooks.minutesUnit",
     "webhooks.more",
     "webhooks.nav",
-    "webhooks.reveal.secret"
+    "webhooks.reveal.secret",
+    "webhooks.form.fieldType",
+    "webhooks.fieldType.date"
   ],
   "de-DE": [
     "account.title",
@@ -608,7 +610,8 @@
     "webhooks.kind.github",
     "webhooks.kind.webhook",
     "webhooks.nav",
-    "webhooks.reveal.secret"
+    "webhooks.reveal.secret",
+    "webhooks.fieldType.text"
   ],
   "pt-BR": [
     "account.title",
@@ -1056,7 +1059,8 @@
     "webhooks.kind.github",
     "webhooks.kind.webhook",
     "webhooks.outcome.ping",
-    "webhooks.reveal.secret"
+    "webhooks.reveal.secret",
+    "webhooks.fieldType.email"
   ],
   "ja-JP": [
     "webhooks.form.pipeline",
@@ -1081,6 +1085,7 @@
     "webhooks.reveal.secret"
   ],
   "zh-TW": [
+    "webhooks.fieldType.email",
     "webhooks.form.pipeline",
     "webhooks.host.placeholder",
     "webhooks.kind.github",
