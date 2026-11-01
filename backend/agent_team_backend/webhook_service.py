@@ -10,6 +10,11 @@ and a custom launch command skips that code altogether. The backend sees every
 one of them, so a webhook run cannot start a pane with a permission bypass
 whichever path made it. Panes are remembered in the store, so a resume after a
 restart is held to the same rule, and a pane a run pane opened inherits it.
+
+A restored pane gets a new id, so the id alone does not recognise it. Its
+session does: every session a run pane used is kept in `webhook_run_sessions`,
+for as long as the transcript can be resumed. A resume that cannot be named, or
+a lookup that fails, loses the bypass rather than keeping it.
 """
 
 from __future__ import annotations
@@ -17,10 +22,12 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
+import os
 import re
+import sqlite3
 import time
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 
 from . import guard_fail_closed, pipeline_graph, webhook_keystore, webhook_payload, webhook_triggers
 from .db import Database
@@ -72,8 +79,72 @@ _ASK = {
 }
 
 
+#: Quotes count as a boundary: `bash -lc 'claude --resume x'` has the flag next to one.
+_BYPASS_FLAG = re.compile(
+    r"""\s*(?<![^\s'"])(?:--(?:allow-)?dangerously-skip-permissions|--permission-mode(?:=|\s+)['"]?bypassPermissions)(?![^\s'"])"""
+)
+_TOKEN = re.compile(r"""'[^']*'|"[^"]*"|\S+""")
+_SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
+_ID_FLAGS = frozenset({"--resume", "-r", "--session-id"})
+_RESUME_FLAGS = frozenset({"--resume", "-r"})
+_CONTINUE_FLAGS = frozenset({"--continue", "-c"})
+
+
 class LaunchRefused(RuntimeError):
     """A pane of a webhook run that cannot be started without a bypass."""
+
+
+class _SessionRefs(NamedTuple):
+    """What a Claude command says about sessions."""
+
+    ids: tuple[str, ...] = ()
+    #: It reopens a conversation, as opposed to pinning a new one's id.
+    resumes: bool = False
+    #: It reopens one the line does not name, or names in a way that cannot be read.
+    unclear: bool = False
+
+
+def _session_refs(line: str) -> _SessionRefs:
+    ids: list[str] = []
+    resumes = unclear = False
+    tokens = [token.strip("'\"") if token[0] in "'\"" else token for token in _TOKEN.findall(line)]
+    for raw, token in zip(_TOKEN.findall(line), tokens, strict=True):
+        if raw[0] in "'\"" and " " in token and token[0] not in "{[":
+            inner = _session_refs(token)
+            ids.extend(inner.ids)
+            resumes, unclear = resumes or inner.resumes, unclear or inner.unclear
+    for index, token in enumerate(tokens):
+        flag, sign, value = token.partition("=")
+        if token in _CONTINUE_FLAGS:
+            resumes = unclear = True
+        elif flag in _ID_FLAGS:
+            resumes = resumes or flag in _RESUME_FLAGS
+            if not sign:
+                value = tokens[index + 1] if index + 1 < len(tokens) else ""
+            if _SESSION_ID.match(value):
+                ids.append(value)
+            else:
+                unclear = True
+    return _SessionRefs(tuple(ids), resumes, unclear)
+
+
+def _dropped_bypass(command: Any) -> Any:
+    """`command` without a bypass flag, and the same object if it had none."""
+    if _BYPASS_FLAG.search(_line(command)) is None:
+        return command
+    return _rewrite(command, lambda text: _BYPASS_FLAG.sub("", text).strip())
+
+
+def without_bypass(agent_key: str, command: Any) -> Any:
+    """For when the service itself could not start: nothing can say whose
+    session this is, so a pane that reopens one keeps its CLI's own prompts."""
+    if agent_key not in VENDORS or not _session_refs(_line(command)).resumes:
+        return command
+    return _dropped_bypass(command)
+
+
+def _workspace_key(path: str) -> str:
+    return os.path.normcase(path.rstrip("/\\"))
 
 
 class Window(Protocol):
@@ -204,6 +275,7 @@ class WebhookService:
         self._pipeline = pipeline
         self._known_program = known_program
         self._guarded = store.run_panes()
+        self._noted_sessions: set[str] = set()
         self._active: dict[str, dict[str, Any]] = {run["workspace"]: run for run in store.open_runs()}
         self._armed: dict[str, dict[str, Any]] = {}
         self._starting: set[str] = set()
@@ -378,6 +450,16 @@ class WebhookService:
         the pane belongs to a webhook run."""
         known = self._guarded.get(pane_id)
         parent = self._guarded.get(str(metadata.get("spawned_by") or ""))
+        refs = _session_refs(_line(command)) if agent_key in VENDORS else _SessionRefs()
+        resumed = None
+        if known is None and parent is None:
+            try:
+                resumed = self._resumed_run(refs)
+            except sqlite3.Error as err:
+                # No run id to trust, so the pane is not recorded as one.
+                log.warning("webhook: session lookup failed, starting this pane without a bypass: %s", err)
+                return _dropped_bypass(command)
+        workspace = str(metadata.get("workspace_path") or "")
         if known is not None:
             run_id, unattended = known
         elif parent is not None:
@@ -385,11 +467,14 @@ class WebhookService:
             # for that pane, and without it a failed hook still leaves the
             # CLI's own prompt, so it needs no fail-closed hook either.
             run_id, unattended = parent[0], False
+        elif resumed is not None:
+            run_id, unattended = resumed
         else:
-            active = self._active.get(str(metadata.get("workspace_path") or ""))
+            active = self._active.get(workspace)
             if active is None or metadata.get("origin") != "pipeline":
-                return command
+                return self._unsure(command, refs, workspace)
             run_id, unattended = active["id"], bool(active["unattended"])
+        unattended = unattended and self._still_unattended(run_id)
         if agent_key not in VENDORS:
             raise LaunchRefused(f"a webhook run cannot start {agent_key or 'this CLI'}: it has no tested Guard hook")
         line = _line(command)
@@ -398,10 +483,57 @@ class WebhookService:
         if _SHELL_SYNTAX.search(line) or not self._known_program(agent_key, program):
             # A custom launch command: whatever it runs is out of sight here.
             raise LaunchRefused(f"a webhook run needs the standard {agent_key} command, not a custom launch command")
-        if pane_id not in self._guarded:
-            self._guarded[pane_id] = (run_id, unattended)
-            self.store.add_run_pane(pane_id, run_id, unattended)
+        try:
+            if self._guarded.get(pane_id) != (run_id, unattended):
+                self.store.add_run_pane(pane_id, run_id, unattended)
+                self._guarded[pane_id] = (run_id, unattended)
+            self.store.add_run_sessions(refs.ids, agent_key, run_id, unattended, pane_id)
+        except sqlite3.Error as err:
+            # An unrecorded session would look like nobody's after a restart.
+            raise LaunchRefused("a webhook run pane could not be recorded") from err
         return _rewrite(command, lambda text: _with_mode(agent_key, text, unattended=unattended))
+
+    def _resumed_run(self, refs: _SessionRefs) -> tuple[str, bool] | None:
+        """The run one of these sessions belongs to."""
+        for session_id in refs.ids:
+            found = self.store.run_session(session_id)
+            if found is not None:
+                return found
+        return None
+
+    def _unsure(self, command: Any, refs: _SessionRefs, workspace: str) -> Any:
+        """A pane no run claims. It may still reopen a run's conversation when
+        the line does not say which one and that workspace has had runs."""
+        if not refs.unclear or _BYPASS_FLAG.search(_line(command)) is None:
+            return command
+        try:
+            workspaces = {_workspace_key(path) for path in self.store.run_workspaces()}
+        except sqlite3.Error as err:
+            log.warning("webhook: run lookup failed, starting this pane without a bypass: %s", err)
+            return _dropped_bypass(command)
+        if _workspace_key(workspace) in workspaces or (workspaces and not workspace):
+            return _dropped_bypass(command)
+        return command
+
+    def _still_unattended(self, run_id: str) -> bool:
+        """Unattended holds only while its trigger exists and still says so."""
+        try:
+            return self.store.run_trigger_unattended(run_id)
+        except sqlite3.Error as err:
+            log.warning("webhook: trigger lookup failed, this pane will ask: %s", err)
+            return False
+
+    def note_pane_session(self, pane_id: str, vendor: str, session_id: str) -> None:
+        """A run pane moved to another session, as /clear does."""
+        known = self._guarded.get(pane_id)
+        if known is None or vendor not in VENDORS or not session_id or session_id in self._noted_sessions:
+            return
+        try:
+            self.store.add_run_sessions((session_id,), vendor, known[0], known[1], pane_id)
+        except sqlite3.Error:
+            log.exception("webhook: could not record a run pane's session")
+            return
+        self._noted_sessions.add(session_id)
 
     def is_run_pane(self, pane_id: str) -> bool:
         return pane_id in self._guarded
@@ -511,12 +643,23 @@ class WebhookService:
 
 
 _service: WebhookService | None = None
+_unavailable = False
 
 
 def current() -> WebhookService | None:
     """The service once startup built it. None means no webhook code has run,
     so callers on an existing path stay exactly what they were."""
     return _service
+
+
+def mark_unavailable() -> None:
+    """Startup failed: every launch goes without this service from here on."""
+    global _unavailable
+    _unavailable = True
+
+
+def unavailable() -> bool:
+    return _unavailable
 
 
 def configure(service: WebhookService | None) -> None:

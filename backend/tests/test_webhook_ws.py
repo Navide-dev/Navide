@@ -139,6 +139,21 @@ class TestRefusals:
         assert [r["outcome"] for r in rows] == ["no-gate-acknowledged"]
 
 
+class TestSessionNotes:
+    async def test_the_app_passes_a_run_panes_new_session_on(self, env) -> None:
+        run = env.store.open_run(trigger_id="t", workspace=WS, project_id="p", pipeline_id=PIPE, unattended=False)
+        env.store.add_run_pane("pane", run["id"], False)
+        webhook_service.configure(webhook_service.WebhookService(
+            store=env.store, db=env.store.db, window=Window(), pipeline=lambda _: None, known_program=lambda *_: True,
+        ))
+        app_module._note_webhook_session("pane", "claude", "after-clear")
+        assert env.store.run_session("after-clear") == (run["id"], False)
+
+    def test_with_no_service_nothing_happens(self, monkeypatch) -> None:
+        monkeypatch.setattr(webhook_service, "_service", None)
+        app_module._note_webhook_session("pane", "claude", "x")
+
+
 class TestUnattended:
     async def test_is_audited_both_ways(self, env, monkeypatch) -> None:
         monkeypatch.setattr(webhook_ws.guard_fail_closed, "unattended_supported", lambda: True)
