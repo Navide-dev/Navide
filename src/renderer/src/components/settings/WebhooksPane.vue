@@ -430,6 +430,7 @@ const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(s
           <span>{{ t('webhooks.form.noGate') }}</span>
         </label>
         <p class="wh-hint">{{ t('webhooks.form.default') }}</p>
+        <p class="wh-hint">{{ t('webhooks.form.codexTrust') }}</p>
         <div class="wh-actions">
           <button type="button" class="wh-btn ghost" @click="creating = false">{{ t('webhooks.cancel') }}</button>
           <button type="button" class="wh-btn primary" data-testid="webhooks-form-create" :disabled="busy || !canCreate" @click="create">{{ t('webhooks.create') }}</button>

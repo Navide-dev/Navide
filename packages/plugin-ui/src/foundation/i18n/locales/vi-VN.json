@@ -12847,6 +12847,7 @@
       "eventsHint": "Chỉ sự kiện được chọn mới bắt đầu lượt chạy. Kiểm tra ping của GitHub được trả lời mà không chạy.",
       "noGate": "Bắt đầu không cần duyệt. Bước đầu không phải cổng phê duyệt, nên yêu cầu sẽ khởi động agent ngay. Nội dung bên ngoài tới agent mà không ai xem trước.",
       "default": "Claude Code chờ bạn xác nhận ở mọi lệnh gọi công cụ. Codex không có chế độ này nên chạy trong sandbox chỉ đọc: đọc không cần hỏi, còn ghi và mạng cần bạn duyệt. Nếu không ai trả lời kịp, lượt chạy dừng và không có gì được duyệt. Điện thoại và kênh chat không thể duyệt lượt chạy webhook. Chỉ Claude Code và Codex.",
+      "codexTrust": "Codex: lần đầu sẽ hỏi có tin tưởng hook của Navide không. Phải có người trả lời trong pane, nếu không lượt chạy sẽ thất bại. Hãy xem hướng dẫn trước khi dùng.",
       "fields": "Trường",
       "fieldLabel": "Nhãn",
       "fieldType": "Loại",

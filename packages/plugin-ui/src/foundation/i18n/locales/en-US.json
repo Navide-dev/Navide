@@ -12847,6 +12847,7 @@
       "eventsHint": "Only events you tick start a run. GitHub's ping test is answered without one.",
       "noGate": "Start without approval. The first step is not an approval gate, so a request starts the agent right away. External content reaches it without anyone looking first.",
       "default": "Claude Code asks you before every tool call. Codex has no such mode, so it runs in a read-only sandbox: it can read without asking, and writes and network need your approval. If nobody answers in time, the run stops and nothing is approved. Phone and chat channels cannot approve for a webhook run. Claude Code and Codex only.",
+      "codexTrust": "Codex: the first time, it asks whether to trust Navide's hooks. Someone has to answer in the pane, or the run fails. See the guide before using Codex here.",
       "fields": "Fields",
       "fieldLabel": "Label",
       "fieldType": "Type",

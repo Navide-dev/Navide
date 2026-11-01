@@ -12847,6 +12847,7 @@
       "eventsHint": "Nur angehakte Ereignisse starten einen Lauf. GitHubs Ping-Test wird beantwortet, ohne einen zu starten.",
       "noGate": "Ohne Freigabe starten. Der erste Schritt ist kein Freigabe-Gate, also startet eine Anfrage den Agenten sofort. Externe Inhalte erreichen ihn, ohne dass jemand sie zuerst sieht.",
       "default": "Claude Code wartet bei jedem Tool-Aufruf auf dich. Codex hat diesen Modus nicht und läuft deshalb in einer schreibgeschützten Sandbox: Lesen geschieht ohne Rückfrage, Schreiben und Netzwerk brauchen deine Freigabe. Antwortet niemand rechtzeitig, stoppt der Lauf, und nichts wird freigegeben. Über Telefon und Chat-Kanäle lässt sich ein Webhook-Lauf nicht freigeben. Nur Claude Code und Codex.",
+      "codexTrust": "Codex: Beim ersten Mal fragt es, ob es Navides Hooks vertrauen soll. Jemand muss im Pane antworten, sonst schlägt der Lauf fehl. Lies vor der Nutzung die Anleitung.",
       "fields": "Felder",
       "fieldLabel": "Beschriftung",
       "fieldType": "Typ",

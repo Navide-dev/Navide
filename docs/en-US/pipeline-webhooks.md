@@ -85,6 +85,20 @@ form opens on this computer only unless you tick it public. A public form's
 address ends up in browser history and tunnel logs, and anyone holding it can
 start a run.
 
+## Codex and hook trust
+
+Navide does not skip Codex's own check of the hooks it adds. The first time, a
+Codex pane stops at **Hooks need review**. Until someone answers it in the pane
+(**2. Trust all and continue**), the run cannot go on and it fails.
+
+- Trust is kept in Codex's `config.toml`, so later panes do not ask again.
+- Codex keeps one trust entry for this hook position. The regular hook and the
+  unattended hook have different content, so trusting one replaces the other,
+  and whichever was replaced asks again. This also reaches your ordinary Codex
+  panes. On a machine that uses both, expect to be asked each time the kind of
+  pane changes.
+- Do not choose **Continue without trusting**: Guard's hook then does not run.
+
 ## How a run behaves
 
 - **Everything the request sent is untrusted.** It reaches the agent as marked

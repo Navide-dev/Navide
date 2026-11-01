@@ -12847,6 +12847,7 @@
       "eventsHint": "Só os eventos marcados iniciam uma execução. O teste ping do GitHub recebe resposta sem iniciar nada.",
       "noGate": "Iniciar sem aprovação. A primeira etapa não é um portão de aprovação, então uma solicitação inicia o agente na hora. O conteúdo externo chega a ele sem ninguém ver antes.",
       "default": "O Claude Code espera sua confirmação a cada chamada de ferramenta. O Codex não tem esse modo, então roda em um sandbox somente leitura: lê sem perguntar, e escrita e rede precisam da sua aprovação. Se ninguém responder a tempo, a execução para e nada é aprovado. Celular e canais de chat não aprovam uma execução de webhook. Apenas Claude Code e Codex.",
+      "codexTrust": "Codex: na primeira vez, ele pergunta se deve confiar nos hooks do Navide. Alguém precisa responder no painel, ou a execução falha. Veja o guia antes de usar.",
       "fields": "Campos",
       "fieldLabel": "Rótulo",
       "fieldType": "Tipo",
