@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Pipelines (0.2.37): a webhook can start a pipeline. Off by default; nothing listens until you turn it on and enable a trigger. A run a webhook starts carries Guard taint, keeps its panes out of permission bypass so every tool call waits for you, refuses to start while App Lock is on, and accepts only Claude Code and Codex. The request's body goes to the agent as marked data and stays out of the run log, which records only its size and hash. GitHub can start a run too: a signed delivery of an event you picked, with only a short list of its fields passed on. Its secret is shown once, kept encrypted, and on Linux protected only by file permissions, which you confirm when you enable the trigger. Set it up in Settings → Webhooks, which also shows each trigger's state, how long a waiting run has left, and its activity. A trigger can run unattended if you turn that on for it: the page says what that gives up before it lets you. New strings in all 11 interface languages.
+
 ### Fixed
 
 - Terminal activity (0.2.37): a pane that started fresh on a session id whose old transcript was gone stopped reporting its turns, so Telegram said "the reply text has not been read yet" and the reply never came. The saved read position pointed past the end of the new file; Navide now spots that once per file and reads on from the end, without resending earlier turns.

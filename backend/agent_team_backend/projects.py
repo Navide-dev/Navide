@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import webhook_payload
 from .db import DB_FILENAME, WorkspaceDatabases
 from .path_guard import PROJECT_DIR_NAME
 
@@ -699,7 +700,7 @@ class ProjectStore:
             {
                 "event": "pipeline_start",
                 "project_id": project.id,
-                "task": task_description,
+                "task": webhook_payload.log_safe_task(task_description),
                 "total_stages": total_stages,
                 "log_file": project.log_file_name,
             },

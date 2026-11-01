@@ -301,6 +301,13 @@ function isImportedWithoutTask(kickoffBody: string): boolean {
  *  `slotRoster` is the list of OTHER slots in the same stage (used by the
  *  Manager protocol to tell the Manager who it's coordinating).
  *  `managerLabel` is the Manager slot's label (used by Worker protocol). */
+/** Whether a run's task is a webhook's: the boundary the backend wraps external
+ *  data in (webhook_payload). The task text is all a resumed run has. A task
+ *  that merely quotes the boundary changes nothing but its own kickoff. */
+export function holdsWebhookData(text: string): boolean {
+  return text.includes('<<<NAVIDE-WEBHOOK-DATA-')
+}
+
 export function renderSlotKickoff(
   slot: StageSlot,
   task: string,
@@ -316,9 +323,14 @@ export function renderSlotKickoff(
     '{{task}}',
     task.trim() || '(no task description provided)'
   )
-  const body = isImportedWithoutTask(slot.kickoffBody) && task.trim()
-    ? `${placed}\n\n---\n\n[Task from the person who started this run]\n${task.trim()}`
-    : placed
+  // A step imported from n8n has no {{task}} of its own. A webhook's data is what
+  // such a step exists to work on, and it comes wrapped and is not someone's word.
+  let body = placed
+  if (holdsWebhookData(task) && !slot.kickoffBody.includes('{{task}}')) {
+    body = `${placed}\n\n${task.trim()}`
+  } else if (isImportedWithoutTask(slot.kickoffBody) && task.trim()) {
+    body = `${placed}\n\n---\n\n[Task from the person who started this run]\n${task.trim()}`
+  }
   let protocol: string
   if (opts.isCommander) {
     protocol = renderManagerProtocol(opts.slotRoster ?? [])

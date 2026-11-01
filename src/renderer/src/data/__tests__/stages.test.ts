@@ -168,3 +168,28 @@ describe('renderSlotKickoff with a step imported from n8n', () => {
     expect(source).toContain('(f"[External content: imported from the n8n workflow \\"{wf_name}\\".')
   })
 })
+
+describe('renderSlotKickoff with a webhook task', () => {
+  const task = 'Webhook trigger "x" started this run.\n<<<NAVIDE-WEBHOOK-DATA-abc\npayload\nNAVIDE-WEBHOOK-DATA-abc>>>\n'
+  const slot = (kickoffBody: string) => ({ agentKey: 'claude', roleKey: '', label: 'a', kickoffBody }) as unknown as Parameters<typeof renderSlotKickoff>[0]
+
+  it('reaches a step with no {{task}} of its own, as an imported one is', () => {
+    expect(renderSlotKickoff(slot('### Step 1'), task)).toMatch(/### Step 1\n\nWebhook trigger[\s\S]*payload/)
+  })
+
+  it('appears once in a step that places it', () => {
+    const out = renderSlotKickoff(slot('Do: {{task}} now'), task)
+    expect(out.split('<<<NAVIDE-WEBHOOK-DATA-').length).toBe(2)
+  })
+
+  it('leaves any other task out of a step with no {{task}}, as before', () => {
+    expect(renderSlotKickoff(slot('### Step 1'), 'fix the login page')).not.toContain('fix the login page')
+  })
+
+  it('reaches an imported step as data, not as what a person typed', () => {
+    const imported = '[External content: imported from the n8n workflow "wf".]\n\n### Step 1'
+    const out = renderSlotKickoff(slot(imported), task)
+    expect(out.split('<<<NAVIDE-WEBHOOK-DATA-').length).toBe(2)
+    expect(out).not.toContain('[Task from the person who started this run]')
+  })
+})

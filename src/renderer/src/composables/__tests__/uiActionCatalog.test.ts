@@ -190,3 +190,9 @@ describe('DESTRUCTIVE_ACTIONS', () => {
     expect(describeUiAction('ui.pane.focus').destructive).toBeUndefined()
   })
 })
+
+// An agent must not be able to open a door for itself: triggers are made in the
+// Settings window alone, over webhook.* messages no ui.* action reaches.
+it('has no webhook action', () => {
+  expect(Object.keys(UI_ACTION_SPECS).filter((name) => /webhook/i.test(name))).toEqual([])
+})

@@ -1736,7 +1736,11 @@
           "title": "Huy hiệu trạng thái",
           "summary": "Đổi tên từng trạng thái pane và chọn màu cho nó, theo từng ngôn ngữ."
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhook",
+        "summary": "Khởi động pipeline từ hệ thống khác qua HTTP, bằng khóa hoặc chữ ký GitHub."
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "Ẩn mọi cửa sổ sau màn hình khóa và mở khóa bằng Touch ID, Windows Hello hoặc PIN"
         },
@@ -2817,14 +2821,14 @@
         "intro": "Mỗi tab trong mười chín tab cài đặt điều khiển gì, Navide Cloud nối nhiều máy thành một mạng riêng như thế nào, và các thành phần hệ thống nằm ngoài màn hình chính — các menu, các cửa sổ độc lập, các chế độ xem mức sử dụng và việc bảo trì tài nguyên.",
         "s1": {
           "title": "Tổng quan về cài đặt",
-          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>25 tab</strong>.",
+          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>26 tab</strong>.",
           "h1": "Ô tìm kiếm",
           "p2": "Dưới tiêu đề thanh bên có một ô tìm kiếm với chữ gợi ý <code>Tìm cài đặt…</code>. Ô này tìm theo tên cài đặt, mục chứa cài đặt và từ khóa <strong>trên mọi tab</strong> (theo ngôn ngữ giao diện hiện tại và các từ khóa đã lập chỉ mục), hiển thị tối đa 8 kết quả; nhấp vào một kết quả sẽ chuyển sang tab đó và cuộn tới mục tương ứng (có một ngoại lệ: “Lưu trữ” đóng cài đặt và mở thẳng Resource Manager). Khi không có kết quả, ô hiển thị <code>Không có cài đặt phù hợp</code>. <kbd class=\"syh-kbd\">Esc</kbd> xóa nội dung ô.",
           "callout": {
             "title": "Chỉ mục tìm kiếm chưa đầy đủ",
             "text": "Chỉ mục là một danh sách được duy trì thủ công, và <strong>các tab {layout}, {notifications}, {security} và {channels} hoàn toàn không có mục nào</strong>, nên không tìm được gì bên trong các tab này — bạn phải tự mở. Một mục CLI agent sẽ mở thẳng ngăn cài đặt của một CLI (xem chủ đề “CLI agent và tài khoản”)."
           },
-          "h2": "Hai mươi lăm tab",
+          "h2": "Hai mươi sáu tab",
           "tabTable": {
             "group": "Nhóm",
             "tab": "Tab",
@@ -2887,6 +2891,10 @@
             "analyzer": {
               "what": "Backend suy luận cục bộ, tải model, đo hiệu năng model",
               "more": "mục 4 của trang này"
+            },
+            "webhooks": {
+              "what": "Trigger cho phép hệ thống khác khởi động pipeline qua HTTP hoặc từ GitHub, cùng khóa, giới hạn và hoạt động",
+              "more": "Chạy không giám sát và cảnh báo khóa trên Linux được giải thích khi bật."
             },
             "security": {
               "what": "Quy tắc và mức độ của Navide Guard, nhánh được bảo vệ, quy tắc tùy chỉnh và bảo vệ lệnh cho terminal thường",
@@ -12791,6 +12799,142 @@
       "internal": "Đồ thị đã chuyển đổi không hợp lệ. Đây là lỗi của trình nhập.",
       "too-large": "Workflow có dung lượng {sizeMb} MB. Mỗi lần nhập tối đa {limitMb} MB.",
       "store-refused": "Không thể lưu workflow “{workflow}”, nên không có gì được nhập: {problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhook",
+    "guardOff": "Hãy bật Navide Guard trong Cài đặt → Bảo mật trước. Nếu không, webhook vẫn tắt và các yêu cầu đến sẽ bị từ chối.",
+    "portTaken": "Navide không thể bắt đầu lắng nghe: {error}. Hãy giải phóng cổng này rồi bật lại. Navide không đổi cổng vì bên gọi đang dùng cổng này.",
+    "enabled": {
+      "title": "Nhận webhook",
+      "desc": "Cho phép hệ thống khác khởi động pipeline qua HTTP. Chỉ lắng nghe khi mục này bật và có trigger đang bật. Navide chỉ lắng nghe trên máy này. Để truy cập từ bên ngoài, hãy tự thiết lập tunnel. Navide phải đang mở, với một cửa sổ của workspace."
+    },
+    "host": {
+      "title": "Tên máy chủ công khai",
+      "desc": "Tên mà tunnel của bạn trả lời. Yêu cầu tới máy chủ khác sẽ bị từ chối. Để trống nếu chỉ máy này gọi Navide.",
+      "placeholder": "hook.example.com",
+      "warning": "Với tunnel, bất kỳ ai trên internet cũng tới được địa chỉ này. Khi đó chỉ khóa hoặc chữ ký của mỗi trigger ngăn được họ."
+    },
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "create": "Tạo trigger",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép",
+    "delete": "Xóa",
+    "deleteConfirm": "Xóa vĩnh viễn?",
+    "turnOn": "Bật",
+    "more": "Tùy chọn",
+    "triggers": "Trigger",
+    "new": "Trigger mới",
+    "needsWorkspace": "Hãy mở workspace trước. Trigger chạy trong workspace.",
+    "empty": {
+      "title": "Chưa có trigger",
+      "desc": "Trigger nối một địa chỉ với một pipeline: gọi địa chỉ đó sẽ bắt đầu một lượt chạy."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "Biểu mẫu"
+    },
+    "form": {
+      "name": "Tên",
+      "source": "Nguồn",
+      "pipeline": "Pipeline",
+      "workspace": "Workspace",
+      "events": "Sự kiện",
+      "limits": "Giới hạn",
+      "timeout": "Chờ bạn",
+      "eventsHint": "Chỉ sự kiện được chọn mới bắt đầu lượt chạy. Kiểm tra ping của GitHub được trả lời mà không chạy.",
+      "noGate": "Bắt đầu không cần duyệt. Bước đầu không phải cổng phê duyệt, nên yêu cầu sẽ khởi động agent ngay. Nội dung bên ngoài tới agent mà không ai xem trước.",
+      "default": "Trong các lượt chạy của trigger này, mọi lệnh gọi công cụ đều chờ bạn xác nhận. Nếu không ai trả lời kịp, lượt chạy dừng và không có gì được duyệt. Điện thoại và kênh chat không thể duyệt lượt chạy webhook. Chỉ Claude Code và Codex."
+    },
+    "perMinute": "mỗi phút",
+    "perDay": "mỗi ngày",
+    "minutes": "phút chờ",
+    "minutesUnit": "phút",
+    "rate": "{minute}/phút · {day}/ngày",
+    "enable": "Bật {name}",
+    "state": {
+      "off": "Tắt",
+      "listener-off": "Đã bật, không lắng nghe",
+      "ready": "Sẵn sàng",
+      "running": "Đang chạy",
+      "waiting": "Đang chờ bạn · dừng sau {minutes} phút"
+    },
+    "reveal": {
+      "titleKey": "Khóa của {name}",
+      "titleSecret": "Secret của {name}",
+      "once": "Hãy sao chép ngay. Navide không giữ bản đọc được và sẽ không hiện lại.",
+      "noAddress": "Bật trigger và địa chỉ sẽ hiện ở hàng của nó.",
+      "url": "Địa chỉ",
+      "key": "Khóa",
+      "secret": "Secret",
+      "copyCurl": "Sao chép lệnh gọi thử",
+      "done": "Tôi đã lưu",
+      "githubHint": "Trong GitHub, mở Settings → Webhooks của kho, dán cả hai và chọn application/json. Địa chỉ phải công khai, nên hãy đặt tên máy chủ ở trên trước."
+    },
+    "rotateKey": "Thay khóa",
+    "rotateSecret": "Thay secret",
+    "unattended": {
+      "chip": "Không giám sát",
+      "title": "Chạy không giám sát",
+      "desc": "Mặc định tắt. Các pane của lượt chạy từ trigger này bỏ qua hỏi quyền. Khi bật sẽ giải thích ý nghĩa.",
+      "unsupported": "Chưa có trên Windows.",
+      "confirmTitle": "Trước khi chạy không giám sát",
+      "skips": "Agent bỏ qua hỏi quyền. Không ai xác nhận các lệnh gọi công cụ của nó.",
+      "external": "Nó làm việc với nội dung bên ngoài, và nội dung đó có thể tìm cách điều khiển nó.",
+      "scripts": "Guard chỉ chặn lệnh mà nó nhận ra. Nó không thể chặn agent viết script rồi chạy script đó.",
+      "hook": "Nếu hook của Guard không trả lời được, lệnh gọi bị từ chối. Nếu chính tiến trình hook bị kill hoặc treo, lệnh gọi sẽ được cho qua.",
+      "tick": "Tôi hiểu agent xử lý nội dung bên ngoài mà không cần xác nhận."
+    },
+    "weakKey": {
+      "title": "Trên Linux, secret này được bảo vệ yếu hơn",
+      "body": "Khóa nằm trong tệp chỉ được bảo vệ bằng quyền truy cập, nên mọi chương trình chạy dưới tài khoản của bạn đều đọc được. macOS và Windows lưu trong kho bảo vệ của hệ thống.",
+      "tick": "Tôi hiểu và muốn bật trigger này."
+    },
+    "log": {
+      "title": "Hoạt động",
+      "empty": "Chưa có ghi nhận."
+    },
+    "refused": {
+      "vendor-refused": "Pipeline này có bước dùng CLI mà lượt chạy webhook không dùng được. Chỉ hỗ trợ Claude Code và Codex, nơi Guard đã được kiểm thử.",
+      "no-gate": "Bước đầu của pipeline này không phải cổng phê duyệt. Hãy thêm cổng, hoặc tạo lại trigger và chọn Bắt đầu không cần duyệt.",
+      "pipeline-missing": "Pipeline của trigger này không còn tồn tại."
+    },
+    "error": {
+      "GUARD_OFF": "Hãy bật Navide Guard trước.",
+      "KEY_UNAVAILABLE": "Không kết nối được kho khóa của hệ thống. Hãy mở khóa rồi thử lại.",
+      "UNATTENDED_UNSUPPORTED": "Chưa có trên Windows.",
+      "NOT_FOUND": "Trigger này không còn tồn tại.",
+      "BAD_REQUEST": "Hãy kiểm tra giá trị. Giới hạn tối đa 60 mỗi phút và 500 mỗi ngày, thời gian chờ từ 5 đến 240 phút.",
+      "generic": "Không thành công. Hãy thử lại."
+    },
+    "outcome": {
+      "accepted": "Đã nhận",
+      "started": "Đã bắt đầu chạy",
+      "start-failed": "Không bắt đầu chạy",
+      "duplicate": "Trùng lần gửi trước, không chạy",
+      "ping": "GitHub ping",
+      "event-ignored": "Sự kiện chưa chọn",
+      "daily-limit": "Đã đạt giới hạn ngày",
+      "rate-limited": "Quá nhiều yêu cầu",
+      "bad-key": "Sai khóa",
+      "bad-signature": "Sai chữ ký",
+      "run-active": "Đã có lượt chạy",
+      "no-window": "Không có cửa sổ workspace",
+      "app-locked": "App Lock đang bật",
+      "guard-off": "Guard đang tắt",
+      "vendor-refused": "Pipeline dùng CLI không hỗ trợ",
+      "no-gate": "Không có cổng phê duyệt",
+      "awaiting-approval": "Đang chờ bạn",
+      "approval-timeout": "Không ai trả lời, đã dừng lượt chạy",
+      "run-timeout": "Lượt chạy đạt giới hạn 4 giờ",
+      "interrupted": "Lượt chạy bị gián đoạn",
+      "secret-lost": "Không còn đọc được secret, đã tắt trigger. Hãy thay secret để dùng lại.",
+      "key-unavailable": "Không kết nối được kho khóa",
+      "unattended-on": "Đã bật không giám sát",
+      "unattended-off": "Đã tắt không giám sát",
+      "no-gate-acknowledged": "Đã chọn Bắt đầu không cần duyệt"
     }
   }
 }

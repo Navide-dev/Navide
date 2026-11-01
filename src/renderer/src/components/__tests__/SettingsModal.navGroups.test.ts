@@ -25,7 +25,7 @@ describe('SettingsModal nav groups', () => {
   it('gives Navide Services (Cloud, plugins, marketplace) their own group between Agent Assets and System', () => {
     expect(navGroups()).toEqual([
       { title: 'general', tabs: ['general', 'appearance', 'language', 'statusBadges', 'layout', 'notifications', 'voice', 'appLock'] },
-      { title: 'accountsAgents', tabs: ['accounts', 'cliAgents', 'analyzer', 'security', 'channels'] },
+      { title: 'accountsAgents', tabs: ['accounts', 'cliAgents', 'analyzer', 'security', 'webhooks', 'channels'] },
       { title: 'integration', tabs: ['mcp', 'skills', 'prompts', 'memory', 'credentials', 'cliExtensions'] },
       { title: 'navidePlugins', tabs: ['cross-device', 'extensions', 'marketplace'] },
       { title: 'system', tabs: ['keybindings', 'updates', 'help'] },
@@ -56,7 +56,7 @@ describe('SettingsModal nav groups', () => {
     const start = helpSource.indexOf('const tabs: TabRow[] = [')
     const table = helpSource.slice(start, helpSource.indexOf('\n]', start))
     const helpKeys = [...table.matchAll(/navKey: '([\w.-]+)'/g)].map((m) => m[1])
-    expect(navLabelKeys()).toHaveLength(25)
+    expect(navLabelKeys()).toHaveLength(26)
     expect(helpKeys).toEqual(navLabelKeys())
   })
 })

@@ -58,6 +58,13 @@ in-repo docs above.
    rather than trusting this list — it drifts. Per-vendor CLI code lives in
    `backend/agent_team_backend/cli_vendors/` (one file per vendor; see
    `docs/adding-a-cli-vendor.md`).
+6. **One release, one CI** — every version is developed on one
+   `integration/<version>` branch, and CI runs once, after all development is
+   done and the user agrees. Do not open a PR per change: an open PR runs CI on
+   every push. Each change gets its own branch; run its affected tests locally,
+   push the branch and report it for review, and the reviewer merges it into
+   the integration branch. Then one PR, one CI, main, the release dry run, and
+   the user's go. Bug fixes go in the current version, never the next one.
 
 ## Workflow (Plan Documents)
 
