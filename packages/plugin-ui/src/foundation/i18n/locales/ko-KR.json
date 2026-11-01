@@ -2653,9 +2653,9 @@
       "custom-colors": "사용자 지정 색",
       "reset-to-defaults": "↺ 기본값으로 재설정",
       "tweaks-hint": "조정 사항은 현재 테마 위에 적용되며 테마를 바꿔도 유지돼요.",
-      "environment": "환경",
-      "environment-hint": "처음 실행할 때의 환경 감지 마법사를 다시 실행해요(Homebrew / Node / CLI / Ollama 등을 확인해요).",
-      "rerun-env-check": "↻ 환경 검사 다시 실행",
+      "environment": "설정 마법사",
+      "environment-hint": "첫 실행 마법사를 다시 열어 Agent CLI를 설치하고 권한을 확인합니다.",
+      "rerun-env-check": "↻ 설정 마법사 다시 열기",
       "backend-timeout": "백엔드 시작 시간 제한",
       "backend-timeout-hint": "시작하거나 다시 시작할 때 백엔드가 정상이 될 때까지 기다리는 시간이에요. 느린 컴퓨터에서는 늘리세요(15–120초).",
       "backend-timeout-label": "시간 제한(초)",
@@ -9297,7 +9297,7 @@
     "install-foundation-tools": "필요한 기본 도구를 설치하세요...",
     "agent-cli-required": "Agent CLI가 하나 이상...",
     "analyzer-requires-ollama": "분석기에는 Ollama가 필요해요...",
-    "download-model": "아무거나 하나 다운로드하세요. 설치된 모델이면...",
+    "download-model": "아무거나 하나 다운로드하세요. 설치된 모델이면 무엇이든 사용할 수 있어요.",
     "review-instructions": "검토 시작을 클릭해 분석...",
     "match-case": "대/소문자 구분(Aa)",
     "replace-all-truncated": "결과가 잘렸어요 — 모두 바꾸기 전에 검색 범위를 좁히세요",
@@ -10214,7 +10214,8 @@
       "environment": "Navide는 실제 터미널에서 실제 CLI를 구동해요. 이 도구들이 그 기반이에요.",
       "agents": "여는 모든 pane은 이 agent 중 하나를 실행해요. 시작하려면 하나면 충분해요.",
       "permissions": "Navide가 컴퓨터를 제어하는 데 필요한 접근 권한을 허용하세요.",
-      "ready": "모두 확인되었어요. 처음에는 언제든 건너뛸 수 있는 짧은 둘러보기가 작업 영역을 고르고 첫 agent를 여는 과정을 안내해요."
+      "ready": "모두 확인되었어요. 처음에는 언제든 건너뛸 수 있는 짧은 둘러보기가 작업 영역을 고르고 첫 agent를 여는 과정을 안내해요.",
+      "ready-locked": "Navide를 열려면 Agent CLI를 하나 이상 설치하세요. 지금은 건너뛰고 나중에 추가해도 돼요."
     },
     "install": "설치",
     "installing": "설치하는 중…",
@@ -10231,9 +10232,9 @@
     "notif-test-body": "알림이 켜졌어요 — agent 소식을 여기서 받을 수 있어요.",
     "perm": {
       "automation": {
-        "title": "Navide가 터미널에서 설치 명령을 실행하도록 허용",
-        "desc": "일부 CLI는 실제 터미널에서 설치해야 해요. 이 권한이 있으면 Navide가 터미널을 열고 명령을 대신 입력해요.",
-        "why": "macOS에서는 이를 자동화라고 불러요. Navide는 클릭한 설치 명령만 보내며 터미널 창의 내용은 절대 읽지 않아요.",
+        "title": "Navide가 터미널에서 명령을 열도록 허용",
+        "desc": "CLI 진단이나 내장 터미널을 시작할 수 없을 때의 설치 등 일부 작업은 터미널을 열고 명령을 대신 입력해요.",
+        "why": "macOS에서는 이 권한을 '자동화'라고 불러요. Navide는 클릭한 명령만 보내며 터미널 창의 내용은 읽지 않아요.",
         "denied": "터미널 제어가 거부되었어요. 시스템 설정에서 켠 뒤 다시 감지하세요.",
         "pane-hint": "개인정보 보호 및 보안 → 자동화에서 Navide 아래의 터미널을 켜세요."
       },

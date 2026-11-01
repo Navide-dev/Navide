@@ -1549,7 +1549,9 @@ SPEC = VendorSpec(
         # https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli
         # (running it needs PowerShell 6+, which the same page states).
         install_cmds={"win32": PlatformInstall(
-            "winget install GitHub.Copilot", ("winget",), needs_terminal=True)},
+            "winget install GitHub.Copilot", ("winget",), needs_terminal=True),
+            # A cask is macOS-only; the wizard links docs_url instead.
+            "linux": PlatformInstall("")},
         update_cmd="copilot update",
         npm_package="@github/copilot",
         config_home_env="COPILOT_HOME",

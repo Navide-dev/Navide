@@ -14,7 +14,7 @@ import { AVAILABLE_UI_LOCALES, isBetaUiLocale } from '@navide/plugin-ui/foundati
 const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
 const emit = defineEmits<{ (e: 'complete'): void; (e: 'close'): void }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const settings = useSettings()
 function selectLanguage(event: Event): void {
   settings.setLanguage((event.target as HTMLSelectElement).value)
@@ -57,6 +57,10 @@ function blockers(dep: OnboardDep): OnboardDep[] {
   return missingProviders(dep, ob.deps.value)
 }
 
+function listNames(names: string[]): string {
+  return new Intl.ListFormat(locale.value, { style: 'long', type: 'conjunction' }).format(names)
+}
+
 /** Prerequisites the user has to install: the backend refuses Install until
  *  they are there, so the card offers a way to get them instead of the button.
  *  An installed CLI got here some other way and needs none of this. */
@@ -64,14 +68,19 @@ function manualBlockers(dep: OnboardDep): ManualPrerequisite[] {
   return dep.status === 'ok' ? [] : manualPrerequisites(dep, ob.deps.value)
 }
 
+/** The card whose Install ran last: shared prerequisites report only there. */
+const installOwner = ref('')
+
 /**
  * The failure to show on `dep`'s card: its own, or a prerequisite's. Homebrew
  * and Node have no card of their own in the wizard, so a link of the chain
- * that failed has to be reported on the card whose Install ran it.
+ * that failed has to be reported on the card whose Install ran it, and only
+ * there: another card sharing that link has not been installed at all.
  */
 function failureFor(dep: OnboardDep): { dep: OnboardDep; failure: InstallFailure } | null {
   const own = ob.installErrors.value[dep.id]
   if (own) return { dep, failure: own }
+  if (dep.id !== installOwner.value) return null
   for (const link of orderInstalls([dep], ob.deps.value)) {
     const failure = ob.installErrors.value[link.id]
     if (failure) return { dep: link, failure }
@@ -107,13 +116,13 @@ function cardError(card: OnboardDep): string {
 /** A prerequisite this app can install joins the chain the Install button runs,
  *  so it is announced up front: a fresh machine has failed at nothing yet. */
 function cardNotice(card: OnboardDep): string {
-  if (failureFor(card) || manualBlockers(card).length) return ''
-  const names = blockers(card).map((p) => p.label)
-  return names.length ? t('onboard.installs-first', { names: names.join('、') }) : ''
+  if (card.status === 'ok' || failureFor(card) || manualBlockers(card).length) return ''
+  const names = orderInstalls([card], ob.deps.value).filter((p) => p.id !== card.id).map((p) => p.label)
+  return names.length ? t('onboard.installs-first', { names: listNames(names) }) : ''
 }
 
 function blockedNames(card: OnboardDep): string {
-  return manualBlockers(card).map((m) => m.name).join('、')
+  return listNames(manualBlockers(card).map((m) => m.name))
 }
 
 /** One it cannot install (Node on Linux has no install command) blocks the card. */
@@ -230,12 +239,18 @@ function requestPermission(key: TccPermissionKey): void {
   void perms.request(key, payload)
 }
 
+// Open App is locked until a CLI is in, so "everything checks out" would be false.
+const asideKey = computed(() =>
+  current.value === 'ready' && !ob.allRequiredReady.value ? 'onboard.aside.ready-locked' : `onboard.aside.${current.value}`,
+)
+
 const activePermission = computed<TccPermissionKey | null>(() =>
   current.value === 'permissions' ? ((activeKey.value || null) as TccPermissionKey | null) : null,
 )
 
 // ── Footer ────────────────────────────────────────────────────────────────────
 async function installMissing(deps: OnboardDep[]): Promise<void> {
+  installOwner.value = deps[0]?.id ?? ''
   // In list order, `brew install node` runs before Homebrew exists and exits
   // 127. orderInstalls pulls each prerequisite ahead of whatever needs it —
   // the helper existed already but nothing was calling it.
@@ -314,7 +329,6 @@ async function saveComplete(): Promise<boolean> {
             :title="d.label"
             :description="d.description"
             :meta="d.version"
-            :optional="d.optional"
             :done="d.status === 'ok'"
             :expanded="activeKey === d.id"
             :notice="cardNotice(d)"
@@ -449,7 +463,7 @@ async function saveComplete(): Promise<boolean> {
           :caption="$t(`onboard.perm.${activePermission}.pane-hint`)"
           :granted="perms.statuses.value[activePermission] === 'granted'"
         />
-        <OnboardingPreview v-else variant="app" :caption="$t(`onboard.aside.${current}`)" />
+        <OnboardingPreview v-else variant="app" :caption="$t(asideKey)" />
       </aside>
     </div>
 
@@ -487,6 +501,8 @@ async function saveComplete(): Promise<boolean> {
   display: flex;
   flex-direction: column;
   background: var(--bg-base);
+  /* A sibling of `.app`, so the shell's font does not reach it. */
+  font-family: var(--font-ui);
   -webkit-app-region: no-drag;
 }
 

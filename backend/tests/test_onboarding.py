@@ -1255,3 +1255,15 @@ def test_the_stuck_credential_message_does_not_name_a_macos_dialog_on_linux(
 
     monkeypatch.setattr(server_link.osplat, "platform_id", "darwin")
     assert "Keychain" in link.keychain_wait_reason()
+
+
+@pytest.mark.parametrize("dep_id", ["copilot", "droid"])
+def test_a_homebrew_cask_is_not_offered_on_linux(dep_id):
+    """Casks are macOS-only, and Homebrew itself is not listed on Linux."""
+    dep = ob.DEPS_BY_ID[dep_id]
+    install = dep.install_for("linux")
+    assert install.command == ""
+    assert install.requires_binaries == ()
+    assert dep.docs_url
+    assert dep.install_for("darwin").command.startswith("brew install --cask")
+

@@ -2878,7 +2878,7 @@ function startPipeline(): void {
 // Down here rather than at the top of setup: canRunPipeline is a const declared
 // above this line. startPipeline/canRunPipeline let the empty stage's "or run
 // the pipeline" link drive the sidebar's own Run button, guard included.
-defineExpose({ openPipelineDetail, showResumeError, selectSidebarTab, startPipeline, canRunPipeline })
+defineExpose({ openPipelineDetail, showResumeError, selectSidebarTab, startPipeline, canRunPipeline, spawn })
 
 const statusColor = computed(() => {
   switch (props.backendStatus) {

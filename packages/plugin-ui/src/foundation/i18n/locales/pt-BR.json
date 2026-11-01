@@ -2653,9 +2653,9 @@
       "custom-colors": "Cores personalizadas",
       "reset-to-defaults": "↺ Restaurar padrões",
       "tweaks-hint": "Os ajustes ficam por cima do tema atual e são mantidos ao trocar de tema.",
-      "environment": "Ambiente",
-      "environment-hint": "Execute novamente o assistente de detecção de ambiente da primeira inicialização (verifica Homebrew / Node / CLI / Ollama etc.).",
-      "rerun-env-check": "↻ Verificar o ambiente novamente",
+      "environment": "Assistente de configuração",
+      "environment-hint": "Reabre o assistente da primeira execução para instalar CLIs de agentes e revisar as permissões.",
+      "rerun-env-check": "↻ Reabrir o assistente de configuração",
       "backend-timeout": "Tempo limite de inicialização do back-end",
       "backend-timeout-hint": "Quanto tempo esperar o back-end ficar íntegro na inicialização ou reinicialização antes de desistir. Aumente em máquinas mais lentas (15–120 segundos).",
       "backend-timeout-label": "Tempo limite (segundos)",
@@ -9297,7 +9297,7 @@
     "install-foundation-tools": "Instale as ferramentas básicas necessárias…",
     "agent-cli-required": "Pelo menos uma CLI de agent…",
     "analyzer-requires-ollama": "O analisador requer o Ollama…",
-    "download-model": "Baixe qualquer um; qualquer modelo instalado…",
+    "download-model": "Baixe qualquer um. O Navide pode usar qualquer modelo instalado.",
     "review-instructions": "Clique em “Iniciar revisão” para analisar…",
     "match-case": "Diferenciar maiúsculas e minúsculas (Aa)",
     "replace-all-truncated": "Os resultados estão truncados – restrinja a pesquisa antes de substituir tudo",
@@ -10214,7 +10214,8 @@
       "environment": "O Navide controla CLIs reais em terminais reais – estas ferramentas são a base em que ele roda.",
       "agents": "Cada pane que você abre executa um destes agents. Um basta para começar.",
       "permissions": "Conceda o acesso de que o Navide precisa para controlar sua máquina.",
-      "ready": "Tudo verificado. Na primeira vez, um tour curto, que pode ser pulado a qualquer momento, ajuda você a escolher um workspace e abrir seu primeiro agent."
+      "ready": "Tudo verificado. Na primeira vez, um tour curto, que pode ser pulado a qualquer momento, ajuda você a escolher um workspace e abrir seu primeiro agent.",
+      "ready-locked": "Instale pelo menos uma CLI de agente para abrir o Navide. Você também pode pular por enquanto e adicionar uma depois."
     },
     "install": "Instalar",
     "installing": "Instalando…",
@@ -10231,9 +10232,9 @@
     "notif-test-body": "As notificações estão ativadas – é aqui que seus agents vão avisar você.",
     "perm": {
       "automation": {
-        "title": "Permitir que o Navide execute comandos de instalação no Terminal",
-        "desc": "Algumas CLIs precisam ser instaladas em um terminal de verdade. Isso permite que o Navide abra o Terminal e digite o comando por você.",
-        "why": "O macOS chama isso de Automação. O Navide só envia o comando de instalação em que você clicou – ele nunca lê o que está nas suas janelas de terminal.",
+        "title": "Permitir que o Navide abra comandos no Terminal",
+        "desc": "Algumas ações, como diagnósticos de CLI ou instalações quando o terminal integrado não consegue iniciar, abrem o Terminal e digitam o comando para você.",
+        "why": "O macOS chama isso de Automação. O Navide envia apenas o comando em que você clicou e nunca lê o conteúdo das janelas do terminal.",
         "denied": "O controle do Terminal foi negado. Ative-o em Ajustes do Sistema e depois detecte novamente.",
         "pane-hint": "Ative o Terminal sob o Navide em Privacidade e Segurança → Automação."
       },

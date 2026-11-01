@@ -2653,9 +2653,9 @@
       "custom-colors": "Eigene Farben",
       "reset-to-defaults": "↺ Auf Standard zurücksetzen",
       "tweaks-hint": "Anpassungen werden über das aktuelle Design gelegt und beim Designwechsel beibehalten.",
-      "environment": "Umgebung",
-      "environment-hint": "Den Assistenten zur Umgebungserkennung beim ersten Start erneut ausführen (prüft Homebrew / Node / CLI / Ollama usw.).",
-      "rerun-env-check": "↻ Umgebungsprüfung erneut ausführen",
+      "environment": "Einrichtungsassistent",
+      "environment-hint": "Öffnet den Assistenten des ersten Starts erneut, um Agent-CLIs zu installieren und Berechtigungen zu prüfen.",
+      "rerun-env-check": "↻ Einrichtungsassistent erneut öffnen",
       "backend-timeout": "Zeitlimit für den Backend-Start",
       "backend-timeout-hint": "Wie lange beim Start oder Neustart darauf gewartet wird, dass das Backend betriebsbereit ist, bevor aufgegeben wird. Erhöhen Sie den Wert auf langsameren Rechnern (15–120 Sekunden).",
       "backend-timeout-label": "Zeitlimit (Sekunden)",
@@ -9297,7 +9297,7 @@
     "install-foundation-tools": "Installieren Sie die erforderlichen Basiswerkzeuge …",
     "agent-cli-required": "Mindestens eine Agent-CLI …",
     "analyzer-requires-ollama": "Der Analysator erfordert Ollama …",
-    "download-model": "Laden Sie ein beliebiges herunter; jedes installierte Modell …",
+    "download-model": "Laden Sie ein beliebiges Modell herunter. Navide kann jedes installierte Modell verwenden.",
     "review-instructions": "Klicken Sie auf „Review starten“, um zu analysieren …",
     "match-case": "Groß-/Kleinschreibung beachten (Aa)",
     "replace-all-truncated": "Die Ergebnisse sind gekürzt – grenzen Sie die Suche ein, bevor Sie alle ersetzen",
@@ -10214,7 +10214,8 @@
       "environment": "Navide steuert echte CLIs in echten Terminals – auf diesen Werkzeugen läuft es.",
       "agents": "Jeder Bereich, den Sie öffnen, führt einen dieser Agents aus. Für den Anfang genügt einer.",
       "permissions": "Erteilen Sie die Zugriffe, die Navide zum Steuern Ihres Computers benötigt.",
-      "ready": "Alles in Ordnung. Beim ersten Mal hilft Ihnen eine kurze Tour, die Sie jederzeit überspringen können, einen Arbeitsbereich zu wählen und Ihren ersten Agent zu öffnen."
+      "ready": "Alles in Ordnung. Beim ersten Mal hilft Ihnen eine kurze Tour, die Sie jederzeit überspringen können, einen Arbeitsbereich zu wählen und Ihren ersten Agent zu öffnen.",
+      "ready-locked": "Installieren Sie mindestens eine Agent-CLI, um Navide zu öffnen. Sie können auch vorerst überspringen und später eine hinzufügen."
     },
     "install": "Installieren",
     "installing": "Wird installiert …",
@@ -10231,9 +10232,9 @@
     "notif-test-body": "Benachrichtigungen sind an – hier hören Sie von Ihren Agents.",
     "perm": {
       "automation": {
-        "title": "Navide erlauben, Installationsbefehle im Terminal auszuführen",
-        "desc": "Manche CLIs müssen in einem echten Terminal installiert werden. Damit kann Navide das Terminal öffnen und den Befehl für Sie eingeben.",
-        "why": "macOS nennt das „Automation“. Navide sendet immer nur den Installationsbefehl, auf den Sie geklickt haben – es liest nie, was in Ihren Terminalfenstern steht.",
+        "title": "Navide erlauben, Befehle im Terminal zu öffnen",
+        "desc": "Einige Aktionen, etwa CLI-Diagnosen oder Installationen, wenn das integrierte Terminal nicht starten kann, öffnen das Terminal und geben den Befehl für Sie ein.",
+        "why": "macOS nennt dies „Automation“. Navide sendet nur den Befehl, den Sie angeklickt haben, und liest niemals den Inhalt Ihrer Terminalfenster.",
         "denied": "Die Terminalsteuerung wurde verweigert. Schalten Sie sie in den Systemeinstellungen ein und erkennen Sie dann erneut.",
         "pane-hint": "Aktivieren Sie „Terminal“ unter Navide in „Datenschutz & Sicherheit → Automation“."
       },

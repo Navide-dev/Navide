@@ -2653,9 +2653,9 @@
       "custom-colors": "Màu tùy chỉnh",
       "reset-to-defaults": "↺ Đặt lại mặc định",
       "tweaks-hint": "Các tinh chỉnh được áp lên trên chủ đề hiện tại và được giữ lại khi đổi chủ đề.",
-      "environment": "Môi trường",
-      "environment-hint": "Chạy lại trình hướng dẫn phát hiện môi trường lần đầu (kiểm tra Homebrew / Node / CLI / Ollama, v.v.).",
-      "rerun-env-check": "↻ Chạy lại kiểm tra môi trường",
+      "environment": "Trình hướng dẫn thiết lập",
+      "environment-hint": "Mở lại trình hướng dẫn lần chạy đầu để cài Agent CLI và xem lại quyền.",
+      "rerun-env-check": "↻ Mở lại trình hướng dẫn thiết lập",
       "backend-timeout": "Thời gian chờ khởi động backend",
       "backend-timeout-hint": "Thời gian chờ backend hoạt động bình thường khi khởi động hoặc khởi động lại trước khi bỏ cuộc. Hãy tăng giá trị này trên máy chậm (15–120 giây).",
       "backend-timeout-label": "Thời gian chờ (giây)",
@@ -9297,7 +9297,7 @@
     "install-foundation-tools": "Cài các công cụ nền tảng cần thiết...",
     "agent-cli-required": "Ít nhất một CLI agent...",
     "analyzer-requires-ollama": "Trình phân tích cần Ollama...",
-    "download-model": "Tải một model bất kỳ; model nào đã cài...",
+    "download-model": "Tải một model bất kỳ. Navide có thể dùng mọi model đã cài.",
     "review-instructions": "Nhấp Bắt đầu xem xét để phân tích...",
     "match-case": "Phân biệt chữ hoa/thường (Aa)",
     "replace-all-truncated": "Kết quả đã bị cắt bớt — hãy thu hẹp tìm kiếm trước khi thay thế tất cả",
@@ -10214,7 +10214,8 @@
       "environment": "Navide điều khiển CLI thật trong terminal thật — đây là những công cụ nó chạy trên đó.",
       "agents": "Mỗi pane bạn mở chạy một trong các agent này. Chỉ cần một là đủ để bắt đầu.",
       "permissions": "Cấp những quyền truy cập Navide cần để điều khiển máy của bạn.",
-      "ready": "Mọi thứ đều ổn. Ở lần đầu, một chuyến tham quan ngắn (có thể bỏ qua bất cứ lúc nào) sẽ giúp bạn chọn workspace và mở agent đầu tiên."
+      "ready": "Mọi thứ đều ổn. Ở lần đầu, một chuyến tham quan ngắn (có thể bỏ qua bất cứ lúc nào) sẽ giúp bạn chọn workspace và mở agent đầu tiên.",
+      "ready-locked": "Hãy cài ít nhất một Agent CLI để mở Navide. Bạn cũng có thể bỏ qua lúc này và thêm sau."
     },
     "install": "Cài đặt",
     "installing": "Đang cài…",
@@ -10231,9 +10232,9 @@
     "notif-test-body": "Thông báo đã bật — bạn sẽ nhận tin từ các agent của mình ở đây.",
     "perm": {
       "automation": {
-        "title": "Cho phép Navide chạy lệnh cài đặt trong Terminal",
-        "desc": "Một số CLI phải được cài trong terminal thật. Quyền này cho Navide mở Terminal và gõ lệnh giúp bạn.",
-        "why": "macOS gọi quyền này là Tự động hóa. Navide chỉ gửi đúng lệnh cài đặt bạn đã nhấp — không bao giờ đọc nội dung trong các cửa sổ terminal của bạn.",
+        "title": "Cho phép Navide mở lệnh trong Terminal",
+        "desc": "Một số thao tác, như chẩn đoán CLI hoặc cài đặt khi terminal tích hợp không khởi động được, sẽ mở Terminal và nhập lệnh giúp bạn.",
+        "why": "macOS gọi quyền này là Automation. Navide chỉ gửi lệnh bạn đã bấm và không bao giờ đọc nội dung cửa sổ terminal.",
         "denied": "Quyền điều khiển Terminal bị từ chối. Hãy bật nó trong Cài đặt hệ thống, rồi phát hiện lại.",
         "pane-hint": "Bật Terminal dưới mục Navide trong Quyền riêng tư & Bảo mật → Tự động hóa."
       },

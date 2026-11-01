@@ -379,7 +379,7 @@ function signIn(): void {
           <!-- What will run, verbatim ---------------------------------------->
           <section v-if="dep && dep.can_install" class="ci-card">
             <div class="ci-card-label">{{ $t('cli-install.command-label') }}</div>
-            <code class="ci-command">{{ result?.command || dep.install_cmd }}</code>
+            <code class="ci-command">{{ nextStep?.install_cmd || result?.command || dep.install_cmd }}</code>
             <p class="ci-note">{{ $t('cli-install.note-terminal') }}</p>
           </section>
           <!-- Until the first status arrives `dep` is undefined; without this
