@@ -32,6 +32,7 @@ import pytest
 
 from agent_team_backend.cli_vendors.registry import VENDORS
 from agent_team_backend.log_readers import base
+from agent_team_backend.log_readers import watcher as watcher_module
 from agent_team_backend.log_readers.base import (
     ActivityEvent,
     LogReader,
@@ -492,3 +493,221 @@ async def test_the_turn_written_just_before_a_crash_is_not_lost(
     await watcher._process_realtime_path(path)
 
     assert seen == ["act:1", "act:2", "act:3"], "the pre-crash turn was skipped"
+
+
+# A session id can come back as a NEW file at the same path: the transcript of
+# an old session is gone, the resume preflight misses, and the pane starts fresh
+# under the same id. The durable mark then counts the OLD file's lines, so every
+# line of the new one reads as already seen and the pane's turn ends never reach
+# the window or its chat.
+
+
+def _append(path: Path, first: int, lines: int) -> None:
+    with path.open("a", encoding="utf-8") as fh:
+        for i in range(first, first + lines):
+            fh.write(json.dumps({"type": "assistant", "timestamp": f"t{i}"}) + "\n")
+
+
+def _stale_checkpoint(store: TokensStore, path: Path, mark: int) -> None:
+    store.advance_ingestion_checkpoint(
+        str(path.resolve()), {"kind": "activity", "keys": [f"act_hw::{mark}"]}, "@activity"
+    )
+
+
+@pytest.mark.asyncio
+async def test_replaced_file_with_a_stale_durable_mark_delivers_new_lines(
+    tmp_path: Path,
+) -> None:
+    """The file already holds 5 lines the old mark (6864) would hide. Those are
+    history and stay undelivered; what is appended from here on arrives."""
+    root = tmp_path / "logs"
+    path = _transcript(root, "reused.jsonl", 5)
+    store = _store(tmp_path)
+    _stale_checkpoint(store, path, 6864)
+
+    seen: list[str] = []
+
+    async def sink(event: ActivityEvent) -> None:
+        seen.append(event.dedup_key)
+
+    watcher = _watcher(store, sink)
+    watcher.add_reader(_LineReader(root))
+    await watcher._process_realtime_path(path)
+    assert seen == [], "a replaced file replayed its turns to the pane and its chat"
+
+    _append(path, 6, 2)
+    await watcher._process_realtime_path(path)
+    assert seen == ["act:6", "act:7"], "the replaced file stayed muted"
+
+    # Durable too: the next process neither replays nor re-mutes the file.
+    assert "act_hw::7" in store.get_ingestion_checkpoint(
+        str(path.resolve()), "@activity"
+    ).get("keys", [])
+    restarted: list[str] = []
+
+    async def sink_b(event: ActivityEvent) -> None:
+        restarted.append(event.dedup_key)
+
+    watcher_b = _watcher(store, sink_b)
+    watcher_b.add_reader(_LineReader(root))
+    await watcher_b._process_realtime_path(path)
+    assert restarted == []
+
+
+@pytest.mark.asyncio
+async def test_rewrite_under_a_running_watcher_is_not_replayed(tmp_path: Path) -> None:
+    """The same with the mark still in memory: a shorter file at the same path."""
+    root = tmp_path / "logs"
+    path = _transcript(root, "rewritten.jsonl", 12)
+    store = _store(tmp_path)
+
+    seen: list[str] = []
+
+    async def sink(event: ActivityEvent) -> None:
+        seen.append(event.dedup_key)
+
+    watcher = _watcher(store, sink)
+    watcher.add_reader(_LineReader(root))
+    await watcher._process_realtime_path(path)
+    assert len(seen) == 12
+    seen.clear()
+
+    _transcript(root, "rewritten.jsonl", 3)
+    await watcher._process_realtime_path(path)
+    assert seen == []
+
+    _append(path, 4, 1)
+    await watcher._process_realtime_path(path)
+    assert seen == ["act:4"]
+
+
+@pytest.mark.asyncio
+async def test_mark_equal_to_the_line_count_and_plain_growth_change_nothing(
+    tmp_path: Path,
+) -> None:
+    """A mark at exactly the last line is the normal resting state, not a
+    replaced file: it stays, and the next line is delivered once."""
+    root = tmp_path / "logs"
+    path = _transcript(root, "steady.jsonl", 4)
+    store = _store(tmp_path)
+    _stale_checkpoint(store, path, 4)
+
+    seen: list[str] = []
+
+    async def sink(event: ActivityEvent) -> None:
+        seen.append(event.dedup_key)
+
+    watcher = _watcher(store, sink)
+    watcher.add_reader(_LineReader(root))
+    await watcher._process_realtime_path(path)
+    assert seen == []
+    assert activity_high_water(watcher._activity_seen[str(path.resolve())]) == 4
+
+    _append(path, 5, 1)
+    await watcher._process_realtime_path(path)
+    assert seen == ["act:5"]
+
+
+@pytest.mark.asyncio
+async def test_a_half_written_last_line_does_not_read_as_a_replaced_file(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "logs"
+    path = _transcript(root, "partial.jsonl", 2)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write('{"type": "assist')
+    store = _store(tmp_path)
+    _stale_checkpoint(store, path, 2)
+
+    seen: list[str] = []
+
+    async def sink(event: ActivityEvent) -> None:
+        seen.append(event.dedup_key)
+
+    watcher = _watcher(store, sink)
+    watcher.add_reader(_LineReader(root))
+    await watcher._process_realtime_path(path)
+    assert seen == []
+    assert activity_high_water(watcher._activity_seen[str(path.resolve())]) == 2
+
+
+@pytest.mark.asyncio
+async def test_appends_never_recount_the_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Counting lines is once per file per process, plus once if it shrinks: a
+    long transcript must not pay a whole-file walk on every append."""
+    root = tmp_path / "logs"
+    path = _transcript(root, "long.jsonl", 3)
+    store = _store(tmp_path)
+    _stale_checkpoint(store, path, 3)
+
+    calls: list[Path] = []
+    real = watcher_module.rewind_past_eof_mark
+
+    def counting(p: Path, seen_keys: set[str]) -> bool:
+        calls.append(p)
+        return real(p, seen_keys)
+
+    monkeypatch.setattr(watcher_module, "rewind_past_eof_mark", counting)
+
+    async def sink(event: ActivityEvent) -> None:
+        pass
+
+    watcher = _watcher(store, sink)
+    watcher.add_reader(_LineReader(root))
+    await watcher._process_realtime_path(path)
+    for i in range(4, 24):
+        _append(path, i, 1)
+        await watcher._process_realtime_path(path)
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_reader_not_keyed_on_lines_keeps_its_mark(tmp_path: Path) -> None:
+    """copilot's and grok's sentinels are not line numbers: never compared."""
+    root = tmp_path / "logs"
+    path = _transcript(root, "rows.jsonl", 2)
+    store = _store(tmp_path)
+    _stale_checkpoint(store, path, 900)
+
+    class _RowReader(_LineReader):
+        activity_resumes_by_line = False
+
+    async def sink(event: ActivityEvent) -> None:
+        pass
+
+    watcher = _watcher(store, sink)
+    watcher.add_reader(_RowReader(root))
+    await watcher._process_realtime_path(path)
+    assert activity_high_water(watcher._activity_seen[str(path.resolve())]) == 900
+
+
+def test_the_real_claude_reader_resumes_from_the_rewound_mark(tmp_path: Path) -> None:
+    """End to end through the real parser: the turn end after the rewind carries
+    its text, which is what the chat is waiting on."""
+    def turn(text: str) -> str:
+        return json.dumps({
+            "type": "assistant",
+            "timestamp": "2026-11-01T07:48:45.000Z",
+            "message": {
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": text}],
+            },
+        }) + "\n"
+
+    path = tmp_path / "abc.jsonl"
+    path.write_text(turn("old"), encoding="utf-8")
+    reader = VENDORS["claude"].make_log_reader()
+
+    muted = {"act_hw::6864"}
+    assert reader.parse_activity(path, muted) == []
+
+    seen = {"act_hw::6864"}
+    assert base.rewind_past_eof_mark(path, seen) is True
+    assert reader.parse_activity(path, seen) == []
+
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(turn("new"))
+    ends = [e for e in reader.parse_activity(path, seen) if e.event_type == "turn_complete"]
+    assert [e.text for e in ends] == ["new"]
