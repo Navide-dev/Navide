@@ -27,6 +27,7 @@ import re
 import secrets
 import sqlite3
 import time
+from collections.abc import Iterable
 from typing import Any
 
 from .db import Database
@@ -125,6 +126,17 @@ def _add_runs(cur: sqlite3.Cursor) -> None:
     )
 
 
+def _add_run_sessions(cur: sqlite3.Cursor) -> None:
+    cur.execute(
+        "CREATE TABLE webhook_run_sessions ("
+        " session_id TEXT PRIMARY KEY,"
+        " agent_key TEXT NOT NULL,"
+        " run_id TEXT NOT NULL,"
+        " unattended INTEGER NOT NULL,"
+        " pane_id TEXT NOT NULL)"
+    )
+
+
 def _add_github(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE webhook_triggers ADD COLUMN github_secret BLOB")
     cur.execute("ALTER TABLE webhook_triggers ADD COLUMN github_events TEXT NOT NULL DEFAULT '[]'")
@@ -207,6 +219,7 @@ class WebhookStore:
         db.migrate(_COMPONENT, 2, _add_runs)
         db.migrate(_COMPONENT, 3, _add_github)
         db.migrate(_COMPONENT, 4, _add_forms)
+        db.migrate(_COMPONENT, 5, _add_run_sessions)
 
     def create(
         self,
@@ -415,6 +428,45 @@ class WebhookStore:
         with self.db.transaction() as cur:
             rows = cur.execute("SELECT pane_id, run_id, unattended FROM webhook_run_panes").fetchall()
         return {row["pane_id"]: (row["run_id"], bool(row["unattended"])) for row in rows}
+
+    def add_run_sessions(
+        self, session_ids: Iterable[str], agent_key: str, run_id: str, unattended: bool, pane_id: str,
+    ) -> None:
+        """Never removed, with the run, the trigger or the events: a transcript
+        stays resumable for as long as it exists, and a missing row reads as
+        "not a webhook session"."""
+        rows = [(session_id, agent_key, run_id, int(unattended), pane_id) for session_id in session_ids]
+        if not rows:
+            return
+        with self.db.transaction() as cur:
+            cur.executemany(
+                "INSERT OR IGNORE INTO webhook_run_sessions (session_id, agent_key, run_id, unattended, pane_id)"
+                " VALUES (?, ?, ?, ?, ?)",
+                rows,
+            )
+
+    def run_session(self, session_id: str) -> tuple[str, bool] | None:
+        with self.db.transaction() as cur:
+            row = cur.execute(
+                "SELECT run_id, unattended FROM webhook_run_sessions WHERE session_id = ?", (session_id,)
+            ).fetchone()
+        return (row["run_id"], bool(row["unattended"])) if row else None
+
+    def run_trigger_unattended(self, run_id: str) -> bool:
+        """Whether the trigger that started this run exists and is unattended now."""
+        with self.db.transaction() as cur:
+            row = cur.execute(
+                "SELECT t.unattended FROM webhook_runs r JOIN webhook_triggers t ON t.id = r.trigger_id"
+                " WHERE r.id = ? AND t.deleted_at IS NULL",
+                (run_id,),
+            ).fetchone()
+        return bool(row and row["unattended"])
+
+    def run_workspaces(self) -> list[str]:
+        """Every workspace a run ever started in. `webhook_runs` is never pruned."""
+        with self.db.transaction() as cur:
+            rows = cur.execute("SELECT DISTINCT workspace FROM webhook_runs").fetchall()
+        return [row["workspace"] for row in rows]
 
     def events(self, trigger_id: str, limit: int = 200) -> list[dict[str, Any]]:
         with self.db.transaction() as cur:

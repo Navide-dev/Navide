@@ -1480,3 +1480,53 @@ async def test_terminal_create_codex_on_a_dev_backend_still_seeds_hook_trust(
         assert f"{home / 'hooks.json'}:stop:0:0" in rows
     finally:
         convenience_wiring.install(None)
+
+
+async def _create_claude(monkeypatch: pytest.MonkeyPatch, command: str) -> Any:
+    monkeypatch.setattr(app, "attribution", FakeAttribution())
+    monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
+    session = _session()
+    await app.handle_message(session, {
+        "id": "m1",
+        "type": "terminal.create",
+        "payload": {"pane_id": "reopened", "agent_key": "claude", "command": command, "cwd": "/ws",
+                    "metadata": {"workspace_path": "/ws", "origin": "manual"}},
+    })
+    return session.terminals.created[0]["command"]
+
+
+async def test_terminal_create_resume_of_a_webhook_session_loses_the_bypass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    from agent_team_backend import webhook_service, webhook_triggers
+    from agent_team_backend.db import Database
+
+    db = Database(tmp_path / "navide.db")
+    store = webhook_triggers.WebhookStore(db)
+    store.add_run_sessions(["abc-123"], "claude", "run", False, "old-pane")
+    service = webhook_service.WebhookService(
+        store=store, db=db, window=SimpleNamespace(), pipeline=lambda _: None, known_program=lambda *_: True,
+    )
+    monkeypatch.setattr(webhook_service, "_service", service)
+    got = await _create_claude(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
+    assert "--dangerously-skip-permissions" not in str(got) and "--permission-mode default" in str(got)
+
+
+async def test_terminal_create_without_the_service_a_resume_loses_the_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_team_backend import webhook_service
+
+    monkeypatch.setattr(webhook_service, "_service", None)
+    monkeypatch.setattr(webhook_service, "_unavailable", True)
+    got = await _create_claude(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
+    assert "--dangerously-skip-permissions" not in str(got)
+
+
+async def test_terminal_create_is_unchanged_when_webhooks_never_ran(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend import webhook_service
+
+    monkeypatch.setattr(webhook_service, "_service", None)
+    monkeypatch.setattr(webhook_service, "_unavailable", False)
+    got = await _create_claude(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
+    assert "--dangerously-skip-permissions" in str(got)

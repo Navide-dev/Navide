@@ -192,3 +192,16 @@ def test_the_schema_only_adds_tables(tmp_path):
     assert database.kv_get("keep") == {"a": 1}
     database.close()
     assert sqlite3.connect(path).execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+
+def test_a_database_from_before_run_sessions_gets_the_table(tmp_path) -> None:
+    db = Database(tmp_path / "navide.db")
+    db.migrate("webhook", 1, wt._create_schema)
+    db.migrate("webhook", 2, wt._add_runs)
+    db.migrate("webhook", 3, wt._add_github)
+    db.migrate("webhook", 4, wt._add_forms)
+    store = wt.WebhookStore(db)
+    store.add_run_sessions(["s"], "claude", "r", False, "p")
+    store.add_run_sessions(["s"], "claude", "other", True, "q")
+    assert store.run_session("s") == ("r", False)
+    assert store.run_session("unknown") is None

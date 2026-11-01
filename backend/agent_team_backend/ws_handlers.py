@@ -8663,6 +8663,8 @@ async def _terminal_create_impl(
 
             settings = guard_fail_closed.claude_settings(str(app.backend_port_file()))
             payload["command"] = claude_hooks.append_settings(payload["command"], settings)
+    elif webhook_service.unavailable():
+        payload["command"] = webhook_service.without_bypass(agent_key, payload.get("command"))
     try:
         startup_probe = await asyncio.get_running_loop().run_in_executor(
             _CLI_PROBE_EXECUTOR,

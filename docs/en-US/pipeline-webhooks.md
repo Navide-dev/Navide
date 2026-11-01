@@ -94,6 +94,15 @@ start a run.
 - **Every tool call waits for you.** Panes start with the CLI's own prompts on,
   whatever your permission settings say, and so does any pane they open. A custom
   launch command is refused.
+- **That holds when a conversation comes back.** Navide remembers every session a
+  run used, so a pane reopened after a restart, a Rebuild, a channel wake or an
+  account switch asks too. A reopen that names no session, such as `--continue`,
+  loses the bypass in any workspace that has had a webhook run. Two things are
+  out of reach: picking a run's session with `/resume` inside a pane already in
+  bypass, and typing the command in a terminal yourself. Neither passes through
+  Navide when the CLI starts.
+- **Unattended ends with the trigger.** A pane keeps the bypass only while its
+  trigger exists and is still unattended. Otherwise it asks, however it started.
 - **Nobody there means it stops.** A gate or a prompt nobody answers stops the
   run after the trigger's wait, 30 minutes by default, and a run stops after 4
   hours whatever it is doing. Nothing is approved on anyone's behalf. Phone and
