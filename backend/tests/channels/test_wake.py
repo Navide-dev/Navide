@@ -694,6 +694,30 @@ async def test_seam_opens_the_conversation_when_the_window_holds_no_placeholder(
     assert seam.retired == ["old-1"]
 
 
+async def test_seam_scheduled_jobs_follow_a_pane_opened_onto_the_conversation(seam, monkeypatch) -> None:
+    from agent_team_backend import scheduler
+
+    hops = []
+
+    async def rebind(*args):
+        hops.append(args)
+        return []
+
+    monkeypatch.setattr(scheduler, "get_service", lambda: SimpleNamespace(rebind_after_rebuild=rebind))
+    assert (await channels_pkg.wake_pane("old-1", "/ws", "sess-1"))["ok"] is True
+    assert hops == [("old-1", "spawned-1", "sess-1", "sess-1")]
+
+
+async def test_seam_a_failed_job_hand_over_does_not_fail_the_wake(seam, monkeypatch) -> None:
+    from agent_team_backend import scheduler
+
+    def boom():
+        raise RuntimeError("scheduler down")
+
+    monkeypatch.setattr(scheduler, "get_service", boom)
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "spawned-1"}
+
+
 async def test_seam_opens_the_workspace_then_the_conversation(seam) -> None:
     # (c) No window holds the workspace and its restore brings no placeholder back either.
     seam.probe = False
