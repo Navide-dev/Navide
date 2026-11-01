@@ -529,6 +529,12 @@ class LogReader(ABC):
         None = not migrated (attribution's legacy chain decides)."""
         return None
 
+    def session_in_workspace(self, file_path: str, workspace_path: str) -> bool | None:
+        """Did the session in ``file_path`` run in ``workspace_path``? For vendors
+        whose folder name alone cannot tell workspaces apart.
+        None = the file does not say."""
+        return None
+
     def pane_cwd_match(
         self, usage: TokenUsage, pane_cwd: str, pane_id: str
     ) -> bool | None:

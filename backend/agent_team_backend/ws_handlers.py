@@ -11936,7 +11936,7 @@ def _collect_orphan_sessions(workspace_path: str) -> list[dict]:
     """
     from . import app
 
-    files = ClaudeLogReader().session_files_for_workspace(workspace_path)
+    files = ClaudeLogReader().own_session_files(workspace_path)
     project = app.project_store.peek(workspace_path)
     live_ids: set[str] = set()
     history_names: dict[str, str] = {}
