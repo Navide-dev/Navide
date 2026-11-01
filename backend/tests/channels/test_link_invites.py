@@ -269,6 +269,15 @@ async def test_pending_and_allowed_entries_say_whether_a_link_code_or_a_pairing_
     assert not any(e["shared"] for e in entries.values())
 
 
+async def test_removing_a_row_with_a_blank_account_reaches_it(env: Env) -> None:
+    env.store.add_allow("telegram", "7", "old", 1, account="")
+    env.store.add_allow("telegram", "8", "other bot", 1, account="second")
+    assert (await env.m.allow_remove("telegram", "7"))["ok"] is True
+    assert env.store.list_allow("telegram")[0]["sender_id"] == "8"
+    # Another bot's row is not the default bot's to remove.
+    assert (await env.m.allow_remove("telegram", "8"))["ok"] is False
+
+
 async def test_the_allow_list_flags_a_shared_telegram_id_without_removing_it(env: Env) -> None:
     env.store._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at)"
                     " VALUES ('telegram', 'default', '1087968824', 'GroupAnonymousBot', 1)")

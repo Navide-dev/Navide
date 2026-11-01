@@ -10,6 +10,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Channels (0.2.37): an old allowlist row with no bot recorded can now be removed in Settings → Channels; removing it answered "not found".
+
 - Scheduler (0.2.37): a pane that a chat woke by opening a new pane onto its conversation now keeps its scheduled jobs. Before, the jobs kept running but their old owner was gone, so the agent could no longer change or renew them, and they stopped after 7 days.
 
 - Terminal activity (0.2.37): a pane that started fresh on a session id whose old transcript was gone stopped reporting its turns, so Telegram said "the reply text has not been read yet" and the reply never came. The saved read position pointed past the end of the new file; Navide now spots that once per file and reads on from the end, without resending earlier turns.
