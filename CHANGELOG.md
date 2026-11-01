@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Terminal activity: a pane that started fresh on a session id whose old transcript was gone stopped reporting its turns, so Telegram said "the reply text has not been read yet" and the reply never came. The saved read position pointed past the end of the new file; Navide now spots that once per file and reads on from the end, without resending earlier turns.
+
 ### Security
 
 - Dependencies: Electron 44.10.1 (Node 24.22.1, Chromium 152.0.7977.169; was 44.9.1 with Node 24.22.0, Chromium 152.0.7977.167). Node 24.22.1 is the Node.js security release of October 21, the one the 0.2.30 notes said Navide would pick up. Electron's own notes also list File System Access blocklist fixes and fixes for malformed asar archives and asar path handling, plus upstream Chromium, V8, Skia, Dawn, ANGLE and PDFium backports, which they do not tie to a CVE or an advisory.

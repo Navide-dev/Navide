@@ -373,6 +373,41 @@ def set_activity_high_water(seen_keys: set[str], line_no: int) -> None:
     seen_keys.add(f"{_ACTIVITY_HW_PREFIX}{line_no}")
 
 
+def rewind_past_eof_mark(path: Path, seen_keys: set[str]) -> bool:
+    """Bring back a line mark that points past the end of the file.
+
+    Transcripts only grow, so a mark beyond the last line was earned by a file
+    that is no longer there: a session id that came back as a new file (the old
+    transcript is gone and the pane started fresh under the same id), or a
+    rewrite. Left alone it reads every line of the new file as already seen, so
+    no turn end ever reaches the pane's window or chat.
+
+    What the new file holds so far is marked as read rather than walked: this
+    path is only reached on a file nobody has delivered from, and a walk would
+    post every old turn to the chat at once. Returns True when the mark moved.
+    Walks the file, so the caller runs it once per file, not once per append.
+    """
+    mark = activity_high_water(seen_keys)
+    if not mark:
+        return False
+    last_complete = line_no = 0
+    try:
+        with path.open("rb") as fh:
+            for line_no, raw_line in enumerate(fh, 1):
+                if line_no >= mark:
+                    return False
+                if raw_line.endswith(b"\n") and raw_line.strip():
+                    last_complete = line_no
+    except OSError:
+        return False
+    seen_keys.difference_update(
+        {k for k in seen_keys if k.startswith(_ACTIVITY_HW_PREFIX)}
+    )
+    if last_complete:
+        set_activity_high_water(seen_keys, last_complete)
+    return True
+
+
 #: Wall-clock time this process started, captured at import. A transcript whose
 #: last write predates it cannot hold activity the running backend has any live
 #: pane state to attach to, so on first sight it is seeded rather than replayed

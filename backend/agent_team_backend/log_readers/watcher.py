@@ -36,6 +36,7 @@ from .base import (
     LogReader,
     TokenSinkResult,
     TokenUsage,
+    rewind_past_eof_mark,
     seed_pre_start_activity,
 )
 
@@ -187,6 +188,8 @@ class LogWatcher:
         self._activity_seen: dict[str, set[str]] = {}
         self._activity_seen_swept_at: float | None = None
         self._scan_mtimes: dict[str, float] = {}
+        # Last seen size per file: a stat is how an append skips the line count.
+        self._activity_sizes: dict[str, int] = {}
         self._queue: asyncio.Queue[tuple[Path | None, str]] = asyncio.Queue()
         self._pending_token_paths: dict[tuple[str, str], Path] = {}
         self._pending_token_backfills: dict[tuple[str, str], int] = {}
@@ -628,6 +631,7 @@ class LogWatcher:
             keys += len(self._activity_seen.pop(path, ()))
             dropped += 1
             self._scan_mtimes.pop(path, None)
+            self._activity_sizes.pop(path, None)
         self._activity_seen_swept_at = now
         if dropped:
             log.info(
@@ -734,6 +738,8 @@ class LogWatcher:
             if act_seen is None:
                 act_seen, seeded = await self._restore_activity_seen(key, path, reader)
                 self._activity_seen[key] = act_seen
+            if await self._rewind_replaced_file(key, path, reader, act_seen, seeded):
+                seeded = True
             before = frozenset(act_seen)
             try:
                 activity_events = await asyncio.to_thread(
@@ -784,6 +790,30 @@ class LogWatcher:
         # stat + line walk are disk-bound; the drain runs on the loop.
         seeded = await asyncio.to_thread(seed_pre_start_activity, path, seen)
         return seen, seeded
+
+    async def _rewind_replaced_file(
+        self, key: str, path: Path, reader: LogReader, act_seen: set[str], seeded: bool
+    ) -> bool:
+        """True when `act_seen` held a mark from a file that is no longer at `path`.
+
+        Only asks on first sight and when the file shrank, both of which a stat
+        answers: an append costs nothing here, however long the transcript. A
+        mark seeded a moment ago came from this very file and needs no asking.
+        """
+        if not reader.activity_resumes_by_line:
+            return False
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return False
+        last_size = self._activity_sizes.get(key)
+        self._activity_sizes[key] = size
+        if seeded or (last_size is not None and size >= last_size):
+            return False
+        if not await asyncio.to_thread(rewind_past_eof_mark, path, act_seen):
+            return False
+        log.info("activity mark of %s was past its end: the file was replaced", path)
+        return True
 
     def _persist_activity_seen(self, key: str, act_seen: set[str]) -> None:
         """Write a file's dedup bag back to the durable checkpoint store.
