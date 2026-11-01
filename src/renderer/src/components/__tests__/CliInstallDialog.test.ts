@@ -537,6 +537,16 @@ describe('CliInstallDialog — dependency chain on a bare machine', () => {
   const installedIds = (mock: ReturnType<typeof createMockBackend>): string[] =>
     runs(mock).map((s) => s.payload.dep_id as string)
 
+  it('shows the command the button runs next, not the one at the end of the chain', async () => {
+    const s = bare()
+    s.deps = s.deps.map((d) => ({ ...d, install_cmd: `install ${d.id}` }))
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', s)
+    wrapper = await open(mock, { depId: 'node' })
+
+    expect(wrapper.get('.ci-command').text()).toBe('install homebrew')
+  })
+
   it('shows the whole chain in order before anything runs', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('onboarding.status', bare())

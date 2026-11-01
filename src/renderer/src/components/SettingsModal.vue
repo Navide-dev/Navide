@@ -503,6 +503,11 @@ const CliInstallDialog = defineAsyncComponent(() => import('./CliInstallDialog.v
  *  Only a confirmed miss counts: 'unknown' is the quick pass not knowing yet. */
 const mcpNodeMissing = computed(() => onboarding.deps.value.find((d) => d.id === 'node')?.status === 'missing')
 const mcpNodeInstallOpen = ref(false)
+// OllamaSetup says "not installed" here, so "run ollama serve" would be wrong.
+const ollamaNotInstalled = computed(() => {
+  const ollama = onboarding.deps.value.find((d) => d.id === 'ollama')
+  return !props.analyzerApi.health.value?.ok && !!ollama && ollama.status !== 'ok'
+})
 
 function closeMcpNodeInstall(): void {
   mcpNodeInstallOpen.value = false
@@ -3347,7 +3352,7 @@ watch(activeTab, (tab) => {
                     :title="$t('settings.analyzer.recheck-title')"
                   >{{ azRechecking ? '…' : '↻' }}</button>
                 </div>
-                <div class="az-status-row">
+                <div v-if="!ollamaNotInstalled" class="az-status-row">
                   <span class="az-status-dot" :class="props.analyzerApi.health.value?.ok ? 'ok' : 'err'"></span>
                   <span class="az-version" v-if="props.analyzerApi.health.value?.ok">
                     {{ $t('settings.analyzer.ollama-connected', { version: props.analyzerApi.health.value?.version }) }}

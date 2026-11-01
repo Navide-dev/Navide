@@ -23954,13 +23954,14 @@ function paneIsCommander(p: ActivePane): boolean {
             <br />{{ $t('hint.pipeline-starting-log') }}
           </p>
         </div>
-        <!-- One sentence and one way forward. The button only surfaces the
-             sidebar's Agents tab, where the spawn card already lives — the same
-             programmatic entry Cmd+1 uses — so nothing spawns from here. -->
+        <!-- One sentence and one way forward. The button surfaces the sidebar's
+             Agents tab and opens the picked CLI, the same spawn the sidebar's
+             button runs: with that tab already showing, surfacing it alone did
+             nothing at all. -->
         <div v-else class="empty-card empty-card--idle">
           <img class="empty-mark" :src="navideMark" alt="" />
           <p class="empty-lead">{{ $t('label.empty-stage-lead') }}</p>
-          <button type="button" class="empty-primary" @click="controlPaneRef?.selectSidebarTab('agents')">
+          <button type="button" class="empty-primary" @click="controlPaneRef?.selectSidebarTab('agents'); controlPaneRef?.spawn()">
             {{ $t('action.add-to-grid') }}
           </button>
           <!-- The sidebar's own Run button, guard and all: disabled exactly

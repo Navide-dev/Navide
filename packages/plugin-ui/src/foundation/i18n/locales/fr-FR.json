@@ -2653,9 +2653,9 @@
       "custom-colors": "Couleurs personnalisées",
       "reset-to-defaults": "↺ Rétablir les valeurs par défaut",
       "tweaks-hint": "Les ajustements s’appliquent par-dessus le thème actuel et sont conservés lors d’un changement de thème.",
-      "environment": "Environnement",
-      "environment-hint": "Relancer l’assistant de détection de l’environnement du premier lancement (vérifie Homebrew / Node / CLI / Ollama, etc.).",
-      "rerun-env-check": "↻ Relancer la vérification de l’environnement",
+      "environment": "Assistant de configuration",
+      "environment-hint": "Rouvre l’assistant du premier lancement pour installer des CLI d’agents et vérifier les autorisations.",
+      "rerun-env-check": "↻ Rouvrir l’assistant de configuration",
       "backend-timeout": "Délai de démarrage du backend",
       "backend-timeout-hint": "Durée d’attente pour que le backend soit opérationnel au démarrage ou au redémarrage avant d’abandonner. Augmentez-la sur les machines plus lentes (15 à 120 secondes).",
       "backend-timeout-label": "Délai (secondes)",
@@ -9297,7 +9297,7 @@
     "install-foundation-tools": "Installez les outils de base nécessaires…",
     "agent-cli-required": "Au moins une CLI d’agent…",
     "analyzer-requires-ollama": "L’analyseur nécessite Ollama…",
-    "download-model": "Téléchargez-en un ; tout modèle installé…",
+    "download-model": "Téléchargez-en un. Navide peut utiliser n’importe quel modèle installé.",
     "review-instructions": "Cliquez sur « Lancer la revue » pour analyser…",
     "match-case": "Respecter la casse (Aa)",
     "replace-all-truncated": "Les résultats sont tronqués : affinez la recherche avant de tout remplacer",
@@ -10208,13 +10208,15 @@
       "environment": "Configurer votre environnement de développement",
       "agents": "Ajouter vos CLI d’agent",
       "permissions": "Configurer Navide sur votre ordinateur",
-      "ready": "Vous êtes prêt"
+      "ready": "Vous êtes prêt",
+      "ready-locked": "Plus qu’une étape"
     },
     "aside": {
       "environment": "Navide pilote de vraies CLI dans de vrais terminaux : ces outils sont ce sur quoi il repose.",
       "agents": "Chaque pane que vous ouvrez exécute l’un de ces agents. Un seul suffit pour commencer.",
       "permissions": "Accordez les accès dont Navide a besoin pour piloter votre ordinateur.",
-      "ready": "Tout est en ordre. La première fois, une courte visite, que vous pouvez passer à tout moment, vous aide à choisir un espace de travail et à ouvrir votre premier agent."
+      "ready": "Tout est en ordre. La première fois, une courte visite, que vous pouvez passer à tout moment, vous aide à choisir un espace de travail et à ouvrir votre premier agent.",
+      "ready-locked": "Installez au moins une CLI d’agent pour ouvrir Navide. Vous pouvez aussi ignorer pour l’instant et en ajouter une plus tard."
     },
     "install": "Installer",
     "installing": "Installation…",
@@ -10231,9 +10233,9 @@
     "notif-test-body": "Les notifications sont activées : vos agents vous préviendront ici.",
     "perm": {
       "automation": {
-        "title": "Autoriser Navide à exécuter des commandes d’installation dans Terminal",
-        "desc": "Certaines CLI doivent être installées dans un vrai terminal. Cela permet à Navide d’ouvrir Terminal et d’y saisir la commande pour vous.",
-        "why": "macOS appelle cela « Automatisation ». Navide n’envoie que la commande d’installation sur laquelle vous avez cliqué ; il ne lit jamais le contenu de vos fenêtres Terminal.",
+        "title": "Autoriser Navide à ouvrir des commandes dans Terminal",
+        "desc": "Quelques actions, comme les diagnostics de CLI ou les installations lorsque le terminal intégré ne peut pas démarrer, ouvrent Terminal et saisissent la commande pour vous.",
+        "why": "macOS appelle cela Automatisation. Navide envoie uniquement la commande sur laquelle vous avez cliqué et ne lit jamais le contenu de vos fenêtres de terminal.",
         "denied": "Le contrôle de Terminal a été refusé. Activez-le dans les Réglages Système, puis relancez la détection.",
         "pane-hint": "Activez Terminal sous Navide dans Confidentialité et sécurité → Automatisation."
       },

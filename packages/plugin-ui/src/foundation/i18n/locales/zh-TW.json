@@ -2653,9 +2653,9 @@
       "custom-colors": "自訂顏色",
       "reset-to-defaults": "↺ 重設為預設值",
       "tweaks-hint": "自訂調整會疊加在目前主題上，切換主題時仍會保留。",
-      "environment": "環境",
-      "environment-hint": "重新執行首次啟動的環境偵測精靈（檢查 Homebrew / Node / CLI / Ollama 等）。",
-      "rerun-env-check": "↻ 重新執行環境檢測",
+      "environment": "設定精靈",
+      "environment-hint": "重新開啟首次啟動精靈，安裝 Agent CLI 並檢視權限。",
+      "rerun-env-check": "↻ 重新開啟設定精靈",
       "backend-timeout": "後端啟動逾時",
       "backend-timeout-hint": "啟動或重啟時等待後端變為健康狀態的時間，逾時就放棄。較慢的機器可拉長此值（15–120 秒）。",
       "backend-timeout-label": "逾時秒數",
@@ -9297,7 +9297,7 @@
     "install-foundation-tools": "安裝所有 Agent 運作所需的基礎工具…",
     "agent-cli-required": "至少需要一個 Agent CLI…",
     "analyzer-requires-ollama": "分析器需要 Ollama…",
-    "download-model": "下載任意一個模型；所有已安裝的模型都可使用…",
+    "download-model": "下載任意一個模型即可；所有已安裝的模型都可使用。",
     "review-instructions": "點擊「開始審查」以分析…",
     "match-case": "區分大小寫（Aa）",
     "replace-all-truncated": "結果已截斷，請先縮小搜尋範圍再執行全部取代",
@@ -10208,13 +10208,15 @@
       "environment": "設定你的開發環境",
       "agents": "接上你的 Agent CLI",
       "permissions": "在這台電腦上設定 Navide",
-      "ready": "一切就緒"
+      "ready": "一切就緒",
+      "ready-locked": "還差一步"
     },
     "aside": {
       "environment": "Navide 會在真實終端機裡驅動真實的 CLI，這些工具就是它的基礎。",
       "agents": "你開的每個面板都會跑其中一個 agent，先裝一個就能開始。",
       "permissions": "授予 Navide 操作這台電腦所需要的權限。",
-      "ready": "檢查都通過了。第一次使用時，接著會有一段可以隨時略過的簡短導覽，帶你挑工作區、開出第一個 Agent。"
+      "ready": "檢查都通過了。第一次使用時，接著會有一段可以隨時略過的簡短導覽，帶你挑工作區、開出第一個 Agent。",
+      "ready-locked": "至少安裝一個 Agent CLI 才能開啟 Navide。也可以先略過，之後再安裝。"
     },
     "install": "安裝",
     "installing": "安裝中…",
@@ -10231,9 +10233,9 @@
     "notif-test-body": "通知已開啟，agent 有動靜就會通知你。",
     "perm": {
       "automation": {
-        "title": "允許 Navide 在終端機執行安裝指令",
-        "desc": "有些 CLI 必須在真正的終端機裡安裝。開啟後，Navide 能替你開啟終端機並輸入指令。",
-        "why": "macOS 稱之為「自動化」。Navide 只會送出你按下安裝的那道指令，不會讀取終端機視窗裡的內容。",
+        "title": "允許 Navide 在 Terminal 開啟指令",
+        "desc": "少數動作（例如 CLI 診斷，或內建終端機無法啟動時的安裝）會開啟 Terminal 並替你輸入指令。",
+        "why": "macOS 稱這項權限為「自動化」。Navide 只會傳送你按下的指令，絕不會讀取終端機視窗的內容。",
         "denied": "終端機控制被拒絕。請到系統設定開啟後重新偵測。",
         "pane-hint": "在「隱私權與安全性 → 自動化」的 Navide 下開啟 Terminal。"
       },

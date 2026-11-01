@@ -2653,9 +2653,9 @@
       "custom-colors": "Custom colors",
       "reset-to-defaults": "↺ Reset to Defaults",
       "tweaks-hint": "Tweaks are layered on top of the current theme and preserved when switching themes.",
-      "environment": "Environment",
-      "environment-hint": "Re-run the first-launch environment detection wizard (checks Homebrew / Node / CLI / Ollama, etc.).",
-      "rerun-env-check": "↻ Re-run Environment Check",
+      "environment": "Setup Wizard",
+      "environment-hint": "Reopen the first-launch wizard to install agent CLIs and review permissions.",
+      "rerun-env-check": "↻ Reopen Setup Wizard",
       "backend-timeout": "Backend startup timeout",
       "backend-timeout-hint": "How long to wait for the backend to become healthy on startup or restart before giving up. Raise this on slower machines (15–120 seconds).",
       "backend-timeout-label": "Timeout (seconds)",
@@ -9297,7 +9297,7 @@
     "install-foundation-tools": "Install the foundational tools required...",
     "agent-cli-required": "At least one Agent CLI...",
     "analyzer-requires-ollama": "Analyzer requires Ollama...",
-    "download-model": "Download any one; any installed model...",
+    "download-model": "Download any one. Navide can use any model you have installed.",
     "review-instructions": "Click Start Review to analyse...",
     "match-case": "Match Case (Aa)",
     "replace-all-truncated": "Results are truncated — narrow the search before replacing all",
@@ -10208,13 +10208,15 @@
       "environment": "Set up your development environment",
       "agents": "Bring in your agent CLIs",
       "permissions": "Set up Navide on your computer",
-      "ready": "You're ready to go"
+      "ready": "You're ready to go",
+      "ready-locked": "One more step"
     },
     "aside": {
       "environment": "Navide drives real CLIs in real terminals — these tools are what it runs on.",
       "agents": "Every pane you open runs one of these agents. One is enough to start.",
       "permissions": "Grant the access Navide needs to drive your machine.",
-      "ready": "Everything checks out. The first time through, a short tour you can skip at any point helps you pick a workspace and open your first agent."
+      "ready": "Everything checks out. The first time through, a short tour you can skip at any point helps you pick a workspace and open your first agent.",
+      "ready-locked": "Install at least one agent CLI to open Navide. You can also skip for now and add one later."
     },
     "install": "Install",
     "installing": "Installing…",
@@ -10231,9 +10233,9 @@
     "notif-test-body": "Notifications are on — you'll hear from your agents here.",
     "perm": {
       "automation": {
-        "title": "Allow Navide to run install commands in Terminal",
-        "desc": "Some CLIs must be installed in a real terminal. This lets Navide open Terminal and type the command for you.",
-        "why": "macOS calls this Automation. Navide only ever sends the install command you clicked — it never reads what is in your terminal windows.",
+        "title": "Allow Navide to open commands in Terminal",
+        "desc": "A few actions, such as CLI diagnostics, or installs when the built-in terminal cannot start, open Terminal and type the command for you.",
+        "why": "macOS calls this Automation. Navide only ever sends a command you clicked — it never reads what is in your terminal windows.",
         "denied": "Terminal control was denied. Turn it on in System Settings, then re-detect.",
         "pane-hint": "Enable Terminal under Navide in Privacy & Security → Automation."
       },

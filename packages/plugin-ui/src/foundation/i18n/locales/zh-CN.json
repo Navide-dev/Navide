@@ -2653,9 +2653,9 @@
       "custom-colors": "自订颜色",
       "reset-to-defaults": "↺ 重设为默认值",
       "tweaks-hint": "自订调整会叠加在目前主题上，切换主题时仍会保留。",
-      "environment": "环境",
-      "environment-hint": "重新运行首次启动的环境侦测精灵（检查 Homebrew / Node / CLI / Ollama 等）。",
-      "rerun-env-check": "↻ 重新运行环境检测",
+      "environment": "设置向导",
+      "environment-hint": "重新打开首次启动向导，安装 Agent CLI 并查看权限。",
+      "rerun-env-check": "↻ 重新打开设置向导",
       "backend-timeout": "后端启动超时",
       "backend-timeout-hint": "启动或重启时等待后端变为健康状态的时间，超时就放弃。较慢的机器可拉长此值（15–120 秒）。",
       "backend-timeout-label": "超时秒数",
@@ -9297,7 +9297,7 @@
     "install-foundation-tools": "安装所有 Agent 运作所需的基础工具…",
     "agent-cli-required": "至少需要一个 Agent CLI…",
     "analyzer-requires-ollama": "分析器需要 Ollama…",
-    "download-model": "下载任意一个模型；所有已安装的模型都可使用…",
+    "download-model": "下载任意一个模型即可；所有已安装的模型都可使用。",
     "review-instructions": "点击“开始审查”以分析…",
     "match-case": "区分大小写（Aa）",
     "replace-all-truncated": "结果已截断，请先缩小搜索范围再运行全部取代",
@@ -10208,13 +10208,15 @@
       "environment": "设置你的开发环境",
       "agents": "接上你的 Agent CLI",
       "permissions": "在这台电脑上设置 Navide",
-      "ready": "一切就绪"
+      "ready": "一切就绪",
+      "ready-locked": "还差一步"
     },
     "aside": {
       "environment": "Navide 会在真实终端里驱动真实的 CLI，这些工具就是它的基础。",
       "agents": "你开的每个面板都会跑其中一个 agent，先装一个就能开始。",
       "permissions": "授予 Navide 操作这台电脑所需要的权限。",
-      "ready": "检查都通过了。第一次使用时，接着会有一段可以随时略过的简短导览，带你挑工作区、开出第一个 Agent。"
+      "ready": "检查都通过了。第一次使用时，接着会有一段可以随时略过的简短导览，带你挑工作区、开出第一个 Agent。",
+      "ready-locked": "至少安装一个 Agent CLI 才能打开 Navide。也可以先跳过，之后再安装。"
     },
     "install": "安装",
     "installing": "安装中…",
@@ -10231,9 +10233,9 @@
     "notif-test-body": "通知已打开，agent 有动静就会通知你。",
     "perm": {
       "automation": {
-        "title": "允许 Navide 在终端运行安装指令",
-        "desc": "有些 CLI 必须在真正的终端里安装。打开后，Navide 能替你打开终端并输入指令。",
-        "why": "macOS 称之为“自动化”。Navide 只会送出你按下安装的那道指令，不会读取终端窗口里的内容。",
+        "title": "允许 Navide 在 Terminal 打开命令",
+        "desc": "少数操作（例如 CLI 诊断，或内置终端无法启动时的安装）会打开 Terminal 并替你输入命令。",
+        "why": "macOS 将此权限称为“自动化”。Navide 只会发送你点击的命令，绝不会读取终端窗口的内容。",
         "denied": "终端控制被拒绝。请到系统设置打开后重新侦测。",
         "pane-hint": "在“隐私权与安全性 → 自动化”的 Navide 下打开 Terminal。"
       },
