@@ -58,8 +58,9 @@ export interface AccountRef {
  *  - `hard`: account-level limits. Any present one at 100% blocks the account.
  *  - `required`: hard windows a reading must contain to count as positive —
  *    a reading missing one says nothing about that limit ("missing window is
- *    unknown"). Left out of `required` are windows the vendor only reports
- *    sometimes (kimi's 5h rate limit, cursor's on-demand pool).
+ *    unknown"), unless the reader proved it absent (`absentWindows`). Left out
+ *    of `required` are windows the vendor only reports sometimes (kimi's 5h
+ *    rate limit, cursor's on-demand pool).
  *  - `alternate`: a pool that keeps requests flowing when a hard window is
  *    spent (cursor on-demand). Headroom there lifts the spent hard window.
  *  - `scoped`: per-model buckets. Never a veto and never a positive — the
@@ -173,7 +174,8 @@ export function judgeReading(
   }
   const weakestRemaining = measured.size > 0 ? Math.min(...measured.values()) : null
   if (!semantics) return { positive: false, spent: effectiveSpent, missing: [], weakestRemaining, measured }
-  const missing = semantics.required.filter((kind) => !present.has(kind))
+  const absent = new Set(snap.absentWindows)
+  const missing = semantics.required.filter((kind) => !present.has(kind) && !absent.has(kind))
   const positive =
     missing.length === 0 &&
     effectiveSpent.length === 0 &&

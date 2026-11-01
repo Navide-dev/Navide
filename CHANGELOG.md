@@ -4,6 +4,14 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Accounts (0.2.37): an account with no 5-hour window, such as a verified Claude Ultra account or a Codex account that reports only a weekly limit, no longer counts as "no quota data". When an account's quota runs out it now ranks by its weekly headroom, and switching to it ends confirmed instead of "quota unconfirmed". Navide treats the window as absent only when the vendor's complete answer shows that; a reading it cannot be sure of stays unknown, as before.
+
+### Documentation
+
+- Accounts (0.2.37): the user guide now says the monthly API credits included with a Claude Max or Ultra plan do not pay for panes on an API key.
+
 ## [0.2.36] — 2026-11-01
 
 ### Added
