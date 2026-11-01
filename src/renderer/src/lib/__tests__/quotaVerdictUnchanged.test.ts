@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { UsageSnapshot } from '@/composables/useUsage'
+import type { UsageSnapshot } from '../../composables/useUsage'
 import { judgeReading, quotaSemanticsFor } from '../quotaFailover'
 
 const BASELINE: Record<string, string> = JSON.parse(
