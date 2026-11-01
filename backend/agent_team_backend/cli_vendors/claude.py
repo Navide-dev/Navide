@@ -1071,8 +1071,11 @@ async def fetch_claude_usage_via_cli(
     if not windows:
         log.info("claude /usage produced no readable windows")
         return _costly("claude -p /usage printed no usage windows")
-    return _snapshot("claude", "ok", windows=windows,
-                     absent_windows=usage_panel_absent_windows(raw))
+    snap = _snapshot("claude", "ok", windows=windows)
+    absent = usage_panel_absent_windows(raw)
+    if absent:
+        snap["absentWindows"] = absent
+    return snap
 
 
 # ---- delegated OAuth refresh (merged from claude_delegated_refresh.py) -----

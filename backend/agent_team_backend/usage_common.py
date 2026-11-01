@@ -63,9 +63,8 @@ def _window(kind: str, label: str, used_percent: float, resets_at: str | None,
 
 
 def _snapshot(provider: str, status: str, *, windows: list[dict] | None = None,
-              plan_type: str | None = None, error: str | None = None,
-              absent_windows: list[str] | None = None) -> dict:
-    snap = {
+              plan_type: str | None = None, error: str | None = None) -> dict:
+    return {
         "provider": provider,
         "status": status,
         "planType": plan_type,
@@ -73,12 +72,6 @@ def _snapshot(provider: str, status: str, *, windows: list[dict] | None = None,
         "fetchedAt": _now_iso(),
         "error": error,
     }
-    # Kinds the vendor's own answer shows this account does not have. Only a
-    # reader that saw the complete answer sets it: a window merely missing from
-    # a reading stays unknown (quota_failover._quota_verdict).
-    if absent_windows:
-        snap["absentWindows"] = absent_windows
-    return snap
 
 
 def parse_retry_after(value: str | None) -> float:

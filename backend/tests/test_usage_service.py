@@ -2823,6 +2823,50 @@ def test_the_cache_drops_a_malformed_absent_window_list(value):
     assert "absentWindows" not in good
 
 
+def test_a_cache_written_before_absent_windows_loads_as_it_did(tmp_path):
+    """The file a v0.2.36 install left behind: same schema version, no field."""
+    cache = tmp_path / "usage-cache.json"
+    window = {"kind": "session", "label": "Session (5h)", "usedPercent": 25,
+              "resetsAt": "2099-01-01T00:00:00Z"}
+    weekly = {"kind": "weekly", "label": "Weekly (all models)", "usedPercent": 30,
+              "resetsAt": "2099-01-01T00:00:00Z"}
+    cache.write_text(json.dumps({
+        "schemaVersion": 1,
+        "accounts": {"claude": {
+            "with-session": {
+                "provider": "claude", "status": "ok", "planType": None, "windows": [window, weekly],
+                "fetchedAt": "2026-10-31T00:00:00Z", "error": None,
+            },
+            "weekly-only": {
+                "provider": "claude", "status": "ok", "planType": None, "windows": [weekly],
+                "fetchedAt": "2026-10-31T00:00:00Z", "error": None,
+            },
+        }},
+    }), encoding="utf-8")
+
+    accounts = us.UsageService(cache_path=cache).payload()["accounts"]["claude"]
+
+    assert us.USAGE_CACHE_SCHEMA_VERSION == 1
+    assert accounts["with-session"]["windows"] == [window, weekly]
+    assert accounts["weekly-only"]["windows"] == [weekly]
+    assert "absentWindows" not in accounts["with-session"]
+    assert "absentWindows" not in accounts["weekly-only"]
+
+
+def test_a_confirmed_absent_window_survives_a_cache_round_trip(tmp_path):
+    cache = tmp_path / "usage-cache.json"
+    good = us._snapshot(
+        "claude", "ok",
+        windows=[us._window("weekly", "Weekly", 30, "2099-01-01T00:00:00Z")],
+    )
+    good["absentWindows"] = ["session"]
+    first = us.UsageService(cache_path=cache)
+    assert first._record_claude_snapshot("acct-a", good) is True
+    first._save_cache()
+
+    assert us.UsageService(cache_path=cache).payload()["accounts"]["claude"]["acct-a"]["absentWindows"] == ["session"]
+
+
 async def test_fetch_codex_no_credentials_without_stranded_login(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     snap = await us.fetch_codex(tmp_path / ".codex")

@@ -1831,10 +1831,10 @@ async def fetch_codex(codex_home: Path) -> dict:
         return _snapshot("codex", "error", error=f"HTTP {resp.status_code}")
     payload = resp.json()
     windows, plan = _protocols.normalize_codex(payload)
-    snap = _snapshot(
-        "codex", "ok", windows=windows, plan_type=plan,
-        absent_windows=_protocols.codex_absent_windows(payload.get("rate_limit") or {}),
-    )
+    snap = _snapshot("codex", "ok", windows=windows, plan_type=plan)
+    absent = _protocols.codex_absent_windows(payload.get("rate_limit") or {})
+    if absent:
+        snap["absentWindows"] = absent
     credits = _protocols._codex_credits(payload)
     if credits is not None:
         snap["credits"] = credits
