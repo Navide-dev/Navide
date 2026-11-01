@@ -11,7 +11,7 @@ import logging
 import time
 from typing import Any
 
-from . import webhook_listener, webhook_service, webhook_triggers
+from . import guard_fail_closed, webhook_listener, webhook_service, webhook_triggers
 from .ipc import make_error, make_response
 
 log = logging.getLogger(__name__)
@@ -231,6 +231,23 @@ async def webhook_trigger_enable(session: Any, msg_id: str, msg_type: str, paylo
     await session.send_json(make_response(msg_id, msg_type, await _status()))
 
 
+async def webhook_trigger_set_unattended(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
+    """Per trigger and off by default. Both directions go in the audit trail."""
+    service = _service()
+    trigger_id, unattended = str(payload.get("id") or ""), payload.get("unattended") is True
+    if unattended and not guard_fail_closed.unattended_supported():
+        await session.send_json(make_error(msg_id, msg_type, "UNATTENDED_UNSUPPORTED", "not on this platform yet"))
+        return
+    try:
+        await asyncio.to_thread(service.store.set_unattended, trigger_id, unattended)
+    except webhook_triggers.WebhookNotFound:
+        await session.send_json(make_error(msg_id, msg_type, "NOT_FOUND", "no such trigger"))
+        return
+    service.audit([{"trigger_id": trigger_id, "outcome": "unattended-on" if unattended else "unattended-off", "status": 0}])
+    await reconcile()
+    await session.send_json(make_response(msg_id, msg_type, await _status()))
+
+
 async def webhook_trigger_rotate(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
     service = _service()
     try:
@@ -263,6 +280,7 @@ HANDLERS = {
     "webhook.settings.set": webhook_settings_set,
     "webhook.trigger.create": webhook_trigger_create,
     "webhook.trigger.enable": webhook_trigger_enable,
+    "webhook.trigger.set_unattended": webhook_trigger_set_unattended,
     "webhook.trigger.rotate": webhook_trigger_rotate,
     "webhook.trigger.delete": webhook_trigger_delete,
     "webhook.events": webhook_events,

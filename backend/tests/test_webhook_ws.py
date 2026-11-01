@@ -139,6 +139,23 @@ class TestRefusals:
         assert [r["outcome"] for r in rows] == ["no-gate-acknowledged"]
 
 
+class TestUnattended:
+    async def test_is_audited_both_ways(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(webhook_ws.guard_fail_closed, "unattended_supported", lambda: True)
+        created = await call("webhook.trigger.create", name="CI", workspace_path=WS, pipeline_id=PIPE)
+        trigger_id = created["payload"]["trigger"]["id"]
+        assert created["payload"]["trigger"]["unattended"] is False
+        await call("webhook.trigger.set_unattended", id=trigger_id, unattended=True)
+        await call("webhook.trigger.set_unattended", id=trigger_id, unattended=False)
+        assert [r["outcome"] for r in env.store.events(trigger_id)] == ["unattended-off", "unattended-on"]
+
+    async def test_is_refused_where_it_is_not_supported(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(webhook_ws.guard_fail_closed, "unattended_supported", lambda: False)
+        created = await call("webhook.trigger.create", name="CI", workspace_path=WS, pipeline_id=PIPE)
+        answer = await call("webhook.trigger.set_unattended", id=created["payload"]["trigger"]["id"], unattended=True)
+        assert answer["error"]["code"] == "UNATTENDED_UNSUPPORTED"
+
+
 class TestKeys:
     async def test_the_key_is_in_the_create_answer_and_nowhere_else(self, env) -> None:
         created = await call("webhook.trigger.create", name="CI", workspace_path=WS, pipeline_id=PIPE)

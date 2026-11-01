@@ -30,7 +30,7 @@ from . import __version__
 from . import agent_messaging
 from . import hook_auth
 from . import hook_drain
-from . import guard_hooks
+from . import guard_fail_closed, guard_hooks
 from .guard import runtime as guard_runtime
 from . import ws_auth
 from . import error_ledger
@@ -3080,11 +3080,14 @@ async def cli_pretooluse_guard_hook(vendor: str, request: Request) -> Response:
         return Response(status_code=404)
     if not hook_auth.presented(request.headers.get(hook_auth.HEADER)):
         return Response(status_code=403)
+    fail_closed = request.headers.get(guard_fail_closed.HEADER) == "1"
     try:
         payload = await request.json()
     except ValueError:
         payload = None
     if not isinstance(payload, dict):
+        if fail_closed:
+            return JSONResponse(guard_fail_closed.deny(vendor, "the call could not be read"))
         return Response(status_code=200)
     cwd = str(payload.get("cwd") or "")
     pane_id, ws_path = "", ""
@@ -3105,6 +3108,10 @@ async def cli_pretooluse_guard_hook(vendor: str, request: Request) -> Response:
         pane_id = _pane_for_guard_token(request.headers.get(guard_hooks.PANE_TOKEN_HEADER, ""))
         pane = agent_messaging.current(pane_id) if pane_id else None
         ws_path = pane.workspace_path if pane is not None else ws_path
+    if fail_closed:
+        return JSONResponse(await guard_fail_closed.respond(
+            vendor, payload, pane_id=pane_id or "", cwd=cwd, workspace=ws_path or cwd
+        ))
     answer = await guard_hooks.respond(
         vendor, payload, pane_id=pane_id or "", cwd=cwd, workspace=ws_path or cwd
     )

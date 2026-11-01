@@ -109,11 +109,17 @@ def _add_runs(cur: sqlite3.Cursor) -> None:
         " project_id TEXT NOT NULL,"
         " pipeline_id TEXT NOT NULL,"
         " state TEXT NOT NULL,"
+        " unattended INTEGER NOT NULL,"
         " started_at INTEGER NOT NULL,"
         " ended_at INTEGER)"
     )
     cur.execute("CREATE INDEX webhook_runs_state ON webhook_runs (state)")
-    cur.execute("CREATE TABLE webhook_run_panes (pane_id TEXT PRIMARY KEY, run_id TEXT NOT NULL)")
+    cur.execute(
+        "CREATE TABLE webhook_run_panes ("
+        " pane_id TEXT PRIMARY KEY,"
+        " run_id TEXT NOT NULL,"
+        " unattended INTEGER NOT NULL)"
+    )
 
 
 def new_token() -> str:
@@ -231,6 +237,9 @@ class WebhookStore:
     def set_enabled(self, trigger_id: str, enabled: bool) -> None:
         self._update_live(trigger_id, "enabled = ?", int(enabled))
 
+    def set_unattended(self, trigger_id: str, unattended: bool) -> None:
+        self._update_live(trigger_id, "unattended = ?", int(unattended))
+
     def rotate(self, trigger_id: str) -> str:
         """A new key; the old one stops working at once."""
         token = new_token()
@@ -291,16 +300,19 @@ class WebhookStore:
                     (trigger_id, trigger_id, EVENTS_PER_TRIGGER),
                 )
 
-    def open_run(self, *, trigger_id: str, workspace: str, project_id: str, pipeline_id: str) -> dict[str, Any]:
+    def open_run(
+        self, *, trigger_id: str, workspace: str, project_id: str, pipeline_id: str, unattended: bool,
+    ) -> dict[str, Any]:
         run = {
             "id": secrets.token_hex(16), "trigger_id": trigger_id, "workspace": workspace,
             "project_id": project_id, "pipeline_id": pipeline_id, "state": "running",
-            "started_at": int(time.time()),
+            "unattended": int(unattended), "started_at": int(time.time()),
         }
         with self.db.transaction() as cur:
             cur.execute(
-                "INSERT INTO webhook_runs (id, trigger_id, workspace, project_id, pipeline_id, state, started_at)"
-                " VALUES (:id, :trigger_id, :workspace, :project_id, :pipeline_id, :state, :started_at)",
+                "INSERT INTO webhook_runs"
+                " (id, trigger_id, workspace, project_id, pipeline_id, state, unattended, started_at)"
+                " VALUES (:id, :trigger_id, :workspace, :project_id, :pipeline_id, :state, :unattended, :started_at)",
                 run,
             )
         return run
@@ -325,15 +337,19 @@ class WebhookStore:
             ).fetchone()
         return (row["approval_timeout_min"] if row else DEFAULT_APPROVAL_TIMEOUT_MIN) * 60
 
-    def add_run_pane(self, pane_id: str, run_id: str) -> None:
+    def add_run_pane(self, pane_id: str, run_id: str, unattended: bool) -> None:
         with self.db.transaction() as cur:
-            cur.execute("INSERT OR REPLACE INTO webhook_run_panes (pane_id, run_id) VALUES (?, ?)", (pane_id, run_id))
+            cur.execute(
+                "INSERT OR REPLACE INTO webhook_run_panes (pane_id, run_id, unattended) VALUES (?, ?, ?)",
+                (pane_id, run_id, int(unattended)),
+            )
 
-    def run_panes(self) -> dict[str, str]:
-        """Every pane a webhook run ever started, with its run."""
+    def run_panes(self) -> dict[str, tuple[str, bool]]:
+        """Every pane a webhook run ever started: its run, and whether it runs
+        unattended."""
         with self.db.transaction() as cur:
-            rows = cur.execute("SELECT pane_id, run_id FROM webhook_run_panes").fetchall()
-        return {row["pane_id"]: row["run_id"] for row in rows}
+            rows = cur.execute("SELECT pane_id, run_id, unattended FROM webhook_run_panes").fetchall()
+        return {row["pane_id"]: (row["run_id"], bool(row["unattended"])) for row in rows}
 
     def events(self, trigger_id: str, limit: int = 200) -> list[dict[str, Any]]:
         with self.db.transaction() as cur:

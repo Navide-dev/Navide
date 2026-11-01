@@ -422,3 +422,52 @@ def test_the_wait_has_bounds(env) -> None:
     for minutes in (4, 241):
         with pytest.raises(wt.WebhookInvalid):
             env.store.create(name="x", workspace=WS, pipeline_id=PIPE, approval_timeout_min=minutes)
+
+
+class TestUnattended:
+    @pytest.fixture(autouse=True)
+    def posix(self, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+
+    async def run(self, env) -> None:
+        env.trigger["unattended"] = True
+        await started_run(env)
+
+    async def test_off_by_default(self, env) -> None:
+        assert env.trigger["unattended"] is False
+        await started_run(env)
+        launch(env, "claude")
+        assert env.service.launch_env("p") == {}
+
+    async def test_a_run_pane_gets_the_bypass_and_the_variable(self, env) -> None:
+        await self.run(env)
+        assert launch(env, "claude --session-id a") == "claude --dangerously-skip-permissions --session-id a"
+        assert env.service.launch_env("p") == {svc.guard_fail_closed.ENV: "1"}
+
+    async def test_codex_too(self, env) -> None:
+        await self.run(env)
+        assert launch(env, "codex -a never resume x", agent="codex") == "codex --dangerously-bypass-approvals-and-sandbox resume x"
+
+    async def test_a_child_gets_neither(self, env) -> None:
+        await self.run(env)
+        launch(env, "claude", pane="parent")
+        got = launch(env, f"claude {CLAUDE_BYPASS}", pane="child", origin="mcp", spawned_by="parent")
+        assert got == "claude --permission-mode default"
+        assert env.service.launch_env("child") == {}
+
+    async def test_a_pane_outside_the_run_gets_neither(self, env) -> None:
+        await self.run(env)
+        assert launch(env, "claude", pane="other", origin="manual") == "claude"
+        assert env.service.launch_env("other") == {}
+
+    async def test_a_resume_after_a_restart_keeps_the_mode(self, env) -> None:
+        await self.run(env)
+        launch(env, "claude", pane="kept")
+        again = svc.WebhookService(store=env.store, db=env.store.db, window=env.window, pipeline=env.pipelines.get,
+                                   known_program=lambda agent, program: program == agent)
+        assert again.launch_env("kept") == {svc.guard_fail_closed.ENV: "1"}
+
+    async def test_where_it_is_not_supported_the_run_asks(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: False)
+        await self.run(env)
+        assert launch(env, "claude") == "claude --permission-mode default"

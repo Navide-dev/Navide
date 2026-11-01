@@ -34,6 +34,7 @@ from . import (
     confirm_token,
     device_trust,
     executions_service,
+    guard_fail_closed,
     launch_id,
     native_mcp,
     native_memory,
@@ -8654,6 +8655,14 @@ async def _terminal_create_impl(
         payload["command"] = webhooks.launch_command(
             agent_key, payload.get("command"), pane_id=str(payload.get("pane_id") or ""), metadata=metadata,
         )
+        env.pop(guard_fail_closed.ENV, None)
+        unattended_env = webhooks.launch_env(str(payload.get("pane_id") or ""))
+        env.update(unattended_env)
+        if unattended_env and agent_key == "claude":
+            from . import claude_hooks
+
+            settings = guard_fail_closed.claude_settings(str(app.backend_port_file()))
+            payload["command"] = claude_hooks.append_settings(payload["command"], settings)
     try:
         startup_probe = await asyncio.get_running_loop().run_in_executor(
             _CLI_PROBE_EXECUTOR,
@@ -8924,6 +8933,10 @@ async def _terminal_create_impl(
                 Path(env.get("CODEX_HOME") or app.codex_home_manager.real_home),
                 app.backend_port_file(), hook_auth.header_file(),
             )
+            if guard_fail_closed.ENV in env and "hooks.PreToolUse" not in app._command_text(payload["command"]):
+                # The hook needs the user's trust and has not got it: this pane
+                # would bypass permissions with no Guard at all.
+                raise webhook_service.LaunchRefused("codex has not trusted Navide's hooks, so no Guard would run")
     from . import guard_hooks
 
     if agent_key in guard_hooks.PANE_TOKEN_VENDORS:

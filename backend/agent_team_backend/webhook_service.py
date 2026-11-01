@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from . import pipeline_graph, webhook_payload, webhook_triggers
+from . import guard_fail_closed, pipeline_graph, webhook_payload, webhook_triggers
 from .db import Database
 
 log = logging.getLogger(__name__)
@@ -56,6 +56,10 @@ _DROP = {
 }
 #: Named rather than left to the default: a CLI's default mode can change, and
 #: its settings file can set a bypass the command line has to outrank.
+_BYPASS = {
+    "claude": "--dangerously-skip-permissions",
+    "codex": "--dangerously-bypass-approvals-and-sandbox",
+}
 _ASK = {
     "claude": "--permission-mode default",
     # untrusted: anything beyond plain reads asks. on-request would leave the
@@ -168,15 +172,16 @@ def _line(command: Any) -> str:
     return str(command[-1]) if isinstance(command, list) and command else str(command or "")
 
 
-def _without_bypass(agent_key: str, line: str) -> str:
-    """`line` with the vendor's bypass flags out and its ask flags right after
-    the program, where a subcommand such as `codex resume` still accepts them."""
+def _with_mode(agent_key: str, line: str, *, unattended: bool) -> str:
+    """`line` with whatever it said about permissions out and the run's mode
+    right after the program, where `codex resume` still accepts it."""
     for flag in _DROP[agent_key]:
         line = flag.sub(" ", line)
     head = _FIRST_TOKEN.match(line)
     end = head.end() if head else 0
     rest = " ".join(line[end:].split())
-    return " ".join(part for part in (line[:end].strip(), _ASK[agent_key], rest) if part)
+    mode = _BYPASS[agent_key] if unattended else _ASK[agent_key]
+    return " ".join(part for part in (line[:end].strip(), mode, rest) if part)
 
 
 class WebhookService:
@@ -324,6 +329,7 @@ class WebhookService:
             self._active[workspace] = self.store.open_run(
                 trigger_id=trigger["id"], workspace=workspace, project_id=project.id,
                 pipeline_id=getattr(project, "pipeline_id", ""),
+                unattended=bool(trigger.get("unattended")) and guard_fail_closed.unattended_supported(),
             )
         elif not child and workspace in self._active:
             self.finish_run(workspace, "replaced")
@@ -336,12 +342,20 @@ class WebhookService:
     def launch_command(self, agent_key: str, command: Any, *, pane_id: str, metadata: dict[str, Any]) -> Any:
         """The command a pane starts with: `command` itself, unchanged, unless
         the pane belongs to a webhook run."""
-        run_id = self._guarded.get(pane_id) or self._guarded.get(str(metadata.get("spawned_by") or ""))
-        if run_id is None:
+        known = self._guarded.get(pane_id)
+        parent = self._guarded.get(str(metadata.get("spawned_by") or ""))
+        if known is not None:
+            run_id, unattended = known
+        elif parent is not None:
+            # A pane an agent opened never inherits the bypass: nobody chose it
+            # for that pane, and without it a failed hook still leaves the
+            # CLI's own prompt, so it needs no fail-closed hook either.
+            run_id, unattended = parent[0], False
+        else:
             active = self._active.get(str(metadata.get("workspace_path") or ""))
             if active is None or metadata.get("origin") != "pipeline":
                 return command
-            run_id = active["id"]
+            run_id, unattended = active["id"], bool(active["unattended"])
         if agent_key not in VENDORS:
             raise LaunchRefused(f"a webhook run cannot start {agent_key or 'this CLI'}: it has no tested Guard hook")
         line = _line(command)
@@ -351,9 +365,14 @@ class WebhookService:
             # A custom launch command: whatever it runs is out of sight here.
             raise LaunchRefused(f"a webhook run needs the standard {agent_key} command, not a custom launch command")
         if pane_id not in self._guarded:
-            self._guarded[pane_id] = run_id
-            self.store.add_run_pane(pane_id, run_id)
-        return _rewrite(command, lambda text: _without_bypass(agent_key, text))
+            self._guarded[pane_id] = (run_id, unattended)
+            self.store.add_run_pane(pane_id, run_id, unattended)
+        return _rewrite(command, lambda text: _with_mode(agent_key, text, unattended=unattended))
+
+    def launch_env(self, pane_id: str) -> dict[str, str]:
+        """What only an unattended run pane's environment holds."""
+        known = self._guarded.get(pane_id)
+        return {guard_fail_closed.ENV: "1"} if known is not None and known[1] else {}
 
 
     # ── nobody at the computer ───────────────────────────────────────────
@@ -381,10 +400,13 @@ class WebhookService:
         for workspace, run in list(self._active.items()):
             await self._check_run(workspace, run)
 
+    def _panes_of(self, run: dict[str, Any]) -> list[str]:
+        return [pane for pane, (run_id, _) in self._guarded.items() if run_id == run["id"]]
+
     async def _awaiting(self, workspace: str, run: dict[str, Any], status: dict[str, Any]) -> bool:
         if status.get("gate"):
             return True
-        panes = [pane for pane, run_id in self._guarded.items() if run_id == run["id"]]
+        panes = self._panes_of(run)
         return any([await self.window.pane_awaiting(workspace, pane) for pane in panes])
 
     async def _check_run(self, workspace: str, run: dict[str, Any]) -> None:
@@ -416,7 +438,7 @@ class WebhookService:
         run = self._active.get(workspace)
         if run is not None:
             self._waiting_since.pop(run["id"], None)
-            if state != "finished":
+            if state == "interrupted":
                 self.audit([{"trigger_id": run["trigger_id"], "outcome": state, "status": 0}])
         self.finish_run(workspace, state)
 
@@ -424,7 +446,7 @@ class WebhookService:
         """Abort, take the panes off whatever prompt holds them, and free them.
         The prompt is cancelled, which refuses the call that was waiting."""
         await self.window.abort(workspace)
-        panes = [pane for pane, run_id in self._guarded.items() if run_id == run["id"]]
+        panes = self._panes_of(run)
         for pane in panes:
             await self.window.interrupt(workspace, pane)
         if panes:

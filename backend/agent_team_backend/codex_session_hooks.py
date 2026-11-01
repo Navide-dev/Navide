@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import osplat
+from . import guard_fail_closed, osplat
 from .cli_vendors.codex import is_subagent_session_meta
 
 LAUNCH_ENV = 'NAVIDE_CODEX_LAUNCH'
@@ -194,7 +194,9 @@ def wire(command: Any, env: dict, metadata: dict, home: Path, port_file: Path, a
     # SessionStart: it is one more hook Codex may ask the user to trust.
     guard = (
         'hooks.PreToolUse=[{hooks=[{type=' + _toml_literal('command')
-        + ',command=' + _toml_literal(guard_hook_command())
+        + ',command=' + _toml_literal(
+            guard_fail_closed.codex_hook_command() if guard_fail_closed.ENV in env else guard_hook_command()
+        )
         + ',timeout=10}]}]'
     )
     text += ' -c ' + osplat.paths.quote_arg(guard)
