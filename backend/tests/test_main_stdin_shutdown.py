@@ -4,12 +4,14 @@ where there is no SIGTERM to deliver."""
 from __future__ import annotations
 
 import io
+import socket
 import sys
 
 import pytest
 
 from agent_team_backend.__main__ import (
     SHUTDOWN_LINE,
+    _hold_free_port,
     _read_confirm_key,
     _read_handover,
     _watch_stdin_for_shutdown,
@@ -275,3 +277,12 @@ def test_windows_a_child_inheriting_the_read_pipe_hangs_at_launch() -> None:
 @pytest.mark.skipif(sys.platform != "win32", reason="the synchronous-pipe lock is Windows behaviour")
 def test_windows_after_isolation_the_same_child_starts_and_exits() -> None:
     assert _run_a_child_while_stdin_is_a_pipe_being_read(isolate=True) == 0
+
+
+def test_the_free_port_stays_held_until_uvicorn_serves_it() -> None:
+    held = _hold_free_port("127.0.0.1")
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as other, pytest.raises(OSError):
+            other.bind(held.getsockname())
+    finally:
+        held.close()

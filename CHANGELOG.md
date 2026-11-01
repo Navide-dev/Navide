@@ -10,6 +10,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Startup (0.2.37): the backend now keeps the free port it picks until it starts serving on it. If another program took the port in that gap, the backend exited at startup.
+
 - Channels (0.2.37): an old allowlist row with no bot recorded can now be removed in Settings → Channels; removing it answered "not found".
 
 - Scheduler (0.2.37): a pane that a chat woke by opening a new pane onto its conversation now keeps its scheduled jobs. Before, the jobs kept running but their old owner was gone, so the agent could no longer change or renew them, and they stopped after 7 days.
