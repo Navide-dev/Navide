@@ -2,6 +2,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useWelcomeTour } from '../composables/useWelcomeTour'
 import {
+  absentSessionNote,
   accountUsageFor,
   formatRemaining,
   formatResetAbsolute,
@@ -67,6 +68,7 @@ const snap = computed(() =>
     : usageFor(props.agentKey)
 )
 const remaining = computed(() => remainingPercent(snap.value))
+const sessionNote = computed(() => absentSessionNote(snap.value))
 const tier = computed(() => (remaining.value === null ? 'ok' : remainingTier(remaining.value)))
 const expired = computed(() => snap.value?.status === 'expired')
 // No general quota left at all. Distinct from the red "<15% left" tier on
@@ -774,6 +776,14 @@ function acctTitle(profileId: string | null): string {
       </div>
       <div v-if="cached && snap.staleExpired" class="usage-pop-expired">
         {{ $t('usage.cached-reset-expired') }}
+      </div>
+      <div v-if="sessionNote" class="usage-row" data-part="session-note">
+        <div class="usage-row-top">
+          <span class="usage-row-label" v-truncate>{{ $t('usage.window-claude-session') }}</span>
+          <span class="usage-row-left" :class="{ ok: sessionNote === 'unlimited' }">
+            {{ $t(`usage.window-${sessionNote}`) }}
+          </span>
+        </div>
       </div>
       <div v-for="w in snap.windows" :key="w.kind + w.label" class="usage-row">
         <div class="usage-row-top">

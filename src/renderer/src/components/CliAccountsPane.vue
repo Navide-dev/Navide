@@ -11,6 +11,7 @@ import {
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import {
   accountUsageFor,
+  absentSessionNote,
   formatRemaining,
   formatResetAbsolute,
   formatResetCountdown,
@@ -639,6 +640,8 @@ function cardFoot(snap: UsageSnapshot, head: UsageWindow): string {
     .map((w) =>
       t('usage.window-left-pct', { label: windowLabel(w), pct: formatRemaining(windowRemaining(w)) }),
     )
+  const note = absentSessionNote(snap)
+  if (note) parts.unshift(`${t('usage.window-claude-session')} ${t(`usage.window-${note}`)}`)
   const countdown = formatResetCountdown(head.resetsAt)
   if (countdown) parts.push(t('usage.resets-in', { time: countdown }))
   return parts.join(' · ')

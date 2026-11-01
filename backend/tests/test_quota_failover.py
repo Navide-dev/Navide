@@ -1437,6 +1437,30 @@ def test_a_confirmed_absent_window_does_not_excuse_a_missing_weekly_one() -> Non
     assert qf.classify_candidate(reading, now=NOW)[0] == "unknown"
 
 
+def test_a_spent_weekly_window_counts_with_no_session_window() -> None:
+    spent = _weekly_only(used=100)
+    assert qf.snapshot_exhausted(spent, NOW)
+    assert qf.classify_candidate(spent, now=NOW)[0] == "exhausted"
+
+
+def test_weekly_headroom_ranks_an_account_with_no_session_window() -> None:
+    rows = qf.rank_candidates(
+        slot_ids=["cur", "near", "room", "out"], current_slot_id="cur",
+        snapshots={"near": _weekly_only(used=95), "room": _weekly_only(used=20), "out": _weekly_only(used=100)},
+        login_states={}, tried=set(), now=NOW,
+    )
+    assert [r["slotId"] for r in rows if r["excluded"] is None] == ["room", "near"]
+    assert next(r for r in rows if r["slotId"] == "out")["excluded"] == "exhausted"
+    assert next(r for r in rows if r["slotId"] == "room")["headroom"] == 80
+
+
+def test_a_weekly_reset_brings_an_account_with_no_session_window_back() -> None:
+    spent = _weekly_only(used=100)
+    assert qf.classify_candidate(spent, now=NOW + 86401)[0] == "reset-expected"
+    assert not qf.snapshot_exhausted(spent, NOW + 86401)
+    assert qf.classify_candidate(_weekly_only(used=2), now=NOW)[0] == "fresh-headroom"
+
+
 def test_only_a_successful_read_can_confirm_a_window_is_absent() -> None:
     assert qf.classify_candidate(_weekly_only(status="error"), now=NOW)[0] == "unknown"
 

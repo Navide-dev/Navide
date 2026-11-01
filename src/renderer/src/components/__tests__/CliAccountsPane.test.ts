@@ -907,6 +907,26 @@ describe('CliAccountsPane', () => {
     expect(cards[1].get('.cli-card-foot').text()).toBe('Weekly 15% left')
   })
 
+  it('says a confirmed account has no 5H limit, without inventing a bar', () => {
+    usage.accountUsageFor.mockImplementation((key) =>
+      key === 'claude'
+        ? usageSnapshot({
+            windows: [{ kind: 'weekly', label: 'Weekly', usedPercent: 85, resetsAt: null }],
+            absentWindows: ['session'],
+          })
+        : undefined,
+    )
+    const w = mountPane(makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      defaults: { claude: 'p1' },
+      identities: { claude: { p1: { email: 'work@example.com', signedIn: true } } },
+    }))
+    const card = section(w, 0).findAll('.cli-card')[1]
+    expect(card.get('.cli-card-big').text().replace(/\s+/g, ' ')).toBe('15% Weekly left')
+    expect(card.findAll('.cli-mini-bar')).toHaveLength(1)
+    expect(card.get('.cli-card-foot').text()).toBe('Session (5h) Unlimited')
+  })
+
   it('names the failure on the card, not just that the refresh failed', () => {
     // Every Claude read failure lands on the same word. A user looking at
     // "unavailable" on a loaded machine reasonably concludes the account is

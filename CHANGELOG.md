@@ -8,6 +8,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 - Accounts (0.2.37): an account with no 5-hour window, such as a verified Claude Ultra account or a Codex account that reports only a weekly limit, no longer counts as "no quota data". When an account's quota runs out it now ranks by its weekly headroom, and switching to it ends confirmed instead of "quota unconfirmed". Navide treats the window as absent only when the vendor's complete answer shows that; a reading it cannot be sure of stays unknown, as before.
+- Accounts (0.2.37): an account with no 5-hour window keeps its 5-hour row, which reads Unlimited on Claude and Not reported on other vendors, and every wait on it now uses the weekly reset: a limit sentence with only a clock, the loop's resume, and its estimate. `cli_usage` documents `absentWindows`, so an agent can tell no limit from no data.
 
 ### Security
 
