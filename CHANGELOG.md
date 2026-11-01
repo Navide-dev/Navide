@@ -6,6 +6,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Channels (0.2.37): waking a pane from a chat now looks at the account the pane is on. A pane on an API key wakes even when subscription quota is used up, instead of being refused with a message that does not apply to it, and the chat is told it is billed by usage. A subscription pane is no longer woken onto an API key: while new panes default to a key, or Codex is on one, a subscription pane is refused from the chat and opens on the computer. A pane whose key is no longer the current one is refused the same way, because Navide cannot tell which account it would come back on. Panes with no API key involved wake as before. Two new strings in all 11 chat languages.
+
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 
 ### Changed

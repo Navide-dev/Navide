@@ -1879,6 +1879,8 @@ class ChannelManager:
         current = self._binding_for(msg) or binding
         kept = await self._live_kept(msg, key, lang)
         await self._reply(msg, wake.text(lang, "woke_sent", count=len(kept)) if kept else wake.text(lang, "woke"))
+        if result.get("paid"):
+            await self._reply(msg, wake.text(lang, "woke_paid"))
         await self._deliver_kept(msg, current, pane_id, lang, reserve=0)
 
     def _set_kept(self, key: str, kept: list[tuple[float, InboundMessage]]) -> None:

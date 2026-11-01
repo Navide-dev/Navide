@@ -394,14 +394,15 @@ async def _wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict
     """Bring a pane that is not online back onto its own conversation (the chat's wake).
 
     Refused before anything opens, with ``started`` False: no Navide window, no record of
-    the conversation, a conversation the CLI cannot resume, a CLI out of quota (the cached
-    reading only), or Navide set never to resume (opening the window would start every pane
-    of the workspace fresh). Then the workspace's window is opened if needed, and the pane is
+    the conversation, a conversation the CLI cannot resume, an API key that might not be the
+    pane's own, a CLI out of quota (the cached reading only; a pane on a key does not spend
+    it), or Navide set never to resume (opening the window would start every pane of the
+    workspace fresh). Then the workspace's window is opened if needed, and the pane is
     opened in place onto that same session: its placeholder when the window restored one,
     otherwise a pane the window opens onto the session. It succeeds only when the pane was
     launched on exactly ``session_id``; a conversation open in another pane is never opened
     a second time."""
-    from .. import app, quota_failover
+    from .. import api_key_accounts, app, quota_failover
     from ..mcp_server import server as mcp
 
     if not app.live_main_window_ids():
@@ -413,8 +414,12 @@ async def _wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict
     refusal = await asyncio.to_thread(mcp._refuse_unresumable_session, agent_key, workspace_path, session_id)
     if refusal:
         return {"ok": False, "code": str(refusal.get("error_code") or "no-record"), "started": False}
-    if quota_failover.snapshot_exhausted(await mcp._cached_usage_snapshot(agent_key)):
+    key = await asyncio.to_thread(api_key_accounts.wake_verdict, agent_key, getattr(record, "profile_id", "") or "")
+    if key == "unclear":
+        return {"ok": False, "code": "key-account-unclear", "started": False}
+    if key != "key" and quota_failover.snapshot_exhausted(await mcp._cached_usage_snapshot(agent_key)):
         return {"ok": False, "code": "quota", "agent": agent_key, "started": False}
+    billed = {"paid": True} if key == "key" else {}
     settings = await asyncio.to_thread(app.ui_settings_store.get)
     behavior = (settings or {}).get(RESUME_BEHAVIOR_KEY)
     if behavior == "never":
@@ -442,7 +447,8 @@ async def _wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict
         # in case the conversation came back in a pane under another record meanwhile.
         if await asyncio.to_thread(_session_open_elsewhere, pane_id, workspace_path, session_id):
             return {"ok": False, "code": "session-open-elsewhere", "started": True}
-        return await _open_onto_session(record, workspace_path, session_id)
+        result = await _open_onto_session(record, workspace_path, session_id)
+        return {**result, **billed} if result["ok"] else result
     # The window's own restore may have brought the conversation back in another pane.
     if await asyncio.to_thread(_session_open_elsewhere, entry.pane_id, workspace_path, session_id):
         return {"ok": False, "code": "session-open-elsewhere", "started": True}
@@ -455,7 +461,7 @@ async def _wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict
         return {"ok": False, "code": "fresh-refused", "started": True}
     if opened.get("launched_session_id") != session_id:
         return {"ok": False, "code": "session-mismatch", "started": True}
-    return {"ok": True, "pane_id": opened["pane"].pane_id}
+    return {"ok": True, "pane_id": opened["pane"].pane_id, **billed}
 
 
 async def start() -> None:
