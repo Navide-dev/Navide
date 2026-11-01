@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Security
+
+- Dependencies: Electron 44.10.1 (Node 24.22.1, Chromium 152.0.7977.169; was 44.9.1 with Node 24.22.0, Chromium 152.0.7977.167). Node 24.22.1 is the Node.js security release of October 21, the one the 0.2.30 notes said Navide would pick up. Electron's own notes also list File System Access blocklist fixes and fixes for malformed asar archives and asar path handling, plus upstream Chromium, V8, Skia, Dawn, ANGLE and PDFium backports, which they do not tie to a CVE or an advisory.
+
 ## [0.2.36] — 2026-11-01
 
 ### Added
