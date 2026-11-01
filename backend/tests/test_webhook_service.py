@@ -259,6 +259,11 @@ class TestLaunch:
             with pytest.raises(svc.LaunchRefused):
                 launch(env, text)
 
+    async def test_it_knows_its_panes(self, env) -> None:
+        await started_run(env)
+        launch(env, "claude", pane="in")
+        assert env.service.is_run_pane("in") and not env.service.is_run_pane("out")
+
     async def test_another_vendor_is_refused_at_the_spawn(self, env) -> None:
         await started_run(env)
         with pytest.raises(svc.LaunchRefused):

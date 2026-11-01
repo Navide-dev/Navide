@@ -401,6 +401,9 @@ class WebhookService:
             self.store.add_run_pane(pane_id, run_id, unattended)
         return _rewrite(command, lambda text: _with_mode(agent_key, text, unattended=unattended))
 
+    def is_run_pane(self, pane_id: str) -> bool:
+        return pane_id in self._guarded
+
     def launch_env(self, pane_id: str) -> dict[str, str]:
         """What only an unattended run pane's environment holds."""
         known = self._guarded.get(pane_id)

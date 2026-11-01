@@ -8933,9 +8933,14 @@ async def _terminal_create_impl(
                 Path(env.get("CODEX_HOME") or app.codex_home_manager.real_home),
                 app.backend_port_file(), hook_auth.header_file(),
             )
-            if guard_fail_closed.ENV in env and "hooks.PreToolUse" not in app._command_text(payload["command"]):
-                # The hook needs the user's trust and has not got it: this pane
-                # would bypass permissions with no Guard at all.
+            webhooks = webhook_service.current()
+            if (
+                webhooks is not None
+                and webhooks.is_run_pane(str(payload.get("pane_id") or ""))
+                and "hooks.PreToolUse" not in app._command_text(payload["command"])
+            ):
+                # wire() leaves the hooks out once Codex has shown its trust
+                # screen: a webhook pane would then run with no Guard at all.
                 raise webhook_service.LaunchRefused("codex has not trusted Navide's hooks, so no Guard would run")
     from . import guard_hooks
 
