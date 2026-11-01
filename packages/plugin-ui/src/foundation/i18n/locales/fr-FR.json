@@ -10208,7 +10208,8 @@
       "environment": "Configurer votre environnement de développement",
       "agents": "Ajouter vos CLI d’agent",
       "permissions": "Configurer Navide sur votre ordinateur",
-      "ready": "Vous êtes prêt"
+      "ready": "Vous êtes prêt",
+      "ready-locked": "Plus qu’une étape"
     },
     "aside": {
       "environment": "Navide pilote de vraies CLI dans de vrais terminaux : ces outils sont ce sur quoi il repose.",

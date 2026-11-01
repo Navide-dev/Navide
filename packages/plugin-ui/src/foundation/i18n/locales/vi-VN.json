@@ -10208,7 +10208,8 @@
       "environment": "Thiết lập môi trường phát triển",
       "agents": "Đưa các agent CLI của bạn vào",
       "permissions": "Thiết lập Navide trên máy tính của bạn",
-      "ready": "Bạn đã sẵn sàng"
+      "ready": "Bạn đã sẵn sàng",
+      "ready-locked": "Còn một bước nữa"
     },
     "aside": {
       "environment": "Navide điều khiển CLI thật trong terminal thật — đây là những công cụ nó chạy trên đó.",

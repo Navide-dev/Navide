@@ -10208,7 +10208,8 @@
       "environment": "Set up your development environment",
       "agents": "Bring in your agent CLIs",
       "permissions": "Set up Navide on your computer",
-      "ready": "You're ready to go"
+      "ready": "You're ready to go",
+      "ready-locked": "One more step"
     },
     "aside": {
       "environment": "Navide drives real CLIs in real terminals — these tools are what it runs on.",

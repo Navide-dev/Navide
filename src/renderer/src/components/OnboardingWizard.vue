@@ -239,10 +239,10 @@ function requestPermission(key: TccPermissionKey): void {
   void perms.request(key, payload)
 }
 
-// Open App is locked until a CLI is in, so "everything checks out" would be false.
-const asideKey = computed(() =>
-  current.value === 'ready' && !ob.allRequiredReady.value ? 'onboard.aside.ready-locked' : `onboard.aside.${current.value}`,
-)
+// Open App is locked until a CLI is in, so "you're ready" would be false.
+const readyLocked = computed(() => current.value === 'ready' && !ob.allRequiredReady.value)
+const headKey = computed(() => (readyLocked.value ? 'onboard.head.ready-locked' : `onboard.head.${current.value}`))
+const asideKey = computed(() => (readyLocked.value ? 'onboard.aside.ready-locked' : `onboard.aside.${current.value}`))
 
 const activePermission = computed<TccPermissionKey | null>(() =>
   current.value === 'permissions' ? ((activeKey.value || null) as TccPermissionKey | null) : null,
@@ -319,7 +319,7 @@ async function saveComplete(): Promise<boolean> {
     <div class="ob-split">
       <!-- ── Left: guided cards ───────────────────────────────────────────── -->
       <main class="ob-main">
-        <h1 class="ob-head">{{ $t(`onboard.head.${current}`) }}</h1>
+        <h1 class="ob-head">{{ $t(headKey) }}</h1>
 
         <!-- Agents -->
         <template v-if="current === 'agents'">

@@ -8,11 +8,11 @@ All notable released changes to Navide will be documented in this file. The form
 
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 
-- First-run wizard (0.2.37): the rest of the wizard's review. The prerequisite note lists everything Install will set up, an installed CLI no longer announces one, and a failed shared prerequisite shows only on the card that ran it. The Ready step says what is missing while Open Navide is locked, CLI cards are no longer marked Optional on the step that needs one, and the wizard uses the app's font instead of Times. The install dialog shows the command its button runs next. On Linux, GitHub Copilot CLI and Droid no longer offer a Homebrew cask that cannot install there and link their own instructions instead.
+- First-run wizard (0.2.37): the rest of the wizard's review. The prerequisite note lists everything Install will set up, an installed CLI no longer announces one, and a failed shared prerequisite shows only on the card that ran it. The Ready step no longer says you are ready while Open Navide is locked, and says what is missing, CLI cards are no longer marked Optional on the step that needs one, and the wizard uses the app's font instead of Times. The install dialog shows the command its button runs next. On Linux, GitHub Copilot CLI and Droid no longer offer a Homebrew cask that cannot install there and link their own instructions instead.
 
 - Settings (0.2.37): the Environment Check entry is now the Setup Wizard, Settings → Analyzer no longer says to run `ollama serve` when Ollama is not installed, and the model hint is a complete sentence. The Automation permission describes what it is used for now.
 
-- Workspace (0.2.37): **Open Agent** on the empty stage opens an agent. With the Agents tab already showing, it did nothing. Eight strings changed or added in all 11 interface languages.
+- Workspace (0.2.37): **Open Agent** on the empty stage opens an agent. With the Agents tab already showing, it did nothing. Nine strings changed or added in all 11 interface languages.
 
 ### Security
 

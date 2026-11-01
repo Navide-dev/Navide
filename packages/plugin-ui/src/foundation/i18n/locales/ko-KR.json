@@ -10208,7 +10208,8 @@
       "environment": "개발 환경 설정",
       "agents": "agent CLI 가져오기",
       "permissions": "컴퓨터에서 Navide 설정",
-      "ready": "모든 준비가 끝났어요"
+      "ready": "모든 준비가 끝났어요",
+      "ready-locked": "한 단계만 더 남았어요"
     },
     "aside": {
       "environment": "Navide는 실제 터미널에서 실제 CLI를 구동해요. 이 도구들이 그 기반이에요.",

@@ -10208,7 +10208,8 @@
       "environment": "開発環境をセットアップ",
       "agents": "エージェント CLI を導入",
       "permissions": "このコンピューターで Navide を設定",
-      "ready": "準備ができました"
+      "ready": "準備ができました",
+      "ready-locked": "あと一歩です"
     },
     "aside": {
       "environment": "Navide は実際のターミナルで CLI を動かします。これらはその実行に必要なツールです。",

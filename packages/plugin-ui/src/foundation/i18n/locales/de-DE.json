@@ -10208,7 +10208,8 @@
       "environment": "Entwicklungsumgebung einrichten",
       "agents": "Agent-CLIs einbinden",
       "permissions": "Navide auf Ihrem Computer einrichten",
-      "ready": "Sie können loslegen"
+      "ready": "Sie können loslegen",
+      "ready-locked": "Noch ein Schritt"
     },
     "aside": {
       "environment": "Navide steuert echte CLIs in echten Terminals – auf diesen Werkzeugen läuft es.",

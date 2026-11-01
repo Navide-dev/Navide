@@ -10208,7 +10208,8 @@
       "environment": "Configura tu entorno de desarrollo",
       "agents": "Añade tus CLI de agent",
       "permissions": "Configura Navide en tu ordenador",
-      "ready": "Ya está todo listo"
+      "ready": "Ya está todo listo",
+      "ready-locked": "Falta un paso"
     },
     "aside": {
       "environment": "Navide controla CLI reales en terminales reales: estas herramientas son la base sobre la que funciona.",

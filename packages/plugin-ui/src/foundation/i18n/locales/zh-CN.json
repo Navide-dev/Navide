@@ -10208,7 +10208,8 @@
       "environment": "设置你的开发环境",
       "agents": "接上你的 Agent CLI",
       "permissions": "在这台电脑上设置 Navide",
-      "ready": "一切就绪"
+      "ready": "一切就绪",
+      "ready-locked": "还差一步"
     },
     "aside": {
       "environment": "Navide 会在真实终端里驱动真实的 CLI，这些工具就是它的基础。",

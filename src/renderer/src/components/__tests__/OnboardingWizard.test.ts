@@ -462,6 +462,7 @@ describe('OnboardingWizard', () => {
       await goToReady(wrapper)
 
       expect(wrapper.text()).toContain(i18n.global.t('onboard.aside.ready-locked'))
+      expect(wrapper.get('.ob-head').text()).toBe(i18n.global.t('onboard.head.ready-locked'))
       expect(wrapper.text()).not.toContain(i18n.global.t('onboard.aside.ready'))
     })
 
@@ -474,6 +475,7 @@ describe('OnboardingWizard', () => {
       await goToReady(wrapper)
 
       expect(wrapper.text()).toContain(i18n.global.t('onboard.aside.ready'))
+      expect(wrapper.get('.ob-head').text()).toBe(i18n.global.t('onboard.head.ready'))
     })
   })
 
