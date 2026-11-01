@@ -8985,6 +8985,14 @@ useApiKeyTakeover(backend, {
       { type: 'info' }
     )
   },
+  announceFolderLogin: (name, stayed) => {
+    notifyRestore.toast(
+      stayed > 0
+        ? i18n.global.t('cli-account.folder-login-takeover-partial', { name, count: stayed })
+        : i18n.global.t('cli-account.folder-login-takeover', { name }),
+      { type: 'info' }
+    )
+  },
 })
 
 useLoginResetNotice(usageVersion, {

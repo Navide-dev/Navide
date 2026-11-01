@@ -6,6 +6,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Accounts (0.2.37): when Claude Code's live login runs out and an API key is set to take over, a subscription account signed in only in its own folder now comes first if its quota reading is current and has room. Panes reopen on that account at no charge, and the move counts toward the automatic-switch limit like any other. Before, Navide went straight to the key while subscription quota was still available. Nothing changes without an API key account opened to automatic switching. Known limit: when that folder account later runs out, panes wait for a reset instead of moving to the key. Five new strings in all 11 interface languages.
+
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 
 ### Changed
