@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
-import { linearPipelineDag } from './pipelineDagTestStub'
+import { linearPipelineDag, RUN_SLOT_STUB } from './pipelineDagTestStub'
 import { detailsAction, startRefusalText } from '../../lib/pipelineErrors'
 import { resetConfirmDialog } from '../../lib/pipelineResetConfirm'
 
@@ -50,7 +50,7 @@ interface StartOpts {
 }
 
 async function loadStart(opts: StartOpts = {}) {
-  const { code } = await transformWithEsbuild(`${startSource}\nreturn onPipelineStart`, 'AppStart.ts', { loader: 'ts' })
+  const { code } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${startSource}\nreturn onPipelineStart`, 'AppStart.ts', { loader: 'ts' })
   const pipeline = { state: 'idle', workspacePath: '', task: '', stageIndex: -1, globalManager: null as unknown, log: [] as string[] }
   const sent: Array<{ type: string; payload: Record<string, unknown> }> = []
   const stagesApi = {
@@ -232,7 +232,7 @@ describe('every slot of the first stage failing to spawn is a refusal (B2)', () 
 describe('the Run button shows the refusal', () => {
   async function loadPanel(refusal: string, coded?: { code: string; params?: Record<string, unknown> }) {
     const src = block('async function onPipelineStartFromPanel(', '\n/** Before firing 🎉')
-    const { code } = await transformWithEsbuild(`${src}\nreturn onPipelineStartFromPanel`, 'AppPanel.ts', { loader: 'ts' })
+    const { code } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${src}\nreturn onPipelineStartFromPanel`, 'AppPanel.ts', { loader: 'ts' })
     const toast = vi.fn()
     const alert = vi.fn()
     const deps: Record<string, unknown> = {
@@ -279,7 +279,7 @@ describe('the Run button shows the refusal', () => {
 describe('the sidebar Abort asks first (Pipeline UX D4)', () => {
   async function loadAbort(confirmed: boolean) {
     const src = block('async function clearStoredPipelineRun(', '\n// ─────────── Switch / close workspace')
-    const { code } = await transformWithEsbuild(`${src}\nreturn { onPipelineUserAbort }`, 'AppAbort.ts', { loader: 'ts' })
+    const { code } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${src}\nreturn { onPipelineUserAbort }`, 'AppAbort.ts', { loader: 'ts' })
     const confirm = vi.fn(async (_message: string, _opts: { title?: string; danger?: boolean }) => confirmed)
     const onPipelineAbort = vi.fn(async () => {})
     const deps: Record<string, unknown> = {

@@ -11,7 +11,7 @@ import {
   reclaimBlockedBy,
 } from '../../lib/idleReclaim'
 import { retroBeforeReclaim } from '../../composables/useEvolve'
-import { linearPipelineDag } from './pipelineDagTestStub'
+import { linearPipelineDag, RUN_SLOT_STUB } from './pipelineDagTestStub'
 
 // A finished stage used to keep its CLIs alive until the whole run ended or the
 // idle sweep caught them 30 minutes later, so a long pipeline went on paying
@@ -103,7 +103,7 @@ function stageList() {
 
 async function load(opts: Options = {}) {
   const { code } = await transformWithEsbuild(
-    `${managerIdSource}\n${nextSource}\n${reclaimSource}\n` +
+    `${RUN_SLOT_STUB}\n${managerIdSource}\n${nextSource}\n${reclaimSource}\n` +
       'return { onPipelineNext, reclaimCompletedStagePanes, reclaimIdlePane, globalManagerPaneId }',
     'AppPipelineStageReclaim.ts',
     { loader: 'ts' },

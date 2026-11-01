@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
+import { RUN_SLOT_STUB } from './pipelineDagTestStub'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -36,6 +37,7 @@ const DISPATCH = '---DISPATCH-START---\nto: 畫師\nmessage: draw the first char
 async function load(opts: { managerOwnsStage: boolean }) {
   const { code } = await transformWithEsbuild(
     [
+      RUN_SLOT_STUB,
       constLine('DISPATCH_RE'), constLine('ASK_RE'), constLine('REPORT_RE'),
       functionSource('parseContentBlocks'), functionSource('parseDispatchBlocks'),
       functionSource('globalManagerRouterScan'),

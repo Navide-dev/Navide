@@ -1550,6 +1550,14 @@ def forget_pane_activity(pane_id: str) -> None:
     forget_pane_live_sessions(pane_id)
 
 
+def _note_webhook_session(pane_id: str, vendor: str, session_id: str) -> None:
+    from . import webhook_service
+
+    webhooks = webhook_service.current()
+    if webhooks is not None:
+        webhooks.note_pane_session(pane_id, vendor, session_id)
+
+
 async def _on_log_activity(event: ActivityEvent) -> None:
     """Sink for agent-activity events (agent_active / turn_complete).
 
@@ -1571,6 +1579,7 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             # External session — skip; no pane to deliver to.
             return
         pane_id = attributed.pane_id or ""
+        _note_webhook_session(pane_id, event.vendor, event.session_id)
         if event.event_type == "subagent_turn_end":
             # A Codex sub-agent's turn end is not its parent pane's: the pane's
             # state, reply text and dev time ignore it. The per-account turn
@@ -2544,12 +2553,13 @@ async def _start_log_watcher() -> None:
         log.warning("scheduler startup failed: %s", err)
 
     # Webhook triggers: empty tables and no listener until the user turns them on.
-    from . import webhook_ws
+    from . import webhook_service, webhook_ws
 
     try:
         await webhook_ws.startup()
     except Exception as err:  # noqa: BLE001
         log.warning("webhook startup failed: %s", err)
+        webhook_service.mark_unavailable()
 
     # Each workspace's self-evolution: its watchdog notices runs that ran past
     # their time or budget, and runs a missed slot once its workspace opens.
@@ -3108,6 +3118,8 @@ async def cli_pretooluse_guard_hook(vendor: str, request: Request) -> Response:
         pane_id = _pane_for_guard_token(request.headers.get(guard_hooks.PANE_TOKEN_HEADER, ""))
         pane = agent_messaging.current(pane_id) if pane_id else None
         ws_path = pane.workspace_path if pane is not None else ws_path
+    # The token still names the pane after /clear, before the new session is attributed.
+    _note_webhook_session(pane_id, vendor, str(payload.get("session_id") or payload.get("sessionId") or ""))
     if fail_closed:
         return JSONResponse(await guard_fail_closed.respond(
             vendor, payload, pane_id=pane_id or "", cwd=cwd, workspace=ws_path or cwd

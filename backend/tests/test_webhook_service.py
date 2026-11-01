@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from types import SimpleNamespace
 from typing import Any
 
@@ -310,6 +311,254 @@ class TestLaunch:
         assert launch(env, command, pane="fresh") is command
 
 
+SESSION = "11111111-2222-3333-4444-555555555555"
+
+
+def restarted(env) -> Any:
+    """The same store under a new service: what an app restart leaves."""
+    return svc.WebhookService(store=env.store, db=env.store.db, window=env.window, pipeline=env.pipelines.get,
+                              known_program=lambda agent, program: program == agent)
+
+
+def reopen(service: Any, command: Any, pane: str = "new-id", workspace: str = WS, origin: str = "manual") -> Any:
+    return service.launch_command("claude", command, pane_id=pane, metadata={"origin": origin, "workspace_path": workspace})
+
+
+async def run_with_session(env, session: str = SESSION, unattended: bool = False) -> None:
+    if unattended:
+        env.store.set_unattended(env.trigger["id"], True)
+        env.trigger = next(t for t in env.store.list() if t["id"] == env.trigger["id"])
+    await started_run(env)
+    launch(env, f"claude {CLAUDE_BYPASS} --session-id {session}", pane="first")
+
+
+class TestResumedSession:
+    """A restored pane has a new id: its session is what still names the run."""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            f"claude {CLAUDE_BYPASS} --resume {SESSION}",
+            f"claude --resume {SESSION} {CLAUDE_BYPASS}",
+            f"claude {CLAUDE_BYPASS} --resume={SESSION}",
+            f"claude {CLAUDE_BYPASS} -r {SESSION}",
+            f"claude {CLAUDE_BYPASS} --session-id={SESSION}",
+            f"claude {CLAUDE_BYPASS} --resume '{SESSION}'",
+            f'claude {CLAUDE_BYPASS} --resume "{SESSION}"',
+            ["/bin/zsh", "-ilc", f"claude --resume {SESSION} {CLAUDE_BYPASS}"],
+            ["powershell.exe", "-NoLogo", "-Command", f"claude --resume {SESSION} {CLAUDE_BYPASS}"],
+            f"bash -lc 'claude --resume {SESSION} {CLAUDE_BYPASS}'",
+        ],
+    )
+    async def test_every_form_finds_the_session_after_a_restart(self, env, command) -> None:
+        await run_with_session(env)
+        again = restarted(env)
+        got = reopen(again, command) if not str(command).startswith("bash") else None
+        if got is None:
+            # Not the plain standard command, so it is refused: still no bypass.
+            with pytest.raises(svc.LaunchRefused):
+                reopen(again, command)
+            return
+        assert CLAUDE_BYPASS not in str(got) and "--permission-mode default" in str(got)
+        assert again.is_run_pane("new-id")
+
+    async def test_a_powershell_call_operator_is_refused_not_passed(self, env) -> None:
+        await run_with_session(env)
+        with pytest.raises(svc.LaunchRefused):
+            reopen(restarted(env), f"& 'claude' --resume {SESSION} {CLAUDE_BYPASS}")
+
+    async def test_the_session_survives_the_run_ending(self, env) -> None:
+        await run_with_session(env)
+        env.service.finish_run(WS, "finished")
+        got = reopen(restarted(env), f"claude {CLAUDE_BYPASS} --resume {SESSION}")
+        assert got == f"claude --permission-mode default --resume {SESSION}"
+
+    async def test_a_restart_while_the_run_is_live(self, env) -> None:
+        await run_with_session(env)
+        got = reopen(restarted(env), f"claude {CLAUDE_BYPASS} --resume {SESSION}", origin="pipeline")
+        assert got == f"claude --permission-mode default --resume {SESSION}"
+
+    async def test_a_rebuild_that_changes_the_account_is_the_same_resume(self, env) -> None:
+        # Failover and account switches rebuild a pane under a new id; only this
+        # gate stands in their way, and it needs nothing from them.
+        await run_with_session(env)
+        got = reopen(env.service, ["/bin/zsh", "-ilc", f"claude --resume {SESSION} {CLAUDE_BYPASS}"], pane="rebuilt")
+        assert got == ["/bin/zsh", "-ilc", f"claude --permission-mode default --resume {SESSION}"]
+
+    async def test_a_wake_from_a_channel_is_the_same_resume(self, env) -> None:
+        await run_with_session(env)
+        got = reopen(env.service, f"claude {CLAUDE_BYPASS} --resume {SESSION}", pane="woken", origin="mcp")
+        assert got == f"claude --permission-mode default --resume {SESSION}"
+
+    async def test_a_new_session_in_a_run_pane_is_recorded(self, env) -> None:
+        await run_with_session(env)
+        env.service.note_pane_session("first", "claude", "after-clear")
+        got = reopen(restarted(env), f"claude {CLAUDE_BYPASS} --resume after-clear")
+        assert got == "claude --permission-mode default --resume after-clear"
+
+    async def test_a_session_of_another_pane_is_not_recorded(self, env) -> None:
+        await run_with_session(env)
+        env.service.note_pane_session("someone-else", "claude", "theirs")
+        command = f"claude {CLAUDE_BYPASS} --resume theirs"
+        assert reopen(env.service, command) is command
+
+    async def test_a_new_resume_chain_is_recorded_too(self, env) -> None:
+        await run_with_session(env)
+        reopen(env.service, f"claude --resume {SESSION} --session-id forked {CLAUDE_BYPASS}")
+        got = reopen(restarted(env), f"claude {CLAUDE_BYPASS} --resume forked", pane="third")
+        assert got == "claude --permission-mode default --resume forked"
+
+    async def test_rows_outlive_the_trigger_and_the_events(self, env) -> None:
+        await run_with_session(env)
+        env.service.finish_run(WS, "finished")
+        env.store.delete(env.trigger["id"])
+        for _ in range(3):
+            env.service.audit([{"trigger_id": env.trigger["id"], "outcome": "accepted", "status": 202}])
+        env.store.seen_recently(env.trigger["id"], "b" * 64, 10**12)
+        assert env.store.run_session(SESSION) is not None
+        got = reopen(restarted(env), f"claude {CLAUDE_BYPASS} --resume {SESSION}")
+        assert got == f"claude --permission-mode default --resume {SESSION}"
+
+
+class TestUnsureMeansNoBypass:
+    @pytest.mark.parametrize(
+        "command",
+        [
+            f"claude {CLAUDE_BYPASS} --continue",
+            f"claude {CLAUDE_BYPASS} -c",
+            f"claude {CLAUDE_BYPASS} --resume",
+            f"claude --resume {CLAUDE_BYPASS}",
+            f"claude {CLAUDE_BYPASS} -r",
+            f"claude {CLAUDE_BYPASS} --resume=",
+            f"claude {CLAUDE_BYPASS} --resume $ID",
+            f"claude --permission-mode bypassPermissions --continue",
+        ],
+    )
+    async def test_a_resume_it_cannot_name_in_a_workspace_with_runs(self, env, command) -> None:
+        await run_with_session(env)
+        again = restarted(env)
+        got = reopen(again, command)
+        assert CLAUDE_BYPASS not in got and "bypassPermissions" not in got
+        assert not again.is_run_pane("new-id")
+
+    async def test_the_same_commands_elsewhere_are_untouched(self, env) -> None:
+        await run_with_session(env)
+        command = f"claude {CLAUDE_BYPASS} --continue"
+        assert reopen(env.service, command, workspace="/ws/other") is command
+
+    async def test_no_workspace_counts_as_any_run(self, env) -> None:
+        await run_with_session(env)
+        got = reopen(env.service, f"claude {CLAUDE_BYPASS} --continue", workspace="")
+        assert CLAUDE_BYPASS not in got
+
+    async def test_a_trailing_slash_is_the_same_workspace(self, env) -> None:
+        await run_with_session(env)
+        assert CLAUDE_BYPASS not in reopen(env.service, f"claude {CLAUDE_BYPASS} --continue", workspace=WS + "/")
+
+    async def test_without_a_bypass_it_stays_as_it_was(self, env) -> None:
+        await run_with_session(env)
+        command = "claude --continue"
+        assert reopen(env.service, command) is command
+
+    async def test_a_store_error_drops_the_bypass_and_trusts_no_run(self, env, monkeypatch, caplog) -> None:
+        await run_with_session(env)
+
+        def broken(*_: Any) -> None:
+            raise sqlite3.OperationalError("disk I/O error")
+
+        monkeypatch.setattr(env.store, "run_session", broken)
+        with caplog.at_level("WARNING"):
+            got = reopen(env.service, f"claude {CLAUDE_BYPASS} --resume {SESSION}")
+        assert got == f"claude --resume {SESSION}"
+        assert not env.service.is_run_pane("new-id")
+        assert "webhook" in caplog.text
+
+    async def test_a_store_error_leaves_a_command_without_a_bypass_alone(self, env, monkeypatch) -> None:
+        def broken(*_: Any) -> None:
+            raise sqlite3.OperationalError("disk I/O error")
+
+        monkeypatch.setattr(env.store, "run_session", broken)
+        command = f"claude --resume {SESSION}"
+        assert reopen(env.service, command) is command
+
+    def test_a_service_that_failed_to_start_drops_a_resume_bypass(self) -> None:
+        assert svc.without_bypass("claude", f"claude {CLAUDE_BYPASS} --resume {SESSION}") == f"claude --resume {SESSION}"
+        assert svc.without_bypass("claude", ["/bin/zsh", "-ilc", f"claude {CLAUDE_BYPASS} -c"]) == ["/bin/zsh", "-ilc", "claude -c"]
+
+    def test_that_leaves_new_panes_and_other_vendors_alone(self) -> None:
+        for agent, command in (("claude", f"claude {CLAUDE_BYPASS} --session-id x"), ("codex", "codex --yolo resume x")):
+            assert svc.without_bypass(agent, command) is command
+
+
+class TestUnattendedOnEveryPath:
+    @pytest.fixture(autouse=True)
+    def posix(self, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+
+    async def test_a_session_keeps_it_while_the_trigger_does(self, env) -> None:
+        await run_with_session(env, unattended=True)
+        again = restarted(env)
+        got = reopen(again, f"claude {CLAUDE_BYPASS} --resume {SESSION}")
+        assert got == f"claude {CLAUDE_BYPASS} --resume {SESSION}"
+        assert again.launch_env("new-id")
+
+    @pytest.mark.parametrize("change", ["off", "deleted"])
+    @pytest.mark.parametrize("path", ["session", "pane", "active"])
+    async def test_it_ends_when_the_trigger_stops_being_unattended(self, env, change, path) -> None:
+        await run_with_session(env, unattended=True)
+        if change == "off":
+            env.store.set_unattended(env.trigger["id"], False)
+        else:
+            env.store.delete(env.trigger["id"])
+        again = restarted(env)
+        if path == "session":
+            got = reopen(again, f"claude {CLAUDE_BYPASS} --resume {SESSION}")
+            pane = "new-id"
+        elif path == "pane":
+            got = reopen(again, f"claude {CLAUDE_BYPASS} --resume {SESSION}", pane="first")
+            pane = "first"
+        else:
+            got = reopen(again, f"claude {CLAUDE_BYPASS}", pane="next-stage", origin="pipeline")
+            pane = "next-stage"
+        assert CLAUDE_BYPASS not in got and "--permission-mode default" in got
+        assert again.launch_env(pane) == {}
+
+    async def test_a_child_never_had_it(self, env) -> None:
+        await run_with_session(env, unattended=True)
+        got = launch(env, f"claude {CLAUDE_BYPASS}", pane="child", origin="mcp", spawned_by="first")
+        assert got == "claude --permission-mode default"
+
+
+class TestNeverUsed:
+    def test_a_resume_with_no_webhook_history_is_the_same_object(self, env) -> None:
+        for command in (f"claude {CLAUDE_BYPASS} --resume {SESSION}", f"claude {CLAUDE_BYPASS} --continue",
+                        ["/bin/zsh", "-ilc", f"claude {CLAUDE_BYPASS} --session-id {SESSION}"]):
+            assert reopen(env.service, command) is command
+        assert not env.service.is_run_pane("new-id")
+
+
+class TestKickoffFailure:
+    async def test_a_run_reported_started_records_the_failure(self, env) -> None:
+        await started_run(env)
+        env.service.note_kickoff_failed(WS)
+        latest = env.store.events(env.trigger["id"])[0]
+        assert (latest["outcome"], latest["detail"]) == ("start-failed", "kickoff")
+
+    async def test_while_starting_only_the_start_reports_it(self, env) -> None:
+        env.window.hold = asyncio.Event()
+        await accept(env)
+        await asyncio.sleep(0)
+        run_started(env)
+        env.service.note_kickoff_failed(WS)
+        assert "kickoff" not in [e["detail"] for e in env.store.events(env.trigger["id"])]
+        env.window.hold.set()
+        await settle(env)
+
+    def test_a_workspace_with_no_webhook_run_records_nothing(self, env) -> None:
+        env.service.note_kickoff_failed("/ws/other")
+        assert env.store.events(env.trigger["id"]) == []
+
+
 class Clock:
     def __init__(self, env, monkeypatch) -> None:
         self.now = 1_000_000.0
@@ -444,6 +693,7 @@ class TestUnattended:
         monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
 
     async def run(self, env) -> None:
+        env.store.set_unattended(env.trigger["id"], True)
         env.trigger["unattended"] = True
         await started_run(env)
 

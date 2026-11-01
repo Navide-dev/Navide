@@ -8663,6 +8663,8 @@ async def _terminal_create_impl(
 
             settings = guard_fail_closed.claude_settings(str(app.backend_port_file()))
             payload["command"] = claude_hooks.append_settings(payload["command"], settings)
+    elif webhook_service.unavailable():
+        payload["command"] = webhook_service.without_bypass(agent_key, payload.get("command"))
     try:
         startup_probe = await asyncio.get_running_loop().run_in_executor(
             _CLI_PROBE_EXECUTOR,
@@ -11554,6 +11556,8 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
     reason = payload.get("reason", "user")
     project = app.project_store.abort_pipeline(payload["workspace_path"], reason=reason)
     _mirror_pipeline_state(project)
+    if reason == "failed" and payload.get("kickoff_failed") is True and (webhooks := webhook_service.current()) is not None:
+        webhooks.note_kickoff_failed(payload["workspace_path"])
     app.tokens_store.end_run(
         project.workspace_path,
         # The engine aborts with reason "failed" when a run cannot go on (a

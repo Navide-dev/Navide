@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
+import { RUN_SLOT_STUB } from './pipelineDagTestStub'
 import { runPipelineKickoff } from '../../lib/cliCoordination'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
@@ -25,7 +26,7 @@ function block(startMarker: string, endMarker: string): string {
 
 async function loadFail(opts: { errorEdge?: boolean; retry?: boolean } = {}) {
   const source = block('async function failRunOnKickoff(', '\n/** Approve the gate the run is paused on')
-  const { code } = await transformWithEsbuild(`${source}\nreturn failRunOnKickoff`, 'AppKickoffFailed.ts', { loader: 'ts' })
+  const { code } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${source}\nreturn failRunOnKickoff`, 'AppKickoffFailed.ts', { loader: 'ts' })
   const pipeline = { state: 'running', stageIndex: 1, workspacePath: '/ws', log: [] as string[] }
   const sent: Array<{ type: string; payload: Record<string, unknown> }> = []
   const failed: Array<[number, string, string]> = []
@@ -76,7 +77,7 @@ describe('a kickoff that never reached its pane fails the run (#448)', () => {
     expect(t.failed).toEqual([[1, 'codex-1', 'kickoff never reached the agent after 3 attempts']])
     expect(t.pipeline.state).not.toBe('running')
     expect(t.ends.map((e) => e[0])).toEqual(['failed'])
-    expect(t.sent).toEqual([{ type: 'pipeline.abort', payload: { workspace_path: '/ws', reason: 'failed' } }])
+    expect(t.sent).toEqual([{ type: 'pipeline.abort', payload: { workspace_path: '/ws', reason: 'failed', kickoff_failed: true } }])
     expect(t.toasts).toHaveLength(1)
     expect(t.toasts[0].type).toBe('error')
     expect(t.toasts[0].text).toContain('pipeline-kickoff-failed')
