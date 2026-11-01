@@ -2760,6 +2760,113 @@ async def test_fetch_codex_promotes_stranded_pane_login(monkeypatch, tmp_path, s
     assert pane_auth.is_symlink()
 
 
+_SEVEN_DAYS = {"used_percent": 41, "limit_window_seconds": 604800, "reset_at": 1_800_000_000}
+_FIVE_HOURS = {"used_percent": 5, "limit_window_seconds": 18000, "reset_at": 1_800_000_000}
+
+
+@pytest.mark.parametrize("rate", [
+    {"primary_window": _SEVEN_DAYS},
+    {"primary_window": None, "secondary_window": _SEVEN_DAYS},
+    {"primary_window": _SEVEN_DAYS, "secondary_window": None},
+])
+def test_codex_confirms_no_session_window_only_for_a_lone_weekly_one(rate):
+    assert protocols_vendor.codex_absent_windows(rate) == ["session"]
+
+
+@pytest.mark.parametrize("rate", [
+    pytest.param({}, id="empty"),
+    pytest.param({"primary_window": _FIVE_HOURS}, id="session only"),
+    pytest.param({"primary_window": _FIVE_HOURS, "secondary_window": _SEVEN_DAYS}, id="both"),
+    pytest.param({"primary_window": {"used_percent": 41}}, id="unknown length"),
+    pytest.param({"primary_window": _SEVEN_DAYS, "secondary_window": {"used_percent": 1}}, id="weekly and unknown"),
+    pytest.param({"primary_window": {"limit_window_seconds": 604800}}, id="no figure"),
+    pytest.param({"primary_window": "weekly"}, id="not an object"),
+])
+def test_codex_confirms_nothing_for_any_other_shape(rate):
+    assert protocols_vendor.codex_absent_windows(rate) == []
+
+
+async def test_fetch_codex_says_the_session_window_is_absent(monkeypatch, tmp_path, set_home):
+    set_home(tmp_path)
+    real = tmp_path / ".codex"
+    real.mkdir()
+    (real / "auth.json").write_text(
+        json.dumps({"tokens": {"access_token": "tok", "account_id": "acc"}}),
+        encoding="utf-8",
+    )
+    _fake_httpx(monkeypatch, {
+        us.codex_usage_url(us.codex_base_url(real)): _FakeResponse(200, {
+            "plan_type": "pro", "rate_limit": {"primary_window": _SEVEN_DAYS},
+        }),
+    })
+
+    snap = await us.fetch_codex(real)
+
+    assert [w["kind"] for w in snap["windows"]] == ["weekly"]
+    assert snap["absentWindows"] == ["session"]
+
+
+def test_the_cache_keeps_a_confirmed_absent_window():
+    good = us.UsageService._cache_safe_snapshot({
+        "windows": [], "fetchedAt": "2026-11-01T00:00:00Z", "absentWindows": ["session"],
+    })
+
+    assert good["absentWindows"] == ["session"]
+
+
+@pytest.mark.parametrize("value", ["session", [1], [], None])
+def test_the_cache_drops_a_malformed_absent_window_list(value):
+    good = us.UsageService._cache_safe_snapshot({
+        "windows": [], "fetchedAt": "2026-11-01T00:00:00Z", "absentWindows": value,
+    })
+
+    assert "absentWindows" not in good
+
+
+def test_a_cache_written_before_absent_windows_loads_as_it_did(tmp_path):
+    """The file a v0.2.36 install left behind: same schema version, no field."""
+    cache = tmp_path / "usage-cache.json"
+    window = {"kind": "session", "label": "Session (5h)", "usedPercent": 25,
+              "resetsAt": "2099-01-01T00:00:00Z"}
+    weekly = {"kind": "weekly", "label": "Weekly (all models)", "usedPercent": 30,
+              "resetsAt": "2099-01-01T00:00:00Z"}
+    cache.write_text(json.dumps({
+        "schemaVersion": 1,
+        "accounts": {"claude": {
+            "with-session": {
+                "provider": "claude", "status": "ok", "planType": None, "windows": [window, weekly],
+                "fetchedAt": "2026-10-31T00:00:00Z", "error": None,
+            },
+            "weekly-only": {
+                "provider": "claude", "status": "ok", "planType": None, "windows": [weekly],
+                "fetchedAt": "2026-10-31T00:00:00Z", "error": None,
+            },
+        }},
+    }), encoding="utf-8")
+
+    accounts = us.UsageService(cache_path=cache).payload()["accounts"]["claude"]
+
+    assert us.USAGE_CACHE_SCHEMA_VERSION == 1
+    assert accounts["with-session"]["windows"] == [window, weekly]
+    assert accounts["weekly-only"]["windows"] == [weekly]
+    assert "absentWindows" not in accounts["with-session"]
+    assert "absentWindows" not in accounts["weekly-only"]
+
+
+def test_a_confirmed_absent_window_survives_a_cache_round_trip(tmp_path):
+    cache = tmp_path / "usage-cache.json"
+    good = us._snapshot(
+        "claude", "ok",
+        windows=[us._window("weekly", "Weekly", 30, "2099-01-01T00:00:00Z")],
+    )
+    good["absentWindows"] = ["session"]
+    first = us.UsageService(cache_path=cache)
+    assert first._record_claude_snapshot("acct-a", good) is True
+    first._save_cache()
+
+    assert us.UsageService(cache_path=cache).payload()["accounts"]["claude"]["acct-a"]["absentWindows"] == ["session"]
+
+
 async def test_fetch_codex_no_credentials_without_stranded_login(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     snap = await us.fetch_codex(tmp_path / ".codex")

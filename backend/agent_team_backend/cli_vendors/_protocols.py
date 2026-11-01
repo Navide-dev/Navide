@@ -198,6 +198,21 @@ def _codex_windows(rate: dict) -> list[dict]:
     return windows
 
 
+def codex_absent_windows(rate: dict) -> list[str]:
+    """``["session"]`` when the answer holds one window and it is the weekly
+    one by its own length, else ``[]``. A window whose length or figure cannot
+    be read proves nothing about the other one."""
+    entries = [rate.get(key) for key, _ in _CODEX_POSITIONAL]
+    present = [entry for entry in entries if entry is not None]
+    if len(present) != 1 or not isinstance(present[0], dict):
+        return []
+    entry = present[0]
+    role = _CODEX_WINDOW_ROLES.get(_codex_window_minutes(entry))
+    if role is None or role[0] != "weekly" or _num(entry.get("used_percent")) is None:
+        return []
+    return ["session"]
+
+
 def _codex_credits(data: dict) -> dict | None:
     credits = data.get("credits")
     if not isinstance(credits, dict):

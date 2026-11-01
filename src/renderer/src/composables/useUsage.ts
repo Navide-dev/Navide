@@ -61,6 +61,10 @@ export interface UsageSnapshot {
   windows: UsageWindow[]
   fetchedAt: string
   error: string | null
+  /** Window kinds the vendor's own answer proves this account does not have
+   *  (a verified Ultra account has no session window). Absent from the list
+   *  and absent from `windows` means unknown, not missing. */
+  absentWindows?: string[]
   stale?: boolean
   lastSuccessAt?: string | null
   refreshStatus?: UsageStatus | 'not-refreshed'

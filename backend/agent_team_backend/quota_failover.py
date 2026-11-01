@@ -655,8 +655,12 @@ def _quota_verdict(snapshot: dict[str, Any] | None, now: float) -> tuple[bool, b
         spent = False
     remaining = [_window_remaining(w) for w in current]
     measured = [value for value in remaining if value is not None]
+    # A required window is present, or a successful read proved it does not
+    # exist for this account. Merely missing still says nothing about it.
+    absent = (snapshot or {}).get("absentWindows") if (snapshot or {}).get("status") == "ok" else None
+    accounted_for = {w.get("kind") for w in current} | set(absent or ())
     positive = bool(semantics is not None and current and not spent and None not in remaining
-                    and set(semantics["required"]) <= {w.get("kind") for w in current})
+                    and set(semantics["required"]) <= accounted_for)
     return spent, positive, min(measured) if measured else None
 
 
