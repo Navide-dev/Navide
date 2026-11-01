@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readdirSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -43,6 +45,15 @@ function fakeCalls(overrides: Partial<Record<keyof Calls, unknown>> = {}): Calls
     remove: vi.fn(async () => ({ ok: true })),
     ...overrides,
   } as unknown as Calls
+}
+
+/** A key test the test answers by hand, to land after what it races. */
+function heldTest() {
+  let answer: (result: string) => void = () => {}
+  const call = vi.fn(() => new Promise((done) => {
+    answer = (result) => done({ ok: true, result })
+  }))
+  return { call, answer: (result: string) => answer(result) }
 }
 
 const AGENTS = [
@@ -156,6 +167,21 @@ describe('AddAccountPanel', () => {
     expect(save()).toBeUndefined()
   })
 
+  it('drops a test answer for a key that has since changed', async () => {
+    const held = heldTest()
+    const w = mountAdd(fakeCalls({ testPasted: held.call }))
+    await openForm(w)
+    await w.get('#api-key-name').setValue('Project')
+    await w.get('#api-key-secret').setValue(FAKE_KEY)
+    await w.get('.ak-secret button').trigger('click')
+    await w.get('#api-key-secret').setValue(FAKE_KEY + 'x')
+    held.answer('rejected')
+    await flushPromises()
+    expect(w.find('.ak-result').exists()).toBe(false)
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
+    expect(w.get('.ak-secret button').text()).toBe(i18n.global.t('settings.accounts.api-keys.form.test'))
+  })
+
   it.each(['subscription-token', 'unsupported-platform', 'login-policy', 'account-active'])('shows the %s error the backend sent', async (code) => {
     const calls = fakeCalls({ create: vi.fn(async () => ({ ok: false, error_code: code })) })
     const w = mountAdd(calls)
@@ -203,6 +229,43 @@ describe('ApiKeyDetail', () => {
     await flushPromises()
     expect(calls.testStored).toHaveBeenCalledWith('k1')
     expect(w.get('.ak-result').text()).toBe(i18n.global.t('settings.accounts.api-keys.form.test-ok'))
+  })
+
+  it('drops a stored-key test answer once another account is showing', async () => {
+    const held = heldTest()
+    const w = mountDetail(fakeCalls({ testStored: held.call }))
+    await w.get('[data-testid="api-key-test"]').trigger('click')
+    await w.setProps({ row: { ...ROW, id: 'k2', name: 'Other', last4: '9B1C' } })
+    held.answer('ok')
+    await flushPromises()
+    expect(w.find('.ak-result').exists()).toBe(false)
+    expect(w.get('[data-testid="api-key-test"]').text()).toBe(i18n.global.t('settings.accounts.api-keys.form.test'))
+  })
+
+  it('drops a pasted-key test answer for a key that has since changed', async () => {
+    const held = heldTest()
+    const w = mountDetail(fakeCalls({ testPasted: held.call }))
+    await w.get('[data-testid="api-key-replace"]').trigger('click')
+    await w.get('#api-key-secret').setValue(FAKE_KEY)
+    await w.get('.ak-secret button').trigger('click')
+    await w.get('#api-key-secret').setValue(FAKE_KEY + 'x')
+    held.answer('rejected')
+    await flushPromises()
+    expect(w.find('.ak-result').exists()).toBe(false)
+    expect(w.get('.ak-btn.primary').attributes('disabled')).toBeUndefined()
+  })
+
+  it('drops a stored-key test answer once the key was replaced', async () => {
+    const held = heldTest()
+    const w = mountDetail(fakeCalls({ testStored: held.call }))
+    await w.get('[data-testid="api-key-test"]').trigger('click')
+    await w.get('[data-testid="api-key-replace"]').trigger('click')
+    await w.get('#api-key-secret').setValue(FAKE_KEY)
+    await w.get('.ak-btn.primary').trigger('click')
+    await flushPromises()
+    held.answer('rejected')
+    await flushPromises()
+    expect(w.find('.ak-result').exists()).toBe(false)
   })
 
   it('replaces a key and clears the field', async () => {
@@ -334,5 +397,49 @@ describe('CliAccountsPane with an API key account', () => {
     await w.get('[data-testid="api-key-stop-using"]').trigger('click')
     await flushPromises()
     expect(api.setPaneDefault).toHaveBeenCalledWith('claude', null)
+  })
+})
+
+describe('API key account wording, in every language', () => {
+  const dir = resolve(__dirname, '../../../../../packages/plugin-ui/src/foundation/i18n/locales')
+  const locales = readdirSync(dir).filter((name) => name.endsWith('.json'))
+    .map((name) => [name, JSON.parse(readFileSync(resolve(dir, name), 'utf8'))] as const)
+
+  it('finds the languages', () => {
+    expect(locales).toHaveLength(11)
+  })
+
+  // Only Claude on macOS uses the Keychain: a Codex key is a file in the
+  // account's folder, and Linux has no Keychain at all.
+  it.each(locales)('%s does not call every key location a keychain', (_name, doc) => {
+    const { error } = doc.settings.accounts['api-keys']
+    for (const text of [error['store-failed'], error['secret-missing']]) {
+      expect(text).not.toMatch(/keychain|Schlüsselbund|llavero|trousseau|キーチェーン|키체인|chaveiro|связк|钥匙圈|鑰匙圈/i)
+    }
+  })
+
+  // The bar shows on any pane that hit a limit, a pane on an API key included.
+  it.each(locales)('%s names no kind of account on the out-of-quota bar', (_name, doc) => {
+    expect(doc.settings.accounts['api-keys'].pane.title).not.toMatch(/subscription|abonnement|suscripción|サブスクリプション|구독|assinatura|подписк|đăng ký|订阅|訂閱/i)
+  })
+
+  // The count includes panes that are not busy, such as one with no session,
+  // and it can be 1, so the sentence must not need a plural.
+  it.each(locales)('%s does not call the panes that stayed busy', (_name, doc) => {
+    expect(doc['cli-account']['api-key-takeover-partial']).not.toMatch(/busy|beschäftigt|ocupad|occupés|処理中|작업 중|Занят|đang bận|忙碌/i)
+  })
+})
+
+describe('Styles only a real window applies', () => {
+  const sfc = (path: string) => readFileSync(resolve(__dirname, path), 'utf8')
+
+  // Adding moved to the list, and AddAccountPanel has its own provider picker.
+  it('hides the provider picker of the detail head along with its add button', () => {
+    expect(sfc('../CliAccountsPane.vue')).toMatch(/\.acct-detail \.cli-scope-select\s*\{\s*display: none;/)
+  })
+
+  // The bar sits where the banner sits, and nothing on it works with the backend away.
+  it('takes the out-of-quota bar off a pane showing the disconnected banner', () => {
+    expect(sfc('../accounts/PaneAccountBar.vue')).toMatch(/:global\(\.pane:has\(\.disconnected-banner\) \.pane-account-bar\)\s*\{\s*display: none;/)
   })
 })

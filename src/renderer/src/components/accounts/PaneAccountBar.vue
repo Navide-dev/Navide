@@ -5,8 +5,9 @@
  * PTY is not resized, and Navide never starts paying on its own: every way
  * forward here is the user's click.
  *
- * TODO: panes cannot spend API keys yet, so a key's "credit used up" or
- * "rejected" states have no signal to show. They belong here once they do.
+ * A pane can run on an API key, so the title names no kind of account. A key's
+ * "credit used up" or "rejected" states have no signal yet, so they do not show
+ * here.
  */
 import { ref, watch } from 'vue'
 import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
@@ -65,4 +66,8 @@ watch(
 .pab-btn { flex: none; padding: 2px 8px; border: 1px solid var(--border-default); border-radius: 5px; background: transparent; color: var(--text-primary); font-size: 11px; white-space: nowrap; cursor: pointer; }
 .pab-btn:hover { background: var(--bg-hover); }
 .pab-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); font-weight: 600; }
+/* The disconnected banner sits in this spot, and nothing here works until the backend is back. */
+:global(.pane:has(.disconnected-banner) .pane-account-bar) {
+  display: none;
+}
 </style>

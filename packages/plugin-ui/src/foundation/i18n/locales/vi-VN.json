@@ -8322,7 +8322,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "Đã dùng hết hạn mức gói đăng ký",
+          "title": "Đã đạt giới hạn sử dụng",
           "back-at": "Có lại lúc {time}",
           "back-unknown": "Chưa rõ thời gian đặt lại",
           "wait": "Chờ đặt lại"
@@ -8390,8 +8390,8 @@
           "invalid-name": "Nhập tên tối đa 60 ký tự.",
           "invalid-reminder": "Nhập số tiền ghi chú ngân sách hằng tháng lớn hơn 0.",
           "unsupported-agent": "CLI này chưa dùng được khóa API.",
-          "store-failed": "Không thể lưu vào keychain của máy tính này.",
-          "secret-missing": "Khóa này không còn trong keychain. Hãy dán lại.",
+          "store-failed": "Không thể lưu vào máy tính này.",
+          "secret-missing": "Khóa này không còn trên máy tính này. Hãy dán lại.",
           "not-found": "Khóa API này không còn tồn tại.",
           "main-window-only": "Chỉ có thể quản lý khóa API trong Cài đặt.",
           "internal-error": "Đã xảy ra lỗi. Hãy thử lại.",
@@ -9802,7 +9802,7 @@
     "failed": "Không kết nối lại được cuộc hội thoại đó — bản ghi của nó có thể không còn"
   },
   "cli-account": {
-    "api-key-takeover-partial": "Đã dùng hết hạn mức. Các khung mới dùng {name}, tính phí theo mức dùng. {count} khung đang bận được giữ nguyên.",
+    "api-key-takeover-partial": "Đã dùng hết hạn mức. Các khung mới dùng {name}, tính phí theo mức dùng. Số khung được giữ nguyên: {count}.",
     "api-key-login-back": "Hạn mức gói đăng ký đã trở lại. Các khung vẫn dùng khóa API cho đến khi bạn chuyển lại trong Tài khoản.",
     "api-key-takeover": "Đã dùng hết hạn mức. Các khung đã chuyển sang {name}, tính phí theo mức dùng. Hãy chuyển lại trong Tài khoản sau khi hạn mức được đặt lại.",
     "default": "Đăng nhập ban đầu",

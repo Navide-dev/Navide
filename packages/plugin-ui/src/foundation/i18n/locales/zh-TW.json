@@ -8322,7 +8322,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "訂閱額度已用完",
+          "title": "已達用量上限",
           "back-at": "{time} 恢復",
           "back-unknown": "重置時間不明",
           "wait": "等待重置"
@@ -8390,8 +8390,8 @@
           "invalid-name": "請輸入 60 個字元以內的名稱。",
           "invalid-reminder": "請輸入大於零的每月預算備註金額。",
           "unsupported-agent": "這個 CLI 目前還不能使用 API key。",
-          "store-failed": "無法儲存到這台電腦的鑰匙圈。",
-          "secret-missing": "鑰匙圈裡已沒有這組金鑰，請重新貼上。",
+          "store-failed": "無法儲存到這台電腦。",
+          "secret-missing": "這台電腦上已沒有這組金鑰，請重新貼上。",
           "not-found": "這組 API key 已不存在。",
           "main-window-only": "API key 只能在設定中管理。",
           "internal-error": "發生錯誤，請再試一次。",
@@ -9802,7 +9802,7 @@
     "failed": "無法接回這段對話，其歷史紀錄可能已不存在"
   },
   "cli-account": {
-    "api-key-takeover-partial": "額度已用完，新 pane 會用 {name}，改為依用量計費。有 {count} 個忙碌中的 pane 維持原狀。",
+    "api-key-takeover-partial": "額度已用完，新 pane 會用 {name}，改為依用量計費。維持原狀的 pane：{count} 個。",
     "api-key-login-back": "訂閱額度已恢復。pane 仍在使用 API key，要換回請到帳號頁。",
     "api-key-takeover": "額度已用完，pane 已換到 {name}，改為依用量計費。額度重置後請到帳號頁換回。",
     "default": "原始登入",

@@ -8322,7 +8322,7 @@
     "accounts": {
       "api-keys": {
         "pane": {
-          "title": "Subscription quota used up",
+          "title": "Usage limit reached",
           "back-at": "Back at {time}",
           "back-unknown": "The reset time is not known",
           "wait": "Wait for reset"
@@ -8390,8 +8390,8 @@
           "invalid-name": "Enter a name of up to 60 characters.",
           "invalid-reminder": "Enter the monthly budget note as an amount above zero.",
           "unsupported-agent": "API keys are not available for this CLI yet.",
-          "store-failed": "Could not save to this computer's keychain.",
-          "secret-missing": "This key is no longer in the keychain. Paste it again.",
+          "store-failed": "Could not save on this computer.",
+          "secret-missing": "This key is no longer on this computer. Paste it again.",
           "not-found": "This API key no longer exists.",
           "main-window-only": "API keys can only be managed in Settings.",
           "internal-error": "Something went wrong. Try again.",
@@ -9802,7 +9802,7 @@
     "failed": "Could not reconnect that conversation — its transcript may no longer exist"
   },
   "cli-account": {
-    "api-key-takeover-partial": "Quota used up. New panes use {name}, billed by usage. {count} busy panes stayed where they were.",
+    "api-key-takeover-partial": "Quota used up. New panes use {name}, billed by usage. Panes that stayed where they were: {count}.",
     "api-key-login-back": "Your subscription quota is back. Panes stay on the API key until you switch back in Accounts.",
     "api-key-takeover": "Quota used up. Panes moved to {name}, billed by usage. Switch back in Accounts after the quota resets.",
     "default": "Original login",
