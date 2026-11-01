@@ -35,7 +35,7 @@ from urllib.parse import urlparse
 import uvicorn
 from uvicorn.protocols.http.h11_impl import H11Protocol
 
-from . import webhook_payload, webhook_triggers
+from . import webhook_github, webhook_payload, webhook_triggers
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +43,8 @@ LOOPBACK = "127.0.0.1"
 THREAD_NAME = "webhook-listener"
 
 MAX_BODY = 64 * 1024
+#: GitHub's own events run larger, and only its deliveries get this far unsigned.
+MAX_GITHUB_BODY = 1024 * 1024
 MAX_HEADERS = 16 * 1024
 MAX_CONNECTIONS = 32
 HEADER_TIMEOUT_S = 10.0
@@ -114,7 +116,7 @@ class _Audit:
     becomes one row with a count, flushed once a minute."""
 
     #: Outcomes that are folded, because anyone can produce them at will.
-    FOLDED = frozenset({"rate-limited", "bad-key", "unknown", "foreign-host", "web-origin", "headers-too-large"})
+    FOLDED = frozenset({"rate-limited", "bad-key", "bad-signature", "unknown", "foreign-host", "web-origin", "headers-too-large"})
 
     def __init__(self, emit: Callable[[list[dict[str, Any]]], None]) -> None:
         self.emit = emit
@@ -290,6 +292,8 @@ class WebhookListener:
         if trigger is None:
             raise _Refused(404, "unknown")
         trigger_id = trigger["id"]
+        if trigger["kind"] == "github":
+            return await self._handle_github(trigger, headers, receive)
         # Before the body: a request without the key costs no memory.
         if not webhook_triggers.key_matches(trigger, self._bearer(headers.get("authorization", ""))):
             self._limit(self._failed, trigger_id)
@@ -300,17 +304,54 @@ class WebhookListener:
         length = headers.get("content-length", "")
         if length.isdigit() and int(length) > MAX_BODY:
             raise _Refused(413, "too-large", trigger_id=trigger_id)
-        raw = await self._read_body(receive, trigger_id)
+        raw = await self._read_body(receive, trigger_id, MAX_BODY)
         try:
             text = webhook_payload.read_body(raw, headers.get("content-type", ""))
         except webhook_payload.PayloadError as err:
             raise _Refused(err.status, err.reason, trigger_id=trigger_id) from None
+        return await self._run(trigger, text, raw)
+
+    async def _run(self, trigger: dict[str, Any], text: str, raw: bytes) -> tuple[int, int, bytes]:
         body_sha256 = hashlib.sha256(raw).hexdigest()
         status, retry_after, outcome = await self._hand_over(trigger, text, body_sha256)
-        self._audit.add(trigger_id, outcome, status, size=len(raw), body_sha256=body_sha256)
+        self._audit.add(trigger["id"], outcome, status, size=len(raw), body_sha256=body_sha256)
         return status, retry_after, b'{"ok":true}' if status == 202 else b""
 
-    async def _read_body(self, receive: Any, trigger_id: str) -> bytes:
+    async def _handle_github(
+        self, trigger: dict[str, Any], headers: dict[str, str], receive: Any,
+    ) -> tuple[int, int, bytes]:
+        """The signature covers the body, so the body comes first: size and
+        rate, then the signature, and only then is a byte of it parsed."""
+        trigger_id = trigger["id"]
+        self._limit(self._trigger_limiter(trigger), trigger_id)
+        length = headers.get("content-length", "")
+        if length.isdigit() and int(length) > MAX_GITHUB_BODY:
+            raise _Refused(413, "too-large", trigger_id=trigger_id)
+        raw = await self._read_body(receive, trigger_id, MAX_GITHUB_BODY)
+        secret = trigger.get("secret")
+        if secret is None:
+            raise _Refused(503, "key-unavailable", trigger_id=trigger_id)
+        if not webhook_github.signature_valid(secret, raw, headers.get(webhook_github.SIGNATURE_HEADER, "")):
+            self._limit(self._failed, trigger_id)
+            raise _Refused(404, "bad-signature", trigger_id=trigger_id)
+        if not self._guard_enabled():
+            raise _Refused(503, "guard-off", trigger_id=trigger_id)
+        if headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+            raise _Refused(415, "unsupported-type", trigger_id=trigger_id)
+        try:
+            text = webhook_payload.read_body(raw, "application/json")
+        except webhook_payload.PayloadError as err:
+            raise _Refused(err.status, err.reason, trigger_id=trigger_id) from None
+        event = headers.get(webhook_github.EVENT_HEADER, "")
+        if event == webhook_github.PING:
+            self._audit.add(trigger_id, "ping", 200)
+            return 200, 0, b""
+        if event not in trigger["github_events"]:
+            self._audit.add(trigger_id, "event-ignored", 204, detail=event[:40])
+            return 204, 0, b""
+        return await self._run(trigger, webhook_github.summary(event, text), raw)
+
+    async def _read_body(self, receive: Any, trigger_id: str, limit: int) -> bytes:
         async def read() -> bytes:
             chunks: list[bytes] = []
             size = 0
@@ -320,7 +361,7 @@ class WebhookListener:
                     raise _Refused(400, "disconnected", trigger_id=trigger_id)
                 chunk = message.get("body", b"")
                 size += len(chunk)
-                if size > MAX_BODY:
+                if size > limit:
                     raise _Refused(413, "too-large", trigger_id=trigger_id)
                 chunks.append(chunk)
                 if not message.get("more_body"):

@@ -6,7 +6,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
-- Pipelines (0.2.37): a webhook can start a pipeline. Off by default; nothing listens until you turn it on and enable a trigger. A run a webhook starts carries Guard taint, keeps its panes out of permission bypass so every tool call waits for you, refuses to start while App Lock is on, and accepts only Claude Code and Codex. The request's body goes to the agent as marked data and stays out of the run log, which records only its size and hash. There is no screen for this yet.
+- Pipelines (0.2.37): a webhook can start a pipeline. Off by default; nothing listens until you turn it on and enable a trigger. A run a webhook starts carries Guard taint, keeps its panes out of permission bypass so every tool call waits for you, refuses to start while App Lock is on, and accepts only Claude Code and Codex. The request's body goes to the agent as marked data and stays out of the run log, which records only its size and hash. GitHub can start a run too: a signed delivery of an event you picked, with only a short list of its fields passed on. Its secret is shown once, kept encrypted, and on Linux protected only by file permissions, which you confirm when you enable the trigger. There is no screen for this yet.
 
 ### Fixed
 

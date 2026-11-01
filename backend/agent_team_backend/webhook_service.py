@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from . import guard_fail_closed, pipeline_graph, webhook_payload, webhook_triggers
+from . import guard_fail_closed, pipeline_graph, webhook_keystore, webhook_payload, webhook_triggers
 from .db import Database
 
 log = logging.getLogger(__name__)
@@ -193,8 +193,10 @@ class WebhookService:
         window: Window,
         pipeline: Callable[[str], dict[str, Any] | None],
         known_program: Callable[[str, str], bool],
+        keystore: webhook_keystore.Keystore | None = None,
     ) -> None:
         self.store, self.db, self.window = store, db, window
+        self.keystore = keystore or webhook_keystore.Keystore()
         self._pipeline = pipeline
         self._known_program = known_program
         self._guarded = store.run_panes()
@@ -257,13 +259,39 @@ class WebhookService:
 
     # ── a request ────────────────────────────────────────────────────────
 
+    def listener_snapshot(self) -> dict[str, dict[str, Any]]:
+        """What the listener holds in memory, GitHub secrets opened. A secret
+        that no longer opens disables its trigger; a key that cannot be read
+        right now leaves the trigger on, answering 503. Called off the loop."""
+        snapshot = self.store.snapshot()
+        for trigger_id, trigger in list(snapshot.items()):
+            blob = trigger.pop("github_secret", None)
+            if trigger["kind"] != "github":
+                continue
+            try:
+                trigger["secret"] = webhook_keystore.decrypt(self.keystore.load(), trigger_id, blob or b"")
+            except webhook_keystore.KeyUnavailable:
+                trigger["secret"] = None
+                self.audit([{"trigger_id": trigger_id, "outcome": "key-unavailable", "status": 503}])
+            except webhook_keystore.KeyLost:
+                self.store.set_enabled(trigger_id, False)
+                del snapshot[trigger_id]
+                self.audit([{"trigger_id": trigger_id, "outcome": "secret-lost", "status": 0}])
+        return snapshot
+
     async def accept(self, trigger: dict[str, Any], text: str, body_sha256: str) -> tuple[int, int, str]:
         """(status, Retry-After, audit outcome). Answers once the run is on its
         way, because a pane spawn takes longer than a caller's own timeout: a
         start that then fails is in the audit trail."""
         workspace = trigger["workspace"]
+        github = trigger["kind"] == "github"
         lock = self._checks.setdefault(workspace, asyncio.Lock())
         async with lock:
+            now = int(time.time())
+            if github and await asyncio.to_thread(self.store.seen_recently, trigger["id"], body_sha256, now):
+                # 200, not an error: GitHub shows it as delivered, and the audit
+                # row is where a redelivery that did nothing can be looked up.
+                return 200, 0, "duplicate"
             if await asyncio.to_thread(self.store.runs_on, trigger["id"], today()) >= trigger["per_day"]:
                 return 429, _seconds_to_midnight(), "daily-limit"
             problem = await asyncio.to_thread(self.binding_problem, trigger)
@@ -278,6 +306,8 @@ class WebhookService:
             self._starting.add(workspace)
             try:
                 await asyncio.to_thread(self.store.count_run, trigger["id"], today())
+                if github:
+                    await asyncio.to_thread(self.store.mark_seen, trigger["id"], body_sha256, now)
             except BaseException:
                 self._starting.discard(workspace)
                 raise

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
@@ -33,7 +34,9 @@ from .db import Database
 _COMPONENT = "webhook"
 _SETTINGS_KEY = "webhook.listener"
 
-KINDS = ("webhook", "form")
+KINDS = ("webhook", "form", "github")
+#: A delivery seen again inside this window is not run again.
+DUPLICATE_WINDOW_S = 24 * 60 * 60
 DEFAULT_PER_MINUTE = 6
 DEFAULT_PER_DAY = 20
 MAX_PER_MINUTE = 60
@@ -122,6 +125,18 @@ def _add_runs(cur: sqlite3.Cursor) -> None:
     )
 
 
+def _add_github(cur: sqlite3.Cursor) -> None:
+    cur.execute("ALTER TABLE webhook_triggers ADD COLUMN github_secret BLOB")
+    cur.execute("ALTER TABLE webhook_triggers ADD COLUMN github_events TEXT NOT NULL DEFAULT '[]'")
+    cur.execute(
+        "CREATE TABLE webhook_seen ("
+        " trigger_id TEXT NOT NULL,"
+        " body_sha256 TEXT NOT NULL,"
+        " seen_at INTEGER NOT NULL,"
+        " PRIMARY KEY (trigger_id, body_sha256))"
+    )
+
+
 def new_token() -> str:
     return _TOKEN_PREFIX + secrets.token_urlsafe(32)
 
@@ -151,6 +166,7 @@ def _public(row: sqlite3.Row) -> dict[str, Any]:
         "no_gate_ack": bool(row["no_gate_ack"]),
         "unattended": bool(row["unattended"]),
         "approval_timeout_min": row["approval_timeout_min"],
+        "github_events": json.loads(row["github_events"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -182,6 +198,7 @@ class WebhookStore:
         self.db = db
         db.migrate(_COMPONENT, 1, _create_schema)
         db.migrate(_COMPONENT, 2, _add_runs)
+        db.migrate(_COMPONENT, 3, _add_github)
 
     def create(
         self,
@@ -223,7 +240,10 @@ class WebhookStore:
             rows = cur.execute(
                 "SELECT * FROM webhook_triggers WHERE enabled = 1 AND deleted_at IS NULL"
             ).fetchall()
-        return {row["id"]: {**_public(row), "token_hash": row["token_hash"]} for row in rows}
+        return {
+            row["id"]: {**_public(row), "token_hash": row["token_hash"], "github_secret": row["github_secret"]}
+            for row in rows
+        }
 
     def _update_live(self, trigger_id: str, assignment: str, *values: Any) -> None:
         with self.db.transaction() as cur:
@@ -237,6 +257,29 @@ class WebhookStore:
     def set_enabled(self, trigger_id: str, enabled: bool) -> None:
         self._update_live(trigger_id, "enabled = ?", int(enabled))
 
+    def set_github(self, trigger_id: str, secret: bytes, events: list[str]) -> None:
+        """A GitHub trigger's ciphertext and the events it runs on. Its key
+        hash stays empty, so the Bearer path can never match it."""
+        self._update_live(trigger_id, "token_hash = '', github_secret = ?, github_events = ?", secret, json.dumps(events))
+
+    def set_github_secret(self, trigger_id: str, secret: bytes) -> None:
+        self._update_live(trigger_id, "github_secret = ?", secret)
+
+    def seen_recently(self, trigger_id: str, body_sha256: str, now: int) -> bool:
+        with self.db.transaction() as cur:
+            cur.execute("DELETE FROM webhook_seen WHERE seen_at <= ?", (now - DUPLICATE_WINDOW_S,))
+            row = cur.execute(
+                "SELECT 1 FROM webhook_seen WHERE trigger_id = ? AND body_sha256 = ?", (trigger_id, body_sha256)
+            ).fetchone()
+        return row is not None
+
+    def mark_seen(self, trigger_id: str, body_sha256: str, now: int) -> None:
+        with self.db.transaction() as cur:
+            cur.execute(
+                "INSERT OR REPLACE INTO webhook_seen (trigger_id, body_sha256, seen_at) VALUES (?, ?, ?)",
+                (trigger_id, body_sha256, now),
+            )
+
     def set_unattended(self, trigger_id: str, unattended: bool) -> None:
         self._update_live(trigger_id, "unattended = ?", int(unattended))
 
@@ -249,7 +292,7 @@ class WebhookStore:
     def delete(self, trigger_id: str) -> None:
         """Soft: see the module docstring. The key's hash goes with it."""
         now = int(time.time())
-        self._update_live(trigger_id, "enabled = 0, token_hash = '', deleted_at = ?", now)
+        self._update_live(trigger_id, "enabled = 0, token_hash = '', github_secret = NULL, deleted_at = ?", now)
 
     def is_bound(self, pipeline_id: str) -> bool:
         """Whether a trigger was ever bound to this pipeline, deleted ones too."""

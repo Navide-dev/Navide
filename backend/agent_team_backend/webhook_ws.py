@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 import time
 from typing import Any
 
-from . import guard_fail_closed, webhook_listener, webhook_service, webhook_triggers
+from . import guard_fail_closed, webhook_github, webhook_keystore, webhook_listener, webhook_service, webhook_triggers
 from .ipc import make_error, make_response
 
 log = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ async def reconcile() -> None:
 
     service = _service()
     settings = await asyncio.to_thread(webhook_triggers.listener_settings, app.database)
-    snapshot = await asyncio.to_thread(service.store.snapshot)
+    snapshot = await asyncio.to_thread(service.listener_snapshot)
     wanted = settings["enabled"] and bool(snapshot)
     if not wanted:
         listener, _listener = _listener, None
@@ -143,6 +144,7 @@ async def _status() -> dict[str, Any]:
         "port": _listener.port if _listener is not None else 0,
         "error": _listener_error,
         "guard_enabled": _guard_on(),
+        "key_protection": webhook_keystore.protection(),
         "triggers": await asyncio.to_thread(service.store.list),
     }
 
@@ -201,10 +203,32 @@ async def webhook_trigger_create(session: Any, msg_id: str, msg_type: str, paylo
     except (webhook_triggers.WebhookInvalid, TypeError, ValueError) as err:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
         return
+    if trigger["kind"] == "github":
+        try:
+            token = await asyncio.to_thread(_arm_github, service, trigger, payload.get("events"))
+        except webhook_keystore.KeyUnavailable:
+            await asyncio.to_thread(service.store.delete, trigger["id"])
+            await session.send_json(make_error(msg_id, msg_type, "KEY_UNAVAILABLE", "the key store cannot be reached"))
+            return
+        except webhook_triggers.WebhookInvalid as err:
+            await asyncio.to_thread(service.store.delete, trigger["id"])
+            await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+            return
+        trigger = next(t for t in await asyncio.to_thread(service.store.list) if t["id"] == trigger["id"])
     problem = await asyncio.to_thread(service.binding_problem, trigger)
     if trigger["no_gate_ack"]:
         service.audit([{"trigger_id": trigger["id"], "outcome": "no-gate-acknowledged", "status": 0}])
     await session.send_json(make_response(msg_id, msg_type, {"trigger": trigger, "token": token, "problem": problem}))
+
+
+def _arm_github(service: webhook_service.WebhookService, trigger: dict[str, Any], events: Any) -> str:
+    """Give a new GitHub trigger its secret, made here and shown once."""
+    if not isinstance(events, list) or not set(events) <= set(webhook_github.EVENTS):
+        raise webhook_triggers.WebhookInvalid("events must come from the supported list")
+    secret = secrets.token_hex(32)
+    blob = webhook_keystore.encrypt(service.keystore.ensure(), trigger["id"], secret)
+    service.store.set_github(trigger["id"], blob, list(events))
+    return secret
 
 
 async def webhook_trigger_enable(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
@@ -221,6 +245,16 @@ async def webhook_trigger_enable(session: Any, msg_id: str, msg_type: str, paylo
         problem = await asyncio.to_thread(service.binding_problem, trigger)
         if problem:
             await session.send_json(make_error(msg_id, msg_type, "BINDING_REFUSED", problem, {"reason": problem}))
+            return
+        if (
+            trigger["kind"] == "github"
+            and webhook_keystore.protection() == "file"
+            and payload.get("weak_key_acknowledged") is not True
+        ):
+            # Said at the moment it matters, not only in the docs.
+            await session.send_json(make_error(
+                msg_id, msg_type, "WEAK_KEY_ACK_REQUIRED", "on Linux the secret's key is a file only permissions protect",
+            ))
             return
     try:
         await asyncio.to_thread(service.store.set_enabled, trigger_id, enabled)
@@ -250,13 +284,30 @@ async def webhook_trigger_set_unattended(session: Any, msg_id: str, msg_type: st
 
 async def webhook_trigger_rotate(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
     service = _service()
+    trigger_id = str(payload.get("id") or "")
     try:
-        token = await asyncio.to_thread(service.store.rotate, str(payload.get("id") or ""))
+        trigger = next((t for t in await asyncio.to_thread(service.store.list) if t["id"] == trigger_id), None)
+        if trigger is not None and trigger["kind"] == "github":
+            token = await asyncio.to_thread(_rotate_github, service, trigger_id)
+        else:
+            token = await asyncio.to_thread(service.store.rotate, trigger_id)
+    except webhook_keystore.KeyUnavailable:
+        await session.send_json(make_error(msg_id, msg_type, "KEY_UNAVAILABLE", "the key store cannot be reached"))
+        return
     except webhook_triggers.WebhookNotFound:
         await session.send_json(make_error(msg_id, msg_type, "NOT_FOUND", "no such trigger"))
         return
     await reconcile()
     await session.send_json(make_response(msg_id, msg_type, {"token": token}))
+
+
+def _rotate_github(service: webhook_service.WebhookService, trigger_id: str) -> str:
+    """Also how a trigger whose secret was lost is rebuilt, by the user's hand."""
+    secret = secrets.token_hex(32)
+    service.store.set_github_secret(
+        trigger_id, webhook_keystore.encrypt(service.keystore.ensure(), trigger_id, secret),
+    )
+    return secret
 
 
 async def webhook_trigger_delete(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
