@@ -118,6 +118,8 @@ class FakeSeams:
         self.options: list[str] = []
         self.agent = ""  # "" keeps the window-reports-no-vendor behaviour
         self.gone: set[str] = set()
+        self.turn_texts: list[str] = []  # what the log gives on a direct read, in turn
+        self.turn_text_calls: list[tuple[str, float]] = []
         self.answers: list[tuple[str, dict[str, Any]]] = []
         self.answer_result: dict[str, Any] = {"ok": True}
         self.expected: list[dict[str, Any] | None] = []
@@ -191,6 +193,10 @@ class FakeSeams:
         self.mcp_tool_calls.append(name)
         return self.mcp_tools.get(name, [])
 
+    async def turn_text(self, pane_id: str, since_s: float) -> str:
+        self.turn_text_calls.append((pane_id, since_s))
+        return self.turn_texts.pop(0) if self.turn_texts else ""
+
     def seams(self) -> Seams:
         return Seams(deliver=self.deliver, await_verdict=self.await_verdict, interrupt=self.interrupt,
                      pane_state=self.pane_state, awaiting_info=self.awaiting_info, answer=self.answer,
@@ -200,7 +206,7 @@ class FakeSeams:
                      agent_skills=lambda a: self.skills.get(a, []), limit_info=self.limit_info,
                      agent_mcp=lambda a: [dict(r) for r in self.mcp_native.get(a, [])],
                      navide_mcp=self.navide_mcp, navide_mcp_tools=self.navide_mcp_tools,
-                     cancel=self.cancel, resume=self.resume)
+                     cancel=self.cancel, resume=self.resume, turn_text=self.turn_text)
 
 
 def _said(env: "Env", needle: str) -> bool:
@@ -2093,6 +2099,70 @@ async def test_text_later_than_the_grace_follows_as_a_late_reply(env: Env, monke
     assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
     _log_end(env, "slow reply")
     await _until(lambda: _said(env, mgr_mod.MSG_LATE_PREFIX + "slow reply"))
+
+
+def _short_watch(monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "LATE_TEXT_STATUS_AFTER_S", 0.01)
+    monkeypatch.setattr(mgr_mod, "EMPTY_TURN_GRACE_S", 0.02)
+    monkeypatch.setattr(mgr_mod, "RUN_WATCH_MAX_S", 0.06)
+
+
+async def test_the_log_is_read_once_before_a_held_reply_is_given_up(env: Env, monkeypatch) -> None:
+    _short_watch(monkeypatch)
+    env.fake.turn_texts = ["read directly"]
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    await _until(lambda: _said(env, mgr_mod.MSG_LATE_PREFIX + "read directly"))
+    assert len(env.fake.turn_text_calls) == 1
+    assert env.fake.turn_text_calls[0][0] == "pane-1"
+    assert not _said(env, mgr_mod.MSG_REPLY_LOST)
+    assert "pane-1" not in env.m._await_text
+
+
+async def test_a_reply_that_cannot_be_read_tells_the_chat(env: Env, monkeypatch) -> None:
+    _short_watch(monkeypatch)
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LOST))
+    assert len(env.fake.turn_text_calls) == 1
+    assert "pane-1" not in env.m._await_text
+
+
+async def test_a_failed_read_still_tells_the_chat(env: Env, monkeypatch) -> None:
+    _short_watch(monkeypatch)
+
+    async def broken(_pane: str, _since: float) -> str:
+        raise OSError("gone")
+
+    env.m._seams.turn_text = broken
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LOST))
+
+
+async def test_a_reply_the_log_delivers_never_reads_the_file(env: Env, monkeypatch) -> None:
+    _short_watch(monkeypatch)
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    _log_end(env, "on time")
+    await _until(lambda: _said(env, "on time"))
+    await asyncio.sleep(0.1)  # past the give-up
+    assert env.fake.turn_text_calls == []
+    assert not _said(env, mgr_mod.MSG_REPLY_LOST)
+
+
+async def test_text_arriving_after_the_give_up_is_still_posted(env: Env, monkeypatch) -> None:
+    _short_watch(monkeypatch)
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LOST))
+    _log_end(env, "very late")
+    await _until(lambda: _said(env, "very late"))
 
 
 async def test_a_turn_with_no_text_says_so_once_the_log_moves_on(env: Env, monkeypatch) -> None:
