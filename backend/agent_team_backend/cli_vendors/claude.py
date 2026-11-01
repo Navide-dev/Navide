@@ -28,7 +28,9 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from datetime import datetime, timedelta
+from itertools import islice
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -242,6 +244,11 @@ def claude_projects_root() -> Path | None:
     return None
 
 
+#: A transcript's first lines carry its cwd; anything past these never will.
+SESSION_CWD_SCAN_LINES = 50
+_session_cwds: dict[tuple[str, int], str] = {}
+
+
 class ClaudeLogReader(LogReader):
     vendor: str = "claude"
 
@@ -301,6 +308,52 @@ class ClaudeLogReader(LogReader):
             except OSError as err:
                 log.debug("enumerate %s failed: %s", d, err)
         return out
+
+    def own_session_files(self, workspace_path: str) -> list[Path]:
+        """session_files_for_workspace without a neighbour's sessions: the folder can
+        be shared (see session_in_workspace). The folder-wide list stays what pane
+        baselines and replays use; this one is for showing a workspace its own."""
+        return [
+            p for p in self.session_files_for_workspace(workspace_path)
+            if self.session_in_workspace(str(p), workspace_path) is not False
+        ]
+
+    def session_in_workspace(self, file_path: str, workspace_path: str) -> bool | None:
+        """Claude's folder name is lossy: every non-alphanumeric character becomes
+        "-", so two Chinese folder names of the same length share one folder. The
+        transcript's own cwd is what tells them apart."""
+        cwd = unicodedata.normalize("NFC", self._session_cwd(Path(file_path)))
+        if not cwd:
+            return None
+        root = unicodedata.normalize("NFC", workspace_path.rstrip("/\\"))
+        return cwd == root or cwd.startswith((root + "/", root + "\\"))
+
+    def _session_cwd(self, path: Path) -> str:
+        """The cwd a transcript started in. The inode is in the key because a session
+        id can come back as a new file at the same path, from another workspace."""
+        try:
+            key = (str(path), path.stat().st_ino)
+        except OSError:
+            return ""
+        cwd = _session_cwds.get(key) or self._read_session_cwd(path)
+        if cwd:
+            _session_cwds[key] = cwd
+        return cwd
+
+    def _read_session_cwd(self, path: Path) -> str:
+        try:
+            with path.open(encoding="utf-8", errors="replace") as fh:
+                for raw in islice(fh, SESSION_CWD_SCAN_LINES):
+                    try:
+                        rec = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    cwd = rec.get("cwd") if isinstance(rec, dict) else None
+                    if cwd and isinstance(cwd, str):
+                        return cwd
+        except OSError as err:
+            log.debug("read cwd of %s failed: %s", path, err)
+        return ""
 
     def cwd_from_file(self, path: Path) -> str:
         """Reverse cwd-hash: project-dir-name `-foo-bar-baz` → `/foo/bar/baz`.

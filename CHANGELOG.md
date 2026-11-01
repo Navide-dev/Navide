@@ -12,6 +12,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Channels (0.2.37): when a chat is told a reply will follow and the text never arrives, Navide now reads the conversation log itself before it stops waiting, and says so in the chat if it still finds nothing. Before, the chat heard nothing more.
 
+- Token statistics (0.2.37): Claude sessions in folders whose Chinese names have the same length were all counted under one of them, because Claude stores those folders under the same name. Each session now counts under the workspace it ran in, and Reconnect and development time no longer pick up a neighbour's sessions. Global and per-account totals do not change, and earlier workspace figures are not recalculated.
+
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 - Sync on Windows (0.2.37): a large skill held for approval could stay on "downloading its files for review" until the next sync, and then download again, when its finished review was saved at the moment something else read the approval list (`WinError 5`). A read that overlapped a save could also briefly show no held records. Reads of the approval list and of held records now wait for the save to finish.
 
