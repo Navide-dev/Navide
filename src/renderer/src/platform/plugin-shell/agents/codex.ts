@@ -62,6 +62,7 @@ export const SPEC = {
   },
   hint: 'implementer',
   // Quota failover: _codex_windows resolves primary/secondary by length to
-  // session (5h) / weekly; the weekly window is not always reported.
+  // session (5h) / weekly. Either can be missing: a lone weekly window is
+  // declared in `absentWindows`, a lone session window needs no declaration.
   quotaSemantics: { hard: ['session', 'weekly'], required: ['session'] },
 } as const satisfies AgentSpec

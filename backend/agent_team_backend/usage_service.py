@@ -949,7 +949,7 @@ class UsageService:
                 safe_window["windowMinutes"] = minutes
             windows.append(safe_window)
         plan_type = snap.get("planType")
-        return {
+        safe = {
             "provider": "claude",
             "status": "ok",
             "planType": plan_type if isinstance(plan_type, str) else None,
@@ -957,6 +957,10 @@ class UsageService:
             "fetchedAt": str(snap.get("fetchedAt") or _now_iso()),
             "error": None,
         }
+        absent = snap.get("absentWindows")
+        if isinstance(absent, list) and absent and all(isinstance(kind, str) for kind in absent):
+            safe["absentWindows"] = absent
+        return safe
 
     def _save_cache(self) -> None:
         if self._cache_path is None:
