@@ -137,6 +137,11 @@ def _add_github(cur: sqlite3.Cursor) -> None:
     )
 
 
+def _add_forms(cur: sqlite3.Cursor) -> None:
+    cur.execute("ALTER TABLE webhook_triggers ADD COLUMN form_fields TEXT NOT NULL DEFAULT '[]'")
+    cur.execute("ALTER TABLE webhook_triggers ADD COLUMN form_public INTEGER NOT NULL DEFAULT 0")
+
+
 def new_token() -> str:
     return _TOKEN_PREFIX + secrets.token_urlsafe(32)
 
@@ -167,6 +172,8 @@ def _public(row: sqlite3.Row) -> dict[str, Any]:
         "unattended": bool(row["unattended"]),
         "approval_timeout_min": row["approval_timeout_min"],
         "github_events": json.loads(row["github_events"]),
+        "form_fields": json.loads(row["form_fields"]),
+        "form_public": bool(row["form_public"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -199,6 +206,7 @@ class WebhookStore:
         db.migrate(_COMPONENT, 1, _create_schema)
         db.migrate(_COMPONENT, 2, _add_runs)
         db.migrate(_COMPONENT, 3, _add_github)
+        db.migrate(_COMPONENT, 4, _add_forms)
 
     def create(
         self,
@@ -261,6 +269,9 @@ class WebhookStore:
         """A GitHub trigger's ciphertext and the events it runs on. Its key
         hash stays empty, so the Bearer path can never match it."""
         self._update_live(trigger_id, "token_hash = '', github_secret = ?, github_events = ?", secret, json.dumps(events))
+
+    def set_form(self, trigger_id: str, fields: list[dict[str, Any]], public: bool) -> None:
+        self._update_live(trigger_id, "form_fields = ?, form_public = ?", json.dumps(fields), int(public))
 
     def set_github_secret(self, trigger_id: str, secret: bytes) -> None:
         self._update_live(trigger_id, "github_secret = ?", secret)

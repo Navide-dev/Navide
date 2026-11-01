@@ -12846,7 +12846,16 @@
       "timeout": "Auf dich warten",
       "eventsHint": "Nur angehakte Ereignisse starten einen Lauf. GitHubs Ping-Test wird beantwortet, ohne einen zu starten.",
       "noGate": "Ohne Freigabe starten. Der erste Schritt ist kein Freigabe-Gate, also startet eine Anfrage den Agenten sofort. Externe Inhalte erreichen ihn, ohne dass jemand sie zuerst sieht.",
-      "default": "In Läufen dieses Triggers wartet jeder Tool-Aufruf auf dich. Antwortet niemand rechtzeitig, stoppt der Lauf, und nichts wird freigegeben. Über Telefon und Chat-Kanäle lässt sich ein Webhook-Lauf nicht freigeben. Nur Claude Code und Codex."
+      "default": "In Läufen dieses Triggers wartet jeder Tool-Aufruf auf dich. Antwortet niemand rechtzeitig, stoppt der Lauf, und nichts wird freigegeben. Über Telefon und Chat-Kanäle lässt sich ein Webhook-Lauf nicht freigeben. Nur Claude Code und Codex.",
+      "fields": "Felder",
+      "fieldLabel": "Beschriftung",
+      "fieldType": "Typ",
+      "required": "Pflichtfeld",
+      "removeField": "Entfernen",
+      "addField": "Feld hinzufügen",
+      "options": "Auswahl, durch Kommas getrennt",
+      "fieldsHint": "Dateien, Passwörter und eigenes HTML sind nicht verfügbar.",
+      "public": "Dieses Formular auch außerhalb dieses Computers öffnen lassen. Die Adresse landet im Browserverlauf und in den Logs deines Tunnels, und wer sie hat, kann einen Lauf starten. Aus: Es öffnet sich nur auf diesem Computer."
     },
     "perMinute": "pro Minute",
     "perDay": "pro Tag",
@@ -12871,7 +12880,9 @@
       "secret": "Secret",
       "copyCurl": "Testaufruf kopieren",
       "done": "Ich habe ihn gespeichert",
-      "githubHint": "Öffne in GitHub die Settings → Webhooks des Repositorys, füge beides ein und wähle application/json. Die Adresse muss öffentlich sein, lege also zuerst oben einen Hostnamen fest."
+      "githubHint": "Öffne in GitHub die Settings → Webhooks des Repositorys, füge beides ein und wähle application/json. Die Adresse muss öffentlich sein, lege also zuerst oben einen Hostnamen fest.",
+      "titleForm": "Adresse von {name}",
+      "formHint": "Diese Adresse ist der einzige Schlüssel: Wer sie hat, kann das Formular öffnen. Teile sie wie ein Passwort."
     },
     "rotateKey": "Schlüssel ersetzen",
     "rotateSecret": "Secret ersetzen",
@@ -12934,7 +12945,21 @@
       "key-unavailable": "Schlüsselspeicher nicht erreichbar",
       "unattended-on": "Unbeaufsichtigt eingeschaltet",
       "unattended-off": "Unbeaufsichtigt ausgeschaltet",
-      "no-gate-acknowledged": "Ohne Freigabe starten angehakt"
+      "no-gate-acknowledged": "Ohne Freigabe starten angehakt",
+      "form-invalid": "Formular mit ungültigen Werten",
+      "form-public": "Formular öffentlich gemacht",
+      "bad-csrf": "Formular ohne gültiges Token",
+      "cross-site": "Formular von einer anderen Website"
+    },
+    "rotateForm": "Adresse ersetzen",
+    "fieldType": {
+      "text": "Text",
+      "textarea": "Langer Text",
+      "number": "Zahl",
+      "email": "E-Mail",
+      "date": "Datum",
+      "select": "Liste",
+      "checkbox": "Kontrollkästchen"
     }
   }
 }

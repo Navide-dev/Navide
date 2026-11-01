@@ -12846,7 +12846,16 @@
       "timeout": "等待确认",
       "eventsHint": "只有勾选的事件才会开始运行。GitHub 的 ping 测试会得到响应，但不会运行。",
       "noGate": "不经批准直接开始。第一步不是批准关卡，所以请求一到就会启动智能体，外部内容会在无人查看的情况下交给它。",
-      "default": "这个触发器启动的运行中，每次工具调用都会等你确认。超时无人响应，运行就会中止，不会自动放行。手机和聊天频道无法批准 Webhook 运行。只支持 Claude Code 和 Codex。"
+      "default": "这个触发器启动的运行中，每次工具调用都会等你确认。超时无人响应，运行就会中止，不会自动放行。手机和聊天频道无法批准 Webhook 运行。只支持 Claude Code 和 Codex。",
+      "fields": "字段",
+      "fieldLabel": "标签",
+      "fieldType": "类型",
+      "required": "必填",
+      "removeField": "移除",
+      "addField": "添加字段",
+      "options": "选项，用逗号分隔",
+      "fieldsHint": "不支持文件、密码和自定义 HTML。",
+      "public": "允许从这台电脑以外打开这张表单。地址会留在浏览记录和隧道日志中，拿到的人都能开始运行。不勾选时只有这台电脑能打开。"
     },
     "perMinute": "次/分钟",
     "perDay": "次/天",
@@ -12871,7 +12880,9 @@
       "secret": "Secret",
       "copyCurl": "复制测试调用",
       "done": "我已保存",
-      "githubHint": "到 GitHub 仓库的 Settings → Webhooks 粘贴这两项，并选择 application/json。地址必须是公开的，请先在上方设置主机名。"
+      "githubHint": "到 GitHub 仓库的 Settings → Webhooks 粘贴这两项，并选择 application/json。地址必须是公开的，请先在上方设置主机名。",
+      "titleForm": "{name} 的地址",
+      "formHint": "这个地址就是唯一的密钥，拿到的人都能打开表单。请像密码一样分享。"
     },
     "rotateKey": "更换密钥",
     "rotateSecret": "更换 secret",
@@ -12934,7 +12945,21 @@
       "key-unavailable": "无法连接密钥保护区",
       "unattended-on": "已开启无人值守",
       "unattended-off": "已关闭无人值守",
-      "no-gate-acknowledged": "已勾选不经批准直接开始"
+      "no-gate-acknowledged": "已勾选不经批准直接开始",
+      "form-invalid": "表单内容不正确",
+      "form-public": "表单已设为公开",
+      "bad-csrf": "表单没有有效的令牌",
+      "cross-site": "表单来自其他网站"
+    },
+    "rotateForm": "更换地址",
+    "fieldType": {
+      "text": "文本",
+      "textarea": "多行文本",
+      "number": "数字",
+      "email": "邮箱",
+      "date": "日期",
+      "select": "下拉列表",
+      "checkbox": "复选框"
     }
   }
 }

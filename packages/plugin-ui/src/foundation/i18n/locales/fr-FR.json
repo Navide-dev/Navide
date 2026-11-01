@@ -12846,7 +12846,16 @@
       "timeout": "Vous attendre",
       "eventsHint": "Seuls les événements cochés lancent une exécution. Le test ping de GitHub reçoit une réponse sans en lancer.",
       "noGate": "Démarrer sans approbation. La première étape n’est pas une porte d’approbation : une requête lance donc l’agent aussitôt. Le contenu externe lui parvient sans que personne l’ait vu.",
-      "default": "Dans les exécutions de ce déclencheur, chaque appel d’outil attend votre confirmation. Sans réponse à temps, l’exécution s’arrête et rien n’est approuvé. Le téléphone et les canaux de discussion ne peuvent pas approuver une exécution de webhook. Claude Code et Codex uniquement."
+      "default": "Dans les exécutions de ce déclencheur, chaque appel d’outil attend votre confirmation. Sans réponse à temps, l’exécution s’arrête et rien n’est approuvé. Le téléphone et les canaux de discussion ne peuvent pas approuver une exécution de webhook. Claude Code et Codex uniquement.",
+      "fields": "Champs",
+      "fieldLabel": "Libellé",
+      "fieldType": "Type",
+      "required": "Obligatoire",
+      "removeField": "Retirer",
+      "addField": "Ajouter un champ",
+      "options": "Choix, séparés par des virgules",
+      "fieldsHint": "Les fichiers, mots de passe et HTML personnalisé ne sont pas disponibles.",
+      "public": "Autoriser l’ouverture de ce formulaire hors de cet ordinateur. Son adresse restera dans l’historique du navigateur et les journaux de votre tunnel, et quiconque l’a peut lancer une exécution. Désactivé, il ne s’ouvre que sur cet ordinateur."
     },
     "perMinute": "par minute",
     "perDay": "par jour",
@@ -12871,7 +12880,9 @@
       "secret": "Secret",
       "copyCurl": "Copier un appel de test",
       "done": "Je l’ai enregistré",
-      "githubHint": "Dans GitHub, ouvrez Settings → Webhooks du dépôt, collez les deux et choisissez application/json. L’adresse doit être publique : définissez d’abord un nom d’hôte ci-dessus."
+      "githubHint": "Dans GitHub, ouvrez Settings → Webhooks du dépôt, collez les deux et choisissez application/json. L’adresse doit être publique : définissez d’abord un nom d’hôte ci-dessus.",
+      "titleForm": "Adresse de {name}",
+      "formHint": "Cette adresse est la seule clé : quiconque l’a peut ouvrir le formulaire. Partagez-la comme un mot de passe."
     },
     "rotateKey": "Remplacer la clé",
     "rotateSecret": "Remplacer le secret",
@@ -12934,7 +12945,21 @@
       "key-unavailable": "Stockage de clés inaccessible",
       "unattended-on": "Sans surveillance activé",
       "unattended-off": "Sans surveillance désactivé",
-      "no-gate-acknowledged": "Démarrer sans approbation coché"
+      "no-gate-acknowledged": "Démarrer sans approbation coché",
+      "form-invalid": "Formulaire aux valeurs non valides",
+      "form-public": "Formulaire rendu public",
+      "bad-csrf": "Formulaire sans jeton valide",
+      "cross-site": "Formulaire envoyé depuis un autre site"
+    },
+    "rotateForm": "Remplacer l’adresse",
+    "fieldType": {
+      "text": "Texte",
+      "textarea": "Texte long",
+      "number": "Nombre",
+      "email": "E-mail",
+      "date": "Date",
+      "select": "Liste",
+      "checkbox": "Case à cocher"
     }
   }
 }

@@ -4,13 +4,16 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
 import {
+  FORM_FIELD_TYPES,
   GITHUB_EVENTS,
   curlExample,
+  formUrl,
   minutesLeft,
   outcomeKey,
   refusalKey,
   triggerState,
   triggerUrl,
+  type FormField,
   type TriggerKind,
   type WebhookEvent,
   type WebhookStatus,
@@ -45,14 +48,15 @@ const actionError = ref('')
 const busy = ref(false)
 const now = ref(Date.now())
 /** A key or secret, on screen until dismissed and never fetched again. */
-const revealed = ref<{ name: string; kind: TriggerKind; id: string; value: string } | null>(null)
+const revealed = ref<{ name: string; kind: TriggerKind; id: string; value: string; formPublic?: boolean } | null>(null)
 const copied = ref('')
 const creating = ref(false)
 const hostDraft = ref('')
 const hostDirty = ref(false)
 const form = reactive({
   name: '', kind: 'webhook' as TriggerKind, pipelineId: '', perMinute: 6, perDay: 20, timeoutMin: 30,
-  noGateAck: false, events: [] as string[],
+  noGateAck: false, events: [] as string[], formPublic: false,
+  fields: [{ label: '', type: 'text', required: false, options: '' }] as Array<{ label: string; type: FormField['type']; required: boolean; options: string }>,
 })
 /** The trigger whose disclosure is open, one at a time. */
 const confirming = ref<{ id: string; what: 'unattended' | 'weak-key'; ticked: boolean } | null>(null)
@@ -156,19 +160,26 @@ function toggleEvent(name: string): void {
   form.events = form.events.includes(name) ? form.events.filter((e) => e !== name) : [...form.events, name]
 }
 
+const canCreate = computed(() => !!form.name.trim() && !!form.pipelineId
+  && (form.kind !== 'form' || form.fields.every((f) => f.label.trim())))
+
 async function create(): Promise<void> {
   const answer = await act('webhook.trigger.create', {
     name: form.name, workspace_path: props.workspacePath ?? '', pipeline_id: form.pipelineId, kind: form.kind,
     per_minute: form.perMinute, per_day: form.perDay, approval_timeout_min: form.timeoutMin,
-    no_gate_ack: form.noGateAck, events: form.events,
+    no_gate_ack: form.noGateAck, events: form.events, form_public: form.formPublic,
+    fields: form.fields.map((f) => ({ ...f, options: f.options.split(',') })),
   })
   if (!answer.ok) return
   const created = answer.payload as { trigger: WebhookTrigger; token: string; problem: string }
-  revealed.value = { name: created.trigger.name, kind: created.trigger.kind, id: created.trigger.id, value: created.token }
+  revealed.value = {
+    name: created.trigger.name, kind: created.trigger.kind, id: created.trigger.id, value: created.token,
+    formPublic: created.trigger.form_public,
+  }
   const key = refusalKey(created.problem)
   actionError.value = key ? t(key) : ''
   creating.value = false
-  Object.assign(form, { name: '', noGateAck: false, events: [] })
+  Object.assign(form, { name: '', noGateAck: false, events: [], formPublic: false, fields: [{ label: '', type: 'text', required: false, options: '' }] })
   await refresh()
 }
 
@@ -212,7 +223,10 @@ async function saveLimits(trigger: WebhookTrigger): Promise<void> {
 async function rotate(trigger: WebhookTrigger): Promise<void> {
   const answer = await act('webhook.trigger.rotate', { id: trigger.id })
   if (answer.ok) {
-    revealed.value = { name: trigger.name, kind: trigger.kind, id: trigger.id, value: String(answer.payload?.token) }
+    revealed.value = {
+      name: trigger.name, kind: trigger.kind, id: trigger.id, value: String(answer.payload?.token),
+      formPublic: trigger.form_public,
+    }
   }
 }
 
@@ -251,7 +265,19 @@ async function copy(text: string, tag: string): Promise<void> {
   setTimeout(() => { if (copied.value === tag) copied.value = '' }, 1500)
 }
 
-const revealedUrl = computed(() => (status.value && revealed.value ? triggerUrl(status.value, revealed.value.id) : ''))
+const revealedUrl = computed(() => {
+  if (!status.value || !revealed.value) return ''
+  return revealed.value.kind === 'form'
+    ? formUrl(status.value, revealed.value.value, revealed.value.formPublic === true)
+    : triggerUrl(status.value, revealed.value.id)
+})
+
+const REVEAL_TITLE: Record<TriggerKind, string> = {
+  webhook: 'webhooks.reveal.titleKey', github: 'webhooks.reveal.titleSecret', form: 'webhooks.reveal.titleForm',
+}
+const ROTATE: Record<TriggerKind, string> = {
+  webhook: 'webhooks.rotateKey', github: 'webhooks.rotateSecret', form: 'webhooks.rotateForm',
+}
 /** No port until the first trigger is on, and an address without one is useless. */
 const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(status.value.port || status.value.settings.port)))
 </script>
@@ -294,7 +320,7 @@ const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(s
 
     <SettingsCard v-if="revealed" class="wh-reveal" data-testid="webhooks-reveal">
       <div class="wh-reveal-head">
-        <strong>{{ t(revealed.kind === 'github' ? 'webhooks.reveal.titleSecret' : 'webhooks.reveal.titleKey', { name: revealed.name }) }}</strong>
+        <strong>{{ t(REVEAL_TITLE[revealed.kind], { name: revealed.name }) }}</strong>
         <span>{{ t('webhooks.reveal.once') }}</span>
       </div>
       <div v-if="hasAddress" class="wh-field">
@@ -302,16 +328,17 @@ const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(s
         <code v-truncate class="wh-code">{{ revealedUrl }}</code>
         <button type="button" class="wh-btn" @click="copy(revealedUrl, 'url')">{{ copied === 'url' ? t('webhooks.copied') : t('webhooks.copy') }}</button>
       </div>
-      <div class="wh-field">
+      <div v-if="revealed.kind !== 'form'" class="wh-field">
         <span class="wh-field-label">{{ t(revealed.kind === 'github' ? 'webhooks.reveal.secret' : 'webhooks.reveal.key') }}</span>
         <code v-truncate class="wh-code">{{ revealed.value }}</code>
         <button type="button" class="wh-btn" @click="copy(revealed.value, 'key')">{{ copied === 'key' ? t('webhooks.copied') : t('webhooks.copy') }}</button>
       </div>
       <div v-if="!hasAddress" class="wh-hint">{{ t('webhooks.reveal.noAddress') }}</div>
       <div v-if="revealed.kind === 'github'" class="wh-hint">{{ t('webhooks.reveal.githubHint') }}</div>
+      <div v-if="revealed.kind === 'form'" class="wh-hint">{{ t('webhooks.reveal.formHint') }}</div>
       <div class="wh-actions">
         <button
-          v-if="revealed.kind !== 'github' && hasAddress"
+          v-if="revealed.kind === 'webhook' && hasAddress"
           type="button"
           class="wh-btn"
           @click="copy(curlExample(revealedUrl, revealed.value), 'curl')"
@@ -342,6 +369,7 @@ const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(s
           <select v-model="form.kind" class="wh-input" data-testid="webhooks-form-kind">
             <option value="webhook">{{ t('webhooks.kind.webhook') }}</option>
             <option value="github">{{ t('webhooks.kind.github') }}</option>
+            <option value="form">{{ t('webhooks.kind.form') }}</option>
           </select>
         </label>
         <label class="wh-form-row">
@@ -364,6 +392,26 @@ const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(s
             <span class="wh-hint">{{ t('webhooks.form.eventsHint') }}</span>
           </div>
         </div>
+        <div v-if="form.kind === 'form'" class="wh-form-row wh-form-top">
+          <span>{{ t('webhooks.form.fields') }}</span>
+          <div class="wh-fields">
+            <div v-for="(field, index) in form.fields" :key="index" class="wh-field-row" data-testid="webhooks-form-field">
+              <input v-model="field.label" class="wh-input" :placeholder="t('webhooks.form.fieldLabel')" :aria-label="t('webhooks.form.fieldLabel')" />
+              <select v-model="field.type" class="wh-input" :aria-label="t('webhooks.form.fieldType')">
+                <option v-for="type in FORM_FIELD_TYPES" :key="type" :value="type">{{ t(`webhooks.fieldType.${type}`) }}</option>
+              </select>
+              <label class="wh-check"><input v-model="field.required" type="checkbox" /><span>{{ t('webhooks.form.required') }}</span></label>
+              <button type="button" class="wh-btn ghost" :disabled="form.fields.length === 1" @click="form.fields.splice(index, 1)">{{ t('webhooks.form.removeField') }}</button>
+              <input v-if="field.type === 'select'" v-model="field.options" class="wh-input wh-field-options" :placeholder="t('webhooks.form.options')" :aria-label="t('webhooks.form.options')" />
+            </div>
+            <button type="button" class="wh-btn wh-add-field" data-testid="webhooks-form-add" @click="form.fields.push({ label: '', type: 'text', required: false, options: '' })">{{ t('webhooks.form.addField') }}</button>
+            <span class="wh-hint">{{ t('webhooks.form.fieldsHint') }}</span>
+          </div>
+        </div>
+        <label v-if="form.kind === 'form'" class="wh-check wh-ack">
+          <input v-model="form.formPublic" type="checkbox" data-testid="webhooks-form-public" />
+          <span>{{ t('webhooks.form.public') }}</span>
+        </label>
         <div class="wh-form-row">
           <span>{{ t('webhooks.form.limits') }}</span>
           <div class="wh-limits">
@@ -384,7 +432,7 @@ const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(s
         <p class="wh-hint">{{ t('webhooks.form.default') }}</p>
         <div class="wh-actions">
           <button type="button" class="wh-btn ghost" @click="creating = false">{{ t('webhooks.cancel') }}</button>
-          <button type="button" class="wh-btn primary" data-testid="webhooks-form-create" :disabled="busy || !form.name.trim() || !form.pipelineId" @click="create">{{ t('webhooks.create') }}</button>
+          <button type="button" class="wh-btn primary" data-testid="webhooks-form-create" :disabled="busy || !canCreate" @click="create">{{ t('webhooks.create') }}</button>
         </div>
       </SettingsCard>
 
@@ -411,7 +459,7 @@ const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(s
             @update:model-value="(on: boolean) => setEnabled(trigger, on)"
           />
         </div>
-        <div v-if="hasAddress" class="wh-field">
+        <div v-if="hasAddress && trigger.kind !== 'form'" class="wh-field">
           <code v-truncate class="wh-code">{{ url(trigger) }}</code>
           <button type="button" class="wh-btn ghost" @click="copy(url(trigger), trigger.id)">{{ copied === trigger.id ? t('webhooks.copied') : t('webhooks.copy') }}</button>
         </div>
@@ -460,7 +508,7 @@ const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(s
             </div>
             <div class="wh-actions wh-actions-start">
               <button type="button" class="wh-btn" data-testid="webhooks-log" @click="toggleLog(trigger)">{{ t('webhooks.log.title') }}</button>
-              <button type="button" class="wh-btn" @click="rotate(trigger)">{{ t(trigger.kind === 'github' ? 'webhooks.rotateSecret' : 'webhooks.rotateKey') }}</button>
+              <button type="button" class="wh-btn" @click="rotate(trigger)">{{ t(ROTATE[trigger.kind]) }}</button>
               <button type="button" class="wh-btn danger" data-testid="webhooks-delete" @click="remove(trigger)" @blur="deleting = ''">{{ t(deleting === trigger.id ? 'webhooks.deleteConfirm' : 'webhooks.delete') }}</button>
             </div>
             <table v-if="openLog === trigger.id && events.length" class="wh-log" data-testid="webhooks-log-table">
@@ -542,6 +590,11 @@ const hasAddress = computed(() => !!status.value && (hasPublicHost.value || !!(s
 .wh-limits-row { align-items: center; padding: 8px 0; }
 .wh-events { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .wh-events .wh-hint { flex-basis: 100%; }
+.wh-fields { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wh-field-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto auto; gap: 8px; align-items: center; }
+.wh-field-row .wh-check { align-items: center; }
+.wh-field-options { grid-column: 1 / -1; }
+.wh-add-field { align-self: flex-start; }
 .wh-check { display: inline-flex; align-items: flex-start; gap: 7px; font-size: var(--font-xs); color: var(--text-primary); line-height: 1.5; }
 .wh-check input { margin: 2px 0 0; flex: none; }
 .wh-ack { display: flex; margin: 8px 0 4px; }

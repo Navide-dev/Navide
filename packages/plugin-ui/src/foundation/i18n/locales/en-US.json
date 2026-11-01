@@ -12846,7 +12846,16 @@
       "timeout": "Wait for you",
       "eventsHint": "Only events you tick start a run. GitHub's ping test is answered without one.",
       "noGate": "Start without approval. The first step is not an approval gate, so a request starts the agent right away. External content reaches it without anyone looking first.",
-      "default": "Every tool call in a run this trigger starts waits for you. If nobody answers in time, the run stops and nothing is approved. Phone and chat channels cannot approve for a webhook run. Claude Code and Codex only."
+      "default": "Every tool call in a run this trigger starts waits for you. If nobody answers in time, the run stops and nothing is approved. Phone and chat channels cannot approve for a webhook run. Claude Code and Codex only.",
+      "fields": "Fields",
+      "fieldLabel": "Label",
+      "fieldType": "Type",
+      "required": "Required",
+      "removeField": "Remove",
+      "addField": "Add field",
+      "options": "Choices, separated by commas",
+      "fieldsHint": "Files, passwords and custom HTML are not available.",
+      "public": "Let this form open from outside this computer. Its address will reach browser history and your tunnel's logs, and anyone holding it can start a run. Off, it opens on this computer only."
     },
     "perMinute": "per minute",
     "perDay": "per day",
@@ -12871,7 +12880,9 @@
       "secret": "Secret",
       "copyCurl": "Copy a test call",
       "done": "I have saved it",
-      "githubHint": "In GitHub, open the repository's Settings → Webhooks, paste both, and choose application/json. The address has to be public, so set a hostname above first."
+      "githubHint": "In GitHub, open the repository's Settings → Webhooks, paste both, and choose application/json. The address has to be public, so set a hostname above first.",
+      "titleForm": "Address of {name}",
+      "formHint": "This address is the only key: anyone who has it can open the form. Share it the way you would a password."
     },
     "rotateKey": "Replace key",
     "rotateSecret": "Replace secret",
@@ -12934,7 +12945,21 @@
       "key-unavailable": "Key store could not be reached",
       "unattended-on": "Unattended turned on",
       "unattended-off": "Unattended turned off",
-      "no-gate-acknowledged": "Start without approval ticked"
+      "no-gate-acknowledged": "Start without approval ticked",
+      "form-invalid": "Form sent with invalid values",
+      "form-public": "Form made public",
+      "bad-csrf": "Form sent without a valid token",
+      "cross-site": "Form sent from another site"
+    },
+    "rotateForm": "Replace address",
+    "fieldType": {
+      "text": "Text",
+      "textarea": "Long text",
+      "number": "Number",
+      "email": "Email",
+      "date": "Date",
+      "select": "List",
+      "checkbox": "Checkbox"
     }
   }
 }
