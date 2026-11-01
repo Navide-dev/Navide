@@ -90,10 +90,14 @@ start a run.
 - **Everything the request sent is untrusted.** It reaches the agent as marked
   data, with control characters and `{{` neutralised. That wording only asks the
   agent not to obey it. What limits an agent that does is the rest of this list.
-- **Every tool call waits for you.** Panes start with the CLI's own prompts on,
-  whatever your permission settings say, and so does any pane they open. A custom
-  launch command is refused. For Codex this also means the `workspace-write`
-  sandbox, and Guard's asks become refusals, because Codex hooks cannot ask.
+- **Claude Code: every tool call waits for you.** Panes start with the CLI's own
+  prompts on, whatever your permission settings say, and so does any pane they
+  open. A custom launch command is refused.
+- **Codex: a read-only sandbox instead.** Codex has no mode that asks before every
+  call, so it runs with `--sandbox read-only --ask-for-approval on-request`.
+  Commands can read files without asking, including ones outside the workspace.
+  Writes and network are blocked unless Codex asks and you approve, and Guard's
+  asks become refusals, because Codex hooks cannot ask.
 - **Nobody there means it stops.** A gate or a prompt nobody answers stops the
   run after the trigger's wait, 30 minutes by default, and a run stops after 4
   hours whatever it is doing. Nothing is approved on anyone's behalf. Phone and

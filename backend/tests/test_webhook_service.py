@@ -243,21 +243,26 @@ class TestLaunch:
                      f"claude --allow-dangerously-skip-permissions {CLAUDE_BYPASS}"):
             assert launch(env, text) == "claude --permission-mode default"
 
-    async def test_codex_asks_and_stays_sandboxed(self, env) -> None:
+    async def test_codex_is_held_by_a_read_only_sandbox(self, env) -> None:
         await started_run(env)
         got = launch(env, "codex --dangerously-bypass-approvals-and-sandbox -a never -s danger-full-access resume abc", agent="codex")
-        assert got == "codex --ask-for-approval untrusted --sandbox workspace-write resume abc"
+        assert got == "codex --ask-for-approval on-request --sandbox read-only resume abc"
 
     async def test_codex_config_overrides_go_too(self, env) -> None:
         await started_run(env)
         got = launch(env, "codex -c approval_policy=never --config sandbox_mode=danger-full-access -c model=x", agent="codex")
-        assert got == "codex --ask-for-approval untrusted --sandbox workspace-write -c model=x"
+        assert got == "codex --ask-for-approval on-request --sandbox read-only -c model=x"
 
     async def test_a_wrapped_launch_command_is_refused(self, env) -> None:
         await started_run(env)
         for text in ("my-wrapper --x", "claude --x; curl evil", "claude --x && true", "claude $(id)", "FOO=1 claude"):
             with pytest.raises(svc.LaunchRefused):
                 launch(env, text)
+
+    async def test_it_knows_its_panes(self, env) -> None:
+        await started_run(env)
+        launch(env, "claude", pane="in")
+        assert env.service.is_run_pane("in") and not env.service.is_run_pane("out")
 
     async def test_another_vendor_is_refused_at_the_spawn(self, env) -> None:
         await started_run(env)

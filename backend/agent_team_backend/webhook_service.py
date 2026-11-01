@@ -62,9 +62,11 @@ _BYPASS = {
 }
 _ASK = {
     "claude": "--permission-mode default",
-    # untrusted: anything beyond plain reads asks. on-request would leave the
-    # decision to the model, which is what a payload is trying to steer.
-    "codex": "--ask-for-approval untrusted --sandbox workspace-write",
+    # Codex 0.166 has no ask-every-call mode: the flag takes only on-request and
+    # never, and config refuses untrusted. on-request alone lets the model decide,
+    # and in workspace-write a command then runs unasked, so the sandbox is what
+    # holds here: read-only stops writes and network whatever the model decides.
+    "codex": "--ask-for-approval on-request --sandbox read-only",
 }
 
 
@@ -398,6 +400,9 @@ class WebhookService:
             self._guarded[pane_id] = (run_id, unattended)
             self.store.add_run_pane(pane_id, run_id, unattended)
         return _rewrite(command, lambda text: _with_mode(agent_key, text, unattended=unattended))
+
+    def is_run_pane(self, pane_id: str) -> bool:
+        return pane_id in self._guarded
 
     def launch_env(self, pane_id: str) -> dict[str, str]:
         """What only an unattended run pane's environment holds."""
