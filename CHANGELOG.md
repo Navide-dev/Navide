@@ -19,6 +19,9 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Accounts (0.2.37): when a quota switch moves panes to an API key and the account list then fails to refresh, the quota report no longer ends in an error. The panes still move; the list catches up on its next read.
 
+
+- Accounts (0.2.37): when Claude Code's live login runs out and an API key is set to take over, a subscription account signed in only in its own folder now comes first if its quota reading is current and has room. Panes reopen on that account at no charge, and the move counts toward the automatic-switch limit like any other. Before, Navide went straight to the key while subscription quota was still available. Nothing changes without an API key account opened to automatic switching. Known limit: when that folder account later runs out, panes wait for a reset instead of moving to the key. Five new strings in all 11 interface languages.
+
 - First-run wizard (0.2.37): a prerequisite Install will set up for you is now a plain note instead of a red error, so a machine without Node.js no longer opens on what looks like a page of failures. Real install failures stay red. When Navide cannot install a prerequisite itself, for example Node.js on Linux, the card says so and is tagged **Needs Node.js** even when collapsed, Install is replaced by a link to the official instructions, and Re-detect also picks up tools only your login shell can see, such as Node.js from nvm. Two new strings and one reworded string in all 11 interface languages.
 - Sync on Windows (0.2.37): a large skill held for approval could stay on "downloading its files for review" until the next sync, and then download again, when its finished review was saved at the moment something else read the approval list (`WinError 5`). A read that overlapped a save could also briefly show no held records. Reads of the approval list and of held records now wait for the save to finish.
 
@@ -27,6 +30,8 @@ All notable released changes to Navide will be documented in this file. The form
 - Settings (0.2.37): the Environment Check entry is now the Setup Wizard, Settings → Analyzer no longer says to run `ollama serve` when Ollama is not installed, and the model hint is a complete sentence. The Automation permission describes what it is used for now.
 
 - Workspace (0.2.37): **Open Agent** on the empty stage opens an agent. With the Agents tab already showing, it did nothing. Nine strings changed or added in all 11 interface languages.
+
+- Accounts (0.2.37): an account with no 5-hour window, such as a verified Claude Ultra account or a Codex account that reports only a weekly limit, no longer counts as "no quota data". When an account's quota runs out it now ranks by its weekly headroom, and switching to it ends confirmed instead of "quota unconfirmed". Navide treats the window as absent only when the vendor's complete answer shows that; a reading it cannot be sure of stays unknown, as before.
 
 - Accounts (0.2.37): an account with no 5-hour window, such as a verified Claude Ultra account or a Codex account that reports only a weekly limit, no longer counts as "no quota data". When an account's quota runs out it now ranks by its weekly headroom, and switching to it ends confirmed instead of "quota unconfirmed". Navide treats the window as absent only when the vendor's complete answer shows that; a reading it cannot be sure of stays unknown, as before.
 

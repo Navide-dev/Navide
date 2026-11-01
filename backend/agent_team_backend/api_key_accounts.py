@@ -321,11 +321,46 @@ def _record_move(service: Any, incident: Any, profile_id: str) -> None:
     service.store.record(move, now=now)
 
 
+async def _folder_login_with_quota(service: Any, incident: Any) -> dict[str, Any] | None:
+    """The subscription account with the most confirmed quota that signed in
+    only inside its own config dir. Its slot is empty, so failover reads it as
+    signed out and no swap can reach it, but a pane pinned to it runs on it.
+    Only a current reading counts: a guess here would stop a pane that a key
+    could have kept running."""
+    try:
+        rows = await service.candidates("claude")
+    except Exception as err:  # noqa: BLE001 - the key stays the answer, as it was
+        log.warning("api key takeover: candidates unavailable (%s)", type(err).__name__)
+        return None
+    rows = [
+        row for row in rows
+        if row["excluded"] == "signed-out" and row["tier"] == "fresh-headroom"
+        and row["slotId"] != incident.outgoing_slot_id
+    ]
+
+    def usable() -> list[dict[str, Any]]:
+        vetoed = service._ledger_vetoes("claude", [str(row["slotId"]) for row in rows])
+        found = []
+        for row in rows:
+            profile = _store().get(row["slotId"])
+            if profile is None or is_api_key(profile) or row["slotId"] in vetoed:
+                continue
+            if _vault().account_dir_signed_in(row["slotId"]):
+                found.append(row)
+        return found
+
+    best = max(await vault_to_thread(usable), key=lambda row: row["headroom"] or 0.0, default=None)
+    return _store().get(best["slotId"]) if best else None
+
+
 async def take_over(service: Any, incident: Any) -> bool:
     """Every login is out: move the panes on claude's live login to an API key
     account the user opened to this. Claude's live login is never swapped for a
     key, so instead of a transaction the new default goes to ``paneDefaults``
     and each window reopens its panes, leaving any that are busy.
+
+    A subscription account with confirmed quota in its own folder is not out,
+    so it takes the panes instead of the key, the same way and at no charge.
 
     Runs only when the live login itself ran out: a pinned account running out
     leaves the live login's quota unspent, and that must cost nothing. Counts
@@ -348,6 +383,9 @@ async def take_over(service: Any, incident: Any) -> bool:
     if service._budget_retry_after("claude", incident.auth_scope) > 0:
         service._stop_incident(incident, "auto_budget_exhausted")
         return True
+    folder_login = await _folder_login_with_quota(service, incident)
+    outcome = "folder-login-takeover" if folder_login else "api-key-takeover"
+    target = folder_login or target
     # The same row an automatic swap writes, so this move counts against the
     # same 5-hour ceiling. Written first: a move that cannot be counted is not
     # made.
@@ -355,7 +393,7 @@ async def take_over(service: Any, incident: Any) -> bool:
         _record_move(service, incident, target["id"])
     except Exception as err:  # noqa: BLE001
         log.warning("api key takeover not recorded (%s)", type(err).__name__)
-        service._stop_incident(incident, "api-key-takeover-unrecorded")
+        service._stop_incident(incident, f"{outcome}-unrecorded")
         return True
     try:
         panes = [
@@ -365,11 +403,12 @@ async def take_over(service: Any, incident: Any) -> bool:
         _store().set_pane_default("claude", target["id"])
     except Exception as err:  # noqa: BLE001
         log.warning("api key takeover not applied (%s)", type(err).__name__)
-        service._stop_incident(incident, "api-key-takeover-failed")
+        service._stop_incident(incident, f"{outcome}-failed")
         return True
-    service._stop_incident(incident, "api-key-takeover")
+    service._stop_incident(incident, outcome)
     await app.broadcast_main_windows(make_event(TAKEOVER_EVENT, {
         "agentKey": "claude", "profileId": target["id"], "name": target.get("name"), "paneIds": panes,
+        "paid": folder_login is None,
     }))
     from .ws_handlers import _broadcast_profiles_changed
 
