@@ -380,12 +380,13 @@ async def wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict[
     return result
 
 
-def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> None:
+def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> list[str]:
     """Retire the records the woken pane replaced: the ones of the same conversation that no
     window holds. Left in place, the next restore of the workspace would bring the
-    conversation back a second time."""
+    conversation back a second time. Returns the retired pane ids."""
     from .. import agent_messaging, app
 
+    retired: list[str] = []
     project = app.project_store.peek(workspace_path)
     for record in list(project.panes if project else []):
         if record.pane_id == keep or getattr(record, "spawn_status", "") == "removed" \
@@ -393,6 +394,23 @@ def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> None:
                 or agent_messaging.current(record.pane_id) is not None:
             continue
         app.project_store.record_pane_unspawn_by_id(workspace_path, pane_id=record.pane_id)
+        retired.append(record.pane_id)
+    return retired
+
+
+async def _hand_over_jobs(retired: list[str], pane_id: str, session_id: str) -> None:
+    """Move the scheduled jobs of the panes a wake replaced onto the woken pane.
+
+    The spawn itself cannot: its records were still live when it was recorded, and it names
+    no previous pane. The session check already passed, so this is the same hop a rebuild
+    makes. The wake succeeded either way."""
+    from .. import scheduler
+
+    for previous in retired:
+        try:
+            await scheduler.get_service().rebind_after_rebuild(previous, pane_id, session_id, session_id)
+        except Exception:  # noqa: BLE001
+            log.exception("channels: scheduled jobs of %s did not follow the wake", previous)
 
 
 async def _open_onto_session(record: Any, workspace_path: str, session_id: str) -> dict[str, Any]:
@@ -415,7 +433,8 @@ async def _open_onto_session(record: Any, workspace_path: str, session_id: str) 
     # disk before the spawn; a window that answers otherwise is not taken on trust.
     if not new_pane_id or opened.get("resumed_session_id") != session_id:
         return {"ok": False, "code": "session-mismatch", "started": True}
-    await asyncio.to_thread(_retire_superseded, workspace_path, session_id, new_pane_id)
+    retired = await asyncio.to_thread(_retire_superseded, workspace_path, session_id, new_pane_id)
+    await _hand_over_jobs(retired, new_pane_id, session_id)
     return {"ok": True, "pane_id": new_pane_id}
 
 
