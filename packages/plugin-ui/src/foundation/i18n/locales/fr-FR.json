@@ -1736,7 +1736,11 @@
           "title": "Badges d’état",
           "summary": "Renommer chaque état de pane et choisir sa couleur, par langue."
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhooks",
+        "summary": "Lancez une pipeline depuis un autre système par HTTP, avec une clé ou une signature GitHub."
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "Masquer toutes les fenêtres derrière un écran de verrouillage et déverrouiller avec Touch ID, Windows Hello ou un PIN"
         },
@@ -2817,14 +2821,14 @@
         "intro": "Ce que contrôle chacun des dix-neuf onglets des paramètres, comment Navide Cloud relie plusieurs machines en un réseau privé, et les éléments du système situés hors de l’écran principal : les menus, les fenêtres autonomes, les vues d’utilisation et l’entretien des ressources.",
         "s1": {
           "title": "Vue d’ensemble des paramètres",
-          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>25 onglets</strong> au total.",
+          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>26 onglets</strong> au total.",
           "h1": "Le champ de recherche",
           "p2": "Sous l’en-tête de la barre latérale se trouve un champ de recherche dont le texte indicatif est <code>Rechercher dans les paramètres…</code>. Il recherche dans les titres des paramètres, leur section et leurs mots-clés <strong>dans tous les onglets</strong> (dans la langue actuelle de l’interface et avec les mots-clés indexés), et affiche au plus 8 résultats ; cliquer sur l’un d’eux ouvre l’onglet correspondant et fait défiler jusqu’à la section (à une exception près : « Stockage » ferme les paramètres et ouvre directement le Resource Manager). Sans résultat, il affiche <code>Aucun paramètre correspondant</code>. <kbd class=\"syh-kbd\">Esc</kbd> le vide.",
           "callout": {
             "title": "L’index de recherche n’est pas exhaustif",
             "text": "L’index est une liste tenue à la main, et <strong>les onglets {layout}, {notifications}, {security} et {channels} n’y ont aucune entrée</strong> : rien de ce qu’ils contiennent n’est donc trouvable, il faut les ouvrir vous-même. Une entrée CLI Agents ouvre directement le panneau de réglages d’une CLI (voir la rubrique « Agents CLI et comptes »)."
           },
-          "h2": "Les vingt-cinq onglets",
+          "h2": "Les vingt-six onglets",
           "tabTable": {
             "group": "Groupe",
             "tab": "Onglet",
@@ -2887,6 +2891,10 @@
             "analyzer": {
               "what": "Le backend d’inférence local, les téléchargements de modèles, les bancs d’essai de modèles",
               "more": "section 4 de cette page"
+            },
+            "webhooks": {
+              "what": "Déclencheurs permettant à un autre système de lancer une pipeline par HTTP ou depuis GitHub, avec leurs clés, limites et activité",
+              "more": "Les exécutions sans surveillance et l’avertissement sur la clé Linux sont expliqués à l’activation."
             },
             "security": {
               "what": "Les règles et niveaux de Navide Guard, les branches protégées, les règles personnalisées et la protection des commandes pour les terminaux simples",
@@ -12791,6 +12799,142 @@
       "internal": "Le graphe converti n’est pas valide. C’est un bogue de l’importateur.",
       "too-large": "Le workflow fait {sizeMb} Mo. Un import accepte au plus {limitMb} Mo.",
       "store-refused": "Le workflow « {workflow} » n’a pas pu être enregistré, donc rien n’a été importé : {problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhooks",
+    "guardOff": "Activez d’abord Navide Guard dans Réglages → Sécurité. Sans lui, les webhooks restent désactivés et les requêtes reçues sont refusées.",
+    "portTaken": "Navide n’a pas pu écouter : {error}. Libérez ce port, puis réactivez. Navide ne change pas de port, car vos appelants utilisent celui-ci.",
+    "enabled": {
+      "title": "Accepter les webhooks",
+      "desc": "Permet à un autre système de lancer une pipeline par HTTP. L’écoute n’a lieu que si ceci est activé et qu’un déclencheur l’est aussi. Navide écoute uniquement sur cet ordinateur. Pour y accéder de l’extérieur, mettez en place votre propre tunnel. Navide doit être ouvert, avec une fenêtre sur l’espace de travail."
+    },
+    "host": {
+      "title": "Nom d’hôte public",
+      "desc": "Le nom auquel répond votre tunnel. Les requêtes vers tout autre hôte sont refusées. Laissez vide si seul cet ordinateur appelle Navide.",
+      "placeholder": "hook.example.com",
+      "warning": "Avec un tunnel, n’importe qui sur Internet peut atteindre cette adresse. Seule la clé ou la signature de chaque déclencheur l’arrête alors."
+    },
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "create": "Créer le déclencheur",
+    "copy": "Copier",
+    "copied": "Copié",
+    "delete": "Supprimer",
+    "deleteConfirm": "Supprimer définitivement ?",
+    "turnOn": "Activer",
+    "more": "Options",
+    "triggers": "Déclencheurs",
+    "new": "Nouveau déclencheur",
+    "needsWorkspace": "Ouvrez d’abord un espace de travail. Un déclencheur s’y exécute.",
+    "empty": {
+      "title": "Aucun déclencheur",
+      "desc": "Un déclencheur relie une adresse à une pipeline : un appel à l’adresse lance une exécution."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "Formulaire"
+    },
+    "form": {
+      "name": "Nom",
+      "source": "Source",
+      "pipeline": "Pipeline",
+      "workspace": "Espace de travail",
+      "events": "Événements",
+      "limits": "Limites",
+      "timeout": "Vous attendre",
+      "eventsHint": "Seuls les événements cochés lancent une exécution. Le test ping de GitHub reçoit une réponse sans en lancer.",
+      "noGate": "Démarrer sans approbation. La première étape n’est pas une porte d’approbation : une requête lance donc l’agent aussitôt. Le contenu externe lui parvient sans que personne l’ait vu.",
+      "default": "Dans les exécutions de ce déclencheur, chaque appel d’outil attend votre confirmation. Sans réponse à temps, l’exécution s’arrête et rien n’est approuvé. Le téléphone et les canaux de discussion ne peuvent pas approuver une exécution de webhook. Claude Code et Codex uniquement."
+    },
+    "perMinute": "par minute",
+    "perDay": "par jour",
+    "minutes": "min d’attente",
+    "minutesUnit": "minutes",
+    "rate": "{minute}/min · {day}/jour",
+    "enable": "Activer {name}",
+    "state": {
+      "off": "Désactivé",
+      "listener-off": "Activé, pas d’écoute",
+      "ready": "Prêt",
+      "running": "Exécution en cours",
+      "waiting": "Vous attend · arrêt dans {minutes} min"
+    },
+    "reveal": {
+      "titleKey": "Clé de {name}",
+      "titleSecret": "Secret de {name}",
+      "once": "Copiez-le maintenant. Navide ne garde pas de copie lisible et ne l’affichera plus.",
+      "noAddress": "Activez le déclencheur et son adresse apparaîtra sur sa ligne.",
+      "url": "Adresse",
+      "key": "Clé",
+      "secret": "Secret",
+      "copyCurl": "Copier un appel de test",
+      "done": "Je l’ai enregistré",
+      "githubHint": "Dans GitHub, ouvrez Settings → Webhooks du dépôt, collez les deux et choisissez application/json. L’adresse doit être publique : définissez d’abord un nom d’hôte ci-dessus."
+    },
+    "rotateKey": "Remplacer la clé",
+    "rotateSecret": "Remplacer le secret",
+    "unattended": {
+      "chip": "Sans surveillance",
+      "title": "Exécuter sans surveillance",
+      "desc": "Désactivé par défaut. Les panneaux des exécutions de ce déclencheur ignorent les demandes d’autorisation. L’activation explique ce que cela implique.",
+      "unsupported": "Pas encore disponible sous Windows.",
+      "confirmTitle": "Avant d’exécuter sans surveillance",
+      "skips": "L’agent ignore les demandes d’autorisation. Personne ne confirme ses appels d’outils.",
+      "external": "Il traite du contenu externe, et ce contenu peut tenter de l’orienter.",
+      "scripts": "Guard n’arrête que les commandes qu’il reconnaît. Il ne peut pas arrêter un agent qui écrit un script puis l’exécute.",
+      "hook": "Si le hook de Guard ne peut pas répondre, l’appel est refusé. Si le processus du hook est lui-même tué ou bloqué, l’appel passe.",
+      "tick": "Je comprends que l’agent traite du contenu externe sans confirmation."
+    },
+    "weakKey": {
+      "title": "Sous Linux, ce secret est moins protégé",
+      "body": "Sa clé se trouve dans un fichier protégé uniquement par ses permissions : tout programme lancé sous votre compte peut la lire. macOS et Windows la gardent dans le stockage protégé du système.",
+      "tick": "Je comprends et je veux activer ce déclencheur."
+    },
+    "log": {
+      "title": "Activité",
+      "empty": "Rien d’enregistré pour l’instant."
+    },
+    "refused": {
+      "vendor-refused": "Cette pipeline a une étape avec une CLI que les exécutions de webhook ne peuvent pas utiliser. Seuls Claude Code et Codex sont pris en charge, car Guard y a été testé.",
+      "no-gate": "La première étape de cette pipeline n’est pas une porte d’approbation. Ajoutez-en une, ou recréez le déclencheur en cochant Démarrer sans approbation.",
+      "pipeline-missing": "La pipeline de ce déclencheur n’existe plus."
+    },
+    "error": {
+      "GUARD_OFF": "Activez d’abord Navide Guard.",
+      "KEY_UNAVAILABLE": "Le stockage de clés du système est inaccessible. Déverrouillez-le et réessayez.",
+      "UNATTENDED_UNSUPPORTED": "Pas encore disponible sous Windows.",
+      "NOT_FOUND": "Ce déclencheur n’existe plus.",
+      "BAD_REQUEST": "Vérifiez les valeurs. Les limites vont jusqu’à 60 par minute et 500 par jour, et l’attente de 5 à 240 minutes.",
+      "generic": "Cela n’a pas fonctionné. Réessayez."
+    },
+    "outcome": {
+      "accepted": "Accepté",
+      "started": "Exécution lancée",
+      "start-failed": "Exécution non lancée",
+      "duplicate": "Même livraison qu’avant, non exécutée",
+      "ping": "Ping GitHub",
+      "event-ignored": "Événement non coché",
+      "daily-limit": "Limite quotidienne atteinte",
+      "rate-limited": "Trop de requêtes",
+      "bad-key": "Clé incorrecte",
+      "bad-signature": "Signature incorrecte",
+      "run-active": "Une exécution était déjà en cours",
+      "no-window": "Aucune fenêtre sur l’espace de travail",
+      "app-locked": "App Lock actif",
+      "guard-off": "Guard désactivé",
+      "vendor-refused": "La pipeline utilise une CLI non prise en charge",
+      "no-gate": "Pas de porte d’approbation",
+      "awaiting-approval": "Vous attend",
+      "approval-timeout": "Sans réponse, exécution arrêtée",
+      "run-timeout": "Limite de 4 heures atteinte",
+      "interrupted": "Exécution interrompue",
+      "secret-lost": "Le secret n’est plus lisible, déclencheur désactivé. Remplacez le secret pour le réutiliser.",
+      "key-unavailable": "Stockage de clés inaccessible",
+      "unattended-on": "Sans surveillance activé",
+      "unattended-off": "Sans surveillance désactivé",
+      "no-gate-acknowledged": "Démarrer sans approbation coché"
     }
   }
 }

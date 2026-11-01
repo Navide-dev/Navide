@@ -1736,7 +1736,11 @@
           "title": "状态徽章",
           "summary": "替九种面板状态各自重命名并选颜色，中文、英文与日文名称可分开填。"
         },
-        "app-lock": {
+        "webhooks": {
+        "title": "Webhook",
+        "summary": "让其他系统通过 HTTP 启动 Pipeline，以密钥或 GitHub 签名验证。"
+      },
+      "app-lock": {
           "title": "App Lock",
           "summary": "用锁定画面盖住所有窗口，用 Touch ID、Windows Hello 或 PIN 解锁"
         },
@@ -2817,14 +2821,14 @@
         "intro": "设置窗口的十九个标签页分别管什么、Navide Cloud 怎么把几台机器接成一个私有网络，以及菜单、独立窗口、用量统计与资源维护这些散在主画面之外的系统面。",
         "s1": {
           "title": "设置总览",
-          "p1": "设置窗口用 <kbd class=\"syh-kbd\">⌘,</kbd> 打开，标题栏的齿轮钮是同一个入口。左侧侧栏分五组，共 <strong>25 个标签页</strong>。",
+          "p1": "设置窗口用 <kbd class=\"syh-kbd\">⌘,</kbd> 打开，标题栏的齿轮钮是同一个入口。左侧侧栏分五组，共 <strong>26 个标签页</strong>。",
           "h1": "搜索框",
           "p2": "侧栏标题底下有一个搜索框，提示字是 <code>搜索设置…</code>。它<strong>跨标签页</strong>比对设置项的标题、所属区块与关键字（使用目前界面语言与已收录的关键字），最多行 8 笔；点一笔会切到那个标签页并卷到对应区块（“保存空间”那笔例外：它会关掉设置、直接开“资源控管”），没命中时显示 <code>找不到相符设置</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜索索引不是全覆盖",
             "text": "索引是一份人工维护的清单，<strong>{layout}、{notifications}、{security}、{channels} 这四个标签页没有任何条目</strong>，搜索不到它们里面的东西，得自己点进去。CLI Agents 的条目点下去会直接打开某一家的设置抽屉（见“CLI Agent 与账号”标签页）。"
           },
-          "h2": "二十五个标签页",
+          "h2": "二十六个标签页",
           "tabTable": {
             "group": "分组",
             "tab": "标签页",
@@ -2887,6 +2891,10 @@
             "analyzer": {
               "what": "本机推论后端、模型下载、模型评测",
               "more": "本页第 4 章"
+            },
+            "webhooks": {
+              "what": "让其他系统通过 HTTP 或从 GitHub 启动 Pipeline 的触发器，包括密钥、上限和活动记录",
+              "more": "无人值守和 Linux 密钥的影响会在开启时说明。"
             },
             "security": {
               "what": "Navide Guard 的规则与等级、受保护分支、自订规则，以及一般终端的指令防护",
@@ -12791,6 +12799,142 @@
       "internal": "转换后的流程图无效。这是导入器的错误。",
       "too-large": "这个工作流有 {sizeMb} MB，一次导入最多 {limitMb} MB。",
       "store-refused": "无法保存工作流“{workflow}”，所以没有导入任何内容：{problems}"
+    }
+  },
+  "webhooks": {
+    "nav": "Webhook",
+    "guardOff": "请先到“设置 → 安全”开启 Navide Guard。未开启时无法启用 Webhook，收到的请求也会被拒绝。",
+    "portTaken": "无法开始监听：{error}。请释放这个端口后再开启一次。调用方用的就是这个端口，所以 Navide 不会换端口。",
+    "enabled": {
+      "title": "接受 Webhook",
+      "desc": "让其他系统通过 HTTP 启动 Pipeline。只有这里开启且有已启用的触发器时才会监听。Navide 只在这台电脑上监听，要从外部连接请自行搭建隧道。Navide 需要开着，并有窗口打开该工作区。"
+    },
+    "host": {
+      "title": "公开主机名",
+      "desc": "隧道使用的名称。其他 Host 的请求一律拒绝。只有这台电脑调用时请留空。",
+      "placeholder": "hook.example.com",
+      "warning": "搭建隧道后，互联网上任何人都能访问这个地址，能挡住他们的只有每个触发器的密钥或签名。"
+    },
+    "save": "保存",
+    "cancel": "取消",
+    "create": "创建触发器",
+    "copy": "复制",
+    "copied": "已复制",
+    "delete": "删除",
+    "deleteConfirm": "确定永久删除？",
+    "turnOn": "开启",
+    "more": "选项",
+    "triggers": "触发器",
+    "new": "新建触发器",
+    "needsWorkspace": "请先打开工作区，触发器要在工作区中运行。",
+    "empty": {
+      "title": "还没有触发器",
+      "desc": "触发器把一个地址连接到一条 Pipeline：调用这个地址就开始一次运行。"
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "github": "GitHub",
+      "form": "表单"
+    },
+    "form": {
+      "name": "名称",
+      "source": "来源",
+      "pipeline": "Pipeline",
+      "workspace": "工作区",
+      "events": "事件",
+      "limits": "上限",
+      "timeout": "等待确认",
+      "eventsHint": "只有勾选的事件才会开始运行。GitHub 的 ping 测试会得到响应，但不会运行。",
+      "noGate": "不经批准直接开始。第一步不是批准关卡，所以请求一到就会启动智能体，外部内容会在无人查看的情况下交给它。",
+      "default": "这个触发器启动的运行中，每次工具调用都会等你确认。超时无人响应，运行就会中止，不会自动放行。手机和聊天频道无法批准 Webhook 运行。只支持 Claude Code 和 Codex。"
+    },
+    "perMinute": "次/分钟",
+    "perDay": "次/天",
+    "minutes": "分钟等待",
+    "minutesUnit": "分钟",
+    "rate": "{minute} 次/分 · {day} 次/天",
+    "enable": "启用 {name}",
+    "state": {
+      "off": "关闭",
+      "listener-off": "已启用，未监听",
+      "ready": "就绪",
+      "running": "运行中",
+      "waiting": "等你确认 · {minutes} 分钟后中止"
+    },
+    "reveal": {
+      "titleKey": "{name} 的密钥",
+      "titleSecret": "{name} 的 secret",
+      "once": "请立即复制。Navide 不保留可读的密钥，之后不会再显示。",
+      "noAddress": "启用触发器后，地址会显示在它的行上。",
+      "url": "地址",
+      "key": "密钥",
+      "secret": "Secret",
+      "copyCurl": "复制测试调用",
+      "done": "我已保存",
+      "githubHint": "到 GitHub 仓库的 Settings → Webhooks 粘贴这两项，并选择 application/json。地址必须是公开的，请先在上方设置主机名。"
+    },
+    "rotateKey": "更换密钥",
+    "rotateSecret": "更换 secret",
+    "unattended": {
+      "chip": "无人值守",
+      "title": "无人值守",
+      "desc": "默认关闭。这个触发器启动的窗格会跳过权限确认。开启时会说明影响。",
+      "unsupported": "Windows 暂不支持。",
+      "confirmTitle": "开启无人值守之前",
+      "skips": "智能体会跳过权限确认，没有人确认它的工具调用。",
+      "external": "它处理的是外部内容，这些内容可能试图操控它。",
+      "scripts": "Guard 只能拦住认识的命令，拦不住智能体先写脚本再执行。",
+      "hook": "Guard 的 hook 无法响应时会拒绝这次调用；但 hook 进程本身被杀掉或卡住时，调用会直接放行。",
+      "tick": "我了解智能体会在没有确认的情况下处理外部内容。"
+    },
+    "weakKey": {
+      "title": "在 Linux 上，这个 secret 的保护较弱",
+      "body": "它的密钥放在只靠文件权限保护的文件中，以你的身份运行的程序都能读取。macOS 和 Windows 则放在系统的保护区。",
+      "tick": "我了解，要启用这个触发器。"
+    },
+    "log": {
+      "title": "活动记录",
+      "empty": "还没有记录。"
+    },
+    "refused": {
+      "vendor-refused": "这条 Pipeline 有步骤使用了 Webhook 运行不支持的 CLI。只支持已验证过 Guard 的 Claude Code 和 Codex。",
+      "no-gate": "这条 Pipeline 的第一步不是批准关卡。请添加关卡，或重新创建触发器并勾选“不经批准直接开始”。",
+      "pipeline-missing": "这个触发器绑定的 Pipeline 已不存在。"
+    },
+    "error": {
+      "GUARD_OFF": "请先开启 Navide Guard。",
+      "KEY_UNAVAILABLE": "无法连接系统的密钥保护区，请解锁后重试。",
+      "UNATTENDED_UNSUPPORTED": "Windows 暂不支持。",
+      "NOT_FOUND": "这个触发器已不存在。",
+      "BAD_REQUEST": "请检查数值。上限是每分钟 60 次、每天 500 次，等待时间是 5 到 240 分钟。",
+      "generic": "操作未成功，请重试。"
+    },
+    "outcome": {
+      "accepted": "已接受",
+      "started": "已开始运行",
+      "start-failed": "未能运行",
+      "duplicate": "与之前相同的投递，未运行",
+      "ping": "GitHub ping",
+      "event-ignored": "事件未勾选",
+      "daily-limit": "已达每日上限",
+      "rate-limited": "请求过多",
+      "bad-key": "密钥错误",
+      "bad-signature": "签名错误",
+      "run-active": "已有运行在进行",
+      "no-window": "没有窗口打开工作区",
+      "app-locked": "App Lock 锁定中",
+      "guard-off": "Guard 已关闭",
+      "vendor-refused": "Pipeline 使用了不支持的 CLI",
+      "no-gate": "没有批准关卡",
+      "awaiting-approval": "等你确认",
+      "approval-timeout": "无人响应，运行已中止",
+      "run-timeout": "运行达到 4 小时上限",
+      "interrupted": "运行被中断",
+      "secret-lost": "secret 已无法读取，触发器已关闭。更换 secret 后才能再用。",
+      "key-unavailable": "无法连接密钥保护区",
+      "unattended-on": "已开启无人值守",
+      "unattended-off": "已关闭无人值守",
+      "no-gate-acknowledged": "已勾选不经批准直接开始"
     }
   }
 }

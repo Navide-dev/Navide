@@ -145,7 +145,9 @@ async def _status() -> dict[str, Any]:
         "error": _listener_error,
         "guard_enabled": _guard_on(),
         "key_protection": webhook_keystore.protection(),
+        "unattended_supported": guard_fail_closed.unattended_supported(),
         "triggers": await asyncio.to_thread(service.store.list),
+        "runs": await asyncio.to_thread(service.open_run_views),
     }
 
 
@@ -282,6 +284,23 @@ async def webhook_trigger_set_unattended(session: Any, msg_id: str, msg_type: st
     await session.send_json(make_response(msg_id, msg_type, await _status()))
 
 
+async def webhook_trigger_update(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
+    service = _service()
+    try:
+        await asyncio.to_thread(
+            service.store.set_limits, str(payload.get("id") or ""), int(payload["per_minute"]),
+            int(payload["per_day"]), int(payload["approval_timeout_min"]),
+        )
+    except webhook_triggers.WebhookNotFound:
+        await session.send_json(make_error(msg_id, msg_type, "NOT_FOUND", "no such trigger"))
+        return
+    except (webhook_triggers.WebhookInvalid, KeyError, TypeError, ValueError) as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    await reconcile()
+    await session.send_json(make_response(msg_id, msg_type, await _status()))
+
+
 async def webhook_trigger_rotate(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
     service = _service()
     trigger_id = str(payload.get("id") or "")
@@ -332,6 +351,7 @@ HANDLERS = {
     "webhook.trigger.create": webhook_trigger_create,
     "webhook.trigger.enable": webhook_trigger_enable,
     "webhook.trigger.set_unattended": webhook_trigger_set_unattended,
+    "webhook.trigger.update": webhook_trigger_update,
     "webhook.trigger.rotate": webhook_trigger_rotate,
     "webhook.trigger.delete": webhook_trigger_delete,
     "webhook.events": webhook_events,

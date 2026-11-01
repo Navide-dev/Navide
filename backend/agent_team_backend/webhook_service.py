@@ -407,6 +407,20 @@ class WebhookService:
 
     # ── nobody at the computer ───────────────────────────────────────────
 
+    def open_run_views(self) -> list[dict[str, Any]]:
+        """Open runs for the screen, each with how long it may still wait."""
+        views = []
+        for workspace, run in self._active.items():
+            since = self._waiting_since.get(run["id"])
+            limit = self.store.approval_timeout_s(run["trigger_id"])
+            views.append({
+                "trigger_id": run["trigger_id"], "workspace": workspace, "started_at": run["started_at"],
+                "unattended": bool(run["unattended"]),
+                "waiting_since": int(since) if since is not None else None,
+                "stops_at": int(since + limit) if since is not None else None,
+            })
+        return views
+
     def start_watchdog(self) -> None:
         self._watchdog = asyncio.create_task(self._watch())
 
