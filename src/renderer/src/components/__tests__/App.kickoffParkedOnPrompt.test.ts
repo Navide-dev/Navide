@@ -99,7 +99,7 @@ describe('every pipeline kickoff path asks whether the pane is parked', () => {
 
   it('activateStage (the resume path) checks before the role and the kickoff', () => {
     const activate = block('async function activateStage(', '\nasync function ')
-    const check = activate.indexOf('if (paneParkedOnPrompt(pane.id))')
+    const check = activate.indexOf("if (turnWait === 'parked' || paneParkedOnPrompt(pane.id))")
     expect(check).toBeGreaterThan(-1)
     expect(check).toBeLessThan(activate.indexOf('`role:${role.label}`'))
     expect(check).toBeLessThan(activate.indexOf('runPipelineKickoff({'))

@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
+import { waitUntilTurnEnds } from '../../lib/pipelineDelivery'
 import { linearPipelineDag, RUN_SLOT_STUB } from './pipelineDagTestStub'
 
 // A pipeline used to pre-spawn EVERY stage the moment Start was pressed, so an
@@ -190,6 +191,8 @@ async function loadActivate(over: {
   findRole?: (key: string) => unknown
   /** Whether a pane sits on a CLI prompt; default: none does. */
   paneParkedOnPrompt?: (paneId: string) => boolean
+  /** Whether a pane is still in a turn; default: none is. */
+  paneTurnBusy?: (paneId: string) => boolean
 } = {}) {
   const { code } = await transformWithEsbuild(
     `${RUN_SLOT_STUB}\n${prewarmSource}\n${activateSource}\nreturn { activateStage, awaitStagePrewarm, prewarmNextStage }`,
@@ -272,6 +275,8 @@ async function loadActivate(over: {
     'heldKickoffPanes',
     'paneParkedOnPrompt',
     'PARKED_ON_PROMPT_REASON',
+    'paneTurnBusy',
+    'waitUntilTurnEnds',
     code,
   )
   const api = factory(
@@ -319,6 +324,8 @@ async function loadActivate(over: {
     heldKickoffPanes,
     over.paneParkedOnPrompt ?? (() => false),
     'the pane is waiting on a CLI prompt',
+    over.paneTurnBusy ?? (() => false),
+    waitUntilTurnEnds,
   )
   return {
     api,
@@ -482,6 +489,59 @@ describe('a stage whose kickoff fails', () => {
     expect(failRunOnKickoff.mock.calls[0][2]).toBe('the pane is waiting on a CLI prompt')
     expect(failRunOnKickoff.mock.calls[0][5]).toBe(true)
     expect(startStageWatcher).not.toHaveBeenCalled()
+  })
+
+  it('a resumed slot still in its previous turn gets its kickoff only after that turn ends, and arms from then', async () => {
+    // Point 4 of the same VM round: the old turn's turn_complete must not read
+    // as the kickoff's. Nothing is typed while the turn runs, and the watcher's
+    // arm time is taken at the injection, after the turn ended.
+    const order: string[] = []
+    let polls = 0
+    let turnEndedAt = 0
+    const inject = vi.fn(async (paneId: string, _t: string, tag: string) => {
+      if (paneId === 'S1-0') order.push(`inject ${tag}`)
+      return true
+    })
+    const { api, pipeline, startStageWatcher } = await loadActivate({
+      injectPane: inject,
+      paneTurnBusy: (paneId) => {
+        if (paneId !== 'S1-0') return false
+        polls++
+        if (polls <= 3) return true
+        if (!turnEndedAt) {
+          turnEndedAt = Date.now()
+          order.push('turn ended')
+        }
+        return false
+      },
+    })
+    pipeline.stageIndex = 0
+    await api.activateStage(0)
+    expect(order[0]).toBe('turn ended')
+    expect(order.filter((e) => e.startsWith('inject kickoff'))).toHaveLength(1)
+    const armed = startStageWatcher.mock.calls.find((c) => c[1] === 'S1-0') as unknown[] | undefined
+    expect(armed).toBeDefined()
+    expect(armed![3] as number).toBeGreaterThanOrEqual(turnEndedAt)
+  })
+
+  it('a slot whose previous turn stops on a prompt is not typed into either', async () => {
+    let parked = false
+    let polls = 0
+    const inject = vi.fn(async (_paneId: string, ..._rest: unknown[]) => true)
+    const { api, pipeline, failRunOnKickoff } = await loadActivate({
+      injectPane: inject,
+      paneTurnBusy: (paneId) => paneId === 'S1-0' && !parked,
+      paneParkedOnPrompt: (paneId) => {
+        if (paneId !== 'S1-0') return false
+        polls++
+        if (polls > 2) parked = true
+        return parked
+      },
+    })
+    pipeline.stageIndex = 0
+    await api.activateStage(0)
+    expect(inject.mock.calls.map((c) => c[0])).not.toContain('S1-0')
+    expect(failRunOnKickoff.mock.calls[0][5]).toBe(true)
   })
 
   it('remembers a held kickoff, so a resume does not paste it again', async () => {

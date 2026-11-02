@@ -64,7 +64,11 @@ async function load() {
     pipelineLog: (line: string) => log.push(line),
     injectPane: vi.fn(async (paneId: string, text: string) => { injected.push([paneId, text]); return true }),
     i18n: { global: { t: (key: string) => key } },
+    // No pane here sits on a CLI prompt: the held queue sends at once.
+    routerInject: undefined as unknown,
   }
+  deps.routerInject = (paneId: string, text: string, label: string) =>
+    (deps.injectPane as (...args: unknown[]) => Promise<boolean>)(paneId, text, label, true)
   const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as {
     routeManagerTurnText: (paneId: string, text: string, timestamp: string) => Promise<void>
     routeManagerDispatch: (r: typeof router, stageId: string, d: { to: string; message: string }) => Promise<void>
