@@ -2661,7 +2661,12 @@ async def _start_log_watcher() -> None:
         # Before the server starts: its session manager snapshots the tool
         # registry, so a tool installed afterwards is missing from the list
         # clients see, with no error anywhere.
-        contributed = plugin_wiring.apply_mcp_tools(plugin_host, mcp_server.server)
+        # Off the loop: each tool builds a pydantic model, ~2.4 s apiece on a
+        # first Windows boot. Nothing reads the registry until the server
+        # starts below.
+        contributed = await asyncio.to_thread(
+            plugin_wiring.apply_mcp_tools, plugin_host, mcp_server.server
+        )
         if contributed:
             log.info("plugins contributing MCP tools: %s", contributed)
         plugin_wiring.apply_routes(plugin_host, app.router)
@@ -2675,7 +2680,11 @@ async def _start_log_watcher() -> None:
     from . import copilot_hooks
 
     convenience_wiring.register_pane_carrier("copilot", copilot_hooks.prepare_pane_hooks)
-    convenience_wiring.install_cli_hooks(str(backend_port_file()))
+    # Awaited, so it still ends before the MCP server comes up; off the loop,
+    # because the settings files it reads and writes held it 29 s on a first
+    # Windows boot. Same writes in the same order — the gate is thread-safe
+    # and the version probe already runs this from a thread.
+    await asyncio.to_thread(convenience_wiring.install_cli_hooks, str(backend_port_file()))
 
     # Navide's own MCP server. Deliberately outside the guard above: this is
     # the endpoint every CLI pane is wired to, and it must come up even if

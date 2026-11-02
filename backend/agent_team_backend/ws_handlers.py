@@ -7949,13 +7949,18 @@ async def onboarding_status(session: "Session", msg_id: str, msg_type: str, payl
 async def onboarding_status_quick(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """PATH-presence-only pass for the UI's first paint (see quick_status).
 
-    Runs inline: pure filesystem stats, no subprocesses — and it must NOT go
-    through _ONBOARDING_EXECUTOR, whose single worker would queue it behind a
-    multi-second full get_status and defeat the point."""
+    Pure filesystem stats, no subprocesses — and it must NOT go through
+    _ONBOARDING_EXECUTOR, whose single worker would queue it behind a
+    multi-second full get_status and defeat the point. Still off the loop:
+    on a first Windows boot those PATH stats held it 2–7 s per call."""
     from . import app
 
-    status = app.onboarding_deps.quick_status()
-    status["complete"] = app.onboarding_deps.is_complete()
+    def quick() -> dict:
+        status = app.onboarding_deps.quick_status()
+        status["complete"] = app.onboarding_deps.is_complete()
+        return status
+
+    status = await asyncio.to_thread(quick)
     await session.send_json(make_response(msg_id, msg_type, status))
 
 
@@ -10246,10 +10251,15 @@ async def terminal_reattach(session: "Session", msg_id: str, msg_type: str, payl
     }
     if session.host_authenticated:
         response_payload["sessions"] = sessions
-        response_payload["bypass_dropped"] = {
-            tid: stored_sessions[tid].metadata[BYPASS_DROPPED_METADATA_KEY]
-            for tid in sessions if BYPASS_DROPPED_METADATA_KEY in stored_sessions[tid].metadata
-        }
+    # Not Host-gated: the window reloading is who needs it, and a window's own
+    # connection is never Host-authenticated. It is what the create's
+    # cli.bypass_dropped event already told the window that asked.
+    bypass_dropped = {}
+    for tid in alive:
+        metadata = getattr(stored_sessions.get(tid), "metadata", None) or {}
+        if BYPASS_DROPPED_METADATA_KEY in metadata:
+            bypass_dropped[tid] = metadata[BYPASS_DROPPED_METADATA_KEY]
+    response_payload["bypass_dropped"] = bypass_dropped
     await session.send_json(
         make_response(
             msg_id,

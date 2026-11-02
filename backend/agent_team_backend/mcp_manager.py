@@ -595,8 +595,10 @@ class MCPManager:
                 self._config_path = config_path
                 previous = set(self._clients)
                 await self._shutdown_unlocked()
-                configs = load_mcp_config(config_path)
-                _forget_removed_logs(previous, config_path)
+                # File I/O, off the loop: on a first Windows boot reading the
+                # settings file alone held the loop 3–4 s.
+                configs = await asyncio.to_thread(load_mcp_config, config_path)
+                await asyncio.to_thread(_forget_removed_logs, previous, config_path)
                 # Registered before they start, so the status shows them as
                 # starting; started together, so one slow server (a first npx
                 # download) does not hold up the others.
