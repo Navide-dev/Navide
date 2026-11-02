@@ -56,7 +56,7 @@ describe('the stage router never types into a pane parked on a CLI prompt', () =
   it('holds an ASK while the box is up, then sends it once after the user answers', async () => {
     const parked = { value: true }
     const { api, typed, routerDeliveries } = await loadRouter(parked)
-    const router = { managerPaneId: 'mgr', managerReady: true, preReadyQueue: [] }
+    const router = { managerPaneId: 'mgr', managerReady: true, preReadyQueue: [], routedWorkerMessages: new Set<string>() }
     api.queueOrRouteWorkerMsg(router, '01', { kind: 'ASK', fromLabel: 'fe', content: 'which API?' })
     await flush()
     await routerDeliveries.drain()

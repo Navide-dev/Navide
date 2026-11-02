@@ -72,6 +72,7 @@ async function load(opts: { managerOwnsStage: boolean }) {
     stageRouters,
     rebaseGlobalRouterCursor: () => {},
     globalRouterCursors: new Map<string, number>(),
+    globalRoutedMessages: new Set<string>(),
     pipelineLog: () => {},
     injectPane: vi.fn(async (paneId: string, text: string) => { injected.push([paneId, text]); return true }),
     i18n: { global: { t: (key: string) => key } },

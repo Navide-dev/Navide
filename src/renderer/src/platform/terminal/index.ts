@@ -31,7 +31,7 @@ export {
 export { createResizeController } from './composables/useTerminalResize'
 export type { ResizeController } from './composables/useTerminalResize'
 
-export { findConsecutiveQuestionBlocks, findSentinel } from './lib/buffer'
+export { findConsecutiveQuestionBlocks, findScreenSentinel, findSentinel } from './lib/buffer'
 
 export {
   BRACKETED_PASTE_END,

@@ -159,7 +159,7 @@ import { diagLog } from '@navide/terminal'
 import { reclaimBlockedBy, focusedReclaimBlockedBy, namedReclaimBlockedBy, focusedForReclaim, idleReclaimDisabled, idleReclaimThresholdMs, RECLAIM_NOW_THRESHOLD_MS, type ReclaimCandidate } from './lib/idleReclaim'
 import { useResourceLimits } from './composables/useResourceLimits'
 import { reclaimRefusalReason, reclaimRequestPaneIds, type ReclaimRefusal } from './lib/paneReclaimRequest'
-import { findConsecutiveQuestionBlocks, findSentinel } from '@navide/terminal'
+import { findConsecutiveQuestionBlocks, findScreenSentinel, findSentinel } from '@navide/terminal'
 import {
   buildCliPaneBufferReply,
   buildExternalPaneContextPaste,
@@ -17752,6 +17752,10 @@ interface StageRouter {
   /** DISPATCH blocks already routed (target + message, whitespace dropped).
    *  The screen scan and the Manager's reply text can both carry one block. */
   routedDispatches: Set<string>
+  /** Worker ASK / REPORT blocks already queued or routed (kind + slot +
+   *  content, whitespace dropped). A TUI repaint re-emits rows already on
+   *  screen, so the scan meets the same block again further down the buffer. */
+  routedWorkerMessages: Set<string>
   /** Manager replies that ended before the router poll started, which waits
    *  for every slot's kickoff, with when each turn ended. startRouterPoll
    *  routes them (#539). */
@@ -17792,6 +17796,7 @@ function ensureStageRouter(stageIndex: number): StageRouter {
       armedAt: 0,
       watchdogFired: false,
       routedDispatches: new Set(),
+      routedWorkerMessages: new Set(),
       earlyTurnTexts: [],
       managerKickoffAt: 0,
       readyReminded: false,
@@ -18322,7 +18327,11 @@ function parseContentBlocks(
     // `content:` consumes everything to end of inner block.
     const cm = inner.match(/(?:^|\n)\s*content:\s*([\s\S]*)$/)
     if (cm) {
-      items.push(cm[1].trim())
+      // Skip the protocol's own template (`content: <...>`): a TUI that prints
+      // the submitted kickoff in full puts it after the router's floor, and a
+      // `<...>` placeholder is never a worker's real message.
+      const content = cm[1].trim()
+      if (!/^<[^<>]*>$/.test(content)) items.push(content)
     } else {
       // Tolerant fallback: take inner trimmed if no `content:` prefix.
       const trimmed = inner.trim()
@@ -18474,7 +18483,7 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     // the message cursor past it, and it must not be matched inside the
     // kickoff echo that sits below the floor.
     const cursor = router.armedCursors.get(router.managerPaneId) ?? 0
-    if (findSentinel(buf, MANAGER_READY_SENTINEL, cursor) >= 0) {
+    if (findScreenSentinel(buf, MANAGER_READY_SENTINEL, cursor) >= 0) {
       await markManagerReady(router, stage.id, '')
     }
     await managerReadyFallback(router, stage.id)
@@ -18495,13 +18504,11 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     // ---STAGE-DONE--- at line start, so a TUI that echoes the paste back
     // verbatim would otherwise finish the stage on the first poll.
     const doneFrom = router.armedCursors.get(router.managerPaneId) ?? 0
+    // Line-anchored only, unlike READY: the echoed kickoff carries webhook data
+    // after the floor, and a `⏺---STAGE-DONE---` written there would end the
+    // stage. A TUI with no line breaks gets it from the reply text instead.
     if (!router.finished && findSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, doneFrom) >= 0) {
-      router.finished = true
-      pipelineLog(
-        `Stage ${stage.id} 🎯 ${i18n.global.t('label.pipeline-log-manager-done', { sentinel: MANAGER_STAGE_DONE_SENTINEL })}`,
-      )
-      stageCompletions.delete(stageIndex)
-      void onPipelineNext()
+      finishManagerStage(router, stage.id, stageIndex)
     }
   }
   } finally {
@@ -18509,7 +18516,20 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
   }
 }
 
+/** The Manager printed ---STAGE-DONE---: on its screen or in its reply text. */
+function finishManagerStage(router: StageRouter, stageId: string, stageIndex: number): void {
+  router.finished = true
+  pipelineLog(
+    `Stage ${stageId} 🎯 ${i18n.global.t('label.pipeline-log-manager-done', { sentinel: MANAGER_STAGE_DONE_SENTINEL })}`,
+  )
+  stageCompletions.delete(stageIndex)
+  void onPipelineNext()
+}
+
 function queueOrRouteWorkerMsg(router: StageRouter, stageId: string, msg: PendingMessage): void {
+  const key = `${msg.kind}\u0000${msg.fromLabel}\u0000${msg.content.replace(/\s+/g, '')}`
+  if (router.routedWorkerMessages.has(key)) return
+  router.routedWorkerMessages.add(key)
   if (!router.managerReady) {
     router.preReadyQueue.push(msg)
     pipelineLog(
@@ -18610,16 +18630,22 @@ async function routeManagerTurnText(paneId: string, text: string, timestamp: str
   for (const d of parseDispatchBlocks(text, 0).items) {
     await routeManagerDispatch(router, stage.id, d)
   }
+  // Only its reply to this stage's kickoff counts: a role acknowledgement that
+  // started before the kickoff, or a late report of an older turn — such as the
+  // previous stage's, when one pane is Manager of both — does not (#539).
+  const turnEndAt = Number.isNaN(eventMs) ? Date.now() : eventMs
+  const replyToKickoff = router.managerKickoffAt > 0 && turnEndAt > router.managerKickoffAt
+    && (paneTurnStartedAt.get(paneId) ?? router.managerKickoffAt) >= router.managerKickoffAt
+  // The screen scan alone missed it: a TUI that places rows with cursor moves
+  // leaves no line for findSentinel to anchor on.
+  if (replyToKickoff && !router.finished && findSentinel(text, MANAGER_STAGE_DONE_SENTINEL, 0) >= 0) {
+    finishManagerStage(router, stage.id, pipeline.stageIndex)
+    return
+  }
   // A Manager can end Phase-1 turns without READY on purpose (it sent a
   // message, started a background task), so a turn end is not READY. Remind it
   // once; managerReadyFallback hands over held messages if it then sits idle.
-  // Only its reply to the kickoff counts: a role acknowledgement that started
-  // before the kickoff, or a late report of an older turn, does not (#539).
-  const turnEndAt = Number.isNaN(eventMs) ? Date.now() : eventMs
-  if (
-    !router.managerReady && router.managerKickoffAt > 0 && turnEndAt > router.managerKickoffAt
-    && (paneTurnStartedAt.get(paneId) ?? router.managerKickoffAt) >= router.managerKickoffAt
-  ) {
+  if (!router.managerReady && replyToKickoff) {
     router.managerQuietSince = Date.now()
     if (!router.readyReminded) {
       router.readyReminded = true
@@ -18666,6 +18692,9 @@ const globalRouterCursors = new Map<string, number>()
 /** Same role as StageRouter.bufferAnchors — these cursors are absolute buffer
  *  indices too, so the 128KB cap invalidates them the same way. */
 const globalRouterAnchors = new Map<string, BufferObservation>()
+/** StageRouter.routedWorkerMessages for the global Manager (pane + stage + kind +
+ *  content, whitespace dropped): a repaint re-emits a block already routed. */
+const globalRoutedMessages = new Set<string>()
 let _globalScanRunning = false
 
 function startGlobalManagerRouter(): void {
@@ -18681,6 +18710,7 @@ function stopGlobalManagerRouter(): void {
     globalRouterHandle = null
     globalRouterCursors.clear()
     globalRouterAnchors.clear()
+    globalRoutedMessages.clear()
     pipelineLog('🎯 Global Manager router stopped')
   }
 }
@@ -18731,6 +18761,14 @@ async function globalManagerRouterScan(): Promise<void> {
     const newCursor = Math.max(askRes.newCursor, reportRes.newCursor, cursor)
     if (newCursor > cursor) globalRouterCursors.set(wp.id, newCursor)
     const fromLabel = wp.slotLabel || wp.stageId
+    const firstSeen = (kind: string, content: string): boolean => {
+      const key = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000${content.replace(/\s+/g, '')}`
+      if (globalRoutedMessages.has(key)) return false
+      globalRoutedMessages.add(key)
+      return true
+    }
+    askRes.items = askRes.items.filter((c) => firstSeen('ASK', c))
+    reportRes.items = reportRes.items.filter((c) => firstSeen('REPORT', c))
     for (const content of askRes.items) {
       pipelineLog(`🎯 Global → Manager: [ASK from ${fromLabel}]`)
       await routerInject(managerPaneId, `[→ ASK FROM ${fromLabel} (Stage ${wp.stageId})]\n${content}`, `ask:${fromLabel}`)

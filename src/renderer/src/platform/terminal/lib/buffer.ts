@@ -315,6 +315,27 @@ export function findSentinel(text: string, sentinel: string, from: number = 0): 
   return match.index + match[0].lastIndexOf(sentinel)
 }
 
+/**
+ * findSentinel for a screen buffer, plus one form it cannot see: the sentinel
+ * right after the assistant's message bullet, anywhere in the text.
+ *
+ * Claude Code 2.1.3xx places every screen row with cursor moves (`\r\x1b[1B`,
+ * `\x1b[H`, `\x1b[r;cH`) and writes no `\n` at all, so the stripped buffer is
+ * one long line and no line anchor ever matches after `from`. The first row of
+ * a reply still starts with its bullet (`⏺---MANAGER-READY---` once the
+ * column move is stripped), and no echo of a prompt has one, so the bullet is
+ * the anchor. A sentinel on a later row of the reply is left to the turn text.
+ */
+export function findScreenSentinel(text: string, sentinel: string, from: number = 0): number {
+  const lineAnchored = findSentinel(text, sentinel, from)
+  if (lineAnchored >= 0) return lineAnchored
+  const escaped = sentinel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp(`[⏺●]\\s*${escaped}`, 'g')
+  re.lastIndex = from
+  const match = re.exec(text)
+  return match ? match.index + match[0].lastIndexOf(sentinel) : -1
+}
+
 export function bufferTail(text: string, maxBytes: number = 64 * 1024): string {
   if (text.length <= maxBytes) return text
   let start = text.length - maxBytes
