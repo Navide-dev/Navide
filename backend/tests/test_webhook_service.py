@@ -304,6 +304,13 @@ class TestLaunch:
         run_started(env, "child-run", child=True)
         assert launch(env, f"claude {CLAUDE_BYPASS}") == "claude --permission-mode default"
 
+    async def test_a_new_run_closes_one_the_watchdog_has_not_reached(self, env) -> None:
+        await started_run(env)
+        first = env.service._active[WS]["id"]
+        await started_run(env)
+        assert [run["id"] for run in env.store.open_runs()] != [first]
+        assert len(env.store.open_runs()) == 1
+
     async def test_a_new_run_nobody_armed_ends_the_policy(self, env) -> None:
         await started_run(env)
         run_started(env, "by-hand")
@@ -312,6 +319,95 @@ class TestLaunch:
 
 
 SESSION = "11111111-2222-3333-4444-555555555555"
+
+
+def continued(env, pipeline_id: str = PIPE, frames: tuple[str, ...] = ()) -> None:
+    """The run has ended; the record the window continues from says this."""
+    env.service.finish_run(WS, "interrupted")
+    stack = [{"run": {"pipeline_id": frame}} for frame in frames]
+    env.service._project = lambda _: SimpleNamespace(workspace_path=WS, pipeline_id=pipeline_id, run_stack=stack)
+
+
+class TestAPipelinePaneAfterTheRunEnded:
+    """Resume, Start Over and restart-from-node all open new panes on the same
+    task, which holds what the webhook sent, with no open run to claim them."""
+
+    async def test_it_loses_the_bypass(self, env) -> None:
+        await started_run(env)
+        continued(env)
+        assert launch(env, f"claude {CLAUDE_BYPASS}", pane="next") == "claude --permission-mode default"
+
+    async def test_an_unattended_run_does_not_get_it_back(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.store.set_unattended(env.trigger["id"], True)
+        await started_run(env)
+        continued(env)
+        assert launch(env, f"claude {CLAUDE_BYPASS}", pane="next") == "claude --permission-mode default"
+
+    async def test_a_sub_pipeline_of_that_run_loses_it_too(self, env) -> None:
+        await started_run(env)
+        continued(env, pipeline_id="child", frames=(PIPE,))
+        assert launch(env, f"claude {CLAUDE_BYPASS}", pane="next") == "claude --permission-mode default"
+
+    async def test_the_pane_and_its_session_stay_the_runs(self, env) -> None:
+        await started_run(env)
+        continued(env)
+        launch(env, f"claude --session-id {SESSION} {CLAUDE_BYPASS}", pane="next")
+        assert env.service.is_run_pane("next")
+        assert env.store.run_session(SESSION) is not None
+
+    async def test_a_custom_command_is_refused_as_in_the_run(self, env) -> None:
+        await started_run(env)
+        continued(env)
+        with pytest.raises(svc.LaunchRefused):
+            launch(env, f"my-wrapper {CLAUDE_BYPASS} | tee log", pane="next")
+
+    async def test_another_vendor_is_refused_as_in_the_run(self, env) -> None:
+        await started_run(env)
+        continued(env)
+        with pytest.raises(svc.LaunchRefused):
+            launch(env, "codex --dangerously-bypass-approvals-and-sandbox", agent="codex", pane="next")
+
+    async def test_another_pipeline_in_that_workspace_is_left_alone(self, env) -> None:
+        await started_run(env)
+        continued(env, pipeline_id="other")
+        command = f"claude {CLAUDE_BYPASS}"
+        assert launch(env, command, pane="next") is command
+
+    async def test_a_pane_opened_by_hand_is_left_alone(self, env) -> None:
+        await started_run(env)
+        continued(env)
+        command = f"claude {CLAUDE_BYPASS}"
+        assert launch(env, command, pane="next", origin="manual") is command
+
+    async def test_it_is_still_the_rule_after_a_restart(self, env) -> None:
+        await started_run(env)
+        continued(env)
+        again = svc.WebhookService(store=env.store, db=env.store.db, window=env.window, pipeline=env.pipelines.get,
+                                   known_program=lambda agent, program: program == agent, project=env.service._project)
+        got = again.launch_command("claude", f"claude {CLAUDE_BYPASS}", pane_id="next",
+                                   metadata={"origin": "pipeline", "workspace_path": WS, "spawned_by": ""})
+        assert got == "claude --permission-mode default"
+
+    async def test_a_record_that_cannot_be_read_loses_the_bypass(self, env) -> None:
+        await started_run(env)
+        env.service.finish_run(WS, "interrupted")
+
+        def broken(_: str) -> Any:
+            raise OSError("no record")
+
+        env.service._project = broken
+        assert CLAUDE_BYPASS not in launch(env, f"claude {CLAUDE_BYPASS}", pane="next")
+
+    async def test_a_lookup_that_fails_loses_the_bypass(self, env, monkeypatch) -> None:
+        await started_run(env)
+        continued(env)
+
+        def broken(*_: Any) -> Any:
+            raise sqlite3.OperationalError("locked")
+
+        monkeypatch.setattr(env.store, "latest_run_of", broken)
+        assert CLAUDE_BYPASS not in launch(env, f"claude {CLAUDE_BYPASS}", pane="next")
 
 
 def restarted(env) -> Any:

@@ -384,6 +384,7 @@ defineExpose({
   // Empty unless this pane reattached to a live PTY, in which case it names
   // the transcript that PTY is really writing to.
   attachedOutputLogFile: terminal.attachedOutputLogFile,
+  attachedBypassDropped: terminal.attachedBypassDropped,
   error: terminal.error,
   lastCommand: terminal.lastCommand,
   cleanBuffer: terminal.cleanBuffer,

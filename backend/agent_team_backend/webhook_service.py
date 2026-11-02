@@ -11,6 +11,13 @@ one of them, so a webhook run cannot start a pane with a permission bypass
 whichever path made it. Panes are remembered in the store, so a resume after a
 restart is held to the same rule, and a pane a run pane opened inherits it.
 
+A run can also go on after its record here has closed: Resume, Start Over and
+restart-from-node open new panes on the same task, which holds what the webhook
+sent, and a window reload is enough to close the record. So a pipeline pane with
+no open run is still held to the rule while the workspace's pipeline is one a
+webhook ran, whoever pressed the button. It never gets the unattended bypass
+back: a person chose that for the run the webhook started, not for this one.
+
 A restored pane gets a new id, so the id alone does not recognise it. Its
 session does: every session a run pane used is kept in `webhook_run_sessions`,
 for as long as the transcript can be resumed. A resume that cannot be named, or
@@ -278,10 +285,12 @@ class WebhookService:
         pipeline: Callable[[str], dict[str, Any] | None],
         known_program: Callable[[str, str], bool],
         keystore: webhook_keystore.Keystore | None = None,
+        project: Callable[[str], Any] = lambda _workspace: None,
     ) -> None:
         self.store, self.db, self.window = store, db, window
         self.keystore = keystore or webhook_keystore.Keystore()
         self._pipeline = pipeline
+        self._project = project
         self._known_program = known_program
         self._guarded = store.run_panes()
         self._noted_sessions: set[str] = set()
@@ -448,6 +457,9 @@ class WebhookService:
         workspace = project.workspace_path
         trigger = self._armed.get(workspace)
         if trigger is not None:
+            # The watchdog only looks every WATCH_EVERY_S, so the last run can
+            # still be open here, and overwriting it would leave it open for good.
+            self.finish_run(workspace, "finished")
             self._active[workspace] = self.store.open_run(
                 trigger_id=trigger["id"], workspace=workspace, project_id=project.id,
                 pipeline_id=getattr(project, "pipeline_id", ""),
@@ -487,9 +499,19 @@ class WebhookService:
             run_id, unattended = resumed
         else:
             active = self._active.get(workspace)
-            if active is None or metadata.get("origin") != "pipeline":
+            if metadata.get("origin") != "pipeline":
                 return self._unsure(command, refs, workspace)
-            run_id, unattended = active["id"], bool(active["unattended"])
+            if active is not None:
+                run_id, unattended = active["id"], bool(active["unattended"])
+            else:
+                try:
+                    earlier = self._earlier_run(workspace)
+                except Exception as err:  # noqa: BLE001 - whatever failed, this pane may be a run's
+                    log.warning("webhook: could not tell whose run this is, starting this pane without a bypass: %s", err)
+                    return _dropped_bypass(command)
+                if earlier is None:
+                    return self._unsure(command, refs, workspace)
+                run_id, unattended = earlier, False
         unattended = unattended and self._still_unattended(run_id)
         if agent_key not in VENDORS:
             raise LaunchRefused(f"a webhook run cannot start {agent_key or 'this CLI'}: it has no tested Guard hook")
@@ -508,6 +530,16 @@ class WebhookService:
             # An unrecorded session would look like nobody's after a restart.
             raise LaunchRefused("a webhook run pane could not be recorded") from err
         return _rewrite(command, lambda text: _with_mode(agent_key, text, unattended=unattended))
+
+    def _earlier_run(self, workspace: str) -> str | None:
+        """The webhook run behind the workspace's current pipeline record. A
+        sub-pipeline's record names its parents in the stack."""
+        project = self._project(workspace)
+        if project is None:
+            return None
+        frames = getattr(project, "run_stack", None) or []
+        pipelines = [getattr(project, "pipeline_id", ""), *(frame["run"].get("pipeline_id", "") for frame in frames)]
+        return self.store.latest_run_of(project.workspace_path, pipelines)
 
     def _resumed_run(self, refs: _SessionRefs) -> tuple[str, bool] | None:
         """The run one of these sessions belongs to."""

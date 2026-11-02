@@ -8667,6 +8667,10 @@ async def _terminal_create_impl(
     elif webhook_service.unavailable():
         payload["command"] = webhook_service.without_bypass(agent_key, payload.get("command"))
     bypass_dropped_command = webhook_service.bypass_dropped_from(requested_command, payload.get("command"))
+    # For a window that reattaches and so never sees this create's event.
+    metadata.pop(BYPASS_DROPPED_METADATA_KEY, None)
+    if bypass_dropped_command:
+        metadata[BYPASS_DROPPED_METADATA_KEY] = bypass_dropped_command
     try:
         startup_probe = await asyncio.get_running_loop().run_in_executor(
             _CLI_PROBE_EXECUTOR,
@@ -10136,6 +10140,9 @@ async def terminal_config_status(session: "Session", msg_id: str, msg_type: str,
     await session.send_json(make_response(msg_id, msg_type, {"stale": stale}))
 
 
+BYPASS_DROPPED_METADATA_KEY = "bypass_dropped_command"
+
+
 @handler("terminal.reattach")
 async def terminal_reattach(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -10239,6 +10246,10 @@ async def terminal_reattach(session: "Session", msg_id: str, msg_type: str, payl
     }
     if session.host_authenticated:
         response_payload["sessions"] = sessions
+        response_payload["bypass_dropped"] = {
+            tid: stored_sessions[tid].metadata[BYPASS_DROPPED_METADATA_KEY]
+            for tid in sessions if BYPASS_DROPPED_METADATA_KEY in stored_sessions[tid].metadata
+        }
     await session.send_json(
         make_response(
             msg_id,

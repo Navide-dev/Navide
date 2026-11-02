@@ -1637,7 +1637,9 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             "event_type": event.event_type,
             "superseded": superseded,
             "workspace_path": attributed.workspace_path,
-            "pane_id": pane_id,
+            # The window knows a pane by the id it answers to now, and every
+            # map a turn end lands in is keyed by it.
+            "pane_id": _current_pane_id(pane_id),
             "stage_id": attributed.stage_id or "",
             "session_id": event.session_id,
             "cwd": event.cwd,
@@ -3271,7 +3273,7 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         "vendor": vendor,
         "event_type": event_type,
         "workspace_path": ws_path or cwd,
-        "pane_id": pane_id or "",
+        "pane_id": _current_pane_id(pane_id) if pane_id else "",
         "stage_id": stage_id or "",
         "session_id": session_id,
         "cwd": cwd,
