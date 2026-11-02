@@ -402,6 +402,20 @@ class WebhookStore:
                 (state, int(time.time()), run_id),
             )
 
+    def latest_run_of(self, workspace: str, pipeline_ids: Iterable[str]) -> str | None:
+        """The last run of any of these pipelines here, whatever became of it."""
+        ids = [pipeline_id for pipeline_id in pipeline_ids if pipeline_id]
+        if not ids:
+            return None
+        marks = ",".join("?" * len(ids))
+        with self.db.transaction() as cur:
+            row = cur.execute(
+                f"SELECT id FROM webhook_runs WHERE workspace = ? AND pipeline_id IN ({marks})"
+                " ORDER BY started_at DESC, rowid DESC LIMIT 1",
+                (workspace, *ids),
+            ).fetchone()
+        return row["id"] if row else None
+
     def open_runs(self) -> list[dict[str, Any]]:
         with self.db.transaction() as cur:
             rows = cur.execute("SELECT * FROM webhook_runs WHERE state = 'running'").fetchall()

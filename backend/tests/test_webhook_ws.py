@@ -155,6 +155,19 @@ class TestSessionNotes:
         app_module._note_webhook_session("pane", "claude", "x")
 
 
+class TestStartup:
+    async def test_the_service_can_read_the_workspaces_run_record(self, env, monkeypatch) -> None:
+        """Without this a pane after the run's end is simply nobody's."""
+        async def nothing() -> None:
+            return None
+
+        monkeypatch.setattr(app_module, "database", env.store.db)
+        monkeypatch.setattr(webhook_ws, "reconcile", nothing)
+        monkeypatch.setattr(webhook_service.WebhookService, "start_watchdog", lambda _: None)
+        await webhook_ws.startup()
+        assert webhook_service.current()._project == app_module.project_store.peek
+
+
 class Sink:
     async def send_json(self, _: Any) -> None:
         return None
