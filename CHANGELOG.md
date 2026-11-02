@@ -70,6 +70,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Security
 
+- Webhooks (0.2.37): a webhook's data can no longer speak for an agent. The submitted kickoff is echoed on the agent's screen, where Navide reads ASK, REPORT and DISPATCH blocks and stage sentinels, so a body carrying `---REPORT-START---` could reach the Manager as the worker's own REPORT. Runs of three or more hyphens in webhook data (spaces between them included) now become en dashes before the data enters a kickoff.
 - Dependencies: Electron 44.10.1 (Node 24.22.1, Chromium 152.0.7977.169; was 44.9.1 with Node 24.22.0, Chromium 152.0.7977.167). Node 24.22.1 is the Node.js security release of October 21, the one the 0.2.30 notes said Navide would pick up. Electron's own notes also list File System Access blocklist fixes and fixes for malformed asar archives and asar path handling, plus upstream Chromium, V8, Skia, Dawn, ANGLE and PDFium backports, which they do not tie to a CVE or an advisory.
 
 ### Documentation
