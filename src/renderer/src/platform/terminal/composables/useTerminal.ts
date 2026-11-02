@@ -2003,6 +2003,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // and it is adopted here, so the caller can record what exists rather than
   // what it guessed.
   const attachedOutputLogFile = ref('')
+  const attachedBypassDropped = ref('')
   // Previous PTY id snapshotted at spawn() time (before tryReattach can clear
   // it) — sent as replaces_terminal_id so the backend reaps the predecessor.
   let replacesPtyId = ''
@@ -2595,6 +2596,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       // Adopt the survivor's real transcript path; '' when it was started
       // without one, and the caller then keeps whatever it derived.
       attachedOutputLogFile.value = resp.payload.logs?.[prev] ?? ''
+      attachedBypassDropped.value = resp.payload.bypass_dropped?.[prev] ?? ''
     } catch {
       return false  // backend unreachable; let the caller decide (it will spawn)
     }
@@ -3530,6 +3532,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     serializeScrollback,
     tryReattach,
     attachedOutputLogFile,
+    attachedBypassDropped,
     interrupt,
     kill,
     focus,

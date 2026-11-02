@@ -81,6 +81,20 @@ async def test_reattach_reports_each_survivor_s_transcript() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reattach_reports_what_a_pane_without_its_bypass_really_runs() -> None:
+    session = make_session(["term-1", "term-2"])
+    session.host_authenticated = True
+    for stored, metadata in zip(
+        session.terminals._sessions.values(),  # noqa: SLF001
+        ({"bypass_dropped_command": "claude --permission-mode default"}, {}),
+        strict=True,
+    ):
+        stored.metadata, stored.agent_key, stored.cwd = metadata, "claude", "/ws"
+    payload = await reattach(session, ["term-1", "term-2"])
+    assert payload["bypass_dropped"] == {"term-1": "claude --permission-mode default"}
+
+
+@pytest.mark.asyncio
 async def test_reattach_omits_a_session_with_no_transcript() -> None:
     # An empty path would overwrite the caller's derived one with nothing.
     terminals_module._register_live_log("term-1", "/ws/a.log")  # noqa: SLF001

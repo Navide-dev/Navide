@@ -473,6 +473,8 @@ def test_a_reattached_panes_hook_keeps_the_text_recorded_under_its_old_id(steppe
         assert app_module._pane_activity["pw2"]["text"] == "what the agent said"
         # ...and only ever one entry: a pane must not accumulate one per reload.
         assert "pw" not in app_module._pane_activity
+        # The window knows it as pw2: a turn end under pw finishes no stage.
+        assert _payload(events)["pane_id"] == "pw2"
     finally:
         agent_messaging._reset_for_test()
         app_module._pane_activity.clear()

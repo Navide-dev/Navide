@@ -304,6 +304,13 @@ class TestLaunch:
         run_started(env, "child-run", child=True)
         assert launch(env, f"claude {CLAUDE_BYPASS}") == "claude --permission-mode default"
 
+    async def test_a_new_run_closes_one_the_watchdog_has_not_reached(self, env) -> None:
+        await started_run(env)
+        first = env.service._active[WS]["id"]
+        await started_run(env)
+        assert [run["id"] for run in env.store.open_runs()] != [first]
+        assert len(env.store.open_runs()) == 1
+
     async def test_a_new_run_nobody_armed_ends_the_policy(self, env) -> None:
         await started_run(env)
         run_started(env, "by-hand")

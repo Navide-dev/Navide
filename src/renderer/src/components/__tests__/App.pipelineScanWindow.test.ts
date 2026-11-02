@@ -287,6 +287,14 @@ describe('the Manager router does not read its own kickoff echo as a result', ()
 })
 
 describe('a turn that ends before the watcher arms still finishes the slot', () => {
+  it('counts from the injection on the fresh-pane path too', () => {
+    const start = appSource.indexOf('await runPipelineKickoff({')
+    const path = appSource.slice(appSource.lastIndexOf('let held = false', start), appSource.indexOf('startStageWatcher(stageIndexForPane', start) + 100)
+    expect(path).toContain('let kickoffStartedAt = Date.now()')
+    expect(path.slice(path.indexOf('inject: async () => {'), path.indexOf('await injectPane('))).toContain('kickoffStartedAt = Date.now()')
+    expect(path).toContain('startStageWatcher(stageIndexForPane, pane.id, kickoffScanFrom2, kickoffStartedAt)')
+  })
+
   it('counts from the injection, not from the arm two round trips later', () => {
     const act = body('async function activateStage(', '\nasync function spawnPipelineStage(')
     const started = act.indexOf('let kickoffStartedAt = Date.now()')

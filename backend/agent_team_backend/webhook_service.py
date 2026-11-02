@@ -457,6 +457,9 @@ class WebhookService:
         workspace = project.workspace_path
         trigger = self._armed.get(workspace)
         if trigger is not None:
+            # The watchdog only looks every WATCH_EVERY_S, so the last run can
+            # still be open here, and overwriting it would leave it open for good.
+            self.finish_run(workspace, "finished")
             self._active[workspace] = self.store.open_run(
                 trigger_id=trigger["id"], workspace=workspace, project_id=project.id,
                 pipeline_id=getattr(project, "pipeline_id", ""),
