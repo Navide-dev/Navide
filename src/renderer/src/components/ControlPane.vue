@@ -3535,6 +3535,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             <button class="primary wide" @click="emit('pipeline-resume')">
               {{ $t('action.resume-from-stage', { n: String(existingProject.nextStageIndex + 1).padStart(2, '0') }) }}
             </button>
+            <button v-if="existingProject.state === 'running'" class="danger" @click="emit('pipeline-abort')">
+              {{ $t('action.abort') }}
+            </button>
             <button
               class="danger"
               @click="confirmingRestart = true"
@@ -4600,6 +4603,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <div class="row">
             <button class="primary wide" @click="emit('pipeline-resume')">
               {{ $t('action.resume-from-stage', { n: String(existingProject.nextStageIndex + 1).padStart(2, '0') }) }}
+            </button>
+            <button v-if="existingProject.state === 'running'" class="danger" @click="emit('pipeline-abort')">
+              {{ $t('action.abort') }}
             </button>
             <button
               class="danger"

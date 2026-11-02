@@ -683,6 +683,11 @@ def outcomes(env) -> list[str]:
     return [e["outcome"] for e in env.store.events(env.trigger["id"])]
 
 
+def run_states(env) -> list[str]:
+    with env.store.db.transaction() as cur:
+        return [row["state"] for row in cur.execute("SELECT state FROM webhook_runs ORDER BY started_at, rowid")]
+
+
 class TestWatchdog:
     async def test_a_working_run_is_left_alone(self, watched) -> None:
         await watched.env.service.tick()
@@ -761,6 +766,34 @@ class TestWatchdog:
         env.window.status = {"active": False, "state": "interrupted"}
         await env.service.tick()
         assert "interrupted" in outcomes(env) and "abort" not in env.window.calls
+
+    async def test_a_resumed_interrupted_run_ends_with_its_real_state(self, watched) -> None:
+        # A Reload interrupts the run, Resume carries the same run on to the end.
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        await env.service.tick()
+        assert outcomes(env).count("interrupted") == 1
+        env.window.status = {"active": True, "state": "running", "gate": {}}
+        await env.service.tick()
+        env.window.status = {"active": False, "state": "completed"}
+        await env.service.tick()
+        assert run_states(env) == ["completed"] and env.service._active == {}
+
+    async def test_an_aborted_interrupted_run_is_recorded_aborted(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        env.window.status = {"active": False, "state": "aborted"}
+        await env.service.tick()
+        assert run_states(env) == ["aborted"]
+
+    async def test_an_interrupted_run_a_new_run_replaces_stays_interrupted(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        await started_run(env)
+        assert run_states(env) == ["interrupted", "running"]
 
     async def test_a_restart_rebuilds_the_watch_from_the_table(self, watched) -> None:
         env = watched.env

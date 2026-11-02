@@ -11582,6 +11582,13 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
     from . import app
 
     reason = payload.get("reason", "user")
+    if payload.get("interrupted_only") is True and not pipeline_liveness.is_interrupted(
+        app.project_store.peek(payload["workspace_path"])
+    ):
+        # A window that does not drive the run asks to end one a Reload or
+        # crash left behind: never a run another window is still driving.
+        await session.send_json(make_error(msg_id, msg_type, "NOT_INTERRUPTED", "no interrupted run in this workspace"))
+        return
     project = app.project_store.abort_pipeline(payload["workspace_path"], reason=reason)
     _mirror_pipeline_state(project)
     if reason == "failed" and payload.get("kickoff_failed") is True and (webhooks := webhook_service.current()) is not None:
