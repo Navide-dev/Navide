@@ -540,7 +540,7 @@ environment variables cannot provide or replace this packaged pin.
 
 ## Local development
 
-In a development build (`pnpm dev`), set `AGENT_TEAM_PLUGIN_DEV=1` to expose
+In a development build (`bun run dev`), set `AGENT_TEAM_PLUGIN_DEV=1` to expose
 the plugin dev menu, which registers dev descriptors pointing at local build
 output and adds entries for the `noop` and `fs_probe` probe plugins. Packaged
 builds ignore `AGENT_TEAM_PLUGIN_DEV` and `AGENT_TEAM_PLUGIN_DEV_PATH`; a

@@ -12,7 +12,7 @@ import { GIT_PLUGIN_REQUIRES } from './src/shared/pluginCapabilities'
 //
 // Output: dist-plugins/git — shipped inside the app package as the bundled
 // builtin copy (electron-builder `extraResources` → resources/plugins/git;
-// `pnpm build` chains this build so packaging always has it). In dev,
+// `bun run build` chains this build so packaging always has it). In dev,
 // AGENT_TEAM_PLUGIN_DEV=1 registers a descriptor pointing straight at this
 // local build.
 

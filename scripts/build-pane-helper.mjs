@@ -3,7 +3,7 @@
 // electron-builder packages it as Contents/Resources/bin/Navide Pane.app and
 // signs it with the rest of the app; the backend runs every pane's shell
 // under it (see resources/pane-helper/main.c for why). A no-op off macOS so
-// `pnpm build` stays one command everywhere.
+// `bun run build` stays one command everywhere.
 
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'

@@ -21,8 +21,9 @@ manifest rules the Registry enforces, see
 - **A Navide account with a verified email** — the same one you use for the
   Navide forum and Navide Cloud. Publishing signs in through it; the CLI never
   asks for your password.
-- **For local testing only:** a checkout of the Navide repository and
-  [uv](https://docs.astral.sh/uv/), to run a throwaway Registry.
+- **For local testing only:** a checkout of the Navide repository (built with
+  [Bun](https://bun.sh)) and [uv](https://docs.astral.sh/uv/), to run a
+  throwaway Registry.
 
 ### Install the CLI
 
@@ -32,8 +33,8 @@ tarballs into your plugin project:
 
 ```bash
 # in the Navide checkout
-pnpm install
-pnpm run build:public-packages
+bun install
+bun run build:public-packages
 npm pack ./packages/plugin-contracts ./packages/plugin-sdk --pack-destination /tmp/navide-sdk
 
 # in your plugin project

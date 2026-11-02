@@ -79,4 +79,4 @@ Verify: `uv --project backend run pytest backend/tests -k "channels or pyinstall
 4. Add i18n keys `channels.platform.<id>`, `channels.desc.<id>`, and
    `channels.field.<key>` for each new field, in `en-US`, `zh-TW` and `ja-JP`.
 
-Verify: `pnpm typecheck` and `pnpm test:run`.
+Verify: `bun run typecheck` and `bun run test:run`.

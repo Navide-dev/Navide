@@ -9,7 +9,7 @@
 ## Testing / 測試
 
 - [ ] `cd backend && uv run pytest` passes
-- [ ] `pnpm typecheck` passes
+- [ ] `bun run typecheck` passes
 - [ ] Manually tested in Electron app
 
 ## Related Issues / 相關 Issue

@@ -171,7 +171,7 @@ For a development checkout, install from source instead.
 
 ### Source prerequisites
 
-- Node.js 22.12+ (22.x) and pnpm 10+
+- Bun (the version pinned in `.bun-version`)
 - Python 3.12+ and uv 0.11+
 - At least one supported coding CLI
 - Optional: Ollama or a local GGUF model for analysis
@@ -181,9 +181,10 @@ For a development checkout, install from source instead.
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-pnpm install
+bun install
+bun node_modules/electron/install.js  # once: Electron 44 downloads its binary lazily
 uv --project backend sync
-pnpm dev
+bun run dev
 ```
 
 The onboarding wizard checks runtimes, detects agent CLIs, and explains relevant macOS permissions. Continue with [Getting Started](docs/en-US/getting-started.md) and the [User Guide](docs/en-US/user-guide.md).

@@ -322,7 +322,7 @@ const packagedFixture = join(process.cwd(), 'dist-test-fixtures/plans/backend/na
 const packagedFixtureEnabled = process.env.NAVIDE_TEST_PACKAGED_PLANS === '1'
 if (packagedFixtureEnabled && !existsSync(packagedFixture)) {
   throw new Error(
-    `NAVIDE_TEST_PACKAGED_PLANS=1 requires the packaged fixture at ${packagedFixture}; run pnpm run build:plans:fixture first.`,
+    `NAVIDE_TEST_PACKAGED_PLANS=1 requires the packaged fixture at ${packagedFixture}; run bun run build:plans:fixture first.`,
   )
 }
 
@@ -339,7 +339,7 @@ const productionBackendEnabled =
   process.env.NAVIDE_TEST_PRODUCTION_PLANS === '1'
 if (productionBackendEnabled && !existsSync(productionBackend)) {
   throw new Error(
-    `NAVIDE_TEST_PRODUCTION_PLANS_BACKEND=1 requires the production backend at ${productionBackend}; run pnpm run build:plans:backend first.`,
+    `NAVIDE_TEST_PRODUCTION_PLANS_BACKEND=1 requires the production backend at ${productionBackend}; run bun run build:plans:backend first.`,
   )
 }
 
