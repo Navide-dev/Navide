@@ -195,7 +195,7 @@ def test_the_windows_version_probe_refreshes_the_pane_file_not_the_shared_one(
 def test_the_backend_registers_claude_as_a_carrier_before_installing_hooks() -> None:
     source = inspect.getsource(app._start_log_watcher)
     register = source.index('register_pane_carrier("claude", claude_hooks.prepare_pane_settings)')
-    assert register < source.index("install_cli_hooks(")
+    assert register < source.index("convenience_wiring.install_cli_hooks")
 
 
 # ── dev and production backends side by side ────────────────────────────────

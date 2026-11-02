@@ -7949,13 +7949,18 @@ async def onboarding_status(session: "Session", msg_id: str, msg_type: str, payl
 async def onboarding_status_quick(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """PATH-presence-only pass for the UI's first paint (see quick_status).
 
-    Runs inline: pure filesystem stats, no subprocesses — and it must NOT go
-    through _ONBOARDING_EXECUTOR, whose single worker would queue it behind a
-    multi-second full get_status and defeat the point."""
+    Pure filesystem stats, no subprocesses — and it must NOT go through
+    _ONBOARDING_EXECUTOR, whose single worker would queue it behind a
+    multi-second full get_status and defeat the point. Still off the loop:
+    on a first Windows boot those PATH stats held it 2–7 s per call."""
     from . import app
 
-    status = app.onboarding_deps.quick_status()
-    status["complete"] = app.onboarding_deps.is_complete()
+    def quick() -> dict:
+        status = app.onboarding_deps.quick_status()
+        status["complete"] = app.onboarding_deps.is_complete()
+        return status
+
+    status = await asyncio.to_thread(quick)
     await session.send_json(make_response(msg_id, msg_type, status))
 
 
