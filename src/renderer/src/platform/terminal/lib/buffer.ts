@@ -19,8 +19,26 @@ const LONE_CR_RE = /\r(?!\n)/g
 // Includes: arrows ›❯▶, em/en dashes —–, box-drawing ─━─, full-width chars, etc.
 const TUI_GLYPH_RE = /[›❯▶＞’’»«‹—–─-╿]/g
 
+// A forward column move (CHA `\x1b[nG`, CUF `\x1b[nC`). Claude Code 2.1.2xx
+// and later draw a fresh row's blank cells by moving past them, so
+// `worker report` reaches the PTY as `worker\x1b[8Greport`; dropped like any
+// other CSI, the words ran together and a routed REPORT lost its spaces
+// (0.2.37 VM). A move between two printed characters reads as one space. One
+// at the edge of the text, or next to a space, adds nothing, so an idle
+// repaint that only positions the cursor still cleans to nothing, and a row
+// indent is not a second space before a sentinel.
+const COLUMN_MOVE_RE = /\x1b\[\d*[CG]/g
+const MOVE_MARK = '\u0001'
+const MOVE_MARK_RUN_RE = /\u0001+/g
+
 export function stripAnsi(s: string): string {
-  return s.replace(ANSI_RE, '').replace(LONE_CR_RE, '')
+  const stripped = s.replace(COLUMN_MOVE_RE, MOVE_MARK).replace(ANSI_RE, '').replace(LONE_CR_RE, '')
+  if (!stripped.includes(MOVE_MARK)) return stripped
+  return stripped.replace(MOVE_MARK_RUN_RE, (run: string, at: number) => {
+    const before = stripped[at - 1]
+    const after = stripped[at + run.length]
+    return before && after && /\S/.test(before) && /\S/.test(after) ? ' ' : ''
+  })
 }
 
 // TUI chrome that Claude / Codex / Gemini repeatedly redraw at the bottom of

@@ -124,7 +124,7 @@ describe('Claude 2.1.316 screen: no newlines, so line anchors never match', () =
 
   it('the kickoff the TUI prints after submit does not read as READY or STAGE-DONE', () => {
     const buf = cleanBufferOf(screens.manager)
-    const reply = buf.indexOf(`⏺${MANAGER_READY_SENTINEL}`)
+    const reply = buf.search(new RegExp(`⏺\\s*${MANAGER_READY_SENTINEL}`))
     expect(reply).toBeGreaterThan(-1)
     // Everything before the reply is the echoed kickoff, which carries both
     // sentinels (the protocol text) but no reply bullet.
@@ -284,3 +284,34 @@ describe('STAGE-DONE in the Manager reply text ends the stage', () => {
     expect(t.onPipelineNext).not.toHaveBeenCalled()
   })
 })
+
+// 0.2.37 VM package 9 (Claude Code 2.1.286, Linux), 3 of 3 runs: after the
+// Manager's DISPATCH the worker's REPORT reached the Manager as
+// "workerreportY…" while its screen showed "worker report Y…". Claude draws a
+// fresh row's blank cells by moving the cursor past them, and the stripper
+// dropped those moves with every other CSI. The worker's stage log shows that
+// first draw ("workerreportY965062ac8a50"), and the repaint after it lost its
+// START marker, so the stripped copy was the only block the router could read.
+describe('a row drawn with column moves keeps its spaces', () => {
+  it('the recorded 2.1.316 status row reads with its spaces', () => {
+    // From the fixture: `Churned\x1b[11Gfor\x1b[15G21s · done\x1b[26G10:04 PM`.
+    expect(cleanBufferOf(screens.worker)).toContain('Churned for 21s · done 10:04 PM')
+  })
+
+  it('a REPORT drawn that way reaches the Manager with the worker\'s spaces', async () => {
+    const t = await load()
+    // The fixture's REPORT rows, with the blank cells skipped as package 9 drew them.
+    const report = '\r\x1b[1B\x1b[38;5;231m⏺\x1b[39m\x1b[3G---REPORT-START---\x1b[K'
+      + '\r\x1b[1B\x1b[3Gworker\x1b[10Greport\x1b[17GY20e0c2d8aecc\x1b[K'
+      + '\r\x1b[1B\x1b[3G---REPORT-END---\x1b[K\r\x1b[2C\x1b[1Bfinished\x1b[K'
+    const buf = cleanBufferOf([...screens.worker, report])
+    const items = t.api.parseContentBlocks(buf, 0, t.api.REPORT_RE).items
+    expect(items).toContain('worker report Y20e0c2d8aecc')
+    expect(items.some((c) => c.includes('workerreport'))).toBe(false)
+  })
+
+  it('a pane that only moves its cursor still cleans to nothing', () => {
+    expect(stripAnsi('\x1b[H\r\x1b[2C\x1b[37B\x1b[K\x1b[40;1H\x1b[38;29H\x1b[21C')).toBe('')
+  })
+})
+

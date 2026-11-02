@@ -55,7 +55,8 @@ describe('a kickoff collapsed into a paste summary drawn with column moves', () 
   it('reads as landed, not as a paste that never appeared', () => {
     const pre = cleanOf([before])
     const buf = cleanOf([before, paste])
-    expect(buf).toContain('[Pastedtext#2+58lines]')
+    // Each column move between two words reads as the space it skips.
+    expect(buf).toContain('[Pasted text #2 +58 lines]')
     const grown = buf.length - pre.length
     expect(echoEvidence(buf, tail, grown, normalizeForMatch(kickoff).length)).toBe('placeholder')
   })
