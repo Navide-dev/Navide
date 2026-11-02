@@ -36,7 +36,7 @@ import time
 from collections.abc import Callable
 from typing import Any, NamedTuple, Protocol
 
-from . import guard_fail_closed, pipeline_graph, webhook_keystore, webhook_payload, webhook_triggers
+from . import guard_fail_closed, pipeline_graph, pipeline_liveness, webhook_keystore, webhook_payload, webhook_triggers
 from .db import Database
 
 log = logging.getLogger(__name__)
@@ -300,7 +300,7 @@ class WebhookService:
         self._checks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._waiting_since: dict[str, float] = {}
-        #: Open runs the window last reported interrupted (a Reload or crash).
+        #: Runs seen interrupted (a Reload or crash), which never run unattended again.
         self._interrupted: set[str] = set()
         self._watchdog: asyncio.Task[None] | None = None
         self._clock = time.time
@@ -516,6 +516,10 @@ class WebhookService:
                 if earlier is None:
                     return self._unsure(command, refs, workspace)
                 run_id, unattended = earlier, False
+        if unattended and workspace and pipeline_liveness.is_interrupted(self._project(workspace)):
+            # Restored before the watchdog looked: nobody drives the run now.
+            self.note_interrupted(workspace)
+            unattended = False
         unattended = unattended and self._still_unattended(run_id)
         if agent_key not in VENDORS:
             raise LaunchRefused(f"a webhook run cannot start {agent_key or 'this CLI'}: it has no tested Guard hook")
@@ -568,7 +572,10 @@ class WebhookService:
         return command
 
     def _still_unattended(self, run_id: str) -> bool:
-        """Unattended holds only while its trigger exists and still says so."""
+        """Unattended holds only while its trigger exists and still says so, and
+        the run was never interrupted."""
+        if run_id in self._interrupted:
+            return False
         try:
             return self.store.run_trigger_unattended(run_id)
         except sqlite3.Error as err:
@@ -649,13 +656,12 @@ class WebhookService:
         state = status.get("state")
         if state == "interrupted":
             # Nobody drives the run now, but Resume carries on this same run,
-            # so its row stays open until the run really ends.
+            # so its row stays open until the run really ends, or the cap.
             self._waiting_since.pop(run["id"], None)
-            if run["id"] not in self._interrupted:
-                self._interrupted.add(run["id"])
-                self.audit([{"trigger_id": run["trigger_id"], "outcome": "interrupted", "status": 0}])
+            self.note_interrupted(workspace)
+            if self._clock() - run["started_at"] >= RUN_CAP_S:
+                self._ended(workspace, "interrupted")
             return
-        self._interrupted.discard(run["id"])
         if not status.get("active"):
             # Only a stored end state names the outcome; anything else (a row
             # closed as 'running' would be read back as open) is "finished".
@@ -676,6 +682,21 @@ class WebhookService:
         limit = await asyncio.to_thread(self.store.approval_timeout_s, run["trigger_id"])
         if now - since >= limit:
             await self._stop_run(workspace, run, "approval-timeout")
+
+    def note_interrupted(self, workspace: str) -> None:
+        """The workspace's run is driven by no window (a Reload or crash). The
+        run may be resumed, still working from what the webhook sent, so it
+        never runs unattended again, after a restart too."""
+        run = self._active.get(workspace)
+        if run is None or run["id"] in self._interrupted:
+            return
+        self._interrupted.add(run["id"])
+        run["unattended"] = 0
+        try:
+            self.store.end_unattended(run["id"])
+        except sqlite3.Error:
+            log.exception("webhook: could not record that a run was interrupted")
+        self.audit([{"trigger_id": run["trigger_id"], "outcome": "interrupted", "status": 0}])
 
     def _ended(self, workspace: str, state: str) -> None:
         run = self._active.get(workspace)

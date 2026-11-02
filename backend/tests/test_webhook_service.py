@@ -632,6 +632,61 @@ class TestUnattendedOnEveryPath:
         assert got == "claude --permission-mode default"
 
 
+class TestInterruptedEndsUnattended:
+    """A Reload or crash interrupts the run and Resume carries the same run on,
+    still working from what the webhook sent: from then on a person is asked."""
+
+    @pytest.fixture(autouse=True)
+    def posix(self, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+
+    @staticmethod
+    def relaunch(service: Any, path: str) -> tuple[Any, str]:
+        if path == "session":
+            return reopen(service, f"claude {CLAUDE_BYPASS} --resume {SESSION}"), "new-id"
+        if path == "pane":
+            return reopen(service, f"claude {CLAUDE_BYPASS} --resume {SESSION}", pane="first"), "first"
+        return reopen(service, f"claude {CLAUDE_BYPASS}", pane="next-stage", origin="pipeline"), "next-stage"
+
+    @pytest.mark.parametrize("restart", [False, True])
+    @pytest.mark.parametrize("path", ["session", "pane", "active"])
+    async def test_no_pane_gets_the_bypass_back(self, env, path, restart) -> None:
+        await run_with_session(env, unattended=True)
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        env.window.status = {"active": True, "state": "running", "gate": {}}  # resumed
+        await env.service.tick()
+        service = restarted(env) if restart else env.service
+        got, pane = self.relaunch(service, path)
+        assert CLAUDE_BYPASS not in got and "--permission-mode default" in got
+        assert service.launch_env(pane) == {}
+
+    @pytest.mark.parametrize("path", ["session", "pane", "active"])
+    async def test_a_pane_restored_before_the_watchdog_looks_asks_too(self, env, monkeypatch, path) -> None:
+        # Reload, then the panes come back at once: the watchdog has not run yet.
+        await run_with_session(env, unattended=True)
+        project = SimpleNamespace(state="running", workspace_path=WS)
+        env.service._project = lambda _workspace: project
+        monkeypatch.setattr(svc.pipeline_liveness, "is_interrupted", lambda p: p is project)
+        got, pane = self.relaunch(env.service, path)
+        assert CLAUDE_BYPASS not in got and env.service.launch_env(pane) == {}
+        monkeypatch.setattr(svc.pipeline_liveness, "is_interrupted", lambda _p: False)  # resumed since
+        got, _ = self.relaunch(restarted(env), path)
+        assert CLAUDE_BYPASS not in got
+
+    async def test_resume_noting_it_ends_unattended_before_any_pane_starts(self, env) -> None:
+        await run_with_session(env, unattended=True)
+        env.service.note_interrupted(WS)
+        got, _ = self.relaunch(restarted(env), "active")
+        assert CLAUDE_BYPASS not in got
+        assert outcomes(env).count("interrupted") == 1
+
+    async def test_a_run_never_interrupted_keeps_it(self, env) -> None:
+        await run_with_session(env, unattended=True)
+        got, _ = self.relaunch(restarted(env), "active")
+        assert got == f"claude {CLAUDE_BYPASS}"
+
+
 class TestNeverUsed:
     def test_a_resume_with_no_webhook_history_is_the_same_object(self, env) -> None:
         for command in (f"claude {CLAUDE_BYPASS} --resume {SESSION}", f"claude {CLAUDE_BYPASS} --continue",
@@ -800,8 +855,23 @@ class TestWatchdog:
         env = watched.env
         env.window.status = {"active": False, "state": "interrupted"}
         await env.service.tick()
-        await started_run(env)
+        # The open row does not hold the next webhook back.
+        env.window.hold = asyncio.Event()
+        assert await accept(env) == (202, 0, "accepted")
+        await asyncio.sleep(0)
+        run_started(env)
+        env.window.hold.set()
+        await settle(env)
         assert run_states(env) == ["interrupted", "running"]
+
+    async def test_an_interrupted_run_nobody_resumes_closes_at_the_cap(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        watched.clock.now += svc.RUN_CAP_S
+        await env.service.tick()
+        assert run_states(env) == ["interrupted"] and env.service._active == {}
+        assert "abort" not in env.window.calls
 
     async def test_a_restart_rebuilds_the_watch_from_the_table(self, watched) -> None:
         env = watched.env
