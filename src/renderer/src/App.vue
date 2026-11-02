@@ -11394,13 +11394,20 @@ registerCommand('ui.pipeline.start', async (args) => {
 registerCommand('ui.pipeline.abort', async (args) => {
   // onPipelineAbort itself returns silently when nothing is running; say so
   // instead of answering ok for a no-op.
-  if (pipeline.state !== 'running') {
+  const interrupted = interruptedRunWorkspace()
+  if (pipeline.state !== 'running' && !interrupted) {
     throw Object.assign(new Error(`ui.pipeline.abort: no pipeline is running in this workspace (state "${pipeline.state}")`), { code: 'not-running' })
   }
   // The editor's Abort asks first, like its Reset; a caller that sets no
   // confirm flag (MCP pipeline_abort) aborts without a dialog.
   if ((args as { confirm?: unknown } | undefined)?.confirm === true && !(await confirmPipelineAbort())) {
     return { workspacePath: pipeline.workspacePath, state: pipeline.state, cancelled: true }
+  }
+  if (pipeline.state !== 'running') {
+    if (!(await abortInterruptedRun(interrupted))) {
+      throw Object.assign(new Error('ui.pipeline.abort: no pipeline is running in this workspace (state "interrupted", driven elsewhere)'), { code: 'not-running' })
+    }
+    return { workspacePath: interrupted, state: 'aborted' }
   }
   await onPipelineAbort()
   return { workspacePath: pipeline.workspacePath, state: pipeline.state }
@@ -15965,7 +15972,30 @@ async function confirmPipelineAbort(): Promise<boolean> {
  *  workspace, MCP) keep calling onPipelineAbort without a dialog. */
 async function onPipelineUserAbort(): Promise<void> {
   if (!(await confirmPipelineAbort())) return
-  await onPipelineAbort()
+  const interrupted = interruptedRunWorkspace()
+  if (pipeline.state !== 'running' && interrupted) await abortInterruptedRun(interrupted)
+  else await onPipelineAbort()
+}
+
+/** The workspace of a stored run left at 'running' that this window does not
+ *  drive (a Reload or crash interrupted it), or ''. Its Resume card offers
+ *  Resume and Abort. */
+function interruptedRunWorkspace(): string {
+  const info = existingProject.value
+  return pipeline.state !== 'running' && info?.state === 'running' ? info.workspacePath : ''
+}
+
+/** End an interrupted run's record (state 'aborted', still resumable). The
+ *  backend refuses when a window still drives it. False when refused. */
+async function abortInterruptedRun(workspacePath: string): Promise<boolean> {
+  const resp = await sendQuiet<ProjectPayload>('pipeline.abort', {
+    workspace_path: workspacePath, reason: 'user', interrupted_only: true,
+  })
+  if (!resp) return false
+  pipelineLog('Interrupted pipeline run aborted by user')
+  applyProjectPaths(resp)
+  await onWorkspaceCheck(workspacePath)
+  return true
 }
 
 // ─────────── Switch / close workspace (phase-7) ───────────

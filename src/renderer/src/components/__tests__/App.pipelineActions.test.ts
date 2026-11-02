@@ -69,6 +69,9 @@ interface Stubs {
   clearStoredPipelineRun: ReturnType<typeof vi.fn>
   confirmPipelineReset: ReturnType<typeof vi.fn>
   confirmPipelineAbort: ReturnType<typeof vi.fn>
+  /** The workspace of a stored run this window does not drive, or ''. */
+  interruptedRunWorkspace: { value: string }
+  abortInterruptedRun: ReturnType<typeof vi.fn>
 }
 
 interface StubOverrides {
@@ -135,6 +138,8 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
     clearStoredPipelineRun: vi.fn(async () => true),
     confirmPipelineReset: vi.fn(async () => true),
     confirmPipelineAbort: vi.fn(async () => true),
+    interruptedRunWorkspace: { value: '' },
+    abortInterruptedRun: vi.fn(async () => true),
   }
 }
 
@@ -163,6 +168,8 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     'clearStoredPipelineRun',
     'confirmPipelineReset',
     'confirmPipelineAbort',
+    'interruptedRunWorkspace',
+    'abortInterruptedRun',
     code,
   )
   factory(
@@ -187,6 +194,8 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     stubs.clearStoredPipelineRun,
     stubs.confirmPipelineReset,
     stubs.confirmPipelineAbort,
+    () => stubs.interruptedRunWorkspace.value,
+    stubs.abortInterruptedRun,
   )
   return handlers
 }
@@ -379,6 +388,26 @@ describe('ui.pipeline.abort', () => {
     const result = await handlers['ui.pipeline.abort']({ confirm: true })
     expect(stubs.confirmPipelineAbort).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'aborted' })
+  })
+
+  // A Reload or crash left the stored run at running with no window driving it:
+  // MCP pipeline_abort ends it instead of answering "no pipeline is running".
+  it('ends an interrupted run this window does not drive', async () => {
+    const stubs = makeStubs({ state: 'idle' })
+    stubs.interruptedRunWorkspace.value = '/tmp/ws'
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.abort']()
+    expect(stubs.abortInterruptedRun).toHaveBeenCalledWith('/tmp/ws')
+    expect(stubs.onPipelineAbort).not.toHaveBeenCalled()
+    expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'aborted' })
+  })
+
+  it('refuses when the backend says another window still drives that run', async () => {
+    const stubs = makeStubs({ state: 'idle' })
+    stubs.interruptedRunWorkspace.value = '/tmp/ws'
+    stubs.abortInterruptedRun.mockImplementation(async () => false)
+    const handlers = await loadActions(stubs)
+    await expect(handlers['ui.pipeline.abort']()).rejects.toMatchObject({ code: 'not-running' })
   })
 })
 

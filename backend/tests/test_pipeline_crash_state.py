@@ -219,3 +219,35 @@ async def test_a_claim_must_be_a_list(wired, ws) -> None:
     await ws_handlers.pipeline_claim(window, "1", "pipeline.claim", {"workspaces": "nope"})
     assert window.sent[-1]["ok"] is False
     assert getattr(window, "pipeline_claimed", False) is False
+
+
+async def test_an_interrupted_run_can_be_aborted(wired, ws) -> None:
+    await _start_run(wired, ws, _Session(held=(ws,)))
+    _restart_backend(wired)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await ws_handlers.pipeline_claim(window, "2", "pipeline.claim", {"workspaces": []})
+    assert _status(ws)["state"] == "interrupted"
+    await ws_handlers.pipeline_abort(
+        window, "3", "pipeline.abort", {"workspace_path": ws, "reason": "user", "interrupted_only": True}
+    )
+    assert window.sent[-1]["ok"] is True
+    assert ProjectStore().peek(ws).state == "aborted"
+    assert _status(ws)["state"] == "aborted"
+
+
+async def test_aborting_only_an_interrupted_run_leaves_a_driven_one_alone(wired, ws) -> None:
+    # A second window on the workspace sees the stored run, but another window drives it.
+    driver = _Session(held=(ws,), window_id="win-a")
+    wired.sessions.append(driver)
+    await ws_handlers.pipeline_claim(driver, "1", "pipeline.claim", {"workspaces": []})
+    await _start_run(wired, ws, driver)
+    viewer = _Session(held=(ws,), window_id="win-b")
+    wired.sessions.append(viewer)
+    await ws_handlers.pipeline_claim(viewer, "2", "pipeline.claim", {"workspaces": []})
+    await ws_handlers.pipeline_abort(
+        viewer, "3", "pipeline.abort", {"workspace_path": ws, "reason": "user", "interrupted_only": True}
+    )
+    assert viewer.sent[-1]["ok"] is False
+    assert viewer.sent[-1]["error"]["code"] == "NOT_INTERRUPTED"
+    assert ProjectStore().peek(ws).state == "running"

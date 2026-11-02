@@ -300,6 +300,8 @@ class WebhookService:
         self._checks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._waiting_since: dict[str, float] = {}
+        #: Open runs the window last reported interrupted (a Reload or crash).
+        self._interrupted: set[str] = set()
         self._watchdog: asyncio.Task[None] | None = None
         self._clock = time.time
 
@@ -459,7 +461,8 @@ class WebhookService:
         if trigger is not None:
             # The watchdog only looks every WATCH_EVERY_S, so the last run can
             # still be open here, and overwriting it would leave it open for good.
-            self.finish_run(workspace, "finished")
+            last = self._active.get(workspace)
+            self.finish_run(workspace, "interrupted" if last and last["id"] in self._interrupted else "finished")
             self._active[workspace] = self.store.open_run(
                 trigger_id=trigger["id"], workspace=workspace, project_id=project.id,
                 pipeline_id=getattr(project, "pipeline_id", ""),
@@ -471,6 +474,7 @@ class WebhookService:
     def finish_run(self, workspace: str, state: str) -> None:
         run = self._active.pop(workspace, None)
         if run is not None:
+            self._interrupted.discard(run["id"])
             self.store.close_run(run["id"], state)
 
     def launch_command(self, agent_key: str, command: Any, *, pane_id: str, metadata: dict[str, Any]) -> Any:
@@ -644,10 +648,18 @@ class WebhookService:
         status = await self.window.run_status(workspace)
         state = status.get("state")
         if state == "interrupted":
-            self._ended(workspace, "interrupted")
+            # Nobody drives the run now, but Resume carries on this same run,
+            # so its row stays open until the run really ends.
+            self._waiting_since.pop(run["id"], None)
+            if run["id"] not in self._interrupted:
+                self._interrupted.add(run["id"])
+                self.audit([{"trigger_id": run["trigger_id"], "outcome": "interrupted", "status": 0}])
             return
+        self._interrupted.discard(run["id"])
         if not status.get("active"):
-            self._ended(workspace, "finished")
+            # Only a stored end state names the outcome; anything else (a row
+            # closed as 'running' would be read back as open) is "finished".
+            self._ended(workspace, state if state in ("completed", "aborted") else "finished")
             return
         now = self._clock()
         if now - run["started_at"] >= RUN_CAP_S:
@@ -669,8 +681,6 @@ class WebhookService:
         run = self._active.get(workspace)
         if run is not None:
             self._waiting_since.pop(run["id"], None)
-            if state == "interrupted":
-                self.audit([{"trigger_id": run["trigger_id"], "outcome": state, "status": 0}])
         self.finish_run(workspace, state)
 
     async def _stop_run(self, workspace: str, run: dict[str, Any], outcome: str) -> None:
