@@ -63,6 +63,13 @@ describe('useTerminal — the transcript a reattached pane adopts', () => {
     localStorage.clear()
   })
 
+  it('adopts what the surviving PTY really runs when its bypass was dropped', async () => {
+    const { result, scope } = pane({ alive: ['sess-old'], dead: [], logs: {}, bypass_dropped: { 'sess-old': 'claude --permission-mode default' } })
+    expect(await result.tryReattach()).toBe(true)
+    expect(result.attachedBypassDropped.value).toBe('claude --permission-mode default')
+    scope.stop()
+  })
+
   it('adopts the surviving PTY\'s real transcript path', async () => {
     const { result, scope } = pane({ alive: ['sess-old'], dead: [], logs: { 'sess-old': REAL_LOG } })
     expect(await result.tryReattach()).toBe(true)

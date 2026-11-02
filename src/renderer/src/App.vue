@@ -7191,8 +7191,12 @@ function scheduleInjection(pane: ActivePane): void {
       // documents) are preserved — without it they become Enter keypresses
       // and fragment the prompt into multiple partial submissions.
       let held = false
+      // The watcher's arm time, as in activateStage: a turn that ends before
+      // the confirmation below returns must still count as this stage's.
+      let kickoffStartedAt = Date.now()
       const kickoffResult = await runPipelineKickoff({
         inject: async () => {
+          kickoffStartedAt = Date.now()
           const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
           const injected = await injectPane(pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence)
           return { injected, echo: evidence.echo }
@@ -7242,7 +7246,7 @@ function scheduleInjection(pane: ActivePane): void {
         const kickoffScanFrom2 = stageAllowsQ
           ? (paneRefs[pane.id]?.markBufferPosition as () => number | undefined)?.()
           : undefined
-        startStageWatcher(stageIndexForPane, pane.id, kickoffScanFrom2)
+        startStageWatcher(stageIndexForPane, pane.id, kickoffScanFrom2, kickoffStartedAt)
       }
     }
   })()
@@ -7719,6 +7723,8 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     // for every restored pane.
     const effectiveLogFile = ref.attachedOutputLogFile || outputLogFile
     if (effectiveLogFile !== outputLogFile) pane.outputLogFile = effectiveLogFile
+    // Same reason: a reattached pane never saw the cli.bypass_dropped of its create.
+    if (ref.attachedBypassDropped) pane.bypassDroppedCommand = ref.attachedBypassDropped as string
 
     // The history entry was pushed before this path was known — back-fill it
     // now so Agent History preview can read the real file. This must happen
