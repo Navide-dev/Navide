@@ -18333,10 +18333,17 @@ function parseContentBlocks(
   const region = buf.slice(fromCursor)
   const items: string[] = []
   let lastEnd = 0
+  // The block's own START marker, the literal before the capture group.
+  const startMarker = re.source.slice(0, re.source.indexOf('('))
   re.lastIndex = 0
   let m: RegExpExecArray | null
   while ((m = re.exec(region)) !== null) {
-    const inner = m[1]
+    // A repaint on a narrow pane can drop letters from an END marker
+    // ("REPOR-END--"), and the lazy match then runs from that template's START
+    // to the END of the next real block. The block is what follows the last
+    // START before its END.
+    const lastStart = m[1].lastIndexOf(startMarker)
+    const inner = lastStart >= 0 ? m[1].slice(lastStart + startMarker.length) : m[1]
     // `content:` consumes everything to end of inner block.
     const cm = inner.match(/(?:^|\n)\s*content:\s*([\s\S]*)$/)
     if (cm) {
