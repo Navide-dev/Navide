@@ -1970,6 +1970,9 @@ interface ActivePane {
    *  block itself is gone, and every genuinely later turn carries a newer
    *  source stamp, so leaving it set rejects nothing that should pass. */
   usageLimitSeenAt?: number | null
+  /** Runtime-only: what the pane really runs when the backend took a requested
+   *  bypass away. Shown on its card; `command` keeps the request. */
+  bypassDroppedCommand?: string
   /** Runtime-only: a quota-failover switch moved this pane's account and the
    *  incident has not reached a verified state yet. Keeps the pipeline quota
    *  gate closed (see paneUsageLimited) after the exhausted-account flag is
@@ -4375,7 +4378,7 @@ function syncViews(): void {
       roleKey: p.roleKey,
       roleLabel: roleLabel(p.roleKey),
       stageId: p.stageId,
-      command: p.command,
+      command: p.bypassDroppedCommand || p.command,
       status: paneDisplayStatus(p) || 'waiting',
       error: ref?.error as string | undefined,
       injectionStatus: p.injectionStatus,
@@ -17098,6 +17101,16 @@ backend.on('codex.hook_trust_changed', (raw) => {
   const ev = raw as { blocked?: boolean }
   if (typeof ev?.blocked !== 'boolean') return
   codexHookTrustReported = ev.blocked
+})
+
+// The card shows what the pane runs. `command` stays as it was asked for: the
+// backend decides the bypass again on every launch from that request.
+backend.on('cli.bypass_dropped', (raw) => {
+  const ev = raw as { pane_id?: string; command?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (!pane || !ev.command) return
+  pane.bypassDroppedCommand = ev.command
+  syncViews()
 })
 
 // Some of this window's env settings never reached the CLI. Sent only to the
