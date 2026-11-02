@@ -19,14 +19,20 @@ export async function runPipelineKickoff(input: {
    *  dialog). Nothing is typed then: the kickoff's Enter would answer that
    *  prompt for the user, and its echo check cannot tell the difference. */
   parkedOnPrompt?: () => boolean
-}): Promise<{ sent: boolean; cancelled: boolean; parked?: boolean }> {
+  /** The run still wants this kickoff. Checked before every attempt: a sibling
+   *  slot can fail the run while this one waits, and an attempt that already
+   *  typed is never undone. */
+  stillWanted?: () => boolean
+}): Promise<{ sent: boolean; cancelled: boolean; parked?: boolean; stopped?: boolean }> {
   if (input.parkedOnPrompt?.()) return { sent: false, cancelled: false, parked: true }
   if (input.heldCopy?.holds()) {
+    if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
     if (await input.heldCopy.submit()) return { sent: true, cancelled: false }
     input.onHeld?.()
     return { sent: false, cancelled: false }
   }
   for (let attempt = 1; attempt <= MAX_KICKOFF_ATTEMPTS; attempt++) {
+    if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
     const result = await input.inject()
     if (result.injected) return { sent: true, cancelled: false }
     if (result.echo != null) {

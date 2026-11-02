@@ -7313,7 +7313,13 @@ function scheduleInjection(pane: ActivePane): void {
         },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
         parkedOnPrompt: () => paneParkedOnPrompt(pane.id),
+        // A sibling slot can fail the run during the role's 30s settle.
+        stillWanted: () => pane.origin !== 'pipeline' || pipeline.state === 'running',
       })
+      if (kickoffResult.stopped) {
+        pipelineLog(`${tag} ⏹ the run is no longer running — not sending the kickoff`)
+        return
+      }
       if (kickoffResult.cancelled) return
       const ok2 = kickoffResult.sent
       const parked = !!kickoffResult.parked
@@ -14914,6 +14920,15 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     }
 
     const tag = `[${stage.id}/${slot.label}]`
+    // Another slot failed the run, or the user stopped or reset it, while this
+    // one waited on its role: nothing more is typed into this pane for a run
+    // that is over. What was already typed stays; nothing is interrupted.
+    const slotStillWanted = (): boolean => pipeline.state === 'running' && pipeline.stageIndex === index
+    const runEndedFirst = (what: string): boolean => {
+      if (slotStillWanted()) return false
+      pipelineLog(`${tag} ⏹ the run is no longer running — not sending the ${what}`)
+      return true
+    }
 
     // Wait for scheduleInjection to finish role injection before sending kickoff.
     // Must wait for 'sent'/'failed'/'skipped' — 'scheduled' means scheduleInjection
@@ -14934,6 +14949,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
       return
     }
+    if (runEndedFirst('role or kickoff')) return
     // A pane this run reuses can sit on a CLI prompt — a resume after a reload
     // finds the previous turn's permission box still up. Typing a role or a
     // kickoff into it presses Enter on that box, approving whatever it asks,
@@ -15061,6 +15077,8 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         }),
         index, slot.label) +
       sessionMarkerLine(pane.sessionMarker)
+    // The role's settle can take 30s, long enough for a sibling to fail the run.
+    if (runEndedFirst('kickoff')) return
     pipelineLog(`${tag} ➜ injecting kickoff (${kickoff.length} chars)`)
     let held = false
     // The watcher's arm time: taken before the injection, because the watcher
@@ -15084,7 +15102,12 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       // A resume after a held kickoff: submit the copy still in the box.
       heldCopy: heldKickoffCopy(pane.id, kickoff),
       parkedOnPrompt: () => paneParkedOnPrompt(pane.id),
+      stillWanted: slotStillWanted,
     })
+    if (kickoffResult.stopped) {
+      pipelineLog(`${tag} ⏹ the run is no longer running — no further kickoff attempt`)
+      return
+    }
     if (kickoffResult.cancelled) {
       releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
       return
@@ -17894,6 +17917,7 @@ function routerObservationIsReal(
 function startRouterPoll(stageIndex: number): void {
   const router = stageRouters.get(stageIndex)
   if (!router || router.pollHandle !== null) return
+  if (pipeline.state !== 'running') return
   // Manager mode arms no per-pane watcher, so the stage's clock starts here.
   router.armedAt = Date.now()
   router.watchdogFired = false
@@ -18721,6 +18745,9 @@ let _globalScanRunning = false
 function startGlobalManagerRouter(): void {
   if (globalRouterHandle !== null) return
   if (!pipeline.globalManager) return
+  // A run a slot failed (or the user stopped) while its stage started has
+  // nothing left to route.
+  if (pipeline.state !== 'running') return
   pipelineLog(`🎯 Global Manager router started (${pipeline.globalManager.stageId}/${pipeline.globalManager.slotLabel})`)
   globalRouterHandle = window.setInterval(() => { void globalManagerRouterScan() }, 2000)
 }
