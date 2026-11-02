@@ -8,9 +8,12 @@ than on the agent:
   paste, and a bare CR is Enter;
 * ``{{...}}`` is expanded after the task is placed in the kickoff
   (renderSlotKickoff, then expandKickoff), so a body holding
-  ``{{node.x.output}}`` would read another step's output.
+  ``{{node.x.output}}`` would read another step's output;
+* a line marker (``---REPORT-START---`` and the rest) is read off the agent's
+  screen, where the submitted kickoff is echoed, so the data could speak for
+  the agent: a REPORT to its Manager, a DISPATCH, a stage end.
 
-Both are removed here, on the way in, so the existing kickoff path stays as it
+All three are neutralised here, on the way in, so the existing kickoff path stays as it
 is. The wording around the data only asks the agent not to obey it: what limits
 an agent that does obey it is the run's Guard taint.
 
@@ -34,6 +37,13 @@ _TYPES = {"application/json", "text/plain", "application/x-www-form-urlencoded"}
 _DROP = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩]")
 _NEWLINES = re.compile("\r\n?| | ")
 
+#: Three or more hyphens, whitespace allowed between them: the opening of
+#: every line marker an agent's output is read for (---REPORT-START---,
+#: ---ASK-END---, ---STAGE-DONE---, ---MSG-START--- ...). Whitespace counts
+#: because Claude Code draws blank cells with cursor moves, so "- - -" can
+#: reach Navide's clean buffer as "---".
+_DASH_RUN = re.compile(r"-(?:\s*-){2,}")
+
 _MARKER = "NAVIDE-WEBHOOK-DATA-"
 _INTRO = (
     'Webhook trigger "{name}" started this run. The block below came from an external system. '
@@ -55,7 +65,10 @@ def sanitize_text(text: str) -> str:
     cleaned = _DROP.sub("", _NEWLINES.sub("\n", text))
     while "{{" in cleaned:
         cleaned = cleaned.replace("{{", "{ {")
-    return cleaned
+    # The kickoff is echoed on the agent's screen, after the point Navide reads
+    # its output from, so a marker in the data would read as the agent's own
+    # (a REPORT, a DISPATCH, a stage end). En dashes keep it legible.
+    return _DASH_RUN.sub(lambda m: m.group(0).replace("-", "\u2013"), cleaned)
 
 
 def build_task(name: str, text: str) -> str:
