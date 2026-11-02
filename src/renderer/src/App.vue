@@ -17913,6 +17913,7 @@ function disposeStageRouter(stageIndex: number): void {
   if (r?.pollHandle !== null && r?.pollHandle !== undefined) {
     window.clearInterval(r.pollHandle)
   }
+  if (r) handStageToGlobalRouter(r)
   stageRouters.delete(stageIndex)
 }
 
@@ -18732,6 +18733,29 @@ function stopGlobalManagerRouter(): void {
     globalRouterAnchors.clear()
     globalRoutedMessages.clear()
     pipelineLog('🎯 Global Manager router stopped')
+  }
+}
+
+/** A stage router whose Manager is the global Manager is being disposed, and
+ *  its workers fall to the global router, which skipped them until now (its
+ *  cursor for them still at 0). Hand over how far the stage router read and
+ *  what it sent, or the global router sends those messages again: a stage's
+ *  last REPORT reached the Manager twice, after STAGE-DONE (0.2.37 VM). */
+function handStageToGlobalRouter(r: StageRouter): void {
+  if (globalRouterHandle === null || r.managerPaneId !== globalManagerPaneId()) return
+  for (const paneId of r.workerPaneIds.values()) {
+    const cursor = r.cursors.get(paneId)
+    const anchor = r.bufferAnchors.get(paneId)
+    if (cursor === undefined || !anchor) continue
+    // The cursor counts in the buffer as the stage router last saw it.
+    globalRouterCursors.set(paneId, cursor)
+    globalRouterAnchors.set(paneId, anchor)
+  }
+  for (const key of r.routedWorkerMessages) {
+    const [kind, label, content] = key.split('\u0000')
+    const paneId = r.workerPaneIds.get(label)
+    const stageId = panes.value.find((p) => p.id === paneId)?.stageId
+    if (paneId && stageId) globalRoutedMessages.add(`${paneId}\u0000${stageId}\u0000${kind}\u0000${content}`)
   }
 }
 
