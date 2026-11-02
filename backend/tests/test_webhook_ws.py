@@ -174,6 +174,26 @@ class TestStartRetry:
         assert status["retry"] is None and status["error"] == "" and webhook_ws._retry_task is None
         assert len(calls) == 1
 
+    async def test_a_timed_out_listener_is_not_left_holding_the_port(self, env, monkeypatch) -> None:
+        """The thread of a start that timed out is still stuck when the retry
+        comes: the retry gets the same port, and turning webhooks off frees it."""
+        from .test_webhook_listener import free_port, stall_listener_thread
+
+        port = free_port()
+        webhook_triggers.save_listener_settings(app_module.database, enabled=False, port=port, public_host="", now=1)
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.05, 0.05), raising=False)
+        release = stall_listener_thread(monkeypatch, times=1)
+        try:
+            await enabled_trigger()
+            await settled(lambda: webhook_ws._listener is not None)
+            assert webhook_ws._listener.port == port and port_open(port)
+            await call("webhook.settings.set", enabled=False)
+            assert not port_open(port)
+        finally:
+            release.set()
+        await settled(lambda: listener_threads() == [])
+        assert not port_open(port)
+
     async def test_shutdown_cancels_a_pending_retry(self, env, monkeypatch) -> None:
         monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (60.0,), raising=False)
         flaky_start(monkeypatch, failures=99)
