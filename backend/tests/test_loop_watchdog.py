@@ -309,3 +309,49 @@ async def test_stop_joins_the_watcher_thread(fast_watchdog) -> None:
     await fast_watchdog.stop()
     assert not thread.is_alive()
     assert fast_watchdog._watchdog._thread is None
+
+
+# ── telling a wedged loop from a starved process (0.2.37 Windows VM) ────────
+# A 30.9 s "stall" there had the loop thread in a non-blocking IOCP recv and
+# the watcher's first report 16.8 s in, though it polls every 0.5 s: the whole
+# process had stopped running. The reports now carry what tells the two apart.
+
+
+@pytest.mark.asyncio
+async def test_stall_report_says_how_long_since_the_watchers_previous_check(
+    fast_watchdog, reports: _Reports, caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="agent_team_backend.loop_watchdog")
+    monkeypatch.setattr(fast_watchdog._watchdog, "_stop_requested", _LateEvent())
+    fast_watchdog.start(asyncio.get_running_loop())
+    try:
+        await asyncio.sleep(0.05)
+        await _stall_loop(reports, await_recovery=False)
+    finally:
+        await fast_watchdog.stop()
+
+    stall = next(m for m in _messages(caplog) if "stalled for" in m and "_stall_loop" in m)
+    found = re.search(r"watchdog's previous check ([\d.]+)s earlier", stall)
+    assert found, stall
+    assert float(found.group(1)) >= _LateEvent.LATE_S - 0.05
+
+
+@pytest.mark.asyncio
+async def test_recovery_report_names_the_process_cpu_spent_while_stalled(
+    fast_watchdog, reports: _Reports, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger="agent_team_backend.loop_watchdog")
+    fast_watchdog.start(asyncio.get_running_loop())
+    try:
+        await asyncio.sleep(0.05)
+        await _stall_loop(reports, 0.4)  # asleep, not computing: little CPU
+    finally:
+        await fast_watchdog.stop()
+
+    messages = _messages(caplog)
+    index = max(i for i, m in enumerate(messages) if "stalled for" in m and "_stall_loop" in m)
+    recovery = messages[index + 1]
+    found = re.search(r"recovered after ([\d.]+)s stalled \(process CPU ([\d.]+)s\)", recovery)
+    assert found, recovery
+    assert float(found.group(2)) < float(found.group(1))

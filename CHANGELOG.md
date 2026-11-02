@@ -23,6 +23,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Pipelines (0.2.37): a webhook run that finished just before the next one started stayed recorded as running. This never shipped: webhooks are new in this version.
 - Windows: reloading a window you opened on a workspace from inside Navide now brings its panes back. They used to disappear while their CLIs kept running with no window attached, and those CLIs could go on running tools. As in any other window, the pane on screen reconnects at once and the others when you open them. Opening such a window for the first time works as before: it starts without the workspace's earlier panes.
 - Startup (0.2.37): the backend now keeps the free port it picks until it starts serving on it. If another program took the port in that gap, the backend exited at startup.
+- Startup on Windows (0.2.37): the backend no longer holds up everything else while it reads the MCP settings, registers the plugins' MCP tools and installs the CLI hooks, and the setup wizard's first check no longer blocks it while it searches PATH. On a first start after install this kept the backend busy for about 40 seconds, so the window could not connect. The hooks it writes, and the order it writes them in, are unchanged. When the backend does stall, its log now says whether the whole process stopped running or only its event loop was busy.
 
 - Channels (0.2.37): an old allowlist row with no bot recorded can now be removed in Settings → Channels; removing it answered "not found".
 

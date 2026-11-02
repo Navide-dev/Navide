@@ -89,9 +89,17 @@ class _LoopWatchdog:
         """Watch the stamp from a plain thread, which keeps running while the
         loop is blocked. One WARNING per stall episode, re-armed on recovery."""
         stall_started_at: float | None = None
+        # Tell a wedged loop from a process that is not running at all (a
+        # starved VM: the 0.2.37 Windows check saw a 30.9 s "stall" with the
+        # loop in a non-blocking recv). A late previous check means this
+        # thread did not run either; process CPU near zero over the stall
+        # means no thread did.
+        previous_check = time.monotonic()
+        healthy_cpu = stall_cpu = time.process_time()
         while not self._stop_requested.wait(TICK_INTERVAL_S):
+            now = time.monotonic()
             last_tick = self._last_tick
-            stalled_for = time.monotonic() - last_tick
+            stalled_for = now - last_tick
             if self._stop_requested.is_set():
                 # stop() landed after the poll timed out: the tick task is
                 # cancelled and the stamp ages without the loop stalling.
@@ -99,15 +107,21 @@ class _LoopWatchdog:
             if stalled_for >= STALL_THRESHOLD_S:
                 if stall_started_at is None:
                     stall_started_at = last_tick
+                    stall_cpu = healthy_cpu  # as of the last check the loop was turning
                     log.warning(
-                        "event loop stalled for %.1fs — loop thread stack:\n%s",
-                        stalled_for, self._loop_stack(),
+                        "event loop stalled for %.1fs (watchdog's previous check %.1fs earlier)"
+                        " — loop thread stack:\n%s",
+                        stalled_for, now - previous_check, self._loop_stack(),
                     )
             elif stall_started_at is not None:
                 log.warning(
-                    "event loop recovered after %.1fs stalled", last_tick - stall_started_at
+                    "event loop recovered after %.1fs stalled (process CPU %.1fs)",
+                    last_tick - stall_started_at, time.process_time() - stall_cpu,
                 )
                 stall_started_at = None
+            if stall_started_at is None:
+                healthy_cpu = time.process_time()
+            previous_check = now
         # A stop can land between the loop turning again and the next poll, so
         # settle a pending stall here rather than dropping the recovery report.
         # Any stamp newer than the stall means the loop turned again; the
@@ -116,7 +130,8 @@ class _LoopWatchdog:
             last_tick = self._last_tick
             if last_tick > stall_started_at:
                 log.warning(
-                    "event loop recovered after %.1fs stalled", last_tick - stall_started_at
+                    "event loop recovered after %.1fs stalled (process CPU %.1fs)",
+                    last_tick - stall_started_at, time.process_time() - stall_cpu,
                 )
 
     def _loop_stack(self) -> str:
