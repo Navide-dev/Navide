@@ -453,9 +453,11 @@ class TestMCPManager:
             {"name": "slow", "command": "echo", "args": [], "env": {}, "enabled": True},
         ]))
         slow_cancelled = asyncio.Event()
+        slow_started = asyncio.Event()
 
         async def start(client):
             if client.name == "slow":
+                slow_started.set()
                 try:
                     await asyncio.sleep(60)
                 except asyncio.CancelledError:
@@ -466,8 +468,11 @@ class TestMCPManager:
         with patch.object(MCPClient, "start", start), \
              patch.object(MCPClient, "stop", new_callable=AsyncMock) as stop:
             startup = asyncio.create_task(manager.startup(cfg_path))
-            while "fast" not in manager._clients:
-                await asyncio.sleep(0.01)
+            # Wait for the slow start to be running, not just registered: the
+            # config is read off the loop, so on Windows this task can wake in
+            # the same loop pass that registers the clients, before any start
+            # has run its first step.
+            await asyncio.wait_for(slow_started.wait(), timeout=5.0)
 
             await asyncio.wait_for(manager.shutdown(), timeout=1.0)
 
