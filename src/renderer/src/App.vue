@@ -4821,6 +4821,7 @@ async function injectText(
   // and starts no turn for it, so there is no turn to watch for.
   const midTurnAtEnter = paneId !== undefined
     && (paneLastActiveAt.get(paneId) ?? 0) > (paneTurnCompleteAt.get(paneId) ?? 0)
+  const watchTurn = shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter })
   // A permission / confirm dialog, where Enter would pick the default option.
   // Not a turn that merely ended on a question — see blockingDialogShown.
   const dialogShown = (): boolean => paneId !== undefined && blockingDialogShown({
@@ -4828,6 +4829,9 @@ async function injectText(
     agentKey,
     screen: visibleScreen() ?? screenTail(),
   })
+  // The first Enter's time: a turn it started may only be seen while a later
+  // attempt is polling.
+  let firstEnterAt = 0
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
     // Never press a resent Enter into a dialog. Our earlier Enter most likely
@@ -4837,6 +4841,7 @@ async function injectText(
       return true
     }
     const enterAt = Date.now()
+    if (attempt === 1) firstEnterAt = enterAt
     try {
       await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
     } catch (err) {
@@ -4861,6 +4866,14 @@ async function injectText(
       })
       // 'unconfirmed' keeps watching: the box may still come into view.
       if (how !== null && how !== 'unconfirmed') break
+      // Our tail can stay on screen after a submit that took: Claude Code
+      // prints the submitted prompt above the box, and on a short pane its
+      // last rows are still the bottom of the screen. A turn started since
+      // our first Enter is the CLI taking it; another Enter proves nothing.
+      if (how === null && watchTurn && turnSince(firstEnterAt)) {
+        how = 'turn'
+        break
+      }
     }
     // A collapsed paste with no box in sight comes back 'unconfirmed' and is
     // reported as such: no extra Enter on a screen we cannot read the box on.
@@ -4869,7 +4882,7 @@ async function injectText(
       // (lib/submitTurnConfirm.ts). Every other verdict returns at once.
       const settled = await confirmWeakSubmit({
         how,
-        watchTurn: shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter }),
+        watchTurn,
         dialogShown,
         turnStarted: () => turnSince(enterAt),
         collapsedHeld: () => framedComposerHolds(visibleScreen() ?? screenTail(), ''),
