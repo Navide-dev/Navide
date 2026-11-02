@@ -143,6 +143,15 @@ def without_bypass(agent_key: str, command: Any) -> Any:
     return _dropped_bypass(command)
 
 
+def bypass_dropped_from(requested: Any, launched: Any) -> str:
+    """What the pane really runs when the window asked for a bypass and did not
+    get one, else ''. The window keeps its own command for later launches, so
+    without this its card goes on showing the flag."""
+    if _BYPASS_FLAG.search(_line(requested)) is None or _BYPASS_FLAG.search(_line(launched)) is not None:
+        return ""
+    return _line(launched)
+
+
 def _workspace_key(path: str) -> str:
     return os.path.normcase(path.rstrip("/\\"))
 
