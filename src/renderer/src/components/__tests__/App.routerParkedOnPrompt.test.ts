@@ -177,6 +177,39 @@ describe('createParkedDelivery', () => {
     expect(onDropped).toHaveBeenCalledWith('p', 'ask')
   })
 
+  it('clear() while a send is in flight: the next held message is never sent', async () => {
+    // A run ending mid-drain must not leak its remaining ASK / DISPATCH into
+    // the run that resumes after it.
+    const parked = { value: true }
+    let release: (ok: boolean) => void = () => {}
+    const typed: string[] = []
+    const q = createParkedDelivery({
+      parked: () => parked.value,
+      alive: () => true,
+      send: (_paneId, text) => {
+        typed.push(text)
+        return text === 'first' ? new Promise<boolean>((r) => { release = r }) : Promise.resolve(true)
+      },
+      setInterval: () => 1,
+      clearInterval: () => {},
+    })
+    const first = q.deliver('p', 'first', 'a', { awaitDelivery: true })
+    const second = q.deliver('p', 'second', 'b', { awaitDelivery: true })
+    parked.value = false
+    const draining = q.drain()
+    await flush()
+    expect(typed).toEqual(['first'])
+    q.clear()
+    release(true)
+    await draining
+    await q.drain()
+    expect(typed).toEqual(['first'])
+    expect(await second).toBe(false)
+    // Settled once, by clear(); the late send result does not settle it again.
+    expect(await first).toBe(false)
+    expect(q.pending('p')).toBe(0)
+  })
+
   it('clear() drops everything still held', async () => {
     const parked = { value: true }
     const { q, send } = make(parked)

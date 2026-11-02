@@ -28,6 +28,9 @@ interface Queued {
 export function createParkedDelivery(deps: ParkedDeliveryDeps) {
   const queues = new Map<string, Queued[]>()
   const draining = new Set<string>()
+  // Bumped by clear(): a drain already awaiting a send sees it and stops, so
+  // nothing a cleared run held is typed afterwards.
+  let generation = 0
   const setTimer = deps.setInterval ?? ((fn: () => void, ms: number) => globalThis.setInterval(fn, ms))
   const clearTimer = deps.clearInterval ?? ((h: unknown) => globalThis.clearInterval(h as ReturnType<typeof setInterval>))
   let timer: unknown = null
@@ -52,10 +55,14 @@ export function createParkedDelivery(deps: ParkedDeliveryDeps) {
       return
     }
     draining.add(paneId)
+    const gen = generation
     try {
-      while (q.length > 0 && deps.alive(paneId) && !deps.parked(paneId)) {
+      while (gen === generation && q.length > 0 && deps.alive(paneId) && !deps.parked(paneId)) {
         const item = q[0]
         const sent = await deps.send(paneId, item.text, item.label)
+        // Cleared while this send was in flight: clear() has settled every
+        // item, this one included, and nothing more goes out.
+        if (gen !== generation) break
         q.shift()
         if (!sent) deps.onFailed?.(paneId, item.label)
         item.resolve(sent)
@@ -93,7 +100,11 @@ export function createParkedDelivery(deps: ParkedDeliveryDeps) {
     },
     /** A run that ended takes its undelivered messages with it. */
     clear(): void {
-      for (const q of queues.values()) for (const item of q) item.resolve(false)
+      generation++
+      for (const q of queues.values()) {
+        for (const item of q) item.resolve(false)
+        q.length = 0
+      }
       queues.clear()
       stopTimerIfIdle()
     },
