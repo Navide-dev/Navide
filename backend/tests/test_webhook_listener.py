@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import socket
 import threading
+import time
 
 import pytest
 
@@ -380,3 +381,67 @@ def test_rate_limiter_window_slides():
     assert limiter.allow() == 60
     now[0] = 161.0
     assert limiter.allow() == 0
+
+
+def free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def stall_listener_thread(monkeypatch, times: int = 99) -> threading.Event:
+    """The first `times` listener threads hang before they serve, as on the
+    VM's first AppImage launch, until the returned event is set."""
+    import uvicorn
+
+    release = threading.Event()
+    real = uvicorn.Config.load
+    stalled = []
+
+    def load(self):
+        if threading.current_thread().name == wl.THREAD_NAME and len(stalled) < times:
+            stalled.append(1)
+            release.wait(10)
+        real(self)
+
+    monkeypatch.setattr(uvicorn.Config, "load", load)
+    monkeypatch.setattr(wl, "START_TIMEOUT_S", 0.2)
+    monkeypatch.setattr(wl, "STOP_TIMEOUT_S", 0.1)
+    return release
+
+
+def test_a_listener_that_timed_out_never_serves_and_frees_its_port(host, monkeypatch):
+    """Fail closed: the abandoned thread may wake later, but the port is
+    released at once and that thread never takes a request."""
+    port = free_port()
+    release = stall_listener_thread(monkeypatch)
+    server = wl.WebhookListener(port=port, public_host="", accept=host.accept, on_audit=host.on_audit, loop=host.loop, guard_enabled=lambda: True)
+    with pytest.raises(wl.ListenerError):
+        server.start()
+    with socket.socket() as probe:
+        assert probe.connect_ex(("127.0.0.1", port)) != 0
+    with socket.socket() as rebind:
+        rebind.bind(("127.0.0.1", port))
+    release.set()
+    deadline = time.monotonic() + 5
+    while wl.THREAD_NAME in {t.name for t in threading.enumerate()}:
+        assert time.monotonic() < deadline
+        time.sleep(0.02)
+    with socket.socket() as probe:
+        assert probe.connect_ex(("127.0.0.1", port)) != 0
+    assert host.accepted == []
+
+
+def test_a_stopped_listener_refuses_a_request_without_handing_it_over(host, listener):
+    listener.stop()
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": "POST", "path": "/webhook/" + TRIGGER_ID, "headers": [(b"host", b"127.0.0.1")]}
+    asyncio.run_coroutine_threadsafe(listener(scope, receive, send), host.loop).result(5)
+    assert sent[0]["status"] == 503 and host.accepted == []

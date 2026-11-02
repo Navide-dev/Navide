@@ -28,6 +28,15 @@ log = logging.getLogger(__name__)
 _listener: webhook_listener.WebhookListener | None = None
 _listener_error = ""
 
+#: Waits before each new try after a failed start. A first launch on a slow
+#: machine can miss START_TIMEOUT_S once; a taken port can be freed later.
+RETRY_DELAYS_S = (5.0, 15.0, 30.0, 60.0, 120.0)
+_retry_task: asyncio.Task[None] | None = None
+_failed_starts = 0
+_next_retry_at = 0.0
+_start_task: asyncio.Task[None] | None = None
+_reconcile_lock: tuple[asyncio.AbstractEventLoop, asyncio.Lock] | None = None
+
 
 def _guard_on() -> bool:
     """Cached, for the listener's thread. Unknown counts as off."""
@@ -61,10 +70,24 @@ async def startup() -> None:
             project=app.project_store.peek,
         )
 
+    global _start_task
     service = await asyncio.to_thread(build)
     webhook_service.configure(service)
     service.start_watchdog()
-    await reconcile()
+    # Not awaited: the backend takes no connection until startup ends, and a
+    # listener that is slow to start must not hold all of it up.
+    _start_task = asyncio.create_task(_first_reconcile(), name="webhook-listener-start")
+
+
+async def _first_reconcile() -> None:
+    global _start_task
+    try:
+        await reconcile()
+    except Exception as err:  # noqa: BLE001 - as when startup itself failed
+        log.warning("webhook startup failed: %s", err)
+        webhook_service.mark_unavailable()
+    finally:
+        _start_task = None
 
 
 def _pipeline_record(pipeline_id: str) -> dict[str, Any] | None:
@@ -89,8 +112,46 @@ def _known_program(agent_key: str, program: str) -> bool:
     return app._names_a_known_command(program, (dep.check_cmd[0], *dep.alt_commands))
 
 
+def _cancel_retry() -> None:
+    global _retry_task, _failed_starts
+    task, _retry_task = _retry_task, None
+    if task is not None and task is not asyncio.current_task():
+        task.cancel()
+    _failed_starts = 0
+
+
+async def _retry_later(delay: float) -> None:
+    global _retry_task
+    await asyncio.sleep(delay)
+    _retry_task = None
+    try:
+        await reconcile()
+    except Exception:  # noqa: BLE001 - a retry must not end as an unretrieved task error
+        log.exception("webhook: listener retry failed")
+
+
+def _start_failed(err: webhook_listener.ListenerError) -> None:
+    """Record the failure and, below the limit, try again after a wait."""
+    global _retry_task, _failed_starts, _listener_error, _next_retry_at
+    _failed_starts += 1
+    attempts = len(RETRY_DELAYS_S) + 1
+    _listener_error = str(err)
+    if _failed_starts < attempts:
+        delay = RETRY_DELAYS_S[_failed_starts - 1]
+        log.warning("webhook: %s (attempt %d of %d, next try in %gs)", err, _failed_starts, attempts, delay)
+        _next_retry_at = time.time() + delay
+        _retry_task = asyncio.create_task(_retry_later(delay), name="webhook-listener-retry")
+    else:
+        log.warning("webhook: %s (attempt %d of %d, giving up until webhooks change)", err, _failed_starts, attempts)
+
+
 async def shutdown() -> None:
-    global _listener
+    global _listener, _start_task
+    task, _start_task = _start_task, None
+    if task is not None:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    _cancel_retry()
     listener, _listener = _listener, None
     if listener is not None:
         await asyncio.to_thread(listener.stop)
@@ -100,10 +161,24 @@ async def shutdown() -> None:
     webhook_service.configure(None)
 
 
+def _lock() -> asyncio.Lock:
+    global _reconcile_lock
+    loop = asyncio.get_running_loop()
+    if _reconcile_lock is None or _reconcile_lock[0] is not loop:
+        _reconcile_lock = (loop, asyncio.Lock())
+    return _reconcile_lock[1]
+
+
 async def reconcile() -> None:
     """Start, stop or refresh the listener to match the stored state. A taken
-    port is reported, never replaced by another one: the caller's URL names it."""
-    global _listener, _listener_error
+    port is reported, never replaced by another one: the caller's URL names it.
+    One at a time: the first one runs beside the window's requests."""
+    async with _lock():
+        await _reconcile()
+
+
+async def _reconcile() -> None:
+    global _listener, _listener_error, _retry_task
     from . import app
 
     service = _service()
@@ -111,12 +186,17 @@ async def reconcile() -> None:
     snapshot = await asyncio.to_thread(service.listener_snapshot)
     wanted = settings["enabled"] and bool(snapshot)
     if not wanted:
+        _cancel_retry()
         listener, _listener = _listener, None
         if listener is not None:
             await asyncio.to_thread(listener.stop)
         _listener_error = ""
         return
     if _listener is None:
+        if _retry_task is not None and _retry_task is not asyncio.current_task():
+            # A change while a retry waits tries now; the wait is not stacked.
+            _retry_task.cancel()
+            _retry_task = None
         listener = webhook_listener.WebhookListener(
             port=settings["port"],
             public_host=settings["public_host"],
@@ -129,9 +209,9 @@ async def reconcile() -> None:
         try:
             await asyncio.to_thread(listener.start)
         except webhook_listener.ListenerError as err:
-            log.warning("webhook: %s", err)
-            _listener_error = str(err)
+            _start_failed(err)
             return
+        _cancel_retry()
         _listener, _listener_error = listener, ""
         if listener.port != settings["port"]:
             await asyncio.to_thread(
@@ -152,6 +232,11 @@ async def _status() -> dict[str, Any]:
         "listening": _listener is not None,
         "port": _listener.port if _listener is not None else 0,
         "error": _listener_error,
+        # Not None while a failed start waits for its next try.
+        "retry": (
+            {"attempt": _failed_starts, "max": len(RETRY_DELAYS_S) + 1, "next_at": int(_next_retry_at)}
+            if _retry_task is not None else None
+        ),
         "guard_enabled": _guard_on(),
         "key_protection": webhook_keystore.protection(),
         "unattended_supported": guard_fail_closed.unattended_supported(),
