@@ -154,6 +154,36 @@ describe('worker screen: templates are not messages, and a repaint is not a seco
     expect(t.api.parseContentBlocks(buf, 0, t.api.REPORT_RE).items).toEqual(['worker report Y24fe56da8069'])
   })
 
+  // Package 7, Linux VM, a 50-column worker: a repaint dropped letters from the
+  // template's END marker ("REPOR-END--"), so the template's START ran on to the
+  // END of the worker's real REPORT, and the whole kickoff tail between them
+  // reached the Manager as one REPORT. The fixture is the forwarded text
+  // verbatim (stub.log line 71); the markers around it are the ones it lost.
+  it('a template whose END was mangled by a repaint does not swallow the real REPORT', async () => {
+    const t = await load()
+    const { forwarded } = JSON.parse(readFileSync(
+      resolve(process.cwd(), 'src/renderer/src/components/__tests__/fixtures/claude-narrow-template-fragment.json'), 'utf8',
+    )) as { forwarded: string }
+    const buf = `---REPORT-START---  content: ${forwarded}  ---REPORT-END---`
+    expect(t.api.parseContentBlocks(buf, 0, t.api.REPORT_RE).items).toEqual(['workerreportY243fbc6bea54'])
+    expect(t.api.parseContentBlocks(buf, 0, t.api.ASK_RE).items).toEqual([])
+  })
+
+  it('a real message with < and > in it is still routed', async () => {
+    const t = await load()
+    const buf = [
+      '---REPORT-START---',
+      'content: <b>bold</b> works now; latency < 200ms and retries > 3 are handled',
+      '---REPORT-END---',
+      '---ASK-START---',
+      'content: <Option A> or <Option B>?',
+      '---ASK-END---',
+    ].join('\n')
+    expect(t.api.parseContentBlocks(buf, 0, t.api.REPORT_RE).items)
+      .toEqual(['<b>bold</b> works now; latency < 200ms and retries > 3 are handled'])
+    expect(t.api.parseContentBlocks(buf, 0, t.api.ASK_RE).items).toEqual(['<Option A> or <Option B>?'])
+  })
+
   it('the same REPORT seen again after a repaint is routed once', async () => {
     const t = await load()
     t.router.managerReady = true

@@ -10,6 +10,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Pipelines (0.2.37): on a narrow worker pane the Manager no longer receives the worker's protocol instructions as a REPORT. A repaint could drop letters from a template's `---REPORT-END---`, so the template's block ran on to the end of the worker's real REPORT; Navide now reads each ASK or REPORT from the last start marker before its end.
 - Pipelines (0.2.37): a kickoff that reached Claude Code is no longer cleared and pasted again, and no longer fails the run as "never submitted" while the agent is already working on it. Claude Code draws a collapsed paste with column moves instead of spaces, so Navide did not recognise `[Pasted text #2 +58 lines]` and read the paste as missing; and on a short pane the submitted prompt stays at the bottom of the screen, so its text never seemed to leave the input box. Navide now accepts the summary without spaces and counts a turn that started after its Enter as the submit.
 - Pipelines (0.2.37): a webhook run's conversation no longer comes back in permission bypass. A pane reopened after a restart, a Rebuild, a channel wake or an account switch has a new id, so it lost the run's rule. Navide now remembers the run's sessions, keeps a pane that cannot be identified out of bypass, and ends unattended as soon as the trigger is deleted or no longer unattended. This never shipped: webhooks are new in this version.
 
