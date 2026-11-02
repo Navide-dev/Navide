@@ -22,6 +22,7 @@ import {
   createRedrawGuard, dropTuiNoise, findScreenSentinel, findSentinel, stripAnsi,
 } from '../../platform/terminal/lib/buffer'
 import { MANAGER_READY_SENTINEL, MANAGER_STAGE_DONE_SENTINEL } from '../../data/stages'
+import { RUN_SLOT_STUB } from './pipelineDagTestStub'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 const screens = JSON.parse(readFileSync(
@@ -100,7 +101,7 @@ async function load() {
   const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as {
     parseContentBlocks: (buf: string, from: number, re: RegExp) => { items: string[]; newCursor: number }
     queueOrRouteWorkerMsg: (r: typeof router, stageId: string, msg: { fromLabel: string; kind: string; content: string }) => void
-    routeManagerTurnText: (paneId: string, text: string, timestamp: string) => Promise<void>
+    routeManagerTurnText: (paneId: string, text: string, timestamp: string, held?: boolean) => Promise<void>
     ASK_RE: RegExp
     REPORT_RE: RegExp
   }
@@ -133,10 +134,13 @@ describe('Claude 2.1.316 screen: no newlines, so line anchors never match', () =
     expect(findScreenSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, 1)).toBe(-1)
   })
 
-  it('the Manager router scan uses the screen form for READY and STAGE-DONE', () => {
+  it('the Manager router scan uses the screen form for READY only', () => {
     const scan = functionSource('managerRouterScan')
     expect(scan).toContain('findScreenSentinel(buf, MANAGER_READY_SENTINEL, cursor)')
-    expect(scan).toContain('findScreenSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, doneFrom)')
+    // STAGE-DONE stays line-anchored: webhook data echoed after the floor could
+    // carry a bullet-prefixed one. A no-newline screen gets it from the reply.
+    expect(scan).toContain('findSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, doneFrom)')
+    expect(scan).not.toContain('findScreenSentinel(buf, MANAGER_STAGE_DONE_SENTINEL')
   })
 })
 
@@ -171,9 +175,50 @@ describe('worker screen: templates are not messages, and a repaint is not a seco
     expect(t.router.preReadyQueue).toHaveLength(3)
   })
 
-  it('the global router drops repeats too', () => {
-    const scan = functionSource('globalManagerRouterScan')
-    expect(scan).toContain('globalRoutedMessages')
+  it('the global router drops a repeat, but not the same words from a later stage', async () => {
+    const { code } = await transformWithEsbuild(
+      [
+        RUN_SLOT_STUB,
+        'const ASK_RE = /---ASK-START---([\\s\\S]*?)---ASK-END---/g',
+        'const REPORT_RE = /---REPORT-START---([\\s\\S]*?)---REPORT-END---/g',
+        'const DISPATCH_RE = /---DISPATCH-START---([\\s\\S]*?)---DISPATCH-END---/g',
+        functionSource('parseContentBlocks'), functionSource('parseDispatchBlocks'),
+        functionSource('globalManagerRouterScan'),
+        'return globalManagerRouterScan',
+      ].join('\n'),
+      'AppGlobalRouterRepeats.ts',
+      { loader: 'ts' },
+    )
+    const block = '---REPORT-START---\ncontent: done\n---REPORT-END---'
+    const worker = { id: 'w1', stageId: 's1', slotLabel: 'wk', realized: true, origin: 'pipeline' }
+    const paneRefs: Record<string, { cleanBuffer: string }> = { mgr: { cleanBuffer: '' }, w1: { cleanBuffer: block } }
+    const reports: string[] = []
+    const deps: Record<string, unknown> = {
+      pipeline: { state: 'running', stageIndex: 0, globalManager: { stageId: 'g', slotLabel: 'boss' } },
+      globalManagerPaneId: () => 'mgr',
+      panes: { value: [{ id: 'mgr', stageId: 'g', slotLabel: 'boss', realized: true, origin: 'pipeline' }, worker] },
+      paneRefs,
+      stageRouters: new Map(),
+      rebaseGlobalRouterCursor: () => {},
+      globalRouterCursors: new Map<string, number>(),
+      globalRoutedMessages: new Set<string>(),
+      pipelineLog: () => {},
+      i18n: { global: { t: (key: string) => key } },
+      routerInject: async (paneId: string, text: string) => { if (paneId === 'mgr') reports.push(text); return true },
+      _globalScanRunning: false,
+    }
+    const scan = new Function(...Object.keys(deps), code)(...Object.values(deps)) as () => Promise<void>
+    await scan()
+    // A repaint writes the same block again further down.
+    paneRefs.w1.cleanBuffer += `\n${block}`
+    await scan()
+    expect(reports).toHaveLength(1)
+    // The same pane, a later stage, the same short words: a new message.
+    worker.stageId = 's2'
+    paneRefs.w1.cleanBuffer += `\n${block}`
+    await scan()
+    expect(reports).toHaveLength(2)
+    expect(reports[1]).toContain('(Stage s2)')
   })
 })
 
@@ -187,6 +232,18 @@ describe('STAGE-DONE in the Manager reply text ends the stage', () => {
     expect(t.onPipelineNext).toHaveBeenCalledTimes(1)
     expect(t.stageCompletions.has(0)).toBe(false)
     expect(t.injected.some(([, text]) => text === 'reminder')).toBe(false)
+  })
+
+  it('a late turn end from the previous stage does not end this one', async () => {
+    const t = await load()
+    t.router.managerReady = true
+    // One pane is Manager of both stages. The previous stage ended on its
+    // screen; that turn's turn_complete arrives after this stage's kickoff was
+    // sent, is held until the poll starts, and is replayed then.
+    const previousTurnEnd = new Date(t.router.managerKickoffAt - 5_000).toISOString()
+    await t.api.routeManagerTurnText('mgr', `${MANAGER_STAGE_DONE_SENTINEL}\nfinished`, previousTurnEnd, true)
+    expect(t.router.finished).toBe(false)
+    expect(t.onPipelineNext).not.toHaveBeenCalled()
   })
 
   it('a reply that only mentions it on a shared line does not end the stage', async () => {

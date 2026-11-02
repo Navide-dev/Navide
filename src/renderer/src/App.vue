@@ -18474,7 +18474,10 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     // ---STAGE-DONE--- at line start, so a TUI that echoes the paste back
     // verbatim would otherwise finish the stage on the first poll.
     const doneFrom = router.armedCursors.get(router.managerPaneId) ?? 0
-    if (!router.finished && findScreenSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, doneFrom) >= 0) {
+    // Line-anchored only, unlike READY: the echoed kickoff carries webhook data
+    // after the floor, and a `⏺---STAGE-DONE---` written there would end the
+    // stage. A TUI with no line breaks gets it from the reply text instead.
+    if (!router.finished && findSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, doneFrom) >= 0) {
       finishManagerStage(router, stage.id, stageIndex)
     }
   }
@@ -18597,22 +18600,22 @@ async function routeManagerTurnText(paneId: string, text: string, timestamp: str
   for (const d of parseDispatchBlocks(text, 0).items) {
     await routeManagerDispatch(router, stage.id, d)
   }
+  // Only its reply to this stage's kickoff counts: a role acknowledgement that
+  // started before the kickoff, or a late report of an older turn — such as the
+  // previous stage's, when one pane is Manager of both — does not (#539).
+  const turnEndAt = Number.isNaN(eventMs) ? Date.now() : eventMs
+  const replyToKickoff = router.managerKickoffAt > 0 && turnEndAt > router.managerKickoffAt
+    && (paneTurnStartedAt.get(paneId) ?? router.managerKickoffAt) >= router.managerKickoffAt
   // The screen scan alone missed it: a TUI that places rows with cursor moves
   // leaves no line for findSentinel to anchor on.
-  if (!router.finished && findSentinel(text, MANAGER_STAGE_DONE_SENTINEL, 0) >= 0) {
+  if (replyToKickoff && !router.finished && findSentinel(text, MANAGER_STAGE_DONE_SENTINEL, 0) >= 0) {
     finishManagerStage(router, stage.id, pipeline.stageIndex)
     return
   }
   // A Manager can end Phase-1 turns without READY on purpose (it sent a
   // message, started a background task), so a turn end is not READY. Remind it
   // once; managerReadyFallback hands over held messages if it then sits idle.
-  // Only its reply to the kickoff counts: a role acknowledgement that started
-  // before the kickoff, or a late report of an older turn, does not (#539).
-  const turnEndAt = Number.isNaN(eventMs) ? Date.now() : eventMs
-  if (
-    !router.managerReady && router.managerKickoffAt > 0 && turnEndAt > router.managerKickoffAt
-    && (paneTurnStartedAt.get(paneId) ?? router.managerKickoffAt) >= router.managerKickoffAt
-  ) {
+  if (!router.managerReady && replyToKickoff) {
     router.managerQuietSince = Date.now()
     if (!router.readyReminded) {
       router.readyReminded = true
@@ -18659,7 +18662,7 @@ const globalRouterCursors = new Map<string, number>()
 /** Same role as StageRouter.bufferAnchors — these cursors are absolute buffer
  *  indices too, so the 128KB cap invalidates them the same way. */
 const globalRouterAnchors = new Map<string, BufferObservation>()
-/** StageRouter.routedWorkerMessages for the global Manager (pane + kind +
+/** StageRouter.routedWorkerMessages for the global Manager (pane + stage + kind +
  *  content, whitespace dropped): a repaint re-emits a block already routed. */
 const globalRoutedMessages = new Set<string>()
 let _globalScanRunning = false
@@ -18729,7 +18732,7 @@ async function globalManagerRouterScan(): Promise<void> {
     if (newCursor > cursor) globalRouterCursors.set(wp.id, newCursor)
     const fromLabel = wp.slotLabel || wp.stageId
     const firstSeen = (kind: string, content: string): boolean => {
-      const key = `${wp.id}\u0000${kind}\u0000${content.replace(/\s+/g, '')}`
+      const key = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000${content.replace(/\s+/g, '')}`
       if (globalRoutedMessages.has(key)) return false
       globalRoutedMessages.add(key)
       return true

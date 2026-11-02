@@ -271,9 +271,9 @@ describe('the Manager router does not read its own kickoff echo as a result', ()
 
   it('scans STAGE-DONE from that floor instead of from 0', () => {
     const scan = body('async function managerRouterScan(', '\nfunction queueOrRouteWorkerMsg(')
-    expect(scan).not.toContain(`findScreenSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, 0)`)
+    expect(scan).not.toContain(`findSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, 0)`)
     expect(scan).toContain('const doneFrom = router.armedCursors.get(router.managerPaneId) ?? 0')
-    expect(scan).toContain('findScreenSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, doneFrom)')
+    expect(scan).toContain('findSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, doneFrom)')
   })
 
   it('scans MANAGER-READY from the floor, not from the advancing message cursor', () => {
