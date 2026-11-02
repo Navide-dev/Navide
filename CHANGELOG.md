@@ -20,6 +20,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Pipelines: a stage whose agent finished within the moment it took to confirm the kickoff could stay `running` for good when the stage's pane had just started. The first stage's fix now covers this path too.
 - Pipelines (0.2.37): after a window reload the card of a webhook run's pane went back to showing `--dangerously-skip-permissions` while the pane ran without it. This never shipped: webhooks are new in this version.
 - Pipelines (0.2.37): a webhook run that finished just before the next one started stayed recorded as running. This never shipped: webhooks are new in this version.
+- Windows: reloading a window you opened on a workspace from inside Navide now brings its panes back. They used to disappear while their CLIs kept running with no window attached, and those CLIs could go on running tools. As in any other window, the pane on screen reconnects at once and the others when you open them. Opening such a window for the first time works as before: it starts without the workspace's earlier panes.
 - Startup (0.2.37): the backend now keeps the free port it picks until it starts serving on it. If another program took the port in that gap, the backend exited at startup.
 
 - Channels (0.2.37): an old allowlist row with no bot recorded can now be removed in Settings → Channels; removing it answered "not found".

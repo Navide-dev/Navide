@@ -148,6 +148,7 @@ import { deriveGlobalManager, type GlobalManagerRef } from './lib/globalManager'
 import { registerStage, completeSlot, releaseSlot, type StageSlotTracker } from './lib/stageTracker'
 import { evaluateManagerStage, fullAutoStallAction, type ManagerStageVerdict } from './lib/managerStageWatchdog'
 import { closeDialogBodyKey, closeEndsTheRun, restoreBlockedByRun } from './lib/workspaceCloseRun'
+import { heldPaneKeys, isHeldRecord, readHeldPanes, writeHeldPanes } from './lib/windowHeldPanes'
 import { dockWindowLabelKey, historyEntryIsLive, workspaceHasPmPanel } from './lib/dockWindow'
 import { droppedPrefix, remapCursor, type BufferObservation } from './lib/bufferCursor'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -1139,7 +1140,9 @@ const WS_PATH_KEY = 'agentTeam.currentWorkspace'
 // seeds per-window sessionStorage, which would otherwise send it to Welcome).
 // Pane restore is suppressed only for duplicate=1 windows — ones cloned from a
 // live window whose CLI sessions are still running (restoring would
-// double-resume them). All other param-carrying boots (Finder "Open With",
+// double-resume them). A Reload of such a window keeps the URL, so it boots the
+// same way, and then restores only the panes the window itself held
+// (lib/windowHeldPanes). All other param-carrying boots (Finder "Open With",
 // Quick Action, CLI path args, crash-restore) come from dead sessions and MUST
 // restore — see onWorkspaceCheck.
 const _bootWorkspace = new URLSearchParams(window.location.search).get('workspace_path') ?? ''
@@ -1161,6 +1164,8 @@ const _bootIsRestore = new URLSearchParams(window.location.search).get('restore'
 // is the user's own doing (they closed the last pane) and must not eject them.
 let restoreEmptyCheckPending = _bootIsRestore
 let suppressPaneRestoreOnce = _bootWorkspace !== '' && _bootIsDuplicate
+// Read once, here: the tracker below rewrites the stored list as panes change.
+const heldPanesAtBoot = readHeldPanes()
 // Detached child window: shows only one run group of its workspace. When set,
 // this window renders just that group's tab/panes and never persists the shared
 // runGroups/activeTab/layout state to project.json (the main window owns those).
@@ -1994,6 +1999,16 @@ interface ActivePane {
 }
 
 const panes = ref<ActivePane[]>([])
+// A duplicate=1 window records what it holds for its next Reload. Started here
+// rather than when the flag is spent, because a folder with no project.json
+// never reaches that branch. While the flag is unspent the panes from before
+// this Reload stay listed, or a second Reload in that gap would find none.
+if (suppressPaneRestoreOnce) {
+  watch(
+    () => heldPaneKeys(panes.value),
+    (keys) => writeHeldPanes(suppressPaneRestoreOnce ? [...heldPanesAtBoot, ...keys] : keys),
+  )
+}
 const paneRefs = reactive<Record<string, InstanceType<typeof TerminalPane> | null>>({})
 // ACP panes (no PTY) live in lib/acpHost.ts, never in paneRefs: code that looks
 // a pane up there finds no ref for one and skips it.
@@ -12956,8 +12971,15 @@ async function onWorkspaceCheck(path: string, opts?: { force?: boolean }): Promi
     let coldRestoreBatch: ColdRestoreBatch | null = null
     if (suppressPaneRestoreOnce) {
       // First load of a duplicated window: open the same workspace as a clean
-      // view without re-resuming the source window's live agent sessions.
-      suppressPaneRestoreOnce = false
+      // view without re-resuming the source window's live agent sessions. Its
+      // list is empty then. After a Reload the list names what this window
+      // held, and only those panes come back.
+      if (heldPanesAtBoot.size > 0) {
+        coldRestoreBatch = await restoreWorkspacePanes(resp, path, undefined, () => seq !== workspaceCheckSeq, heldPanesAtBoot)
+      }
+      // A superseded check leaves the flag to the check that replaced it, which
+      // would otherwise run the ordinary restore of every record.
+      if (seq === workspaceCheckSeq) suppressPaneRestoreOnce = false
     } else {
       // isStale lets restore bail if a newer workspace-check superseded this one
       // before or during restore (the await can span a user pause).
@@ -13067,7 +13089,7 @@ watch(
  *  Full cold loads create placeholders; explicit activation realizes and
  *  resumes (or fresh-spawns) one record at a time. Detached/group reattachments
  *  remain eager so their live PTYs reconnect immediately. */
-async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: string, onlyGroupId?: string, isStale?: () => boolean): Promise<ColdRestoreBatch | null> {
+async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: string, onlyGroupId?: string, isStale?: () => boolean, onlyHeld?: ReadonlySet<string>): Promise<ColdRestoreBatch | null> {
   // Don't restore the workspace the run is in — its panes are already alive.
   //
   // Asked of pipelineRunWorkspace, NOT pipeline.workspacePath: the latter is
@@ -13158,6 +13180,9 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
   // open a second copy as a window pane. Records without a surface are window
   // panes, which is every record written before the field existed.
   toRestore = toRestore.filter((p) => !p.surface || p.surface === 'main')
+  // A duplicate=1 window after a Reload. Ahead of the dedupe, which could
+  // otherwise keep a record of the same conversation that is not this window's.
+  if (onlyHeld) toRestore = toRestore.filter((p) => isHeldRecord(p, onlyHeld))
   // Collapse duplicate records that resume the SAME conversation: spawning
   // several `--resume <same id>` concurrently makes the CLI fork/conflict and
   // leak processes (a source of the leftover-agent pileup).
