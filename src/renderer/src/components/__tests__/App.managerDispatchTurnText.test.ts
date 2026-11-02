@@ -17,7 +17,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { findSentinel } from '../../platform/terminal/lib/buffer'
-import { MANAGER_READY_SENTINEL } from '../../data/stages'
+import { MANAGER_READY_SENTINEL, MANAGER_STAGE_DONE_SENTINEL } from '../../data/stages'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -60,6 +60,7 @@ async function load() {
     stagesApi: { stages: { value: [{ id: 'storyboard' }, { id: 'illustration' }] } },
     findSentinel,
     MANAGER_READY_SENTINEL,
+    MANAGER_STAGE_DONE_SENTINEL,
     TURN_TEXT_REPLAY_TOLERANCE_MS: 60_000,
     pipelineLog: (line: string) => log.push(line),
     injectPane: vi.fn(async (paneId: string, text: string) => { injected.push([paneId, text]); return true }),

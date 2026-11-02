@@ -1,0 +1,199 @@
+// @vitest-environment happy-dom
+// 0.2.37 package 6, Linux VM: a Manager-mode stage stayed `running` for good.
+// The router never saw ---MANAGER-READY--- on the Manager's screen (it took the
+// reply text at the turn end), never saw ---STAGE-DONE--- at all, forwarded the
+// worker kickoff's protocol templates as an ASK and a REPORT, and sent the real
+// REPORT twice. It happened without any permission prompt too.
+//
+// Root cause, reproduced with the same CLI (fixture below): Claude Code 2.1.316
+// places every screen row with cursor moves and writes no `\n`, so the stripped
+// clean buffer is one long line. A line-anchored sentinel never matches there;
+// the TUI prints the submitted kickoff in full after the router's floor, so
+// its templates parse as blocks; and every repaint appends the same blocks
+// again. STAGE-DONE was read from the screen only, never from the reply text.
+//
+// App.vue cannot be mounted here, so the functions are lifted out, compiled
+// and run against stubs passed by name.
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
+import { transformWithEsbuild } from 'vite'
+import {
+  createRedrawGuard, dropTuiNoise, findScreenSentinel, findSentinel, stripAnsi,
+} from '../../platform/terminal/lib/buffer'
+import { MANAGER_READY_SENTINEL, MANAGER_STAGE_DONE_SENTINEL } from '../../data/stages'
+
+const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
+const screens = JSON.parse(readFileSync(
+  resolve(process.cwd(), 'src/renderer/src/components/__tests__/fixtures/claude-manager-mode-screen.json'), 'utf8',
+)) as { manager: string[]; worker: string[] }
+
+function functionSource(name: string): string {
+  const start = appSource.search(new RegExp(`(?:async )?function ${name}\\(`))
+  expect(start, `${name} should exist`).toBeGreaterThan(-1)
+  const end = appSource.indexOf('\n}\n', start)
+  return appSource.slice(start, end + 2)
+}
+
+/** useTerminal's appendClean, chunk by chunk: what the router reads. */
+function cleanBufferOf(chunks: string[]): string {
+  const guard = createRedrawGuard()
+  let buf = ''
+  for (const chunk of chunks) {
+    const cleaned = dropTuiNoise(stripAnsi(chunk))
+    if (!cleaned || guard.isReplay(cleaned)) continue
+    buf += cleaned
+    guard.accept(cleaned)
+  }
+  return buf
+}
+
+async function load() {
+  const names = [
+    'parseContentBlocks', 'parseDispatchBlocks', 'matchWorkerByLabel', 'queueOrRouteWorkerMsg',
+    'injectManagerPane', 'markManagerReady', 'routeManagerDispatch', 'finishManagerStage', 'routeManagerTurnText',
+  ]
+  const { code } = await transformWithEsbuild(
+    [
+      'const DISPATCH_RE = /---DISPATCH-START---([\\s\\S]*?)---DISPATCH-END---/g',
+      'const ASK_RE = /---ASK-START---([\\s\\S]*?)---ASK-END---/g',
+      'const REPORT_RE = /---REPORT-START---([\\s\\S]*?)---REPORT-END---/g',
+      ...names.map(functionSource),
+      'return { parseContentBlocks, queueOrRouteWorkerMsg, routeManagerTurnText, ASK_RE, REPORT_RE }',
+    ].join('\n'),
+    'AppManagerRouterMarkers.ts',
+    { loader: 'ts' },
+  )
+  const router = {
+    managerPaneId: 'mgr',
+    workerPaneIds: new Map([['wk', 'w1']]),
+    managerReady: false,
+    preReadyQueue: [] as Array<{ fromLabel: string; kind: string; content: string }>,
+    routedDispatches: new Set<string>(),
+    routedWorkerMessages: new Set<string>(),
+    finished: false,
+    armedAt: Date.parse('2026-11-02T13:24:40Z'),
+    managerKickoffAt: Date.parse('2026-11-02T13:24:36Z'),
+    readyReminded: false,
+    managerQuietSince: 0,
+  }
+  const injected: Array<[string, string]> = []
+  const log: string[] = []
+  const onPipelineNext = vi.fn(async () => {})
+  const stageCompletions = new Map([[0, {}]])
+  const deps: Record<string, unknown> = {
+    pipeline: { state: 'running', stageIndex: 0 },
+    stageRouters: new Map([[0, router]]),
+    stagesApi: { stages: { value: [{ id: 'm1' }] } },
+    stageCompletions,
+    onPipelineNext,
+    findSentinel,
+    MANAGER_READY_SENTINEL,
+    MANAGER_STAGE_DONE_SENTINEL,
+    MANAGER_READY_REMINDER: 'reminder',
+    TURN_TEXT_REPLAY_TOLERANCE_MS: 60_000,
+    paneTurnStartedAt: new Map(),
+    pipelineLog: (line: string) => log.push(line),
+    i18n: { global: { t: (key: string) => key } },
+    routerInject: async (paneId: string, text: string) => { injected.push([paneId, text]); return true },
+  }
+  const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as {
+    parseContentBlocks: (buf: string, from: number, re: RegExp) => { items: string[]; newCursor: number }
+    queueOrRouteWorkerMsg: (r: typeof router, stageId: string, msg: { fromLabel: string; kind: string; content: string }) => void
+    routeManagerTurnText: (paneId: string, text: string, timestamp: string) => Promise<void>
+    ASK_RE: RegExp
+    REPORT_RE: RegExp
+  }
+  return { api, router, injected, log, onPipelineNext, stageCompletions }
+}
+
+describe('Claude 2.1.316 screen: no newlines, so line anchors never match', () => {
+  it('the clean buffer of a real Manager screen is a single line', () => {
+    const buf = cleanBufferOf(screens.manager)
+    expect(buf).toContain(MANAGER_READY_SENTINEL)
+    expect(buf.includes('\n')).toBe(false)
+    // The Manager printed READY, and findSentinel reads past it.
+    expect(findSentinel(buf, MANAGER_READY_SENTINEL, 1)).toBe(-1)
+  })
+
+  it('the screen scan finds the READY the Manager printed', () => {
+    const buf = cleanBufferOf(screens.manager)
+    expect(findScreenSentinel(buf, MANAGER_READY_SENTINEL, 1)).toBeGreaterThan(-1)
+  })
+
+  it('the kickoff the TUI prints after submit does not read as READY or STAGE-DONE', () => {
+    const buf = cleanBufferOf(screens.manager)
+    const reply = buf.indexOf(`⏺${MANAGER_READY_SENTINEL}`)
+    expect(reply).toBeGreaterThan(-1)
+    // Everything before the reply is the echoed kickoff, which carries both
+    // sentinels (the protocol text) but no reply bullet.
+    const echo = buf.slice(0, reply)
+    expect(echo).toContain(MANAGER_STAGE_DONE_SENTINEL)
+    expect(findScreenSentinel(echo, MANAGER_READY_SENTINEL, 1)).toBe(-1)
+    expect(findScreenSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, 1)).toBe(-1)
+  })
+
+  it('the Manager router scan uses the screen form for READY and STAGE-DONE', () => {
+    const scan = functionSource('managerRouterScan')
+    expect(scan).toContain('findScreenSentinel(buf, MANAGER_READY_SENTINEL, cursor)')
+    expect(scan).toContain('findScreenSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, doneFrom)')
+  })
+})
+
+describe('worker screen: templates are not messages, and a repaint is not a second one', () => {
+  it('the protocol templates echoed with the kickoff are not parsed as ASK or REPORT', async () => {
+    const t = await load()
+    const buf = cleanBufferOf(screens.worker)
+    // The echo really is there, twice, wrapped two ways.
+    expect(buf.match(/---ASK-START---/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(t.api.parseContentBlocks(buf, 0, t.api.ASK_RE).items).toEqual([])
+    expect(t.api.parseContentBlocks(buf, 0, t.api.REPORT_RE).items).toEqual(['worker report Y24fe56da8069'])
+  })
+
+  it('the same REPORT seen again after a repaint is routed once', async () => {
+    const t = await load()
+    t.router.managerReady = true
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'REPORT', content: 'worker report Y24fe56da8069' })
+    // A repaint re-emits the row, padded differently.
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'REPORT', content: 'worker report  Y24fe56da8069 ' })
+    await Promise.resolve()
+    expect(t.injected.filter(([pane, text]) => pane === 'mgr' && text.includes('[→ REPORT FROM wk]'))).toHaveLength(1)
+  })
+
+  it('a held duplicate is not queued twice either', async () => {
+    const t = await load()
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'REPORT', content: 'worker report Y1' })
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'REPORT', content: 'worker report Y1' })
+    expect(t.router.preReadyQueue).toHaveLength(1)
+    // A different message, or the same text as an ASK, still goes through.
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'ASK', content: 'worker report Y1' })
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'REPORT', content: 'worker report Y2' })
+    expect(t.router.preReadyQueue).toHaveLength(3)
+  })
+
+  it('the global router drops repeats too', () => {
+    const scan = functionSource('globalManagerRouterScan')
+    expect(scan).toContain('globalRoutedMessages')
+  })
+})
+
+describe('STAGE-DONE in the Manager reply text ends the stage', () => {
+  it('finishes the stage once', async () => {
+    const t = await load()
+    t.router.managerReady = true
+    await t.api.routeManagerTurnText('mgr', `${MANAGER_STAGE_DONE_SENTINEL}\nfinished`, '2026-11-02T13:26:00Z')
+    await t.api.routeManagerTurnText('mgr', `${MANAGER_STAGE_DONE_SENTINEL}\nfinished`, '2026-11-02T13:26:05Z')
+    expect(t.router.finished).toBe(true)
+    expect(t.onPipelineNext).toHaveBeenCalledTimes(1)
+    expect(t.stageCompletions.has(0)).toBe(false)
+    expect(t.injected.some(([, text]) => text === 'reminder')).toBe(false)
+  })
+
+  it('a reply that only mentions it on a shared line does not end the stage', async () => {
+    const t = await load()
+    t.router.managerReady = true
+    await t.api.routeManagerTurnText('mgr', `I will print ${MANAGER_STAGE_DONE_SENTINEL} when the worker is done.`, '2026-11-02T13:26:00Z')
+    expect(t.router.finished).toBe(false)
+    expect(t.onPipelineNext).not.toHaveBeenCalled()
+  })
+})
