@@ -250,7 +250,7 @@ describe('the Manager router does not read its own kickoff echo as a result', ()
       expect(act).not.toContain('if (managerSlot && !ok) {')
       // Two exits fail the run: the failed kickoff's, and the one for a role
       // that never landed, which sends no kickoff (#448). Both are held to it.
-      const failed = act.indexOf('await failRunOnKickoff(index, slot.label, failure, held)')
+      const failed = act.indexOf('await failRunOnKickoff(index, slot.label, failure, held, false, parked)')
       expect(failed, 'the failed-kickoff exit').toBeGreaterThan(-1)
       expect(act.lastIndexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'", failed)).toBeGreaterThan(inject)
       expect(act.indexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'", failed)).toBe(-1)

@@ -6897,6 +6897,30 @@ function paneScreenBlocked(paneId: string): boolean {
 }
 
 /**
+ * The pane is parked on a CLI prompt that only its user may answer: a
+ * permission box or question (the awaiting badge, or the vendor's box read off
+ * the screen right now) or a keystroke-swallowing startup dialog. A pipeline
+ * injection into such a pane would press Enter on the prompt — a resumed run
+ * once approved a webhook's shell command that way — so it types nothing.
+ */
+function paneParkedOnPrompt(paneId: string): boolean {
+  const ref = paneRefs[paneId]
+  if (!ref) return false
+  if ((ref.displayStatus as string | undefined) === 'awaiting') return true
+  if (paneScreenBlocked(paneId)) return true
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  if (!agentKey || !ref.readScreenTail) return false
+  try {
+    return matchAwaitingInput(agentKey, ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string)
+  } catch {
+    return false
+  }
+}
+
+const PARKED_ON_PROMPT_REASON =
+  'the pane is waiting on a CLI prompt (permission or menu) — answer it in the pane, then resume'
+
+/**
  * Whether this window has already told the backend that Codex gates the hook.
  *
  * Once is enough: the backend stops injecting for every later spawn, and the
@@ -7181,6 +7205,25 @@ function scheduleInjection(pane: ActivePane): void {
       }
       return true
     }
+    // A reattached or resumed pane can come back on a CLI prompt. The role and
+    // kickoff are not typed into it (their Enter would answer it); the pane is
+    // left ready so its user can, and a pipeline slot waiting on this kickoff
+    // stops the run for a resume.
+    if (paneParkedOnPrompt(pane.id)) {
+      pipelineLog(`${tag} ⏸ ${PARKED_ON_PROMPT_REASON} — not typing into it`)
+      pane.injectionStatus = 'failed'
+      setPrepStatus(pane, 'ready')
+      syncViews()
+      const parkedStageIndex = pane.origin === 'pipeline'
+        ? stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
+        : -1
+      if (pane.kickoffStatus === 'pending' && parkedStageIndex >= 0) {
+        pane.kickoffStatus = 'failed'
+        syncViews()
+        await failRunOnKickoff(parkedStageIndex, pane.slotLabel ?? '', PARKED_ON_PROMPT_REASON, false, false, true)
+      }
+      return
+    }
     if (pane.roleKey && !(await injectRole())) return
 
     // 4. Inject kickoff prompt (pipeline panes only) — but only AFTER the
@@ -7224,27 +7267,36 @@ function scheduleInjection(pane: ActivePane): void {
           pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
         },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+        parkedOnPrompt: () => paneParkedOnPrompt(pane.id),
       })
       if (kickoffResult.cancelled) return
       const ok2 = kickoffResult.sent
+      const parked = !!kickoffResult.parked
       pane.kickoffStatus = ok2 ? 'sent' : 'failed'
-      setPrepStatus(pane, ok2 ? 'ready' : 'failed')
+      // A parked pane stays ready: its user has to be able to answer the prompt.
+      setPrepStatus(pane, ok2 || parked ? 'ready' : 'failed')
       syncViews()
       const stageIndexForPane = pane.origin === 'pipeline'
         ? stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
         : -1
       if (!ok2) {
-        pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+        pipelineLog(parked
+          ? `${tag} ⏸ ${PARKED_ON_PROMPT_REASON} — not typing into it`
+          : `${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
         // A pipeline slot without its task cannot finish its stage (#448).
         if (stageIndexForPane >= 0) {
           if (held) heldKickoffPanes.add(pane.id)
           await failRunOnKickoff(
             stageIndexForPane,
             pane.slotLabel ?? '',
-            held
+            parked
+              ? PARKED_ON_PROMPT_REASON
+              : held
               ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
               : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`,
             held,
+            false,
+            parked,
           )
           return
         }
@@ -14830,6 +14882,36 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
       return
     }
+    // A pane this run reuses can sit on a CLI prompt — a resume after a reload
+    // finds the previous turn's permission box still up. Typing a role or a
+    // kickoff into it presses Enter on that box, approving whatever it asks,
+    // and the old turn's end then reads as this kickoff's. Nothing is typed:
+    // the run stops on this stage, the same exit a failed role takes, for the
+    // user to answer the prompt and resume.
+    if (paneParkedOnPrompt(pane.id)) {
+      pipelineLog(`${tag} ⏸ ${PARKED_ON_PROMPT_REASON} — not typing into it`)
+      pane.kickoffStatus = 'failed'
+      syncViews()
+      pipelineDag.slotStarted(index, slot.label, pane.id)
+      await sendQuiet('pipeline.slot_kickoff', {
+        workspace_path: pipeline.workspacePath,
+        stage_index: index,
+        slot_label: slot.label,
+        kickoff_status: 'failed',
+      })
+      if (pipeline.state === 'running' && pipeline.stageIndex === index) {
+        const stageResp = await sendQuiet<ProjectPayload>('pipeline.stage_spawn', {
+          workspace_path: pipeline.workspacePath,
+          stage_index: index,
+          pane_id: pane.id,
+          agent: slot.agentKey,
+          role: slot.roleKey,
+        })
+        applyProjectPaths(stageResp ?? undefined)
+      }
+      await failRunOnKickoff(index, slot.label, PARKED_ON_PROMPT_REASON, false, false, true)
+      return
+    }
 
     // If role was deferred (skipRoleInjection), inject it now before kickoff.
     // A role that failed at pre-spawn gets the same one more try. A slot whose
@@ -14927,13 +15009,18 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       // A resume after a held kickoff: submit the copy still in the box.
       heldCopy: heldKickoffCopy(pane.id, kickoff),
+      parkedOnPrompt: () => paneParkedOnPrompt(pane.id),
     })
     if (kickoffResult.cancelled) {
       releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
       return
     }
     const ok = kickoffResult.sent
-    const failure = held
+    const parked = !!kickoffResult.parked
+    if (parked) pipelineLog(`${tag} ⏸ ${PARKED_ON_PROMPT_REASON} — not typing into it`)
+    const failure = parked
+      ? PARKED_ON_PROMPT_REASON
+      : held
       ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
       : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`
     // Another slot failed the run (or the user stopped it) while this kickoff
@@ -14942,7 +15029,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     if (runMovedOn()) {
       if (!ok) {
         if (held) heldKickoffPanes.add(pane.id)
-        void failRunOnKickoff(index, slot.label, failure, held)
+        void failRunOnKickoff(index, slot.label, failure, held, false, parked)
       }
       return
     }
@@ -14980,7 +15067,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       kickoff_status: ok ? 'sent' : 'failed',
     })
     if (ok) pipelineLog(`${tag} ✓ kickoff sent`)
-    else pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+    else if (!parked) pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
 
     // For question-interactive stages (P01): capture scanFrom AFTER kickoff is
     // confirmed so the watcher only scans content produced after the kickoff.
@@ -14998,7 +15085,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     if (runMovedOn()) {
       if (!ok) {
         if (held) heldKickoffPanes.add(pane.id)
-        void failRunOnKickoff(index, slot.label, failure, held)
+        void failRunOnKickoff(index, slot.label, failure, held, false, parked)
       }
       return
     }
@@ -15015,7 +15102,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       // A slot without its task cannot finish the stage, and a watcher armed
       // over it kept the run `running` with nothing to show for it (#448).
       if (held) heldKickoffPanes.add(pane.id)
-      await failRunOnKickoff(index, slot.label, failure, held)
+      await failRunOnKickoff(index, slot.label, failure, held, false, parked)
       return
     }
     if (runMovedOn()) return
@@ -15542,12 +15629,14 @@ function scheduleSlotRetry(stageIndex: number, slotLabel: string, retry: { attem
  *  never got its task (#448). Like an abort, the panes stay alive for a
  *  resume. The first failing slot ends the run; later ones only fail their
  *  own node. */
-async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false, reported = false): Promise<void> {
+async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false, reported = false, needsUser = false): Promise<void> {
   // A kickoff that finishes late, after the user stopped this run and another
   // one moved to a different stage, must not fail that one.
   if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
-  // A slot with a retry policy tries again first.
-  if (pipeline.state === 'running') {
+  // A slot with a retry policy tries again first. A slot parked on a prompt
+  // only its user can answer does not: neither a retry nor an error edge
+  // answers it, so the run stops there for a resume.
+  if (pipeline.state === 'running' && !needsUser) {
     const retry = pipelineDag.retryAfterFailure(stageIndex, slotLabel, reason)
     if (retry) {
       scheduleSlotRetry(stageIndex, slotLabel, retry)
@@ -15556,7 +15645,7 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   }
   // A slot with an error edge fails down that edge: its node is failed, the
   // slot counts as finished and the run goes on.
-  if (pipeline.state === 'running' && pipelineDag.routeFailure(stageIndex, slotLabel, reason)) {
+  if (pipeline.state === 'running' && !needsUser && pipelineDag.routeFailure(stageIndex, slotLabel, reason)) {
     const stageId = stagesApi.stages.value[stageIndex]?.id
     const pane = stageId === undefined ? undefined : runSlotPane(stageId, slotLabel)
     onStageSlotCompleted(stageIndex, pane?.id ?? `failed:${slotLabel}`, 'error-edge')

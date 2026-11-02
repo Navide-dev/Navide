@@ -188,6 +188,8 @@ async function loadActivate(over: {
   injectionStatus?: string
   /** The role registry's lookup; default: no role found. */
   findRole?: (key: string) => unknown
+  /** Whether a pane sits on a CLI prompt; default: none does. */
+  paneParkedOnPrompt?: (paneId: string) => boolean
 } = {}) {
   const { code } = await transformWithEsbuild(
     `${RUN_SLOT_STUB}\n${prewarmSource}\n${activateSource}\nreturn { activateStage, awaitStagePrewarm, prewarmNextStage }`,
@@ -205,7 +207,7 @@ async function loadActivate(over: {
   /** Backend sends, kickoff failures and watcher arms, in the order they happened. */
   const events: string[] = []
   const heldKickoffPanes = new Set<string>()
-  const failRunOnKickoff = vi.fn(async (index: number, label: string, reason: string, _held?: boolean) => {
+  const failRunOnKickoff = vi.fn(async (index: number, label: string, reason: string, _held?: boolean, _reported?: boolean, _needsUser?: boolean) => {
     events.push(`fail ${index}/${label}: ${reason}`)
     // What tearDownPipelineOrchestration does first, synchronously.
     pipeline.state = 'aborted'
@@ -268,6 +270,8 @@ async function loadActivate(over: {
     'failRunOnKickoff',
     'heldKickoffCopy',
     'heldKickoffPanes',
+    'paneParkedOnPrompt',
+    'PARKED_ON_PROMPT_REASON',
     code,
   )
   const api = factory(
@@ -313,6 +317,8 @@ async function loadActivate(over: {
     failRunOnKickoff,
     vi.fn(over.heldKickoffCopy ?? (() => undefined)),
     heldKickoffPanes,
+    over.paneParkedOnPrompt ?? (() => false),
+    'the pane is waiting on a CLI prompt',
   )
   return {
     api,
@@ -437,6 +443,44 @@ describe('a stage whose kickoff fails', () => {
     pipeline.stageIndex = 0
     await api.activateStage(0)
     expect(events.filter((e) => e.startsWith('send pipeline.stage_spawn'))).toEqual(['send pipeline.stage_spawn 0 S1-0'])
+    expect(startStageWatcher).not.toHaveBeenCalled()
+  })
+
+  it('a resumed slot parked on a permission box gets nothing typed into it, and the run stops there', async () => {
+    // 0.2.37 VM round: the kickoff's Enter answered "Yes" on the box, and the
+    // old turn's end then completed the stage. Nothing reaches the parked
+    // pane — not the kickoff, not a held copy's Enter — and no watcher arms.
+    const inject = vi.fn(async (_paneId: string, ..._rest: unknown[]) => true)
+    const submit = vi.fn(async () => true)
+    const { api, pipeline, events, failRunOnKickoff, startStageWatcher } = await loadActivate({
+      injectPane: inject,
+      heldKickoffCopy: (paneId) => (paneId === 'S1-0' ? { holds: () => true, submit } : undefined),
+      paneParkedOnPrompt: (paneId) => paneId === 'S1-0',
+    })
+    pipeline.stageIndex = 0
+    await api.activateStage(0)
+    expect(inject.mock.calls.map((c) => c[0])).not.toContain('S1-0')
+    expect(submit).not.toHaveBeenCalled()
+    expect(failRunOnKickoff).toHaveBeenCalledWith(0, 'slot1', 'the pane is waiting on a CLI prompt', false, false, true)
+    expect(events).toContain('send pipeline.stage_spawn 0 S1-0')
+    expect(startStageWatcher.mock.calls.map((c) => c[1])).not.toContain('S1-0')
+  })
+
+  it('a slot whose pane comes up on a prompt between attempts stops without typing again', async () => {
+    let parked = false
+    const inject = vi.fn(async (_paneId: string, _t: string, _g: string, _p: boolean, _x: unknown, evidence?: { echo?: unknown }) => {
+      parked = true
+      if (evidence) evidence.echo = null
+      return false
+    })
+    const { api, pipeline, failRunOnKickoff, startStageWatcher } = await loadActivate({
+      injectPane: inject,
+      paneParkedOnPrompt: () => parked,
+    })
+    pipeline.stageIndex = 0
+    await api.activateStage(0)
+    expect(failRunOnKickoff.mock.calls[0][2]).toBe('the pane is waiting on a CLI prompt')
+    expect(failRunOnKickoff.mock.calls[0][5]).toBe(true)
     expect(startStageWatcher).not.toHaveBeenCalled()
   })
 
