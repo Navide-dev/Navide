@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
+from pathlib import Path
 
 import pytest
 
@@ -26,18 +29,66 @@ from tests.test_main_parent_watch import _isolated_backend_env
 #: The bound the backend gives in-flight requests (__main__'s uvicorn config),
 #: plus room for the lifespan teardown that runs after it.
 _EXIT_DEADLINE_S = 3.0 + 7.0
+_LISTEN_DEADLINE_S = 40.0
 
 
 def _read_listen_port(proc: subprocess.Popen) -> int:
     assert proc.stdout is not None
-    deadline = time.monotonic() + 40
-    while time.monotonic() < deadline:
-        line = proc.stdout.readline()
+    stdout = proc.stdout
+    lines: queue.SimpleQueue[str] = queue.SimpleQueue()
+
+    def pump() -> None:
+        # Stops at the listen line: the caller may go on reading stdout. On a
+        # backend that never gets there it ends when the test kills the process.
+        while True:
+            line = stdout.readline()
+            lines.put(line)
+            if not line or line.startswith("AGENT_TEAM_BACKEND_LISTEN "):
+                return
+
+    # readline blocks, so a deadline read between lines cannot fire on a backend
+    # that stops printing: on a Windows gate that is the whole job's timeout.
+    threading.Thread(target=pump, daemon=True).start()
+    seen: list[str] = []
+    deadline = time.monotonic() + _LISTEN_DEADLINE_S
+    while True:
+        try:
+            line = lines.get(timeout=max(0.0, deadline - time.monotonic()))
+        except queue.Empty:
+            raise AssertionError(_never_listened(seen)) from None
         if not line:
             raise AssertionError(f"the backend exited before listening (code {proc.poll()})")
         if line.startswith("AGENT_TEAM_BACKEND_LISTEN "):
             return int(line.rsplit("port=", 1)[1])
-    raise AssertionError("the backend never printed its listen line")
+        seen.append(line.strip())
+
+
+def _never_listened(seen: list[str]) -> str:
+    """Where startup stopped: the app log says, once the process got that far."""
+    log_lines = [line for line in seen if line.startswith("AGENT_TEAM_BACKEND_LOG path=")]
+    if not log_lines:
+        return f"the backend never printed its listen line; stdout so far: {seen}"
+    log_path = Path(log_lines[-1].split("path=", 1)[1])
+    tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-15:]
+    return "the backend never printed its listen line; its log ends:\n" + "\n".join(tail)
+
+
+def test_a_process_that_prints_nothing_fails_the_wait_instead_of_hanging_it(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(sys.modules[__name__], "_LISTEN_DEADLINE_S", 0.2)
+    log = tmp_path / "backend.log"
+    log.write_text("starting\nstopped here\n", encoding="utf-8")
+    silent = subprocess.Popen(
+        [sys.executable, "-c", "import sys, time; print('AGENT_TEAM_BACKEND_LOG path=' + sys.argv[1], flush=True); time.sleep(60)", str(log)],
+        stdout=subprocess.PIPE, text=True,
+    )
+    try:
+        with pytest.raises(AssertionError, match="stopped here"):
+            _read_listen_port(silent)
+    finally:
+        silent.kill()
+        silent.wait(timeout=10)
+        assert silent.stdout is not None
+        silent.stdout.close()
 
 
 def _wait_healthy(port: int) -> None:
