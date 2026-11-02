@@ -788,6 +788,14 @@ class TestWatchdog:
         await env.service.tick()
         assert run_states(env) == ["aborted"]
 
+    @pytest.mark.parametrize("state", ["running", "idle", "suspended", None])
+    async def test_an_inactive_run_without_an_end_state_closes_as_finished(self, watched, state) -> None:
+        # A row closed as 'running' would be picked up again as an open run.
+        env = watched.env
+        env.window.status = {"active": False, "state": state}
+        await env.service.tick()
+        assert run_states(env) == ["finished"] and env.store.open_runs() == []
+
     async def test_an_interrupted_run_a_new_run_replaces_stays_interrupted(self, watched) -> None:
         env = watched.env
         env.window.status = {"active": False, "state": "interrupted"}

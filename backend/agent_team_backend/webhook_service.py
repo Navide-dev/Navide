@@ -657,7 +657,9 @@ class WebhookService:
             return
         self._interrupted.discard(run["id"])
         if not status.get("active"):
-            self._ended(workspace, str(state or "finished"))
+            # Only a stored end state names the outcome; anything else (a row
+            # closed as 'running' would be read back as open) is "finished".
+            self._ended(workspace, state if state in ("completed", "aborted") else "finished")
             return
         now = self._clock()
         if now - run["started_at"] >= RUN_CAP_S:
