@@ -402,6 +402,14 @@ class WebhookStore:
                 (state, int(time.time()), run_id),
             )
 
+    def reopen_run(self, run_id: str) -> None:
+        """A closed run Resume carries on: open again, and never unattended."""
+        with self.db.transaction() as cur:
+            cur.execute(
+                "UPDATE webhook_runs SET state = 'running', ended_at = NULL, unattended = 0 WHERE id = ?",
+                (run_id,),
+            )
+
     def end_unattended(self, run_id: str) -> None:
         """For good: an interrupted run is never unattended again."""
         with self.db.transaction() as cur:

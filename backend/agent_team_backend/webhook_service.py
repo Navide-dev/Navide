@@ -159,6 +159,20 @@ def bypass_dropped_from(requested: Any, launched: Any) -> str:
     return _line(launched)
 
 
+def end_state_of(project: Any) -> str:
+    """What a run's row records when the run's record is about to be
+    overwritten (a new run, a reset): what the run had come to. One still going
+    is being stopped."""
+    if project is None:
+        return "finished"
+    if pipeline_liveness.is_interrupted(project):
+        return "interrupted"
+    state = getattr(project, "state", "")
+    if state == "running":
+        return "aborted"
+    return state if state in ("completed", "aborted") else "finished"
+
+
 def _workspace_key(path: str) -> str:
     return os.path.normcase(path.rstrip("/\\"))
 
@@ -302,6 +316,9 @@ class WebhookService:
         self._waiting_since: dict[str, float] = {}
         #: Runs seen interrupted (a Reload or crash), which never run unattended again.
         self._interrupted: set[str] = set()
+        #: Per workspace, a run the watchdog closed as aborted that Resume may
+        #: still carry on: a failed kickoff is stored aborted too.
+        self._closed: dict[str, dict[str, Any]] = {}
         self._watchdog: asyncio.Task[None] | None = None
         self._clock = time.time
 
@@ -452,24 +469,47 @@ class WebhookService:
 
     # ── the run's panes ──────────────────────────────────────────────────
 
-    def run_started(self, project: Any, *, child: bool) -> None:
+    def run_started(self, project: Any, *, child: bool, ended: str = "finished") -> None:
         """pipeline.start in the window, on the main loop. Adopts the arming of
         a run this service asked for. A run nobody armed is someone else's and
-        ends the policy, unless it is a sub-pipeline of the run in progress."""
+        ends the policy, unless it is a sub-pipeline of the run in progress.
+        `ended` is end_state_of the record this start overwrote."""
         workspace = project.workspace_path
+        if not child:
+            self._closed.pop(workspace, None)
         trigger = self._armed.get(workspace)
         if trigger is not None:
             # The watchdog only looks every WATCH_EVERY_S, so the last run can
             # still be open here, and overwriting it would leave it open for good.
-            last = self._active.get(workspace)
-            self.finish_run(workspace, "interrupted" if last and last["id"] in self._interrupted else "finished")
+            self.finish_run(workspace, ended)
             self._active[workspace] = self.store.open_run(
                 trigger_id=trigger["id"], workspace=workspace, project_id=project.id,
                 pipeline_id=getattr(project, "pipeline_id", ""),
                 unattended=bool(trigger.get("unattended")) and guard_fail_closed.unattended_supported(),
             )
         elif not child and workspace in self._active:
-            self.finish_run(workspace, "replaced")
+            self.finish_run(workspace, ended if ended in ("completed", "aborted", "interrupted") else "replaced")
+
+    def run_reset(self, workspace: str, ended: str) -> None:
+        """pipeline.reset returned the workspace's record to idle: the open row
+        ends with what the run had come to (end_state_of, read before)."""
+        self._closed.pop(workspace, None)
+        if workspace in self._active:
+            self._ended(workspace, ended)
+
+    def run_resumed(self, workspace: str) -> None:
+        """pipeline.resume carries on the run the watchdog closed as aborted
+        (a failed kickoff is stored so): its row opens again, to end with the
+        run's real outcome. Before any pane of it starts, and never unattended."""
+        run = self._closed.pop(workspace, None)
+        if run is None or workspace in self._active:
+            return
+        try:
+            self.store.reopen_run(run["id"])
+        except sqlite3.Error:
+            log.exception("webhook: could not reopen a resumed run")
+            return
+        self._active[workspace] = {**run, "state": "running", "unattended": 0}
 
     def finish_run(self, workspace: str, state: str) -> None:
         run = self._active.pop(workspace, None)
@@ -666,6 +706,8 @@ class WebhookService:
             # Only a stored end state names the outcome; anything else (a row
             # closed as 'running' would be read back as open) is "finished".
             self._ended(workspace, state if state in ("completed", "aborted") else "finished")
+            if state == "aborted":
+                self._closed[workspace] = run
             return
         now = self._clock()
         if now - run["started_at"] >= RUN_CAP_S:

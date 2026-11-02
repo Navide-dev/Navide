@@ -193,8 +193,11 @@ class TestBinding:
         assert env.service.binding_problem(env.trigger) == "vendor-refused"
 
 
-def run_started(env, project_id: str = "run1", child: bool = False) -> None:
-    env.service.run_started(SimpleNamespace(workspace_path=WS, id=project_id, log_file_name="runs/x/pipeline.log", pipeline_id=PIPE), child=child)
+def run_started(env, project_id: str = "run1", child: bool = False, ended: str = "finished") -> None:
+    env.service.run_started(
+        SimpleNamespace(workspace_path=WS, id=project_id, log_file_name="runs/x/pipeline.log", pipeline_id=PIPE),
+        child=child, ended=ended,
+    )
 
 
 async def started_run(env) -> None:
@@ -859,7 +862,7 @@ class TestWatchdog:
         env.window.hold = asyncio.Event()
         assert await accept(env) == (202, 0, "accepted")
         await asyncio.sleep(0)
-        run_started(env)
+        run_started(env, ended="interrupted")
         env.window.hold.set()
         await settle(env)
         assert run_states(env) == ["interrupted", "running"]
@@ -893,6 +896,92 @@ class TestWatchdog:
         while len(ticks) < 3:
             await asyncio.sleep(0)
         await env.service.stop_watchdog()
+
+
+async def next_webhook_run(env, ended: str) -> None:
+    """The next webhook's run starts before the watchdog looked again."""
+    env.window.hold = asyncio.Event()
+    assert await accept(env) == (202, 0, "accepted")
+    await asyncio.sleep(0)
+    run_started(env, "run2", ended=ended)
+    env.window.hold.set()
+    await settle(env)
+
+
+class TestRunEndStates:
+    """A run's row ends with what the pipeline really came to."""
+
+    @pytest.fixture(autouse=True)
+    def posix(self, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+
+    async def test_an_interrupted_run_aborted_before_the_next_run_records_aborted(self, watched) -> None:
+        # Reload, then MCP pipeline_abort, then the next webhook within a tick.
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        await next_webhook_run(env, ended="aborted")
+        assert run_states(env) == ["aborted", "running"]
+
+    async def test_a_run_that_completed_before_the_next_run_records_completed(self, watched) -> None:
+        await next_webhook_run(watched.env, ended="completed")
+        assert run_states(watched.env) == ["completed", "running"]
+
+    async def test_a_failed_run_resumed_to_the_end_records_completed(self, watched) -> None:
+        # A kickoff parked on a prompt fails the run (stored aborted); the
+        # person answers and resumes it.
+        env = watched.env
+        env.window.status = {"active": False, "state": "aborted"}
+        await env.service.tick()
+        assert run_states(env) == ["aborted"]
+        env.service.run_resumed(WS)
+        assert run_states(env) == ["running"] and env.store.open_runs()[0]["unattended"] == 0
+        env.window.status = {"active": True, "state": "running", "gate": {}}
+        await env.service.tick()
+        env.window.status = {"active": False, "state": "completed"}
+        await env.service.tick()
+        assert run_states(env) == ["completed"] and env.service._active == {}
+
+    async def test_a_resumed_failed_run_never_runs_unattended(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.store.set_unattended(env.trigger["id"], True)
+        env.trigger = next(t for t in env.store.list() if t["id"] == env.trigger["id"])
+        await started_run(env)
+        assert CLAUDE_BYPASS in launch(env, "claude", pane="first")
+        env.window.status = {"active": False, "state": "aborted"}
+        await env.service.tick()
+        env.service.run_resumed(WS)
+        assert CLAUDE_BYPASS not in launch(env, "claude", pane="next-stage")
+        assert CLAUDE_BYPASS not in launch(env, "claude", pane="first")
+        assert CLAUDE_BYPASS not in reopen(restarted(env), "claude", pane="first", origin="pipeline")
+
+    async def test_resume_reopens_nothing_after_another_run_started(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "aborted"}
+        await env.service.tick()
+        run_started(env, "by-hand")  # nobody armed it
+        env.service.run_resumed(WS)
+        assert run_states(env) == ["aborted"] and env.service._active == {}
+
+    async def test_a_reset_ends_the_row_with_what_the_run_came_to(self, watched) -> None:
+        # Restart, Resume of the interrupted run, then a reset while it runs.
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        service = restarted(env)
+        env.window.status = {"active": True, "state": "running", "gate": {}}
+        await service.tick()
+        service.run_reset(WS, "aborted")
+        assert run_states(env) == ["aborted"] and service._active == {}
+
+    def test_the_end_state_of_a_record(self, monkeypatch) -> None:
+        interrupted = SimpleNamespace(state="running")
+        monkeypatch.setattr(svc.pipeline_liveness, "is_interrupted", lambda p: p is interrupted)
+        assert svc.end_state_of(None) == "finished"
+        assert svc.end_state_of(interrupted) == "interrupted"
+        for state, ended in (("running", "aborted"), ("completed", "completed"), ("aborted", "aborted"),
+                             ("idle", "finished"), ("suspended", "finished")):
+            assert svc.end_state_of(SimpleNamespace(state=state)) == ended
 
 
 def test_the_wait_has_bounds(env) -> None:

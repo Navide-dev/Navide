@@ -289,6 +289,7 @@ async def test_resuming_a_run_that_was_not_interrupted_changes_nothing(wired, ws
     calls: list[str] = []
     monkeypatch.setattr(webhook_service, "_service", SimpleNamespace(
         note_interrupted=calls.append, store=SimpleNamespace(is_bound=lambda _p: False), run_started=lambda *a, **k: None,
+        run_resumed=lambda _ws: None,
     ))
     window = _Session(held=(ws,))
     wired.sessions.append(window)
@@ -296,3 +297,50 @@ async def test_resuming_a_run_that_was_not_interrupted_changes_nothing(wired, ws
     await ws_handlers.pipeline_abort(window, "2", "pipeline.abort", {"workspace_path": ws})
     await ws_handlers.pipeline_resume(window, "3", "pipeline.resume", {"workspace_path": ws})
     assert window.sent[-1]["ok"] is True and calls == []
+
+
+def _webhook_spy(monkeypatch) -> SimpleNamespace:
+    from agent_team_backend import webhook_service
+
+    spy = SimpleNamespace(calls=[], store=SimpleNamespace(is_bound=lambda _p: False))
+    spy.run_started = lambda project, *, child, ended: spy.calls.append(("started", ended))
+    spy.run_resumed = lambda ws: spy.calls.append(("resumed", ws))
+    spy.note_interrupted = lambda ws: spy.calls.append(("interrupted", ws))
+    spy.run_reset = lambda ws, ended: spy.calls.append(("reset", ended))
+    monkeypatch.setattr(webhook_service, "_service", spy)
+    return spy
+
+
+@pytest.mark.parametrize("end", ["completed", "aborted"])
+async def test_a_new_run_tells_the_webhook_row_how_the_last_one_ended(wired, ws, monkeypatch, end) -> None:
+    spy = _webhook_spy(monkeypatch)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    if end == "completed":
+        project = wired.store.peek(ws)
+        project.state = "completed"
+        wired.store.save(project)
+    else:
+        await ws_handlers.pipeline_abort(window, "2", "pipeline.abort", {"workspace_path": ws})
+    await _start_run(wired, ws, window)
+    assert spy.calls[-1] == ("started", end)
+
+
+async def test_resume_reopens_the_webhook_row_before_any_pane(wired, ws, monkeypatch) -> None:
+    spy = _webhook_spy(monkeypatch)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    await ws_handlers.pipeline_abort(window, "2", "pipeline.abort", {"workspace_path": ws, "reason": "failed"})
+    await ws_handlers.pipeline_resume(window, "3", "pipeline.resume", {"workspace_path": ws})
+    assert window.sent[-1]["ok"] is True and spy.calls[-1] == ("resumed", ws)
+
+
+async def test_a_reset_ends_a_running_webhook_row_as_aborted(wired, ws, monkeypatch) -> None:
+    spy = _webhook_spy(monkeypatch)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    await ws_handlers.pipeline_reset(window, "2", "pipeline.reset", {"workspace_path": ws})
+    assert spy.calls[-1] == ("reset", "aborted")
