@@ -11300,6 +11300,8 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     before = peek(payload["workspace_path"]) if peek else None
     stack = getattr(before, "run_stack", None) if before is not None else None
     frame_taint = str(stack[-1].get("taint") or "") if before is not None and before.state == "suspended" and stack else ""
+    # Judged before the resume claims the run, which makes it live again.
+    was_interrupted = pipeline_liveness.is_interrupted(before)
     try:
         project, resume_index = app.project_store.resume_pipeline(payload["workspace_path"])
     except NoRunToResume as err:
@@ -11313,6 +11315,9 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     from .guard.taint import pipeline_run_resumed, restore_pipeline_run_taint
 
     restore_pipeline_run_taint(payload["workspace_path"], frame_taint)
+    if was_interrupted and (webhooks := webhook_service.current()) is not None:
+        # Before any pane of the resumed run starts: none of them may run unattended.
+        webhooks.note_interrupted(payload["workspace_path"])
     pipeline_run_resumed(payload["workspace_path"], _run_taint_detail(getattr(project, "pipeline_id", "")))
     pipeline_liveness.claim_run(session, project.workspace_path)
     _mirror_pipeline_state(project)

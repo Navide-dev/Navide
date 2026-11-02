@@ -251,3 +251,48 @@ async def test_aborting_only_an_interrupted_run_leaves_a_driven_one_alone(wired,
     assert viewer.sent[-1]["ok"] is False
     assert viewer.sent[-1]["error"]["code"] == "NOT_INTERRUPTED"
     assert ProjectStore().peek(ws).state == "running"
+
+
+async def test_resuming_an_interrupted_webhook_run_ends_its_unattended(wired, ws, tmp_path, monkeypatch) -> None:
+    # Resume claims the run before any pane starts, so the panes cannot tell
+    # it was interrupted: the resume itself has to say so.
+    from agent_team_backend import guard_fail_closed, webhook_service, webhook_triggers
+    from agent_team_backend.db import Database
+
+    monkeypatch.setattr(guard_fail_closed, "unattended_supported", lambda: True)
+    store = webhook_triggers.WebhookStore(Database(tmp_path / "navide.db"))
+    service = webhook_service.WebhookService(
+        store=store, db=store.db, window=SimpleNamespace(), pipeline=lambda _p: None, known_program=lambda a, p: True,
+    )
+    monkeypatch.setattr(webhook_service, "_service", service)
+    trigger, _ = store.create(name="CI", workspace=ws, pipeline_id="pl-1")
+    store.set_unattended(trigger["id"], True)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    run = store.open_run(trigger_id=trigger["id"], workspace=ws, project_id="p", pipeline_id="pl-1", unattended=True)
+    service._active[ws] = run
+    assert store.run_trigger_unattended(run["id"]) is True
+
+    _restart_backend(wired)
+    reloaded = _Session(held=(ws,))
+    wired.sessions.append(reloaded)
+    await ws_handlers.pipeline_claim(reloaded, "2", "pipeline.claim", {"workspaces": []})
+    await ws_handlers.pipeline_resume(reloaded, "3", "pipeline.resume", {"workspace_path": ws})
+    assert reloaded.sent[-1]["ok"] is True
+    assert store.run_trigger_unattended(run["id"]) is False
+
+
+async def test_resuming_a_run_that_was_not_interrupted_changes_nothing(wired, ws, tmp_path, monkeypatch) -> None:
+    from agent_team_backend import webhook_service
+
+    calls: list[str] = []
+    monkeypatch.setattr(webhook_service, "_service", SimpleNamespace(
+        note_interrupted=calls.append, store=SimpleNamespace(is_bound=lambda _p: False), run_started=lambda *a, **k: None,
+    ))
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    await ws_handlers.pipeline_abort(window, "2", "pipeline.abort", {"workspace_path": ws})
+    await ws_handlers.pipeline_resume(window, "3", "pipeline.resume", {"workspace_path": ws})
+    assert window.sent[-1]["ok"] is True and calls == []
