@@ -58,6 +58,7 @@ async def startup() -> None:
             window=webhook_service.LiveWindow(),
             pipeline=_pipeline_record,
             known_program=_known_program,
+            project=app.project_store.peek,
         )
 
     service = await asyncio.to_thread(build)
