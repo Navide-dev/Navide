@@ -15,7 +15,12 @@ export async function runPipelineKickoff(input: {
   /** This pane's last kickoff was held in its input box (#448). A copy still
    *  there is submitted with Enter, never pasted a second time. */
   heldCopy?: { holds: () => boolean; submit: () => Promise<boolean> }
-}): Promise<{ sent: boolean; cancelled: boolean }> {
+  /** The pane is parked on a CLI prompt (a permission box, a menu, a startup
+   *  dialog). Nothing is typed then: the kickoff's Enter would answer that
+   *  prompt for the user, and its echo check cannot tell the difference. */
+  parkedOnPrompt?: () => boolean
+}): Promise<{ sent: boolean; cancelled: boolean; parked?: boolean }> {
+  if (input.parkedOnPrompt?.()) return { sent: false, cancelled: false, parked: true }
   if (input.heldCopy?.holds()) {
     if (await input.heldCopy.submit()) return { sent: true, cancelled: false }
     input.onHeld?.()
@@ -32,6 +37,7 @@ export async function runPipelineKickoff(input: {
       input.onRetry?.(attempt)
       await input.sleep(3000)
       if (!input.paneAlive()) return { sent: false, cancelled: true }
+      if (input.parkedOnPrompt?.()) return { sent: false, cancelled: false, parked: true }
     }
   }
   return { sent: false, cancelled: false }

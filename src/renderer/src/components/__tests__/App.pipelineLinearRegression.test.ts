@@ -139,6 +139,13 @@ async function load(extraDeps: Record<string, unknown> = {}) {
     heldKickoffCopy: () => undefined,
     heldKickoffPanes: new Set<string>(),
     failRunOnKickoff: async () => {},
+    // No pane in these traces sits on a CLI prompt.
+    paneParkedOnPrompt: () => false,
+    PARKED_ON_PROMPT_REASON: 'parked',
+    // ...and none is still in a turn when its kickoff goes in.
+    paneTurnBusy: () => false,
+    waitUntilTurnEnds: async () => 'idle',
+    routerDeliveries: { clear: () => {} },
     ...extraDeps,
   }
   const factory = new Function(...Object.keys(deps), code)
