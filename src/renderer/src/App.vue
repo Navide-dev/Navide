@@ -4393,7 +4393,8 @@ function syncViews(): void {
       roleKey: p.roleKey,
       roleLabel: roleLabel(p.roleKey),
       stageId: p.stageId,
-      command: p.bypassDroppedCommand || p.command,
+      // A reattached pane never saw the cli.bypass_dropped of its create.
+      command: p.bypassDroppedCommand || (ref?.attachedBypassDropped as string | undefined) || p.command,
       status: paneDisplayStatus(p) || 'waiting',
       error: ref?.error as string | undefined,
       injectionStatus: p.injectionStatus,
@@ -7738,8 +7739,6 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     // for every restored pane.
     const effectiveLogFile = ref.attachedOutputLogFile || outputLogFile
     if (effectiveLogFile !== outputLogFile) pane.outputLogFile = effectiveLogFile
-    // Same reason: a reattached pane never saw the cli.bypass_dropped of its create.
-    if (ref.attachedBypassDropped) pane.bypassDroppedCommand = ref.attachedBypassDropped as string
 
     // The history entry was pushed before this path was known — back-fill it
     // now so Agent History preview can read the real file. This must happen

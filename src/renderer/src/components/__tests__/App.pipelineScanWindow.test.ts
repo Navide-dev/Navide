@@ -319,7 +319,7 @@ describe('a pane card never claims a bypass the pane does not have', () => {
     const handler = body("backend.on('cli.bypass_dropped'", '\n})\n')
     expect(handler).toContain('pane.bypassDroppedCommand = ev.command')
     expect(handler).not.toContain('pane.command =')
-    expect(appSource).toContain('command: p.bypassDroppedCommand || p.command,')
+    expect(appSource).toContain('command: p.bypassDroppedCommand || (ref?.attachedBypassDropped as string | undefined) || p.command,')
   })
 })
 
