@@ -8651,6 +8651,7 @@ async def _terminal_create_impl(
     payload["command"] = app._command_with_installed_cli_alias(
         agent_key, payload.get("command")
     )
+    requested_command = payload.get("command")
     if (webhooks := webhook_service.current()) is not None:
         payload["command"] = webhooks.launch_command(
             agent_key, payload.get("command"), pane_id=str(payload.get("pane_id") or ""), metadata=metadata,
@@ -8665,6 +8666,7 @@ async def _terminal_create_impl(
             payload["command"] = claude_hooks.append_settings(payload["command"], settings)
     elif webhook_service.unavailable():
         payload["command"] = webhook_service.without_bypass(agent_key, payload.get("command"))
+    bypass_dropped_command = webhook_service.bypass_dropped_from(requested_command, payload.get("command"))
     try:
         startup_probe = await asyncio.get_running_loop().run_in_executor(
             _CLI_PROBE_EXECUTOR,
@@ -9368,6 +9370,11 @@ async def _terminal_create_impl(
             "denied": sorted(denied_env_keys),
             # Accepted, then replaced or removed by a higher-priority source.
             "overridden": overridden_env_keys,
+        }))
+    if bypass_dropped_command:
+        await session.send_json(make_event("cli.bypass_dropped", {
+            "pane_id": str(payload.get("pane_id") or ""),
+            "command": bypass_dropped_command,
         }))
     # Announced only now the PTY exists. Wiring the channel is a spawn-time
     # decision, but advertising it before the CLI is actually running would tell

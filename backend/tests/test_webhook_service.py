@@ -489,6 +489,13 @@ class TestUnsureMeansNoBypass:
         for agent, command in (("claude", f"claude {CLAUDE_BYPASS} --session-id x"), ("codex", "codex --yolo resume x")):
             assert svc.without_bypass(agent, command) is command
 
+    def test_the_window_hears_only_of_a_bypass_that_was_really_taken_away(self) -> None:
+        kept = f"claude {CLAUDE_BYPASS} -c"
+        assert svc.bypass_dropped_from(kept, "claude -c") == "claude -c"
+        assert svc.bypass_dropped_from(["/bin/zsh", "-ilc", kept], ["/bin/zsh", "-ilc", "claude -c"]) == "claude -c"
+        assert svc.bypass_dropped_from(kept, kept) == ""
+        assert svc.bypass_dropped_from("claude -c", "claude -c") == ""
+
 
 class TestUnattendedOnEveryPath:
     @pytest.fixture(autouse=True)

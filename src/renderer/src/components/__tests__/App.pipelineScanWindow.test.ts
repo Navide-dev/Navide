@@ -306,6 +306,15 @@ describe('a turn that ends before the watcher arms still finishes the slot', () 
   })
 })
 
+describe('a pane card never claims a bypass the pane does not have', () => {
+  it('shows the command the backend reports, and keeps the request for later launches', () => {
+    const handler = body("backend.on('cli.bypass_dropped'", '\n})\n')
+    expect(handler).toContain('pane.bypassDroppedCommand = ev.command')
+    expect(handler).not.toContain('pane.command =')
+    expect(appSource).toContain('command: p.bypassDroppedCommand || p.command,')
+  })
+})
+
 describe('a cross-agent handoff does not swallow a sibling sentinel', () => {
   const completed = body('function onStageSlotCompleted(', '\nfunction releaseStageSlot(')
 

@@ -1483,6 +1483,11 @@ async def test_terminal_create_codex_on_a_dev_backend_still_seeds_hook_trust(
 
 
 async def _create_claude(monkeypatch: pytest.MonkeyPatch, command: str) -> Any:
+    session = await _claude_session(monkeypatch, command)
+    return session.terminals.created[0]["command"]
+
+
+async def _claude_session(monkeypatch: pytest.MonkeyPatch, command: str) -> Any:
     monkeypatch.setattr(app, "attribution", FakeAttribution())
     monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
     session = _session()
@@ -1492,7 +1497,11 @@ async def _create_claude(monkeypatch: pytest.MonkeyPatch, command: str) -> Any:
         "payload": {"pane_id": "reopened", "agent_key": "claude", "command": command, "cwd": "/ws",
                     "metadata": {"workspace_path": "/ws", "origin": "manual"}},
     })
-    return session.terminals.created[0]["command"]
+    return session
+
+
+def _bypass_dropped(session: Any) -> list[dict[str, Any]]:
+    return [m["payload"] for m in session.websocket.sent if m.get("type") == "cli.bypass_dropped"]
 
 
 async def test_terminal_create_resume_of_a_webhook_session_loses_the_bypass(
@@ -1523,10 +1532,22 @@ async def test_terminal_create_without_the_service_a_resume_loses_the_bypass(
     assert "--dangerously-skip-permissions" not in str(got)
 
 
+async def test_terminal_create_tells_the_window_what_a_pane_without_its_bypass_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_team_backend import webhook_service
+
+    monkeypatch.setattr(webhook_service, "_service", None)
+    monkeypatch.setattr(webhook_service, "_unavailable", True)
+    session = await _claude_session(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
+    assert _bypass_dropped(session) == [{"pane_id": "reopened", "command": "claude --resume abc-123"}]
+
+
 async def test_terminal_create_is_unchanged_when_webhooks_never_ran(monkeypatch: pytest.MonkeyPatch) -> None:
     from agent_team_backend import webhook_service
 
     monkeypatch.setattr(webhook_service, "_service", None)
     monkeypatch.setattr(webhook_service, "_unavailable", False)
-    got = await _create_claude(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
-    assert "--dangerously-skip-permissions" in str(got)
+    session = await _claude_session(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
+    assert "--dangerously-skip-permissions" in str(session.terminals.created[0]["command"])
+    assert _bypass_dropped(session) == []
