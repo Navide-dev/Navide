@@ -7,6 +7,11 @@ import type { ChildProcess } from 'node:child_process'
 
 const killProcessTree = vi.hoisted(() => vi.fn())
 vi.mock('./process-tree', () => ({ killProcessTree }))
+const registryPath = vi.hoisted(() => ({ entries: [] as string[] }))
+vi.mock('./windows-registry-path', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./windows-registry-path')>()),
+  readWindowsRegistryPath: () => registryPath.entries,
+}))
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -15,6 +20,7 @@ import { platformId, setPlatformId } from '../shared/osplat'
 import {
   bindBackendDisabledBuiltins,
   bindBackendPluginActivationCatalog,
+  getResolvedUserPath,
   handConfirmKey,
   listNvmNodeBins,
   mergePathList,
@@ -369,5 +375,35 @@ describe('proveWindow', () => {
 
   it('binds the per-connection nonce, so one proof cannot answer another challenge', () => {
     expect(proveWindow('host-secret', 'nonce-1')).not.toBe(proveWindow('host-secret', 'nonce-2'))
+  })
+})
+
+
+describe('getResolvedUserPath on Windows', () => {
+  let root = ''
+  afterEach(() => {
+    setPlatformId(BASELINE)
+    registryPath.entries = []
+    vi.unstubAllEnvs()
+    if (root) rmSync(root, { recursive: true, force: true })
+    root = ''
+  })
+
+  it('appends what the registry PATH gained since launch, so editors installed later are found', () => {
+    root = mkdtempSync(join(tmpdir(), 'navide-userpath-'))
+    const code = join(root, 'Microsoft VS Code', 'bin')
+    mkdirSync(code, { recursive: true })
+    vi.stubEnv('PATH', join(root, 'System32'))
+    registryPath.entries = [code]
+    setPlatformId('win32')
+    expect(getResolvedUserPath()).toBe([join(root, 'System32'), code].join(delimiter))
+  })
+
+  it('does not consult the registry off Windows', () => {
+    root = mkdtempSync(join(tmpdir(), 'navide-userpath-'))
+    registryPath.entries = [root]
+    vi.stubEnv('PATH', '/usr/bin')
+    setPlatformId('darwin')
+    expect(getResolvedUserPath()).toBe('/usr/bin')
   })
 })
