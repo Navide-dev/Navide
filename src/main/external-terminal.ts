@@ -231,6 +231,19 @@ async function openWithLinuxTerminal(
   }
 }
 
+/**
+ * Prepended to every Windows terminal command: the window inherits the PATH
+ * Navide launched with, so Node installed since (winget, in the guided
+ * install) would leave `npm` unresolvable in it. PowerShell reads both
+ * registry values itself at run time, so no PATH value is ever spliced into
+ * the command line where it could be parsed as code. Appended, so nothing the
+ * inherited PATH resolves first is displaced. No `"` (Node's argv quoting) and
+ * no `%` (cmd.exe expansion on the `start` route).
+ */
+export const REFRESH_PATH_PS =
+  "$env:Path = @($env:Path, [Environment]::GetEnvironmentVariable('Path', 'Machine'), " +
+  "[Environment]::GetEnvironmentVariable('Path', 'User')) -join [IO.Path]::PathSeparator;"
+
 async function openWithWindowsTerminal(
   command: string,
   path: string | undefined
@@ -244,17 +257,22 @@ async function openWithWindowsTerminal(
   // PowerShell parses as a string plus a stray token; the call operator makes
   // it a command. Same rule as onboarding_deps.run_argv.
   if (command.startsWith("'") || command.startsWith('"')) command = `& ${command}`
-  const powershell = ['powershell.exe', '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', command]
+  // Separate argv elements: PowerShell joins everything after -Command with
+  // spaces, so the command itself still arrives as its own unmangled token.
+  const powershell = (refresh: string): string[] =>
+    ['powershell.exe', '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', refresh, command]
   const wt = findOnPath('wt.exe', path)
   if (wt) {
-    const result = await launch(wt, powershell)
+    // wt splits its command line at every `;` into subcommands; `\;` is its
+    // escape for a literal one.
+    const result = await launch(wt, powershell(REFRESH_PATH_PS.replace(/;$/, '\\;')))
     if (result.ok) return result
     // On PATH but would not start — fall back rather than report no terminal.
   }
   // Otherwise the conhost route: `start` opens PowerShell in its own window.
   // windowsHide keeps the intermediate cmd.exe from flashing a console of
   // its own; the window `start` creates is not affected by it.
-  return launch('cmd.exe', ['/c', 'start', ...powershell], { windowsHide: true })
+  return launch('cmd.exe', ['/c', 'start', ...powershell(REFRESH_PATH_PS)], { windowsHide: true })
 }
 
 /**

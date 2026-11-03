@@ -20,6 +20,7 @@ import {
   type BackendPluginActivationCatalogFile,
 } from './plugins/pluginBackendActivationCatalog'
 import { resolveBackendDataDir } from './ui-settings-bootstrap'
+import { appendExistingDirs, readWindowsRegistryPath } from './windows-registry-path'
 
 /**
  * The key that tells a person's own window apart from an agent driving the same
@@ -193,9 +194,13 @@ function getLoginShellEnv(): Promise<{ shell: string; path: string | null }> {
 let resolvedUserPath: string | null = null
 
 /** The PATH to give processes main spawns. Falls back to the process PATH
- *  when the backend has not started yet (or the probe failed). */
+ *  when the backend has not started yet (or the probe failed). On Windows
+ *  the registry PATH is re-read on every call (two `reg query`s), so a tool
+ *  installed after launch is found without a restart. */
 export function getResolvedUserPath(): string {
-  return resolvedUserPath ?? process.env.PATH ?? ''
+  const base = resolvedUserPath ?? process.env.PATH ?? ''
+  if (!isWindows()) return base
+  return appendExistingDirs(base, readWindowsRegistryPath())
 }
 
 /** Mirror a backend log line to our own stdio, best-effort.
