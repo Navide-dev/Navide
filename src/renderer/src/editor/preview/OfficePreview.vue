@@ -4,6 +4,7 @@
 // via srcdoc (empty sandbox attribute — never v-html into the app origin);
 // xlsx → per-sheet tables behind tabs, mirroring the CsvPreview table styling.
 import { onMounted, ref } from 'vue'
+import { previewSrcdoc } from './previewSrcdoc'
 import type { useBackend } from '../../composables/useBackend'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 
@@ -73,7 +74,7 @@ onMounted(async () => {
     <iframe
       v-else-if="docxHtml"
       class="offp-frame"
-      :srcdoc="docxHtml"
+      :srcdoc="previewSrcdoc(docxHtml)"
       sandbox=""
       :title="name"
     />

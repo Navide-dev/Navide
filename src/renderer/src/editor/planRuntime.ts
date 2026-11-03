@@ -721,7 +721,7 @@ function isRefreshMeta(tag: string): boolean {
 // A meta refresh navigates the frame to a page the injected CSP never reaches.
 // Each one becomes a bare `<meta>` rather than nothing: the text on either
 // side then cannot join into a new tag, so one pass is enough.
-function stripMetaRefresh(html: string): string {
+export function stripMetaRefresh(html: string): string {
   const meta = /<meta(?=[\t\n\f\r />])/gi
   let seen: Uint8Array | undefined
   let out = ''

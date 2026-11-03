@@ -12,6 +12,14 @@ from agent_team_backend import app as app_module
 from agent_team_backend import ws_auth
 from agent_team_backend.app import app
 
+# Sandbox (opaque origin, no scripts/forms) plus a resource policy: a previewed
+# page may load its own relative subresources from this backend and inline
+# data, and nothing from any other host.
+PREVIEW_CSP = (
+    "sandbox; default-src 'none'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; font-src 'self' data:; media-src 'self' data:"
+)
+
 
 @pytest.fixture()
 def client() -> TestClient:
@@ -122,7 +130,7 @@ def test_raw_html_inline_with_csp_sandbox(client, workspace):
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/html")
     assert "content-disposition" not in resp.headers
-    assert resp.headers["content-security-policy"] == "sandbox"
+    assert resp.headers["content-security-policy"] == PREVIEW_CSP
     assert resp.headers["x-content-type-options"] == "nosniff"
 
 
@@ -131,7 +139,7 @@ def test_raw_xhtml_inline_with_csp_sandbox(client, workspace):
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/xhtml+xml"
     assert "content-disposition" not in resp.headers
-    assert resp.headers["content-security-policy"] == "sandbox"
+    assert resp.headers["content-security-policy"] == PREVIEW_CSP
 
 
 def test_raw_js_downgraded_to_attachment(client, workspace):
@@ -141,7 +149,7 @@ def test_raw_js_downgraded_to_attachment(client, workspace):
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/octet-stream"
     assert resp.headers["content-disposition"].startswith("attachment")
-    assert resp.headers["content-security-policy"] == "sandbox"
+    assert resp.headers["content-security-policy"] == PREVIEW_CSP
     assert resp.headers["x-content-type-options"] == "nosniff"
 
 
@@ -150,7 +158,7 @@ def test_raw_svg_inline_but_sandboxed(client, workspace):
     resp = _get(client, workspace, "vector.svg")
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "image/svg+xml"
-    assert resp.headers["content-security-policy"] == "sandbox"
+    assert resp.headers["content-security-policy"] == PREVIEW_CSP
 
 
 def test_raw_font_inline(client, workspace):
@@ -159,7 +167,7 @@ def test_raw_font_inline(client, workspace):
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "font/woff2"
     assert "content-disposition" not in resp.headers
-    assert resp.headers["content-security-policy"] == "sandbox"
+    assert resp.headers["content-security-policy"] == PREVIEW_CSP
 
 
 def test_raw_pdf_has_no_csp_sandbox(client, workspace):
@@ -194,7 +202,7 @@ def test_raw_agent_team_plans_html_served(client, workspace):
     resp = _get(client, workspace, ".agent-team/plans/plan.html")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/html")
-    assert resp.headers["content-security-policy"] == "sandbox"
+    assert resp.headers["content-security-policy"] == PREVIEW_CSP
 
 
 def test_raw_agent_team_plans_traversal_rejected(client, workspace):
@@ -214,7 +222,7 @@ def test_raw_mockup_html_served_under_each_root(client, workspace, root_rel):
     assert response.status_code == 200
     assert response.text == "<h1>mockup</h1>"
     assert response.headers["content-type"].startswith("text/html")
-    assert response.headers["content-security-policy"] == "sandbox"
+    assert response.headers["content-security-policy"] == PREVIEW_CSP
 
 
 def test_raw_mockup_traversal_still_protected(client, workspace):

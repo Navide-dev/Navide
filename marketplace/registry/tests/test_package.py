@@ -140,6 +140,35 @@ def test_zip64_end_of_central_directory_rejected() -> None:
         read_package(bytes(data))
 
 
+# The Host reader (src/main/plugins/pluginPackage.ts) walks the central
+# directory by EOCD entry count from the raw EOCD offset. Archives the two
+# readers would see differently are refused on both sides.
+def test_prefixed_archive_rejected() -> None:
+    # zipfile shifts every offset by the prefix and reads this happily; the
+    # Host would look for the central directory at the unshifted offset.
+    with pytest.raises(PackageError, match="central directory does not end"):
+        read_package(b"junk" + build_package())
+
+
+def test_eocd_entry_count_mismatch_rejected() -> None:
+    data = bytearray(_zip_with_entries(_valid_archive_entries()))
+    data[-14:-12] = (1).to_bytes(2, "little")
+    data[-12:-10] = (1).to_bytes(2, "little")
+    with pytest.raises(PackageError, match="central directory does not end"):
+        read_package(bytes(data))
+
+
+def test_local_name_mismatch_rejected_for_unread_entries() -> None:
+    # zipfile checks the local name only when it reads an entry; a directory
+    # entry is never read, so its local name must be checked separately.
+    entries = [("aaaa/", b"", 0o040755), *_valid_archive_entries()]
+    data = bytearray(_zip_with_entries(entries))
+    assert data[30:35] == b"aaaa/"
+    data[30:34] = b"bbbb"
+    with pytest.raises(PackageError, match="local header name does not match"):
+        read_package(bytes(data))
+
+
 def test_missing_manifest_rejected() -> None:
     with pytest.raises(PackageError, match="missing manifest.json"):
         read_package(build_package(omit_manifest=True))
