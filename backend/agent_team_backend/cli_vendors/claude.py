@@ -260,6 +260,13 @@ class ClaudeLogReader(LogReader):
     #: lines rather than replaying it (log_readers.base).
     activity_resumes_by_line: bool = True
 
+    def __init__(self) -> None:
+        super().__init__()
+        # path -> (high-water line, byte offset just past it, inode): where
+        # parse_activity picks a file up again. Memory only; a miss reads
+        # from the head, exactly as before.
+        self._activity_resume: dict[str, tuple[int, int, int]] = {}
+
     def _default_root(self) -> Path | None:
         return claude_projects_root()
 
@@ -582,7 +589,8 @@ class ClaudeLogReader(LogReader):
         cwd = self.cwd_from_file(path)
         session_id = path.stem
         try:
-            fh = path.open(encoding="utf-8")
+            fh = path.open("rb")
+            inode = os.fstat(fh.fileno()).st_ino
         except OSError:
             return out
 
@@ -592,10 +600,35 @@ class ClaudeLogReader(LogReader):
         # does not grow with the transcript. See log_readers.base.
         high_water = activity_high_water(seen_keys)
         last_line = high_water
+        # The mark skips parsing, not reading: a walk from byte 0 read a 315 MB
+        # transcript in full on every append, and the serial log reader fell
+        # minutes behind the Stop hook. Resume after the mark's line when this
+        # is still the file (same inode, not shorter, a line end right before).
+        first_line, offset = 1, 0
+        resume_key = str(path)
+        resume = self._activity_resume.get(resume_key)
+        if resume is not None and resume[0] == high_water and resume[2] == inode:
+            try:
+                if os.fstat(fh.fileno()).st_size >= resume[1] > 0:
+                    fh.seek(resume[1] - 1)
+                    if fh.read(1) == b"\n":
+                        first_line, offset = high_water + 1, resume[1]
+                fh.seek(offset)
+            except OSError:
+                first_line, offset = 1, 0
+                fh.seek(0)
+        # Byte offset just past line `last_line`, when that line ended in "\n".
+        resume_at: int | None = offset if first_line > 1 else None
 
         try:
             with fh:
-                for line_no, raw_line in enumerate(fh, 1):
+                for line_no, raw_bytes in enumerate(fh, first_line):
+                    offset += len(raw_bytes)
+                    if line_no == high_water and raw_bytes.endswith(b"\n"):
+                        resume_at = offset
+                    # Strict, as the text-mode read was: a line cut mid-character
+                    # raises, after the mark has kept the lines before it.
+                    raw_line = raw_bytes.decode("utf-8")
                     raw = raw_line.strip()
                     if not raw:
                         continue
@@ -618,8 +651,10 @@ class ClaudeLogReader(LogReader):
                         # re-reading — and re-emitting — the rest of the file
                         # on every poll.
                         last_line = line_no
+                        resume_at = offset
                         continue
                     last_line = line_no
+                    resume_at = offset if raw_line.endswith("\n") else None
 
                     rtype = rec.get("type")
                     ts = str(rec.get("timestamp") or "")
@@ -720,6 +755,10 @@ class ClaudeLogReader(LogReader):
                             ))
         finally:
             set_activity_high_water(seen_keys, last_line)
+            if resume_at is not None:
+                self._activity_resume[resume_key] = (last_line, resume_at, inode)
+            else:
+                self._activity_resume.pop(resume_key, None)
         return out
 
 
