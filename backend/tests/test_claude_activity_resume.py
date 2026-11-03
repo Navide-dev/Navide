@@ -110,7 +110,7 @@ def test_truncated_file_is_read_from_the_head(transcript: Path, monkeypatch: pyt
     reader.parse_activity(transcript, seen)
 
     short = "".join(_line(i) for i in range(1, 11))
-    with transcript.open("r+", encoding="utf-8") as fh:  # same inode, smaller
+    with transcript.open("r+", encoding="utf-8", newline="") as fh:  # same inode, smaller
         fh.truncate(0)
         fh.write(short)
     expected = _fresh(transcript, seen)

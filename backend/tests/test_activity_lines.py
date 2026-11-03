@@ -106,7 +106,7 @@ def test_a_truncated_file_is_read_from_the_head(path: Path, monkeypatch: pytest.
     reader, seen = _Reader(), set()
     _walk(reader, path, seen)
     short = "".join(f"short {i}\n" for i in range(1, 11))
-    with path.open("r+", encoding="utf-8") as fh:
+    with path.open("r+", encoding="utf-8", newline="") as fh:
         fh.truncate(0)
         fh.write(short)
     expected = _fresh(path, seen)
