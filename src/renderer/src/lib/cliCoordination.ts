@@ -1,4 +1,4 @@
-import { parseEventMs, turnTextFingerprint } from './completion'
+import { isReplayedTurnComplete, parseEventMs, turnTextFingerprint } from './completion'
 import type { EchoEvidence, SubmitEvidence } from './injectEcho'
 
 export const MAX_KICKOFF_ATTEMPTS = 3
@@ -107,6 +107,27 @@ export function createTurnTextGate() {
     delete(paneId: string): void {
       timestamps.delete(paneId)
       fingerprints.delete(paneId)
+    },
+  }
+}
+
+/** Which turn ends the MSG scan reads: each turn once, and none from before
+ * this window started.
+ *
+ * A replay is a turn that ended before this window booted (a backend restart
+ * re-emitting history), not one that is merely old: judged against `now`, a
+ * turn end the log reader delivered more than the tolerance late was dropped
+ * as a replay, MSG blocks and all, with no log row and no notice (2026-11-03,
+ * reader lag up to 733 s). Repeats within the session are the text gate's. */
+export function createMessagingTurnGate(bootMs: number) {
+  const gate = createTurnTextGate()
+  return {
+    accept(paneId: string, text: string, timestamp: string, toleranceMs: number): boolean {
+      if (isReplayedTurnComplete(timestamp, bootMs, toleranceMs)) return false
+      return gate.accept(paneId, text, timestamp)
+    },
+    delete(paneId: string): void {
+      gate.delete(paneId)
     },
   }
 }

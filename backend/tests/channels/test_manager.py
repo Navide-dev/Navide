@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from agent_team_backend.channels import manager as mgr_mod
+from agent_team_backend.channels import media
 from agent_team_backend.channels import relay as relay_mod
 from agent_team_backend.channels.base import AdapterStatus, Capabilities, InboundMessage, Location
 from agent_team_backend.channels.manager import (
@@ -2046,6 +2047,16 @@ def _log_prompt(env: Env, pane_id: str = "pane-1") -> None:
                                      "turn_start": True, "ts_monotonic": env.clock() + 1e-6})
 
 
+def _lost(env: Env) -> bool:
+    """The chat was told, in plain words, that the reply could not be sent."""
+    return any(_said(env, strings["reply.lost"]) for strings in media.STRINGS.values())
+
+
+def _waiting_notice(env: Env) -> bool:
+    """Anything telling the chat the reply is still on its way (removed 2026-11-03)."""
+    return any("補送" in t or t.startswith("⏳ 回合") for t in env.tg.texts())
+
+
 async def _delivered(env: Env, key: str = "k1") -> None:
     env.fake.verdicts[key] = {"status": "delivered"}
     await _until(lambda: _status_posted(env))
@@ -2060,8 +2071,7 @@ async def test_a_hook_turn_end_waits_for_the_logs_text(env: Env) -> None:
     _log_end(env, "the real reply")
     await _until(lambda: _said(env, "the real reply"))
     await asyncio.sleep(0.3)  # past the grace
-    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY) and not _said(env, mgr_mod.MSG_REPLY_LATE)
-    assert not _said(env, mgr_mod.MSG_LATE_PREFIX)
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY) and not _waiting_notice(env)
     assert sum("the real reply" in t for t in env.tg.texts()) == 1
 
 
@@ -2089,16 +2099,18 @@ async def test_text_arriving_after_the_next_message_still_answers_the_first(env:
     ]
 
 
-async def test_text_later_than_the_grace_follows_as_a_late_reply(env: Env, monkeypatch) -> None:
+async def test_text_later_than_the_grace_is_posted_like_any_reply(env: Env, monkeypatch) -> None:
+    # 2026-11-03, the user: "如果是結束就結束" — no "still waiting" message, no "（補送）".
     monkeypatch.setattr(mgr_mod, "LATE_TEXT_STATUS_AFTER_S", 0.05)
     await env.inbound("go")
     await _delivered(env)
     _hook_end(env)
     await _until(lambda: any(t == mgr_mod.MSG_READING_REPLY for _, t in env.tg.edits))
-    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LATE))
-    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+    await asyncio.sleep(0.4)  # past the grace
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY) and not _waiting_notice(env) and not _lost(env)
     _log_end(env, "slow reply")
-    await _until(lambda: _said(env, mgr_mod.MSG_LATE_PREFIX + "slow reply"))
+    await _until(lambda: _said(env, "slow reply"))
+    assert not _waiting_notice(env)
 
 
 def _short_watch(monkeypatch) -> None:
@@ -2113,10 +2125,10 @@ async def test_the_log_is_read_once_before_a_held_reply_is_given_up(env: Env, mo
     await env.inbound("go")
     await _delivered(env)
     _hook_end(env)
-    await _until(lambda: _said(env, mgr_mod.MSG_LATE_PREFIX + "read directly"))
+    await _until(lambda: _said(env, "read directly"))
     assert len(env.fake.turn_text_calls) == 1
     assert env.fake.turn_text_calls[0][0] == "pane-1"
-    assert not _said(env, mgr_mod.MSG_REPLY_LOST)
+    assert not _lost(env) and not _waiting_notice(env)
     assert "pane-1" not in env.m._await_text
 
 
@@ -2125,7 +2137,7 @@ async def test_a_reply_that_cannot_be_read_tells_the_chat(env: Env, monkeypatch)
     await env.inbound("go")
     await _delivered(env)
     _hook_end(env)
-    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LOST))
+    await _until(lambda: _lost(env))
     assert len(env.fake.turn_text_calls) == 1
     assert "pane-1" not in env.m._await_text
 
@@ -2140,7 +2152,7 @@ async def test_a_failed_read_still_tells_the_chat(env: Env, monkeypatch) -> None
     await env.inbound("go")
     await _delivered(env)
     _hook_end(env)
-    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LOST))
+    await _until(lambda: _lost(env))
 
 
 async def test_a_reply_the_log_delivers_never_reads_the_file(env: Env, monkeypatch) -> None:
@@ -2152,7 +2164,7 @@ async def test_a_reply_the_log_delivers_never_reads_the_file(env: Env, monkeypat
     await _until(lambda: _said(env, "on time"))
     await asyncio.sleep(0.1)  # past the give-up
     assert env.fake.turn_text_calls == []
-    assert not _said(env, mgr_mod.MSG_REPLY_LOST)
+    assert not _lost(env)
 
 
 async def test_text_arriving_after_the_give_up_is_still_posted(env: Env, monkeypatch) -> None:
@@ -2160,7 +2172,7 @@ async def test_text_arriving_after_the_give_up_is_still_posted(env: Env, monkeyp
     await env.inbound("go")
     await _delivered(env)
     _hook_end(env)
-    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LOST))
+    await _until(lambda: _lost(env))
     _log_end(env, "very late")
     await _until(lambda: _said(env, "very late"))
 
@@ -2175,7 +2187,7 @@ async def test_a_turn_with_no_text_says_so_once_the_log_moves_on(env: Env, monke
     assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
     _log_prompt(env)  # the next prompt: that turn wrote no text
     await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
-    assert not _said(env, mgr_mod.MSG_REPLY_LATE)
+    assert not _waiting_notice(env)
 
 
 async def test_a_turn_split_over_two_log_lines_after_a_hook_end_replies_with_its_text(env: Env) -> None:
@@ -2197,9 +2209,10 @@ async def test_a_late_reply_is_posted_at_replies_verbosity(env: Env, monkeypatch
     await _until(lambda: env.m._pending.get("pane-1") is not None
                  and env.m._pending["pane-1"].armed_at is not None)
     _hook_end(env)
-    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LATE))
+    await asyncio.sleep(0.4)  # past the grace
     _log_end(env, "late but kept")
-    await _until(lambda: _said(env, mgr_mod.MSG_LATE_PREFIX + "late but kept"))
+    await _until(lambda: _said(env, "late but kept"))
+    assert not _waiting_notice(env)
 
 
 async def test_the_log_first_then_the_hook_replies_once(env: Env) -> None:
@@ -2219,7 +2232,7 @@ async def test_a_vendor_without_a_hook_is_answered_as_before(env: Env) -> None:
     await _delivered(env)
     _log_end(env, "")
     await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
-    assert not _said(env, mgr_mod.MSG_REPLY_LATE) and not _said(env, mgr_mod.MSG_LATE_PREFIX)
+    assert not _waiting_notice(env)
     await env.inbound("again")
     await _delivered(env, "k2")
     _log_end(env, "plain reply")
@@ -2233,7 +2246,7 @@ async def test_unbinding_drops_a_run_waiting_for_the_logs_text(env: Env) -> None
     await env.m.unbind("pane-1")
     _log_end(env, "not for the old chat")
     await asyncio.sleep(0.3)
-    assert not _said(env, "not for the old chat") and not _said(env, mgr_mod.MSG_REPLY_LATE)
+    assert not _said(env, "not for the old chat") and not _waiting_notice(env) and not _lost(env)
 
 
 async def test_a_textless_turn_with_nothing_after_it_says_so_at_the_grace(env: Env, monkeypatch) -> None:
@@ -2245,8 +2258,7 @@ async def test_a_textless_turn_with_nothing_after_it_says_so_at_the_grace(env: E
     _hook_end(env)
     _log_end(env, "")
     await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
-    assert not _said(env, mgr_mod.MSG_REPLY_LATE)
-    assert not _said(env, mgr_mod.MSG_LATE_PREFIX)
+    assert not _waiting_notice(env)
     assert "pane-1" not in env.m._await_text
 
 
@@ -2272,7 +2284,77 @@ async def test_a_late_hook_does_not_close_the_next_messages_run(env: Env) -> Non
     _log_prompt(env)
     _log_end(env, "reply two")
     await _until(lambda: _said(env, "reply two"))
-    assert not _said(env, mgr_mod.MSG_LATE_PREFIX)
+    assert not _waiting_notice(env)
+
+
+def _hook_end_at(env: Env, wall: float, pane_id: str = "pane-1") -> None:
+    env.m.on_pane_activity(pane_id, {"event_type": "turn_complete", "text": "", "source": "hook",
+                                     "event_wall": wall, "ts_monotonic": env.clock() + 1e-6})
+
+
+def _log_prompt_at(env: Env, wall: float, pane_id: str = "pane-1") -> None:
+    env.m.on_pane_activity(pane_id, {"event_type": "agent_active", "text": "next", "source": "log",
+                                     "turn_start": True, "event_wall": wall,
+                                     "ts_monotonic": env.clock() + 1e-6})
+
+
+async def test_a_hooked_turn_the_log_never_ended_tells_the_chat_at_the_next_prompt(env: Env, monkeypatch) -> None:
+    # The Stop hook fired, but the transcript has no end line for that turn (interrupted):
+    # the log moving on to a prompt written after the hook means none is coming.
+    monkeypatch.setattr(mgr_mod, "EMPTY_TURN_GRACE_S", 60.0)
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end_at(env, 1000.0)
+    _log_prompt_at(env, 1005.0)
+    await _until(lambda: _lost(env))
+    assert "pane-1" not in env.m._await_text
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+
+
+async def test_a_lagging_log_reading_the_turns_own_prompt_keeps_waiting(env: Env, monkeypatch) -> None:
+    # Under load the reader reaches this turn's own prompt after its hook: written before it.
+    monkeypatch.setattr(mgr_mod, "EMPTY_TURN_GRACE_S", 60.0)
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end_at(env, 1000.0)
+    _log_prompt_at(env, 990.0)
+    await asyncio.sleep(0.05)
+    assert not _lost(env)
+    _log_end(env, "its reply")
+    await _until(lambda: _said(env, "its reply"))
+    assert not _lost(env)
+
+
+async def test_a_reply_still_waited_for_at_a_restart_is_reported_lost(env: Env) -> None:
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    await _until(lambda: "pane-1" in env.m._await_text)
+    factory = env.m._factory_for
+    await env.m.stop()
+    restarted = mgr_mod.ChannelManager(env.store, env.fake.seams(), factory_for=factory, clock=env.clock)
+    env.m = restarted
+    await restarted.start()
+    await restarted.wait_idle()
+    await _until(lambda: _lost(env))
+    assert env.store.awaiting_replies() == {} and env.store.lost_replies() == {}
+
+
+async def test_a_reply_answered_before_the_restart_is_not_reported(env: Env) -> None:
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    _log_end(env, "answered")
+    await _until(lambda: _said(env, "answered"))
+    assert env.store.awaiting_replies() == {}
+    factory = env.m._factory_for
+    await env.m.stop()
+    restarted = mgr_mod.ChannelManager(env.store, env.fake.seams(), factory_for=factory, clock=env.clock)
+    env.m = restarted
+    await restarted.start()
+    await restarted.wait_idle()
+    await asyncio.sleep(0.1)
+    assert not _lost(env)
 
 
 # Claude Code 2.1.31x screens (awaitingPromptText's last lines). The idle input box

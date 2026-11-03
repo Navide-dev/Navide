@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createPaneSessionPersistence, createTurnTextGate, runPipelineKickoff } from '../../src/renderer/src/lib/cliCoordination'
+import { createMessagingTurnGate, createPaneSessionPersistence, createTurnTextGate, runPipelineKickoff } from '../../src/renderer/src/lib/cliCoordination'
 
 describe('frontend shared coordination regression', () => {
   it('settles a successful kickoff immediately without sleeping', async () => {
@@ -92,5 +92,37 @@ describe('frontend shared coordination regression', () => {
     await persist('pane:session', write)
     await persist('pane:session', write)
     expect(write).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('messaging turn gate', () => {
+  const BOOT = Date.parse('2026-11-03T07:00:00Z')
+  const TOLERANCE = 60_000
+  const iso = (ms: number) => new Date(ms).toISOString()
+
+  it('scans a turn whose log turn end arrives 300 s late, once', () => {
+    vi.useFakeTimers()
+    try {
+      const gate = createMessagingTurnGate(BOOT)
+      const ended = BOOT + 3_600_000
+      vi.setSystemTime(ended + 300_000)
+      expect(gate.accept('pane', 'MSG to router', iso(ended), TOLERANCE)).toBe(true)
+      // The same turn reported again (hook and log, or a backend re-emit).
+      expect(gate.accept('pane', 'MSG to router', iso(ended), TOLERANCE)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('skips turns that ended before this window started (a restart replay)', () => {
+    vi.useFakeTimers()
+    try {
+      const gate = createMessagingTurnGate(BOOT)
+      vi.setSystemTime(BOOT + 1_000)
+      expect(gate.accept('pane', 'old MSG', iso(BOOT - 10 * 60_000), TOLERANCE)).toBe(false)
+      expect(gate.accept('pane', 'fresh MSG', iso(BOOT + 500), TOLERANCE)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
