@@ -207,3 +207,60 @@ def test_set_pane_parent_moving_a_subtree_keeps_it_intact(
     panes = _panes(store, ws)
     assert panes["b"].spawned_by == "d"
     assert panes["c"].spawned_by == "b"
+
+
+def test_retiring_a_superseded_record_hands_its_children_to_the_successor(
+    store_ws: tuple[ProjectStore, str]
+) -> None:
+    """A record replaced by another pane on the same conversation is not a close.
+
+    Its children belong to the pane that now holds the conversation; adopting
+    them onto the retired record's own parent would make every child of a
+    root commander a root (the 2026-11-01 Telegram wake).
+    """
+    store, ws = store_ws
+    store.record_manual_pane_spawn(ws, pane_id="cmd-old", agent="claude", session_id="s-cmd")
+    store.record_manual_pane_spawn(ws, pane_id="kid", agent="claude", origin="mcp", spawned_by="cmd-old")
+    store.record_manual_pane_spawn(ws, pane_id="cmd-new", agent="claude", origin="mcp", session_id="s-cmd")
+    store.record_pane_unspawn_by_id(ws, pane_id="cmd-old", successor="cmd-new")
+    panes = _panes(store, ws)
+    assert panes["cmd-old"].spawn_status == "removed"
+    assert panes["kid"].spawned_by == "cmd-new"
+
+
+def test_channels_wake_into_a_new_pane_keeps_the_commanders_children(
+    store_ws: tuple[ProjectStore, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wake's retire step runs against the real store (reproduces 2026-11-01)."""
+    import agent_team_backend.channels as channels_pkg
+    from agent_team_backend import agent_messaging, app
+
+    store, ws = store_ws
+    store.record_manual_pane_spawn(ws, pane_id="cmd-old", agent="claude", session_id="s-cmd")
+    store.record_manual_pane_spawn(ws, pane_id="kid-a", agent="claude", origin="mcp", spawned_by="cmd-old")
+    store.record_manual_pane_spawn(ws, pane_id="kid-b", agent="claude", origin="mcp", spawned_by="cmd-old")
+    store.record_manual_pane_spawn(ws, pane_id="grandkid", agent="claude", origin="mcp", spawned_by="kid-a")
+    store.record_manual_pane_spawn(ws, pane_id="cmd-new", agent="claude", origin="mcp", session_id="s-cmd")
+    monkeypatch.setattr(app, "project_store", store, raising=False)
+    monkeypatch.setattr(agent_messaging, "current", lambda pid: None)
+    channels_pkg._retire_superseded(ws, "s-cmd", "cmd-new")
+    panes = _panes(store, ws)
+    assert panes["cmd-old"].spawn_status == "removed"
+    assert panes["kid-a"].spawned_by == "cmd-new"
+    assert panes["kid-b"].spawned_by == "cmd-new"
+    assert panes["grandkid"].spawned_by == "kid-a"
+
+
+def test_a_stale_parent_naming_a_retired_record_does_not_overwrite_the_lineage(
+    store_ws: tuple[ProjectStore, str]
+) -> None:
+    """The window still holds the retired id in a child's spawnedBy and sends it
+    back when that child is realized; a retired record is never a live parent."""
+    store, ws = store_ws
+    store.record_manual_pane_spawn(ws, pane_id="cmd-old", agent="claude", session_id="s-cmd")
+    store.record_manual_pane_spawn(ws, pane_id="kid", agent="claude", origin="mcp", spawned_by="cmd-old")
+    store.record_manual_pane_spawn(ws, pane_id="cmd-new", agent="claude", origin="mcp", session_id="s-cmd")
+    store.record_pane_unspawn_by_id(ws, pane_id="cmd-old", successor="cmd-new")
+    store.record_manual_pane_spawn(ws, pane_id="kid-2", previous_pane_id="kid", agent="claude",
+                                   spawned_by="cmd-old")
+    assert _panes(store, ws)["kid-2"].spawned_by == "cmd-new"

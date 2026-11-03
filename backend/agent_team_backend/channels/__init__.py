@@ -393,9 +393,23 @@ def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> list[
                 or (getattr(record, "session_id", "") or "").strip() != session_id \
                 or agent_messaging.current(record.pane_id) is not None:
             continue
-        app.project_store.record_pane_unspawn_by_id(workspace_path, pane_id=record.pane_id)
+        # Its children follow the conversation to `keep`; a plain retire would make them roots.
+        app.project_store.record_pane_unspawn_by_id(workspace_path, pane_id=record.pane_id, successor=keep)
         retired.append(record.pane_id)
     return retired
+
+
+async def _announce_lineage_handoff(retired: list[str], pane_id: str, workspace_path: str) -> None:
+    """Tell the windows the records moved: _retire_superseded re-keyed the retired panes'
+    children onto the woken pane, and a window still holding the old ids in their spawnedBy
+    would render them as roots until its next reload."""
+    from .. import app
+    from ..ipc import make_event
+
+    for previous in retired:
+        await app.broadcast_main_windows(make_event("pane.lineage_rekeyed", {
+            "workspace_path": workspace_path, "old_pane_id": previous, "new_pane_id": pane_id,
+        }))
 
 
 async def _hand_over_jobs(retired: list[str], pane_id: str, session_id: str) -> None:
@@ -435,6 +449,7 @@ async def _open_onto_session(record: Any, workspace_path: str, session_id: str) 
         return {"ok": False, "code": "session-mismatch", "started": True}
     retired = await asyncio.to_thread(_retire_superseded, workspace_path, session_id, new_pane_id)
     await _hand_over_jobs(retired, new_pane_id, session_id)
+    await _announce_lineage_handoff(retired, new_pane_id, workspace_path)
     return {"ok": True, "pane_id": new_pane_id}
 
 
