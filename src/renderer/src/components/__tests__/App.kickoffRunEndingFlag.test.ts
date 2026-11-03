@@ -83,6 +83,8 @@ async function harness(segment: string, locals: Record<string, unknown>, ends: {
     onStageSlotCompleted: vi.fn(),
     pipelineLog: () => {},
     tearDownPipelineOrchestration: () => { pipeline.state = 'aborted' },
+    stopFailedRunPanes: async () => {},
+    runPaneSentAt: new Map(),
     applyProjectPaths: () => {},
     notifyRestore: { toast: () => {} },
     i18n: { global: { t: (k: string) => k } },
