@@ -191,6 +191,8 @@ class LogWatcher:
         # Last seen size per file: a stat is how an append skips the line count.
         self._activity_sizes: dict[str, int] = {}
         self._queue: asyncio.Queue[tuple[Path | None, str]] = asyncio.Queue()
+        # Paths waiting in _queue for a realtime walk (see _enqueue_realtime).
+        self._realtime_queued: set[Path] = set()
         self._pending_token_paths: dict[tuple[str, str], Path] = {}
         self._pending_token_backfills: dict[tuple[str, str], int] = {}
         self._token_flush_lock = asyncio.Lock()
@@ -230,7 +232,7 @@ class LogWatcher:
             if loop is None or loop.is_closed():
                 return
             try:
-                loop.call_soon_threadsafe(self._queue.put_nowait, (p, ""))
+                loop.call_soon_threadsafe(self._enqueue_realtime, p)
             except RuntimeError:
                 # loop closed mid-flight
                 pass
@@ -367,6 +369,20 @@ class LogWatcher:
 
     # ───────────────────────── workers ────────────────────────────────────
 
+    def _enqueue_realtime(self, path: Path) -> None:
+        """Queue a changed file for its realtime walk (on the loop), once.
+
+        Every append is a watchdog event and every queued entry a walk of the
+        whole file, so a busy transcript queued once per line made the serial
+        drain fall minutes behind the CLI (turn ends 120-733 s after their
+        Stop hook). A walk reads to the end of the file as it is when it runs,
+        so the entry already waiting covers later appends.
+        """
+        if path in self._realtime_queued:
+            return
+        self._realtime_queued.add(path)
+        self._queue.put_nowait((path, ""))
+
     def _queue_token_path(self, path: Path, replay_workspace: str = "") -> None:
         """Coalesce one path for the next token-ingestion pass."""
         try:
@@ -395,6 +411,9 @@ class LogWatcher:
                 self._token_flush_tasks.add(task)
                 task.add_done_callback(self._token_flush_tasks.discard)
                 continue
+            if not replay_workspace:
+                # Before the walk: an append that lands during it queues again.
+                self._realtime_queued.discard(path)
             try:
                 await self._process_realtime_path(path)
             except Exception as err:  # noqa: BLE001
@@ -696,7 +715,7 @@ class LogWatcher:
                 # stays safe: this coroutine is its only writer, and the
                 # sweep below runs strictly after the thread returns.
                 for path in await asyncio.to_thread(self._files_to_scan):
-                    self._queue.put_nowait((path, ""))
+                    self._enqueue_realtime(path)
                 if self._loop is not None:
                     self._sweep_activity_seen(self._loop.time())
             except Exception as err:  # noqa: BLE001
