@@ -80,7 +80,7 @@ def transcript(tmp_path: Path) -> Path:
     project = tmp_path / "-ws"
     project.mkdir()
     path = project / "session.jsonl"
-    path.write_text("".join(_line(i) for i in range(1, 2001)), encoding="utf-8")
+    path.write_text("".join(_line(i) for i in range(1, 2001)), encoding="utf-8", newline="")
     return path
 
 
@@ -91,7 +91,7 @@ def test_append_reads_only_the_new_bytes(transcript: Path, monkeypatch: pytest.M
     assert activity_high_water(seen) == 2000
 
     added = _line(2001) + _line(2002) + _line(2003, end=True)
-    with transcript.open("a", encoding="utf-8") as fh:
+    with transcript.open("a", encoding="utf-8", newline="") as fh:
         fh.write(added)
     expected = _fresh(transcript, seen)
     meter = _ReadMeter(monkeypatch)
@@ -129,7 +129,7 @@ def test_replaced_file_is_read_from_the_head(transcript: Path) -> None:
     # A different file (new inode), bigger than the old one, at the same path.
     other = transcript.with_suffix(".tmp")
     other.write_text("".join(_line(i) for i in range(1, 2003)) + _line(2003, end=True),
-                     encoding="utf-8")
+                     encoding="utf-8", newline="")
     os.replace(other, transcript)
     expected = _fresh(transcript, seen)
     assert _keys(reader.parse_activity(transcript, seen)) == expected
@@ -141,12 +141,12 @@ def test_half_written_line_is_finished_next_time(transcript: Path) -> None:
     reader.parse_activity(transcript, seen)
 
     whole = _line(2001, end=True)
-    with transcript.open("a", encoding="utf-8") as fh:
+    with transcript.open("a", encoding="utf-8", newline="") as fh:
         fh.write(whole[:50])
     assert reader.parse_activity(transcript, seen) == []
     assert activity_high_water(seen) == 2000
 
-    with transcript.open("a", encoding="utf-8") as fh:
+    with transcript.open("a", encoding="utf-8", newline="") as fh:
         fh.write(whole[50:])
     expected = _fresh(transcript, seen)
     events = reader.parse_activity(transcript, seen)
