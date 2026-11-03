@@ -257,6 +257,33 @@ describe('prepareInstall', () => {
     ).rejects.toThrow(/digest/)
   })
 
+  it('checks the digest before the zip parser ever reads the bytes', async () => {
+    const garbage = new Uint8Array([1, 2, 3, 4])
+    const { deps } = fakeDeps(garbage, null)
+    await expect(
+      prepareInstall({ ...REQ_BASE, expectedDigest: 'f'.repeat(64) }, deps)
+    ).rejects.toMatchObject({ code: 'DIGEST_MISMATCH' })
+  })
+
+  it('stops reading a Registry download past the size cap instead of buffering it whole', async () => {
+    const chunk = new Uint8Array(1024 * 1024)
+    let pulled = 0
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1
+        if (pulled > 300) controller.close()
+        else controller.enqueue(chunk)
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, { status: 200 })))
+    try {
+      await expect(defaultInstallerDeps.download('https://registry.example.test/x')).rejects.toThrow(/larger than/)
+      expect(pulled).toBeLessThan(300)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('rejects when the download header disagrees with expected digest', async () => {
     const { bytes, digest } = pkg()
     const { deps } = fakeDeps(bytes, 'a'.repeat(64))

@@ -12614,6 +12614,7 @@
       "open": "Version veröffentlichen",
       "sign-in-first": "Melden Sie sich zuerst als Herausgeber an: Navide signiert das Paket mit dem gespeicherten Schlüssel und lädt es hoch.",
       "choose": ".vsix-Paket auswählen …",
+      "read-linked": "Dieses Paket lesen",
       "package": "Navide-Plug-in",
       "file": "Datei",
       "digest": "SHA-256",

@@ -190,6 +190,7 @@ import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
 import { createPluginStagedCandidateRelay } from './pluginStagedCandidateRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
+import { isAppNavigation as isAppNavigationPolicy, handleWindowOpen } from './navigationPolicy'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
 import { isLinux, isMac } from '../shared/osplat'
@@ -4021,7 +4022,8 @@ function openMainWindow(workspacePath = '', background = false): void {
   void createWindow(params, background ? { background: true } : undefined)
 }
 
-ipcMain.handle('window:openMain', (_event, args?: { workspace_path?: string; background?: boolean }) => {
+ipcMain.handle('window:openMain', (event, args?: { workspace_path?: string; background?: boolean }) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   openMainWindow(args?.workspace_path, args?.background === true)
   return { ok: true }
 })
@@ -4804,7 +4806,8 @@ function validateRef(value: string, label: string): string | null {
 }
 
 // Run git diff directly in main process — no Python backend needed, always up-to-date.
-ipcMain.handle('git:diff-head', async (_event, args: { workspace_path: string; base?: string; compare?: string }) => {
+ipcMain.handle('git:diff-head', async (event, args: { workspace_path: string; base?: string; compare?: string }) => {
+  if (!isAppWindowSender(event)) return { ...UNTRUSTED_SENDER, diff: '' }
   const { execFile } = await import('node:child_process')
   const { promisify } = await import('node:util')
   const execFileAsync = promisify(execFile)
@@ -4854,6 +4857,7 @@ function isHtmlPlanDocPath(relPath: string): boolean {
 }
 
 ipcMain.handle('window:openEditor', async (event, args: Record<string, string>) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   const params = args ?? {}
   const workspacePath = params.workspace_path ?? ''
   const filepath = params.filepath ?? ''
@@ -4879,6 +4883,7 @@ ipcMain.handle('editors:list', (_event, args?: { refresh?: boolean }) =>
 ipcMain.handle(
   'editor:openFolder',
   async (event, args: { dir?: string; editorId?: string }) => {
+    if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
     const ok = await openFolderInEditor(
       BrowserWindow.fromWebContents(event.sender),
       args?.dir ?? '',
@@ -5791,7 +5796,8 @@ ipcMain.handle('logs:findManualLog', async (_event, workspacePath: string, filen
 // matched. See log-content-search.ts for the chunked-read implementation.
 ipcMain.handle(
   'logs:searchContent',
-  async (_event, args: { query: string; files: Array<{ id: string; path: string }> }) => {
+  async (event, args: { query: string; files: Array<{ id: string; path: string }> }) => {
+    if (!isAppWindowSender(event)) return { matchedIds: [] }
     if (!args || typeof args.query !== 'string' || !Array.isArray(args.files)) return { matchedIds: [] }
     const matchedIds = await searchLogFiles(args.query, args.files)
     return { matchedIds }
@@ -6148,15 +6154,9 @@ if (!gotSingleInstanceLock) {
 const DEV_ORIGIN = process.env['ELECTRON_RENDERER_URL']
   ? new URL(process.env['ELECTRON_RENDERER_URL']).origin
   : null
+const APP_INDEX_PATH = join(__dirname, '../renderer/index.html')
 function isAppNavigation(url: string): boolean {
-  try {
-    const u = new URL(url)
-    if (DEV_ORIGIN && u.origin === DEV_ORIGIN) return true
-    if (u.protocol === 'file:') return u.pathname.endsWith('/renderer/index.html')
-  } catch {
-    // Malformed URL — treat as not-app and block.
-  }
-  return false
+  return isAppNavigationPolicy(url, DEV_ORIGIN, APP_INDEX_PATH)
 }
 app.on('web-contents-created', (_e, contents) => {
   // Page zoom is owned by the app's interface-scale setting, not by Chromium's
@@ -6198,10 +6198,9 @@ app.on('web-contents-created', (_e, contents) => {
     if (!isAppNavigation(url)) e.preventDefault()
   })
   guardPlanFrameNavigation(contents, () => isPluginWebGuest(contents))
-  contents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
-    return { action: 'deny' }
-  })
+  // A plugin view opens links only through ui.openExternal (grant + gesture).
+  contents.setWindowOpenHandler(({ url }) =>
+    handleWindowOpen(url, frontendPluginManager.isPluginViewContents(contents), (target) => shell.openExternal(target)))
 })
 // A renderer of a window without its own crash watch, and a GPU or utility
 // process, going away was logged nowhere.

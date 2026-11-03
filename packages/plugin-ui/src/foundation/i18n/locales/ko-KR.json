@@ -12614,6 +12614,7 @@
       "open": "버전 게시",
       "sign-in-first": "먼저 게시자로 로그인하세요. Navide가 보관 중인 키로 패키지에 서명하고 업로드해요.",
       "choose": ".vsix 패키지 선택…",
+      "read-linked": "이 패키지 읽기",
       "package": "Navide 플러그인",
       "file": "파일",
       "digest": "SHA-256",

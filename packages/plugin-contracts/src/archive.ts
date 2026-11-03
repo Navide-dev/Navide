@@ -4,6 +4,14 @@ export type ArchivePathKind = 'regular' | 'directory'
 
 export const MAX_ARCHIVE_PATH_LENGTH = 1024
 
+const WINDOWS_RESERVED_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
+
+/** Whether Windows treats a path segment as a device: a reserved name on its
+ *  own or before any extension (`CON`, `nul.txt`, `com1 .js`), any case. */
+export function isWindowsReservedName(segment: string): boolean {
+  return WINDOWS_RESERVED_NAME.test(segment.split('.', 1)[0].replace(/ +$/, ''))
+}
+
 function canonicalRelativePath(path: string): string | null {
   if (
     path.length === 0 ||
@@ -18,7 +26,8 @@ function canonicalRelativePath(path: string): string | null {
   }
 
   const segments = path.split('/')
-  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
+  if (segments.some((segment) =>
+    segment.length === 0 || segment === '.' || segment === '..' || isWindowsReservedName(segment))) {
     return null
   }
   return path
