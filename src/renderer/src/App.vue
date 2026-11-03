@@ -2555,6 +2555,10 @@ const paneTurnCompleteAt = new Map<string, number>()
 // disagree, and read only by the quota gate — see quotaTurnIsFresh for why
 // receipt time cannot answer its question.
 const paneTurnCompleteSourceAt = new Map<string, number>()
+/** The receipt times of the pane's last few turn ends, for counting them:
+ *  ends that arrive in one batch share a time (see waitForQueuedTurn). */
+const paneTurnCompleteTimes = new Map<string, number[]>()
+const TURN_COMPLETE_TIMES_KEPT = 8
 
 // Per-pane wall-clock of the latest `agent_active` (CLI is producing output or
 // running a tool). Compared against turnCompleteAt to tell whether the CLI's
@@ -7134,6 +7138,7 @@ async function confirmQueuedKickoff(paneId: string, since: number, tag: string, 
     since,
     lastCompleteAt: () => paneTurnCompleteAt.get(paneId) ?? 0,
     lastActiveAt: () => paneLastActiveAt.get(paneId) ?? 0,
+    completionsSince: (t) => (paneTurnCompleteTimes.get(paneId) ?? []).filter((at) => at > t).length,
     parked: () => paneParkedOnPrompt(paneId),
     alive: () => paneAlive(paneId),
     stillWanted,
@@ -7141,6 +7146,13 @@ async function confirmQueuedKickoff(paneId: string, since: number, tag: string, 
     now: Date.now,
   })
   pipelineLog(`${tag} queued kickoff: ${QUEUED_TURN_LINE[outcome]} after ${Date.now() - t0} ms`)
+  if (outcome === 'no-own-turn') {
+    const ends = (paneTurnCompleteTimes.get(paneId) ?? []).filter((at) => at > since)
+    pipelineLog(
+      `${tag} queued kickoff: no own turn — ${ends.length} turn end(s) since the kickoff` +
+      ` (at +${ends.map((at) => at - since).join(', +') || '—'} ms), last activity +${(paneLastActiveAt.get(paneId) ?? 0) - since} ms`,
+    )
+  }
   return outcome === 'started'
 }
 
@@ -16747,10 +16759,15 @@ backend.on('agent.activity', (raw) => {
     // pipeline stage at once. A live event is still stamped with `now`, so no
     // consumer of this map changes.
     if (!ev.superseded) {
-      recordTurnComplete(
+      const recorded = recordTurnComplete(
         paneTurnCompleteAt, ev.pane_id, ev.timestamp ?? '', Date.now(),
         TURN_TEXT_REPLAY_TOLERANCE_MS, paneTurnCompleteSourceAt
       )
+      if (recorded) {
+        const times = paneTurnCompleteTimes.get(ev.pane_id) ?? []
+        times.push(paneTurnCompleteAt.get(ev.pane_id) ?? Date.now())
+        paneTurnCompleteTimes.set(ev.pane_id, times.slice(-TURN_COMPLETE_TIMES_KEPT))
+      }
     }
     // Badge: authoritative turn end → drop the RUNNING hysteresis latch now.
     paneRefs[ev.pane_id]?.markTurnComplete?.()
@@ -18122,8 +18139,9 @@ interface StageRouter {
    *  The screen scan and the Manager's reply text can both carry one block. */
   routedDispatches: Set<string>
   /** Worker ASK / REPORT blocks already queued or routed (kind + slot +
-   *  content, whitespace dropped). A TUI repaint re-emits rows already on
-   *  screen, so the scan meets the same block again further down the buffer. */
+   *  content, whitespace dropped, + the turn the block was read in). A TUI repaint
+   *  re-emits rows already on screen, so the scan meets the same block again
+   *  further down the buffer; the same text in a later turn is a new message. */
   routedWorkerMessages: Set<string>
   /** Manager replies that ended before the router poll started, which waits
    *  for every slot's kickoff, with when each turn ended. startRouterPoll
@@ -18910,8 +18928,17 @@ function finishManagerStage(router: StageRouter, stageId: string, stageIndex: nu
 }
 
 function queueOrRouteWorkerMsg(router: StageRouter, stageId: string, msg: PendingMessage): void {
-  const key = `${msg.kind}\u0000${msg.fromLabel}\u0000${msg.content.replace(/\s+/g, '')}`
-  if (router.routedWorkerMessages.has(key)) return
+  // The turn the block was read in: when the worker's turn started. Two ASK
+  // or REPORT blocks with the same text are a repaint of one block only within
+  // one turn; a worker may well answer "done" twice. A vendor that reports no
+  // turns keeps 0, and every copy counts as a repaint, as before.
+  const workerPaneId = router.workerPaneIds.get(msg.fromLabel)
+  const turn = workerPaneId ? paneTurnStartedAt.get(workerPaneId) ?? 0 : 0
+  const key = `${msg.kind}\u0000${msg.fromLabel}\u0000${msg.content.replace(/\s+/g, '')}\u0000${turn}`
+  if (router.routedWorkerMessages.has(key)) {
+    pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} skipped — a repaint of a block already routed this turn`)
+    return
+  }
   router.routedWorkerMessages.add(key)
   if (!router.managerReady) {
     router.preReadyQueue.push(msg)
@@ -19076,7 +19103,8 @@ const globalRouterCursors = new Map<string, number>()
  *  indices too, so the 128KB cap invalidates them the same way. */
 const globalRouterAnchors = new Map<string, BufferObservation>()
 /** StageRouter.routedWorkerMessages for the global Manager (pane + stage + kind +
- *  content, whitespace dropped): a repaint re-emits a block already routed. */
+ *  content, whitespace dropped, + turn): a repaint re-emits a block already
+ *  routed. */
 const globalRoutedMessages = new Set<string>()
 let _globalScanRunning = false
 
@@ -19120,10 +19148,10 @@ function handStageToGlobalRouter(r: StageRouter): void {
     globalRouterAnchors.set(paneId, anchor)
   }
   for (const key of r.routedWorkerMessages) {
-    const [kind, label, content] = key.split('\u0000')
+    const [kind, label, content, turn] = key.split('\u0000')
     const paneId = r.workerPaneIds.get(label)
     const stageId = panes.value.find((p) => p.id === paneId)?.stageId
-    if (paneId && stageId) globalRoutedMessages.add(`${paneId}\u0000${stageId}\u0000${kind}\u0000${content}`)
+    if (paneId && stageId) globalRoutedMessages.add(`${paneId}\u0000${stageId}\u0000${kind}\u0000${content}\u0000${turn}`)
   }
 }
 
@@ -19174,8 +19202,11 @@ async function globalManagerRouterScan(): Promise<void> {
     if (newCursor > cursor) globalRouterCursors.set(wp.id, newCursor)
     const fromLabel = wp.slotLabel || wp.stageId
     const firstSeen = (kind: string, content: string): boolean => {
-      const key = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000${content.replace(/\s+/g, '')}`
-      if (globalRoutedMessages.has(key)) return false
+      const key = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000${content.replace(/\s+/g, '')}\u0000${paneTurnStartedAt.get(wp.id) ?? 0}`
+      if (globalRoutedMessages.has(key)) {
+        pipelineLog(`🎯 Global: ${kind} from ${fromLabel} skipped — a repaint of a block already routed this turn`)
+        return false
+      }
       globalRoutedMessages.add(key)
       return true
     }

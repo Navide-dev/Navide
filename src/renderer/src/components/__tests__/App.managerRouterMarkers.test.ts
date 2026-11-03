@@ -232,6 +232,7 @@ describe('worker screen: templates are not messages, and a repaint is not a seco
       rebaseGlobalRouterCursor: () => {},
       globalRouterCursors: new Map<string, number>(),
       globalRoutedMessages: new Set<string>(),
+      paneTurnStartedAt: new Map<string, number>(),
       pipelineLog: () => {},
       i18n: { global: { t: (key: string) => key } },
       routerInject: async (paneId: string, text: string) => { if (paneId === 'mgr') reports.push(text); return true },
