@@ -103,7 +103,7 @@ describe('every pipeline kickoff path asks whether the pane is parked', () => {
     expect(check).toBeGreaterThan(-1)
     expect(check).toBeLessThan(activate.indexOf('`role:${role.label}`'))
     expect(check).toBeLessThan(activate.indexOf('runPipelineKickoff({'))
-    expect(activate).toContain('parkedOnPrompt: () => paneParkedOnPrompt(pane.id)')
+    expect(activate).toContain('parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id)')
     expect(activate).toContain('failRunOnKickoff(index, slot.label, PARKED_ON_PROMPT_REASON, false, false, true)')
   })
 
@@ -112,7 +112,7 @@ describe('every pipeline kickoff path asks whether the pane is parked', () => {
     const check = schedule.indexOf('if (paneParkedOnPrompt(pane.id))')
     expect(check).toBeGreaterThan(-1)
     expect(check).toBeLessThan(schedule.indexOf('if (pane.roleKey && !(await injectRole())) return'))
-    expect(schedule).toContain('parkedOnPrompt: () => paneParkedOnPrompt(pane.id)')
+    expect(schedule).toContain('parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id)')
   })
 
   it('a parked slot neither retries nor takes an error edge: the run stops for a resume', () => {

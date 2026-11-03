@@ -1,5 +1,5 @@
 import { parseEventMs, turnTextFingerprint } from './completion'
-import type { EchoEvidence } from './injectEcho'
+import type { EchoEvidence, SubmitEvidence } from './injectEcho'
 
 export const MAX_KICKOFF_ATTEMPTS = 3
 export const MAX_PERSIST_PANE_ATTEMPTS = 8
@@ -9,7 +9,7 @@ export const MAX_PERSIST_PANE_ATTEMPTS = 8
 export async function runPipelineKickoff(input: {
   /** `stopped`: the injection asked stillWanted right before its Enter, got
    *  no, and cleared the box instead of submitting. */
-  inject: () => Promise<{ injected: boolean; echo?: EchoEvidence | null; stopped?: boolean }>
+  inject: () => Promise<{ injected: boolean; echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean }>
   sleep: (ms: number) => Promise<void>
   paneAlive: () => boolean
   onHeld?: () => void
@@ -25,6 +25,11 @@ export async function runPipelineKickoff(input: {
    *  slot can fail the run while this one waits, and an attempt that already
    *  typed is never undone. */
   stillWanted?: () => boolean
+  /** A kickoff the CLI queued behind a turn still running (submit 'queued')
+   *  is not sent yet: resolves true once that turn has ended and the kickoff
+   *  started a turn of its own. False holds it, as a kickoff left in the box
+   *  is held, and is never typed again. */
+  confirmQueued?: () => Promise<boolean>
 }): Promise<{ sent: boolean; cancelled: boolean; parked?: boolean; stopped?: boolean }> {
   if (input.parkedOnPrompt?.()) return { sent: false, cancelled: false, parked: true }
   if (input.heldCopy?.holds()) {
@@ -36,6 +41,11 @@ export async function runPipelineKickoff(input: {
   for (let attempt = 1; attempt <= MAX_KICKOFF_ATTEMPTS; attempt++) {
     if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
     const result = await input.inject()
+    if (result.injected && result.submit === 'queued' && input.confirmQueued) {
+      if (await input.confirmQueued()) return { sent: true, cancelled: false }
+      input.onHeld?.()
+      return { sent: false, cancelled: false }
+    }
     if (result.injected) return { sent: true, cancelled: false }
     if (result.stopped) return { sent: false, cancelled: false, stopped: true }
     if (result.echo != null) {
