@@ -758,3 +758,13 @@ def test_reader_declares_its_attribution_hooks() -> None:
     # The directory name is already the resume id, so nothing has to wait for
     # a real id to appear inside the file.
     assert reader.requires_real_resume_id is False
+
+
+def test_parse_activity_resumes_after_an_append(fake_muse_root: Path, monkeypatch) -> None:
+    from tests.activity_resume_support import assert_resumes
+
+    path = _session_file(fake_muse_root)
+    _write_jsonl(path, [_metadata(), _intake("first", seq=4), _assistant("one", seq=5), _terminal(6)])
+    assert_resumes(MuseLogReader, path, [
+        _intake("second", seq=7), _assistant("two", seq=8), _terminal(9),
+    ], monkeypatch)
