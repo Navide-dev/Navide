@@ -40,12 +40,23 @@ describe('frontend shared coordination regression', () => {
     expect(inject).toHaveBeenCalledTimes(1)
   })
 
-  it('deduplicates epoch timestamps before dispatch and rejects older turns', () => {
+  it('deduplicates epoch timestamps before dispatch', () => {
     const gate = createTurnTextGate()
     expect(gate.accept('pane', 'first', '1757500000000')).toBe(true)
     expect(gate.accept('pane', 'duplicate from watcher', '1757500000000')).toBe(false)
-    expect(gate.accept('pane', 'late', '1757499999999')).toBe(false)
     expect(gate.accept('pane', 'next', '1757500000001')).toBe(true)
+  })
+
+  it('accepts an older turn that arrives after a newer one, and each turn once', () => {
+    // The log reader can deliver turn B before turn A (A read late, after B):
+    // A's MSG blocks were dropped because its stamp was not the newest.
+    const gate = createTurnTextGate()
+    const a = '2026-11-03T12:24:27.492Z'
+    const b = '2026-11-03T12:24:39.354Z'
+    expect(gate.accept('pane', 'B: MSG to router', b)).toBe(true)
+    expect(gate.accept('pane', 'A: MSG to n8n', a)).toBe(true)
+    expect(gate.accept('pane', 'A: MSG to n8n', a)).toBe(false)
+    expect(gate.accept('pane', 'B: MSG to router', b)).toBe(false)
   })
 
   it('deduplicates unreadable timestamps by text independently per pane and clears teardown state', () => {
@@ -109,6 +120,22 @@ describe('messaging turn gate', () => {
       expect(gate.accept('pane', 'MSG to router', iso(ended), TOLERANCE)).toBe(true)
       // The same turn reported again (hook and log, or a backend re-emit).
       expect(gate.accept('pane', 'MSG to router', iso(ended), TOLERANCE)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('scans B then a late A, and a turn replayed twice once', () => {
+    vi.useFakeTimers()
+    try {
+      const gate = createMessagingTurnGate(BOOT)
+      const a = BOOT + 3_600_000
+      const b = a + 12_000
+      vi.setSystemTime(b + 400_000)
+      expect(gate.accept('pane', 'B: MSG to router', iso(b), TOLERANCE)).toBe(true)
+      expect(gate.accept('pane', 'A: MSG to n8n', iso(a), TOLERANCE)).toBe(true)
+      expect(gate.accept('pane', 'A: MSG to n8n', iso(a), TOLERANCE)).toBe(false)
+      expect(gate.accept('pane', 'A: MSG to n8n', iso(a), TOLERANCE)).toBe(false)
     } finally {
       vi.useRealTimers()
     }

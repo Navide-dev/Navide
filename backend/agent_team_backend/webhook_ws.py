@@ -18,6 +18,7 @@ from . import (
     webhook_github,
     webhook_keystore,
     webhook_listener,
+    webhook_payload,
     webhook_service,
     webhook_triggers,
 )
@@ -210,6 +211,9 @@ async def _reconcile() -> None:
             guard_enabled=_guard_on,
         )
         listener.update(snapshot)
+        # The body filter's character class takes 0.3-1 s to build; built in a
+        # worker before the port opens, not on the loop by the first request.
+        await asyncio.to_thread(webhook_payload._dash_run)
         try:
             await asyncio.to_thread(listener.start)
         except webhook_listener.ListenerError as err:

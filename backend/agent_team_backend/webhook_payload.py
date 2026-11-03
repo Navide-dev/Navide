@@ -22,6 +22,7 @@ Pure functions: nothing here touches the network, the store or a window.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import re
@@ -67,7 +68,11 @@ def _invisible_class() -> str:
     return "".join(ranges)
 
 
-_DASH_RUN = re.compile(rf"-(?:[\s{_invisible_class()}]*-){{2,}}")
+@functools.cache
+def _dash_run() -> re.Pattern[str]:
+    """Built on first use: the class walks every code point (0.3-1 s of CPU),
+    which every backend start paid at import, webhook or not."""
+    return re.compile(rf"-(?:[\s{_invisible_class()}]*-){{2,}}")
 
 _MARKER = "NAVIDE-WEBHOOK-DATA-"
 _INTRO = (
@@ -93,7 +98,7 @@ def sanitize_text(text: str) -> str:
     # The kickoff is echoed on the agent's screen, after the point Navide reads
     # its output from, so a marker in the data would read as the agent's own
     # (a REPORT, a DISPATCH, a stage end). En dashes keep it legible.
-    return _DASH_RUN.sub(lambda m: m.group(0).replace("-", "\u2013"), cleaned)
+    return _dash_run().sub(lambda m: m.group(0).replace("-", "\u2013"), cleaned)
 
 
 def build_task(name: str, text: str) -> str:
