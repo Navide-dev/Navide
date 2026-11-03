@@ -98,6 +98,7 @@ async function loadStart(opts: StartOpts = {}) {
     activateStage: vi.fn(async () => {}),
     startGlobalManagerRouter: vi.fn(),
     pipelineDag: opts.dag ?? linearPipelineDag(() => pipeline.workspacePath).dag,
+    runEndingSlots: new Set<string>(),
   }
   const onPipelineStart = new Function(...Object.keys(deps), code)(...Object.values(deps)) as (
     p: { task: string; workspacePath: string; pipelineId?: string },

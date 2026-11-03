@@ -80,6 +80,7 @@ async function secondRun(oldPaneTakesText: boolean) {
     renderSlotKickoff: () => 'kickoff',
     sessionMarkerLine: () => '',
     heldKickoffPanes: new Set(),
+    runEndingSlots: new Set(),
     heldKickoffCopy: () => undefined,
     rolesApi: { find: () => null },
     agentSpecs: [],
@@ -135,6 +136,7 @@ describe('the other lookups', () => {
       pipeline: { state: 'running', stageIndex: 0 },
       stagesApi: { stages: { value: [STAGE] } },
       pipelineDag: { retryAfterFailure: () => null, routeFailure: () => true },
+      runEndingSlots: new Set(),
     })
     await api.failRunOnKickoff(0, 'Check', 'no')
     expect(onStageSlotCompleted).toHaveBeenCalledWith(0, 'new', 'error-edge')
