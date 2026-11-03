@@ -8711,13 +8711,16 @@ export class FrontendPluginManager {
             permissionStored,
           })
         } else {
-          // Same Host gate as the persisted branch: a profile the Host forces
-          // off ignores the package's yolo request.
+          // The Host decides as for a persisted view; the package's yolo
+          // request can only narrow that decision, never widen it.
           let yolo = args.yolo === true
           if (yolo) {
             const settingsPayload = await this.sendPublicBackend('ui.settings.get', {}, beforeDispatch)
             const stored = toPayload(toPayload(settingsPayload).settings)
-            if (stored[`agentTeam.cliPermission.${profileId}`] === 'force-off') yolo = false
+            const permissionStored = stored[`agentTeam.cliPermission.${profileId}`]
+            const yoloStored = stored['agentTeam.yolo']
+            yolo = permissionStored === 'force-on' ||
+              (permissionStored !== 'force-off' && (yoloStored == null || yoloStored === '1'))
           }
           command = this.aiCliCommand(profileId, { ...args, yolo }, workspacePath)
         }

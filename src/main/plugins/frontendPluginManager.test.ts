@@ -15632,7 +15632,14 @@ describe('first-party Git private bridge', () => {
   })
 
   it('ignores a package yolo request on a non-persisted start when the Host forces the profile off', async () => {
-    for (const [index, permission] of ['force-off', 'force-on', undefined].entries()) {
+    const cases: Array<{ settings: Record<string, string>; bypass: boolean }> = [
+      { settings: { 'agentTeam.cliPermission.claude': 'force-off' }, bypass: false },
+      { settings: { 'agentTeam.cliPermission.claude': 'force-on', 'agentTeam.yolo': '0' }, bypass: true },
+      { settings: {}, bypass: true },
+      // The Host's global switch off: the package cannot widen it.
+      { settings: { 'agentTeam.yolo': '0' }, bypass: false },
+    ]
+    for (const [index, { settings: hostSettings, bypass }] of cases.entries()) {
       const opened = await openGitView('/workspace', 'git-window')
       opened.mgr.setBackendWsUrl(`ws://git-ai-yolo-force-off-${index}`)
       const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
@@ -15657,7 +15664,7 @@ describe('first-party Git private bridge', () => {
         id: settings.id,
         type: settings.type,
         ok: true,
-        payload: { settings: permission ? { 'agentTeam.cliPermission.claude': permission } : {} },
+        payload: { settings: hostSettings },
         error: null,
         timestamp: '',
       })
@@ -15666,8 +15673,8 @@ describe('first-party Git private bridge', () => {
       expect(create.type).toBe('terminal.create')
       const command = create.payload.command as string | string[]
       const line = Array.isArray(command) ? command.at(-1)! : command
-      expect(line, String(permission)).toBe(
-        permission === 'force-off' ? 'claude' : 'claude --dangerously-skip-permissions')
+      expect(line, JSON.stringify(hostSettings)).toBe(
+        bypass ? 'claude --dangerously-skip-permissions' : 'claude')
       socket.receive({
         id: create.id,
         type: create.type,

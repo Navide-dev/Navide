@@ -20,6 +20,9 @@ describe('Windows reserved device names', () => {
       }
     }
     expect(canonicalPackagePath('views/con.html')).toBeNull()
+    for (const segment of ['con:stream', 'nul.', 'aux. ', 'CONIN$', 'conout$.txt', 'CLOCK$', 'COM\u00b9', 'lpt\u00b2.log', 'com\u00b3']) {
+      expect(canonicalArchivePath(`dist/${segment}`, 'regular'), segment).toBeNull()
+    }
   })
 
   it('leave names that only start with or contain a reserved word alone', () => {
