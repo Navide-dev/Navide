@@ -44,14 +44,19 @@ _NEWLINES = re.compile("\r\n?| | ")
 #: ---ASK-END---, ---STAGE-DONE---, ---MSG-START--- ...). Whitespace counts
 #: because Claude Code draws blank cells with cursor moves, so "- - -" can
 #: reach Navide's clean buffer as "---". Format characters (Cf: soft hyphen,
-#: zero-width space, word joiner, BOM ...) and combining marks (Mn, Me) count
-#: too: they draw nothing of their own, and a renderer or the clean buffer can
-#: drop them and leave the run behind.
+#: zero-width space, word joiner, BOM ...), marks (Mn, Mc, Me) and the blank
+#: fillers count too: they draw nothing a router reads, and a renderer or the
+#: clean buffer can drop them and leave the run behind. The same set
+#: plugins/external_content.py treats as invisible (Zl and Zp are \s already).
+_INVISIBLE_FILLERS = frozenset("\u115f\u1160\u3164\uffa0\u2800")
+
+
 def _invisible_class() -> str:
     ranges: list[str] = []
     start = prev = -2
     for cp in range(sys.maxunicode + 1):
-        if unicodedata.category(chr(cp)) not in ("Cf", "Mn", "Me"):
+        ch = chr(cp)
+        if ch not in _INVISIBLE_FILLERS and unicodedata.category(ch) not in ("Cf", "Mn", "Mc", "Me"):
             continue
         if cp != prev + 1:
             if start >= 0:

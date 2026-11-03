@@ -119,13 +119,17 @@ def test_dash_runs_become_en_dashes_and_single_hyphens_stay():
     assert wp.sanitize_text("2026-11-02, -5, a--b, x-y") == "2026-11-02, -5, a--b, x-y"
 
 
-# Format characters (Cf) and combining marks (Mn, Me) draw nothing of their
-# own: a renderer or the clean buffer can drop them and leave "---" behind.
-# They separate a dash run the way whitespace does.
+# Format characters (Cf), marks (Mn, Mc, Me) and the blank fillers draw
+# nothing a router reads: a renderer or the clean buffer can drop them and
+# leave "---" behind. They separate a dash run the way whitespace does: the
+# same set plugins/external_content.py treats as invisible.
 @pytest.mark.parametrize(
     "sep",
-    ["\u00ad", "\u200b", "\u2060", "\ufeff", "\u200d", "\u0301", "\u20dd"],
-    ids=["soft-hyphen", "zwsp", "word-joiner", "bom", "zwj", "combining-acute", "enclosing-circle"],
+    ["\u00ad", "\u200b", "\u2060", "\ufeff", "\u200d", "\u0301", "\u20dd", "\u0903",
+     "\u115f", "\u1160", "\u3164", "\uffa0", "\u2800"],
+    ids=["soft-hyphen", "zwsp", "word-joiner", "bom", "zwj", "combining-acute", "enclosing-circle",
+         "spacing-mark", "hangul-choseong-filler", "hangul-jungseong-filler", "hangul-filler",
+         "halfwidth-hangul-filler", "braille-blank"],
 )
 def test_a_dash_run_split_by_invisible_characters_is_still_a_dash_run(sep):
     raw = f"-{sep}-{sep}-REPORT-START-{sep}-{sep}-"
