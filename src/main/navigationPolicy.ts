@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isWindows } from '../shared/osplat'
 
 /** Whether a top-level navigation stays on the app itself: the dev-server
  *  origin (HMR/reloads), or exactly the app's own index.html. Any other file
@@ -11,7 +12,7 @@ export function isAppNavigation(url: string, devOrigin: string | null, appIndexP
     if (u.protocol !== 'file:') return false
     const target = resolve(fileURLToPath(u))
     const own = resolve(appIndexPath)
-    return process.platform === 'win32'
+    return isWindows()
       ? target.toLowerCase() === own.toLowerCase()
       : target === own
   } catch {
