@@ -123,11 +123,15 @@ def _cancel_retry() -> None:
 async def _retry_later(delay: float) -> None:
     global _retry_task
     await asyncio.sleep(delay)
-    _retry_task = None
+    # Held while the retry runs, so the status keeps reporting it: cleared in
+    # between, a status read during the attempt showed the error with no retry.
     try:
         await reconcile()
     except Exception:  # noqa: BLE001 - a retry must not end as an unretrieved task error
         log.exception("webhook: listener retry failed")
+    finally:
+        if _retry_task is asyncio.current_task():
+            _retry_task = None
 
 
 def _start_failed(err: webhook_listener.ListenerError) -> None:

@@ -140,7 +140,9 @@ class TestStartRetry:
     listener stayed off until the app was restarted."""
 
     async def test_a_failed_start_is_retried_until_it_listens(self, env, monkeypatch) -> None:
-        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.05, 0.05, 0.05), raising=False)
+        # The first wait is long enough for the status read below on a slow
+        # runner (Windows arm64 read it after both 0.05 s waits had run out).
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.5, 0.05, 0.05), raising=False)
         calls = flaky_start(monkeypatch, failures=2)
         await enabled_trigger()
         status = (await call("webhook.status"))["payload"]
@@ -150,6 +152,25 @@ class TestStartRetry:
         status = (await call("webhook.status"))["payload"]
         assert status["listening"] is True and status["error"] == "" and status["retry"] is None
         assert port_open(status["port"]) and len(calls) == 3
+
+    async def test_the_status_reports_the_retry_while_it_runs(self, env, monkeypatch) -> None:
+        # Windows arm64 CI: a status read during the retry's own start attempt
+        # showed the failure with retry None, as if no retry were coming.
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.01, 0.01, 0.01), raising=False)
+        seen: list[bool] = []
+        real = webhook_ws.webhook_listener.WebhookListener.start
+
+        def start(self) -> None:
+            seen.append(webhook_ws._retry_task is not None)
+            if len(seen) == 1:
+                raise webhook_ws.webhook_listener.ListenerError("the webhook listener did not start")
+            real(self)
+
+        monkeypatch.setattr(webhook_ws.webhook_listener.WebhookListener, "start", start)
+        await enabled_trigger()
+        await settled(lambda: webhook_ws._listener is not None)
+        assert seen == [False, True]
+        assert webhook_ws._retry_task is None
 
     async def test_retries_stop_at_the_limit_and_every_failure_is_logged(self, env, monkeypatch, caplog) -> None:
         monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.01, 0.01), raising=False)
