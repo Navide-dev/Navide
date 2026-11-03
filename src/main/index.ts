@@ -3461,7 +3461,7 @@ let detectedEditorsCache: DetectedEditor[] | null = null
 
 function currentDetectedEditors(refresh = false): DetectedEditor[] {
   if (refresh || !detectedEditorsCache) {
-    detectedEditorsCache = detectEditors(getResolvedUserPath())
+    detectedEditorsCache = detectEditors(getResolvedUserPath({ fresh: refresh }))
   }
   return detectedEditorsCache
 }

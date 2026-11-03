@@ -928,3 +928,37 @@ def test_a_failed_or_relative_npm_prefix_adds_nothing(tmp_path, monkeypatch):
         with patch("subprocess.run", return_value=result):
             _refresh_path_from_login_shell(force=True)
         assert os.environ["PATH"] == str(tmp_path)
+
+
+def _codepage_run(stdout: bytes):
+    """A `subprocess.run` that decodes the way Windows does: with the ANSI
+    code page (cp950 on zh-TW) unless the caller names an encoding."""
+    def run(argv, **kwargs):
+        out = stdout.decode(kwargs.get("encoding") or "cp950", kwargs.get("errors") or "strict")
+        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+    return run
+
+
+def _npm_on_path(monkeypatch):
+    monkeypatch.setattr(osplat.paths, "resolve_program",
+                        lambda name, path=None: "npm" if name == "npm" else None)
+    monkeypatch.setattr(osplat.paths, "launch_argv", lambda program, args=(): [program, *args])
+
+
+def test_npm_prefix_under_a_chinese_user_name_is_read_as_utf8(tmp_path, monkeypatch):
+    """npm prints UTF-8; read with the zh-TW code page, `C:\\Users\\王小明\\...`
+    raised UnicodeDecodeError out of get_status(fresh=True) — the re-detect
+    right after the guided install."""
+    prefix = tmp_path / "王小明" / "AppData" / "Roaming" / "npm"
+    _npm_on_path(monkeypatch)
+    with patch("subprocess.run", side_effect=_codepage_run(f"{prefix}\r\n".encode("utf-8"))):
+        assert onboarding_deps._npm_global_bin_dirs() == [str(prefix)]
+
+
+def test_undecodable_npm_prefix_output_adds_nothing(tmp_path, monkeypatch):
+    _npm_on_path(monkeypatch)
+    with patch("subprocess.run", side_effect=_codepage_run(f"{tmp_path}/\xff".encode("latin-1"))):
+        assert onboarding_deps._npm_global_bin_dirs() == []
+    decode_error = UnicodeDecodeError("cp950", b"\xe7", 0, 1, "illegal multibyte sequence")
+    with patch("subprocess.run", side_effect=decode_error):
+        assert onboarding_deps._npm_global_bin_dirs() == []

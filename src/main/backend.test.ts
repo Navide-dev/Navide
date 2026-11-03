@@ -10,13 +10,14 @@ vi.mock('./process-tree', () => ({ killProcessTree }))
 const registryPath = vi.hoisted(() => ({ entries: [] as string[] }))
 vi.mock('./windows-registry-path', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./windows-registry-path')>()),
-  readWindowsRegistryPath: () => registryPath.entries,
+  readWindowsRegistryPath: vi.fn(() => registryPath.entries),
 }))
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { platformId, setPlatformId } from '../shared/osplat'
+import { readWindowsRegistryPath } from './windows-registry-path'
 import {
   bindBackendDisabledBuiltins,
   bindBackendPluginActivationCatalog,
@@ -397,6 +398,30 @@ describe('getResolvedUserPath on Windows', () => {
     registryPath.entries = [code]
     setPlatformId('win32')
     expect(getResolvedUserPath()).toBe([join(root, 'System32'), code].join(delimiter))
+  })
+
+  // Each read is two synchronous `reg.exe` runs on Electron's main thread;
+  // a slow machine froze the UI for tens to hundreds of ms per call.
+  it('reads the registry once per 30 s, unless a rescan forces it', () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubEnv('PATH', 'C:\\Windows')
+      setPlatformId('win32')
+      const reads = vi.mocked(readWindowsRegistryPath)
+      getResolvedUserPath({ fresh: true })
+      reads.mockClear()
+      getResolvedUserPath()
+      vi.advanceTimersByTime(29_000)
+      getResolvedUserPath()
+      expect(reads).not.toHaveBeenCalled()
+      getResolvedUserPath({ fresh: true })
+      expect(reads).toHaveBeenCalledTimes(1)
+      vi.advanceTimersByTime(30_000)
+      getResolvedUserPath()
+      expect(reads).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('does not consult the registry off Windows', () => {

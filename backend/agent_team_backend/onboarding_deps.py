@@ -383,16 +383,20 @@ def _npm_global_bin_dirs() -> list[str]:
     try:
         proc = subprocess.run(
             osplat.paths.launch_argv(npm, ["prefix", "-g"]),
-            capture_output=True, text=True, timeout=_NPM_PREFIX_TIMEOUT_S,
+            # npm prints UTF-8; text=True alone decodes with the ANSI code
+            # page (cp950 on zh-TW), which fails on a non-ASCII user name.
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=_NPM_PREFIX_TIMEOUT_S,
         )
-    except (subprocess.SubprocessError, OSError):
+    except (subprocess.SubprocessError, OSError, ValueError):
         return []
     lines = (proc.stdout or "").strip().splitlines()
     if proc.returncode != 0 or not lines:
         return []
     prefix = lines[-1].strip()
-    # Absolute only, for the reason `npm_prefix_bins` gives.
-    if not os.path.isabs(prefix):
+    # Absolute only, for the reason `npm_prefix_bins` gives; a replaced
+    # (undecodable) character means the path is not the real one.
+    if not os.path.isabs(prefix) or "\ufffd" in prefix:
         return []
     return [prefix]
 
