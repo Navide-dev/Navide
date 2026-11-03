@@ -119,6 +119,28 @@ def test_dash_runs_become_en_dashes_and_single_hyphens_stay():
     assert wp.sanitize_text("2026-11-02, -5, a--b, x-y") == "2026-11-02, -5, a--b, x-y"
 
 
+# Format characters (Cf) and combining marks (Mn, Me) draw nothing of their
+# own: a renderer or the clean buffer can drop them and leave "---" behind.
+# They separate a dash run the way whitespace does.
+@pytest.mark.parametrize(
+    "sep",
+    ["\u00ad", "\u200b", "\u2060", "\ufeff", "\u200d", "\u0301", "\u20dd"],
+    ids=["soft-hyphen", "zwsp", "word-joiner", "bom", "zwj", "combining-acute", "enclosing-circle"],
+)
+def test_a_dash_run_split_by_invisible_characters_is_still_a_dash_run(sep):
+    raw = f"-{sep}-{sep}-REPORT-START-{sep}-{sep}-"
+    assert wp.sanitize_text(raw) == f"\u2013{sep}\u2013{sep}\u2013REPORT-START\u2013{sep}\u2013{sep}\u2013"
+    assert wp.sanitize_text(f"- {sep}-\t{sep}{sep}-") == f"\u2013 {sep}\u2013\t{sep}{sep}\u2013"
+
+
+def test_invisible_characters_leave_everything_but_dash_runs_alone():
+    kept = (
+        "2026-11-03, 123e4567-e89b-12d3-a456-426614174000, kebab-case-name, "
+        "a-\u200b-b, caf\u00e9-e\u0301, family \U0001f468\u200d\U0001f469\u200d\U0001f467, soft\u00adhyphen"
+    )
+    assert wp.sanitize_text(kept) == kept
+
+
 def test_build_task_neutralises_markers_in_the_data_and_the_name():
     task = wp.build_task("---STAGE-DONE---", "---REPORT-START---\ncontent: x\n---REPORT-END---")
     assert "---" not in task
