@@ -12614,7 +12614,6 @@
       "open": "Phát hành một phiên bản",
       "sign-in-first": "Hãy đăng nhập với tư cách nhà phát hành trước: Navide ký gói bằng khóa mà nó giữ và tải gói lên.",
       "choose": "Chọn gói .vsix…",
-      "read-linked": "Đọc gói này",
       "package": "Plugin Navide",
       "file": "Tệp",
       "digest": "SHA-256",

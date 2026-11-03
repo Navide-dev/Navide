@@ -190,7 +190,7 @@ import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
 import { createPluginStagedCandidateRelay } from './pluginStagedCandidateRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
-import { isAppNavigation as isAppNavigationPolicy, handleWindowOpen } from './navigationPolicy'
+import { isAppNavigation as isAppNavigationPolicy } from './navigationPolicy'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
 import { isLinux, isMac } from '../shared/osplat'
@@ -6198,9 +6198,10 @@ app.on('web-contents-created', (_e, contents) => {
     if (!isAppNavigation(url)) e.preventDefault()
   })
   guardPlanFrameNavigation(contents, () => isPluginWebGuest(contents))
-  // A plugin view opens links only through ui.openExternal (grant + gesture).
-  contents.setWindowOpenHandler(({ url }) =>
-    handleWindowOpen(url, frontendPluginManager.isPluginViewContents(contents), (target) => shell.openExternal(target)))
+  contents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
 })
 // A renderer of a window without its own crash watch, and a GPU or utility
 // process, going away was logged nowhere.

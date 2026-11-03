@@ -12614,7 +12614,6 @@
       "open": "上架新版本",
       "sign-in-first": "请先以发布者身分登录：Navide 会用它保管的密钥签章并上传套件。",
       "choose": "选择 .vsix 套件…",
-      "read-linked": "读取此套件",
       "package": "Navide 插件",
       "file": "文件",
       "digest": "SHA-256",

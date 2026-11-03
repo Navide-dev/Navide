@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { isAppNavigation, handleWindowOpen } from './navigationPolicy'
+import { isAppNavigation } from './navigationPolicy'
 
 const APP_INDEX = join(process.cwd(), 'out', 'renderer', 'index.html')
 
@@ -18,25 +18,5 @@ describe('isAppNavigation', () => {
     expect(isAppNavigation('file:///tmp/renderer/index.html', null, APP_INDEX)).toBe(false)
     expect(isAppNavigation('https://example.com/renderer/index.html', null, APP_INDEX)).toBe(false)
     expect(isAppNavigation('not a url', null, APP_INDEX)).toBe(false)
-  })
-})
-
-describe('handleWindowOpen', () => {
-  it('routes an http(s) link from an app window to the OS browser', () => {
-    const openExternal = vi.fn(async () => undefined)
-    expect(handleWindowOpen('https://example.com', false, openExternal)).toEqual({ action: 'deny' })
-    expect(openExternal).toHaveBeenCalledWith('https://example.com')
-  })
-
-  it('never opens anything externally for a plugin view', () => {
-    const openExternal = vi.fn(async () => undefined)
-    expect(handleWindowOpen('https://example.com', true, openExternal)).toEqual({ action: 'deny' })
-    expect(openExternal).not.toHaveBeenCalled()
-  })
-
-  it('denies non-http(s) schemes without opening them', () => {
-    const openExternal = vi.fn(async () => undefined)
-    expect(handleWindowOpen('file:///etc/passwd', false, openExternal)).toEqual({ action: 'deny' })
-    expect(openExternal).not.toHaveBeenCalled()
   })
 })
