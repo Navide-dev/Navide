@@ -82,7 +82,7 @@ describe('App uses the executable CLI coordination seams', () => {
   it('accepts turn text before dispatch and releases deduplication state on teardown', () => {
     const start = source.indexOf('function onTurnCompleteForMessaging(')
     const body = source.slice(start, source.indexOf('\n}\n', start))
-    expect(body.indexOf('turnTextGate.accept(paneId, text, timestamp)')).toBeGreaterThan(-1)
+    expect(body.indexOf('turnTextGate.accept(paneId, text, timestamp, TURN_TEXT_REPLAY_TOLERANCE_MS)')).toBeGreaterThan(-1)
     expect(body.indexOf('turnTextGate.accept(')).toBeLessThan(body.indexOf('const parsed = parseMessages(text)'))
     expect(source).toContain('turnTextGate.delete(paneId)')
   })
