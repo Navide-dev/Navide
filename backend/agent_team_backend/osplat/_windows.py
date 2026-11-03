@@ -1166,6 +1166,8 @@ terminal_backend = WindowsTerminalBackend()
 
 import tempfile  # noqa: E402
 
+from ._posix_paths import _npmrc_prefix  # noqa: E402  (a portable ini read)
+
 
 class WindowsLayout(WindowsPaths):
     def state_dir(self, app_name: str) -> Path:
@@ -1462,6 +1464,60 @@ def _probe_symlinks() -> bool:
     return True
 
 
+_MACHINE_ENV_KEY = r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
+_USER_ENV_KEY = "Environment"
+
+
+def _registry_path_entries() -> list[str]:
+    """The PATH a new process would get now: Machine, then User, expanded.
+
+    Read fresh on every call; it is a pair of registry reads. A key or value
+    that is absent (a locked-down profile has no User PATH) contributes
+    nothing rather than failing the rest.
+    """
+    try:
+        import winreg
+    except ImportError:
+        return []
+    entries: list[str] = []
+    for root, subkey in (
+        (winreg.HKEY_LOCAL_MACHINE, _MACHINE_ENV_KEY),
+        (winreg.HKEY_CURRENT_USER, _USER_ENV_KEY),
+    ):
+        try:
+            key = winreg.OpenKey(root, subkey)
+            try:
+                value, _kind = winreg.QueryValueEx(key, "Path")
+            finally:
+                winreg.CloseKey(key)
+        except OSError:
+            continue
+        # REG_EXPAND_SZ holds `%USERPROFILE%\...` as written; expanded either
+        # way, since a REG_SZ with no `%` comes back unchanged.
+        expanded = winreg.ExpandEnvironmentStrings(str(value))
+        entries.extend(entry for entry in expanded.split(";") if entry.strip())
+    return entries
+
+
+def _npm_global_dirs(home: Path) -> list[str]:
+    """Where `npm install -g` puts its `.cmd` shims on Windows.
+
+    npm's default prefix there is `%APPDATA%\npm`, and unlike POSIX the shims
+    sit in the prefix itself, not `<prefix>\bin`. A prefix the user set
+    (`npm_config_prefix`, `~/.npmrc`) is added too.
+    """
+    appdata = os.environ.get("APPDATA")
+    roaming = Path(appdata) if appdata else home / "AppData" / "Roaming"
+    dirs = [str(roaming / "npm")]
+    configured = (os.environ.get("npm_config_prefix") or "").strip() or _npmrc_prefix(home)
+    if configured:
+        prefix = Path(os.path.expandvars(configured)).expanduser()
+        # Absolute only, for the reason `npm_prefix_bins` gives.
+        if prefix.is_absolute() and str(prefix) not in dirs:
+            dirs.append(str(prefix))
+    return dirs
+
+
 class WindowsDiscoveryLayout(WindowsLayout):
     def executable_candidates(self, name: str) -> list[str]:
         exts = _pathext()
@@ -1475,8 +1531,8 @@ class WindowsDiscoveryLayout(WindowsLayout):
         return True
 
     def login_path_probe(self) -> list[str] | None:
-        # No login shell: PATH comes from the registry and the process
-        # already carries it.
+        # No login shell: PATH comes from the registry, re-read through
+        # `login_path_tail_fallbacks` so a dir added after launch is seen.
         return None
 
     def login_path_fallbacks(self, home: Path) -> list[str]:
@@ -1484,7 +1540,13 @@ class WindowsDiscoveryLayout(WindowsLayout):
         return []
 
     def login_path_tail_fallbacks(self, home: Path) -> list[str]:
-        return []
+        # The process PATH is the one Explorer handed Navide at launch. An
+        # installer that ran since (winget's Node MSI, nvm-windows, Volta)
+        # wrote its dir to the registry, and `npm install -g` lands in npm's
+        # global dir — neither reaches this process until Navide restarts.
+        # Appended, never prepended: nothing the inherited PATH resolves
+        # first is displaced.
+        return [*_registry_path_entries(), *_npm_global_dirs(home)]
 
     def git_subprocess_env(self, askpass: str) -> dict[str, str]:
         # GIT_ASKPASS only, as before: whether the bundled OpenSSH execs the
