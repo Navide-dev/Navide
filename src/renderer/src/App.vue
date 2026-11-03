@@ -84,7 +84,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { VENDORS_WITHOUT_TURN_END, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -2973,7 +2973,11 @@ function messagingHoldKey(
   if (acp.owns(paneId)) return acp.holdKey(paneId)
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return 'gone'
-  const status = paneRefs[paneId]?.displayStatus as string | undefined
+  const status = messagingGateStatus(
+    paneRefs[paneId]?.displayStatus as string | undefined,
+    paneRefs[paneId]?.liveStatus as string | undefined,
+    paneRefs[paneId]?.stoppedBy as string | null | undefined,
+  )
   // A question passes deliberately. Those panes were already reaching this gate
   // as 'idle' (a turn ending on a question, or an AskUserQuestion box the badge
   // used to show as running-then-idle), so holding them back would newly park
@@ -10080,7 +10084,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
  *
  *  `keepLoop` is for interrupts not aimed at this one pane (batch, evolve):
  *  they leave its loop running. */
-async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): Promise<boolean> {
+async function onInterrupt(paneId: string, opts: { keepLoop?: boolean; by?: 'agent' | 'user' } = {}): Promise<boolean> {
   if (!panes.value.find((p) => p.id === paneId)?.realized) return false
   const ref = paneRefs[paneId]
   if (acp.owns(paneId)) return acp.interrupt(paneId, opts)
@@ -10091,7 +10095,7 @@ async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): P
   // continue aborts.
   if (!opts.keepLoop && panes.value.find((p) => p.id === paneId)?.loopActive) stopLoopSpinning(paneId, 'interrupted')
   try {
-    const issued = await ref.interrupt()
+    const issued = await ref.interrupt(opts.by ?? 'user')
     persistPaneStopped(paneId, true)
     return issued !== false
   } catch {
@@ -11406,7 +11410,9 @@ registerCommand('ui.pane.interrupt', async (args) => {
   const ref = paneRefs[paneId]
   const status = paneDisplayStatus(pane)
   const awaitingKind = (ref?.awaitingKind as string | null | undefined) || undefined
-  const sent = await onInterrupt(paneId)
+  // Reached only over the MCP bus (cli_interrupt, ui_invoke), never from the
+  // STOP button: an agent's interrupt, so queued messages may follow it.
+  const sent = await onInterrupt(paneId, { by: 'agent' })
   const advisories = interruptAdvisoriesFor({
     name: (pane.messagingName as string | undefined) ?? pane.customName ?? paneId,
     sent,
