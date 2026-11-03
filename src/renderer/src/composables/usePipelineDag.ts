@@ -23,6 +23,7 @@ import {
   rejectGate,
   rejectOutcome,
   restartPointFor,
+  retryLeft,
   retryPolicyOf,
   routeFailure as planRouteFailure,
   settleUntaken,
@@ -428,6 +429,17 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     return !!p && !!id && hasErrorEdge(p, id)
   }
 
+  /** True when a failure of this slot now would end the run: it is one only
+   *  its user can answer, or the slot has neither a try left nor an error
+   *  edge. What failRunOnKickoff will decide, read without taking a try. */
+  function failureEndsRun(index: number, label: string, needsUser: boolean): boolean {
+    if (needsUser) return true
+    const p = plan.value
+    const id = nodeId(index, label)
+    if (!p || !run || !id) return true
+    return !retryLeft(p, run, id) && !hasErrorEdge(p, id)
+  }
+
   /** A failed slot with an error edge: fail its node down that edge and let
    *  the run go on. false when it has none (the run fails as before). */
   function routeFailure(index: number, label: string, error: string): boolean {
@@ -617,6 +629,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     signalNonce,
     retryAfterFailure,
     routesFailure,
+    failureEndsRun,
     runStack,
     setRunStack,
     isChildRun,

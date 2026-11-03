@@ -7344,7 +7344,7 @@ function scheduleInjection(pane: ActivePane): void {
           const injected = await injectPane(
             pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence, undefined,
             // Asked again right before its Enter: the run can fail mid-paste.
-            () => pane.origin !== 'pipeline' || pipeline.state === 'running',
+            () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
           )
           return { injected, echo: evidence.echo, stopped: evidence.stopped }
         },
@@ -7357,7 +7357,7 @@ function scheduleInjection(pane: ActivePane): void {
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
         parkedOnPrompt: () => paneParkedOnPrompt(pane.id),
         // A sibling slot can fail the run during the role's 30s settle.
-        stillWanted: () => pane.origin !== 'pipeline' || pipeline.state === 'running',
+        stillWanted: () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
       })
       if (kickoffResult.stopped) {
         pipelineLog(`${tag} ⏹ the run is no longer running — not sending the kickoff`)
@@ -14254,6 +14254,7 @@ async function onPipelineRestart(payload: { task: string; workspacePath: string;
   // Drop the previous attempt's slot counts too, so killing its panes below
   // does not release slots of a run that is being thrown away anyway.
   stageCompletions.clear()
+  runEndingSlots.clear()
   activeQuestion.value = null
   // Kill any pipeline-origin panes still hanging around so we get a clean grid.
   for (const p of [...panes.value]) {
@@ -14347,6 +14348,7 @@ async function runPipelineResume(): Promise<void> {
   pipelineRunWorkspace = resumeWorkspacePath
   pipeline.stageIndex = info.nextStageIndex
   pipeline.state = 'running'
+  runEndingSlots.clear()
   // Paused at a gate: the run sits at the end of the stage before it.
   if (gateNext !== null) pipeline.stageIndex = gateNext - 1
   pipeline.log = []
@@ -14966,7 +14968,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     // Another slot failed the run, or the user stopped or reset it, while this
     // one waited on its role: nothing more is typed into this pane for a run
     // that is over. What was already typed stays; nothing is interrupted.
-    const slotStillWanted = (): boolean => pipeline.state === 'running' && pipeline.stageIndex === index
+    const slotStillWanted = (): boolean => pipeline.state === 'running' && pipeline.stageIndex === index && !runEnding()
     const runEndedFirst = (what: string): boolean => {
       if (slotStillWanted()) return false
       pipelineLog(`${tag} ⏹ the run is no longer running — not sending the ${what}`)
@@ -15011,7 +15013,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         busy: () => paneTurnBusy(pane.id),
         parked: () => paneParkedOnPrompt(pane.id),
         alive: () => paneAlive(pane.id),
-        stillWanted: () => pipeline.state === 'running' && pipeline.stageIndex === index,
+        stillWanted: slotStillWanted,
         sleep,
       })
       if (turnWait === 'gone') {
@@ -15026,6 +15028,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     }
     if (turnWait === 'parked' || paneParkedOnPrompt(pane.id)) {
       pipelineLog(`${tag} ⏸ ${PARKED_ON_PROMPT_REASON} — not typing into it`)
+      markRunEnding(index, slot.label, true)
       pane.kickoffStatus = 'failed'
       syncViews()
       pipelineDag.slotStarted(index, slot.label, pane.id)
@@ -15076,6 +15079,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       syncViews()
       if (!roleOk) {
         const roleFailure = 'role prompt never reached the agent'
+        markRunEnding(index, slot.label)
         pipelineLog(`${tag} ✕ ${retry ? 'retried' : 'deferred'} role injection failed (agent didn't react) — not sending the kickoff`)
         // The failed-kickoff exit below, without a kickoff: the slot's node and
         // backend record say so, and pipeline.stage_spawn goes first so a resume
@@ -15173,6 +15177,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       : held
       ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
       : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`
+    if (!ok) markRunEnding(index, slot.label, parked)
     // Another slot failed the run (or the user stopped it) while this kickoff
     // was in flight: record nothing and arm nothing for a run that is over.
     const runMovedOn = (): boolean => pipeline.state !== 'running' || pipeline.stageIndex !== index
@@ -15433,6 +15438,7 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   pipelineRunWorkspace = payload.workspacePath
   pipeline.stageIndex = 0
   pipeline.state = 'running'
+  runEndingSlots.clear()
   // The graph decides where the run starts (0, or a restart-from-node point).
   const startIndex = await pipelineDag.begin(pid, stagesApi.stages.value, {
     fromNodeId: payload.fromNodeId,
@@ -15703,6 +15709,7 @@ async function onPipelineNext(): Promise<void> {
  *  the workspace it inspects, and that workspace is the one being closed. */
 function tearDownPipelineOrchestration(): void {
   pipeline.state = 'aborted'
+  runEndingSlots.clear()
   stopGlobalManagerRouter()
   // Router text waiting on a prompt belongs to this run, not to a resumed one.
   routerDeliveries.clear()
@@ -15785,12 +15792,36 @@ function scheduleSlotRetry(stageIndex: number, slotLabel: string, retry: { attem
   })()
 }
 
+/** Slots ("stage/label") whose failure will end the run, from the moment
+ *  that is decided until failRunOnKickoff takes it. In between the slot still
+ *  records its kickoff and its stage with the backend, two round trips with
+ *  the run `running`, and a sibling asked whether it is still wanted in that
+ *  second pressed its Enter (0.2.37 Linux VM, 2/13). Taken out again when
+ *  failRunOnKickoff gives the slot a retry instead, and emptied whenever a
+ *  run starts, resumes, restarts, resets or is torn down. */
+const runEndingSlots = new Set<string>()
+
+/** True while a slot of this run is on its way to failing it. */
+function runEnding(): boolean {
+  return runEndingSlots.size > 0
+}
+
+/** Called the moment a slot's failure is decided, before anything is awaited:
+ *  when that failure will end the run, no sibling types anything more. */
+function markRunEnding(stageIndex: number, slotLabel: string, needsUser = false): void {
+  if (pipelineDag.failureEndsRun(stageIndex, slotLabel, needsUser)) runEndingSlots.add(`${stageIndex}/${slotLabel}`)
+}
+
 /** A slot's kickoff never reached its agent: fail its node with the reason and
  *  end the run as failed, instead of leaving it `running` around a pane that
  *  never got its task (#448). Like an abort, the panes stay alive for a
  *  resume. The first failing slot ends the run; later ones only fail their
  *  own node. */
 async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false, reported = false, needsUser = false): Promise<void> {
+  // Nothing is awaited from here to the teardown below, so the mark can go
+  // now: either this run ends in the same tick, or the slot retries, takes its
+  // error edge or belongs to a run that is over, and the mark was wrong.
+  runEndingSlots.delete(`${stageIndex}/${slotLabel}`)
   // A kickoff that finishes late, after the user stopped this run and another
   // one moved to a different stage, must not fail that one.
   if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
@@ -15993,6 +16024,7 @@ async function onPipelineReset(paneIds?: readonly string[]): Promise<void> {
   stopGlobalManagerRouter()
   cancelAllWatchers()
   stageCompletions.clear()
+  runEndingSlots.clear()
   // Reset kills the panes, so any pre-spawn still in flight is warming a stage
   // that no longer has a run behind it. Dropping the promises here stops the
   // next run from awaiting this one's warm-up.

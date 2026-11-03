@@ -461,6 +461,12 @@ export function takeRetry(plan: DagPlan, state: DagRunState, nodeId: string, rea
   }
 }
 
+/** True when takeRetry would give `nodeId` another try. Reads only. */
+export function retryLeft(plan: DagPlan, state: DagRunState, nodeId: string): boolean {
+  const policy = retryPolicyOf(plan, nodeId)
+  return !!policy && (state.retries[nodeId] ?? 0) + 1 < policy.maxTries
+}
+
 export function hasErrorEdge(plan: DagPlan, nodeId: string): boolean {
   return plan.graph.edges.some((e) => e.kind === 'error' && e.from === nodeId)
 }

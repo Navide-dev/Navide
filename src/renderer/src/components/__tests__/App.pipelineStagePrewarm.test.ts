@@ -120,6 +120,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
     'activateStage',
     'startGlobalManagerRouter',
     'pipelineDag',
+    'runEndingSlots',
     code,
   )
   const api = factory(
@@ -147,6 +148,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
     activateStage,
     vi.fn(),
     linearPipelineDag().dag,
+    new Set<string>(),
   )
   return { api, spawned, stageList, pipeline, activateStage }
 }
@@ -277,6 +279,8 @@ async function loadActivate(over: {
     'PARKED_ON_PROMPT_REASON',
     'paneTurnBusy',
     'waitUntilTurnEnds',
+    'runEnding',
+    'markRunEnding',
     code,
   )
   const api = factory(
@@ -326,6 +330,9 @@ async function loadActivate(over: {
     'the pane is waiting on a CLI prompt',
     over.paneTurnBusy ?? (() => false),
     waitUntilTurnEnds,
+    // No slot here fails the run before failRunOnKickoff does.
+    () => false,
+    vi.fn(),
   )
   return {
     api,
