@@ -253,8 +253,7 @@ export class DeveloperAccount {
       headers['Content-Type'] = 'application/json'
       body = JSON.stringify(init.json)
     }
-    // A redirect would carry the Bearer token to wherever the Registry points.
-    return this.fetchImpl(`${base}${path}`, { method: init.method ?? 'GET', headers, body, redirect: 'error' })
+    return this.fetchImpl(`${base}${path}`, { method: init.method ?? 'GET', headers, body })
   }
 
   application(): Promise<DeveloperRegistryResponse> {

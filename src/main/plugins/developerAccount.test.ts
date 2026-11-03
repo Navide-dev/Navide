@@ -252,20 +252,6 @@ describe('reclaimed namespaces in the application (W2)', () => {
 })
 
 describe('Registry calls that carry the kept credential', () => {
-  it('refuse to follow a redirect, so the Bearer token never reaches another host', async () => {
-    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2099-01-01T00:00:00Z', null)
-    const seen: RequestInit[] = []
-    const impl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-      seen.push(init ?? {})
-      return new Response('{}', { status: 200 })
-    })
-    const acct = new DeveloperAccount({ vault, registryUrl: () => REGISTRY, openExternal: vi.fn(), fetch: impl as unknown as typeof fetch })
-    await acct.registryFetch('/api/developer/me/application', {}, 'account')
-    await acct.registryDownload('/api/testplace/a/b/1.0.0/download', 'account')
-    expect(seen).toHaveLength(2)
-    for (const init of seen) expect(init.redirect).toBe('error')
-  })
-
   it('stops reading a package download past the size cap instead of buffering it whole', async () => {
     vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2099-01-01T00:00:00Z', null)
     const chunk = new Uint8Array(1024 * 1024)

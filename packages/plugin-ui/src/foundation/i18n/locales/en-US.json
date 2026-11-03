@@ -12614,7 +12614,6 @@
       "open": "Publish a Version",
       "sign-in-first": "Sign in as a publisher first: Navide signs the package with the key it keeps and uploads it.",
       "choose": "Choose a .vsix Package…",
-      "read-linked": "Read This Package",
       "package": "Navide plugin",
       "file": "File",
       "digest": "SHA-256",

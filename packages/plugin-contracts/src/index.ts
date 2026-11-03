@@ -1,7 +1,7 @@
 import manifestV2Schema from './schemas/plugin-manifest-v2.schema.json' with { type: 'json' }
 import capabilitiesV1 from './schemas/capabilities-v1.json' with { type: 'json' }
 import executionPolicyV1Schema from './schemas/execution-policy-v1.schema.json' with { type: 'json' }
-import { canonicalHtmlPath, canonicalPackagePath, isWindowsReservedName } from './archive.js'
+import { canonicalHtmlPath, canonicalPackagePath } from './archive.js'
 import type { EditorFilesystemParams, EditorFilesystemResults } from './editorFilesystem.js'
 import type { EditorAiParams, EditorAiResults, EditorAiEvents } from './editorAi.js'
 import type { AiTerminalParams, AiTerminalResults } from './aiTerminal.js'
@@ -400,7 +400,7 @@ const SCRIPT_EXTENSIONS = new Set([
 
 /** Return whether a value is a canonical Manifest v2 package id. */
 export function isValidManifestV2PluginId(value: unknown): value is string {
-  return typeof value === 'string' && PLUGIN_ID.test(value) && !value.split('.').some(isWindowsReservedName)
+  return typeof value === 'string' && PLUGIN_ID.test(value)
 }
 
 type ParsedSemver = {
@@ -806,9 +806,6 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   if (!PLUGIN_ID.test(id)) {
     fail(`manifest id must be lowercase dot-separated segments, got ${id}`)
   }
-  if (!isValidManifestV2PluginId(id)) {
-    fail(`manifest id must not use a Windows device name (con, prn, aux, nul, com1-9, lpt1-9) as a segment, got ${id}`)
-  }
   const name = displayText(required(manifest, 'name', 'manifest'), 'manifest name')
   const version = stringValue(required(manifest, 'version', 'manifest'), 'manifest version')
   if (!SEMVER.test(version)) fail(`manifest version must be semver, got ${version}`)
@@ -830,7 +827,7 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   let extensionPack: string[] | undefined
   if (manifest.extensionPack !== undefined) {
     extensionPack = uniqueStringArray(manifest.extensionPack, 'manifest extensionPack', 1, MAX_EXTENSION_PACK_MEMBERS)
-    const invalidMember = extensionPack.find((member) => !isValidManifestV2PluginId(member))
+    const invalidMember = extensionPack.find((member) => !PLUGIN_ID.test(member))
     if (invalidMember !== undefined) {
       fail(`manifest extensionPack contains an invalid package id ${JSON.stringify(invalidMember)}; a package id is lowercase dot-separated segments, for example acme.tool`)
     }

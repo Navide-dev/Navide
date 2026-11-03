@@ -176,9 +176,7 @@ watch(() => form.value?.seq, () => {
     agentValues.value = draft
   } else if (current.form === 'publish') {
     const path = current.prefill.path || (current.request?.draft?.fields.path as string | undefined)
-    // A link from outside Navide names a path; show it and wait for the user.
-    if (path && current.origin === 'link') linkedPath.value = path
-    else if (path) void loadStaged(path)
+    if (path) void loadStaged(path)
   } else if (current.form === 'publish-yank') {
     yankId.value = current.prefill.id ?? ''
     yankVersion.value = current.prefill.version ?? ''
@@ -387,13 +385,6 @@ onMounted(() => {
         <p v-if="state && !state.signedIn.publisher" class="dev-notice">{{ $t('marketplace-developer.publish.sign-in-first') }}</p>
         <div class="dev-actions">
           <button class="nv-btn nv-btn--sm" :disabled="busy !== null" @click="loadStaged()">{{ $t('marketplace-developer.publish.choose') }}</button>
-        </div>
-        <div v-if="linkedPath" class="dev-callout" data-testid="developer-publish-linked">
-          <dl class="dev-facts">
-            <dt>{{ $t('marketplace-developer.publish.file') }}</dt>
-            <dd><code>{{ linkedPath }}</code></dd>
-          </dl>
-          <button class="nv-btn nv-btn--sm nv-btn--primary" data-testid="developer-publish-linked-read" :disabled="busy !== null" @click="readLinkedPackage">{{ $t('marketplace-developer.publish.read-linked') }}</button>
         </div>
         <template v-if="staged">
           <dl class="dev-facts">

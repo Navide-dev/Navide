@@ -12614,7 +12614,6 @@
       "open": "Publicar una versión",
       "sign-in-first": "Inicia sesión primero como editor: Navide firma el paquete con la clave que guarda y lo sube.",
       "choose": "Elegir un paquete .vsix…",
-      "read-linked": "Leer este paquete",
       "package": "Complemento de Navide",
       "file": "Archivo",
       "digest": "SHA-256",

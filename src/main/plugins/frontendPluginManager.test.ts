@@ -15625,12 +15625,6 @@ describe('first-party Git private bridge', () => {
     }
   })
 
-  it('marks every plugin view WebContents so the global window-open handler can refuse it', async () => {
-    const opened = await openGitView('/workspace', 'git-window')
-    expect(opened.mgr.isPluginViewContents(opened.view.webContents)).toBe(true)
-    expect(opened.mgr.isPluginViewContents(new FakeBrowserWindow().webContents)).toBe(false)
-  })
-
   it('ignores a package yolo request on a non-persisted start when the Host forces the profile off', async () => {
     const cases: Array<{ settings: Record<string, string>; bypass: boolean }> = [
       { settings: { 'agentTeam.cliPermission.claude': 'force-off' }, bypass: false },

@@ -27,8 +27,7 @@ function canonicalRelativePath(path: string): string | null {
   }
 
   const segments = path.split('/')
-  if (segments.some((segment) =>
-    segment.length === 0 || segment === '.' || segment === '..' || isWindowsReservedName(segment))) {
+  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
     return null
   }
   return path

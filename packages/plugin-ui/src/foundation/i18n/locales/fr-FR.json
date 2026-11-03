@@ -12614,7 +12614,6 @@
       "open": "Publier une version",
       "sign-in-first": "Connectez-vous d’abord en tant qu’éditeur : Navide signe le paquet avec la clé qu’il conserve et l’envoie.",
       "choose": "Choisir un paquet .vsix…",
-      "read-linked": "Lire ce paquet",
       "package": "Plugin Navide",
       "file": "Fichier",
       "digest": "SHA-256",
