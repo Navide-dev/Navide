@@ -43,11 +43,24 @@ describe('OfficePreview – docx', () => {
     })
     const frame = wrapper.find('iframe.offp-frame')
     expect(frame.exists()).toBe(true)
-    expect(frame.attributes('srcdoc')).toBe('<h1>Report</h1><p>body</p>')
+    expect(frame.attributes('srcdoc')).toContain('<h1>Report</h1><p>body</p>')
     // Empty sandbox attribute = no allow-* tokens (scripts/forms blocked).
     expect(frame.attributes('sandbox')).toBe('')
     // The converted HTML must never render into the app origin (no v-html).
     expect(wrapper.find('h1').exists()).toBe(false)
+  })
+
+  it('prefixes a CSP that refuses every network load and strips meta refresh', async () => {
+    const { wrapper } = await mountOffice({
+      ok: true,
+      kind: 'docx',
+      html: '<meta http-equiv="refresh" content="0;url=https://evil.test/"><img src="https://evil.test/x.png">',
+    })
+    const srcdoc = wrapper.find('iframe.offp-frame').attributes('srcdoc')!
+    expect(srcdoc.startsWith(
+      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'; font-src data:">',
+    )).toBe(true)
+    expect(srcdoc).not.toMatch(/http-equiv="refresh"/i)
   })
 })
 

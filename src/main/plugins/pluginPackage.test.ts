@@ -174,6 +174,35 @@ describe('readZipEntries', () => {
     const zip = Buffer.concat([central, eocd])
     expect(() => readZipEntries(zip)).toThrow(PluginPackageError)
   })
+
+  // The Registry parses packages with Python's zipfile, which walks the central
+  // directory by size rather than by EOCD entry count. Every archive the two
+  // readers could see differently is refused here.
+  it('rejects an EOCD entry count that leaves central directory entries unread', () => {
+    const zip = makeZip([
+      { name: 'manifest.json', data: '{"id":"acme.demo"}' },
+      { name: 'hidden.js', data: 'x' },
+    ])
+    zip.writeUInt16LE(1, zip.length - 14)
+    zip.writeUInt16LE(1, zip.length - 12)
+    expect(() => readZipEntries(zip)).toThrow(/central directory does not end at/)
+  })
+
+  it('rejects bytes between the central directory and the EOCD record', () => {
+    const zip = makeZip([{ name: 'manifest.json', data: '{"id":"acme.demo"}' }])
+    const gapped = Buffer.concat([
+      zip.subarray(0, zip.length - 22),
+      Buffer.from('junk'),
+      zip.subarray(zip.length - 22),
+    ])
+    expect(() => readZipEntries(gapped)).toThrow(/central directory does not end at/)
+  })
+
+  it('rejects a local header name that differs from the central directory name', () => {
+    const zip = makeZip([{ name: 'a.js', data: 'x' }])
+    zip.write('b', 30) // first byte of the local header's file name
+    expect(() => readZipEntries(zip)).toThrow(/local header name does not match/)
+  })
 })
 
 describe('readManifestFromEntries', () => {

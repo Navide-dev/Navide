@@ -110,10 +110,8 @@ export function readZipEntries(bytes: Uint8Array): ZipEntry[] {
     if (centralEnd > buf.length) {
       throw new PluginPackageError('central directory entry out of bounds')
     }
-    const name = decodeUtf8(
-      buf.subarray(ptr + 46, ptr + 46 + nameLen),
-      'archive entry name'
-    )
+    const nameBytes = buf.subarray(ptr + 46, ptr + 46 + nameLen)
+    const name = decodeUtf8(nameBytes, 'archive entry name')
     ptr = centralEnd
 
     const platform = versionMadeBy >>> 8
@@ -140,6 +138,14 @@ export function readZipEntries(bytes: Uint8Array): ZipEntry[] {
     }
     const lNameLen = buf.readUInt16LE(localOffset + 26)
     const lExtraLen = buf.readUInt16LE(localOffset + 28)
+    // The Registry's Python zipfile reader refuses an entry whose local name
+    // differs from its central name; refuse it here too so both agree.
+    if (
+      localOffset + 30 + lNameLen > buf.length ||
+      !buf.subarray(localOffset + 30, localOffset + 30 + lNameLen).equals(nameBytes)
+    ) {
+      throw new PluginPackageError(`local header name does not match central directory for ${name}`)
+    }
     const dataStart = localOffset + 30 + lNameLen + lExtraLen
     if (dataStart > buf.length || compSize > buf.length - dataStart) {
       throw new PluginPackageError(`entry data out of bounds for ${name}`)
@@ -183,6 +189,13 @@ export function readZipEntries(bytes: Uint8Array): ZipEntry[] {
       type,
       executable: type === 'regular' && (unixMode & 0o111) !== 0,
     })
+  }
+  // Python's zipfile walks the central directory by size, not by the EOCD
+  // entry count, and tolerates data before or after it. Require the walked
+  // directory to end exactly at its declared size and at the EOCD record, so
+  // the Host never installs a different set of entries than the Registry saw.
+  if (ptr !== centralDirectoryOffset + centralDirectorySize || ptr !== eocd) {
+    throw new PluginPackageError('central directory does not end at the end-of-central-directory record')
   }
   return entries
 }
