@@ -15475,7 +15475,11 @@ describe('first-party Git private bridge', () => {
         },
       })
       await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
-      const create = JSON.parse(socket.sent[0]!)
+      const settings = JSON.parse(socket.sent[0]!)
+      expect(settings.type).toBe('ui.settings.get')
+      socket.receive({ id: settings.id, type: settings.type, ok: true, payload: { settings: {} }, error: null, timestamp: '' })
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+      const create = JSON.parse(socket.sent[1]!)
       expect(create.type).toBe('terminal.create')
       // The Host must hand the backend the documented command shape: a POSIX
       // `[shell, flags, line]` wrapper, or a single string off Windows. The
@@ -15537,8 +15541,8 @@ describe('first-party Git private bridge', () => {
         runtime: runtimeOf(second.instanceId),
         args: { cols: 100, rows: 30 },
       })
-      await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
-      const reattach = JSON.parse(socket.sent[1]!)
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(3))
+      const reattach = JSON.parse(socket.sent[2]!)
       expect(reattach).toMatchObject({
         type: 'terminal.reattach',
         payload: { terminal_session_ids: ['ai-session-1'], cols: 100, rows: 30 },
@@ -15553,6 +15557,7 @@ describe('first-party Git private bridge', () => {
       })
       await expect(resume).resolves.toEqual({ sessionId: 'ai-session-1', profileId: 'claude' })
       expect(socket.sent.map((raw) => JSON.parse(raw).type)).toEqual([
+        'ui.settings.get',
         'terminal.create',
         'terminal.reattach',
       ])
@@ -15583,7 +15588,11 @@ describe('first-party Git private bridge', () => {
           args: { profileId, requestId, cols: 80, rows: 24, yolo: true },
         })
         await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
-        const create = JSON.parse(socket.sent[0]!)
+        const settings = JSON.parse(socket.sent[0]!)
+        expect(settings.type, profileId).toBe('ui.settings.get')
+        socket.receive({ id: settings.id, type: settings.type, ok: true, payload: { settings: {} }, error: null, timestamp: '' })
+        await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+        const create = JSON.parse(socket.sent[1]!)
         expect(create.type, profileId).toBe('terminal.create')
 
         const profile = AI_CLI_PROFILES[profileId as keyof typeof AI_CLI_PROFILES]
@@ -15613,6 +15622,61 @@ describe('first-party Git private bridge', () => {
       }
     } finally {
       vi.useRealTimers()
+    }
+  })
+
+  it('marks every plugin view WebContents so the global window-open handler can refuse it', async () => {
+    const opened = await openGitView('/workspace', 'git-window')
+    expect(opened.mgr.isPluginViewContents(opened.view.webContents)).toBe(true)
+    expect(opened.mgr.isPluginViewContents(new FakeBrowserWindow().webContents)).toBe(false)
+  })
+
+  it('ignores a package yolo request on a non-persisted start when the Host forces the profile off', async () => {
+    for (const [index, permission] of ['force-off', 'force-on', undefined].entries()) {
+      const opened = await openGitView('/workspace', 'git-window')
+      opened.mgr.setBackendWsUrl(`ws://git-ai-yolo-force-off-${index}`)
+      const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      socket.open()
+      const runtime = (
+        opened.mgr as unknown as {
+          running: Map<string, { capabilityContext: HostCapabilityContext }>
+        }
+      ).running.get(opened.instanceId)!.capabilityContext.runtimeBinding!
+      const requestId = `yolo-gate-${index}`
+      const start = opened.mgr.executePublicCapability({
+        kind: 'public',
+        address: 'aiCli.startSession',
+        scope: 'workspace',
+        runtime,
+        args: { profileId: 'claude', requestId, cols: 80, rows: 24, yolo: true },
+      })
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+      const settings = JSON.parse(socket.sent[0]!)
+      expect(settings.type).toBe('ui.settings.get')
+      socket.receive({
+        id: settings.id,
+        type: settings.type,
+        ok: true,
+        payload: { settings: permission ? { 'agentTeam.cliPermission.claude': permission } : {} },
+        error: null,
+        timestamp: '',
+      })
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+      const create = JSON.parse(socket.sent[1]!)
+      expect(create.type).toBe('terminal.create')
+      const command = create.payload.command as string | string[]
+      const line = Array.isArray(command) ? command.at(-1)! : command
+      expect(line, String(permission)).toBe(
+        permission === 'force-off' ? 'claude' : 'claude --dangerously-skip-permissions')
+      socket.receive({
+        id: create.id,
+        type: create.type,
+        ok: true,
+        payload: { terminal_session_id: `yolo-${index}`, pane_id: create.payload.pane_id, create_generation: requestId },
+        error: null,
+        timestamp: '',
+      })
+      await expect(start).resolves.toEqual({ sessionId: `yolo-${index}` })
     }
   })
 

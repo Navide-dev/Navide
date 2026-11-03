@@ -62,6 +62,7 @@ import {
   type RegistryTrustSnapshot,
 } from './pluginInstalledTrust'
 import { readZipEntries, readManifestFromEntries, type ZipEntry } from './pluginPackage'
+import { PACKAGE_DOWNLOAD_MAX_BYTES, readBodyCapped } from './readBodyCapped'
 import {
   parseInstalledManifest,
   assertManifestFiles,
@@ -236,7 +237,8 @@ export const defaultInstallerDeps: InstallerDeps = {
   async download(url) {
     const res = await fetch(url)
     if (!res.ok) throw new InstallError(`download failed: HTTP ${res.status}`)
-    const bytes = new Uint8Array(await res.arrayBuffer())
+    const bytes = await readBodyCapped(res, PACKAGE_DOWNLOAD_MAX_BYTES)
+    if (!bytes) throw new InstallError(`download failed: the package is larger than ${PACKAGE_DOWNLOAD_MAX_BYTES} bytes`)
     return { bytes, digestHeader: res.headers.get('x-package-digest') }
   },
   mkdirp(dir) {
@@ -353,6 +355,16 @@ export async function prepareInstall(
   if (digestHeader && digestHeader !== req.expectedDigest) {
     throw new InstallError(
       `download digest header ${digestHeader} does not match expected ${req.expectedDigest}`
+    )
+  }
+
+  // The bytes must be the ones the trusted metadata names before the zip
+  // parser reads any of them; verifyPackage below repeats this check.
+  const downloadedDigest = sha256Hex(bytes)
+  if (downloadedDigest !== req.expectedDigest) {
+    throw new PluginVerifyError(
+      'DIGEST_MISMATCH',
+      `package digest ${downloadedDigest} does not match expected ${req.expectedDigest}`
     )
   }
 

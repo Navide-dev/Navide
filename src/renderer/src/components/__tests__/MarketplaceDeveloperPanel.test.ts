@@ -77,4 +77,30 @@ describe('MarketplaceDeveloperPanel', () => {
     wrapper = await open({ paneId: 'p', paneName: 'helper', workspace: null, callerKind: 'pane' })
     expect(wrapper.find('[data-testid="developer-form-tainted"]').exists()).toBe(false)
   })
+
+  it('reads a navide://publish package only after the user confirms the path it names (L10)', async () => {
+    const linked = '/Users/someone/dist/acme.tool-1.0.0.vsix'
+    const stagePackage = vi.fn(async (path?: string) => ({
+      stageId: 's1', path: path ?? '', fileName: 'acme.tool-1.0.0.vsix', id: 'acme.tool', version: '1.0.0',
+      publisher: 'acme', digest: 'd'.repeat(64), size: 1, defaultTarget: 'universal', disclosure: null,
+    }))
+    ;(window as unknown as { agentTeam: unknown }).agentTeam = {
+      developer: { state: vi.fn(async () => state), stagePackage },
+    }
+    showMarketplaceForm({ form: 'publish', origin: 'link', prefill: { path: linked }, requester: null, request: null })
+    wrapper = mount(MarketplaceDeveloperPanel, { props: { backend: createMockBackend('connected').backend }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(stagePackage).not.toHaveBeenCalled()
+    const confirm = wrapper.find('[data-testid="developer-publish-linked"]')
+    expect(confirm.exists()).toBe(true)
+    expect(confirm.find('code').text()).toBe(linked)
+    expect(wrapper.find('[data-testid="developer-publish-linked-read"]').text())
+      .toBe(i18n.global.t('marketplace-developer.publish.read-linked'))
+
+    await wrapper.find('[data-testid="developer-publish-linked-read"]').trigger('click')
+    await flushPromises()
+    expect(stagePackage).toHaveBeenCalledWith(linked)
+    expect(wrapper.find('[data-testid="developer-publish-linked"]').exists()).toBe(false)
+  })
 })
