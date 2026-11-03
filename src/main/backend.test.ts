@@ -11,17 +11,19 @@ const registryPath = vi.hoisted(() => ({ entries: [] as string[] }))
 vi.mock('./windows-registry-path', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./windows-registry-path')>()),
   readWindowsRegistryPath: vi.fn(() => registryPath.entries),
+  readWindowsRegistryPathAsync: vi.fn(async () => registryPath.entries),
 }))
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { platformId, setPlatformId } from '../shared/osplat'
-import { readWindowsRegistryPath } from './windows-registry-path'
+import { readWindowsRegistryPath, readWindowsRegistryPathAsync } from './windows-registry-path'
 import {
   bindBackendDisabledBuiltins,
   bindBackendPluginActivationCatalog,
   getResolvedUserPath,
+  warmRegistryPath,
   handConfirmKey,
   listNvmNodeBins,
   mergePathList,
@@ -400,28 +402,69 @@ describe('getResolvedUserPath on Windows', () => {
     expect(getResolvedUserPath()).toBe([join(root, 'System32'), code].join(delimiter))
   })
 
-  // Each read is a synchronous PowerShell run on Electron's main thread;
-  // a slow machine froze the UI for tens to hundreds of ms per call.
-  it('reads the registry once per 30 s, unless a rescan forces it', () => {
+  // A sync read is a PowerShell cold start on Electron's main thread (1-3 s
+  // on ARM): the UI froze on the first editor menu or external terminal. The
+  // read happens in the background instead, ahead of the first use.
+  it('serves the PATH from a background read made at app ready, never the sync one', async () => {
+    root = mkdtempSync(join(tmpdir(), 'navide-userpath-'))
+    const npm = join(root, 'npm')
+    mkdirSync(npm)
+    vi.stubEnv('PATH', 'C:\\Windows')
+    setPlatformId('win32')
+    registryPath.entries = [npm]
+    await warmRegistryPath()
+    vi.mocked(readWindowsRegistryPath).mockClear()
+    expect(getResolvedUserPath()).toBe(['C:\\Windows', npm].join(delimiter))
+    expect(readWindowsRegistryPath).not.toHaveBeenCalled()
+  })
+
+  it('answers with the old entries once they expire and re-reads them in the background', async () => {
     vi.useFakeTimers()
     try {
+      root = mkdtempSync(join(tmpdir(), 'navide-userpath-'))
+      const before = join(root, 'before')
+      const after = join(root, 'after')
+      mkdirSync(before)
+      mkdirSync(after)
       vi.stubEnv('PATH', 'C:\\Windows')
       setPlatformId('win32')
-      const reads = vi.mocked(readWindowsRegistryPath)
-      getResolvedUserPath({ fresh: true })
-      reads.mockClear()
-      getResolvedUserPath()
+      registryPath.entries = [before]
+      await warmRegistryPath()
+      const asyncReads = vi.mocked(readWindowsRegistryPathAsync)
+      asyncReads.mockClear()
+      vi.mocked(readWindowsRegistryPath).mockClear()
+      registryPath.entries = [after]
       vi.advanceTimersByTime(29_000)
-      getResolvedUserPath()
-      expect(reads).not.toHaveBeenCalled()
-      getResolvedUserPath({ fresh: true })
-      expect(reads).toHaveBeenCalledTimes(1)
-      vi.advanceTimersByTime(30_000)
-      getResolvedUserPath()
-      expect(reads).toHaveBeenCalledTimes(2)
+      expect(getResolvedUserPath()).toBe(['C:\\Windows', before].join(delimiter))
+      expect(asyncReads).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(1_000)
+      expect(getResolvedUserPath()).toBe(['C:\\Windows', before].join(delimiter))
+      expect(asyncReads).toHaveBeenCalledTimes(1)
+      await warmRegistryPath()
+      expect(getResolvedUserPath()).toBe(['C:\\Windows', after].join(delimiter))
+      expect(readWindowsRegistryPath).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('answers without the registry, rather than block, while the app-ready read is under way', async () => {
+    // A fresh module: no read has settled yet, as right after launch.
+    vi.resetModules()
+    const osplat = await import('../shared/osplat')
+    const reg = await import('./windows-registry-path')
+    const fresh = await import('./backend')
+    osplat.setPlatformId('win32')
+    let finish: (entries: string[]) => void = () => {}
+    vi.mocked(reg.readWindowsRegistryPathAsync).mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve))
+    )
+    vi.stubEnv('PATH', 'C:\\Windows')
+    const warming = fresh.warmRegistryPath()
+    expect(fresh.getResolvedUserPath()).toBe('C:\\Windows')
+    expect(reg.readWindowsRegistryPath).not.toHaveBeenCalled()
+    finish([])
+    await warming
   })
 
   it('does not consult the registry off Windows', () => {
