@@ -147,6 +147,11 @@ async function load(extraDeps: Record<string, unknown> = {}) {
     PARKED_ON_PROMPT_REASON: 'parked',
     // ...and none is still in a turn when its kickoff goes in.
     paneTurnBusy: () => false,
+    TURN_END_WAIT_MS: 90_000,
+    turnStillOpen: () => false,
+    turnEndUnconfirmed: () => false,
+    logInjectEvidence: () => {},
+    awaitRoleTurn: async () => 'ended',
     waitUntilTurnEnds: async () => 'idle',
     routerDeliveries: { clear: () => {} },
     ...extraDeps,

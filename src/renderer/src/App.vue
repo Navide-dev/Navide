@@ -182,7 +182,7 @@ import {
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
 import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { composerClearKeys, createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
-import { createParkedDelivery, waitUntilTurnEnds } from './lib/pipelineDelivery'
+import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRoleTurn, waitUntilTurnEnds, type QueuedTurnOutcome, type RoleTurnOutcome } from './lib/pipelineDelivery'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
 import { resolveDragBatch, reorderBatchByIds, withFoldedSubtree } from './lib/paneBatchDrag'
@@ -197,7 +197,7 @@ import {
 import { pickReusablePane, runReportedDispatch, validatePlanDispatch, type PlanDispatchOutcome, type PlanDispatchPayload } from './lib/planDispatch'
 import { planExecutionPrompt } from './lib/planExecutePrompt'
 import {
-  composerHoldsPayload, echoEvidence, echoTimeoutFor, framedComposerHolds, injectionVerified, normalizeForMatch,
+  composerHoldsPayload, echoEvidenceSince, echoTimeoutFor, framedComposerHolds, injectionVerified, normalizeForMatch,
   shellSubmitEvidence, submitBaseline, submitEvidence, type EchoEvidence, type SubmitEvidence,
   SUBMIT_CONFIRM_MS, SUBMIT_SCREEN_LINES, TAIL_MATCH_LEN
 } from './lib/injectEcho'
@@ -1881,6 +1881,9 @@ interface ActivePane {
   /** Which pipeline run group this pane belongs to. Undefined = unassigned (manual). */
   runGroupId?: string
   injectionStatus: InjectionStatus
+  /** When this pane's role prompt was last typed: a kickoff waits for the
+   *  turn it started to end (awaitRoleTurn). Cleared once that wait ran. */
+  roleSentAt?: number
   preparationStatus: PreparationStatus
   injectionTimer: number | null
   kickoffStatus: KickoffStatus
@@ -4511,6 +4514,8 @@ async function injectText(
     /** Set when stillWanted said no right before an Enter: the box was
      *  cleared and nothing was submitted. */
     stopped?: boolean
+    /** Enters pressed by the submit loop. */
+    enters?: number
   },
   // Told `true` while the payload is written but the PTY is not reading it
   // (the message is held on `pty-blocked`), `false` once the wait ends either
@@ -4696,7 +4701,7 @@ async function injectText(
       break
     }
     const echoed = (): EchoEvidence | null =>
-      echoEvidence(cleanBuf(), tail, cleanBytes() - preBytes, normalizedLen)
+      echoEvidenceSince(cleanBuf(), tail, cleanBytes() - preBytes, normalizedLen)
     if (needsInputWait(ackPending, inputBlocks.get(sessionId) !== null)) {
       const waited = await awaitInputUnblocked({
         ackPending,
@@ -4861,12 +4866,16 @@ async function injectText(
   // attempt is polling.
   let firstEnterAt = 0
   let stoppedAtExtraEnter = false
+  // A dialog already up before the first Enter was not raised by it: every
+  // Enter went into that dialog, and none of them submitted our text.
+  const dialogBeforeEnter = dialogShown()
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
     if (stillWanted && !stillWanted()) return stopBeforeEnter()
     // Never press a resent Enter into a dialog. Our earlier Enter most likely
     // started the work that raised it, but nothing confirms that.
     if (attempt > 1 && dialogShown()) {
+      if (dialogBeforeEnter) return false
       if (evidence) evidence.submit = 'unconfirmed'
       return true
     }
@@ -4878,6 +4887,7 @@ async function injectText(
       console.error(`[injectText] submit Enter failed (attempt ${attempt}/${MAX_SUBMITS}):`, err)
       return false
     }
+    if (evidence) evidence.enters = attempt
     if (paneId === undefined || before < 0) return true
     // Poll instead of one flat sleep: a fast agent clears the composer in a few
     // hundred ms, and waiting the full gap on every attempt costs seconds.
@@ -4965,6 +4975,7 @@ async function injectPane(
     foregroundBusy?: boolean
     commandRefused?: string
     stopped?: boolean
+    enters?: number
   },
   onInputBlocked?: (held: boolean) => void,
   stillWanted?: () => boolean
@@ -7004,6 +7015,98 @@ function paneTurnBusy(paneId: string): boolean {
   )
 }
 
+/** How long a kickoff waits for the turn_complete of a turn that has
+ *  activity after its last turn end. paneTurnBusy stops reading such a turn
+ *  as busy once the badge goes idle on a frozen screen and its last activity
+ *  is two minutes old, and both happened while Claude Code ran its stop hooks:
+ *  on the 0.2.37 Windows VM under load they took over 20s, the screen frozen
+ *  on "running stop hooks", and a kickoff typed then was never submitted. */
+const TURN_END_WAIT_MS = 90_000
+
+/** No turn_complete has come since the pane's last activity. */
+function turnEndUnconfirmed(paneId: string): boolean {
+  return (paneLastActiveAt.get(paneId) ?? 0) > (paneTurnCompleteAt.get(paneId) ?? 0)
+}
+
+/** paneTurnBusy, or, until `until`, a turn whose end has not been reported. */
+function turnStillOpen(paneId: string, until: number): boolean {
+  return paneTurnBusy(paneId) || (turnEndUnconfirmed(paneId) && Date.now() < until)
+}
+
+const TURN_END_UNCONFIRMED_LINE =
+  `⚠ no turn_complete within ${TURN_END_WAIT_MS / 1000} s of the turn's last activity — going on; a kickoff the CLI queues is still checked`
+
+const ROLE_TURN_WAIT_LINE: Record<RoleTurnOutcome, string> = {
+  'ended': '✓ the role\'s turn ended (turn_complete)',
+  'no-start': '⚠ no turn started within 10 s of the role — going on as before',
+  'parked': '⏸ the pane stopped on a CLI prompt',
+  'gone': '✕ the pane is gone',
+  'moved-on': '⏹ the run is no longer running',
+}
+
+/** Before a kickoff: wait for the turn the pane's role prompt started, typed
+ *  at `roleSentAt`, to end (lib/pipelineDelivery waitForRoleTurn), and log
+ *  how long that took and what let the kickoff go. */
+async function awaitRoleTurn(paneId: string, roleSentAt: number, tag: string, stillWanted: () => boolean): Promise<RoleTurnOutcome> {
+  const t0 = Date.now()
+  const turnEndBy = t0 + ROLE_TURN_START_MS + TURN_END_WAIT_MS
+  const outcome = await waitForRoleTurn({
+    startedSince: () => Math.max(
+      paneLastActiveAt.get(paneId) ?? 0, paneTurnStartedAt.get(paneId) ?? 0, paneTurnCompleteAt.get(paneId) ?? 0,
+    ) > roleSentAt,
+    busy: () => turnStillOpen(paneId, turnEndBy),
+    parked: () => paneParkedOnPrompt(paneId),
+    alive: () => paneAlive(paneId),
+    stillWanted,
+    sleep,
+    now: Date.now,
+  })
+  const line = outcome === 'ended' && turnEndUnconfirmed(paneId) ? TURN_END_UNCONFIRMED_LINE : ROLE_TURN_WAIT_LINE[outcome]
+  pipelineLog(`${tag} role turn wait: ${line} after ${Date.now() - t0} ms`)
+  return outcome
+}
+
+const QUEUED_TURN_LINE: Record<QueuedTurnOutcome, string> = {
+  'started': '✓ the queued kickoff started its own turn',
+  'turn-never-ended': '✕ the turn it waited behind never ended',
+  'no-own-turn': '✕ that turn ended, and the kickoff started no turn of its own',
+  'parked': '✕ the pane stopped on a CLI prompt',
+  'gone': '✕ the pane is gone',
+  'moved-on': '⏹ the run is no longer running',
+}
+
+/** A pipeline kickoff the CLI queued behind a turn still running (submit
+ *  'queued'): true once that turn ended and the kickoff started its own.
+ *  `since` is when the kickoff began to be typed. */
+async function confirmQueuedKickoff(paneId: string, since: number, tag: string, stillWanted: () => boolean): Promise<boolean> {
+  pipelineLog(`${tag} ⏳ the kickoff was queued behind a turn still running — waiting for it to start its own`)
+  const t0 = Date.now()
+  const outcome = await waitForQueuedTurn({
+    since,
+    lastCompleteAt: () => paneTurnCompleteAt.get(paneId) ?? 0,
+    lastActiveAt: () => paneLastActiveAt.get(paneId) ?? 0,
+    parked: () => paneParkedOnPrompt(paneId),
+    alive: () => paneAlive(paneId),
+    stillWanted,
+    sleep,
+    now: Date.now,
+  })
+  pipelineLog(`${tag} queued kickoff: ${QUEUED_TURN_LINE[outcome]} after ${Date.now() - t0} ms`)
+  return outcome === 'started'
+}
+
+/** One line per role or kickoff injection: what the echo and submit checks
+ *  saw. The packaged app logs nothing else for an injection that worked. */
+function logInjectEvidence(
+  tag: string, what: string, attempt: number, ok: boolean,
+  ev: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; enters?: number; stopped?: boolean },
+): void {
+  pipelineLog(
+    `${tag} · ${what} attempt ${attempt}: ${ev.stopped ? 'stopped' : ok ? 'injected' : 'not injected'}` +
+    ` — echo ${ev.echo ?? 'none'}, submit ${ev.submit ?? 'none'}, ${ev.enters ?? 0} Enter(s)`,
+  )
+}
+
 /**
  * Whether this window has already told the backend that Codex gates the hook.
  *
@@ -7254,14 +7357,17 @@ function scheduleInjection(pane: ActivePane): void {
       syncViews()
       await acquireInjectionSlot()
       let ok: boolean
+      const roleEvidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; enters?: number } = {}
       try {
         // bracketed paste (preserveNewlines) — same as kickoff — so the multi-line
         // role prompt isn't sent as a raw keystroke burst that floods the PTY
         // input buffer (EAGAIN drops) and re-renders on every embedded newline.
-        ok = await injectPane(pane.id, roleContent, `role:${role.label}`, true)
+        pane.roleSentAt = Date.now()
+        ok = await injectPane(pane.id, roleContent, `role:${role.label}`, true, undefined, roleEvidence)
       } finally {
         releaseInjectionSlot()
       }
+      logInjectEvidence(tag, 'role', 1, ok, roleEvidence)
       pane.injectionStatus = ok ? 'sent' : 'failed'
       setPrepStatus(pane, ok ? 'ready' : 'failed')
       syncViews()
@@ -7315,18 +7421,35 @@ function scheduleInjection(pane: ActivePane): void {
     //    settled). This prevents the kickoff from being interleaved into
     //    the agent's role-acknowledgement output.
     if (pane.kickoffStatus === 'pending') {
+      // The role's turn found parked on a CLI prompt: the kickoff stops there.
+      let roleParked = false
       if (pane.roleKey) {
-        pipelineLog(`${tag} waiting for agent to acknowledge role (up to 30s)`)
-        setPrepStatus(pane, 'waiting-agent')
-        syncViews()
-        const result = await waitForActivityThenSettle(pane.id, 2500, 30_000)
-        if (!paneAlive(pane.id)) return
-        if (result === 'no-activity') {
-          pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
-        } else if (result === 'timeout') {
-          pipelineLog(`${tag} ⚠ agent still streaming — sending kickoff anyway`)
-        } else {
-          pipelineLog(`${tag} ✓ agent settled — proceeding`)
+        // The role's own turn first: a kickoff typed in it is queued behind
+        // it (0.2.37 Windows VM, where that turn's first activity reached the
+        // window 2s after the role's Enter and only a title spinner moved).
+        const roleTurn = pane.roleSentAt
+          ? await awaitRoleTurn(pane.id, pane.roleSentAt, tag, () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()))
+          : 'no-start'
+        pane.roleSentAt = undefined
+        if (roleTurn === 'gone') return
+        if (roleTurn === 'moved-on') {
+          pipelineLog(`${tag} ⏹ the run is no longer running — not sending the kickoff`)
+          return
+        }
+        roleParked = roleTurn === 'parked'
+        if (roleTurn === 'no-start') {
+          pipelineLog(`${tag} waiting for agent to acknowledge role (up to 30s)`)
+          setPrepStatus(pane, 'waiting-agent')
+          syncViews()
+          const result = await waitForActivityThenSettle(pane.id, 2500, 30_000)
+          if (!paneAlive(pane.id)) return
+          if (result === 'no-activity') {
+            pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
+          } else if (result === 'timeout') {
+            pipelineLog(`${tag} ⚠ agent still streaming — sending kickoff anyway`)
+          } else {
+            pipelineLog(`${tag} ✓ agent settled — proceeding`)
+          }
         }
       }
       pipelineLog(`${tag} ➜ injecting kickoff (${pane.kickoffPrompt.length} chars)`)
@@ -7337,17 +7460,20 @@ function scheduleInjection(pane: ActivePane): void {
       // The watcher's arm time, as in activateStage: a turn that ends before
       // the confirmation below returns must still count as this stage's.
       let kickoffStartedAt = Date.now()
+      let kickoffAttempt = 0
       const kickoffResult = await runPipelineKickoff({
         inject: async () => {
           kickoffStartedAt = Date.now()
-          const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean } = {}
+          const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number } = {}
           const injected = await injectPane(
             pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence, undefined,
             // Asked again right before its Enter: the run can fail mid-paste.
             () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
           )
-          return { injected, echo: evidence.echo, stopped: evidence.stopped }
+          logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
+          return { injected, echo: evidence.echo, submit: evidence.submit, stopped: evidence.stopped }
         },
+        confirmQueued: () => confirmQueuedKickoff(pane.id, kickoffStartedAt, tag, () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding())),
         sleep,
         paneAlive: () => paneAlive(pane.id),
         onHeld: () => {
@@ -7355,7 +7481,7 @@ function scheduleInjection(pane: ActivePane): void {
           pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
         },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
-        parkedOnPrompt: () => paneParkedOnPrompt(pane.id),
+        parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
         // A sibling slot can fail the run during the role's 30s settle.
         stillWanted: () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
       })
@@ -15007,10 +15133,29 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     // behind that turn, and its turn_complete would read as the kickoff's. The
     // watcher arms from the injection below, after that turn has ended.
     let turnWait = 'idle'
-    if (!paneParkedOnPrompt(pane.id) && paneTurnBusy(pane.id)) {
+    // A role typed at pre-spawn may still be in the turn it started, and on
+    // Windows that turn's first activity reached the window 2s after the
+    // role's Enter: the busy check below read the pane as idle and the
+    // kickoff was queued behind the role (0.2.37 VM). Its start is waited for.
+    if (pane.roleSentAt) {
+      const roleTurn = await awaitRoleTurn(pane.id, pane.roleSentAt, tag, slotStillWanted)
+      pane.roleSentAt = undefined
+      if (roleTurn === 'gone') {
+        releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
+        return
+      }
+      if (roleTurn === 'moved-on') {
+        pipelineLog(`${tag} ⏹ the run is no longer running — not sending the role or kickoff`)
+        return
+      }
+      if (roleTurn === 'parked') turnWait = 'parked'
+    }
+    // Up to its turn_complete, not to a quiet screen: see TURN_END_WAIT_MS.
+    const turnEndBy = Date.now() + TURN_END_WAIT_MS
+    if (turnWait !== 'parked' && !paneParkedOnPrompt(pane.id) && turnStillOpen(pane.id, turnEndBy)) {
       pipelineLog(`${tag} ⏳ the pane is still in its previous turn — waiting for it to end before typing`)
       turnWait = await waitUntilTurnEnds({
-        busy: () => paneTurnBusy(pane.id),
+        busy: () => turnStillOpen(pane.id, turnEndBy),
         parked: () => paneParkedOnPrompt(pane.id),
         alive: () => paneAlive(pane.id),
         stillWanted: slotStillWanted,
@@ -15024,7 +15169,9 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         pipelineLog(`${tag} ⏹ the run is no longer running — not sending the role or kickoff`)
         return
       }
-      if (turnWait === 'idle') pipelineLog(`${tag} ✓ previous turn ended — proceeding`)
+      if (turnWait === 'idle') {
+        pipelineLog(turnEndUnconfirmed(pane.id) ? `${tag} ${TURN_END_UNCONFIRMED_LINE}` : `${tag} ✓ previous turn ended — proceeding`)
+      }
     }
     if (turnWait === 'parked' || paneParkedOnPrompt(pane.id)) {
       pipelineLog(`${tag} ⏸ ${PARKED_ON_PROMPT_REASON} — not typing into it`)
@@ -15053,6 +15200,8 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     }
 
     // If role was deferred (skipRoleInjection), inject it now before kickoff.
+    // The role's turn found parked on a CLI prompt: the kickoff stops there.
+    let roleParked = false
     // A role that failed at pre-spawn gets the same one more try. A slot whose
     // role never landed takes no kickoff and fails the run below: it used to get
     // the kickoff anyway and run as `running` without its role (#448).
@@ -15069,8 +15218,10 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       pipelineLog(`${tag} ➜ injecting role '${role.label}' (${retry ? 'retry after the pre-spawn injection failed' : 'deferred'}, ${roleContent.length} chars)`)
       // bracketed paste (preserveNewlines) — same as kickoff — to avoid a raw
       // keystroke burst flooding the PTY input buffer.
-      const roleEvidence: { stopped?: boolean } = {}
+      const roleEvidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; enters?: number; stopped?: boolean } = {}
+      const roleSentAt = Date.now()
       const roleOk = await injectPane(pane.id, roleContent, `role:${role.label}`, true, undefined, roleEvidence, undefined, slotStillWanted)
+      logInjectEvidence(tag, 'role', 1, roleOk, roleEvidence)
       if (roleEvidence.stopped) {
         pipelineLog(`${tag} ⏹ the run is no longer running — the role was not submitted`)
         return
@@ -15108,14 +15259,29 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         return
       } else {
         pipelineLog(`${tag} ✓ role injected`)
-        // Wait for agent to acknowledge the role before injecting kickoff
-        const settleResult = await waitForActivityThenSettle(pane.id, 2500, 30_000)
-        if (!paneAlive(pane.id)) {
+        // The role's own turn first, read off its turn events: only a title
+        // spinner moves during it on Windows, which the settle below took
+        // for a quiet pane and typed the kickoff into it (0.2.37 VM).
+        const roleTurn = await awaitRoleTurn(pane.id, roleSentAt, tag, slotStillWanted)
+        if (roleTurn === 'gone') {
           releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
           return
         }
-        if (settleResult === 'no-activity') {
-          pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
+        if (roleTurn === 'moved-on') {
+          pipelineLog(`${tag} ⏹ the run is no longer running — not sending the kickoff`)
+          return
+        }
+        roleParked = roleTurn === 'parked'
+        if (roleTurn === 'no-start') {
+          // Wait for agent to acknowledge the role before injecting kickoff
+          const settleResult = await waitForActivityThenSettle(pane.id, 2500, 30_000)
+          if (!paneAlive(pane.id)) {
+            releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
+            return
+          }
+          if (settleResult === 'no-activity') {
+            pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
+          }
         }
       }
     }
@@ -15140,15 +15306,18 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     // itself arms two backend round trips after it, and a turn that ends in
     // between must still count as this stage's. See startStageWatcher.
     let kickoffStartedAt = Date.now()
+    let kickoffAttempt = 0
     const kickoffResult = await runPipelineKickoff({
       inject: async () => {
         kickoffStartedAt = Date.now()
-        const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean } = {}
+        const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number } = {}
         // Asked again right before its Enter: a sibling can fail the run in
         // the second this kickoff is being typed.
         const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence, undefined, slotStillWanted)
-        return { injected, echo: evidence.echo, stopped: evidence.stopped }
+        logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
+        return { injected, echo: evidence.echo, submit: evidence.submit, stopped: evidence.stopped }
       },
+      confirmQueued: () => confirmQueuedKickoff(pane.id, kickoffStartedAt, tag, slotStillWanted),
       sleep,
       paneAlive: () => paneAlive(pane.id),
       onHeld: () => {
@@ -15158,7 +15327,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       // A resume after a held kickoff: submit the copy still in the box.
       heldCopy: heldKickoffCopy(pane.id, kickoff),
-      parkedOnPrompt: () => paneParkedOnPrompt(pane.id),
+      parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
       stillWanted: slotStillWanted,
     })
     if (kickoffResult.stopped) {

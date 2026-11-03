@@ -101,12 +101,12 @@ async function runSiteWhereTheRunFailsMidInjection(site: string) {
   const run = new Function(
     'runPipelineKickoff', 'injectPane', 'sleep', 'paneAlive', 'pipelineLog',
     'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'paneParkedOnPrompt',
-    'slotStillWanted', 'pipeline', 'runEnding', code,
+    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'runEnding', code,
   )(
     runPipelineKickoff, injectPane, sleep, () => true, () => {},
     { id: 'pane', stageId: 'stage', kickoffPrompt: 'kickoff', origin: 'pipeline' }, { id: 'stage' },
     'kickoff', 'test', MAX_KICKOFF_ATTEMPTS, () => undefined, () => false,
-    () => pipeline.state === 'running' && pipeline.stageIndex === 0, pipeline, () => false,
+    () => pipeline.state === 'running' && pipeline.stageIndex === 0, pipeline, false, 0, () => {}, () => false,
   ) as () => ReturnType<typeof runPipelineKickoff>
   return { result: await run(), injectPane, sleep }
 }

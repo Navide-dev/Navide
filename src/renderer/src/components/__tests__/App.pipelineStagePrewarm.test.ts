@@ -281,6 +281,11 @@ async function loadActivate(over: {
     'waitUntilTurnEnds',
     'runEnding',
     'markRunEnding',
+    'TURN_END_WAIT_MS',
+    'turnStillOpen',
+    'turnEndUnconfirmed',
+    'logInjectEvidence',
+    'awaitRoleTurn',
     code,
   )
   const api = factory(
@@ -333,6 +338,12 @@ async function loadActivate(over: {
     // No slot here fails the run before failRunOnKickoff does.
     () => false,
     vi.fn(),
+    // The turn checks read the test's own turn-busy stub; no role turn is waited on.
+    90_000,
+    (paneId: string) => (over.paneTurnBusy ?? (() => false))(paneId),
+    () => false,
+    vi.fn(),
+    async () => 'ended',
   )
   return {
     api,

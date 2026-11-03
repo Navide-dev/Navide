@@ -251,6 +251,20 @@ export function echoEvidence(
   return null
 }
 
+/** echoEvidence for one send: the tail counts only inside the `grownBy`
+ *  characters that arrived since it, never in the scrollback before it. A
+ *  kickoff typed a second time found the first attempt's copy, echoed after
+ *  that attempt had given up, and took it for its own. */
+export function echoEvidenceSince(
+  buffer: string,
+  tail: string,
+  grownBy: number,
+  normalizedLength: number,
+): EchoEvidence | null {
+  if (tail && grownBy > 0 && normalizeForMatch(buffer.slice(-grownBy)).includes(tail)) return 'tail'
+  return echoEvidence(buffer, '', grownBy, normalizedLength)
+}
+
 /** Is the composer holding OUR payload right now — either its normalized
  *  `tail` verbatim, or the collapsed-paste summary a TUI draws in its place?
  *
