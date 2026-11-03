@@ -51,6 +51,7 @@ from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import AccountSwitchSpec, Dep, PlatformInstall, VendorSpec, command_text
 from ..osplat import platform_id as _platform_id
 from ..log_readers.base import (
+    ActivityLines,
     ActivityEvent,
     LogReader,
     TokenUsage,
@@ -375,7 +376,7 @@ class DroidLogReader(LogReader):
         cwd = self.cwd_from_file(path)
         session_id = path.stem
         try:
-            fh = path.open(encoding="utf-8")
+            fh = ActivityLines(self, path, seen_keys)
         except OSError:
             return out
 
@@ -389,7 +390,7 @@ class DroidLogReader(LogReader):
 
         try:
             with fh:
-                for line_no, raw_line in enumerate(fh, 1):
+                for line_no, raw_line in fh:
                     raw = raw_line.strip()
                     if not raw:
                         continue
@@ -466,6 +467,7 @@ class DroidLogReader(LogReader):
                     ))
         finally:
             set_activity_high_water(seen_keys, last_line)
+            fh.save(last_line)
             seen_keys.difference_update(
                 {key for key in seen_keys if key.startswith(_TEXT_MARK_PREFIX)}
             )

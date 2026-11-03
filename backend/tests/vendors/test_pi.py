@@ -764,3 +764,15 @@ def test_workspace_attribution_via_header_cwd(
     _write_jsonl(f2, [_header("sess-y", "/elsewhere"), _assistant("aa000002")])
     usage2 = reader.parse_session_file(f2, set())[0]
     assert attr.attribute(usage2).workspace_path is None
+
+
+def test_parse_activity_resumes_after_an_append(fake_pi_root: Path, monkeypatch) -> None:
+    from tests.activity_resume_support import assert_resumes
+
+    f = _session_file(fake_pi_root)
+    _write_jsonl(f, [_header(), _user("aa000001", content="first"),
+                     _assistant_saying("aa000002", "one", "aa000001")])
+    assert_resumes(PiLogReader, f, [
+        _user("aa000003", content="second", parent="aa000002"),
+        _assistant_saying("aa000004", "two", "aa000003"),
+    ], monkeypatch)

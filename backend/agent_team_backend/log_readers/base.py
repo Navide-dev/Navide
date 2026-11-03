@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 from abc import ABC, abstractmethod
@@ -371,6 +372,69 @@ def set_activity_high_water(seen_keys: set[str], line_no: int) -> None:
         {k for k in seen_keys if k.startswith(_ACTIVITY_HW_PREFIX)}
     )
     seen_keys.add(f"{_ACTIVITY_HW_PREFIX}{line_no}")
+
+
+class ActivityLines:
+    """The lines of a transcript for one parse_activity walk, as ``(line_no, text)``,
+    starting after the high-water line when the last walk of this file stopped there.
+
+    The mark skips parsing, not reading: a walk from line 1 read the whole file on
+    every append, so a long conversation made the serial log reader fall minutes
+    behind. A walk resumes from the byte after the mark's line only when the
+    reader's last walk of this path ended at that line, the file is the same inode,
+    is not shorter than that offset, and has a line end just before it; anything
+    else (truncated, replaced, a rewound or fresh bag, another reader) reads from
+    line 1 as before. Decoding is strict UTF-8, as the text-mode read was.
+
+    Use: ``lines = ActivityLines(self, path, seen_keys)`` (raises OSError as
+    ``path.open`` did), iterate it inside ``with lines:``, and call
+    ``lines.save(last_line)`` once the walk has set its mark.
+    """
+
+    def __init__(self, reader: object, path: Path, seen_keys: set[str]) -> None:
+        self._store: dict[str, tuple[int, int, int]] = reader.__dict__.setdefault(
+            "_activity_line_resume", {})
+        self._key = str(path)
+        self._fh = path.open("rb")
+        self._inode = os.fstat(self._fh.fileno()).st_ino
+        high_water = activity_high_water(seen_keys)
+        self._first, offset = 1, 0
+        resume = self._store.get(self._key)
+        if resume is not None and resume[0] == high_water and resume[2] == self._inode:
+            try:
+                if os.fstat(self._fh.fileno()).st_size >= resume[1] > 0:
+                    self._fh.seek(resume[1] - 1)
+                    if self._fh.read(1) == b"\n":
+                        self._first, offset = high_water + 1, resume[1]
+                self._fh.seek(offset)
+            except OSError:
+                self._first, offset = 1, 0
+                self._fh.seek(0)
+        self._high_water = high_water
+        self._offset = offset
+        # line -> byte offset just past it, for lines a walk may leave its mark on
+        self._ends: dict[int, int] = {self._first - 1: offset} if self._first > 1 else {}
+
+    def __enter__(self) -> "ActivityLines":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._fh.close()
+
+    def __iter__(self):  # noqa: ANN204
+        for line_no, raw in enumerate(self._fh, self._first):
+            self._offset += len(raw)
+            if line_no >= self._high_water and raw.endswith(b"\n"):
+                self._ends[line_no] = self._offset
+            yield line_no, raw.decode("utf-8")
+
+    def save(self, last_line: int) -> None:
+        """Remember where the walk that set the mark to ``last_line`` can be picked up."""
+        end = self._ends.get(last_line)
+        if end is None:
+            self._store.pop(self._key, None)
+        else:
+            self._store[self._key] = (last_line, end, self._inode)
 
 
 def rewind_past_eof_mark(path: Path, seen_keys: set[str]) -> bool:
