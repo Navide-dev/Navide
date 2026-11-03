@@ -273,7 +273,7 @@ import {
   savedGroupToRecreate,
 } from './lib/runGroups'
 import { createRunSlotPanes } from './lib/runSlotPanes'
-import { failedRunStop } from './lib/failedRunStop'
+import { stopFailedRunPanes as stopFailedRunPanesFor } from './lib/failedRunStop'
 import {
   ALL_SCOPE_RESTORE_CONCURRENCY,
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
@@ -2565,6 +2565,11 @@ const paneLastActiveAt = new Map<string, number>()
 /** When the pane's current (or last) turn started — the first agent_active
  *  after a turn end. Read by the quota failover settle (see noteTurnComplete). */
 const paneTurnStartedAt = new Map<string, number>()
+/** When the run in progress last began sending a pane its role or kickoff.
+ *  With paneTurnCompleteAt it tells a failed run which panes it set to work
+ *  before their badge could show it (stopFailedRunPanes). Emptied when a run
+ *  starts; a send stopped before its Enter is taken out again. */
+const runPaneSentAt = new Map<string, number>()
 
 // Per-pane count of background subagents the CLI is still waiting on, as last
 // reported by a hook event, with the wall-clock time of that report. The
@@ -7433,6 +7438,7 @@ function scheduleInjection(pane: ActivePane): void {
         // role prompt isn't sent as a raw keystroke burst that floods the PTY
         // input buffer (EAGAIN drops) and re-renders on every embedded newline.
         pane.roleSentAt = Date.now()
+        runPaneSentAt.set(pane.id, pane.roleSentAt)
         ok = await injectPane(pane.id, roleContent, `role:${role.label}`, true, undefined, roleEvidence)
       } finally {
         releaseInjectionSlot()
@@ -7534,6 +7540,7 @@ function scheduleInjection(pane: ActivePane): void {
       const kickoffResult = await runPipelineKickoff({
         inject: async () => {
           kickoffStartedAt = Date.now()
+          runPaneSentAt.set(pane.id, kickoffStartedAt)
           const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number; late?: LateSubmit; lateMs?: number } = {}
           const injected = await injectPane(
             pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence, undefined,
@@ -7541,6 +7548,7 @@ function scheduleInjection(pane: ActivePane): void {
             () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
           )
           logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
+          if (evidence.stopped) runPaneSentAt.delete(pane.id)
           return { injected, echo: evidence.echo, submit: evidence.submit, stopped: evidence.stopped }
         },
         confirmQueued: () => confirmQueuedKickoff(pane.id, kickoffStartedAt, tag, () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding())),
@@ -15282,9 +15290,11 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       // keystroke burst flooding the PTY input buffer.
       const roleEvidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; enters?: number; stopped?: boolean } = {}
       const roleSentAt = Date.now()
+      runPaneSentAt.set(pane.id, roleSentAt)
       const roleOk = await injectPane(pane.id, roleContent, `role:${role.label}`, true, undefined, roleEvidence, undefined, slotStillWanted)
       logInjectEvidence(tag, 'role', 1, roleOk, roleEvidence)
       if (roleEvidence.stopped) {
+        runPaneSentAt.delete(pane.id)
         pipelineLog(`${tag} ⏹ the run is no longer running — the role was not submitted`)
         return
       }
@@ -15372,11 +15382,13 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     const kickoffResult = await runPipelineKickoff({
       inject: async () => {
         kickoffStartedAt = Date.now()
+        runPaneSentAt.set(pane.id, kickoffStartedAt)
         const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number; late?: LateSubmit; lateMs?: number } = {}
         // Asked again right before its Enter: a sibling can fail the run in
         // the second this kickoff is being typed.
         const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence, undefined, slotStillWanted)
         logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
+        if (evidence.stopped) runPaneSentAt.delete(pane.id)
         return { injected, echo: evidence.echo, submit: evidence.submit, stopped: evidence.stopped }
       },
       confirmQueued: () => confirmQueuedKickoff(pane.id, kickoffStartedAt, tag, slotStillWanted),
@@ -15724,6 +15736,7 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   // has the run, so a refused start leaves no empty group behind.
   createRunGroup(pipelineRunGroupName(pid))
   runSlots.startRun(!!payload.childOf)
+  runPaneSentAt.clear()
   applyProjectPaths(resp ?? undefined)
   pipelineDag.setRunStack(resp?.project?.run_stack)
   pipelineDag.adoptOutputs(resp?.project?.node_outputs)
@@ -16111,26 +16124,37 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
  *  runSlots. Checked again before each pane: once the state is back to
  *  `running`, a run goes on and nothing more is pressed. */
 async function stopFailedRunPanes(failedPaneId: string | undefined): Promise<void> {
-  for (const paneId of new Set(runSlots.current().values())) {
-    if (pipeline.state === 'running') return
-    if (paneId === failedPaneId) continue
-    const pane = panes.value.find((p) => p.id === paneId)
-    const ref = paneRefs[paneId]
-    const stop = failedRunStop(ref?.displayStatus as string | undefined)
-    if (!pane?.realized || !stop) continue
-    let sent = false
-    if (stop === 'interrupt' || acp.owns(paneId)) {
-      sent = await onInterrupt(paneId)
-    } else if (ref?.sessionId) {
-      try {
-        await backend.send('terminal.input', { terminal_session_id: ref.sessionId, data: '\x1b' })
-        sent = true
-      } catch {
-        sent = false
+  const slots = runSlots.current()
+  const failedAt = Date.now()
+  await stopFailedRunPanesFor({
+    paneIds: [...new Set(slots.values())].filter((id) => id !== failedPaneId),
+    status: (paneId) => (panes.value.find((p) => p.id === paneId)?.realized ? paneRefs[paneId]?.displayStatus as string | undefined : undefined),
+    sentUnfinished: (paneId) => {
+      const sentAt = runPaneSentAt.get(paneId)
+      return sentAt !== undefined && (paneTurnCompleteAt.get(paneId) ?? 0) < sentAt && !!panes.value.find((p) => p.id === paneId)?.realized
+    },
+    userTouched: (paneId) => ((paneRefs[paneId]?.lastUserKeyAt as number | undefined) ?? 0) > failedAt,
+    // A resume, a restart or a new run: that run's panes are its own.
+    runGoesOn: () => pipeline.state === 'running' || runSlots.current() !== slots,
+    stop: async (paneId, how) => {
+      const pane = panes.value.find((p) => p.id === paneId)
+      const ref = paneRefs[paneId]
+      let sent = false
+      if (how === 'interrupt' || acp.owns(paneId)) {
+        sent = await onInterrupt(paneId)
+      } else if (ref?.sessionId) {
+        try {
+          await backend.send('terminal.input', { terminal_session_id: ref.sessionId, data: '\x1b' })
+          sent = true
+        } catch {
+          sent = false
+        }
       }
-    }
-    if (sent) pipelineLog(`⏹ interrupted ${pane.slotLabel ?? paneId} — the run failed`)
-  }
+      if (sent) pipelineLog(`⏹ interrupted ${pane?.slotLabel ?? paneId} — the run failed`)
+    },
+    sleep,
+    now: Date.now,
+  })
 }
 
 /** Approve the gate the run is paused on and carry on with the hand-off. */

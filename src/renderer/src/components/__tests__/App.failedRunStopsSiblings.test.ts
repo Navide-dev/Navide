@@ -9,9 +9,10 @@
 // against panes that only answer their display status.
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { createRunSlotPanes } from '../../lib/runSlotPanes'
+import * as failedRunStopLib from '../../lib/failedRunStop'
 import { failedRunStop } from '../../lib/failedRunStop'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
@@ -40,10 +41,21 @@ async function load(scope: Record<string, unknown>) {
 
 type Status = 'running' | 'awaiting' | 'idle' | 'exited'
 
-async function failWk(statuses: Record<string, Status>, opts: { retry?: boolean; errorEdge?: boolean; foreign?: Status } = {}) {
+const T0 = Date.UTC(2026, 10, 3, 12, 41, 59, 538)
+
+interface Event { at: number; apply: (w: World) => void }
+interface World {
+  pipeline: { state: string }
+  paneRefs: Record<string, { sessionId: string; displayStatus: Status; lastUserKeyAt?: number }>
+}
+
+async function failWk(
+  statuses: Record<string, Status>,
+  opts: { retry?: boolean; errorEdge?: boolean; foreign?: Status; sent?: Record<string, number>; turnComplete?: Record<string, number>; events?: Event[] } = {},
+) {
   const runSlots = createRunSlotPanes()
   const panes: Array<{ id: string; slotLabel: string; realized: boolean }> = []
-  const paneRefs: Record<string, { sessionId: string; displayStatus: Status }> = {}
+  const paneRefs: World['paneRefs'] = {}
   for (const [label, status] of Object.entries(statuses)) {
     const id = `pane-${label}`
     runSlots.record(runSlots.current(), 'S1', label, id)
@@ -56,6 +68,13 @@ async function failWk(statuses: Record<string, Status>, opts: { retry?: boolean;
     paneRefs['pane-old'] = { sessionId: 's-old', displayStatus: opts.foreign }
   }
   const pipeline = { state: 'running', stageIndex: 0, workspacePath: '/ws' }
+  const world: World = { pipeline, paneRefs }
+  const pending = [...(opts.events ?? [])].sort((a, b) => a.at - b.at)
+  const sleep = async (ms: number) => {
+    vi.setSystemTime(Date.now() + ms)
+    while (pending.length && pending[0].at <= Date.now() - T0) pending.shift()!.apply(world)
+  }
+  let watch: Promise<void> = Promise.resolve()
   const onInterrupt = vi.fn(async () => true)
   const send = vi.fn(async () => ({ ok: true }))
   const log: string[] = []
@@ -82,7 +101,11 @@ async function failWk(statuses: Record<string, Status>, opts: { retry?: boolean;
     i18n: { global: { t: (k: string) => k } },
     onWorkspaceCheck: vi.fn(async () => {}),
     acp: { owns: () => false },
+    stopFailedRunPanesFor: (deps: Parameters<typeof failedRunStopLib.stopFailedRunPanes>[0]) => (watch = failedRunStopLib.stopFailedRunPanes(deps)),
     failedRunStop,
+    runPaneSentAt: new Map(Object.entries(opts.sent ?? {})),
+    paneTurnCompleteAt: new Map(Object.entries(opts.turnComplete ?? {})),
+    sleep,
     onInterrupt,
     backend: { send },
     pipelineLog: (line: string) => { log.push(line) },
@@ -90,13 +113,19 @@ async function failWk(statuses: Record<string, Status>, opts: { retry?: boolean;
     onStageSlotCompleted,
   })
   await failRunOnKickoff(0, 'wk', 'parked on a permission prompt', false, false, !opts.retry && !opts.errorEdge)
-  await new Promise((r) => setTimeout(r, 0))
+  await watch
   const escs = send.mock.calls.filter((c) => (c as unknown[])[0] === 'terminal.input' && ((c as unknown[])[1] as { data: string }).data === '\x1b')
     .map((c) => ((c as unknown[])[1] as { terminal_session_id: string }).terminal_session_id)
   return { interrupted: onInterrupt.mock.calls.map((c) => (c as unknown[])[0]), escs, log, scheduleSlotRetry }
 }
 
 describe('a slot failing the run stops the others', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(T0)
+  })
+  afterEach(() => vi.useRealTimers())
+
   it('a sibling in a turn gets its interrupt key, and the log says so', async () => {
     const r = await failWk({ wk: 'awaiting', mgr: 'running' })
     expect(r.interrupted).toEqual(['pane-mgr'])
@@ -139,6 +168,47 @@ describe('a slot failing the run stops the others', () => {
     const r = await failWk({ wk: 'awaiting', mgr: 'running' }, { errorEdge: true })
     expect(r.interrupted).toEqual([])
     expect(r.escs).toEqual([])
+  })
+
+  it('a sibling whose kickoff went out 200 ms before, badge still idle, gets its interrupt key', async () => {
+    const r = await failWk({ wk: 'awaiting', mgr: 'idle' }, { sent: { 'pane-mgr': T0 - 200 }, turnComplete: { 'pane-mgr': T0 - 20_000 } })
+    expect(r.interrupted).toEqual(['pane-mgr'])
+  })
+
+  it('a sibling whose role or kickoff turn already ended gets nothing', async () => {
+    const r = await failWk({ wk: 'awaiting', mgr: 'idle' }, { sent: { 'pane-mgr': T0 - 20_000 }, turnComplete: { 'pane-mgr': T0 - 5_000 } })
+    expect(r.interrupted).toEqual([])
+  })
+
+  it('a sibling that turns running 3 s after the failure gets its interrupt key then', async () => {
+    const r = await failWk({ wk: 'awaiting', mgr: 'idle' }, { events: [{ at: 3_000, apply: (w) => { w.paneRefs['pane-mgr'].displayStatus = 'running' } }] })
+    expect(r.interrupted).toEqual(['pane-mgr'])
+    expect(r.log).toContain('⏹ interrupted mgr — the run failed')
+  })
+
+  it('a sibling that turns busy after the 30 s watch gets nothing', async () => {
+    const r = await failWk({ wk: 'awaiting', mgr: 'idle' }, { events: [{ at: 31_000, apply: (w) => { w.paneRefs['pane-mgr'].displayStatus = 'running' } }] })
+    expect(r.interrupted).toEqual([])
+  })
+
+  it('a sibling the person typed into after the failure is theirs', async () => {
+    const r = await failWk({ wk: 'awaiting', mgr: 'idle' }, {
+      events: [
+        { at: 1_000, apply: (w) => { w.paneRefs['pane-mgr'].lastUserKeyAt = Date.now() } },
+        { at: 3_000, apply: (w) => { w.paneRefs['pane-mgr'].displayStatus = 'running' } },
+      ],
+    })
+    expect(r.interrupted).toEqual([])
+  })
+
+  it('once the run is resumed the watch sends nothing more', async () => {
+    const r = await failWk({ wk: 'awaiting', mgr: 'idle' }, {
+      events: [
+        { at: 2_000, apply: (w) => { w.pipeline.state = 'running' } },
+        { at: 3_000, apply: (w) => { w.paneRefs['pane-mgr'].displayStatus = 'running' } },
+      ],
+    })
+    expect(r.interrupted).toEqual([])
   })
 })
 
