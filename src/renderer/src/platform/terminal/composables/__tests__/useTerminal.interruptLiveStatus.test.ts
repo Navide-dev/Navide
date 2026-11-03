@@ -106,7 +106,8 @@ describe('useTerminal — liveStatus behind the STOP badge', () => {
     const { result, mock, scope } = await spawnedFake()
     await work(mock, 0, 5)
     expect(result.displayStatus.value).toBe('running')
-    await result.interrupt()
+    await result.interrupt('agent')
+    expect(result.stoppedBy.value).toBe('agent')
     // The CLI repaints "Interrupted · What should Claude do instead?" and
     // stops; nothing reports a turn end for an interrupted turn.
     mock.emit('terminal.output', { terminal_session_id: 'sess-1', data: 'Interrupted · What should Claude do instead?\r\n' })
@@ -132,6 +133,34 @@ describe('useTerminal — liveStatus behind the STOP badge', () => {
     const { result, mock, scope } = await spawnedFake()
     await work(mock, 0, 5)
     expect(result.liveStatus.value).toBe(result.displayStatus.value)
+    scope.stop()
+  })
+
+  it("records a STOP with no stated origin as the user's", async () => {
+    const { result, scope } = await spawnedFake()
+    await result.interrupt()
+    expect(result.isStopped.value).toBe(true)
+    expect(result.stoppedBy.value).toBe('user')
+    scope.stop()
+  })
+
+  it('forgets the origin once a person types and STOP clears', async () => {
+    const { result, scope } = await spawnedFake()
+    await result.interrupt('agent')
+    captured.dataHandler!('h')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(result.isStopped.value).toBe(false)
+    expect(result.stoppedBy.value).toBe(null)
+    scope.stop()
+  })
+
+  it('treats a STOP restored without an origin as nobody\'s agent', async () => {
+    const { result, scope } = await spawnedFake()
+    await result.interrupt('agent')
+    captured.dataHandler!('h')
+    await vi.advanceTimersByTimeAsync(0)
+    result.isStopped.value = true
+    expect(result.stoppedBy.value).toBe(null)
     scope.stop()
   })
 

@@ -377,6 +377,7 @@ defineExpose({
   status: terminal.status,
   displayStatus,
   liveStatus: terminal.liveStatus,
+  stoppedBy: terminal.stoppedBy,
   awaitingKind: terminal.awaitingKind,
   startingStartedAt: terminal.startingStartedAt,
   startingAgeMs: terminal.startingAgeMs,

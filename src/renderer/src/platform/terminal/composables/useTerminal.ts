@@ -948,6 +948,13 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   const stallReason = ref<string | null>(null)
 
   const isStopped = ref(false)
+  /** Who caused the current STOP: 'agent' for an interrupt another agent sent
+   *  (cli_interrupt), 'user' for the STOP button and everything else, null when
+   *  not stopped or when STOP was restored from disk without an origin. The
+   *  messaging gate reads through only an agent's STOP: a person who pressed
+   *  STOP wants that agent to stay stopped until they type. */
+  const stoppedBy = ref<'agent' | 'user' | null>(null)
+  watch(isStopped, (stopped) => { if (!stopped) stoppedBy.value = null }, { flush: 'sync' })
 
   const displayStatus = computed<DisplayStatus>(() => {
     if (status.value === 'exited' || status.value === 'error') return status.value
@@ -3352,7 +3359,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  exactly like "the agent ignored me" without it. True still means only
    *  that the backend accepted the request: it writes to the PTY and answers,
    *  and a write that fails there is logged, not reported back. */
-  async function interrupt(): Promise<boolean> {
+  async function interrupt(by: 'agent' | 'user' = 'user'): Promise<boolean> {
     if (!sessionId.value) return false
     // Guarded like every other user input, and for the sharpest case of it: a
     // frozen-looking pane is exactly when someone hits STOP, so a queued SIGINT
@@ -3361,6 +3368,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // once the request is on its way, so the STOP badge cannot advertise an
     // interrupt that never left.
     if (!inputTransportReady()) return false
+    stoppedBy.value = by
     isStopped.value = true
     const reply = await terminalPort.interrupt(sessionId.value)
     // wsClient resolves an `ok: false` rather than rejecting it, so a refusal
@@ -3557,6 +3565,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     status,
     displayStatus,
     liveStatus,
+    stoppedBy,
     awaitingKind,
     startingStartedAt,
     startingAgeMs,
