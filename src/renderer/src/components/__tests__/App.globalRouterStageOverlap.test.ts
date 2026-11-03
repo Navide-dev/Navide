@@ -70,7 +70,7 @@ async function load(opts: { managerOwnsStage: boolean }) {
     // The stage router has read w1's REPORT and sent it to the Manager.
     cursors: new Map([['w1', REPORT.length]]),
     bufferAnchors: new Map([['w1', { len: REPORT.length, bytesSeen: REPORT.length }]]),
-    routedWorkerMessages: new Set([`REPORT\u0000畫師\u0000${REPORT.slice(19, -17).replace(/\s+/g, '')}`]),
+    routedWorkerMessages: new Set([`REPORT\u0000畫師\u0000${REPORT.slice(19, -17).replace(/\s+/g, '')}\u00000`]),
   }]])
   const injected: Array<[string, string]> = []
   const deps: Record<string, unknown> = {
@@ -84,6 +84,7 @@ async function load(opts: { managerOwnsStage: boolean }) {
     globalRouterAnchors: new Map<string, unknown>(),
     globalRouterHandle: 1,
     globalRoutedMessages: new Set<string>(),
+    paneTurnStartedAt: new Map<string, number>(),
     pipelineLog: () => {},
     injectPane: vi.fn(async (paneId: string, text: string) => { injected.push([paneId, text]); return true }),
     i18n: { global: { t: (key: string) => key } },

@@ -187,7 +187,13 @@ export type QueuedTurnOutcome = 'started' | 'turn-never-ended' | 'no-own-turn' |
  *  after `since` (when the kickoff began to be typed), then for activity
  *  after that end, the queued kickoff's own turn. A turn end reported before
  *  `since` belongs to an earlier turn, and activity before the end to the
- *  turn the kickoff waited behind. */
+ *  turn the kickoff waited behind.
+ *
+ *  The times are when the window received each event, so a batch that brings
+ *  the turn ahead's end, the kickoff turn's activity and its end together (a
+ *  late transcript, a stalled backend) stamps them all alike: the last end is
+ *  then the kickoff turn's, and no activity comes after it. A second turn end
+ *  since `since` (`completionsSince`) is the kickoff's own turn, ended. */
 export async function waitForQueuedTurn(deps: {
   since: number
   lastCompleteAt: () => number
@@ -197,9 +203,12 @@ export async function waitForQueuedTurn(deps: {
   stillWanted: () => boolean
   sleep: (ms: number) => Promise<void>
   now: () => number
+  /** Turn ends received after the given time. */
+  completionsSince?: (t: number) => number
   pollMs?: number
 }): Promise<QueuedTurnOutcome> {
   const pollMs = deps.pollMs ?? 250
+  const ownTurnEnded = (): boolean => (deps.completionsSince?.(deps.since) ?? 0) >= 2
   const stop = (): QueuedTurnOutcome | null =>
     !deps.alive() ? 'gone' : !deps.stillWanted() ? 'moved-on' : deps.parked() ? 'parked' : null
   const endBy = deps.now() + QUEUED_TURN_END_MS
@@ -211,7 +220,7 @@ export async function waitForQueuedTurn(deps: {
   }
   const ended = deps.lastCompleteAt()
   const startBy = deps.now() + QUEUED_OWN_TURN_MS
-  while (deps.lastActiveAt() <= ended && deps.lastCompleteAt() <= ended) {
+  while (deps.lastActiveAt() <= ended && deps.lastCompleteAt() <= ended && !ownTurnEnded()) {
     const why = stop()
     if (why) return why
     if (deps.now() >= startBy) return 'no-own-turn'
