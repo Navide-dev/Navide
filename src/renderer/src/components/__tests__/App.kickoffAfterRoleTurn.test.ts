@@ -160,6 +160,7 @@ async function slotRun(opts: {
     sessionMarkerLine: () => '',
     heldKickoffPanes: new Set(),
     heldKickoffCopy: () => undefined,
+    runPaneSentAt: new Map(),
     rolesApi: { find: () => ({ system_prompt: 'role', label: 'Worker' }) },
     ROLE_STANDBY_SUFFIX: '',
     runEnding: () => false,
