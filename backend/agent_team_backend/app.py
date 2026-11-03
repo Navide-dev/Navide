@@ -2869,17 +2869,6 @@ for _mime, _ext in zip(_FONT_MIMES, (".ttf", ".otf", ".woff", ".woff2")):
     mimetypes.add_type(_mime, _ext)
 
 
-# `sandbox` gives a previewed page an opaque origin with scripts, forms and
-# plugins blocked. The rest keeps it off the network: a page served from
-# /fs/page may load its own relative stylesheets, images, fonts and media from
-# this backend ('self' is the URL's origin even in the sandbox) and inline
-# styles and data: URIs, and nothing from any other host.
-_PREVIEW_CSP = (
-    "sandbox; default-src 'none'; style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data:; font-src 'self' data:; media-src 'self' data:"
-)
-
-
 def _serve_workspace_file(workspace: str, rel: str, *, allow_css: bool = False) -> FileResponse:
     """Serve a workspace file over HTTP (Range/206 handled by FileResponse).
 
@@ -2918,7 +2907,7 @@ def _serve_workspace_file(workspace: str, rel: str, *, allow_css: bool = False) 
     )
     headers = {"X-Content-Type-Options": "nosniff"}
     if media_type != "application/pdf":
-        headers["Content-Security-Policy"] = _PREVIEW_CSP
+        headers["Content-Security-Policy"] = "sandbox"
     if not inline:
         return FileResponse(
             target,

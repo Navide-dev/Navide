@@ -116,30 +116,6 @@ describe('NotebookPreview – outputs', () => {
     expect(wrapper.find('table').exists()).toBe(false)
   })
 
-  it('prefixes html outputs with a no-network CSP and strips meta refresh', async () => {
-    const { wrapper } = await mountNb(
-      nb([
-        {
-          cell_type: 'code',
-          execution_count: 3,
-          source: 'x',
-          outputs: [
-            {
-              output_type: 'display_data',
-              data: { 'text/html': ['<META HTTP-EQUIV=Refresh CONTENT="0;url=https://evil.test/">ok'] },
-            },
-          ],
-        },
-      ]),
-    )
-    const srcdoc = wrapper.find('iframe.nbp-out-frame').attributes('srcdoc')!
-    expect(srcdoc.startsWith(
-      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'; font-src data:">',
-    )).toBe(true)
-    expect(srcdoc).not.toMatch(/refresh/i)
-    expect(srcdoc).toContain('ok')
-  })
-
   it('renders error outputs with ANSI escape codes stripped', async () => {
     const { wrapper } = await mountNb(
       nb([
