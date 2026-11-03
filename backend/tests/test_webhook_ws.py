@@ -306,6 +306,33 @@ class TestStartup:
         assert (await call("webhook.status"))["payload"]["listening"] is True
 
 
+    async def test_the_first_request_does_not_build_the_text_filter(self, env, monkeypatch) -> None:
+        """The filter's character class takes 0.3-1 s to build. Built lazily on
+        the first body, it held up the request that needs the fastest answer;
+        the listener's start builds it in a worker thread first."""
+        import unicodedata
+
+        from agent_team_backend import webhook_payload
+
+        await enabled_trigger()
+        await webhook_ws.shutdown()
+        webhook_payload._dash_run.cache_clear()
+        monkeypatch.setattr(app_module, "database", env.store.db)
+        monkeypatch.setattr(webhook_service.WebhookService, "start_watchdog", lambda _: None)
+        await webhook_ws.startup()
+        await settled(lambda: webhook_ws._listener is not None)
+        calls = [0]
+        real = unicodedata.category
+
+        def counting(ch: str) -> str:
+            calls[0] += 1
+            return real(ch)
+
+        monkeypatch.setattr(unicodedata, "category", counting)
+        assert webhook_payload.sanitize_text("a - - - b") == "a \u2013 \u2013 \u2013 b"
+        assert calls[0] == 0
+
+
 class Sink:
     async def send_json(self, _: Any) -> None:
         return None
