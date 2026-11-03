@@ -86,17 +86,27 @@ export function composerClearKeys(text: string, cols: number): string[] {
   return writes
 }
 
+const TURN_STAMPS_KEPT = 512
+
 /** Hook and transcript watcher can report the same turn. Record acceptance
  * synchronously, before a caller dispatches messages and can be reentered. */
 export function createTurnTextGate() {
-  const timestamps = new Map<string, number>()
+  // A turn end's stamp is its identity: whether that turn was already taken,
+  // not whether it is the newest. The log reader can deliver an older turn
+  // after a newer one (read late, behind a hook-prioritized file), and a
+  // newest-only rule dropped the older turn's MSG blocks without a trace.
+  const timestamps = new Map<string, Set<number>>()
   const fingerprints = new Map<string, string>()
   return {
     accept(paneId: string, text: string, timestamp: string): boolean {
       const eventMs = parseEventMs(timestamp)
       if (!Number.isNaN(eventMs)) {
-        if (eventMs <= (timestamps.get(paneId) ?? 0)) return false
-        timestamps.set(paneId, eventMs)
+        let seen = timestamps.get(paneId)
+        if (!seen) timestamps.set(paneId, (seen = new Set()))
+        if (seen.has(eventMs)) return false
+        seen.add(eventMs)
+        // Bounded: a replay older than this many turns is the boot gate's.
+        if (seen.size > TURN_STAMPS_KEPT) seen.delete(seen.values().next().value as number)
       } else {
         const fingerprint = turnTextFingerprint(text)
         if (fingerprint === fingerprints.get(paneId)) return false
