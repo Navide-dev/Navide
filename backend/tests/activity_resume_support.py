@@ -33,13 +33,13 @@ def assert_resumes(
     walk, ``appended`` is written: the reader that walked it before must emit
     exactly what a fresh reader with the same bag emits, reading only a fraction
     of the file."""
-    with path.open("a", encoding="utf-8") as fh:
+    with path.open("a", encoding="utf-8", newline="") as fh:
         fh.write(PAD * PAD_LINES)
     reader = make_reader()
     seen: set[str] = set()
     reader.parse_activity(path, seen)
 
-    with path.open("a", encoding="utf-8") as fh:
+    with path.open("a", encoding="utf-8", newline="") as fh:
         for rec in appended:
             fh.write(json.dumps(rec) + "\n")
     expected = _events(make_reader().parse_activity(path, set(seen)))

@@ -86,7 +86,7 @@ def _fresh(path: Path, seen: set[str]) -> list[tuple[int, str]]:
 @pytest.fixture
 def path(tmp_path: Path) -> Path:
     p = tmp_path / "log.jsonl"
-    p.write_text("".join(f"line {i} {'x' * 100}\n" for i in range(1, 501)), encoding="utf-8")
+    p.write_text("".join(f"line {i} {'x' * 100}\n" for i in range(1, 501)), encoding="utf-8", newline="")
     return p
 
 
@@ -94,7 +94,7 @@ def test_an_append_is_read_from_where_the_walk_stopped(path: Path, monkeypatch: 
     reader, seen = _Reader(), set()
     _walk(reader, path, seen)
     added = "new 501\n\nnew 503\n"
-    with path.open("a", encoding="utf-8") as fh:
+    with path.open("a", encoding="utf-8", newline="") as fh:
         fh.write(added)
     expected = _fresh(path, seen)
     meter = _ReadMeter(monkeypatch)
@@ -119,7 +119,7 @@ def test_a_replaced_file_is_read_from_the_head(path: Path) -> None:
     reader, seen = _Reader(), set()
     _walk(reader, path, seen)
     other = path.with_suffix(".tmp")
-    other.write_text("".join(f"other {i} {'y' * 120}\n" for i in range(1, 520)), encoding="utf-8")
+    other.write_text("".join(f"other {i} {'y' * 120}\n" for i in range(1, 520)), encoding="utf-8", newline="")
     os.replace(other, path)
     expected = _fresh(path, seen)
     assert _walk(reader, path, seen) == expected
@@ -128,10 +128,10 @@ def test_a_replaced_file_is_read_from_the_head(path: Path) -> None:
 def test_a_half_written_line_is_finished_next_time(path: Path) -> None:
     reader, seen = _Reader(), set()
     _walk(reader, path, seen)
-    with path.open("a", encoding="utf-8") as fh:
+    with path.open("a", encoding="utf-8", newline="") as fh:
         fh.write("half")
     assert _walk(reader, path, seen) == []
-    with path.open("a", encoding="utf-8") as fh:
+    with path.open("a", encoding="utf-8", newline="") as fh:
         fh.write(" done\n")
     expected = _fresh(path, seen)
     assert _walk(reader, path, seen) == expected == [(501, "half done")]
