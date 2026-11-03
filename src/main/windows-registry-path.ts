@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { statSync } from 'node:fs'
 import { delimiter } from 'node:path'
 
@@ -29,42 +29,70 @@ export function expandWindowsEnv(value: string, env: NodeJS.ProcessEnv): string 
 // `reg.exe` answers in the console's OEM code page (cp950 on zh-TW), so a
 // Chinese user name in %APPDATA%\npm came out as mojibake under utf8 and was
 // dropped. PowerShell can switch its output to UTF-8 first; one run reads
-// both values (expanded by .NET), and getResolvedUserPath's cache absorbs its
-// start-up time.
+// both values (expanded by .NET). Its start-up is slow, so main reads it in
+// the background (backend.ts warmRegistryPath).
 const READ_PATH_PS =
   '[Console]::OutputEncoding = [Text.Encoding]::UTF8; ' +
   "[Environment]::GetEnvironmentVariable('Path', 'Machine'); " +
   "[Environment]::GetEnvironmentVariable('Path', 'User')"
 
+const PS_ARGS = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', READ_PATH_PS]
+
 type PathRunner = (args: string[]) => Uint8Array
+type AsyncPathRunner = (args: string[]) => Promise<Uint8Array>
 
 const runPowerShell: PathRunner = (args) =>
   execFileSync('powershell.exe', args, { timeout: 5000, windowsHide: true })
 
-/** Machine then User PATH entries, expanded. PowerShell failing to run
- *  contributes nothing; an entry that did not decode (U+FFFD) is skipped. */
-export function readWindowsRegistryPath(
-  run: PathRunner = runPowerShell,
-  env: NodeJS.ProcessEnv = process.env
-): string[] {
-  let stdout: string
-  try {
-    stdout = new TextDecoder('utf-8').decode(
-      run(['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', READ_PATH_PS])
+const runPowerShellAsync: AsyncPathRunner = (args) =>
+  new Promise((resolve, reject) => {
+    execFile(
+      'powershell.exe',
+      args,
+      { encoding: 'buffer', timeout: 5000, windowsHide: true },
+      (error, stdout) => (error ? reject(error) : resolve(stdout))
     )
-  } catch {
-    return []
-  }
+  })
+
+/** PATH entries from READ_PATH_PS's output bytes; an entry that did not
+ *  decode (U+FFFD) is skipped. */
+function parsePathOutput(output: Uint8Array, env: NodeJS.ProcessEnv): string[] {
   const entries: string[] = []
-  for (const value of stdout.split(/\r?\n/)) {
+  for (const value of new TextDecoder('utf-8').decode(output).split(/\r?\n/)) {
     if (!value.trim()) continue
     entries.push(
       ...expandWindowsEnv(value.trim(), env)
         .split(';')
-        .filter((e) => e.trim() && !e.includes('�'))
+        .filter((e) => e.trim() && !e.includes('\uFFFD'))
     )
   }
   return entries
+}
+
+/** Machine then User PATH entries, expanded. Blocks the calling thread for a
+ *  PowerShell start-up; prefer readWindowsRegistryPathAsync on main. */
+export function readWindowsRegistryPath(
+  run: PathRunner = runPowerShell,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  try {
+    return parsePathOutput(run(PS_ARGS), env)
+  } catch {
+    return []
+  }
+}
+
+/** readWindowsRegistryPath without blocking: PowerShell failing to run, or
+ *  timing out, contributes nothing. */
+export async function readWindowsRegistryPathAsync(
+  run: AsyncPathRunner = runPowerShellAsync,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string[]> {
+  try {
+    return parsePathOutput(await run(PS_ARGS), env)
+  } catch {
+    return []
+  }
 }
 
 function isDir(path: string): boolean {

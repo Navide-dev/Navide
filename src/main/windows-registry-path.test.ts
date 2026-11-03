@@ -7,6 +7,7 @@ import {
   expandWindowsEnv,
   parseRegQueryPath,
   readWindowsRegistryPath,
+  readWindowsRegistryPathAsync,
 } from './windows-registry-path'
 
 // 11-03: Navide on Windows keeps the PATH Explorer gave it at launch, so a
@@ -84,6 +85,18 @@ describe('readWindowsRegistryPath', () => {
       throw new Error('spawn powershell.exe ENOENT')
     }
     expect(readWindowsRegistryPath(fail, {})).toEqual([])
+  })
+
+  it('reads the same off the main thread, and nothing when PowerShell fails', async () => {
+    const env = { ProgramFiles: 'C:\\Program Files' }
+    expect(await readWindowsRegistryPathAsync(async (args) => powershell(args), env)).toEqual(
+      readWindowsRegistryPath(powershell, env)
+    )
+    expect(
+      await readWindowsRegistryPathAsync(async () => {
+        throw new Error('timed out')
+      }, {})
+    ).toEqual([])
   })
 })
 

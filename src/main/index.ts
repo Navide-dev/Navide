@@ -11,6 +11,8 @@ import {
   startBackend,
   setBackendDisabledBuiltinsProvider,
   getResolvedUserPath,
+  getFreshResolvedUserPath,
+  warmRegistryPath,
   readWsToken,
   mintTrustConfirmation,
   backendDataDir,
@@ -3461,10 +3463,23 @@ let detectedEditorsCache: DetectedEditor[] | null = null
 
 function currentDetectedEditors(refresh = false): DetectedEditor[] {
   if (refresh || !detectedEditorsCache) {
-    detectedEditorsCache = detectEditors(getResolvedUserPath({ fresh: refresh }))
+    detectedEditorsCache = detectEditors(getResolvedUserPath())
   }
   return detectedEditorsCache
 }
+
+// The list Settings and the "Open with…" menus show. The first detection and
+// Settings' rescan follow a registry PATH read (Windows) awaited off the main
+// thread, rather than one run synchronously on it.
+async function listDetectedEditors(refresh: boolean): Promise<DetectedEditor[]> {
+  if (!refresh && detectedEditorsCache) return detectedEditorsCache
+  detectedEditorsCache = detectEditors(await getFreshResolvedUserPath())
+  return detectedEditorsCache
+}
+
+// The registry PATH read behind getResolvedUserPath is a PowerShell start-up
+// on Windows; have it ready before the first editor menu or terminal needs it.
+app.whenReady().then(() => void warmRegistryPath())
 
 // An external editor that cannot be launched falls back to the mini-IDE, which
 // on its own looks like the setting was ignored. Warn once per editor id per
@@ -3709,7 +3724,7 @@ frontendPluginManager.setEditorNativeHandlers({
     const result = await openTempFilePath(name, content)
     if (!result.ok) throw new Error(result.error ?? 'open temp file failed')
   },
-  listEditors: async (refresh) => currentDetectedEditors(refresh).map((editor) => ({
+  listEditors: async (refresh) => (await listDetectedEditors(refresh === true)).map((editor) => ({
     id: editor.id,
     label: editor.id === 'vscode' ? 'Visual Studio Code' : editor.id === 'cursor' ? 'Cursor' : editor.id,
     available: editor.available,
@@ -4858,7 +4873,7 @@ ipcMain.handle('window:openEditor', async (event, args: Record<string, string>) 
 // Default-editor surface for Settings and the "Open with…" menus: the built-in
 // editors plus whether each one was found on this machine.
 ipcMain.handle('editors:list', (_event, args?: { refresh?: boolean }) =>
-  currentDetectedEditors(args?.refresh === true)
+  listDetectedEditors(args?.refresh === true)
 )
 
 ipcMain.handle(
