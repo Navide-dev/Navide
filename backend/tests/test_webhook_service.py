@@ -159,6 +159,70 @@ class TestAccept:
         assert env.store.events(env.trigger["id"])[0]["outcome"] == "start-failed"
 
 
+class TestStartUnderStall:
+    """0.2.37 Linux VM (70e669130), 18:37–18:46: the backend's event loop stalled
+    2–8 s at a time. A 2 s window probe timed out with the window open (503
+    no-window, which GitHub does not redeliver), and ui.pipeline.start went
+    unanswered for 60 s (ui_action_timeout) while the window went on starting."""
+
+    async def test_the_probe_waits_out_the_worst_measured_stall(self, monkeypatch) -> None:
+        from agent_team_backend.mcp_server import server as mcp
+
+        waited: list[float] = []
+
+        async def probe(workspace: str, timeout: float) -> bool:
+            waited.append(timeout)
+            return True
+
+        monkeypatch.setattr(mcp, "_probe_window", probe)
+        assert await svc.LiveWindow().probe(WS) is True
+        assert waited and waited[0] >= 8.0
+
+    async def test_a_run_the_window_started_before_its_answer_timed_out_is_started(self, env) -> None:
+        async def start(*_: Any) -> dict[str, Any]:
+            run_started(env)
+            return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        event = env.store.events(env.trigger["id"])[0]
+        assert (event["outcome"], event["detail"]) == ("started", "late-answer")
+        assert WS in env.service._active
+
+    async def test_a_run_that_comes_up_after_the_timeout_is_adopted(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+
+        async def start(*_: Any) -> dict[str, Any]:
+            asyncio.get_running_loop().call_later(0.05, run_started, env)
+            return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        event = env.store.events(env.trigger["id"])[0]
+        assert (event["outcome"], event["detail"]) == ("started", "late-answer")
+        # Adopted under this trigger, not taken for someone else's run.
+        assert env.service._active[WS]["trigger_id"] == env.trigger["id"]
+
+    async def test_a_run_that_never_comes_up_is_still_a_failed_start(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc, "LATE_START_S", 0.05)
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+        env.window.answer = {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        event = env.store.events(env.trigger["id"])[0]
+        assert (event["outcome"], event["detail"]) == ("start-failed", "ui_action_timeout")
+        assert WS not in env.service._armed and WS not in env.service._starting
+
+    async def test_another_refusal_is_not_waited_on(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc, "LATE_START_S", 60.0)
+        env.window.answer = {"ok": False, "error_code": "not-started"}
+        assert (await accept(env))[0] == 202
+        await asyncio.wait_for(settle(env), 1.0)
+        assert env.store.events(env.trigger["id"])[0]["outcome"] == "start-failed"
+
+
 class TestBinding:
     @pytest.mark.parametrize("agent", ["codex", "copilot", "qwen", "kimi", "cursor", ""])
     async def test_only_claude_runs(self, env, agent) -> None:

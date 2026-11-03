@@ -211,6 +211,7 @@ import {
   runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
+import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink, injectFailedMessage } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
@@ -4516,6 +4517,10 @@ async function injectText(
     stopped?: boolean
     /** Enters pressed by the submit loop. */
     enters?: number
+    /** What showed, after every Enter looked untaken, that the CLI took the
+     *  message after all, and how long into the grace window. */
+    late?: LateSubmit
+    lateMs?: number
   },
   // Told `true` while the payload is written but the PTY is not reading it
   // (the message is held on `pty-blocked`), `false` once the wait ends either
@@ -4869,6 +4874,9 @@ async function injectText(
   // A dialog already up before the first Enter was not raised by it: every
   // Enter went into that dialog, and none of them submitted our text.
   const dialogBeforeEnter = dialogShown()
+  // Busy lines already on screen (the last turn's "Worked for 12s") say
+  // nothing about this message — see lib/submitStall.ts.
+  const busyBefore = busyLines(visibleScreen() ?? screenTail())
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
     if (stillWanted && !stillWanted()) return stopBeforeEnter()
@@ -4954,6 +4962,47 @@ async function injectText(
         `[injectText] input box still holds the text ${SUBMIT_CONFIRM_MS}ms after Enter ` +
         `(attempt ${attempt}/${MAX_SUBMITS}) — resending Enter`
       )
+    }
+  }
+  // Every Enter looked untaken. Under a stalled backend the screen and the
+  // turn events reach the window late (lib/submitStall.ts): look again before
+  // calling it never submitted. Only where a turn can be seen and the pane was
+  // not mid-turn: a queued message starts no turn, and a running one keeps
+  // drawing busy lines of its own.
+  if (watchTurn && paneId !== undefined) {
+    const graceFrom = Date.now()
+    let lateHow: SubmitEvidence | null = null
+    const late = await awaitLateSubmit({
+      turnSeen: () => turnSince(firstEnterAt) || (paneLastActiveAt.get(paneId) ?? 0) > firstEnterAt,
+      busySeen: () => newBusyLine(busyBefore, visibleScreen() ?? screenTail()),
+      screenSubmitted: () => {
+        const how = submitEvidence({
+          tailWasOnScreen, tail, screen: screenTail(), grownBy: cleanBytes() - before, baseline, visibleScreen: visibleScreen(),
+        })
+        if (how === 'tail-left' || how === 'queued') {
+          lateHow = how
+          return true
+        }
+        // A collapsed paste: the framed box no longer holds its summary.
+        if (framedComposerHolds(visibleScreen() ?? screenTail(), tail) === false) {
+          lateHow = 'unconfirmed'
+          return true
+        }
+        return false
+      },
+      aborted,
+      sleep,
+      now: Date.now,
+    })
+    if (late === 'aborted') return false
+    if (late !== null) {
+      console.warn(`[injectText] submit seen late (${late}, ${Date.now() - graceFrom}ms after the last Enter's watch)`)
+      if (evidence) {
+        evidence.late = late
+        evidence.lateMs = Date.now() - graceFrom
+        evidence.submit = late === 'turn' ? 'turn' : late === 'screen' ? lateHow : 'unconfirmed'
+      }
+      return true
     }
   }
   // Content was confirmed in the box and Enter was re-sent 3× but the box never
@@ -7099,12 +7148,32 @@ async function confirmQueuedKickoff(paneId: string, since: number, tag: string, 
  *  saw. The packaged app logs nothing else for an injection that worked. */
 function logInjectEvidence(
   tag: string, what: string, attempt: number, ok: boolean,
-  ev: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; enters?: number; stopped?: boolean },
+  ev: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; enters?: number; stopped?: boolean; late?: LateSubmit; lateMs?: number },
 ): void {
   pipelineLog(
     `${tag} · ${what} attempt ${attempt}: ${ev.stopped ? 'stopped' : ok ? 'injected' : 'not injected'}` +
-    ` — echo ${ev.echo ?? 'none'}, submit ${ev.submit ?? 'none'}, ${ev.enters ?? 0} Enter(s)`,
+    ` — echo ${ev.echo ?? 'none'}, submit ${ev.submit ?? 'none'}, ${ev.enters ?? 0} Enter(s)` +
+    (ev.late ? `, taken late (${ev.late}, ${ev.lateMs ?? 0} ms into the grace)` : ''),
   )
+}
+
+/** A kickoff judged never submitted whose pane starts a turn anyway: the run
+ *  has failed the slot while the agent works on it. Logged so a VM run can
+ *  find the two disagreeing. `since` is when the kickoff began to be typed. */
+function watchKickoffAfterFailure(paneId: string, since: number, tag: string): void {
+  const t0 = Date.now()
+  void awaitTurnAfterFailure({
+    turnSeen: () => Math.max(
+      paneLastActiveAt.get(paneId) ?? 0, paneTurnStartedAt.get(paneId) ?? 0, paneTurnCompleteAt.get(paneId) ?? 0,
+    ) > since,
+    alive: () => paneAlive(paneId),
+    sleep,
+    now: Date.now,
+  }).then((started) => {
+    if (started) {
+      pipelineLog(`${tag} ⚠ run/agent mismatch: the kickoff was judged never submitted, but the pane started a turn ${Date.now() - t0} ms later — the agent may be working on it`)
+    }
+  })
 }
 
 /**
@@ -7464,7 +7533,7 @@ function scheduleInjection(pane: ActivePane): void {
       const kickoffResult = await runPipelineKickoff({
         inject: async () => {
           kickoffStartedAt = Date.now()
-          const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number } = {}
+          const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number; late?: LateSubmit; lateMs?: number } = {}
           const injected = await injectPane(
             pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence, undefined,
             // Asked again right before its Enter: the run can fail mid-paste.
@@ -7479,6 +7548,7 @@ function scheduleInjection(pane: ActivePane): void {
         onHeld: () => {
           held = true
           pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+          watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
         },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
         parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
@@ -15301,7 +15371,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     const kickoffResult = await runPipelineKickoff({
       inject: async () => {
         kickoffStartedAt = Date.now()
-        const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number } = {}
+        const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number; late?: LateSubmit; lateMs?: number } = {}
         // Asked again right before its Enter: a sibling can fail the run in
         // the second this kickoff is being typed.
         const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence, undefined, slotStillWanted)
@@ -15314,6 +15384,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       onHeld: () => {
         held = true
         pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+        watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
       },
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       // A resume after a held kickoff: submit the copy still in the box.

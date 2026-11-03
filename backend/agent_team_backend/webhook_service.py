@@ -47,7 +47,19 @@ log = logging.getLogger(__name__)
 #: run. The Codex rows below are kept for when it comes back; nothing reaches them.
 VENDORS = frozenset({"claude"})
 
-PROBE_S = 2.0
+#: How long a request waits for the window to answer that it holds the
+#: workspace. The 0.2.37 Linux VM, starved of CPU, stalled the backend's event
+#: loop 2–8 s at a time; at 2 s the probe timed out with the window open and
+#: the request was refused "no-window" (503), which GitHub does not redeliver.
+#: A late answer still counts within the wait, so it covers the worst stall.
+PROBE_S = 8.0
+#: After ui.pipeline.start went unanswered (ui_action_timeout): how long to
+#: wait for the window's pipeline.start to adopt the run. The window is not
+#: told to stop on that timeout, so a slow start goes on and the run comes up
+#: late; failing it here dropped its arming and audited a run that ran as
+#: "start-failed".
+LATE_START_S = 120.0
+LATE_START_POLL_S = 1.0
 WATCH_EVERY_S = 15.0
 #: A run ends here whatever it is doing.
 RUN_CAP_S = 4 * 60 * 60
@@ -432,11 +444,14 @@ class WebhookService:
     async def _start(self, trigger: dict[str, Any], text: str, body_sha256: str) -> None:
         workspace = trigger["workspace"]
         self._armed[workspace] = trigger
+        before = self._active.get(workspace)
         try:
             answer = await self.window.start(
                 workspace, webhook_payload.build_task(trigger["name"], text), trigger["pipeline_id"],
                 f'webhook trigger "{trigger["name"]}"',
             )
+            if answer.get("error_code") == "ui_action_timeout" and await self._adopted_late(workspace, before):
+                answer = {"ok": True, "late": True}
         except Exception:  # noqa: BLE001 - the caller already has its 202
             log.exception("webhook: starting a run failed")
             answer = {"ok": False, "error_code": "start-error"}
@@ -450,8 +465,23 @@ class WebhookService:
             "status": 202,
             "body_sha256": body_sha256,
             # The code only: a window's error text can quote the task.
-            "detail": None if started else str(answer.get("error_code") or "start-refused")[:80],
+            "detail": ("late-answer" if answer.get("late") else None)
+            if started
+            else str(answer.get("error_code") or "start-refused")[:80],
         }])
+
+    async def _adopted_late(self, workspace: str, before: Any) -> bool:
+        """Did run_started adopt a run for this workspace, within LATE_START_S
+        of an unanswered start? `before` is the open row from before the start;
+        the arming stays in place meanwhile so the late run is still ours."""
+        deadline = time.monotonic() + LATE_START_S
+        while True:
+            current = self._active.get(workspace)
+            if current is not None and current is not before:
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            await asyncio.sleep(LATE_START_POLL_S)
 
     def note_kickoff_failed(self, workspace: str) -> None:
         """A run that had been reported started never got its task. While the
