@@ -273,6 +273,7 @@ import {
   savedGroupToRecreate,
 } from './lib/runGroups'
 import { createRunSlotPanes } from './lib/runSlotPanes'
+import { failedRunStop } from './lib/failedRunStop'
 import {
   ALL_SCOPE_RESTORE_CONCURRENCY,
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
@@ -16078,7 +16079,10 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   if (pipeline.state !== 'running') return
   const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
   pipelineLog(`Stage ${stageLabel}/${slotLabel} ✕ ${reason} — pipeline failed`)
+  const failedStageId = stagesApi.stages.value[stageIndex]?.id
+  const failedPaneId = failedStageId === undefined ? undefined : runSlotPane(failedStageId, slotLabel)?.id
   tearDownPipelineOrchestration()
+  void stopFailedRunPanes(failedPaneId)
   await pipelineDag.end('failed', `run stopped: slot "${slotLabel}" failed (${reason})`)
   const resp = await sendQuiet<ProjectPayload>('pipeline.abort', {
     workspace_path: pipeline.workspacePath,
@@ -16098,6 +16102,35 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   )
   if (pipelineDag.isChildRun() && await returnToParent('failed', { summary: '', output: null }, `${slotLabel}: ${reason}`)) return
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
+}
+
+/** A slot failed the run: stop the agents of its other slots (lib/failedRunStop).
+ *  One in a turn gets its interrupt key, the pane's stop button; one parked on
+ *  a prompt gets Esc. Idle ones get nothing, the failed slot's own pane is left
+ *  as it is for a resume, and no pane is closed. Panes of other runs are not in
+ *  runSlots. Checked again before each pane: once the state is back to
+ *  `running`, a run goes on and nothing more is pressed. */
+async function stopFailedRunPanes(failedPaneId: string | undefined): Promise<void> {
+  for (const paneId of new Set(runSlots.current().values())) {
+    if (pipeline.state === 'running') return
+    if (paneId === failedPaneId) continue
+    const pane = panes.value.find((p) => p.id === paneId)
+    const ref = paneRefs[paneId]
+    const stop = failedRunStop(ref?.displayStatus as string | undefined)
+    if (!pane?.realized || !stop) continue
+    let sent = false
+    if (stop === 'interrupt' || acp.owns(paneId)) {
+      sent = await onInterrupt(paneId)
+    } else if (ref?.sessionId) {
+      try {
+        await backend.send('terminal.input', { terminal_session_id: ref.sessionId, data: '\x1b' })
+        sent = true
+      } catch {
+        sent = false
+      }
+    }
+    if (sent) pipelineLog(`⏹ interrupted ${pane.slotLabel ?? paneId} — the run failed`)
+  }
 }
 
 /** Approve the gate the run is paused on and carry on with the hand-off. */
