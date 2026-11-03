@@ -193,14 +193,23 @@ function getLoginShellEnv(): Promise<{ shell: string; path: string | null }> {
 // external editors, see editors.ts — don't pay the probe again.
 let resolvedUserPath: string | null = null
 
+// The registry read is a synchronous PowerShell run on the main thread, so
+// it is reused for a short while; `fresh` (Settings' editor rescan) skips that.
+const REGISTRY_PATH_TTL_MS = 30_000
+let registryPathCache: { readAt: number; entries: string[] } | null = null
+
 /** The PATH to give processes main spawns. Falls back to the process PATH
  *  when the backend has not started yet (or the probe failed). On Windows
- *  the registry PATH is re-read on every call (two `reg query`s), so a tool
- *  installed after launch is found without a restart. */
-export function getResolvedUserPath(): string {
+ *  the registry PATH is appended (re-read at most every 30 s, or when
+ *  `fresh`), so a tool installed after launch is found without a restart. */
+export function getResolvedUserPath({ fresh = false }: { fresh?: boolean } = {}): string {
   const base = resolvedUserPath ?? process.env.PATH ?? ''
   if (!isWindows()) return base
-  return appendExistingDirs(base, readWindowsRegistryPath())
+  const now = Date.now()
+  if (fresh || !registryPathCache || now - registryPathCache.readAt >= REGISTRY_PATH_TTL_MS) {
+    registryPathCache = { readAt: now, entries: readWindowsRegistryPath() }
+  }
+  return appendExistingDirs(base, registryPathCache.entries)
 }
 
 /** Mirror a backend log line to our own stdio, best-effort.

@@ -14,9 +14,6 @@ import {
 // invisible to editor detection and launch until a restart. These read the
 // registry PATH the way the backend's `_registry_path_entries` does.
 
-const MACHINE = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'
-const USER = 'HKCU\\Environment'
-
 describe('parseRegQueryPath', () => {
   it('reads the Path value of a `reg query` answer', () => {
     const out = [
@@ -43,36 +40,50 @@ describe('expandWindowsEnv', () => {
 })
 
 describe('readWindowsRegistryPath', () => {
-  it('returns Machine then User entries, expanded', () => {
-    const answers: Record<string, string> = {
-      [MACHINE]: '    Path    REG_EXPAND_SZ    C:\\Windows\\system32;%ProgramFiles%\\nodejs\\;\r\n',
-      [USER]: '    Path    REG_EXPAND_SZ    %USERPROFILE%\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\r\n',
-    }
+  // Windows PowerShell writes to a pipe in the console's OEM code page
+  // (cp950 on zh-TW) unless the script switches its output to UTF-8 first;
+  // `reg.exe` has no such switch. %APPDATA%\npm of a Chinese user name was
+  // read as mojibake and dropped.
+  const UTF8_OUTPUT = '[Console]::OutputEncoding = [Text.Encoding]::UTF8'
+  const CP950_NAME = Buffer.from('a4fda470a9fa', 'hex') // 王小明 in cp950
+  const powershell = (args: string[]): Buffer =>
+    Buffer.concat([
+      Buffer.from('C:\\Windows\\system32;%ProgramFiles%\\nodejs\\\r\nC:\\Users\\'),
+      args[args.length - 1].includes(UTF8_OUTPUT) ? Buffer.from('王小明', 'utf8') : CP950_NAME,
+      Buffer.from('\\AppData\\Roaming\\npm\r\n'),
+    ])
+
+  it('returns Machine then User entries, expanded, with a Chinese user name intact', () => {
     const seen: string[][] = []
     const entries = readWindowsRegistryPath(
       (args) => {
         seen.push(args)
-        return answers[args[1]]
+        return powershell(args)
       },
-      { USERPROFILE: 'C:\\Users\\amy', ProgramFiles: 'C:\\Program Files' }
+      { ProgramFiles: 'C:\\Program Files' }
     )
-    expect(seen).toEqual([
-      ['query', MACHINE, '/v', 'Path'],
-      ['query', USER, '/v', 'Path'],
-    ])
+    expect(seen).toHaveLength(1)
     expect(entries).toEqual([
       'C:\\Windows\\system32',
       'C:\\Program Files\\nodejs\\',
-      'C:\\Users\\amy\\AppData\\Local\\Programs\\Microsoft VS Code\\bin',
+      'C:\\Users\\王小明\\AppData\\Roaming\\npm',
     ])
   })
 
-  it('skips a key that cannot be read rather than failing the rest', () => {
-    const entries = readWindowsRegistryPath((args) => {
-      if (args[1] === MACHINE) throw new Error('reg exited 1')
-      return '    Path    REG_SZ    C:\\tools\r\n'
-    }, {})
-    expect(entries).toEqual(['C:\\tools'])
+  it('skips an entry that does not decode, keeping the rest', () => {
+    const out = Buffer.concat([
+      Buffer.from('C:\\tools;C:\\Users\\'),
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from('\\npm\r\n'),
+    ])
+    expect(readWindowsRegistryPath(() => out, {})).toEqual(['C:\\tools'])
+  })
+
+  it('returns nothing when PowerShell cannot be run', () => {
+    const fail = (): Buffer => {
+      throw new Error('spawn powershell.exe ENOENT')
+    }
+    expect(readWindowsRegistryPath(fail, {})).toEqual([])
   })
 })
 

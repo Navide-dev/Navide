@@ -10,11 +10,6 @@ import { delimiter } from 'node:path'
  * `osplat._windows._registry_path_entries`.
  */
 
-const KEYS = [
-  'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment',
-  'HKCU\\Environment',
-] as const
-
 /** The `Path` value of a `reg query <key> /v Path` answer, or null. */
 export function parseRegQueryPath(stdout: string): string | null {
   for (const line of stdout.split(/\r?\n/)) {
@@ -31,27 +26,43 @@ export function expandWindowsEnv(value: string, env: NodeJS.ProcessEnv): string 
   return value.replace(/%([^%;]+)%/g, (whole, name: string) => lookup.get(name.toUpperCase()) ?? whole)
 }
 
-type RegRunner = (args: string[]) => string
+// `reg.exe` answers in the console's OEM code page (cp950 on zh-TW), so a
+// Chinese user name in %APPDATA%\npm came out as mojibake under utf8 and was
+// dropped. PowerShell can switch its output to UTF-8 first; one run reads
+// both values (expanded by .NET), and getResolvedUserPath's cache absorbs its
+// start-up time.
+const READ_PATH_PS =
+  '[Console]::OutputEncoding = [Text.Encoding]::UTF8; ' +
+  "[Environment]::GetEnvironmentVariable('Path', 'Machine'); " +
+  "[Environment]::GetEnvironmentVariable('Path', 'User')"
 
-const runReg: RegRunner = (args) =>
-  execFileSync('reg.exe', args, { encoding: 'utf8', timeout: 2000, windowsHide: true })
+type PathRunner = (args: string[]) => Uint8Array
 
-/** Machine then User PATH entries, expanded. A key that cannot be read (a
- *  locked-down profile has no User PATH) contributes nothing. */
+const runPowerShell: PathRunner = (args) =>
+  execFileSync('powershell.exe', args, { timeout: 5000, windowsHide: true })
+
+/** Machine then User PATH entries, expanded. PowerShell failing to run
+ *  contributes nothing; an entry that did not decode (U+FFFD) is skipped. */
 export function readWindowsRegistryPath(
-  run: RegRunner = runReg,
+  run: PathRunner = runPowerShell,
   env: NodeJS.ProcessEnv = process.env
 ): string[] {
+  let stdout: string
+  try {
+    stdout = new TextDecoder('utf-8').decode(
+      run(['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', READ_PATH_PS])
+    )
+  } catch {
+    return []
+  }
   const entries: string[] = []
-  for (const key of KEYS) {
-    let value: string | null = null
-    try {
-      value = parseRegQueryPath(run(['query', key, '/v', 'Path']))
-    } catch {
-      continue
-    }
-    if (!value) continue
-    entries.push(...expandWindowsEnv(value, env).split(';').filter((e) => e.trim()))
+  for (const value of stdout.split(/\r?\n/)) {
+    if (!value.trim()) continue
+    entries.push(
+      ...expandWindowsEnv(value.trim(), env)
+        .split(';')
+        .filter((e) => e.trim() && !e.includes('�'))
+    )
   }
   return entries
 }
