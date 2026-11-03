@@ -428,8 +428,13 @@ def seam(monkeypatch, tmp_path):
                                          spawn_status="spawned", custom_name="api", auto_name="")],
         registry={}, refusal=None, exhausted=False, probe=True, opened_ws=[], placeholder_calls=[],
         placeholder={"ok": True, "reason": "opened", "launched_session_id": "sess-1"}, spawns=[],
-        settings={}, spawn_answer=None, retired=[], successors=[])
+        settings={}, spawn_answer=None, retired=[], successors=[], broadcasts=[])
     monkeypatch.setattr(app, "live_main_window_ids", lambda: set(state.windows))
+
+    async def broadcast_main_windows(event):
+        state.broadcasts.append(event)
+
+    monkeypatch.setattr(app, "broadcast_main_windows", broadcast_main_windows)
     def unspawn(ws, *, pane_id, successor=""):
         state.retired.append(pane_id)
         state.successors.append(successor)
@@ -695,6 +700,9 @@ async def test_seam_opens_the_conversation_when_the_window_holds_no_placeholder(
     assert seam.retired == ["old-1"]
     # ...and its children follow the conversation to the new pane.
     assert seam.successors == ["spawned-1"]
+    # The window is told, so its in-memory children follow without a reload.
+    assert [(e["type"], e["payload"]) for e in seam.broadcasts] == [("pane.lineage_rekeyed", {
+        "workspace_path": "/ws", "old_pane_id": "old-1", "new_pane_id": "spawned-1"})]
 
 
 async def test_seam_scheduled_jobs_follow_a_pane_opened_onto_the_conversation(seam, monkeypatch) -> None:

@@ -26,7 +26,7 @@ import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceFo
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
 import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
-import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
+import { buildPaneLineage, effectiveParents, lineageHandoff, rekeyChildren, withDescendants } from './lib/paneLineage'
 import { pluginWindowWithoutBackendText } from './lib/pluginWindowWithoutBackend'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
@@ -12721,23 +12721,14 @@ function rekeyLineage(oldId: string, newId: string): void {
   runSlots.rekey(oldId, newId)
   // The follow-the-default-account flag rides the same id hand-offs.
   accountFollow.rekey(oldId, newId)
-  for (const p of panes.value) {
-    if (p.spawnedBy === oldId) p.spawnedBy = p.id === newId ? undefined : newId
-  }
+  rekeyChildren(panes.value, (p) => p.id, oldId, newId)
   // Agent History keeps its own durable copy of the same pointer, and it
   // outlives the pane record. Left behind, it would still name an id retired
   // restarts ago — so a resume that fell back to history would rebuild the
   // tree against a pane that no longer exists, which reads as "no parent" and
   // flattens the branch. Reassigned rather than mutated in place so the
   // persistence watcher sees the change and writes it to the workspace.
-  let touched = false
-  for (const e of spawnHistory.value) {
-    if (e.spawnedBy === oldId) {
-      e.spawnedBy = e.paneId === newId ? undefined : newId
-      touched = true
-    }
-  }
-  if (touched) spawnHistory.value = [...spawnHistory.value]
+  if (rekeyChildren(spawnHistory.value, (e) => e.paneId, oldId, newId)) spawnHistory.value = [...spawnHistory.value]
 }
 
 async function spawnRestoredPane(opts: RestoredPaneSpawnOptions): Promise<RestoredPaneSpawnResult | null> {
@@ -16878,6 +16869,16 @@ backend.on('pane.stopped', (raw) => {
   const ev = raw as { pane_id?: string; stopped?: boolean }
   if (!ev?.pane_id) return
   paneRefs[ev.pane_id]?.setStopped(!!ev.stopped)
+})
+
+// A chat wake opened a conversation in a NEW pane and retired the record that
+// held it; the backend already moved that record's children onto the new pane
+// (_retire_superseded). Follow it here, or the window keeps the retired id in
+// each child's spawnedBy and renders them as roots until the next reload.
+// Every main window gets it; ids are unique, so one that holds none is a no-op.
+backend.on('pane.lineage_rekeyed', (raw) => {
+  const handoff = lineageHandoff(raw)
+  if (handoff) rekeyLineage(handoff.oldId, handoff.newId)
 })
 
 // Cross-workspace message routed by the backend registry. Every window receives

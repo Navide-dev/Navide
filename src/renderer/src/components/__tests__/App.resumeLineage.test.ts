@@ -122,8 +122,8 @@ describe('lineage is persisted in the workspace', () => {
     // restarts — and a resume falling back to it would rebuild the tree
     // against a pane retired long ago.
     const fn = bodyOf('function rekeyLineage')
-    expect(fn).toContain('for (const e of spawnHistory.value)')
-    expect(fn).toContain('e.spawnedBy = e.paneId === newId ? undefined : newId')
+    // rekeyChildren (lib/paneLineage) drops the self-reference; its own test runs it.
+    expect(fn).toContain('rekeyChildren(spawnHistory.value, (e) => e.paneId, oldId, newId)')
     // Reassigned, not mutated in place, or the persistence watcher never fires
     // and the re-key is lost on the next restart.
     expect(fn).toContain('spawnHistory.value = [...spawnHistory.value]')
