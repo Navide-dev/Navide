@@ -286,6 +286,7 @@ async function loadActivate(over: {
     'turnEndUnconfirmed',
     'logInjectEvidence',
     'awaitRoleTurn',
+    'watchKickoffAfterFailure',
     code,
   )
   const api = factory(
@@ -344,6 +345,7 @@ async function loadActivate(over: {
     () => false,
     vi.fn(),
     async () => 'ended',
+    vi.fn(),
   )
   return {
     api,

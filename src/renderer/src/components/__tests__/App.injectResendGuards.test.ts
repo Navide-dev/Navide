@@ -28,13 +28,13 @@ async function runKickoffSite(site: string, echo: EchoEvidence | null) {
   const run = new Function(
     'runPipelineKickoff', 'injectPane', 'sleep', 'paneAlive', 'pipelineLog',
     'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'paneParkedOnPrompt',
-    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', code,
+    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'watchKickoffAfterFailure', code,
   )(
     runPipelineKickoff, injectPane, sleep, () => true, () => {},
     { id: 'pane', stageId: 'stage', kickoffPrompt: 'kickoff' }, { id: 'stage' },
     'kickoff', 'test', MAX_KICKOFF_ATTEMPTS, () => undefined, () => false,
     // The run is running: both sites check it before each attempt.
-    () => true, { state: 'running' }, false, 0, () => {},
+    () => true, { state: 'running' }, false, 0, () => {}, () => {},
   ) as () => ReturnType<typeof runPipelineKickoff>
   const result = await run()
   return { result, injectPane, sleep }
