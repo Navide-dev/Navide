@@ -7,7 +7,6 @@
 // preview); base64 image outputs become data: URIs; error tracebacks are
 // shown as plain text with ANSI escape codes stripped.
 import { onMounted, ref } from 'vue'
-import { previewSrcdoc } from './previewSrcdoc'
 import type { useBackend } from '../../composables/useBackend'
 import { renderLines, InlineText } from '../markdownRender'
 import type { RenderLine } from '../markdownRender'
@@ -179,7 +178,7 @@ onMounted(async () => {
               <iframe
                 v-else-if="out.kind === 'html'"
                 class="nbp-out-frame"
-                :srcdoc="previewSrcdoc(out.html ?? '')"
+                :srcdoc="out.html"
                 sandbox=""
                 :title="`output ${oi}`"
               />
