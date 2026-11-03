@@ -323,6 +323,9 @@ class WebhookService:
         self._active: dict[str, dict[str, Any]] = {run["workspace"]: run for run in store.open_runs()}
         self._armed: dict[str, dict[str, Any]] = {}
         self._starting: set[str] = set()
+        #: Workspaces whose start went unanswered and wait for the run to come
+        #: up (_adopted_late): a run adopted then never runs unattended.
+        self._late: set[str] = set()
         self._checks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._waiting_since: dict[str, float] = {}
@@ -474,14 +477,23 @@ class WebhookService:
         """Did run_started adopt a run for this workspace, within LATE_START_S
         of an unanswered start? `before` is the open row from before the start;
         the arming stays in place meanwhile so the late run is still ours."""
-        deadline = time.monotonic() + LATE_START_S
-        while True:
-            current = self._active.get(workspace)
-            if current is not None and current is not before:
-                return True
-            if time.monotonic() >= deadline:
-                return False
-            await asyncio.sleep(LATE_START_POLL_S)
+        if self._active.get(workspace) not in (None, before):
+            return True  # adopted before the answer timed out, as usual
+        # Adopted from here on, the run is ours but never unattended: nothing
+        # ties it to this start but its workspace and pipeline. The watchdog
+        # and RUN_CAP_S still stop it if it waits on a prompt.
+        self._late.add(workspace)
+        try:
+            deadline = time.monotonic() + LATE_START_S
+            while True:
+                current = self._active.get(workspace)
+                if current is not None and current is not before:
+                    return True
+                if time.monotonic() >= deadline:
+                    return False
+                await asyncio.sleep(LATE_START_POLL_S)
+        finally:
+            self._late.discard(workspace)
 
     def note_kickoff_failed(self, workspace: str) -> None:
         """A run that had been reported started never got its task. While the
@@ -508,6 +520,11 @@ class WebhookService:
         if not child:
             self._closed.pop(workspace, None)
         trigger = self._armed.get(workspace)
+        if trigger is not None and getattr(project, "pipeline_id", "") != trigger["pipeline_id"]:
+            # Another pipeline started in the workspace while this one was
+            # armed, by hand or by anyone else: not this trigger's run, and
+            # never one to hand the trigger's unattended setting to.
+            trigger = None
         if trigger is not None:
             # The watchdog only looks every WATCH_EVERY_S, so the last run can
             # still be open here, and overwriting it would leave it open for good.
@@ -515,7 +532,8 @@ class WebhookService:
             self._active[workspace] = self.store.open_run(
                 trigger_id=trigger["id"], workspace=workspace, project_id=project.id,
                 pipeline_id=getattr(project, "pipeline_id", ""),
-                unattended=bool(trigger.get("unattended")) and guard_fail_closed.unattended_supported(),
+                unattended=bool(trigger.get("unattended")) and guard_fail_closed.unattended_supported()
+                and workspace not in self._late,
             )
         elif not child and workspace in self._active:
             self.finish_run(workspace, ended if ended in ("completed", "aborted", "interrupted") else "replaced")

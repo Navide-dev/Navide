@@ -205,6 +205,86 @@ class TestStartUnderStall:
         # Adopted under this trigger, not taken for someone else's run.
         assert env.service._active[WS]["trigger_id"] == env.trigger["id"]
 
+    async def test_a_run_adopted_after_the_timeout_is_never_unattended(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.trigger = {**env.trigger, "unattended": True}
+
+        async def start(*_: Any) -> dict[str, Any]:
+            asyncio.get_running_loop().call_later(0.05, run_started, env)
+            return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        assert env.service._active[WS]["unattended"] == 0
+        event = env.store.events(env.trigger["id"])[0]
+        assert (event["outcome"], event["detail"]) == ("started", "late-answer")
+        assert WS not in env.service._late
+
+    async def test_a_late_run_left_on_a_prompt_is_still_stopped(self, env, monkeypatch) -> None:
+        """Not unattended, its panes ask before every tool call: the watchdog
+        and the run cap still apply, so it never hangs on a prompt for good."""
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.trigger = {**env.trigger, "unattended": True}
+
+        async def start(*_: Any) -> dict[str, Any]:
+            asyncio.get_running_loop().call_later(0.05, run_started, env)
+            return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+
+        env.window.start = start
+        await accept(env)
+        await settle(env)
+        assert CLAUDE_BYPASS not in str(launch(env, "claude", pane="p"))
+        clock = Clock(env, monkeypatch)
+        env.service._active[WS]["started_at"] = clock.now
+        env.window.awaiting = {"p"}
+        await env.service.tick()
+        clock.now += 30 * 60
+        await env.service.tick()
+        assert "approval-timeout" in outcomes(env) and env.service._active == {}
+
+    async def test_a_run_adopted_in_time_keeps_the_unattended_setting(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.trigger = {**env.trigger, "unattended": True}
+
+        async def start(*_: Any) -> dict[str, Any]:
+            run_started(env)
+            return {"ok": True}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        assert env.service._active[WS]["unattended"] == 1
+
+    @pytest.mark.parametrize("timed_out", [False, True])
+    async def test_another_pipeline_started_while_armed_is_not_adopted(self, env, monkeypatch, timed_out) -> None:
+        monkeypatch.setattr(svc, "LATE_START_S", 0.1)
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.trigger = {**env.trigger, "unattended": True}
+
+        def by_hand() -> None:
+            env.service.run_started(
+                SimpleNamespace(workspace_path=WS, id="manual", log_file_name="runs/m/pipeline.log", pipeline_id="other"),
+                child=False,
+            )
+
+        async def start(*_: Any) -> dict[str, Any]:
+            if timed_out:
+                asyncio.get_running_loop().call_later(0.02, by_hand)
+                return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+            by_hand()
+            return {"ok": False, "error_code": "not-started"}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        assert WS not in env.service._active
+        assert env.store.open_runs() == []
+        assert env.store.events(env.trigger["id"])[0]["outcome"] == "start-failed"
+
     async def test_a_run_that_never_comes_up_is_still_a_failed_start(self, env, monkeypatch) -> None:
         monkeypatch.setattr(svc, "LATE_START_S", 0.05)
         monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
