@@ -441,6 +441,7 @@ def seam(monkeypatch, tmp_path):
         for record in state.records:
             if record.pane_id == pane_id:
                 record.spawn_status = "removed"
+        return SimpleNamespace(panes=state.records), True
 
     monkeypatch.setattr(app, "project_store", SimpleNamespace(
         peek=lambda ws: SimpleNamespace(panes=state.records) if ws == "/ws" else None,
@@ -476,6 +477,9 @@ def seam(monkeypatch, tmp_path):
         state.spawns.append((a, kw))
         if state.spawn_answer is not None:
             return state.spawn_answer
+        # The window writes the new pane's record (the lineage hand-off waits for it).
+        state.records.append(_Record(pane_id="spawned-1", agent="claude", session_id=kw.get("session_id"),
+                                     spawn_status="spawned", custom_name="", auto_name=""))
         return {"ok": True, "pane_id": "spawned-1", "resumed_session_id": kw.get("session_id")}
 
     monkeypatch.setattr(mcp, "_probe_window", probe)
@@ -486,6 +490,8 @@ def seam(monkeypatch, tmp_path):
     monkeypatch.setattr(channels_pkg, "WAKE_PANE_WAIT_S", 0.05)
     monkeypatch.setattr(channels_pkg, "WAKE_HELD_GRACE_S", 0.02)
     monkeypatch.setattr(channels_pkg, "WAKE_PANE_POLL_S", 0.01)
+    monkeypatch.setattr(channels_pkg, "WAKE_SUCCESSOR_WAIT_S", 0.05)
+    monkeypatch.setattr(channels_pkg, "WAKE_SUCCESSOR_POLL_S", 0.01)
     return state
 
 
