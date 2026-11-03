@@ -193,7 +193,7 @@ function getLoginShellEnv(): Promise<{ shell: string; path: string | null }> {
 // external editors, see editors.ts — don't pay the probe again.
 let resolvedUserPath: string | null = null
 
-// The registry read is two synchronous `reg.exe` runs on the main thread, so
+// The registry read is a synchronous PowerShell run on the main thread, so
 // it is reused for a short while; `fresh` (Settings' editor rescan) skips that.
 const REGISTRY_PATH_TTL_MS = 30_000
 let registryPathCache: { readAt: number; entries: string[] } | null = null

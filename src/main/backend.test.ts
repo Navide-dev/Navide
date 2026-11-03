@@ -400,7 +400,7 @@ describe('getResolvedUserPath on Windows', () => {
     expect(getResolvedUserPath()).toBe([join(root, 'System32'), code].join(delimiter))
   })
 
-  // Each read is two synchronous `reg.exe` runs on Electron's main thread;
+  // Each read is a synchronous PowerShell run on Electron's main thread;
   // a slow machine froze the UI for tens to hundreds of ms per call.
   it('reads the registry once per 30 s, unless a rescan forces it', () => {
     vi.useFakeTimers()
