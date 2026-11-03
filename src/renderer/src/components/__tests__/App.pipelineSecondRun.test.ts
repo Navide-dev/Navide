@@ -81,6 +81,7 @@ async function secondRun(oldPaneTakesText: boolean) {
     sessionMarkerLine: () => '',
     heldKickoffPanes: new Set(),
     runEndingSlots: new Set(),
+    runPaneSentAt: new Map(),
     heldKickoffCopy: () => undefined,
     rolesApi: { find: () => null },
     agentSpecs: [],

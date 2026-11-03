@@ -99,6 +99,7 @@ async function loadStart(opts: StartOpts = {}) {
     startGlobalManagerRouter: vi.fn(),
     pipelineDag: opts.dag ?? linearPipelineDag(() => pipeline.workspacePath).dag,
     runEndingSlots: new Set<string>(),
+    runPaneSentAt: new Map<string, number>(),
   }
   const onPipelineStart = new Function(...Object.keys(deps), code)(...Object.values(deps)) as (
     p: { task: string; workspacePath: string; pipelineId?: string },

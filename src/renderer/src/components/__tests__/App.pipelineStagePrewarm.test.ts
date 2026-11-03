@@ -121,6 +121,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
     'startGlobalManagerRouter',
     'pipelineDag',
     'runEndingSlots',
+    'runPaneSentAt',
     code,
   )
   const api = factory(
@@ -149,6 +150,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
     vi.fn(),
     linearPipelineDag().dag,
     new Set<string>(),
+    new Map(),
   )
   return { api, spawned, stageList, pipeline, activateStage }
 }
@@ -287,6 +289,7 @@ async function loadActivate(over: {
     'logInjectEvidence',
     'awaitRoleTurn',
     'watchKickoffAfterFailure',
+    'runPaneSentAt',
     code,
   )
   const api = factory(
@@ -346,6 +349,7 @@ async function loadActivate(over: {
     vi.fn(),
     async () => 'ended',
     vi.fn(),
+    new Map(),
   )
   return {
     api,

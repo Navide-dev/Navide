@@ -131,7 +131,7 @@ describe('confirmQueuedKickoff counts the turn ends it has', () => {
   })
 
   it('every recorded turn end is counted', () => {
-    expect(appSource).toMatch(/if \(recorded\) \{\n\s*const times = paneTurnCompleteTimes\.get\(ev\.pane_id\)/)
+    expect(appSource).toMatch(/TURN_TEXT_REPLAY_TOLERANCE_MS, paneTurnCompleteSourceAt, paneTurnCompleteTimes\n/)
   })
 })
 

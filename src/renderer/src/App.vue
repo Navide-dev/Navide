@@ -2557,9 +2557,9 @@ const paneTurnCompleteAt = new Map<string, number>()
 // receipt time cannot answer its question.
 const paneTurnCompleteSourceAt = new Map<string, number>()
 /** The receipt times of the pane's last few turn ends, for counting them:
- *  ends that arrive in one batch share a time (see waitForQueuedTurn). */
+ *  ends that arrive in one batch share a time (see waitForQueuedTurn).
+ *  Written by recordTurnComplete with the two maps above. */
 const paneTurnCompleteTimes = new Map<string, number[]>()
-const TURN_COMPLETE_TIMES_KEPT = 8
 
 // Per-pane wall-clock of the latest `agent_active` (CLI is producing output or
 // running a tool). Compared against turnCompleteAt to tell whether the CLI's
@@ -15305,8 +15305,8 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       runPaneSentAt.set(pane.id, roleSentAt)
       const roleOk = await injectPane(pane.id, roleContent, `role:${role.label}`, true, undefined, roleEvidence, undefined, slotStillWanted)
       logInjectEvidence(tag, 'role', 1, roleOk, roleEvidence)
+      if (roleEvidence.stopped) runPaneSentAt.delete(pane.id)
       if (roleEvidence.stopped) {
-        runPaneSentAt.delete(pane.id)
         pipelineLog(`${tag} ⏹ the run is no longer running — the role was not submitted`)
         return
       }
@@ -16816,15 +16816,10 @@ backend.on('agent.activity', (raw) => {
     // pipeline stage at once. A live event is still stamped with `now`, so no
     // consumer of this map changes.
     if (!ev.superseded) {
-      const recorded = recordTurnComplete(
+      recordTurnComplete(
         paneTurnCompleteAt, ev.pane_id, ev.timestamp ?? '', Date.now(),
-        TURN_TEXT_REPLAY_TOLERANCE_MS, paneTurnCompleteSourceAt
+        TURN_TEXT_REPLAY_TOLERANCE_MS, paneTurnCompleteSourceAt, paneTurnCompleteTimes
       )
-      if (recorded) {
-        const times = paneTurnCompleteTimes.get(ev.pane_id) ?? []
-        times.push(paneTurnCompleteAt.get(ev.pane_id) ?? Date.now())
-        paneTurnCompleteTimes.set(ev.pane_id, times.slice(-TURN_COMPLETE_TIMES_KEPT))
-      }
     }
     // Badge: authoritative turn end → drop the RUNNING hysteresis latch now.
     paneRefs[ev.pane_id]?.markTurnComplete?.()
