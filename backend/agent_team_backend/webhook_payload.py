@@ -26,6 +26,8 @@ import hashlib
 import json
 import re
 import secrets
+import sys
+import unicodedata
 
 #: Deepest JSON accepted. Checked before parsing, on the bytes.
 MAX_JSON_DEPTH = 32
@@ -41,8 +43,26 @@ _NEWLINES = re.compile("\r\n?| | ")
 #: every line marker an agent's output is read for (---REPORT-START---,
 #: ---ASK-END---, ---STAGE-DONE---, ---MSG-START--- ...). Whitespace counts
 #: because Claude Code draws blank cells with cursor moves, so "- - -" can
-#: reach Navide's clean buffer as "---".
-_DASH_RUN = re.compile(r"-(?:\s*-){2,}")
+#: reach Navide's clean buffer as "---". Format characters (Cf: soft hyphen,
+#: zero-width space, word joiner, BOM ...) and combining marks (Mn, Me) count
+#: too: they draw nothing of their own, and a renderer or the clean buffer can
+#: drop them and leave the run behind.
+def _invisible_class() -> str:
+    ranges: list[str] = []
+    start = prev = -2
+    for cp in range(sys.maxunicode + 1):
+        if unicodedata.category(chr(cp)) not in ("Cf", "Mn", "Me"):
+            continue
+        if cp != prev + 1:
+            if start >= 0:
+                ranges.append(f"{re.escape(chr(start))}-{re.escape(chr(prev))}")
+            start = cp
+        prev = cp
+    ranges.append(f"{re.escape(chr(start))}-{re.escape(chr(prev))}")
+    return "".join(ranges)
+
+
+_DASH_RUN = re.compile(rf"-(?:[\s{_invisible_class()}]*-){{2,}}")
 
 _MARKER = "NAVIDE-WEBHOOK-DATA-"
 _INTRO = (
