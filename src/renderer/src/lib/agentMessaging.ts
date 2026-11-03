@@ -723,6 +723,21 @@ export function isTurnInFlight(
 }
 
 /**
+ * The pane status the messaging gate judges. The STOP badge ('stopped') is the
+ * record of an interrupt and stays until a person types into the pane, so read
+ * as a status it held every queued message for as long as nobody did (0.2.37:
+ * 90 minutes after cli_interrupt). Behind it the CLI is whatever `liveStatus`
+ * says: idle at its prompt, or still running if the interrupt did not stop it.
+ * Without a live status there is nothing to read through, so 'stopped' stays.
+ */
+export function messagingGateStatus(
+  displayStatus: string | undefined,
+  liveStatus: string | undefined,
+): string | undefined {
+  return displayStatus === 'stopped' && liveStatus !== undefined ? liveStatus : displayStatus
+}
+
+/**
  * True when a `to:` target names another workspace (`<folder>/<pane>` or
  * `/abs/path/<pane>`). Bare names stay workspace-local, which is the original
  * single-window behaviour.

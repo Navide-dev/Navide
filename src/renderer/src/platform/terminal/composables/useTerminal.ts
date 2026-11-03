@@ -952,6 +952,16 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   const displayStatus = computed<DisplayStatus>(() => {
     if (status.value === 'exited' || status.value === 'error') return status.value
     if (isStopped.value) return 'stopped'
+    return liveStatus.value
+  })
+
+  /** The CLI's own state with the STOP badge left out. 'stopped' records that
+   *  someone interrupted the pane and stays until a person types into it; it
+   *  says nothing about whether the CLI went back to its prompt. The messaging
+   *  gate reads this instead, so an interrupted pane that settled at its prompt
+   *  takes queued messages and one that kept working stays busy. */
+  const liveStatus = computed<DisplayStatus>(() => {
+    if (status.value === 'exited' || status.value === 'error') return status.value
     // A resume parked for a hidden tab hasn't created its PTY yet — a resumed
     // agent comes up idle, so show 'idle' instead of a stuck 'starting' in the
     // agent list until the tab is shown. (Fresh spawns create immediately, so
@@ -3546,6 +3556,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     insertText,
     status,
     displayStatus,
+    liveStatus,
     awaitingKind,
     startingStartedAt,
     startingAgeMs,
