@@ -936,6 +936,16 @@ class VendorSpec:
     # in the vault by design).
     login_home_env: str | None = None
 
+    # macOS only: the CLI keeps its secret in fixed-name Keychain items
+    # (``account_switch.keychain_items``) and honors no config-dir variable,
+    # but ``$HOME`` decides which keychain the Security framework uses. A
+    # login pane then runs on a HOME shim whose own Library holds a private,
+    # password-less keychain set as that HOME's default, so the sign-in lands
+    # there and the live items are never touched. The shim mirrors the real
+    # home by symlink, except ``Library/Keychains``, ``Library/Preferences``
+    # and the ``live_file`` stale copy, which stay private to the shim.
+    login_home_keychain: bool = False
+
     # Arguments that turn this CLI's binary into its direct sign-in trigger,
     # e.g. "auth login". A login pane keeps the resolved binary and replaces
     # everything after it with these, so YOLO flags never reach an auth

@@ -35,8 +35,6 @@ log = logging.getLogger("agent_team_backend.cli_profiles")
 PROFILES_FILE = "cli-profiles.json"
 _KV_KEY = "cli_profiles"
 PROFILES_SCHEMA_VERSION = 1
-# antigravity is excluded on purpose: its OAuth token lives in a fixed-name
-# macOS Keychain entry, so config-home isolation cannot separate accounts.
 def _supported_agent_keys() -> tuple[str, ...]:
     """Multi-account support = the vendor declares a credential slot layout.
     Derived from the registry so a vendor's spec is the single source."""
