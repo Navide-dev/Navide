@@ -393,7 +393,8 @@ def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> list[
                 or (getattr(record, "session_id", "") or "").strip() != session_id \
                 or agent_messaging.current(record.pane_id) is not None:
             continue
-        app.project_store.record_pane_unspawn_by_id(workspace_path, pane_id=record.pane_id)
+        # Its children follow the conversation to `keep`; a plain retire would make them roots.
+        app.project_store.record_pane_unspawn_by_id(workspace_path, pane_id=record.pane_id, successor=keep)
         retired.append(record.pane_id)
     return retired
 

@@ -900,6 +900,12 @@ class ProjectStore:
                 child.spawned_by = "" if child.pane_id == new_id else new_id
 
     @staticmethod
+    def _names_only_retired(project: "Project", pane_id: str) -> bool:
+        """True if records carry `pane_id` and every one of them is removed."""
+        named = [p for p in project.panes if p.pane_id == pane_id]
+        return bool(named) and all(p.spawn_status == "removed" for p in named)
+
+    @staticmethod
     def _adopt_orphans(project: "Project", dying: "PaneRecord") -> None:
         """Re-parent a closing pane's children onto its own parent.
 
@@ -1044,7 +1050,11 @@ class ProjectStore:
             # Guarded like the fields above: an omitted origin must not blank an
             # existing record back to "manual" (that would strip the mcp marker).
             if origin: pane.origin = origin
-            if spawned_by: pane.spawned_by = spawned_by
+            # A parent whose every record is retired is a stale pointer the
+            # window still holds (its close or hand-off already re-parented the
+            # children here); writing it back would undo that.
+            if spawned_by and not self._names_only_retired(project, spawned_by):
+                pane.spawned_by = spawned_by
             # Only a dock's spawn passes these; a main-window spawn leaves them
             # empty and the record exactly as before.
             if surface: pane.surface = surface
@@ -1074,6 +1084,7 @@ class ProjectStore:
         workspace_path: str,
         *,
         pane_id: str,
+        successor: str = "",
     ) -> tuple["Project", bool]:
         """Retire any pane record by its own id, pipeline slots included.
 
@@ -1085,6 +1096,10 @@ class ProjectStore:
         whichever pipeline its window happens to be showing — which is not
         necessarily the one this workspace ran.
 
+        `successor` names the pane that took this record's conversation over
+        (a channel wake that opened it in a new pane). That is a hand-off, not
+        a close, so the children move to the successor instead of up a level.
+
         Returns the project and whether a record was actually retired.
         """
         with self._save_lock:
@@ -1095,8 +1110,14 @@ class ProjectStore:
             ]
             if not matches:
                 return project, False
+            heir = successor if successor and successor != pane_id and any(
+                p.pane_id == successor and p.spawn_status != "removed" for p in project.panes
+            ) else ""
             for pane in matches:
-                self._adopt_orphans(project, pane)
+                if heir:
+                    self._rekey_spawned_by(project, pane.pane_id, heir)
+                else:
+                    self._adopt_orphans(project, pane)
                 pane.spawn_status = "removed"
                 pane.removed_at = _now_iso()
                 pane.kickoff_status = "none"

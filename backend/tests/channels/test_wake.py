@@ -428,10 +428,11 @@ def seam(monkeypatch, tmp_path):
                                          spawn_status="spawned", custom_name="api", auto_name="")],
         registry={}, refusal=None, exhausted=False, probe=True, opened_ws=[], placeholder_calls=[],
         placeholder={"ok": True, "reason": "opened", "launched_session_id": "sess-1"}, spawns=[],
-        settings={}, spawn_answer=None, retired=[])
+        settings={}, spawn_answer=None, retired=[], successors=[])
     monkeypatch.setattr(app, "live_main_window_ids", lambda: set(state.windows))
-    def unspawn(ws, *, pane_id):
+    def unspawn(ws, *, pane_id, successor=""):
         state.retired.append(pane_id)
+        state.successors.append(successor)
         for record in state.records:
             if record.pane_id == pane_id:
                 record.spawn_status = "removed"
@@ -692,6 +693,8 @@ async def test_seam_opens_the_conversation_when_the_window_holds_no_placeholder(
     assert seam.placeholder_calls == [] and seam.opened_ws == []
     # The record it replaced would otherwise come back on the next restore.
     assert seam.retired == ["old-1"]
+    # ...and its children follow the conversation to the new pane.
+    assert seam.successors == ["spawned-1"]
 
 
 async def test_seam_scheduled_jobs_follow_a_pane_opened_onto_the_conversation(seam, monkeypatch) -> None:
