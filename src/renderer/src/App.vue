@@ -181,7 +181,7 @@ import {
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
 import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
-import { createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
+import { composerClearKeys, createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { createParkedDelivery, waitUntilTurnEnds } from './lib/pipelineDelivery'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -4508,11 +4508,19 @@ async function injectText(
     /** Plain terminal only: the backend's terminal command protection refused
      *  the line (guard.terminal_policy) — its message, for the sender. */
     commandRefused?: string
+    /** Set when stillWanted said no right before an Enter: the box was
+     *  cleared and nothing was submitted. */
+    stopped?: boolean
   },
   // Told `true` while the payload is written but the PTY is not reading it
   // (the message is held on `pty-blocked`), `false` once the wait ends either
   // way. Only the messaging path cares; see lib/ptyInputBlock.ts.
-  onInputBlocked?: (held: boolean) => void
+  onInputBlocked?: (held: boolean) => void,
+  // Asked right before every Enter by a caller whose run can end under it: a
+  // pipeline slot whose sibling fails the run while its kickoff is being
+  // typed. No means the box is cleared instead of submitted. An Enter already
+  // sent is not chased.
+  stillWanted?: () => boolean
 ): Promise<boolean> {
   // Log the full injection text to the session's output log file BEFORE
   // chunking so the log file shows one readable block per send.
@@ -4618,6 +4626,25 @@ async function injectText(
     if (wroteBytes) {
       await backend.send('terminal.input', { terminal_session_id: sessionId, data: CLEAR_LINE })
         .catch(() => { /* nothing left to clear into */ })
+    }
+    return false
+  }
+  // stillWanted said no with the payload in the box: empty the whole box (one
+  // Ctrl-U clears only a row of it), so nothing of a run that is over waits
+  // there for the next Enter.
+  const stopBeforeEnter = async (): Promise<false> => {
+    if (evidence) {
+      evidence.stopped = true
+      evidence.leftInComposer = false
+    }
+    const cols = paneId !== undefined ? paneRefs[paneId]?.terminalSize?.()?.cols : undefined
+    for (const keys of composerClearKeys(body, cols ?? 80)) {
+      try {
+        await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys })
+      } catch {
+        break // nothing left to clear into
+      }
+      await sleep(100)
     }
     return false
   }
@@ -4788,6 +4815,7 @@ async function injectText(
     // resent Enter would land in whatever the command is now doing (answering
     // its [Y/n] prompt, or an empty sudo password). The Enter going out is the
     // delivery; the cursor leaving the typed line is the evidence, if any.
+    if (stillWanted && !stillWanted()) return stopBeforeEnter()
     try {
       const resp = await backend.send<{ ok?: boolean; error?: string; refusal?: { message?: string } }>('terminal.input', {
         terminal_session_id: sessionId, data: '\r', ...shellGuard,
@@ -4832,8 +4860,10 @@ async function injectText(
   // The first Enter's time: a turn it started may only be seen while a later
   // attempt is polling.
   let firstEnterAt = 0
+  let stoppedAtExtraEnter = false
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
+    if (stillWanted && !stillWanted()) return stopBeforeEnter()
     // Never press a resent Enter into a dialog. Our earlier Enter most likely
     // started the work that raised it, but nothing confirms that.
     if (attempt > 1 && dialogShown()) {
@@ -4887,6 +4917,11 @@ async function injectText(
         turnStarted: () => turnSince(enterAt),
         collapsedHeld: () => framedComposerHolds(visibleScreen() ?? screenTail(), ''),
         pressEnter: async () => {
+          // Only pressed while the box still holds the collapsed paste.
+          if (stillWanted && !stillWanted()) {
+            stoppedAtExtraEnter = true
+            return false
+          }
           try {
             await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
             return true
@@ -4899,6 +4934,8 @@ async function injectText(
         now: Date.now,
       })
       if (settled === null) return false
+      // A turn that started took the first Enter: that one is not chased.
+      if (stoppedAtExtraEnter && settled !== 'turn') return stopBeforeEnter()
       if (evidence) evidence.submit = settled
       return true
     }
@@ -4927,8 +4964,10 @@ async function injectPane(
     leftInComposer?: boolean
     foregroundBusy?: boolean
     commandRefused?: string
+    stopped?: boolean
   },
-  onInputBlocked?: (held: boolean) => void
+  onInputBlocked?: (held: boolean) => void,
+  stillWanted?: () => boolean
 ): Promise<boolean> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.realized) return false
@@ -4938,7 +4977,7 @@ async function injectPane(
   // button exists for — including this button's own injection.
   pane.resumeContinueAvailable = false
   return injectText(
-    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked,
+    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted,
   )
 }
 
@@ -7301,9 +7340,13 @@ function scheduleInjection(pane: ActivePane): void {
       const kickoffResult = await runPipelineKickoff({
         inject: async () => {
           kickoffStartedAt = Date.now()
-          const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
-          const injected = await injectPane(pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence)
-          return { injected, echo: evidence.echo }
+          const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean } = {}
+          const injected = await injectPane(
+            pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence, undefined,
+            // Asked again right before its Enter: the run can fail mid-paste.
+            () => pane.origin !== 'pipeline' || pipeline.state === 'running',
+          )
+          return { injected, echo: evidence.echo, stopped: evidence.stopped }
         },
         sleep,
         paneAlive: () => paneAlive(pane.id),
@@ -14975,7 +15018,10 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
         return
       }
-      if (turnWait === 'moved-on') return
+      if (turnWait === 'moved-on') {
+        pipelineLog(`${tag} ⏹ the run is no longer running — not sending the role or kickoff`)
+        return
+      }
       if (turnWait === 'idle') pipelineLog(`${tag} ✓ previous turn ended — proceeding`)
     }
     if (turnWait === 'parked' || paneParkedOnPrompt(pane.id)) {
@@ -15020,7 +15066,12 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       pipelineLog(`${tag} ➜ injecting role '${role.label}' (${retry ? 'retry after the pre-spawn injection failed' : 'deferred'}, ${roleContent.length} chars)`)
       // bracketed paste (preserveNewlines) — same as kickoff — to avoid a raw
       // keystroke burst flooding the PTY input buffer.
-      const roleOk = await injectPane(pane.id, roleContent, `role:${role.label}`, true)
+      const roleEvidence: { stopped?: boolean } = {}
+      const roleOk = await injectPane(pane.id, roleContent, `role:${role.label}`, true, undefined, roleEvidence, undefined, slotStillWanted)
+      if (roleEvidence.stopped) {
+        pipelineLog(`${tag} ⏹ the run is no longer running — the role was not submitted`)
+        return
+      }
       pane.injectionStatus = roleOk ? 'sent' : 'failed'
       syncViews()
       if (!roleOk) {
@@ -15088,9 +15139,11 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     const kickoffResult = await runPipelineKickoff({
       inject: async () => {
         kickoffStartedAt = Date.now()
-        const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
-        const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence)
-        return { injected, echo: evidence.echo }
+        const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean } = {}
+        // Asked again right before its Enter: a sibling can fail the run in
+        // the second this kickoff is being typed.
+        const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence, undefined, slotStillWanted)
+        return { injected, echo: evidence.echo, stopped: evidence.stopped }
       },
       sleep,
       paneAlive: () => paneAlive(pane.id),
@@ -15105,7 +15158,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       stillWanted: slotStillWanted,
     })
     if (kickoffResult.stopped) {
-      pipelineLog(`${tag} ⏹ the run is no longer running — no further kickoff attempt`)
+      pipelineLog(`${tag} ⏹ the run is no longer running — the kickoff was not submitted`)
       return
     }
     if (kickoffResult.cancelled) {
@@ -15128,6 +15181,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         if (held) heldKickoffPanes.add(pane.id)
         void failRunOnKickoff(index, slot.label, failure, held, false, parked)
       }
+      pipelineLog(`${tag} ⏹ the run is no longer running — ${ok ? 'the kickoff went out first; nothing more is typed' : 'no watcher armed'}`)
       return
     }
     // Wire the Manager router HERE — the first statement after the kickoff
@@ -15184,6 +15238,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         if (held) heldKickoffPanes.add(pane.id)
         void failRunOnKickoff(index, slot.label, failure, held, false, parked)
       }
+      pipelineLog(`${tag} ⏹ the run is no longer running — ${ok ? 'the kickoff went out first; nothing more is typed' : 'no watcher armed'}`)
       return
     }
     const stageResp = await sendQuiet<ProjectPayload>('pipeline.stage_spawn', {
@@ -15202,13 +15257,19 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       await failRunOnKickoff(index, slot.label, failure, held, false, parked)
       return
     }
-    if (runMovedOn()) return
+    if (runMovedOn()) {
+      pipelineLog(`${tag} ⏹ the run is no longer running — the kickoff went out first; no watcher armed`)
+      return
+    }
     startStageWatcher(index, pane.id, kickoffScanFrom, kickoffStartedAt)
   }))
 
   // A run failed by one of this stage's kickoffs is over: no router poll, and
   // no CLIs spawned for a next stage it will never reach.
-  if (pipeline.state !== 'running' || pipeline.stageIndex !== index) return
+  if (pipeline.state !== 'running' || pipeline.stageIndex !== index) {
+    pipelineLog(`Stage ${stage.id} ⏹ the run is no longer running — no router poll, no next stage`)
+    return
+  }
   // A retried slot rejoins a stage whose router, pre-spawn and counts stand.
   if (only) return
 
@@ -15311,8 +15372,7 @@ async function spawnPipelineStage(index: number): Promise<void> {
   // Manager-mode: start the per-stage router poll loop (scans buffers,
   // routes ASK/REPORT/DISPATCH/MANAGER-READY/STAGE-DONE).
   if (managerSlot) {
-    startRouterPoll(index)
-    pipelineLog(`Stage ${stage.id} 🎯 Manager router poll started (${ROUTER_POLL_MS / 1000}s)`)
+    if (startRouterPoll(index)) pipelineLog(`Stage ${stage.id} 🎯 Manager router poll started (${ROUTER_POLL_MS / 1000}s)`)
   }
 }
 
@@ -17914,10 +17974,14 @@ function routerObservationIsReal(
   return true
 }
 
-function startRouterPoll(stageIndex: number): void {
+/** False when no poll was started by this call. */
+function startRouterPoll(stageIndex: number): boolean {
   const router = stageRouters.get(stageIndex)
-  if (!router || router.pollHandle !== null) return
-  if (pipeline.state !== 'running') return
+  if (!router || router.pollHandle !== null) return false
+  if (pipeline.state !== 'running') {
+    pipelineLog(`Stage ${stageIndex} ⏹ the run is no longer running — not starting the Manager router poll`)
+    return false
+  }
   // Manager mode arms no per-pane watcher, so the stage's clock starts here.
   router.armedAt = Date.now()
   router.watchdogFired = false
@@ -17930,6 +17994,7 @@ function startRouterPoll(stageIndex: number): void {
       for (const e of early) await routeManagerTurnText(router.managerPaneId, e.text, new Date(e.at).toISOString(), true)
     })()
   }
+  return true
 }
 
 function disposeStageRouter(stageIndex: number): void {
@@ -18747,7 +18812,10 @@ function startGlobalManagerRouter(): void {
   if (!pipeline.globalManager) return
   // A run a slot failed (or the user stopped) while its stage started has
   // nothing left to route.
-  if (pipeline.state !== 'running') return
+  if (pipeline.state !== 'running') {
+    pipelineLog('⏹ the run is no longer running — not starting the Global Manager router')
+    return
+  }
   pipelineLog(`🎯 Global Manager router started (${pipeline.globalManager.stageId}/${pipeline.globalManager.slotLabel})`)
   globalRouterHandle = window.setInterval(() => { void globalManagerRouterScan() }, 2000)
 }

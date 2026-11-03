@@ -70,7 +70,7 @@ describe('App uses the executable CLI coordination seams', () => {
     })
 
     it.each([
-      ['missing evidence out-parameter', ', undefined, evidence)', ', undefined)'],
+      ['missing evidence out-parameter', ', undefined, evidence, undefined,', ', undefined, undefined, undefined,'],
       ['missing returned echo', 'echo: evidence.echo', 'echo: undefined'],
     ])('detects a %s regression', async (_name, before, after) => {
       const mutant = kickoffSites[index].replace(before, after)

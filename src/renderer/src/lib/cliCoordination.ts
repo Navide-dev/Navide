@@ -7,7 +7,9 @@ export const MAX_PERSIST_PANE_ATTEMPTS = 8
 /** Retry only an injection that left the composer empty. A failed submit with
  * an observed echo must never append a second copy of the kickoff. */
 export async function runPipelineKickoff(input: {
-  inject: () => Promise<{ injected: boolean; echo?: EchoEvidence | null }>
+  /** `stopped`: the injection asked stillWanted right before its Enter, got
+   *  no, and cleared the box instead of submitting. */
+  inject: () => Promise<{ injected: boolean; echo?: EchoEvidence | null; stopped?: boolean }>
   sleep: (ms: number) => Promise<void>
   paneAlive: () => boolean
   onHeld?: () => void
@@ -35,6 +37,7 @@ export async function runPipelineKickoff(input: {
     if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
     const result = await input.inject()
     if (result.injected) return { sent: true, cancelled: false }
+    if (result.stopped) return { sent: false, cancelled: false, stopped: true }
     if (result.echo != null) {
       input.onHeld?.()
       break
@@ -47,6 +50,30 @@ export async function runPipelineKickoff(input: {
     }
   }
   return { sent: false, cancelled: false }
+}
+
+/** Ctrl-U presses that empty a Claude Code input box holding `text`, typed
+ *  at `cols` columns. Measured on 2.1.286 and 2.1.316: each Ctrl-U deletes one
+ *  screen row of the box and the next the line break before it, so a wrapped
+ *  line costs one row per wrap; on an empty box it does nothing, so a count
+ *  that runs over is harmless. Wide characters count as two columns, the
+ *  box's frame and prompt take four, and one row more covers a wide character
+ *  wrapping early.
+ *
+ *  Returned as separate writes of at most 32: one read of 64 or more Ctrl-U
+ *  is taken as a paste and does nothing (measured on 2.1.286), so the caller
+ *  leaves a gap between them for the CLI to read each on its own. */
+export function composerClearKeys(text: string, cols: number): string[] {
+  const width = Math.max(1, cols - 4)
+  let rows = 0
+  for (const line of text.split('\n')) {
+    let used = 0
+    for (const ch of line) used += /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]|[\u{1f300}-\u{1faff}\u{20000}-\u{3fffd}]/u.test(ch) ? 2 : 1
+    rows += Math.max(1, Math.ceil(used / width))
+  }
+  const writes: string[] = []
+  for (let left = (rows + 1) * 2; left > 0; left -= 32) writes.push('\x15'.repeat(Math.min(32, left)))
+  return writes
 }
 
 /** Hook and transcript watcher can report the same turn. Record acceptance
