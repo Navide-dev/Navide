@@ -135,7 +135,7 @@ describe('confirmQueuedKickoff counts the turn ends it has', () => {
   })
 })
 
-describe('the stage router: the same words in a later turn are a new message', () => {
+describe('the stage router: a block from an earlier turn is not sent again', () => {
   async function load() {
     const { code } = await transformWithEsbuild(
       `${functionSource('queueOrRouteWorkerMsg')}\n${functionSource('injectManagerPane')}\nreturn queueOrRouteWorkerMsg`,
@@ -159,13 +159,15 @@ describe('the stage router: the same words in a later turn are a new message', (
     return { queue: (content: string) => queue(router, 's1', { fromLabel: 'wk', kind: 'REPORT', content }), injected, log, paneTurnStartedAt }
   }
 
-  it('one REPORT in each of two turns: both reach the Manager', async () => {
+  // 0.2.37 VM: the worker's first-turn ASK stayed on screen and was scanned
+  // again in its next turn; a per-turn key sent it to the Manager twice.
+  it('an ASK still on screen in the worker\'s next turn reaches the Manager once', async () => {
     const t = await load()
-    t.queue('done')
+    t.queue('may I?')
     t.paneTurnStartedAt.set('w1', T0 + 60_000)
-    t.queue('done')
+    t.queue('may I?')
     await Promise.resolve()
-    expect(t.injected).toHaveLength(2)
+    expect(t.injected).toHaveLength(1)
   })
 
   it('a block repainted in the same turn reaches it once, and the skip is logged', async () => {
@@ -174,12 +176,12 @@ describe('the stage router: the same words in a later turn are a new message', (
     t.queue(' done ')
     await Promise.resolve()
     expect(t.injected).toHaveLength(1)
-    expect(t.log.some((l) => l.includes('REPORT from wk skipped — a repaint'))).toBe(true)
+    expect(t.log.some((l) => l.includes('REPORT from wk skipped — a block already routed'))).toBe(true)
   })
 })
 
-describe('the global router: the same words in a later turn are a new message', () => {
-  it('two turns, two REPORTs; a repaint, none more', async () => {
+describe('the global router: a block from an earlier turn is not sent again', () => {
+  it('a repaint and the next turn\'s rescan both stay at one REPORT', async () => {
     const { code } = await transformWithEsbuild(
       [
         RUN_SLOT_STUB,
@@ -220,10 +222,10 @@ describe('the global router: the same words in a later turn are a new message', 
     paneRefs.w1.cleanBuffer += `\n${block}` // a repaint, same turn
     await scan()
     expect(reports).toHaveLength(1)
-    expect(log.some((l) => l.includes('REPORT from wk skipped — a repaint'))).toBe(true)
-    paneTurnStartedAt.set('w1', T0 + 60_000) // the worker's next turn says "done" again
+    expect(log.some((l) => l.includes('REPORT from wk skipped — a block already routed'))).toBe(true)
+    paneTurnStartedAt.set('w1', T0 + 60_000) // the next turn rescans the block still on screen
     paneRefs.w1.cleanBuffer += `\n${block}`
     await scan()
-    expect(reports).toHaveLength(2)
+    expect(reports).toHaveLength(1)
   })
 })
