@@ -3260,6 +3260,11 @@ async def cli_hook(vendor: str, request: Request) -> Any:
             # call the pane idle and start injecting the NEXT queued message
             # over stdin, into a pane that is already working.
             event_type = "agent_active"
+    # The turn's reply text is only in the transcript. Read it next rather than
+    # behind every other file the log watcher has queued.
+    transcript = payload.get("transcript_path")
+    if event_type == "turn_complete" and isinstance(transcript, str) and transcript and _log_watcher is not None:
+        _log_watcher.prioritize(Path(transcript))
     # idle_prompt fires about a minute after EVERY finished turn (draft in the
     # composer or not). It reports the pane waiting, not working, so recording
     # it as agent_active would replace the turn_complete entry for good —
