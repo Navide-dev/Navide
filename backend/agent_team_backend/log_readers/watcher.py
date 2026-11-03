@@ -87,6 +87,11 @@ _ACTIVITY_KEYS_PERSIST_LIMIT = 8
 # up on them. See drain_pending_tokens: this is on the shutdown critical path.
 _SHUTDOWN_FLUSH_TIMEOUT_S = 5.0
 
+# Files the watchdog handler queues without a reader's say-so. .db =
+# Antigravity conversations / Grok's grok.db / OpenCode's opencode.db / Kilo's
+# kilo.db.
+_WATCHED_SUFFIXES = (".jsonl", ".json", ".db")
+
 TokenSink = Callable[[TokenUsage], Awaitable[TokenSinkResult | None]]
 ActivitySink = Callable[[ActivityEvent], Awaitable[None]]
 SessionSink = Callable[[str, Path], Awaitable[None]]  # (vendor, file_path)
@@ -122,7 +127,7 @@ class _Handler(FileSystemEventHandler):
             return
         # .db = Antigravity conversations / Grok's grok.db / OpenCode's
         # opencode.db / Kilo's kilo.db.
-        if not s.endswith((".jsonl", ".json", ".db")):
+        if not s.endswith(_WATCHED_SUFFIXES):
             return
         self._on_path(Path(s))
 
@@ -395,9 +400,43 @@ class LogWatcher:
         prioritized path also has exactly one FIFO entry (the one already
         waiting, or the one queued here to wake the drain); the priority walk
         makes that entry stale, so the file is still walked once.
+
+        ``path`` comes from a hook payload any local process can post, so it is
+        followed only when, symlinks resolved, it is a transcript (a watched
+        suffix or one a reader accepts) under a root the watcher already reads,
+        and a reader claims it. It is matched to a queued entry by that resolved
+        form, so a different spelling of a waiting file does not walk it twice.
         """
-        self._enqueue_realtime(path)
-        self._priority[path] = None
+        try:
+            resolved = path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            log.debug("hook transcript ignored: %s does not resolve", path)
+            return
+        roots = set(self._watched_dirs)
+        for reader in self._readers:
+            roots.update(reader.project_dirs())
+        under_root = False
+        for root in roots:
+            try:
+                if resolved.is_relative_to(root.resolve()):
+                    under_root = True
+                    break
+            except (OSError, RuntimeError):
+                continue
+        name = str(resolved)
+        transcript = name.endswith(_WATCHED_SUFFIXES) or any(r.accepts_watch_path(name) for r in self._readers)
+        if not (under_root and transcript and resolved.is_file() and self._reader_for(resolved)):
+            log.debug("hook transcript ignored: %s is not a watched transcript", path)
+            return
+        for queued in self._realtime_queued:
+            try:
+                if queued.resolve() == resolved:
+                    resolved = queued
+                    break
+            except (OSError, RuntimeError):
+                continue
+        self._enqueue_realtime(resolved)
+        self._priority[resolved] = None
 
     def _queue_token_path(self, path: Path, replay_workspace: str = "") -> None:
         """Coalesce one path for the next token-ingestion pass."""

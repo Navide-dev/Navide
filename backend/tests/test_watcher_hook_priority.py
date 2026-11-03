@@ -5,6 +5,10 @@ behind (2026-11-03 evening: forty-odd busy files, a turn end read up to six
 minutes after its Stop hook), the file someone is waiting on for a reply sat
 behind every other file's walk. The Stop hook says exactly which file that is,
 so it is walked next, before the background walks, and still only once.
+
+The path comes from the hook's payload, and any local process can post one: it
+is only followed when, symlinks resolved, it is a transcript under a root the
+watcher already reads.
 """
 
 from __future__ import annotations
@@ -69,6 +73,15 @@ def _files(root: Path, names: list[str]) -> list[Path]:
     return out
 
 
+def _start(root: Path) -> tuple[_OrderReader, LogWatcher, asyncio.Task]:
+    reader = _OrderReader(root)
+    watcher = LogWatcher(sink=_tokens, activity_sink=_activity)  # type: ignore[arg-type]
+    watcher.add_reader(reader)
+    watcher._loop = asyncio.get_running_loop()  # noqa: SLF001
+    drain = asyncio.create_task(watcher._drain_loop())  # noqa: SLF001
+    return reader, watcher, drain
+
+
 async def _drain_until_empty(watcher: LogWatcher) -> None:
     loop = asyncio.get_running_loop()
     deadline = loop.time() + 5
@@ -82,11 +95,7 @@ async def _run(tmp_path: Path, hooked_already_queued: bool) -> list[str]:
     root.mkdir()
     blocker, hooked = _files(root, ["blocker.jsonl", "hooked.jsonl"])
     others = _files(root, [f"other{i:02d}.jsonl" for i in range(40)])
-    reader = _OrderReader(root)
-    watcher = LogWatcher(sink=_tokens, activity_sink=_activity)  # type: ignore[arg-type]
-    watcher.add_reader(reader)
-    watcher._loop = asyncio.get_running_loop()  # noqa: SLF001
-    drain = asyncio.create_task(watcher._drain_loop())  # noqa: SLF001
+    reader, watcher, drain = _start(root)
     try:
         watcher._enqueue_realtime(blocker)  # noqa: SLF001
         await asyncio.to_thread(reader.first_started.wait, 5)
@@ -128,11 +137,7 @@ async def test_an_append_after_the_priority_walk_queues_the_file_again(tmp_path:
     root = tmp_path / "claude"
     root.mkdir()
     blocker, hooked, other = _files(root, ["blocker.jsonl", "hooked.jsonl", "other.jsonl"])
-    reader = _OrderReader(root)
-    watcher = LogWatcher(sink=_tokens, activity_sink=_activity)  # type: ignore[arg-type]
-    watcher.add_reader(reader)
-    watcher._loop = asyncio.get_running_loop()  # noqa: SLF001
-    drain = asyncio.create_task(watcher._drain_loop())  # noqa: SLF001
+    reader, watcher, drain = _start(root)
     try:
         watcher._enqueue_realtime(blocker)  # noqa: SLF001
         await asyncio.to_thread(reader.first_started.wait, 5)
@@ -144,6 +149,52 @@ async def test_an_append_after_the_priority_walk_queues_the_file_again(tmp_path:
         watcher._enqueue_realtime(hooked)  # noqa: SLF001
         await _drain_until_empty(watcher)
         assert reader.walked == ["blocker.jsonl", "hooked.jsonl", "other.jsonl", "hooked.jsonl"]
+    finally:
+        reader.release.set()
+        drain.cancel()
+
+
+@pytest.mark.asyncio
+async def test_a_path_outside_the_roots_is_never_read(tmp_path: Path) -> None:
+    root = (tmp_path / "claude").resolve()
+    root.mkdir()
+    (blocker,) = _files(root, ["blocker.jsonl"])
+    outside = tmp_path / "secret.jsonl"
+    outside.write_text("{}\n", encoding="utf-8")
+    escape = root / "escape.jsonl"  # inside the root by name, outside once resolved
+    escape.symlink_to(outside)
+    (root / "notes.txt").write_text("x\n", encoding="utf-8")
+    reader, watcher, drain = _start(root)
+    try:
+        watcher._enqueue_realtime(blocker)  # noqa: SLF001
+        await asyncio.to_thread(reader.first_started.wait, 5)
+        for p in (outside, escape, root / "notes.txt", root / "missing.jsonl", root / ".." / "secret.jsonl"):
+            watcher.prioritize(p)
+        reader.release.set()
+        await _drain_until_empty(watcher)
+        assert reader.walked == ["blocker.jsonl"]
+    finally:
+        reader.release.set()
+        drain.cancel()
+
+
+@pytest.mark.asyncio
+async def test_a_symlink_spelling_inside_the_roots_is_walked_once(tmp_path: Path) -> None:
+    root = (tmp_path / "claude").resolve()
+    root.mkdir()
+    blocker, real, other = _files(root, ["blocker.jsonl", "real.jsonl", "other.jsonl"])
+    alias = root / "alias.jsonl"
+    alias.symlink_to(real)
+    reader, watcher, drain = _start(root)
+    try:
+        watcher._enqueue_realtime(blocker)  # noqa: SLF001
+        await asyncio.to_thread(reader.first_started.wait, 5)
+        watcher._enqueue_realtime(other)  # noqa: SLF001
+        watcher._enqueue_realtime(real)  # noqa: SLF001
+        watcher.prioritize(alias)
+        reader.release.set()
+        await _drain_until_empty(watcher)
+        assert reader.walked == ["blocker.jsonl", "real.jsonl", "other.jsonl"]
     finally:
         reader.release.set()
         drain.cancel()
