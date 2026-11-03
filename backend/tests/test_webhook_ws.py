@@ -226,6 +226,70 @@ class TestStartRetry:
         assert task.cancelled() and webhook_ws._retry_task is None
 
 
+def gated_start(monkeypatch, failures: int = 0) -> tuple[threading.Event, threading.Event, threading.Event]:
+    """The listener's start, after `failures` failed ones, waits for `gate`
+    before it binds: `entered` once it waits, `done` once it has started."""
+    entered, gate, done = threading.Event(), threading.Event(), threading.Event()
+    calls: list[int] = []
+    real = webhook_ws.webhook_listener.WebhookListener.start
+
+    def start(self) -> None:
+        calls.append(1)
+        if len(calls) <= failures:
+            raise webhook_ws.webhook_listener.ListenerError("the webhook listener did not start")
+        entered.set()
+        gate.wait(10)
+        real(self)
+        done.set()
+
+    monkeypatch.setattr(webhook_ws.webhook_listener.WebhookListener, "start", start)
+    return entered, gate, done
+
+
+class TestShutdownDuringStart:
+    """Review of 0.2.37: a shutdown that cancels a start in flight left the
+    listener that start went on to bring up untracked, holding its port."""
+
+    async def shut_down_while_starting(self, entered, gate, done, port) -> None:
+        await settled(entered.is_set)
+        closing = asyncio.create_task(webhook_ws.shutdown())
+        await asyncio.sleep(0.05)
+        gate.set()
+        await closing
+        await settled(done.is_set)
+        await asyncio.sleep(0.05)
+        assert not port_open(port)
+        await settled(lambda: listener_threads() == [])
+
+    async def test_a_first_start_cut_off_by_shutdown_is_stopped(self, env, monkeypatch) -> None:
+        from .test_webhook_listener import free_port
+
+        port = free_port()
+        webhook_triggers.save_listener_settings(app_module.database, enabled=False, port=port, public_host="", now=1)
+        await enabled_trigger()
+        await webhook_ws.shutdown()
+        monkeypatch.setattr(webhook_service.WebhookService, "start_watchdog", lambda _: None)
+        entered, gate, done = gated_start(monkeypatch)
+        try:
+            await webhook_ws.startup()
+            await self.shut_down_while_starting(entered, gate, done, port)
+        finally:
+            gate.set()
+
+    async def test_a_retry_cut_off_by_shutdown_is_stopped(self, env, monkeypatch) -> None:
+        from .test_webhook_listener import free_port
+
+        port = free_port()
+        webhook_triggers.save_listener_settings(app_module.database, enabled=False, port=port, public_host="", now=1)
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.01,), raising=False)
+        entered, gate, done = gated_start(monkeypatch, failures=1)
+        try:
+            await enabled_trigger()
+            await self.shut_down_while_starting(entered, gate, done, port)
+        finally:
+            gate.set()
+
+
 class TestRefusals:
     async def test_guard_off_refuses_both_switches(self, env, monkeypatch) -> None:
         created = await call("webhook.trigger.create", name="CI", workspace_path=WS, pipeline_id=PIPE)

@@ -969,6 +969,27 @@ class TestWatchdog:
         await env.service.tick()
         assert "interrupted" in outcomes(env) and "abort" not in env.window.calls
 
+    async def test_a_restart_does_not_record_the_same_interruption_again(self, watched) -> None:
+        # Review of 0.2.37: what was noted lived in memory only, so the first
+        # tick after a restart wrote a second "interrupted" row for the run.
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        again = restarted(env)
+        await again.tick()
+        assert outcomes(env).count("interrupted") == 1
+        assert again._still_unattended(watched.run["id"]) is False
+
+    async def test_a_later_run_of_the_trigger_is_still_recorded_interrupted(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        env.service.finish_run(WS, "interrupted")
+        await started_run(env)
+        again = restarted(env)
+        await again.tick()
+        assert outcomes(env).count("interrupted") == 2
+
     async def test_a_resumed_interrupted_run_ends_with_its_real_state(self, watched) -> None:
         # A Reload interrupts the run, Resume carries the same run on to the end.
         env = watched.env

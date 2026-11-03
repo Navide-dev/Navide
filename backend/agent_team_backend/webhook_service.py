@@ -329,8 +329,9 @@ class WebhookService:
         self._checks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._waiting_since: dict[str, float] = {}
-        #: Runs seen interrupted (a Reload or crash), which never run unattended again.
-        self._interrupted: set[str] = set()
+        #: Runs seen interrupted (a Reload or crash), which never run unattended
+        #: again. Read back from the audit, so a restart does not note one twice.
+        self._interrupted: set[str] = store.interrupted_open_runs()
         #: Per workspace, a run the watchdog closed as aborted that Resume may
         #: still carry on: a failed kickoff is stored aborted too.
         self._closed: dict[str, dict[str, Any]] = {}
@@ -786,7 +787,7 @@ class WebhookService:
             self.store.end_unattended(run["id"])
         except sqlite3.Error:
             log.exception("webhook: could not record that a run was interrupted")
-        self.audit([{"trigger_id": run["trigger_id"], "outcome": "interrupted", "status": 0}])
+        self.audit([{"trigger_id": run["trigger_id"], "outcome": "interrupted", "status": 0, "detail": run["id"]}])
 
     def _ended(self, workspace: str, state: str) -> None:
         run = self._active.get(workspace)

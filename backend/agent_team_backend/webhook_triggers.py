@@ -434,6 +434,16 @@ class WebhookStore:
             rows = cur.execute("SELECT * FROM webhook_runs WHERE state = 'running'").fetchall()
         return [dict(row) for row in rows]
 
+    def interrupted_open_runs(self) -> set[str]:
+        """Open runs already audited as interrupted: the event names the run."""
+        with self.db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT r.id FROM webhook_runs r WHERE r.state = 'running' AND EXISTS ("
+                " SELECT 1 FROM webhook_events e WHERE e.trigger_id = r.trigger_id"
+                " AND e.outcome = 'interrupted' AND e.detail = r.id)"
+            ).fetchall()
+        return {row["id"] for row in rows}
+
     def approval_timeout_s(self, trigger_id: str) -> int:
         """From the row, deleted triggers too: a run outlives its trigger."""
         with self.db.transaction() as cur:

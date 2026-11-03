@@ -153,10 +153,13 @@ def _start_failed(err: webhook_listener.ListenerError) -> None:
 async def shutdown() -> None:
     global _listener, _start_task
     task, _start_task = _start_task, None
-    if task is not None:
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
+    retry = _retry_task
     _cancel_retry()
+    for pending in (task, retry):
+        # Awaited: one cut off mid-start stops the listener it started.
+        if pending is not None:
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
     listener, _listener = _listener, None
     if listener is not None:
         await asyncio.to_thread(listener.stop)
@@ -214,8 +217,16 @@ async def _reconcile() -> None:
         # The body filter's character class takes 0.3-1 s to build; built in a
         # worker before the port opens, not on the loop by the first request.
         await asyncio.to_thread(webhook_payload._dash_run)
+        starting = asyncio.ensure_future(asyncio.to_thread(listener.start))
         try:
-            await asyncio.to_thread(listener.start)
+            await asyncio.shield(starting)
+        except asyncio.CancelledError:
+            # The start's thread runs on: a listener it brings up is in no
+            # global yet, so nothing else would stop it and it would hold the
+            # port until the process ends.
+            await asyncio.gather(starting, return_exceptions=True)
+            await asyncio.to_thread(listener.stop)
+            raise
         except webhook_listener.ListenerError as err:
             _start_failed(err)
             return
