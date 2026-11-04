@@ -4491,14 +4491,6 @@ function flattenForInjection(text: string): string {
  *  terminal.input_blocked / input_unblocked events. */
 const inputBlocks = createInputBlockTracker()
 
-/** Kill-line for a composer holding text we gave up on. Ctrl-U is what ⌘⌫
- *  sends from the terminal (useTerminal) and the canonical-mode kill character,
- *  so it clears whichever side of the PTY ends up holding the payload — a
- *  blocked PTY queues it behind the text, and it takes effect when the CLI
- *  reads. Nothing before the injection clears the composer (the typing hold
- *  keeps a draft out of the way instead), so this is the only clear. */
-const CLEAR_LINE = '\x15'
-
 async function injectText(
   sessionId: string,
   text: string,
@@ -4645,11 +4637,20 @@ async function injectText(
   }
   // Every failure exit after bytes went out must not leave them in the
   // composer: the next thing the user or an agent submits would carry them.
-  // Best effort — a socket that just failed the send fails this too.
+  // Best effort — a socket that just failed the send fails this too. The whole
+  // box, as stopBeforeEnter clears it: one Ctrl-U clears only a row, and a
+  // multi-row task's tail stayed behind for the next Enter (0.2.37 Windows VM).
   const giveUp = async (): Promise<false> => {
     if (wroteBytes) {
-      await backend.send('terminal.input', { terminal_session_id: sessionId, data: CLEAR_LINE })
-        .catch(() => { /* nothing left to clear into */ })
+      const cols = paneId !== undefined ? paneRefs[paneId]?.terminalSize?.()?.cols : undefined
+      for (const keys of composerClearKeys(body, cols ?? 80)) {
+        try {
+          await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys })
+        } catch {
+          break // nothing left to clear into
+        }
+        await sleep(100)
+      }
     }
     return false
   }
