@@ -5,6 +5,7 @@ case "$1" in
   export XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus WAYLAND_DISPLAY=wayland-0 DISPLAY=:0
   export XAUTHORITY=$(ls /run/user/1000/.mutter-Xwaylandauth.* | head -1) PATH=$HOME/.local/bin:$PATH
   mkdir -p ~/.config/agent-team; echo '{"enabled":true,"port":9223}' > ~/.config/agent-team/cdp-debug.json
+  [ -e ~/wh/app.out ] && mv ~/wh/app.out ~/wh/app-$(date +%H%M%S).out  # keep the previous run's log
   setsid nohup /opt/Navide/navide > ~/wh/app.out 2>&1 < /dev/null &
   echo $! > ~/wh/app.pid; cat ~/wh/app.pid ;;
  stop)
