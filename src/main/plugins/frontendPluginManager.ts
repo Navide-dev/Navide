@@ -7649,8 +7649,26 @@ export class FrontendPluginManager {
     }
     const early = recheck()
     if (early) return early
-    if (risk === 'write' && !(await host.confirmWrite(spec, tool, root!))) {
-      return agentToolError('WORKSPACE_WRITE_DECLINED', 'The user did not allow changes in this workspace.')
+    if (risk === 'write') {
+      // The first-write dialog waits for a person; answer by the deadline
+      // instead of leaving the core to time out with no reason. The dialog
+      // stays open, and a retry after the answer reuses it.
+      let dialogTimer: ReturnType<typeof setTimeout> | undefined
+      const unanswered = new Promise<'unanswered'>((resolve) => {
+        dialogTimer = setTimeout(() => resolve('unanswered'), Math.max(0, deadline - Date.now()))
+      })
+      const allowed = await Promise.race([host.confirmWrite(spec, tool, root!), unanswered])
+      clearTimeout(dialogTimer)
+      if (allowed === 'unanswered') {
+        console.warn(`[agent-tools] ${spec.pluginId} ${tool.name}: the first-write approval dialog is still unanswered`)
+        return agentToolError(
+          'PLUGIN_TOOL_TIMEOUT',
+          'Waiting for the user to answer the Navide approval dialog for this workspace; call again after they allow it.',
+        )
+      }
+      if (!allowed) {
+        return agentToolError('WORKSPACE_WRITE_DECLINED', 'The user did not allow changes in this workspace.')
+      }
     }
     const afterConfirm = recheck()
     if (afterConfirm) return afterConfirm
