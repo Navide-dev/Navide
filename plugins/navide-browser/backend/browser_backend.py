@@ -91,6 +91,10 @@ _bridge_origin_ids: dict[str, set[str]] = {}
 # browser_tabs new/select. Lost on restart: a Space then acts on its first
 # agent tab again, as it did before Spaces had tabs.
 _active_tabs: dict[str, str] = {}
+# The pane whose browser_handoff a view is waiting on (viewId -> pane). On a
+# Space any pane may use, another pane's take_over or finish leaves that
+# handoff's need-action state and note in place while the user holds control.
+_handoffs: dict[str, str | None] = {}
 
 
 class DuplicateKeyError(ValueError):
@@ -462,6 +466,7 @@ def _cancel(request_id: Any) -> None:
 _USER_IN_CONTROL_MESSAGES = {
     "user-owned": "This Space belongs to the user. Ask the user to choose \"Let the agent use this Space\" first.",
     "manual_takeover": "The user took over this Space. Call browser_wait_for_control and continue once it returns control.",
+    "agent_handoff": "An agent handed this Space to the user with browser_handoff. Call browser_wait_for_control and continue once the user returns control.",
     "permission": "The page asked for a permission only the user can grant. Call browser_wait_for_control.",
 }
 
@@ -1083,6 +1088,8 @@ def tabs(bridge: Bridge, arguments: dict[str, Any], pane: str | None, *, sleep: 
         return {"viewId": tab, **_tabs_value(name, views)}
     _call(bridge, "close", {"viewId": tab})
     with _state_lock:
+        _handoffs.pop(tab, None)
+    with _state_lock:
         if _active_tabs.get(name) == tab:
             del _active_tabs[name]
     return {"closed": [tab], **_tabs_value(name, _usable_views(bridge, pane))}
@@ -1096,6 +1103,8 @@ def close(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> dict[s
     if not whole:
         view_id = _resolve_tab(bridge, arguments, pane)
         _call(bridge, "close", {"viewId": view_id})
+        with _state_lock:
+            _handoffs.pop(view_id, None)
         with _state_lock:
             for name, active in list(_active_tabs.items()):
                 if active == view_id:
@@ -1112,6 +1121,8 @@ def close(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> dict[s
             skipped.append(view["viewId"])
             continue
         _call(bridge, "close", {"viewId": view["viewId"]})
+        with _state_lock:
+            _handoffs.pop(view["viewId"], None)
         closed.append(view["viewId"])
     with _state_lock:
         _active_tabs.pop(name, None)
@@ -1276,6 +1287,14 @@ def upload(bridge: Bridge, view_id: str, arguments: dict[str, Any], workspace: s
     return value
 
 
+def _others_handoff_pending(view: dict[str, Any] | None, pane: str | None) -> bool:
+    """The user still holds a view another pane (or a pane before a restart) handed off."""
+    if view is None or view.get("control") != "user" or view.get("state") != "need-action":
+        return False
+    with _state_lock:
+        return view.get("viewId") not in _handoffs or _handoffs[view["viewId"]] != pane
+
+
 def take_over(
     bridge: Bridge,
     view_id: str,
@@ -1283,6 +1302,7 @@ def take_over(
     *,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
+    pane: str | None = None,
 ) -> dict[str, Any]:
     """Ask the user for control back, then wait. Never takes control itself."""
     view = _find_view(bridge, view_id)
@@ -1298,7 +1318,9 @@ def take_over(
     timeout = _bounded_timeout(arguments, WAIT_FOR_CONTROL_MAX_MS, WAIT_FOR_CONTROL_MAX_MS)
     # running, not need-action: entering need-action reloads a page the agent
     # ran script in, which would throw away what the user is doing there.
-    _set_state(bridge, view_id, "running", f"{TAKE_OVER_NOTE}: {note}" if note else TAKE_OVER_NOTE)
+    # Another pane's handoff the user has not finished keeps its own request.
+    if not _others_handoff_pending(view, pane):
+        _set_state(bridge, view_id, "running", f"{TAKE_OVER_NOTE}: {note}" if note else TAKE_OVER_NOTE)
     return {"asked": True, **wait_for_control(bridge, view_id, timeout, sleep=sleep, clock=clock)}
 
 
@@ -1352,6 +1374,8 @@ def run_tool(
         elif name == "browser.handoff":
             view_id = _resolve_view(bridge, arguments, pane)
             _set_state(bridge, view_id, "need-action", arguments.get("note"))
+            with _state_lock:
+                _handoffs[view_id] = pane
             value = {"viewId": view_id, "state": "need-action", "control": "user"}
         elif name == "browser.control.wait":
             view_id = _resolve_view(bridge, arguments, pane)
@@ -1361,8 +1385,11 @@ def run_tool(
             value = {"viewId": view_id, **wait_for_control(bridge, view_id, min(timeout, WAIT_FOR_CONTROL_MAX_MS))}
         elif name == "browser.finish":
             view_id = _resolve_view(bridge, arguments, pane)
-            _set_state(bridge, view_id, "done", arguments.get("note"))
-            value = {"viewId": view_id, "state": "done"}
+            if _others_handoff_pending(_find_view(bridge, view_id), pane):
+                value = {"viewId": view_id, "state": "need-action", "handoffPending": True}
+            else:
+                _set_state(bridge, view_id, "done", arguments.get("note"))
+                value = {"viewId": view_id, "state": "done"}
         elif name == "browser.close":
             value = close(bridge, arguments, pane)
         elif name == "browser.tabs":
@@ -1381,7 +1408,7 @@ def run_tool(
             value = {"viewId": view_id, **upload(bridge, view_id, arguments, workspace)}
         elif name == "browser.takeover":
             view_id = _resolve_tab(bridge, arguments, pane)
-            value = {"viewId": view_id, **take_over(bridge, view_id, arguments)}
+            value = {"viewId": view_id, **take_over(bridge, view_id, arguments, pane=pane)}
         elif name == "browser.cdp":
             view_id = _resolve_tab(bridge, arguments, pane)
             value = {"viewId": view_id, **raw_cdp(bridge, view_id, arguments)}

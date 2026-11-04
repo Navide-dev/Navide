@@ -429,6 +429,16 @@ describe('user in control', () => {
     expect(registry.list('navide.browser')[0]).toMatchObject({ control: 'agent', state: 'running' })
   })
 
+  it('a handoff is refused as the agent handing over, not as a user takeover', async () => {
+    const { registry } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
+    registry.setState('navide.browser', viewId, 'need-action', 'Solve the captcha')
+    expect(await rejectionOf(registry.cdp('navide.browser', viewId, 'Runtime.evaluate', {}))).toMatchObject({
+      code: 'USER_IN_CONTROL',
+      reason: 'agent_handoff',
+    })
+  })
+
   it('detaches the debugger on every takeover and re-attaches on the next agent cdp', async () => {
     const { registry, views, sessions } = setup()
     const takeovers: Array<(viewId: string, contents: (typeof views)[number]['webContents']) => void> = [
