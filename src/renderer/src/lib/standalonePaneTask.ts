@@ -11,6 +11,16 @@
  * App.vue state so it is unit-testable.
  */
 
+import { kickoffVerified, type EchoEvidence, type SubmitEvidence } from './injectEcho'
+import type { KickoffVerdict } from './spawnKickoff'
+
+/** What injectPane observed while typing the task: the same echo / submit
+ *  evidence the pane path's kickoff loop judges. */
+export interface StandaloneKickoffEvidence {
+  echo?: EchoEvidence | null
+  submit?: SubmitEvidence | null
+}
+
 export interface StandaloneTaskInjectionDeps {
   selectPane: (paneId: string, opts: { userInitiated: boolean }) => void
   sendSessionMarkerBootstrap: (paneId: string, tag: string) => Promise<boolean>
@@ -18,7 +28,9 @@ export interface StandaloneTaskInjectionDeps {
   waitForStartupActivity: (paneId: string) => Promise<boolean>
   waitForQuiet: (paneId: string, requiredQuietMs: number, timeoutMs: number) => Promise<void>
   paneAlive: (paneId: string) => boolean
-  injectPane: (paneId: string, text: string, logLabel: string, preserveNewlines: boolean) => Promise<boolean>
+  injectPane: (
+    paneId: string, text: string, logLabel: string, preserveNewlines: boolean, evidence?: StandaloneKickoffEvidence,
+  ) => Promise<boolean>
   onKill: (paneId: string) => Promise<void>
 }
 
@@ -33,7 +45,7 @@ export async function injectStandaloneTask(
   task: string,
   logLabel: string,
   deps: StandaloneTaskInjectionDeps,
-  opts: { resume?: boolean } = {},
+  opts: { resume?: boolean; evidence?: StandaloneKickoffEvidence } = {},
 ): Promise<boolean> {
   if (!task) return true
 
@@ -55,10 +67,30 @@ export async function injectStandaloneTask(
     await deps.onKill(paneId)
     return false
   }
-  const injected = await deps.injectPane(paneId, task, logLabel, true)
+  const injected = opts.evidence
+    ? await deps.injectPane(paneId, task, logLabel, true, opts.evidence)
+    : await deps.injectPane(paneId, task, logLabel, true)
   if (!injected) {
     await deps.onKill(paneId)
     return false
   }
   return true
+}
+
+/** cli_open_agent's kickoff verdict for a standalone (target_workspace) spawn,
+ *  judged on the evidence injectStandaloneTask collected. This path has no
+ *  prompt-ready gate (it waits for quiet, not idle+quiet), so only the strict
+ *  half of kickoffVerified applies: growth-only evidence stays 'unverified',
+ *  which the server answers with "read cli_get_status before resending". */
+export function standaloneKickoffVerdict(
+  evidence: StandaloneKickoffEvidence,
+  opts: { task?: string } = {},
+): { kickoff: KickoffVerdict; reason?: string } {
+  if (opts.task === '') return { kickoff: 'sent', reason: 'no task — the pane was left as it was' }
+  if (kickoffVerified(evidence.echo ?? null, evidence.submit ?? null, false)) return { kickoff: 'sent' }
+  return {
+    kickoff: 'unverified',
+    reason: `the task was typed but its echo/submit was not confirmed (echo=${evidence.echo ?? 'none'}, `
+      + `submit=${evidence.submit ?? 'none'}) — the task may be in the pane, read its prompt before resending`,
+  }
 }

@@ -110,15 +110,19 @@ describe('the kickoff verdict reaches the waiting cli_open_agent call', () => {
   // boolean, which says true on buffer growth alone — the evidence the pane
   // path refuses to call sent. One word meaning two strengths depending on the
   // path is how a caller stops looking at a pane that never got its task.
-  it('the standalone path reports its kickoff too — as unverified, so the call never waits 45s', () => {
+  it('the standalone path reports its kickoff too — judged on its evidence, so the call never waits 45s', () => {
     const handler = block('async function handleMcpSpawnRequest(ev: {', '\nfunction describeSpawnRefusal(')
     const standaloneReport = handler.indexOf('report({ ok: true, paneId, name: childName, advisories: gate.advisories })')
     expect(standaloneReport).toBeGreaterThan(-1)
     const emit = handler.indexOf("backend.send('agent_spawn.kickoff'", standaloneReport)
     expect(emit).toBeGreaterThan(standaloneReport)
     const payload = handler.slice(emit, emit + 400)
-    expect(payload).toContain("kickoff: 'unverified'")
+    // Neither word hard-coded: a fixed 'unverified' reported every external
+    // spawn as failed with the task running; a fixed 'sent' would hide a real miss.
+    expect(payload).toContain('kickoff: verdict.kickoff')
+    expect(payload).not.toContain("kickoff: 'unverified'")
     expect(payload).not.toContain("kickoff: 'sent'")
+    expect(handler.slice(standaloneReport, emit)).toContain('standaloneKickoffVerdict(standaloneEvidence')
     expect(payload).toContain('reason:')
   })
 

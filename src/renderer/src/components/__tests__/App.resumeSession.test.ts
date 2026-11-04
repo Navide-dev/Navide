@@ -46,7 +46,7 @@ describe('cli_open_agent(session_id) — the MCP resume path, station by station
     // the gate result rather than being threaded through it.
     expect(body).toContain("const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(),")
     expect(body).toContain('createRequestedPane(parent, spawnReq)')
-    expect(body).toContain('createStandaloneRequestedPane(ev.target_workspace as string, spawnReq)')
+    expect(body).toContain('createStandaloneRequestedPane(ev.target_workspace as string, spawnReq, standaloneEvidence)')
   })
 
   it('both spawn paths turn it into a commandOverride instead of launching fresh', () => {
