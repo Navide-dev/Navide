@@ -219,7 +219,7 @@ import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSin
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
-import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
+import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { acceptStartupTrust } from './lib/startupTrust'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
@@ -3500,7 +3500,7 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
     waitForStartupActivity: (id) => waitForStartupActivity(id),
     waitForQuiet: (id, quietMs, timeoutMs) => waitForQuiet(id, quietMs, timeoutMs),
     paneAlive: (id) => paneAlive(id),
-    injectPane: (id, text, label, preserveNewlines) => injectPane(id, text, label, preserveNewlines),
+    injectPane: (id, text, label, preserveNewlines, evidence) => injectPane(id, text, label, preserveNewlines, undefined, evidence),
     onKill: (id) => onKill(id),
   }
 }
@@ -3515,6 +3515,7 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
 async function createStandaloneRequestedPane(
   workspacePath: string,
   req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
+  kickoffEvidence?: StandaloneKickoffEvidence,
 ): Promise<string | null> {
   assertRequestedSpawnGroup(workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3586,6 +3587,7 @@ async function createStandaloneRequestedPane(
   if (!pane || pane.preparationStatus === 'failed') return null
   const injected = await injectStandaloneTask(paneId, req.task, 'mcp-task', standaloneTaskDeps(), {
     resume: !!mcpResumeId,
+    evidence: kickoffEvidence,
   })
   if (!injected) return null
   return paneId
@@ -4079,6 +4081,8 @@ async function handleMcpSpawnRequest(ev: {
     })
   }
   let paneId: string | null = null
+  // Filled by the standalone path's injection, judged below for its verdict.
+  const standaloneEvidence: StandaloneKickoffEvidence = {}
   try {
     // The gate decides identity (name collisions, model/effort); the session to
     // resume is not its business, so it rides alongside rather than through it.
@@ -4090,7 +4094,7 @@ async function handleMcpSpawnRequest(ev: {
         )
       : parent
         ? await createRequestedPane(parent, spawnReq)
-        : await createStandaloneRequestedPane(ev.target_workspace as string, spawnReq)
+        : await createStandaloneRequestedPane(ev.target_workspace as string, spawnReq, standaloneEvidence)
   } catch (err) {
     report({ ok: false, error: err instanceof Error ? err.message : String(err) })
     return
@@ -4127,19 +4131,18 @@ async function handleMcpSpawnRequest(ev: {
     // injectStandaloneTask already typed the task (a failure returned null
     // above), so answer at once rather than letting the call wait out 45s.
     //
-    // 'unverified', not 'sent': all injectStandaloneTask hands back is
-    // injectPane's boolean, and that says true on buffer growth alone — the
-    // same growth-only evidence the pane path refuses to call sent. Claiming
-    // 'sent' here made one word mean two different things depending on which
-    // path answered it, and the weaker one was the silent kind: the caller
-    // stopped looking. 'unverified' routes through the server's "read
-    // cli_get_status first" hint instead.
+    // Judged on the echo/submit evidence injectPane recorded, not on its
+    // boolean: that says true on buffer growth alone, which the pane path
+    // refuses to call sent. Growth-only stays 'unverified' and routes through
+    // the server's "read cli_get_status first" hint; payload-level evidence is
+    // 'sent'. Hard-coding 'unverified' here reported every external spawn as
+    // failed, the task already running (Linux VM 0.2.38).
+    const verdict = standaloneKickoffVerdict(standaloneEvidence, { task: gate.task })
     backend.send('agent_spawn.kickoff', {
       request_id: ev.request_id,
       pane_id: paneId,
-      kickoff: 'unverified',
-      reason: 'standalone injection reports success without payload-level evidence — '
-        + 'the task may be in the pane, read its prompt before resending',
+      kickoff: verdict.kickoff,
+      ...(verdict.reason ? { reason: verdict.reason } : {}),
     }).catch(() => { /* the tool call times out and says so */ })
     return
   }
