@@ -18228,6 +18228,33 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     }
   })
 
+  it('answers by the deadline while the first-write dialog is still unanswered, and the dialog stays for the retry', async () => {
+    const f = await fixture()
+    let answerDialog: (allowed: boolean) => void = () => {}
+    f.confirmWrite.mockImplementationOnce(() => new Promise<boolean>((resolve) => { answerDialog = resolve }))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    try {
+      f.socket.receive({ type: 'agent.capability.request', payload: toolRequest(f) })
+      await vi.advanceTimersByTimeAsync(31_000)
+      const results = sentOf(f.socket).filter((message) => message.type === 'agent.capability.result')
+      expect(results.at(-1)?.payload.response).toMatchObject({
+        ok: false,
+        error_code: 'PLUGIN_TOOL_TIMEOUT',
+        error: expect.stringContaining('approval'),
+      })
+      expect(f.call).not.toHaveBeenCalled()
+      answerDialog(true)
+    } finally {
+      vi.useRealTimers()
+    }
+    try {
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:after-allow' }))).resolves.toMatchObject({ ok: true })
+      expect(f.call).toHaveBeenCalledTimes(1)
+    } finally {
+      await f.cleanup()
+    }
+  })
+
   it('does not dispatch when the bind finishes after the deadline', async () => {
     const f = await fixture()
     const realNow = Date.now
