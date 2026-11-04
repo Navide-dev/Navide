@@ -36,7 +36,7 @@ export interface WebAgentCaller { paneId: string | null; workspace: string | nul
 export type WebViewControl = 'agent' | 'user'
 export type WebViewState = 'idle' | 'running' | 'need-action' | 'done'
 /** Why a bridge `cdp` call was refused with USER_IN_CONTROL. */
-export type WebControlReason = 'user-owned' | 'manual_takeover' | 'permission'
+export type WebControlReason = 'user-owned' | 'manual_takeover' | 'agent_handoff' | 'permission'
 export interface WebViewRect { x: number; y: number; width: number; height: number }
 /** A JavaScript dialog open in the page (message at most 500 characters). */
 export interface WebViewDialog {

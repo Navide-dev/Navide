@@ -361,7 +361,8 @@ export class PluginWebViewRegistry {
     entry.state = state
     entry.note = note
     if (state === 'need-action') {
-      this.takeOver(entry, 'manual_takeover')
+      // The agent handed the view over; nothing the user did took it.
+      this.takeOver(entry, 'agent_handoff')
       // The agent asked the user in: there is no user input to lose, so the
       // page its script ran in is reloaded before the user types anything.
       const contents = entry.view.webContents
