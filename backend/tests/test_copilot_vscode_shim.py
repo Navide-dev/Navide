@@ -107,3 +107,34 @@ def test_spawn_probe_does_not_run_the_shim(monkeypatch) -> None:
     assert probed == []
     assert result["reason"] == "not_found"
     assert result["binary_path"] == ""
+
+
+def test_spawn_command_uses_the_real_cli_behind_the_shim(monkeypatch, tmp_path: Path) -> None:
+    """PATH has the shim first and a real Copilot CLI later: the pane's shell
+    would run the bare `copilot` as the shim, so the command names the real
+    CLI's absolute path instead."""
+    real = str(tmp_path / "WinGet" / "Links" / "copilot")
+    monkeypatch.setattr(
+        osplat.paths, "resolve_program",
+        lambda name, path=None: SHIM if name == "copilot" else None,
+    )
+    monkeypatch.setattr(onboarding_deps, "_distinct_executables", lambda command: [
+        {"path": SHIM, "resolved_path": SHIM, "aliases": [SHIM]},
+        {"path": real, "resolved_path": real, "aliases": [real]},
+    ])
+    command = ["/bin/zsh", "-ilc", "copilot --resume abc"]
+
+    assert app._command_with_installed_cli_alias("copilot", command) == [
+        "/bin/zsh", "-ilc", f"{real} --resume abc",
+    ]
+
+
+def test_spawn_command_untouched_without_the_shim(monkeypatch) -> None:
+    real = "/opt/homebrew/bin/copilot"
+    monkeypatch.setattr(
+        osplat.paths, "resolve_program",
+        lambda name, path=None: real if name == "copilot" else None,
+    )
+    command = ["/bin/zsh", "-ilc", "copilot --resume abc"]
+
+    assert app._command_with_installed_cli_alias("copilot", command) == command

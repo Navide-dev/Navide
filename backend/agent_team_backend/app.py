@@ -3779,9 +3779,12 @@ def _command_with_installed_cli_alias(agent_key: str, command: Any) -> Any:
     installed (cursor ships `agent`; older installs only have `cursor-agent`).
     Spawning the pinned name then dies with exit 127 while detection reports
     the CLI as present — so resolve the alias here instead.
+
+    The same goes for a name that resolves to another product's stand-in
+    (Dep.shim_dirs: VS Code's copilot-shim) ahead of the real CLI on PATH.
     """
     dep = onboarding_deps.DEPS_BY_ID.get(agent_key)
-    if dep is None or not dep.alt_commands:
+    if dep is None or not (dep.alt_commands or dep.shim_dirs):
         return command
     text = _command_text(command)
     try:
@@ -3790,7 +3793,8 @@ def _command_with_installed_cli_alias(agent_key: str, command: Any) -> Any:
         return command
     if not parts or not _names_a_known_command(parts[0], (dep.check_cmd[0], *dep.alt_commands)):
         return command
-    if osplat.paths.resolve_program(parts[0]):
+    requested = osplat.paths.resolve_program(parts[0])
+    if requested and not onboarding_deps.is_shim(dep, requested):
         return command  # the requested name resolves — nothing to fix
     installed = onboarding_deps.resolve_executable(dep)
     if not installed:
