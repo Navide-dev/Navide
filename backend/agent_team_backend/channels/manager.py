@@ -449,9 +449,10 @@ class ChannelManager:
         self._textless: dict[str, tuple[_Pending, asyncio.Task[Any]]] = {}
         # pane_id -> runs a hook's turn end closed, oldest first, waiting for the log's text
         self._await_text: dict[str, list[_AwaitText]] = {}
-        # pane_id -> the texts of the last turns a Stop hook's own text answered, so the
-        # log's end of those turns (arriving later) is not posted a second time
-        self._hook_replied: dict[str, deque[str]] = {}
+        # pane_id -> (when, text) of the last turns a Stop hook's own text answered, so
+        # the log's end of each of those turns (arriving later) is not posted a second
+        # time; an entry is used up by the log turn end it matches
+        self._hook_replied: dict[str, deque[tuple[float, str]]] = {}
         self._queued: dict[str, set[str]] = {}  # pane_id -> msg_keys still queued
         self._queued_loc: dict[str, str] = {}  # msg_key -> the chat location that sent it
         self._chat_sends: dict[tuple[str, str], list[float]] = {}  # (pane_id, sender_id) -> send times
@@ -1387,8 +1388,25 @@ class ChannelManager:
             return
         self._close_run(pane_id, pending)
         replied = self._hook_replied.setdefault(pane_id, deque(maxlen=HOOK_REPLIED_REMEMBERED))
-        replied.append(text.strip())
+        replied.append((time.time(), text.strip()))
         self._spawn(self._send_reply(pending, text))
+
+    def _take_hook_replied(self, pane_id: str, text: str, wall: Any) -> bool:
+        """Whether a log turn end with ``text``, stamped ``wall`` (None when unstamped), is
+        the log's copy of a turn a Stop hook already answered — and use that entry up, so
+        a later turn that happens to end with the same words goes its own way (the
+        transcript is in order: the answered turn's log end comes first). A copy written
+        before the hook fired is stamped no later than the hook's arrival."""
+        replied = self._hook_replied.get(pane_id)
+        if not replied:
+            return False
+        wanted = text.strip()
+        for item in replied:
+            when, said = item
+            if said == wanted and (wall is None or float(wall) <= when):
+                replied.remove(item)
+                return True
+        return False
 
     def _handle_activity(self, pane_id: str, entry: dict[str, Any] | None) -> None:
         if entry is None:
@@ -1438,7 +1456,8 @@ class ChannelManager:
                 # A prompt written after the hook fired, and no end line for the hooked
                 # turn before it (an interrupted turn): its text is not coming.
                 self._lose_held(pane_id, head, "the log has no end for the turn")
-        if is_turn_end and source == "log" and text.strip() in self._hook_replied.get(pane_id, ()):
+        if is_turn_end and source == "log" \
+                and self._take_hook_replied(pane_id, text, entry.get("event_wall")):
             # The log's end of a turn whose Stop hook already answered the chat with this
             # same text (_handle_hook_reply): posted once. Arriving late, it is neither the
             # reply to a run armed since nor a turn to mirror.

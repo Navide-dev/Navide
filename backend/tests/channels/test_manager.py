@@ -2589,3 +2589,49 @@ async def test_a_hook_without_its_own_text_is_answered_from_the_log_as_before(en
     _log_end(env, "from the log")
     await _until(lambda: _said(env, "from the log"))
     assert sum("from the log" in t for t in env.tg.texts()) == 1
+
+
+async def test_two_turns_with_the_same_text_are_two_replies_when_the_log_beats_the_second_hook(env: Env) -> None:
+    """Review of a9567fc28: a remembered text must be used up by the log turn end it
+    matches. Kept, the second turn's log end (same words, "好。" twice) was skipped as
+    the first's copy, so when the reader beat that turn's hook nothing closed the second
+    run: the hook then saw a log end with its text and stood aside, and the reply went
+    the slow RUN_WATCH_MAX_S way."""
+    await env.inbound("first")
+    await _delivered(env)
+    _hook_reply(env, "好。")
+    _hook_end(env)
+    await _until(lambda: _said(env, "好。"))
+    _log_end(env, "好。")  # the log's end of the first turn: recognised, and used up
+    await env.inbound("second")
+    env.fake.verdicts["k2"] = {"status": "delivered"}
+    await _until(lambda: env.m._pending.get("pane-1") is not None
+                 and env.m._pending["pane-1"].armed_at is not None)
+    _log_end(env, "好。")  # this time the reader is ahead of the hook
+    await _until(lambda: sum("好。" in t for t in env.tg.texts()) == 2)
+    assert env.m._pending.get("pane-1") is None
+    _hook_reply(env, "好。", log_ended=True)  # app._log_ended_with: the log has this text
+    env.m.on_pane_activity("pane-1", {"event_type": "turn_complete", "text": "好。", "source": "hook",
+                                      "log_ended": True, "ts_monotonic": env.clock() + 1e-6})
+    await asyncio.sleep(0.3)
+    assert sum("好。" in t for t in env.tg.texts()) == 2
+    assert not env.m._await_text.get("pane-1") and env.m._pending.get("pane-1") is None
+
+
+async def test_a_log_end_stamped_after_the_hook_is_not_its_copy(env: Env) -> None:
+    """The same words again, but the hooked turn's log end never came (an interrupted
+    turn): the next turn's end is stamped after that hook fired, so it is not taken for
+    the copy and answers its own run."""
+    await env.inbound("first")
+    await _delivered(env)
+    _hook_reply(env, "好。")
+    _hook_end(env)
+    await _until(lambda: _said(env, "好。"))
+    await env.inbound("second")
+    env.fake.verdicts["k2"] = {"status": "delivered"}
+    await _until(lambda: env.m._pending.get("pane-1") is not None
+                 and env.m._pending["pane-1"].armed_at is not None)
+    env.m.on_pane_activity("pane-1", {"event_type": "turn_complete", "text": "好。", "source": "log",
+                                      "event_wall": time.time() + 5.0, "ts_monotonic": env.clock() + 1e-6})
+    await _until(lambda: sum("好。" in t for t in env.tg.texts()) == 2)
+    assert env.m._pending.get("pane-1") is None
