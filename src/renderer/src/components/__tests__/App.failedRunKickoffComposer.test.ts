@@ -122,9 +122,13 @@ describe('a failed run leaves no kickoff in an input box', () => {
       return { ok: true }
     })
     const clearedWhile: string[] = []
-    // Claude Code puts the kickoff back a moment after the interrupt key.
+    // Claude Code puts the kickoff back a moment after the interrupt key: at
+    // the next wait, not at once, so the first read still shows the copy drawn
+    // above the box. Tied to the waits, not to a real timer, so a slow runner
+    // sees the same order.
+    let putBackPending = false
     const onInterrupt = vi.fn(async () => {
-      setTimeout(() => { mgr.screen = box(KICKOFF.split('\n').slice(-1)[0]) }, 50)
+      putBackPending = true
       return true
     })
     const log: string[] = []
@@ -153,7 +157,11 @@ describe('a failed run leaves no kickoff in an input box', () => {
       paneTurnCompleteAt: new Map([['pane-mgr', T0 - 20_000]]),
       sleep: async (ms: number) => {
         vi.setSystemTime(Date.now() + ms)
-        await new Promise((r) => setTimeout(r, 10))
+        if (putBackPending) {
+          putBackPending = false
+          mgr.screen = box(KICKOFF.split('\n').slice(-1)[0])
+        }
+        await Promise.resolve()
       },
       onInterrupt,
       backend: { send },
@@ -166,10 +174,12 @@ describe('a failed run leaves no kickoff in an input box', () => {
     })
     await failRunOnKickoff(0, 'wk', 'parked on a permission prompt', false, false, true)
     await watch
-    await vi.waitFor(() => expect(keysTo(send, 's-mgr').filter((k) => k.startsWith('\x15'))).toEqual(composerClearKeys(KICKOFF, 80)), { timeout: 2000 })
+    // clearInterruptedCopy is not awaited by the stop; its log line is its
+    // last step, so once it is there every key it sends has been sent.
+    await vi.waitFor(() => expect(log.some((l) => l.includes('cleared mgr'))).toBe(true), { timeout: 2000 })
+    expect(keysTo(send, 's-mgr').filter((k) => k.startsWith('\x15'))).toEqual(composerClearKeys(KICKOFF, 80))
     expect(onInterrupt).toHaveBeenCalledWith('pane-mgr')
     expect(keysTo(send, 's-mgr')).not.toContain('\r')
     expect(clearedWhile).toEqual([box(KICKOFF.split('\n').slice(-1)[0])])
-    expect(log.some((l) => l.includes('cleared mgr'))).toBe(true)
   })
 })
