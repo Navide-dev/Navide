@@ -955,6 +955,37 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  STOP wants that agent to stay stopped until they type. */
   const stoppedBy = ref<'agent' | 'user' | null>(null)
   watch(isStopped, (stopped) => { if (!stopped) stoppedBy.value = null }, { flush: 'sync' })
+  /** A STOP that was not an agent's whose badge the agent's own next turn has
+   *  since cleared (markAgentTurnStart). The badge is gone, but the messaging
+   *  gate keeps holding queued messages until a person types: see stoppedBy. */
+  const stopHeldForUser = ref(false)
+  // When this composable last issued an interrupt; 0 for a STOP restored from
+  // disk or another window, which has no interrupted turn left to settle.
+  let stoppedAt = 0
+  // Activity stamped this soon after an interrupt still belongs to the turn it
+  // cut off (its last log records, Claude's "[Request interrupted by user]").
+  const STOP_SETTLE_MS = 3_000
+
+  /** The agent began a turn of its own after a STOP: Stop hook feedback, a
+   *  schedule, a delivered message. The badge records the interrupt and must
+   *  not outlive the next turn — left on, it kept Interrupt / Reapply Role /
+   *  Reclaim disabled on a pane that was visibly working (0.2.38). Only the
+   *  badge clears: a STOP that was not an agent's keeps holding the messaging
+   *  gate through stopHeldForUser until a person types. `at` is when the
+   *  activity was recorded. */
+  function markAgentTurnStart(at: number): void {
+    if (!isStopped.value || at - stoppedAt < STOP_SETTLE_MS) return
+    if (stoppedBy.value !== 'agent') stopHeldForUser.value = true
+    isStopped.value = false
+  }
+
+  /** A person typed into the pane: the STOP is over, badge and gate hold both. */
+  function resumeFromStop(): void {
+    if (!isStopped.value && !stopHeldForUser.value) return
+    isStopped.value = false
+    stopHeldForUser.value = false
+    opts?.onUserResume?.()
+  }
 
   const displayStatus = computed<DisplayStatus>(() => {
     if (status.value === 'exited' || status.value === 'error') return status.value
@@ -2420,7 +2451,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
 
   /** Input bookkeeping shared by term.onData and the manual-paste path. */
   function noteUserInput(text: string): void {
-    if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+    resumeFromStop()
     // A clipboard paste is the user putting something in the composer they have
     // not sent yet, so it counts as input for the draft gate exactly like typing.
     lastUserKeyAt.value = Date.now()
@@ -2459,7 +2490,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       if (!inputTransportReady()) return
       noteAnswerKeys(data)
       if (data === '\r' || data === '\n' || data === '\r\n') {
-        if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+        resumeFromStop()
         if (inputBuffer.trim() === '/clear' && opts?.onClear) {
           inputBuffer = ''
           syncDraft()
@@ -2483,10 +2514,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         // the failure this whole gate exists to prevent.
         inputBuffer = inputBuffer.replace(/\s*\S+\s*$/, '')
       } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-        if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+        resumeFromStop()
         inputBuffer += data
       } else if (data.length > 1) {
-        if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+        resumeFromStop()
         // Terminal reports ride this same channel and are not typed text.
         // Dropping escape sequences is not enough for the mouse ones: X10
         // encodes the button and coordinates as three PRINTABLE bytes after
@@ -3091,6 +3122,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       throw new Error('terminal already running')
     }
     isStopped.value = false
+    stopHeldForUser.value = false
     runningLatched.value = false
     turnCompleteAt.value = 0
     // A rebuild/respawn out of AWAITING must not carry the old session's
@@ -3346,7 +3378,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   function submitAsTyped(): boolean {
     if (_stdinGated || isDisposed) return false
     if (!pasteText('\r', HUMAN_KEY)) return false
-    if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+    resumeFromStop()
     inputBuffer = ''
     syncDraft()
     return true
@@ -3369,6 +3401,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // interrupt that never left.
     if (!inputTransportReady()) return false
     stoppedBy.value = by
+    stoppedAt = Date.now()
+    stopHeldForUser.value = false
     isStopped.value = true
     const reply = await terminalPort.interrupt(sessionId.value)
     // wsClient resolves an `ok: false` rather than rejecting it, so a refusal
@@ -3566,6 +3600,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     displayStatus,
     liveStatus,
     stoppedBy,
+    stopHeldForUser,
+    markAgentTurnStart,
     awaitingKind,
     startingStartedAt,
     startingAgeMs,
