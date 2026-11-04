@@ -12,10 +12,10 @@ p="${1:-}"; need_platform "$p"; f="${2:-}"; log="${3:-}"; tot="${4:-0}"; HI="${H
 st="${5:-running}"; hi=0; lo=0; since=$(date +%s); warned=0; [ "$tot" -gt 3600 ] && warned=1
 if [ "$p" = linux ]; then
   alive() { "$HERE/gsh.sh" linux 'kill -0 $(cat wfull.pid) 2>/dev/null && echo y' 2>/dev/null | grep -q y; }
-  section() { "$HERE/gsh.sh" linux 'grep -h "^===" fpre.out fpost.out 2>/dev/null | tail -1' 2>/dev/null; }
+  section() { "$HERE/gsh.sh" linux 'grep -h "^===" fpre.out fmid.out fpost.out 2>/dev/null | tail -1' 2>/dev/null; }
 else
   alive() { "$HERE/gsh.sh" windows "if (Get-Process -Id ([int](Get-Content \$env:USERPROFILE\\wh\\wfull.pid)) -EA 0) { 'y' }" 2>/dev/null | grep -q y; }
-  section() { "$HERE/gsh.sh" windows "(Select-String -Path \$env:USERPROFILE\\wh\\fpre.out,\$env:USERPROFILE\\wh\\fpost.out -Pattern '^===' -EA 0 | Select -Last 1).Line" 2>/dev/null | tr -d '\r'; }
+  section() { "$HERE/gsh.sh" windows "(Select-String -Path \$env:USERPROFILE\\wh\\fpre.out,\$env:USERPROFILE\\wh\\fmid.out,\$env:USERPROFILE\\wh\\fpost.out -Pattern '^===' -EA 0 | Select -Last 1).Line" 2>/dev/null | tr -d '\r'; }
 fi
 while [ "$st" = paused ] || alive; do
   l="$(tail -1 "$f" | awk '{print $2}')"; i="${l%.*}"
