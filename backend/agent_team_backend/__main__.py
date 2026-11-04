@@ -201,7 +201,23 @@ def _watch_parent_for_shutdown(
         time.sleep(interval_s)
 
 
+def _utf8_stdio() -> None:
+    """Write stdout and stderr as UTF-8 whatever the console code page says.
+
+    Electron reads both through pipes, where a frozen Python on Windows encodes
+    with the ANSI code page (cp1252 on an English install). A profile path that
+    page cannot spell, such as C:\\Users\\測試員, then raised UnicodeEncodeError on
+    the first print of the log path and the backend exited before serving.
+    Electron decodes the chunks as UTF-8, so this also makes them read right.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def main() -> int:
+    _utf8_stdio()
     parser = argparse.ArgumentParser(prog="navide-backend")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 = pick a free port")
