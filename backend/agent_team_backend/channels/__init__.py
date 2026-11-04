@@ -576,6 +576,7 @@ async def start() -> None:
         manager = ChannelManager(ChannelStore(app.database), default_seams())
         _manager = manager
         app.pane_activity_listeners.append(manager.on_pane_activity)
+        app.hook_reply_listeners.append(manager.on_hook_reply)
         app.pane_prompt_listeners.append(manager.mirror.on_local_prompt)
         agent_messaging.pane_listeners.append(manager.mirror.on_registry)
         agent_messaging.message_row_listeners.append(manager.mirror.on_message_rows)
@@ -602,6 +603,7 @@ async def stop() -> None:
 
     for registry, hook in (
         (app.pane_activity_listeners, manager.on_pane_activity),
+        (app.hook_reply_listeners, manager.on_hook_reply),
         (app.pane_prompt_listeners, manager.mirror.on_local_prompt),
         (agent_messaging.pane_listeners, manager.mirror.on_registry),
         (agent_messaging.message_row_listeners, manager.mirror.on_message_rows),
