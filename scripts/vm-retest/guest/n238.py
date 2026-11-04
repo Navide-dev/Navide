@@ -152,10 +152,14 @@ elif phase == "reclaim":
     RULES.unlink()
 elif phase == "browser":
     qa, qb = pane_url(st["qa"]), pane_url(st["qb"]); sp = "shared-" + _s.token_hex(3)
-    page = "data:text/html," + "<h1>t</h1><p>static text</p><button id=b onclick=\"this.textContent='clicked'\">Press</button><input aria-label=name><div id=r><a href=#x>link</a></div>"
+    # The plugin only loads http(s) URLs: serve the test page from a throwaway local server (PID recorded, ended below).
+    pd = ROOTP + "/browser-page"; os.makedirs(pd, exist_ok=True)
+    open(pd + "/t.html", "w").write("<h1>t</h1><p>static text</p><button id=b onclick=\"this.textContent='clicked'\">Press</button><input aria-label=name><div id=r><a href=#x>link</a></div>")
+    srv = subprocess.Popen([sys.executable, "-m", "http.server", "8952", "--bind", "127.0.0.1", "--directory", pd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(1)
+    page = "http://127.0.0.1:8952/t.html"; say("page server pid", srv.pid)
     say("list (qa)", json.dumps(mcp(qa, "browser_list", {}))[:300])
-    o = mcp(qa, "browser_open", {"space": sp, "url": "http://127.0.0.1:8951/"}); say("open qa", json.dumps(o)[:300])
-    say("goto data page", json.dumps(mcp(qa, "browser_act", {"space": sp, "action": "goto", "url": page}))[:200])
+    o = mcp(qa, "browser_open", {"space": sp, "url": page}); say("open qa", json.dumps(o)[:300])
+    say("goto page", json.dumps(mcp(qa, "browser_act", {"space": sp, "action": "goto", "url": page}))[:200])
     full = mcp(qa, "browser_snapshot", {"space": sp}); say("snapshot default", json.dumps(full)[:600])
     inter = mcp(qa, "browser_snapshot", {"space": sp, "filter": "interactive"}); say("snapshot interactive", json.dumps(inter)[:600])
     ref = (re.findall(r"@\d+", json.dumps(inter)) or ["@0"])[0]
@@ -167,7 +171,9 @@ elif phase == "browser":
         L = mcp(qb, "browser_list", {}); s = json.dumps(L)
         return [x for x in (L.get("spaces") or L.get("tabs") or L.get("views") or []) if sp in json.dumps(x)] or s[:400]
     say("space after handoff", spc())
+    say("qb open same space name", json.dumps(mcp(qb, "browser_open", {"space": sp}))[:400])
     say("qb take_over", json.dumps(mcp(qb, "browser_take_over", {"space": sp, "note": "qb wants to continue", "timeoutMs": 3000}))[:300])
     say("space after qb take_over", spc())
     say("qb finish", json.dumps(mcp(qb, "browser_finish", {"space": sp, "note": "qb done"}))[:300])
     say("RESULT browser space after qb finish", spc())
+    srv.terminate(); srv.wait(10); say("page server ended", srv.pid)
