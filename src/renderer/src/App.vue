@@ -84,7 +84,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -17076,12 +17076,9 @@ backend.on('agent.activity', (raw) => {
         paneTurnStartedAt.set(ev.pane_id, Date.now())
       }
       paneLastActiveAt.set(ev.pane_id, Date.now())
-      // A turn the agent started on its own ends a STOP badge. A user record is
-      // not that: it may be the interrupt's own "[Request interrupted by user]".
-      if (ev.detail !== 'user' && ev.detail !== 'prompt' && ev.detail !== 'user_message') {
-        const at = ev.timestamp ? Date.parse(ev.timestamp) : NaN
-        paneRefs[ev.pane_id]?.markAgentTurnStart?.(Number.isNaN(at) ? Date.now() : at)
-      }
+      // A turn the agent started on its own ends a STOP badge, user records
+      // included: see agentTurnActivityAt.
+      paneRefs[ev.pane_id]?.markAgentTurnStart?.(agentTurnActivityAt(ev.timestamp, Date.now()))
       // The loop reads a stricter clock; see activityMeansWorking for why.
       if (activityMeansWorking(ev.detail ?? '')) paneLastWorkingAt.set(ev.pane_id, Date.now())
     }
