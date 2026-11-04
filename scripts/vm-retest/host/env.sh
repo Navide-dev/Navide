@@ -31,7 +31,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUEST_DIR="$(cd "$HERE/../guest" && pwd)"
 
 # ssh options for throwaway test guests: their host keys change on every snapshot revert
-SSH_OPTS=(-o BatchMode=yes -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=no
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15 -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=no
           -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o IdentitiesOnly=yes -i "$SSH_KEY")
 [ -n "$VM_HOST" ] && SSH_OPTS+=(-o "ProxyJump=$VM_HOST")
 

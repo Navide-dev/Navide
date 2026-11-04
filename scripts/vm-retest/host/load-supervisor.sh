@@ -11,12 +11,20 @@ p="${1:-}"; need_platform "$p"; f="${2:-}"; log="${3:-}"; tot="${4:-0}"; HI="${H
 [ -f "$f" ] && [ -n "$log" ] || die "usage: load-supervisor.sh <linux|windows> <load file> <log> [paused s]"
 st="${5:-running}"; hi=0; lo=0; since=$(date +%s); warned=0; [ "$tot" -gt 3600 ] && warned=1
 if [ "$p" = linux ]; then
-  alive() { "$HERE/gsh.sh" linux 'kill -0 $(cat wfull.pid) 2>/dev/null && echo y' 2>/dev/null | grep -q y; }
+  probe() { "$HERE/gsh.sh" linux 'kill -0 $(cat wfull.pid) 2>/dev/null && echo y || echo n' 2>/dev/null; }
   section() { "$HERE/gsh.sh" linux 'grep -h "^===" fpre.out fmid.out fpost.out 2>/dev/null | tail -1' 2>/dev/null; }
 else
-  alive() { "$HERE/gsh.sh" windows "if (Get-Process -Id ([int](Get-Content \$env:USERPROFILE\\wh\\wfull.pid)) -EA 0) { 'y' }" 2>/dev/null | grep -q y; }
+  probe() { "$HERE/gsh.sh" windows "if (Get-Process -Id ([int](Get-Content \$env:USERPROFILE\\wh\\wfull.pid)) -EA 0) { 'y' } else { 'n' }" 2>/dev/null | tr -d '\r'; }
   section() { "$HERE/gsh.sh" windows "(Select-String -Path \$env:USERPROFILE\\wh\\fpre.out,\$env:USERPROFILE\\wh\\fmid.out,\$env:USERPROFILE\\wh\\fpost.out -Pattern '^===' -EA 0 | Select -Last 1).Line" 2>/dev/null | tr -d '\r'; }
 fi
+# alive: the guest answered and wfull.py runs. An unanswered probe is not an end: the VM must still be on (vm.sh state),
+# otherwise stop with a VM-gone line instead of a normal "wfull ended".
+alive() {
+  local r; r="$(probe)"
+  case "$r" in *y*) return 0 ;; *n*) return 1 ;; esac
+  if [ "$("$HERE/vm.sh" "$p" state)" != running ]; then echo "VM NOT RUNNING $(date +%T) (guest gone; total pause ${tot}s)" >> "$log"; exit 1; fi
+  return 0
+}
 while [ "$st" = paused ] || alive; do
   l="$(tail -1 "$f" | awk '{print $2}')"; i="${l%.*}"
   if [ "$i" -ge "$HI" ]; then hi=$((hi+1)); else hi=0; fi
@@ -25,7 +33,8 @@ while [ "$st" = paused ] || alive; do
     s="$(section)"; "$HERE/vm.sh" "$p" pause; st=paused; since=$(date +%s)
     echo "pause $(date +%T) load(1m) $(tail -6 "$f" | awk '{print $2}' | tr '\n' ' ')| in progress: $s (re-run it)" >> "$log"
   elif [ "$st" = paused ] && [ "$lo" -ge 24 ]; then
-    "$HERE/vm.sh" "$p" unpause; st=running; tot=$((tot + $(date +%s) - since))
+    if ! "$HERE/vm.sh" "$p" unpause; then echo "UNPAUSE FAILED $(date +%T) (VM state: $("$HERE/vm.sh" "$p" state))" >> "$log"; exit 1; fi
+    st=running; tot=$((tot + $(date +%s) - since))
     echo "resume $(date +%T) load(1m) $(tail -1 "$f" | awk '{print $2, $3, $4}') | paused total ${tot}s" >> "$log"
   fi
   if [ "$warned" = 0 ] && [ "$st" = paused ] && [ $((tot + $(date +%s) - since)) -gt 3600 ]; then
