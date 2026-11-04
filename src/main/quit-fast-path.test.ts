@@ -13,6 +13,12 @@ type Listener = (...args: never[]) => unknown
 const appListeners: Array<[string, Listener]> = []
 const ipcListeners = new Map<string, Listener>()
 const windowSends: Array<[string, unknown]> = []
+// The quit prompt stays on screen until a test resolves it.
+const dialogState = vi.hoisted(() => ({
+  prompts: 0,
+  focuses: 0,
+  answer: null as null | ((value: { response: number; checkboxChecked: boolean }) => void),
+}))
 
 // index.ts runs the Linux keyring preflight at import; never spawn dbus-send here.
 vi.mock('./linuxKeyring', () => ({ applyLinuxKeyringPreflight: () => false }))
@@ -37,6 +43,7 @@ vi.mock('electron', () => {
     static getAllWindows(): unknown[] {
       return [{
         isDestroyed: () => false,
+        focus: () => { dialogState.focuses++ },
         webContents: {
           send: (channel: string, arg: unknown) => { windowSends.push([channel, arg]) },
         },
@@ -52,7 +59,10 @@ vi.mock('electron', () => {
     // New frame-asset registration runs at module evaluation; tests only need it inert.
     protocol: { registerSchemesAsPrivileged: () => {}, handle: () => {}, unhandle: () => {} },
     dialog: {
-      showMessageBox: () => Promise.resolve({ response: 0 }),
+      showMessageBox: () => {
+        dialogState.prompts++
+        return new Promise((resolve) => { dialogState.answer = resolve })
+      },
       showOpenDialog: () => Promise.resolve({ canceled: true, filePaths: [] }),
     },
     ipcMain: {
@@ -100,5 +110,41 @@ describe('before-quit with nothing running', () => {
 
     expect(preventDefault).not.toHaveBeenCalled()
     expect(windowSends.filter(([channel]) => channel === QUIT_PROGRESS_CHANNEL)).toEqual([])
+  })
+})
+
+describe('before-quit while the quit prompt is open', () => {
+  beforeEach(() => {
+    appListeners.length = 0
+    ipcListeners.clear()
+    windowSends.length = 0
+    dialogState.prompts = 0
+    dialogState.focuses = 0
+    dialogState.answer = null
+    vi.resetModules()
+  })
+
+  it('a second quit request focuses the open prompt instead of opening another', { timeout: 60_000 }, async () => {
+    await import('./index')
+    const setQuitConfirm = ipcListeners.get('app:setQuitConfirm') as (event: unknown, cfg: unknown) => void
+    setQuitConfirm({}, { enabled: true })
+    const beforeQuit = appListeners.find(([event]) => event === 'before-quit')![1] as (event: unknown) => Promise<unknown>
+
+    const first = beforeQuit({ preventDefault: vi.fn() })
+    await vi.waitFor(() => expect(dialogState.prompts).toBe(1))
+    const secondPreventDefault = vi.fn()
+    // Not awaited: before the fix this second request opened its own prompt
+    // and waited on it.
+    void beforeQuit({ preventDefault: secondPreventDefault })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(dialogState.prompts).toBe(1)
+    expect(secondPreventDefault).toHaveBeenCalled()
+    expect(dialogState.focuses).toBe(1)
+
+    // Cancel the one prompt: the app stays open.
+    dialogState.answer!({ response: 1, checkboxChecked: false })
+    await first
+    expect(dialogState.prompts).toBe(1)
   })
 })
