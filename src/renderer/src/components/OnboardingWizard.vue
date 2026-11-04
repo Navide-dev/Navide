@@ -251,6 +251,11 @@ const activePermission = computed<TccPermissionKey | null>(() =>
 // ── Footer ────────────────────────────────────────────────────────────────────
 async function installMissing(deps: OnboardDep[]): Promise<void> {
   installOwner.value = deps[0]?.id ?? ''
+  // The cards hold what was detected when the wizard opened: a tool installed
+  // outside Navide since then (Node from nodejs.org) would be installed again.
+  // Re-detect first, and plan from the fresh entries.
+  await ob.refresh({ fresh: true })
+  deps = deps.map((d) => ob.deps.value.find((x) => x.id === d.id) ?? d)
   // In list order, `brew install node` runs before Homebrew exists and exits
   // 127. orderInstalls pulls each prerequisite ahead of whatever needs it —
   // the helper existed already but nothing was calling it.
