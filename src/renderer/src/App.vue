@@ -2977,6 +2977,7 @@ function messagingHoldKey(
     paneRefs[paneId]?.displayStatus as string | undefined,
     paneRefs[paneId]?.liveStatus as string | undefined,
     paneRefs[paneId]?.stoppedBy as string | null | undefined,
+    !!paneRefs[paneId]?.stopHeldForUser,
   )
   // A question passes deliberately. Those panes were already reaching this gate
   // as 'idle' (a turn ending on a question, or an AskUserQuestion box the badge
@@ -16923,6 +16924,12 @@ backend.on('agent.activity', (raw) => {
         paneTurnStartedAt.set(ev.pane_id, Date.now())
       }
       paneLastActiveAt.set(ev.pane_id, Date.now())
+      // A turn the agent started on its own ends a STOP badge. A user record is
+      // not that: it may be the interrupt's own "[Request interrupted by user]".
+      if (ev.detail !== 'user' && ev.detail !== 'prompt' && ev.detail !== 'user_message') {
+        const at = ev.timestamp ? Date.parse(ev.timestamp) : NaN
+        paneRefs[ev.pane_id]?.markAgentTurnStart?.(Number.isNaN(at) ? Date.now() : at)
+      }
       // The loop reads a stricter clock; see activityMeansWorking for why.
       if (activityMeansWorking(ev.detail ?? '')) paneLastWorkingAt.set(ev.pane_id, Date.now())
     }
