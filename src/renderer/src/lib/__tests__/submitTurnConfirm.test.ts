@@ -201,7 +201,8 @@ describe('injectText never presses an extra Enter it cannot justify', () => {
   })
 
   it('decides the turn watch per vendor and per mid-turn', () => {
-    expect(fn).toContain('watchTurn: shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter })')
+    expect(fn).toContain('const watchTurn = shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter })')
+    expect(fn).toContain('watchTurn,')
   })
 })
 

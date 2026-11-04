@@ -98,6 +98,8 @@ async function loadStart(opts: StartOpts = {}) {
     activateStage: vi.fn(async () => {}),
     startGlobalManagerRouter: vi.fn(),
     pipelineDag: opts.dag ?? linearPipelineDag(() => pipeline.workspacePath).dag,
+    runEndingSlots: new Set<string>(),
+    runPaneSentAt: new Map<string, number>(),
   }
   const onPipelineStart = new Function(...Object.keys(deps), code)(...Object.values(deps)) as (
     p: { task: string; workspacePath: string; pipelineId?: string },
@@ -277,18 +279,23 @@ describe('the Run button shows the refusal', () => {
 })
 
 describe('the sidebar Abort asks first (Pipeline UX D4)', () => {
-  async function loadAbort(confirmed: boolean) {
+  async function loadAbort(confirmed: boolean, interrupted = false) {
     const src = block('async function clearStoredPipelineRun(', '\n// ─────────── Switch / close workspace')
     const { code } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${src}\nreturn { onPipelineUserAbort }`, 'AppAbort.ts', { loader: 'ts' })
     const confirm = vi.fn(async (_message: string, _opts: { title?: string; danger?: boolean }) => confirmed)
     const onPipelineAbort = vi.fn(async () => {})
+    const sendQuiet = vi.fn(async () => ({}))
+    const onWorkspaceCheck = vi.fn(async () => {})
     const deps: Record<string, unknown> = {
       notifyRestore: { confirm },
       i18n: { global: { t: (key: string) => key } },
       resetConfirmDialog,
       panesInView: { value: [] },
-      sendQuiet: vi.fn(),
-      existingProject: { value: null },
+      sendQuiet,
+      pipeline: { state: interrupted ? 'idle' : 'running' },
+      applyProjectPaths: () => {},
+      onWorkspaceCheck,
+      existingProject: { value: interrupted ? { state: 'running', workspacePath: '/tmp/ws' } : null },
       currentWorkspace: { value: '/tmp/ws' },
       buildExistingProjectInfo: () => null,
       pipelineLog: () => {},
@@ -296,8 +303,18 @@ describe('the sidebar Abort asks first (Pipeline UX D4)', () => {
       onPipelineAbort,
     }
     const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as { onPipelineUserAbort: () => Promise<void> }
-    return { api, confirm, onPipelineAbort }
+    return { api, confirm, onPipelineAbort, sendQuiet, onWorkspaceCheck }
   }
+
+  it('ends an interrupted run (stored running, driven by no window) through the backend', async () => {
+    const t = await loadAbort(true, true)
+    await t.api.onPipelineUserAbort()
+    expect(t.onPipelineAbort).not.toHaveBeenCalled()
+    expect(t.sendQuiet).toHaveBeenCalledWith('pipeline.abort', {
+      workspace_path: '/tmp/ws', reason: 'user', interrupted_only: true,
+    })
+    expect(t.onWorkspaceCheck).toHaveBeenCalledWith('/tmp/ws')
+  })
 
   it('confirms before aborting, saying the run pauses and can be resumed', async () => {
     const t = await loadAbort(true)

@@ -159,6 +159,150 @@ class TestAccept:
         assert env.store.events(env.trigger["id"])[0]["outcome"] == "start-failed"
 
 
+class TestStartUnderStall:
+    """0.2.37 Linux VM (70e669130), 18:37–18:46: the backend's event loop stalled
+    2–8 s at a time. A 2 s window probe timed out with the window open (503
+    no-window, which GitHub does not redeliver), and ui.pipeline.start went
+    unanswered for 60 s (ui_action_timeout) while the window went on starting."""
+
+    async def test_the_probe_waits_out_the_worst_measured_stall(self, monkeypatch) -> None:
+        from agent_team_backend.mcp_server import server as mcp
+
+        waited: list[float] = []
+
+        async def probe(workspace: str, timeout: float) -> bool:
+            waited.append(timeout)
+            return True
+
+        monkeypatch.setattr(mcp, "_probe_window", probe)
+        assert await svc.LiveWindow().probe(WS) is True
+        assert waited and waited[0] >= 8.0
+
+    async def test_a_run_the_window_started_before_its_answer_timed_out_is_started(self, env) -> None:
+        async def start(*_: Any) -> dict[str, Any]:
+            run_started(env)
+            return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        event = env.store.events(env.trigger["id"])[0]
+        assert (event["outcome"], event["detail"]) == ("started", "late-answer")
+        assert WS in env.service._active
+
+    async def test_a_run_that_comes_up_after_the_timeout_is_adopted(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+
+        async def start(*_: Any) -> dict[str, Any]:
+            asyncio.get_running_loop().call_later(0.05, run_started, env)
+            return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        event = env.store.events(env.trigger["id"])[0]
+        assert (event["outcome"], event["detail"]) == ("started", "late-answer")
+        # Adopted under this trigger, not taken for someone else's run.
+        assert env.service._active[WS]["trigger_id"] == env.trigger["id"]
+
+    async def test_a_run_adopted_after_the_timeout_is_never_unattended(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.trigger = {**env.trigger, "unattended": True}
+
+        async def start(*_: Any) -> dict[str, Any]:
+            asyncio.get_running_loop().call_later(0.05, run_started, env)
+            return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        assert env.service._active[WS]["unattended"] == 0
+        event = env.store.events(env.trigger["id"])[0]
+        assert (event["outcome"], event["detail"]) == ("started", "late-answer")
+        assert WS not in env.service._late
+
+    async def test_a_late_run_left_on_a_prompt_is_still_stopped(self, env, monkeypatch) -> None:
+        """Not unattended, its panes ask before every tool call: the watchdog
+        and the run cap still apply, so it never hangs on a prompt for good."""
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.trigger = {**env.trigger, "unattended": True}
+
+        async def start(*_: Any) -> dict[str, Any]:
+            asyncio.get_running_loop().call_later(0.05, run_started, env)
+            return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+
+        env.window.start = start
+        await accept(env)
+        await settle(env)
+        assert CLAUDE_BYPASS not in str(launch(env, "claude", pane="p"))
+        clock = Clock(env, monkeypatch)
+        env.service._active[WS]["started_at"] = clock.now
+        env.window.awaiting = {"p"}
+        await env.service.tick()
+        clock.now += 30 * 60
+        await env.service.tick()
+        assert "approval-timeout" in outcomes(env) and env.service._active == {}
+
+    async def test_a_run_adopted_in_time_keeps_the_unattended_setting(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.trigger = {**env.trigger, "unattended": True}
+
+        async def start(*_: Any) -> dict[str, Any]:
+            run_started(env)
+            return {"ok": True}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        assert env.service._active[WS]["unattended"] == 1
+
+    @pytest.mark.parametrize("timed_out", [False, True])
+    async def test_another_pipeline_started_while_armed_is_not_adopted(self, env, monkeypatch, timed_out) -> None:
+        monkeypatch.setattr(svc, "LATE_START_S", 0.1)
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.trigger = {**env.trigger, "unattended": True}
+
+        def by_hand() -> None:
+            env.service.run_started(
+                SimpleNamespace(workspace_path=WS, id="manual", log_file_name="runs/m/pipeline.log", pipeline_id="other"),
+                child=False,
+            )
+
+        async def start(*_: Any) -> dict[str, Any]:
+            if timed_out:
+                asyncio.get_running_loop().call_later(0.02, by_hand)
+                return {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+            by_hand()
+            return {"ok": False, "error_code": "not-started"}
+
+        env.window.start = start
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        assert WS not in env.service._active
+        assert env.store.open_runs() == []
+        assert env.store.events(env.trigger["id"])[0]["outcome"] == "start-failed"
+
+    async def test_a_run_that_never_comes_up_is_still_a_failed_start(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc, "LATE_START_S", 0.05)
+        monkeypatch.setattr(svc, "LATE_START_POLL_S", 0.01)
+        env.window.answer = {"ok": False, "error_code": "ui_action_timeout", "error": "no answer"}
+        assert (await accept(env))[0] == 202
+        await settle(env)
+        event = env.store.events(env.trigger["id"])[0]
+        assert (event["outcome"], event["detail"]) == ("start-failed", "ui_action_timeout")
+        assert WS not in env.service._armed and WS not in env.service._starting
+
+    async def test_another_refusal_is_not_waited_on(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc, "LATE_START_S", 60.0)
+        env.window.answer = {"ok": False, "error_code": "not-started"}
+        assert (await accept(env))[0] == 202
+        await asyncio.wait_for(settle(env), 1.0)
+        assert env.store.events(env.trigger["id"])[0]["outcome"] == "start-failed"
+
+
 class TestBinding:
     @pytest.mark.parametrize("agent", ["codex", "copilot", "qwen", "kimi", "cursor", ""])
     async def test_only_claude_runs(self, env, agent) -> None:
@@ -193,8 +337,11 @@ class TestBinding:
         assert env.service.binding_problem(env.trigger) == "vendor-refused"
 
 
-def run_started(env, project_id: str = "run1", child: bool = False) -> None:
-    env.service.run_started(SimpleNamespace(workspace_path=WS, id=project_id, log_file_name="runs/x/pipeline.log", pipeline_id=PIPE), child=child)
+def run_started(env, project_id: str = "run1", child: bool = False, ended: str = "finished") -> None:
+    env.service.run_started(
+        SimpleNamespace(workspace_path=WS, id=project_id, log_file_name="runs/x/pipeline.log", pipeline_id=PIPE),
+        child=child, ended=ended,
+    )
 
 
 async def started_run(env) -> None:
@@ -632,6 +779,61 @@ class TestUnattendedOnEveryPath:
         assert got == "claude --permission-mode default"
 
 
+class TestInterruptedEndsUnattended:
+    """A Reload or crash interrupts the run and Resume carries the same run on,
+    still working from what the webhook sent: from then on a person is asked."""
+
+    @pytest.fixture(autouse=True)
+    def posix(self, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+
+    @staticmethod
+    def relaunch(service: Any, path: str) -> tuple[Any, str]:
+        if path == "session":
+            return reopen(service, f"claude {CLAUDE_BYPASS} --resume {SESSION}"), "new-id"
+        if path == "pane":
+            return reopen(service, f"claude {CLAUDE_BYPASS} --resume {SESSION}", pane="first"), "first"
+        return reopen(service, f"claude {CLAUDE_BYPASS}", pane="next-stage", origin="pipeline"), "next-stage"
+
+    @pytest.mark.parametrize("restart", [False, True])
+    @pytest.mark.parametrize("path", ["session", "pane", "active"])
+    async def test_no_pane_gets_the_bypass_back(self, env, path, restart) -> None:
+        await run_with_session(env, unattended=True)
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        env.window.status = {"active": True, "state": "running", "gate": {}}  # resumed
+        await env.service.tick()
+        service = restarted(env) if restart else env.service
+        got, pane = self.relaunch(service, path)
+        assert CLAUDE_BYPASS not in got and "--permission-mode default" in got
+        assert service.launch_env(pane) == {}
+
+    @pytest.mark.parametrize("path", ["session", "pane", "active"])
+    async def test_a_pane_restored_before_the_watchdog_looks_asks_too(self, env, monkeypatch, path) -> None:
+        # Reload, then the panes come back at once: the watchdog has not run yet.
+        await run_with_session(env, unattended=True)
+        project = SimpleNamespace(state="running", workspace_path=WS)
+        env.service._project = lambda _workspace: project
+        monkeypatch.setattr(svc.pipeline_liveness, "is_interrupted", lambda p: p is project)
+        got, pane = self.relaunch(env.service, path)
+        assert CLAUDE_BYPASS not in got and env.service.launch_env(pane) == {}
+        monkeypatch.setattr(svc.pipeline_liveness, "is_interrupted", lambda _p: False)  # resumed since
+        got, _ = self.relaunch(restarted(env), path)
+        assert CLAUDE_BYPASS not in got
+
+    async def test_resume_noting_it_ends_unattended_before_any_pane_starts(self, env) -> None:
+        await run_with_session(env, unattended=True)
+        env.service.note_interrupted(WS)
+        got, _ = self.relaunch(restarted(env), "active")
+        assert CLAUDE_BYPASS not in got
+        assert outcomes(env).count("interrupted") == 1
+
+    async def test_a_run_never_interrupted_keeps_it(self, env) -> None:
+        await run_with_session(env, unattended=True)
+        got, _ = self.relaunch(restarted(env), "active")
+        assert got == f"claude {CLAUDE_BYPASS}"
+
+
 class TestNeverUsed:
     def test_a_resume_with_no_webhook_history_is_the_same_object(self, env) -> None:
         for command in (f"claude {CLAUDE_BYPASS} --resume {SESSION}", f"claude {CLAUDE_BYPASS} --continue",
@@ -681,6 +883,11 @@ async def watched(env, monkeypatch):
 
 def outcomes(env) -> list[str]:
     return [e["outcome"] for e in env.store.events(env.trigger["id"])]
+
+
+def run_states(env) -> list[str]:
+    with env.store.db.transaction() as cur:
+        return [row["state"] for row in cur.execute("SELECT state FROM webhook_runs ORDER BY started_at, rowid")]
 
 
 class TestWatchdog:
@@ -762,6 +969,78 @@ class TestWatchdog:
         await env.service.tick()
         assert "interrupted" in outcomes(env) and "abort" not in env.window.calls
 
+    async def test_a_restart_does_not_record_the_same_interruption_again(self, watched) -> None:
+        # Review of 0.2.37: what was noted lived in memory only, so the first
+        # tick after a restart wrote a second "interrupted" row for the run.
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        again = restarted(env)
+        await again.tick()
+        assert outcomes(env).count("interrupted") == 1
+        assert again._still_unattended(watched.run["id"]) is False
+
+    async def test_a_later_run_of_the_trigger_is_still_recorded_interrupted(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        env.service.finish_run(WS, "interrupted")
+        await started_run(env)
+        again = restarted(env)
+        await again.tick()
+        assert outcomes(env).count("interrupted") == 2
+
+    async def test_a_resumed_interrupted_run_ends_with_its_real_state(self, watched) -> None:
+        # A Reload interrupts the run, Resume carries the same run on to the end.
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        await env.service.tick()
+        assert outcomes(env).count("interrupted") == 1
+        env.window.status = {"active": True, "state": "running", "gate": {}}
+        await env.service.tick()
+        env.window.status = {"active": False, "state": "completed"}
+        await env.service.tick()
+        assert run_states(env) == ["completed"] and env.service._active == {}
+
+    async def test_an_aborted_interrupted_run_is_recorded_aborted(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        env.window.status = {"active": False, "state": "aborted"}
+        await env.service.tick()
+        assert run_states(env) == ["aborted"]
+
+    @pytest.mark.parametrize("state", ["running", "idle", "suspended", None])
+    async def test_an_inactive_run_without_an_end_state_closes_as_finished(self, watched, state) -> None:
+        # A row closed as 'running' would be picked up again as an open run.
+        env = watched.env
+        env.window.status = {"active": False, "state": state}
+        await env.service.tick()
+        assert run_states(env) == ["finished"] and env.store.open_runs() == []
+
+    async def test_an_interrupted_run_a_new_run_replaces_stays_interrupted(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        # The open row does not hold the next webhook back.
+        env.window.hold = asyncio.Event()
+        assert await accept(env) == (202, 0, "accepted")
+        await asyncio.sleep(0)
+        run_started(env, ended="interrupted")
+        env.window.hold.set()
+        await settle(env)
+        assert run_states(env) == ["interrupted", "running"]
+
+    async def test_an_interrupted_run_nobody_resumes_closes_at_the_cap(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        watched.clock.now += svc.RUN_CAP_S
+        await env.service.tick()
+        assert run_states(env) == ["interrupted"] and env.service._active == {}
+        assert "abort" not in env.window.calls
+
     async def test_a_restart_rebuilds_the_watch_from_the_table(self, watched) -> None:
         env = watched.env
         again = svc.WebhookService(store=env.store, db=env.store.db, window=env.window, pipeline=env.pipelines.get,
@@ -782,6 +1061,92 @@ class TestWatchdog:
         while len(ticks) < 3:
             await asyncio.sleep(0)
         await env.service.stop_watchdog()
+
+
+async def next_webhook_run(env, ended: str) -> None:
+    """The next webhook's run starts before the watchdog looked again."""
+    env.window.hold = asyncio.Event()
+    assert await accept(env) == (202, 0, "accepted")
+    await asyncio.sleep(0)
+    run_started(env, "run2", ended=ended)
+    env.window.hold.set()
+    await settle(env)
+
+
+class TestRunEndStates:
+    """A run's row ends with what the pipeline really came to."""
+
+    @pytest.fixture(autouse=True)
+    def posix(self, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+
+    async def test_an_interrupted_run_aborted_before_the_next_run_records_aborted(self, watched) -> None:
+        # Reload, then MCP pipeline_abort, then the next webhook within a tick.
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        await next_webhook_run(env, ended="aborted")
+        assert run_states(env) == ["aborted", "running"]
+
+    async def test_a_run_that_completed_before_the_next_run_records_completed(self, watched) -> None:
+        await next_webhook_run(watched.env, ended="completed")
+        assert run_states(watched.env) == ["completed", "running"]
+
+    async def test_a_failed_run_resumed_to_the_end_records_completed(self, watched) -> None:
+        # A kickoff parked on a prompt fails the run (stored aborted); the
+        # person answers and resumes it.
+        env = watched.env
+        env.window.status = {"active": False, "state": "aborted"}
+        await env.service.tick()
+        assert run_states(env) == ["aborted"]
+        env.service.run_resumed(WS)
+        assert run_states(env) == ["running"] and env.store.open_runs()[0]["unattended"] == 0
+        env.window.status = {"active": True, "state": "running", "gate": {}}
+        await env.service.tick()
+        env.window.status = {"active": False, "state": "completed"}
+        await env.service.tick()
+        assert run_states(env) == ["completed"] and env.service._active == {}
+
+    async def test_a_resumed_failed_run_never_runs_unattended(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(svc.guard_fail_closed, "unattended_supported", lambda: True)
+        env.store.set_unattended(env.trigger["id"], True)
+        env.trigger = next(t for t in env.store.list() if t["id"] == env.trigger["id"])
+        await started_run(env)
+        assert CLAUDE_BYPASS in launch(env, "claude", pane="first")
+        env.window.status = {"active": False, "state": "aborted"}
+        await env.service.tick()
+        env.service.run_resumed(WS)
+        assert CLAUDE_BYPASS not in launch(env, "claude", pane="next-stage")
+        assert CLAUDE_BYPASS not in launch(env, "claude", pane="first")
+        assert CLAUDE_BYPASS not in reopen(restarted(env), "claude", pane="first", origin="pipeline")
+
+    async def test_resume_reopens_nothing_after_another_run_started(self, watched) -> None:
+        env = watched.env
+        env.window.status = {"active": False, "state": "aborted"}
+        await env.service.tick()
+        run_started(env, "by-hand")  # nobody armed it
+        env.service.run_resumed(WS)
+        assert run_states(env) == ["aborted"] and env.service._active == {}
+
+    async def test_a_reset_ends_the_row_with_what_the_run_came_to(self, watched) -> None:
+        # Restart, Resume of the interrupted run, then a reset while it runs.
+        env = watched.env
+        env.window.status = {"active": False, "state": "interrupted"}
+        await env.service.tick()
+        service = restarted(env)
+        env.window.status = {"active": True, "state": "running", "gate": {}}
+        await service.tick()
+        service.run_reset(WS, "aborted")
+        assert run_states(env) == ["aborted"] and service._active == {}
+
+    def test_the_end_state_of_a_record(self, monkeypatch) -> None:
+        interrupted = SimpleNamespace(state="running")
+        monkeypatch.setattr(svc.pipeline_liveness, "is_interrupted", lambda p: p is interrupted)
+        assert svc.end_state_of(None) == "finished"
+        assert svc.end_state_of(interrupted) == "interrupted"
+        for state, ended in (("running", "aborted"), ("completed", "completed"), ("aborted", "aborted"),
+                             ("idle", "finished"), ("suspended", "finished")):
+            assert svc.end_state_of(SimpleNamespace(state=state)) == ended
 
 
 def test_the_wait_has_bounds(env) -> None:

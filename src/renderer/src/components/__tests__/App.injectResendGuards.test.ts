@@ -27,11 +27,14 @@ async function runKickoffSite(site: string, echo: EchoEvidence | null) {
   )
   const run = new Function(
     'runPipelineKickoff', 'injectPane', 'sleep', 'paneAlive', 'pipelineLog',
-    'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'paneParkedOnPrompt', code,
+    'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'paneParkedOnPrompt',
+    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'watchKickoffAfterFailure', 'runPaneSentAt', code,
   )(
     runPipelineKickoff, injectPane, sleep, () => true, () => {},
     { id: 'pane', stageId: 'stage', kickoffPrompt: 'kickoff' }, { id: 'stage' },
     'kickoff', 'test', MAX_KICKOFF_ATTEMPTS, () => undefined, () => false,
+    // The run is running: both sites check it before each attempt.
+    () => true, { state: 'running' }, false, 0, () => {}, () => {}, new Map(),
   ) as () => ReturnType<typeof runPipelineKickoff>
   const result = await run()
   return { result, injectPane, sleep }
@@ -67,7 +70,7 @@ describe('App uses the executable CLI coordination seams', () => {
     })
 
     it.each([
-      ['missing evidence out-parameter', ', undefined, evidence)', ', undefined)'],
+      ['missing evidence out-parameter', ', undefined, evidence, undefined,', ', undefined, undefined, undefined,'],
       ['missing returned echo', 'echo: evidence.echo', 'echo: undefined'],
     ])('detects a %s regression', async (_name, before, after) => {
       const mutant = kickoffSites[index].replace(before, after)
@@ -79,7 +82,7 @@ describe('App uses the executable CLI coordination seams', () => {
   it('accepts turn text before dispatch and releases deduplication state on teardown', () => {
     const start = source.indexOf('function onTurnCompleteForMessaging(')
     const body = source.slice(start, source.indexOf('\n}\n', start))
-    expect(body.indexOf('turnTextGate.accept(paneId, text, timestamp)')).toBeGreaterThan(-1)
+    expect(body.indexOf('turnTextGate.accept(paneId, text, timestamp, TURN_TEXT_REPLAY_TOLERANCE_MS)')).toBeGreaterThan(-1)
     expect(body.indexOf('turnTextGate.accept(')).toBeLessThan(body.indexOf('const parsed = parseMessages(text)'))
     expect(source).toContain('turnTextGate.delete(paneId)')
   })

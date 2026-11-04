@@ -193,6 +193,8 @@ class WebhookListener:
         self._per_trigger: dict[str, RateLimiter] = {}
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
+        self._sock: socket.socket | None = None
+        self._stopped = False
 
     def update(self, triggers: dict[str, dict[str, Any]]) -> None:
         self._triggers = dict(triggers)
@@ -217,6 +219,7 @@ class WebhookListener:
         # Bound here rather than by uvicorn, which ends the process on a failed
         # bind; a taken port has to reach the user as an error.
         sock = self._bind()
+        self._sock, self._stopped = sock, False
         self.address = sock.getsockname()[:2]
         self.port = self.address[1]
         config = uvicorn.Config(
@@ -235,7 +238,7 @@ class WebhookListener:
             timeout_graceful_shutdown=int(STOP_TIMEOUT_S),
         )
         server = uvicorn.Server(config)
-        thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, name=THREAD_NAME, daemon=True)
+        thread = threading.Thread(target=self._serve, args=(server, sock), name=THREAD_NAME, daemon=True)
         self._server, self._thread = server, thread
         thread.start()
         deadline = time.monotonic() + START_TIMEOUT_S
@@ -245,18 +248,41 @@ class WebhookListener:
                 raise ListenerError("the webhook listener did not start")
             time.sleep(0.01)
 
+    def _serve(self, server: uvicorn.Server, sock: socket.socket) -> None:
+        try:
+            server.run(sockets=[sock])
+        except OSError:
+            if not self._stopped:
+                raise
+            # stop() closed the socket of a start that timed out: the end it meant.
+            log.info("webhook: an abandoned listener thread ended without serving")
+
     def stop(self) -> None:
-        server, thread = self._server, self._thread
+        # Before anything else: a request already queued is refused from here on.
+        self._stopped = True
+        server, thread, sock = self._server, self._thread, self._sock
         if server is not None and thread is not None:
             server.should_exit = True
             thread.join(STOP_TIMEOUT_S + 2)
-        self._server = self._thread = None
+            if thread.is_alive() and sock is not None:
+                # A thread stuck before serving (a start that timed out) would
+                # hold the port, untracked, until it ends. Closing the socket
+                # frees it now, and the thread then cannot serve on it.
+                log.warning("webhook: the listener thread did not end; its socket is closed")
+                sock.close()
+        self._server = self._thread = self._sock = None
         self._audit.flush()
 
     # ── ASGI ─────────────────────────────────────────────────────────────
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] != "http":
+            return
+        if self._stopped:
+            # Nothing is handed over once stop() has begun, whatever thread
+            # this server still runs on.
+            await send({"type": "http.response.start", "status": 503, "headers": [*_SECURITY_HEADERS, (b"content-length", b"0")]})
+            await send({"type": "http.response.body", "body": b""})
             return
         try:
             status, retry_after, body = await self._handle(scope, receive)

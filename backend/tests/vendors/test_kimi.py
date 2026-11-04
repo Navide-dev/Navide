@@ -611,3 +611,13 @@ def test_turns_without_any_boundary_are_one_turn(fake_kimi_home: Path) -> None:
     _write_jsonl(wire, [_usage(1, 0, 1, time=1), _usage(2, 0, 2, time=2)])
     turns = reader.turns_for_session(wire)
     assert [(t.turn_index, t.call_count, t.total, t.prompt_excerpt) for t in turns] == [(1, 2, 6, "")]
+
+
+def test_parse_activity_resumes_after_an_append(fake_kimi_home: Path, monkeypatch) -> None:
+    from tests.activity_resume_support import assert_resumes
+
+    wire = _session(fake_kimi_home, "/x")
+    _write_jsonl(wire, [_prompt("first", time=1), _text_part("one", time=2), _usage(10, 0, 5, time=3)])
+    assert_resumes(KimiLogReader, wire, [
+        _prompt("second", time=4), _text_part("two", time=5), _usage(10, 0, 5, time=6),
+    ], monkeypatch)

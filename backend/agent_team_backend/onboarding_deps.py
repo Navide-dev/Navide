@@ -285,6 +285,13 @@ def _refresh_path_from_login_shell(
     global _path_refreshed_at, _path_probe_answered
     probe = _path_probe_command()
     if probe is None:
+        # No login shell (Windows): the platform's tail list is the registry
+        # PATH and npm's global dir, read fresh each time — cheap enough to
+        # skip the TTL. Without it a CLI installed after Navide started stayed
+        # "missing" until a restart (11-03, codex via `npm install -g`).
+        # npm itself is asked only on a forced pass (an installer just ran):
+        # it costs a node start-up, and only an install changes the answer.
+        _append_path_dirs(_tail_path_dirs() + (_npm_global_bin_dirs() if force else []))
         return
     now = time.monotonic()
     ttl = _PATH_REFRESH_TTL_S if _path_probe_answered else _PATH_RETRY_TTL_S
@@ -335,6 +342,63 @@ def _refresh_path_from_login_shell(
             tail_paths.append(p)
     if new_paths or tail_paths:
         os.environ["PATH"] = os.pathsep.join(new_paths + current_paths + tail_paths)
+
+
+def _append_path_dirs(dirs: list[str]) -> None:
+    """Append the existing dirs among `dirs` that PATH lacks, in order.
+
+    Compared through `normcase`: on Windows `C:\\Tools` and `c:\\tools` are
+    one directory, and the registry and the inherited PATH spell them freely.
+    """
+    current = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+    seen = {os.path.normcase(p) for p in current}
+    added: list[str] = []
+    for p in dirs:
+        key = os.path.normcase(p)
+        if p and key not in seen and os.path.isdir(p):
+            seen.add(key)
+            added.append(p)
+    if added:
+        os.environ["PATH"] = os.pathsep.join(current + added)
+
+
+# `npm prefix -g` is a node start-up (~0.5-1.5s on Windows); a hung npm must
+# not eat the forced pass's budget (see _PATH_PROBE_TIMEOUT_FORCED_S).
+_NPM_PREFIX_TIMEOUT_S = 5.0
+
+
+def _npm_global_bin_dirs() -> list[str]:
+    """The dir `npm install -g` puts CLIs in, as the npm on PATH reports it.
+
+    Windows only (its caller): covers what `%APPDATA%\\npm` and `~/.npmrc`
+    cannot, a prefix set in npm's builtin or global npmrc, or fnm's
+    per-version node dir. POSIX reads the prefix from `~/.npmrc` without a
+    subprocess (`npm_prefix_bins`) and finds nvm through the login shell.
+    Shims sit in the prefix itself on Windows. Best-effort: no npm, a failure,
+    or a relative answer contributes nothing.
+    """
+    npm = osplat.paths.resolve_program("npm")
+    if not npm:
+        return []
+    try:
+        proc = subprocess.run(
+            osplat.paths.launch_argv(npm, ["prefix", "-g"]),
+            # npm prints UTF-8; text=True alone decodes with the ANSI code
+            # page (cp950 on zh-TW), which fails on a non-ASCII user name.
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=_NPM_PREFIX_TIMEOUT_S,
+        )
+    except (subprocess.SubprocessError, OSError, ValueError):
+        return []
+    lines = (proc.stdout or "").strip().splitlines()
+    if proc.returncode != 0 or not lines:
+        return []
+    prefix = lines[-1].strip()
+    # Absolute only, for the reason `npm_prefix_bins` gives; a replaced
+    # (undecodable) character means the path is not the real one.
+    if not os.path.isabs(prefix) or "\ufffd" in prefix:
+        return []
+    return [prefix]
 
 
 def _parse_version(text: str, regex: str) -> str:

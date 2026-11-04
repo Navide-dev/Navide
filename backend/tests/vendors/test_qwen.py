@@ -717,3 +717,11 @@ def test_parse_activity_without_background_work_emits_no_background_events(
     events = reader.parse_activity(f, set())
     assert _qwen_bg_events(events) == []
     assert [e.detail for e in events] == ["user", "assistant", "idle"]
+
+
+def test_parse_activity_resumes_after_an_append(fake_qwen_root: Path, monkeypatch) -> None:
+    from tests.activity_resume_support import assert_resumes
+
+    f = _chat_file(fake_qwen_root)
+    _write_jsonl(f, [_user("u1", text="first"), _assistant("a1")])
+    assert_resumes(QwenLogReader, f, [_user("u2", text="second"), _assistant("a2")], monkeypatch)

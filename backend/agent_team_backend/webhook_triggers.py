@@ -402,6 +402,19 @@ class WebhookStore:
                 (state, int(time.time()), run_id),
             )
 
+    def reopen_run(self, run_id: str) -> None:
+        """A closed run Resume carries on: open again, and never unattended."""
+        with self.db.transaction() as cur:
+            cur.execute(
+                "UPDATE webhook_runs SET state = 'running', ended_at = NULL, unattended = 0 WHERE id = ?",
+                (run_id,),
+            )
+
+    def end_unattended(self, run_id: str) -> None:
+        """For good: an interrupted run is never unattended again."""
+        with self.db.transaction() as cur:
+            cur.execute("UPDATE webhook_runs SET unattended = 0 WHERE id = ?", (run_id,))
+
     def latest_run_of(self, workspace: str, pipeline_ids: Iterable[str]) -> str | None:
         """The last run of any of these pipelines here, whatever became of it."""
         ids = [pipeline_id for pipeline_id in pipeline_ids if pipeline_id]
@@ -420,6 +433,16 @@ class WebhookStore:
         with self.db.transaction() as cur:
             rows = cur.execute("SELECT * FROM webhook_runs WHERE state = 'running'").fetchall()
         return [dict(row) for row in rows]
+
+    def interrupted_open_runs(self) -> set[str]:
+        """Open runs already audited as interrupted: the event names the run."""
+        with self.db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT r.id FROM webhook_runs r WHERE r.state = 'running' AND EXISTS ("
+                " SELECT 1 FROM webhook_events e WHERE e.trigger_id = r.trigger_id"
+                " AND e.outcome = 'interrupted' AND e.detail = r.id)"
+            ).fetchall()
+        return {row["id"] for row in rows}
 
     def approval_timeout_s(self, trigger_id: str) -> int:
         """From the row, deleted triggers too: a run outlives its trigger."""
@@ -467,11 +490,12 @@ class WebhookStore:
         return (row["run_id"], bool(row["unattended"])) if row else None
 
     def run_trigger_unattended(self, run_id: str) -> bool:
-        """Whether the trigger that started this run exists and is unattended now."""
+        """Whether the trigger that started this run exists and is unattended
+        now, and the run itself still is (see end_unattended)."""
         with self.db.transaction() as cur:
             row = cur.execute(
                 "SELECT t.unattended FROM webhook_runs r JOIN webhook_triggers t ON t.id = r.trigger_id"
-                " WHERE r.id = ? AND t.deleted_at IS NULL",
+                " WHERE r.id = ? AND t.deleted_at IS NULL AND r.unattended = 1",
                 (run_id,),
             ).fetchone()
         return bool(row and row["unattended"])

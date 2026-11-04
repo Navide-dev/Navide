@@ -185,8 +185,13 @@ export function growthNeededFor(normalizedLength: number): number {
  *  "[Pasted text #1 +40 lines]" and its variants — and the payload itself is
  *  never drawn. Recognising that summary is how we tell "the paste landed"
  *  apart from "nothing happened" in the one case where neither of the other
- *  two signals can fire. */
-export const PASTE_PLACEHOLDER_RE = /\[pasted?\s+text\b[^\]]*\]/i
+ *  two signals can fire.
+ *
+ *  The spaces are optional: Claude Code skips cells that were already blank
+ *  with a column move (`[Pasted\x1b[11Gtext\x1b[16G#2…`), so the stripped
+ *  clean buffer holds "[Pastedtext#2+58lines]". Requiring a space read a
+ *  landed kickoff as "never appeared", cleared it and pasted it again. */
+export const PASTE_PLACEHOLDER_RE = /\[pasted?\s*text\b[^\]]*\]/i
 
 /** Chars either side of the grown region to search for the placeholder. The
  *  summary can straddle the boundary when the TUI redraws the composer rather
@@ -244,6 +249,20 @@ export function echoEvidence(
   }
   if (grownBy >= growthNeededFor(normalizedLength)) return 'growth'
   return null
+}
+
+/** echoEvidence for one send: the tail counts only inside the `grownBy`
+ *  characters that arrived since it, never in the scrollback before it. A
+ *  kickoff typed a second time found the first attempt's copy, echoed after
+ *  that attempt had given up, and took it for its own. */
+export function echoEvidenceSince(
+  buffer: string,
+  tail: string,
+  grownBy: number,
+  normalizedLength: number,
+): EchoEvidence | null {
+  if (tail && grownBy > 0 && normalizeForMatch(buffer.slice(-grownBy)).includes(tail)) return 'tail'
+  return echoEvidence(buffer, '', grownBy, normalizedLength)
 }
 
 /** Is the composer holding OUR payload right now — either its normalized

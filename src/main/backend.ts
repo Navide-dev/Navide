@@ -20,6 +20,11 @@ import {
   type BackendPluginActivationCatalogFile,
 } from './plugins/pluginBackendActivationCatalog'
 import { resolveBackendDataDir } from './ui-settings-bootstrap'
+import {
+  appendExistingDirs,
+  readWindowsRegistryPath,
+  readWindowsRegistryPathAsync,
+} from './windows-registry-path'
 
 /**
  * The key that tells a person's own window apart from an agent driving the same
@@ -192,10 +197,55 @@ function getLoginShellEnv(): Promise<{ shell: string; path: string | null }> {
 // external editors, see editors.ts — don't pay the probe again.
 let resolvedUserPath: string | null = null
 
+// Reading the registry PATH is a PowerShell start-up (1-3 s cold on ARM), so
+// main never waits on it after app ready: warmRegistryPath reads it in the
+// background, and an entry older than 30 s is still served while a background
+// read replaces it. A call while the first read runs gets the launch PATH; only
+// one with no read at all (none started) reads synchronously. Settings' editor
+// rescan awaits a fresh read instead.
+const REGISTRY_PATH_TTL_MS = 30_000
+let registryPathCache: { readAt: number; entries: string[] } | null = null
+let registryPathRead: Promise<void> | null = null
+
+/** Re-read the Windows registry PATH off the main thread; joins a read
+ *  already under way. A no-op elsewhere. */
+export function warmRegistryPath(): Promise<void> {
+  if (!isWindows()) return Promise.resolve()
+  registryPathRead ??= readWindowsRegistryPathAsync()
+    .then((entries) => {
+      // A failed or timed-out read answers []; keep what we had rather than
+      // drop every registry dir for the next 30 s.
+      const kept = entries.length ? entries : (registryPathCache?.entries ?? [])
+      registryPathCache = { readAt: Date.now(), entries: kept }
+    })
+    .finally(() => {
+      registryPathRead = null
+    })
+  return registryPathRead
+}
+
 /** The PATH to give processes main spawns. Falls back to the process PATH
- *  when the backend has not started yet (or the probe failed). */
+ *  when the backend has not started yet (or the probe failed). On Windows
+ *  the registry PATH is appended (see warmRegistryPath), so a tool installed
+ *  after launch is found without a restart. */
 export function getResolvedUserPath(): string {
-  return resolvedUserPath ?? process.env.PATH ?? ''
+  const base = resolvedUserPath ?? process.env.PATH ?? ''
+  if (!isWindows()) return base
+  if (!registryPathCache) {
+    // The app-ready read is still running: the launch PATH is right for
+    // everything but a tool installed in the last few seconds; don't block.
+    if (registryPathRead) return base
+    registryPathCache = { readAt: Date.now(), entries: readWindowsRegistryPath() }
+  } else if (Date.now() - registryPathCache.readAt >= REGISTRY_PATH_TTL_MS) {
+    void warmRegistryPath()
+  }
+  return appendExistingDirs(base, registryPathCache.entries)
+}
+
+/** getResolvedUserPath after a fresh registry read, for an explicit rescan. */
+export async function getFreshResolvedUserPath(): Promise<string> {
+  await warmRegistryPath()
+  return getResolvedUserPath()
 }
 
 /** Mirror a backend log line to our own stdio, best-effort.

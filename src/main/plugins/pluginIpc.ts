@@ -29,6 +29,7 @@ import {
   type InstallerTrustConfig,
 } from './pluginInstaller'
 import { developerRegistryDownload, developerRegistryFetch, registryError } from './developerAccount'
+import { readBodyCapped } from './readBodyCapped'
 import type { DeveloperCallResult } from '../../shared/marketplaceDeveloper'
 import { registryClockRefusal, type RegistryClockRefusal } from '../../shared/registryClock'
 import {
@@ -469,37 +470,6 @@ function httpsLink(value: unknown): string | null {
  *  letter placeholder. */
 export const MARKETPLACE_ICON_MAX_BYTES = 256 * 1024
 const ICON_PATH_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/
-
-/** Read a response body, giving up (and cancelling the stream) as soon as it
- *  passes `cap` bytes, so a chunked or lying response never lands in memory
- *  whole. A response without a stream (a test double) is read directly. */
-async function readBodyCapped(res: Response, cap: number): Promise<Uint8Array | null> {
-  const body = res.body
-  if (!body) {
-    const bytes = new Uint8Array(await res.arrayBuffer())
-    return bytes.byteLength <= cap ? bytes : null
-  }
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    if (total > cap) {
-      await reader.cancel().catch(() => undefined)
-      return null
-    }
-    chunks.push(value)
-  }
-  const bytes = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return bytes
-}
 
 /** Raster type by magic bytes; the Registry's Content-Type is not trusted. */
 function sniffIconMime(bytes: Uint8Array): string | null {

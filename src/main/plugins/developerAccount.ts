@@ -13,6 +13,7 @@ import { createHash, createPrivateKey, randomBytes, sign as signDigest, timingSa
 import { createServer } from 'http'
 import type { DeveloperPublicState, DeveloperTokenScope, DeveloperVault } from './developerVault'
 import { publicKeyFingerprint } from './developerVault'
+import { PACKAGE_DOWNLOAD_MAX_BYTES, readBodyCapped } from './readBodyCapped'
 
 export const DEVELOPER_LOGIN_TIMEOUT_MS = 5 * 60_000
 export const DEVELOPER_LOGIN_LABEL = 'Navide app'
@@ -227,9 +228,11 @@ export class DeveloperAccount {
   async registryDownload(path: string, auth: DeveloperTokenScope): Promise<{ status: number; body: Buffer; digest: string | null }> {
     const response = await this.authorized(path, {}, auth)
     if (!response) return { status: 401, body: Buffer.from(JSON.stringify(NOT_SIGNED_IN)), digest: null }
+    const bytes = await readBodyCapped(response, PACKAGE_DOWNLOAD_MAX_BYTES)
+    if (!bytes) throw new Error(`the Registry download is larger than ${PACKAGE_DOWNLOAD_MAX_BYTES} bytes`)
     return {
       status: response.status,
-      body: Buffer.from(await response.arrayBuffer()),
+      body: Buffer.from(bytes),
       digest: response.headers.get('X-Package-Digest'),
     }
   }

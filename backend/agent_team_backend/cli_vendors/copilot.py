@@ -133,6 +133,7 @@ from ..usage_common import (
     parse_retry_after,
 )
 from ..log_readers.base import (
+    ActivityLines,
     ActivityEvent,
     IncrementalParseResult,
     LogReader,
@@ -923,7 +924,7 @@ class CopilotLogReader(LogReader):
         last_text = _read_last_text(seen_keys)
         text_changed = False
         try:
-            fh = path.open(encoding="utf-8")
+            fh = ActivityLines(self, path, seen_keys)
         except OSError:
             return out
 
@@ -931,7 +932,7 @@ class CopilotLogReader(LogReader):
         last_line = high_water
         try:
             with fh:
-                for line_no, raw_line in enumerate(fh, 1):
+                for line_no, raw_line in fh:
                     raw = raw_line.strip()
                     if not raw:
                         continue
@@ -997,6 +998,7 @@ class CopilotLogReader(LogReader):
                         text_changed = True
         finally:
             set_activity_high_water(seen_keys, last_line)
+            fh.save(last_line)
 
         if text_changed:
             _write_last_text(seen_keys, last_text)

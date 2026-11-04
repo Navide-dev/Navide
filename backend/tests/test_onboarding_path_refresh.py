@@ -382,11 +382,11 @@ def test_macos_tail_is_the_nvm_bins_newest_first(tmp_path):
     ]
 
 
-def test_linux_and_windows_have_no_tail(tmp_path):
-    """Linux keeps nvm in its prepended list, as before; Windows has no merge."""
+def test_linux_has_no_tail(tmp_path):
+    """Linux keeps nvm in its prepended list, as before. (Windows' tail is the
+    registry PATH plus npm's global dir — see the Windows section below.)"""
     (tmp_path / ".nvm" / "versions" / "node" / "v22.11.0" / "bin").mkdir(parents=True)
     assert _linux.paths.login_path_tail_fallbacks(tmp_path) == []
-    assert _windows.paths.login_path_tail_fallbacks(tmp_path) == []
 
 
 # The merge itself, on the macOS lists, with a disk laid out per case. Mirror
@@ -778,3 +778,187 @@ def test_the_configured_npm_prefix_reaches_the_platform_fallback_list(tmp_path, 
     monkeypatch.setenv("npm_config_prefix", str(prefix))
     impl = _darwin.paths if sys.platform == "darwin" else _linux.paths
     assert str(prefix / "bin") in impl.login_path_fallbacks(tmp_path)
+
+
+# ── Windows: no login shell, so the registry and npm say where a CLI landed ──
+#
+# 11-03 report: the guided install ran `npm install -g @openai/codex` (exit 0)
+# and detection still read "missing". The backend keeps the PATH Explorer gave
+# Navide at launch, and with no login shell to probe the refresh returned
+# before merging anything — so a dir an installer added to the registry PATH,
+# or npm's global dir, stayed invisible until Navide restarted.
+
+
+class _FakeWinreg:
+    """The slice of `winreg` the registry read uses."""
+
+    HKEY_LOCAL_MACHINE = "HKLM"
+    HKEY_CURRENT_USER = "HKCU"
+
+    def __init__(self, values, env):
+        self._values = values
+        self._env = env
+
+    def OpenKey(self, root, subkey):  # noqa: N802 — winreg's own name
+        if (root, subkey) not in self._values:
+            raise OSError(2, "not found")
+        return (root, subkey)
+
+    def QueryValueEx(self, key, name):  # noqa: N802
+        if name != "Path":
+            raise OSError(2, "not found")
+        return self._values[key], 2
+
+    def CloseKey(self, key):  # noqa: N802
+        pass
+
+    def ExpandEnvironmentStrings(self, value):  # noqa: N802
+        for var, sub in self._env.items():
+            value = value.replace(f"%{var}%", sub)
+        return value
+
+
+def test_windows_registry_path_reads_machine_then_user_expanded(monkeypatch):
+    fake = _FakeWinreg(
+        {
+            ("HKLM", _windows._MACHINE_ENV_KEY): r"C:\Windows\system32;C:\Program Files\nodejs\;",
+            ("HKCU", _windows._USER_ENV_KEY): r"%USERPROFILE%\AppData\Roaming\npm",
+        },
+        {"USERPROFILE": r"C:\Users\amy"},
+    )
+    monkeypatch.setitem(sys.modules, "winreg", fake)
+    assert _windows._registry_path_entries() == [
+        r"C:\Windows\system32",
+        "C:\\Program Files\\nodejs\\",
+        r"C:\Users\amy\AppData\Roaming\npm",
+    ]
+
+
+def test_windows_registry_path_survives_a_missing_key(monkeypatch):
+    fake = _FakeWinreg({("HKCU", _windows._USER_ENV_KEY): r"C:\tools"}, {})
+    monkeypatch.setitem(sys.modules, "winreg", fake)
+    assert _windows._registry_path_entries() == [r"C:\tools"]
+
+
+def test_windows_tail_is_the_registry_path_then_npm_global_dir(tmp_path, monkeypatch):
+    roaming = tmp_path / "Roaming"
+    monkeypatch.setenv("APPDATA", str(roaming))
+    monkeypatch.delenv("npm_config_prefix", raising=False)
+    monkeypatch.setattr(_windows, "_registry_path_entries", lambda: [r"C:\nvm4w\nodejs"])
+    assert _windows.paths.login_path_tail_fallbacks(tmp_path) == [
+        r"C:\nvm4w\nodejs",
+        str(roaming / "npm"),
+    ]
+
+
+def test_windows_tail_includes_a_configured_npm_prefix(tmp_path, monkeypatch):
+    """On Windows npm puts its shims in the prefix itself, not `<prefix>/bin`."""
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setattr(_windows, "_registry_path_entries", lambda: [])
+    prefix = tmp_path / "npm-global"
+    (tmp_path / ".npmrc").write_text(f"prefix={prefix}\n", encoding="utf-8")
+    monkeypatch.delenv("npm_config_prefix", raising=False)
+    assert str(prefix) in _windows.paths.login_path_tail_fallbacks(tmp_path)
+
+
+def _windows_cli(directory, name):
+    directory.mkdir(parents=True, exist_ok=True)
+    shim = directory / f"{name}.cmd"
+    shim.write_text("@ECHO off\r\n")
+    shim.chmod(0o755)  # shutil.which on a POSIX test host wants the bit
+    return shim
+
+
+def test_windows_refresh_finds_a_cli_npm_installed_after_launch(tmp_path, monkeypatch):
+    """The reported case, end to end through the refresh the install triggers."""
+    npm_dir = tmp_path / "Roaming" / "npm"
+    shim = _windows_cli(npm_dir, "codex")
+    stale = tmp_path / "System32"
+    stale.mkdir()
+    monkeypatch.setenv("PATH", str(stale))
+    monkeypatch.setenv("PATHEXT", ".COM;.EXE;.BAT;.CMD")
+    monkeypatch.setattr(osplat.paths, "login_path_probe", lambda: None)
+    monkeypatch.setattr(onboarding_deps, "_tail_path_dirs", lambda: [str(npm_dir)])
+    with patch("subprocess.run", side_effect=OSError("no npm here")):
+        _refresh_path_from_login_shell(force=True)
+    assert os.environ["PATH"].split(os.pathsep) == [str(stale), str(npm_dir)]
+    assert _windows.paths.resolve_program("codex", path=os.environ["PATH"]) == str(shim)
+
+
+def test_windows_refresh_appends_and_never_duplicates(tmp_path, monkeypatch):
+    """Appended, so nothing the inherited PATH resolves first is displaced; a
+    dir already there in another case is the same dir on NTFS."""
+    have = tmp_path / "Have"
+    have.mkdir()
+    new = tmp_path / "New"
+    new.mkdir()
+    monkeypatch.setenv("PATH", str(have))
+    monkeypatch.setattr(osplat.paths, "login_path_probe", lambda: None)
+    monkeypatch.setattr(onboarding_deps.os.path, "normcase", lambda p: p.lower())
+    monkeypatch.setattr(onboarding_deps, "_tail_path_dirs",
+                        lambda: [str(have).upper(), str(new), str(new), str(tmp_path / "gone")])
+    with patch("subprocess.run") as mock_run:
+        _refresh_path_from_login_shell()
+    mock_run.assert_not_called()  # an unforced read stays subprocess-free
+    assert os.environ["PATH"].split(os.pathsep) == [str(have), str(new)]
+
+
+def test_forced_refresh_asks_npm_for_its_global_prefix_on_windows(tmp_path, monkeypatch):
+    """`npm prefix -g` covers what no guess can: a prefix set in npm's builtin
+    or global npmrc, and fnm's per-shell node dirs."""
+    prefix = tmp_path / "fnm" / "node-versions" / "v22" / "installation"
+    _windows_cli(prefix, "codex")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setattr(osplat.paths, "login_path_probe", lambda: None)
+    monkeypatch.setattr(osplat.paths, "resolve_program",
+                        lambda name, path=None: r"C:\nodejs\npm.cmd" if name == "npm" else None)
+    monkeypatch.setattr(osplat.paths, "launch_argv", lambda program, args=(): [program, *args])
+    with patch("subprocess.run", return_value=_make_run_result(f"{prefix}\n")) as mock_run:
+        _refresh_path_from_login_shell(force=True)
+    assert mock_run.call_args.args[0] == [r"C:\nodejs\npm.cmd", "prefix", "-g"]
+    assert os.environ["PATH"].split(os.pathsep)[-1] == str(prefix)
+
+
+def test_a_failed_or_relative_npm_prefix_adds_nothing(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setattr(osplat.paths, "login_path_probe", lambda: None)
+    monkeypatch.setattr(osplat.paths, "resolve_program",
+                        lambda name, path=None: "npm" if name == "npm" else None)
+    for result in (_make_run_result("relative\\dir\n"), _make_run_result("", returncode=1)):
+        with patch("subprocess.run", return_value=result):
+            _refresh_path_from_login_shell(force=True)
+        assert os.environ["PATH"] == str(tmp_path)
+
+
+def _codepage_run(stdout: bytes):
+    """A `subprocess.run` that decodes the way Windows does: with the ANSI
+    code page (cp950 on zh-TW) unless the caller names an encoding."""
+    def run(argv, **kwargs):
+        out = stdout.decode(kwargs.get("encoding") or "cp950", kwargs.get("errors") or "strict")
+        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+    return run
+
+
+def _npm_on_path(monkeypatch):
+    monkeypatch.setattr(osplat.paths, "resolve_program",
+                        lambda name, path=None: "npm" if name == "npm" else None)
+    monkeypatch.setattr(osplat.paths, "launch_argv", lambda program, args=(): [program, *args])
+
+
+def test_npm_prefix_under_a_chinese_user_name_is_read_as_utf8(tmp_path, monkeypatch):
+    """npm prints UTF-8; read with the zh-TW code page, `C:\\Users\\王小明\\...`
+    raised UnicodeDecodeError out of get_status(fresh=True) — the re-detect
+    right after the guided install."""
+    prefix = tmp_path / "王小明" / "AppData" / "Roaming" / "npm"
+    _npm_on_path(monkeypatch)
+    with patch("subprocess.run", side_effect=_codepage_run(f"{prefix}\r\n".encode("utf-8"))):
+        assert onboarding_deps._npm_global_bin_dirs() == [str(prefix)]
+
+
+def test_undecodable_npm_prefix_output_adds_nothing(tmp_path, monkeypatch):
+    _npm_on_path(monkeypatch)
+    with patch("subprocess.run", side_effect=_codepage_run(f"{tmp_path}/\xff".encode("latin-1"))):
+        assert onboarding_deps._npm_global_bin_dirs() == []
+    decode_error = UnicodeDecodeError("cp950", b"\xe7", 0, 1, "illegal multibyte sequence")
+    with patch("subprocess.run", side_effect=decode_error):
+        assert onboarding_deps._npm_global_bin_dirs() == []

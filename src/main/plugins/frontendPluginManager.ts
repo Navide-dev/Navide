@@ -1595,6 +1595,9 @@ export class FrontendPluginManager {
   /** webContents.id → opaque instance id, so a call's origin can be trusted,
    *  not the payload. */
   private readonly bySender = new Map<number, string>()
+  /** Every plugin WebContentsView's contents, recorded at construction so the
+   *  global window-open handler can refuse them before any id is bound. */
+  private readonly pluginViewContents = new WeakSet<object>()
   /** Installed/available plugin descriptors keyed by id (loader registry). The
    *  mini-IDE is registered here as the first built-in; third-party installs are
    *  added by {@link loadInstalledPlugins} / {@link registerDescriptor}. */
@@ -3340,6 +3343,11 @@ export class FrontendPluginManager {
       initiator,
       ...(executionPolicy ? { executionPolicy } : {}),
     }
+  }
+
+  /** Whether these contents belong to a plugin WebContentsView. */
+  isPluginViewContents(contents: object): boolean {
+    return this.pluginViewContents.has(contents)
   }
 
   private instanceForSender(senderId: number): RunningPlugin | undefined {
@@ -8703,7 +8711,18 @@ export class FrontendPluginManager {
             permissionStored,
           })
         } else {
-          command = this.aiCliCommand(profileId, args, workspacePath)
+          // The Host decides as for a persisted view; the package's yolo
+          // request can only narrow that decision, never widen it.
+          let yolo = args.yolo === true
+          if (yolo) {
+            const settingsPayload = await this.sendPublicBackend('ui.settings.get', {}, beforeDispatch)
+            const stored = toPayload(toPayload(settingsPayload).settings)
+            const permissionStored = stored[`agentTeam.cliPermission.${profileId}`]
+            const yoloStored = stored['agentTeam.yolo']
+            yolo = permissionStored === 'force-on' ||
+              (permissionStored !== 'force-off' && (yoloStored == null || yoloStored === '1'))
+          }
+          command = this.aiCliCommand(profileId, { ...args, yolo }, workspacePath)
         }
         if (!command) throw new Error(`AI CLI profile '${profileId}' is not available`)
         const response = await client.send(
@@ -11542,6 +11561,8 @@ export class FrontendPluginManager {
         ],
       },
     })
+
+    this.pluginViewContents.add(view.webContents)
 
     // A dedicated host window carries no UI of its own — its webContents stays
     // blank, so the plugin's document.title never reaches the window and the

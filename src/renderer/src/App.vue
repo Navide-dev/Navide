@@ -26,7 +26,7 @@ import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceFo
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
 import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
-import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
+import { buildPaneLineage, effectiveParents, lineageHandoff, rekeyChildren, withDescendants } from './lib/paneLineage'
 import { pluginWindowWithoutBackendText } from './lib/pluginWindowWithoutBackend'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
@@ -84,7 +84,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { VENDORS_WITHOUT_TURN_END, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -159,7 +159,7 @@ import { diagLog } from '@navide/terminal'
 import { reclaimBlockedBy, focusedReclaimBlockedBy, namedReclaimBlockedBy, focusedForReclaim, idleReclaimDisabled, idleReclaimThresholdMs, RECLAIM_NOW_THRESHOLD_MS, type ReclaimCandidate } from './lib/idleReclaim'
 import { useResourceLimits } from './composables/useResourceLimits'
 import { reclaimRefusalReason, reclaimRequestPaneIds, type ReclaimRefusal } from './lib/paneReclaimRequest'
-import { findConsecutiveQuestionBlocks, findSentinel } from '@navide/terminal'
+import { findConsecutiveQuestionBlocks, findScreenSentinel, findSentinel } from '@navide/terminal'
 import {
   buildCliPaneBufferReply,
   buildExternalPaneContextPaste,
@@ -181,8 +181,8 @@ import {
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
 import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
-import { createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
-import { createParkedDelivery, waitUntilTurnEnds } from './lib/pipelineDelivery'
+import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
+import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRoleTurn, waitUntilTurnEnds, type QueuedTurnOutcome, type RoleTurnOutcome } from './lib/pipelineDelivery'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
 import { resolveDragBatch, reorderBatchByIds, withFoldedSubtree } from './lib/paneBatchDrag'
@@ -197,7 +197,7 @@ import {
 import { pickReusablePane, runReportedDispatch, validatePlanDispatch, type PlanDispatchOutcome, type PlanDispatchPayload } from './lib/planDispatch'
 import { planExecutionPrompt } from './lib/planExecutePrompt'
 import {
-  composerHoldsPayload, echoEvidence, echoTimeoutFor, framedComposerHolds, injectionVerified, normalizeForMatch,
+  composerHoldsPayload, echoEvidenceSince, echoTimeoutFor, framedComposerHolds, injectionVerified, normalizeForMatch,
   shellSubmitEvidence, submitBaseline, submitEvidence, type EchoEvidence, type SubmitEvidence,
   SUBMIT_CONFIRM_MS, SUBMIT_SCREEN_LINES, TAIL_MATCH_LEN
 } from './lib/injectEcho'
@@ -211,6 +211,7 @@ import {
   runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
+import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink, injectFailedMessage } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
@@ -272,6 +273,7 @@ import {
   savedGroupToRecreate,
 } from './lib/runGroups'
 import { createRunSlotPanes } from './lib/runSlotPanes'
+import { stopFailedRunPanes as stopFailedRunPanesFor } from './lib/failedRunStop'
 import {
   ALL_SCOPE_RESTORE_CONCURRENCY,
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
@@ -1881,6 +1883,9 @@ interface ActivePane {
   /** Which pipeline run group this pane belongs to. Undefined = unassigned (manual). */
   runGroupId?: string
   injectionStatus: InjectionStatus
+  /** When this pane's role prompt was last typed: a kickoff waits for the
+   *  turn it started to end (awaitRoleTurn). Cleared once that wait ran. */
+  roleSentAt?: number
   preparationStatus: PreparationStatus
   injectionTimer: number | null
   kickoffStatus: KickoffStatus
@@ -2551,6 +2556,10 @@ const paneTurnCompleteAt = new Map<string, number>()
 // disagree, and read only by the quota gate — see quotaTurnIsFresh for why
 // receipt time cannot answer its question.
 const paneTurnCompleteSourceAt = new Map<string, number>()
+/** The receipt times of the pane's last few turn ends, for counting them:
+ *  ends that arrive in one batch share a time (see waitForQueuedTurn).
+ *  Written by recordTurnComplete with the two maps above. */
+const paneTurnCompleteTimes = new Map<string, number[]>()
 
 // Per-pane wall-clock of the latest `agent_active` (CLI is producing output or
 // running a tool). Compared against turnCompleteAt to tell whether the CLI's
@@ -2560,6 +2569,11 @@ const paneLastActiveAt = new Map<string, number>()
 /** When the pane's current (or last) turn started — the first agent_active
  *  after a turn end. Read by the quota failover settle (see noteTurnComplete). */
 const paneTurnStartedAt = new Map<string, number>()
+/** When the run in progress last began sending a pane its role or kickoff.
+ *  With paneTurnCompleteAt it tells a failed run which panes it set to work
+ *  before their badge could show it (stopFailedRunPanes). Emptied when a run
+ *  starts; a send stopped before its Enter is taken out again. */
+const runPaneSentAt = new Map<string, number>()
 
 // Per-pane count of background subagents the CLI is still waiting on, as last
 // reported by a hook event, with the wall-clock time of that report. The
@@ -2959,7 +2973,11 @@ function messagingHoldKey(
   if (acp.owns(paneId)) return acp.holdKey(paneId)
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return 'gone'
-  const status = paneRefs[paneId]?.displayStatus as string | undefined
+  const status = messagingGateStatus(
+    paneRefs[paneId]?.displayStatus as string | undefined,
+    paneRefs[paneId]?.liveStatus as string | undefined,
+    paneRefs[paneId]?.stoppedBy as string | null | undefined,
+  )
   // A question passes deliberately. Those panes were already reaching this gate
   // as 'idle' (a turn ending on a question, or an AskUserQuestion box the badge
   // used to show as running-then-idle), so holding them back would newly park
@@ -3125,7 +3143,7 @@ async function pushDeliverAgentMessage(paneId: string, text: string): Promise<Pu
   return 'declined'
 }
 
-const turnTextGate = createTurnTextGate()
+const turnTextGate = createMessagingTurnGate(Date.now())
 
 /** Close out the report a spawned pane owes its parent, on the first turn that
  *  ends after its task went in.
@@ -3165,8 +3183,8 @@ function settleSpawnReport(
 
 function onTurnCompleteForMessaging(paneId: string, text: string, timestamp: string): void {
   const senderName = panes.value.find((p) => p.id === paneId)?.messagingName
-  if (senderName && text && !isReplayedTurnComplete(timestamp, Date.now(), TURN_TEXT_REPLAY_TOLERANCE_MS)) {
-    if (turnTextGate.accept(paneId, text, timestamp)) {
+  if (senderName && text) {
+    if (turnTextGate.accept(paneId, text, timestamp, TURN_TEXT_REPLAY_TOLERANCE_MS)) {
       const parsed = parseMessages(text)
       // A turn that opened a block and produced none is the protocol's one
       // invisible failure: nothing queued, so no log row and no failure notice
@@ -4508,11 +4526,25 @@ async function injectText(
     /** Plain terminal only: the backend's terminal command protection refused
      *  the line (guard.terminal_policy) — its message, for the sender. */
     commandRefused?: string
+    /** Set when stillWanted said no right before an Enter: the box was
+     *  cleared and nothing was submitted. */
+    stopped?: boolean
+    /** Enters pressed by the submit loop. */
+    enters?: number
+    /** What showed, after every Enter looked untaken, that the CLI took the
+     *  message after all, and how long into the grace window. */
+    late?: LateSubmit
+    lateMs?: number
   },
   // Told `true` while the payload is written but the PTY is not reading it
   // (the message is held on `pty-blocked`), `false` once the wait ends either
   // way. Only the messaging path cares; see lib/ptyInputBlock.ts.
-  onInputBlocked?: (held: boolean) => void
+  onInputBlocked?: (held: boolean) => void,
+  // Asked right before every Enter by a caller whose run can end under it: a
+  // pipeline slot whose sibling fails the run while its kickoff is being
+  // typed. No means the box is cleared instead of submitted. An Enter already
+  // sent is not chased.
+  stillWanted?: () => boolean
 ): Promise<boolean> {
   // Log the full injection text to the session's output log file BEFORE
   // chunking so the log file shows one readable block per send.
@@ -4621,6 +4653,25 @@ async function injectText(
     }
     return false
   }
+  // stillWanted said no with the payload in the box: empty the whole box (one
+  // Ctrl-U clears only a row of it), so nothing of a run that is over waits
+  // there for the next Enter.
+  const stopBeforeEnter = async (): Promise<false> => {
+    if (evidence) {
+      evidence.stopped = true
+      evidence.leftInComposer = false
+    }
+    const cols = paneId !== undefined ? paneRefs[paneId]?.terminalSize?.()?.cols : undefined
+    for (const keys of composerClearKeys(body, cols ?? 80)) {
+      try {
+        await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys })
+      } catch {
+        break // nothing left to clear into
+      }
+      await sleep(100)
+    }
+    return false
+  }
   // The pane closing, being reclaimed or rebuilt under us hands its ref a
   // different session (or none), and a CLI that exited leaves the ref with
   // the dead session's id; the loop caller's own abort rides along.
@@ -4669,7 +4720,7 @@ async function injectText(
       break
     }
     const echoed = (): EchoEvidence | null =>
-      echoEvidence(cleanBuf(), tail, cleanBytes() - preBytes, normalizedLen)
+      echoEvidenceSince(cleanBuf(), tail, cleanBytes() - preBytes, normalizedLen)
     if (needsInputWait(ackPending, inputBlocks.get(sessionId) !== null)) {
       const waited = await awaitInputUnblocked({
         ackPending,
@@ -4788,6 +4839,7 @@ async function injectText(
     // resent Enter would land in whatever the command is now doing (answering
     // its [Y/n] prompt, or an empty sudo password). The Enter going out is the
     // delivery; the cursor leaving the typed line is the evidence, if any.
+    if (stillWanted && !stillWanted()) return stopBeforeEnter()
     try {
       const resp = await backend.send<{ ok?: boolean; error?: string; refusal?: { message?: string } }>('terminal.input', {
         terminal_session_id: sessionId, data: '\r', ...shellGuard,
@@ -4821,6 +4873,7 @@ async function injectText(
   // and starts no turn for it, so there is no turn to watch for.
   const midTurnAtEnter = paneId !== undefined
     && (paneLastActiveAt.get(paneId) ?? 0) > (paneTurnCompleteAt.get(paneId) ?? 0)
+  const watchTurn = shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter })
   // A permission / confirm dialog, where Enter would pick the default option.
   // Not a turn that merely ended on a question — see blockingDialogShown.
   const dialogShown = (): boolean => paneId !== undefined && blockingDialogShown({
@@ -4828,21 +4881,35 @@ async function injectText(
     agentKey,
     screen: visibleScreen() ?? screenTail(),
   })
+  // The first Enter's time: a turn it started may only be seen while a later
+  // attempt is polling.
+  let firstEnterAt = 0
+  let stoppedAtExtraEnter = false
+  // A dialog already up before the first Enter was not raised by it: every
+  // Enter went into that dialog, and none of them submitted our text.
+  const dialogBeforeEnter = dialogShown()
+  // Busy lines already on screen (the last turn's "Worked for 12s") say
+  // nothing about this message — see lib/submitStall.ts.
+  const busyBefore = busyLines(visibleScreen() ?? screenTail())
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
+    if (stillWanted && !stillWanted()) return stopBeforeEnter()
     // Never press a resent Enter into a dialog. Our earlier Enter most likely
     // started the work that raised it, but nothing confirms that.
     if (attempt > 1 && dialogShown()) {
+      if (dialogBeforeEnter) return false
       if (evidence) evidence.submit = 'unconfirmed'
       return true
     }
     const enterAt = Date.now()
+    if (attempt === 1) firstEnterAt = enterAt
     try {
       await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
     } catch (err) {
       console.error(`[injectText] submit Enter failed (attempt ${attempt}/${MAX_SUBMITS}):`, err)
       return false
     }
+    if (evidence) evidence.enters = attempt
     if (paneId === undefined || before < 0) return true
     // Poll instead of one flat sleep: a fast agent clears the composer in a few
     // hundred ms, and waiting the full gap on every attempt costs seconds.
@@ -4861,6 +4928,14 @@ async function injectText(
       })
       // 'unconfirmed' keeps watching: the box may still come into view.
       if (how !== null && how !== 'unconfirmed') break
+      // Our tail can stay on screen after a submit that took: Claude Code
+      // prints the submitted prompt above the box, and on a short pane its
+      // last rows are still the bottom of the screen. A turn started since
+      // our first Enter is the CLI taking it; another Enter proves nothing.
+      if (how === null && watchTurn && turnSince(firstEnterAt)) {
+        how = 'turn'
+        break
+      }
     }
     // A collapsed paste with no box in sight comes back 'unconfirmed' and is
     // reported as such: no extra Enter on a screen we cannot read the box on.
@@ -4869,11 +4944,16 @@ async function injectText(
       // (lib/submitTurnConfirm.ts). Every other verdict returns at once.
       const settled = await confirmWeakSubmit({
         how,
-        watchTurn: shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter }),
+        watchTurn,
         dialogShown,
         turnStarted: () => turnSince(enterAt),
         collapsedHeld: () => framedComposerHolds(visibleScreen() ?? screenTail(), ''),
         pressEnter: async () => {
+          // Only pressed while the box still holds the collapsed paste.
+          if (stillWanted && !stillWanted()) {
+            stoppedAtExtraEnter = true
+            return false
+          }
           try {
             await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
             return true
@@ -4886,6 +4966,8 @@ async function injectText(
         now: Date.now,
       })
       if (settled === null) return false
+      // A turn that started took the first Enter: that one is not chased.
+      if (stoppedAtExtraEnter && settled !== 'turn') return stopBeforeEnter()
       if (evidence) evidence.submit = settled
       return true
     }
@@ -4894,6 +4976,47 @@ async function injectText(
         `[injectText] input box still holds the text ${SUBMIT_CONFIRM_MS}ms after Enter ` +
         `(attempt ${attempt}/${MAX_SUBMITS}) — resending Enter`
       )
+    }
+  }
+  // Every Enter looked untaken. Under a stalled backend the screen and the
+  // turn events reach the window late (lib/submitStall.ts): look again before
+  // calling it never submitted. Only where a turn can be seen and the pane was
+  // not mid-turn: a queued message starts no turn, and a running one keeps
+  // drawing busy lines of its own.
+  if (watchTurn && paneId !== undefined) {
+    const graceFrom = Date.now()
+    let lateHow: SubmitEvidence | null = null
+    const late = await awaitLateSubmit({
+      turnSeen: () => turnSince(firstEnterAt) || (paneLastActiveAt.get(paneId) ?? 0) > firstEnterAt,
+      busySeen: () => newBusyLine(busyBefore, visibleScreen() ?? screenTail()),
+      screenSubmitted: () => {
+        const how = submitEvidence({
+          tailWasOnScreen, tail, screen: screenTail(), grownBy: cleanBytes() - before, baseline, visibleScreen: visibleScreen(),
+        })
+        if (how === 'tail-left' || how === 'queued') {
+          lateHow = how
+          return true
+        }
+        // A collapsed paste: the framed box no longer holds its summary.
+        if (framedComposerHolds(visibleScreen() ?? screenTail(), tail) === false) {
+          lateHow = 'unconfirmed'
+          return true
+        }
+        return false
+      },
+      aborted,
+      sleep,
+      now: Date.now,
+    })
+    if (late === 'aborted') return false
+    if (late !== null) {
+      console.warn(`[injectText] submit seen late (${late}, ${Date.now() - graceFrom}ms after the last Enter's watch)`)
+      if (evidence) {
+        evidence.late = late
+        evidence.lateMs = Date.now() - graceFrom
+        evidence.submit = late === 'turn' ? 'turn' : late === 'screen' ? lateHow : 'unconfirmed'
+      }
+      return true
     }
   }
   // Content was confirmed in the box and Enter was re-sent 3× but the box never
@@ -4914,8 +5037,11 @@ async function injectPane(
     leftInComposer?: boolean
     foregroundBusy?: boolean
     commandRefused?: string
+    stopped?: boolean
+    enters?: number
   },
-  onInputBlocked?: (held: boolean) => void
+  onInputBlocked?: (held: boolean) => void,
+  stillWanted?: () => boolean
 ): Promise<boolean> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.realized) return false
@@ -4925,7 +5051,7 @@ async function injectPane(
   // button exists for — including this button's own injection.
   pane.resumeContinueAvailable = false
   return injectText(
-    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked,
+    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted,
   )
 }
 
@@ -6952,6 +7078,126 @@ function paneTurnBusy(paneId: string): boolean {
   )
 }
 
+/** How long a kickoff waits for the turn_complete of a turn that has
+ *  activity after its last turn end. paneTurnBusy stops reading such a turn
+ *  as busy once the badge goes idle on a frozen screen and its last activity
+ *  is two minutes old, and both happened while Claude Code ran its stop hooks:
+ *  on the 0.2.37 Windows VM under load they took over 20s, the screen frozen
+ *  on "running stop hooks", and a kickoff typed then was never submitted. */
+const TURN_END_WAIT_MS = 90_000
+
+/** No turn_complete has come since the pane's last activity. */
+function turnEndUnconfirmed(paneId: string): boolean {
+  return (paneLastActiveAt.get(paneId) ?? 0) > (paneTurnCompleteAt.get(paneId) ?? 0)
+}
+
+/** paneTurnBusy, or, until `until`, a turn whose end has not been reported. */
+function turnStillOpen(paneId: string, until: number): boolean {
+  return paneTurnBusy(paneId) || (turnEndUnconfirmed(paneId) && Date.now() < until)
+}
+
+const TURN_END_UNCONFIRMED_LINE =
+  `⚠ no turn_complete within ${TURN_END_WAIT_MS / 1000} s of the turn's last activity — going on; a kickoff the CLI queues is still checked`
+
+const ROLE_TURN_WAIT_LINE: Record<RoleTurnOutcome, string> = {
+  'ended': '✓ the role\'s turn ended (turn_complete)',
+  'no-start': '⚠ no turn started within 10 s of the role — going on as before',
+  'parked': '⏸ the pane stopped on a CLI prompt',
+  'gone': '✕ the pane is gone',
+  'moved-on': '⏹ the run is no longer running',
+}
+
+/** Before a kickoff: wait for the turn the pane's role prompt started, typed
+ *  at `roleSentAt`, to end (lib/pipelineDelivery waitForRoleTurn), and log
+ *  how long that took and what let the kickoff go. */
+async function awaitRoleTurn(paneId: string, roleSentAt: number, tag: string, stillWanted: () => boolean): Promise<RoleTurnOutcome> {
+  const t0 = Date.now()
+  const turnEndBy = t0 + ROLE_TURN_START_MS + TURN_END_WAIT_MS
+  const outcome = await waitForRoleTurn({
+    startedSince: () => Math.max(
+      paneLastActiveAt.get(paneId) ?? 0, paneTurnStartedAt.get(paneId) ?? 0, paneTurnCompleteAt.get(paneId) ?? 0,
+    ) > roleSentAt,
+    busy: () => turnStillOpen(paneId, turnEndBy),
+    parked: () => paneParkedOnPrompt(paneId),
+    alive: () => paneAlive(paneId),
+    stillWanted,
+    sleep,
+    now: Date.now,
+  })
+  const line = outcome === 'ended' && turnEndUnconfirmed(paneId) ? TURN_END_UNCONFIRMED_LINE : ROLE_TURN_WAIT_LINE[outcome]
+  pipelineLog(`${tag} role turn wait: ${line} after ${Date.now() - t0} ms`)
+  return outcome
+}
+
+const QUEUED_TURN_LINE: Record<QueuedTurnOutcome, string> = {
+  'started': '✓ the queued kickoff started its own turn',
+  'turn-never-ended': '✕ the turn it waited behind never ended',
+  'no-own-turn': '✕ that turn ended, and the kickoff started no turn of its own',
+  'parked': '✕ the pane stopped on a CLI prompt',
+  'gone': '✕ the pane is gone',
+  'moved-on': '⏹ the run is no longer running',
+}
+
+/** A pipeline kickoff the CLI queued behind a turn still running (submit
+ *  'queued'): true once that turn ended and the kickoff started its own.
+ *  `since` is when the kickoff began to be typed. */
+async function confirmQueuedKickoff(paneId: string, since: number, tag: string, stillWanted: () => boolean): Promise<boolean> {
+  pipelineLog(`${tag} ⏳ the kickoff was queued behind a turn still running — waiting for it to start its own`)
+  const t0 = Date.now()
+  const outcome = await waitForQueuedTurn({
+    since,
+    lastCompleteAt: () => paneTurnCompleteAt.get(paneId) ?? 0,
+    lastActiveAt: () => paneLastActiveAt.get(paneId) ?? 0,
+    completionsSince: (t) => (paneTurnCompleteTimes.get(paneId) ?? []).filter((at) => at > t).length,
+    parked: () => paneParkedOnPrompt(paneId),
+    alive: () => paneAlive(paneId),
+    stillWanted,
+    sleep,
+    now: Date.now,
+  })
+  pipelineLog(`${tag} queued kickoff: ${QUEUED_TURN_LINE[outcome]} after ${Date.now() - t0} ms`)
+  if (outcome === 'no-own-turn') {
+    const ends = (paneTurnCompleteTimes.get(paneId) ?? []).filter((at) => at > since)
+    pipelineLog(
+      `${tag} queued kickoff: no own turn — ${ends.length} turn end(s) since the kickoff` +
+      ` (at +${ends.map((at) => at - since).join(', +') || '—'} ms), last activity +${(paneLastActiveAt.get(paneId) ?? 0) - since} ms`,
+    )
+  }
+  return outcome === 'started'
+}
+
+/** One line per role or kickoff injection: what the echo and submit checks
+ *  saw. The packaged app logs nothing else for an injection that worked. */
+function logInjectEvidence(
+  tag: string, what: string, attempt: number, ok: boolean,
+  ev: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; enters?: number; stopped?: boolean; late?: LateSubmit; lateMs?: number },
+): void {
+  pipelineLog(
+    `${tag} · ${what} attempt ${attempt}: ${ev.stopped ? 'stopped' : ok ? 'injected' : 'not injected'}` +
+    ` — echo ${ev.echo ?? 'none'}, submit ${ev.submit ?? 'none'}, ${ev.enters ?? 0} Enter(s)` +
+    (ev.late ? `, taken late (${ev.late}, ${ev.lateMs ?? 0} ms into the grace)` : ''),
+  )
+}
+
+/** A kickoff judged never submitted whose pane starts a turn anyway: the run
+ *  has failed the slot while the agent works on it. Logged so a VM run can
+ *  find the two disagreeing. `since` is when the kickoff began to be typed. */
+function watchKickoffAfterFailure(paneId: string, since: number, tag: string): void {
+  const t0 = Date.now()
+  void awaitTurnAfterFailure({
+    turnSeen: () => Math.max(
+      paneLastActiveAt.get(paneId) ?? 0, paneTurnStartedAt.get(paneId) ?? 0, paneTurnCompleteAt.get(paneId) ?? 0,
+    ) > since,
+    alive: () => paneAlive(paneId),
+    sleep,
+    now: Date.now,
+  }).then((started) => {
+    if (started) {
+      pipelineLog(`${tag} ⚠ run/agent mismatch: the kickoff was judged never submitted, but the pane started a turn ${Date.now() - t0} ms later — the agent may be working on it`)
+    }
+  })
+}
+
 /**
  * Whether this window has already told the backend that Codex gates the hook.
  *
@@ -7202,14 +7448,18 @@ function scheduleInjection(pane: ActivePane): void {
       syncViews()
       await acquireInjectionSlot()
       let ok: boolean
+      const roleEvidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; enters?: number } = {}
       try {
         // bracketed paste (preserveNewlines) — same as kickoff — so the multi-line
         // role prompt isn't sent as a raw keystroke burst that floods the PTY
         // input buffer (EAGAIN drops) and re-renders on every embedded newline.
-        ok = await injectPane(pane.id, roleContent, `role:${role.label}`, true)
+        pane.roleSentAt = Date.now()
+        runPaneSentAt.set(pane.id, pane.roleSentAt)
+        ok = await injectPane(pane.id, roleContent, `role:${role.label}`, true, undefined, roleEvidence)
       } finally {
         releaseInjectionSlot()
       }
+      logInjectEvidence(tag, 'role', 1, ok, roleEvidence)
       pane.injectionStatus = ok ? 'sent' : 'failed'
       setPrepStatus(pane, ok ? 'ready' : 'failed')
       syncViews()
@@ -7263,18 +7513,35 @@ function scheduleInjection(pane: ActivePane): void {
     //    settled). This prevents the kickoff from being interleaved into
     //    the agent's role-acknowledgement output.
     if (pane.kickoffStatus === 'pending') {
+      // The role's turn found parked on a CLI prompt: the kickoff stops there.
+      let roleParked = false
       if (pane.roleKey) {
-        pipelineLog(`${tag} waiting for agent to acknowledge role (up to 30s)`)
-        setPrepStatus(pane, 'waiting-agent')
-        syncViews()
-        const result = await waitForActivityThenSettle(pane.id, 2500, 30_000)
-        if (!paneAlive(pane.id)) return
-        if (result === 'no-activity') {
-          pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
-        } else if (result === 'timeout') {
-          pipelineLog(`${tag} ⚠ agent still streaming — sending kickoff anyway`)
-        } else {
-          pipelineLog(`${tag} ✓ agent settled — proceeding`)
+        // The role's own turn first: a kickoff typed in it is queued behind
+        // it (0.2.37 Windows VM, where that turn's first activity reached the
+        // window 2s after the role's Enter and only a title spinner moved).
+        const roleTurn = pane.roleSentAt
+          ? await awaitRoleTurn(pane.id, pane.roleSentAt, tag, () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()))
+          : 'no-start'
+        pane.roleSentAt = undefined
+        if (roleTurn === 'gone') return
+        if (roleTurn === 'moved-on') {
+          pipelineLog(`${tag} ⏹ the run is no longer running — not sending the kickoff`)
+          return
+        }
+        roleParked = roleTurn === 'parked'
+        if (roleTurn === 'no-start') {
+          pipelineLog(`${tag} waiting for agent to acknowledge role (up to 30s)`)
+          setPrepStatus(pane, 'waiting-agent')
+          syncViews()
+          const result = await waitForActivityThenSettle(pane.id, 2500, 30_000)
+          if (!paneAlive(pane.id)) return
+          if (result === 'no-activity') {
+            pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
+          } else if (result === 'timeout') {
+            pipelineLog(`${tag} ⚠ agent still streaming — sending kickoff anyway`)
+          } else {
+            pipelineLog(`${tag} ✓ agent settled — proceeding`)
+          }
         }
       }
       pipelineLog(`${tag} ➜ injecting kickoff (${pane.kickoffPrompt.length} chars)`)
@@ -7285,22 +7552,38 @@ function scheduleInjection(pane: ActivePane): void {
       // The watcher's arm time, as in activateStage: a turn that ends before
       // the confirmation below returns must still count as this stage's.
       let kickoffStartedAt = Date.now()
+      let kickoffAttempt = 0
       const kickoffResult = await runPipelineKickoff({
         inject: async () => {
           kickoffStartedAt = Date.now()
-          const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
-          const injected = await injectPane(pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence)
-          return { injected, echo: evidence.echo }
+          runPaneSentAt.set(pane.id, kickoffStartedAt)
+          const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number; late?: LateSubmit; lateMs?: number } = {}
+          const injected = await injectPane(
+            pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence, undefined,
+            // Asked again right before its Enter: the run can fail mid-paste.
+            () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
+          )
+          logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
+          if (evidence.stopped) runPaneSentAt.delete(pane.id)
+          return { injected, echo: evidence.echo, submit: evidence.submit, stopped: evidence.stopped }
         },
+        confirmQueued: () => confirmQueuedKickoff(pane.id, kickoffStartedAt, tag, () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding())),
         sleep,
         paneAlive: () => paneAlive(pane.id),
         onHeld: () => {
           held = true
           pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+          watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
         },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
-        parkedOnPrompt: () => paneParkedOnPrompt(pane.id),
+        parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
+        // A sibling slot can fail the run during the role's 30s settle.
+        stillWanted: () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
       })
+      if (kickoffResult.stopped) {
+        pipelineLog(`${tag} ⏹ the run is no longer running — not sending the kickoff`)
+        return
+      }
       if (kickoffResult.cancelled) return
       const ok2 = kickoffResult.sent
       const parked = !!kickoffResult.parked
@@ -9801,7 +10084,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
  *
  *  `keepLoop` is for interrupts not aimed at this one pane (batch, evolve):
  *  they leave its loop running. */
-async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): Promise<boolean> {
+async function onInterrupt(paneId: string, opts: { keepLoop?: boolean; by?: 'agent' | 'user' } = {}): Promise<boolean> {
   if (!panes.value.find((p) => p.id === paneId)?.realized) return false
   const ref = paneRefs[paneId]
   if (acp.owns(paneId)) return acp.interrupt(paneId, opts)
@@ -9812,7 +10095,7 @@ async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): P
   // continue aborts.
   if (!opts.keepLoop && panes.value.find((p) => p.id === paneId)?.loopActive) stopLoopSpinning(paneId, 'interrupted')
   try {
-    const issued = await ref.interrupt()
+    const issued = await ref.interrupt(opts.by ?? 'user')
     persistPaneStopped(paneId, true)
     return issued !== false
   } catch {
@@ -11127,7 +11410,9 @@ registerCommand('ui.pane.interrupt', async (args) => {
   const ref = paneRefs[paneId]
   const status = paneDisplayStatus(pane)
   const awaitingKind = (ref?.awaitingKind as string | null | undefined) || undefined
-  const sent = await onInterrupt(paneId)
+  // Reached only over the MCP bus (cli_interrupt, ui_invoke), never from the
+  // STOP button: an agent's interrupt, so queued messages may follow it.
+  const sent = await onInterrupt(paneId, { by: 'agent' })
   const advisories = interruptAdvisoriesFor({
     name: (pane.messagingName as string | undefined) ?? pane.customName ?? paneId,
     sent,
@@ -11394,13 +11679,20 @@ registerCommand('ui.pipeline.start', async (args) => {
 registerCommand('ui.pipeline.abort', async (args) => {
   // onPipelineAbort itself returns silently when nothing is running; say so
   // instead of answering ok for a no-op.
-  if (pipeline.state !== 'running') {
+  const interrupted = interruptedRunWorkspace()
+  if (pipeline.state !== 'running' && !interrupted) {
     throw Object.assign(new Error(`ui.pipeline.abort: no pipeline is running in this workspace (state "${pipeline.state}")`), { code: 'not-running' })
   }
   // The editor's Abort asks first, like its Reset; a caller that sets no
   // confirm flag (MCP pipeline_abort) aborts without a dialog.
   if ((args as { confirm?: unknown } | undefined)?.confirm === true && !(await confirmPipelineAbort())) {
     return { workspacePath: pipeline.workspacePath, state: pipeline.state, cancelled: true }
+  }
+  if (pipeline.state !== 'running') {
+    if (!(await abortInterruptedRun(interrupted))) {
+      throw Object.assign(new Error('ui.pipeline.abort: no pipeline is running in this workspace (state "interrupted", driven elsewhere)'), { code: 'not-running' })
+    }
+    return { workspacePath: interrupted, state: 'aborted' }
   }
   await onPipelineAbort()
   return { workspacePath: pipeline.workspacePath, state: pipeline.state }
@@ -12652,23 +12944,14 @@ function rekeyLineage(oldId: string, newId: string): void {
   runSlots.rekey(oldId, newId)
   // The follow-the-default-account flag rides the same id hand-offs.
   accountFollow.rekey(oldId, newId)
-  for (const p of panes.value) {
-    if (p.spawnedBy === oldId) p.spawnedBy = p.id === newId ? undefined : newId
-  }
+  rekeyChildren(panes.value, (p) => p.id, oldId, newId)
   // Agent History keeps its own durable copy of the same pointer, and it
   // outlives the pane record. Left behind, it would still name an id retired
   // restarts ago — so a resume that fell back to history would rebuild the
   // tree against a pane that no longer exists, which reads as "no parent" and
   // flattens the branch. Reassigned rather than mutated in place so the
   // persistence watcher sees the change and writes it to the workspace.
-  let touched = false
-  for (const e of spawnHistory.value) {
-    if (e.spawnedBy === oldId) {
-      e.spawnedBy = e.paneId === newId ? undefined : newId
-      touched = true
-    }
-  }
-  if (touched) spawnHistory.value = [...spawnHistory.value]
+  if (rekeyChildren(spawnHistory.value, (e) => e.paneId, oldId, newId)) spawnHistory.value = [...spawnHistory.value]
 }
 
 async function spawnRestoredPane(opts: RestoredPaneSpawnOptions): Promise<RestoredPaneSpawnResult | null> {
@@ -14185,6 +14468,7 @@ async function onPipelineRestart(payload: { task: string; workspacePath: string;
   // Drop the previous attempt's slot counts too, so killing its panes below
   // does not release slots of a run that is being thrown away anyway.
   stageCompletions.clear()
+  runEndingSlots.clear()
   activeQuestion.value = null
   // Kill any pipeline-origin panes still hanging around so we get a clean grid.
   for (const p of [...panes.value]) {
@@ -14278,6 +14562,7 @@ async function runPipelineResume(): Promise<void> {
   pipelineRunWorkspace = resumeWorkspacePath
   pipeline.stageIndex = info.nextStageIndex
   pipeline.state = 'running'
+  runEndingSlots.clear()
   // Paused at a gate: the run sits at the end of the stage before it.
   if (gateNext !== null) pipeline.stageIndex = gateNext - 1
   pipeline.log = []
@@ -14894,6 +15179,15 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     }
 
     const tag = `[${stage.id}/${slot.label}]`
+    // Another slot failed the run, or the user stopped or reset it, while this
+    // one waited on its role: nothing more is typed into this pane for a run
+    // that is over. What was already typed stays; nothing is interrupted.
+    const slotStillWanted = (): boolean => pipeline.state === 'running' && pipeline.stageIndex === index && !runEnding()
+    const runEndedFirst = (what: string): boolean => {
+      if (slotStillWanted()) return false
+      pipelineLog(`${tag} ⏹ the run is no longer running — not sending the ${what}`)
+      return true
+    }
 
     // Wait for scheduleInjection to finish role injection before sending kickoff.
     // Must wait for 'sent'/'failed'/'skipped' — 'scheduled' means scheduleInjection
@@ -14914,6 +15208,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
       return
     }
+    if (runEndedFirst('role or kickoff')) return
     // A pane this run reuses can sit on a CLI prompt — a resume after a reload
     // finds the previous turn's permission box still up. Typing a role or a
     // kickoff into it presses Enter on that box, approving whatever it asks,
@@ -14926,24 +15221,49 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     // behind that turn, and its turn_complete would read as the kickoff's. The
     // watcher arms from the injection below, after that turn has ended.
     let turnWait = 'idle'
-    if (!paneParkedOnPrompt(pane.id) && paneTurnBusy(pane.id)) {
+    // A role typed at pre-spawn may still be in the turn it started, and on
+    // Windows that turn's first activity reached the window 2s after the
+    // role's Enter: the busy check below read the pane as idle and the
+    // kickoff was queued behind the role (0.2.37 VM). Its start is waited for.
+    if (pane.roleSentAt) {
+      const roleTurn = await awaitRoleTurn(pane.id, pane.roleSentAt, tag, slotStillWanted)
+      pane.roleSentAt = undefined
+      if (roleTurn === 'gone') {
+        releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
+        return
+      }
+      if (roleTurn === 'moved-on') {
+        pipelineLog(`${tag} ⏹ the run is no longer running — not sending the role or kickoff`)
+        return
+      }
+      if (roleTurn === 'parked') turnWait = 'parked'
+    }
+    // Up to its turn_complete, not to a quiet screen: see TURN_END_WAIT_MS.
+    const turnEndBy = Date.now() + TURN_END_WAIT_MS
+    if (turnWait !== 'parked' && !paneParkedOnPrompt(pane.id) && turnStillOpen(pane.id, turnEndBy)) {
       pipelineLog(`${tag} ⏳ the pane is still in its previous turn — waiting for it to end before typing`)
       turnWait = await waitUntilTurnEnds({
-        busy: () => paneTurnBusy(pane.id),
+        busy: () => turnStillOpen(pane.id, turnEndBy),
         parked: () => paneParkedOnPrompt(pane.id),
         alive: () => paneAlive(pane.id),
-        stillWanted: () => pipeline.state === 'running' && pipeline.stageIndex === index,
+        stillWanted: slotStillWanted,
         sleep,
       })
       if (turnWait === 'gone') {
         releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
         return
       }
-      if (turnWait === 'moved-on') return
-      if (turnWait === 'idle') pipelineLog(`${tag} ✓ previous turn ended — proceeding`)
+      if (turnWait === 'moved-on') {
+        pipelineLog(`${tag} ⏹ the run is no longer running — not sending the role or kickoff`)
+        return
+      }
+      if (turnWait === 'idle') {
+        pipelineLog(turnEndUnconfirmed(pane.id) ? `${tag} ${TURN_END_UNCONFIRMED_LINE}` : `${tag} ✓ previous turn ended — proceeding`)
+      }
     }
     if (turnWait === 'parked' || paneParkedOnPrompt(pane.id)) {
       pipelineLog(`${tag} ⏸ ${PARKED_ON_PROMPT_REASON} — not typing into it`)
+      markRunEnding(index, slot.label, true)
       pane.kickoffStatus = 'failed'
       syncViews()
       pipelineDag.slotStarted(index, slot.label, pane.id)
@@ -14968,6 +15288,8 @@ async function activateStage(index: number, opts: { only?: string; note?: string
     }
 
     // If role was deferred (skipRoleInjection), inject it now before kickoff.
+    // The role's turn found parked on a CLI prompt: the kickoff stops there.
+    let roleParked = false
     // A role that failed at pre-spawn gets the same one more try. A slot whose
     // role never landed takes no kickoff and fails the run below: it used to get
     // the kickoff anyway and run as `running` without its role (#448).
@@ -14984,11 +15306,21 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       pipelineLog(`${tag} ➜ injecting role '${role.label}' (${retry ? 'retry after the pre-spawn injection failed' : 'deferred'}, ${roleContent.length} chars)`)
       // bracketed paste (preserveNewlines) — same as kickoff — to avoid a raw
       // keystroke burst flooding the PTY input buffer.
-      const roleOk = await injectPane(pane.id, roleContent, `role:${role.label}`, true)
+      const roleEvidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; enters?: number; stopped?: boolean } = {}
+      const roleSentAt = Date.now()
+      runPaneSentAt.set(pane.id, roleSentAt)
+      const roleOk = await injectPane(pane.id, roleContent, `role:${role.label}`, true, undefined, roleEvidence, undefined, slotStillWanted)
+      logInjectEvidence(tag, 'role', 1, roleOk, roleEvidence)
+      if (roleEvidence.stopped) runPaneSentAt.delete(pane.id)
+      if (roleEvidence.stopped) {
+        pipelineLog(`${tag} ⏹ the run is no longer running — the role was not submitted`)
+        return
+      }
       pane.injectionStatus = roleOk ? 'sent' : 'failed'
       syncViews()
       if (!roleOk) {
         const roleFailure = 'role prompt never reached the agent'
+        markRunEnding(index, slot.label)
         pipelineLog(`${tag} ✕ ${retry ? 'retried' : 'deferred'} role injection failed (agent didn't react) — not sending the kickoff`)
         // The failed-kickoff exit below, without a kickoff: the slot's node and
         // backend record say so, and pipeline.stage_spawn goes first so a resume
@@ -15017,14 +15349,29 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         return
       } else {
         pipelineLog(`${tag} ✓ role injected`)
-        // Wait for agent to acknowledge the role before injecting kickoff
-        const settleResult = await waitForActivityThenSettle(pane.id, 2500, 30_000)
-        if (!paneAlive(pane.id)) {
+        // The role's own turn first, read off its turn events: only a title
+        // spinner moves during it on Windows, which the settle below took
+        // for a quiet pane and typed the kickoff into it (0.2.37 VM).
+        const roleTurn = await awaitRoleTurn(pane.id, roleSentAt, tag, slotStillWanted)
+        if (roleTurn === 'gone') {
           releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
           return
         }
-        if (settleResult === 'no-activity') {
-          pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
+        if (roleTurn === 'moved-on') {
+          pipelineLog(`${tag} ⏹ the run is no longer running — not sending the kickoff`)
+          return
+        }
+        roleParked = roleTurn === 'parked'
+        if (roleTurn === 'no-start') {
+          // Wait for agent to acknowledge the role before injecting kickoff
+          const settleResult = await waitForActivityThenSettle(pane.id, 2500, 30_000)
+          if (!paneAlive(pane.id)) {
+            releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
+            return
+          }
+          if (settleResult === 'no-activity') {
+            pipelineLog(`${tag} ⚠ agent silent after role — sending kickoff anyway`)
+          }
         }
       }
     }
@@ -15041,30 +15388,45 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         }),
         index, slot.label) +
       sessionMarkerLine(pane.sessionMarker)
+    // The role's settle can take 30s, long enough for a sibling to fail the run.
+    if (runEndedFirst('kickoff')) return
     pipelineLog(`${tag} ➜ injecting kickoff (${kickoff.length} chars)`)
     let held = false
     // The watcher's arm time: taken before the injection, because the watcher
     // itself arms two backend round trips after it, and a turn that ends in
     // between must still count as this stage's. See startStageWatcher.
     let kickoffStartedAt = Date.now()
+    let kickoffAttempt = 0
     const kickoffResult = await runPipelineKickoff({
       inject: async () => {
         kickoffStartedAt = Date.now()
-        const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
-        const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence)
-        return { injected, echo: evidence.echo }
+        runPaneSentAt.set(pane.id, kickoffStartedAt)
+        const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number; late?: LateSubmit; lateMs?: number } = {}
+        // Asked again right before its Enter: a sibling can fail the run in
+        // the second this kickoff is being typed.
+        const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence, undefined, slotStillWanted)
+        logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
+        if (evidence.stopped) runPaneSentAt.delete(pane.id)
+        return { injected, echo: evidence.echo, submit: evidence.submit, stopped: evidence.stopped }
       },
+      confirmQueued: () => confirmQueuedKickoff(pane.id, kickoffStartedAt, tag, slotStillWanted),
       sleep,
       paneAlive: () => paneAlive(pane.id),
       onHeld: () => {
         held = true
         pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+        watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
       },
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       // A resume after a held kickoff: submit the copy still in the box.
       heldCopy: heldKickoffCopy(pane.id, kickoff),
-      parkedOnPrompt: () => paneParkedOnPrompt(pane.id),
+      parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
+      stillWanted: slotStillWanted,
     })
+    if (kickoffResult.stopped) {
+      pipelineLog(`${tag} ⏹ the run is no longer running — the kickoff was not submitted`)
+      return
+    }
     if (kickoffResult.cancelled) {
       releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
       return
@@ -15077,6 +15439,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       : held
       ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
       : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`
+    if (!ok) markRunEnding(index, slot.label, parked)
     // Another slot failed the run (or the user stopped it) while this kickoff
     // was in flight: record nothing and arm nothing for a run that is over.
     const runMovedOn = (): boolean => pipeline.state !== 'running' || pipeline.stageIndex !== index
@@ -15085,6 +15448,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         if (held) heldKickoffPanes.add(pane.id)
         void failRunOnKickoff(index, slot.label, failure, held, false, parked)
       }
+      pipelineLog(`${tag} ⏹ the run is no longer running — ${ok ? 'the kickoff went out first; nothing more is typed' : 'no watcher armed'}`)
       return
     }
     // Wire the Manager router HERE — the first statement after the kickoff
@@ -15141,6 +15505,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         if (held) heldKickoffPanes.add(pane.id)
         void failRunOnKickoff(index, slot.label, failure, held, false, parked)
       }
+      pipelineLog(`${tag} ⏹ the run is no longer running — ${ok ? 'the kickoff went out first; nothing more is typed' : 'no watcher armed'}`)
       return
     }
     const stageResp = await sendQuiet<ProjectPayload>('pipeline.stage_spawn', {
@@ -15159,13 +15524,19 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       await failRunOnKickoff(index, slot.label, failure, held, false, parked)
       return
     }
-    if (runMovedOn()) return
+    if (runMovedOn()) {
+      pipelineLog(`${tag} ⏹ the run is no longer running — the kickoff went out first; no watcher armed`)
+      return
+    }
     startStageWatcher(index, pane.id, kickoffScanFrom, kickoffStartedAt)
   }))
 
   // A run failed by one of this stage's kickoffs is over: no router poll, and
   // no CLIs spawned for a next stage it will never reach.
-  if (pipeline.state !== 'running' || pipeline.stageIndex !== index) return
+  if (pipeline.state !== 'running' || pipeline.stageIndex !== index) {
+    pipelineLog(`Stage ${stage.id} ⏹ the run is no longer running — no router poll, no next stage`)
+    return
+  }
   // A retried slot rejoins a stage whose router, pre-spawn and counts stand.
   if (only) return
 
@@ -15268,8 +15639,7 @@ async function spawnPipelineStage(index: number): Promise<void> {
   // Manager-mode: start the per-stage router poll loop (scans buffers,
   // routes ASK/REPORT/DISPATCH/MANAGER-READY/STAGE-DONE).
   if (managerSlot) {
-    startRouterPoll(index)
-    pipelineLog(`Stage ${stage.id} 🎯 Manager router poll started (${ROUTER_POLL_MS / 1000}s)`)
+    if (startRouterPoll(index)) pipelineLog(`Stage ${stage.id} 🎯 Manager router poll started (${ROUTER_POLL_MS / 1000}s)`)
   }
 }
 
@@ -15330,6 +15700,7 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   pipelineRunWorkspace = payload.workspacePath
   pipeline.stageIndex = 0
   pipeline.state = 'running'
+  runEndingSlots.clear()
   // The graph decides where the run starts (0, or a restart-from-node point).
   const startIndex = await pipelineDag.begin(pid, stagesApi.stages.value, {
     fromNodeId: payload.fromNodeId,
@@ -15383,6 +15754,7 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   // has the run, so a refused start leaves no empty group behind.
   createRunGroup(pipelineRunGroupName(pid))
   runSlots.startRun(!!payload.childOf)
+  runPaneSentAt.clear()
   applyProjectPaths(resp ?? undefined)
   pipelineDag.setRunStack(resp?.project?.run_stack)
   pipelineDag.adoptOutputs(resp?.project?.node_outputs)
@@ -15600,6 +15972,7 @@ async function onPipelineNext(): Promise<void> {
  *  the workspace it inspects, and that workspace is the one being closed. */
 function tearDownPipelineOrchestration(): void {
   pipeline.state = 'aborted'
+  runEndingSlots.clear()
   stopGlobalManagerRouter()
   // Router text waiting on a prompt belongs to this run, not to a resumed one.
   routerDeliveries.clear()
@@ -15682,12 +16055,36 @@ function scheduleSlotRetry(stageIndex: number, slotLabel: string, retry: { attem
   })()
 }
 
+/** Slots ("stage/label") whose failure will end the run, from the moment
+ *  that is decided until failRunOnKickoff takes it. In between the slot still
+ *  records its kickoff and its stage with the backend, two round trips with
+ *  the run `running`, and a sibling asked whether it is still wanted in that
+ *  second pressed its Enter (0.2.37 Linux VM, 2/13). Taken out again when
+ *  failRunOnKickoff gives the slot a retry instead, and emptied whenever a
+ *  run starts, resumes, restarts, resets or is torn down. */
+const runEndingSlots = new Set<string>()
+
+/** True while a slot of this run is on its way to failing it. */
+function runEnding(): boolean {
+  return runEndingSlots.size > 0
+}
+
+/** Called the moment a slot's failure is decided, before anything is awaited:
+ *  when that failure will end the run, no sibling types anything more. */
+function markRunEnding(stageIndex: number, slotLabel: string, needsUser = false): void {
+  if (pipelineDag.failureEndsRun(stageIndex, slotLabel, needsUser)) runEndingSlots.add(`${stageIndex}/${slotLabel}`)
+}
+
 /** A slot's kickoff never reached its agent: fail its node with the reason and
  *  end the run as failed, instead of leaving it `running` around a pane that
  *  never got its task (#448). Like an abort, the panes stay alive for a
  *  resume. The first failing slot ends the run; later ones only fail their
  *  own node. */
 async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false, reported = false, needsUser = false): Promise<void> {
+  // Nothing is awaited from here to the teardown below, so the mark can go
+  // now: either this run ends in the same tick, or the slot retries, takes its
+  // error edge or belongs to a run that is over, and the mark was wrong.
+  runEndingSlots.delete(`${stageIndex}/${slotLabel}`)
   // A kickoff that finishes late, after the user stopped this run and another
   // one moved to a different stage, must not fail that one.
   if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
@@ -15713,7 +16110,10 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   if (pipeline.state !== 'running') return
   const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
   pipelineLog(`Stage ${stageLabel}/${slotLabel} ✕ ${reason} — pipeline failed`)
+  const failedStageId = stagesApi.stages.value[stageIndex]?.id
+  const failedPaneId = failedStageId === undefined ? undefined : runSlotPane(failedStageId, slotLabel)?.id
   tearDownPipelineOrchestration()
+  void stopFailedRunPanes(failedPaneId)
   await pipelineDag.end('failed', `run stopped: slot "${slotLabel}" failed (${reason})`)
   const resp = await sendQuiet<ProjectPayload>('pipeline.abort', {
     workspace_path: pipeline.workspacePath,
@@ -15733,6 +16133,46 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
   )
   if (pipelineDag.isChildRun() && await returnToParent('failed', { summary: '', output: null }, `${slotLabel}: ${reason}`)) return
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
+}
+
+/** A slot failed the run: stop the agents of its other slots (lib/failedRunStop).
+ *  One in a turn gets its interrupt key, the pane's stop button; one parked on
+ *  a prompt gets Esc. Idle ones get nothing, the failed slot's own pane is left
+ *  as it is for a resume, and no pane is closed. Panes of other runs are not in
+ *  runSlots. Checked again before each pane: once the state is back to
+ *  `running`, a run goes on and nothing more is pressed. */
+async function stopFailedRunPanes(failedPaneId: string | undefined): Promise<void> {
+  const slots = runSlots.current()
+  const failedAt = Date.now()
+  await stopFailedRunPanesFor({
+    paneIds: [...new Set(slots.values())].filter((id) => id !== failedPaneId),
+    status: (paneId) => (panes.value.find((p) => p.id === paneId)?.realized ? paneRefs[paneId]?.displayStatus as string | undefined : undefined),
+    sentUnfinished: (paneId) => {
+      const sentAt = runPaneSentAt.get(paneId)
+      return sentAt !== undefined && (paneTurnCompleteAt.get(paneId) ?? 0) < sentAt && !!panes.value.find((p) => p.id === paneId)?.realized
+    },
+    userTouched: (paneId) => ((paneRefs[paneId]?.lastUserKeyAt as number | undefined) ?? 0) > failedAt,
+    // A resume, a restart or a new run: that run's panes are its own.
+    runGoesOn: () => pipeline.state === 'running' || runSlots.current() !== slots,
+    stop: async (paneId, how) => {
+      const pane = panes.value.find((p) => p.id === paneId)
+      const ref = paneRefs[paneId]
+      let sent = false
+      if (how === 'interrupt' || acp.owns(paneId)) {
+        sent = await onInterrupt(paneId)
+      } else if (ref?.sessionId) {
+        try {
+          await backend.send('terminal.input', { terminal_session_id: ref.sessionId, data: '\x1b' })
+          sent = true
+        } catch {
+          sent = false
+        }
+      }
+      if (sent) pipelineLog(`⏹ interrupted ${pane?.slotLabel ?? paneId} — the run failed`)
+    },
+    sleep,
+    now: Date.now,
+  })
 }
 
 /** Approve the gate the run is paused on and carry on with the hand-off. */
@@ -15890,6 +16330,7 @@ async function onPipelineReset(paneIds?: readonly string[]): Promise<void> {
   stopGlobalManagerRouter()
   cancelAllWatchers()
   stageCompletions.clear()
+  runEndingSlots.clear()
   // Reset kills the panes, so any pre-spawn still in flight is warming a stage
   // that no longer has a run behind it. Dropping the promises here stops the
   // next run from awaiting this one's warm-up.
@@ -15965,7 +16406,30 @@ async function confirmPipelineAbort(): Promise<boolean> {
  *  workspace, MCP) keep calling onPipelineAbort without a dialog. */
 async function onPipelineUserAbort(): Promise<void> {
   if (!(await confirmPipelineAbort())) return
-  await onPipelineAbort()
+  const interrupted = interruptedRunWorkspace()
+  if (pipeline.state !== 'running' && interrupted) await abortInterruptedRun(interrupted)
+  else await onPipelineAbort()
+}
+
+/** The workspace of a stored run left at 'running' that this window does not
+ *  drive (a Reload or crash interrupted it), or ''. Its Resume card offers
+ *  Resume and Abort. */
+function interruptedRunWorkspace(): string {
+  const info = existingProject.value
+  return pipeline.state !== 'running' && info?.state === 'running' ? info.workspacePath : ''
+}
+
+/** End an interrupted run's record (state 'aborted', still resumable). The
+ *  backend refuses when a window still drives it. False when refused. */
+async function abortInterruptedRun(workspacePath: string): Promise<boolean> {
+  const resp = await sendQuiet<ProjectPayload>('pipeline.abort', {
+    workspace_path: workspacePath, reason: 'user', interrupted_only: true,
+  })
+  if (!resp) return false
+  pipelineLog('Interrupted pipeline run aborted by user')
+  applyProjectPaths(resp)
+  await onWorkspaceCheck(workspacePath)
+  return true
 }
 
 // ─────────── Switch / close workspace (phase-7) ───────────
@@ -16360,7 +16824,7 @@ backend.on('agent.activity', (raw) => {
     if (!ev.superseded) {
       recordTurnComplete(
         paneTurnCompleteAt, ev.pane_id, ev.timestamp ?? '', Date.now(),
-        TURN_TEXT_REPLAY_TOLERANCE_MS, paneTurnCompleteSourceAt
+        TURN_TEXT_REPLAY_TOLERANCE_MS, paneTurnCompleteSourceAt, paneTurnCompleteTimes
       )
     }
     // Badge: authoritative turn end → drop the RUNNING hysteresis latch now.
@@ -16720,6 +17184,16 @@ backend.on('pane.stopped', (raw) => {
   const ev = raw as { pane_id?: string; stopped?: boolean }
   if (!ev?.pane_id) return
   paneRefs[ev.pane_id]?.setStopped(!!ev.stopped)
+})
+
+// A chat wake opened a conversation in a NEW pane and retired the record that
+// held it; the backend already moved that record's children onto the new pane
+// (_retire_superseded). Follow it here, or the window keeps the retired id in
+// each child's spawnedBy and renders them as roots until the next reload.
+// Every main window gets it; ids are unique, so one that holds none is a no-op.
+backend.on('pane.lineage_rekeyed', (raw) => {
+  const handoff = lineageHandoff(raw)
+  if (handoff) rekeyLineage(handoff.oldId, handoff.newId)
 })
 
 // Cross-workspace message routed by the backend registry. Every window receives
@@ -17722,6 +18196,10 @@ interface StageRouter {
   /** DISPATCH blocks already routed (target + message, whitespace dropped).
    *  The screen scan and the Manager's reply text can both carry one block. */
   routedDispatches: Set<string>
+  /** Worker ASK / REPORT blocks already queued or routed (kind + slot +
+   *  content, whitespace dropped). A TUI repaint re-emits rows already on
+   *  screen, so the scan meets the same block again further down the buffer. */
+  routedWorkerMessages: Set<string>
   /** Manager replies that ended before the router poll started, which waits
    *  for every slot's kickoff, with when each turn ended. startRouterPoll
    *  routes them (#539). */
@@ -17762,6 +18240,7 @@ function ensureStageRouter(stageIndex: number): StageRouter {
       armedAt: 0,
       watchdogFired: false,
       routedDispatches: new Set(),
+      routedWorkerMessages: new Set(),
       earlyTurnTexts: [],
       managerKickoffAt: 0,
       readyReminded: false,
@@ -17843,9 +18322,14 @@ function routerObservationIsReal(
   return true
 }
 
-function startRouterPoll(stageIndex: number): void {
+/** False when no poll was started by this call. */
+function startRouterPoll(stageIndex: number): boolean {
   const router = stageRouters.get(stageIndex)
-  if (!router || router.pollHandle !== null) return
+  if (!router || router.pollHandle !== null) return false
+  if (pipeline.state !== 'running') {
+    pipelineLog(`Stage ${stageIndex} ⏹ the run is no longer running — not starting the Manager router poll`)
+    return false
+  }
   // Manager mode arms no per-pane watcher, so the stage's clock starts here.
   router.armedAt = Date.now()
   router.watchdogFired = false
@@ -17858,6 +18342,7 @@ function startRouterPoll(stageIndex: number): void {
       for (const e of early) await routeManagerTurnText(router.managerPaneId, e.text, new Date(e.at).toISOString(), true)
     })()
   }
+  return true
 }
 
 function disposeStageRouter(stageIndex: number): void {
@@ -17865,6 +18350,7 @@ function disposeStageRouter(stageIndex: number): void {
   if (r?.pollHandle !== null && r?.pollHandle !== undefined) {
     window.clearInterval(r.pollHandle)
   }
+  if (r) handStageToGlobalRouter(r)
   stageRouters.delete(stageIndex)
 }
 
@@ -18285,14 +18771,25 @@ function parseContentBlocks(
   const region = buf.slice(fromCursor)
   const items: string[] = []
   let lastEnd = 0
+  // The block's own START marker, the literal before the capture group.
+  const startMarker = re.source.slice(0, re.source.indexOf('('))
   re.lastIndex = 0
   let m: RegExpExecArray | null
   while ((m = re.exec(region)) !== null) {
-    const inner = m[1]
+    // A repaint on a narrow pane can drop letters from an END marker
+    // ("REPOR-END--"), and the lazy match then runs from that template's START
+    // to the END of the next real block. The block is what follows the last
+    // START before its END.
+    const lastStart = m[1].lastIndexOf(startMarker)
+    const inner = lastStart >= 0 ? m[1].slice(lastStart + startMarker.length) : m[1]
     // `content:` consumes everything to end of inner block.
     const cm = inner.match(/(?:^|\n)\s*content:\s*([\s\S]*)$/)
     if (cm) {
-      items.push(cm[1].trim())
+      // Skip the protocol's own template (`content: <...>`): a TUI that prints
+      // the submitted kickoff in full puts it after the router's floor, and a
+      // `<...>` placeholder is never a worker's real message.
+      const content = cm[1].trim()
+      if (!/^<[^<>]*>$/.test(content)) items.push(content)
     } else {
       // Tolerant fallback: take inner trimmed if no `content:` prefix.
       const trimmed = inner.trim()
@@ -18444,7 +18941,7 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     // the message cursor past it, and it must not be matched inside the
     // kickoff echo that sits below the floor.
     const cursor = router.armedCursors.get(router.managerPaneId) ?? 0
-    if (findSentinel(buf, MANAGER_READY_SENTINEL, cursor) >= 0) {
+    if (findScreenSentinel(buf, MANAGER_READY_SENTINEL, cursor) >= 0) {
       await markManagerReady(router, stage.id, '')
     }
     await managerReadyFallback(router, stage.id)
@@ -18465,13 +18962,11 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     // ---STAGE-DONE--- at line start, so a TUI that echoes the paste back
     // verbatim would otherwise finish the stage on the first poll.
     const doneFrom = router.armedCursors.get(router.managerPaneId) ?? 0
+    // Line-anchored only, unlike READY: the echoed kickoff carries webhook data
+    // after the floor, and a `⏺---STAGE-DONE---` written there would end the
+    // stage. A TUI with no line breaks gets it from the reply text instead.
     if (!router.finished && findSentinel(buf, MANAGER_STAGE_DONE_SENTINEL, doneFrom) >= 0) {
-      router.finished = true
-      pipelineLog(
-        `Stage ${stage.id} 🎯 ${i18n.global.t('label.pipeline-log-manager-done', { sentinel: MANAGER_STAGE_DONE_SENTINEL })}`,
-      )
-      stageCompletions.delete(stageIndex)
-      void onPipelineNext()
+      finishManagerStage(router, stage.id, stageIndex)
     }
   }
   } finally {
@@ -18479,7 +18974,27 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
   }
 }
 
+/** The Manager printed ---STAGE-DONE---: on its screen or in its reply text. */
+function finishManagerStage(router: StageRouter, stageId: string, stageIndex: number): void {
+  router.finished = true
+  pipelineLog(
+    `Stage ${stageId} 🎯 ${i18n.global.t('label.pipeline-log-manager-done', { sentinel: MANAGER_STAGE_DONE_SENTINEL })}`,
+  )
+  stageCompletions.delete(stageIndex)
+  void onPipelineNext()
+}
+
 function queueOrRouteWorkerMsg(router: StageRouter, stageId: string, msg: PendingMessage): void {
+  // Keyed on the text alone: a block from an earlier turn stays on screen and
+  // is scanned again in the next one, so a per-turn key re-sent it (0.2.37 VM,
+  // ASK reached the Manager twice). The same text sent again on purpose is a
+  // known gap for 0.2.38.
+  const key = `${msg.kind}\u0000${msg.fromLabel}\u0000${msg.content.replace(/\s+/g, '')}`
+  if (router.routedWorkerMessages.has(key)) {
+    pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} skipped — a block already routed`)
+    return
+  }
+  router.routedWorkerMessages.add(key)
   if (!router.managerReady) {
     router.preReadyQueue.push(msg)
     pipelineLog(
@@ -18580,16 +19095,22 @@ async function routeManagerTurnText(paneId: string, text: string, timestamp: str
   for (const d of parseDispatchBlocks(text, 0).items) {
     await routeManagerDispatch(router, stage.id, d)
   }
+  // Only its reply to this stage's kickoff counts: a role acknowledgement that
+  // started before the kickoff, or a late report of an older turn — such as the
+  // previous stage's, when one pane is Manager of both — does not (#539).
+  const turnEndAt = Number.isNaN(eventMs) ? Date.now() : eventMs
+  const replyToKickoff = router.managerKickoffAt > 0 && turnEndAt > router.managerKickoffAt
+    && (paneTurnStartedAt.get(paneId) ?? router.managerKickoffAt) >= router.managerKickoffAt
+  // The screen scan alone missed it: a TUI that places rows with cursor moves
+  // leaves no line for findSentinel to anchor on.
+  if (replyToKickoff && !router.finished && findSentinel(text, MANAGER_STAGE_DONE_SENTINEL, 0) >= 0) {
+    finishManagerStage(router, stage.id, pipeline.stageIndex)
+    return
+  }
   // A Manager can end Phase-1 turns without READY on purpose (it sent a
   // message, started a background task), so a turn end is not READY. Remind it
   // once; managerReadyFallback hands over held messages if it then sits idle.
-  // Only its reply to the kickoff counts: a role acknowledgement that started
-  // before the kickoff, or a late report of an older turn, does not (#539).
-  const turnEndAt = Number.isNaN(eventMs) ? Date.now() : eventMs
-  if (
-    !router.managerReady && router.managerKickoffAt > 0 && turnEndAt > router.managerKickoffAt
-    && (paneTurnStartedAt.get(paneId) ?? router.managerKickoffAt) >= router.managerKickoffAt
-  ) {
+  if (!router.managerReady && replyToKickoff) {
     router.managerQuietSince = Date.now()
     if (!router.readyReminded) {
       router.readyReminded = true
@@ -18636,11 +19157,20 @@ const globalRouterCursors = new Map<string, number>()
 /** Same role as StageRouter.bufferAnchors — these cursors are absolute buffer
  *  indices too, so the 128KB cap invalidates them the same way. */
 const globalRouterAnchors = new Map<string, BufferObservation>()
+/** StageRouter.routedWorkerMessages for the global Manager (pane + stage + kind +
+ *  content, whitespace dropped): a repaint re-emits a block already routed. */
+const globalRoutedMessages = new Set<string>()
 let _globalScanRunning = false
 
 function startGlobalManagerRouter(): void {
   if (globalRouterHandle !== null) return
   if (!pipeline.globalManager) return
+  // A run a slot failed (or the user stopped) while its stage started has
+  // nothing left to route.
+  if (pipeline.state !== 'running') {
+    pipelineLog('⏹ the run is no longer running — not starting the Global Manager router')
+    return
+  }
   pipelineLog(`🎯 Global Manager router started (${pipeline.globalManager.stageId}/${pipeline.globalManager.slotLabel})`)
   globalRouterHandle = window.setInterval(() => { void globalManagerRouterScan() }, 2000)
 }
@@ -18651,7 +19181,31 @@ function stopGlobalManagerRouter(): void {
     globalRouterHandle = null
     globalRouterCursors.clear()
     globalRouterAnchors.clear()
+    globalRoutedMessages.clear()
     pipelineLog('🎯 Global Manager router stopped')
+  }
+}
+
+/** A stage router whose Manager is the global Manager is being disposed, and
+ *  its workers fall to the global router, which skipped them until now (its
+ *  cursor for them still at 0). Hand over how far the stage router read and
+ *  what it sent, or the global router sends those messages again: a stage's
+ *  last REPORT reached the Manager twice, after STAGE-DONE (0.2.37 VM). */
+function handStageToGlobalRouter(r: StageRouter): void {
+  if (globalRouterHandle === null || r.managerPaneId !== globalManagerPaneId()) return
+  for (const paneId of r.workerPaneIds.values()) {
+    const cursor = r.cursors.get(paneId)
+    const anchor = r.bufferAnchors.get(paneId)
+    if (cursor === undefined || !anchor) continue
+    // The cursor counts in the buffer as the stage router last saw it.
+    globalRouterCursors.set(paneId, cursor)
+    globalRouterAnchors.set(paneId, anchor)
+  }
+  for (const key of r.routedWorkerMessages) {
+    const [kind, label, content] = key.split('\u0000')
+    const paneId = r.workerPaneIds.get(label)
+    const stageId = panes.value.find((p) => p.id === paneId)?.stageId
+    if (paneId && stageId) globalRoutedMessages.add(`${paneId}\u0000${stageId}\u0000${kind}\u0000${content}`)
   }
 }
 
@@ -18701,6 +19255,17 @@ async function globalManagerRouterScan(): Promise<void> {
     const newCursor = Math.max(askRes.newCursor, reportRes.newCursor, cursor)
     if (newCursor > cursor) globalRouterCursors.set(wp.id, newCursor)
     const fromLabel = wp.slotLabel || wp.stageId
+    const firstSeen = (kind: string, content: string): boolean => {
+      const key = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000${content.replace(/\s+/g, '')}`
+      if (globalRoutedMessages.has(key)) {
+        pipelineLog(`🎯 Global: ${kind} from ${fromLabel} skipped — a block already routed`)
+        return false
+      }
+      globalRoutedMessages.add(key)
+      return true
+    }
+    askRes.items = askRes.items.filter((c) => firstSeen('ASK', c))
+    reportRes.items = reportRes.items.filter((c) => firstSeen('REPORT', c))
     for (const content of askRes.items) {
       pipelineLog(`🎯 Global → Manager: [ASK from ${fromLabel}]`)
       await routerInject(managerPaneId, `[→ ASK FROM ${fromLabel} (Stage ${wp.stageId})]\n${content}`, `ask:${fromLabel}`)

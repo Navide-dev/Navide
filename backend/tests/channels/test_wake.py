@@ -428,13 +428,20 @@ def seam(monkeypatch, tmp_path):
                                          spawn_status="spawned", custom_name="api", auto_name="")],
         registry={}, refusal=None, exhausted=False, probe=True, opened_ws=[], placeholder_calls=[],
         placeholder={"ok": True, "reason": "opened", "launched_session_id": "sess-1"}, spawns=[],
-        settings={}, spawn_answer=None, retired=[])
+        settings={}, spawn_answer=None, retired=[], successors=[], broadcasts=[])
     monkeypatch.setattr(app, "live_main_window_ids", lambda: set(state.windows))
-    def unspawn(ws, *, pane_id):
+
+    async def broadcast_main_windows(event):
+        state.broadcasts.append(event)
+
+    monkeypatch.setattr(app, "broadcast_main_windows", broadcast_main_windows)
+    def unspawn(ws, *, pane_id, successor=""):
         state.retired.append(pane_id)
+        state.successors.append(successor)
         for record in state.records:
             if record.pane_id == pane_id:
                 record.spawn_status = "removed"
+        return SimpleNamespace(panes=state.records), True
 
     monkeypatch.setattr(app, "project_store", SimpleNamespace(
         peek=lambda ws: SimpleNamespace(panes=state.records) if ws == "/ws" else None,
@@ -470,6 +477,9 @@ def seam(monkeypatch, tmp_path):
         state.spawns.append((a, kw))
         if state.spawn_answer is not None:
             return state.spawn_answer
+        # The window writes the new pane's record (the lineage hand-off waits for it).
+        state.records.append(_Record(pane_id="spawned-1", agent="claude", session_id=kw.get("session_id"),
+                                     spawn_status="spawned", custom_name="", auto_name=""))
         return {"ok": True, "pane_id": "spawned-1", "resumed_session_id": kw.get("session_id")}
 
     monkeypatch.setattr(mcp, "_probe_window", probe)
@@ -480,6 +490,8 @@ def seam(monkeypatch, tmp_path):
     monkeypatch.setattr(channels_pkg, "WAKE_PANE_WAIT_S", 0.05)
     monkeypatch.setattr(channels_pkg, "WAKE_HELD_GRACE_S", 0.02)
     monkeypatch.setattr(channels_pkg, "WAKE_PANE_POLL_S", 0.01)
+    monkeypatch.setattr(channels_pkg, "WAKE_SUCCESSOR_WAIT_S", 0.05)
+    monkeypatch.setattr(channels_pkg, "WAKE_SUCCESSOR_POLL_S", 0.01)
     return state
 
 
@@ -692,6 +704,11 @@ async def test_seam_opens_the_conversation_when_the_window_holds_no_placeholder(
     assert seam.placeholder_calls == [] and seam.opened_ws == []
     # The record it replaced would otherwise come back on the next restore.
     assert seam.retired == ["old-1"]
+    # ...and its children follow the conversation to the new pane.
+    assert seam.successors == ["spawned-1"]
+    # The window is told, so its in-memory children follow without a reload.
+    assert [(e["type"], e["payload"]) for e in seam.broadcasts] == [("pane.lineage_rekeyed", {
+        "workspace_path": "/ws", "old_pane_id": "old-1", "new_pane_id": "spawned-1"})]
 
 
 async def test_seam_scheduled_jobs_follow_a_pane_opened_onto_the_conversation(seam, monkeypatch) -> None:

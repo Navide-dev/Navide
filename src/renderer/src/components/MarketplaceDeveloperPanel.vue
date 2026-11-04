@@ -128,6 +128,8 @@ const publishTarget = ref('')
 const previousDisclosure = ref<ManifestDisclosure | null>(null)
 const yankId = ref('')
 const yankVersion = ref('')
+/** A navide://publish path the user has not confirmed yet: nothing reads it until they do. */
+const linkedPath = ref('')
 
 function writtenByAgent(field: string): boolean {
   return field in agentValues.value && agentValues.value[field] === appFields[field]
@@ -158,6 +160,7 @@ watch(() => form.value?.seq, () => {
   error.value = ''
   agentValues.value = {}
   staged.value = null
+  linkedPath.value = ''
   if (!current) return
   if (current.form === 'developer-application') {
     resetApplicationFields()
@@ -191,6 +194,12 @@ const publishDiff = computed<DisclosureDiff | null>(() => {
     return null
   }
 })
+
+function readLinkedPackage(): void {
+  const path = linkedPath.value
+  linkedPath.value = ''
+  void loadStaged(path)
+}
 
 async function discardForm(): Promise<void> {
   const pending = request.value

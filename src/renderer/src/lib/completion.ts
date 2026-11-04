@@ -661,6 +661,9 @@ export function turnEndsWithLoopDone(text: string, marker: string): boolean {
  *  The stamp stays `now` (not the event's own timestamp) so every consumer's
  *  existing wall-clock comparisons are unchanged; only the decision to record
  *  at all is new. Returns whether the map was written. */
+/** How many turn ends recordTurnComplete keeps per pane in `timesMap`. */
+export const TURN_COMPLETE_TIMES_KEPT = 8
+
 export function recordTurnComplete(
   map: Map<string, number>,
   paneId: string,
@@ -668,9 +671,14 @@ export function recordTurnComplete(
   now: number,
   toleranceMs: number,
   sourceMap?: Map<string, number>,
+  timesMap?: Map<string, number[]>,
 ): boolean {
   if (isReplayedTurnComplete(timestamp, now, toleranceMs)) return false
   map.set(paneId, now)
+  // `timesMap` keeps the receipt times of the pane's last few turn ends, so a
+  // caller can count ends that arrived in one batch and share a time
+  // (App.vue's confirmQueuedKickoff, lib/pipelineDelivery waitForQueuedTurn).
+  if (timesMap) timesMap.set(paneId, [...(timesMap.get(paneId) ?? []), now].slice(-TURN_COMPLETE_TIMES_KEPT))
   // `sourceMap` keeps the event's OWN clock alongside the receipt clock above,
   // written in the same breath so the two can never disagree about whether a
   // turn was recorded. Only the quota gate reads it; every existing consumer

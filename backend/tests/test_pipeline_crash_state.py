@@ -219,3 +219,128 @@ async def test_a_claim_must_be_a_list(wired, ws) -> None:
     await ws_handlers.pipeline_claim(window, "1", "pipeline.claim", {"workspaces": "nope"})
     assert window.sent[-1]["ok"] is False
     assert getattr(window, "pipeline_claimed", False) is False
+
+
+async def test_an_interrupted_run_can_be_aborted(wired, ws) -> None:
+    await _start_run(wired, ws, _Session(held=(ws,)))
+    _restart_backend(wired)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await ws_handlers.pipeline_claim(window, "2", "pipeline.claim", {"workspaces": []})
+    assert _status(ws)["state"] == "interrupted"
+    await ws_handlers.pipeline_abort(
+        window, "3", "pipeline.abort", {"workspace_path": ws, "reason": "user", "interrupted_only": True}
+    )
+    assert window.sent[-1]["ok"] is True
+    assert ProjectStore().peek(ws).state == "aborted"
+    assert _status(ws)["state"] == "aborted"
+
+
+async def test_aborting_only_an_interrupted_run_leaves_a_driven_one_alone(wired, ws) -> None:
+    # A second window on the workspace sees the stored run, but another window drives it.
+    driver = _Session(held=(ws,), window_id="win-a")
+    wired.sessions.append(driver)
+    await ws_handlers.pipeline_claim(driver, "1", "pipeline.claim", {"workspaces": []})
+    await _start_run(wired, ws, driver)
+    viewer = _Session(held=(ws,), window_id="win-b")
+    wired.sessions.append(viewer)
+    await ws_handlers.pipeline_claim(viewer, "2", "pipeline.claim", {"workspaces": []})
+    await ws_handlers.pipeline_abort(
+        viewer, "3", "pipeline.abort", {"workspace_path": ws, "reason": "user", "interrupted_only": True}
+    )
+    assert viewer.sent[-1]["ok"] is False
+    assert viewer.sent[-1]["error"]["code"] == "NOT_INTERRUPTED"
+    assert ProjectStore().peek(ws).state == "running"
+
+
+async def test_resuming_an_interrupted_webhook_run_ends_its_unattended(wired, ws, tmp_path, monkeypatch) -> None:
+    # Resume claims the run before any pane starts, so the panes cannot tell
+    # it was interrupted: the resume itself has to say so.
+    from agent_team_backend import guard_fail_closed, webhook_service, webhook_triggers
+    from agent_team_backend.db import Database
+
+    monkeypatch.setattr(guard_fail_closed, "unattended_supported", lambda: True)
+    store = webhook_triggers.WebhookStore(Database(tmp_path / "navide.db"))
+    service = webhook_service.WebhookService(
+        store=store, db=store.db, window=SimpleNamespace(), pipeline=lambda _p: None, known_program=lambda a, p: True,
+    )
+    monkeypatch.setattr(webhook_service, "_service", service)
+    trigger, _ = store.create(name="CI", workspace=ws, pipeline_id="pl-1")
+    store.set_unattended(trigger["id"], True)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    run = store.open_run(trigger_id=trigger["id"], workspace=ws, project_id="p", pipeline_id="pl-1", unattended=True)
+    service._active[ws] = run
+    assert store.run_trigger_unattended(run["id"]) is True
+
+    _restart_backend(wired)
+    reloaded = _Session(held=(ws,))
+    wired.sessions.append(reloaded)
+    await ws_handlers.pipeline_claim(reloaded, "2", "pipeline.claim", {"workspaces": []})
+    await ws_handlers.pipeline_resume(reloaded, "3", "pipeline.resume", {"workspace_path": ws})
+    assert reloaded.sent[-1]["ok"] is True
+    assert store.run_trigger_unattended(run["id"]) is False
+
+
+async def test_resuming_a_run_that_was_not_interrupted_changes_nothing(wired, ws, tmp_path, monkeypatch) -> None:
+    from agent_team_backend import webhook_service
+
+    calls: list[str] = []
+    monkeypatch.setattr(webhook_service, "_service", SimpleNamespace(
+        note_interrupted=calls.append, store=SimpleNamespace(is_bound=lambda _p: False), run_started=lambda *a, **k: None,
+        run_resumed=lambda _ws: None,
+    ))
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    await ws_handlers.pipeline_abort(window, "2", "pipeline.abort", {"workspace_path": ws})
+    await ws_handlers.pipeline_resume(window, "3", "pipeline.resume", {"workspace_path": ws})
+    assert window.sent[-1]["ok"] is True and calls == []
+
+
+def _webhook_spy(monkeypatch) -> SimpleNamespace:
+    from agent_team_backend import webhook_service
+
+    spy = SimpleNamespace(calls=[], store=SimpleNamespace(is_bound=lambda _p: False))
+    spy.run_started = lambda project, *, child, ended: spy.calls.append(("started", ended))
+    spy.run_resumed = lambda ws: spy.calls.append(("resumed", ws))
+    spy.note_interrupted = lambda ws: spy.calls.append(("interrupted", ws))
+    spy.run_reset = lambda ws, ended: spy.calls.append(("reset", ended))
+    monkeypatch.setattr(webhook_service, "_service", spy)
+    return spy
+
+
+@pytest.mark.parametrize("end", ["completed", "aborted"])
+async def test_a_new_run_tells_the_webhook_row_how_the_last_one_ended(wired, ws, monkeypatch, end) -> None:
+    spy = _webhook_spy(monkeypatch)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    if end == "completed":
+        project = wired.store.peek(ws)
+        project.state = "completed"
+        wired.store.save(project)
+    else:
+        await ws_handlers.pipeline_abort(window, "2", "pipeline.abort", {"workspace_path": ws})
+    await _start_run(wired, ws, window)
+    assert spy.calls[-1] == ("started", end)
+
+
+async def test_resume_reopens_the_webhook_row_before_any_pane(wired, ws, monkeypatch) -> None:
+    spy = _webhook_spy(monkeypatch)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    await ws_handlers.pipeline_abort(window, "2", "pipeline.abort", {"workspace_path": ws, "reason": "failed"})
+    await ws_handlers.pipeline_resume(window, "3", "pipeline.resume", {"workspace_path": ws})
+    assert window.sent[-1]["ok"] is True and spy.calls[-1] == ("resumed", ws)
+
+
+async def test_a_reset_ends_a_running_webhook_row_as_aborted(wired, ws, monkeypatch) -> None:
+    spy = _webhook_spy(monkeypatch)
+    window = _Session(held=(ws,))
+    wired.sessions.append(window)
+    await _start_run(wired, ws, window)
+    await ws_handlers.pipeline_reset(window, "2", "pipeline.reset", {"workspace_path": ws})
+    assert spy.calls[-1] == ("reset", "aborted")

@@ -41,8 +41,8 @@ async function loadRouter(parked: { value: boolean }) {
     'AppRouter.ts',
     { loader: 'ts' },
   )
-  const api = new Function('injectPane', 'routerInject', 'pipelineLog', 'i18n', code)(
-    injectPane, routerInject, () => {}, { global: { t: () => '' } },
+  const api = new Function('injectPane', 'routerInject', 'pipelineLog', 'i18n', 'paneTurnStartedAt', code)(
+    injectPane, routerInject, () => {}, { global: { t: () => '' } }, new Map(),
   ) as {
     queueOrRouteWorkerMsg: (router: unknown, stageId: string, msg: unknown) => void
     markManagerReady: (router: unknown, stageId: string, how: string) => Promise<void>
@@ -56,7 +56,7 @@ describe('the stage router never types into a pane parked on a CLI prompt', () =
   it('holds an ASK while the box is up, then sends it once after the user answers', async () => {
     const parked = { value: true }
     const { api, typed, routerDeliveries } = await loadRouter(parked)
-    const router = { managerPaneId: 'mgr', managerReady: true, preReadyQueue: [] }
+    const router = { managerPaneId: 'mgr', managerReady: true, preReadyQueue: [], routedWorkerMessages: new Set<string>(), workerPaneIds: new Map() }
     api.queueOrRouteWorkerMsg(router, '01', { kind: 'ASK', fromLabel: 'fe', content: 'which API?' })
     await flush()
     await routerDeliveries.drain()

@@ -8,9 +8,12 @@ than on the agent:
   paste, and a bare CR is Enter;
 * ``{{...}}`` is expanded after the task is placed in the kickoff
   (renderSlotKickoff, then expandKickoff), so a body holding
-  ``{{node.x.output}}`` would read another step's output.
+  ``{{node.x.output}}`` would read another step's output;
+* a line marker (``---REPORT-START---`` and the rest) is read off the agent's
+  screen, where the submitted kickoff is echoed, so the data could speak for
+  the agent: a REPORT to its Manager, a DISPATCH, a stage end.
 
-Both are removed here, on the way in, so the existing kickoff path stays as it
+All three are neutralised here, on the way in, so the existing kickoff path stays as it
 is. The wording around the data only asks the agent not to obey it: what limits
 an agent that does obey it is the run's Guard taint.
 
@@ -19,10 +22,13 @@ Pure functions: nothing here touches the network, the store or a window.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import re
 import secrets
+import sys
+import unicodedata
 
 #: Deepest JSON accepted. Checked before parsing, on the bytes.
 MAX_JSON_DEPTH = 32
@@ -33,6 +39,40 @@ _TYPES = {"application/json", "text/plain", "application/x-www-form-urlencoded"}
 #: make text read differently from what it holds.
 _DROP = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩]")
 _NEWLINES = re.compile("\r\n?| | ")
+
+#: Three or more hyphens, whitespace allowed between them: the opening of
+#: every line marker an agent's output is read for (---REPORT-START---,
+#: ---ASK-END---, ---STAGE-DONE---, ---MSG-START--- ...). Whitespace counts
+#: because Claude Code draws blank cells with cursor moves, so "- - -" can
+#: reach Navide's clean buffer as "---". Format characters (Cf: soft hyphen,
+#: zero-width space, word joiner, BOM ...), marks (Mn, Mc, Me) and the blank
+#: fillers count too: they draw nothing a router reads, and a renderer or the
+#: clean buffer can drop them and leave the run behind. The same set
+#: plugins/external_content.py treats as invisible (Zl and Zp are \s already).
+_INVISIBLE_FILLERS = frozenset("\u115f\u1160\u3164\uffa0\u2800")
+
+
+def _invisible_class() -> str:
+    ranges: list[str] = []
+    start = prev = -2
+    for cp in range(sys.maxunicode + 1):
+        ch = chr(cp)
+        if ch not in _INVISIBLE_FILLERS and unicodedata.category(ch) not in ("Cf", "Mn", "Mc", "Me"):
+            continue
+        if cp != prev + 1:
+            if start >= 0:
+                ranges.append(f"{re.escape(chr(start))}-{re.escape(chr(prev))}")
+            start = cp
+        prev = cp
+    ranges.append(f"{re.escape(chr(start))}-{re.escape(chr(prev))}")
+    return "".join(ranges)
+
+
+@functools.cache
+def _dash_run() -> re.Pattern[str]:
+    """Built on first use: the class walks every code point (0.3-1 s of CPU),
+    which every backend start paid at import, webhook or not."""
+    return re.compile(rf"-(?:[\s{_invisible_class()}]*-){{2,}}")
 
 _MARKER = "NAVIDE-WEBHOOK-DATA-"
 _INTRO = (
@@ -55,7 +95,10 @@ def sanitize_text(text: str) -> str:
     cleaned = _DROP.sub("", _NEWLINES.sub("\n", text))
     while "{{" in cleaned:
         cleaned = cleaned.replace("{{", "{ {")
-    return cleaned
+    # The kickoff is echoed on the agent's screen, after the point Navide reads
+    # its output from, so a marker in the data would read as the agent's own
+    # (a REPORT, a DISPATCH, a stage end). En dashes keep it legible.
+    return _dash_run().sub(lambda m: m.group(0).replace("-", "\u2013"), cleaned)
 
 
 def build_task(name: str, text: str) -> str:

@@ -139,11 +139,20 @@ async function load(extraDeps: Record<string, unknown> = {}) {
     heldKickoffCopy: () => undefined,
     heldKickoffPanes: new Set<string>(),
     failRunOnKickoff: async () => {},
+    runEndingSlots: new Set<string>(),
+    runPaneSentAt: new Map<string, number>(),
+    runEnding: () => false,
+    markRunEnding: () => {},
     // No pane in these traces sits on a CLI prompt.
     paneParkedOnPrompt: () => false,
     PARKED_ON_PROMPT_REASON: 'parked',
     // ...and none is still in a turn when its kickoff goes in.
     paneTurnBusy: () => false,
+    TURN_END_WAIT_MS: 90_000,
+    turnStillOpen: () => false,
+    turnEndUnconfirmed: () => false,
+    logInjectEvidence: () => {},
+    awaitRoleTurn: async () => 'ended',
     waitUntilTurnEnds: async () => 'idle',
     routerDeliveries: { clear: () => {} },
     ...extraDeps,
@@ -463,6 +472,8 @@ describe('a run aborted while paused at a gate', () => {
       realizeRestoredPane: async () => {},
       activateStage: async (i: number) => { activated.push(i) },
       startGlobalManagerRouter: () => {},
+      runEndingSlots: new Set<string>(),
+      runPaneSentAt: new Map<string, number>(),
     }
     await (new Function(...Object.keys(resumeDeps), resumeCode)(...Object.values(resumeDeps)) as { runPipelineResume: () => Promise<void> }).runPipelineResume()
     await flush()
@@ -545,6 +556,8 @@ describe('restart from a node', () => {
     const deps: Record<string, unknown> = {
       cancelAllWatchers: vi.fn(),
       stageCompletions: new Map(),
+      runEndingSlots: new Set<string>(),
+      runPaneSentAt: new Map<string, number>(),
       activeQuestion: { value: null },
       panes: { value: [{ id: 'p1', origin: 'pipeline' }] },
       onKill,

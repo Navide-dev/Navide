@@ -122,6 +122,7 @@ from pathlib import Path
 from typing import Any
 
 from ..log_readers.base import (
+    ActivityLines,
     ActivityEvent,
     IncrementalParseResult,
     LogReader,
@@ -570,7 +571,7 @@ class MuseLogReader(LogReader):
         last_text = _read_sentinel(seen_keys, _TEXT_PREFIX)
 
         try:
-            fh = path.open(encoding="utf-8")
+            fh = ActivityLines(self, path, seen_keys)
         except OSError:
             return out
 
@@ -583,7 +584,7 @@ class MuseLogReader(LogReader):
 
         try:
             with fh:
-                for line_no, raw_line in enumerate(fh, 1):
+                for line_no, raw_line in fh:
                     raw = raw_line.strip()
                     if not raw:
                         continue
@@ -656,6 +657,7 @@ class MuseLogReader(LogReader):
 
         finally:
             set_activity_high_water(seen_keys, last_line)
+            fh.save(last_line)
             _write_sentinel(seen_keys, _TEXT_PREFIX, last_text)
         return out
 

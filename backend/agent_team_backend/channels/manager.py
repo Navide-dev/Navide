@@ -144,10 +144,7 @@ MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷�
 MSG_QUEUE_FULL = "⚠️ 這個 pane 已有太多訊息在排隊，請稍後再傳"
 MSG_CHAT_RATE = "⚠️ 1 分鐘內傳了超過 {max} 則，這則沒有送進 pane，請 {wait} 秒後重送"
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
-MSG_READING_REPLY = "✅ 回合已結束，正在讀取回覆…"
-MSG_REPLY_LATE = "⏳ 回合已結束，但還沒讀到回覆文字；讀到後會補送。"
-MSG_REPLY_LOST = "⚠️ 一直讀不到這回合的回覆文字，先不等了；請到電腦上的視窗查看。"
-MSG_LATE_PREFIX = "（補送）"
+MSG_READING_REPLY = "✅ 完成，正在送出回覆…"
 MSG_STILL_RUNNING = "⏳ 仍在執行，完成時會再回覆"
 MSG_USAGE_LIMIT = "⚠️ {agent} 額度已用完，{reset} 重置"
 MSG_USAGE_LIMIT_NO_RESET = "⚠️ {agent} 額度已用完（重置時間未知）"
@@ -372,7 +369,6 @@ class _Pending:
     owner: str = ""  # pane whose messages these are, for reply-to routing
     limit_noticed: bool = False  # the chat was told this run's pane hit a usage limit
     next_limit_probe: float = 0.0
-    late: bool = False  # the chat was told the reply would follow: it goes as a follow-up
 
 
 @dataclass
@@ -382,6 +378,8 @@ class _AwaitText:
     pending: _Pending
     timer: asyncio.Task[None] | None = None
     log_ended: bool = False  # the log reported this turn's end, with no text (yet)
+    hook_wall: float | None = None  # when the hook's turn end arrived (wall clock)
+    since: float = 0.0  # self._clock() then
 
 
 @dataclass
@@ -494,6 +492,7 @@ class ChannelManager:
         if self._status_task is None:
             self._status_task = asyncio.create_task(self._status_watch(), name="channels-status")
         self._adopt_lost_kept()
+        self._adopt_lost_replies()
         if self.store.global_enabled():
             for (platform, account), acct in self.store.accounts().items():
                 if acct["enabled"]:
@@ -652,6 +651,7 @@ class ChannelManager:
             adapter.command_language = lambda: prompt_skills.language(self._seams.ui_settings())
         await adapter.start(emit)
         await self._report_lost_kept(bot)
+        await self._report_lost_replies(bot)
         return None
 
     async def _stop_bot(self, platform: str, account: str) -> None:
@@ -1396,6 +1396,11 @@ class ChannelManager:
             if entry.get("turn_start") and head.log_ended:
                 # The log moved on to the next prompt: that turn wrote no text.
                 self._settle_await(pane_id, "")
+            elif entry.get("turn_start") and head.hook_wall is not None \
+                    and float(entry.get("event_wall") or 0) > head.hook_wall:
+                # A prompt written after the hook fired, and no end line for the hooked
+                # turn before it (an interrupted turn): its text is not coming.
+                self._lose_held(pane_id, head, "the log has no end for the turn")
         if is_turn_end and text.strip() and pane_id in self._textless \
                 and (pending is None or pending.armed_at is None):
             # The text half of a turn end that came in two lines: the reply after all.
@@ -1423,8 +1428,11 @@ class ChannelManager:
         self._awaiting_shown.pop(pane_id, None)
         if source == "hook":
             # The turn ended; its text is still on its way from the conversation log.
-            held = _AwaitText(pending)
+            wall = entry.get("event_wall")
+            held = _AwaitText(pending, hook_wall=float(wall) if wall is not None else None,
+                              since=self._clock())
             self._await_text.setdefault(pane_id, []).append(held)
+            self._count_awaiting(pending, 1)
             held.timer = self._spawn(self._watch_await(pane_id, held))
             return
         if not text.strip():
@@ -1451,20 +1459,102 @@ class ChannelManager:
             self._settle_held(pane_id, waiting[0], text)
 
     def _settle_held(self, pane_id: str, held: _AwaitText, text: str) -> None:
+        if not self._unhold(pane_id, held):
+            return
+        waited = self._clock() - held.since
+        if waited >= LATE_TEXT_STATUS_AFTER_S:
+            log.info("channels: reply text for %s read %.0fs after its turn ended",
+                     held.pending.loc.key(), waited)
+        self._spawn(self._send_reply(held.pending, text))
+
+    def _unhold(self, pane_id: str, held: _AwaitText) -> bool:
+        """Take ``held`` off the pane's waiting list; False when it was not on it."""
         waiting = self._await_text.get(pane_id)
         if not waiting or held not in waiting:
-            return
+            return False
         waiting.remove(held)
         if not waiting:
             del self._await_text[pane_id]
         if held.timer is not None and held.timer is not asyncio.current_task():
             held.timer.cancel()
-        self._spawn(self._send_reply(held.pending, text))
+        self._count_awaiting(held.pending, -1)
+        return True
+
+    def _lose_held(self, pane_id: str, held: _AwaitText, why: str) -> None:
+        """Stop waiting for ``held``'s text and tell the chat, in plain words, that the
+        reply could not be sent (it was not told anything was still coming)."""
+        if not self._unhold(pane_id, held):
+            return
+        pending = held.pending
+        log.warning("channels: reply for %s not sent: %s", pending.loc.key(), why)
+        if not pending.silent:
+            self._spawn(self._tell_reply_lost(pending.loc))
+
+    async def _tell_reply_lost(self, loc: Location) -> bool:
+        adapter = self._adapters.get((loc.platform, loc.account))
+        if adapter is None:
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        return await self._notice(adapter, loc, media.text(lang, "reply.lost"))
+
+    def _count_awaiting(self, pending: _Pending, delta: int) -> None:
+        """Keep, per chat, how many replies are still awaited, so a restart can say they are lost."""
+        if pending.silent:
+            return
+        key = pending.loc.key()
+        try:
+            awaiting = self.store.awaiting_replies()
+            count = awaiting.get(key, 0) + delta
+            if count > 0:
+                awaiting[key] = count
+            else:
+                awaiting.pop(key, None)
+            self.store.set_awaiting_replies(awaiting)
+        except Exception as exc:  # noqa: BLE001 — the wait itself goes on in memory
+            log.warning("channels: saving the replies %s waits for failed: %s", key, exc)
+
+    def _adopt_lost_replies(self) -> None:
+        """At start: replies still awaited when the backend last stopped will not come."""
+        try:
+            lost = self.store.lost_replies()
+            for key, count in self.store.awaiting_replies().items():
+                lost[key] = lost.get(key, 0) + count
+            bound = {b.location().key() for b in self.store.bindings()}
+            self.store.set_lost_replies({k: v for k, v in lost.items() if k in bound})
+            self.store.set_awaiting_replies({})
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading the replies awaited before the restart failed: %s", exc)
+
+    async def _report_lost_replies(self, bot: BotKey) -> None:
+        """Tell ``bot``'s chats that replies awaited before the restart could not be sent."""
+        try:
+            lost = self.store.lost_replies()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading the lost replies failed: %s", exc)
+            return
+        for b in self.store.bindings():
+            loc = b.location()
+            if loc.key() not in lost or (b.platform, b.account) != bot:
+                continue
+
+            async def tell(loc: Location = loc) -> None:
+                # Kept when the notice did not go: the bot's next start tries again.
+                if await self._tell_reply_lost(loc):
+                    log.info("channels: told %s a reply awaited before the restart was lost", loc.key())
+                    try:
+                        rest = self.store.lost_replies()
+                        rest.pop(loc.key(), None)
+                        self.store.set_lost_replies(rest)
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("channels: forgetting the lost replies of %s failed: %s", loc.key(), exc)
+
+            self._enqueue(loc.key(), tell)
 
     async def _watch_await(self, pane_id: str, held: _AwaitText) -> None:
-        """While a hook-ended run waits for its text: say it is being read, then that it
-        will follow. Once RUN_WATCH_MAX_S has passed, read the log directly; if that finds
-        nothing either, stop waiting and tell the chat, since it was promised the text."""
+        """While a hook-ended run waits for its text: the status says the turn is done.
+        The chat is told nothing else while it waits; the text, when it comes, is posted
+        like any reply. Once RUN_WATCH_MAX_S has passed, read the log directly; if that
+        finds nothing either, stop waiting and tell the chat the reply could not be sent."""
         pending = held.pending
 
         def still() -> bool:
@@ -1485,10 +1575,8 @@ class ChannelManager:
             # wrote none — the same answer a log-only turn end gets at the grace.
             self._settle_held(pane_id, held, "")
             return
-        pending.late = True
-        adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
-        if adapter is not None and not pending.silent:
-            await self._notice(adapter, pending.loc, MSG_REPLY_LATE)
+        log.info("channels: reply text for %s not read %.0fs after its turn ended; still waiting",
+                 pending.loc.key(), EMPTY_TURN_GRACE_S)
         await asyncio.sleep(max(0.0, RUN_WATCH_MAX_S - EMPTY_TURN_GRACE_S))
         if not still():
             return
@@ -1498,13 +1586,7 @@ class ChannelManager:
         if text.strip():
             self._settle_held(pane_id, held, text)
             return
-        waiting = self._await_text[pane_id]
-        waiting.remove(held)
-        if not waiting:
-            del self._await_text[pane_id]
-        adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
-        if adapter is not None and not pending.silent:
-            await self._notice(adapter, pending.loc, MSG_REPLY_LOST)
+        self._lose_held(pane_id, held, f"no text after {RUN_WATCH_MAX_S:.0f}s")
 
     async def _reread_turn(self, pane_id: str, held: _AwaitText) -> str:
         """The held run's text straight from the pane's log. With several runs waiting the
@@ -1599,8 +1681,6 @@ class ChannelManager:
         attached as a file, where the platform takes files."""
         body, full = self._for_chat(pending.loc, body), self._for_chat(pending.loc, full)
         raw = body
-        if pending.late:
-            body = f"{MSG_LATE_PREFIX}{body or MSG_EMPTY_REPLY}"
         body = result_text(pending.source, body or MSG_EMPTY_REPLY, pending.child) if pending.source else body
         chunks = chunk_for(pending.loc.platform, redact.redact_text(body)) or [MSG_EMPTY_REPLY]
         whole = full.strip() if len(full.strip()) > CHILD_SUMMARY_CHARS else ""
@@ -3335,6 +3415,7 @@ class ChannelManager:
         for waiting in self._await_text.pop(pane_id, []):
             if waiting.timer is not None:
                 waiting.timer.cancel()
+            self._count_awaiting(waiting.pending, -1)
         self._awaiting_posted.discard(pane_id)
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown.pop(pane_id, None)

@@ -801,3 +801,20 @@ def test_turns_answer_to_the_file_stem_as_well_as_the_session_meta_id(
     assert len(reader.turns_for_session(fake_codex_session, "thread-1")) == 1
     assert len(reader.turns_for_session(fake_codex_session, "rollout-test")) == 1
     assert reader.turns_for_session(fake_codex_session, "thread-9") == []
+
+
+def test_parse_activity_resumes_after_an_append(fake_codex_session: Path, monkeypatch) -> None:
+    from tests.activity_resume_support import assert_resumes
+
+    def turn(prompt: str, reply: str) -> list[dict]:
+        return [
+            {"timestamp": "2026-07-22T13:25:00Z", "type": "event_msg",
+             "payload": {"type": "user_message", "message": prompt}},
+            {"timestamp": "2026-07-22T13:26:00Z", "type": "event_msg",
+             "payload": {"type": "agent_message", "message": reply}},
+            _token_count_event(100, 0, 50, 0),
+            _task_complete_event(),
+        ]
+
+    _write_jsonl(fake_codex_session, turn("first", "one"))
+    assert_resumes(CodexLogReader, fake_codex_session, turn("second", "two"), monkeypatch)

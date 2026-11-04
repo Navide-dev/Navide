@@ -190,3 +190,33 @@ export function resolveSiblingDrop(
   }
   return null
 }
+
+/** Point every item whose parent is `oldId` at `newId`; true if any moved.
+ *
+ *  A self-reference is dropped rather than kept: a pane that became its own
+ *  parent would make the lineage walk loop. Mirrors the backend's
+ *  _rekey_spawned_by, which has already rewritten the records. */
+export function rekeyChildren<T extends { spawnedBy?: string }>(
+  items: readonly T[],
+  idOf: (item: T) => string,
+  oldId: string,
+  newId: string,
+): boolean {
+  if (!oldId || oldId === newId) return false
+  let moved = false
+  for (const item of items) {
+    if (item.spawnedBy !== oldId) continue
+    item.spawnedBy = idOf(item) === newId ? undefined : newId
+    moved = true
+  }
+  return moved
+}
+
+/** The ids a `pane.lineage_rekeyed` event hands over (a chat wake that opened
+ *  a conversation in a new pane retired the record that held it), or null. */
+export function lineageHandoff(raw: unknown): { oldId: string; newId: string } | null {
+  const ev = (raw ?? {}) as { old_pane_id?: unknown; new_pane_id?: unknown }
+  const oldId = typeof ev.old_pane_id === 'string' ? ev.old_pane_id : ''
+  const newId = typeof ev.new_pane_id === 'string' ? ev.new_pane_id : ''
+  return oldId && newId && oldId !== newId ? { oldId, newId } : null
+}

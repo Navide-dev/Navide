@@ -292,7 +292,7 @@ describe('several workspaces in one window', () => {
     const at = appSource.indexOf('function rekeyLineage(')
     expect(at).toBeGreaterThan(-1)
     const fn = appSource.slice(at, appSource.indexOf('\n}', at))
-    expect(fn).toContain('if (p.spawnedBy === oldId)')
+    expect(fn).toContain('rekeyChildren(panes.value, (p) => p.id, oldId, newId)')
   })
 
   it('gives a restore placeholder its parent', () => {

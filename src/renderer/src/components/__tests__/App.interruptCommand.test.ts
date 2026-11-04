@@ -21,7 +21,7 @@ function block(startMarker: string, endMarker: string): string {
 
 describe('onInterrupt', () => {
   const fn = block(
-    'async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): Promise<boolean> {',
+    "async function onInterrupt(paneId: string, opts: { keepLoop?: boolean; by?: 'agent' | 'user' } = {}): Promise<boolean> {",
     '\nasync function onKillAll(',
   )
 
@@ -38,9 +38,9 @@ describe('onInterrupt', () => {
     // The flag must come from useTerminal's own answer rather than being
     // assumed from "the promise resolved": interrupt() also drops the request
     // when the window's socket is down, which resolves exactly like a send.
-    expect(fn).toContain('const issued = await ref.interrupt()')
+    expect(fn).toContain("const issued = await ref.interrupt(opts.by ?? 'user')")
     expect(fn).toContain('return issued !== false')
-    expect(fn).not.toMatch(/await ref\.interrupt\(\)\s*\n\s*persistPaneStopped[^]*?return true/)
+    expect(fn).not.toMatch(/await ref\.interrupt\([^)]*\)\s*\n\s*persistPaneStopped[^]*?return true/)
     // A refused or throwing request is not a send either — the old
     // `catch { /* ignore */ }` would have reported success for a PTY that threw.
     expect(fn).toMatch(/catch \{\s*return false\s*\}/)
@@ -71,7 +71,7 @@ describe('ui.pane.interrupt wiring', () => {
     // answer would always look like "it was already idle".
     const statusIdx = cmd.indexOf('const status = paneDisplayStatus(pane)')
     const awaitingIdx = cmd.indexOf('const awaitingKind =')
-    const interruptIdx = cmd.indexOf('const sent = await onInterrupt(paneId)')
+    const interruptIdx = cmd.indexOf("const sent = await onInterrupt(paneId, { by: 'agent' })")
     expect(statusIdx).toBeGreaterThan(-1)
     expect(awaitingIdx).toBeGreaterThan(-1)
     expect(interruptIdx).toBeGreaterThan(-1)
@@ -82,7 +82,7 @@ describe('ui.pane.interrupt wiring', () => {
   it('takes `sent` from onInterrupt itself rather than re-deriving its guards', () => {
     // A second copy of "is this pane realized and does it have a session"
     // would drift away from the one that decides whether to write.
-    expect(cmd).toContain('const sent = await onInterrupt(paneId)')
+    expect(cmd).toContain("const sent = await onInterrupt(paneId, { by: 'agent' })")
     expect(cmd).not.toContain('realized')
     expect(cmd).not.toContain('sessionId')
   })

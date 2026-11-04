@@ -55,6 +55,11 @@ async function loadFail(opts: { errorEdge?: boolean; retry?: boolean } = {}) {
     onStageSlotCompleted: (index: number, key: string, reason: string) => completed.push([index, key, reason]),
     scheduleSlotRetry: (index: number, label: string, retry: { attempt: number }) => retried.push([index, label, retry.attempt]),
     tearDownPipelineOrchestration: vi.fn(() => { pipeline.state = 'aborted' }),
+    runEndingSlots: new Set<string>(),
+    // The block above carries stopFailedRunPanes; its sibling stops are
+    // App.failedRunStopsSiblings.test.ts's.
+    stopFailedRunPanesFor: async () => {},
+    sleep: async () => {},
     sendQuiet: vi.fn(async (type: string, payload: Record<string, unknown>) => {
       sent.push({ type, payload })
       return null

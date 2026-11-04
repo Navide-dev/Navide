@@ -11,6 +11,8 @@ import {
   startBackend,
   setBackendDisabledBuiltinsProvider,
   getResolvedUserPath,
+  getFreshResolvedUserPath,
+  warmRegistryPath,
   readWsToken,
   mintTrustConfirmation,
   backendDataDir,
@@ -188,6 +190,7 @@ import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
 import { createPluginStagedCandidateRelay } from './pluginStagedCandidateRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
+import { isAppNavigation as isAppNavigationPolicy } from './navigationPolicy'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
 import { isLinux, isMac } from '../shared/osplat'
@@ -3466,6 +3469,19 @@ function currentDetectedEditors(refresh = false): DetectedEditor[] {
   return detectedEditorsCache
 }
 
+// The list Settings and the "Open with…" menus show. The first detection and
+// Settings' rescan follow a registry PATH read (Windows) awaited off the main
+// thread, rather than one run synchronously on it.
+async function listDetectedEditors(refresh: boolean): Promise<DetectedEditor[]> {
+  if (!refresh && detectedEditorsCache) return detectedEditorsCache
+  detectedEditorsCache = detectEditors(await getFreshResolvedUserPath())
+  return detectedEditorsCache
+}
+
+// The registry PATH read behind getResolvedUserPath is a PowerShell start-up
+// on Windows; have it ready before the first editor menu or terminal needs it.
+app.whenReady().then(() => void warmRegistryPath())
+
 // An external editor that cannot be launched falls back to the mini-IDE, which
 // on its own looks like the setting was ignored. Warn once per editor id per
 // session: enough to explain it, not so much that every click nags.
@@ -3709,7 +3725,7 @@ frontendPluginManager.setEditorNativeHandlers({
     const result = await openTempFilePath(name, content)
     if (!result.ok) throw new Error(result.error ?? 'open temp file failed')
   },
-  listEditors: async (refresh) => currentDetectedEditors(refresh).map((editor) => ({
+  listEditors: async (refresh) => (await listDetectedEditors(refresh === true)).map((editor) => ({
     id: editor.id,
     label: editor.id === 'vscode' ? 'Visual Studio Code' : editor.id === 'cursor' ? 'Cursor' : editor.id,
     available: editor.available,
@@ -4006,7 +4022,8 @@ function openMainWindow(workspacePath = '', background = false): void {
   void createWindow(params, background ? { background: true } : undefined)
 }
 
-ipcMain.handle('window:openMain', (_event, args?: { workspace_path?: string; background?: boolean }) => {
+ipcMain.handle('window:openMain', (event, args?: { workspace_path?: string; background?: boolean }) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   openMainWindow(args?.workspace_path, args?.background === true)
   return { ok: true }
 })
@@ -4789,7 +4806,8 @@ function validateRef(value: string, label: string): string | null {
 }
 
 // Run git diff directly in main process — no Python backend needed, always up-to-date.
-ipcMain.handle('git:diff-head', async (_event, args: { workspace_path: string; base?: string; compare?: string }) => {
+ipcMain.handle('git:diff-head', async (event, args: { workspace_path: string; base?: string; compare?: string }) => {
+  if (!isAppWindowSender(event)) return { ...UNTRUSTED_SENDER, diff: '' }
   const { execFile } = await import('node:child_process')
   const { promisify } = await import('node:util')
   const execFileAsync = promisify(execFile)
@@ -4839,6 +4857,7 @@ function isHtmlPlanDocPath(relPath: string): boolean {
 }
 
 ipcMain.handle('window:openEditor', async (event, args: Record<string, string>) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   const params = args ?? {}
   const workspacePath = params.workspace_path ?? ''
   const filepath = params.filepath ?? ''
@@ -4858,12 +4877,13 @@ ipcMain.handle('window:openEditor', async (event, args: Record<string, string>) 
 // Default-editor surface for Settings and the "Open with…" menus: the built-in
 // editors plus whether each one was found on this machine.
 ipcMain.handle('editors:list', (_event, args?: { refresh?: boolean }) =>
-  currentDetectedEditors(args?.refresh === true)
+  listDetectedEditors(args?.refresh === true)
 )
 
 ipcMain.handle(
   'editor:openFolder',
   async (event, args: { dir?: string; editorId?: string }) => {
+    if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
     const ok = await openFolderInEditor(
       BrowserWindow.fromWebContents(event.sender),
       args?.dir ?? '',
@@ -5776,7 +5796,8 @@ ipcMain.handle('logs:findManualLog', async (_event, workspacePath: string, filen
 // matched. See log-content-search.ts for the chunked-read implementation.
 ipcMain.handle(
   'logs:searchContent',
-  async (_event, args: { query: string; files: Array<{ id: string; path: string }> }) => {
+  async (event, args: { query: string; files: Array<{ id: string; path: string }> }) => {
+    if (!isAppWindowSender(event)) return { matchedIds: [] }
     if (!args || typeof args.query !== 'string' || !Array.isArray(args.files)) return { matchedIds: [] }
     const matchedIds = await searchLogFiles(args.query, args.files)
     return { matchedIds }
@@ -6133,15 +6154,9 @@ if (!gotSingleInstanceLock) {
 const DEV_ORIGIN = process.env['ELECTRON_RENDERER_URL']
   ? new URL(process.env['ELECTRON_RENDERER_URL']).origin
   : null
+const APP_INDEX_PATH = join(__dirname, '../renderer/index.html')
 function isAppNavigation(url: string): boolean {
-  try {
-    const u = new URL(url)
-    if (DEV_ORIGIN && u.origin === DEV_ORIGIN) return true
-    if (u.protocol === 'file:') return u.pathname.endsWith('/renderer/index.html')
-  } catch {
-    // Malformed URL — treat as not-app and block.
-  }
-  return false
+  return isAppNavigationPolicy(url, DEV_ORIGIN, APP_INDEX_PATH)
 }
 app.on('web-contents-created', (_e, contents) => {
   // Page zoom is owned by the app's interface-scale setting, not by Chromium's

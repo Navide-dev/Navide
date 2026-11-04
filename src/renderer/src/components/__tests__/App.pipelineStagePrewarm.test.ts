@@ -120,6 +120,8 @@ async function loadStart(over: { stageCount?: number } = {}) {
     'activateStage',
     'startGlobalManagerRouter',
     'pipelineDag',
+    'runEndingSlots',
+    'runPaneSentAt',
     code,
   )
   const api = factory(
@@ -147,6 +149,8 @@ async function loadStart(over: { stageCount?: number } = {}) {
     activateStage,
     vi.fn(),
     linearPipelineDag().dag,
+    new Set<string>(),
+    new Map(),
   )
   return { api, spawned, stageList, pipeline, activateStage }
 }
@@ -277,6 +281,15 @@ async function loadActivate(over: {
     'PARKED_ON_PROMPT_REASON',
     'paneTurnBusy',
     'waitUntilTurnEnds',
+    'runEnding',
+    'markRunEnding',
+    'TURN_END_WAIT_MS',
+    'turnStillOpen',
+    'turnEndUnconfirmed',
+    'logInjectEvidence',
+    'awaitRoleTurn',
+    'watchKickoffAfterFailure',
+    'runPaneSentAt',
     code,
   )
   const api = factory(
@@ -326,6 +339,17 @@ async function loadActivate(over: {
     'the pane is waiting on a CLI prompt',
     over.paneTurnBusy ?? (() => false),
     waitUntilTurnEnds,
+    // No slot here fails the run before failRunOnKickoff does.
+    () => false,
+    vi.fn(),
+    // The turn checks read the test's own turn-busy stub; no role turn is waited on.
+    90_000,
+    (paneId: string) => (over.paneTurnBusy ?? (() => false))(paneId),
+    () => false,
+    vi.fn(),
+    async () => 'ended',
+    vi.fn(),
+    new Map(),
   )
   return {
     api,

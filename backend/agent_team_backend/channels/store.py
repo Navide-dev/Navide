@@ -22,6 +22,10 @@ KV_SHARE_OPEN_NOTIFY = "channels.share_open_notify"
 KV_WAKE_KEPT = "channels.wake_kept"
 # the same, carried over from before a restart until each chat's bot is running to be told
 KV_WAKE_LOST = "channels.wake_lost"
+# location key -> how many replies its chat is still waiting on from the conversation log
+KV_AWAITING_REPLIES = "channels.awaiting_replies"
+# the same, carried over from before a restart until each chat's bot is running to be told
+KV_LOST_REPLIES = "channels.lost_replies"
 
 
 def _v1(cur: sqlite3.Cursor) -> None:
@@ -235,6 +239,23 @@ class ChannelStore:
 
     def set_lost_previews(self, lost: dict[str, list[str]]) -> None:
         self._db.kv_set(KV_WAKE_LOST, lost, now=int(time.time()))
+
+    def awaiting_replies(self) -> dict[str, int]:
+        return self._counts(KV_AWAITING_REPLIES)
+
+    def set_awaiting_replies(self, awaiting: dict[str, int]) -> None:
+        self._db.kv_set(KV_AWAITING_REPLIES, awaiting, now=int(time.time()))
+
+    def lost_replies(self) -> dict[str, int]:
+        return self._counts(KV_LOST_REPLIES)
+
+    def set_lost_replies(self, lost: dict[str, int]) -> None:
+        self._db.kv_set(KV_LOST_REPLIES, lost, now=int(time.time()))
+
+    def _counts(self, key: str) -> dict[str, int]:
+        raw = self._db.kv_get(key, {})
+        return {str(k): int(v) for k, v in raw.items() if isinstance(v, int) and v > 0} \
+            if isinstance(raw, dict) else {}
 
     # --- accounts -------------------------------------------------------------
 

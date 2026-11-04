@@ -3,6 +3,7 @@ exactly as it was while nobody uses any of this."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import socket
 import threading
@@ -110,6 +111,185 @@ class TestLifecycle:
         assert not port_open(port)
 
 
+def flaky_start(monkeypatch, failures: int) -> list[int]:
+    """The listener's start fails `failures` times, as on a first launch that
+    did not get the CPU within START_TIMEOUT_S, then starts for real."""
+    calls: list[int] = []
+    real = webhook_ws.webhook_listener.WebhookListener.start
+
+    def start(self) -> None:
+        calls.append(1)
+        if len(calls) <= failures:
+            raise webhook_ws.webhook_listener.ListenerError("the webhook listener did not start")
+        real(self)
+
+    monkeypatch.setattr(webhook_ws.webhook_listener.WebhookListener, "start", start)
+    return calls
+
+
+async def settled(predicate, timeout: float = 5.0) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not predicate():
+        assert asyncio.get_running_loop().time() < deadline, "never settled"
+        await asyncio.sleep(0.01)
+
+
+class TestStartRetry:
+    """A listener that failed to start is tried again, and says so meanwhile.
+    VM 0.2.37: the first AppImage launch missed the start deadline once and the
+    listener stayed off until the app was restarted."""
+
+    async def test_a_failed_start_is_retried_until_it_listens(self, env, monkeypatch) -> None:
+        # The first wait is long enough for the status read below on a slow
+        # runner (Windows arm64 read it after both 0.05 s waits had run out).
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.5, 0.05, 0.05), raising=False)
+        calls = flaky_start(monkeypatch, failures=2)
+        await enabled_trigger()
+        status = (await call("webhook.status"))["payload"]
+        assert status["listening"] is False and "did not start" in status["error"]
+        assert status["retry"]["attempt"] >= 1 and status["retry"]["max"] == 4
+        await settled(lambda: webhook_ws._listener is not None)
+        status = (await call("webhook.status"))["payload"]
+        assert status["listening"] is True and status["error"] == "" and status["retry"] is None
+        assert port_open(status["port"]) and len(calls) == 3
+
+    async def test_the_status_reports_the_retry_while_it_runs(self, env, monkeypatch) -> None:
+        # Windows arm64 CI: a status read during the retry's own start attempt
+        # showed the failure with retry None, as if no retry were coming.
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.01, 0.01, 0.01), raising=False)
+        seen: list[bool] = []
+        real = webhook_ws.webhook_listener.WebhookListener.start
+
+        def start(self) -> None:
+            seen.append(webhook_ws._retry_task is not None)
+            if len(seen) == 1:
+                raise webhook_ws.webhook_listener.ListenerError("the webhook listener did not start")
+            real(self)
+
+        monkeypatch.setattr(webhook_ws.webhook_listener.WebhookListener, "start", start)
+        await enabled_trigger()
+        await settled(lambda: webhook_ws._listener is not None)
+        assert seen == [False, True]
+        assert webhook_ws._retry_task is None
+
+    async def test_retries_stop_at_the_limit_and_every_failure_is_logged(self, env, monkeypatch, caplog) -> None:
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.01, 0.01), raising=False)
+        calls = flaky_start(monkeypatch, failures=99)
+        with caplog.at_level("WARNING", logger=webhook_ws.log.name):
+            await enabled_trigger()
+            await settled(lambda: len(calls) == 3 and webhook_ws._retry_task is None)
+            await asyncio.sleep(0.1)
+        assert len(calls) == 3
+        status = (await call("webhook.status"))["payload"]
+        assert status["listening"] is False and "did not start" in status["error"] and status["retry"] is None
+        failures = [r.getMessage() for r in caplog.records if "did not start" in r.getMessage()]
+        assert len(failures) == 3 and "attempt 1 of 3" in failures[0] and "attempt 3 of 3" in failures[-1]
+
+    async def test_turning_webhooks_off_cancels_a_pending_retry(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (60.0,), raising=False)
+        calls = flaky_start(monkeypatch, failures=99)
+        await enabled_trigger()
+        assert (await call("webhook.status"))["payload"]["retry"]["attempt"] == 1
+        await call("webhook.settings.set", enabled=False)
+        status = (await call("webhook.status"))["payload"]
+        assert status["retry"] is None and status["error"] == "" and webhook_ws._retry_task is None
+        assert len(calls) == 1
+
+    async def test_a_timed_out_listener_is_not_left_holding_the_port(self, env, monkeypatch) -> None:
+        """The thread of a start that timed out is still stuck when the retry
+        comes: the retry gets the same port, and turning webhooks off frees it."""
+        from .test_webhook_listener import free_port, stall_listener_thread
+
+        port = free_port()
+        webhook_triggers.save_listener_settings(app_module.database, enabled=False, port=port, public_host="", now=1)
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.05, 0.05), raising=False)
+        release = stall_listener_thread(monkeypatch, times=1)
+        try:
+            await enabled_trigger()
+            await settled(lambda: webhook_ws._listener is not None)
+            assert webhook_ws._listener.port == port and port_open(port)
+            await call("webhook.settings.set", enabled=False)
+            assert not port_open(port)
+        finally:
+            release.set()
+        await settled(lambda: listener_threads() == [])
+        assert not port_open(port)
+
+    async def test_shutdown_cancels_a_pending_retry(self, env, monkeypatch) -> None:
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (60.0,), raising=False)
+        flaky_start(monkeypatch, failures=99)
+        await enabled_trigger()
+        task = webhook_ws._retry_task
+        assert task is not None
+        await webhook_ws.shutdown()
+        await asyncio.gather(task, return_exceptions=True)
+        assert task.cancelled() and webhook_ws._retry_task is None
+
+
+def gated_start(monkeypatch, failures: int = 0) -> tuple[threading.Event, threading.Event, threading.Event]:
+    """The listener's start, after `failures` failed ones, waits for `gate`
+    before it binds: `entered` once it waits, `done` once it has started."""
+    entered, gate, done = threading.Event(), threading.Event(), threading.Event()
+    calls: list[int] = []
+    real = webhook_ws.webhook_listener.WebhookListener.start
+
+    def start(self) -> None:
+        calls.append(1)
+        if len(calls) <= failures:
+            raise webhook_ws.webhook_listener.ListenerError("the webhook listener did not start")
+        entered.set()
+        gate.wait(10)
+        real(self)
+        done.set()
+
+    monkeypatch.setattr(webhook_ws.webhook_listener.WebhookListener, "start", start)
+    return entered, gate, done
+
+
+class TestShutdownDuringStart:
+    """Review of 0.2.37: a shutdown that cancels a start in flight left the
+    listener that start went on to bring up untracked, holding its port."""
+
+    async def shut_down_while_starting(self, entered, gate, done, port) -> None:
+        await settled(entered.is_set)
+        closing = asyncio.create_task(webhook_ws.shutdown())
+        await asyncio.sleep(0.05)
+        gate.set()
+        await closing
+        await settled(done.is_set)
+        await asyncio.sleep(0.05)
+        assert not port_open(port)
+        await settled(lambda: listener_threads() == [])
+
+    async def test_a_first_start_cut_off_by_shutdown_is_stopped(self, env, monkeypatch) -> None:
+        from .test_webhook_listener import free_port
+
+        port = free_port()
+        webhook_triggers.save_listener_settings(app_module.database, enabled=False, port=port, public_host="", now=1)
+        await enabled_trigger()
+        await webhook_ws.shutdown()
+        monkeypatch.setattr(webhook_service.WebhookService, "start_watchdog", lambda _: None)
+        entered, gate, done = gated_start(monkeypatch)
+        try:
+            await webhook_ws.startup()
+            await self.shut_down_while_starting(entered, gate, done, port)
+        finally:
+            gate.set()
+
+    async def test_a_retry_cut_off_by_shutdown_is_stopped(self, env, monkeypatch) -> None:
+        from .test_webhook_listener import free_port
+
+        port = free_port()
+        webhook_triggers.save_listener_settings(app_module.database, enabled=False, port=port, public_host="", now=1)
+        monkeypatch.setattr(webhook_ws, "RETRY_DELAYS_S", (0.01,), raising=False)
+        entered, gate, done = gated_start(monkeypatch, failures=1)
+        try:
+            await enabled_trigger()
+            await self.shut_down_while_starting(entered, gate, done, port)
+        finally:
+            gate.set()
+
+
 class TestRefusals:
     async def test_guard_off_refuses_both_switches(self, env, monkeypatch) -> None:
         created = await call("webhook.trigger.create", name="CI", workspace_path=WS, pipeline_id=PIPE)
@@ -166,6 +346,55 @@ class TestStartup:
         monkeypatch.setattr(webhook_service.WebhookService, "start_watchdog", lambda _: None)
         await webhook_ws.startup()
         assert webhook_service.current()._project == app_module.project_store.peek
+
+    async def test_a_slow_listener_start_does_not_hold_up_the_backend(self, env, monkeypatch) -> None:
+        """VM 0.2.37: startup awaited the listener, so the backend took no
+        connection for its start deadline plus the stop join (10 s + 7 s)."""
+        import time as _time
+
+        await enabled_trigger()
+        await webhook_ws.shutdown()
+        real = webhook_ws.webhook_listener.WebhookListener.start
+
+        def slow(self) -> None:
+            _time.sleep(1.0)
+            real(self)
+
+        monkeypatch.setattr(app_module, "database", env.store.db)
+        monkeypatch.setattr(webhook_service.WebhookService, "start_watchdog", lambda _: None)
+        monkeypatch.setattr(webhook_ws.webhook_listener.WebhookListener, "start", slow)
+        began = _time.monotonic()
+        await webhook_ws.startup()
+        assert _time.monotonic() - began < 0.5
+        await settled(lambda: webhook_ws._listener is not None)
+        assert (await call("webhook.status"))["payload"]["listening"] is True
+
+
+    async def test_the_first_request_does_not_build_the_text_filter(self, env, monkeypatch) -> None:
+        """The filter's character class takes 0.3-1 s to build. Built lazily on
+        the first body, it held up the request that needs the fastest answer;
+        the listener's start builds it in a worker thread first."""
+        import unicodedata
+
+        from agent_team_backend import webhook_payload
+
+        await enabled_trigger()
+        await webhook_ws.shutdown()
+        webhook_payload._dash_run.cache_clear()
+        monkeypatch.setattr(app_module, "database", env.store.db)
+        monkeypatch.setattr(webhook_service.WebhookService, "start_watchdog", lambda _: None)
+        await webhook_ws.startup()
+        await settled(lambda: webhook_ws._listener is not None)
+        calls = [0]
+        real = unicodedata.category
+
+        def counting(ch: str) -> str:
+            calls[0] += 1
+            return real(ch)
+
+        monkeypatch.setattr(unicodedata, "category", counting)
+        assert webhook_payload.sanitize_text("a - - - b") == "a \u2013 \u2013 \u2013 b"
+        assert calls[0] == 0
 
 
 class Sink:

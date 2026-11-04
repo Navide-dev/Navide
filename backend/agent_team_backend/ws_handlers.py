@@ -11300,6 +11300,8 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     before = peek(payload["workspace_path"]) if peek else None
     stack = getattr(before, "run_stack", None) if before is not None else None
     frame_taint = str(stack[-1].get("taint") or "") if before is not None and before.state == "suspended" and stack else ""
+    # Judged before the resume claims the run, which makes it live again.
+    was_interrupted = pipeline_liveness.is_interrupted(before)
     try:
         project, resume_index = app.project_store.resume_pipeline(payload["workspace_path"])
     except NoRunToResume as err:
@@ -11313,6 +11315,11 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     from .guard.taint import pipeline_run_resumed, restore_pipeline_run_taint
 
     restore_pipeline_run_taint(payload["workspace_path"], frame_taint)
+    if (webhooks := webhook_service.current()) is not None:
+        # Before any pane of the resumed run starts: none of them may run unattended.
+        webhooks.run_resumed(payload["workspace_path"])
+        if was_interrupted:
+            webhooks.note_interrupted(payload["workspace_path"])
     pipeline_run_resumed(payload["workspace_path"], _run_taint_detail(getattr(project, "pipeline_id", "")))
     pipeline_liveness.claim_run(session, project.workspace_path)
     _mirror_pipeline_state(project)
@@ -11334,6 +11341,9 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
 
     child_of = str(payload.get("child_of") or "")
     frame = None
+    # What the run this start overwrites had come to, for its webhook row.
+    peek = getattr(app.project_store, "peek", None)
+    ended = webhook_service.end_state_of(peek(payload["workspace_path"]) if peek else None)
     if child_of:
         before = app.project_store.peek(payload["workspace_path"])
         stack = getattr(before, "run_stack", None) or []
@@ -11365,7 +11375,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
         arm_pipeline_run(payload["workspace_path"], str(frame["taint"]))
     pipeline_run_started(payload["workspace_path"], _run_taint_detail(getattr(project, "pipeline_id", "")))
     if (webhooks := webhook_service.current()) is not None:
-        webhooks.run_started(project, child=bool(child_of))
+        webhooks.run_started(project, child=bool(child_of), ended=ended)
     pipeline_liveness.claim_run(session, project.workspace_path)
     app._register_workspace_and_backfill(project.workspace_path)
     _mirror_pipeline_state(project)
@@ -11582,6 +11592,13 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
     from . import app
 
     reason = payload.get("reason", "user")
+    if payload.get("interrupted_only") is True and not pipeline_liveness.is_interrupted(
+        app.project_store.peek(payload["workspace_path"])
+    ):
+        # A window that does not drive the run asks to end one a Reload or
+        # crash left behind: never a run another window is still driving.
+        await session.send_json(make_error(msg_id, msg_type, "NOT_INTERRUPTED", "no interrupted run in this workspace"))
+        return
     project = app.project_store.abort_pipeline(payload["workspace_path"], reason=reason)
     _mirror_pipeline_state(project)
     if reason == "failed" and payload.get("kickoff_failed") is True and (webhooks := webhook_service.current()) is not None:
@@ -11608,7 +11625,11 @@ async def pipeline_reset(session: "Session", msg_id: str, msg_type: str, payload
     survives no restart (#417). Run history (log, run directory) is kept."""
     from . import app
 
+    peek = getattr(app.project_store, "peek", None)
+    ended = webhook_service.end_state_of(peek(payload["workspace_path"]) if peek else None)
     project = app.project_store.reset_pipeline(payload["workspace_path"])
+    if (webhooks := webhook_service.current()) is not None:
+        webhooks.run_reset(payload["workspace_path"], ended)
     if project is not None:
         log.info("pipeline reset: %s is idle again", project.workspace_path)
         _mirror_pipeline_state(project)

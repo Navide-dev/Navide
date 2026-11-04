@@ -188,8 +188,9 @@ class Paths(Protocol):
 
         Installers on POSIX write `PATH` exports into shell rc files, which a
         GUI-launched backend never read; the probe recovers them. Windows
-        keeps `PATH` in the registry and the process already has it, so there
-        is nothing to probe — None tells the caller to keep what it has.
+        keeps `PATH` in the registry, so there is no shell to probe — None
+        tells the caller to merge only `login_path_tail_fallbacks`, which on
+        Windows re-reads the registry `PATH` an installer may have changed.
 
         The line to read is the one prefixed with `LOGIN_PATH_MARKER`: the
         shell's own rc chatter shares stdout, and "the last line" was the
@@ -218,7 +219,8 @@ class Paths(Protocol):
         Appended, they still make a CLI installed under one of them findable
         (nothing earlier provides it) without displacing anything the user's
         shell put first. Entries that do not exist on disk are the caller's to
-        drop.
+        drop. On Windows this is the current registry `PATH` plus npm's global
+        dir: what an installer wrote after this process started.
         """
         ...
 

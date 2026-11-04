@@ -36,7 +36,7 @@ import time
 from collections.abc import Callable
 from typing import Any, NamedTuple, Protocol
 
-from . import guard_fail_closed, pipeline_graph, webhook_keystore, webhook_payload, webhook_triggers
+from . import guard_fail_closed, pipeline_graph, pipeline_liveness, webhook_keystore, webhook_payload, webhook_triggers
 from .db import Database
 
 log = logging.getLogger(__name__)
@@ -47,7 +47,19 @@ log = logging.getLogger(__name__)
 #: run. The Codex rows below are kept for when it comes back; nothing reaches them.
 VENDORS = frozenset({"claude"})
 
-PROBE_S = 2.0
+#: How long a request waits for the window to answer that it holds the
+#: workspace. The 0.2.37 Linux VM, starved of CPU, stalled the backend's event
+#: loop 2–8 s at a time; at 2 s the probe timed out with the window open and
+#: the request was refused "no-window" (503), which GitHub does not redeliver.
+#: A late answer still counts within the wait, so it covers the worst stall.
+PROBE_S = 8.0
+#: After ui.pipeline.start went unanswered (ui_action_timeout): how long to
+#: wait for the window's pipeline.start to adopt the run. The window is not
+#: told to stop on that timeout, so a slow start goes on and the run comes up
+#: late; failing it here dropped its arming and audited a run that ran as
+#: "start-failed".
+LATE_START_S = 120.0
+LATE_START_POLL_S = 1.0
 WATCH_EVERY_S = 15.0
 #: A run ends here whatever it is doing.
 RUN_CAP_S = 4 * 60 * 60
@@ -157,6 +169,20 @@ def bypass_dropped_from(requested: Any, launched: Any) -> str:
     if _BYPASS_FLAG.search(_line(requested)) is None or _BYPASS_FLAG.search(_line(launched)) is not None:
         return ""
     return _line(launched)
+
+
+def end_state_of(project: Any) -> str:
+    """What a run's row records when the run's record is about to be
+    overwritten (a new run, a reset): what the run had come to. One still going
+    is being stopped."""
+    if project is None:
+        return "finished"
+    if pipeline_liveness.is_interrupted(project):
+        return "interrupted"
+    state = getattr(project, "state", "")
+    if state == "running":
+        return "aborted"
+    return state if state in ("completed", "aborted") else "finished"
 
 
 def _workspace_key(path: str) -> str:
@@ -297,9 +323,18 @@ class WebhookService:
         self._active: dict[str, dict[str, Any]] = {run["workspace"]: run for run in store.open_runs()}
         self._armed: dict[str, dict[str, Any]] = {}
         self._starting: set[str] = set()
+        #: Workspaces whose start went unanswered and wait for the run to come
+        #: up (_adopted_late): a run adopted then never runs unattended.
+        self._late: set[str] = set()
         self._checks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._waiting_since: dict[str, float] = {}
+        #: Runs seen interrupted (a Reload or crash), which never run unattended
+        #: again. Read back from the audit, so a restart does not note one twice.
+        self._interrupted: set[str] = store.interrupted_open_runs()
+        #: Per workspace, a run the watchdog closed as aborted that Resume may
+        #: still carry on: a failed kickoff is stored aborted too.
+        self._closed: dict[str, dict[str, Any]] = {}
         self._watchdog: asyncio.Task[None] | None = None
         self._clock = time.time
 
@@ -413,11 +448,14 @@ class WebhookService:
     async def _start(self, trigger: dict[str, Any], text: str, body_sha256: str) -> None:
         workspace = trigger["workspace"]
         self._armed[workspace] = trigger
+        before = self._active.get(workspace)
         try:
             answer = await self.window.start(
                 workspace, webhook_payload.build_task(trigger["name"], text), trigger["pipeline_id"],
                 f'webhook trigger "{trigger["name"]}"',
             )
+            if answer.get("error_code") == "ui_action_timeout" and await self._adopted_late(workspace, before):
+                answer = {"ok": True, "late": True}
         except Exception:  # noqa: BLE001 - the caller already has its 202
             log.exception("webhook: starting a run failed")
             answer = {"ok": False, "error_code": "start-error"}
@@ -431,8 +469,32 @@ class WebhookService:
             "status": 202,
             "body_sha256": body_sha256,
             # The code only: a window's error text can quote the task.
-            "detail": None if started else str(answer.get("error_code") or "start-refused")[:80],
+            "detail": ("late-answer" if answer.get("late") else None)
+            if started
+            else str(answer.get("error_code") or "start-refused")[:80],
         }])
+
+    async def _adopted_late(self, workspace: str, before: Any) -> bool:
+        """Did run_started adopt a run for this workspace, within LATE_START_S
+        of an unanswered start? `before` is the open row from before the start;
+        the arming stays in place meanwhile so the late run is still ours."""
+        if self._active.get(workspace) not in (None, before):
+            return True  # adopted before the answer timed out, as usual
+        # Adopted from here on, the run is ours but never unattended: nothing
+        # ties it to this start but its workspace and pipeline. The watchdog
+        # and RUN_CAP_S still stop it if it waits on a prompt.
+        self._late.add(workspace)
+        try:
+            deadline = time.monotonic() + LATE_START_S
+            while True:
+                current = self._active.get(workspace)
+                if current is not None and current is not before:
+                    return True
+                if time.monotonic() >= deadline:
+                    return False
+                await asyncio.sleep(LATE_START_POLL_S)
+        finally:
+            self._late.discard(workspace)
 
     def note_kickoff_failed(self, workspace: str) -> None:
         """A run that had been reported started never got its task. While the
@@ -450,27 +512,58 @@ class WebhookService:
 
     # ── the run's panes ──────────────────────────────────────────────────
 
-    def run_started(self, project: Any, *, child: bool) -> None:
+    def run_started(self, project: Any, *, child: bool, ended: str = "finished") -> None:
         """pipeline.start in the window, on the main loop. Adopts the arming of
         a run this service asked for. A run nobody armed is someone else's and
-        ends the policy, unless it is a sub-pipeline of the run in progress."""
+        ends the policy, unless it is a sub-pipeline of the run in progress.
+        `ended` is end_state_of the record this start overwrote."""
         workspace = project.workspace_path
+        if not child:
+            self._closed.pop(workspace, None)
         trigger = self._armed.get(workspace)
+        if trigger is not None and getattr(project, "pipeline_id", "") != trigger["pipeline_id"]:
+            # Another pipeline started in the workspace while this one was
+            # armed, by hand or by anyone else: not this trigger's run, and
+            # never one to hand the trigger's unattended setting to.
+            trigger = None
         if trigger is not None:
             # The watchdog only looks every WATCH_EVERY_S, so the last run can
             # still be open here, and overwriting it would leave it open for good.
-            self.finish_run(workspace, "finished")
+            self.finish_run(workspace, ended)
             self._active[workspace] = self.store.open_run(
                 trigger_id=trigger["id"], workspace=workspace, project_id=project.id,
                 pipeline_id=getattr(project, "pipeline_id", ""),
-                unattended=bool(trigger.get("unattended")) and guard_fail_closed.unattended_supported(),
+                unattended=bool(trigger.get("unattended")) and guard_fail_closed.unattended_supported()
+                and workspace not in self._late,
             )
         elif not child and workspace in self._active:
-            self.finish_run(workspace, "replaced")
+            self.finish_run(workspace, ended if ended in ("completed", "aborted", "interrupted") else "replaced")
+
+    def run_reset(self, workspace: str, ended: str) -> None:
+        """pipeline.reset returned the workspace's record to idle: the open row
+        ends with what the run had come to (end_state_of, read before)."""
+        self._closed.pop(workspace, None)
+        if workspace in self._active:
+            self._ended(workspace, ended)
+
+    def run_resumed(self, workspace: str) -> None:
+        """pipeline.resume carries on the run the watchdog closed as aborted
+        (a failed kickoff is stored so): its row opens again, to end with the
+        run's real outcome. Before any pane of it starts, and never unattended."""
+        run = self._closed.pop(workspace, None)
+        if run is None or workspace in self._active:
+            return
+        try:
+            self.store.reopen_run(run["id"])
+        except sqlite3.Error:
+            log.exception("webhook: could not reopen a resumed run")
+            return
+        self._active[workspace] = {**run, "state": "running", "unattended": 0}
 
     def finish_run(self, workspace: str, state: str) -> None:
         run = self._active.pop(workspace, None)
         if run is not None:
+            self._interrupted.discard(run["id"])
             self.store.close_run(run["id"], state)
 
     def launch_command(self, agent_key: str, command: Any, *, pane_id: str, metadata: dict[str, Any]) -> Any:
@@ -512,6 +605,10 @@ class WebhookService:
                 if earlier is None:
                     return self._unsure(command, refs, workspace)
                 run_id, unattended = earlier, False
+        if unattended and workspace and pipeline_liveness.is_interrupted(self._project(workspace)):
+            # Restored before the watchdog looked: nobody drives the run now.
+            self.note_interrupted(workspace)
+            unattended = False
         unattended = unattended and self._still_unattended(run_id)
         if agent_key not in VENDORS:
             raise LaunchRefused(f"a webhook run cannot start {agent_key or 'this CLI'}: it has no tested Guard hook")
@@ -564,7 +661,10 @@ class WebhookService:
         return command
 
     def _still_unattended(self, run_id: str) -> bool:
-        """Unattended holds only while its trigger exists and still says so."""
+        """Unattended holds only while its trigger exists and still says so, and
+        the run was never interrupted."""
+        if run_id in self._interrupted:
+            return False
         try:
             return self.store.run_trigger_unattended(run_id)
         except sqlite3.Error as err:
@@ -644,10 +744,19 @@ class WebhookService:
         status = await self.window.run_status(workspace)
         state = status.get("state")
         if state == "interrupted":
-            self._ended(workspace, "interrupted")
+            # Nobody drives the run now, but Resume carries on this same run,
+            # so its row stays open until the run really ends, or the cap.
+            self._waiting_since.pop(run["id"], None)
+            self.note_interrupted(workspace)
+            if self._clock() - run["started_at"] >= RUN_CAP_S:
+                self._ended(workspace, "interrupted")
             return
         if not status.get("active"):
-            self._ended(workspace, "finished")
+            # Only a stored end state names the outcome; anything else (a row
+            # closed as 'running' would be read back as open) is "finished".
+            self._ended(workspace, state if state in ("completed", "aborted") else "finished")
+            if state == "aborted":
+                self._closed[workspace] = run
             return
         now = self._clock()
         if now - run["started_at"] >= RUN_CAP_S:
@@ -665,12 +774,25 @@ class WebhookService:
         if now - since >= limit:
             await self._stop_run(workspace, run, "approval-timeout")
 
+    def note_interrupted(self, workspace: str) -> None:
+        """The workspace's run is driven by no window (a Reload or crash). The
+        run may be resumed, still working from what the webhook sent, so it
+        never runs unattended again, after a restart too."""
+        run = self._active.get(workspace)
+        if run is None or run["id"] in self._interrupted:
+            return
+        self._interrupted.add(run["id"])
+        run["unattended"] = 0
+        try:
+            self.store.end_unattended(run["id"])
+        except sqlite3.Error:
+            log.exception("webhook: could not record that a run was interrupted")
+        self.audit([{"trigger_id": run["trigger_id"], "outcome": "interrupted", "status": 0, "detail": run["id"]}])
+
     def _ended(self, workspace: str, state: str) -> None:
         run = self._active.get(workspace)
         if run is not None:
             self._waiting_since.pop(run["id"], None)
-            if state == "interrupted":
-                self.audit([{"trigger_id": run["trigger_id"], "outcome": state, "status": 0}])
         self.finish_run(workspace, state)
 
     async def _stop_run(self, workspace: str, run: dict[str, Any], outcome: str) -> None:

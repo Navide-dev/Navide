@@ -25,6 +25,11 @@ log = logging.getLogger(__name__)
 WAKE_PANE_WAIT_S = 30.0
 WAKE_HELD_GRACE_S = 3.0
 WAKE_PANE_POLL_S = 0.5
+# How long the pane a wake opened gets for its window to write its record. The window answers
+# the open before it persists the pane, and the replaced records' children can only be handed
+# to a record that exists.
+WAKE_SUCCESSOR_WAIT_S = 5.0
+WAKE_SUCCESSOR_POLL_S = 0.1
 
 _manager: ChannelManager | None = None
 _start_task: asyncio.Task[None] | None = None
@@ -380,22 +385,62 @@ async def wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict[
     return result
 
 
-def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> list[str]:
+def _has_live_record(workspace_path: str, pane_id: str) -> bool:
+    from .. import app
+
+    project = app.project_store.peek(workspace_path)
+    return any(p.pane_id == pane_id and getattr(p, "spawn_status", "") != "removed"
+               for p in (project.panes if project else []))
+
+
+async def _await_successor_record(workspace_path: str, pane_id: str) -> bool:
+    """Wait, up to WAKE_SUCCESSOR_WAIT_S, for the window to write the woken pane's record."""
+    deadline = asyncio.get_running_loop().time() + WAKE_SUCCESSOR_WAIT_S
+    while not await asyncio.to_thread(_has_live_record, workspace_path, pane_id):
+        if asyncio.get_running_loop().time() >= deadline:
+            return False
+        await asyncio.sleep(WAKE_SUCCESSOR_POLL_S)
+    return True
+
+
+def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> tuple[list[str], list[str]]:
     """Retire the records the woken pane replaced: the ones of the same conversation that no
     window holds. Left in place, the next restore of the workspace would bring the
-    conversation back a second time. Returns the retired pane ids."""
+    conversation back a second time. Returns the retired pane ids, and those of them whose
+    children the store actually handed to `keep` (it does only while `keep`'s record is live;
+    otherwise they move up a level)."""
     from .. import agent_messaging, app
 
     retired: list[str] = []
+    inherited: list[str] = []
     project = app.project_store.peek(workspace_path)
     for record in list(project.panes if project else []):
         if record.pane_id == keep or getattr(record, "spawn_status", "") == "removed" \
                 or (getattr(record, "session_id", "") or "").strip() != session_id \
                 or agent_messaging.current(record.pane_id) is not None:
             continue
-        app.project_store.record_pane_unspawn_by_id(workspace_path, pane_id=record.pane_id)
+        # Its children follow the conversation to `keep`; a plain retire would make them roots.
+        after, _ = app.project_store.record_pane_unspawn_by_id(
+            workspace_path, pane_id=record.pane_id, successor=keep)
         retired.append(record.pane_id)
-    return retired
+        # The store chose the heir under its lock against this same state.
+        if any(p.pane_id == keep and getattr(p, "spawn_status", "") != "removed" for p in after.panes):
+            inherited.append(record.pane_id)
+    return retired, inherited
+
+
+async def _announce_lineage_handoff(retired: list[str], pane_id: str, workspace_path: str) -> None:
+    """Tell the windows the records moved: _retire_superseded re-keyed the retired panes'
+    children onto the woken pane, and a window still holding the old ids in their spawnedBy
+    would render them as roots until its next reload. Only the hand-offs the store made:
+    announcing one it did not would leave the window disagreeing with the records."""
+    from .. import app
+    from ..ipc import make_event
+
+    for previous in retired:
+        await app.broadcast_main_windows(make_event("pane.lineage_rekeyed", {
+            "workspace_path": workspace_path, "old_pane_id": previous, "new_pane_id": pane_id,
+        }))
 
 
 async def _hand_over_jobs(retired: list[str], pane_id: str, session_id: str) -> None:
@@ -433,8 +478,15 @@ async def _open_onto_session(record: Any, workspace_path: str, session_id: str) 
     # disk before the spawn; a window that answers otherwise is not taken on trust.
     if not new_pane_id or opened.get("resumed_session_id") != session_id:
         return {"ok": False, "code": "session-mismatch", "started": True}
-    retired = await asyncio.to_thread(_retire_superseded, workspace_path, session_id, new_pane_id)
+    await _await_successor_record(workspace_path, new_pane_id)
+    retired, inherited = await asyncio.to_thread(_retire_superseded, workspace_path, session_id, new_pane_id)
     await _hand_over_jobs(retired, new_pane_id, session_id)
+    for previous in retired:
+        if previous not in inherited:
+            log.warning("channels: children of %s moved up a level, not to %s: its record was not "
+                        "written within %.1fs; no lineage hand-off announced",
+                        previous, new_pane_id, WAKE_SUCCESSOR_WAIT_S)
+    await _announce_lineage_handoff(inherited, new_pane_id, workspace_path)
     return {"ok": True, "pane_id": new_pane_id}
 
 
