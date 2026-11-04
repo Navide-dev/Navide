@@ -2576,6 +2576,10 @@ const paneTurnStartedAt = new Map<string, number>()
  *  before their badge could show it (stopFailedRunPanes). Emptied when a run
  *  starts; a send stopped before its Enter is taken out again. */
 const runPaneSentAt = new Map<string, number>()
+/** The last text injectPane typed into each pane. A failed run reads it for
+ *  a pane in runPaneSentAt: interrupting a turn the model has not answered
+ *  yet puts that role or kickoff back in the input box. */
+const paneLastInjectedText = new Map<string, string>()
 
 // Per-pane count of background subagents the CLI is still waiting on, as last
 // reported by a hook event, with the wall-clock time of that report. The
@@ -5108,6 +5112,7 @@ async function injectPane(
   // Anything reaching the prompt ends the parked-after-resume state the continue
   // button exists for — including this button's own injection.
   pane.resumeContinueAvailable = false
+  paneLastInjectedText.set(paneId, text)
   return injectText(
     ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted,
   )
@@ -7634,7 +7639,7 @@ function scheduleInjection(pane: ActivePane): void {
           watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
         },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
-        copyInBox: kickoffCopyInBox(pane.id, pane.kickoffPrompt),
+        copyInBox: kickoffCopyInBox(pane.id, pane.kickoffPrompt, () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding())),
         parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
         // A sibling slot can fail the run during the role's 30s settle.
         stillWanted: () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
@@ -15480,8 +15485,8 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       },
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       // A resume after a held kickoff: submit the copy still in the box.
-      heldCopy: heldKickoffCopy(pane.id, kickoff),
-      copyInBox: kickoffCopyInBox(pane.id, kickoff),
+      heldCopy: heldKickoffCopy(pane.id, kickoff, slotStillWanted),
+      copyInBox: kickoffCopyInBox(pane.id, kickoff, slotStillWanted),
       parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
       stillWanted: slotStillWanted,
     })
@@ -16077,23 +16082,28 @@ const heldKickoffPanes = new Set<string>()
 /** For a pane in heldKickoffPanes (the flag is consumed): read whether the
  *  box still holds this kickoff, and submit it with Enter — the same framed-box
  *  check the spawn kickoff trusts. undefined for every other pane. */
-function heldKickoffCopy(paneId: string, text: string): { holds: () => boolean; submit: () => Promise<boolean> } | undefined {
+function heldKickoffCopy(paneId: string, text: string, stillWanted?: () => boolean): { holds: () => boolean; submit: () => Promise<boolean>; cleared: () => boolean } | undefined {
   if (!heldKickoffPanes.delete(paneId)) return undefined
   const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
   const screenTail = (): string => {
     const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
     return read ? read(SUBMIT_SCREEN_LINES) : ''
   }
+  const copy = kickoffCopyInBox(paneId, text, stillWanted)
   return {
     holds: () => composerHoldsPayload(screenTail(), tail),
-    submit: kickoffCopyInBox(paneId, text).submit,
+    submit: copy.submit,
+    cleared: copy.cleared,
   }
 }
 
 /** runPipelineKickoff's copyInBox: whether the framed input box holds this
  *  kickoff right now — the box only, so a summary drawn above it by an
- *  earlier submit is not taken for a held copy — and Enter on that copy. */
-function kickoffCopyInBox(paneId: string, text: string): { holds: () => boolean; submit: () => Promise<boolean> } {
+ *  earlier submit is not taken for a held copy — and Enter on that copy.
+ *  stillWanted is asked right before every Enter: one the run no longer
+ *  wants is not pressed, and the copy is cleared out of the box instead. */
+function kickoffCopyInBox(paneId: string, text: string, stillWanted?: () => boolean): { holds: () => boolean; submit: () => Promise<boolean>; cleared: () => boolean } {
+  let cleared = false
   const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
   const screenTail = (): string => {
     const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
@@ -16101,11 +16111,26 @@ function kickoffCopyInBox(paneId: string, text: string): { holds: () => boolean;
   }
   return {
     holds: () => framedComposerHolds(screenTail(), tail) === true,
+    cleared: () => cleared,
     submit: () => submitHeldCopy({
       held: () => framedComposerHolds(screenTail(), tail),
       pressEnter: async () => {
         const sid = paneRefs[paneId]?.sessionId
         if (!sid || !paneAlive(paneId)) return false
+        if (stillWanted && !stillWanted()) {
+          // runPipelineKickoff reports it stopped, and its caller logs that.
+          cleared = true
+          const cols = paneRefs[paneId]?.terminalSize?.()?.cols as number | undefined
+          for (const keys of composerClearKeys(text, cols ?? 80)) {
+            try {
+              await backend.send('terminal.input', { terminal_session_id: sid, data: keys })
+            } catch {
+              break // nothing left to clear into
+            }
+            await sleep(100)
+          }
+          return false
+        }
         try {
           await backend.send('terminal.input', { terminal_session_id: sid, data: '\r' })
           return true
@@ -16221,13 +16246,14 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
 async function stopFailedRunPanes(failedPaneId: string | undefined): Promise<void> {
   const slots = runSlots.current()
   const failedAt = Date.now()
+  const sentUnfinished = (paneId: string): boolean => {
+    const sentAt = runPaneSentAt.get(paneId)
+    return sentAt !== undefined && (paneTurnCompleteAt.get(paneId) ?? 0) < sentAt && !!panes.value.find((p) => p.id === paneId)?.realized
+  }
   await stopFailedRunPanesFor({
     paneIds: [...new Set(slots.values())].filter((id) => id !== failedPaneId),
     status: (paneId) => (panes.value.find((p) => p.id === paneId)?.realized ? paneRefs[paneId]?.displayStatus as string | undefined : undefined),
-    sentUnfinished: (paneId) => {
-      const sentAt = runPaneSentAt.get(paneId)
-      return sentAt !== undefined && (paneTurnCompleteAt.get(paneId) ?? 0) < sentAt && !!panes.value.find((p) => p.id === paneId)?.realized
-    },
+    sentUnfinished,
     userTouched: (paneId) => ((paneRefs[paneId]?.lastUserKeyAt as number | undefined) ?? 0) > failedAt,
     // A resume, a restart or a new run: that run's panes are its own.
     runGoesOn: () => pipeline.state === 'running' || runSlots.current() !== slots,
@@ -16246,10 +16272,56 @@ async function stopFailedRunPanes(failedPaneId: string | undefined): Promise<voi
         }
       }
       if (sent) pipelineLog(`⏹ interrupted ${pane?.slotLabel ?? paneId} — the run failed`)
+      // Not awaited: the other panes' stop keys do not wait on this one's box.
+      if (sent && how === 'interrupt' && sentUnfinished(paneId)) void clearInterruptedCopy(paneId, failedAt)
     },
     sleep,
     now: Date.now,
   })
+}
+
+/** How long after a failed run's interrupt key the input box is watched for
+ *  the role or kickoff Claude Code puts back. */
+const INTERRUPTED_COPY_WAIT_MS = 3_000
+
+/** A turn interrupted before the model answered gives its message back:
+ *  Claude Code 2.1.286 put a failed run's whole kickoff back in the input box,
+ *  where the next Enter would send it (0.2.38 Linux VM, 2/15). Once the box
+ *  shows that text it is cleared the way stopBeforeEnter clears it, with no
+ *  Enter. Nothing is pressed when the box never shows it, when the person
+ *  typed into the pane since the failure, or once a run goes on. */
+async function clearInterruptedCopy(paneId: string, failedAt: number): Promise<void> {
+  const text = paneLastInjectedText.get(paneId)
+  const ref = paneRefs[paneId]
+  const sessionId = ref?.sessionId
+  if (text === undefined || !sessionId) return
+  const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
+  // The framed box only, read off the whole screen: the kickoff Claude Code
+  // drew above the box when it was submitted must not pass for the copy put
+  // back, and a copy put back whole can be taller than the bottom rows.
+  const screen = (): string => (ref.readVisibleScreen as (() => string) | undefined)?.()
+    ?? (ref.readScreenTail as ((n: number) => string) | undefined)?.(SUBMIT_SCREEN_LINES) ?? ''
+  const until = Date.now() + INTERRUPTED_COPY_WAIT_MS
+  const leftAlone = (): boolean => pipeline.state === 'running'
+    || paneRefs[paneId]?.sessionId !== sessionId
+    || ((paneRefs[paneId]?.lastUserKeyAt as number | undefined) ?? 0) > failedAt
+  while (framedComposerHolds(screen(), tail) !== true) {
+    if (Date.now() >= until) return
+    await sleep(200)
+    if (leftAlone()) return
+  }
+  if (leftAlone()) return
+  const cols = ref.terminalSize?.()?.cols as number | undefined
+  for (const keys of composerClearKeys(text, cols ?? 80)) {
+    try {
+      await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys })
+    } catch {
+      return // nothing left to clear into
+    }
+    await sleep(100)
+  }
+  const label = panes.value.find((p) => p.id === paneId)?.slotLabel ?? paneId
+  pipelineLog(`⏹ cleared ${label}'s input box — the interrupt put the run's message back in it`)
 }
 
 /** Approve the gate the run is paused on and carry on with the hand-off. */

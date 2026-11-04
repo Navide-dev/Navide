@@ -16,14 +16,15 @@ export async function runPipelineKickoff(input: {
   onRetry?: (attempt: number) => void
   /** This pane's last kickoff was held in its input box (#448). A copy still
    *  there is submitted with Enter, never pasted a second time. */
-  heldCopy?: { holds: () => boolean; submit: () => Promise<boolean> }
+  heldCopy?: { holds: () => boolean; submit: () => Promise<boolean>; cleared?: () => boolean }
   /** Read right before a retry types the kickoff again: the framed box is
    *  already holding this kickoff. An echo the window missed is not a copy
    *  that never arrived (0.2.37 Windows, a loaded host with the window in the
    *  background: "[Pasted text #1 +60 lines]" sat in the box, the retry pasted
    *  on top of it, and the box held several copies). A held copy gets Enter,
-   *  as #448's heldCopy does, never a second paste. */
-  copyInBox?: { holds: () => boolean; submit: () => Promise<boolean> }
+   *  as #448's heldCopy does, never a second paste. `cleared`: submit
+   *  stopped because the run ended before an Enter, and emptied the box. */
+  copyInBox?: { holds: () => boolean; submit: () => Promise<boolean>; cleared?: () => boolean }
   /** The pane is parked on a CLI prompt (a permission box, a menu, a startup
    *  dialog). Nothing is typed then: the kickoff's Enter would answer that
    *  prompt for the user, and its echo check cannot tell the difference. */
@@ -42,6 +43,8 @@ export async function runPipelineKickoff(input: {
   if (input.heldCopy?.holds()) {
     if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
     if (await input.heldCopy.submit()) return { sent: true, cancelled: false }
+    // The run ended between the copy's Enters: it was cleared, not held.
+    if (input.heldCopy.cleared?.()) return { sent: false, cancelled: false, stopped: true }
     input.onHeld?.()
     return { sent: false, cancelled: false }
   }
@@ -67,6 +70,7 @@ export async function runPipelineKickoff(input: {
       if (input.copyInBox?.holds()) {
         if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
         if (await input.copyInBox.submit()) return { sent: true, cancelled: false }
+        if (input.copyInBox.cleared?.()) return { sent: false, cancelled: false, stopped: true }
         input.onHeld?.()
         return { sent: false, cancelled: false }
       }

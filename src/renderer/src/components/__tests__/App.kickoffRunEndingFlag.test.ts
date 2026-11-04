@@ -226,9 +226,9 @@ describe('the mark', () => {
 
   it('is read by the spawn path checks too', () => {
     const spawned = appSource.match(/pane\.origin !== 'pipeline' \|\| \(pipeline\.state === 'running' && !runEnding\(\)\)/g) ?? []
-    // The kickoff's Enter check, its attempt check, the role-turn wait and
-    // the queued-kickoff confirmation.
-    expect(spawned).toHaveLength(4)
+    // The kickoff's Enter check, its attempt check, the role-turn wait, the
+    // queued-kickoff confirmation and the Enter on a copy held in the box.
+    expect(spawned).toHaveLength(5)
     expect(appSource).not.toMatch(/pane\.origin !== 'pipeline' \|\| pipeline\.state === 'running',?\n/)
   })
 
