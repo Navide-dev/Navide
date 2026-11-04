@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveReadySpawnGroupId } from '../../lib/runGroups'
+import { standaloneKickoffVerdict } from '../../lib/standalonePaneTask'
 
 // cli_open_agent's `account` (plan mcp-pane-cli-usage_213031 P3). The backend
 // resolves it to an explicit pin, `profile_id` on agent_spawn.request, and the
@@ -47,7 +48,7 @@ function harness() {
     activeTab: { value: 'rg-active' }, runGroupsReady: { value: true },
     normWs: (path: string) => path.replace(/\/+$/, ''), resolveReadySpawnGroupId,
     mcpSpawnCommandOverride: () => '',
-    standaloneTaskDeps: () => ({}),
+    standaloneTaskDeps: () => ({}), standaloneKickoffVerdict,
     evaluateSpawnRequest: (req: Record<string, unknown>) => ({ ok: true, ...req, agentKey: req.agent }),
     spawnGateContextFor: () => ({}), standaloneSpawnGateContext: () => ({}),
     recordDiagnostic: vi.fn(), notifyRestore: { toast: vi.fn() },
