@@ -4,6 +4,15 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Navide Browser (0.2.38): agents can read a page for a fraction of the tokens. `browser_snapshot` takes `filter: "interactive"`, which lists only controls, headings and landmarks (a landmark line ends with "(+N hidden)" when it holds text left out, and the answer says how many lines it omitted), and `root: "@ref"`, which lists one element's subtree, the way to expand a landmark; refs are the same as in the full snapshot, so they go straight to `browser_act`. On Wikipedia, MDN, GitHub and Hacker News this cut a viewport snapshot by 65–74% and a full-page one by 77–87%, and a Wikipedia article that used to be cut off at the size limit now comes back whole. `browser_act` takes `diff: true`: the page after the action comes back as only the lines that changed since that pane's last look at it (opening a dropdown on GitHub: 324 tokens instead of about 4,500), or as the whole snapshot when there is no earlier one, the page changed or a diff would be longer, with `mode` (`diff` or `full`) and `fullReason` saying which. `ui_invoke` takes `snapshot: true` and returns what `ui_snapshot` would answer right after the action, one call instead of two; a snapshot that fails is reported beside the action's answer and never makes the action count as failed. Without these new arguments every answer is exactly what it was. Navide Browser 1.1.0.
+
+### Fixed
+
+- Navide Browser (0.2.38): after an agent hands a Space to you with `browser_handoff`, agents are now told an agent handed it over (reason `agent_handoff`), instead of "The user took over this Space". When you really take over, the message is unchanged.
+- Navide Browser (0.2.38): on a Space you let agents use, another pane's `browser_take_over` or `browser_finish` no longer wipes a handoff you have not dealt with yet. It used to rewrite the Space to running or done with its own note while you still held control, so what the first agent asked you to do disappeared and the Space no longer showed that it was waiting on you. While the handoff is open, the other pane's take_over still waits for you and its finish answers that the handoff is pending, both leaving the Space's state and note as they were. The pane that handed off, and every pane once you return control, behave as before; no pane is locked out.
+
 ## [0.2.37] — 2026-11-04
 
 ### Added
