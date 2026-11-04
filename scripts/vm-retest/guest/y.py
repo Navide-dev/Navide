@@ -161,7 +161,7 @@ elif cmd == "setupm":  # one Manager stage (mgr commander + wk worker) behind a 
     role = ARGS[0] if ARGS else "developer"; role_wk = ARGS[1] if len(ARGS) > 1 else role
     st = {"id": "m1", "title": "Managed", "short_title": "M1", "slots": [
         {"agent_key": "claude", "role_key": role, "label": "mgr", "kickoff_body": "ROLEMGR coordinate the worker.", "is_commander": True},
-        {"agent_key": "claude", "role_key": role_wk, "label": "wk", "kickoff_body": "ROLEWK do the work and report.", "is_commander": False}]}
+        {"agent_key": os.environ.get("WK_AGENT", "claude"), "role_key": role_wk, "label": "wk", "kickoff_body": "ROLEWK do the work and report.", "is_commander": False}]}
     s = tx(mcp_call(b, "stage_define", {"op": "upsert", "pipeline_id": pid, "stage": st, "workspace_path": ws})); print("stage", s.get("ok"), s.get("error"), [(x.get("label"), x.get("is_commander")) for x in (s.get("stage") or {}).get("slots", [])])
     t = b.call("webhook.trigger.create", name=name, workspace_path=ws, pipeline_id=pid, no_gate_ack=True, per_minute=60, per_day=500)
     e = b.call("webhook.trigger.enable", id=t["payload"]["trigger"]["id"], enabled=True); print("enable", e.get("ok"), e.get("error"))

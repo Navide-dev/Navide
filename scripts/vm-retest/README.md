@@ -36,7 +36,7 @@ VM_DIR="$HOME/Virtual Machines.localized"       # the .vmwarevm bundles
 LINUX_VMX=... WINDOWS_VMX=...                     # default: the two bundles under VM_DIR
 LINUX_SNAPSHOT=pre-navide-0.2.13                  # every round starts from, and is reverted to, these
 WINDOWS_SNAPSHOT=installed-clean-updated
-LINUX_GUEST= WINDOWS_GUEST=                       # empty: ask `vmrun getGuestIPAddress`
+LINUX_GUEST= WINDOWS_GUEST=                       # empty: ask `vmrun getGuestIPAddress` (needs VMware Tools in the guest)
 LINUX_USER=navide WINDOWS_USER=navide             # test accounts
 SSH_KEY="$HOME/.ssh/navide_vm_ed25519"            # the key those accounts accept
 VM_HOST=                                          # empty: VMware Fusion runs here
@@ -136,6 +136,11 @@ on Windows:
 | `lineage.py … reopen`, `heldkids`, `wake A` | A channel wake reattaches the commander to its session, its children follow, and the tree nests them without a reload. Wait out the 15 s offline grace before `/wake`. |
 | `lineage.py … closewake B1`; after the restart `wake B2` | Waking with the window closed, and after a real restart. |
 | `rec.py`, `sibrep.py`, `sibinput.py` | Records one sibling failure, with an idle bystander pane (`byopen.py`). Every keystroke after the failure must be accounted for. |
+| `n238.py stopagent`, `stopuser` | The STOP badge. After `cli_interrupt`, a turn started by a `cli_send` shows `running` and the menu's Interrupt is enabled. After a person's STOP, a turn Claude starts on its own (a background Bash job ends) clears the badge, but a `cli_send` stays queued until a person types. |
+| `n238.py kick 12` | 12 busy processes and the window minimized, three external `cli_open_agent` calls with a task: the kickoff answer, the attempts in `backend.log`, and what is left in each input box. |
+| `n238.py reclaim` | A child opened by a pane reports to it with `cli_send` while its turn runs, and once the child is idle the parent's `cli_reclaim_agent` succeeds. |
+| `n238.py browser` | Navide Browser: `browser_snapshot` filter and root, `browser_act` diff, and a Space shared by two panes: one hands off, the other takes over and finishes, and the Space still shows the hand-off. |
+| `fakecodex.py`, `WK_AGENT=codex y.py <root> setupm <ws>`, `winloops.py <root> m\|dup …` | A vendor with no turn text. `fakecodex.py`, installed as `codex` on the app's PATH, is a stand-in, not the real CLI: it echoes what is typed and prints a fixed REPORT. The worker slot runs it, and the router must keep its text-only dedupe. |
 | `freeze.py <root> <ws>` | Run right after a start. Opens Explorer, right-clicks folder `sub` and opens "Open with" (the editor probe). The renderer heartbeat gap and the IPC round trip show any freeze. |
 | `winhold.py hold <port>` / `release` (Windows), `holdport.py <port>` (Linux) | Hold the webhook port across an app start. The listener retries, and binds once the port is released; the next webhook completes. |
 | `slowhook.py`, `quitapp.py`, `quitdlg.ps1`, `extcheck.ps1`, `obwalk.py`, `shot.py`, `evjs.py`, `rlog.py`, `stubq.py`, `ck.py`, `bystat.py` | Helpers used by the items above (see each file's header). |
