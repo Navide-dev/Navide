@@ -141,6 +141,16 @@ export interface KickoffLoopDeps {
    *  keystroke still missing. Optional — without it a held copy stays
    *  'unverified', as it always has. */
   resubmit?: () => Promise<boolean>
+  /** Before an attempt that went out is retyped or settled as anything but
+   *  'sent': did the CLI take it anyway? The same evidence, and the same
+   *  grace, a pipeline kickoff gets before it is called never submitted
+   *  (lib/submitStall.ts) — a turn or agent activity since the attempt began,
+   *  a new busy line, the box letting go of a copy we saw land. Under a 2–3 s
+   *  echo lag the screen settles after the checks have run, and without this
+   *  a delivered task was typed again or reported failed with a resend hint.
+   *  `echo` is the settling attempt's own. Optional — without it nothing
+   *  changes. */
+  takenLate?: (echo: EchoEvidence | null) => Promise<boolean>
 }
 
 export type KickoffLoopResult =
@@ -159,6 +169,9 @@ export type KickoffLoopResult =
       /** Sent only because `resubmit` pressed Enter on a copy the composer
        *  was holding after the attempt itself could not be verified. */
       resubmitted?: true
+      /** Sent only because `takenLate` saw the CLI take the attempt after
+       *  its own checks had given up on it. */
+      takenLate?: true
     }
 
 /** Type a new pane's task, and type it again if the first copy cannot be
@@ -208,6 +221,19 @@ export async function runKickoffAttempts(deps: KickoffLoopDeps): Promise<Kickoff
           echo: last.echo,
           submit: last.submit,
           resubmitted: true,
+        }
+      }
+    }
+    if (verdict.outcome !== 'sent' && last.injected && deps.takenLate) {
+      if (!deps.paneAlive()) return { settled: false }
+      if (await deps.takenLate(last.echo)) {
+        return {
+          settled: true,
+          outcome: 'sent',
+          retriedOut: false,
+          echo: last.echo,
+          submit: last.submit,
+          takenLate: true,
         }
       }
     }

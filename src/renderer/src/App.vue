@@ -3742,6 +3742,14 @@ async function kickoffRequestedPane(
       const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
       return read ? read(SUBMIT_SCREEN_LINES) : ''
     }
+    const visibleScreen = (): string => {
+      const read = paneRefs[paneId]?.readVisibleScreen as (() => string) | undefined
+      return read ? read() : screenTail()
+    }
+    // Per attempt, for takenLate: when it began to be typed, and the busy
+    // lines already on screen then (an earlier turn's "Worked for" is not ours).
+    let attemptStartedAt = 0
+    let busyBeforeAttempt: string[] = []
     // The loop, the per-attempt decision and the one-shot report all live in
     // lib/spawnKickoff.ts, where they can be driven under test — this function
     // cannot be, so everything that only it can do (write to the PTY, read the
@@ -3752,6 +3760,8 @@ async function kickoffRequestedPane(
       promptReady,
       paneStarting,
       inject: async () => {
+        attemptStartedAt = Date.now()
+        busyBeforeAttempt = busyLines(visibleScreen())
         const seen: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
         const kicked = await injectPane(paneId, text, 'agent-spawn', true, undefined, seen)
         return { injected: kicked, echo: seen.echo ?? null, submit: seen.submit ?? null }
@@ -3779,6 +3789,23 @@ async function kickoffRequestedPane(
         now: Date.now,
         confirmMs: SUBMIT_CONFIRM_MS,
       }),
+      // The grace a pipeline kickoff gets (lib/submitStall.ts). A paste starts
+      // no turn and fires no hook, so activity since the attempt began is the
+      // CLI taking it; the box letting go counts only for a copy seen landing.
+      takenLate: async (echo) => {
+        const late = await awaitLateSubmit({
+          turnSeen: () => Math.max(
+            paneTurnStartedAt.get(paneId) ?? 0, paneLastActiveAt.get(paneId) ?? 0,
+          ) > attemptStartedAt,
+          busySeen: () => newBusyLine(busyBeforeAttempt, visibleScreen()),
+          screenSubmitted: () => (echo === 'tail' || echo === 'placeholder')
+            && framedComposerHolds(visibleScreen(), tail) === false,
+          aborted: () => !paneAlive(paneId),
+          sleep,
+          now: Date.now,
+        })
+        return late !== null && late !== 'aborted'
+      },
       onRetry: ({ attempt, echo, submit }) => recordDiagnostic({
         level: 'warn',
         code: 'spawn.kickoff-retry',
@@ -3803,6 +3830,16 @@ async function kickoffRequestedPane(
         message:
           `kickoff held unsent in the composer on ${loop.echo ?? 'no'} echo / ${loop.submit ?? 'no'} ` +
           'submit evidence — pressed Enter and it left the box',
+        paneId,
+      })
+    }
+    if (loop.takenLate) {
+      recordDiagnostic({
+        level: 'info',
+        code: 'spawn.kickoff-taken-late',
+        message:
+          `kickoff checks gave up on ${loop.echo ?? 'no'} echo / ${loop.submit ?? 'no'} submit ` +
+          'evidence, then the CLI showed it took the task — not typing it again',
         paneId,
       })
     }

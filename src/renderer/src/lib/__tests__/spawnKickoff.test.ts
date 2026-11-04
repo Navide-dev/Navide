@@ -1,9 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   createKickoffReporter, kickoffAttemptOutcome, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff, runKickoffAttempts,
   submitHeldCopy, terminalKickoffOutcome, type KickoffAttemptEvidence,
 } from '../spawnKickoff'
+import { awaitLateSubmit, SUBMIT_STALL_GRACE_MS } from '../submitStall'
 
 describe('terminalKickoffOutcome', () => {
   it('is sent only on payload-level evidence', () => {
@@ -482,5 +485,82 @@ describe('rolelessPaneAwaitsKickoff', () => {
 
   it('leaves a manual pane to the caller that spawned it', () => {
     expect(rolelessPaneAwaitsKickoff({ origin: 'manual', kickoffStatus: 'pending' })).toBe(false)
+  })
+})
+
+// 0.2.38 (plan d351f1 n9): a cli_open_agent task delivered under a 2–3 s echo
+// lag came back "failed"/unverified with a resend hint. The attempt's checks
+// ran before the screen caught up, so the pane read blank and growth-only, the
+// task was typed a second time, and the caller was told to send it again. A
+// pipeline kickoff gets a grace before "never submitted" (lib/submitStall.ts);
+// this is the same evidence for the spawn kickoff.
+describe('runKickoffAttempts — a task the CLI took late is sent, not retyped', () => {
+  const T0 = Date.UTC(2026, 10, 4, 13, 0, 0)
+  const LAG_MS = 2_500
+
+  async function lagged(opts: { activityAt: number | null }) {
+    let now = T0
+    const sleep = async (ms: number) => { now += ms }
+    let startedAt = 0
+    const inject = vi.fn(async (): Promise<KickoffAttemptEvidence> => {
+      startedAt = now
+      // Typing, echo and three Enters' checks: about 10 s, all blind.
+      now += 10_000
+      return { injected: true, echo: 'growth', submit: 'growth' }
+    })
+    const onRetry = vi.fn()
+    const result = await runKickoffAttempts({
+      maxAttempts: 2,
+      promptReady: true,
+      paneStarting: false,
+      inject,
+      composerHolds: () => false,
+      paneAlive: () => true,
+      onRetry,
+      takenLate: async () => {
+        const late = await awaitLateSubmit({
+          turnSeen: () => opts.activityAt !== null && now >= opts.activityAt && opts.activityAt > startedAt,
+          busySeen: () => false,
+          screenSubmitted: () => false,
+          aborted: () => false,
+          sleep,
+          now: () => now,
+        })
+        return late !== null && late !== 'aborted'
+      },
+    })
+    return { result, inject, onRetry, elapsed: now - T0 }
+  }
+
+  it('agent activity a few seconds late settles it as sent, typed once', async () => {
+    const { result, inject, onRetry } = await lagged({ activityAt: T0 + 10_000 + LAG_MS })
+    expect(result).toMatchObject({ settled: true, outcome: 'sent', takenLate: true })
+    expect(inject).toHaveBeenCalledTimes(1)
+    expect(onRetry).not.toHaveBeenCalled()
+  })
+
+  it('with no sign of it within the grace, it is retyped as before', async () => {
+    const { result, inject, elapsed } = await lagged({ activityAt: null })
+    expect(inject).toHaveBeenCalledTimes(2)
+    expect(result).toMatchObject({ settled: true, outcome: 'failed', retriedOut: true })
+    expect(elapsed).toBeGreaterThanOrEqual(2 * SUBMIT_STALL_GRACE_MS)
+  })
+
+  it('is not asked about an attempt that never went out', async () => {
+    const takenLate = vi.fn(async () => true)
+    const result = await runKickoffAttempts({
+      maxAttempts: 2, promptReady: true, paneStarting: false,
+      inject: async () => ({ injected: false, echo: null, submit: null }),
+      composerHolds: () => false, paneAlive: () => true, onRetry: () => {}, takenLate,
+    })
+    expect(result).toMatchObject({ outcome: 'failed' })
+    expect(takenLate).not.toHaveBeenCalled()
+  })
+
+  it('kickoffRequestedPane hands the loop the late-submit evidence', () => {
+    const app = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
+    const start = app.indexOf('async function kickoffRequestedPane(')
+    const body = app.slice(start, app.indexOf('\n}\n', start))
+    expect(body).toMatch(/takenLate: async \(echo\) => \{\s*const late = await awaitLateSubmit\(/)
   })
 })
