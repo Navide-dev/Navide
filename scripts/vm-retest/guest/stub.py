@@ -25,14 +25,18 @@ class H(BaseHTTPRequestHandler):
         with open(LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps({"at": __import__("time").time(), "tools": has_tools, "done": done, "n": len(msgs), "messages": msgs}, ensure_ascii=False) + "\n")
         tool = has_tools and not done and not __import__("os").path.exists(LOG + ".notool")
-        rule_text = None
+        rule_text = None; bg = None
+        # rule "bg": answer with a Bash call that runs in the background; when it finishes Claude starts a turn of its own
+        # stub.log.tailsleep (seconds): the next request that carries a tool result waits that long (one shot)
+        if has_tools and done and os_.path.exists(LOG + ".tailsleep"):
+            sl = int(open(LOG + ".tailsleep").read() or 0); os_.remove(LOG + ".tailsleep"); __import__("time").sleep(sl)
         if has_tools and msgs and os_.path.exists(LOG + ".rules.json"):
             lu = next((m for m in reversed(msgs) if m.get("role") == "user"), msgs[-1]); lc = lu.get("content")
             last = json.dumps([b for b in lc if isinstance(b, dict) and b.get("type") == "text"] if isinstance(lc, list) else lu, ensure_ascii=False)
             if "tool_result" not in last:
                 for r in json.load(open(LOG + ".rules.json", encoding="utf-8")):
                     if r["match"] in last:
-                        __import__("time").sleep(r.get("sleep", 0)); rule_text = r["text"]; break
+                        __import__("time").sleep(r.get("sleep", 0)); rule_text = r["text"]; bg = r.get("bg"); break
         # Manager-mode pipeline (kickoffs carry ROLEMGR / ROLEWK): the Manager prints
         # MANAGER-READY and then parks on a Bash permission box; the worker reports late.
         t_all = json.dumps(msgs, ensure_ascii=False); role = "MGR" if "ROLEMGR" in t_all else "WK" if "ROLEWK" in t_all else ""
@@ -63,6 +67,13 @@ class H(BaseHTTPRequestHandler):
         self.send_response(200); self.send_header("content-type","text/event-stream"); self.end_headers()
         w = self.wfile; model = body.get("model", "m")
         if rule_text is not None: tool = False; pre = ""
+        if bg:
+            sse(w,"message_start",{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":model,"stop_reason":None,"stop_sequence":None,"usage":{"input_tokens":1,"output_tokens":1}}})
+            sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_"+__import__("secrets").token_hex(6),"name":"Bash","input":{}}})
+            sse(w,"content_block_delta",{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":json.dumps({"command":bg,"description":"t","run_in_background":True})}})
+            sse(w,"content_block_stop",{"type":"content_block_stop","index":0})
+            sse(w,"message_delta",{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":None},"usage":{"output_tokens":1}})
+            sse(w,"message_stop",{"type":"message_stop"}); return
         sse(w,"message_start",{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":model,"stop_reason":None,"stop_sequence":None,"usage":{"input_tokens":1,"output_tokens":1}}})
         if pre and tool:
             sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}})
