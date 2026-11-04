@@ -747,6 +747,23 @@ export function messagingGateStatus(
 }
 
 /**
+ * When an agent_active record (one that already passed the idle_prompt and
+ * tool-result guards) was written, for useTerminal.markAgentTurnStart: its own
+ * timestamp, or `now` for a hook event, which carries none.
+ *
+ * Every such record counts, user records included. A turn a delivered message starts is, until the model
+ * answers, nothing but the user record of its envelope; dropping user records
+ * left the badge on for that whole turn (0.2.38 Linux VM, Claude Code
+ * 2.1.286). The interrupt's own "[Request interrupted by user]" record is
+ * still not a new turn: markAgentTurnStart ignores records in its settle
+ * window, and a person typing has already cleared the STOP before theirs.
+ */
+export function agentTurnActivityAt(timestamp: string | undefined, now: number): number {
+  const at = timestamp ? Date.parse(timestamp) : NaN
+  return Number.isNaN(at) ? now : at
+}
+
+/**
  * True when a `to:` target names another workspace (`<folder>/<pane>` or
  * `/abs/path/<pane>`). Bare names stay workspace-local, which is the original
  * single-window behaviour.

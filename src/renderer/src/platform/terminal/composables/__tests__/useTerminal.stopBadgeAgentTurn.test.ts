@@ -66,7 +66,7 @@ vi.mock('@xterm/addon-fit', () => ({
 }))
 
 import { useTerminal } from '../useTerminal'
-import { messagingGateStatus } from '../../../../lib/agentMessaging'
+import { agentTurnActivityAt, messagingGateStatus } from '../../../../lib/agentMessaging'
 
 // 0.2.38 (plan d351f1 n9): after cli_interrupt or the menu's Interrupt, a turn
 // the agent started on its own (Stop hook feedback, a schedule, a delivered
@@ -160,6 +160,64 @@ describe('useTerminal — STOP badge ends with the agent\'s next turn', () => {
     result.markAgentTurnStart(Date.now() - 500)
     result.markAgentTurnStart(Date.now() + 1_000)
     expect(result.displayStatus.value).toBe('stopped')
+    scope.stop()
+  })
+})
+
+// 0.2.38 Linux VM (candidate ff52847aa, Claude Code 2.1.286): the turn a
+// delivered message starts shows up first, and with a slow model only, as the
+// transcript's user record of the [Navide MSG] envelope. App.vue dropped every
+// user record, so nothing cleared the badge for the whole turn.
+describe('agent.activity -> STOP badge (App.vue wiring)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+    localStorage.clear()
+    captured.dataHandler = undefined
+  })
+
+  async function stoppedPane(by: 'agent' | 'user') {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
+    const mock = createMockBackend()
+    mock.setResponse('terminal.create', { terminal_session_id: 'sess-1', pid: 42 })
+    mock.setResponse('terminal.interrupt', { ok: true })
+    const { result, scope } = withScope(() => useTerminal('pane-1', mock.backend))
+    result.mount(document.createElement('div'))
+    const spawning = result.spawn({ command: 'bash', cwd: '/tmp', skipReattach: true })
+    await vi.advanceTimersByTimeAsync(200)
+    await spawning
+    await result.interrupt(by)
+    await vi.advanceTimersByTimeAsync(11_000)
+    return { result, scope }
+  }
+
+  /** What App.vue does with one agent_active user record written at `at`. */
+  function userRecord(result: Awaited<ReturnType<typeof stoppedPane>>['result'], at: number): void {
+    result.markAgentTurnStart(agentTurnActivityAt(new Date(at).toISOString(), Date.now()))
+  }
+
+  it('cli_interrupt, then a delivered message: its user record clears the badge', async () => {
+    const { result, scope } = await stoppedPane('agent')
+    expect(result.displayStatus.value).toBe('stopped')
+    userRecord(result, Date.now())
+    expect(result.isStopped.value).toBe(false)
+    expect(result.stopHeldForUser.value).toBe(false)
+    scope.stop()
+  })
+
+  it('menu Interrupt, then a turn the agent starts: badge clears, gate still waits for a person', async () => {
+    const { result, scope } = await stoppedPane('user')
+    userRecord(result, Date.now())
+    expect(result.isStopped.value).toBe(false)
+    expect(result.stopHeldForUser.value).toBe(true)
+    scope.stop()
+  })
+
+  it('the interrupt\'s own "[Request interrupted by user]" record does not clear it', async () => {
+    const { result, scope } = await stoppedPane('agent')
+    userRecord(result, Date.now() - 11_000 + 200)
+    expect(result.isStopped.value).toBe(true)
     scope.stop()
   })
 })

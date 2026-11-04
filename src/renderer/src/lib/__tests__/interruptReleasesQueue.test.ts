@@ -93,11 +93,13 @@ describe('App.vue wiring', () => {
     expect(body).toContain('stopHeldForUser')
   })
 
-  it('an agent turn (not a user record) clears the STOP badge', () => {
+  it('an agent turn clears the STOP badge, user records included', () => {
+    // 0.2.38 Linux VM: a delivered message's turn is only its user record until
+    // the model answers; filtering user records left the badge on all turn.
     const at = appSource.indexOf("ev.event_type === 'agent_active'")
     const branch = appSource.slice(at, at + 4000)
-    expect(branch).toContain('markAgentTurnStart')
-    expect(branch).toContain("ev.detail !== 'user'")
+    expect(branch).toContain('markAgentTurnStart?.(agentTurnActivityAt(ev.timestamp, Date.now()))')
+    expect(branch).not.toContain("ev.detail !== 'user'")
   })
 
   it('TerminalPane exposes liveStatus', () => {
