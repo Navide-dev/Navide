@@ -3744,6 +3744,14 @@ async function kickoffRequestedPane(
       const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
       return read ? read(SUBMIT_SCREEN_LINES) : ''
     }
+    const visibleScreen = (): string => {
+      const read = paneRefs[paneId]?.readVisibleScreen as (() => string) | undefined
+      return read ? read() : screenTail()
+    }
+    // Per attempt, for takenLate: when it began to be typed, and the busy
+    // lines already on screen then (an earlier turn's "Worked for" is not ours).
+    let attemptStartedAt = 0
+    let busyBeforeAttempt: string[] = []
     // The loop, the per-attempt decision and the one-shot report all live in
     // lib/spawnKickoff.ts, where they can be driven under test — this function
     // cannot be, so everything that only it can do (write to the PTY, read the
@@ -3754,6 +3762,8 @@ async function kickoffRequestedPane(
       promptReady,
       paneStarting,
       inject: async () => {
+        attemptStartedAt = Date.now()
+        busyBeforeAttempt = busyLines(visibleScreen())
         const seen: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
         const kicked = await injectPane(paneId, text, 'agent-spawn', true, undefined, seen)
         return { injected: kicked, echo: seen.echo ?? null, submit: seen.submit ?? null }
@@ -3781,6 +3791,23 @@ async function kickoffRequestedPane(
         now: Date.now,
         confirmMs: SUBMIT_CONFIRM_MS,
       }),
+      // The grace a pipeline kickoff gets (lib/submitStall.ts). A paste starts
+      // no turn and fires no hook, so activity since the attempt began is the
+      // CLI taking it; the box letting go counts only for a copy seen landing.
+      takenLate: async (echo) => {
+        const late = await awaitLateSubmit({
+          turnSeen: () => Math.max(
+            paneTurnStartedAt.get(paneId) ?? 0, paneLastActiveAt.get(paneId) ?? 0,
+          ) > attemptStartedAt,
+          busySeen: () => newBusyLine(busyBeforeAttempt, visibleScreen()),
+          screenSubmitted: () => (echo === 'tail' || echo === 'placeholder')
+            && framedComposerHolds(visibleScreen(), tail) === false,
+          aborted: () => !paneAlive(paneId),
+          sleep,
+          now: Date.now,
+        })
+        return late !== null && late !== 'aborted'
+      },
       onRetry: ({ attempt, echo, submit }) => recordDiagnostic({
         level: 'warn',
         code: 'spawn.kickoff-retry',
@@ -3805,6 +3832,16 @@ async function kickoffRequestedPane(
         message:
           `kickoff held unsent in the composer on ${loop.echo ?? 'no'} echo / ${loop.submit ?? 'no'} ` +
           'submit evidence — pressed Enter and it left the box',
+        paneId,
+      })
+    }
+    if (loop.takenLate) {
+      recordDiagnostic({
+        level: 'info',
+        code: 'spawn.kickoff-taken-late',
+        message:
+          `kickoff checks gave up on ${loop.echo ?? 'no'} echo / ${loop.submit ?? 'no'} submit ` +
+          'evidence, then the CLI showed it took the task — not typing it again',
         paneId,
       })
     }
@@ -4493,14 +4530,6 @@ function flattenForInjection(text: string): string {
  *  terminal.input_blocked / input_unblocked events. */
 const inputBlocks = createInputBlockTracker()
 
-/** Kill-line for a composer holding text we gave up on. Ctrl-U is what ⌘⌫
- *  sends from the terminal (useTerminal) and the canonical-mode kill character,
- *  so it clears whichever side of the PTY ends up holding the payload — a
- *  blocked PTY queues it behind the text, and it takes effect when the CLI
- *  reads. Nothing before the injection clears the composer (the typing hold
- *  keeps a draft out of the way instead), so this is the only clear. */
-const CLEAR_LINE = '\x15'
-
 async function injectText(
   sessionId: string,
   text: string,
@@ -4647,11 +4676,20 @@ async function injectText(
   }
   // Every failure exit after bytes went out must not leave them in the
   // composer: the next thing the user or an agent submits would carry them.
-  // Best effort — a socket that just failed the send fails this too.
+  // Best effort — a socket that just failed the send fails this too. The whole
+  // box, as stopBeforeEnter clears it: one Ctrl-U clears only a row, and a
+  // multi-row task's tail stayed behind for the next Enter (0.2.37 Windows VM).
   const giveUp = async (): Promise<false> => {
     if (wroteBytes) {
-      await backend.send('terminal.input', { terminal_session_id: sessionId, data: CLEAR_LINE })
-        .catch(() => { /* nothing left to clear into */ })
+      const cols = paneId !== undefined ? paneRefs[paneId]?.terminalSize?.()?.cols : undefined
+      for (const keys of composerClearKeys(body, cols ?? 80)) {
+        try {
+          await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys })
+        } catch {
+          break // nothing left to clear into
+        }
+        await sleep(100)
+      }
     }
     return false
   }
@@ -7578,6 +7616,7 @@ function scheduleInjection(pane: ActivePane): void {
           watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
         },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+        copyInBox: kickoffCopyInBox(pane.id, pane.kickoffPrompt),
         parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
         // A sibling slot can fail the run during the role's 30s settle.
         stillWanted: () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
@@ -15424,6 +15463,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       // A resume after a held kickoff: submit the copy still in the box.
       heldCopy: heldKickoffCopy(pane.id, kickoff),
+      copyInBox: kickoffCopyInBox(pane.id, kickoff),
       parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
       stillWanted: slotStillWanted,
     })
@@ -16028,6 +16068,21 @@ function heldKickoffCopy(paneId: string, text: string): { holds: () => boolean; 
   }
   return {
     holds: () => composerHoldsPayload(screenTail(), tail),
+    submit: kickoffCopyInBox(paneId, text).submit,
+  }
+}
+
+/** runPipelineKickoff's copyInBox: whether the framed input box holds this
+ *  kickoff right now — the box only, so a summary drawn above it by an
+ *  earlier submit is not taken for a held copy — and Enter on that copy. */
+function kickoffCopyInBox(paneId: string, text: string): { holds: () => boolean; submit: () => Promise<boolean> } {
+  const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
+  const screenTail = (): string => {
+    const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
+    return read ? read(SUBMIT_SCREEN_LINES) : ''
+  }
+  return {
+    holds: () => framedComposerHolds(screenTail(), tail) === true,
     submit: () => submitHeldCopy({
       held: () => framedComposerHolds(screenTail(), tail),
       pressEnter: async () => {
