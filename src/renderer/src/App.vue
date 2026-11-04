@@ -7614,6 +7614,7 @@ function scheduleInjection(pane: ActivePane): void {
           watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
         },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+        copyInBox: kickoffCopyInBox(pane.id, pane.kickoffPrompt),
         parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
         // A sibling slot can fail the run during the role's 30s settle.
         stillWanted: () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
@@ -15458,6 +15459,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       // A resume after a held kickoff: submit the copy still in the box.
       heldCopy: heldKickoffCopy(pane.id, kickoff),
+      copyInBox: kickoffCopyInBox(pane.id, kickoff),
       parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
       stillWanted: slotStillWanted,
     })
@@ -16062,6 +16064,21 @@ function heldKickoffCopy(paneId: string, text: string): { holds: () => boolean; 
   }
   return {
     holds: () => composerHoldsPayload(screenTail(), tail),
+    submit: kickoffCopyInBox(paneId, text).submit,
+  }
+}
+
+/** runPipelineKickoff's copyInBox: whether the framed input box holds this
+ *  kickoff right now — the box only, so a summary drawn above it by an
+ *  earlier submit is not taken for a held copy — and Enter on that copy. */
+function kickoffCopyInBox(paneId: string, text: string): { holds: () => boolean; submit: () => Promise<boolean> } {
+  const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
+  const screenTail = (): string => {
+    const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
+    return read ? read(SUBMIT_SCREEN_LINES) : ''
+  }
+  return {
+    holds: () => framedComposerHolds(screenTail(), tail) === true,
     submit: () => submitHeldCopy({
       held: () => framedComposerHolds(screenTail(), tail),
       pressEnter: async () => {

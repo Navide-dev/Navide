@@ -17,6 +17,13 @@ export async function runPipelineKickoff(input: {
   /** This pane's last kickoff was held in its input box (#448). A copy still
    *  there is submitted with Enter, never pasted a second time. */
   heldCopy?: { holds: () => boolean; submit: () => Promise<boolean> }
+  /** Read right before a retry types the kickoff again: the framed box is
+   *  already holding this kickoff. An echo the window missed is not a copy
+   *  that never arrived (0.2.37 Windows, a loaded host with the window in the
+   *  background: "[Pasted text #1 +60 lines]" sat in the box, the retry pasted
+   *  on top of it, and the box held several copies). A held copy gets Enter,
+   *  as #448's heldCopy does, never a second paste. */
+  copyInBox?: { holds: () => boolean; submit: () => Promise<boolean> }
   /** The pane is parked on a CLI prompt (a permission box, a menu, a startup
    *  dialog). Nothing is typed then: the kickoff's Enter would answer that
    *  prompt for the user, and its echo check cannot tell the difference. */
@@ -57,6 +64,12 @@ export async function runPipelineKickoff(input: {
       await input.sleep(3000)
       if (!input.paneAlive()) return { sent: false, cancelled: true }
       if (input.parkedOnPrompt?.()) return { sent: false, cancelled: false, parked: true }
+      if (input.copyInBox?.holds()) {
+        if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
+        if (await input.copyInBox.submit()) return { sent: true, cancelled: false }
+        input.onHeld?.()
+        return { sent: false, cancelled: false }
+      }
     }
   }
   return { sent: false, cancelled: false }
