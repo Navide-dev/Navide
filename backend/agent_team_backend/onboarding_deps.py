@@ -480,6 +480,17 @@ def _is_that_tool(dep: Dep, binary_path: str) -> bool:
     return ok
 
 
+def is_shim(dep: Dep, binary_path: str) -> bool:
+    """Whether `binary_path` is another product's stand-in for dep's name.
+
+    Read off the path alone (no subprocess), case-insensitively and with
+    either separator, so it holds for a Windows path on any host."""
+    if not dep.shim_dirs:
+        return False
+    parts = re.split(r"[\\/]+", binary_path.rstrip("\\/"))
+    return len(parts) >= 2 and parts[-2].lower() in {d.lower() for d in dep.shim_dirs}
+
+
 def resolve_executable(dep: Dep, quick: bool = False) -> str:
     """PATH location of the dep's binary — its primary name, else an alternate.
 
@@ -501,6 +512,12 @@ def resolve_executable(dep: Dep, quick: bool = False) -> str:
     fallback = ""
     for name in (dep.check_cmd[0], *dep.alt_commands):
         found = osplat.paths.resolve_program(name)
+        if found and is_shim(dep, found):
+            # The stand-in came first on PATH; a real install may sit later.
+            found = next(
+                (c["path"] for c in _distinct_executables(name) if not is_shim(dep, c["path"])),
+                None,
+            )
         if not found:
             continue
         if quick or _is_that_tool(dep, found):
@@ -820,7 +837,10 @@ def build_cli_health(dep_statuses: list[dict[str, Any]]) -> dict[str, Any]:
     for dep in DEPS:
         if dep.group != "agent_cli":
             continue
-        candidates = _distinct_executables(dep.check_cmd[0])
+        candidates = [
+            candidate for candidate in _distinct_executables(dep.check_cmd[0])
+            if not is_shim(dep, candidate["path"])
+        ]
         if not candidates:
             continue  # Missing optional CLIs are handled by normal onboarding.
         dep_status = status_by_id.get(dep.id, {})

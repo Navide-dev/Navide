@@ -175,6 +175,11 @@ How to read the columns:
   Kimi Code prints a bare version. Kimi's `official_regex` names the mismatch
   in the pane's startup probe line and points at the Kimi Code installer; the
   launch is not refused.
+- **Copilot CLI vs VS Code's copilot-shim.** VS Code installs
+  `bin\copilot-shim\copilot.exe` and puts its `bin` on PATH. It is not the
+  Copilot CLI, so Copilot's `shim_dirs` names that directory: detection, the
+  CLI health check and the startup probe skip it, and look further down PATH
+  for a real install (0.2.38).
 - **Turn text is validated for two vendors only.** `verifiedTurnText: true`
   is set in `claude.ts:19` and `codex.ts:21`; every other reader's turn text
   is enough for inter-CLI messaging but keeps the loose buffer scan.

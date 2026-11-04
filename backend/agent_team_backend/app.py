@@ -4027,6 +4027,8 @@ def _probe_agent_cli_for_spawn(agent_key: str, requested_command: Any = None) ->
     known_names = (dep.check_cmd[0], *dep.alt_commands)
     if requested_executable and _names_a_known_command(requested_executable, known_names):
         executable = osplat.paths.resolve_program(requested_executable)
+        if executable and onboarding_deps.is_shim(dep, executable):
+            executable = None  # VS Code's stand-in, not the CLI (Dep.shim_dirs)
     executable = executable or onboarding_deps.resolve_executable(dep)
     if not executable:
         if _spawn_execs_the_cli_directly(requested_command, known_names):
