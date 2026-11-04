@@ -182,6 +182,7 @@ import {
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
 import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
+import { noteScreenRoute, takeScreenRoute } from './lib/routedBlockCredits'
 import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRoleTurn, waitUntilTurnEnds, type QueuedTurnOutcome, type RoleTurnOutcome } from './lib/pipelineDelivery'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -8752,6 +8753,8 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   // keep the seat, and workspace close / teardown restore the pane later.
   if (markRemoved && !keepInList) useChannels(backend).paneClosed(paneId)
   turnTextGate.delete(paneId)
+  workerTurnTextGate.delete(paneId)
+  workerTurnTextAt.delete(paneId)
   // The auto-name guard is per pane id and pane ids are never reused, so a
   // stale entry cannot misfire — it just never leaves. Dropped here with the
   // rest of the per-pane state.
@@ -16877,6 +16880,7 @@ backend.on('agent.activity', (raw) => {
     judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     if (ownTurn) paneLastReply.set(ev.pane_id, ownTurn)
     if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    if (!markerReply) void routeWorkerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
     // the resume prompt again (runs before the poll's turn-complete continue).
@@ -18207,6 +18211,10 @@ interface StageRouter {
    *  content, whitespace dropped). A TUI repaint re-emits rows already on
    *  screen, so the scan meets the same block again further down the buffer. */
   routedWorkerMessages: Set<string>
+  /** Receipt times of the screen's sends, by the same key, not yet matched to
+   *  the turn text that printed them (see lib/routedBlockCredits). Created on
+   *  first use. */
+  screenRoutes?: Map<string, number[]>
   /** Manager replies that ended before the router poll started, which waits
    *  for every slot's kickoff, with when each turn ended. startRouterPoll
    *  routes them (#539). */
@@ -18991,15 +18999,25 @@ function finishManagerStage(router: StageRouter, stageId: string, stageIndex: nu
   void onPipelineNext()
 }
 
-function queueOrRouteWorkerMsg(router: StageRouter, stageId: string, msg: PendingMessage): void {
-  // Keyed on the text alone: a block from an earlier turn stays on screen and
-  // is scanned again in the next one, so a per-turn key re-sent it (0.2.37 VM,
-  // ASK reached the Manager twice). The same text sent again on purpose is a
-  // known gap for 0.2.38.
+/** `turnTextSince` set: the block came from the worker's turn text, and is the
+ *  time its previous turn text arrived (see routeWorkerTurnText). */
+function queueOrRouteWorkerMsg(router: StageRouter, stageId: string, msg: PendingMessage, turnTextSince?: number): void {
+  // The screen is keyed on the text alone: a block from an earlier turn stays
+  // on screen and is scanned again in the next one, so a per-turn key re-sent
+  // it (0.2.37 VM, ASK reached the Manager twice). The same text printed again
+  // in a later turn is known from that turn's own text instead.
   const key = `${msg.kind}\u0000${msg.fromLabel}\u0000${msg.content.replace(/\s+/g, '')}`
-  if (router.routedWorkerMessages.has(key)) {
-    pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} skipped — a block already routed`)
-    return
+  const credits = (router.screenRoutes ??= new Map())
+  if (turnTextSince === undefined) {
+    if (router.routedWorkerMessages.has(key)) {
+      pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} skipped — a block already routed`)
+      return
+    }
+    noteScreenRoute(credits, key, Date.now())
+  } else if (takeScreenRoute(credits, key, turnTextSince)) {
+    return // the screen already sent this turn's copy
+  } else if (router.routedWorkerMessages.has(key)) {
+    pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} printed again in a new turn — routing it again`)
   }
   router.routedWorkerMessages.add(key)
   if (!router.managerReady) {
@@ -19127,6 +19145,68 @@ async function routeManagerTurnText(paneId: string, text: string, timestamp: str
   }
 }
 
+/** When each pane's last turn text reached routeWorkerTurnText (receipt clock):
+ *  a screen send before it belonged to an earlier turn. */
+const workerTurnTextAt = new Map<string, number>()
+/** Hook and transcript can report one turn twice; the second must not count as
+ *  a new turn that printed the same blocks again. A turn from before this
+ *  window booted (a backend restart re-emitting history) is not taken at all. */
+const workerTurnTextGate = createMessagingTurnGate(Date.now())
+
+/** A worker's reply, as its reader reported it at turn end, for both routers.
+ *  The screen cannot tell a block this turn printed from one an earlier turn
+ *  left on screen, so it sends a text only once; the turn text holds only what
+ *  this turn printed, so an ASK or REPORT in it that the screen did not send
+ *  for this turn is a new message, even with words already sent (0.2.37 VM
+ *  dup1–dup3: the run waited on a REPORT skipped as "already routed"). */
+async function routeWorkerTurnText(paneId: string, text: string, timestamp: string): Promise<void> {
+  if (!text || pipeline.state !== 'running' || isInjectedMessageText(text)) return
+  if (!workerTurnTextGate.accept(paneId, text, timestamp, TURN_TEXT_REPLAY_TOLERANCE_MS)) return
+  const since = workerTurnTextAt.get(paneId) ?? 0
+  workerTurnTextAt.set(paneId, Date.now())
+  // A block printed twice in one turn is one message, as on screen.
+  const blocks = (re: RegExp): string[] => {
+    const seen = new Set<string>()
+    return parseContentBlocks(text, 0, re).items.filter((c) => {
+      const k = c.replace(/\s+/g, '')
+      return !seen.has(k) && !!seen.add(k)
+    })
+  }
+  const asks = blocks(ASK_RE)
+  const reports = blocks(REPORT_RE)
+  if (!asks.length && !reports.length) return
+  const eventMs = timestamp ? Date.parse(timestamp) : NaN
+  const router = stageRouters.get(pipeline.stageIndex)
+  const stage = stagesApi.stages.value[pipeline.stageIndex]
+  const label = router ? [...router.workerPaneIds].find(([, id]) => id === paneId)?.[0] : undefined
+  // A replayed historical turn (backend restart) is older than the arm, as in
+  // routeManagerTurnText.
+  if (router && stage && label !== undefined && router.armedAt && !router.finished &&
+      !(!Number.isNaN(eventMs) && eventMs < router.armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS)) {
+    for (const content of asks) queueOrRouteWorkerMsg(router, stage.id, { fromLabel: label, kind: 'ASK', content }, since)
+    for (const content of reports) queueOrRouteWorkerMsg(router, stage.id, { fromLabel: label, kind: 'REPORT', content }, since)
+  }
+  // The global router, for the same panes its screen scan reads.
+  if (globalRouterHandle === null || !pipeline.globalManager) return
+  const managerPaneId = globalManagerPaneId()
+  const gm = pipeline.globalManager
+  const wp = panes.value.find((p) => p.id === paneId)
+  if (!managerPaneId || !wp || !wp.realized || wp.origin !== 'pipeline' || wp.id === managerPaneId || isPriorRunPane(wp.id) ||
+      (wp.stageId === gm.stageId && wp.slotLabel === gm.slotLabel)) return
+  if (router?.managerPaneId === managerPaneId && label !== undefined) return // the stage router's, as in the scan
+  const fromLabel = wp.slotLabel || wp.stageId
+  for (const [kind, items] of [['ASK', asks], ['REPORT', reports]] as const) {
+    for (const content of items) {
+      const key = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000${content.replace(/\s+/g, '')}`
+      if (takeScreenRoute(globalScreenRoutes, key, since)) continue
+      if (globalRoutedMessages.has(key)) pipelineLog(`🎯 Global: ${kind} from ${fromLabel} printed again in a new turn — routing it again`)
+      globalRoutedMessages.add(key)
+      pipelineLog(`🎯 Global → Manager: [${kind} from ${fromLabel}]`)
+      await routerInject(managerPaneId, `[→ ${kind} FROM ${fromLabel} (Stage ${wp.stageId})]\n${content}`, `${kind.toLowerCase()}:${fromLabel}`)
+    }
+  }
+}
+
 /** The deadlock fallback (#539): a Manager that ended its turn without READY,
  *  was reminded, and has sat idle MANAGER_READY_FALLBACK_MS since, while worker
  *  messages are held for it, gets them anyway. Every pane would otherwise wait
@@ -19167,6 +19247,8 @@ const globalRouterAnchors = new Map<string, BufferObservation>()
 /** StageRouter.routedWorkerMessages for the global Manager (pane + stage + kind +
  *  content, whitespace dropped): a repaint re-emits a block already routed. */
 const globalRoutedMessages = new Set<string>()
+/** StageRouter.screenRoutes for the global Manager, by globalRoutedMessages' key. */
+const globalScreenRoutes = new Map<string, number[]>()
 let _globalScanRunning = false
 
 function startGlobalManagerRouter(): void {
@@ -19189,6 +19271,7 @@ function stopGlobalManagerRouter(): void {
     globalRouterCursors.clear()
     globalRouterAnchors.clear()
     globalRoutedMessages.clear()
+    globalScreenRoutes.clear()
     pipelineLog('🎯 Global Manager router stopped')
   }
 }
@@ -19213,6 +19296,12 @@ function handStageToGlobalRouter(r: StageRouter): void {
     const paneId = r.workerPaneIds.get(label)
     const stageId = panes.value.find((p) => p.id === paneId)?.stageId
     if (paneId && stageId) globalRoutedMessages.add(`${paneId}\u0000${stageId}\u0000${kind}\u0000${content}`)
+  }
+  for (const [key, times] of r.screenRoutes ?? []) {
+    const [kind, label, content] = key.split('\u0000')
+    const paneId = r.workerPaneIds.get(label)
+    const stageId = panes.value.find((p) => p.id === paneId)?.stageId
+    if (paneId && stageId) globalScreenRoutes.set(`${paneId}\u0000${stageId}\u0000${kind}\u0000${content}`, [...times])
   }
 }
 
@@ -19269,6 +19358,7 @@ async function globalManagerRouterScan(): Promise<void> {
         return false
       }
       globalRoutedMessages.add(key)
+      noteScreenRoute(globalScreenRoutes, key, Date.now())
       return true
     }
     askRes.items = askRes.items.filter((c) => firstSeen('ASK', c))
