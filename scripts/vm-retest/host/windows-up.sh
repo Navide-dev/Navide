@@ -19,7 +19,7 @@ pw="Vm$(openssl rand -hex 12)x"
 unset pw
 sleep 30; wait_ssh; sleep 25
 "$HERE/gsh.sh" windows 'query user' 2>&1 | head -3
-"$HERE/gcp.sh" windows put "$GUEST_DIR"/* "${exe[0]}" || die "copy failed"
+"$HERE/gcp.sh" windows put "$GUEST_DIR"/*.* "${exe[0]}" || die "copy failed"
 echo "host sha256: $(shasum -a 256 "${exe[0]}" | cut -c1-64)  $b"
 "$HERE/gsh.sh" windows "\$w=\"\$env:USERPROFILE\\wh\"; cd \$w; (Get-FileHash \$w\\$b).Hash
 \$p=Start-Process \$w\\$b -ArgumentList '/S' -PassThru -Wait; 'install exit=' + \$p.ExitCode

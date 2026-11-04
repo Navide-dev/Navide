@@ -31,7 +31,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUEST_DIR="$(cd "$HERE/../guest" && pwd)"
 
 # ssh options for throwaway test guests: their host keys change on every snapshot revert
-SSH_OPTS=(-o BatchMode=yes -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=no
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15 -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=no
           -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o IdentitiesOnly=yes -i "$SSH_KEY")
 [ -n "$VM_HOST" ] && SSH_OPTS+=(-o "ProxyJump=$VM_HOST")
 
@@ -52,7 +52,13 @@ user_of() { case "$1" in linux) echo "$LINUX_USER" ;; windows) echo "$WINDOWS_US
 guest_of() {
   local p="$1" a
   case "$p" in linux) a="$LINUX_GUEST" ;; windows) a="$WINDOWS_GUEST" ;; esac
-  [ -n "$a" ] || a="$(vmr getGuestIPAddress "$(vmx_of "$p")" -wait 2>/dev/null | tr -d '\r')"
+  # vmrun prints "Error: The VMware Tools are not running ..." on stdout while the guest boots: keep asking (up to
+  # a minute) until the answer is an IPv4 address. A guest without VMware Tools never answers: set <PLATFORM>_GUEST
+  local i; for i in $(seq 1 12); do
+    [ -n "$a" ] && break
+    a="$(vmr getGuestIPAddress "$(vmx_of "$p")" -wait 2>/dev/null | tr -d '\r')"
+    printf '%s' "$a" | grep -Eq '^[0-9]+(\.[0-9]+){3}$' || { a=""; sleep 5; }
+  done
   [ -n "$a" ] || die "no address for the $p guest (set $(echo "$p" | tr a-z A-Z)_GUEST or start the VM)"
   echo "$a"
 }

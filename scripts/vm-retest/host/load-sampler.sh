@@ -8,5 +8,5 @@ sample='l=$(sysctl -n vm.loadavg | tr -d "{}"); c=$(ps -axo %cpu=,comm= | awk "/
 ( while :; do
     if [ -z "$VM_HOST" ]; then bash -c "$sample"; else ssh -o BatchMode=yes "$VM_HOST" "$sample"; fi >> "$out"
     sleep 5
-  done ) &
+  done ) > /dev/null 2>&1 < /dev/null &  # detached from our stdout, so piping this script's output cannot hang
 echo "sampler pid $!"
