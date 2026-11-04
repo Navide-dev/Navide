@@ -10,6 +10,7 @@ stdout is reserved for compact protocol frames; diagnostics belong on stderr.
 
 from __future__ import annotations
 
+import difflib
 import json
 import math
 import os
@@ -79,6 +80,17 @@ ACT_ACTIONS = ("click", "fill", "press", "select", "hover", "scroll", "goto", "b
 REF_RE = re.compile(r"^@([1-9][0-9]{0,15})$")
 # AX roles that only wrap content; a nameless one is flattened into its parent.
 _STRUCTURAL_ROLES = frozenset({"generic", "none", "presentation", "InlineTextBox", "LineBreak"})
+# filter "interactive": landmarks and containers worth expanding (their lines
+# say how much they hide), then the controls and headings an agent acts on.
+_LANDMARK_ROLES = frozenset({
+    "banner", "navigation", "main", "complementary", "contentinfo", "region", "form", "search", "dialog",
+    "alertdialog", "listbox", "menu", "menubar", "tablist", "tree",
+})
+_INTERACTIVE_ROLES = _LANDMARK_ROLES | frozenset({
+    "button", "link", "textbox", "searchbox", "combobox", "checkbox", "radio", "switch", "slider", "spinbutton",
+    "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "treeitem", "heading",
+})
+SNAPSHOT_FILTERS = ("all", "interactive")
 
 _MISSING = object()
 _write_lock = threading.Lock()
@@ -91,6 +103,10 @@ _bridge_origin_ids: dict[str, set[str]] = {}
 # browser_tabs new/select. Lost on restart: a Space then acts on its first
 # agent tab again, as it did before Spaces had tabs.
 _active_tabs: dict[str, str] = {}
+# The last viewport snapshot each pane saw of each view ((pane, viewId) ->
+# (document URL, text, None when it was cut)), the base browser_act diff compares against. Keyed by
+# pane so two panes sharing a Space never diff against each other's reads.
+_snapshot_bases: dict[tuple[str | None, str], tuple[str, str | None]] = {}
 
 
 class DuplicateKeyError(ValueError):
@@ -607,8 +623,8 @@ def _ax_text(field: Any) -> str:
     return ""
 
 
-def _viewport_nodes(bridge: Bridge, view_id: str) -> set[int]:
-    """backendNodeIds whose layout box intersects the visible viewport."""
+def _viewport_nodes(bridge: Bridge, view_id: str) -> tuple[set[int], str]:
+    """backendNodeIds whose layout box intersects the visible viewport, and the document URL."""
     metrics = _evaluate(
         bridge,
         view_id,
@@ -617,12 +633,15 @@ def _viewport_nodes(bridge: Bridge, view_id: str) -> set[int]:
     try:
         left, top, width, height = (float(item) for item in json.loads(metrics))
     except (TypeError, ValueError):
-        return set()
+        return set(), ""
     captured = _cdp(bridge, view_id, "DOMSnapshot.captureSnapshot", {"computedStyles": []})
     documents = captured.get("documents")
     if not isinstance(documents, list) or not documents or not _is_record(documents[0]):
-        return set()
+        return set(), ""
     document = documents[0]
+    strings = captured.get("strings")
+    url_index = document.get("documentURL")
+    url = strings[url_index] if isinstance(strings, list) and isinstance(url_index, int) and 0 <= url_index < len(strings) else ""
     backend_ids = (document.get("nodes") or {}).get("backendNodeId") or []
     layout = document.get("layout") or {}
     visible: set[int] = set()
@@ -634,41 +653,87 @@ def _viewport_nodes(bridge: Bridge, view_id: str) -> set[int]:
             continue
         if x < left + width and x + w > left and y < top + height and y + h > top and 0 <= index < len(backend_ids):
             visible.add(backend_ids[index])
-    return visible
+    return visible, url if isinstance(url, str) else ""
 
 
-def snapshot(bridge: Bridge, view_id: str, scope: str = "viewport") -> dict[str, Any]:
+def snapshot(
+    bridge: Bridge, view_id: str, scope: str = "viewport", filter: str = "all", root: Any = None
+) -> dict[str, Any]:
     """A compact role/name tree; every element carries a ref ``@<backendDOMNodeId>``.
 
     Refs are valid only until the page changes; take a new snapshot after any action.
+    `filter` "interactive" keeps controls, headings and landmarks only; `root`
+    (a ref) renders that element's subtree only. Neither changes a ref.
     """
+    return _snapshot(bridge, view_id, scope, filter, root)[0]
+
+
+def _snapshot(bridge: Bridge, view_id: str, scope: str, filter: str, root: Any) -> tuple[dict[str, Any], str]:
+    """snapshot() and, for scope viewport, the document URL it was taken of."""
     if scope not in ("viewport", "full"):
         raise ToolError("INVALID_ARGUMENT", "scope must be viewport or full.")
+    if filter not in SNAPSHOT_FILTERS:
+        raise ToolError("INVALID_ARGUMENT", "filter must be all or interactive.")
+    root_id = _backend_node(root) if root is not None else None
     tree = _cdp(bridge, view_id, "Accessibility.getFullAXTree")
     nodes = [node for node in tree.get("nodes") or [] if _is_record(node)]
     by_id = {node.get("nodeId"): node for node in nodes}
     child_ids = {child for node in nodes for child in node.get("childIds") or []}
-    roots = [node for node in nodes if node.get("nodeId") not in child_ids]
-    visible = _viewport_nodes(bridge, view_id) if scope == "viewport" else None
+    if root_id is None:
+        roots = [node for node in nodes if node.get("nodeId") not in child_ids]
+    else:
+        roots = [node for node in nodes if node.get("backendDOMNodeId") == root_id][:1]
+        if not roots:
+            raise ToolError("STALE_REF", "The element is gone; take a new browser_snapshot.")
+    visible, url = _viewport_nodes(bridge, view_id) if scope == "viewport" else (None, "")
+    interactive = filter == "interactive"
 
     lines: list[str] = []
     truncated = False
     size = 0
+    omitted = 0
+
+    def listed(node: dict[str, Any]) -> bool:
+        """The node has a line of its own under filter all."""
+        role = _ax_text(node.get("role"))
+        name = _ax_text(node.get("name")).strip()
+        own = not node.get("ignored") and role not in ("", "RootWebArea") and not (
+            role in _STRUCTURAL_ROLES and not name
+        )
+        return own and not (role == "StaticText" and not name)
+
+    def in_viewport(node: dict[str, Any]) -> bool:
+        backend_id = node.get("backendDOMNodeId")
+        return visible is None or (isinstance(backend_id, int) and backend_id in visible)
+
+    def hidden_below(node: dict[str, Any]) -> int:
+        """Lines filter interactive drops under `node`, down to the next kept node."""
+        count = 0
+        for child_id in node.get("childIds") or []:
+            child = by_id.get(child_id)
+            if child is None:
+                continue
+            if listed(child) and _ax_text(child.get("role")) in _INTERACTIVE_ROLES:
+                continue
+            if listed(child) and in_viewport(child):
+                count += 1
+            count += hidden_below(child)
+        return count
 
     def render(node: dict[str, Any], depth: int) -> bool:
         """Append the node's subtree; True when anything in it was emitted."""
-        nonlocal truncated, size
+        nonlocal truncated, size, omitted
         if truncated:
             return False
         role = _ax_text(node.get("role"))
         name = _ax_text(node.get("name")).strip()
         backend_id = node.get("backendDOMNodeId")
-        own = not node.get("ignored") and role not in ("", "RootWebArea") and not (
-            role in _STRUCTURAL_ROLES and not name
-        )
-        if role == "StaticText" and not name:
+        own = listed(node)
+        in_view = in_viewport(node)
+        if interactive and own and role not in _INTERACTIVE_ROLES:
             own = False
-        in_view = visible is None or (isinstance(backend_id, int) and backend_id in visible)
+            if in_view:
+                omitted += 1
         line_index = len(lines)
         if own and in_view:
             parts = [f"{'  ' * depth}- {role}"]
@@ -685,6 +750,10 @@ def snapshot(bridge: Bridge, view_id: str, scope: str = "viewport") -> dict[str,
                         parts.append(f"[{prop['name']}]" if flag == "true" else f"[{prop['name']}={flag}]")
             if isinstance(backend_id, int) and role != "StaticText":
                 parts.append(f"@{backend_id}")
+            if interactive and role in _LANDMARK_ROLES:
+                hidden = hidden_below(node)
+                if hidden:
+                    parts.append(f"(+{hidden} hidden)")
             line = " ".join(parts)
             if size + len(line) + 1 > SNAPSHOT_MAX_CHARS:
                 truncated = True
@@ -703,9 +772,14 @@ def snapshot(bridge: Bridge, view_id: str, scope: str = "viewport") -> dict[str,
             size += len(container) + 1
         return (own and in_view) or emitted_child
 
-    for root in roots:
-        render(root, 0)
-    return {"scope": scope, "snapshot": "\n".join(lines), "truncated": truncated}
+    for node in roots:
+        render(node, 0)
+    result: dict[str, Any] = {"scope": scope, "snapshot": "\n".join(lines), "truncated": truncated}
+    if interactive:
+        result.update(filter=filter, omitted=omitted)
+    if root_id is not None:
+        result["root"] = f"@{root_id}"
+    return result, url
 
 
 def _backend_node(ref: Any) -> int:
@@ -840,10 +914,20 @@ def _http_url(value: Any) -> str:
     return value
 
 
-def act(bridge: Bridge, view_id: str, arguments: dict[str, Any], *, sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
+def act(
+    bridge: Bridge,
+    view_id: str,
+    arguments: dict[str, Any],
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    pane: str | None = None,
+) -> dict[str, Any]:
     action = arguments.get("action")
     if action not in ACT_ACTIONS:
         raise ToolError("INVALID_ARGUMENT", f"action must be one of {', '.join(ACT_ACTIONS)}.")
+    diff = arguments.get("diff", False)
+    if not isinstance(diff, bool):
+        raise ToolError("INVALID_ARGUMENT", "diff must be a boolean.")
     result: dict[str, Any] = {"action": action}
     navigates = False
     if action in ("click", "hover"):
@@ -918,9 +1002,67 @@ def act(bridge: Bridge, view_id: str, arguments: dict[str, Any], *, sleep: Calla
         # A click or Enter may or may not navigate; give it a moment to start.
         sleep(0.3)
         result["loaded"] = wait_for_load(bridge, view_id, sleep=sleep)
-    if arguments.get("snapshot") is True:
-        result.update(snapshot(bridge, view_id, "viewport"))
+    if diff:
+        result.update(_diff_snapshot(bridge, view_id, pane))
+    elif arguments.get("snapshot") is True:
+        taken, url = _snapshot(bridge, view_id, "viewport", "all", None)
+        remember_snapshot(pane, view_id, url, taken)
+        result.update(taken)
     return result
+
+
+def remember_snapshot(pane: str | None, view_id: str, url: str, taken: dict[str, Any]) -> None:
+    """Keep a full viewport snapshot as the base of this pane's next diff."""
+    with _state_lock:
+        _snapshot_bases[(pane, view_id)] = (url, None if taken["truncated"] else taken["snapshot"])
+
+
+def _forget_snapshots(view_id: str) -> None:
+    with _state_lock:
+        for key in [key for key in _snapshot_bases if key[1] == view_id]:
+            del _snapshot_bases[key]
+
+
+def _refs(text: str) -> set[str]:
+    return set(re.findall(r" (@[0-9]+)(?= |$)", text, re.MULTILINE))
+
+
+def _diff_snapshot(bridge: Bridge, view_id: str, pane: str | None) -> dict[str, Any]:
+    """The viewport after an action as the lines that changed since this pane's last
+    snapshot of the view, or the whole of it when a diff would not be the cheaper or
+    the truthful answer; `mode` says which one came back."""
+    taken, url = _snapshot(bridge, view_id, "viewport", "all", None)
+    with _state_lock:
+        base = _snapshot_bases.get((pane, view_id))
+    remember_snapshot(pane, view_id, url, taken)
+    text = taken["snapshot"]
+    reason = None
+    if base is None:
+        reason = "no-base"
+    elif taken["truncated"] or base[1] is None:
+        reason = "truncated"
+    elif base[0] != url:
+        reason = "navigated"
+    elif _refs(base[1]) and not _refs(base[1]) & _refs(text):
+        reason = "stale"
+    if reason is None:
+        changed = [
+            f"{line[0]} {line[1:]}"
+            for line in difflib.unified_diff(base[1].splitlines(), text.splitlines(), n=0, lineterm="")
+            if line[:1] in "+-" and not line.startswith(("+++", "---"))
+        ]
+        patch = "\n".join(changed)
+        if len(patch) < len(text):
+            return {
+                "scope": "viewport",
+                "snapshot": patch,
+                "truncated": False,
+                "mode": "diff",
+                "added": sum(1 for line in changed if line[0] == "+"),
+                "removed": sum(1 for line in changed if line[0] == "-"),
+            }
+        reason = "larger"
+    return {**taken, "mode": "full", "fullReason": reason}
 
 
 def screenshot(bridge: Bridge, view_id: str) -> dict[str, Any]:
@@ -1082,6 +1224,7 @@ def tabs(bridge: Bridge, arguments: dict[str, Any], pane: str | None, *, sleep: 
             _active_tabs[name] = tab
         return {"viewId": tab, **_tabs_value(name, views)}
     _call(bridge, "close", {"viewId": tab})
+    _forget_snapshots(tab)
     with _state_lock:
         if _active_tabs.get(name) == tab:
             del _active_tabs[name]
@@ -1096,6 +1239,7 @@ def close(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> dict[s
     if not whole:
         view_id = _resolve_tab(bridge, arguments, pane)
         _call(bridge, "close", {"viewId": view_id})
+        _forget_snapshots(view_id)
         with _state_lock:
             for name, active in list(_active_tabs.items()):
                 if active == view_id:
@@ -1112,6 +1256,7 @@ def close(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> dict[s
             skipped.append(view["viewId"])
             continue
         _call(bridge, "close", {"viewId": view["viewId"]})
+        _forget_snapshots(view["viewId"])
         closed.append(view["viewId"])
     with _state_lock:
         _active_tabs.pop(name, None)
@@ -1342,10 +1487,15 @@ def run_tool(
             value = open_space(bridge, arguments, pane)
         elif name == "browser.snapshot":
             view_id = _resolve_view(bridge, arguments, pane)
-            value = {"viewId": view_id, **snapshot(bridge, view_id, arguments.get("scope", "viewport"))}
+            scope = arguments.get("scope", "viewport")
+            filter_ = arguments.get("filter", "all")
+            taken, url = _snapshot(bridge, view_id, scope, filter_, arguments.get("root"))
+            if scope == "viewport" and filter_ == "all" and arguments.get("root") is None:
+                remember_snapshot(pane, view_id, url, taken)
+            value = {"viewId": view_id, **taken}
         elif name == "browser.act":
             view_id = _resolve_view(bridge, arguments, pane)
-            value = {"viewId": view_id, **act(bridge, view_id, arguments)}
+            value = {"viewId": view_id, **act(bridge, view_id, arguments, pane=pane)}
         elif name == "browser.screenshot":
             view_id = _resolve_view(bridge, arguments, pane)
             value = {"viewId": view_id, **screenshot(bridge, view_id)}

@@ -315,7 +315,7 @@ copilot/cursor/droid/grok/kilo/muse/opencode 的 `turn_complete` 是 CLI 自己�
 | Tool | 參數 | 功能 |
 |---|---|---|
 | `ui_list_actions` | `workspace_path` | 列出擁有 `workspace_path` 的 Navide 視窗中註冊的每一個 Command id |
-| `ui_invoke` | `workspace_path`、`action`、`args?` | 呼叫一個已註冊的 Action，`args` 原樣傳入。被拒時回 `ok: false` 加一句 `error`；Action 有指明原因時另帶 `error_code` 與 `params`，請依代碼判斷，不要比對文字 |
+| `ui_invoke` | `workspace_path`、`action`、`args?`、`snapshot=false` | 呼叫一個已註冊的 Action，`args` 原樣傳入。被拒時回 `ok: false` 加一句 `error`；Action 有指明原因時另帶 `error_code` 與 `params`，請依代碼判斷，不要比對文字。`snapshot` 為 true 時，在 `ok: true` 的回應之後，另外附上當下 `ui_snapshot` 的結果，放在 `snapshot`；快照失敗時改回 `snapshot_error` `{error, error_code}`，Action 本身的回應不變 |
 | `ui_snapshot` | `workspace_path` | 該視窗 UI 狀態的結構化快照 |
 | `ui_diagnostics` | `workspace_path`、`since_seq=0`、`pane_id`、`limit=50` | 該視窗自己記下的 Renderer 端診斷 —— 例如 `injectText` 因為 Echo 檢查逾時而重送內容，或乾脆放棄 —— 這些是 `ui_invoke` 呼叫端光看 `ok: true` 看不出來的，過去只出現在那個視窗的 DevTools Console 裡。當某個 Tool 回報成功、但視窗裡的實際行為看起來不對（重複輸入、送出卡住）時用它來診斷。`since_seq` 只回傳序號在它之後的項目，所以把上一次的 `nextSeq` 傳回來就能增量輪詢。回應也帶 `frame_drops`：從 Backend 啟動以來，因為沒有視窗擁有其 PTY 而被丟掉的終端機 Frame 數（`ownerless`），以及指名了 Backend 不認得的終端機 id 的終端機請求數（`unknown_terminal`）。視窗自己的 `inject.failed` 項目會帶上該 Pane 的終端機尺寸 |
 
