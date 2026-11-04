@@ -508,11 +508,12 @@ async def test_kill_all_honours_a_declared_grace() -> None:
     once, against the same ~/.claude.json. kill_all's own 1s grace ignored the
     3s the vendor asked for, so the exact stale-entry bug the ShutdownSpec
     exists to prevent survived on the quit path."""
-    svc = TerminalService(emit=_noop_emit)
+    out = _OutputByPane()
+    svc = TerminalService(emit=out.emit)
     session = svc.create(
         pane_id="p1", agent_key="claude", command=_ignore_term_script(), cwd="/"
     )
-    await asyncio.sleep(0.3)
+    await out.wait_armed("p1")
 
     started = time.monotonic()
     await svc.kill_all()
