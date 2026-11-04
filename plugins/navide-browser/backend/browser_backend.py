@@ -1433,11 +1433,16 @@ def upload(bridge: Bridge, view_id: str, arguments: dict[str, Any], workspace: s
 
 
 def _others_handoff_pending(view: dict[str, Any] | None, pane: str | None) -> bool:
-    """The user still holds a view another pane (or a pane before a restart) handed off."""
+    """The user still holds a view this backend saw another pane hand off.
+
+    A need-action of unknown origin (one set before a restart, or not through
+    browser_handoff) is not protected: take_over and finish act on it as they
+    always did.
+    """
     if view is None or view.get("control") != "user" or view.get("state") != "need-action":
         return False
     with _state_lock:
-        return view.get("viewId") not in _handoffs or _handoffs[view["viewId"]] != pane
+        return view.get("viewId") in _handoffs and _handoffs[view["viewId"]] != pane
 
 
 def take_over(

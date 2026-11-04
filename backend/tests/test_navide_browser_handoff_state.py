@@ -129,3 +129,14 @@ def test_a_manual_takeover_without_handoff_is_asked_back_as_before() -> None:
     browser.run_tool("browser.takeover", {"viewId": "v1", "note": "please", "timeoutMs": 0}, bridge, "pane-b")
     assert bridge.view["state"] == "running"
     assert bridge.view["note"].endswith(": please")
+
+
+def test_a_need_action_of_unknown_origin_is_asked_back_as_before() -> None:
+    # Set before a restart, or not through browser_handoff: nothing records
+    # which pane it belongs to, so take_over writes its request as it always did.
+    bridge = HostBridge()
+    bridge.view.update(control="user", state="need-action", note="old request", reason="agent_handoff")
+    browser.run_tool("browser.takeover", {"viewId": "v1", "note": "please", "timeoutMs": 0}, bridge, "pane-b")
+    assert bridge.view["state"] == "running"
+    assert bridge.view["note"].endswith(": please")
+    assert browser.run_tool("browser.finish", {"viewId": "v1"}, bridge, "pane-b")["state"] == "done"
