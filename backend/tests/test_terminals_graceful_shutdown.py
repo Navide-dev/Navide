@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import re
 import sys
 import threading
 import time
@@ -63,11 +64,48 @@ def _trap_term_script(marker: Path) -> list[str]:
     return ["sh", "-c", f'trap "touch {marker}; exit 0" TERM; sleep 30']
 
 
+#: Printed by _ignore_term_script once its trap is in place.
+_TRAP_ARMED = b"TRAP-ARMED"
+_ESCAPES = re.compile(rb"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|.)")
+
+
 def _ignore_term_script() -> list[str]:
     """A child that refuses SIGTERM, so a grace provably runs its full length.
     HUP is left alone: defer_master_close keeps the master open, so no HUP is
-    sent and the escalation is what finally puts it down."""
-    return ["sh", "-c", 'trap "" TERM; sleep 30']
+    sent and the escalation is what finally puts it down. It prints
+    _TRAP_ARMED after the trap, so a test can wait for that instead of
+    guessing how long a loaded machine takes to start a shell."""
+    return ["sh", "-c", f'trap "" TERM; echo {_TRAP_ARMED.decode()}; sleep 30']
+
+
+class _OutputByPane:
+    """An emit that keeps each pane's terminal output, decoded from the binary
+    output frame (TerminalService._build_output_frame)."""
+
+    def __init__(self) -> None:
+        self.data: dict[str, bytes] = {}
+
+    async def emit(self, event: Any) -> None:
+        if not isinstance(event, (bytes, bytearray)):
+            return
+        sid_len = event[5]
+        pane_at = 6 + sid_len
+        pane_len = event[pane_at]
+        pane = bytes(event[pane_at + 1 : pane_at + 1 + pane_len]).decode()
+        body = bytes(event[pane_at + 1 + pane_len :])
+        self.data[pane] = self.data.get(pane, b"") + body
+
+    async def wait_armed(self, *panes: str, timeout_s: float = 20.0) -> None:
+        """Until every pane's child has installed its TERM trap. Bounded: a
+        child that never gets there fails here, not as a missing grace."""
+        # Windows ConPTY may interleave escape sequences with the text.
+        def plain(p: str) -> bytes:
+            return _ESCAPES.sub(b"", self.data.get(p, b""))
+
+        armed = await _wait_for(
+            lambda: all(_TRAP_ARMED in plain(p) for p in panes), timeout_s
+        )
+        assert armed, f"TERM trap never armed: {self.data!r}"
 
 
 async def _wait_for(predicate: Any, timeout_s: float = 8.0) -> bool:
@@ -470,11 +508,12 @@ async def test_kill_all_honours_a_declared_grace() -> None:
     once, against the same ~/.claude.json. kill_all's own 1s grace ignored the
     3s the vendor asked for, so the exact stale-entry bug the ShutdownSpec
     exists to prevent survived on the quit path."""
-    svc = TerminalService(emit=_noop_emit)
+    out = _OutputByPane()
+    svc = TerminalService(emit=out.emit)
     session = svc.create(
         pane_id="p1", agent_key="claude", command=_ignore_term_script(), cwd="/"
     )
-    await asyncio.sleep(0.3)
+    await out.wait_armed("p1")
 
     started = time.monotonic()
     await svc.kill_all()
@@ -512,11 +551,12 @@ async def test_kill_all_leaves_a_vendor_without_a_spec_on_the_old_grace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # The other half: nobody who declared nothing pays for this.
-    svc = TerminalService(emit=_noop_emit)
+    out = _OutputByPane()
+    svc = TerminalService(emit=out.emit)
     session = svc.create(
         pane_id="p1", agent_key="codex", command=_ignore_term_script(), cwd="/"
     )
-    await asyncio.sleep(0.3)
+    await out.wait_armed("p1")
     clock = _SteppingClock(svc._loop, 0.05)  # noqa: SLF001
     svc._loop = clock  # type: ignore[assignment]  # noqa: SLF001
     signalled: list[tuple[bool, float]] = []
@@ -552,7 +592,8 @@ async def test_kill_all_waits_the_longest_grace_once_not_once_per_pane(
     so three TERM-ignoring claudes cost one grace between them. Counted on
     _SteppingClock, not timed: the wall clock also carried the snapshot and
     the drain, and a loaded Windows runner took 10.66s with no grace at all."""
-    svc = TerminalService(emit=_noop_emit)
+    out = _OutputByPane()
+    svc = TerminalService(emit=out.emit)
     sessions = [
         svc.create(
             pane_id=f"p{i}", agent_key="claude",
@@ -560,7 +601,7 @@ async def test_kill_all_waits_the_longest_grace_once_not_once_per_pane(
         )
         for i in range(3)
     ]
-    await asyncio.sleep(0.4)
+    await out.wait_armed("p0", "p1", "p2")
     clock = _SteppingClock(svc._loop, 0.05)  # noqa: SLF001
     svc._loop = clock  # type: ignore[assignment]  # noqa: SLF001
     signalled: list[tuple[bool, float]] = []

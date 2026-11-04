@@ -157,6 +157,7 @@ import { deriveAutoName, stripCliSessionContext } from './lib/autoName'
 import { bootWorkspaceToRecord } from './lib/bootWorkspace'
 import { diagLog } from '@navide/terminal'
 import { reclaimBlockedBy, focusedReclaimBlockedBy, namedReclaimBlockedBy, focusedForReclaim, idleReclaimDisabled, idleReclaimThresholdMs, RECLAIM_NOW_THRESHOLD_MS, type ReclaimCandidate } from './lib/idleReclaim'
+import { isSpawnReportSend } from './lib/spawnReportSend'
 import { useResourceLimits } from './composables/useResourceLimits'
 import { reclaimRefusalReason, reclaimRequestPaneIds, type ReclaimRefusal } from './lib/paneReclaimRequest'
 import { findConsecutiveQuestionBlocks, findScreenSentinel, findSentinel } from '@navide/terminal'
@@ -3183,6 +3184,22 @@ function settleSpawnReport(
   messaging.sendMessage(senderName, parentName, report, { kind: 'fallback' })
 }
 
+/** cli_send messages that are a spawned pane's report to its parent, by
+ *  msg_key → child pane id, until their delivery verdict arrives. */
+const spawnReportSends = new Map<string, string>()
+
+/** A child's cli_send report to its parent was delivered: that is the report
+ *  cli_open_agent asked for, so the debt is settled (see isSpawnReportSend). */
+function settleSpawnReportSend(msgKey: string, ok: boolean): void {
+  const childId = spawnReportSends.get(msgKey)
+  if (!childId) return
+  spawnReportSends.delete(msgKey)
+  const pane = panes.value.find((p) => p.id === childId)
+  if (!ok || !pane?.spawnReportPending) return
+  pane.spawnReportPending = false
+  persistPaneReportDebt(pane)
+}
+
 function onTurnCompleteForMessaging(paneId: string, text: string, timestamp: string): void {
   const senderName = panes.value.find((p) => p.id === paneId)?.messagingName
   if (senderName && text) {
@@ -4281,6 +4298,7 @@ onMounted(() => {
     pushDeliver: pushDeliverAgentMessage,
     routeRemote: routeRemoteMessage,
     reportDelivery: (msgKey, ok, reason) => {
+      settleSpawnReportSend(msgKey, ok)
       backend
         .send('agent_msg.delivered', {
           msg_key: msgKey,
@@ -17284,6 +17302,21 @@ backend.on('agent_msg.deliver', (raw) => {
     origin?: string
   }
   if (!ev?.msg_key || !ev.target_pane_id || !ev.content) return
+  if (ev.from_pane_id) {
+    const child = panes.value.find((p) => p.id === ev.from_pane_id)
+    const reportSend = isSpawnReportSend(
+      child,
+      {
+        fromPaneId: ev.from_pane_id,
+        targetPaneId: ev.target_pane_id,
+        targetName: ev.target_name,
+        targetWorkspacePath: ev.target_workspace_path,
+        kind: ev.kind,
+      },
+      (name) => panes.value.find((p) => p.messagingName === name)?.id,
+    )
+    if (child && reportSend) spawnReportSends.set(ev.msg_key, child.id)
+  }
   // The broadcast reaches the sending window too. When the sender is one of our
   // panes, log the outbound side here — a message sent through the MCP cli_send
   // tool never passed through sendMessage(), so nothing else would record it.
@@ -17474,6 +17507,7 @@ backend.on('agent_msg.cancel', (raw) => {
 backend.on('agent_msg.delivery_result', (raw) => {
   const ev = raw as { msg_key?: string; ok?: boolean; reason?: string }
   if (!ev?.msg_key) return
+  settleSpawnReportSend(ev.msg_key, !!ev.ok)
   messaging.resolveRemoteDelivery(ev.msg_key, !!ev.ok, ev.reason || '')
 })
 
