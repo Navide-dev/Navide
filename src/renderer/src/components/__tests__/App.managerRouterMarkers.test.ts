@@ -23,6 +23,7 @@ import {
 } from '../../platform/terminal/lib/buffer'
 import { MANAGER_READY_SENTINEL, MANAGER_STAGE_DONE_SENTINEL } from '../../data/stages'
 import { RUN_SLOT_STUB } from './pipelineDagTestStub'
+import { noteScreenRoute, takeScreenRoute } from '../../lib/routedBlockCredits'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 const screens = JSON.parse(readFileSync(
@@ -94,6 +95,8 @@ async function load() {
     MANAGER_READY_REMINDER: 'reminder',
     TURN_TEXT_REPLAY_TOLERANCE_MS: 60_000,
     paneTurnStartedAt: new Map(),
+    noteScreenRoute,
+    takeScreenRoute,
     pipelineLog: (line: string) => log.push(line),
     i18n: { global: { t: (key: string) => key } },
     routerInject: async (paneId: string, text: string) => { injected.push([paneId, text]); return true },
@@ -232,6 +235,8 @@ describe('worker screen: templates are not messages, and a repaint is not a seco
       rebaseGlobalRouterCursor: () => {},
       globalRouterCursors: new Map<string, number>(),
       globalRoutedMessages: new Set<string>(),
+      globalScreenRoutes: new Map<string, number[]>(),
+      noteScreenRoute,
       paneTurnStartedAt: new Map<string, number>(),
       pipelineLog: () => {},
       i18n: { global: { t: (key: string) => key } },

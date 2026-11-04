@@ -15,6 +15,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { RUN_SLOT_STUB } from './pipelineDagTestStub'
+import { noteScreenRoute } from '../../lib/routedBlockCredits'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -84,6 +85,8 @@ async function load(opts: { managerOwnsStage: boolean }) {
     globalRouterAnchors: new Map<string, unknown>(),
     globalRouterHandle: 1,
     globalRoutedMessages: new Set<string>(),
+    globalScreenRoutes: new Map<string, number[]>(),
+    noteScreenRoute,
     paneTurnStartedAt: new Map<string, number>(),
     pipelineLog: () => {},
     injectPane: vi.fn(async (paneId: string, text: string) => { injected.push([paneId, text]); return true }),
