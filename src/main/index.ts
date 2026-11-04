@@ -379,6 +379,9 @@ const quitCancelWatch = createQuitCancelWatch({
 // True while the quit confirmation dialog is on screen, so a second close
 // request cannot stack another one.
 let quitPromptOpen = false
+// The window the open quit dialog is parented to, so a repeated quit request
+// can bring that dialog forward instead of opening a second one.
+let quitPromptWindow: BrowserWindow | undefined
 // Multiple independent main windows (VS Code-style cmd+shift+N). `mainWindow`
 // tracks the most-recently-focused one so dialogs parent to it; `mainWindows`
 // holds them all for lifecycle code that must reach every main window.
@@ -6708,11 +6711,13 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
     checkboxChecked: false,
   }
   quitPromptOpen = true
+  quitPromptWindow = win
   let res: Electron.MessageBoxReturnValue
   try {
     res = win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
   } finally {
     quitPromptOpen = false
+    quitPromptWindow = undefined
   }
   if (res.response === 1) return false
   if (res.checkboxChecked) {
@@ -6728,6 +6733,12 @@ app.on('before-quit', async (e) => {
   // Confirmation gate — shared "confirm before close" setting, driven by renderer.
   if (quitConfirm.enabled && !quitConfirmed) {
     e.preventDefault()
+    // A second quit request (Quit pressed twice, Browser.close sent twice)
+    // while the dialog is up: bring the open dialog forward, never stack one.
+    if (quitPromptOpen) {
+      if (quitPromptWindow && !quitPromptWindow.isDestroyed()) quitPromptWindow.focus()
+      return
+    }
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     if (!(await askQuitConfirm(win))) return // cancelled — stay open (default already prevented)
     quitConfirmed = true

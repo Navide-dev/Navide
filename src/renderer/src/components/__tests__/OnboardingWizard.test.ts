@@ -295,8 +295,35 @@ describe('OnboardingWizard', () => {
     await flushPromises()
 
     expect(installRuns(mock).map((s) => s.payload.dep_id)).toEqual(['homebrew', 'node', 'claude'])
-    // Each exit was followed by a fresh re-detect before the next install.
-    expect(mock.sent.filter((s) => s.type === 'onboarding.status' && s.payload.fresh)).toHaveLength(3)
+    // A fresh re-detect before the first install, and after each exit.
+    expect(mock.sent.filter((s) => s.type === 'onboarding.status' && s.payload.fresh)).toHaveLength(4)
+  })
+
+  it('re-detects before installing, and skips a prerequisite installed since the wizard opened', async () => {
+    // Node was missing when the wizard opened; the user then installed it
+    // outside Navide. The first Install must not run Node's installer again.
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', bareMac(new Set(['homebrew'])))
+    wrapper = await open(mock)
+    withRunsExiting(mock, { statusFor: (installed) => bareMac(new Set(['homebrew', 'node', ...installed])) })
+
+    await installButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(installRuns(mock).map((s) => s.payload.dep_id)).toEqual(['claude'])
+  })
+
+  it('installs nothing when the CLI itself was installed since the wizard opened', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status', bareMac(new Set(['homebrew'])))
+    wrapper = await open(mock)
+    withRunsExiting(mock, { statusFor: () => bareMac(new Set(['homebrew', 'node', 'claude'])) })
+
+    await installButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(installCount(mock)).toBe(0)
+    expect(wrapper.findAll('.oc-card')[0].find('.oc-error').exists()).toBe(false)
   })
 
   it('stops the chain once a prerequisite exits non-zero, and says so on the CLI card', async () => {

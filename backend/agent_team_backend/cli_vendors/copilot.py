@@ -1545,6 +1545,8 @@ SPEC = VendorSpec(
     install_dep=Dep("copilot", "GitHub Copilot CLI", "GitHub Copilot coding agent CLI", "agent_cli",
         ["copilot", "--version"], r"(\d+\.\d+\.\d+)",
         install_cmd="brew install --cask copilot-cli",
+        # VS Code's own `copilot` stand-in, see Dep.shim_dirs.
+        shim_dirs=("copilot-shim",),
         needs_terminal=True, requires_binaries=("brew",), optional=True,
         docs_url="https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli",
         # Windows: WinGet, per
