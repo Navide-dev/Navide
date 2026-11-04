@@ -1,0 +1,713 @@
+{
+ "ax": {
+  "nodes": [
+   {
+    "nodeId": "1",
+    "role": {
+     "value": "RootWebArea"
+    },
+    "name": {
+     "value": "Golden page"
+    },
+    "childIds": [
+     "2",
+     "10",
+     "40",
+     "70"
+    ],
+    "backendDOMNodeId": 1
+   },
+   {
+    "nodeId": "2",
+    "role": {
+     "value": "banner"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [
+     "3",
+     "4"
+    ],
+    "backendDOMNodeId": 2
+   },
+   {
+    "nodeId": "3",
+    "role": {
+     "value": "link"
+    },
+    "name": {
+     "value": "Home"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 3
+   },
+   {
+    "nodeId": "4",
+    "role": {
+     "value": "navigation"
+    },
+    "name": {
+     "value": "Primary"
+    },
+    "childIds": [
+     "5",
+     "6",
+     "7"
+    ],
+    "backendDOMNodeId": 4
+   },
+   {
+    "nodeId": "5",
+    "role": {
+     "value": "link"
+    },
+    "name": {
+     "value": "Docs"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 5
+   },
+   {
+    "nodeId": "6",
+    "role": {
+     "value": "link"
+    },
+    "name": {
+     "value": "Blog"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 6
+   },
+   {
+    "nodeId": "7",
+    "role": {
+     "value": "button"
+    },
+    "name": {
+     "value": "Menu"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 7,
+    "properties": [
+     {
+      "name": "expanded",
+      "value": {
+       "value": false
+      }
+     }
+    ]
+   },
+   {
+    "nodeId": "10",
+    "role": {
+     "value": "main"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [
+     "11",
+     "12",
+     "13",
+     "20",
+     "30"
+    ],
+    "backendDOMNodeId": 10
+   },
+   {
+    "nodeId": "11",
+    "role": {
+     "value": "heading"
+    },
+    "name": {
+     "value": "Welcome — 歡迎"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 11,
+    "properties": [
+     {
+      "name": "level",
+      "value": {
+       "value": 1
+      }
+     }
+    ]
+   },
+   {
+    "nodeId": "12",
+    "role": {
+     "value": "paragraph"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [
+     "14",
+     "15"
+    ],
+    "backendDOMNodeId": 12
+   },
+   {
+    "nodeId": "14",
+    "role": {
+     "value": "StaticText"
+    },
+    "name": {
+     "value": "Intro text xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 14
+   },
+   {
+    "nodeId": "15",
+    "role": {
+     "value": "StaticText"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [],
+    "backendDOMNodeId": 15
+   },
+   {
+    "nodeId": "13",
+    "role": {
+     "value": "generic"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [
+     "16"
+    ],
+    "backendDOMNodeId": 13
+   },
+   {
+    "nodeId": "16",
+    "role": {
+     "value": "generic"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [
+     "17"
+    ],
+    "backendDOMNodeId": 16,
+    "ignored": true
+   },
+   {
+    "nodeId": "17",
+    "role": {
+     "value": "checkbox"
+    },
+    "name": {
+     "value": "Remember me"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 17,
+    "properties": [
+     {
+      "name": "checked",
+      "value": {
+       "value": "true"
+      }
+     },
+     {
+      "name": "disabled",
+      "value": {
+       "value": true
+      }
+     }
+    ]
+   },
+   {
+    "nodeId": "20",
+    "role": {
+     "value": "table"
+    },
+    "name": {
+     "value": "Scores"
+    },
+    "childIds": [
+     "21",
+     "24"
+    ],
+    "backendDOMNodeId": 20
+   },
+   {
+    "nodeId": "21",
+    "role": {
+     "value": "row"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [
+     "22",
+     "23"
+    ],
+    "backendDOMNodeId": 21
+   },
+   {
+    "nodeId": "22",
+    "role": {
+     "value": "cell"
+    },
+    "name": {
+     "value": "Alice"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 22
+   },
+   {
+    "nodeId": "23",
+    "role": {
+     "value": "cell"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [
+     "25"
+    ],
+    "backendDOMNodeId": 23
+   },
+   {
+    "nodeId": "25",
+    "role": {
+     "value": "link"
+    },
+    "name": {
+     "value": "Profile"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 25
+   },
+   {
+    "nodeId": "24",
+    "role": {
+     "value": "row"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [
+     "26"
+    ],
+    "backendDOMNodeId": 24
+   },
+   {
+    "nodeId": "26",
+    "role": {
+     "value": "cell"
+    },
+    "name": {
+     "value": "Below the fold"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 26
+   },
+   {
+    "nodeId": "30",
+    "role": {
+     "value": "form"
+    },
+    "name": {
+     "value": "Sign up"
+    },
+    "childIds": [
+     "31",
+     "32",
+     "33"
+    ],
+    "backendDOMNodeId": 30
+   },
+   {
+    "nodeId": "31",
+    "role": {
+     "value": "textbox"
+    },
+    "name": {
+     "value": "Email"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 31,
+    "value": {
+     "value": "a@b.c"
+    },
+    "properties": [
+     {
+      "name": "focused",
+      "value": {
+       "value": true
+      }
+     }
+    ]
+   },
+   {
+    "nodeId": "32",
+    "role": {
+     "value": "combobox"
+    },
+    "name": {
+     "value": "Plan"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 32,
+    "value": {
+     "value": "Pro"
+    }
+   },
+   {
+    "nodeId": "33",
+    "role": {
+     "value": "button"
+    },
+    "name": {
+     "value": "Submit"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 33
+   },
+   {
+    "nodeId": "40",
+    "role": {
+     "value": "complementary"
+    },
+    "name": {
+     "value": ""
+    },
+    "childIds": [
+     "41"
+    ],
+    "backendDOMNodeId": 40
+   },
+   {
+    "nodeId": "41",
+    "role": {
+     "value": "StaticText"
+    },
+    "name": {
+     "value": "Sidebar note"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 41
+   },
+   {
+    "nodeId": "70",
+    "role": {
+     "value": "contentinfo"
+    },
+    "name": {
+     "value": "Footer"
+    },
+    "childIds": [
+     "71",
+     "72"
+    ],
+    "backendDOMNodeId": 70
+   },
+   {
+    "nodeId": "71",
+    "role": {
+     "value": "link"
+    },
+    "name": {
+     "value": "Privacy"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 71
+   },
+   {
+    "nodeId": "72",
+    "role": {
+     "value": "StaticText"
+    },
+    "name": {
+     "value": "© 2026"
+    },
+    "childIds": [],
+    "backendDOMNodeId": 72
+   }
+  ]
+ },
+ "dom": {
+  "documents": [
+   {
+    "nodes": {
+     "backendNodeId": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      10,
+      11,
+      12,
+      14,
+      15,
+      13,
+      16,
+      17,
+      20,
+      21,
+      22,
+      23,
+      25,
+      24,
+      26,
+      30,
+      31,
+      32,
+      33,
+      40,
+      41,
+      70,
+      71,
+      72
+     ]
+    },
+    "layout": {
+     "nodeIndex": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30
+     ],
+     "bounds": [
+      [
+       0,
+       0,
+       1440,
+       3000
+      ],
+      [
+       0,
+       0,
+       1440,
+       60
+      ],
+      [
+       10,
+       10,
+       50,
+       20
+      ],
+      [
+       100,
+       0,
+       600,
+       60
+      ],
+      [
+       110,
+       10,
+       40,
+       20
+      ],
+      [
+       160,
+       10,
+       40,
+       20
+      ],
+      [
+       210,
+       10,
+       40,
+       20
+      ],
+      [
+       0,
+       60,
+       1440,
+       2000
+      ],
+      [
+       20,
+       80,
+       400,
+       40
+      ],
+      [
+       20,
+       130,
+       800,
+       60
+      ],
+      [
+       20,
+       130,
+       800,
+       20
+      ],
+      [
+       20,
+       150,
+       0,
+       0
+      ],
+      [
+       20,
+       200,
+       800,
+       40
+      ],
+      [
+       20,
+       200,
+       800,
+       40
+      ],
+      [
+       20,
+       200,
+       20,
+       20
+      ],
+      [
+       20,
+       300,
+       800,
+       200
+      ],
+      [
+       20,
+       300,
+       800,
+       40
+      ],
+      [
+       20,
+       300,
+       400,
+       40
+      ],
+      [
+       420,
+       300,
+       400,
+       40
+      ],
+      [
+       430,
+       310,
+       60,
+       20
+      ],
+      [
+       20,
+       1200,
+       800,
+       40
+      ],
+      [
+       20,
+       1200,
+       400,
+       40
+      ],
+      [
+       20,
+       820,
+       800,
+       200
+      ],
+      [
+       20,
+       830,
+       300,
+       30
+      ],
+      [
+       20,
+       870,
+       300,
+       30
+      ],
+      [
+       20,
+       910,
+       100,
+       30
+      ],
+      [
+       0,
+       1500,
+       300,
+       400
+      ],
+      [
+       0,
+       1500,
+       300,
+       20
+      ],
+      [
+       0,
+       2900,
+       1440,
+       100
+      ],
+      [
+       10,
+       2910,
+       50,
+       20
+      ],
+      [
+       100,
+       2910,
+       50,
+       20
+      ]
+     ]
+    }
+   }
+  ]
+ },
+ "metrics": "[0, 0, 1440, 900]",
+ "expected": {
+  "viewport": {
+   "scope": "viewport",
+   "snapshot": "- banner @2\n  - link \"Home\" @3\n  - navigation \"Primary\" @4\n    - link \"Docs\" @5\n    - link \"Blog\" @6\n    - button \"Menu\" @7\n- main @10\n  - heading \"Welcome — 歡迎\" @11\n  - paragraph @12\n    - StaticText \"Intro text xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  - checkbox \"Remember me\" [checked] [disabled] @17\n  - table \"Scores\" @20\n    - row @21\n      - cell \"Alice\" @22\n      - cell @23\n        - link \"Profile\" @25\n  - form \"Sign up\" @30\n    - textbox \"Email\" value=\"a@b.c\" [focused] @31\n    - combobox \"Plan\" value=\"Pro\" @32",
+   "truncated": false
+  },
+  "full": {
+   "scope": "full",
+   "snapshot": "- banner @2\n  - link \"Home\" @3\n  - navigation \"Primary\" @4\n    - link \"Docs\" @5\n    - link \"Blog\" @6\n    - button \"Menu\" @7\n- main @10\n  - heading \"Welcome — 歡迎\" @11\n  - paragraph @12\n    - StaticText \"Intro text xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  - checkbox \"Remember me\" [checked] [disabled] @17\n  - table \"Scores\" @20\n    - row @21\n      - cell \"Alice\" @22\n      - cell @23\n        - link \"Profile\" @25\n    - row @24\n      - cell \"Below the fold\" @26\n  - form \"Sign up\" @30\n    - textbox \"Email\" value=\"a@b.c\" [focused] @31\n    - combobox \"Plan\" value=\"Pro\" @32\n    - button \"Submit\" @33\n- complementary @40\n  - StaticText \"Sidebar note\"\n- contentinfo \"Footer\" @70\n  - link \"Privacy\" @71\n  - StaticText \"© 2026\"",
+   "truncated": false
+  }
+ }
+}
