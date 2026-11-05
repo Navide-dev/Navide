@@ -90,7 +90,7 @@ describe('SchedulerJobRow – system jobs are read-only', () => {
     for (const sel of ['toggle', 'run-now', 'adopt', 'keep', 'retarget', 'repair', 'owner', 'expiry', 'target-gone', 'rebound']) {
       expect(wrapper.find(`[data-test="${sel}"]`).exists(), sel).toBe(false)
     }
-    expect(wrapper.get('[data-test="target"]').text()).toBe('由 workspace 管理')
+    expect(wrapper.get('[data-test="target"]').text()).toBe('由工作區管理')
   })
 
   it('"到 workspace 管理 →" opens that workspace evolve panel and calls no scheduler mutation', async () => {

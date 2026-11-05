@@ -89,7 +89,7 @@ describe('SettingsSystemHelp', () => {
     expect(text).toContain('Token 監看')
     // Table labels now read the product's own keys, so they translate too.
     expect(text).toContain('狀態徽章')
-    expect(text).toContain('關閉 pane 前確認')
+    expect(text).toContain('關閉分格前確認')
     expect(text).toContain('流程管理')
     expect(wrapper.findAll('.syh-h2')).toHaveLength(9)
     expect(rowCounts(wrapper)).toEqual(TABLE_ROWS)

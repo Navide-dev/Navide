@@ -118,11 +118,26 @@ term kept in English here stays English in zh-CN too.
 **Kept in English in zh-TW and zh-CN:** AI, agent, CLI, MCP, MCP server, Git,
 PR, API, JSON, SSH, OAuth, LLM, token, session, hook, bot, stash, Loop, Guard,
 App Lock,
-pane, pipeline, worktree, repo, URL, plus product and vendor names. Common
+pipeline, worktree, repo, URL, plus product and vendor names. Common
 nouns are lowercase even at the start of a string (agent, token, session,
-hook, bot, pane, pipeline, worktree, repo); acronyms and feature names keep
+hook, bot, pipeline, worktree, repo); acronyms and feature names keep
 their form. Put a half-width space between the English word and Chinese
-text. 面板 is reserved for "panel" and never means a pane.
+text.
+
+**Layout terms in zh-TW and zh-CN (the user's call, 2026-11-05):** pane 分格,
+window 視窗 (zh-CN 窗口), panel 面板, dialog 對話框 (zh-CN 对话框),
+workspace 工作區 (zh-CN 工作区), group 群組 (zh-CN 群组), tab 分頁
+(zh-CN keeps its existing 标签页). 視窗／窗口 means a real Navide or
+operating-system window only, never a pane; 面板 means a panel only, never a
+pane. A named tool surface that en-US calls a pane but that is not a cell of
+the stage grid (the Git pane, the plan pane) stays 面板. Do not write
+"分割分格" for "split pane": use a verb ("再切一格", "左右切分"). The first
+mention on a help page or in onboarding carries the gloss
+"分格＝視窗裡的一格，通常跑一個 agent" (zh-CN "分格＝窗口里的一格，通常跑一个 agent").
+In the user's spoken Chinese, 派人 / 派工 means "open a pane and give an agent
+work in it" (the same thing `cli_open_agent` does); agents and docs read it
+that way. UI strings that already say 指派 / 派工 for that action keep their
+wording as long as it is used consistently; they are not rewritten to 派人.
 
 **zh-TW renderings:** workspace 工作區, plan 計畫, commit 提交, branch 分支,
 diff 差異, skill 技能, terminal 終端機, tab 分頁, quota 額度, Settings 設定,

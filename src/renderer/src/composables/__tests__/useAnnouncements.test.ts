@@ -537,7 +537,7 @@ describe('agent plugin notices (B2-c)', () => {
     const { pluginAgentNoticeTitle, i18n } = await load()
     const notice = { ...base, action: 'disable' as const, requester: { paneId: 'p', paneName: 'dev', workspace: null, callerKind: 'pane' as const } }
     i18n.global.locale.value = 'zh-TW'
-    expect(pluginAgentNoticeTitle(notice)).toBe('Agent pane「dev」停用了 Navide 外掛 nerdtechnic.devmap')
+    expect(pluginAgentNoticeTitle(notice)).toBe('Agent 分格「dev」停用了 Navide 外掛 nerdtechnic.devmap')
     i18n.global.locale.value = 'ja-JP'
     expect(pluginAgentNoticeTitle(notice)).toContain('nerdtechnic.devmap')
     i18n.global.locale.value = 'en-US'

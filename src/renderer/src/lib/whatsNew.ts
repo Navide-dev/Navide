@@ -150,10 +150,10 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'vi-VN': 'Tài khoản khóa API: Claude Code và Codex nay có thể chạy bằng khóa API, tính phí theo mức dùng. Thêm bằng + Thêm tài khoản trong Cài đặt → Tài khoản. Tự động chuyển khi hết hạn mức mặc định tắt và được bật theo từng tài khoản. Khi hạn mức gói đăng ký trở lại, Navide chỉ thông báo, không tự chuyển về.',
       },
       {
-        'zh-TW': 'API key 只存本機，不經 Navide Cloud。金鑰只會送到發行它的廠商：CLI 呼叫時，以及你按「測試金鑰」時。存放位置和 pane 裡的程式能否取得金鑰，隱私文件有完整說明。',
+        'zh-TW': 'API key 只存本機，不經 Navide Cloud。金鑰只會送到發行它的廠商：CLI 呼叫時，以及你按「測試金鑰」時。存放位置和分格裡的程式能否取得金鑰，隱私文件有完整說明。',
         'en-US': 'Your API key is stored only on this computer and does not go through Navide Cloud. It goes only to the vendor that issued it: when the CLI makes a call, and when you press Test key. The privacy document says exactly where it is kept and how programs in a pane can reach it.',
         'ja-JP': 'API キーはこのコンピューターにのみ保存され、Navide Cloud を経由しません。キーが送られるのは発行元のベンダーだけで、CLI が呼び出すときと「キーをテスト」を押したときです。保存場所と、ペイン内のプログラムがキーを取得できる点は、プライバシー文書に詳しく記載しています。',
-        'zh-CN': 'API 密钥只保存在本机，不经过 Navide Cloud。密钥只会发送给签发它的厂商：CLI 调用时，以及你点击“测试密钥”时。存放位置以及窗格中的程序如何取得密钥，隐私文档有完整说明。',
+        'zh-CN': 'API 密钥只保存在本机，不经过 Navide Cloud。密钥只会发送给签发它的厂商：CLI 调用时，以及你点击“测试密钥”时。存放位置以及分格中的程序如何取得密钥，隐私文档有完整说明。',
         'ko-KR': 'API 키는 이 컴퓨터에만 저장되며 Navide Cloud를 거치지 않습니다. 키는 발급한 공급업체로만 전송됩니다. CLI가 호출할 때와 키 테스트를 누를 때입니다. 저장 위치와 패널 안의 프로그램이 키에 접근하는 방식은 개인정보 문서에 자세히 나와 있습니다.',
         'es-ES': 'Tu clave de API se guarda solo en este ordenador y no pasa por Navide Cloud. Solo se envía al proveedor que la emitió: cuando la CLI hace una llamada y cuando pulsas Probar clave. El documento de privacidad detalla dónde se guarda y cómo pueden llegar a ella los programas de un panel.',
         'fr-FR': 'Votre clé API est stockée uniquement sur cet ordinateur et ne passe pas par Navide Cloud. Elle n’est envoyée qu’au fournisseur qui l’a émise : quand la CLI effectue un appel et quand vous appuyez sur Tester la clé. Le document de confidentialité précise où elle est conservée et comment les programmes d’un panneau peuvent y accéder.',
@@ -163,10 +163,10 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'vi-VN': 'Khóa API chỉ lưu trên máy tính này và không đi qua Navide Cloud. Khóa chỉ được gửi tới nhà cung cấp đã cấp nó: khi CLI thực hiện lệnh gọi và khi bạn nhấn Kiểm tra khóa. Tài liệu quyền riêng tư nêu rõ nơi lưu khóa và cách các chương trình trong khung có thể lấy khóa.',
       },
       {
-        'zh-TW': '花費：Agent 不能自己選 API key 帳號，但你把新 pane 設成 API key 後，Agent 開的 pane 會跟隨這個預設，子 pane 也會繼承。花費的真正上限是官方後台的設定。Navide 的每月預算備註不是硬上限，這一版也只會記下金額，不會統計花費或發出通知，建議先在後台設好上限。',
+        'zh-TW': '花費：Agent 不能自己選 API key 帳號，但你把新分格設成 API key 後，Agent 開的分格會跟隨這個預設，子分格也會繼承。花費的真正上限是官方後台的設定。Navide 的每月預算備註不是硬上限，這一版也只會記下金額，不會統計花費或發出通知，建議先在後台設好上限。',
         'en-US': 'Spending: agents cannot pick an API key account themselves, but once you set new panes to an API key, the panes agents open follow that default, and so do their child panes. The real spending limit is the one you set in the vendor’s console. Navide’s monthly budget note is not a hard limit, and in this version it only saves the amount: it does not track spending or alert you. Set a limit in the console first.',
         'ja-JP': '費用：Agent が自分で API キーアカウントを選ぶことはできません。ただし、新しいペインを API キーに設定すると、Agent が開くペインはその既定に従い、子ペインも引き継ぎます。費用の本当の上限はベンダーの管理画面の設定です。Navide の毎月の予算メモは厳密な上限ではなく、このバージョンでは金額を保存するだけで、費用の集計も通知も行いません。先に管理画面で上限を設定することをおすすめします。',
-        'zh-CN': '费用：Agent 不能自行选择 API 密钥账号，但你把新窗格设为 API 密钥后，Agent 打开的窗格会跟随这个默认设置，子窗格也会继承。费用的真正上限是厂商后台的设置。Navide 的每月预算备注不是硬性上限，这一版也只会记下金额，不会统计费用或发出通知，建议先在后台设好上限。',
+        'zh-CN': '费用：Agent 不能自行选择 API 密钥账号，但你把新分格设为 API 密钥后，Agent 打开的分格会跟随这个默认设置，子分格也会继承。费用的真正上限是厂商后台的设置。Navide 的每月预算备注不是硬性上限，这一版也只会记下金额，不会统计费用或发出通知，建议先在后台设好上限。',
         'ko-KR': '비용: 에이전트가 API 키 계정을 직접 고를 수는 없지만, 새 패널을 API 키로 설정하면 에이전트가 여는 패널도 그 기본값을 따르고 하위 패널도 이어받습니다. 실제 지출 한도는 공급업체 콘솔의 설정입니다. Navide의 월간 예산 메모는 강제 한도가 아니며, 이번 버전에서는 금액만 저장할 뿐 지출을 집계하거나 알리지 않습니다. 콘솔에서 먼저 한도를 설정하세요.',
         'es-ES': 'Gasto: los agentes no pueden elegir por sí mismos una cuenta con clave de API, pero si configuras los paneles nuevos con una clave, los paneles que abran los agentes siguen ese valor predeterminado, y también sus paneles hijos. El límite real de gasto es el que fijes en la consola del proveedor. La nota de presupuesto mensual de Navide no es un límite estricto y, en esta versión, solo guarda el importe: no mide el gasto ni avisa. Fija primero un límite en la consola.',
         'fr-FR': 'Dépenses : les agents ne peuvent pas choisir eux-mêmes un compte à clé API, mais dès que vous réglez les nouveaux panneaux sur une clé, les panneaux ouverts par les agents suivent ce réglage, tout comme leurs panneaux enfants. La vraie limite de dépense est celle que vous fixez dans la console du fournisseur. La note de budget mensuel de Navide n’est pas une limite stricte et, dans cette version, elle enregistre seulement le montant : il ne suit pas les dépenses et n’envoie aucune alerte. Fixez d’abord une limite dans la console.',
@@ -243,7 +243,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Navide Browser：App に標準搭載され、既定で有効になりました。Navide Marketplace からのインストールは不要で、⌘⇧X（Windows と Linux では Ctrl+Shift+X）で開けます。Space にタブが付き、最大 9 個を「並べて表示」するか、「1 つずつ表示」で全画面に表示できます。各 Space には、開いているダイアログと agent がアップロードしたすべてのファイルが表示されます。agent のツールは 8 つ増え、タブ操作、待機、ダイアログへの応答、ワークスペース内のファイルのアップロードなどができます。これらのツールは「設定 → Navide プラグイン」の「エージェントに純正 Navide プラグインのツール呼び出しを許可」で切り替えられ、既定でオンです。Navide Browser 自体も同じページで無効にできます。',
       },
       {
-        'zh-TW': 'Plans：在 Plan 視圖按 HTML 計畫上方的「編輯文件」，就能直接修改整份文件，變更會自動存檔。agent 改到你正在編輯的段落時，會跳出對話框讓你選要保留哪一版，不會互相覆蓋。每次變更都會留下版本：「歷史」列出修改者（你、哪個 agent pane，或 Plans 以外的修改）和原因，可以看「差異」或「還原」。還原只換內文，階段、核准狀態、待辦和審查留言都維持現在的樣子。已核准的計畫內文被改過時會顯示「核准後已修改」，點一下就能比對。',
+        'zh-TW': 'Plans：在 Plan 視圖按 HTML 計畫上方的「編輯文件」，就能直接修改整份文件，變更會自動存檔。agent 改到你正在編輯的段落時，會跳出對話框讓你選要保留哪一版，不會互相覆蓋。每次變更都會留下版本：「歷史」列出修改者（你、哪個 agent 分格，或 Plans 以外的修改）和原因，可以看「差異」或「還原」。還原只換內文，階段、核准狀態、待辦和審查留言都維持現在的樣子。已核准的計畫內文被改過時會顯示「核准後已修改」，點一下就能比對。',
         'en-US': 'Plans: Edit document above an HTML plan in the Plan view makes the whole document editable, and changes save by themselves. If an agent changes the section you are editing, a dialog lets you choose which version to keep, so neither overwrites the other. Every change now keeps a version: History shows who made it (you, a named agent pane, or a change outside Plans) and why, with Diff and Restore. Restore brings back the text only and keeps the stage, approval, todos and review notes. An approved plan whose text changed shows Changed since approval; click it to compare.',
         'ja-JP': 'プラン：Plan ビューで HTML プランの上にある「ドキュメントを編集」を押すと、ドキュメント全体を直接編集でき、変更は自動で保存されます。編集中のセクションを agent が変更したときは、ダイアログでどちらの版を残すかを選べるので、互いに上書きされることはありません。変更のたびに版が残ります。「履歴」には、変更した人（あなた、どの agent pane か、または Plans の外での変更）と理由が表示され、「差分」と「復元」が使えます。復元で戻るのは本文だけで、ステージ、承認、ToDo、レビューノートは現在のまま残ります。承認済みのプランの本文が変更されると「承認後に変更あり」と表示され、クリックすると比較できます。',
       },
@@ -253,7 +253,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'App Lock：Windows 11 で Windows Hello による解除ができるようになりました。PIN は予備として使え、忘れた PIN は Windows Hello のあとでリセットできます。Windows 10 と Linux は PIN でのみ解除し、「設定 → App Lock」にもそう表示されます。ロック画面の表示中は、アプリケーションメニューのうち、隠す、終了、ウィンドウ操作、PIN 入力に必要な編集キー以外はグレーアウトし、ショートカットも背後の App に届きません。agent、ターミナル、スケジュールはそのまま動き続けます。',
       },
       {
-        'zh-TW': 'Telegram：用連結代碼不會再直接加入允許名單，還沒獲准的人要先由你在「設定 → 聊天室」核准。Telegram 的共用 ID（例如匿名管理員）一律拒絕，舊的名單列會標上警告，由你決定是否移除。允許名單會顯示每個人怎麼加入、何時加入。pane 綁定到發送者還沒獲准的聊天時，聊天裡和「設定 → 聊天室」都會提醒，不再看起來已連線卻只收到配對回覆。',
+        'zh-TW': 'Telegram：用連結代碼不會再直接加入允許名單，還沒獲准的人要先由你在「設定 → 聊天室」核准。Telegram 的共用 ID（例如匿名管理員）一律拒絕，舊的名單列會標上警告，由你決定是否移除。允許名單會顯示每個人怎麼加入、何時加入。分格綁定到發送者還沒獲准的聊天時，聊天裡和「設定 → 聊天室」都會提醒，不再看起來已連線卻只收到配對回覆。',
         'en-US': 'Telegram: redeeming a link code no longer adds someone straight to the allowed list; a new sender waits for your approval in Settings → Channels. Telegram’s shared IDs, such as anonymous admins, are always refused, and an older row holding one gets a warning for you to remove. The allowed list shows how and when each sender was added. A pane bound to a chat whose sender is not allowed now says so, in the chat and in Settings → Channels, instead of looking connected while the chat only gets pairing replies.',
         'ja-JP': 'Telegram：リンクコードを使っても、すぐには許可リストに追加されなくなりました。まだ許可されていない人は、「設定 → チャット連携」であなたの承認を待ちます。匿名管理者などの Telegram の共有 ID は常に拒否され、それを含む既存の行には警告が付くので、削除するかどうかを判断できます。許可リストには、各送信者が追加された方法と日時が表示されます。送信者が許可されていないチャットに pane を紐づけると、接続済みに見えるのにペアリングの返信しか届かない状態にはならず、チャットと「設定 → チャット連携」で知らせます。',
       },
@@ -288,7 +288,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'パイプライン：ステップは agent の報告に応じて分岐し、失敗したときはエラーリンクに進み、自動でリトライし、別のパイプラインを呼び出して終わるのを待てるようになりました。スケジュールからパイプラインを開始することもできます。エディターのツールバーは「⋯」メニューにまとまり、「このステップをリトライ」や「ここから再実行」などは「復旧」メニューに入り、使えないときは理由を表示します。エラーは表示言語で表示され、「詳細」ボタンがあります。',
       },
       {
-        'zh-TW': '帳號：agent 用 MCP 開出的 Claude pane，預設沿用開它的那個 pane 的帳號，不再一律用目前登入的帳號；agent 也可以指定某個帳號。agent 還可以請求只把某一個 pane 換到別的帳號（由你在切換對話框確認），並查到每個 pane 用的是哪個帳號。',
+        'zh-TW': '帳號：agent 用 MCP 開出的 Claude 分格，預設沿用開它的那個分格的帳號，不再一律用目前登入的帳號；agent 也可以指定某個帳號。agent 還可以請求只把某一個分格換到別的帳號（由你在切換對話框確認），並查到每個分格用的是哪個帳號。',
         'en-US': 'Accounts: a Claude pane an agent opens through MCP now runs on the same account as the pane that opened it, instead of always the current login, or on an account the agent names. An agent can also ask to move a single pane to another account, which you confirm in the switch dialog, and see which account each pane runs on.',
         'ja-JP': 'アカウント：agent が MCP で開いた Claude の pane は、常に今のログインを使うのではなく、開いた pane と同じアカウントで動くようになりました。agent がアカウントを指定することもできます。agent は 1 つの pane だけを別のアカウントに移すよう求めることもでき（切り替えダイアログであなたが確認します）、各 pane がどのアカウントで動いているかも確認できます。',
       },
@@ -298,17 +298,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '自己改善：パネルに「繰り返しの手作業」と「あなたの指摘」の 2 つの振り返りと、「回収前の振り返り」、同じエラーが短時間に多発したときの「早めの実行」が加わりました（後の 2 つは既定でオフ）。採用された提案はどう反映するかを記録し、7 日後に効果を自動で確認します。コードは必ず draft pull request として届き、判断はあなたに任されます。',
       },
       {
-        'zh-TW': 'Pane：MCP 伺服器或技能變更後，之前就啟動的 pane 標題列會顯示「設定已更新」，點一下就能「重建」。後端重新啟動後，除了畫面上的 pane，也會接回最多六個在畫面外工作的 pane，並在通知裡列出哪些接回了、哪些沒有。',
+        'zh-TW': '分格：MCP 伺服器或技能變更後，之前就啟動的分格標題列會顯示「設定已更新」，點一下就能「重建」。後端重新啟動後，除了畫面上的分格，也會接回最多六個在畫面外工作的分格，並在通知裡列出哪些接回了、哪些沒有。',
         'en-US': 'Panes: a pane that started before its MCP servers or skills changed now shows Settings changed in its title bar, with Rebuild one click away. After the backend restarts, up to six panes working off screen come back too, besides the ones on screen, and the announcements list which came back and which did not.',
         'ja-JP': 'pane：MCP サーバーやスキルが変わる前に起動した pane は、タイトルバーに「設定が変更されました」と表示し、クリックひとつで「再構築」できます。バックエンドが再起動したあと、画面上の pane に加えて、画面外で作業していた pane も最大 6 つまで戻り、お知らせにはどれが戻ってどれが戻らなかったかが表示されます。',
       },
       {
-        'zh-TW': '安全與頻道：Navide Guard 會用和內建 shell 相同的規則檢查第三方 MCP 的 shell、檔案、登錄檔和結束程序工具，「設定 → MCP」會標示能執行指令的伺服器。在 pane 裡回答完 Claude 的提問後，Telegram 等聊天不會再多收到一則只有輸入框的假確認訊息。',
+        'zh-TW': '安全與頻道：Navide Guard 會用和內建 shell 相同的規則檢查第三方 MCP 的 shell、檔案、登錄檔和結束程序工具，「設定 → MCP」會標示能執行指令的伺服器。在分格裡回答完 Claude 的提問後，Telegram 等聊天不會再多收到一則只有輸入框的假確認訊息。',
         'en-US': 'Security and channels: Navide Guard grades third-party MCP shell, file, registry and process tools by the same rules as the built-in shell, and Settings → MCP marks servers that can run commands. After you answer a Claude question in the pane, Telegram and other chats no longer get a stray confirmation that shows only the input box.',
         'ja-JP': 'セキュリティとチャンネル：Navide Guard は、サードパーティ MCP のシェル、ファイル、レジストリ、プロセス終了のツールを、組み込みのシェルと同じルールで判定します。「設定 → MCP」では、コマンドを実行できるサーバーに印が付きます。pane で Claude の質問に答えたあと、Telegram などのチャットに入力欄だけの確認メッセージが余分に届くことはなくなりました。',
       },
       {
-        'zh-TW': '設定：各頁的清單和空白狀態寫法一致，文字最小 12px、鍵盤操作有焦點框，狀態改用文字標示；俄文和德文介面的 pane 等 Navide 名詞改為譯名。',
+        'zh-TW': '設定：各頁的清單和空白狀態寫法一致，文字最小 12px、鍵盤操作有焦點框，狀態改用文字標示；俄文和德文介面的分格等 Navide 名詞改為譯名。',
         'en-US': 'Settings: lists and empty states read the same on every page, text is at least 12px, keyboard focus is visible and status is spelled out in words; the Russian and German interfaces translate pane and other Navide terms.',
         'ja-JP': '設定：どのページでも一覧と空の状態の書き方がそろい、文字は 12px 以上、キーボード操作ではフォーカス枠が見え、状態は文字で表示されるようになりました。ロシア語とドイツ語の表示では、pane などの Navide の用語を翻訳しました。',
       },
@@ -317,13 +317,13 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.33',
     title: {
-      'zh-TW': '從聊天喚醒 pane 會接回原本的對話，聊天文字支援 11 種語言',
+      'zh-TW': '從聊天喚醒分格會接回原本的對話，聊天文字支援 11 種語言',
       'en-US': 'Waking a Pane from Chat Brings Back Its Conversation, in All 11 Languages',
       'ja-JP': 'チャットから pane を起こすと元の会話に戻り、チャットの文字は 11 言語に対応',
     },
     highlights: [
       {
-        'zh-TW': '頻道：在 Telegram 等聊天軟體喚醒離線的 pane 時，Navide 會直接把 pane 開回原本的對話，不再等 30 秒後回報「喚醒失敗」；八個聊天平台都適用。聊天裡的文字（喚醒按鈕與提示、快速選單、檔案通知、Telegram 的指令選單）現在跟著 Navide 的介面語言，11 種語言都有；Prompt 技能和技能的名稱也和設定頁一致。Mattermost 上直接輸入 wake 就能喚醒。',
+        'zh-TW': '頻道：在 Telegram 等聊天軟體喚醒離線的分格時，Navide 會直接把分格開回原本的對話，不再等 30 秒後回報「喚醒失敗」；八個聊天平台都適用。聊天裡的文字（喚醒按鈕與提示、快速選單、檔案通知、Telegram 的指令選單）現在跟著 Navide 的介面語言，11 種語言都有；Prompt 技能和技能的名稱也和設定頁一致。Mattermost 上直接輸入 wake 就能喚醒。',
         'en-US': 'Channels: waking an offline pane from Telegram or another chat app now opens the pane onto its conversation, instead of waiting 30 seconds and answering that the wake failed, on all eight chat platforms. Chat text (the wake button and hint, the quick menu, file notices and Telegram’s command menu) now follows Navide’s interface language, in all 11 languages, and names Prompts and Skills as the Settings pages do. On Mattermost, typing wake wakes the pane.',
         'ja-JP': 'チャンネル：Telegram などのチャットアプリからオフラインの pane を起こすと、30 秒待って「起こせませんでした」と返すのではなく、pane を元の会話のまま開くようになりました。8 つのチャットプラットフォームすべてで同じです。チャットの文字（起こすボタンと案内、クイックメニュー、ファイルのお知らせ、Telegram のコマンドメニュー）は Navide の表示言語に合わせて 11 言語で表示され、プロンプトとスキルの名前も設定ページと同じになりました。Mattermost では wake と入力するだけで起こせます。',
       },
@@ -368,7 +368,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'MCP の同期は「どのサーバーをインストールしているか」だけになりました：名前、接続方式、コマンドと引数、URL、オン／オフ、環境変数とヘッダーの名前です。それらの値はこのマシンから出ません。URL や引数に含まれる認証情報やトークン（user:password@、?api_key=、ghp_…、--token の後の値など）も同じです。ほかのデバイスから届いたサーバーがこのマシンにすでにある値を使うのは、コマンドと引数、または URL が変わっていない場合だけです。実行するものが変わった場合や、このマシンにまだ値がない場合は、変更を承認しても空欄のままで、「設定 → MCP」に「要設定」と表示され、このマシンで入力するよう案内します。トークンが別のプログラムやアドレスに渡されることはありません。値だけを変えても同期されず、ほかのデバイスで承認を求められることもなくなりました。旧バージョンがアップロードした値はサーバーに残り、このリリースでは削除しません。まだ更新していないデバイスはこれまでどおり同期し、値が空になったサーバーを受け取ることはありません。',
       },
       {
-        'zh-TW': '「設定 → 帳號」裡的「貼入憑證」已移除：Navide 不再把貼入的憑證（例如 claude setup-token 產生的）交給新開的 pane。用過這個功能的裝置，更新時會清除存在本機的憑證、加密它的金鑰，以及舊版從雲端拉下來的副本，並在第一次啟動時通知一次；沒用過的裝置什麼都不會動。新的 Claude pane 改用 Claude 自己的登入，可能是另一個帳號，並扣用那個帳號的額度。已經開著的 pane 會沿用原本的憑證，直到關閉或重新啟動。',
+        'zh-TW': '「設定 → 帳號」裡的「貼入憑證」已移除：Navide 不再把貼入的憑證（例如 claude setup-token 產生的）交給新開的分格。用過這個功能的裝置，更新時會清除存在本機的憑證、加密它的金鑰，以及舊版從雲端拉下來的副本，並在第一次啟動時通知一次；沒用過的裝置什麼都不會動。新的 Claude 分格改用 Claude 自己的登入，可能是另一個帳號，並扣用那個帳號的額度。已經開著的分格會沿用原本的憑證，直到關閉或重新啟動。',
         'en-US': 'Paste Credential is gone from Settings → Accounts: Navide no longer hands pasted credentials (such as one from claude setup-token) to new panes. On a device that used it, the update erases the stored credentials, the key that encrypted them and the copies older versions pulled from the cloud, and says so once at the first launch; a device that never used it is not touched. New Claude panes now use Claude’s own sign-in, which may be a different account and draws on that account’s quota. Panes already open keep their credential until they are closed or restarted.',
         'ja-JP': '「設定 → アカウント」の「認証情報を貼り付け」を廃止しました。Navide は貼り付けた認証情報（claude setup-token で作ったものなど）を新しい pane に渡さなくなります。この機能を使ったデバイスでは、更新時に保存されていた認証情報、それを暗号化していた鍵、旧バージョンがクラウドから取得したコピーを消去し、初回起動時に一度だけお知らせします。使っていないデバイスには何もしません。新しい Claude pane は Claude 自身のサインインを使うため、別のアカウントになり、そのアカウントの使用量枠が消費されることがあります。すでに開いている pane は、閉じるか再起動するまで元の認証情報を使い続けます。',
       },
@@ -378,7 +378,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「設定 → エージェント資産 → メモリ」：保存していない下書きが確認なしに破棄されることはなくなりました。キャンセル、閉じる、別のファイルを開く、設定を閉じる前に確認します。保存するたびに置き換えられた版を Navide 自身のフォルダーに 1 つ残し、「前のバージョンに戻す」で元に戻せます。エディターで新しく作ったファイルは「作成を取り消す」でシステムのゴミ箱に移せ、直接削除はしません。このページには、Claude Code がプロジェクトについて自分で書く自動メモリ（MEMORY.md とトピックごとのファイル）も表示されるようになり、開く・編集する・元に戻すことができます。Claude が書いたもので、後で Claude が書き換えることがあると表示されます。',
       },
       {
-        'zh-TW': '「設定 → Agent 資產 → Prompt 技能」：把內容清空不會再把整個 Prompt 技能刪掉（以前連同步的其他電腦也會跟著刪），原本的文字會保留，並提示要刪除請按「刪除」；按「刪除」也會先確認，並說明同步的電腦也會一起移除。Prompt 技能在 pane 裡啟動循環失敗時，會跳出錯誤通知。',
+        'zh-TW': '「設定 → Agent 資產 → Prompt 技能」：把內容清空不會再把整個 Prompt 技能刪掉（以前連同步的其他電腦也會跟著刪），原本的文字會保留，並提示要刪除請按「刪除」；按「刪除」也會先確認，並說明同步的電腦也會一起移除。Prompt 技能在分格裡啟動循環失敗時，會跳出錯誤通知。',
         'en-US': 'Settings → Agent Assets → Prompts: clearing a prompt’s text no longer deletes the prompt (on your synced machines too); the previous text is kept, with a note to use Delete to remove it. Delete now asks first and says your synced machines will remove it too. When a prompt’s loop fails to start in a pane, an error notice says so.',
         'ja-JP': '「設定 → エージェント資産 → プロンプト」：内容を空にしてもプロンプト自体が削除されることはなくなりました（以前は同期しているほかのマシンでも削除されていました）。元のテキストは残り、削除するには「削除」を使うよう案内します。「削除」も先に確認し、同期しているマシンからも削除されることを伝えます。pane でプロンプトのループを開始できなかったときは、エラーの通知が表示されます。',
       },
@@ -388,7 +388,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「設定 → エージェント資産 → MCP」のマスクがより確実になりました。名前だけでなく値も確認し、URL 内のユーザー名とパスワード、トークンの形をした値や引数をマスクします。agent が mcp_list で読む内容も同じです。古い設定バンドルをインポートしたとき、このマシンのシークレットを戻すのは、名前と接続先（コマンドと引数、または URL）の両方が一致するサーバーだけです。同じ名前でも別の場所を指すサーバーには戻さず、空欄のままのものはインポート結果に一覧表示します。ツールを一覧できないサーバーは、ツールがないように見えるのではなく、その理由を表示します。',
       },
       {
-        'zh-TW': 'Skills：agent 想把技能送到更多 CLI，或打開停用中的共用技能時，要先在主視窗經你核准，和安裝一樣；縮小範圍則照舊直接生效。Navide 也內建了一個教 agent 寫 Navide 外掛的技能（navide:plugin-authoring），同樣要你核准才會安裝。技能接到 pane 失敗時，pane 啟動時會印出來，不再只寫進紀錄。',
+        'zh-TW': 'Skills：agent 想把技能送到更多 CLI，或打開停用中的共用技能時，要先在主視窗經你核准，和安裝一樣；縮小範圍則照舊直接生效。Navide 也內建了一個教 agent 寫 Navide 外掛的技能（navide:plugin-authoring），同樣要你核准才會安裝。技能接到分格失敗時，分格啟動時會印出來，不再只寫進紀錄。',
         'en-US': 'Skills: when an agent asks to deliver a skill to more CLIs, or to turn a disabled shared skill on, you now approve it in the main window, as with an install; narrowing still applies at once. Navide also ships a skill that teaches an agent to write Navide plugins (navide:plugin-authoring), installed only once you approve it. When wiring skills into a pane fails, the pane prints it at startup instead of only logging it.',
         'ja-JP': 'Skills：agent がスキルを配信する CLI を増やしたり、無効になっている共有スキルをオンにしたりするときは、インストールと同じようにメインウィンドウでの承認が必要になりました。範囲を狭める変更はこれまでどおりすぐに反映されます。agent に Navide プラグインの作り方を教えるスキル（navide:plugin-authoring）も同梱しました。承認したときだけインストールされます。pane へのスキルの接続に失敗したときは、ログに書くだけでなく pane の起動時に表示します。',
       },
@@ -413,7 +413,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Plans ウィンドウ：プランのドキュメントが細い列に押し込まれ、横に大きな空白ができることはなくなりました。折りたたんだ AI CLI のサイドパネルは自分の幅だけを使い、幅は Git ウィンドウとは別に記憶します。',
       },
       {
-        'zh-TW': '帳號：在關閉「跟隨帳號切換」的 Claude pane 上選別的帳號，現在只會移動這個 pane：它會在那個帳號裡重新開啟並接續原本的對話，預設帳號和其他 pane 都不受影響。開著「跟隨」時照舊。',
+        'zh-TW': '帳號：在關閉「跟隨帳號切換」的 Claude 分格上選別的帳號，現在只會移動這個分格：它會在那個帳號裡重新開啟並接續原本的對話，預設帳號和其他分格都不受影響。開著「跟隨」時照舊。',
         'en-US': 'Accounts: on a Claude pane with Follow account switch off, choosing another account in its menu now moves only that pane: it reopens in that account with its conversation resumed, and the default account and every other pane stay as they are. With Follow on, nothing changes.',
         'ja-JP': 'アカウント：「アカウント切り替えに追従」をオフにした Claude pane でメニューから別のアカウントを選ぶと、その pane だけが移るようになりました。そのアカウントで開き直し、会話を再開します。既定のアカウントとほかの pane はそのままです。「追従」がオンのときは変わりません。',
       },
@@ -433,7 +433,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     },
     highlights: [
       {
-        'zh-TW': 'Linux：開啟 pane 之後，後端記憶體不再每分鐘增加約 90 MB，event loop 不再越卡越久，pane 的輸入和捲動也不再延遲。原因是 Git 監看器連 inotify 的「讀取」事件也會反應，agent 在工作區每讀一個檔案就多排一批事件；現在只對檔案新增、刪除、修改和搬移反應，一連串變更也只喚醒 event loop 一次。macOS 和 Windows 不受影響。感謝 @emissionspectrum-creator 在 #622 回報。',
+        'zh-TW': 'Linux：開啟分格之後，後端記憶體不再每分鐘增加約 90 MB，event loop 不再越卡越久，分格的輸入和捲動也不再延遲。原因是 Git 監看器連 inotify 的「讀取」事件也會反應，agent 在工作區每讀一個檔案就多排一批事件；現在只對檔案新增、刪除、修改和搬移反應，一連串變更也只喚醒 event loop 一次。macOS 和 Windows 不受影響。感謝 @emissionspectrum-creator 在 #622 回報。',
         'en-US': 'Linux: once a pane is open, the backend\'s memory no longer grows by about 90 MB a minute, the event loop no longer stalls for longer and longer, and pane input and scrolling no longer lag. The Git watcher reacted to inotify\'s read events, so every file an agent read in the workspace queued more events; it now reacts only to files being created, deleted, modified or moved, and a burst of changes wakes the event loop once. macOS and Windows were not affected. Thanks to @emissionspectrum-creator for reporting it in #622.',
         'ja-JP': 'Linux：pane を開いた後、バックエンドのメモリが毎分約 90 MB ずつ増えることはなくなり、event loop の停止がだんだん長くなることも、pane の入力やスクロールが遅れることもなくなりました。原因は Git の監視が inotify の「読み取り」イベントにも反応していたことで、agent がワークスペースのファイルを読むたびにイベントが溜まっていました。現在はファイルの作成・削除・変更・移動にだけ反応し、まとまった変更でも event loop を起こすのは 1 回だけです。macOS と Windows には影響ありません。#622 で報告してくださった @emissionspectrum-creator さんに感謝します。',
       },
@@ -443,7 +443,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「設定 → Navide プラグイン」を 4 つのページに分け、サイドバーの「Navide プラグイン」の下に並べました：Navide プラグイン、実行ポリシー、開発者とネイティブコード、開示の一覧。ページを開かなくても状態がわかります：実行ポリシーのページに警告があるときはサイドバーの行に ⚠ が、開発者モードやネイティブバックエンドのスイッチがどれかオンのときは「開発者とネイティブコード」に「オン」が表示されます。ウィンドウの幅が 720px 以下のときは、ページ上部のタブで切り替えます。各プラグインの行には、クリックしなくてもリスクレベルと「⚠ N」が表示されます。開示の文言は変わっていません。',
       },
       {
-        'zh-TW': '安裝了會在主畫面加入 view 的外掛之後，主畫面不會再被整個蓋住，點擊也不會穿透到底下的終端機：外掛的畫面變成舞台上的一個分頁，排在既有分頁後面，標籤是 view 的標題，前面有 Navide 畫的 ◇ 標記；滑鼠移上去會顯示外掛 ID、發行者和來源。安裝時不會自動切過去，點回其他分頁、按「+」或從側欄打開 pane，就會回到 pane 格線。這是 0.1.93 起就有的問題，內建外掛都沒有用到這個位置。',
+        'zh-TW': '安裝了會在主畫面加入 view 的外掛之後，主畫面不會再被整個蓋住，點擊也不會穿透到底下的終端機：外掛的畫面變成舞台上的一個分頁，排在既有分頁後面，標籤是 view 的標題，前面有 Navide 畫的 ◇ 標記；滑鼠移上去會顯示外掛 ID、發行者和來源。安裝時不會自動切過去，點回其他分頁、按「+」或從側欄打開分格，就會回到分格格線。這是 0.1.93 起就有的問題，內建外掛都沒有用到這個位置。',
         'en-US': 'Installing a plugin that adds a view to the main area no longer covers the whole stage, and clicks no longer fall through to the terminals underneath: the plugin\'s view is now a stage tab after the existing tabs, labelled with the view\'s title and marked ◇ by Navide; hover it for the plugin\'s id, publisher and source. Installing it does not switch to it, and picking another tab, pressing + or opening a pane from the sidebar brings the pane grid back. This had been the case since 0.1.93; no bundled plugin uses that area.',
         'ja-JP': 'メイン領域に view を追加するプラグインをインストールしても、ステージ全体が覆われることはなくなり、クリックが下のターミナルに抜けることもなくなりました：プラグインの画面はステージのタブの 1 つになり、既存のタブの後ろに view のタイトルで表示され、Navide が付ける ◇ マークが付きます。ポインターを合わせるとプラグインの ID、発行者、ソースが表示されます。インストールしても自動では切り替わらず、ほかのタブを選ぶか、「+」を押すか、サイドバーから pane を開くと pane のグリッドに戻ります。0.1.93 から続いていた問題で、同梱のプラグインはこの領域を使っていません。',
       },
@@ -458,7 +458,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'サードパーティ製プラグインをインストールすると、そのネイティブバックエンドの実行を許可したことになります。インストールのダイアログにそう表示され、その後はプログラムや権限が変わったときだけ改めて確認します。0.2.30 以前にインストールしたパッケージと、インストールのダイアログを通っていないバージョン（agent が始めた更新やロールバックなど）は、初めて実行する前に一度確認します。このスイッチは既定でオンになりました。0.2.30 でネイティブバックエンドの設定（このスイッチの切り替えや、ネイティブバックエンドの許可・無効化など）を一度も変更していない場合、スイッチは現在オンです。以前に保存した値は保たれ、オフで保存したものはオフのままです。ネイティブバックエンドは OS のサンドボックス内でだけ動き、それ自体はネットワークに接続できません（macOS は Seatbelt、Linux は bubblewrap）。サンドボックスがない環境では動かず、現在は Windows も含まれます。「設定 → Navide プラグイン → 開発者とネイティブコード」でオフにできます。',
       },
       {
-        'zh-TW': '外掛現在可以申請讀取同一個工作區的 agent 資訊（pane 清單、哪個 pane 開了哪個、不含內容的訊息傳送紀錄、session 清單），這是中風險權限；訊息內容要另外申請高風險權限，安裝時會再確認一次，而且 agent 要讀到訊息內容，執行政策必須明確寫入。對話紀錄、帳號和額度資料都不開放。內建外掛都沒有申請這兩種權限。',
+        'zh-TW': '外掛現在可以申請讀取同一個工作區的 agent 資訊（分格清單、哪個分格開了哪個、不含內容的訊息傳送紀錄、session 清單），這是中風險權限；訊息內容要另外申請高風險權限，安裝時會再確認一次，而且 agent 要讀到訊息內容，執行政策必須明確寫入。對話紀錄、帳號和額度資料都不開放。內建外掛都沒有申請這兩種權限。',
         'en-US': 'Plugins can now ask to read agent information in their own workspace (the pane list, which pane opened which, message delivery records without their text, and the session list), a medium-risk permission. Message text needs a separate high-risk permission, confirmed a second time at install, and an agent gets it only from an Execution Policy that names it. Conversation transcripts, account and quota data are never available. None of the bundled plugins asks for either.',
         'ja-JP': 'プラグインが、同じワークスペースの agent の情報（pane の一覧、どの pane がどの pane を開いたか、本文を含まないメッセージの配信記録、session の一覧）の読み取りを申請できるようになりました。これは中リスクの権限です。メッセージの本文には別の高リスクの権限が必要で、インストール時にもう一度確認され、agent が本文を読めるのは実行ポリシーに明記されている場合だけです。会話の記録、アカウントや使用量のデータは公開されません。同梱のプラグインはどちらも申請していません。',
       },
@@ -513,7 +513,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Pipeline の Manager モードで、Manager が ---MANAGER-READY--- を出力しないまま黙って止まることはなくなりました：Navide はまず一度だけ促し、その後 180 秒アイドルのままで worker のメッセージが待っている場合は、タイムアウト時の代替処理であることを伝えて、待っていたメッセージを渡します。実行ログにも記録されます。',
       },
       {
-        'zh-TW': 'Pipeline 某個 slot 的 role 提示沒有送到 agent 時，run 會明確失敗，不再在沒有 role 的情況下照樣開工：節點會顯示「role prompt never reached the agent」，錯誤通知會指出是哪個階段和 slot，pane 會保留，之後可以接續執行。',
+        'zh-TW': 'Pipeline 某個 slot 的 role 提示沒有送到 agent 時，run 會明確失敗，不再在沒有 role 的情況下照樣開工：節點會顯示「role prompt never reached the agent」，錯誤通知會指出是哪個階段和 slot，分格會保留，之後可以接續執行。',
         'en-US': 'When a pipeline slot\'s role prompt never reaches its agent, the run now fails with the reason instead of starting the slot without its role: the node shows "role prompt never reached the agent", an error toast names the stage and slot, and the panes stay open so the run can be resumed.',
         'ja-JP': 'Pipeline の slot の role プロンプトが agent に届かなかった場合、role なしのまま作業を始めることはなくなり、run は理由を示して失敗します：ノードに「role prompt never reached the agent」と表示され、エラー通知がどのステージのどの slot かを示し、pane はそのまま残るので run を再開できます。',
       },
@@ -523,7 +523,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'ローカル（stdio）の MCP サーバーが起動の途中で終了したり接続に失敗したりした場合、「設定 → MCP」は本当の理由（サーバーの終了コードや接続エラー）を表示し、起動がキャンセルされたと扱ったり、誤った終了コードを表示したりすることはなくなりました。',
       },
       {
-        'zh-TW': '更穩定：關掉的 pane 不會在下次還原專案時又冒出來；Navide 內建的 Plan MCP 服務在內部中斷後會正常重新開始；同時更改版面、主題或語言時，不會蓋掉剛存好的其他變更。',
+        'zh-TW': '更穩定：關掉的分格不會在下次還原專案時又冒出來；Navide 內建的 Plan MCP 服務在內部中斷後會正常重新開始；同時更改版面、主題或語言時，不會蓋掉剛存好的其他變更。',
         'en-US': 'Steadier: a closed pane no longer comes back the next time the project is restored, Navide\'s built-in Plan MCP service starts again cleanly after an internal interruption, and changing the layout, theme or language no longer overwrites another change saved at the same moment.',
         'ja-JP': '安定性の向上：閉じた pane が次にプロジェクトを復元したときに戻ってくることはなくなりました。Navide 内蔵の Plan MCP サービスは内部で中断しても正常に再開し、レイアウト・テーマ・言語の変更が同じタイミングで保存された別の変更を上書きすることもなくなりました。',
       },
@@ -553,7 +553,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'デスクトップ版に組み込まれている Node.js は Electron に由来します。Electron はまだ今回の修正を含むバージョンを公開していません。公開され次第、Navide の新しいバージョンで対応します。',
       },
       {
-        'zh-TW': '介面多了六種語言（Beta）：德文、西班牙文、法文、巴西葡萄牙文、俄文和越南文。翻譯由 AI pane 完成、另一個 AI pane 審稿，還沒有母語者校對；法文介面把 AI 寫成 IA。到「設定 → 外觀」或第一次啟動時選擇。',
+        'zh-TW': '介面多了六種語言（Beta）：德文、西班牙文、法文、巴西葡萄牙文、俄文和越南文。翻譯由 AI 分格完成、另一個 AI 分格審稿，還沒有母語者校對；法文介面把 AI 寫成 IA。到「設定 → 外觀」或第一次啟動時選擇。',
         'en-US': 'Six more interface languages (Beta): German, Spanish, French, Brazilian Portuguese, Russian and Vietnamese. AI panes translated them and a separate AI pane reviewed them; no native speaker has checked them yet. The French interface writes AI as IA. Pick one in Settings → Appearance, or at the first start.',
         'ja-JP': '表示言語が 6 つ増えました（ベータ）：ドイツ語、スペイン語、フランス語、ポルトガル語（ブラジル）、ロシア語、ベトナム語。AI pane が翻訳し、別の AI pane がレビューしましたが、ネイティブスピーカーによる確認はまだです。フランス語の表示では AI を IA と書きます。「設定 → 外観」または初回起動時に選べます。',
       },
@@ -588,12 +588,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Windows で新しくインストールした後の初回起動では、バックエンドを待つ時間が 45 秒から 120 秒に延びました（Linux と同じ）。Microsoft Defender が新しいファイルをスキャンしている間に、まだ起動中のバックエンドが起動失敗と判定されることはなくなり、起動画面も待っている間ずっと表示されます。',
       },
       {
-        'zh-TW': '開很多 CLI pane 時，資源面板的風險檢查不會再讓後端凍結好幾秒，檢查結果不變。',
+        'zh-TW': '開很多 CLI 分格時，資源面板的風險檢查不會再讓後端凍結好幾秒，檢查結果不變。',
         'en-US': 'With many CLI panes open, the resource panel\'s risk check no longer freezes the backend for seconds at a time; its results are unchanged.',
         'ja-JP': 'CLI pane をたくさん開いていても、リソースパネルのリスクチェックでバックエンドが数秒止まることはなくなりました。チェックの結果は変わりません。',
       },
       {
-        'zh-TW': 'Codex pane 的子 agent 結束時，不會再連帶結束父 pane 的這一回合；子 agent 的回覆不會被當成 pane 的回覆，也不會拿它的任務來為 pane 命名。',
+        'zh-TW': 'Codex 分格的子 agent 結束時，不會再連帶結束父分格的這一回合；子 agent 的回覆不會被當成分格的回覆，也不會拿它的任務來為分格命名。',
         'en-US': 'In a Codex pane, a sub-agent finishing no longer ends the parent pane\'s turn; its reply is not taken as the pane\'s, and its task is not used to name the pane.',
         'ja-JP': 'Codex pane でサブ agent が終了しても、親 pane のターンが一緒に終わることはなくなりました。サブ agent の返信は pane の返信として扱われず、そのタスクで pane に名前が付くこともありません。',
       },
@@ -623,12 +623,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '承認した Navide プラグインのインストールと更新はすぐに有効になり、再起動も Navide の再起動も不要です。承認の前に、そのプラグインの開いている画面が再読み込みされることをダイアログが説明します。切り替えはすべてお知らせに記録され、前のバージョンに戻すボタンが付きます。ファイルから更新した場合は置き換えたバージョンを保持し、そこへ戻すには改めて同意が必要です。',
       },
       {
-        'zh-TW': 'agent 可以管理 Navide 視窗：列出所有視窗並切到前景、把某個 pane 或整個專案移到另一個視窗，以及關掉別的視窗或專案（不會關自己的，也不會結束 CLI）。每個動作都會顯示是哪個 pane 做的，並留下紀錄。',
+        'zh-TW': 'agent 可以管理 Navide 視窗：列出所有視窗並切到前景、把某個分格或整個專案移到另一個視窗，以及關掉別的視窗或專案（不會關自己的，也不會結束 CLI）。每個動作都會顯示是哪個分格做的，並留下紀錄。',
         'en-US': 'Agents can arrange Navide windows: list them and bring one to the front, move a pane or a whole project to another window, and close another window or project (never their own, and no CLI ends). Every action shows which pane did it and is recorded.',
         'ja-JP': 'agent が Navide のウィンドウを整理できます：ウィンドウの一覧と前面への切り替え、pane やプロジェクト全体の別ウィンドウへの移動、ほかのウィンドウやプロジェクトのクローズ（自分自身は閉じず、CLI も終了しません）。どの操作も、どの pane が行ったかが表示され、記録されます。',
       },
       {
-        'zh-TW': 'agent 用 cli_open_agent 開子 pane 時可以開在另一個專案裡，子 pane 仍然向開它的 pane 回報。',
+        'zh-TW': 'agent 用 cli_open_agent 開子分格時可以開在另一個專案裡，子分格仍然向開它的分格回報。',
         'en-US': 'An agent can open a child pane in another project with cli_open_agent; the child still reports back to the pane that opened it.',
         'ja-JP': 'agent は cli_open_agent で別のプロジェクトに子 pane を開けます。子 pane は開いた pane に引き続き報告します。',
       },
@@ -663,7 +663,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     },
     highlights: [
       {
-        'zh-TW': 'Navide 瀏覽器：在 Navide 裡開真正的網頁，從 Navide 市集安裝（不隨 App 內建）。每個 agent pane 在自己的背景 Space 工作，你的 Space 有釘選標記，agent 預設碰不到；總覽卡片顯示縮圖和狀態（執行中、需要你處理、完成）。',
+        'zh-TW': 'Navide 瀏覽器：在 Navide 裡開真正的網頁，從 Navide 市集安裝（不隨 App 內建）。每個 agent 分格在自己的背景 Space 工作，你的 Space 有釘選標記，agent 預設碰不到；總覽卡片顯示縮圖和狀態（執行中、需要你處理、完成）。',
         'en-US': 'Navide Browser opens real web pages inside Navide. Install it from the Navide Marketplace; it does not ship with the App. Each agent pane works in its own background Space; your own Spaces are pinned and off limits to agents unless you let them in. The overview shows every Space with a thumbnail and its state (Running, Need your action, Done).',
         'ja-JP': 'Navide ブラウザーで Navide の中に本物の Web ページを開けます。Navide マーケットプレイスからインストールします（App には同梱されません）。agent の pane はそれぞれ自分のバックグラウンド Space で作業し、あなたの Space はピン留めされ、許可しない限り agent は使えません。一覧では各 Space のサムネイルと状態（実行中・対応が必要・完了）が表示されます。',
       },
@@ -692,7 +692,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.26',
     title: {
-      'zh-TW': '從聊天室喚醒 pane、只接回上次開著的 pane、從檔案或資料夾安裝 Navide 外掛（清楚標示來源）',
+      'zh-TW': '從聊天室喚醒分格、只接回上次開著的分格、從檔案或資料夾安裝 Navide 外掛（清楚標示來源）',
       'en-US': 'Wake a Pane From Its Chat, Resume Only What Was Running, and Install Navide Plugins From a File or Folder — With Their Source Shown',
       'ja-JP': 'チャットから pane を起動、前回動いていた pane だけを再開、ファイルやフォルダーから Navide プラグインをインストール（提供元を明示）',
     },
@@ -701,17 +701,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         icon: '▶️',
         name: { 'zh-TW': '從聊天室喚醒', 'en-US': 'Wake from chat', 'ja-JP': 'チャットから起動' },
         tagline: {
-          'zh-TW': 'pane 不在線上時，按「▶️ 喚醒」把它接回原本的對話；離線時傳的訊息會依序送進去。',
+          'zh-TW': '分格不在線上時，按「▶️ 喚醒」把它接回原本的對話；離線時傳的訊息會依序送進去。',
           'en-US': 'When a pane is offline, press ▶️ 喚醒 to bring it back on its own conversation; what you sent meanwhile goes in, in order.',
           'ja-JP': 'pane がオフラインのとき「▶️ 喚醒」を押すと元の会話に戻り、その間に送ったメッセージが順番に届きます。',
         },
-        where: { 'zh-TW': '聊天室 → pane 離線時的回覆', 'en-US': 'Chat → the offline reply', 'ja-JP': 'チャット → オフライン時の返信' },
+        where: { 'zh-TW': '聊天室 → 分格離線時的回覆', 'en-US': 'Chat → the offline reply', 'ja-JP': 'チャット → オフライン時の返信' },
       },
       {
         icon: '🔁',
         name: { 'zh-TW': '接續範圍「自動」', 'en-US': 'Resume scope Auto', 'ja-JP': '再開する範囲「自動」' },
         tagline: {
-          'zh-TW': '只接回上次關閉 Navide 時還在執行的 pane。',
+          'zh-TW': '只接回上次關閉 Navide 時還在執行的分格。',
           'en-US': 'Bring back only the panes still running when Navide last closed.',
           'ja-JP': '前回 Navide を閉じたときに動いていた pane だけを再開します。',
         },
@@ -730,12 +730,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     ],
     highlights: [
       {
-        'zh-TW': '喚醒：pane 不在線上時，聊天室可以按「▶️ 喚醒」接回原本的對話；離線期間的訊息最多暫存 20 則、30 分鐘，喚醒後依序送進去。絕不會開新對話。',
+        'zh-TW': '喚醒：分格不在線上時，聊天室可以按「▶️ 喚醒」接回原本的對話；離線期間的訊息最多暫存 20 則、30 分鐘，喚醒後依序送進去。絕不會開新對話。',
         'en-US': 'Wake: a chat can wake an offline pane back onto its own conversation; up to 20 messages from the last 30 minutes are kept and sent in order. It never starts a new conversation.',
         'ja-JP': '起動：pane がオフラインのとき、チャットから「▶️ 喚醒」で元の会話に戻せます。オフラインの間のメッセージは最大 20 件・30 分まで保留され、起動後に順番に送られます。新しい会話は決して始めません。',
       },
       {
-        'zh-TW': '接續範圍「自動」：只接回上次關閉 Navide 時還在執行的 pane。',
+        'zh-TW': '接續範圍「自動」：只接回上次關閉 Navide 時還在執行的分格。',
         'en-US': 'Resume scope Auto brings back only the panes still running when Navide last closed.',
         'ja-JP': '再開する範囲「自動」：前回 Navide を閉じたときにまだ動いていた pane だけを再開します。',
       },
@@ -836,7 +836,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '表示倍率：「設定 → 外観」で設定した表示倍率が、Navide を再起動しても 100% に戻らず保たれるようになりました。',
       },
       {
-        'zh-TW': '其他修正與注意：Loop：evolve 超過預算時會自動中斷，Loop 也會停下來。~/.claude/secrets 的保護不只用在搜尋，直接讀取時也會要求確認。在 Telegram 送出 stop 之後，按「繼續」不會重開 Loop，要回到桌面重開。另外，明確中斷 pane 時 Loop 也會一起停；存了好幾個 MCP 登入的 Claude 帳號現在可以正常切換；在 Windows 上，外掛工具可以用 C:\\ 這類磁碟代號的工作區路徑；外掛名稱和路徑裡看不見的字元會被顯示出來，避免被偽裝成別的外掛。',
+        'zh-TW': '其他修正與注意：Loop：evolve 超過預算時會自動中斷，Loop 也會停下來。~/.claude/secrets 的保護不只用在搜尋，直接讀取時也會要求確認。在 Telegram 送出 stop 之後，按「繼續」不會重開 Loop，要回到桌面重開。另外，明確中斷分格時 Loop 也會一起停；存了好幾個 MCP 登入的 Claude 帳號現在可以正常切換；在 Windows 上，外掛工具可以用 C:\\ 這類磁碟代號的工作區路徑；外掛名稱和路徑裡看不見的字元會被顯示出來，避免被偽裝成別的外掛。',
         'en-US': 'Other fixes and notes: Loop: when an evolve run goes over its budget it is interrupted automatically, and its Loop stops too. The protection for ~/.claude/secrets covers reading it directly, not just searching it, so a direct read also asks you to confirm. After sending stop from Telegram, pressing Continue does not restart the Loop; restart it on the desktop. Also, explicitly interrupting a pane stops its Loop as well; Claude accounts holding several MCP logins can now be switched; on Windows, Navide plugin tools accept a drive-letter workspace path such as C:\\…; and invisible characters in Navide plugin names and paths are spelled out, so one plugin cannot pass itself off as another.',
         'ja-JP': 'そのほかの修正と注意：Loop：evolve が予算を超えると自動で中断され、Loop も止まります。~/.claude/secrets の保護は検索だけでなく直接の読み取りにも及び、直接読み取るときも確認を求めます。Telegram から stop を送ったあとに「続行」を押しても Loop は再開しないため、デスクトップで再開してください。また、ペインを明示的に中断すると Loop も止まります。複数の MCP ログインを保存した Claude アカウントも切り替えられるようになりました。Windows では、Navide プラグインのツールが C:\\… のようなドライブ文字のワークスペースパスを受け付けます。Navide プラグインの名前やパスに含まれる見えない文字は表示されるようになり、別のプラグインになりすませなくなりました。',
       },
@@ -851,12 +851,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     },
     highlights: [
       {
-        'zh-TW': 'Telegram 待確認提示：在聊天輸入 /pending，就會把這個聊天裡所有還在等確認的提示重新列出，附上 pane 名稱、等了幾分鐘、選項和按鈕。pane 在等確認時你傳訊息過去，收到的警告現在也會附上提示內容、選項和按鈕，並引用原本那則提示。畫面上的確認如果已經換了，你的回覆不會送出，聊天會收到最新的確認讓你重新選。Navide 只會補上 bot 指令選單缺少的項目，不會覆蓋你原本的指令。傳錯訊息時，/cancel 會撤回還沒送進 pane 的訊息；「已收到，等 pane 空檔」的回覆也附上「撤回」和「中斷」按鈕。用 stop 中斷後，回覆會寫出 pane 名稱和還在排隊的則數，按「▶️ 繼續」、傳 /resume，或直接傳下一則訊息，就能讓 pane 繼續。',
+        'zh-TW': 'Telegram 待確認提示：在聊天輸入 /pending，就會把這個聊天裡所有還在等確認的提示重新列出，附上分格名稱、等了幾分鐘、選項和按鈕。分格在等確認時你傳訊息過去，收到的警告現在也會附上提示內容、選項和按鈕，並引用原本那則提示。畫面上的確認如果已經換了，你的回覆不會送出，聊天會收到最新的確認讓你重新選。Navide 只會補上 bot 指令選單缺少的項目，不會覆蓋你原本的指令。傳錯訊息時，/cancel 會撤回還沒送進分格的訊息；「已收到，等分格空檔」的回覆也附上「撤回」和「中斷」按鈕。用 stop 中斷後，回覆會寫出分格名稱和還在排隊的則數，按「▶️ 繼續」、傳 /resume，或直接傳下一則訊息，就能讓分格繼續。',
         'en-US': 'Telegram prompts waiting for an answer: type /pending in a chat to list every prompt still waiting there again, with the pane name, how long it has waited, its options and buttons. The warning you get when you write to a waiting pane now carries the prompt, its options and buttons, and quotes the original prompt. If the prompt on screen has changed, your answer is not sent, and the chat gets the current prompt to choose again. Navide only adds the bot commands it needs that are missing; your own commands are never replaced. Sent something by mistake? /cancel withdraws messages that have not reached the pane yet, and the “received, waiting for the pane” reply has Withdraw and Interrupt buttons. After stop, the reply names the pane and how many messages are still queued, and ▶️ Continue, /resume or simply your next message lets the pane carry on.',
         'ja-JP': 'Telegram の確認待ち：チャットで /pending と送ると、そのチャットでまだ回答を待っている確認がすべて、ペイン名、待ち時間、選択肢、ボタン付きで改めて表示されます。確認待ちのペインにメッセージを送ったときの警告にも、確認の内容、選択肢、ボタンが付き、元の確認メッセージを引用するようになりました。画面の確認が変わっていた場合、回答は送られず、最新の確認がチャットに届くので選び直せます。Navide は bot のコマンド一覧に足りない項目だけを追加し、既存のコマンドを上書きしません。間違えて送ったときは、/cancel でまだペインに届いていないメッセージを取り消せます。「受け取りました、ペインの空きを待っています」の返信にも「取り消し」と「中断」のボタンが付きます。stop で中断すると、返信にペイン名とまだ待っている件数が表示され、「▶️ 続行」、/resume、または次のメッセージを送るだけでペインが再開します。',
       },
       {
-        'zh-TW': '頻道聊天訊息不再被當成 agent 而擋下：之前一分鐘內傳第六則就會收到「訊息沒有送進 pane（rate-limit）」，連重送也被擋。現在人傳的聊天訊息上限是每個 pane 每分鐘 30 則，超過時會告訴你幾秒後可以重送。從聊天頻道送進來的訊息也有專屬的通知樣式：紅色標題列寫著「外部頻道 · 平台 · 傳送者」。頻道標籤現在一律顯示 bot 的名字（平台 · bot），不再顯示聊天對象，完整資訊放在提示框。Claude 讀取圖片時的說明不會再以「你：[Image: …]」轉到聊天；貼了圖片的訊息會轉送你打的文字加上「🖼 圖片 ×N」。「工作中」的狀態也不會再卡住、等不到 ✅。',
+        'zh-TW': '頻道聊天訊息不再被當成 agent 而擋下：之前一分鐘內傳第六則就會收到「訊息沒有送進分格（rate-limit）」，連重送也被擋。現在人傳的聊天訊息上限是每個分格每分鐘 30 則，超過時會告訴你幾秒後可以重送。從聊天頻道送進來的訊息也有專屬的通知樣式：紅色標題列寫著「外部頻道 · 平台 · 傳送者」。頻道標籤現在一律顯示 bot 的名字（平台 · bot），不再顯示聊天對象，完整資訊放在提示框。Claude 讀取圖片時的說明不會再以「你：[Image: …]」轉到聊天；貼了圖片的訊息會轉送你打的文字加上「🖼 圖片 ×N」。「工作中」的狀態也不會再卡住、等不到 ✅。',
         'en-US': 'Chat messages are no longer limited like an agent’s: a sixth message within a minute used to get “message not delivered to pane (rate-limit)”, and resends were refused too. A person’s chat messages now have a cap of 30 per minute per pane, and past it the chat is told how many seconds to wait before resending. Deliveries from a chat channel also get their own toast, with a red header reading “External channel · platform · sender”. Channel labels now name the bot (platform · bot) instead of the person you chat with, with the full detail in the tooltip. Claude’s notes about an image it read are no longer forwarded as “You: [Image: …]”; a message with pasted images forwards your typed text plus “🖼 Image ×N”. The “working” status no longer gets stuck before ✅.',
         'ja-JP': 'チャンネルのチャットのメッセージが、エージェントと同じ制限で拒否されなくなりました。以前は 1 分間に 6 通目を送ると「メッセージがペインに届きませんでした（rate-limit）」となり、再送も拒否されていました。人が送るチャットのメッセージは、ペインごとに 1 分間 30 通までになり、超えたときは何秒後に再送できるかを伝えます。チャットのチャンネルから届いたメッセージには専用の通知も加わり、赤い見出しに「外部チャンネル · プラットフォーム · 送信者」と表示されます。チャンネルのラベルは、チャットの相手ではなく bot の名前（プラットフォーム · bot）を表示するようになり、詳しい情報はツールチップに出ます。Claude が画像を読んだときのメモは「あなた：[Image: …]」としてチャットに転送されなくなり、画像を貼り付けたメッセージは入力した文字に「🖼 画像 ×N」を添えて転送します。「作業中」の表示が ✅ にならないまま残ることもなくなりました。',
       },
@@ -866,7 +866,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Linux でも読み上げの音声が出るようになりました。Windows の音声設定の案内は、macOS のパスではなく「設定 › 時刻と言語 › 音声認識」を示すようになりました。',
       },
       {
-        'zh-TW': '其他修正：Git 監看剛好大量寫入時結束 Navide，後端不會再卡住或多等。排程工作的擁有者會跟著續接的對話走，原本的 pane 關掉或重建後，接手同一段對話的 pane 仍能修改它。用 navide-plugin init 建立的外掛現在可以安裝。外掛開發文件已更正，並會在與 SDK 不一致時讓 CI 失敗；外掛後端的錯誤訊息也會完整保留。',
+        'zh-TW': '其他修正：Git 監看剛好大量寫入時結束 Navide，後端不會再卡住或多等。排程工作的擁有者會跟著續接的對話走，原本的分格關掉或重建後，接手同一段對話的分格仍能修改它。用 navide-plugin init 建立的外掛現在可以安裝。外掛開發文件已更正，並會在與 SDK 不一致時讓 CI 失敗；外掛後端的錯誤訊息也會完整保留。',
         'en-US': 'Also fixed: quitting Navide while the Git watcher is recording a burst no longer hangs or delays the backend. A scheduled job’s owner follows a resumed conversation, so the pane that takes over the conversation can still change the job after the original pane is closed or rebuilt. A plugin created with navide-plugin init now installs. The plugin developer docs are corrected, and CI now fails when they drift from the SDK; plugin backend error messages are kept in full.',
         'ja-JP': 'そのほかの修正：Git の監視が大量に記録している最中に Navide を終了しても、バックエンドが止まったり待たされたりしなくなりました。スケジュールしたジョブの所有者は再開した会話に引き継がれるため、元のペインを閉じたり作り直したりしても、その会話を引き継いだペインからジョブを変更できます。navide-plugin init で作成したプラグインがインストールできるようになりました。プラグイン開発者向けドキュメントを修正し、SDK と食い違うと CI が失敗するようにしました。プラグインのバックエンドのエラーメッセージも省かれずに残ります。',
       },
@@ -875,18 +875,18 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.23',
     title: {
-      'zh-TW': '解除綁定的頻道聊天不再收到 pane 的回覆、狀態列通知鈴鐺、Windows 與 Linux 的快速鍵和視窗修正、安全性加強',
+      'zh-TW': '解除綁定的頻道聊天不再收到分格的回覆、狀態列通知鈴鐺、Windows 與 Linux 的快速鍵和視窗修正、安全性加強',
       'en-US': 'Unbound Channel Chats Stay Unbound, a Notifications Bell, Windows and Linux Shortcut and Window Fixes, and Security Hardening',
       'ja-JP': '紐づけを解除したチャットにペインの返信が届かなくなりました、ステータスバーの通知ベル、Windows と Linux のショートカットとウィンドウの修正、セキュリティの強化',
     },
     highlights: [
       {
-        'zh-TW': 'Telegram 等頻道聊天：pane 的回合結束時沒有文字，Navide 會先保留這則請求，最多等 120 秒讓文字送到。在 0.2.22 裡，如果在這段等待中解除綁定（或 pane 關掉了），pane 的下一則回覆，連你在鍵盤上打的那一則，都可能被送到已解除綁定的聊天。現在解除綁定會一併丟掉保留的請求，不會再有任何內容送到那個聊天。「Channel 連線監控」的每一列現在會同時顯示連線的兩端：pane（已關閉的會標上「已關閉」）以及平台、bot 和聊天名稱。',
+        'zh-TW': 'Telegram 等頻道聊天：分格的回合結束時沒有文字，Navide 會先保留這則請求，最多等 120 秒讓文字送到。在 0.2.22 裡，如果在這段等待中解除綁定（或分格關掉了），分格的下一則回覆，連你在鍵盤上打的那一則，都可能被送到已解除綁定的聊天。現在解除綁定會一併丟掉保留的請求，不會再有任何內容送到那個聊天。「Channel 連線監控」的每一列現在會同時顯示連線的兩端：分格（已關閉的會標上「已關閉」）以及平台、bot 和聊天名稱。',
         'en-US': 'Telegram and other channel chats: when a pane’s turn ends without text, Navide holds the chat request for up to 120 s for that text. In 0.2.22, if the chat was unbound (or the pane went away) during that wait, the pane’s next reply, even one typed at the keyboard, could be sent to the unbound chat. Unbinding now drops the held request, so nothing more is sent to that chat. Each row in Channel connections now shows both ends of its link: the pane (marked “Closed” when it is gone) and the platform, bot and chat name.',
         'ja-JP': 'Telegram などのチャンネルのチャット：ペインのターンがテキストなしで終わると、Navide はそのテキストを最大 120 秒待つあいだリクエストを保留します。0.2.22 では、この待ち時間中にチャットの紐づけを解除する（またはペインがなくなる）と、ペインの次の返信が、キーボードから入力したものも含めて、紐づけを解除したチャットに送られることがありました。紐づけを解除すると保留中のリクエストも破棄されるようになり、そのチャットには何も送られなくなりました。「チャンネル接続」の各行には接続の両端が表示されるようになりました。ペイン（なくなったものは「閉じています」と表示）と、プラットフォーム、bot、チャット名です。',
       },
       {
-        'zh-TW': 'Windows 與 Linux 快速鍵改變：主視窗側欄分頁改成 Ctrl+Alt+1–5，設定改成 Ctrl+,。這些按鍵不會再傳給終端機 pane 裡的 CLI。Ctrl+1–9 仍然是選擇 CLI 類型。在 AltGr+數字會打出字元的鍵盤配置上（例如德文的 ² 和 ³），那個數字鍵照樣打出字元，不會切換分頁。macOS 不變。',
+        'zh-TW': 'Windows 與 Linux 快速鍵改變：主視窗側欄分頁改成 Ctrl+Alt+1–5，設定改成 Ctrl+,。這些按鍵不會再傳給終端機分格裡的 CLI。Ctrl+1–9 仍然是選擇 CLI 類型。在 AltGr+數字會打出字元的鍵盤配置上（例如德文的 ² 和 ³），那個數字鍵照樣打出字元，不會切換分頁。macOS 不變。',
         'en-US': 'Windows and Linux shortcuts change: the main window’s sidebar tabs are now Ctrl+Alt+1–5 and Settings is Ctrl+,. Those keys no longer reach the CLI in a terminal pane. Ctrl+1–9 still selects the CLI type. On keyboard layouts where AltGr+digit types a character (German ² and ³, for example), that digit keeps typing the character and does not switch tabs. macOS is unchanged.',
         'ja-JP': 'Windows と Linux のショートカットが変わりました：メインウィンドウのサイドバーのタブは Ctrl+Alt+1〜5、設定は Ctrl+, になりました。これらのキーはターミナルのペインの CLI には送られなくなります。Ctrl+1〜9 は引き続き CLI の種類を選びます。AltGr+数字で文字が入力されるキーボード配列（たとえばドイツ語の ² と ³）では、その数字キーはこれまでどおり文字を入力し、タブは切り替わりません。macOS は変わりません。',
       },
@@ -896,12 +896,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'ステータスバーに通知ベルが加わりました。システム通知と通知音がオンかどうかがひと目でわかり、システムが通知を許可していないときは警告の点が付きます。クリックすると「システム通知」と「通知音」をその場で切り替えられ、通知の許可状態の確認や通知の設定への移動もできます。',
       },
       {
-        'zh-TW': '更容易看出 pane 出了問題：agent CLI 以非 0 代碼結束時，標題列會顯示「⚠ 已結束（代碼 N）」；回合進行中超過 20 分鐘沒有任何紀錄或輸出時，會顯示「⏳ 超過 20 分鐘沒有動靜」，只是提醒，不會中斷任何東西。Git 面板讀不到歷史或某個 commit 時，會顯示「讀取失敗：原因」，不再看起來像沒有新 commit。',
+        'zh-TW': '更容易看出分格出了問題：agent CLI 以非 0 代碼結束時，標題列會顯示「⚠ 已結束（代碼 N）」；回合進行中超過 20 分鐘沒有任何紀錄或輸出時，會顯示「⏳ 超過 20 分鐘沒有動靜」，只是提醒，不會中斷任何東西。Git 面板讀不到歷史或某個 commit 時，會顯示「讀取失敗：原因」，不再看起來像沒有新 commit。',
         'en-US': 'Easier to see when a pane is in trouble: an agent CLI that ends with a non-zero code shows “⚠ Exited (code N)” in its title bar, and a turn with no log activity and no output for 20 minutes shows “⏳ No activity 20+ min”, as a reminder only; nothing is interrupted. When the Git panel cannot read the history or a commit, it says “Read failed: <reason>” instead of looking like there are no new commits.',
         'ja-JP': 'ペインの問題に気づきやすくなりました：エージェントの CLI が 0 以外のコードで終了すると、タイトルバーに「⚠ 終了（コード N）」と表示されます。ターンの途中で 20 分以上ログにも画面にも動きがないと「⏳ 20 分以上動きなし」と表示されますが、通知だけで何も中断しません。Git パネルが履歴やコミットを読み込めないときは、新しいコミットがないように見えるのではなく「読み込みに失敗しました：理由」と表示します。',
       },
       {
-        'zh-TW': '沒有 pane 的工作區分頁只顯示一句說明、一個「開啟 Agent」按鈕（打開側欄的 Agents 分頁），以及「或執行流程 ▶」連結。歡迎視窗的最近清單中，狀態標籤、時間和「找不到資料夾」提示都會依介面語言顯示，主要按鈕改用強調色。',
+        'zh-TW': '沒有分格的工作區分頁只顯示一句說明、一個「開啟 Agent」按鈕（打開側欄的 Agents 分頁），以及「或執行流程 ▶」連結。歡迎視窗的最近清單中，狀態標籤、時間和「找不到資料夾」提示都會依介面語言顯示，主要按鈕改用強調色。',
         'en-US': 'A workspace tab with no panes shows one sentence, an “Open Agent” button that opens the sidebar’s Agents tab, and an “or run the pipeline ▶” link. In the Welcome window, the recent list’s state badges, times and “Folder not found” tooltip are translated, and the primary button uses the accent colour.',
         'ja-JP': 'ペインのないワークスペースのタブには、一文の説明と、サイドバーの「エージェント」タブを開く「エージェントを開く」ボタン、「またはパイプラインを実行 ▶」のリンクだけが表示されます。ようこそ画面の最近使用した項目では、状態の表示、時刻、「フォルダが見つかりません」の表示が日本語になり、主ボタンはアクセントカラーになりました。',
       },
@@ -916,12 +916,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Navide プラグインの信頼性を改善：Registry に接続できないときも、以前見つかったプラグインの更新が消えなくなり、各パッケージは最後に見つかった更新を保持します。「Navide プラグイン」と「Navide マーケットプレイス」で、プラグインの削除、インストール済み一覧の再読み込み、「プレリリースを受け取る」の切り替えに失敗したときは、黙って失敗せずにエラーを表示するようになりました。',
       },
       {
-        'zh-TW': '切換版面（從格線改成側欄、聚焦或全螢幕）後，終端機 pane 的欄寬可能被鎖得比 pane 窄。這時在 pane 的右鍵選單選「填滿面板寬度」，就能改用 pane 的完整寬度；這個選項只在欄寬被鎖住時出現，上方較早的輸出可能會有幾行重新換行。',
+        'zh-TW': '切換版面（從格線改成側欄、聚焦或全螢幕）後，終端機分格的欄寬可能被鎖得比分格窄。這時在分格的右鍵選單選「填滿分格寬度」，就能改用分格的完整寬度；這個選項只在欄寬被鎖住時出現，上方較早的輸出可能會有幾行重新換行。',
         'en-US': 'After switching the layout from Grid to sidebar, spotlight or fullscreen, a terminal pane’s columns can stay locked narrower than the pane. Its right-click menu now offers “Fit to pane width” to use the full width; it appears only while the pane is capped, and older output above may re-wrap a few lines.',
         'ja-JP': 'レイアウトをグリッドからサイドバー、スポットライト、フルスクリーンに切り替えたあと、ターミナルのペインの桁数がペインより狭く固定されることがあります。そのときはペインの右クリックメニューの「ペイン幅に合わせる」でペインの全幅を使えます。この項目は桁数が固定されているときだけ表示され、上の古い出力は数行折り返し直される場合があります。',
       },
       {
-        'zh-TW': '通知更好分辨：從其他裝置（透過 Navide Cloud）或聊天頻道（Telegram、LINE 等）送來的訊息，改用專屬的紅色「外部」通知，顯示 8 秒，取代原本誤標成「來自其他工作區」的那則。Navide Guard 的通知加上紅框，其他本機工作區的通知改成靛藍色，其餘通知不變。通知文字也都依介面語言顯示，更新提示改稱「Navide」而不是「Agent-Team」，閒置回收的通知也改正為請你點 pane 上的「點擊以續接」卡片。',
+        'zh-TW': '通知更好分辨：從其他裝置（透過 Navide Cloud）或聊天頻道（Telegram、LINE 等）送來的訊息，改用專屬的紅色「外部」通知，顯示 8 秒，取代原本誤標成「來自其他工作區」的那則。Navide Guard 的通知加上紅框，其他本機工作區的通知改成靛藍色，其餘通知不變。通知文字也都依介面語言顯示，更新提示改稱「Navide」而不是「Agent-Team」，閒置回收的通知也改正為請你點分格上的「點擊以續接」卡片。',
         'en-US': 'Toasts that tell you where they come from: messages from another device through Navide Cloud, or from a chat channel (Telegram, LINE and others), get a dedicated red “external” toast for 8 s, in place of the mislabeled “other workspace” one. Navide Guard toasts get a red frame, toasts from another local workspace are indigo, and every other toast is unchanged. Toast text is translated throughout, update prompts say “Navide” instead of “Agent-Team”, and the idle-reclaim toast now points at the pane’s “Click to resume” card.',
         'ja-JP': '通知の出どころがわかりやすくなりました：Navide Cloud を通じた別のデバイスや、チャットのチャンネル（Telegram、LINE など）からのメッセージは、誤って「別のワークスペース」と表示されていた通知の代わりに、専用の赤い「外部」通知で 8 秒表示されます。Navide Guard の通知には赤い枠が付き、ローカルの別のワークスペースからの通知は藍色になり、それ以外の通知は変わりません。通知の文言も日本語で表示されるようになり、アップデートの確認は「Agent-Team」ではなく「Navide」と表示し、アイドル回収の通知はペインの「クリックして再開」カードを案内するようになりました。',
       },
@@ -931,7 +931,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Windows と Linux の修正：ターミナルでファイルのパスを Ctrl+クリックすると開けるようになり（macOS は Cmd+クリック）、C:\\… のような Windows のパスも認識します。タイトルバーのワークスペース名をドラッグしてウィンドウを動かせます。プラグインのビューは、最大化、元に戻す、フルスクリーンのあともウィンドウの大きさに合わせます。終了の確認の題名は「agent-team」ではなく「Navide」になり、Linux では最大化ボタンが「元に戻す」のまま残らなくなりました。Windows では、バックスラッシュのパスで開いた Plan が正しく開きます。',
       },
       {
-        'zh-TW': '安全性加強：pane 連到 Navide MCP 的憑證不再出現在命令列（`ps` 對這台電腦上的每個帳號都看得到），改放在只有你能讀的檔案或環境變數裡。在規則編輯器封鎖的裝置，伺服器停止提供規則時仍然會被拒絕。跨裝置訊息要先通過簽章驗證才會記入防重送紀錄，訊息通道也不再接受配對訊息；配對只能在帳號視窗完成。已使用時間簽章（sig2）的裝置，若訊息缺少或附上無效的時間簽章，改為拒收（不再退回舊版簽章）；從未使用時間簽章的裝置照舊。若是兩台機器時鐘差距過大，帳號視窗會說明對方那台快或慢了幾分鐘。',
+        'zh-TW': '安全性加強：分格連到 Navide MCP 的憑證不再出現在命令列（`ps` 對這台電腦上的每個帳號都看得到），改放在只有你能讀的檔案或環境變數裡。在規則編輯器封鎖的裝置，伺服器停止提供規則時仍然會被拒絕。跨裝置訊息要先通過簽章驗證才會記入防重送紀錄，訊息通道也不再接受配對訊息；配對只能在帳號視窗完成。已使用時間簽章（sig2）的裝置，若訊息缺少或附上無效的時間簽章，改為拒收（不再退回舊版簽章）；從未使用時間簽章的裝置照舊。若是兩台機器時鐘差距過大，帳號視窗會說明對方那台快或慢了幾分鐘。',
         'en-US': 'Security hardening: a pane’s credential for Navide’s MCP server is no longer in its command line, where ps shows it to every account on the computer; it is in a file only you can read, or in the environment. A device blocked in the policy editor stays refused when the server stops serving the policy. A cross-device message goes into the replay record only after its signature verifies, and the message channel no longer carries pairing; pairing is done only in the account window. A device that signs with the time signature (sig2) now has messages without a usable one refused instead of falling back to the older signature; devices that have never used it behave as before. When the cause is clock skew, the account window says whether the other machine is ahead or behind, and by how many minutes.',
         'ja-JP': 'セキュリティの強化：ペインが Navide の MCP サーバーに接続するための認証情報はコマンドラインに含まれなくなりました（コマンドラインは ps でこのコンピューターのすべてのアカウントから見えます）。代わりに本人だけが読めるファイルか環境変数に入ります。ルールの編集画面でブロックしたデバイスは、サーバーがルールを提供しなくなっても拒否されたままです。デバイス間のメッセージは署名を確認してから再送防止の記録に入り、メッセージのチャンネルではペアリングを扱わなくなりました。ペアリングはアカウント画面でのみ行えます。時刻署名（sig2）を使っているデバイスから、時刻署名がないか無効なメッセージが届いた場合は、旧形式の署名に戻さずに受信を拒否するようになりました。時刻署名を使ったことのないデバイスはこれまでどおりです。原因が時刻のずれの場合は、相手のマシンが何分進んでいるか遅れているかをアカウント画面で説明します。',
       },
@@ -956,17 +956,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '設定画面を全面的に整理：ステータスバッジ、キーボードショートカット、分析のページでは、無効なボタンの文字も読みやすくなり、キーボードショートカットは絵文字の代わりにアイコンと見える凡例で表示し、各ページの主ボタンは一つになり、日本語の文字が切れることもなくなりました。レイアウト、CLI エージェント、CLI 拡張機能のページも整えました。アイコンをそろえて操作部品の位置を合わせ、無効な操作部品も見分けられるようにし、プッシュの表示を「プッシュ有効／プッシュ無効／プッシュ非対応」に、タブ名を「Navide による変更」に短くし、分析ページのボタンのコントラストを改善し、日本語で一文字だけ次の行に送られることもなくなりました。アカウント、認証情報、セキュリティのページも整理しました。複数アカウントに対応した CLI を先頭に完全なメールアドレスで表示し、長い説明は「詳細」に折りたたみ、認証情報ではセグメント切り替えで検出結果と一覧を切り替え、セキュリティでは CLI を 2 列に並べて「適用範囲」の行を見出し付きにし、CLI の略称も重複しなくなりました。日本語の改行位置もさらに自然になりました。',
       },
       {
-        'zh-TW': '語音朗讀：標上 🔊 的 pane 完成時，Navide 會用系統聲音念出「<pane> 完成了」，需要你回答時念「<pane> 需要你回答」。在 pane 標題列點 🔊 就能標記；按 Esc 或語音輸入快速鍵會立刻停止。預設關閉，到設定 › 語音輸入 › 語音朗讀開啟「朗讀回覆」。「語音模型」一列會顯示建議的聲音（中文是美佳（Premium））是否已安裝，按「下載」會打開 macOS 系統設定的「輔助使用 › 朗讀內容」下載。',
+        'zh-TW': '語音朗讀：標上 🔊 的分格完成時，Navide 會用系統聲音念出「<分格> 完成了」，需要你回答時念「<分格> 需要你回答」。在分格標題列點 🔊 就能標記；按 Esc 或語音輸入快速鍵會立刻停止。預設關閉，到設定 › 語音輸入 › 語音朗讀開啟「朗讀回覆」。「語音模型」一列會顯示建議的聲音（中文是美佳（Premium））是否已安裝，按「下載」會打開 macOS 系統設定的「輔助使用 › 朗讀內容」下載。',
         'en-US': 'Read aloud: when a pane marked 🔊 finishes or needs your answer, Navide speaks a short notice in the system voice — “<pane> is done” or “<pane> needs your answer”. Click 🔊 in a pane’s title bar to mark it; Esc or the voice input shortcut stops speech at once. It is off by default: turn on “Read replies aloud” in Settings › Voice Input › Read aloud. The “Voice model” row shows whether the recommended voice (Ava (Premium) for English) is installed, and Download opens Accessibility › Spoken Content in macOS System Settings to get it.',
         'ja-JP': '読み上げ：🔊 を付けたペインが完了したり回答を求めたりすると、Navide がシステムの音声で「<pane> が完了しました」「<pane> があなたの回答を待っています」と短く読み上げます。ペインのタイトルバーの 🔊 をクリックして付け、Esc か音声入力のショートカットですぐに止められます。既定ではオフなので、設定 › 音声入力 › 読み上げ で「返信を読み上げる」をオンにしてください。「音声モデル」の行で推奨の音声（日本語は Kyoko (Enhanced)）がインストール済みかを確認でき、「ダウンロード」を押すと macOS のシステム設定の「アクセシビリティ › 読み上げコンテンツ」が開きます。',
       },
       {
-        'zh-TW': 'Telegram 等頻道聊天：Claude 在閒置時自動壓縮對話後，聊天不會再一直停在「⏳ 仍在執行」。綁定頻道的 pane 用完 Claude 額度時，聊天會收到一次通知並附上重置時間；這則請求會先保留，重置後的回覆照樣會送到聊天。Claude 把一則回覆拆成兩行紀錄時，聊天也不會再多收到一則空白的「（pane 回合結束，沒有文字輸出）」。資料夾名稱含有 token 字樣（例如「Token仲介平台」）的檔案，現在可以當附件傳到聊天，不會再被誤判成金鑰。',
+        'zh-TW': 'Telegram 等頻道聊天：Claude 在閒置時自動壓縮對話後，聊天不會再一直停在「⏳ 仍在執行」。綁定頻道的分格用完 Claude 額度時，聊天會收到一次通知並附上重置時間；這則請求會先保留，重置後的回覆照樣會送到聊天。Claude 把一則回覆拆成兩行紀錄時，聊天也不會再多收到一則空白的「（分格回合結束，沒有文字輸出）」。資料夾名稱含有 token 字樣（例如「Token仲介平台」）的檔案，現在可以當附件傳到聊天，不會再被誤判成金鑰。',
         'en-US': 'Telegram and other channel chats: a chat no longer stays on “⏳ still running” after Claude compacts an idle conversation. When a pane bound to a chat hits its Claude usage limit, the chat is told once, with the reset time; the request stays open, so the reply after the reset still arrives there. When Claude splits one reply into two transcript lines, the chat no longer gets an extra empty “pane turn ended with no text output” reply. A file in a folder whose name mentions “token” can now be sent as a chat attachment instead of being refused as a secret.',
         'ja-JP': 'Telegram などのチャンネルのチャット：Claude がアイドル中の会話を自動で圧縮したあとも、チャットが「⏳ 実行中」のまま止まらなくなりました。チャットに紐づいたペインが Claude の使用量の上限に達すると、チャットにリセット時刻つきで一度だけ通知します。リクエストは保留されたままなので、リセット後の返信もそのチャットに届きます。Claude が一つの返信を記録の二行に分けたときに、空の「ペインのターンが終了、テキスト出力なし」という返信が余分に届くこともなくなりました。フォルダー名に token を含むファイルも、秘密情報と誤判定されずにチャットへ添付できるようになりました。',
       },
       {
-        'zh-TW': '帳號清單的「全部改為跟隨」和切換帳號，現在也能找到在問題開著時被重建的 pane，不會再把它當成不見了。每個 pane 的「跟隨帳號切換」開關移到帳號彈出視窗的最上方；pane 標頭的 🔗 按鈕已移除，只有固定帳號的 pane 會在標頭顯示 📌。',
+        'zh-TW': '帳號清單的「全部改為跟隨」和切換帳號，現在也能找到在問題開著時被重建的分格，不會再把它當成不見了。每個分格的「跟隨帳號切換」開關移到帳號彈出視窗的最上方；分格標頭的 🔗 按鈕已移除，只有固定帳號的分格會在標頭顯示 📌。',
         'en-US': '“Make all follow” and account switching in the account list now find a pane that was rebuilt while the question was open, instead of reporting it missing. Each pane’s “Follow account switch” toggle now sits at the top of the account popover; the 🔗 button in the pane header is gone, and the header shows 📌 only when a pane is pinned.',
         'ja-JP': 'アカウント一覧の「すべて追従にする」とアカウントの切り替えは、確認を開いている間に作り直されたペインも見つけられるようになり、見つからないと報告しなくなりました。ペインごとの「アカウント切り替えに追従」のスイッチはアカウントのポップオーバーの一番上に移りました。ペインのヘッダーの 🔗 ボタンはなくなり、📌 は固定したペインのヘッダーにだけ表示されます。',
       },
@@ -981,7 +981,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'ステータスバーのバックエンドのポップオーバー（タイトル、接続状態、再起動／開始／停止）とパイプラインの進行状況（ステージ N / M、完了／中止）が日本語で表示されるようになり、英語のままにならなくなりました。',
       },
       {
-        'zh-TW': 'pane 在儲存庫的子資料夾裡工作時，Plan 和 pipeline 也能正常運作。',
+        'zh-TW': '分格在儲存庫的子資料夾裡工作時，Plan 和 pipeline 也能正常運作。',
         'en-US': 'Plans and pipelines work correctly when a pane works in a subfolder of a repository.',
         'ja-JP': 'ペインがリポジトリのサブフォルダーで作業しているときも、Plan とパイプラインが正しく動作するようになりました。',
       },
@@ -990,18 +990,18 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.21',
     title: {
-      'zh-TW': '點一下就切換所有 pane 的帳號、Guard 可放行信任的指令、配對失敗會說原因',
+      'zh-TW': '點一下就切換所有分格的帳號、Guard 可放行信任的指令、配對失敗會說原因',
       'en-US': 'One Click Switches Every Pane’s Account, Trusted Commands in Navide Guard, and Pairing Failures That Say Why',
       'ja-JP': 'ワンクリックで全ペインのアカウントを切り替え、Navide Guard で信頼するコマンドを許可、ペアリング失敗の理由を表示',
     },
     highlights: [
       {
-        'zh-TW': '點一下就切換帳號：在 pane 帳號徽章的帳號清單點另一個 Claude 帳號，所有跟隨中的 pane 下一回合就改用新帳號，不用重開，每個帳號也只要登入一次。新開的 pane 預設跟隨；想讓某個 pane 留在原帳號，按帳號徽章旁的圖釘把它固定（會在該帳號的資料夾重開一次並接續對話），再按一次就改回跟隨。0.2.20 的「切換 Claude 帳號時，固定帳號的 pane 一起換」照舊只管固定的 pane：開啟時，切換後會列出這些 pane 讓你選要不要一起換；跟隨中的 pane 不用這個設定就會跟著換。升級前就在帳號資料夾裡執行的 pane 會維持固定，在帳號清單按「全部改為跟隨」就會跟著切換（每個 pane 重開一次並接續對話，正在執行的會先問你）。',
+        'zh-TW': '點一下就切換帳號：在分格帳號徽章的帳號清單點另一個 Claude 帳號，所有跟隨中的分格下一回合就改用新帳號，不用重開，每個帳號也只要登入一次。新開的分格預設跟隨；想讓某個分格留在原帳號，按帳號徽章旁的圖釘把它固定（會在該帳號的資料夾重開一次並接續對話），再按一次就改回跟隨。0.2.20 的「切換 Claude 帳號時，固定帳號的分格一起換」照舊只管固定的分格：開啟時，切換後會列出這些分格讓你選要不要一起換；跟隨中的分格不用這個設定就會跟著換。升級前就在帳號資料夾裡執行的分格會維持固定，在帳號清單按「全部改為跟隨」就會跟著切換（每個分格重開一次並接續對話，正在執行的會先問你）。',
         'en-US': 'One click switches accounts: click another Claude account in a pane’s account badge list, and every following pane uses it from its next turn — no restart, and one sign-in per account. New panes follow by default. To keep a pane on its account, fix it with the pin beside its account badge (it reopens once in that account’s own folder and picks up its conversation); click again to make it follow. 0.2.20’s “Move pinned panes along when switching Claude accounts” still covers only fixed panes: when on, a switch lists them so you can choose which move too; following panes move without it. Panes that were already running in an account folder before the update stay fixed until you choose “Make all follow” in the account list (each reopens once and picks up its conversation; one that is working is asked about first).',
         'ja-JP': 'ワンクリックでアカウントを切り替え：ペインのアカウントバッジの一覧で別の Claude アカウントをクリックすると、追従中のペインはすべて次のターンから新しいアカウントを使います。再起動は不要で、サインインもアカウントごとに一度だけです。新しいペインは既定で追従します。ペインを元のアカウントのままにしたいときは、アカウントバッジの横のピンで固定します（そのアカウントの専用フォルダーで一度開き直し、会話を続けます）。もう一度押すと追従に戻ります。0.2.20 の「Claude アカウントの切り替え時に、固定したペインも一緒に切り替える」はこれまでどおり固定したペインだけが対象で、オンにすると切り替え後にそれらのペインが一覧に並び、一緒に切り替えるかを選べます。追従中のペインはこの設定がなくても切り替わります。アップデート前からアカウントのフォルダーで動いていたペインは固定のままなので、アカウント一覧の「すべて追従にする」を選ぶと切り替えに追従します（各ペインは一度開き直して会話を続け、実行中のペインは先に確認します）。',
       },
       {
-        'zh-TW': 'Navide Guard：在收過外部內容的 pane，你可以用比對整條指令的萬用字元樣式（例如 python3 -c *）放行信任的指令，不必每次確認。Guard 看不懂的特殊寫法一律交給你確認；因此在這類 pane 上，find -exec … \\; 這類寫法可能會多問你一次。',
+        'zh-TW': 'Navide Guard：在收過外部內容的分格，你可以用比對整條指令的萬用字元樣式（例如 python3 -c *）放行信任的指令，不必每次確認。Guard 看不懂的特殊寫法一律交給你確認；因此在這類分格上，find -exec … \\; 這類寫法可能會多問你一次。',
         'en-US': 'Navide Guard: on a pane that has received external content, an allow pattern that matches the whole command with wildcards (for example python3 -c *) now lets a command you trust run without asking each time. Anything written in a way Guard cannot read is always left for you to confirm, so on such a pane a command like find -exec … \\; may ask you once more.',
         'ja-JP': 'Navide Guard：外部の内容を受け取ったペインでも、コマンド全体に一致するワイルドカードの許可パターン（例：python3 -c *）で、信頼するコマンドを毎回確認せずに実行できるようになりました。Guard が読み取れない特殊な書き方は必ずあなたの確認に回すため、そのようなペインでは find -exec … \\; のような書き方で一度多く確認されることがあります。',
       },
@@ -1016,7 +1016,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Windows と Linux：Windows のターミナルで Ctrl+V で貼り付けられるようになり、Windows と Linux では Ctrl+Shift+V でも貼り付けられます。Claude Code のようにマウスを自分で扱うプログラムで右クリックしても、二重に貼り付けられることはなくなりました。Navide のコピー／貼り付けメニューは Shift＋右クリックで開きます。設定 → キーボードショートカットのアプリケーションメニューも、Windows と Linux で実際に使う Ctrl の組み合わせで表示されます。',
       },
       {
-        'zh-TW': '其他修正：開著多個工作區視窗時，結束到一半被取消，下次啟動不會少開視窗；原本在已拔除螢幕上的視窗會回到主螢幕。Git 面板和檔案總管的右鍵子選單靠近邊緣時會改往左或往下開，不再被切掉。pane 標頭的頻道選單會把已連到其他視窗 pane 的聊天標成「已連接」，不能重複選。Navide 關閉期間到期的單次排程，重新啟動補跑時不會送出兩次。切換帳號的對話框在狀態文字很長時不再超出畫面，額度用完的帳號改用灰色顯示。設定的狀態徽章、鍵盤快速鍵和分析頁面的版面也整理過。',
+        'zh-TW': '其他修正：開著多個工作區視窗時，結束到一半被取消，下次啟動不會少開視窗；原本在已拔除螢幕上的視窗會回到主螢幕。Git 面板和檔案總管的右鍵子選單靠近邊緣時會改往左或往下開，不再被切掉。分格標頭的頻道選單會把已連到其他視窗分格的聊天標成「已連接」，不能重複選。Navide 關閉期間到期的單次排程，重新啟動補跑時不會送出兩次。切換帳號的對話框在狀態文字很長時不再超出畫面，額度用完的帳號改用灰色顯示。設定的狀態徽章、鍵盤快速鍵和分析頁面的版面也整理過。',
         'en-US': 'Also fixed: with several workspace windows open, a quit that was cancelled part-way no longer leaves windows out of the next launch, and a window saved on a display that is no longer connected comes back on the main display. Right-click submenus in the Git panel and the file explorer open to the left or below near an edge instead of being cut off. The channel menu in a pane header marks a chat connected to a pane in another window as connected, so it cannot be picked twice. A one-time schedule that came due while Navide was closed is no longer sent twice when it is caught up after a restart. The account switch dialog no longer runs off screen when a status is long, and out-of-quota accounts are shown in grey. The status badges, keyboard shortcuts and analyzer pages in Settings are tidied up too.',
         'ja-JP': 'その他の修正：複数のワークスペースウィンドウを開いているときに終了が途中で取り消されても、次回の起動でウィンドウが欠けなくなりました。接続されていないディスプレイに保存されていたウィンドウはメインディスプレイに戻ります。Git パネルとファイルエクスプローラーの右クリックのサブメニューは、端に近いと左または下に開き、切れなくなりました。ペインのヘッダーのチャンネルメニューでは、別のウィンドウのペインに接続しているチャットが「接続中」と表示され、重ねて選べなくなりました。Navide を閉じている間に期限が来た一回限りのスケジュールが、再起動後の追い上げで二度送られることはなくなりました。アカウント切り替えのダイアログは長い状態表示で画面からはみ出さなくなり、使用量を使い切ったアカウントは灰色で表示されます。設定のステータスバッジ、キーボードショートカット、分析のページのレイアウトも整えました。',
       },
@@ -1036,17 +1036,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「便利機能と Navide があなたのコンピューターに加えた変更」を追加しました（設定 → エージェント資産 → 拡張機能）。Navide は、許可された便利機能が必要とするときにだけ、~/.claude や ~/.codex など Navide のフォルダー外に書き込みます。書き込みは毎回お知らせパネルで通知され、一覧に記録とバックアップの場所が残ります。機能ごとにオフにでき、オフにするとバックアップを取ってから Navide が追加した内容を取り除きます。自分で削除したものは再び自動で追加されません。必要になったら「再度許可」を選んでください。アップデート前から使っていた機能はオンのままです。',
       },
       {
-        'zh-TW': 'Navide 的 hook 改由 pane 自己帶著：Claude、Codex、Copilot pane 啟動時各自帶入 Navide 的 hook，不再寫進 ~/.claude/settings.json、~/.codex/config.toml 這類共用設定檔。舊版寫進去的項目，會在啟動時備份後收回並通知你，不會跑兩次。也因此，在 Navide 外直接開的 Claude 不再帶有 Navide 的 hook（包含 Navide Guard）。',
+        'zh-TW': 'Navide 的 hook 改由分格自己帶著：Claude、Codex、Copilot 分格啟動時各自帶入 Navide 的 hook，不再寫進 ~/.claude/settings.json、~/.codex/config.toml 這類共用設定檔。舊版寫進去的項目，會在啟動時備份後收回並通知你，不會跑兩次。也因此，在 Navide 外直接開的 Claude 不再帶有 Navide 的 hook（包含 Navide Guard）。',
         'en-US': 'Navide’s hooks now travel with each pane: Claude, Codex and Copilot panes bring Navide’s hooks along when they start, instead of Navide writing them into shared files such as ~/.claude/settings.json or ~/.codex/config.toml. Entries an older version wrote there are backed up and taken back at startup, with a notice, so nothing runs twice. As a result, Claude started outside Navide no longer carries Navide’s hooks, Navide Guard included.',
         'ja-JP': 'Navide の hook はペインが持ち運ぶようになりました。Claude、Codex、Copilot のペインは起動時にそれぞれ Navide の hook を読み込み、~/.claude/settings.json や ~/.codex/config.toml などの共有設定ファイルには書き込みません。旧バージョンが書き込んだ項目は、起動時にバックアップしてから取り除き、お知らせで伝えるので、二重に動くことはありません。そのため、Navide の外で起動した Claude には Navide の hook（Navide Guard を含む）は付きません。',
       },
       {
-        'zh-TW': '「帳號登入自動修復」預設開啟：切換帳號後如果 CLI 目前的登入不見了，Navide 會還原你選的帳號，避免 pane 啟動時變成未登入。如果你是在 Navide 外換成另一個帳號，Navide 不會蓋掉它，而是問你要「保留目前的登入」還是切回原帳號；在 Navide 外登出，Navide 只會告訴你，不會自動幫你登回。這一項可在便利功能總覽關閉，關閉後 Navide 完全不碰 CLI 目前的登入。另外，你在 pane 內完成的 Codex 登入，如果這台電腦還沒有 Codex 登入，會成為整台電腦的 Codex 登入（同樣可關閉）。',
+        'zh-TW': '「帳號登入自動修復」預設開啟：切換帳號後如果 CLI 目前的登入不見了，Navide 會還原你選的帳號，避免分格啟動時變成未登入。如果你是在 Navide 外換成另一個帳號，Navide 不會蓋掉它，而是問你要「保留目前的登入」還是切回原帳號；在 Navide 外登出，Navide 只會告訴你，不會自動幫你登回。這一項可在便利功能總覽關閉，關閉後 Navide 完全不碰 CLI 目前的登入。另外，你在分格內完成的 Codex 登入，如果這台電腦還沒有 Codex 登入，會成為整台電腦的 Codex 登入（同樣可關閉）。',
         'en-US': '“Account sign-in auto-repair” is on by default: when a CLI’s live sign-in goes missing after an account switch, Navide restores the account you chose so panes do not start signed out. If you switched to another account outside Navide, Navide does not overwrite it — it asks whether to keep the current sign-in or switch back; if you signed out outside Navide, it tells you and does not sign you back in. Turn it off in the convenience overview and Navide leaves the CLI’s live sign-in alone entirely. Also, a Codex sign-in you make inside a pane becomes this computer’s Codex sign-in when there is none yet (this can be turned off too).',
         'ja-JP': '「アカウントのログイン自動修復」は既定でオンです。アカウント切り替え後に CLI の現在のログインが失われた場合、選んだアカウントを Navide が復元し、ペインが未ログインで起動しないようにします。Navide の外で別のアカウントに切り替えていた場合は上書きせず、今のログインを残すか元に戻すかを尋ねます。Navide の外でログアウトした場合は知らせるだけで、自動でログインし直すことはしません。便利機能の一覧でオフにすると、Navide は CLI の現在のログインに一切触れません。また、このコンピューターにまだ Codex のログインがない場合、ペイン内で行った Codex のログインがコンピューター全体の Codex のログインになります（これもオフにできます）。',
       },
       {
-        'zh-TW': '新增「切換 Claude 帳號時，固定帳號的 pane 一起換」（設定 → 一般，預設關閉）：開啟後，切換 Claude 帳號時會列出還在用原帳號的 pane，勾選的 pane 會改用新帳號重新開啟並接續原本的對話。原帳號和額度用完的 pane 會預先勾好，忙碌中的 pane 會等它做完，不會被打斷；額度用完的 pane 旁邊也會出現「換帳號 ›」按鈕。',
+        'zh-TW': '新增「切換 Claude 帳號時，固定帳號的分格一起換」（設定 → 一般，預設關閉）：開啟後，切換 Claude 帳號時會列出還在用原帳號的分格，勾選的分格會改用新帳號重新開啟並接續原本的對話。原帳號和額度用完的分格會預先勾好，忙碌中的分格會等它做完，不會被打斷；額度用完的分格旁邊也會出現「換帳號 ›」按鈕。',
         'en-US': 'New “Move pinned panes along when switching Claude accounts” (Settings → General, off by default): when on, switching Claude accounts lists the panes still on their own account, and the ones you tick reopen on the new account and pick up their conversation. Panes on the old account and panes out of quota come pre-ticked, a busy pane is waited for rather than interrupted, and a pane out of quota gets a “Switch account ›” button.',
         'ja-JP': '「Claude アカウントの切り替え時に、固定したペインも一緒に切り替える」を追加しました（設定 → 一般、既定はオフ）。オンにすると、Claude アカウントを切り替えるときに元のアカウントのままのペインが一覧に並び、チェックしたペインは新しいアカウントで開き直して会話を再開します。元のアカウントのペインと使用量を使い切ったペインはあらかじめチェックされ、作業中のペインは中断せず終わるまで待ちます。使用量を使い切ったペインには「アカウントを切り替え ›」ボタンが表示されます。',
       },
@@ -1061,7 +1061,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Navide Cloud：サーバーが対応している場合、「設定 → Navide Cloud」が「同期／共有／デバイス」に分かれます。Plans の「共有リンク」で計画やレポートを読み取り専用のリンクにでき（このコンピューターで暗号化し、鍵はリンクの中だけ）、「共有」タブでコピー・延長・新しいリンクへの切り替え・取り消しができます。サーバーがまだ対応していないときは 0.2.19 と同じ画面です。同期には「バージョン履歴」が加わり、前のバージョンに戻せます。ログアウトするとサーバー上のこのデバイスのログインも取り消され、別のデバイスからの取り消しやパスワード変更でセッションが終わったときは理由が表示されます。',
       },
       {
-        'zh-TW': '傳給剛接續對話的 pane 的訊息，會等 CLI 真的啟動後才送，不會再被吃掉或誤報已送達；送出但無法確認的訊息會標成「未確認」，不提供重送，以免同一件事做兩次。設定側欄也重新整理：「憑證與金鑰」和「擴充」移到「Agent 資產」，「Navide 外掛」與「Navide 市集」有了自己的分組。',
+        'zh-TW': '傳給剛接續對話的分格的訊息，會等 CLI 真的啟動後才送，不會再被吃掉或誤報已送達；送出但無法確認的訊息會標成「未確認」，不提供重送，以免同一件事做兩次。設定側欄也重新整理：「憑證與金鑰」和「擴充」移到「Agent 資產」，「Navide 外掛」與「Navide 市集」有了自己的分組。',
         'en-US': 'Messages to a pane that is just resuming its conversation now wait until the CLI has really started, so they are no longer lost or reported delivered when they were not; one that went out but could not be confirmed is marked unconfirmed, without Resend, so the work does not run twice. The Settings sidebar is regrouped too: Credentials & keys and Extensions move under Agent Assets, and Navide Plugins and Navide Marketplace get their own group.',
         'ja-JP': '会話を再開したばかりのペインへのメッセージは、CLI が実際に起動するまで待ってから送るようになり、消えたり、届いていないのに配信済みと表示されたりしなくなりました。送信したものの確認できなかったメッセージは「未確認」と表示され、同じ作業が二重に走らないよう再送ボタンは出ません。設定のサイドバーも整理し、「認証情報とキー」と「拡張機能」は「エージェント資産」へ移り、「Navide プラグイン」と「Navide マーケットプレイス」は独自のグループになりました。',
       },
@@ -1091,17 +1091,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「最近」のワークスペースは、自分で削除するまで残るようになりました。20 件までしか残らず、毎日使うプロジェクトが押し出されることはもうありません。開いているものとピン留めしたものが上にまとまり、残りは 10 件ずつ「さらに表示」で見られ、検索ボックスは全履歴を探します。見つからないフォルダーは印が付くだけで消えません。上限は「設定 → 一般」で変更でき、既定は 1000 件、上限なしも選べます。開いているものとピン留めしたものは削除されません。',
       },
       {
-        'zh-TW': '新增「設定 → 一般 → 資源限制」，每一項在你調整前都維持原本的行為：限制新 pane 跑測試時的 worker 數、列出已關閉的 pane 留下還在跑的伺服器並一鍵停止、讓聚焦中但好幾小時沒動的 pane 也被回收（點一下就能接續）、自我優化逾時後過一段時間收掉它的 pane；macOS 上還能直接打開 Spotlight 的隱私權設定，把建置輸出排除在索引外。',
+        'zh-TW': '新增「設定 → 一般 → 資源限制」，每一項在你調整前都維持原本的行為：限制新分格跑測試時的 worker 數、列出已關閉的分格留下還在跑的伺服器並一鍵停止、讓聚焦中但好幾小時沒動的分格也被回收（點一下就能接續）、自我優化逾時後過一段時間收掉它的分格；macOS 上還能直接打開 Spotlight 的隱私權設定，把建置輸出排除在索引外。',
         'en-US': 'New Settings → General → Resource limits, each leaving things as they were until you change it: cap the test workers new panes use, list servers that closed panes left running and stop one with a click, let a focused pane untouched for hours be reclaimed too (one click resumes it), and reclaim a timed-out self-evolution run’s pane after a grace period. On macOS a button opens Spotlight’s privacy settings so you can keep build output out of the index.',
         'ja-JP': '「設定 → 一般 → リソース制限」を追加しました。どの項目も変更するまでは従来どおりです。新しいペインのテスト worker 数の上限、閉じたペインが残したまま動いているサーバーの一覧とワンクリック停止、フォーカス中でも何時間も操作のないペインの回収（クリックで再開）、タイムアウトした自己改善のペインを猶予後に回収。macOS では Spotlight のプライバシー設定を開くボタンから、ビルド出力をインデックスの対象外にできます。',
       },
       {
-        'zh-TW': '關掉的 pane 不會再留下還在跑的 CLI 程序：結束失敗會被察覺並補清，重新接回的 pane 也找得到原本的程序，關閉 Navide 時讓 Claude 有時間正常結束，逾時的指令會連同子程序一起停止；App 關閉期間錯過的排程，補跑時不會再重複執行兩次。pane 上的聊天室標籤改顯示綁定的聊天室名稱；工作區標題上的 ✦ 徽章只顯示狀態，設定改從標題的「⋯」選單或右鍵選單打開。',
+        'zh-TW': '關掉的分格不會再留下還在跑的 CLI 程序：結束失敗會被察覺並補清，重新接回的分格也找得到原本的程序，關閉 Navide 時讓 Claude 有時間正常結束，逾時的指令會連同子程序一起停止；App 關閉期間錯過的排程，補跑時不會再重複執行兩次。分格上的聊天室標籤改顯示綁定的聊天室名稱；工作區標題上的 ✦ 徽章只顯示狀態，設定改從標題的「⋯」選單或右鍵選單打開。',
         'en-US': 'Closed panes no longer leave CLI processes running: a failed kill is noticed and cleaned up, a reattached pane’s processes are still found, quitting Navide gives Claude time to shut down cleanly, and a timed-out command stops along with its children; a schedule that missed runs while the app was closed no longer fires twice when it catches up. The chat chip on a pane now shows the bound chat’s name, and the ✦ badge on a workspace heading only shows status; open its settings from the heading’s ⋯ menu or right-click menu.',
         'ja-JP': '閉じたペインが CLI のプロセスを残さなくなりました。終了の失敗を検知して後片付けし、再接続したペインのプロセスも見つけ、Navide の終了時は Claude が正常に終了する時間を確保し、タイムアウトしたコマンドは子プロセスごと止めます。アプリを閉じている間に実行されなかったスケジュールが、後から追いつくときに 2 回実行されることもなくなりました。ペインのチャットのラベルには紐づいたチャットの名前が表示されます。ワークスペース見出しの ✦ バッジは状態の表示だけになり、設定は見出しの「⋯」メニューか右クリックメニューから開きます。',
       },
       {
-        'zh-TW': '更安全：Navide 不會再覆寫讀不懂的 Claude settings.json、不會再把檔案搬進你的家目錄、不會再讓 Codex 的 config.toml 越長越大、不會把你自己的 Cursor 技能藏起來不讓 git 看到、搬移舊資料時會保留真正的對話紀錄檔，也補上 Cursor 技能清單的路徑漏洞；從 pane 裡啟動 Navide 時，也不會再把你的家目錄誤當成專案（技能與 MCP 設定都已修正）。',
+        'zh-TW': '更安全：Navide 不會再覆寫讀不懂的 Claude settings.json、不會再把檔案搬進你的家目錄、不會再讓 Codex 的 config.toml 越長越大、不會把你自己的 Cursor 技能藏起來不讓 git 看到、搬移舊資料時會保留真正的對話紀錄檔，也補上 Cursor 技能清單的路徑漏洞；從分格裡啟動 Navide 時，也不會再把你的家目錄誤當成專案（技能與 MCP 設定都已修正）。',
         'en-US': 'Safer: Navide no longer overwrites a Claude settings.json it cannot read, no longer moves files into your home folder, stops growing Codex’s config.toml, no longer hides your own Cursor skills from git, keeps the real session file when migrating old data, and closes a path issue in the Cursor skills manifest. When Navide is started from inside a pane, it no longer mistakes your home folder for a project (fixed in skills and MCP wiring).',
         'ja-JP': 'より安全に：Navide は読み取れない Claude の settings.json を上書きしなくなり、ホームフォルダーにファイルを移動しなくなり、Codex の config.toml が増え続けることもなくなりました。自分の Cursor スキルを git から隠すこともなく、古いデータの移行時は本来のセッションファイルを残し、Cursor スキルの一覧ファイルのパスの問題も修正しました。ペインの中から Navide を起動しても、ホームフォルダーをプロジェクトと取り違えなくなりました（スキルと MCP の設定の両方を修正）。',
       },
@@ -1136,17 +1136,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「設定 → 認証情報とキー」を追加しました。このコンピューターの git 認証情報の取得元、gh／glab のアカウント、SSH キー、キーチェーンの項目をスキャンし、remote URL に含まれたトークン、パスフレーズのないキー、平文で保存されたトークンといったリスクを示します。値は一切表示せず、何も変更しません。安全な場合は、コピーして使える修正コマンドを添えます。エージェントも MCP で名前と検出項目を照会できます。',
       },
       {
-        'zh-TW': '聊天室：pane 傳出的 HTML 檔會轉成 A4 PDF，每個附件都附上一張報告卡（標題與一句摘要），你回覆報告卡時 pane 會知道你指的是哪份報告；很長的回覆改成一則預覽加上完整內容的 Markdown 檔。「設定 → Channels」會列出每個 bot 的聊天室與綁定的 pane，可以跳過去、多選解除綁定、清掉 pane 已不存在的綁定。',
+        'zh-TW': '聊天室：分格傳出的 HTML 檔會轉成 A4 PDF，每個附件都附上一張報告卡（標題與一句摘要），你回覆報告卡時分格會知道你指的是哪份報告；很長的回覆改成一則預覽加上完整內容的 Markdown 檔。「設定 → Channels」會列出每個 bot 的聊天室與綁定的分格，可以跳過去、多選解除綁定、清掉分格已不存在的綁定。',
         'en-US': 'Chats: an HTML file a pane sends arrives as an A4 PDF, every attachment comes with a report card (a title and a one-line summary), and replying to a card tells the pane which report you mean. A very long reply arrives as one preview plus the whole text as a Markdown file. Settings → Channels lists each bot’s chats and bound panes, so you can jump to a pane, unbind several at once, and clear bindings whose pane is gone.',
         'ja-JP': 'チャット：ペインが送る HTML ファイルは A4 の PDF になり、すべての添付にレポートカード（タイトルと一行の要約）が付きます。カードに返信すると、どのレポートの話かがペインに伝わります。長い返信は 1 件のプレビューと全文の Markdown ファイルで届きます。「設定 → Channels」では bot ごとにチャットと紐づいたペインが一覧でき、ペインへの移動、まとめての紐づけ解除、ペインがなくなった紐づけの削除ができます。',
       },
       {
-        'zh-TW': 'pane 現在可以把工作區外的檔案、隱藏檔，以及你拖進 Navide 的檔案傳回聊天室；但 ~/.ssh、~/.aws、GitHub CLI、GnuPG、Kubernetes、Docker、鑰匙圈、各 CLI 的登入檔與 Navide 自己的資料，在每個平台上都一律不傳。',
+        'zh-TW': '分格現在可以把工作區外的檔案、隱藏檔，以及你拖進 Navide 的檔案傳回聊天室；但 ~/.ssh、~/.aws、GitHub CLI、GnuPG、Kubernetes、Docker、鑰匙圈、各 CLI 的登入檔與 Navide 自己的資料，在每個平台上都一律不傳。',
         'en-US': 'A pane can now send files from outside its workspace, hidden files, and files you dragged into Navide; ~/.ssh, ~/.aws, the GitHub CLI, GnuPG, Kubernetes, Docker, keyrings, the CLIs’ sign-in files and Navide’s own data are still never sent, on every platform.',
         'ja-JP': 'ペインはワークスペース外のファイル、隠しファイル、Navide にドラッグしたファイルもチャットへ送れるようになりました。ただし ~/.ssh、~/.aws、GitHub CLI、GnuPG、Kubernetes、Docker、キーリング、各 CLI のログインファイル、Navide 自身のデータは、どのプラットフォームでも送りません。',
       },
       {
-        'zh-TW': '給 agent：開啟工作區會等新視窗準備好再回報，視窗還沒好時開 pane 會立刻告知而不是卡住，「~/」路徑也會展開；新增 cli_reclaim_agent 收掉已完成的 pane。排程執行的自我優化不會再停下來問問題，閒置太久會被提醒並一定回報。開 pane 時的記憶體提醒只計算真的在執行的 pane。pane 一輪結束後，cli_get_status 會正確回報已完成，不會再停在進行中；排隊的訊息也不會因此多等最多 2 分鐘。',
+        'zh-TW': '給 agent：開啟工作區會等新視窗準備好再回報，視窗還沒好時開分格會立刻告知而不是卡住，「~/」路徑也會展開；新增 cli_reclaim_agent 收掉已完成的分格。排程執行的自我優化不會再停下來問問題，閒置太久會被提醒並一定回報。開分格時的記憶體提醒只計算真的在執行的分格。分格一輪結束後，cli_get_status 會正確回報已完成，不會再停在進行中；排隊的訊息也不會因此多等最多 2 分鐘。',
         'en-US': 'For agents: opening a workspace waits until its window is ready, opening a pane before then says so at once instead of hanging, and a "~/" path is expanded; cli_reclaim_agent releases a finished pane. Scheduled self-evolution runs no longer stop to ask a question, are nudged when idle too long and always report back. The memory advisory when opening a pane counts only panes that are actually running. Once a pane finishes a turn, cli_get_status now reports it as finished instead of leaving it in progress, and queued messages no longer wait up to 2 minutes extra because of it.',
         'ja-JP': 'エージェント向け：ワークスペースを開くとウィンドウの準備ができるまで待ってから応答し、準備前にペインを開こうとするとすぐにそう伝えて止まらなくなりました。「~/」のパスも展開されます。完了したペインを片付ける cli_reclaim_agent を追加しました。スケジュール実行の自己改善は質問で止まらなくなり、長く停止すると促され、必ず報告します。ペインを開くときのメモリの注意は、実際に動いているペインだけを数えます。ペインのターンが終わると cli_get_status は正しく完了と報告し、実行中のままにならなくなりました。そのせいでキュー内のメッセージが最大 2 分余計に待つこともなくなりました。',
       },
@@ -1166,12 +1166,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     },
     highlights: [
       {
-        'zh-TW': '電腦很忙、pane 很多時，後端偶爾會誤以為 Navide 已經關閉而自行停止，畫面就一直停在「connecting…」。現在查不到 Navide 時只會略過這一次檢查，不會再自行停止。',
+        'zh-TW': '電腦很忙、分格很多時，後端偶爾會誤以為 Navide 已經關閉而自行停止，畫面就一直停在「connecting…」。現在查不到 Navide 時只會略過這一次檢查，不會再自行停止。',
         'en-US': 'With a busy machine and many panes, the backend could mistake a momentary lookup failure for Navide having quit and stop itself, leaving the window on "connecting…". A failed lookup is now skipped, never taken as Navide being gone.',
         'ja-JP': 'マシンが混雑しペインが多いとき、バックエンドが一時的な確認の失敗を Navide の終了と取り違えて自ら停止し、画面が「connecting…」のままになることがありました。確認に失敗しても今回は見送るだけになり、停止しなくなりました。',
       },
       {
-        'zh-TW': '後端關閉時最多等 3 秒，不會再被 pane 掛著的連線卡住；視窗連續重連 3 次失敗後，會向 Navide 確認後端是否換了位置並改連過去。',
+        'zh-TW': '後端關閉時最多等 3 秒，不會再被分格掛著的連線卡住；視窗連續重連 3 次失敗後，會向 Navide 確認後端是否換了位置並改連過去。',
         'en-US': 'The backend now waits at most 3 seconds to shut down, so connections held open by panes can no longer keep it hanging, and after 3 failed reconnects the window asks Navide where the backend is now and follows it.',
         'ja-JP': 'バックエンドの終了待ちは最大 3 秒になり、ペインが保持する接続で止まらなくなりました。再接続に 3 回失敗すると、ウィンドウが Navide にバックエンドの現在の場所を確認して接続し直します。',
       },
@@ -1185,7 +1185,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.16',
     title: {
-      'zh-TW': 'Pipeline 畫布編輯器、在聊天室收發檔案、重開後自動接回工作中的 pane',
+      'zh-TW': 'Pipeline 畫布編輯器、在聊天室收發檔案、重開後自動接回工作中的分格',
       'en-US': 'A Pipeline Canvas Editor, Files in Chats, and Panes That Pick Up Where They Left Off',
       'ja-JP': 'Pipeline キャンバスエディター、チャットでのファイル送受信、再起動後に作業中のペインを自動で再開',
     },
@@ -1196,32 +1196,32 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Pipeline Manager がウィンドウ全体のワークスペースになり、各パイプラインをスイムレーンまたは自由なキャンバスで編集できます。ロールを同じ列にドラッグすると並列に、新しい列にドラッグすると順番に実行され、承認ゲートの追加、差し戻しループと再試行回数の設定、ステップを固定して前回の出力を再利用、任意のステップからの再実行ができます。実行中はどの表示でも進捗が見え、承認待ちのゲートがあると知らせて「確認する」で直接移動できます。ロールタブでは、ステップに表示される設定項目も編集できます。',
       },
       {
-        'zh-TW': '聊天室可以傳檔案了：在 Telegram、Discord、Slack 傳給 pane 的檔案與圖片會先下載，pane 會知道檔案放在哪裡；pane 回覆時也能把檔案傳回聊天室，但只限工作區內或剛收到的檔案，不會送出隱藏檔與金鑰。單檔上限 20 MB；其他平台會回覆「此平台尚不支援媒體」，文字照常送達。在 Telegram、Discord 用「回覆」某則訊息時，pane 也會看到被回覆的原文（只引用你信任的發言者）。',
+        'zh-TW': '聊天室可以傳檔案了：在 Telegram、Discord、Slack 傳給分格的檔案與圖片會先下載，分格會知道檔案放在哪裡；分格回覆時也能把檔案傳回聊天室，但只限工作區內或剛收到的檔案，不會送出隱藏檔與金鑰。單檔上限 20 MB；其他平台會回覆「此平台尚不支援媒體」，文字照常送達。在 Telegram、Discord 用「回覆」某則訊息時，分格也會看到被回覆的原文（只引用你信任的發言者）。',
         'en-US': 'Chats can carry files: files and pictures sent to a pane from Telegram, Discord or Slack are downloaded first and the pane is told where they are, and a pane can send files back in its reply, limited to its workspace or the files it just received, never hidden files or keys. Each file can be up to 20 MB; other platforms reply that media is not supported yet and still deliver the text. Replying to a message in Telegram or Discord now shows the pane the message you replied to, quoted only from senders you trust.',
         'ja-JP': 'チャットでファイルを送受信できるようになりました。Telegram・Discord・Slack からペインに送ったファイルや画像は先にダウンロードされ、保存場所がペインに伝わります。ペインも返信でファイルを送り返せますが、ワークスペース内のファイルか受け取ったファイルに限られ、隠しファイルや鍵は送りません。1 ファイル 20 MB まで。その他のプラットフォームでは「このプラットフォームはまだメディアに対応していません」と返し、テキストは通常どおり届きます。Telegram と Discord で特定のメッセージに「返信」すると、返信元の原文もペインに届きます（信頼する送信者のみ引用）。',
       },
       {
-        'zh-TW': '重開 Navide 後，原本正在跑回合、或停在權限詢問與提問上的 pane，以及等它們回報的母 pane，會自動接回（最多 6 個）。接回後不會自己繼續，要按「繼續」或由母 pane 下令；母 pane 會收到哪些子 pane 被中斷的通知。沒接回的會標示「重開時工作中」，點一下就能接回。不想要可以在「設定 → 一般」關閉。',
+        'zh-TW': '重開 Navide 後，原本正在跑回合、或停在權限詢問與提問上的分格，以及等它們回報的母分格，會自動接回（最多 6 個）。接回後不會自己繼續，要按「繼續」或由母分格下令；母分格會收到哪些子分格被中斷的通知。沒接回的會標示「重開時工作中」，點一下就能接回。不想要可以在「設定 → 一般」關閉。',
         'en-US': 'After Navide restarts, panes that were running a turn or waiting on a permission prompt or a question, plus the parent panes waiting on their reports, come back by themselves (up to 6). None of them continues on its own: press Continue or let the parent say so, and each parent is told which of its panes were interrupted. Panes left closed are marked "Working at restart" and resume with a click. Turn this off in Settings → General.',
         'ja-JP': 'Navide を再起動すると、ターンの実行中や権限の確認・質問で待っていたペインと、その報告を待つ親ペインが自動で戻ります（最大 6 個）。戻ったペインが勝手に続きを始めることはなく、「続行」を押すか親ペインの指示で再開します。親ペインには、どの子ペインが中断されたかが通知されます。戻らなかったペインには「再起動時に作業中」と表示され、クリックで再開できます。「設定 → 一般」でオフにできます。',
       },
       {
-        'zh-TW': 'Claude 帳號可以各自在自己的設定資料夾登入一次，不同 pane 就能同時用不同帳號：從額度徽章選新 pane 要用的帳號，或按「繼續」把單一個 pane 換到另一個帳號接著對話，其他 pane 不受影響；這些帳號的額度也能各自讀取。登入過期時新 pane 會改用目前的帳號並提示重新登入；刪除帳號會一併清掉它的登入，還有 pane 在用時會先擋下並告訴你幾個。',
+        'zh-TW': 'Claude 帳號可以各自在自己的設定資料夾登入一次，不同分格就能同時用不同帳號：從額度徽章選新分格要用的帳號，或按「繼續」把單一個分格換到另一個帳號接著對話，其他分格不受影響；這些帳號的額度也能各自讀取。登入過期時新分格會改用目前的帳號並提示重新登入；刪除帳號會一併清掉它的登入，還有分格在用時會先擋下並告訴你幾個。',
         'en-US': 'Each Claude account can sign in once inside its own settings folder, so different panes can run on different accounts at the same time: pick the account new panes start on from the quota badge, or press Continue to move one pane onto another account and carry on its conversation, leaving the rest alone. These accounts each get their own quota reading. When such a login expires, new panes fall back to the current account and you are offered to sign in again; deleting an account removes its login too, and is held back, with a count, while panes still use it.',
         'ja-JP': 'Claude アカウントごとに専用の設定フォルダーで一度ログインしておくと、ペインごとに別のアカウントを同時に使えます。クォータバッジで新しいペインが使うアカウントを選ぶか、「続行」で 1 つのペインだけを別のアカウントに移して会話を続けられ、ほかのペインには影響しません。これらのアカウントはそれぞれのクォータも読み取れます。ログインが期限切れになると新しいペインは現在のアカウントに戻り、再ログインを案内します。アカウントを削除するとそのログインも消え、まだ使っているペインがある間は件数を示して削除を止めます。',
       },
       {
-        'zh-TW': '新增工作區「自我優化」（預設關閉）：從側欄工作區標題的徽章開啟面板並啟用後，Navide 每天依你設定的時間開一個 pane 檢查這個 repo，在獨立的 worktree 修正小錯誤、逐一 commit 回本機主分支（不會 push），新功能與取捨則寫成提案；每天次數、時間與 token 預算都有上限，每一步都會通知你。',
+        'zh-TW': '新增工作區「自我優化」（預設關閉）：從側欄工作區標題的徽章開啟面板並啟用後，Navide 每天依你設定的時間開一個分格檢查這個 repo，在獨立的 worktree 修正小錯誤、逐一 commit 回本機主分支（不會 push），新功能與取捨則寫成提案；每天次數、時間與 token 預算都有上限，每一步都會通知你。',
         'en-US': 'New per-workspace Self-evolution, off by default: open its panel from the badge on the workspace heading in the sidebar and turn it on, and at the time you choose each day Navide opens a pane that checks the repository, fixes small bugs in a separate worktree and commits each fix to the local main branch (never pushing), and writes new features and trade-offs up as proposals instead. Runs per day, time and token budget are all capped, and you are told about every step.',
         'ja-JP': 'ワークスペースごとの「自己改善」を追加しました（既定はオフ）。サイドバーのワークスペース見出しのバッジからパネルを開いて有効にすると、毎日指定した時刻に Navide がペインを開いてリポジトリを確認し、小さなバグを別の worktree で修正して 1 件ずつローカルのメインブランチにコミットします（push はしません）。新機能や判断が必要なものは提案として残します。1 日の回数・時間・トークン予算には上限があり、各ステップは通知されます。',
       },
       {
-        'zh-TW': '給 agent 的新能力：agent 可以替其他 pane 回答權限詢問與選單（高風險的仍由 Navide Guard 擋下，每次回答都會記錄）、在工作完成後收掉子 pane，從 agent 開啟工作區也不再逾時。',
+        'zh-TW': '給 agent 的新能力：agent 可以替其他分格回答權限詢問與選單（高風險的仍由 Navide Guard 擋下，每次回答都會記錄）、在工作完成後收掉子分格，從 agent 開啟工作區也不再逾時。',
         'en-US': 'For agents: an agent can now answer another pane’s permission prompt or menu (Navide Guard still blocks high-risk ones, and every answer is recorded), release its finished child panes, and opening a workspace from an agent no longer times out.',
         'ja-JP': 'エージェント向け：エージェントがほかのペインの権限確認やメニューに回答できるようになりました（高リスクのものは引き続き Navide Guard がブロックし、回答はすべて記録されます）。作業が終わった子ペインの片付けもでき、エージェントからワークスペースを開いてもタイムアウトしなくなりました。',
       },
       {
-        'zh-TW': '其他：主視窗畫面意外掛掉時會自動重新載入並接回 pane，不再留下一片空白、pane 最後被清掉；分頁標籤顯示「執行中／總數」；重開不再把其他工作區的分頁群組塞進目前的工作區；「設定 → Prompt 技能」可以拖曳排序 skill；送到另一台裝置的訊息一定會回報結果，不再一直停在排隊中；Windows 上不再重建已經正確的共用連結。',
+        'zh-TW': '其他：主視窗畫面意外掛掉時會自動重新載入並接回分格，不再留下一片空白、分格最後被清掉；分頁標籤顯示「執行中／總數」；重開不再把其他工作區的分頁群組塞進目前的工作區；「設定 → Prompt 技能」可以拖曳排序 skill；送到另一台裝置的訊息一定會回報結果，不再一直停在排隊中；Windows 上不再重建已經正確的共用連結。',
         'en-US': 'Also: a main window whose page crashes reloads itself and reconnects its panes, instead of staying blank until the panes are cleared; stage tabs show running / total panes; a restart no longer files other workspaces’ tab groups into the one on screen; skills can be dragged into order in Settings → Prompts; a message sent to another device always reports how it ended instead of sitting on queued; and Windows no longer rebuilds shared links that are already correct.',
         'ja-JP': 'そのほか：メインウィンドウの画面が予期せず落ちても自動で再読み込みしてペインに再接続し、真っ白なままペインが消えることはなくなりました。タブに「実行中 / 合計」のペイン数を表示します。再起動時にほかのワークスペースのタブグループが表示中のワークスペースに入り込まなくなりました。「設定 → プロンプト」でスキルをドラッグして並べ替えられます。別のデバイスに送ったメッセージは必ず結果が返り、「待機中」のまま止まらなくなりました。Windows で正しく張られている共有リンクを作り直さなくなりました。',
       },
@@ -1230,18 +1230,18 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.15',
     title: {
-      'zh-TW': '首次使用導覽、一鍵建立 Telegram bot、內嵌 AI 面板成為正式 pane',
+      'zh-TW': '首次使用導覽、一鍵建立 Telegram bot、內嵌 AI 面板成為正式分格',
       'en-US': 'A First-Run Tour, One-Step Telegram Bots, and Embedded AI Panels That Act Like Panes',
       'ja-JP': 'はじめてのツアー、Telegram ボットのワンステップ作成、内蔵 AI パネルがペインと同じように',
     },
     highlights: [
       {
-        'zh-TW': '首次安裝後，導覽會用一個小提示框指著真正的按鈕，一次只請你做一件事：在 Welcome 挑工作區資料夾、按 + 開出第一個 Agent、在 pane 裡下第一個指令。導覽期間其他地方會蓋上灰色遮罩，誤點不會中斷導覽；提示框會一直留著，等你做完，或按「下一個」跳過這一步。',
+        'zh-TW': '首次安裝後，導覽會用一個小提示框指著真正的按鈕，一次只請你做一件事：在 Welcome 挑工作區資料夾、按 + 開出第一個 Agent、在分格裡下第一個指令。導覽期間其他地方會蓋上灰色遮罩，誤點不會中斷導覽；提示框會一直留著，等你做完，或按「下一個」跳過這一步。',
         'en-US': 'After a fresh install, a small bubble points at the real control and asks for one thing at a time: pick a workspace folder on Welcome, press + to open your first agent, and give it a first instruction in its pane. A grey mask covers the rest of the window so a stray click cannot end the tour, and each bubble stays until you have done its step or press Next to skip it.',
         'ja-JP': '初回インストール後、小さな吹き出しが実際のボタンを指し、一度に 1 つだけ操作をお願いします。Welcome でワークスペースのフォルダーを選び、+ で最初のエージェントを開き、ペインで最初の指示を出します。ツアー中はほかの部分がグレーのマスクで覆われ、誤ってクリックしてもツアーは終わりません。吹き出しは、その手順を終えるか「次へ」でスキップするまで表示されたままです。',
       },
       {
-        'zh-TW': '接著陪你試一次讓 agent 互相合作：打 @ 選另一個 pane 叫它做事，或把一個 pane 拖進另一個帶入對話脈絡。最後一步一定會出現：把滑鼠停在額度徽章上看帳號與剩餘額度，需要時直接切換帳號；徽章還沒出現時，提示框會指著它之後出現的位置，按「完成」才結束。',
+        'zh-TW': '接著陪你試一次讓 agent 互相合作：打 @ 選另一個分格叫它做事，或把一個分格拖進另一個帶入對話脈絡。最後一步一定會出現：把滑鼠停在額度徽章上看帳號與剩餘額度，需要時直接切換帳號；徽章還沒出現時，提示框會指著它之後出現的位置，按「完成」才結束。',
         'en-US': 'Then it has you try agents working together: type @ to pick another pane and hand it a task, or drag one pane into another to bring its conversation along. The last step always comes: rest the pointer on the quota badge to see the account and what is left, with a switch right there. Before the badge appears, the bubble points at where it will show, and the tour ends only when you press Done.',
         'ja-JP': '続いて、エージェント同士の連携を試します。@ でほかのペインを選んで作業を頼むか、ペインを別のペインにドラッグして会話の文脈を渡します。最後の手順は必ず表示されます。クォータバッジにマウスを重ねるとアカウントと残量が表示され、その場で切り替えられます。バッジがまだ表示されていないときは、表示される位置を吹き出しが指し、「完了」を押すまでツアーは終わりません。',
       },
@@ -1251,7 +1251,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「設定 → Channels」でのボット追加が一度で完了します。認証情報を確認して起動し、リンクガイドを開き、プラットフォームが受け入れた場合のみ保存します。Bot Management Mode を有効にした Telegram ボットからは「新しいボットを作成」もでき、Telegram で作成すると Navide が自動で追加します。',
       },
       {
-        'zh-TW': 'Pipeline Manager、Plan、Git、Editor 視窗裡的 AI 面板會記錄歷史、可以收其他 pane 的訊息，並標示自己在哪個視窗；關閉視窗會一併結束面板，重開 Navide 後會接續原本的對話。',
+        'zh-TW': 'Pipeline Manager、Plan、Git、Editor 視窗裡的 AI 面板會記錄歷史、可以收其他分格的訊息，並標示自己在哪個視窗；關閉視窗會一併結束面板，重開 Navide 後會接續原本的對話。',
         'en-US': 'The AI panel in the Pipeline Manager, Plan, Git and Editor windows keeps its history, can receive messages from other panes, and shows which window it lives in. Closing the window ends its panel, and it picks up its session again after Navide restarts.',
         'ja-JP': 'Pipeline Manager・Plan・Git・Editor ウィンドウの AI パネルが履歴を記録し、他のペインからメッセージを受け取れ、どのウィンドウにあるかを表示します。ウィンドウを閉じるとパネルも終了し、Navide を再起動すると元のセッションを再開します。',
       },
@@ -1261,12 +1261,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Plans が計画ファイルを直接読み書きするようになり、大きなライブラリの読み込みが速くなりました。各アクセスは引き続き Navide が承認し、Execution Policy も適用されます。「設定 → 拡張機能」に Plans が表示され、各拡張機能が読み書きを宣言したファイル範囲も確認できます。',
       },
       {
-        'zh-TW': '聊天室：在已綁定的 Telegram、Discord、Slack 聊天室輸入 /menu，就能用按鈕把這個 pane 的提示詞與 skill 送給它；斷線 5 秒就重連（原本 30 秒）；確認按鈕在電腦上回答、被新提問取代、回合結束或逾時後會標示原因並收起，不會再按出「這個確認已失效」。',
+        'zh-TW': '聊天室：在已綁定的 Telegram、Discord、Slack 聊天室輸入 /menu，就能用按鈕把這個分格的提示詞與 skill 送給它；斷線 5 秒就重連（原本 30 秒）；確認按鈕在電腦上回答、被新提問取代、回合結束或逾時後會標示原因並收起，不會再按出「這個確認已失效」。',
         'en-US': 'Chats: type /menu in a bound Telegram, Discord or Slack chat to send the pane one of its prompts or skills with a button. A dropped connection retries after 5 s instead of 30 s, and a confirmation answered at the computer, replaced by a newer one, outlived by its turn or timed out says why and drops its buttons, instead of answering "this confirmation has expired".',
         'ja-JP': 'チャット：バインド済みの Telegram・Discord・Slack のチャットで /menu と入力すると、そのペインのプロンプトやスキルをボタンで送れます。切断後 5 秒で再接続します（以前は 30 秒）。コンピューターで回答された、新しい確認に置き換えられた、ターンが終わった、または期限切れになった確認は理由を表示してボタンを外し、「この確認は無効です」と返すことはなくなりました。',
       },
       {
-        'zh-TW': '其他：排程會跟著重建的 pane 走，目標一直不在會自動停用並通知你；某個工作區的 Plans 後端停止時會跳出通知並說明怎麼恢復；結束 Navide 時若被取消，後端與插件會自動回復；結束 Navide 時關閉終端機不再卡住、CPU 飆到 100%；CLI 自行結束時，它啟動的子行程（例如 MCP server）會一併清掉；Windows 傳給 Claude pane 的中文與多行訊息不再亂碼（#147）；Git 狀態讀取失敗或被截斷時不再假裝乾淨（#144）；修補多個相依套件的安全性弱點。',
+        'zh-TW': '其他：排程會跟著重建的分格走，目標一直不在會自動停用並通知你；某個工作區的 Plans 後端停止時會跳出通知並說明怎麼恢復；結束 Navide 時若被取消，後端與插件會自動回復；結束 Navide 時關閉終端機不再卡住、CPU 飆到 100%；CLI 自行結束時，它啟動的子行程（例如 MCP server）會一併清掉；Windows 傳給 Claude 分格的中文與多行訊息不再亂碼（#147）；Git 狀態讀取失敗或被截斷時不再假裝乾淨（#144）；修補多個相依套件的安全性弱點。',
         'en-US': 'Also: schedules follow a rebuilt pane and turn off with a notice when their target stays gone; you are told when a workspace’s Plans backend stops, and how to bring it back; a quit that gets cancelled brings the backend and extensions back; quitting no longer hangs at 100% CPU while closing terminals; a CLI that exits on its own no longer leaves its child processes, such as MCP servers, running; on Windows, Chinese and multi-line messages reach Claude panes intact (#147); Git no longer shows a failed or truncated status as clean (#144); and several dependency security advisories are patched.',
         'ja-JP': 'そのほか：スケジュールは再構築されたペインに追従し、対象が見つからない状態が続くと通知して停止します。ワークスペースの Plans バックエンドが停止すると、通知で復旧方法をお知らせします。終了がキャンセルされた場合は、バックエンドと拡張機能が自動で元に戻ります。終了時にターミナルを閉じる処理で止まって CPU が 100% になることはなくなりました。CLI が自分で終了したとき、起動した子プロセス（MCP サーバーなど）も片付けられます。Windows で Claude ペインに送る中国語や複数行のメッセージが文字化けしなくなり（#147）、Git の状態読み取りが失敗または打ち切られてもクリーンと表示しなくなりました（#144）。依存パッケージのセキュリティ勧告にも対応しました。',
       },
@@ -1326,12 +1326,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '拡張機能マーケットプレイスを公開しました。サードパーティの拡張機能や拡張機能パックを閲覧・インストールでき、拡張機能ごとにプレリリースも選べます。公開者は自分でサインインし、ドメインを検証して公開でき、掲載前に審査とシークレットスキャンが行われます。navide:// リンクはアプリ内で拡張機能のページを開き、インストールには必ず確認が必要です。',
       },
       {
-        'zh-TW': '標題列新增 Channels 連線監控：一眼看到哪些 pane 綁定了聊天室，可以直接跳過去或中斷連線。',
+        'zh-TW': '標題列新增 Channels 連線監控：一眼看到哪些分格綁定了聊天室，可以直接跳過去或中斷連線。',
         'en-US': 'A Channels monitor in the titlebar shows which panes are bound to a chat, and lets you jump to one or disconnect it.',
         'ja-JP': 'タイトルバーに Channels の接続モニターを追加しました。どのペインがチャットにバインドされているかを確認し、ペインへの移動や切断ができます。',
       },
       {
-        'zh-TW': 'Channels 可以把綁定 pane 的活動同步到聊天室，聊天室的回覆也會回到 pane。綁定時先選擇聊天室會收到什麼，預設「只回覆聊天室」，本機輸入不會送出；之後可隨時在 pane 的連接選單更改。',
+        'zh-TW': 'Channels 可以把綁定分格的活動同步到聊天室，聊天室的回覆也會回到分格。綁定時先選擇聊天室會收到什麼，預設「只回覆聊天室」，本機輸入不會送出；之後可隨時在分格的連接選單更改。',
         'en-US': 'Channels can mirror a bound pane\'s activity to its chat and bring replies back. When you bind, you choose what the chat receives; the default, “Chat replies only”, sends nothing typed locally. You can change it any time from the pane\'s channel menu.',
         'ja-JP': 'Channels でバインドしたペインのアクティビティをチャットに同期し、返信をペインに戻せます。バインド時にチャットが受け取る内容を選べ、既定の「チャットへの返信のみ」ではローカル入力は送信されません。ペインのチャンネルメニューからいつでも変更できます。',
       },
@@ -1346,7 +1346,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '音声入力は接続時とモデルのダウンロード後に準備されるため、最初の発話からリアルタイムに文字が表示されます。設定ではモデルとエンジンの状態を分けて表示します。',
       },
       {
-        'zh-TW': '修正：Git 遠端操作不再提早逾時或在輸入密碼時關閉視窗；終端機與 mini-IDE 開檔失敗會提示；pane 內 Ctrl+C 恢復作用；Windows 上關閉 App 後後端會立即結束。',
+        'zh-TW': '修正：Git 遠端操作不再提早逾時或在輸入密碼時關閉視窗；終端機與 mini-IDE 開檔失敗會提示；分格內 Ctrl+C 恢復作用；Windows 上關閉 App 後後端會立即結束。',
         'en-US': 'Fixes: Git remote operations no longer time out early or close the password prompt; opening a file from the terminal or the mini-IDE says so when it fails; Ctrl+C works in panes again; on Windows the backend exits promptly when the app closes.',
         'ja-JP': '修正：Git のリモート操作が早すぎるタイムアウトやパスワード入力中のダイアログ終了を起こさなくなりました。ターミナルと mini-IDE でのファイルオープン失敗が通知されます。ペイン内の Ctrl+C が再び機能します。Windows でアプリ終了時にバックエンドがすぐ終了します。',
       },
@@ -1366,7 +1366,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Channels でボットを接続したら、ワンクリックで自分のチャットアカウントを連携できます。Telegram の DM、グループやサーバーへの追加、Slack の DM、またはボットに送るワンタイムコードに対応し、ペアリングコードの承認は不要です。コードの期限切れや連携失敗時は画面に理由が表示され、新しいコードを取得できます。',
       },
       {
-        'zh-TW': '側欄新增 Workspace／Free 兩種模式：Workspace 照工作區分組，Free 把所有 agent 列成一張清單，每個 agent 自成一張線框卡片並標出所屬工作區，主區顯示全部 pane。選擇會記住，已開的視窗也會即時跟著切換。',
+        'zh-TW': '側欄新增 Workspace／Free 兩種模式：Workspace 照工作區分組，Free 把所有 agent 列成一張清單，每個 agent 自成一張線框卡片並標出所屬工作區，主區顯示全部分格。選擇會記住，已開的視窗也會即時跟著切換。',
         'en-US': 'The sidebar has two modes: Workspace groups agents by workspace, and Free lists every agent in one flat list — each in its own outlined card, labelled with its workspace — with every pane on the stage. The choice is remembered, and windows that are already open follow it live.',
         'ja-JP': 'サイドバーに Workspace／Free の 2 つのモードを追加しました。Workspace はワークスペースごとにグループ化し、Free はすべてのエージェントを 1 つのリストにまとめ、各エージェントを所属ワークスペース付きの枠線カードで表示し、すべてのペインを表示します。選択は保存され、開いている他のウィンドウにもすぐ反映されます。',
       },
@@ -1376,7 +1376,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「設定 → 拡張機能」で、インストールした拡張機能を置き換え前のパッケージにロールバックできます。失敗した場合は理由が表示され、表示も元に戻ります。',
       },
       {
-        'zh-TW': 'Pipeline 執行時最多只保留兩個階段的 CLI，減少記憶體占用；更新視窗的版本說明改為可讀的文字；Windows 上關閉 pane 更快。',
+        'zh-TW': 'Pipeline 執行時最多只保留兩個階段的 CLI，減少記憶體占用；更新視窗的版本說明改為可讀的文字；Windows 上關閉分格更快。',
         'en-US': 'A pipeline run keeps at most two stages of CLIs alive, using less memory; the updater shows release notes as readable text; and closing a pane is faster on Windows.',
         'ja-JP': 'パイプライン実行中に保持する CLI は最大 2 ステージ分になり、メモリ使用量が減りました。アップデーターのリリースノートは読みやすいテキストで表示され、Windows ではペインを閉じる処理が速くなりました。',
       },
@@ -1455,12 +1455,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         icon: '💬',
         name: { 'zh-TW': 'Channels 聊天頻道', 'en-US': 'Channels', 'ja-JP': 'チャンネル' },
         tagline: {
-          'zh-TW': '把 Telegram、Discord、Slack、飛書、釘釘、Matrix、Mattermost 或 iMessage 接到 pane：在聊天室下指令，回合結束時結果回到同一個對話。',
+          'zh-TW': '把 Telegram、Discord、Slack、飛書、釘釘、Matrix、Mattermost 或 iMessage 接到分格：在聊天室下指令，回合結束時結果回到同一個對話。',
           'en-US': 'Connect Telegram, Discord, Slack, Feishu/Lark, DingTalk, Matrix, Mattermost or iMessage to a pane: send instructions from the chat, and the answer comes back to the same conversation when the turn ends.',
           'ja-JP': 'Telegram、Discord、Slack、Feishu/Lark、DingTalk、Matrix、Mattermost、iMessage をペインにつなぎ、チャットから指示を送ると、ターン終了時に同じ会話へ結果が返ります。',
         },
         where: {
-          'zh-TW': '設定 → Channels，再按 pane 標題列的聊天按鈕',
+          'zh-TW': '設定 → Channels，再按分格標題列的聊天按鈕',
           'en-US': 'Settings → Channels, then the chat button in a pane header',
           'ja-JP': '設定 → チャンネル、次にペインヘッダーのチャットボタン',
         },
@@ -1469,7 +1469,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         icon: '🎙',
         name: { 'zh-TW': '語音輸入', 'en-US': 'Voice Input', 'ja-JP': '音声入力' },
         tagline: {
-          'zh-TW': '按住快捷鍵說話，放開後文字就打進目前的 pane。辨識完全在本機進行，語音不會離開這台電腦。',
+          'zh-TW': '按住快捷鍵說話，放開後文字就打進目前的分格。辨識完全在本機進行，語音不會離開這台電腦。',
           'en-US': 'Hold a key and speak; let go and the words are typed into the focused pane. Transcription runs entirely on this machine — your voice never leaves it.',
           'ja-JP': 'キーを押しながら話し、離すとフォーカス中のペインに文字が入力されます。文字起こしはすべてこのマシン上で行われ、音声は外に出ません。',
         },
@@ -1482,7 +1482,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     ],
     highlights: [
       {
-        'zh-TW': 'Channels：平台在「設定 → Channels」設定一次，之後每個 pane 都能從標題列的聊天按鈕綁到一個聊天位置（Telegram 論壇主題、Discord/Slack 討論串…）。只有配對過的傳送者能下指令；CLI 要求權限時，會把選項送到聊天室讓你回答，但永遠不會代按「永久允許」。',
+        'zh-TW': 'Channels：平台在「設定 → Channels」設定一次，之後每個分格都能從標題列的聊天按鈕綁到一個聊天位置（Telegram 論壇主題、Discord/Slack 討論串…）。只有配對過的傳送者能下指令；CLI 要求權限時，會把選項送到聊天室讓你回答，但永遠不會代按「永久允許」。',
         'en-US': 'Channels: set a platform up once in Settings → Channels, then bind any pane to one chat location (a Telegram forum topic, a Discord or Slack thread, …) from the chat button in its header. Only paired senders can give instructions; when a CLI asks for permission the options are relayed to the chat for you to answer, and a permanent-allow option is never pressed from chat.',
         'ja-JP': 'チャンネル：プラットフォームは「設定 → チャンネル」で一度設定すれば、各ペインをヘッダーのチャットボタンから 1 つのチャット位置（Telegram フォーラムのトピック、Discord/Slack のスレッドなど）に結び付けられます。指示できるのはペアリング済みの送信者だけです。CLI が許可を求めると選択肢がチャットに届き、そこで回答できますが、「常に許可」がチャットから押されることはありません。',
       },
@@ -1502,12 +1502,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     },
     highlights: [
       {
-        'zh-TW': '「排程」分頁可以替 CLI pane 排工作：指定時間跑一次，或每 N 分鐘、每天、每週重複，時間到了就喚醒該 pane 並送出指令。',
+        'zh-TW': '「排程」分頁可以替 CLI 分格排工作：指定時間跑一次，或每 N 分鐘、每天、每週重複，時間到了就喚醒該分格並送出指令。',
         'en-US': 'Schedule work for a CLI pane from the Schedule tab: once at a set time, or every N minutes, daily or weekly — when due it wakes the pane and sends it the instruction.',
         'ja-JP': '「スケジュール」タブから CLI ペインの作業を予約できます。指定時刻に 1 回、または N 分ごと・毎日・毎週に繰り返し、時刻になるとペインを起こして指示を送ります。',
       },
       {
-        'zh-TW': '每個 CLI 帳號都能命名，名稱會出現在 pane 標題列的額度徽章、帳號清單與切換通知。',
+        'zh-TW': '每個 CLI 帳號都能命名，名稱會出現在分格標題列的額度徽章、帳號清單與切換通知。',
         'en-US': 'Name every CLI account; the name leads in the pane header’s quota badge, the account list and switch notices.',
         'ja-JP': 'CLI アカウントごとに名前を付けられ、ペインヘッダーのクォータバッジ、アカウント一覧、切り替え通知に表示されます。',
       },
@@ -1535,19 +1535,19 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'A group folds up everything under it, from the sidebar or the workspace heading. Drag a folded row and the hidden descendants travel with it — before, the parent moved alone and left its children behind. In a multi-selection only the row you grabbed expands into its subtree.',
       },
       {
-        'zh-TW': 'Claude Code 全螢幕時往上滑會顯示先前提示的那一列深色橫幅，之前會莫名消失。原因是 Navide 關 pane 時直接強制終止，claude 來不及跑自己的退出處理，在設定檔留下殘跡；累積兩次它就自己把全螢幕關掉。現在 macOS 與 Linux 會先送 SIGTERM 並等它收尾。**Windows 尚未支援**，追蹤於 #120。',
+        'zh-TW': 'Claude Code 全螢幕時往上滑會顯示先前提示的那一列深色橫幅，之前會莫名消失。原因是 Navide 關分格時直接強制終止，claude 來不及跑自己的退出處理，在設定檔留下殘跡；累積兩次它就自己把全螢幕關掉。現在 macOS 與 Linux 會先送 SIGTERM 並等它收尾。**Windows 尚未支援**，追蹤於 #120。',
         'en-US': 'Claude Code\u2019s dim row of previous prompts — the one that appears when you scroll up in fullscreen — stopped showing for some people. Navide was terminating the pane outright, so claude never ran its own exit handler and left a trace behind; two of those and it turns fullscreen off itself. macOS and Linux now send SIGTERM and wait. **Not on Windows yet** — tracked in #120.',
       },
       {
-        'zh-TW': '側欄可以一次回收整個專案的 CLI，每個 pane 變成點一下就能接續的佔位。正在使用的、等你回答的、有未送出文字的、還有無法接續的，都不會被收走。',
+        'zh-TW': '側欄可以一次回收整個專案的 CLI，每個分格變成點一下就能接續的佔位。正在使用的、等你回答的、有未送出文字的、還有無法接續的，都不會被收走。',
         'en-US': 'Reclaim a whole project\u2019s CLIs from the sidebar; each pane becomes a click-to-resume placeholder. The focused pane, one awaiting your answer, one holding unsent text and one that cannot be resumed are left alone.',
       },
       {
-        'zh-TW': '在一個視窗裡開多個專案時，切換途中開的 pane 會被歸到「正要離開的那個專案」的群組底下，嚴重時還會把一個專案的群組記錄蓋掉另一個。這版修好了。**如果你在 0.2.7 已經遇到，舊資料要手動清**：關掉 Navide 後執行 scripts/repair-run-group-ids.py（預設乾跑、寫入前自動備份）。',
+        'zh-TW': '在一個視窗裡開多個專案時，切換途中開的分格會被歸到「正要離開的那個專案」的群組底下，嚴重時還會把一個專案的群組記錄蓋掉另一個。這版修好了。**如果你在 0.2.7 已經遇到，舊資料要手動清**：關掉 Navide 後執行 scripts/repair-run-group-ids.py（預設乾跑、寫入前自動備份）。',
         'en-US': 'With two workspaces in one window, a pane opened mid-switch filed itself under the workspace being left, and saving could write one workspace\u2019s groups over another\u2019s. Fixed. **If 0.2.7 already mixed your rows**, the fix only stops new ones — close Navide and run scripts/repair-run-group-ids.py to clean up (dry-runs by default, backs up first).',
       },
       {
-        'zh-TW': 'Navide Cloud 的 pane 清單改成依裝置 → 狀態 → 專案分層，可摺疊、可搜尋，不再是一長串。Welcome 的「New…」現在可以直接命名新資料夾，不必再靠系統對話框改名。',
+        'zh-TW': 'Navide Cloud 的分格清單改成依裝置 → 狀態 → 專案分層，可摺疊、可搜尋，不再是一長串。Welcome 的「New…」現在可以直接命名新資料夾，不必再靠系統對話框改名。',
         'en-US': 'The Navide Cloud pane list nests by device, state and workspace, foldable and searchable, instead of one flat run of rows. Welcome\u2019s New… now asks for a name rather than leaving you to rename in the file picker.',
       },
     ],
@@ -1555,16 +1555,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.7',
     title: {
-      'zh-TW': 'Codex pane 不再誤判失敗、更新改走自家載點',
+      'zh-TW': 'Codex 分格不再誤判失敗、更新改走自家載點',
       'en-US': 'Codex Panes Stop Failing, Updates Come From Our Own Mirror',
     },
     highlights: [
       {
-        'zh-TW': 'Codex pane 開起來約 30 秒後被判「失敗」、但 Codex 自己明明還停在提示字元——這個已修。原因是建立終端機時要先掃完該廠商的整棵 session 樹（Codex 會逐一打開每個 rollout 檔讀檔頭），樹一大就超過前端 30 秒的等待上限。現在 PTY 一起來就先回報成功，掃描在背後跑。',
+        'zh-TW': 'Codex 分格開起來約 30 秒後被判「失敗」、但 Codex 自己明明還停在提示字元——這個已修。原因是建立終端機時要先掃完該廠商的整棵 session 樹（Codex 會逐一打開每個 rollout 檔讀檔頭），樹一大就超過前端 30 秒的等待上限。現在 PTY 一起來就先回報成功，掃描在背後跑。',
         'en-US': 'A Codex pane that reported failed about 30 seconds after starting — while Codex itself sat at its prompt — is fixed. Creating a terminal waited for a scan that opens every rollout file in the vendor\u2019s session tree; on a large tree it ran past the renderer\u2019s 30-second deadline. The pane now reports success as soon as its PTY is up, and the scan runs behind it.',
       },
       {
-        'zh-TW': 'Codex CLI 0.155 改了日誌格式，pane 命名因此空白、每呼叫一次工具就誤報回合結束——已跟上新格式，命名恢復，回合以 task_complete 為準。',
+        'zh-TW': 'Codex CLI 0.155 改了日誌格式，分格命名因此空白、每呼叫一次工具就誤報回合結束——已跟上新格式，命名恢復，回合以 task_complete 為準。',
         'en-US': 'Codex CLI 0.155 changed its rollout log, leaving pane names blank and reporting a turn finished on every tool call. The reader now follows the new format: names come back, and a turn ends at task_complete.',
       },
       {
@@ -1601,11 +1601,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'The usage-limit badge now trusts the account\u2019s /usage reading: a limit sentence in the terminal that contradicts a fresh reading is overruled, so a replayed transcript or a conversation about quotas no longer lights it for hours; and it lights from the reading alone when the account really is spent.',
       },
       {
-        'zh-TW': '裝了 xAI grok 的機器不會再把它當成 Cursor CLI（同名的 agent 執行檔）；從「設定 → 帳號」登入現用 Claude／Kilo 帳號時 pane 不再秒退；Copilot 與 Muse 的登入按鈕現在直接執行各自的 login 指令。',
+        'zh-TW': '裝了 xAI grok 的機器不會再把它當成 Cursor CLI（同名的 agent 執行檔）；從「設定 → 帳號」登入現用 Claude／Kilo 帳號時分格不再秒退；Copilot 與 Muse 的登入按鈕現在直接執行各自的 login 指令。',
         'en-US': 'grok is no longer detected or launched as Cursor CLI (same `agent` binary name); signing in to the current Claude or Kilo account from Settings → Accounts no longer kills the pane; Copilot and Muse sign in with their own login commands.',
       },
       {
-        'zh-TW': 'Codex 若每次開 pane 都跳「Hooks need review」，看過一次後這台機器就不再注入該 hook——session 綁定改走 log 偵測，功能不缺但目前沒有 UI 可以重新開啟。',
+        'zh-TW': 'Codex 若每次開分格都跳「Hooks need review」，看過一次後這台機器就不再注入該 hook——session 綁定改走 log 偵測，功能不缺但目前沒有 UI 可以重新開啟。',
         'en-US': 'If Codex asks "Hooks need review" on every pane, seeing it once now stops the hook being injected on this machine; session binding falls back to log detection, and there is no UI yet to turn it back on.',
       },
       {
@@ -1622,11 +1622,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     },
     highlights: [
       {
-        'zh-TW': '「設定 → CLI Agents」現在把每個 CLI 的東西收在同一頁：預設模型與 reasoning effort、自訂啟動指令、額外環境變數、權限略過、推送通道、安裝引導。手動開 pane 的對話框也多了 Model 與 Effort 欄位。注意：填了自訂啟動指令就等於完全接管命令列，Navide 不會再往上加任何參數（包含預設模型與權限略過）。',
+        'zh-TW': '「設定 → CLI Agents」現在把每個 CLI 的東西收在同一頁：預設模型與 reasoning effort、自訂啟動指令、額外環境變數、權限略過、推送通道、安裝引導。手動開分格的對話框也多了 Model 與 Effort 欄位。注意：填了自訂啟動指令就等於完全接管命令列，Navide 不會再往上加任何參數（包含預設模型與權限略過）。',
         'en-US': 'Settings → CLI Agents now holds everything about a CLI in one place: a default model and reasoning effort, a custom launch command, extra environment variables, permission bypass, push channels and guided install. The manual spawn dialog gains Model and Effort fields. Note: a custom launch command takes the command line over completely — Navide adds nothing to it, including the default model and the permission-bypass flag.',
       },
       {
-        'zh-TW': '面板右鍵選單新增「一次關掉這個與它衍生的全部代理」，不必再看著子代理重新掛到別的父節點上。',
+        'zh-TW': '分格右鍵選單新增「一次關掉這個與它衍生的全部代理」，不必再看著子代理重新掛到別的父節點上。',
         'en-US': 'A pane\u2019s context menu can now close it together with every agent it spawned, instead of leaving the children to reattach to another parent.',
       },
       {
@@ -1634,7 +1634,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'The out-of-quota badge can be dismissed (with a confirmation), and a loop waiting on quota resumes at once. It also no longer swallows the next real limit the following day, or when you switch back to the account that ran out.',
       },
       {
-        'zh-TW': '修好用 npm -g／nvm／volta／pnpm／bun 安裝的 CLI 從 Finder 啟動時開不了 pane（「在終端機跑得動、在 Navide 開不起來」），安裝引導也改成 shell 真的回報找不到指令才提示。',
+        'zh-TW': '修好用 npm -g／nvm／volta／pnpm／bun 安裝的 CLI 從 Finder 啟動時開不了分格（「在終端機跑得動、在 Navide 開不起來」），安裝引導也改成 shell 真的回報找不到指令才提示。',
         'en-US': 'Fixed panes refusing to open for a CLI installed through npm -g, nvm, volta, pnpm or bun when Navide was started from Finder — the "works in Terminal, will not open in Navide" case. Guided install now waits until the shell actually reports the command is missing.',
       },
       {
@@ -1642,7 +1642,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'On macOS the nvm directories now come after your own PATH, so the node you selected with nvm use is no longer replaced. If you were relying on Navide putting an nvm node first, you will now get the one your shell would.',
       },
       {
-        'zh-TW': 'Pipeline 的「繼續執行」修好了——原本每個開出來的 pane 都會以「cwd does not exist」失敗；連點兩次也不會再重複開。',
+        'zh-TW': 'Pipeline 的「繼續執行」修好了——原本每個開出來的分格都會以「cwd does not exist」失敗；連點兩次也不會再重複開。',
         'en-US': 'Resuming a pipeline stage works again — every pane it opened used to fail with "cwd does not exist" — and pressing Resume twice no longer spawns the stage twice.',
       },
     ],
@@ -1663,7 +1663,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'Correction: the Settings → Sharing page announced for this release was removed before 0.2.4 shipped and is awaiting a redesign. Exporting and importing the settings bundle is still available under Settings → General → Settings Management; the cloud share code and paired-device list did not ship.',
       },
       {
-        'zh-TW': '關閉工作區時可選擇保留 CLI 繼續在背景執行：右鍵選單分成「關閉工作區」與「關閉工作區與 CLI 視窗」，關掉畫面不再等於砍掉正在跑的 agent。',
+        'zh-TW': '關閉工作區時可選擇保留 CLI 繼續在背景執行：右鍵選單分成「關閉工作區」與「關閉工作區與其中的分格」，關掉畫面不再等於砍掉正在跑的 agent。',
         'en-US': 'Closing a workspace can now leave its CLI panes running: the context menu separates "close workspace" from "close workspace and its CLI panes", so putting a project away no longer kills the agents working in it.',
       },
       {
@@ -1671,7 +1671,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'Downloads now have a mirror at dl.navide.dev: the website switches to it automatically when GitHub is unreachable or slow, and the in-app updater retries there after a network failure on GitHub.',
       },
       {
-        'zh-TW': '終端機輸入在 CLI 大量輸出時不再卡住；工作區側邊欄支援子樹摺疊；Codex 面板重啟後能正確接回原本的對話。',
+        'zh-TW': '終端機輸入在 CLI 大量輸出時不再卡住；工作區側邊欄支援子樹摺疊；Codex 分格重啟後能正確接回原本的對話。',
         'en-US': 'Terminal input no longer stalls while a CLI floods the pane with output; the workspace sidebar folds subtrees; and Codex panes reconnect to their original conversation after a restart.',
       },
     ],
@@ -1688,11 +1688,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'macOS, Windows x64, Windows ARM64 and Linux x64 ship from one commit for the first time, and Windows on Arm gets a native installer instead of running emulated.',
       },
       {
-        'zh-TW': '修正終端機面板在分析器輪詢期間逾時的問題（外連 TLS 內容改為只建一次且不佔用事件迴圈）。',
+        'zh-TW': '修正終端機分格在分析器輪詢期間逾時的問題（外連 TLS 內容改為只建一次且不佔用事件迴圈）。',
         'en-US': 'Fixed terminal panes timing out while the analyzer polled: the outbound TLS context is now built once, off the event loop.',
       },
       {
-        'zh-TW': 'MCP 面板可接續既有的 CLI 對話；側邊欄拖放會建立面板血緣關係。',
+        'zh-TW': 'MCP 分格可接續既有的 CLI 對話；側邊欄拖放會建立分格血緣關係。',
         'en-US': 'MCP panes can resume an existing CLI conversation, and sidebar drag-and-drop assigns pane lineage.',
       },
     ],
@@ -1721,7 +1721,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'Plans performance & hardening: Single-flight concurrent scan coalescing, debounced watcher events, directory move tracking, and recovery retries.',
       },
       {
-        'zh-TW': 'MCP 與訊息協議加強：支援喚醒冷啟動面板、Ack-only 確認訊息不佔用終端輸入、以及多裝置連線感知。',
+        'zh-TW': 'MCP 與訊息協議加強：支援喚醒冷啟動分格、Ack-only 確認訊息不佔用終端輸入、以及多裝置連線感知。',
         'en-US': 'MCP & messaging extensions: Wake cold-restored agent panes, ack-only receipt messages, and multi-device presence hints.',
       },
     ],
@@ -1806,13 +1806,13 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         'zh-TW':
-          '側欄血緣導軌：面板依「誰開出誰」畫出連續的分支軌，滑過會整條亮起；執行群組列改為黏頂區段標題，附自己的 ＋ 按鈕。',
+          '側欄血緣導軌：分格依「誰開出誰」畫出連續的分支軌，滑過會整條亮起；執行群組列改為黏頂區段標題，附自己的 ＋ 按鈕。',
         'en-US':
           'Sidebar lineage rails: panes are drawn on continuous branch rails showing which opened which, with the whole trunk highlighting on hover. Run-group rows became sticky section headers with their own ＋.',
       },
       {
         'zh-TW':
-          '關閉面板前先提醒：還在跑的回合、排隊中的訊息、以及會一起消失的子面板，會在你按下關閉前列出來。',
+          '關閉分格前先提醒：還在跑的回合、排隊中的訊息、以及會一起消失的子分格，會在你按下關閉前列出來。',
         'en-US':
           'Advice before you close a pane: an active turn, queued messages, and child panes that would go with it are listed before the pane closes.',
       },
@@ -1842,7 +1842,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         'zh-TW':
-          '啟動與重繪更省：活動掃描只看有面板在跑的工作區、面板檢視不再重複重繪、WebGL 游標閃爍計時器不再洩漏，較重的對話框改為閒置時預先載入。',
+          '啟動與重繪更省：活動掃描只看有分格在跑的工作區、分格檢視不再重複重繪、WebGL 游標閃爍計時器不再洩漏，較重的對話框改為閒置時預先載入。',
         'en-US':
           'Lighter startup and redraw: activity scanning is scoped to workspaces with live panes, unchanged pane views skip re-render, the WebGL cursor-blink timer no longer leaks, and heavy modals prewarm while idle.',
       },
@@ -1893,7 +1893,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         'zh-TW':
-          '側邊欄工作區拖曳與層級縮排優化：完善多工作區拖曳分離為獨立視窗的手勢反饋，並修復子面板折疊導軌與縮排對齊。',
+          '側邊欄工作區拖曳與層級縮排優化：完善多工作區拖曳分離為獨立視窗的手勢反饋，並修復子分格折疊導軌與縮排對齊。',
         'en-US':
           'Sidebar Workspace Drag-Out & Lineage Rails: enhanced gestures for dragging workspaces into standalone windows and resolved lineage rail indentation alignment.',
       },
@@ -1914,13 +1914,13 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     highlights: [
       {
         'zh-TW':
-          '終端 @ 提及選單與冷還原修復：在終端輸入 @ 即時彈出跨面板與上下文候選選單，並修復冷還原面板註冊 handle 與深淺主題固定色盤適配。',
+          '終端 @ 提及選單與冷還原修復：在終端輸入 @ 即時彈出跨分格與上下文候選選單，並修復冷還原分格註冊 handle 與深淺主題固定色盤適配。',
         'en-US':
           'Terminal @-Mention Menu & Lazy Restore Fix: popup mention menu for panes and context autocomplete on @, with lazy restore handle registration and terminal palette styling.',
       },
       {
         'zh-TW':
-          '原生 MCP 伺服器與 Native Memory 管理面板：獨立視覺化面板支援 MCP 伺服器健康檢查、工具調用診斷與系統進程記憶體即時採樣分析。',
+          '原生 MCP 伺服器與 Native Memory 管理分格：獨立視覺化分格支援 MCP 伺服器健康檢查、工具調用診斷與系統進程記憶體即時採樣分析。',
         'en-US':
           'Native MCP & Memory Management: dedicated visual panes for MCP server health diagnostics, tool inspection, and kernel-level memory monitoring.',
       },
@@ -1959,7 +1959,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     highlights: [
       {
         'zh-TW':
-          '全新資源管理器 (Resource Manager)：整合 CPU 佔用、記憶體與 Token 消耗即時監控，支援全局面板跳轉與閒置回收。',
+          '全新資源管理器 (Resource Manager)：整合 CPU 佔用、記憶體與 Token 消耗即時監控，支援全局分格跳轉與閒置回收。',
         'en-US':
           'Unified Resource Manager: real-time CPU, memory, and token monitoring with cross-window pane jumping and idle reclaim.',
       },
@@ -2109,7 +2109,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         'zh-TW':
-          '終端長時間閒置回收：自動回收長時間無操作的 CLI 面板釋放系統記憶體，支援點擊一鍵恢復。',
+          '終端長時間閒置回收：自動回收長時間無操作的 CLI 分格釋放系統記憶體，支援點擊一鍵恢復。',
         'en-US':
           'Terminal Idle Reclaim: automatically reclaims memory from long-idle CLI processes with one-click restore.',
       },
@@ -2130,7 +2130,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         'zh-TW':
-          '⌘W 彈窗關閉與防誤觸確認：按 ⌘W 優先關閉最上層 Modal 彈窗；關閉閒置 CLI 面板前新增防誤觸確認與「不再詢問」選項。',
+          '⌘W 彈窗關閉與防誤觸確認：按 ⌘W 優先關閉最上層 Modal 彈窗；關閉閒置 CLI 分格前新增防誤觸確認與「不再詢問」選項。',
         'en-US':
           '⌘W Modal Close & Pane Protection: ⌘W prioritizes closing open modals; closing idle panes includes a confirmation dialog with a "Don\'t ask again" option.',
       },
@@ -2184,19 +2184,19 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     highlights: [
       {
         'zh-TW':
-          '投遞失敗回報：訊息送不到時，寄件 pane 會收到一則 `[Navide MSG] delivery failed` 系統通知，說明目標與原因。',
+          '投遞失敗回報：訊息送不到時，寄件分格會收到一則 `[Navide MSG] delivery failed` 系統通知，說明目標與原因。',
         'en-US':
           'Delivery-failure notices: when a message cannot be delivered, the sending pane receives a `[Navide MSG] delivery failed` notice naming the target and the reason.',
       },
       {
         'zh-TW':
-          'Claude Stop hook 直送：Claude pane 回合結束時若有訊息在等，會直接經由 Stop hook 交給 agent 當下一步指令，完全不經過輸入框。',
+          'Claude Stop hook 直送：Claude 分格回合結束時若有訊息在等，會直接經由 Stop hook 交給 agent 當下一步指令，完全不經過輸入框。',
         'en-US':
           'Claude Stop-hook hand-over: a message waiting for a Claude pane is handed to the agent as its next instruction when its turn ends, without ever touching the input box.',
       },
       {
         'zh-TW':
-          '打字時暫緩投遞與整段貼上：目標 pane 有人在輸入時訊息會顯示為「輸入中」暫緩，注入一律以 bracketed paste 整段送入，不再打斷你打到一半的提示。',
+          '打字時暫緩投遞與整段貼上：目標分格有人在輸入時訊息會顯示為「輸入中」暫緩，注入一律以 bracketed paste 整段送入，不再打斷你打到一半的提示。',
         'en-US':
           'Typing hold & whole-paste injection: delivery waits while someone is typing in the target pane, and injections land as a single bracketed paste so a half-written prompt is never submitted with them.',
       },
@@ -2223,7 +2223,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         'zh-TW':
-          '多面板批量拖曳與 Drop 貼上：支援 Shift 多選面板批量拖曳與 Ghost 懸浮圖示，可一次性拖入終端機貼上批量 @mention 標籤。',
+          '多分格批量拖曳與 Drop 貼上：支援 Shift 多選分格批量拖曳與 Ghost 懸浮圖示，可一次性拖入終端機貼上批量 @mention 標籤。',
         'en-US':
           'Multi-pane batch dragging & dropping: Shift-select multiple agent panes to drag with a ghost image and drop all @mention tags into terminals at once.',
       },
@@ -2292,13 +2292,13 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.1.80',
     title: {
-      'zh-TW': 'LLM 智慧 Pane 命名、Copilot/Qwen Hooks 路由與 WebGL 終端加速',
+      'zh-TW': 'LLM 智慧分格命名、Copilot/Qwen Hooks 路由與 WebGL 終端加速',
       'en-US': 'LLM-assisted Pane Naming, Copilot/Qwen Hooks & WebGL Terminal Acceleration',
     },
     highlights: [
       {
         'zh-TW':
-          'LLM 智慧標題命名與平滑升級：首回合對話完成後自動請求本地模型生成高適配性 Pane 標題，並在不干擾使用者自訂命名的前提下平滑升級面板名稱。',
+          'LLM 智慧標題命名與平滑升級：首回合對話完成後自動請求本地模型生成高適配性分格標題，並在不干擾使用者自訂命名的前提下平滑升級分格名稱。',
         'en-US':
           'LLM-assisted pane naming: automatically generates relevant pane titles using local models after the first turn and smoothly upgrades panel labels without overwriting custom renames.',
       },
@@ -2352,7 +2352,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     highlights: [
       {
         'zh-TW':
-          '修復無聲對話遺失：從 Claude Code 環境裡啟動 Navide 時，pane 會繼承子 session 標記而靜默停寫對話記錄，重啟後 pane 變空白。後端現於啟動時剝除該標記（並防禦 Grok 同型標記），對話記錄保證落盤。',
+          '修復無聲對話遺失：從 Claude Code 環境裡啟動 Navide 時，分格會繼承子 session 標記而靜默停寫對話記錄，重啟後分格變空白。後端現於啟動時剝除該標記（並防禦 Grok 同型標記），對話記錄保證落盤。',
         'en-US':
           'Fixed silent transcript loss: launching Navide from inside a Claude Code environment made panes inherit a child-session marker and silently stop writing transcripts (blank panes after restart). The backend now strips the marker at startup (plus Grok’s equivalents), so transcripts always persist.',
       },
@@ -2385,7 +2385,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         'zh-TW':
-          '預設外部編輯器與快速鍵操作提升：可選擇 VS Code / Cursor 等為預設外部編輯器並支援開啟專案資料夾；新增 Ctrl+Tab 面板切換與 ⌘⇧L 系統診斷工具 DebugModal。',
+          '預設外部編輯器與快速鍵操作提升：可選擇 VS Code / Cursor 等為預設外部編輯器並支援開啟專案資料夾；新增 Ctrl+Tab 分格切換與 ⌘⇧L 系統診斷工具 DebugModal。',
         'en-US':
           'Default external editor & keybindings overhaul: choose VS Code or Cursor as your default editor with Open Folder support; added Ctrl+Tab pane cycling and ⌘⇧L DebugModal diagnostics.',
       },
@@ -2439,7 +2439,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         'zh-TW':
-          '拖曳面板 @ 定址輸入：支援將遠端視窗或頁籤面板直接拖曳至 "@" 提及輸入框，自動帶入其全區目標位址。',
+          '拖曳分格 @ 定址輸入：支援將遠端視窗或頁籤分格直接拖曳至 "@" 提及輸入框，自動帶入其全區目標位址。',
         'en-US':
           'Drag-to-mention @ addressing: drag any remote pane onto the "@" mention box to automatically insert its fully qualified address.',
       },
@@ -2605,7 +2605,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           'Wheel scrolls forwarded to the terminal no longer count as activity, so browsing history keeps the RUNNING badge from latching on.',
       },
       {
-        'zh-TW': 'Agent 歷史載入時，對已無對應 pane 的項目補上移除時間戳，時間欄位不再空白。',
+        'zh-TW': 'Agent 歷史載入時，對已無對應分格的項目補上移除時間戳，時間欄位不再空白。',
         'en-US':
           'Agent History stamps a removal time on load for entries with no live pane, so their timestamp column is no longer blank.',
       },
@@ -2653,13 +2653,13 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     highlights: [
       {
         'zh-TW':
-          '設定新增 Storage 分頁：檢視各項資料佔用的空間並進行清理，清理只會動它能證明無人使用的資料（Codex pane home 等），live 資料受保護。',
+          '設定新增 Storage 分頁：檢視各項資料佔用的空間並進行清理，清理只會動它能證明無人使用的資料（Codex 分格 home 等），live 資料受保護。',
         'en-US':
           'New Storage tab in Settings: see what is using disk and reclaim it. Cleanup only offers data it can prove no pane still references (stale Codex pane homes and the like) — live data is protected.',
       },
       {
         'zh-TW':
-          '憑證修復：停止跨 config 目錄複製 Claude token（切帳號後舊 pane 顯示 Login expired 的根因），改由該 Profile 自己的 home 讀取登入狀態；aider 每個 pane 也有各自的對話歷史檔。',
+          '憑證修復：停止跨 config 目錄複製 Claude token（切帳號後舊分格顯示 Login expired 的根因），改由該 Profile 自己的 home 讀取登入狀態；aider 每個分格也有各自的對話歷史檔。',
         'en-US':
           'Credential fixes: stopped copying Claude tokens across config dirs (the root cause of “Login expired” on older panes after an account switch) and read a managed profile’s login from its own home; aider panes now get their own chat-history file.',
       },
@@ -2685,7 +2685,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           'Quota fetchers added for opencode, qwen, kilo, pi, copilot and cursor, with each account’s remaining quota shown right in the account switcher.',
       },
       {
-        'zh-TW': 'CLI Agent 可用 SPAWN 區塊直接開出新的 CLI 面板，把工作交給另一個 agent。',
+        'zh-TW': 'CLI Agent 可用 SPAWN 區塊直接開出新的 CLI 分格，把工作交給另一個 agent。',
         'en-US':
           'CLI agents can open new CLI panes themselves via SPAWN blocks, handing work off to another agent.',
       },
