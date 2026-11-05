@@ -40,11 +40,18 @@ LINUX_GUEST= WINDOWS_GUEST=                       # empty: ask `vmrun getGuestIP
 LINUX_USER=navide WINDOWS_USER=navide             # test accounts
 SSH_KEY="$HOME/.ssh/navide_vm_ed25519"            # the key those accounts accept
 VM_HOST=                                          # empty: VMware Fusion runs here
+VM_HOST_KEY=                                      # key for VM_HOST (empty: ssh's defaults)
 ```
 
-To run against VMs on another machine (for example a Mac mini), set `VM_HOST=user@host`. `vmrun` then runs there
-over ssh, and the guests are reached with `ProxyJump` through it. The script that samples the host load also
-samples that machine.
+To run against VMs on another machine (for example a Mac mini), set `VM_HOST=user@host` (and `VM_HOST_KEY`).
+`vmrun` then runs there over ssh, and the guests are reached through it with `ssh -W`. The script that samples the
+host load also samples that machine. The VMs' VNC servers listen on that machine's 127.0.0.1 only, so `vnc.sh`
+opens an ssh tunnel for each `vncdo` call (it needs `vncdo` on this machine only).
+
+Fusion copied to the VM host by a non-root user loses its set-UID root helpers, and its NAT network (vmnet8) is
+only set up by an administrator: open Fusion there once and enter the password, and if
+`/Library/Preferences/VMware Fusion/networking` is still missing, run `vmnet-cli --configure` and `--start` (in
+`Contents/Library`) with sudo. Both are for the machine's owner to do; the scripts never ask for a password.
 
 The scripts never create or change credentials, with one exception: the Windows auto-logon password. Windows
 needs a password for the test account to log on to the desktop by itself, so `windows-up.sh` makes a new random one

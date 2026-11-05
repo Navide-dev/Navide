@@ -3,7 +3,9 @@
 # environment (or a file named by VM_RETEST_ENV), so nothing here is specific to one machine.
 #
 #   VM_HOST           empty = VMware Fusion runs on this machine; otherwise an ssh destination (user@mac-mini) that
-#                     runs vmrun, and that the guests are reached through (ProxyJump)
+#                     runs vmrun, and that the guests are reached through (ProxyCommand ssh -W)
+#   VM_HOST_KEY       key for VM_HOST (empty = ssh's own defaults); used for vmrun, the load sampler, the guest hop
+#                     and the VNC tunnel (vnc.sh)
 #   VM_DIR            folder that holds the .vmwarevm bundles
 #   LINUX_VMX / WINDOWS_VMX              the two VMs
 #   LINUX_SNAPSHOT / WINDOWS_SNAPSHOT    the snapshot every round starts from and is reverted to
@@ -15,6 +17,7 @@
 [ -n "${VM_RETEST_ENV:-}" ] && [ -f "$VM_RETEST_ENV" ] && . "$VM_RETEST_ENV"
 
 VM_HOST="${VM_HOST:-}"
+VM_HOST_KEY="${VM_HOST_KEY:-}"
 VM_DIR="${VM_DIR:-$HOME/Virtual Machines.localized}"
 LINUX_VMX="${LINUX_VMX:-$VM_DIR/Ubuntu 24.04 arm64.vmwarevm/Ubuntu 24.04 arm64.vmx}"
 WINDOWS_VMX="${WINDOWS_VMX:-$VM_DIR/Windows 11 ARM64 navide.vmwarevm/Windows 11 ARM64 navide.vmx}"
@@ -33,7 +36,11 @@ GUEST_DIR="$(cd "$HERE/../guest" && pwd)"
 # ssh options for throwaway test guests: their host keys change on every snapshot revert
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15 -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=no
           -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o IdentitiesOnly=yes -i "$SSH_KEY")
-[ -n "$VM_HOST" ] && SSH_OPTS+=(-o "ProxyJump=$VM_HOST")
+# ssh to the VM host itself (vmrun, load samples, tunnels)
+HOST_SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15)
+[ -n "$VM_HOST_KEY" ] && HOST_SSH_OPTS+=(-o IdentitiesOnly=yes -i "$VM_HOST_KEY")
+# ProxyJump would not pass VM_HOST_KEY to the hop, so the hop is an explicit ssh -W
+[ -n "$VM_HOST" ] && SSH_OPTS+=(-o "ProxyCommand=ssh ${HOST_SSH_OPTS[*]} -W %h:%p $VM_HOST")
 
 die() { echo "vm-retest: $*" >&2; exit 1; }
 need_platform() { case "$1" in linux|windows) ;; *) die "first argument is linux or windows" ;; esac; }
@@ -42,7 +49,7 @@ need_platform() { case "$1" in linux|windows) ;; *) die "first argument is linux
 # `vmrun start` down with it.
 vmr() {
   if [ -z "$VM_HOST" ]; then "$VMRUN" -T fusion "$@"
-  else ssh -o BatchMode=yes "$VM_HOST" "$(printf '%q ' "$VMRUN" -T fusion "$@")"; fi
+  else ssh "${HOST_SSH_OPTS[@]}" "$VM_HOST" "$(printf '%q ' "$VMRUN" -T fusion "$@")"; fi
 }
 
 vmx_of() { case "$1" in linux) echo "$LINUX_VMX" ;; windows) echo "$WINDOWS_VMX" ;; *) die "platform is linux or windows" ;; esac; }
