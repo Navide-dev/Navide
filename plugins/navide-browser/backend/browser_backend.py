@@ -639,6 +639,8 @@ def _viewport_nodes(bridge: Bridge, view_id: str) -> tuple[set[int], str]:
         left, top, width, height = (float(item) for item in json.loads(metrics))
     except (TypeError, ValueError):
         return set(), ""
+    if width <= 0 or height <= 0:
+        raise _not_rendered()
     captured = _cdp(bridge, view_id, "DOMSnapshot.captureSnapshot", {"computedStyles": []})
     documents = captured.get("documents")
     if not isinstance(documents, list) or not documents or not _is_record(documents[0]):
@@ -659,6 +661,13 @@ def _viewport_nodes(bridge: Bridge, view_id: str) -> tuple[set[int], str]:
         if x < left + width and x + w > left and y < top + height and y + h > top and 0 <= index < len(backend_ids):
             visible.add(backend_ids[index])
     return visible, url if isinstance(url, str) else ""
+
+
+def _not_rendered() -> ToolError:
+    return ToolError(
+        "VIEW_NOT_RENDERED",
+        "The page has no viewport (0x0): it is not laid out, so it cannot be read or captured.",
+    )
 
 
 def snapshot(
@@ -1071,6 +1080,14 @@ def _diff_snapshot(bridge: Bridge, view_id: str, pane: str | None) -> dict[str, 
 
 
 def screenshot(bridge: Bridge, view_id: str) -> dict[str, Any]:
+    # A 0x0 page never paints, and Page.captureScreenshot then never answers.
+    try:
+        metrics = _evaluate(bridge, view_id, "JSON.stringify([scrollX, scrollY, innerWidth, innerHeight])")
+        _, _, width, height = (float(item) for item in json.loads(metrics))
+    except (TypeError, ValueError):
+        width = height = 1.0
+    if width <= 0 or height <= 0:
+        raise _not_rendered()
     for quality in SCREENSHOT_QUALITIES:
         shot = _cdp(bridge, view_id, "Page.captureScreenshot", {"format": "jpeg", "quality": quality})
         data = shot.get("data")

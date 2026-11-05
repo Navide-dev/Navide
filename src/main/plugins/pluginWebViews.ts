@@ -108,6 +108,11 @@ export interface PluginWebViewDeps {
 }
 
 export const DEFAULT_CAPTURE_WIDTH = 480
+/** Bounds of a view on no window. A WebContentsView never given bounds is
+ *  0x0: its page has no viewport (innerWidth 0) and never paints, so a
+ *  viewport snapshot comes back empty and Page.captureScreenshot never
+ *  answers. Hidden views still lay out and paint at this size. */
+export const UNATTACHED_VIEW_BOUNDS: WebViewRect = { x: 0, y: 0, width: 1280, height: 800 }
 const CDP_PROTOCOL_VERSION = '1.3'
 const MAX_CDP_ERROR_MESSAGE = 500
 const PLUGIN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
@@ -265,6 +270,7 @@ export class PluginWebViewRegistry {
     this.views.set(entry.viewId, entry)
     this.wireGuest(entry)
     view.setVisible(false)
+    view.setBounds(UNATTACHED_VIEW_BOUNDS)
     void view.webContents.loadURL(request.url ?? 'about:blank').catch(() => undefined)
     this.changed(pluginId)
     return { viewId: entry.viewId }
@@ -614,6 +620,7 @@ export class PluginWebViewRegistry {
     entry.host = null
     entry.rect = null
     entry.view.setVisible(false)
+    entry.view.setBounds(UNATTACHED_VIEW_BOUNDS)
     if (host) {
       try {
         host.removeChildView(entry.view)

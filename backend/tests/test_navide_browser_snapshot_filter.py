@@ -299,3 +299,27 @@ def test_diff_refs_are_the_full_snapshots_refs() -> None:
     added = [line[2:] for line in answer["snapshot"].splitlines() if line.startswith("+ ")]
     full = browser.snapshot(bridge, "v1", "viewport")["snapshot"].splitlines()
     assert added and all(line in full for line in added)
+
+
+# ── a view with no viewport (0x0, never on a window) ─────────────────────────
+
+
+def _zero_viewport_bridge() -> PageBridge:
+    bridge = PageBridge()
+    bridge.page["metrics"] = json.dumps([0, 0, 0, 0])
+    return bridge
+
+
+@pytest.mark.parametrize("filter_", ["all", "interactive"])
+def test_a_zero_size_viewport_is_an_error_not_an_empty_snapshot(filter_: str) -> None:
+    with pytest.raises(browser.ToolError) as raised:
+        browser.snapshot(_zero_viewport_bridge(), "v1", "viewport", filter_)
+    assert raised.value.code == "VIEW_NOT_RENDERED"
+
+
+def test_a_zero_size_viewport_fails_the_screenshot_before_it_can_hang() -> None:
+    bridge = _zero_viewport_bridge()
+    with pytest.raises(browser.ToolError) as raised:
+        browser.screenshot(bridge, "v1")
+    assert raised.value.code == "VIEW_NOT_RENDERED"
+    assert not [call for call in bridge.calls if call[1].get("method") == "Page.captureScreenshot"]

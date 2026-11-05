@@ -8,6 +8,7 @@ import {
   MAX_ATTACHED_VIEWS,
   MAX_VIEWS_PER_PLUGIN,
   PluginWebViewRegistry,
+  UNATTACHED_VIEW_BOUNDS,
   WebViewError,
   webPartitionFor,
   type WebGuestSession,
@@ -648,6 +649,18 @@ describe('cdp scope', () => {
 })
 
 describe('attach and lifecycle', () => {
+  it('gives a view on no window a default viewport, so its page lays out and paints', () => {
+    // A WebContentsView never given bounds is 0x0: innerWidth is 0, so a
+    // viewport snapshot is empty and Page.captureScreenshot never answers.
+    const { registry, views } = setup()
+    const surface = host()
+    const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
+    expect(views[0].bounds).toEqual(UNATTACHED_VIEW_BOUNDS)
+    registry.attach('navide.browser', viewId, { x: 0, y: 0, width: 0, height: 0 }, surface)
+    registry.detach('navide.browser', viewId)
+    expect(views[0].bounds).toEqual(UNATTACHED_VIEW_BOUNDS)
+  })
+
   it('starts agent views in the background, unthrottled and unattached', () => {
     const { registry, views } = setup()
     registry.create('navide.browser', { space: 'agent' }, 'agent')
