@@ -177,9 +177,10 @@ def test_token_totals_come_from_token_count_only(rollout: Path) -> None:
     events = CodexLogReader().parse_session_file(rollout, set())
     assert len(events) == 1
     ev = events[0]
-    # Last token_count: input 2500 + cached 1400, output 120 + reasoning 30.
+    # Last token_count: input 2500 (1400 of it cached), output 120 (30 of it
+    # reasoning) — total_tokens is input + output, so nothing is added on top.
     # token_usage_record repeats these numbers and must not add to them.
-    assert (ev.input_tokens, ev.output_tokens) == (3900, 150)
+    assert (ev.input_tokens, ev.output_tokens) == (2500, 120)
     assert ev.cwd == _CWD
     assert ev.cli_version == _VERSION
     assert ev.model == "openai"
@@ -189,7 +190,7 @@ def test_incremental_parse_reads_the_0163_header(rollout: Path) -> None:
     result = CodexLogReader().parse_incremental(rollout, {})
     assert len(result.events) == 1
     ev = result.events[0]
-    assert (ev.input_tokens, ev.output_tokens) == (3900, 150)
+    assert (ev.input_tokens, ev.output_tokens) == (2500, 120)
     assert ev.session_id == _THREAD
     assert ev.cwd == _CWD
     assert ev.cli_version == _VERSION
