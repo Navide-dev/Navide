@@ -483,31 +483,33 @@ class ProcessTree(Protocol):
 
         POSIX: a new process group (not a new session: the controlling
         terminal stays), so `end_own_group` also reaches a grandchild forked
-        after any snapshot. Windows has no process groups: the child starts
-        suspended instead, and `start_own_group` must follow the spawn."""
+        after any snapshot. Windows has no process groups and adds nothing:
+        not suspended, no job (each git.exe started suspended in a job left a
+        kernel Token object behind), so a timeout ends the tree from a
+        snapshot of it."""
         ...
 
     def start_own_group(self, pid: int) -> int | None:
         """Finish a spawn made with `own_group_spawn_kwargs`.
 
-        Windows: put the suspended child in a kill-on-close job (`contain`),
-        then let it run, so nothing it starts can be outside the job. The job
-        handle is returned for `end_contained` (a timed-out run) or
-        `release_contained` (any other end); None when the job could not be
-        made, and the child runs uncontained. Raises OSError, with the child
-        killed, only when it cannot be resumed. POSIX: None, nothing done."""
+        Returns a job handle for `end_contained` (a timed-out run) or
+        `release_contained` (any other end), or None. Both platforms return
+        None and do nothing: POSIX has its group, and Windows no longer
+        contains these runs (see `own_group_spawn_kwargs`)."""
         ...
 
     def release_contained(self, pid: int, job: int) -> None:
-        """Let go of a job from `start_own_group` without ending what is left
-        in it: whatever the child left running keeps running, as it would
-        without the job. Never raises. A no-op on POSIX."""
+        """Close a job from `start_own_group`. Windows closes the handle as is,
+        so its kill-on-close ends what is left in it (clearing the limit first
+        was dropped with the Token leak); `start_own_group` returns no job
+        there now, so no run reaches this. Never raises. A no-op on POSIX."""
         ...
 
     def end_own_group(self, pid: int) -> None:
         """SIGKILL the group a child spawned with `own_group_spawn_kwargs` leads,
         only while `pid` still leads it and never the caller's own group.
-        Never raises. A no-op on Windows."""
+        Windows, which has neither groups nor (now) a job for these runs,
+        kills the tree as it reads at this moment instead. Never raises."""
         ...
 
     def contain(self, pid: int) -> int | None:
