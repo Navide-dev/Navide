@@ -134,10 +134,6 @@ the stage grid (the Git pane, the plan pane) stays 面板. Do not write
 "分割分格" for "split pane": use a verb ("再切一格", "左右切分"). The first
 mention on a help page or in onboarding carries the gloss
 "分格＝視窗裡的一格，通常跑一個 agent" (zh-CN "分格＝窗口里的一格，通常跑一个 agent").
-In the user's spoken Chinese, 派人 / 派工 means "open a pane and give an agent
-work in it" (the same thing `cli_open_agent` does); agents and docs read it
-that way. UI strings that already say 指派 / 派工 for that action keep their
-wording as long as it is used consistently; they are not rewritten to 派人.
 
 **zh-TW renderings:** workspace 工作區, plan 計畫, commit 提交, branch 分支,
 diff 差異, skill 技能, terminal 終端機, tab 分頁, quota 額度, Settings 設定,
