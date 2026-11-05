@@ -121,6 +121,15 @@ describe('lib/standalonePaneTask kickoff evidence (cli_open_agent target_workspa
     }
   })
 
+  it('a prefill asks injectPane not to press Enter and is sent on its echo alone', async () => {
+    const d = deps()
+    const evidence: StandaloneKickoffEvidence = {}
+    expect(await injectStandaloneTask('pane-1', 'sudo -v', 'mcp-task', d, { evidence, prefill: true })).toBe(true)
+    expect(d.injectPane).toHaveBeenCalledWith('pane-1', 'sudo -v', 'mcp-task', true, evidence, true)
+    expect(standaloneKickoffVerdict({ echo: 'tail' }, { task: 'sudo -v', prefill: true }).kickoff).toBe('sent')
+    expect(standaloneKickoffVerdict({}, { task: 'sudo -v', prefill: true }).kickoff).toBe('unverified')
+  })
+
   it('a task-less standalone pane is sent: nothing was asked of it', () => {
     expect(standaloneKickoffVerdict({}, { task: '' }).kickoff).toBe('sent')
   })

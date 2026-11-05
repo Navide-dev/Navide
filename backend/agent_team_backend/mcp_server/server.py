@@ -195,6 +195,13 @@ server = NavideMCP(
         "sane advisory thresholds gets logged as a diagnostic warning (readable "
         "via ui_diagnostics) rather than refused.\n"
         "\n"
+        "Commands the user must type into: when a step needs the user at a "
+        "terminal (a password, sudo, a login, ssh-copy-id), open a plain shell "
+        "pane with cli_open_agent(agent=\"terminal\") instead of asking the user "
+        "to type `!` in your own CLI. A command the terminal protection refuses "
+        "can still go there with submit: false — it is prefilled on the command "
+        "line without Enter, and the user checks it and presses Enter.\n"
+        "\n"
         "Picking up an earlier conversation: a CLI session outlives the pane "
         "that ran it — the pane closes, the app restarts, and the vendor's "
         "transcript stays on disk. cli_list_sessions lists the ones this "
@@ -1124,6 +1131,7 @@ async def cli_open_agent(
     window: str = "",
     window_id: str = "",
     account: str = "",
+    submit: bool = True,
 ) -> dict[str, Any]:
     """Open a new CLI pane and give it a task.
 
@@ -1149,6 +1157,14 @@ async def cli_open_agent(
     before resending. A destructive `task` is refused before the pane opens
     (error_code "terminal-command-refused" — see cli_send). Talk to it
     afterwards with cli_send — see there.
+
+    `submit: false` (terminal only) prefills `task` on the shell's command
+    line without pressing Enter: the user reads it and runs it themselves —
+    the way to hand over a command that needs the user (a password, sudo,
+    ssh-copy-id) or that the protection refuses. One printable line only. A
+    refused command is still prefilled, audited as a prefill, and the answer
+    carries `guard_refused` {rule, segment, reason}. `kickoff: "sent"` then
+    means it is on the command line, not that it ran.
 
     The pane you open is related to you: you opened it, so its result needs to
     come back to you. When you talk to the user about it, use whatever reads
@@ -1353,6 +1369,12 @@ async def cli_open_agent(
             "ok": False,
             "error": "a terminal pane is a plain shell — it takes no model, effort or session_id",
         }
+    if not submit and agent_key != _TERMINAL_AGENT:
+        return {
+            "ok": False,
+            "error": 'submit: false prefills a command for the user — it applies to agent "terminal" only',
+            "error_code": "prefill-terminal-only",
+        }
     refusal = _refuse_unsupported_model(agent_key, (model or "").strip(), (effort or "").strip())
     if refusal:
         return {"ok": False, "error": refusal}
@@ -1445,12 +1467,17 @@ async def cli_open_agent(
             _resume_lineage, resume_workspace, agent_key, resume_id
         )
 
+    guard_refused: dict[str, str] | None = None
     if agent_key == _TERMINAL_AGENT and (task or "").strip():
         # Checked before the pane exists: a refused first command should not
         # leave a shell behind that the caller then types into another way.
-        refused = _terminal_refusal(
-            task, workspace=target_workspace or _caller_workspace(caller), pane_id="", via="cli_open_agent"
-        )
+        terminal_workspace = target_workspace or _caller_workspace(caller)
+        if submit:
+            refused = _terminal_refusal(task, workspace=terminal_workspace, pane_id="", via="cli_open_agent")
+        else:
+            refused, guard_refused = _terminal_prefill(
+                task, workspace=terminal_workspace, pane_id="", via="cli_open_agent"
+            )
         if refused:
             return refused
     prepared = ""
@@ -1506,6 +1533,10 @@ async def cli_open_agent(
             spawn_payload["effort"] = effort.strip()
         if run_group_id is not None:
             spawn_payload["run_group_id"] = run_group_id
+        # Only for a prefill: an older window ignores the key, and the backend's
+        # terminal.input guard still refuses whatever this refused.
+        if not submit:
+            spawn_payload["submit"] = False
         # The explicit pin the window hands to spawnPane, the same pin a 📌
         # pinned pane is spawned with. Absent when the pane runs on the live
         # login: the payload is then exactly what it was before `account`.
@@ -1619,6 +1650,10 @@ async def cli_open_agent(
     if agent_key == _TERMINAL_AGENT and not _TERMINAL_PROMPT_CHECK:
         result["prompt_check"] = "unavailable"
         advisories.append(_TERMINAL_NO_PROMPT_CHECK)
+    if not submit:
+        result["submit"] = False
+        if guard_refused:
+            result["guard_refused"] = guard_refused
     # Two answers only. "unverified" is the window's honest word for "bytes
     # written, nothing seen" — to the caller that is a task that did not
     # arrive, and the cure is the same as for an outright failure.
@@ -2360,6 +2395,24 @@ def _terminal_refusal(text: str, *, workspace: str, pane_id: str, via: str) -> d
     }
 
 
+def _terminal_prefill(
+    text: str, *, workspace: str, pane_id: str, via: str
+) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+    """(refusal answer, guard note) for prefilling ``text`` — typing it into a
+    terminal without Enter (submit: false). Only a single printable line is
+    refused; a command the protection refuses is still prefilled, because the
+    user runs it, but enforce() audits it as a prefill and the note says why."""
+    from agent_team_backend.guard import terminal_policy
+
+    problem = terminal_policy.prefill_line_error(text)
+    if problem:
+        return {"ok": False, "error": problem, "error_code": "prefill-not-single-line"}, None
+    refusal = terminal_policy.enforce(text, workspace=workspace, pane_id=pane_id, via=via, prefill=True)
+    if refusal is None:
+        return None, None
+    return None, {"rule": refusal.rule, "segment": refusal.segment, "reason": refusal.reason}
+
+
 class TerminalExternalRefused(Exception):
     """External content (a chat channel, another device) addressed to a plain
     terminal pane. Refused here, before it is broadcast or taints anything:
@@ -2396,6 +2449,7 @@ async def _dispatch_delivery(
     entry: Any, text: str, *, caller: "_Caller", me: str, cross_workspace: bool,
     reply_to: str = "", kind: str = "", from_display: str = "",
     origin: str = "", taint_detail: str = "", taint_source: str = "agent",
+    prefill: bool = False,
 ) -> str:
     """Hand one message to the windows and record it; returns its msg_key.
 
@@ -2465,6 +2519,9 @@ async def _dispatch_delivery(
                 # "channel" for a chat-channel message, so the window can mark
                 # it as external; absent otherwise.
                 **({"origin": origin} if origin else {}),
+                # Only for a terminal prefill (cli_send submit: false): typed
+                # without Enter. Absent otherwise.
+                **({"submit": False} if prefill else {}),
             },
         )
     )
@@ -2482,6 +2539,7 @@ async def cli_send(
     reply_to: str = "",
     kind: str = "message",
     open_target: bool = False,
+    submit: bool = True,
 ) -> dict[str, Any]:
     """Send an instruction to another CLI pane, in this or another workspace.
 
@@ -2526,8 +2584,24 @@ async def cli_send(
     services, fork bombs, piping a download into a shell, credential files,
     force-pushing main, and lines that cannot be judged statically. The answer
     is ok: false with error_code "terminal-command-refused" and `refused`
-    {rule, segment, reason}; tell the user to run it themselves. The user
-    tunes the categories and patterns in Settings → Security.
+    {rule, segment, reason}. Then resend it with `submit: false` so the user
+    can check it and press Enter, or ask the user to add an allow prefix in
+    Settings → Security (where the categories and patterns are tuned), or to
+    run it themselves.
+
+    `submit` (default true) applies to a terminal pane only. `submit: false`
+    prefills `text` on the shell's command line — written as a bracketed paste
+    where the shell supports it, and Enter is NOT pressed: the user reads it
+    and runs it (or clears it). Use it for anything the user has to see first
+    or type into (a password, sudo, ssh-copy-id) and for a refused command.
+    One printable line only: a newline, carriage return or other control
+    character fails with error_code "prefill-not-single-line". A refused
+    command is still prefilled, audited as a prefill, and the answer carries
+    `guard_refused` {rule, segment, reason}. Until the user types into that
+    terminal, every other message to it fails rather than being typed after
+    the prefill. "delivered" means it is on the command line, not that it
+    ran. Refused for any other pane, a group or another device
+    ("prefill-terminal-only").
 
     `to: "group"` broadcasts instead: every other pane in YOUR OWN tab group,
     in your own workspace. Deliberately narrower than the bare-line protocol's
@@ -2676,6 +2750,7 @@ async def cli_send(
         reply_to=reply_to,
         kind=kind,
         open_target=open_target,
+        submit=submit,
     )
 
 
@@ -2690,6 +2765,7 @@ async def _send(
     kind: str = "message",
     open_target: bool = False,
     taint_detail: str = "",
+    submit: bool = True,
 ) -> dict[str, Any]:
     """cli_send once its caller is resolved.
 
@@ -2707,6 +2783,15 @@ async def _send(
     send_kind = "ack" if kind == "ack" else ""
     me = caller.pane_id if caller.kind == "pane" else ""
     target_id = (pane_id or "").strip()
+    prefill_only = {
+        "ok": False,
+        "error": "submit: false prefills a command for the user — it applies to one terminal pane on this machine only",
+        "error_code": "prefill-terminal-only",
+    }
+    if not submit and send_kind == "ack":
+        return prefill_only
+    if not submit and not target_id and _is_group_target(to):
+        return prefill_only
     if not target_id and _is_group_target(to):
         if caller.kind != "pane":
             return {
@@ -2751,6 +2836,8 @@ async def _send(
         # The resolution order lives in message_routing, shared with the
         # bare-line path so the two cannot answer the same address differently.
         routed = message_routing.route(me, to)
+        if routed.remote is not None and not submit:
+            return prefill_only
         if routed.remote is not None:
             if send_kind == "ack":
                 # Refused rather than relayed, because the relay cannot carry
@@ -2816,8 +2903,16 @@ async def _send(
         opened = {"realized": True, "reason": open_result["reason"]}
         target = open_result["pane"]
 
+    if not submit and target.agent_key != _TERMINAL_AGENT:
+        return prefill_only
+    guard_refused: dict[str, str] | None = None
     if target.agent_key == _TERMINAL_AGENT and send_kind != "ack":
-        refused = _terminal_refusal(text, workspace=target.workspace_path, pane_id=target.pane_id, via="cli_send")
+        if submit:
+            refused = _terminal_refusal(text, workspace=target.workspace_path, pane_id=target.pane_id, via="cli_send")
+        else:
+            refused, guard_refused = _terminal_prefill(
+                text, workspace=target.workspace_path, pane_id=target.pane_id, via="cli_send"
+            )
         if refused:
             return refused
     msg_key = await _dispatch_delivery(
@@ -2829,6 +2924,7 @@ async def _send(
         reply_to=reply_to,
         kind=send_kind,
         taint_detail=taint_detail,
+        prefill=not submit,
     )
     answer: dict[str, Any] = {
         "ok": True,
@@ -2836,6 +2932,10 @@ async def _send(
         "cross_workspace": result.cross_workspace,
         "msg_key": msg_key,
     }
+    if not submit:
+        answer["submit"] = False
+        if guard_refused:
+            answer["guard_refused"] = guard_refused
     if opened is not None:
         answer["opened"] = opened
     elif not target.realized:

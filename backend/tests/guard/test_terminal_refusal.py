@@ -63,7 +63,7 @@ async def test_cli_send_refuses_a_destructive_command_before_any_window_sees_it(
     assert res["error_code"] == "terminal-command-refused"
     assert res["refused"]["rule"] == "privilege"
     assert "sudo rm -rf /opt/app" in res["refused"]["segment"]
-    assert "Run it yourself" in res["error"]
+    assert "submit: false" in res["error"]
     assert captured == []
     (entry,) = guard_store.audit_list()
     assert entry["action"] == "deny" and entry["tool"] == "terminal:cli_send"

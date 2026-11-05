@@ -234,7 +234,9 @@ export interface MessagingDeps {
    *  sender is told (a terminal command the backend will not type).
    *  `{ unconfirmed }`: typed and submitted, but the CLI has not shown it
    *  received it — see UNCONFIRMED_REASON. */
-  deliver: (paneId: string, text: string, shouldAbort?: () => boolean) =>
+  /** `prefill`: a plain terminal message sent with cli_send submit: false —
+   *  typed onto the command line without Enter, for the user to run. */
+  deliver: (paneId: string, text: string, shouldAbort?: () => boolean, prefill?: boolean) =>
     Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }>
   /** True when the pane can accept an injection right now (idle + settled). */
   isPaneIdle: (paneId: string) => boolean
@@ -479,6 +481,9 @@ const queues = new Map<string, number[]>()
 const delivering = new Set<string>()
 /** Envelope text per message id (not shown in the log panel). */
 const envelopes = new Map<number, string>()
+/** Ids of terminal messages to type without Enter (cli_send submit: false).
+ *  Ids are never reused, so an entry left behind cannot misfire. */
+const prefills = new Set<number>()
 /** Enqueue timestamps per `${from}→${to}` pair, for rate limiting. */
 const pairSends = new Map<string, number[]>()
 /** msgKeys this window has already accepted, newest last. The backend
@@ -1087,6 +1092,8 @@ function acceptRemoteMessage(args: {
   /** From a sender no MSG block can reach (see hasReplyRoute): the envelope
    *  asks for the answer in the final output instead. */
   noReplyRoute?: boolean
+  /** cli_send submit: false to a plain terminal: typed without Enter. */
+  prefill?: boolean
 }): boolean {
   if (!deps) return false
   const localName = nameByPane.get(args.targetPaneId)
@@ -1179,6 +1186,7 @@ function acceptRemoteMessage(args: {
           noReplyRoute: args.noReplyRoute,
         }),
   )
+  if (toTerminal && args.prefill) prefills.add(msg.id)
   correlations.set(args.msgKey, { id: msg.id, sentAt: msg.createdAt })
   remoteInbound.set(msg.id, args.msgKey)
   q.push(msg.id)
@@ -1496,6 +1504,7 @@ async function pumpPane(paneId: string): Promise<void> {
     cancelRequested.delete(id)
     if (!requeued) {
       q.shift()
+      prefills.delete(id)
       pushUnclearCount.delete(id)
       ackInbound(id, ackOk, ackReason)
     }
@@ -1533,7 +1542,9 @@ async function deliverOnce(
     if (outcome === 'unclear') return 'unclear'
     if (!deps.isPaneIdle(paneId)) return null
   }
-  return deps.deliver(paneId, envelope, shouldAbort)
+  return prefills.has(msg.id)
+    ? deps.deliver(paneId, envelope, shouldAbort, true)
+    : deps.deliver(paneId, envelope, shouldAbort)
 }
 
 /**
