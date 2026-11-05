@@ -231,13 +231,35 @@ async def test_guarded_writes_wait_for_the_user_after_a_prefill(decisions, guard
             "refused to type into a terminal: a prefilled command is waiting on this terminal; "
             "the user runs or clears it first."
         )
-    # A focus or mouse report is not the user acting on the line.
-    assert (await ws({"terminal_session_id": "s1", "data": "\x1b[I"}, terms))["ok"] is True
-    assert (await ws(_guarded("\r"), terms))["refusal"]["rule"] == "prefill-pending"
+    # A focus or mouse report, a space or an arrow key leaves the prefill on
+    # the line: the user has not run or cleared it.
+    for data, human in (("\x1b[I", False), (" ", True), ("\x1b[D", True), ("x", True)):
+        assert (await ws({"terminal_session_id": "s1", "data": data, "human": human}, terms))["ok"] is True
+        assert (await ws(_guarded("\r"), terms))["refusal"]["rule"] == "prefill-pending", data
+    assert ws_handlers._GUARDED_LINES["s1"] == "sudo -v"
     # The user's own Enter runs it and frees the terminal.
     assert (await ws({"terminal_session_id": "s1", "data": "\r", "human": True}, terms))["ok"] is True
+    assert "s1" not in ws_handlers._GUARDED_LINES
     assert (await ws(_guarded("ls"), terms))["ok"] is True
-    assert terms.written == ["sudo -v", "\x1b[I", "\r", "ls"]
+    assert terms.written == ["sudo -v", "\x1b[I", " ", "\x1b[D", "x", "\r", "ls"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", ["\r", "\x03", "\x15"])
+async def test_enter_ctrl_c_or_ctrl_u_from_the_user_release_a_prefill(decisions, guard_store, key):
+    terms = FakeTerminals()
+    assert (await ws(_guarded("sudo -v", prefill=True), terms))["ok"] is True
+    assert (await ws({"terminal_session_id": "s1", "data": key, "human": True}, terms))["ok"] is True
+    assert "s1" not in ws_handlers._PREFILL_HELD and "s1" not in ws_handlers._GUARDED_LINES
+    assert (await ws(_guarded("ls\r"), terms))["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_non_human_enter_does_not_release_a_prefill(decisions, guard_store):
+    terms = FakeTerminals()
+    assert (await ws(_guarded("sudo -v", prefill=True), terms))["ok"] is True
+    assert (await ws({"terminal_session_id": "s1", "data": "\r"}, terms))["ok"] is True
+    assert (await ws(_guarded("x"), terms))["refusal"]["rule"] == "prefill-pending"
 
 
 # ── ~/.ssh/*.pub (read-only) is not a credential for a command's arguments ──

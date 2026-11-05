@@ -9581,9 +9581,13 @@ _PASTE_GUARDS = ("\x1b[200~", "\x1b[201~")
 #: Terminal sessions whose command line holds a prefill (cli_send /
 #: cli_open_agent submit: false) the user has not run or cleared yet. Every
 #: guarded write is refused meanwhile: one with an Enter would run the prefill,
-#: which is the user's to run. Only the user's own keystrokes (a terminal.input
-#: flagged human) clear it: a focus or mouse report leaves the line as it was.
+#: which is the user's to run. The prefill is also the session's pending line in
+#: _GUARDED_LINES. Only the user's own keystroke that ends the line (a
+#: terminal.input flagged human carrying Enter, Ctrl-C or Ctrl-U) releases both:
+#: any other key, or a focus or mouse report, leaves the prefill on the line.
 _PREFILL_HELD: set[str] = set()
+#: Keys that run or discard the command line: Enter, Ctrl-C, Ctrl-U.
+_LINE_ENDING_KEYS = ("\r", "\x03", "\x15")
 
 
 def _guarded_terminal_write_refusal(
@@ -9609,6 +9613,7 @@ def _guarded_terminal_write_refusal(
         problem = terminal_policy.prefill_line_error(text)
         if problem:
             return terminal_policy.Refusal("prefill-not-single-line", text[:200], problem)
+        _GUARDED_LINES[session_id] = _GUARDED_LINES.get(session_id, "") + text
         _PREFILL_HELD.add(session_id)
         return None
     if session_id in _PREFILL_HELD:
@@ -9664,9 +9669,11 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
     elif payload["data"]:
         # Anything else written (a person typing, a kill-line after a failed
         # injection) means the line is no longer only what was injected.
-        _GUARDED_LINES.pop(session_id, None)
-        if payload.get("human") is True:
+        if session_id not in _PREFILL_HELD:
+            _GUARDED_LINES.pop(session_id, None)
+        elif payload.get("human") is True and any(k in payload["data"] for k in _LINE_ENDING_KEYS):
             _PREFILL_HELD.discard(session_id)
+            _GUARDED_LINES.pop(session_id, None)
     pending = session.terminals.write(session_id, payload["data"])
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "pending": pending}))
     # A keyboard frame (the renderer flags only those: not mouse/focus reports,
