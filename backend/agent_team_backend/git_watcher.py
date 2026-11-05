@@ -86,8 +86,8 @@ _IGNORE_STORAGE_SUBDIRS = frozenset({"framework", "logs"})
 
 # Directories that are noise only outside a repository: a home-directory
 # workspace sees every write the OS, browsers and tools make under AppData,
-# Library and the dot-dirs (.cache, .config, .npm …), and each became a
-# git.changed. Discovery already skips them (git_service, `d.startswith(".")`).
+# Library and the dot-dirs (.cache, .config, .npm …), and in its dot-files
+# (.zsh_history, .DS_Store), and each became a git.changed. Discovery already skips them (git_service, `d.startswith(".")`).
 # Inside a repository they are content — a repo's own .github/ or a Unity
 # project's Library/ — so they are dropped only above the first repo root.
 _OUTSIDE_REPO_NOISE = frozenset({"AppData", "Library"})
@@ -287,7 +287,7 @@ class _RepoHandler(FileSystemEventHandler):
         name = parts[-1]
         if name.endswith(".lock"):
             return False  # index.lock, ref locks — transient, ignore.
-        if self._is_outside_repo_noise(parts, is_dir):
+        if self._is_outside_repo_noise(parts):
             return False
         if ".git" in parts:
             gi = parts.index(".git")
@@ -311,15 +311,14 @@ class _RepoHandler(FileSystemEventHandler):
             return False
         return True
 
-    def _is_outside_repo_noise(self, parts: tuple[str, ...], is_dir: bool) -> bool:
-        """True when a directory in *parts* is AppData, Library or a dot-dir
-        (other than .git) and no repository root lies at or above it.
+    def _is_outside_repo_noise(self, parts: tuple[str, ...]) -> bool:
+        """True when a segment of *parts* is AppData, Library or starts with a
+        dot (a dot-dir or dot-file, other than .git) and no repository root
+        lies at or above it.
 
         Only paths that contain such a segment pay for the `.git` stats."""
         stop = parts.index(".git") if ".git" in parts else len(parts)
-        # The last part is a directory only for a directory event.
-        dirs = parts[:stop] if stop < len(parts) or is_dir else parts[:stop - 1]
-        for i, seg in enumerate(dirs):
+        for i, seg in enumerate(parts[:stop]):
             if seg.startswith(".") or seg in _OUTSIDE_REPO_NOISE:
                 return not any(
                     (self._root.joinpath(*parts[:j]) / ".git").exists() for j in range(i + 1)

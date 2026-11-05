@@ -670,8 +670,10 @@ def test_home_noise_dirs_outside_a_repo_are_ignored(tmp_path: Path) -> None:
                   ".cache/pre-commit/repo1/.git/HEAD"):
         assert h._is_relevant(str(tmp_path / noise)) is False, noise
     assert h._is_relevant(str(tmp_path / ".cache"), is_dir=True) is False
-    # Dot files are not dot-dirs.
-    assert h._is_relevant(str(tmp_path / ".zshrc")) is True
+    # Dot-files outside a repo too: shell history, Finder state.
+    for noise in (".zsh_history", ".DS_Store", ".CFUserTextEncoding",
+                  "Documents/.DS_Store"):
+        assert h._is_relevant(str(tmp_path / noise)) is False, noise
 
 
 def test_dot_dirs_inside_a_repo_still_report(tmp_path: Path) -> None:
@@ -683,4 +685,34 @@ def test_dot_dirs_inside_a_repo_still_report(tmp_path: Path) -> None:
         assert home._is_relevant(str(tmp_path / tracked)) is True, tracked
     repo = _handler(tmp_path / "proj")
     assert repo._is_relevant(str(tmp_path / "proj" / ".github" / "x.yml")) is True
+    for tracked in (".gitignore", ".env", "src/.eslintrc"):
+        assert home._is_relevant(str(tmp_path / "proj" / tracked)) is True, tracked
+        assert repo._is_relevant(str(tmp_path / "proj" / tracked)) is True, tracked
     assert repo._is_relevant(str(tmp_path / "proj" / "AppData" / "x")) is True
+
+
+@pytest.mark.asyncio
+async def test_home_dot_file_writes_fire_nothing_but_a_repo_gitignore_does(
+    tmp_path: Path, arming_delay: float
+) -> None:
+    repo = tmp_path / "proj"
+    (repo / ".git").mkdir(parents=True)
+    fired: list[tuple[str, set[str]]] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append((ws, {rel for rel, _ in paths}))
+
+    watcher = GitWatcher(sink, debounce_s=0.1)
+    watcher.start()
+    try:
+        watcher.watch(str(tmp_path))
+        await arm(tmp_path, fired, per_probe_s=2.0)
+        fired.clear()
+        (tmp_path / ".zsh_history").write_text("ls\n")
+        (repo / ".gitignore").write_text("dist/\n")
+        assert await wait_until(
+            lambda: any("proj/.gitignore" in paths for _, paths in fired)
+        )
+        assert not any(".zsh_history" in paths for _, paths in fired)
+    finally:
+        watcher.stop()
