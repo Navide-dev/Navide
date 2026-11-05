@@ -322,6 +322,43 @@ async def test_a_typed_wake_for_an_online_pane_is_answered_not_sent_to_the_cli(e
     assert env.fake.delivered == [] and fw.calls == []
 
 
+def _not_live(env: Env, fw: FakeWake) -> None:
+    """pane-1 is still in the registry, but only as a restore placeholder or offline."""
+    env.store.set_wake_target("pane-1", "/ws", "sess-1")
+    env.m._seams = dataclasses.replace(env.m._seams, pane_live=lambda _pane_id: False)
+
+
+async def test_a_wake_press_for_a_restored_placeholder_wakes_it(env: Env) -> None:
+    fw = FakeWake(env).install()
+    _not_live(env, fw)
+    await _press_wake(env)
+    assert fw.calls == [("pane-1", "/ws", "sess-1")]
+    assert _zh("already_online") not in env.tg.texts()
+
+
+async def test_a_typed_wake_for_a_pane_whose_window_just_closed_wakes_it(env: Env) -> None:
+    fw = FakeWake(env).install()
+    _not_live(env, fw)
+    await env.inbound("/wake")
+    assert fw.calls == [("pane-1", "/ws", "sess-1")]
+    assert _zh("already_online") not in env.tg.texts()
+
+
+async def test_a_wake_for_a_live_pane_is_still_answered_online(env: Env) -> None:
+    fw = FakeWake(env).install()
+    env.store.set_wake_target("pane-1", "/ws", "sess-1")
+    env.m._seams = dataclasses.replace(env.m._seams, pane_live=lambda _pane_id: True)
+    await _press_wake(env)
+    assert env.tg.texts()[-1] == _zh("already_online") and fw.calls == []
+
+
+async def test_a_plain_message_to_a_placeholder_is_still_delivered(env: Env) -> None:
+    fw = FakeWake(env).install()
+    _not_live(env, fw)
+    await env.inbound("hello")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "hello") and fw.calls == []
+
+
 async def test_a_typed_wake_after_the_pane_came_back_sends_what_was_kept(env: Env) -> None:
     fw = _wakeable(env)
     await env.inbound("kept while offline")
