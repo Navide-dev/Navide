@@ -127,6 +127,57 @@ def _read_cumulative(seen_keys: set[str]) -> tuple[int, int]:
     return 0, 0
 
 
+#: parse_incremental checkpoints whose input_total/output_total follow
+#: _session_totals. Checkpoints without it were written when the totals added
+#: cached_input_tokens and reasoning_output_tokens a second time.
+_TOTALS_BASIS = 2
+
+
+def _session_totals(totals: dict) -> tuple[int, int]:
+    """A token_count's running (input, output) totals. Codex's input_tokens
+    already contains cached_input_tokens and its output_tokens already contains
+    reasoning_output_tokens — total_tokens is input + output — so neither is
+    added again."""
+    return _int(totals.get("input_tokens")), _int(totals.get("output_tokens"))
+
+
+def _token_count_totals(rec: dict | None) -> dict | None:
+    if rec is None or rec.get("type") != "event_msg":
+        return None
+    payload = rec.get("payload") or {}
+    if not isinstance(payload, dict) or payload.get("type") != "token_count":
+        return None
+    info = payload.get("info")
+    totals = info.get("total_token_usage") if isinstance(info, dict) else None
+    return totals if isinstance(totals, dict) else None
+
+
+def _counted_totals_before(path: Path, offset: int) -> tuple[int, int]:
+    """The last running totals a pre-basis checkpoint counted, re-read in the
+    current basis: the last token_count wholly before its byte offset.
+
+    An old checkpoint only stored its totals in the double-counting basis, from
+    which the true pair cannot be recovered; the rollout itself still holds it.
+    Read once per such checkpoint, after which the checkpoint carries the basis.
+    """
+    found = (0, 0)
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(offset)
+    except OSError as err:
+        log.debug("re-read %s for checkpoint basis failed: %s", path, err)
+        return found
+    for raw in head.splitlines():
+        try:
+            rec = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        totals = _token_count_totals(rec if isinstance(rec, dict) else None)
+        if totals is not None:
+            found = _session_totals(totals)
+    return found
+
+
 def _write_cumulative(seen_keys: set[str], input_total: int, output_total: int) -> None:
     # Drop any prior sentinel, write new one.
     for k in [k for k in seen_keys if k.startswith(_CUM_PREFIX)]:
@@ -363,8 +414,7 @@ class CodexLogReader(LogReader):
                 if not isinstance(totals, dict):
                     continue
 
-                cur_in = _int(totals.get("input_tokens")) + _int(totals.get("cached_input_tokens"))
-                cur_out = _int(totals.get("output_tokens")) + _int(totals.get("reasoning_output_tokens"))
+                cur_in, cur_out = _session_totals(totals)
                 # Accept any monotonically non-decreasing pair; if values shrink
                 # the user likely rotated session — reset baseline silently.
                 if cur_in < latest_in or cur_out < latest_out:
@@ -421,6 +471,8 @@ class CodexLogReader(LogReader):
         )
         prev_in = 0 if replaced else max(0, int(checkpoint.get("input_total") or 0))
         prev_out = 0 if replaced else max(0, int(checkpoint.get("output_total") or 0))
+        if (prev_in or prev_out) and checkpoint.get("basis") != _TOTALS_BASIS:
+            prev_in, prev_out = _counted_totals_before(path, int(checkpoint.get("offset") or 0))
         latest_in, latest_out = prev_in, prev_out
         cwd = "" if replaced else str(checkpoint.get("cwd") or "")
         model = "" if replaced else str(checkpoint.get("model") or "")
@@ -454,8 +506,7 @@ class CodexLogReader(LogReader):
             totals = info.get("total_token_usage") if isinstance(info, dict) else None
             if not isinstance(totals, dict):
                 continue
-            latest_in = _int(totals.get("input_tokens")) + _int(totals.get("cached_input_tokens"))
-            latest_out = _int(totals.get("output_tokens")) + _int(totals.get("reasoning_output_tokens"))
+            latest_in, latest_out = _session_totals(totals)
             latest_event = rec
             latest_end = end
 
@@ -467,6 +518,7 @@ class CodexLogReader(LogReader):
             "session_id": session_id,
             "cli_version": cli_version,
             "meta_seen": meta_seen,
+            "basis": _TOTALS_BASIS,
         })
         if latest_event is None:
             return IncrementalParseResult([], next_checkpoint)
