@@ -617,6 +617,11 @@
       "open-accounts": "Git 계정 열기"
     },
     "left-view-unavailable": "내장 Git 보기를 일시적으로 사용할 수 없어요.",
+    "recovery-title": "내장 Git을 시작할 수 없어요",
+    "recovery-reason": "원인: {reason}",
+    "recovery-reinstall": "내장 Git 다시 설치",
+    "recovery-reinstalling": "다시 설치하는 중…",
+    "recovery-reinstall-failed": "다시 설치하지 못했어요: {reason}",
     "detail-open-failed": "세부 정보 보기를 열지 못했어요. Git pane은 현재 대상을 유지해요.",
     "open-workspace": "Git을 사용하려면 작업 영역을 여세요.",
     "settings-unavailable": "Git 환경설정을 불러오지 못했어요.",

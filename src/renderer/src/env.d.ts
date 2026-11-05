@@ -181,11 +181,11 @@ declare global {
       openGitLeftView: (args: {
         workspace_path: string
         bounds: { x: number; y: number; width: number; height: number }
-      }) => Promise<{ ok: boolean; fallback?: 'legacy' }>
+      }) => Promise<{ ok: boolean; fallback?: 'legacy'; reason?: string }>
       updateGitLeftView: (args: {
         bounds: { x: number; y: number; width: number; height: number }
         visible: boolean
-      }) => Promise<{ ok: boolean; fallback?: 'legacy' }>
+      }) => Promise<{ ok: boolean; fallback?: 'legacy'; reason?: string }>
       closeGitLeftView: () => Promise<{ ok: boolean }>
       getZoomFactor?: () => Promise<number>
       setUiScale?: (scale: number) => Promise<number>

@@ -122,8 +122,8 @@ describe('GitPluginHostSlot lifecycle', () => {
     expect(closeGitLeftView).toHaveBeenCalledTimes(1)
   })
 
-  it('switches to the in-process legacy composition when Host reports rollback', async () => {
-    const openGitLeftView = vi.fn().mockResolvedValue({ ok: true, fallback: 'legacy' })
+  it('shows the recovery panel with the Host reason when Host reports rollback', async () => {
+    const openGitLeftView = vi.fn().mockResolvedValue({ ok: true, fallback: 'legacy', reason: 'activation timed out' })
     const closeGitLeftView = vi.fn().mockResolvedValue({ ok: true })
     window.agentTeam = {
       getZoomFactor: vi.fn().mockResolvedValue(1),
@@ -133,17 +133,15 @@ describe('GitPluginHostSlot lifecycle', () => {
     } as unknown as typeof window.agentTeam
 
     const wrapper = shallowMount(GitPluginHostSlot, {
-      props: {
-        workspacePath: '/workspace',
-        visible: true,
-        backend: { send: vi.fn(), on: vi.fn(), status: { value: 'connected' } } as never,
-      },
+      props: { workspacePath: '/workspace', visible: true },
       global: { plugins: [i18n] },
     })
     await flushPromises()
 
     expect(openGitLeftView).toHaveBeenCalledTimes(1)
-    expect(wrapper.findComponent({ name: 'GitLegacyLeftFallback' }).exists()).toBe(true)
+    const panel = wrapper.findComponent({ name: 'GitRecoveryPanel' })
+    expect(panel.exists()).toBe(true)
+    expect(panel.props('reason')).toBe('activation timed out')
     expect(wrapper.find('.git-plugin-host-slot__empty').exists()).toBe(false)
   })
 

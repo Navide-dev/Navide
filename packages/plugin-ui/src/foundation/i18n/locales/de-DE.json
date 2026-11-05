@@ -617,6 +617,11 @@
       "open-accounts": "Git-Konten öffnen"
     },
     "left-view-unavailable": "Die eingebettete Git-Ansicht ist vorübergehend nicht verfügbar.",
+    "recovery-title": "Integriertes Git konnte nicht starten",
+    "recovery-reason": "Grund: {reason}",
+    "recovery-reinstall": "Integriertes Git neu installieren",
+    "recovery-reinstalling": "Neuinstallation …",
+    "recovery-reinstall-failed": "Neuinstallation fehlgeschlagen: {reason}",
     "detail-open-failed": "Die Detailansicht konnte nicht geöffnet werden. Der Git-Bereich behält das aktuelle Ziel.",
     "open-workspace": "Öffnen Sie einen Arbeitsbereich, um Git zu verwenden.",
     "settings-unavailable": "Die Git-Einstellungen konnten nicht geladen werden.",

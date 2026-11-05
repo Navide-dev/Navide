@@ -880,12 +880,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
   openGitLeftView: (args: {
     workspace_path: string
     bounds: { x: number; y: number; width: number; height: number }
-  }): Promise<{ ok: boolean; fallback?: 'legacy' }> =>
+  }): Promise<{ ok: boolean; fallback?: 'legacy'; reason?: string }> =>
     ipcRenderer.invoke('window:openGitLeft', args),
   updateGitLeftView: (args: {
     bounds: { x: number; y: number; width: number; height: number }
     visible: boolean
-  }): Promise<{ ok: boolean; fallback?: 'legacy' }> =>
+  }): Promise<{ ok: boolean; fallback?: 'legacy'; reason?: string }> =>
     ipcRenderer.invoke('window:updateGitLeft', args),
   closeGitLeftView: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:closeGitLeft'),
   getZoomFactor: (): Promise<number> => ipcRenderer.invoke('window:getZoomFactor'),

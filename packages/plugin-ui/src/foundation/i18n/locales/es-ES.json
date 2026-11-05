@@ -617,6 +617,11 @@
       "open-accounts": "Abrir cuentas de Git"
     },
     "left-view-unavailable": "La vista de Git integrada no está disponible temporalmente.",
+    "recovery-title": "No se pudo iniciar el Git integrado",
+    "recovery-reason": "Motivo: {reason}",
+    "recovery-reinstall": "Reinstalar el Git integrado",
+    "recovery-reinstalling": "Reinstalando…",
+    "recovery-reinstall-failed": "Error al reinstalar: {reason}",
     "detail-open-failed": "No se pudo abrir la vista de detalle. El pane de Git mantiene el destino actual.",
     "open-workspace": "Abre un área de trabajo para usar Git.",
     "settings-unavailable": "No se pudieron cargar las preferencias de Git.",

@@ -1,31 +1,14 @@
 <script setup lang="ts">
-import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { Issue, IssueDetail, IssueHandlerMode, IssueProvider } from '../composables/useIssues'
-import type { useBackend } from '../composables/useBackend'
-
-const GitLegacyLeftFallback = defineAsyncComponent(() => import('./GitLegacyLeftFallback.vue'))
+import GitRecoveryPanel from './GitRecoveryPanel.vue'
 
 const props = defineProps<{
   workspacePath: string
   visible: boolean
-  backend?: ReturnType<typeof useBackend>
-  analyzerModel?: string
-  dispatchTargets?: { id: string; label: string }[]
-  availableAgents?: { key: string; label: string }[]
-  issueHandoffs?: Record<string, { paneId: string; mode: string; state: string }>
 }>()
 
 const { t } = useI18n()
-
-const emit = defineEmits<{
-  (e: 'changes-count', count: number): void
-  (e: 'open-workspace', path: string): void
-  (e: 'dispatch-issue', payload: { paneId: string; issue: IssueDetail }): void
-  (e: 'spawn-for-issue', payload: { agentKey: string; mode: IssueHandlerMode; issue: Issue; provider: IssueProvider }): void
-  (e: 'focus-pane', paneId: string): void
-  (e: 'open-git-accounts'): void
-}>()
 
 const slot = ref<HTMLElement | null>(null)
 const slotError = ref(false)
@@ -38,6 +21,7 @@ let lastBounds: { x: number; y: number; width: number; height: number } | null =
 let lastGeometry = ''
 let queue = Promise.resolve()
 const legacyFallback = ref(false)
+const legacyFallbackReason = ref('')
 let zoomFactor = 1
 let zoomLoaded = false
 let zoomLoad: Promise<void> | null = null
@@ -129,7 +113,8 @@ function enqueue(task: () => Promise<void>): void {
   })
 }
 
-function applyLegacyFallback(): void {
+function applyLegacyFallback(reason = ''): void {
+  legacyFallbackReason.value = reason
   slotError.value = false
   pendingGeometry = null
   resetViewState()
@@ -201,7 +186,7 @@ function sync(): void {
             return
           }
           if (result.fallback === 'legacy') {
-            applyLegacyFallback()
+            applyLegacyFallback(result.reason)
             return
           }
           openedWorkspace.value = workspacePath
@@ -219,7 +204,7 @@ function sync(): void {
             return
           }
           if (result.fallback === 'legacy') {
-            applyLegacyFallback()
+            applyLegacyFallback(result.reason)
             return
           }
           visibleInHost = props.visible
@@ -237,7 +222,7 @@ function sync(): void {
           return
         }
         if (result.fallback === 'legacy') {
-          applyLegacyFallback()
+          applyLegacyFallback(result.reason)
           return
         }
         visibleInHost = false
@@ -322,22 +307,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="slot" class="git-plugin-host-slot" aria-label="Git">
-    <GitLegacyLeftFallback
-      v-if="legacyFallback && backend"
-      :workspace-path="workspacePath"
-      :visible="visible"
-      :backend="backend"
-      :analyzer-model="analyzerModel"
-      :dispatch-targets="dispatchTargets"
-      :available-agents="availableAgents"
-      :issue-handoffs="issueHandoffs"
-      @changes-count="emit('changes-count', $event)"
-      @open-workspace="emit('open-workspace', $event)"
-      @dispatch-issue="emit('dispatch-issue', $event)"
-      @spawn-for-issue="emit('spawn-for-issue', $event)"
-      @focus-pane="emit('focus-pane', $event)"
-      @open-git-accounts="emit('open-git-accounts')"
-    />
+    <GitRecoveryPanel v-if="legacyFallback" :reason="legacyFallbackReason" />
     <div v-else-if="slotError" class="git-plugin-host-slot__error" role="alert" aria-live="polite">
       <span>{{ t('git.left-view-unavailable') }}</span>
       <button type="button" class="ghost" @click="retry">{{ t('action.retry') }}</button>
