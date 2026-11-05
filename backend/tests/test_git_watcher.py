@@ -572,3 +572,115 @@ async def test_a_restarted_watcher_drains_again() -> None:
         assert "/stale" not in fired
     finally:
         w.stop()
+
+
+# ── Home-directory workspace: one observer schedule per tree, not per repo ──
+#
+# A workspace at the home directory was watched recursively, and then every
+# repo under it was scheduled again by its badge's git.status — two kernel
+# watches and two handler passes for every write in a repo. A path already
+# covered by a watched ancestor now rides on that ancestor's schedule, and
+# still gets its own git.changed (Git panes match workspace_path exactly).
+
+
+class _FakeObserver:
+    def __init__(self) -> None:
+        self.scheduled: list[tuple[object, str]] = []
+        self.unscheduled: list[object] = []
+
+    def schedule(self, handler, path: str, recursive: bool = False):
+        watch = object()
+        self.scheduled.append((watch, path))
+        return watch
+
+    def unschedule(self, watch) -> None:
+        self.unscheduled.append(watch)
+
+
+def _fake_watcher() -> tuple[GitWatcher, _FakeObserver, list[tuple[str, list]]]:
+    marks: list[tuple[str, list]] = []
+    w = GitWatcher(lambda ws, paths: asyncio.sleep(0))
+    obs = _FakeObserver()
+    w._started = True
+    w._observer = obs  # type: ignore[assignment]
+    w._mark_dirty_threadsafe = lambda ws, paths: marks.append((ws, paths))  # type: ignore[method-assign]
+    return w, obs, marks
+
+
+def _top_handler(obs: _FakeObserver, w: GitWatcher) -> _RepoHandler:
+    live = [watch for watch, _ in obs.scheduled if watch not in obs.unscheduled]
+    assert len(live) == 1
+    return w._handlers[next(ws for ws, watch in w._watches.items() if watch is live[0])]
+
+
+def test_a_repo_under_a_watched_workspace_adds_no_observer(tmp_path: Path) -> None:
+    repo = tmp_path / "proj"
+    (repo / ".git").mkdir(parents=True)
+    w, obs, marks = _fake_watcher()
+    w.watch(str(tmp_path))
+    w.watch(str(repo))
+    w.watch(str(repo))  # badge refreshes call it again
+    assert [path for _, path in obs.scheduled] == [str(tmp_path.resolve())]
+    # The repo still gets its own, repo-relative, change.
+    _top_handler(obs, w).on_any_event(FileModifiedEvent(str(repo / "a.py")))
+    assert sorted(marks) == sorted([
+        (str(tmp_path), [("proj/a.py", "modified")]),
+        (str(repo), [("a.py", "modified")]),
+    ])
+
+
+def test_watching_an_ancestor_replaces_its_watched_descendants(tmp_path: Path) -> None:
+    repo = tmp_path / "proj"
+    (repo / ".git").mkdir(parents=True)
+    w, obs, marks = _fake_watcher()
+    w.watch(str(repo))
+    w.watch(str(tmp_path))
+    assert [path for _, path in obs.scheduled] == [str(repo.resolve()), str(tmp_path.resolve())]
+    assert obs.unscheduled == [obs.scheduled[0][0]]
+    _top_handler(obs, w).on_any_event(FileModifiedEvent(str(repo / ".git" / "HEAD")))
+    assert sorted(marks) == sorted([
+        (str(tmp_path), [("proj/.git/HEAD", "modified")]),
+        (str(repo), [(".git/HEAD", "modified")]),
+    ])
+    # A sibling outside the repo reaches only the workspace.
+    marks.clear()
+    _top_handler(obs, w).on_any_event(FileModifiedEvent(str(tmp_path / "notes.txt")))
+    assert marks == [(str(tmp_path), [("notes.txt", "modified")])]
+
+
+def test_an_unrelated_workspace_is_still_scheduled(tmp_path: Path) -> None:
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    w, obs, _ = _fake_watcher()
+    w.watch(str(a))
+    w.watch(str(b))
+    assert [path for _, path in obs.scheduled] == [str(a.resolve()), str(b.resolve())]
+    assert obs.unscheduled == []
+
+
+# ── Home-directory noise: AppData, Library and dot-dirs outside a repo ──────
+
+
+def test_home_noise_dirs_outside_a_repo_are_ignored(tmp_path: Path) -> None:
+    h = _handler(tmp_path)
+    for noise in ("AppData/Local/Temp/x.tmp", "Library/Caches/y.db",
+                  ".cache/pip/z", ".config/Code/state.json", ".npm/_logs/a.log",
+                  "Documents/.obsidian/workspace.json",
+                  ".cache/pre-commit/repo1/.git/HEAD"):
+        assert h._is_relevant(str(tmp_path / noise)) is False, noise
+    assert h._is_relevant(str(tmp_path / ".cache"), is_dir=True) is False
+    # Dot files are not dot-dirs.
+    assert h._is_relevant(str(tmp_path / ".zshrc")) is True
+
+
+def test_dot_dirs_inside_a_repo_still_report(tmp_path: Path) -> None:
+    # A repo's own .github/, .vscode/ or Library/ is tracked content.
+    (tmp_path / "proj" / ".git").mkdir(parents=True)
+    home = _handler(tmp_path)
+    for tracked in ("proj/.github/workflows/ci.yml", "proj/Library/Src/a.cs",
+                    "proj/.git/HEAD", "proj/.git/refs/heads/main", "proj/.git/index"):
+        assert home._is_relevant(str(tmp_path / tracked)) is True, tracked
+    repo = _handler(tmp_path / "proj")
+    assert repo._is_relevant(str(tmp_path / "proj" / ".github" / "x.yml")) is True
+    assert repo._is_relevant(str(tmp_path / "proj" / "AppData" / "x")) is True
