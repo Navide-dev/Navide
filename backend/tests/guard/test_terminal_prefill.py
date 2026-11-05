@@ -213,6 +213,9 @@ async def test_prefill_write_must_be_one_printable_line(decisions, guard_store, 
     terms = FakeTerminals()
     res = await ws(_guarded(data, prefill=True), terms)
     assert res["ok"] is False and res["refusal"]["rule"] == "prefill-not-single-line"
+    assert "single line" in res["refusal"]["message"] or "printable" in res["refusal"]["message"]
+    assert "submit: false" not in res["refusal"]["message"].split(" — ", 1)[0]
+    assert "send it again" not in res["refusal"]["message"]
     assert terms.written == []
 
 
@@ -224,6 +227,10 @@ async def test_guarded_writes_wait_for_the_user_after_a_prefill(decisions, guard
     for data in ("\r", "x", "ls\r"):
         res = await ws(_guarded(data), terms)
         assert res["ok"] is False and res["refusal"]["rule"] == "prefill-pending", data
+        assert res["refusal"]["message"] == (
+            "refused to type into a terminal: a prefilled command is waiting on this terminal; "
+            "the user runs or clears it first."
+        )
     # A focus or mouse report is not the user acting on the line.
     assert (await ws({"terminal_session_id": "s1", "data": "\x1b[I"}, terms))["ok"] is True
     assert (await ws(_guarded("\r"), terms))["refusal"]["rule"] == "prefill-pending"

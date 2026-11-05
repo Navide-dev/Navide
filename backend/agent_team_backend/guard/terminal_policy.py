@@ -135,6 +135,15 @@ class Refusal:
 
     def message(self) -> str:
         what = f"refused to type into a terminal: `{_clip(self.segment)}` — {self.reason}"
+        # The two prefill refusals (ws_handlers): resending with submit: false
+        # is what got them here, so it is not the advice.
+        if self.rule == "prefill-pending":
+            return (
+                "refused to type into a terminal: a prefilled command is waiting on this terminal; "
+                "the user runs or clears it first."
+            )
+        if self.rule == "prefill-not-single-line":
+            return f"{what}."
         return (
             f"{what}. To let the user decide, send it again with submit: false — it is "
             "prefilled on the command line without Enter, for the user to check and run; "
