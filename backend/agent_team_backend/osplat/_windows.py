@@ -492,56 +492,40 @@ class WindowsProcessTree:
         self.kill_tree(gid, force=force)
 
     def own_group_spawn_kwargs(self) -> dict[str, int]:
-        # Suspended until `start_own_group` has put it in its job: a child
-        # that ran first could start a process (cmd\git.exe starts the real
-        # git.exe at once) before the assignment, and that one and everything
-        # it starts would be outside the job.
-        return {"creationflags": CREATE_SUSPENDED}
+        # Not suspended, and `start_own_group` puts it in no job. Until 0.2.38
+        # a run started CREATE_SUSPENDED, joined a kill-on-close job and was
+        # resumed with NtResumeProcess; on a user's host every git.exe started
+        # that way left one kernel Token object behind (paged pool +280MB/h
+        # under GitWatcher), while the processes git starts itself, with
+        # neither, left none. Both steps are dropped, since which one leaks
+        # could not be tested there. A timeout kills the tree from a snapshot
+        # instead (host_shell._kill_tree_and_reap).
+        return {}
 
     def end_own_group(self, pid: int) -> None:
-        return None
+        # No group and, since 0.2.38, no job either (see
+        # `own_group_spawn_kwargs`): the tree is read again here, just before
+        # host_shell kills the root, so a grandchild started after its first
+        # snapshot still ends. The root is unreaped, so its pid is still its.
+        try:
+            self.kill_tree(pid, force=True)
+        except OSError:
+            pass
 
     def start_own_group(self, pid: int) -> int | None:
-        job: int | None = None
-        try:
-            job = self.contain(pid)
-        except OSError as exc:
-            # Degraded, not fatal: the run works, and a timeout falls back to
-            # killing the snapshot of its tree.
-            log.warning("job object unavailable for pid %s: %s", pid, exc)
-        try:
-            # NtResumeProcess: Popen has already closed the thread handle.
-            psutil.Process(pid).resume()
-        except psutil.Error as exc:
-            if job is not None:
-                self.end_contained(pid, job)
-            else:
-                try:
-                    self.kill(pid, force=True)
-                except OSError:
-                    pass
-            raise _translate(exc) from None
-        return job
+        # No job (see `own_group_spawn_kwargs`): nothing to assign or resume.
+        return None
 
     def release_contained(self, pid: int, job: int) -> None:
         with _jobs_lock:
             entry = _jobs.get(pid)
             if entry is not None and entry[0] == job:
                 del _jobs[pid]
-        k = _kernel32()
-        # Zeroed limits: no KILL_ON_JOB_CLOSE, so the close below ends nothing.
-        info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-        if k.SetInformationJobObject(
-            job, JobObjectExtendedLimitInformation, ctypes.byref(info), ctypes.sizeof(info)
-        ):
-            k.CloseHandle(job)
-            return
-        # Closing it now would end what the run left running: keep the handle.
-        log.warning(
-            "could not clear kill-on-close for pid %s (error %s); keeping its job open",
-            pid,
-            ctypes.get_last_error(),  # type: ignore[attr-defined]
-        )
+        # Closed as is, limits not cleared first: clearing them before the
+        # close was one of the two steps under suspicion for the leaked Token
+        # objects (see `own_group_spawn_kwargs`). With KILL_ON_JOB_CLOSE still
+        # set, the close ends whatever the child left running in the job.
+        _kernel32().CloseHandle(job)
 
     def contain(self, pid: int) -> int | None:
         job = _create_kill_on_close_job()

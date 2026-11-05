@@ -1074,3 +1074,51 @@ def _fake_processes(monkeypatch, alive: dict, missing: dict | None = None) -> No
         return alive[pid]
 
     monkeypatch.setattr(_windows.psutil, "Process", factory)
+
+
+# ---- own group (host_shell runs) ---------------------------------------------
+
+
+class TestOwnGroup:
+    """A run of git and the like no longer starts suspended or in a job: every
+    git.exe spawned that way left one kernel Token object behind on a user's
+    host, while the processes git starts itself, with neither, did not."""
+
+    def test_a_run_spawns_unsuspended(self):
+        kwargs = _windows.process_tree.own_group_spawn_kwargs()
+        assert not kwargs.get("creationflags", 0) & _windows.CREATE_SUSPENDED
+
+    def test_start_makes_no_job_and_resumes_nothing(self, kernel32, monkeypatch):
+        def no_resume(pid):
+            raise AssertionError("the child was never suspended")
+
+        monkeypatch.setattr(_windows.psutil, "Process", no_resume)
+        assert _windows.process_tree.start_own_group(4242) is None
+        assert kernel32.calls == []
+        assert _windows._jobs == {}
+
+    def test_release_closes_the_job_without_clearing_its_limits(self, kernel32):
+        job = _windows.process_tree.contain(4242)
+        kernel32.calls.clear()
+
+        _windows.process_tree.release_contained(4242, job)
+
+        assert kernel32.calls == [("CloseHandle", job)]
+        assert _windows._jobs == {}
+
+    def test_end_kills_the_tree_as_it_is_now(self, kernel32, monkeypatch):
+        """With no job, a timed-out run's tree is read again just before its
+        root dies, which reaches what started after the first snapshot."""
+        ended: list[tuple[int, bool]] = []
+        monkeypatch.setattr(
+            _windows.process_tree, "kill_tree", lambda pid, *, force: ended.append((pid, force))
+        )
+        _windows.process_tree.end_own_group(4242)
+        assert ended == [(4242, True)]
+
+    def test_end_never_raises(self, kernel32, monkeypatch):
+        def gone(pid, *, force):
+            raise ProcessLookupError(pid)
+
+        monkeypatch.setattr(_windows.process_tree, "kill_tree", gone)
+        assert _windows.process_tree.end_own_group(4242) is None

@@ -57,8 +57,8 @@ async def test_a_timed_out_run_ends_the_grandchild_holding_its_pipes(tmp_path) -
 async def test_a_grandchild_the_tree_read_missed_still_ends(tmp_path, monkeypatch, caplog) -> None:
     """A grandchild forked after the tree read (git still starting when the
     run timed out) is not in the snapshot, and once git dies it is init's
-    child, out of any later read's reach. Its process group (POSIX) or its
-    job (Windows) still ends it. The read here waits until the grandchild is
+    child, out of any later read's reach. Its process group (POSIX) or a
+    second read of the tree just before the root dies (Windows) still ends it. The read here waits until the grandchild is
     running and then reports no descendants, so the miss happens every time,
     however fast the host is."""
     marker = tmp_path / "stay.pid"
