@@ -479,6 +479,9 @@ class ClaudeLogReader(LogReader):
             recent.append(dedup_key)
             recent = recent[-64:]
             recent_set = set(recent)
+            cache_split = usage.get("cache_creation")
+            if not isinstance(cache_split, dict):
+                cache_split = {}
             event_checkpoint = dict(final_checkpoint)
             event_checkpoint["offset"] = end
             event_checkpoint["recent_keys"] = list(recent)
@@ -496,6 +499,9 @@ class ClaudeLogReader(LogReader):
                 cache_read_tokens=_int(usage.get("cache_read_input_tokens")),
                 cache_creation_tokens=_int(usage.get("cache_creation_input_tokens")),
                 cli_version=str(rec.get("version") or ""),
+                # The 1-hour TTL share of cache_creation, priced 2x input rather
+                # than 1.25x (cost_ledger).
+                raw={"cache_write_1h": _int(cache_split.get("ephemeral_1h_input_tokens"))},
             ))
 
         final_checkpoint["recent_keys"] = recent
