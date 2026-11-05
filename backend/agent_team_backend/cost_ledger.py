@@ -2,7 +2,8 @@
 
 One row per model call in ``usage_calls`` (navide.db), keyed on
 ``(vendor, dedup_key)`` — the dedup key the vendor's log reader already
-composes (claude: ``message.id::requestId``). Writes are INSERT OR IGNORE, so a
+composes (claude: ``message.id::requestId``; other vendors' keys are prefixed
+with the log file, see ledger_key). Writes are INSERT OR IGNORE, so a
 replay, a backfill or a crash-and-reread of the same log never counts a call
 twice, and any log can be re-ingested safely.
 
@@ -97,6 +98,20 @@ def transcript_cwd(usage: TokenUsage) -> str:
     return unicodedata.normalize("NFC", cwd or "")
 
 
+#: Vendors whose dedup_key is unique across files. Claude's message.id::requestId
+#: is, and a resumed session copies earlier calls into its new transcript, so
+#: keying it per file would count those calls twice. Every other reader may key
+#: on something only unique inside one log (a byte offset, a line number), so
+#: its key is scoped to the file the way tokens_store scopes it.
+_GLOBAL_KEY_VENDORS = frozenset({"claude"})
+
+
+def ledger_key(usage: TokenUsage) -> str:
+    if usage.vendor in _GLOBAL_KEY_VENDORS:
+        return usage.dedup_key
+    return f"{usage.file_path}::{usage.dedup_key}"
+
+
 def _row(usage: TokenUsage, workspace: str, pane: str) -> tuple:
     cache_read = max(0, int(usage.cache_read_tokens))
     cache_write = max(0, int(usage.cache_creation_tokens))
@@ -104,7 +119,7 @@ def _row(usage: TokenUsage, workspace: str, pane: str) -> tuple:
     ts = parse_event_time(usage.timestamp)
     return (
         usage.vendor,
-        usage.dedup_key,
+        ledger_key(usage),
         usage.session_id or "",
         transcript_cwd(usage),
         workspace or "",

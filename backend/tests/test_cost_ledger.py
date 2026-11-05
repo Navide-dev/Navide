@@ -163,6 +163,25 @@ async def test_sink_records_ledger_and_survives_ledger_failure(
     assert totals["calls"] == 2
 
 
+def test_file_local_keys_do_not_collide_but_claude_keys_dedup_across_files(
+    tmp_path: Path,
+) -> None:
+    db = Database(tmp_path / "navide.db")
+    ledger = CostLedger(db)
+
+    def ev(vendor: str, path: str, key: str) -> TokenUsage:
+        return TokenUsage(vendor=vendor, input_tokens=3, output_tokens=1, cwd="/w",
+                          session_id="s", file_path=path, dedup_key=key)
+
+    # aider keys on a byte offset inside one log: two logs, two calls.
+    assert ledger.record(ev("aider", "/a.md", "aider::s::@10")) is True
+    assert ledger.record(ev("aider", "/b.md", "aider::s::@10")) is True
+    # claude's message id is global: a resumed transcript re-carrying it is one call.
+    assert ledger.record(ev("claude", "/old.jsonl", "m1::r1")) is True
+    assert ledger.record(ev("claude", "/resumed.jsonl", "m1::r1")) is False
+    assert len(_rows(db)) == 3
+
+
 def test_cwd_is_nfc(monkeypatch: pytest.MonkeyPatch) -> None:
     nfd = "/Users/me/café"
     ev = TokenUsage(vendor="codex", input_tokens=1, output_tokens=1, cwd=nfd,
