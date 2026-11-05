@@ -182,6 +182,49 @@ def test_file_local_keys_do_not_collide_but_claude_keys_dedup_across_files(
     assert len(_rows(db)) == 3
 
 
+def _codex_rollout(path: Path, totals: list[tuple[int, int, int]]) -> None:
+    lines = [
+        {"type": "session_meta", "payload": {"id": "cx1", "cwd": "/Users/me/proj",
+                                             "model_provider": "openai"}},
+        {"type": "turn_context", "payload": {"model": "gpt-5.6-sol"}},
+    ]
+    for inp, cached, out in totals:
+        lines.append({"type": "event_msg", "timestamp": "2026-11-05T02:00:00Z", "payload": {
+            "type": "token_count", "info": {"total_token_usage": {
+                "input_tokens": inp, "cached_input_tokens": cached,
+                "cache_write_input_tokens": 0, "output_tokens": out,
+                "reasoning_output_tokens": 0, "total_tokens": inp + out}}}})
+    path.write_text("".join(json.dumps(x) + "\n" for x in lines))
+
+
+def test_codex_session_totals_match_however_the_log_was_read(tmp_path: Path) -> None:
+    from agent_team_backend.cli_vendors.codex import CodexLogReader
+
+    rollout = tmp_path / "rollout-2026-11-05T02-00-00-cx1.jsonl"
+    reader = CodexLogReader()
+    db_live, db_full = Database(tmp_path / "live.db"), Database(tmp_path / "full.db")
+    live, full = CostLedger(db_live), CostLedger(db_full)
+
+    # Live: read after the first count, then again after the second.
+    _codex_rollout(rollout, [(1000, 600, 50)])
+    first = reader.parse_incremental(rollout, {})
+    for ev in first.events:
+        live.record(ev, "/ws", "pane-1")
+    _codex_rollout(rollout, [(1000, 600, 50), (2500, 1800, 90)])
+    for ev in reader.parse_incremental(rollout, first.checkpoint).events:
+        live.record(ev, "", "")
+    # Backfill: one read of the whole log; a second backfill changes nothing.
+    for _ in range(2):
+        full.record_many(reader.parse_incremental(rollout, {}).events)
+
+    pick = ("model", "input", "cache_read", "output", "cwd")
+    [lrow], [frow] = _rows(db_live), _rows(db_full)
+    assert {k: lrow[k] for k in pick} == {k: frow[k] for k in pick} == {
+        "model": "gpt-5.6-sol", "input": 700, "cache_read": 1800, "output": 90,
+        "cwd": "/Users/me/proj"}
+    assert (lrow["workspace"], lrow["pane"]) == ("/ws", "pane-1")  # kept on update
+
+
 def test_cwd_is_nfc(monkeypatch: pytest.MonkeyPatch) -> None:
     nfd = "/Users/me/café"
     ev = TokenUsage(vendor="codex", input_tokens=1, output_tokens=1, cwd=nfd,

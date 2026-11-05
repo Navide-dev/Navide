@@ -44,6 +44,23 @@ _INSERT = (
     " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
+# A session-totals row (see _row) only ever moves forward: a re-read that
+# started earlier or later lands on the same or a larger total.
+_UPSERT_TOTALS = (
+    "INSERT INTO usage_calls (vendor, dedup_key, session_id, cwd,"
+    " workspace, pane, model, ts, input, cache_read, cache_write_5m,"
+    " cache_write_1h, output, source_file)"
+    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    " ON CONFLICT(vendor, dedup_key) DO UPDATE SET"
+    " ts = excluded.ts, input = excluded.input, cache_read = excluded.cache_read,"
+    " cache_write_5m = excluded.cache_write_5m, output = excluded.output,"
+    " model = CASE WHEN excluded.model != '' THEN excluded.model ELSE model END,"
+    " workspace = CASE WHEN excluded.workspace != '' THEN excluded.workspace ELSE workspace END,"
+    " pane = CASE WHEN excluded.pane != '' THEN excluded.pane ELSE pane END"
+    " WHERE excluded.input + excluded.cache_read + excluded.output"
+    " > input + cache_read + output"
+)
+
 
 def _create_schema_v1(cur: sqlite3.Cursor) -> None:
     cur.execute(
@@ -112,7 +129,34 @@ def ledger_key(usage: TokenUsage) -> str:
     return f"{usage.file_path}::{usage.dedup_key}"
 
 
+def _sql(usage: TokenUsage) -> str:
+    return _UPSERT_TOTALS if "ledger_session_totals" in usage.raw else _INSERT
+
+
 def _row(usage: TokenUsage, workspace: str, pane: str) -> tuple:
+    totals = usage.raw.get("ledger_session_totals")
+    if isinstance(totals, dict):
+        # A reader whose events are differences of the CLI's running totals
+        # (codex) keys them on the totals, so the same session read from two
+        # starting points yields different keys. One row per session holding
+        # the latest totals stays exact however the log was read.
+        ts = parse_event_time(usage.timestamp)
+        return (
+            usage.vendor,
+            f"{usage.file_path}::session_totals",
+            usage.session_id or "",
+            transcript_cwd(usage),
+            workspace or "",
+            pane or "",
+            str(totals.get("model") or ""),
+            int(ts if ts is not None else time.time()),
+            int(totals.get("input", 0)),
+            int(totals.get("cache_read", 0)),
+            int(totals.get("cache_write", 0)),
+            0,
+            int(totals.get("output", 0)),
+            usage.file_path or "",
+        )
     cache_read = max(0, int(usage.cache_read_tokens))
     cache_write = max(0, int(usage.cache_creation_tokens))
     write_1h = min(cache_write, max(0, int(usage.raw.get("cache_write_1h", 0) or 0)))
@@ -156,7 +200,7 @@ class CostLedger:
             if not self._accept(usage):
                 return False
             with self._db.transaction() as cur:
-                cur.execute(_INSERT, _row(usage, workspace, pane))
+                cur.execute(_sql(usage), _row(usage, workspace, pane))
                 return cur.rowcount == 1
         except Exception as err:  # noqa: BLE001
             log.warning("cost ledger write failed: %s", err)
@@ -167,14 +211,15 @@ class CostLedger:
         rows, skipped = [], 0
         for ev in events:
             if self._accept(ev):
-                rows.append(_row(ev, "", ""))
+                rows.append((_sql(ev), _row(ev, "", "")))
             else:
                 skipped += 1
         if not rows:
             return 0, skipped
         with self._db.transaction() as cur:
             before = cur.execute("SELECT total_changes()").fetchone()[0]
-            cur.executemany(_INSERT, rows)
+            for sql, row in rows:
+                cur.execute(sql, row)
             written = cur.execute("SELECT total_changes()").fetchone()[0] - before
         return written, skipped + (len(rows) - written)
 
