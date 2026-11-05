@@ -323,3 +323,64 @@ def test_a_zero_size_viewport_fails_the_screenshot_before_it_can_hang() -> None:
         browser.screenshot(bridge, "v1")
     assert raised.value.code == "VIEW_NOT_RENDERED"
     assert not [call for call in bridge.calls if call[1].get("method") == "Page.captureScreenshot"]
+
+
+# ── a view that never paints a frame (Linux VM, software rendering) ──────────
+
+
+class NoFrameBridge(PageBridge):
+    def __init__(self, failure: Exception | None = None) -> None:
+        super().__init__()
+        self.failure = failure
+        self.release = __import__("threading").Event()
+
+    def __call__(self, operation: str, arguments: dict[str, Any]) -> Any:
+        if arguments.get("method") == "Page.captureScreenshot":
+            self.calls.append((operation, arguments))
+            if self.failure is not None:
+                raise self.failure
+            self.release.wait(10)
+            return {"result": {}}
+        return super().__call__(operation, arguments)
+
+
+def test_a_screenshot_that_never_answers_is_view_not_rendered_within_five_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(browser, "SCREENSHOT_WAIT_S", 0.2)
+    bridge = NoFrameBridge()
+    try:
+        with pytest.raises(browser.ToolError) as raised:
+            browser.screenshot(bridge, "v1")
+    finally:
+        bridge.release.set()
+    assert raised.value.code == "VIEW_NOT_RENDERED"
+    assert raised.value.reason == "no-frame"
+
+
+def test_the_backstop_is_at_most_five_seconds() -> None:
+    assert browser.SCREENSHOT_WAIT_S <= 5.0
+
+
+def test_the_hosts_no_frame_answer_is_view_not_rendered() -> None:
+    failure = browser.BridgeFailure("CDP_ERROR", None, "no-frame: the page produced no frame to capture")
+    bridge = NoFrameBridge(failure)
+    with pytest.raises(browser.ToolError) as raised:
+        browser.screenshot(bridge, "v1")
+    assert raised.value.code == "VIEW_NOT_RENDERED"
+    assert raised.value.reason == "no-frame"
+    assert len([call for call in bridge.calls if call[1].get("method") == "Page.captureScreenshot"]) == 1
+
+
+def test_other_cdp_failures_still_surface_as_they_did() -> None:
+    bridge = NoFrameBridge(browser.BridgeFailure("CDP_ERROR", None, "Target closed"))
+    with pytest.raises(browser.BridgeFailure):
+        browser.screenshot(bridge, "v1")
+
+
+def test_a_screenshot_that_answers_returns_the_image() -> None:
+    class ShotBridge(PageBridge):
+        def __call__(self, operation: str, arguments: dict[str, Any]) -> Any:
+            if arguments.get("method") == "Page.captureScreenshot":
+                return {"result": {"data": "aGk="}}
+            return super().__call__(operation, arguments)
+
+    assert browser.screenshot(ShotBridge(), "v1") == {"mimeType": "image/jpeg", "data": "aGk=", "quality": 70}

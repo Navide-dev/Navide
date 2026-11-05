@@ -35,6 +35,11 @@ SNAPSHOT_MAX_CHARS = 400_000
 # A screenshot's base64 is bounded the same way; quality steps down until it fits.
 SCREENSHOT_MAX_BASE64 = 700_000
 SCREENSHOT_QUALITIES = (70, 50, 35, 20)
+# A view on no window may paint no frame (Linux/Windows without a compositor,
+# software rendering). The Host gives up after ~4s with NO_FRAME_PREFIX; this
+# is the backstop so the tool never runs into the 30s plugin timeout.
+SCREENSHOT_WAIT_S = 5.0
+NO_FRAME_PREFIX = "no-frame"
 WAIT_FOR_CONTROL_MAX_MS = 50_000
 WAIT_FOR_CONTROL_POLL_S = 1.0
 # browser_wait polls the page for a URL, selector or text up to this long.
@@ -1079,6 +1084,36 @@ def _diff_snapshot(bridge: Bridge, view_id: str, pane: str | None) -> dict[str, 
     return {**taken, "mode": "full", "fullReason": reason}
 
 
+def _no_frame(detail: str) -> ToolError:
+    return ToolError(
+        "VIEW_NOT_RENDERED",
+        f"The page painted no frame to capture ({detail}). A Space that is not shown in the Browser "
+        "window may not paint on this system; open it in the Browser window, or use browser_snapshot.",
+        reason="no-frame",
+    )
+
+
+def _capture_screenshot(bridge: Bridge, view_id: str, quality: int) -> dict[str, Any]:
+    answer: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+
+    def run() -> None:
+        try:
+            answer.put((True, _cdp(bridge, view_id, "Page.captureScreenshot", {"format": "jpeg", "quality": quality})))
+        except BaseException as error:  # noqa: BLE001 - handed to the caller's thread
+            answer.put((False, error))
+
+    threading.Thread(target=run, name="navide-browser-screenshot", daemon=True).start()
+    try:
+        ok, value = answer.get(timeout=SCREENSHOT_WAIT_S)
+    except queue.Empty:
+        raise _no_frame(f"no answer in {SCREENSHOT_WAIT_S:g}s") from None
+    if ok:
+        return value
+    if isinstance(value, BridgeFailure) and value.code == "CDP_ERROR" and (value.message or "").startswith(NO_FRAME_PREFIX):
+        raise _no_frame("the Host found no frame") from None
+    raise value
+
+
 def screenshot(bridge: Bridge, view_id: str) -> dict[str, Any]:
     # A 0x0 page never paints, and Page.captureScreenshot then never answers.
     try:
@@ -1089,7 +1124,7 @@ def screenshot(bridge: Bridge, view_id: str) -> dict[str, Any]:
     if width <= 0 or height <= 0:
         raise _not_rendered()
     for quality in SCREENSHOT_QUALITIES:
-        shot = _cdp(bridge, view_id, "Page.captureScreenshot", {"format": "jpeg", "quality": quality})
+        shot = _capture_screenshot(bridge, view_id, quality)
         data = shot.get("data")
         if not isinstance(data, str):
             raise ToolError("SCREENSHOT_FAILED", "The page returned no image.")
