@@ -189,6 +189,10 @@ def default_seams() -> Seams:
         pane = agent_messaging.current(pane_id)
         return pane.pane_id if pane is not None else ""
 
+    def pane_live(pane_id: str) -> bool:
+        pane = agent_messaging.current(pane_id)
+        return pane is not None and pane.realized and not pane.offline
+
     def pane_workspace(pane_id: str) -> str:
         pane = agent_messaging.current(pane_id)
         return pane.workspace_path if pane is not None else ""
@@ -301,7 +305,7 @@ def default_seams() -> Seams:
         pane_directory=pane_directory, inherit_taint=inherit_taint,
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
         agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
-        wake_target=wake_target, windows_open=windows_open, wake=wake, turn_text=turn_text,
+        wake_target=wake_target, windows_open=windows_open, pane_live=pane_live, wake=wake, turn_text=turn_text,
         is_login_pane=login_panes.is_login_pane,
     )
 
