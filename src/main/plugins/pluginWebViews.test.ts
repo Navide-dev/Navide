@@ -7,7 +7,10 @@ import {
   looksSecret,
   MAX_ATTACHED_VIEWS,
   MAX_VIEWS_PER_PLUGIN,
+  NO_FRAME_MESSAGE,
   PluginWebViewRegistry,
+  SCREENSHOT_CAPTURE_WAIT_MS,
+  SCREENSHOT_FRAME_WAIT_MS,
   UNATTACHED_VIEW_BOUNDS,
   WebViewError,
   webPartitionFor,
@@ -790,6 +793,80 @@ describe('attach and lifecycle', () => {
     await expect(registry.capture('navide.browser', viewId, 200)).resolves.toEqual({
       dataUrl: `data:image/jpeg;base64,${Buffer.from('jpeg').toString('base64')}`,
     })
+  })
+})
+
+describe('screenshot without a frame', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  function hangingScreenshot(view: FakeView): void {
+    const send = view.webContents.debugger.sendCommand
+    view.webContents.debugger.sendCommand = (method, params) =>
+      method === 'Page.captureScreenshot' ? new Promise(() => undefined) : send(method, params)
+  }
+
+  it('passes a frame through when one comes in time', async () => {
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'a' }, 'agent')
+    await expect(registry.cdp('navide.browser', viewId, 'Page.captureScreenshot', { format: 'jpeg', quality: 80 }))
+      .resolves.toEqual({ ok: 'Page.captureScreenshot' })
+    expect(views[0].webContents.sent.map(entry => entry.method)).toContain('Page.captureScreenshot')
+  })
+
+  it('falls back to capturePage when the view paints no frame', async () => {
+    vi.useFakeTimers()
+    const lines: string[] = []
+    const registry = new PluginWebViewRegistry({
+      createView: options => new FakeView(options),
+      session: () => new FakeSession(),
+      onChanged: () => undefined,
+      log: line => lines.push(line),
+    })
+    const { viewId } = registry.create('navide.browser', { space: 'a' }, 'agent')
+    const view = (registry as unknown as { views: Map<string, { view: FakeView }> }).views.get(viewId)!.view
+    hangingScreenshot(view)
+    const shot = registry.cdp('navide.browser', viewId, 'Page.captureScreenshot', { format: 'jpeg', quality: 60 })
+    await vi.advanceTimersByTimeAsync(SCREENSHOT_FRAME_WAIT_MS)
+    await expect(shot).resolves.toEqual({ data: Buffer.from('jpeg').toString('base64') })
+    expect(lines.join('\n')).toMatch(/no frame in 2500ms .*on no window/)
+  })
+
+  it('answers no-frame within the budget when capturePage has nothing either', async () => {
+    vi.useFakeTimers()
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'a' }, 'agent')
+    hangingScreenshot(views[0])
+    views[0].webContents.capturePage = () => new Promise(() => undefined)
+    const shot = rejectionOf(registry.cdp('navide.browser', viewId, 'Page.captureScreenshot', { format: 'jpeg', quality: 60 }))
+    await vi.advanceTimersByTimeAsync(SCREENSHOT_FRAME_WAIT_MS + SCREENSHOT_CAPTURE_WAIT_MS)
+    const error = await shot
+    expect(error.code).toBe('CDP_ERROR')
+    expect(error.message).toBe(NO_FRAME_MESSAGE)
+    expect(SCREENSHOT_FRAME_WAIT_MS + SCREENSHOT_CAPTURE_WAIT_MS).toBeLessThan(5000)
+  })
+
+  it('answers no-frame when capturePage comes back empty', async () => {
+    vi.useFakeTimers()
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'a' }, 'agent')
+    hangingScreenshot(views[0])
+    const empty = { isEmpty: () => true, getSize: () => ({ width: 0, height: 0 }), resize: () => ({ toJPEG: () => Buffer.alloc(0) }), toJPEG: () => Buffer.alloc(0) }
+    views[0].webContents.capturePage = async () => empty
+    const shot = rejectionOf(registry.cdp('navide.browser', viewId, 'Page.captureScreenshot', { format: 'jpeg' }))
+    await vi.advanceTimersByTimeAsync(SCREENSHOT_FRAME_WAIT_MS)
+    expect((await shot).message).toBe(NO_FRAME_MESSAGE)
+  })
+
+  it('answers no-frame without a fallback for a PNG request', async () => {
+    vi.useFakeTimers()
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'a' }, 'agent')
+    hangingScreenshot(views[0])
+    const capture = vi.spyOn(views[0].webContents, 'capturePage')
+    const shot = rejectionOf(registry.cdp('navide.browser', viewId, 'Page.captureScreenshot', {}))
+    await vi.advanceTimersByTimeAsync(SCREENSHOT_FRAME_WAIT_MS)
+    expect((await shot).message).toBe(NO_FRAME_MESSAGE)
+    expect(capture).not.toHaveBeenCalled()
   })
 })
 
