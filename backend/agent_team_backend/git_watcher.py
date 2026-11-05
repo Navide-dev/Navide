@@ -84,6 +84,14 @@ _IGNORE_GIT_FIRST_LEVEL = frozenset({"objects", "logs", "hooks", "lfs"})
 # still reports changes normally.
 _IGNORE_STORAGE_SUBDIRS = frozenset({"framework", "logs"})
 
+# Directories that are noise only outside a repository: a home-directory
+# workspace sees every write the OS, browsers and tools make under AppData,
+# Library and the dot-dirs (.cache, .config, .npm …), and in its dot-files
+# (.zsh_history, .DS_Store), and each became a git.changed. Discovery already skips them (git_service, `d.startswith(".")`).
+# Inside a repository they are content — a repo's own .github/ or a Unity
+# project's Library/ — so they are dropped only above the first repo root.
+_OUTSIDE_REPO_NOISE = frozenset({"AppData", "Library"})
+
 # The watchdog event types that mean something on disk changed. `closed`
 # (close after write) is left out: it always follows a `modified` for the same
 # write, and inotify queues a directory `modified` beside it.
@@ -121,6 +129,10 @@ class _RepoHandler(FileSystemEventHandler):
         self._on_dirty = on_dirty
         self._on_plans_dirty = on_plans_dirty
         self._ignores = ignores
+        # ws_path -> (path below this root, handler) for workspaces nested in
+        # this one: they share this handler's observer schedule instead of
+        # adding a second recursive watch over the same tree.
+        self._nested: dict[str, tuple[tuple[str, ...], _RepoHandler]] = {}
 
     def on_any_event(self, event: FileSystemEvent) -> None:
         # Only react to actual create/delete/modify/move. An allowlist, not a
@@ -143,6 +155,22 @@ class _RepoHandler(FileSystemEventHandler):
         # handler makes per event on watchdog's single dispatch thread.
         src_parts = self._parts(src)
         dest_parts = self._parts(dest) if dest else ()
+        self._judge(event, src_parts, dest_parts)
+        for prefix, nested in list(self._nested.values()):
+            n = len(prefix)
+            nested_src = src_parts[n:] if src_parts[:n] == prefix else ()
+            nested_dest = dest_parts[n:] if dest_parts[:n] == prefix else ()
+            if nested_src or nested_dest:
+                nested._judge(event, nested_src, nested_dest)
+
+    def _judge(
+        self,
+        event: FileSystemEvent,
+        src_parts: tuple[str, ...],
+        dest_parts: tuple[str, ...],
+    ) -> None:
+        """Judge one event whose paths are already relative to this root."""
+        dest = bool(dest_parts)
         self._refresh_ignore_rules(src_parts)
         if dest_parts:
             self._refresh_ignore_rules(dest_parts)
@@ -259,6 +287,8 @@ class _RepoHandler(FileSystemEventHandler):
         name = parts[-1]
         if name.endswith(".lock"):
             return False  # index.lock, ref locks — transient, ignore.
+        if self._is_outside_repo_noise(parts):
+            return False
         if ".git" in parts:
             gi = parts.index(".git")
             sub = parts[gi + 1:]
@@ -280,6 +310,20 @@ class _RepoHandler(FileSystemEventHandler):
         if self._ignores is not None and self._ignores.ignored(parts, is_dir):
             return False
         return True
+
+    def _is_outside_repo_noise(self, parts: tuple[str, ...]) -> bool:
+        """True when a segment of *parts* is AppData, Library or starts with a
+        dot (a dot-dir or dot-file, other than .git) and no repository root
+        lies at or above it.
+
+        Only paths that contain such a segment pay for the `.git` stats."""
+        stop = parts.index(".git") if ".git" in parts else len(parts)
+        for i, seg in enumerate(parts[:stop]):
+            if seg.startswith(".") or seg in _OUTSIDE_REPO_NOISE:
+                return not any(
+                    (self._root.joinpath(*parts[:j]) / ".git").exists() for j in range(i + 1)
+                )
+        return False
 
 
 class GitWatcher:
@@ -305,6 +349,11 @@ class GitWatcher:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._observer: Observer | None = None
         self._roots: dict[str, Path] = {}  # ws_path -> resolved root
+        # ws_path -> handler, for every watched workspace
+        self._handlers: dict[str, _RepoHandler] = {}
+        # ws_path -> observer watch, only for workspaces with their own
+        # schedule; the rest ride on a watched ancestor (see `watch`).
+        self._watches: dict[str, object] = {}
         self._pending: dict[str, asyncio.TimerHandle] = {}
         # ws_path -> the (rel_path, event_type) pairs seen in the open window
         self._dirty_paths: dict[str, set[tuple[str, str]]] = {}
@@ -376,12 +425,43 @@ class GitWatcher:
             self._mark_plans_dirty_threadsafe if self._on_plans_change else None,
             GitIgnore(root),
         )
+        # A workspace inside an already-watched one (a repo under a home
+        # directory workspace, registered again by its badge's git.status)
+        # shares that schedule: one recursive watch per tree, not one per repo.
+        for top_ws, watch in self._watches.items():
+            top_root = self._roots[top_ws]
+            if root == top_root or top_root in root.parents:
+                prefix = root.relative_to(top_root).parts
+                self._handlers[top_ws]._nested[ws_path] = (prefix, handler)
+                self._roots[ws_path] = root
+                self._handlers[ws_path] = handler
+                log.info("GitWatcher watching %s (via %s)", root, top_root)
+                return
         try:
-            self._observer.schedule(handler, str(root), recursive=True)
+            watch = self._observer.schedule(handler, str(root), recursive=True)
         except Exception as err:  # noqa: BLE001
             log.warning("GitWatcher schedule on %s failed: %s", root, err)
             return
         self._roots[ws_path] = root
+        self._handlers[ws_path] = handler
+        self._watches[ws_path] = watch
+        # Watched descendants move under this schedule, so a write below them
+        # is not seen by two recursive watches. Their own nested workspaces
+        # move along, re-based on this root.
+        for low_ws in [ws for ws in self._watches if ws != ws_path]:
+            low_root = self._roots[low_ws]
+            if root not in low_root.parents:
+                continue
+            low = self._handlers[low_ws]
+            moved = {low_ws: ((), low), **low._nested}
+            low._nested = {}
+            base = low_root.relative_to(root).parts
+            for ws, (prefix, h) in moved.items():
+                handler._nested[ws] = (base + prefix, h)
+            try:
+                self._observer.unschedule(self._watches.pop(low_ws))
+            except Exception as err:  # noqa: BLE001
+                log.warning("GitWatcher unschedule on %s failed: %s", low_root, err)
         log.info("GitWatcher watching %s", root)
 
     # ───────────────────────── debounce (loop thread) ─────────────────────
