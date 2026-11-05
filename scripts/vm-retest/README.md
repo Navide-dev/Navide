@@ -48,28 +48,23 @@ To run against VMs on another machine (for example a Mac mini), set `VM_HOST=use
 host load also samples that machine. The VMs' VNC servers listen on that machine's 127.0.0.1 only, so `vnc.sh`
 opens an ssh tunnel for each `vncdo` call (it needs `vncdo` on this machine only).
 
-### A VM host set up by copying Fusion (no installer)
+### Setting up another Mac as the VM host
 
-Copying `VMware Fusion.app` and a `.vmwarevm` to another Mac (rsync, as a non-root user) skips everything the
-Fusion installer does as root. These are the steps that made the Mac mini work (2026-11-05, Fusion 26.0.0, macOS
-27.2); all of them need the machine owner's administrator password, so the scripts never run them:
+Install VMware Fusion there from the official installer (Broadcom's Fusion dmg; drag it to Applications, open it
+once, enter the administrator password and accept the license, quit it). That is all the host needs: copy the
+`.vmwarevm` bundles into `VM_DIR` (rsync -a; the disks are not sparse) and `vmrun ... nogui` runs them over ssh.
+Checked on the Mac mini on 2026-11-05 with Fusion 26.0.1: the vmx log says "Services_Init: Successfully opened the
+services", `vmnet-dhcpd`, `vmnet-natd` and `vmnet-bridge` run from
+`/Library/Application Support/VMware/VMware Fusion/Services`, and the Linux guest gets 192.168.22.129 with working
+HTTPS out.
 
-1. Open Fusion once in the GUI and enter the password. This sets the set-UID root helpers (`vmware-vmx`, ...)
-   back to root; without it `vmrun start` fails with "vmrun must be set-UID root".
-2. `sudo "/Applications/VMware Fusion.app/Contents/Library/Initialize VMware Fusion.tool" set`
-3. Copy the network settings from a working Fusion host: `/Library/Preferences/VMware Fusion/networking`, and
-   `vmnet1/dhcpd.conf`, `vmnet8/dhcpd.conf`, `vmnet8/nat.conf` under it (keeps the 192.168.22.0/24 NAT subnet).
-   `vmnet-cli --configure` failed there, so do not use it.
-4. `sudo mkdir -p /var/db/vmware` and `sudo touch` `vmnet-dhcpd-vmnet1.leases` and `vmnet-dhcpd-vmnet8.leases` in it:
-   `vmnet-dhcpd` exits at start when its lease file is missing.
-5. Fusion runs the vmnet daemons from a copy in `/Library/Application Support/VMware/VMware Fusion/Services/`,
-   and on that machine the copy came out without its `Contents/Frameworks` (the daemons then crash at launch with
-   "Library not loaded: @loader_path/../Frameworks/libvnetlib.dylib", see `~/Library/Logs/DiagnosticReports`).
-   Copy the app's whole `Contents/Frameworks/.` into it, then `sudo ".../vmnet-cli" --start`.
-6. Do not open the Fusion GUI afterwards: opening it (and some VM starts) rebuilds that Services copy with an empty
-   `Frameworks` again, and `vmnet-natd` crashes on the next start, so the guest gets an address but no Internet.
-
-Step 5 is not durable yet (open issue): check `ls ".../Services/Contents/Frameworks"` before a round.
+Do not copy `VMware Fusion.app` itself to the other Mac. A copy made by a non-root user loses its set-UID root
+helpers, and even after an administrator repaired those (opening Fusion, `Initialize VMware Fusion.tool set`,
+the network settings and `/var/db/vmware` lease files by hand), Fusion kept failing to locate itself
+("LocationGetRoot: ... never been run on this machine", "Services_Init: Failed to open the services") and rebuilt
+its Services copy without `Contents/Frameworks`, so `vmnet-dhcpd` / `vmnet-natd` crashed at launch ("Library not
+loaded: @loader_path/../Frameworks/libvnetlib.dylib" in `~/Library/Logs/DiagnosticReports`) and guests got no
+address or no Internet. The official installer fixed all of it.
 
 A copied VM also gets a new `uuid.bios` on its first start (Fusion treats it as copied), so its MAC address
 changes; the guest still gets 192.168.22.129 from DHCP there, but set `LINUX_GUEST` / `WINDOWS_GUEST` (the guests
