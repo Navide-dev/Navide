@@ -33,7 +33,7 @@ def menu(nm, click=None):
       const items=[...document.querySelectorAll('.pane-ctx-item')];
       const desc=items.map(i=>i.innerText.trim().split('\\n')[0]+((i.disabled||i.classList.contains('disabled')||i.getAttribute('aria-disabled')==='true')?' [disabled]':''));
       const want={json.dumps(click)};
-      if(want){{ const it=items.find(i=>new RegExp(want,'i').test(i.innerText.trim())); if(!it) return 'no-item '+JSON.stringify(desc); it.click(); return 'clicked '+JSON.stringify(desc); }}
+      if(want){{ const it=items.find(i=>new RegExp(want,'i').test(i.innerText.trim().split('\\n')[0]) && !i.disabled && !i.classList.contains('disabled')); if(!it) return 'no-item '+JSON.stringify(desc); it.click(); return 'clicked '+JSON.stringify(desc); }}
       document.dispatchEvent(new KeyboardEvent('keydown',{{key:'Escape',bubbles:true}})); document.body.click();
       return JSON.stringify(desc);}})()"""
     return c.ev(js)
@@ -74,7 +74,7 @@ elif phase == "stopuser":
     (ROOT / "stub.log.tailsleep").write_text("300")
     say("send BGTURN", json.dumps(ext("cli_send", {"to": f"wn/{nm}", "text": f"BGTURN-{n} run it in the background"}))[:160])
     say("busy", wait_busy(nm)); time.sleep(8); t0 = time.time()
-    say("person STOP via menu:", menu(nm, "^(Interrupt|中斷)"))
+    say("person STOP via menu:", menu(nm, "^(Interrupt|中斷)$"))
     time.sleep(4); say("after STOP", ui(nm))
     p = _s.token_hex(4); r = ext("cli_send", {"to": f"wn/{nm}", "text": f"PING-{p} reply with ok"}); k = r.get("msg_key")
     say("sent PING", json.dumps(r)[:160])
