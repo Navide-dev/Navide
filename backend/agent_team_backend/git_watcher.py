@@ -34,6 +34,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import sys
 import threading
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -99,6 +101,18 @@ _CHANGE_EVENT_TYPES = frozenset({
     EVENT_TYPE_CREATED, EVENT_TYPE_DELETED, EVENT_TYPE_MODIFIED, EVENT_TYPE_MOVED,
 })
 
+# Windows reports a last-access or attribute change as `modified`: watchdog
+# asks ReadDirectoryChangesW for both. Git reading a repo's .git files to
+# answer a status therefore came back as a change to that repo, and every Git
+# pane read status again — ~1078 git processes a minute under a home-folder
+# workspace on Windows, none on Linux (inotify's reads are not `modified`).
+# There a `modified` whose size and mtime did not move is dropped. NTFS keeps
+# mtime to 100 ns, so a real write always moves it; other platforms keep every
+# event, since a coarse mtime (HFS+, FAT) could hide a second same-size write.
+_SKIP_UNCHANGED_MODIFIED = sys.platform == "win32"
+# Bound on the per-handler (mtime, size) memo; cleared, not evicted, past it.
+_MAX_STAMPS = 8192
+
 # Directories monitored for plan and report documents.
 PLAN_DOC_DIRS = frozenset({
     (".agent-team", "plans"),
@@ -133,6 +147,9 @@ class _RepoHandler(FileSystemEventHandler):
         # this one: they share this handler's observer schedule instead of
         # adding a second recursive watch over the same tree.
         self._nested: dict[str, tuple[tuple[str, ...], _RepoHandler]] = {}
+        # path -> (mtime_ns, size) at its last `modified`, for
+        # _SKIP_UNCHANGED_MODIFIED. Only the observer's dispatch thread uses it.
+        self._stamps: dict[str, tuple[int, int]] = {}
 
     def on_any_event(self, event: FileSystemEvent) -> None:
         # Only react to actual create/delete/modify/move. An allowlist, not a
@@ -144,6 +161,12 @@ class _RepoHandler(FileSystemEventHandler):
         if event.event_type not in _CHANGE_EVENT_TYPES:
             return
         src = str(event.src_path)
+        if (
+            _SKIP_UNCHANGED_MODIFIED
+            and event.event_type == EVENT_TYPE_MODIFIED
+            and not self._stamp_moved(src)
+        ):
+            return
         dest = str(event.dest_path) if getattr(event, "dest_path", "") else ""
         # Editing an ignore file changes the answer for every path beneath it,
         # so its cached rules go before this event is judged — otherwise the
@@ -162,6 +185,23 @@ class _RepoHandler(FileSystemEventHandler):
             nested_dest = dest_parts[n:] if dest_parts[:n] == prefix else ()
             if nested_src or nested_dest:
                 nested._judge(event, nested_src, nested_dest)
+
+    def _stamp_moved(self, src: str) -> bool:
+        """True unless `src` has the size and mtime it had at its last
+        `modified` — the first one seen, and a file that cannot be stat'ed,
+        count as moved."""
+        try:
+            st = os.stat(src)
+        except OSError:
+            self._stamps.pop(src, None)
+            return True
+        stamp = (st.st_mtime_ns, st.st_size)
+        if self._stamps.get(src) == stamp:
+            return False
+        if len(self._stamps) >= _MAX_STAMPS:
+            self._stamps.clear()
+        self._stamps[src] = stamp
+        return True
 
     def _judge(
         self,
@@ -370,6 +410,10 @@ class GitWatcher:
         self._inbox_lock = threading.Lock()
         self._drain_queued = False
         self._started = False
+        # git.status calls watch() from worker threads (asyncio.to_thread), and
+        # a window's panes ask together: unguarded, each passed the "already
+        # watched" check and scheduled its own recursive watch on the same root.
+        self._watch_lock = threading.Lock()
 
     def start(self) -> None:
         if self._started:
@@ -408,6 +452,10 @@ class GitWatcher:
     def watch(self, ws_path: str) -> None:
         """Register a workspace to watch. Idempotent; safe to call on every
         git.status. No-op until start() has run."""
+        with self._watch_lock:
+            self._watch_locked(ws_path)
+
+    def _watch_locked(self, ws_path: str) -> None:
         if not self._started or self._observer is None or not ws_path:
             return
         if ws_path in self._roots:
