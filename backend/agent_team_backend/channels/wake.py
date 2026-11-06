@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 COOLDOWN_S = 300.0  # between two wakes of one binding
+FAILED_COOLDOWN_S = 30.0  # after a wake that opened something but did not bring the pane back
 DAILY_MAX = 10  # wakes of one binding per local day
 STASH_MAX = 20  # messages kept for the wake to deliver, per binding
 STASH_TTL_S = 1800.0  # a kept message older than this is not delivered by a later wake
@@ -445,12 +446,16 @@ class WakeLimits:
     """One wake at a time; per binding (its chat location) a cooldown and a daily cap.
 
     Only a wake that got as far as opening something counts: one refused up front (no
-    window, out of quota, a conversation that cannot be resumed) leaves the limits alone."""
+    window, out of quota, a conversation that cannot be resumed) leaves the limits alone.
+    One that opened something and still failed (the window did not answer, or refused)
+    counts towards the day's cap but cools down for FAILED_COOLDOWN_S only: the chat was
+    told it failed, and the wake itself checks again, before opening anything, whether the
+    conversation came back meanwhile."""
 
     clock: Callable[[], float] = time.monotonic
     today: Callable[[], str] = lambda: time.strftime("%Y-%m-%d")
     waking: str = ""  # the location being woken now
-    _last: dict[str, float] = field(default_factory=dict)
+    _until: dict[str, float] = field(default_factory=dict)  # location -> when its cooldown ends
     _count: dict[str, tuple[str, int]] = field(default_factory=dict)  # location -> (day, wakes)
 
     def refusal(self, key: str, lang: str) -> str:
@@ -460,19 +465,19 @@ class WakeLimits:
         day, count = self._count.get(key, ("", 0))
         if day == self.today() and count >= DAILY_MAX:
             return text(lang, "daily", max=DAILY_MAX)
-        last = self._last.get(key)
-        if last is not None and self.clock() - last < COOLDOWN_S:
-            return text(lang, "cooldown", wait=int(COOLDOWN_S - (self.clock() - last)) + 1)
+        until = self._until.get(key)
+        if until is not None and self.clock() < until:
+            return text(lang, "cooldown", wait=int(until - self.clock()) + 1)
         return ""
 
     def begin(self, key: str) -> None:
         self.waking = key
 
-    def end(self, key: str, *, counted: bool) -> None:
+    def end(self, key: str, *, counted: bool, succeeded: bool = True) -> None:
         self.waking = ""
         if not counted:
             return
-        self._last[key] = self.clock()
+        self._until[key] = self.clock() + (COOLDOWN_S if succeeded else FAILED_COOLDOWN_S)
         day, count = self._count.get(key, ("", 0))
         today = self.today()
         self._count[key] = (today, count + 1 if day == today else 1)
