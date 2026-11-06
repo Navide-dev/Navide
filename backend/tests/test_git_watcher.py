@@ -716,3 +716,73 @@ async def test_home_dot_file_writes_fire_nothing_but_a_repo_gitignore_does(
         assert not any(".zsh_history" in paths for _, paths in fired)
     finally:
         watcher.stop()
+
+
+# ── Windows home-folder poll storm (0.2.38) ─────────────────────────────────
+#
+# Windows asks ReadDirectoryChangesW for last-access and attribute changes too
+# (watchdog's flags), and reports them as `modified`: git reading a repo's
+# .git files to answer a status came back as a change to that repo, which made
+# every Git pane read status again — ~1078 git processes a minute under a
+# home-folder workspace on a Windows VM, none on Linux.
+
+
+def test_windows_modified_events_that_change_nothing_do_not_fire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import agent_team_backend.git_watcher as gw
+
+    monkeypatch.setattr(gw, "_SKIP_UNCHANGED_MODIFIED", True)
+    (tmp_path / ".git").mkdir()
+    index = tmp_path / ".git" / "index"
+    index.write_bytes(b"one")
+    h, dirty, _ = _counting_handler(tmp_path, "")
+    for _ in range(5):  # git status read the index five times
+        h.on_any_event(FileModifiedEvent(str(index)))
+    assert len(dirty) == 1
+    index.write_bytes(b"two!")  # a real write still reports
+    h.on_any_event(FileModifiedEvent(str(index)))
+    assert len(dirty) == 2
+
+
+def test_modified_events_still_fire_every_time_off_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import agent_team_backend.git_watcher as gw
+
+    monkeypatch.setattr(gw, "_SKIP_UNCHANGED_MODIFIED", False)
+    f = tmp_path / "a.txt"
+    f.write_text("x", encoding="utf-8")
+    h, dirty, _ = _counting_handler(tmp_path, "")
+    for _ in range(3):
+        h.on_any_event(FileModifiedEvent(str(f)))
+    assert len(dirty) == 3
+
+
+def test_concurrent_watch_calls_schedule_one_observer(tmp_path: Path) -> None:
+    # git.status registers the workspace from a worker thread
+    # (asyncio.to_thread), and a window's panes ask for status together: the
+    # Windows log showed "GitWatcher watching C:\Users\navide" four times in
+    # one millisecond — four recursive kernel watches over the home folder.
+    w, obs, _ = _fake_watcher()
+    orig = obs.schedule
+    barrier = threading.Barrier(8)
+
+    def slow_schedule(handler, path: str, recursive: bool = False):
+        import time
+
+        time.sleep(0.02)
+        return orig(handler, path, recursive)
+
+    obs.schedule = slow_schedule  # type: ignore[method-assign]
+
+    def call() -> None:
+        barrier.wait()
+        w.watch(str(tmp_path))
+
+    threads = [threading.Thread(target=call) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(obs.scheduled) == 1
