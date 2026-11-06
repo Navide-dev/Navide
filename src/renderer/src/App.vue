@@ -200,6 +200,7 @@ import { pickReusablePane, runReportedDispatch, validatePlanDispatch, type PlanD
 import { planExecutionPrompt } from './lib/planExecutePrompt'
 import {
   composerHoldsPayload, echoEvidenceSince, echoTimeoutFor, framedComposerHolds, injectionVerified, normalizeForMatch,
+  screenShowsNewTail,
   shellSubmitEvidence, submitBaseline, submitEvidence, type EchoEvidence, type SubmitEvidence,
   SUBMIT_CONFIRM_MS, SUBMIT_SCREEN_LINES, TAIL_MATCH_LEN
 } from './lib/injectEcho'
@@ -4638,6 +4639,14 @@ async function injectText(
   // zero — or negative — while output is streaming, which made the echo look
   // absent and resent the whole prompt.
   const cleanBytes = (): number => (paneId ? paneCleanBytes(paneId) : -1)
+  const renderedScreen = (): string => {
+    const read = paneId ? (paneRefs[paneId]?.readVisibleScreen as (() => string) | undefined) : undefined
+    try {
+      return read ? read() : ''
+    } catch {
+      return ''
+    }
+  }
 
   // Send in modest chunks to avoid hitting any tty input-buffer limits and to
   // give the CLI's render loop a chance to keep up.
@@ -4787,9 +4796,15 @@ async function injectText(
   const MAX_CONTENT_SENDS = 1
   const readyTimeout = echoTimeoutFor(text.length)
   let ready = false
+  // For inject.failed: what this pane's own terminal saw after we typed.
+  let bytesBeforeSend = -1
+  let sentAt = 0
   for (let send = 1; send <= MAX_CONTENT_SENDS && !ready; send++) {
     if (aborted()) return giveUp()
     const preBytes = cleanBytes()
+    bytesBeforeSend = preBytes
+    sentAt = Date.now()
+    const screenBefore = renderedScreen()
     const ackPending = await sendChunks()
     if (ackPending === null) return giveUp()
     if (paneId === undefined || preBytes < 0) {
@@ -4798,8 +4813,10 @@ async function injectText(
       ready = true
       break
     }
+    // The rendered screen backs the stream up: see screenShowsNewTail.
     const echoed = (): EchoEvidence | null =>
       echoEvidenceSince(cleanBuf(), tail, cleanBytes() - preBytes, normalizedLen)
+        ?? (screenShowsNewTail(screenBefore, renderedScreen(), tail) ? 'tail' : null)
     if (needsInputWait(ackPending, inputBlocks.get(sessionId) !== null)) {
       const waited = await awaitInputUnblocked({
         ackPending,
@@ -4875,7 +4892,11 @@ async function injectText(
     recordDiagnostic({
       level: 'error',
       code: 'inject.failed',
-      message: injectFailedMessage(paneId ? paneRefs[paneId]?.terminalSize?.() : null),
+      message: injectFailedMessage(paneId ? paneRefs[paneId]?.terminalSize?.() : null)
+        + (paneId && bytesBeforeSend >= 0
+          ? ` — since typing: ${cleanBytes() - bytesBeforeSend} clean chars, raw output `
+            + `${Number(paneRefs[paneId]?.lastRawActivityAt ?? 0) >= sentAt ? 'yes' : 'no'}`
+          : ''),
       paneId
     })
     return giveUp()
