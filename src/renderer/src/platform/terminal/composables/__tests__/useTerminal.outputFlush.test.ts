@@ -122,6 +122,26 @@ describe('useTerminal — output flush policy', () => {
     mock.emit('terminal.output', { terminal_session_id: 'sess-1', data })
   }
 
+  // Windows VM 0.2.38: a CLI that printed its whole banner before the
+  // terminal.create response named its PTY had every byte dropped, and every
+  // injection into it then read "the pane printed nothing".
+  it('replays output that arrived before the create response named this PTY', async () => {
+    const mock = createMockBackend()
+    mock.setResponse('terminal.create', { terminal_session_id: 'sess-1', pid: 42 })
+    mock.beforeResponse.set('terminal.create', () => {
+      mock.emit('terminal.output', { terminal_session_id: 'sess-1', data: 'Claude Code banner' })
+      mock.emit('terminal.output', { terminal_session_id: 'sess-other', data: 'another pane' })
+    })
+    const { result, scope } = withScope(() => useTerminal('pane-1', mock.backend))
+    result.mount(document.createElement('div'))
+    await result.spawn({ command: 'claude', cwd: '/tmp' })
+    await new Promise((r) => setTimeout(r, 600))
+    expect(captured.writes).toContain('Claude Code banner')
+    expect(captured.writes).not.toContain('another pane')
+    expect(result.cleanBytesSeen.value).toBeGreaterThan(0)
+    scope.stop()
+  })
+
   it('writes immediately while the pane textarea is focused', async () => {
     const { mock, scope } = await spawnedTerminal()
     captured.textarea!.dispatchEvent(new Event('focus'))
