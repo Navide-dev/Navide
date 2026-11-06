@@ -2052,7 +2052,8 @@ class ChannelManager:
                 log.warning("channels: waking %s failed: %s", binding.pane_id, exc)
                 result = {"ok": False, "code": "error", "started": True}
         finally:
-            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)))
+            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)),
+                                  succeeded=bool(result.get("ok")))
         if not result.get("ok"):
             await self._reply(msg, wake.outcome_text(lang, result))
             return

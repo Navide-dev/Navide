@@ -345,6 +345,18 @@ def _wake_record(workspace_path: str, session_id: str) -> Any | None:
     return None if record is None or getattr(record, "spawn_status", "") == "removed" else record
 
 
+def _held_entry(pane_id: str) -> Any | None:
+    """The registry entry a connected window holds for ``pane_id`` (or the pane it is now
+    known by), else None. An entry waiting out its offline grace is not one: its window closed,
+    so no window has that pane to open, and the window holding the workspace, asked to open
+    it, answers "unknown pane" at once (0.2.38: a duplicate window holding only a pane's
+    children, the pane's own entry left behind by the window that closed)."""
+    from .. import agent_messaging
+
+    entry = agent_messaging.current(pane_id)
+    return None if entry is None or entry.offline else entry
+
+
 def _session_open_elsewhere(pane_id: str, workspace_path: str, session_id: str) -> bool:
     """Whether a realized pane other than ``pane_id`` (or the pane it is now known by) already
     runs this conversation in the workspace: opening ours too would put two CLIs on it."""
@@ -364,18 +376,18 @@ def _session_open_elsewhere(pane_id: str, workspace_path: str, session_id: str) 
 
 
 def _registered_pane(pane_id: str, workspace_path: str, session_id: str) -> Any | None:
-    """The registered pane behind the binding: its id (or an alias), else the live record
-    that holds the same conversation."""
-    from .. import agent_messaging, app
+    """The pane a connected window holds behind the binding: its id (or an alias), else the
+    live record that holds the same conversation."""
+    from .. import app
 
-    entry = agent_messaging.current(pane_id)
+    entry = _held_entry(pane_id)
     if entry is not None:
         return entry
     project = app.project_store.peek(workspace_path)
     for record in reversed(project.panes if project else []):
         if (getattr(record, "session_id", "") or "").strip() == session_id \
                 and getattr(record, "spawn_status", "") != "removed":
-            entry = agent_messaging.current(record.pane_id)
+            entry = _held_entry(record.pane_id)
             if entry is not None:
                 return entry
     return None
@@ -413,7 +425,7 @@ def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> tuple
     conversation back a second time. Returns the retired pane ids, and those of them whose
     children the store actually handed to `keep` (it does only while `keep`'s record is live;
     otherwise they move up a level)."""
-    from .. import agent_messaging, app
+    from .. import app
 
     retired: list[str] = []
     inherited: list[str] = []
@@ -421,7 +433,7 @@ def _retire_superseded(workspace_path: str, session_id: str, keep: str) -> tuple
     for record in list(project.panes if project else []):
         if record.pane_id == keep or getattr(record, "spawn_status", "") == "removed" \
                 or (getattr(record, "session_id", "") or "").strip() != session_id \
-                or agent_messaging.current(record.pane_id) is not None:
+                or _held_entry(record.pane_id) is not None:
             continue
         # Its children follow the conversation to `keep`; a plain retire would make them roots.
         after, _ = app.project_store.record_pane_unspawn_by_id(
@@ -547,7 +559,8 @@ async def _wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict
         entry = _registered_pane(pane_id, workspace_path, session_id)
     if entry is None:
         # No placeholder: the window's restore skipped the record (a detached group's, a
-        # pipeline run holding the restore) or the pane left its layout. Asked again first,
+        # pipeline run holding the restore), the pane left its layout, or only the entry its
+        # closed window left behind remains. Asked again first,
         # in case the conversation came back in a pane under another record meanwhile.
         if await asyncio.to_thread(_session_open_elsewhere, pane_id, workspace_path, session_id):
             return {"ok": False, "code": "session-open-elsewhere", "started": True}
