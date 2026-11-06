@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   composerHoldsPayload, echoEvidence, echoLanded, echoTimeoutFor, growthNeededFor, injectionVerified,
   composerFromScreen, framedComposerHolds, kickoffVerified, normalizeForMatch, submitBaseline, submitEvidence,
-  submitLanded, TAIL_MATCH_LEN
+  submitLanded, TAIL_MATCH_LEN, screenShowsNewTail,
 } from '../injectEcho'
 
 describe('normalizeForMatch', () => {
@@ -578,5 +578,24 @@ describe('framedComposerHolds', () => {
 
   it('answers null without a frame, so nothing acts on a guess', () => {
     expect(framedComposerHolds('❯ [Pasted text #1 +31 lines]', tail)).toBeNull()
+  })
+})
+
+// Windows VM 0.2.38: the task sat in the input box, drawn by xterm, while the
+// stream checks read no echo and the pane was killed as a failed launch.
+describe('screenShowsNewTail (ConPTY diff rendering)', () => {
+  const task = 'KICKDIAG2 reply with the word ready.'
+  const tail = normalizeForMatch(task).slice(-TAIL_MATCH_LEN)
+  it('the rendered screen shows it whole, and that counts', () => {
+    const before = '────────\n❯\u00a0\n────────'
+    const now = '────────\n❯\u00a0KICKDIAG2 reply\n  with the word\n  ready.\n────────'
+    expect(screenShowsNewTail(before, now, tail)).toBe(true)
+  })
+
+  it('a copy already on screen before typing does not vouch for this one', () => {
+    const screen = '❯ KICKDIAG2 reply with the word ready.\n⏺ ready\n❯\u00a0'
+    expect(screenShowsNewTail(screen, screen, tail)).toBe(false)
+    expect(screenShowsNewTail('', 'nothing of ours', tail)).toBe(false)
+    expect(screenShowsNewTail('', task, '')).toBe(false)
   })
 })

@@ -2767,6 +2767,34 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // pendingSpawn — which does not exist until this line.
   watch(displayStatus, onLeftUserPrompt)
   let activeCreateGeneration: string | null = null
+  // Output frames that arrived while terminal.create was in flight, keyed by
+  // their PTY id: the backend streams a PTY's output the moment it spawns, but
+  // this pane only learns the id from the create response. A CLI that prints
+  // its whole banner before that response and then sits at its prompt was
+  // otherwise dropped entirely — the pane showed nothing, cleanBytesSeen stayed
+  // 0, and every injection into it read "printed nothing" (Windows VM 0.2.38,
+  // cli_open_agent into a new workspace). Frames for other panes' PTYs land
+  // here too and are discarded once the response names ours; the cap bounds
+  // what a busy window can pile up while one create is slow.
+  const EARLY_OUTPUT_CAP_BYTES = 512 * 1024
+  let earlyOutput = new Map<string, (string | Uint8Array)[]>()
+  let earlyOutputBytes = 0
+  function holdEarlyOutput(id: string, data: string | Uint8Array): void {
+    if (!id || earlyOutputBytes + data.length > EARLY_OUTPUT_CAP_BYTES) return
+    earlyOutputBytes += data.length
+    const held = earlyOutput.get(id)
+    if (held) held.push(data)
+    else earlyOutput.set(id, [data])
+  }
+  /** Hand the held frames of `id` to the normal output path, drop the rest. */
+  function replayEarlyOutput(id: string): void {
+    const held = earlyOutput.get(id)
+    earlyOutput = new Map()
+    earlyOutputBytes = 0
+    if (!held?.length) return
+    _pendingOutput.push(...held)
+    if (!_outputTimer) _outputTimer = setTimeout(() => _flushPendingOutput(true), _coalesceMs())
+  }
   let pendingCreateCancel: Promise<boolean> | null = null
   const createCancelRequests = new Map<string, Promise<boolean>>()
 
@@ -2926,6 +2954,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       if (activeCreateGeneration !== createGeneration || isDisposed) return
       stallReason.value = null  // past every silent exit — the create is going out
       createInFlight = true
+      // This pane's output handler is bound only once the response below names
+      // its PTY; hold whatever arrives meanwhile (see replayEarlyOutput).
+      earlyOutput = new Map()
+      earlyOutputBytes = 0
+      const earlyUnsub = terminalPort.onOutput((p) => holdEarlyOutput(p.terminal_session_id, p.data))
       const resp = await terminalPort.create({
         paneId,
         createGeneration,
@@ -2946,7 +2979,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         replacesTerminalId: replacesPtyId || null,
         quotaTransactionId: opts.quotaTransactionId,
         quotaOriginalPaneId: opts.quotaOriginalPaneId,
-      }, TERMINAL_CREATE_TIMEOUT_MS)
+      }, TERMINAL_CREATE_TIMEOUT_MS).finally(earlyUnsub)
       // A cancellation or replacement can land while the RPC is in flight.
       // The backend cancellation owns rollback; a late result must never bind
       // its PTY or overwrite the newer pane state.
@@ -2969,6 +3002,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       activeCreateGeneration = null
       startingStartedAt.value = null
       sessionId.value = resp.payload.terminal_session_id
+      replayEarlyOutput(sessionId.value)
       rememberSessionId(sessionId.value)  // enable reattach after a reload
       resumeSpawnedAt.value = opts.isResume ? Date.now() : 0
       status.value = 'running'
