@@ -35,7 +35,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import sys
 import threading
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -49,6 +48,7 @@ from watchdog.events import (
     FileSystemEventHandler,
 )
 
+from . import osplat
 from .fs_observer import Observer
 from .gitignore import GitIgnore
 
@@ -109,7 +109,7 @@ _CHANGE_EVENT_TYPES = frozenset({
 # There a `modified` whose size and mtime did not move is dropped. NTFS keeps
 # mtime to 100 ns, so a real write always moves it; other platforms keep every
 # event, since a coarse mtime (HFS+, FAT) could hide a second same-size write.
-_SKIP_UNCHANGED_MODIFIED = sys.platform == "win32"
+_SKIP_UNCHANGED_MODIFIED = osplat.watch_reports_touch_as_modified
 # Bound on the per-handler (mtime, size) memo; cleared, not evicted, past it.
 _MAX_STAMPS = 8192
 

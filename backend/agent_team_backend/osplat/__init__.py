@@ -129,3 +129,8 @@ __all__ += ["folder_birth_time"]
 #: compared by its (device, inode).
 paths_ignore_case: bool = {"darwin": True, "linux": False, "win32": True}[platform_id]
 __all__ += ["paths_ignore_case"]
+
+# Whether the directory watcher reports a plain read (atime/attribute touch) as
+# `modified`: ReadDirectoryChangesW does, inotify and FSEvents do not.
+watch_reports_touch_as_modified: bool = {"darwin": False, "linux": False, "win32": True}[platform_id]
+__all__ += ["watch_reports_touch_as_modified"]
