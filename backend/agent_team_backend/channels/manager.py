@@ -739,17 +739,40 @@ class ChannelManager:
             self._spawn(self._changed())
         return changed
 
-    def _bot_state(self, platform: str, account: str, acct: dict[str, Any] | None) -> dict[str, Any]:
+    def _bot_state(self, platform: str, account: str, acct: dict[str, Any] | None,
+                   bindings: list[Binding] | None = None,
+                   directory: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
         adapter = self._adapters.get((platform, account))
         config = acct["config"] if acct else {}
+        status = self._status_of(platform, account)
+        summary = [self._binding_summary(b, directory or {}) for b in bindings or []]
+        seen = self.store.chats_last_seen(platform, _bot_key(adapter)) if adapter is not None else None
+        activity = [t for t in (status.get("last_inbound_at"), seen, *(b["created_at"] for b in summary)) if t]
         return {
             "account": account,
             "name": str(config.get("name") or ""),
             "configured": acct is not None,
             "enabled": bool(acct and acct["enabled"]),
-            "status": self._status_of(platform, account),
+            "status": status,
             "config": {**config, "secret_hint": self._secret_hints.get((platform, account), "")},
             "capabilities": dataclasses.asdict(adapter.capabilities) if adapter is not None else None,
+            "bot_id": str(getattr(adapter, "bot_id", "") or "") if platform == "telegram" else "",
+            "bindings": summary,
+            "last_activity_at": max(activity) if activity else None,
+        }
+
+    def _binding_summary(self, binding: Binding, directory: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        """Where one binding of a bot points, for its row in the Settings list."""
+        pane = self._pane_info(binding, directory)
+        workspace = pane["workspace_path"] or binding.workspace_path
+        return {
+            "pane_id": self._seams.resolve_pane(binding.pane_id) or binding.pane_id,
+            "pane_name": pane["name"],
+            "pane_exists": pane["exists"],
+            "workspace_path": workspace,
+            "workspace_name": os.path.basename(workspace.rstrip("/\\")) if workspace else "",
+            "chat_title": binding.title,
+            "created_at": binding.created_at,
         }
 
     def list(self) -> dict[str, Any]:
@@ -757,9 +780,14 @@ class ChannelManager:
         bot's state flattened onto the platform as before several bots existed."""
         self._sync_bindings()
         accounts = self.store.accounts()
+        directory = {str(p.get("pane_id")): p for p in self._seams.pane_directory()}
+        by_bot: dict[BotKey, list[Binding]] = {}
+        for b in self.store.bindings():
+            by_bot.setdefault((b.platform, b.account), []).append(b)
         platforms = []
         for platform in PLATFORMS:
-            bots = [self._bot_state(platform, a, acct) for (p, a), acct in accounts.items() if p == platform]
+            bots = [self._bot_state(platform, a, acct, by_bot.get((p, a)), directory)
+                    for (p, a), acct in accounts.items() if p == platform]
             first = bots[0] if bots else self._bot_state(platform, DEFAULT_ACCOUNT, None)
             platforms.append({
                 "platform": platform,

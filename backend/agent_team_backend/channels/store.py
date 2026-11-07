@@ -186,7 +186,8 @@ class Binding:
     def public(self) -> dict[str, Any]:
         return {"pane_id": self.pane_id, "platform": self.platform, "account": self.account,
                 "chat_id": self.chat_id, "thread_id": self.thread_id, "title": self.title,
-                "verbosity": self.verbosity, "parent_pane_id": self.parent_pane_id, "auto": self.auto}
+                "verbosity": self.verbosity, "parent_pane_id": self.parent_pane_id, "auto": self.auto,
+                "workspace_path": self.workspace_path}
 
 
 class ChannelStore:
@@ -334,6 +335,12 @@ class ChannelStore:
                  "supports_topics": bool(r["supports_topics"])}
                 for r in self._rows("SELECT * FROM channel_chats WHERE platform = ? AND bot = ?"
                                     " ORDER BY last_seen DESC", (platform, bot))]
+
+    def chats_last_seen(self, platform: str, bot: str) -> int | None:
+        """When ``bot`` last saw any chat (None if it never did)."""
+        rows = self._rows("SELECT MAX(last_seen) AS t FROM channel_chats WHERE platform = ? AND bot = ?",
+                          (platform, bot))
+        return int(rows[0]["t"]) if rows and rows[0]["t"] is not None else None
 
     # --- pairing --------------------------------------------------------------
 

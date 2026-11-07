@@ -239,3 +239,31 @@ async def test_ws_api_routes_the_new_requests(ov: Env) -> None:
     focus = await ws_api._dispatch(ov.m, "channels.focus_pane", {"pane_id": "pane-2"})
     assert focus["ok"] is True and focus["workspace_path"] == "/w/Other"
 
+
+
+async def test_list_summarises_each_bots_bindings_with_one_directory_read(ov: Env) -> None:
+    ov.tg.bot_id = "7421000"
+    ov.store.remember_chat("telegram", _bot_key(ov), "-100", "Dev group", "supergroup", True, 5)
+    ov.store.bind("pane-1", Location("telegram", "default", "-100", "50", "api"))
+    ov.store.bind("pane-2", Location("telegram", "default", "-100", "60", "scout"))
+    ov.store.set_wake_target("pane-2", "/w/Other", "s-2")
+    ov.fake.gone.add("pane-2")
+    calls = []
+    directory = ov.m._seams.pane_directory
+    ov.m._seams = dataclasses.replace(ov.m._seams, pane_directory=lambda: calls.append(1) or directory())
+    bot = ov.m.list()["platforms"][0]["accounts"][0]
+    assert len(calls) == 1
+    assert bot["bot_id"] == "7421000"
+    by_pane = {b["pane_id"]: b for b in bot["bindings"]}
+    assert by_pane["pane-1"]["pane_name"] == "api" and by_pane["pane-1"]["pane_exists"] is True
+    assert by_pane["pane-1"]["workspace_path"] == "/w/Agent-Team"
+    assert by_pane["pane-1"]["workspace_name"] == "Agent-Team"
+    # A closed pane keeps the name it was bound under and the workspace it was woken from.
+    assert by_pane["pane-2"]["pane_exists"] is False and by_pane["pane-2"]["pane_name"] == "scout"
+    assert by_pane["pane-2"]["workspace_name"] == "Other"
+    assert bot["last_activity_at"] == max(b["created_at"] for b in bot["bindings"])
+
+
+async def test_list_gives_an_unbound_bot_no_bindings(ov: Env) -> None:
+    bot = ov.m.list()["platforms"][0]["accounts"][0]
+    assert bot["bindings"] == [] and bot["last_activity_at"] is None
