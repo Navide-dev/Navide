@@ -568,7 +568,7 @@ function* iterTokens(text: string, deadline: Deadline): Generator<Token> {
 
 // ── script rules (static_scan/js_scan.py) ───────────────────────────────────
 
-const CAPABILITY_ADDRESS_RE = /^(aiCli|fs|shell|storage|ui|workspace)\.[a-z][A-Za-z0-9]{0,63}$/
+const CAPABILITY_ADDRESS_RE = /^(agentMessages|agents|aiCli|fs|shell|storage|ui|web|workspace)\.[a-z][A-Za-z0-9]{0,63}$/
 const FS_READ_ADDRESSES = new Set(['fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.queryFiles', 'fs.glob', 'fs.stat', 'fs.statPath'])
 const FS_WRITE_ADDRESSES = new Set(['fs.writeFile'])
 const COMMAND_EXECUTABLES = new Set([
@@ -1510,7 +1510,7 @@ export function declaredVsScanned(
   if (shell === null && scan.shell.dynamic.count) add(undeclared, 'shellDynamic', 'dynamic')
   const namespaces = new Set(scan.capabilities.map((item) => item.address.split('.')[0]))
   if (shell === null && namespaces.has('shell')) add(undeclared, 'shell', 'shell.run')
-  for (const namespace of ['aiCli', 'fs', 'ui']) {
+  for (const namespace of ['aiCli', 'fs', 'ui', 'web', 'agents', 'agentMessages']) {
     if (namespaces.has(namespace) && !declared.has(namespace)) add(undeclared, 'system', namespace)
   }
   const files = scan.files

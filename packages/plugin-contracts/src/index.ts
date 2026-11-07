@@ -11,6 +11,7 @@ import type { GitAccountParams, GitAccountResults, GitCredentialEvents } from '.
 import type { IssueParams, IssueResults } from './issues.js'
 import { AGENTS_EVENTS, type AgentsEventAddress, type AgentsEventPayloads, type AgentsParams, type AgentsResults } from './agents.js'
 import type { PluginsParams, PluginsResults } from './plugins.js'
+import type { WebEventPayloads, WebParams, WebResults } from './web.js'
 import type { EditorPreferenceParams, EditorPreferenceResults, EditorPreferenceEvents } from './editorPreferences.js'
 import type { FilePickerRequest } from './filePicker.js'
 export { validFilePickerRequest } from './filePicker.js'
@@ -25,6 +26,7 @@ export * from './gitCapabilities.js'
 export * from './issues.js'
 export * from './agents.js'
 export * from './plugins.js'
+export * from './web.js'
 export * from './editorPreferences.js'
 export * from './staticScan.js'
 export { agentToolViewId, AGENT_TOOL_VIEW_METHOD_PREFIX, deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
@@ -1454,7 +1456,7 @@ export class PluginError extends Error {
   }
 }
 
-export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams {
+export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams, WebParams {
   'ui.openFilePicker': FilePickerRequest
   'fs.readFile': { path: string; encoding?: string; selectionGrant?: string }
   'fs.writeFile': { path: string; content: string; encoding?: string; expectedMtime?: number; selectionGrant?: string }
@@ -1497,7 +1499,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'storage.delete': { scope: StoragePartitionScope; key: string }
 }
 
-export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults, PluginsResults {
+export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults, PluginsResults, WebResults {
   'ui.openFilePicker': { opened: boolean }
   'fs.readFile': {
     content: string
@@ -1567,7 +1569,7 @@ export type PublicMethod = keyof PublicMethodParams
 export type Params<M extends PublicMethod> = PublicMethodParams[M]
 export type Result<M extends PublicMethod> = PublicMethodResults[M]
 
-export interface PublicEventPayloads extends EditorAiEvents, EditorNativeEvents, EditorPreferenceEvents, GitCredentialEvents, AgentsEventPayloads {
+export interface PublicEventPayloads extends EditorAiEvents, EditorNativeEvents, EditorPreferenceEvents, GitCredentialEvents, AgentsEventPayloads, WebEventPayloads {
   /** UI notification for a write to this receiver's own selected snapshot. */
   'ui.pluginStorageChanged': { scope: StoragePartitionScope; key: string; value: JsonValue; deleted: boolean }
   'workspace.filesChanged': {

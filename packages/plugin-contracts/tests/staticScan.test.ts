@@ -102,3 +102,40 @@ describe('contract twins', () => {
       expect(declaredVsScanned({ permissions }, scan)).toEqual(expected.declaredVsScanned)
     })
 })
+
+describe('web capability addresses', () => {
+  const manifest = { schemaVersion: 2, id: 'acme.web', version: '1.0.0', publisher: 'acme', permissions: { system: ['web'] } }
+  const compare = (text: string) => {
+    const report = scanPackageFiles({
+      files: filesOf(manifest, { 'frontend/main/app.js': { text } }),
+      artifactDigest: 'b'.repeat(64),
+      target: 'universal',
+      manifest,
+    }) as StaticScanReport
+    return { report, comparison: declaredVsScanned({ permissions: disclosurePermissions(manifest) }, report) }
+  }
+
+  it('finds web.* calls, so a declared web is seen', () => {
+    const { report, comparison } = compare(
+      "const v = await invoke('web.create', {}); await invoke('web.cdp', {viewId: v.viewId, method: 'Page.navigate', params: {}})"
+    )
+    expect(report.capabilities.map((item) => item.address)).toEqual(['web.cdp', 'web.create'])
+    expect(comparison.declaredNotSeen).toEqual([])
+  })
+
+  it('still reports a declared web that the code never calls', () => {
+    const { comparison } = compare("await invoke('ui.notify', {message: 'hi'})")
+    expect(comparison.declaredNotSeen).toEqual([{ kind: 'system', key: 'web' }])
+  })
+
+  it('reports web.* calls when web is not declared', () => {
+    const undeclaredManifest = { ...manifest, permissions: {} }
+    const report = scanPackageFiles({
+      files: filesOf(undeclaredManifest, { 'frontend/main/app.js': { text: "invoke('web.create', {})" } }),
+      artifactDigest: 'b'.repeat(64),
+      target: 'universal',
+      manifest: undeclaredManifest,
+    }) as StaticScanReport
+    expect(declaredVsScanned({ permissions: disclosurePermissions(undeclaredManifest) }, report).undeclared).toEqual([{ kind: 'system', key: 'web' }])
+  })
+})

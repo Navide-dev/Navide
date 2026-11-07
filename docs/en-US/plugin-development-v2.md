@@ -1796,6 +1796,11 @@ the package, not to a workspace. Addresses marked with a gesture are refused
 with `USER_CANCELLED` unless the Host observed the user gesture itself, so an
 agent or a backend can never perform them.
 
+`@navide/plugin-sdk` types every address below: `capabilities.invoke('web.cdp',
+{viewId, method, params})` resolves to `{result}`, and `Params<'web.*'>`,
+`Result<'web.*'>` and `Payload<'web.changed'>` (with `WebViewSummary` for one
+view) come from `@navide/plugin-contracts`.
+
 | Address | Request → result | Rule |
 |---|---|---|
 | `web.list` | `{}` → `{views: WebViewInfo[]}` | Every view of this package |
