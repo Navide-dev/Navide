@@ -131,6 +131,13 @@ The test account is the image's own `admin`, which logs on to the desktop by its
 the app in that session. `tart run --no-graphics` runs detached on the VM host (`~/vm-retest-tart/run.pid` there),
 so no Fusion or tart window opens.
 
+The cirruslabs vanilla image ships with Gatekeeper assessments disabled (`spctl --status` says "assessments
+disabled", and `spctl -a` adds "override=security disabled"). `macos-up.sh` runs `sudo -n spctl --global-enable` in
+the guest before it installs the app and stops the round if that fails, so the spctl verdict it records is the one
+an enforcing Gatekeeper gives. The first-launch "downloaded from the Internet" prompt of a quarantined app cannot be
+clicked over ssh (Accessibility and Screen Recording need TCC grants that SIP keeps read-only), so pressing Open on it
+is checked by hand on a real Mac.
+
 ## Load rules
 
 The host is shared, so a busy host can make results meaningless. The rules:

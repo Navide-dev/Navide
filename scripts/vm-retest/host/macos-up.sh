@@ -3,6 +3,9 @@
 # Copies the guest scripts and the .dmg in and installs the app the way a person does: mount the dmg, copy Navide.app to
 # /Applications, eject. Records Gatekeeper's verdict (spctl), points Claude Code at the local stub, starts the stub (PID in
 # stub.pid) and the app with `open` in the auto-logged-in desktop session (CDP on 9223). Output also lands in macup.out.
+# The cirruslabs image ships with Gatekeeper assessments disabled (spctl prints "override=security disabled"), which
+# would make the spctl verdict prove only the signature and notarization. Gatekeeper is turned on first, and the round
+# stops if that fails.
 set -u
 . "$(dirname "$0")/env.sh"
 A="${1:-}"; [ -d "$A" ] || die "usage: macos-up.sh <artifact dir with one .dmg>"
@@ -10,6 +13,8 @@ dmg=("$A"/*.dmg); [ -f "${dmg[0]}" ] || die "need one .dmg in $A"; b="$(basename
 for _ in $(seq 1 60); do "$HERE/gsh.sh" macos true 2>/dev/null && break; sleep 5; done
 "$HERE/gsh.sh" macos 'mkdir -p ~/wh' || die "guest ssh not up"
 "$HERE/gcp.sh" macos put "$GUEST_DIR"/*.* "${dmg[0]}" || die "copy failed"
+"$HERE/gsh.sh" macos 'sudo -n spctl --global-enable && spctl --status | grep -qx "assessments enabled"' \
+  || die "could not enable Gatekeeper in the guest (sudo -n spctl --global-enable)"
 echo "host sha256: $(shasum -a 256 "${dmg[0]}" | cut -c1-64)  $b"
 "$HERE/gsh.sh" macos "export PATH=\$HOME/.local/bin:/usr/local/bin:\$PATH; {
   shasum -a 256 '$b' | cut -c1-64
