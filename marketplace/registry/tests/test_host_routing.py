@@ -102,7 +102,7 @@ def test_store_serves_package_assets_for_its_pages(store, legacy) -> None:
 
 
 def test_store_sends_developer_pages_to_the_console(store) -> None:
-    for path in ("/publish", "/publisher", "/publisher/acme", "/developer/apply", "/admin/review"):
+    for path in ("/publish", "/publisher", "/publisher/acme", "/developer", "/developer/apply", "/admin/review"):
         resp = store.get(path)
         assert resp.status_code == 301, path
         assert resp.headers["location"] == DEV + path
@@ -135,7 +135,7 @@ def test_store_robots_allows(store) -> None:
 
 # -- developer console ----------------------------------------------------
 def test_console_pages_are_noindex_and_sign_in_gated(dev) -> None:
-    for path in ("/publish", "/publisher", "/developer/apply", "/admin/review"):
+    for path in ("/publisher", "/developer/apply", "/admin/review"):
         resp = dev.get(path)
         assert resp.status_code == 303, path
         assert resp.headers["location"].startswith("/login?")
@@ -166,11 +166,19 @@ def test_console_signs_in_on_its_own_host(dev) -> None:
     assert "x-robots-tag" in resp.headers
 
 
-def test_console_publish_page_redirects_signed_in_developers(dev) -> None:
+def test_console_open_pages_are_noindex_too(dev) -> None:
+    # /developer and /publish explain the flow before sign-in; still noindex.
+    for path in ("/developer", "/publish"):
+        resp = dev.get(path)
+        assert resp.status_code == 200, path
+        assert resp.headers["x-robots-tag"] == "noindex, nofollow"
+
+
+def test_console_publish_page_shows_signed_in_developers_their_step(dev) -> None:
     _sign_in(dev, "/publisher")
     resp = dev.get("/publish")
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/publisher"
+    assert resp.status_code == 200
+    assert "You are on step 2" in resp.text
 
 
 def test_console_sign_out_returns_to_the_store(dev) -> None:
@@ -212,6 +220,7 @@ def test_legacy_keeps_serving_the_api_and_downloads(legacy) -> None:
         "/publish",
         "/publisher",
         "/publisher/claim",
+        "/developer",
         "/developer/apply",
         "/login",
         "/admin/review",

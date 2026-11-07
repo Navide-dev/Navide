@@ -52,6 +52,17 @@ _TEMPLATES_DIR = Path(__file__).parent / "web_templates"
 # Raw HTML disabled -> README markdown cannot inject active markup (XSS-safe).
 _MD = MarkdownIt("commonmark", {"html": False, "linkify": False})
 
+# Where a third-party developer reads on: the one entry page in the
+# repository (docs/en-US/build-for-navide.md) and its community links.
+_REPO_URL = "https://github.com/Navide-dev/Navide"
+SITE_LINKS = {
+    "repo_url": _REPO_URL,
+    "guide_url": f"{_REPO_URL}/blob/main/docs/en-US/build-for-navide.md",
+    "ideas_url": f"{_REPO_URL}/blob/main/docs/en-US/plugin-ideas.md",
+    "discussions_url": f"{_REPO_URL}/discussions",
+    "security_url": f"{_REPO_URL}/security/policy",
+}
+
 _README_NAMES = {"readme.md", "readme.markdown", "readme"}
 
 
@@ -241,13 +252,15 @@ def _base_path_context(request: Request) -> dict[str, str]:
     `store` and `dev` prefix links to the storefront and developer console
     pages, `api` links to the JSON API, and `canonical_url` is the
     storefront's own address of a storefront page. With host routing off they
-    all collapse to the one site."""
+    all collapse to the one site. SITE_LINKS (the developer guide and the
+    community links) ride along so every page's footer can use them."""
     base = request.scope.get("root_path", "").rstrip("/")
     settings = request.app.state.registry.settings
     role = host_routing.request_role(request)
     if role is None:
-        return {"base": base, "store": base, "dev": base, "api": base, "canonical_url": ""}
+        return {"base": base, "store": base, "dev": base, "api": base, "canonical_url": "", **SITE_LINKS}
     return {
+        **SITE_LINKS,
         "base": base,
         "store": base if role == host_routing.STORE else settings.store_origin,
         "dev": base if role == host_routing.DEVELOPER else settings.developer_origin,

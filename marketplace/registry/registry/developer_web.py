@@ -269,6 +269,14 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
         context.update(extra or {})
         return page(request, "developer_apply.html", context, status=status)
 
+    @router.get("/developer")
+    def landing(request: Request) -> Response:
+        # The console's one page open without signing in: the seven steps,
+        # what an application needs, what to do before signing in. Like every
+        # console page it is noindex; discovery is the storefront's job.
+        enabled = request.app.state.registry.settings.cloud_auth_enabled
+        return page(request, "developer_landing.html", {"enabled": enabled})
+
     @router.get("/developer/apply")
     @guarded
     def apply_form(request: Request) -> Response:

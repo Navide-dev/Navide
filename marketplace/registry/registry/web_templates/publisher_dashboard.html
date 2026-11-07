@@ -44,6 +44,30 @@
   <nav class="page-toc" aria-label="On this page">
     <a href="#publish-cli">CLI</a><a href="#versions">Versions</a><a href="#reports">Reports</a><a href="#tokens">Tokens</a><a href="#signing-key">Signing key</a><a href="#verified">Verified publisher</a>
   </nav>
+  {# One card at a time, from publisher_web.next_step. #}
+  {% if next_step and not publisher.frozen_at %}
+  <div class="next-card{% if next_step == 'rejected' %} next-card--danger{% endif %}" role="status">
+    {% if next_step == 'key' %}
+      <p class="next-card-title">Next: register your signing key</p>
+      <p>Run <code>navide-plugin keygen</code>, then paste the <code>.pub</code> file into Signing key below.
+        Keep the private key out of Git.</p>
+      <a href="#signing-key">Go to Signing key</a>
+    {% elif next_step == 'first-version' %}
+      <p class="next-card-title">Next: publish your first version</p>
+      <p><code>navide-plugin publish &lt;file&gt;</code> — the id must start with <code>{{ publisher.name }}.</code></p>
+      <a href="#publish-cli">How to publish</a>
+    {% elif next_step == 'in-review' %}
+      <p class="next-card-title">In review</p>
+      <p><code>{{ rows[0].identity }}</code> {{ rows[0].version }} was submitted on {{ rows[0].submitted_at.strftime('%Y-%m-%d') }};
+        the target is 3 business days. Meanwhile you can send a Testplace build to testers.</p>
+    {% elif next_step == 'rejected' %}
+      <p class="next-card-title">Rejected</p>
+      <p><code>{{ rows[0].identity }}</code> {{ rows[0].version }}{% if rows[0].reason %} — reason: {{ rows[0].reason }}{% endif %}.
+        Fix it and publish again with a new version number (a version number is never reused).</p>
+      <a href="#versions">See versions</a>
+    {% endif %}
+  </div>
+  {% endif %}
   {% if rows %}
   <div class="stat-row summary-stats" aria-label="Versions and reports">
     <div class="stat stat--ok"><b>{{ rows|selectattr('status', 'equalto', 'approved')|list|length }}</b><span>live</span></div>
@@ -63,6 +87,9 @@ navide-plugin publish ./{{ publisher.name }}.my-extension-1.0.0.vsix --registry 
   {% endif %}
 
   <h2 class="section-title" id="versions">Versions &amp; review status</h2>
+  <p class="muted">A <a href="{{ repo_url }}/blob/main/docs/en-US/marketplace-publishing.md#8-yank-a-version">yank ↗</a>
+    takes a version down everywhere and cannot be undone: users keep what they installed, and
+    Navide no longer installs it.</p>
   {% if rows %}
   <div class="table-scroll">
   <table class="version-table review-status-table">
@@ -94,6 +121,9 @@ navide-plugin publish ./{{ publisher.name }}.my-extension-1.0.0.vsix --registry 
   {% else %}
   <p class="empty">Nothing published yet.</p>
   {% endif %}
+
+  {# Testplace builds (0.2.40): this namespace's test builds, testers, expiry and
+     codes, with Promote and Revoke. Needs a developer-side view in testplace_web. #}
 
   <h2 class="section-title" id="reports">Reports from users</h2>
   {% if reports %}

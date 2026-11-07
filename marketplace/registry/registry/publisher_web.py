@@ -203,6 +203,64 @@ def _manifest_check(report: dict) -> str:
     return report.get("signature", "unsigned")
 
 
+# The seven steps of build-for-navide.md §4, numbered as the step bar shows
+# them: 1 application, 2 namespace, 3 signing key, 4 Testplace (optional),
+# 5 publish and review, 6 update, 7 withdraw.
+_JOURNEY_STEP = {
+    "apply": 1,
+    "apply-pending": 1,
+    "apply-rejected": 1,
+    "apply-revoked": 1,
+    "claim": 2,
+    "key": 3,
+    "first-version": 5,
+    "in-review": 5,
+    "rejected": 5,
+    "live": 6,
+}
+
+
+def next_step(publisher: Publisher, rows: list[dict]) -> str | None:
+    """The one thing a namespace's owner should do next, or None when its
+    latest version is live. `rows` is `_version_rows`, newest first."""
+    if not publisher.public_key:
+        return "key"
+    if not rows:
+        return "first-version"
+    if rows[0]["status"] == review.PENDING:
+        return "in-review"
+    if rows[0]["status"] == review.REJECTED:
+        return "rejected"
+    return None
+
+
+def journey(session: Session, member_id: str) -> dict:
+    """Where a signed-in developer stands in the seven steps, from the data
+    the dashboard already shows: application, namespace, key, versions."""
+    application = qualification.view(qualification.get(session, member_id))
+    publishers = owned_publishers(session, member_id)
+    namespace = row = None
+    if publishers:
+        rows = _version_rows(session, publishers[0])
+        state = next_step(publishers[0], rows) or "live"
+        namespace = publishers[0].name
+        row = rows[0] if rows else None
+    else:
+        state = {
+            qualification.APPROVED: "claim",
+            qualification.PENDING: "apply-pending",
+            qualification.REJECTED: "apply-rejected",
+            qualification.REVOKED: "apply-revoked",
+        }.get(application["status"], "apply")
+    return {
+        "state": state,
+        "step": _JOURNEY_STEP[state],
+        "application": application,
+        "namespace": namespace,
+        "row": row,
+    }
+
+
 def create_publisher_router() -> APIRouter:
     router = APIRouter(include_in_schema=False)
     templates = Jinja2Templates(
@@ -230,9 +288,15 @@ def create_publisher_router() -> APIRouter:
     @router.get("/publish", response_class=HTMLResponse)
     @guarded
     def publish_landing(request: Request) -> Response:
-        # Signed-in only: an anonymous visitor goes straight to sign-in.
-        _require_viewer(request, "/publisher")
-        return _redirect(request, "/publisher")
+        # Open to everyone: an anonymous visitor sees the seven steps and the
+        # checklist with a sign-in button, a developer sees which step they
+        # are on.
+        context: dict = {"enabled": _settings(request).cloud_auth_enabled}
+        viewer = cloud_auth.current_viewer(request) if context["enabled"] else None
+        if viewer is not None:
+            with _session(request) as session:
+                context["journey"] = journey(session, viewer.member_id)
+        return page(request, "publish_signin.html", context)
 
     @router.get("/login")
     def login(request: Request, next: str | None = None) -> Response:
@@ -324,10 +388,12 @@ def create_publisher_router() -> APIRouter:
                 for p in publishers
             ]
             counted = session.exec(select(counted_namespaces(viewer.member_id))).one()
+            steps = journey(session, viewer.member_id) if not items else None
         return page(
             request,
             "publisher_home.html",
             {
+                "journey": steps,
                 "items": items,
                 "can_claim": counted < MAX_NAMESPACES_PER_ACCOUNT,
                 "max": MAX_NAMESPACES_PER_ACCOUNT,
@@ -400,6 +466,7 @@ def create_publisher_router() -> APIRouter:
                 "max_token_days": MAX_TOKEN_DAYS,
                 "owned_count": len(owned_publishers(session, viewer.member_id)),
                 "registry_url": _registry_api_url(request),
+                "next_step": next_step(publisher, rows),
             }
         context.update(extra or {})
         return page(request, "publisher_dashboard.html", context, status=status)

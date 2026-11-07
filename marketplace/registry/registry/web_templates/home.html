@@ -69,6 +69,22 @@
 </section>
 {% endif %}
 
+{% if not filtered %}
+<section class="build-card" aria-labelledby="build-title">
+  <h2 id="build-title">Build for Navide — make your own extension</h2>
+  <ol class="build-steps">
+    <li><b>1 · Running in five minutes</b><code>npx navide-plugin init --template vue</code>Navide 0.2.39 or later</li>
+    <li><b>2 · Load it and try it</b>Settings → Navide Plugins → Developer Mode → Load from folder</li>
+    <li><b>3 · Apply to publish</b>Apply once with your real name; a person reviews it, target: 3 business days</li>
+  </ol>
+  <div class="button-row">
+    <a class="install-button" href="{{ dev }}/developer">Start at Navide Developers →</a>
+    <a class="secondary-button" href="{{ guide_url }}">Read the guide ↗</a>
+    <a class="secondary-button" href="{{ repo_url }}">GitHub ↗</a>
+  </div>
+</section>
+{% endif %}
+
 {% if featured and not filtered %}
 <section class="featured">
   <h2 class="section-title">Featured</h2>
