@@ -968,7 +968,7 @@ async def test_the_round_two_tools_are_registered_with_their_declared_arguments(
         "before",
     }
     assert set(tools["cli_token_stats"].inputSchema.get("properties") or {}) == {
-        "workspace_path"
+        "workspace_path", "cost_by", "since", "until", "pane",
     }
     assert set(tools["memory_list"].inputSchema.get("properties") or {}) == {
         "workspace_path",
