@@ -41,6 +41,10 @@ export const TURN_START_SIGNAL: Readonly<Record<string, boolean>> = {
   goose: true,
   // No log reader: mcode keeps its history in SQLite Navide cannot read yet.
   mcode: false,
+  // No log readers yet (standalone agents; their sessions live in their own
+  // runtime).
+  openclaw: false,
+  hermes: false,
   // A plain shell takes its own submit path and never reaches the watch.
   terminal: false,
 }

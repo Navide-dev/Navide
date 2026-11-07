@@ -193,6 +193,16 @@ MEMORY_SOURCES: tuple[MemorySource, ...] = (
     MemorySource("goose", USER_SCOPE, (".agents", "AGENTS.md")),
     MemorySource("goose", PROJECT_SCOPE, (".goosehints",), canonical=True),
     MemorySource("goose", PROJECT_SCOPE, ("AGENTS.md",)),
+    # -- hermes: one project file per session, first match of .hermes.md /
+    # HERMES.md (up to the git root), AGENTS.override.md, AGENTS.md (merged
+    # git root -> cwd), CLAUDE.md, .cursorrules; SOUL.md only from the Hermes
+    # home (docs/user-guide/features/context-files, read 2026-11-07).
+    MemorySource("hermes", USER_SCOPE, (".hermes", "SOUL.md"), canonical=True),
+    MemorySource("hermes", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("hermes", PROJECT_SCOPE, (".hermes.md",)),
+    MemorySource("hermes", PROJECT_SCOPE, ("HERMES.md",)),
+    MemorySource("hermes", PROJECT_SCOPE, ("AGENTS.override.md",)),
+    MemorySource("hermes", PROJECT_SCOPE, ("CLAUDE.md",)),
     # -- grok: ~/.grok/AGENTS.md, then AGENTS.override.md/AGENTS.md per level.
     MemorySource("grok", USER_SCOPE, (".grok", "AGENTS.md"), canonical=True),
     MemorySource("grok", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
@@ -226,6 +236,11 @@ MEMORY_SOURCES: tuple[MemorySource, ...] = (
     MemorySource("opencode", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
     MemorySource("opencode", PROJECT_SCOPE, ("CLAUDE.md",)),
     MemorySource("opencode", PROJECT_SCOPE, ("CONTEXT.md",)),
+    # -- openclaw: bootstrap files come from the agent workspace
+    # (~/.openclaw/workspace; OPENCLAW_WORKSPACE_DIR / profile relocate it),
+    # not from the TUI's cwd (docs/concepts/agent-workspace, read 2026-11-07).
+    MemorySource("openclaw", USER_SCOPE, (".openclaw", "workspace", "AGENTS.md"), canonical=True),
+    MemorySource("openclaw", USER_SCOPE, (".openclaw", "workspace", "SOUL.md")),
     # -- pi: ~/.pi/agent/ and every ancestor directory, override first.
     MemorySource("pi", USER_SCOPE, (".pi", "agent", "AGENTS.md"), canonical=True),
     MemorySource("pi", USER_SCOPE, (".pi", "agent", "CLAUDE.md")),
