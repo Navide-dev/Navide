@@ -21,12 +21,18 @@ it can never drift from the rows it sums.
 with every call that names a pane. Rows that name no pane (a backfill, a call
 read before its pane claimed the session) take their session's pane from it,
 and cost_report compares the two views per pane.
+
+``profile_id`` (schema 3) is the account slot the call ran on, as the token
+sink attributed it; '' when unknown. It is stored as an opaque string and never
+interpreted here. Upgrading to schema 3 fills it for the last 30 days of rows
+whose log lives under a Navide claude profile dir (see profile_from_path).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import sys
 import time
@@ -45,8 +51,8 @@ PRICING_FILE = Path(__file__).with_name("cost_pricing.json")
 _INSERT = (
     "INSERT OR IGNORE INTO usage_calls (vendor, dedup_key, session_id, cwd,"
     " workspace, pane, model, ts, input, cache_read, cache_write_5m,"
-    " cache_write_1h, output, source_file)"
-    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    " cache_write_1h, output, source_file, profile_id)"
+    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
 # A session-totals row (see _row) only ever moves forward: a re-read that
@@ -54,14 +60,15 @@ _INSERT = (
 _UPSERT_TOTALS = (
     "INSERT INTO usage_calls (vendor, dedup_key, session_id, cwd,"
     " workspace, pane, model, ts, input, cache_read, cache_write_5m,"
-    " cache_write_1h, output, source_file)"
-    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    " cache_write_1h, output, source_file, profile_id)"
+    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     " ON CONFLICT(vendor, dedup_key) DO UPDATE SET"
     " ts = excluded.ts, input = excluded.input, cache_read = excluded.cache_read,"
     " cache_write_5m = excluded.cache_write_5m, output = excluded.output,"
     " model = CASE WHEN excluded.model != '' THEN excluded.model ELSE model END,"
     " workspace = CASE WHEN excluded.workspace != '' THEN excluded.workspace ELSE workspace END,"
-    " pane = CASE WHEN excluded.pane != '' THEN excluded.pane ELSE pane END"
+    " pane = CASE WHEN excluded.pane != '' THEN excluded.pane ELSE pane END,"
+    " profile_id = CASE WHEN excluded.profile_id != '' THEN excluded.profile_id ELSE profile_id END"
     " WHERE excluded.input + excluded.cache_read + excluded.output"
     " > input + cache_read + output"
 )
@@ -113,6 +120,43 @@ def _create_schema_v2(cur: sqlite3.Cursor) -> None:
     cur.execute("CREATE INDEX pane_sessions_session ON pane_sessions (vendor, session_id)")
 
 
+#: How far back the schema-3 upgrade fills profile_id from log paths.
+BACKFILL_PROFILE_DAYS = 30
+
+# <...>/cli-profiles/claude/<profile_id>/... ; a removed profile's dir is
+# renamed "<profile_id>.deleted-<ns>", the same slot.
+_PROFILE_DIR = re.compile(r"[/\\]cli-profiles[/\\]claude[/\\]([^/\\]+?)(?:\.deleted-\d+)?[/\\]")
+
+
+def profile_from_path(source_file: str) -> str:
+    """The claude profile slot a log path lives under, or '' when it is not a
+    Navide claude profile dir (a live login's ~/.claude, another vendor)."""
+    m = _PROFILE_DIR.search(source_file or "")
+    return m.group(1) if m else ""
+
+
+def _create_schema_v3(cur: sqlite3.Cursor, now: float | None = None) -> None:
+    cur.execute("ALTER TABLE usage_calls ADD COLUMN profile_id TEXT NOT NULL DEFAULT ''")
+    cur.execute("CREATE INDEX usage_calls_profile_ts ON usage_calls (profile_id, ts)")
+    cur.execute("DROP VIEW usage_daily")
+    cur.execute(
+        "CREATE VIEW usage_daily AS SELECT"
+        " date(ts, 'unixepoch') AS day, cwd, vendor, model, profile_id,"
+        " COUNT(*) AS calls, SUM(input) AS input, SUM(cache_read) AS cache_read,"
+        " SUM(cache_write_5m) AS cache_write_5m, SUM(cache_write_1h) AS cache_write_1h,"
+        " SUM(output) AS output"
+        " FROM usage_calls GROUP BY day, cwd, vendor, model, profile_id"
+    )
+    cutoff = int((time.time() if now is None else now) - BACKFILL_PROFILE_DAYS * 86400)
+    rows = cur.execute(
+        "SELECT rowid, source_file FROM usage_calls"
+        " WHERE ts >= ? AND vendor = 'claude' AND source_file LIKE '%cli-profiles%'",
+        (cutoff,),
+    ).fetchall()
+    updates = [(pid, rowid) for rowid, src in rows if (pid := profile_from_path(src))]
+    cur.executemany("UPDATE usage_calls SET profile_id = ? WHERE rowid = ?", updates)
+
+
 _UPSERT_PANE_SESSION = (
     "INSERT INTO pane_sessions (pane, vendor, session_id, workspace, first_ts, last_ts)"
     " VALUES (?, ?, ?, ?, ?, ?)"
@@ -161,7 +205,14 @@ def _sql(usage: TokenUsage) -> str:
     return _UPSERT_TOTALS if "ledger_session_totals" in usage.raw else _INSERT
 
 
-def _row(usage: TokenUsage, workspace: str, pane: str) -> tuple:
+def _profile(profile_id: str) -> str:
+    # The sink's own "no account" marker is stored as '' like every other
+    # unknown field here.
+    pid = str(profile_id or "")
+    return "" if pid == "unknown" else pid
+
+
+def _row(usage: TokenUsage, workspace: str, pane: str, profile_id: str = "") -> tuple:
     totals = usage.raw.get("ledger_session_totals")
     if isinstance(totals, dict):
         # A reader whose events are differences of the CLI's running totals
@@ -184,6 +235,7 @@ def _row(usage: TokenUsage, workspace: str, pane: str) -> tuple:
             0,
             int(totals.get("output", 0)),
             usage.file_path or "",
+            _profile(profile_id),
         )
     cache_read = max(0, int(usage.cache_read_tokens))
     cache_write = max(0, int(usage.cache_creation_tokens))
@@ -204,6 +256,7 @@ def _row(usage: TokenUsage, workspace: str, pane: str) -> tuple:
         write_1h,
         max(0, int(usage.output_tokens)),
         usage.file_path or "",
+        _profile(profile_id),
     )
 
 
@@ -212,6 +265,7 @@ class CostLedger:
         self._db = db
         self._db.migrate("cost_ledger", 1, _create_schema_v1)
         self._db.migrate("cost_ledger", 2, _create_schema_v2)
+        self._db.migrate("cost_ledger", 3, _create_schema_v3)
         self._keyless_vendors: set[str] = set()
 
     def _accept(self, usage: TokenUsage) -> bool:
@@ -222,13 +276,16 @@ class CostLedger:
             log.warning("cost ledger: %s events carry no dedup_key; skipped", usage.vendor)
         return False
 
-    def record(self, usage: TokenUsage, workspace: str = "", pane: str = "") -> bool:
+    def record(
+        self, usage: TokenUsage, workspace: str = "", pane: str = "", profile_id: str = ""
+    ) -> bool:
         """Insert one call. Never raises: the token sink must not depend on it.
-        Returns True when a new row was written."""
+        Returns True when a new row was written. ``profile_id`` is the account
+        slot the sink attributed the call to ("unknown" is stored as '')."""
         try:
             if not self._accept(usage):
                 return False
-            row = _row(usage, workspace, pane)
+            row = _row(usage, workspace, pane, profile_id)
             with self._db.transaction() as cur:
                 cur.execute(_sql(usage), row)
                 written = cur.rowcount == 1
@@ -247,11 +304,12 @@ class CostLedger:
         return cost_report(self._db, by, **filters)
 
     def record_many(self, events: Iterable[TokenUsage]) -> tuple[int, int]:
-        """Batch insert for the backfill. Returns (written, skipped)."""
+        """Batch insert for the backfill. Returns (written, skipped). A call's
+        account is read off its log path (profile_from_path), '' otherwise."""
         rows, skipped = [], 0
         for ev in events:
             if self._accept(ev):
-                rows.append((_sql(ev), _row(ev, "", "")))
+                rows.append((_sql(ev), _row(ev, "", "", profile_from_path(ev.file_path))))
             else:
                 skipped += 1
         if not rows:
@@ -299,6 +357,10 @@ _GROUP_KEYS = {
     "day": "date(u.ts, 'unixepoch')",
     "session": "u.session_id",
     "model": "u.model",
+    "account": "u.profile_id",
+    # model × account: key "<model>::<profile_id>", split again into the
+    # bucket's model and account fields.
+    "model_account": "u.model || '::' || u.profile_id",
 }
 
 COST_REPORT_GROUPS = tuple(_GROUP_KEYS)
@@ -318,7 +380,9 @@ def cost_report(
     until: str = "",
     pricing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Tokens and dollars from the ledger, grouped by cwd, pane, day, session or model.
+    """Tokens and dollars from the ledger, grouped by cwd, pane, day, session,
+    model, account (profile_id, '' = unknown) or model_account (key
+    "<model>::<profile_id>"; each group also carries ``model`` and ``account``).
 
     ``cwd`` keeps calls made in that folder or below it; ``since`` and ``until``
     are inclusive UTC days (YYYY-MM-DD). A model the pricing table does not know
@@ -372,6 +436,8 @@ def cost_report(
     groups = sorted(buckets.values(), key=lambda b: b["usd"], reverse=True)
     for bucket in groups:
         bucket["usd"] = round(bucket["usd"], 4)
+        if by == "model_account":
+            bucket["model"], _, bucket["account"] = bucket["key"].rpartition("::")
     answer: dict[str, Any] = {
         "by": by,
         "groups": groups,

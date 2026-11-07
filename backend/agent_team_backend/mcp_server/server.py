@@ -8275,8 +8275,11 @@ async def cli_token_stats(
 
     `cost_by` adds `cost`: dollars from Navide's per-call usage ledger, for the
     calls made in this workspace's folder or below it, grouped by "cwd",
-    "pane", "day", "session" or "model". Each group is {key, calls, input,
-    cache_read, cache_write_5m, cache_write_1h, output, usd, unpriced_calls}:
+    "pane", "day", "session", "model", "account" (the account slot's
+    profile id, "" when unknown) or "model_account" (key "<model>::<profile
+    id>", with `model` and `account` on each group). Each group is {key,
+    calls, input, cache_read, cache_write_5m, cache_write_1h, output, usd,
+    unpriced_calls}:
     input is the uncached part, and a model the price table does not know adds
     to unpriced_calls, not to usd. `pricing` names the price table's version
     and effective date. `since` and `until` (YYYY-MM-DD, UTC, inclusive) limit
