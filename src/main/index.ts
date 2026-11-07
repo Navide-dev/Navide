@@ -25,7 +25,7 @@ import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
 import type { PluginCommandRunResult } from '../shared/pluginCommands'
 import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
-import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, openGitPluginView, openGitLeftPluginView, updateGitLeftPluginView, closeGitLeftPluginView, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, registerLegacyBundledGit, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
+import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
 import { createWindowCloseCoordinator } from './plugins/windowCloseCoordinator'
 import { createQuitCancelReset, createQuitCancelWatch } from './quit-cancel-watch'
 import { dockSurfaceProvided } from './dockSurfaceProvider'
@@ -87,7 +87,7 @@ import { MINI_IDE_PLUGIN_ID, MiniIdeStorageLifecycleSelector } from './plugins/m
 import { officialPluginVersion, supersedingBundledVersions } from './plugins/officialPluginVersions'
 import { createMiniIdeStorageMigrationGate, type MiniIdeStorageAvailability } from './plugins/miniIdeStorageMigrationGate'
 import { createMiniIdeLegacyPreferences } from './plugins/miniIdeLegacyPreferences'
-import { recoverFailedGitV2Activation } from './plugins/gitV2ActivationRecovery'
+import { isSelectedGitV2ActivationFailure } from './plugins/gitV2ActivationRecovery'
 import { composePluginContributionQuery } from './plugins/pluginContributionQuery'
 import {
   createPlansWindowRouter,
@@ -96,11 +96,7 @@ import {
 } from './plansWindowRouting'
 import { menuStringsFor } from './menuStrings'
 import { HostLocaleManager, readPersistedLocaleFromSettings, type SupportedLocale } from './hostLocale'
-import {
-  activateFactoryGitWithLegacyFallback,
-  assertFactoryGitRestoreAllowed,
-  shouldAttemptFactoryGit,
-} from './plugins/factoryGitStartup'
+import { activateFactoryGit, shouldAttemptFactoryGit } from './plugins/factoryGitStartup'
 import { migrateBundledGitPreferences } from './plugins/gitStorageMigration'
 import { GitStorageLifecycleSelector } from './plugins/gitStorageLifecycle'
 import { PlansStorageLifecycleSelector } from './plugins/plansStorageLifecycle'
@@ -391,19 +387,15 @@ const mainWindows = new Set<BrowserWindow>()
 /** Dedicated hosts are keyed by the stable catalog contribution key. The
  * renderer never receives the corresponding plugin instance id. */
 const contributionWindows = new Map<string, BrowserWindow>()
-const gitRecoveryForced = process.env['NAVIDE_GIT_RECOVERY'] === 'legacy'
-let gitRecoveryEnabled = gitRecoveryForced
-let legacyGitRegisteredForForcedRecovery = false
-/** The ready-time legacy Git registration for a recovery session. */
-function registerForcedLegacyGit(): void {
-  legacyGitRegisteredForForcedRecovery = true
-  const recovery = registerLegacyBundledGit(frontendPluginManager, {
-    isPackaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-    artifactVersion: officialPluginVersion('navide.git'),
-  })
-  if (!recovery.registered) {
-    warnMain(`[main] NAVIDE_GIT_RECOVERY=legacy but legacy Git bundle is unavailable: ${recovery.reason}`)
+/** Why the Git plugin could not start this session; null while it runs (or
+ *  is simply not installed). The main window shows it with a Reinstall action
+ *  in place of the Git tab; the Host has no Git interface of its own. */
+let gitActivationFailure: string | null = null
+function setGitActivationFailure(reason: string | null): void {
+  gitActivationFailure = reason
+  for (const hostWindow of mainWindows) {
+    if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+    hostWindow.webContents.send('plugins:activationFailed', { pluginId: 'navide.git', reason })
   }
 }
 const plansRecoveryForced = process.env['NAVIDE_PLANS_RECOVERY'] === 'legacy'
@@ -812,7 +804,9 @@ async function createWindow(
   })
 
   const mainBootParams: Record<string, string> = {
-    ...(gitRecoveryEnabled ? { legacy_git_recovery: '1' } : {}),
+    // Like the Plans reason below: a window opened after Git failed to start
+    // never sees the IPC event.
+    ...(gitActivationFailure !== null ? { git_activation_failure: gitActivationFailure } : {}),
     ...(plansRecoveryEnabled ? { legacy_plans_recovery: '1' } : {}),
     // A window opened after the downgrade never sees the IPC event, so the
     // reason has to travel with it or its recovery panel has nothing to say.
@@ -1254,11 +1248,10 @@ function refuseDisabledBuiltin(pluginId: string, target?: BrowserWindow | null, 
 }
 // An installed Marketplace copy of a first-party plugin is superseded when the
 // App bundles a newer version. Only ids whose bundled copy is attempted below
-// take part: an opted-out factory copy or a forced legacy Git or Plans recovery
+// take part: an opted-out factory copy or a forced legacy Plans recovery
 // keeps the installed package in charge.
 frontendPluginManager.setBundledPluginVersions(supersedingBundledVersions({
   optedOut: (pluginId) => pluginFactoryOptOuts.has(pluginId),
-  gitRecoveryForced,
   plansRecoveryForced,
 }))
 const installedPluginLoad = frontendPluginManager.loadInstalledPlugins(pluginsRoot(), {
@@ -1672,60 +1665,36 @@ if (!installedBrowserDescriptorPresent && !pluginFactoryOptOuts.has(BROWSER_PLUG
   else if (!factoryBrowser.absent) warnMain(`[main] bundled navide.browser unavailable: ${factoryBrowser.reason}`)
 }
 if (shouldAttemptFactoryGit({
-  forcedLegacy: gitRecoveryEnabled,
   installedPackagePresent: installedGitDescriptorPresent,
   optedOut: pluginFactoryOptOuts.has('navide.git'),
 })) {
-  const selection = activateFactoryGitWithLegacyFallback({
-    loadFactory: loadFactoryGitPackage,
-    activateLegacy: () => registerLegacyBundledGit(frontendPluginManager, {
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      artifactVersion: officialPluginVersion('navide.git'),
-    }),
-  })
+  const selection = activateFactoryGit(loadFactoryGitPackage)
   if (selection.mode === 'v2') factoryGitActivations.push(selection.activation)
-  else if (selection.mode === 'legacy') {
-    gitRecoveryEnabled = true
-    warnMain(`[main] bundled navide.git v2 failed; using legacy recovery: ${selection.v2Reason}`)
-  } else {
-    warnMain(
-      `[main] bundled navide.git is unavailable: ${selection.v2Reason}; ${selection.legacyReason}`
-    )
+  else {
+    gitActivationFailure = selection.reason
+    warnMain(`[main] bundled navide.git v2 failed to load: ${selection.reason}`)
   }
 }
 let miniIdeRecoveryEnabled = false
 frontendPluginManager.setActivationFailureHandler((failure) => {
-  const recovered = recoverFailedGitV2Activation(failure, {
+  if (isSelectedGitV2ActivationFailure(failure, {
     selectedDescriptor: () => frontendPluginManager.getDescriptor('navide.git') ?? null,
     hasExactGrant: (pluginId, packageVersion) =>
       pluginCapabilityGrants.get(pluginId, packageVersion) !== null,
-    activateLegacy: () => registerLegacyBundledGit(frontendPluginManager, {
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      artifactVersion: officialPluginVersion('navide.git'),
-    }),
-    onActivated: () => {
-      // The only record of *why* the session downgraded. Without it a user
-      // reporting the "Legacy recovery" panel left nothing to diagnose from.
-      warnMain(
-        `[main] navide.git v2 activation failed (${failure.reason}); switched to legacy recovery`
-      )
-      gitRecoveryEnabled = true
-      for (const [key, hostWindow] of contributionWindows) {
-        if (key.startsWith('navide.git.') && !hostWindow.isDestroyed()) hostWindow.close()
-      }
-      for (const hostWindow of mainWindows) {
-        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
-        hostWindow.webContents.send('plugins:contributionsChanged')
-        hostWindow.webContents.send('git:recoveryChanged', { legacy: true })
-      }
-    },
-  })
-  if (!recovered && failure.pluginId === 'navide.git') {
-    warnMain(
-      `[main] failed navide.git v2 activation could not switch to legacy recovery: ${failure.reason}`
-    )
+  })) {
+    // The only record of *why* Git stopped. Without it a user reporting the
+    // reinstall notice left nothing to diagnose from.
+    warnMain(`[main] navide.git v2 activation failed (${failure.reason}); showing the reinstall notice`)
+    for (const [key, hostWindow] of contributionWindows) {
+      if (key.startsWith('navide.git.') && !hostWindow.isDestroyed()) hostWindow.close()
+    }
+    for (const hostWindow of mainWindows) {
+      if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+      hostWindow.webContents.send('plugins:contributionsChanged')
+    }
+    setGitActivationFailure(failure.reason)
+  } else if (failure.pluginId === 'navide.git') {
+    warnMain(`[main] navide.git v2 activation failed outside the selected granted package: ${failure.reason}`)
   }
   if (
     failure.pluginId === MINI_IDE_PLUGIN_ID &&
@@ -1991,53 +1960,38 @@ const applyPluginActivationChange = ({
     }
   }
 }
-/** Re-activate the App-bundled v2 package, from a cold start or from legacy
- *  recovery. Recovery keeps the package registered, so the plain factory load
- *  refuses to run again and needs the recovery-specific seam. */
-function activateFactoryGitPackage():
-  | { loaded: true; activation: (typeof approvedInstalledPluginActivations)[number] }
+/** Bring Git back after it failed to start. A package that failed while
+ *  running stays registered, so clearing the failure lets the next view
+ *  activate it again; one that never loaded is loaded from the App bundle. */
+function reactivateFactoryGit():
+  | { loaded: true; activation?: (typeof approvedInstalledPluginActivations)[number] }
   | { loaded: false; reason: string } {
-  if (!gitRecoveryEnabled) return loadFactoryGitPackage()
-  const restored = frontendPluginManager.restoreFactoryAfterRecovery(factoryGitDir(), 'navide.git')
-  return restored.restored
-    ? { loaded: true, activation: restored.activation }
-    : { loaded: false, reason: restored.reason }
+  if (frontendPluginManager.getDescriptor('navide.git')) return { loaded: true }
+  return loadFactoryGitPackage()
 }
 
 // A failed v2 activation is usually transient: a readiness handshake that
 // missed its budget under load, or a guest torn down before it reported ready.
-// The downgrade used to last the whole session, with no way back but a
-// restart. Opening the Git tab is the user's natural retry, so spend a small
-// budget of v2 attempts there before the session settles on legacy Git.
+// Opening the Git tab is the user's natural retry, so spend a small budget of
+// attempts there before the session settles on the reinstall notice.
 const GIT_V2_RECOVERY_RETRIES = 2
 let gitV2RetriesLeft = GIT_V2_RECOVERY_RETRIES
 function retryGitV2AfterRecovery(): { ok: boolean; reason?: string } {
-  if (!gitRecoveryEnabled) return { ok: true }
-  if (gitRecoveryForced) return { ok: false, reason: 'NAVIDE_GIT_RECOVERY=legacy is forcing legacy recovery' }
+  if (gitActivationFailure === null) return { ok: true }
   if (pluginFactoryOptOuts.has('navide.git')) return { ok: false, reason: 'factory package is opted out' }
   if (gitV2RetriesLeft <= 0) return { ok: false, reason: 'no v2 attempt left this session' }
-  const restored = activateFactoryGitPackage()
+  const restored = reactivateFactoryGit()
   if (!restored.loaded) {
-    // Only an attempt that actually failed costs budget. Spending it up front
-    // meant a restore that worked still burned one, so two downgrades — even
-    // two spurious ones — stranded the session on legacy until a restart.
+    // Only an attempt that actually failed costs budget.
     gitV2RetriesLeft -= 1
     warnMain(`[main] navide.git v2 retry failed: ${restored.reason}; ${gitV2RetriesLeft} retry left`)
     return { ok: false, reason: restored.reason }
   }
-  gitRecoveryEnabled = false
-  // v2 is running again, so the budget has served its purpose. A later,
-  // unrelated downgrade starts from a full budget rather than inheriting the
-  // cost of one that was already recovered from.
+  // A later, unrelated failure starts from a full budget.
   gitV2RetriesLeft = GIT_V2_RECOVERY_RETRIES
-  applyPluginActivationChange({ pluginId: 'navide.git', activation: restored.activation })
-  for (const hostWindow of mainWindows) {
-    if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
-    hostWindow.webContents.send('git:recoveryChanged', { legacy: false })
-  }
-  warnMain(
-    `[main] navide.git v2 restored after legacy recovery; retry budget reset to ${gitV2RetriesLeft}`
-  )
+  if (restored.activation) applyPluginActivationChange({ pluginId: 'navide.git', activation: restored.activation })
+  setGitActivationFailure(null)
+  warnMain(`[main] navide.git v2 retried after a failed start; retry budget reset to ${gitV2RetriesLeft}`)
   return { ok: true }
 }
 ipcMain.handle('git:retryV2', (event) => {
@@ -2249,17 +2203,6 @@ const pluginTrustRefresh = registerPluginIpc(
       }
     },
     factoryPackageIds: ['navide.git', MINI_IDE_PLUGIN_ID, BROWSER_PLUGIN_ID],
-    // loadFactoryPackage refuses the same way, but only after the open Git
-    // views were drained; asking first keeps the button hidden instead.
-    factoryRollbackRefusal: (pluginId) => {
-      if (pluginId !== 'navide.git') return undefined
-      try {
-        assertFactoryGitRestoreAllowed({ forcedLegacy: gitRecoveryForced })
-        return undefined
-      } catch (error) {
-        return error instanceof Error ? error.message : String(error)
-      }
-    },
     backendCallConcurrency: () => frontendPluginManager.backendCallConcurrency(),
     backendResourceUsage: () => frontendPluginManager.backendResourceUsage(),
     listFactoryPackages: () => {
@@ -2268,7 +2211,7 @@ const pluginTrustRefresh = registerPluginIpc(
         .listInstalledPackages()
         .some((pkg) => pkg.id === 'navide.git' && pkg.provenance === 'factory-bundled') &&
         descriptor?.capabilityPolicy?.kind === 'manifest-v2' &&
-        !gitRecoveryEnabled
+        gitActivationFailure === null
       const miniDescriptor = frontendPluginManager.getDescriptor(MINI_IDE_PLUGIN_ID)
       const miniFactoryActive = frontendPluginManager
         .listInstalledPackages()
@@ -2345,20 +2288,14 @@ const pluginTrustRefresh = registerPluginIpc(
         return
       }
       if (pluginId !== 'navide.git') throw new Error('unknown factory package')
-      assertFactoryGitRestoreAllowed({ forcedLegacy: gitRecoveryForced })
       if (existsSync(join(pluginsRoot(), pluginId))) {
         throw new Error('an installed package already owns this plugin id')
       }
-      const restored = activateFactoryGitPackage()
+      const restored = reactivateFactoryGit()
       if (!restored.loaded) throw new Error(restored.reason)
       pluginFactoryOptOuts.remove(pluginId)
-      gitRecoveryEnabled = false
-      applyPluginActivationChange({ pluginId, activation: restored.activation })
-      for (const hostWindow of mainWindows) {
-        if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
-          hostWindow.webContents.send('git:recoveryChanged', { legacy: false })
-        }
-      }
+      if (restored.activation) applyPluginActivationChange({ pluginId, activation: restored.activation })
+      setGitActivationFailure(null)
     },
     // Rollback hands an id back to the same bundled bytes restoreFactoryPackage
     // serves, so it owes the same guard and the same recovery-state reset. It
@@ -2392,17 +2329,10 @@ const pluginTrustRefresh = registerPluginIpc(
         return loaded
       }
       if (pluginId === 'navide.git') {
-        // Refuses while Git is pinned to legacy, the same way a restore does.
-        assertFactoryGitRestoreAllowed({ forcedLegacy: gitRecoveryForced })
         const loaded = loadFactoryGitPackage()
         if (!loaded.loaded) return loaded
-        gitRecoveryEnabled = false
         pluginFactoryOptOuts.remove(pluginId)
-        for (const hostWindow of mainWindows) {
-          if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
-            hostWindow.webContents.send('git:recoveryChanged', { legacy: false })
-          }
-        }
+        setGitActivationFailure(null)
         return loaded
       }
       if (pluginId === BROWSER_PLUGIN_ID) {
@@ -2440,12 +2370,7 @@ const pluginTrustRefresh = registerPluginIpc(
         return
       }
       pluginFactoryOptOuts.add(pluginId)
-      gitRecoveryEnabled = gitRecoveryForced
-      for (const hostWindow of mainWindows) {
-        if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
-          hostWindow.webContents.send('git:recoveryChanged', { legacy: gitRecoveryEnabled })
-        }
-      }
+      setGitActivationFailure(null)
     },
     onPackageInstalled: (pluginId) => {
       if (pluginId === 'navide.git') pluginFactoryOptOuts.remove(pluginId)
@@ -2453,7 +2378,6 @@ const pluginTrustRefresh = registerPluginIpc(
       if (pluginId === BROWSER_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
     },
     onBuiltinSwitchReset: (resumed) => {
-      for (const pluginId of resumed) completeBuiltinEnable(pluginId)
       builtinSwitchReconciler.sync()
       for (const hostWindow of mainWindows) {
         if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
@@ -2553,20 +2477,11 @@ async function applyBuiltinSwitch(pluginId: string, disabled: boolean): Promise<
     await frontendPluginManager.suspendBuiltinPlugin(pluginId)
   } else {
     frontendPluginManager.resumeBuiltinPlugin(pluginId)
-    completeBuiltinEnable(pluginId)
   }
   for (const hostWindow of mainWindows) {
     if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
       hostWindow.webContents.send('plugins:contributionsChanged')
     }
-  }
-}
-/** What enabling a built-in needs after `resumeBuiltinPlugin`, shared by the
- *  Enable switch and the reset of an unreadable store: a forced legacy Git
- *  recovery session registers the legacy Git it would have at startup. */
-function completeBuiltinEnable(pluginId: string): void {
-  if (pluginId === 'navide.git' && gitRecoveryForced && !legacyGitRegisteredForForcedRecovery) {
-    registerForcedLegacyGit()
   }
 }
 // A store that turns unreadable while the app runs fails closed for the
@@ -4492,6 +4407,10 @@ async function openCatalogContributionWindow(
       } catch {
         // The host has already torn down its WebContentsView.
       }
+      // The Git window's embedded AI panels end with it (not on app quit), in
+      // its own workspace only: other workspaces' Git windows keep theirs. Its
+      // AI review closes with the view instance in closeContribution.
+      if (contributionKey === 'navide.git.window') frontendPluginManager.endDockSurface('git', workspacePath)
     })
   }
 
@@ -4597,15 +4516,8 @@ function catalogContributionQuery(
 
 async function openGitWindow(workspacePath: string, extraParams: Record<string, string> = {}): Promise<boolean> {
   if (refuseDisabledBuiltin('navide.git', findMainWindowForWorkspace(workspacePath))) return false
-  const httpUrl = backend ? `http://${backend.host}:${backend.port}` : ''
   const generic = await openCatalogContributionWindow('navide.git.window', workspacePath, extraParams)
-  if (generic.ok) return true
-  if (!gitRecoveryEnabled) return false
-  await migrateGitStorage()
-  return openGitPluginView(workspacePath, httpUrl, currentUiTheme(), {
-    ...currentGitReadOnlyQuery(),
-    ...extraParams,
-  })
+  return generic.ok
 }
 
 function gitWindowExtraParams(args: {
@@ -4636,61 +4548,6 @@ ipcMain.handle('window:openGit', async (_event, args: Record<string, string>) =>
   // load and via the incremental openTarget delivery when already open.
   const ok = await openGitWindow(workspacePath, gitWindowExtraParams(args))
   return { ok }
-})
-
-function pluginBoundsFrom(value: unknown): { x: number; y: number; width: number; height: number } | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
-  const record = value as Record<string, unknown>
-  const values = [record.x, record.y, record.width, record.height]
-  if (!values.every((entry) => typeof entry === 'number' && Number.isFinite(entry))) return null
-  if (Number(record.width) <= 0 || Number(record.height) <= 0) return null
-  return {
-    x: Math.round(Number(record.x)),
-    y: Math.round(Number(record.y)),
-    width: Math.round(Number(record.width)),
-    height: Math.round(Number(record.height)),
-  }
-}
-
-// The renderer supplies layout geometry and a workspace assertion. The main
-// process resolves the registered workspace and actual left contribution;
-// neither the workspace authority nor the opaque instance handle comes from
-// renderer input.
-ipcMain.handle('window:openGitLeft', async (event, args: Record<string, unknown>) => {
-  if (!gitRecoveryEnabled || frontendPluginManager.isBuiltinPluginDisabled('navide.git')) return { ok: false }
-  const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
-  const requestedWorkspace = typeof args?.workspace_path === 'string' ? args.workspace_path : ''
-  const registeredWorkspace = hostWindow
-    ? registeredGitLeftWorkspace(hostWindow, requestedWorkspace, mainWindowWorkspaces, normalizeWorkspacePath)
-    : null
-  const bounds = pluginBoundsFrom(args?.bounds)
-  if (!hostWindow || !registeredWorkspace || !bounds) return { ok: false }
-  const workspacePath = normalizeWorkspacePath(registeredWorkspace)
-  if (!workspacePath) return { ok: false }
-  await migrateGitStorage()
-  const httpUrl = backend ? `http://${backend.host}:${backend.port}` : ''
-  return openGitLeftPluginView(
-    hostWindow,
-    workspacePath,
-    bounds,
-    httpUrl,
-    currentUiTheme(),
-    currentGitReadOnlyQuery(),
-  )
-})
-
-ipcMain.handle('window:updateGitLeft', (event, args: Record<string, unknown>) => {
-  if (!gitRecoveryEnabled || frontendPluginManager.isBuiltinPluginDisabled('navide.git')) return { ok: false }
-  const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
-  const bounds = pluginBoundsFrom(args?.bounds)
-  if (!hostWindow || !bounds) return { ok: false }
-  return updateGitLeftPluginView(hostWindow, bounds, args?.visible === true)
-})
-
-ipcMain.handle('window:closeGitLeft', (event) => {
-  if (!gitRecoveryEnabled) return { ok: false }
-  const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
-  return hostWindow ? closeGitLeftPluginView(hostWindow) : { ok: false }
 })
 
 function trustedPluginRegionHost(event: IpcMainInvokeEvent): BrowserWindow | null {
@@ -4814,13 +4671,6 @@ ipcMain.handle('plugins:closeContribution', (event, args: Record<string, unknown
   return frontendPluginManager.closeContribution(hostWindow, contributionKey)
 })
 
-ipcMain.handle('window:getZoomFactor', (event) => {
-  const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
-  if (!hostWindow) return 1
-  const factor = hostWindow.webContents.getZoomFactor()
-  return Number.isFinite(factor) && factor > 0 ? factor : 1
-})
-
 // Interface scale, applied to every window at once. Accepted only from a
 // top-level app frame: plugin content runs in a child frame or a
 // WebContentsView whose preload does not expose this bridge at all, so it can
@@ -4843,62 +4693,6 @@ function openBranchDiffWindow(host: BrowserWindow | null, params: Record<string,
 ipcMain.handle('window:openBranchDiff', (event, args: Record<string, string>) => {
   openBranchDiffWindow(BrowserWindow.fromWebContents(event.sender), args ?? {})
   return { ok: true }
-})
-
-// Reject only what git itself forbids in ref names (git-check-ref-format), so
-// non-ASCII (e.g. CJK) branch names are allowed — matching the Python backend's
-// _INVALID_REF_RE. An ASCII allowlist here wrongly rejected branches like
-// "AI修改". Not the security boundary: execFile is exec-not-shell and the
-// leading-'-' check below blocks flag smuggling.
-const INVALID_GIT_REF_RE = /(\.\.|\x00|@\{|\\|[ ~^:?*[\]]|\/$|\.lock$|\.lock\/)/
-
-function validateRef(value: string, label: string): string | null {
-  if (!value) return null // empty is OK (means "omit")
-  if (value.startsWith('-')) return `invalid ${label}: must not start with '-'`
-  if (INVALID_GIT_REF_RE.test(value))
-    return `invalid ${label}: contains characters git disallows in ref names`
-  return null
-}
-
-// Run git diff directly in main process — no Python backend needed, always up-to-date.
-ipcMain.handle('git:diff-head', async (event, args: { workspace_path: string; base?: string; compare?: string }) => {
-  if (!isAppWindowSender(event)) return { ...UNTRUSTED_SENDER, diff: '' }
-  const { execFile } = await import('node:child_process')
-  const { promisify } = await import('node:util')
-  const execFileAsync = promisify(execFile)
-  const cwd = (args.workspace_path ?? '').trim()
-  if (!cwd) return { ok: false, diff: '', error: 'workspace_path required' }
-  const compare = (args.compare ?? '').trim()
-  const base = (args.base ?? '').trim()
-  const refErr = validateRef(base, 'base') ?? validateRef(compare, 'compare')
-  if (refErr) return { ok: false, diff: '', error: refErr }
-  // A compare target needs an explicit base — align with the backend, which
-  // errors here rather than silently diffing HEAD and ignoring compare.
-  if (compare && !base) return { ok: false, diff: '', error: 'base branch is required to compare' }
-  try {
-    const gitArgs: string[] = ['-c', 'core.quotePath=false', 'diff']
-    if (compare && base) {
-      gitArgs.push(`${base}...${compare}`)
-    } else {
-      gitArgs.push('HEAD')
-    }
-    // timeout+SIGKILL so a hung git (stale mount, wedged filter) can't spin the
-    // diff pane forever; generous maxBuffer since we only keep the first 100 K.
-    const { stdout } = await execFileAsync('git', gitArgs, {
-      cwd,
-      maxBuffer: 64 * 1024 * 1024,
-      timeout: 30_000,
-      killSignal: 'SIGKILL'
-    })
-    const truncated = stdout.length > 100_000
-    return { ok: true, diff: stdout.slice(0, 100_000), truncated }
-  } catch (err: unknown) {
-    const e = err as { stderr?: string; message?: string; killed?: boolean; code?: string }
-    if (e.killed) return { ok: false, diff: '', error: 'git diff timed out' }
-    if (e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER')
-      return { ok: false, diff: '', error: 'diff too large to display' }
-    return { ok: false, diff: '', error: e.stderr?.trim() || e.message || 'git error' }
-  }
 })
 
 // Reviewable plan doc: top-level, non-infrastructure `.agent-team/plans/*.html`
@@ -6213,13 +6007,7 @@ app.on('web-contents-created', (_e, contents) => {
     zoom.track(contents)
     contents.once('destroyed', () => zoom.untrack(contents))
   }
-  lockPageZoom(
-    contents,
-    () => {
-      if (!contents.isDestroyed()) contents.send('window:zoom-changed')
-    },
-    () => (scalable ? zoom.get() : 1)
-  )
+  lockPageZoom(contents, () => (scalable ? zoom.get() : 1))
   // Electron has no default right-click menu; without this one, right-click is
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
@@ -6299,10 +6087,6 @@ app.whenReady().then(async () => {
   // Windows/Linux cold start: the link is a launch argument.
   const launchLink = app.isPackaged ? deepLinkFromArgv(process.argv) : null
   if (launchLink) deepLinks.handle(launchLink)
-  // A disabled Git gets no legacy view either; Enable registers it then.
-  if (gitRecoveryEnabled && !frontendPluginManager.isBuiltinPluginDisabled('navide.git')) {
-    registerForcedLegacyGit()
-  }
   // The plugin-view dev entry is opt-in via AGENT_TEAM_PLUGIN_DEV=1 so the
   // default menu / UI is unchanged for every normal launch (dev or packaged).
   // This mode keeps the fixed first-party dist-plugins bundles available for

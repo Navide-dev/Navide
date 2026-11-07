@@ -163,6 +163,36 @@ export interface IssuePort {
   }>>
 }
 
+export interface GitReviewFinding {
+  id: string
+  file: string
+  line: number | null
+  severity: 'critical' | 'warning' | 'suggestion'
+  title: string
+  body: string
+}
+
+export interface GitReviewResult {
+  summary: string
+  findings: GitReviewFinding[]
+  verdict: 'approve' | 'approve_with_comments' | 'request_changes'
+}
+
+/** AI code review of the working tree or a branch comparison, run by the
+ *  Host's analyzer through the aiCli capability. Provider credentials stay in
+ *  Host Settings; this port only starts and stops a review, reads its events
+ *  and the provider/model choice. */
+export interface GitReviewPort {
+  start(args: { mode: 'working' | 'branch'; base?: string; compare?: string }): Promise<string>
+  stop(reviewId: string): Promise<void>
+  onResult(callback: (reviewId: string, result: GitReviewResult) => void): () => void
+  onEnd(callback: (reviewId: string) => void): () => void
+  onError(callback: (reviewId: string, message: string) => void): () => void
+  getModelPreferences(): Promise<{ provider: string; model: string }>
+  setModelPreferences(provider: string, model: string): Promise<void>
+  listModels(): Promise<string[]>
+}
+
 export interface GitSurfacePorts {
   gitTransport: GitTransport
   fileAccess: GitFileAccessPort
@@ -179,6 +209,7 @@ export const GIT_UI_KEY: InjectionKey<GitWindowUiPort> = Symbol('git-ui')
 export const GIT_BRANCH_DIFF_KEY: InjectionKey<GitBranchDiffPort> = Symbol('git-branch-diff')
 export const GIT_ACCOUNTS_KEY: InjectionKey<GitAccountPort> = Symbol('git-accounts')
 export const GIT_ISSUES_KEY: InjectionKey<IssuePort> = Symbol('git-issues')
+export const GIT_REVIEW_KEY: InjectionKey<GitReviewPort> = Symbol('git-review')
 
 // Keep these imports type-only and colocated with the contracts so adapters can
 // share the exact feature shapes without exposing a Host transport to the UI.

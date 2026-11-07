@@ -617,6 +617,11 @@
       "open-accounts": "Git アカウントを開く"
     },
     "left-view-unavailable": "埋め込み Git ビューは一時的に利用できません。",
+    "recovery-title": "内蔵 Git を起動できませんでした",
+    "recovery-reason": "原因: {reason}",
+    "recovery-reinstall": "内蔵 Git を再インストール",
+    "recovery-reinstalling": "再インストール中…",
+    "recovery-reinstall-failed": "再インストールに失敗しました: {reason}",
     "detail-open-failed": "詳細ビューを開けませんでした。Git パネルは現在のターゲットを保持します。",
     "open-workspace": "Git を使用するにはワークスペースを開いてください。",
     "settings-unavailable": "Git の設定を読み込めませんでした。",
@@ -1615,6 +1620,22 @@
       "cannot-rebuild": "再開できる会話がありません",
       "rebuild": "再構築"
     },
+    "archive": {
+      "hint": "しばらく書き込みのない Claude Code の Session ログを圧縮し、必要ならご自身の S3 バケットへアップロードします。ここの項目はすべて既定でオフで、オンにするまで何もしません。",
+      "compress": "アイドル状態の Session ログを圧縮する",
+      "compress-hint": "1 日 1 回、設定した日数だけアイドル状態の Claude Code Session ログの隣に .zst のコピーを作り、展開すると元と同じバイト列になることを確認します。開いている Pane が使っている Session には触れません。",
+      "idle-days": "圧縮するまでの書き込みなしの日数",
+      "remove-originals": ".zst の検証後に元のファイルを削除する",
+      "remove-originals-hint": "ディスク容量を空けられます。削除したログは Claude Code で再開できず、Token パネルでも読めなくなりますが、.zst にはすべてのバイトが残ります。オフなら両方を残します。",
+      "upload": "ご自身の S3 バケットへアップロードする",
+      "upload-hint": "各 .zst を下のプレフィックスの下に、S3 側で暗号化してご自身のバケットへ送ります。認証情報は AWS の標準チェーン（環境変数、~/.aws のプロファイル、SSO）から取得し、Navide が AWS キーを保存することはありません。",
+      "upload-after-days": "アップロードするまでの日数",
+      "bucket": "S3 バケット",
+      "prefix": "キーのプレフィックス",
+      "region": "リージョン",
+      "region-placeholder": "AWS プロファイルの設定を使用",
+      "save-failed": "アーカイブ設定を保存できませんでした"
+    },
     "limits": {
       "hint": "Navide と、Navide が起動するエージェントがこのマシンに過負荷をかけないための任意の制限です。変更するまで、どの項目もオフ、または Navide の従来の動作のままです。",
       "test-workers": "新しいペインのテストワーカー数を制限",
@@ -2116,7 +2137,6 @@
           "previousChanged": "以前のバージョンのパッケージがディスク上で変更されたため、戻しませんでした。",
           "grantUnavailable": "{id} に付与された権限が見つからないため、戻しませんでした。",
           "factoryUnavailable": "同梱版に戻す操作は現在利用できません。",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy でレガシー復旧が強制されている間は、同梱の Git を復元できません。",
           "factoryRestoreFailed": "同梱版を読み込めませんでした。"
         }
       },
@@ -7656,6 +7676,7 @@
     "section": {
       "general-behavior": "一般的な動作",
       "resource-limits": "リソース制限",
+      "session-archive": "Session ログのアーカイブ",
       "settings-management": "設定の管理",
       "theme": "テーマ",
       "other": "その他"

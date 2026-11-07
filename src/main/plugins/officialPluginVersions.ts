@@ -13,17 +13,15 @@ export const OFFICIAL_PLUGIN_VERSIONS: Readonly<Record<string, string>> = Object
 
 /** The bundled versions that may supersede an older installed copy this
  * session: only ids whose bundled copy will be attempted. An opted-out factory
- * copy, or a forced legacy recovery the user asked for, keeps the installed
- * package in charge of that id. */
+ * copy, or a forced legacy Plans recovery the user asked for, keeps the
+ * installed package in charge of that id. */
 export function supersedingBundledVersions(opts: {
   optedOut: (pluginId: string) => boolean
-  gitRecoveryForced: boolean
   plansRecoveryForced: boolean
 }): Record<string, string> {
   return Object.fromEntries(
     Object.entries(OFFICIAL_PLUGIN_VERSIONS).filter(([pluginId]) =>
       !opts.optedOut(pluginId) &&
-      !(pluginId === 'navide.git' && opts.gitRecoveryForced) &&
       !(pluginId === 'navide.plans' && opts.plansRecoveryForced)
     ),
   )

@@ -617,6 +617,11 @@
       "open-accounts": "Git 계정 열기"
     },
     "left-view-unavailable": "내장 Git 보기를 일시적으로 사용할 수 없어요.",
+    "recovery-title": "내장 Git을 시작할 수 없어요",
+    "recovery-reason": "원인: {reason}",
+    "recovery-reinstall": "내장 Git 다시 설치",
+    "recovery-reinstalling": "다시 설치하는 중…",
+    "recovery-reinstall-failed": "다시 설치하지 못했어요: {reason}",
     "detail-open-failed": "세부 정보 보기를 열지 못했어요. Git pane은 현재 대상을 유지해요.",
     "open-workspace": "Git을 사용하려면 작업 영역을 여세요.",
     "settings-unavailable": "Git 환경설정을 불러오지 못했어요.",
@@ -1615,6 +1620,22 @@
       "cannot-rebuild": "이어갈 대화가 없습니다",
       "rebuild": "다시 빌드"
     },
+    "archive": {
+      "hint": "한동안 기록되지 않은 Claude Code 세션 로그를 압축하고, 원하면 본인의 S3 버킷에 업로드합니다. 여기 있는 항목은 모두 기본적으로 꺼져 있으며 켜기 전에는 아무것도 하지 않습니다.",
+      "compress": "유휴 세션 로그 압축",
+      "compress-hint": "하루에 한 번, 설정한 일수 동안 유휴 상태인 Claude Code 세션 로그 옆에 .zst 사본을 만들고, 압축을 풀면 원본과 같은 바이트가 되는지 확인합니다. 열려 있는 분할 창이 사용 중인 세션은 건드리지 않습니다.",
+      "idle-days": "압축하기 전까지 기록이 없는 일수",
+      "remove-originals": ".zst 확인 후 원본 삭제",
+      "remove-originals-hint": "디스크 공간을 확보합니다. 삭제된 로그는 Claude Code에서 다시 이어갈 수 없고 Token 패널에서도 읽을 수 없지만, .zst에는 모든 바이트가 남아 있습니다. 끄면 두 파일을 모두 유지합니다.",
+      "upload": "본인의 S3 버킷에 업로드",
+      "upload-hint": "각 .zst를 아래 접두사 아래에 S3 측 암호화로 본인의 버킷에 보냅니다. 자격 증명은 표준 AWS 체인(환경 변수, ~/.aws 프로필 또는 SSO)에서 가져오며, Navide는 AWS 키를 저장하지 않습니다.",
+      "upload-after-days": "업로드하기 전까지의 일수",
+      "bucket": "S3 버킷",
+      "prefix": "키 접두사",
+      "region": "리전",
+      "region-placeholder": "AWS 프로필 설정 사용",
+      "save-failed": "보관 설정을 저장하지 못했습니다"
+    },
     "limits": {
       "hint": "Navide와 Navide가 실행하는 agent가 이 컴퓨터에 과부하를 주지 않도록 하는 선택적 제한이에요. 직접 바꾸기 전까지는 각각 꺼져 있거나 Navide의 이전 동작을 따라요.",
       "test-workers": "새 pane의 테스트 러너 worker 수 제한",
@@ -2116,7 +2137,6 @@
           "previousChanged": "디스크에 있는 이전 버전의 패키지가 바뀌어서 롤백하지 않았어요.",
           "grantUnavailable": "{id}에 부여한 권한을 찾지 못해서 롤백하지 않았어요.",
           "factoryUnavailable": "기본 포함 버전으로 롤백할 수 없어요.",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy로 레거시 복구를 강제하는 동안에는 기본 포함 Git을 복원할 수 없어요.",
           "factoryRestoreFailed": "기본 포함 버전을 불러오지 못했어요."
         }
       },
@@ -7656,6 +7676,7 @@
     "section": {
       "general-behavior": "일반 동작",
       "resource-limits": "리소스 제한",
+      "session-archive": "세션 로그 보관",
       "settings-management": "설정 관리",
       "theme": "테마",
       "other": "기타"

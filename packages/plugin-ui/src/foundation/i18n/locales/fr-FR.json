@@ -617,6 +617,11 @@
       "open-accounts": "Ouvrir les comptes Git"
     },
     "left-view-unavailable": "La vue Git intégrée est temporairement indisponible.",
+    "recovery-title": "Impossible de démarrer le Git intégré",
+    "recovery-reason": "Raison : {reason}",
+    "recovery-reinstall": "Réinstaller le Git intégré",
+    "recovery-reinstalling": "Réinstallation…",
+    "recovery-reinstall-failed": "Échec de la réinstallation : {reason}",
     "detail-open-failed": "Impossible d’ouvrir la vue détaillée. Le pane Git conserve la cible actuelle.",
     "open-workspace": "Ouvrez un espace de travail pour utiliser Git.",
     "settings-unavailable": "Impossible de charger les préférences Git.",
@@ -1615,6 +1620,22 @@
       "cannot-rebuild": "Aucune conversation enregistrée à reprendre",
       "rebuild": "Reconstruire"
     },
+    "archive": {
+      "hint": "Compresse les journaux de session de Claude Code dans lesquels rien n’a été écrit depuis un moment, et les envoie si vous le souhaitez dans votre propre bucket S3. Tout est désactivé ici tant que vous ne l’activez pas.",
+      "compress": "Compresser les journaux de session inactifs",
+      "compress-hint": "Une fois par jour, chaque journal de session de Claude Code inactif depuis le nombre de jours choisi reçoit une copie .zst à côté de lui, et Navide vérifie que cette copie se décompresse en octets identiques. Les sessions utilisées par un volet ouvert ne sont pas touchées.",
+      "idle-days": "Jours sans écriture avant la compression",
+      "remove-originals": "Supprimer l’original une fois le .zst vérifié",
+      "remove-originals-hint": "Libère de l’espace disque. Un journal supprimé ne peut plus être repris dans Claude Code ni lu par le panneau Token, mais le .zst en garde chaque octet. Désactivé, les deux fichiers sont conservés.",
+      "upload": "Envoyer les archives dans votre propre bucket S3",
+      "upload-hint": "Envoie chaque .zst dans votre propre bucket, sous le préfixe ci-dessous, chiffré par S3. Les identifiants viennent de la chaîne standard d’AWS (variables d’environnement, un profil ~/.aws ou SSO). Navide ne stocke jamais de clé AWS.",
+      "upload-after-days": "Jours avant l’envoi d’une archive",
+      "bucket": "Bucket S3",
+      "prefix": "Préfixe des clés",
+      "region": "Région",
+      "region-placeholder": "selon votre profil AWS",
+      "save-failed": "Impossible d’enregistrer les réglages d’archive"
+    },
     "limits": {
       "hint": "Limites facultatives qui empêchent Navide et les agents qu’il exécute de surcharger cette machine. Chacune est désactivée, ou conserve le comportement précédent de Navide, tant que vous ne la modifiez pas.",
       "test-workers": "Limiter les workers de test dans les nouveaux panes",
@@ -2116,7 +2137,6 @@
           "previousChanged": "Le paquet de la version précédente a changé sur le disque ; le retour en arrière n’a donc pas eu lieu.",
           "grantUnavailable": "Les autorisations accordées à {id} sont introuvables ; le retour en arrière n’a donc pas eu lieu.",
           "factoryUnavailable": "Le retour à la version fournie n’est pas disponible.",
-          "gitLegacyRecovery": "Impossible de restaurer le Git fourni tant que NAVIDE_GIT_RECOVERY=legacy force la récupération héritée.",
           "factoryRestoreFailed": "Impossible de charger la version fournie."
         }
       },
@@ -7656,6 +7676,7 @@
     "section": {
       "general-behavior": "Comportement général",
       "resource-limits": "Limites de ressources",
+      "session-archive": "Archive des journaux de session",
       "settings-management": "Gestion des paramètres",
       "theme": "Thème",
       "other": "Autres"

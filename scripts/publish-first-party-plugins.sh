@@ -4,7 +4,7 @@
 #   NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
 #   NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
 #   NAVIDE_PLUGIN_TOKEN=<navide publisher bearer token> \
-#   scripts/publish-first-party-plugins.sh [--skip-build] [--only git|plans|mini-ide]
+#   scripts/publish-first-party-plugins.sh [--skip-build] [--only git|plans|mini-ide|browser]
 #   scripts/publish-first-party-plugins.sh --package <vsix> --target <target> \
 #       --version <version> [--id <plugin id>]
 #   scripts/publish-first-party-plugins.sh --from-run <run id> --version <version> \
@@ -28,9 +28,9 @@
 #
 # navide.git and navide.mini-ide are frontend-only and are published once as
 # `universal`.
-# navide.plans ships a PyInstaller backend, so its package is built for, and
-# published as, the current host target only (`<platform>-<arch>`, e.g.
-# darwin-arm64). Other targets must be built and published from a machine of
+# navide.plans and navide.browser ship a PyInstaller backend, so their packages
+# are built for, and published as, the current host target only
+# (`<platform>-<arch>`, e.g. darwin-arm64). Other targets must be built and published from a machine of
 # that platform/architecture with the same command; the Registry keeps one
 # artifact per target of the same version and 409s a target published twice.
 #
@@ -58,7 +58,7 @@ YES=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-build) SKIP_BUILD=1 ;;
-    --only) ONLY="${2:?--only needs git, plans or mini-ide}"; shift ;;
+    --only) ONLY="${2:?--only needs git, plans, mini-ide or browser}"; shift ;;
     --package) PACKAGE="${2:?--package needs a vsix path}"; shift ;;
     --target) TARGET="${2:?--target needs a target}"; shift ;;
     --from-run) RUN_ID="${2:?--from-run needs a run id}"; shift ;;
@@ -70,8 +70,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 case "$ONLY" in
-  ""|git|plans|mini-ide) ;;
-  *) echo "--only must be git, plans or mini-ide" >&2; exit 2 ;;
+  ""|git|plans|mini-ide|browser) ;;
+  *) echo "--only must be git, plans, mini-ide or browser" >&2; exit 2 ;;
 esac
 
 # The targets the app ships a build for (release.yml); a plugin artifact for
@@ -211,4 +211,19 @@ if [ -z "$ONLY" ] || [ "$ONLY" = "plans" ]; then
   fi
   echo "==> Plans backend: $(file -b "$backend" 2>/dev/null || echo unknown)"
   publish_dir "$ROOT/dist-plugins/navide-plans" "$HOST_TARGET"
+fi
+
+if [ -z "$ONLY" ] || [ "$ONLY" = "browser" ]; then
+  if [ "$SKIP_BUILD" -eq 0 ]; then
+    pnpm run build:browser:v2
+    pnpm run build:browser:backend
+  fi
+  backend="$ROOT/dist-plugins/navide-browser/backend/navide-browser"
+  case "$HOST_TARGET" in win32-*) backend="$backend.exe" ;; esac
+  if [ ! -x "$backend" ]; then
+    echo "missing Navide Browser backend executable: $backend (run without --skip-build)" >&2
+    exit 1
+  fi
+  echo "==> Navide Browser backend: $(file -b "$backend" 2>/dev/null || echo unknown)"
+  publish_dir "$ROOT/dist-plugins/navide-browser" "$HOST_TARGET"
 fi

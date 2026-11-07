@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from . import cloud_auth, qualification, ratings, reports, review
+from . import cloud_auth, host_routing, qualification, ratings, reports, review
 from .account_auth import exchange_account_code, find_account_code, issue_account_code
 from .developer_web import register_developer_routes
 from .app import _require_admin_token as require_admin_token
@@ -103,6 +103,21 @@ def _settings(request: Request):
 
 def _base(request: Request) -> str:
     return request.scope.get("root_path", "").rstrip("/")
+
+
+def _registry_api_url(request: Request) -> str:
+    """The --registry value the dashboard tells the CLI to use: the API host
+    under host routing, otherwise this site."""
+    settings = _settings(request)
+    if host_routing.request_role(request) is not None and settings.legacy_hosts:
+        return host_routing.api_base(settings)
+    return str(request.base_url).rstrip("/")
+
+
+def _default_next(request: Request) -> str:
+    """Where sign-in lands without a `next`: the storefront signs members in
+    to rate and report, so it returns home rather than to the dashboard."""
+    return "/" if host_routing.request_role(request) == host_routing.STORE else "/publisher"
 
 
 def _redirect(request: Request, path: str) -> RedirectResponse:
@@ -213,17 +228,23 @@ def create_publisher_router() -> APIRouter:
 
     # -- sign in (card 7) ------------------------------------------------
     @router.get("/publish", response_class=HTMLResponse)
+    @guarded
     def publish_landing(request: Request) -> Response:
-        if cloud_auth.current_viewer(request) is not None:
-            return _redirect(request, "/publisher")
-        return page(request, "publish_signin.html", {"enabled": _settings(request).cloud_auth_enabled})
+        # Signed-in only: an anonymous visitor goes straight to sign-in.
+        _require_viewer(request, "/publisher")
+        return _redirect(request, "/publisher")
 
     @router.get("/login")
     def login(request: Request, next: str | None = None) -> Response:
         settings = _settings(request)
         if not settings.cloud_auth_enabled:
             raise HTTPException(status_code=503, detail="Navide Cloud sign-in is not configured")
-        state, location = cloud_auth.start_login(settings, cloud_auth.safe_next(next), time.time())
+        state, location = cloud_auth.start_login(
+            settings,
+            cloud_auth.safe_next(next, _default_next(request)),
+            time.time(),
+            cloud_auth.return_url(request),
+        )
         response = RedirectResponse(location, status_code=303, headers=_NO_STORE)
         cloud_auth.set_cookie(
             response, request, settings, cloud_auth.LOGIN_STATE_COOKIE, state, cloud_auth.LOGIN_STATE_TTL_SECONDS
@@ -253,7 +274,9 @@ def create_publisher_router() -> APIRouter:
             )
             cloud_auth.clear_cookie(response, request, settings, cloud_auth.LOGIN_STATE_COOKIE)
             return response
-        response = _redirect(request, cloud_auth.safe_next(str(state.get("next", ""))))
+        response = _redirect(
+            request, cloud_auth.safe_next(str(state.get("next", "")), _default_next(request))
+        )
         response.headers["Cache-Control"] = "no-store"
         cloud_auth.clear_cookie(response, request, settings, cloud_auth.LOGIN_STATE_COOKIE)
         cloud_auth.set_cookie(
@@ -277,7 +300,9 @@ def create_publisher_router() -> APIRouter:
         viewer = _require_viewer(request)
         _check_csrf(request, viewer, csrf)
         cloud_auth.revoke_sessions(request.app.state.registry.engine, viewer.member_id)
-        response = _redirect(request, "/")
+        # The storefront home: on the developer console "/" is the dashboard,
+        # which would send a signed-out visitor straight back to sign-in.
+        response = RedirectResponse(_base_path_context(request)["store"] + "/", status_code=303)
         cloud_auth.clear_cookie(response, request, _settings(request), cloud_auth.SESSION_COOKIE)
         return response
 
@@ -374,7 +399,7 @@ def create_publisher_router() -> APIRouter:
                 "tokens": tokens,
                 "max_token_days": MAX_TOKEN_DAYS,
                 "owned_count": len(owned_publishers(session, viewer.member_id)),
-                "registry_url": str(request.base_url).rstrip("/"),
+                "registry_url": _registry_api_url(request),
             }
         context.update(extra or {})
         return page(request, "publisher_dashboard.html", context, status=status)

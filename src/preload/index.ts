@@ -74,20 +74,17 @@ export interface GitCredential {
   expectedHost: string
 }
 
-/** Main-owned recovery transition. The renderer can only move into recovery;
- * there is deliberately no public event or API for switching back. */
-export interface GitRecoveryChanged {
-  legacy: boolean
+/** A built-in plugin could not start (reason) or runs again (null). Main-owned:
+ * the renderer only shows it and offers the Host's reinstall action. */
+export interface PluginActivationFailed {
+  pluginId: string
+  reason: string | null
 }
 
-function isGitRecoveryChanged(payload: unknown): payload is GitRecoveryChanged {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    !Array.isArray(payload) &&
-    'legacy' in payload &&
-    typeof payload.legacy === 'boolean'
-  )
+function isPluginActivationFailed(payload: unknown): payload is PluginActivationFailed {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  return typeof record.pluginId === 'string' && (record.reason === null || typeof record.reason === 'string')
 }
 
 export interface PlansRecoveryChanged {
@@ -688,12 +685,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
   // and gives up the upgrade source.
   repairPlansStorageRecord: (): Promise<{ ok: boolean; repaired: boolean; reason?: string }> =>
     ipcRenderer.invoke('plans:repairStorageRecord'),
-  onGitRecoveryChanged: (cb: (change: GitRecoveryChanged) => void): (() => void) => {
+  onPluginActivationFailed: (cb: (change: PluginActivationFailed) => void): (() => void) => {
     const listener = (_event: unknown, payload: unknown): void => {
-      if (isGitRecoveryChanged(payload)) cb(payload)
+      if (isPluginActivationFailed(payload)) cb(payload)
     }
-    ipcRenderer.on('git:recoveryChanged', listener)
-    return () => ipcRenderer.removeListener('git:recoveryChanged', listener)
+    ipcRenderer.on('plugins:activationFailed', listener)
+    return () => ipcRenderer.removeListener('plugins:activationFailed', listener)
   },
   onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void): (() => void) => {
     const listener = (_event: unknown, payload: unknown): void => {
@@ -877,25 +874,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ...(args.base === undefined ? {} : { base: args.base }),
       ...(args.compare === undefined ? {} : { compare: args.compare }),
     }),
-  openGitLeftView: (args: {
-    workspace_path: string
-    bounds: { x: number; y: number; width: number; height: number }
-  }): Promise<{ ok: boolean; fallback?: 'legacy' }> =>
-    ipcRenderer.invoke('window:openGitLeft', args),
-  updateGitLeftView: (args: {
-    bounds: { x: number; y: number; width: number; height: number }
-    visible: boolean
-  }): Promise<{ ok: boolean; fallback?: 'legacy' }> =>
-    ipcRenderer.invoke('window:updateGitLeft', args),
-  closeGitLeftView: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:closeGitLeft'),
-  getZoomFactor: (): Promise<number> => ipcRenderer.invoke('window:getZoomFactor'),
   // Interface scale: main applies it to every window's WebContents at once.
   setUiScale: (scale: number): Promise<number> => ipcRenderer.invoke('window:setUiScale', scale),
-  onZoomChanged: (cb: () => void): (() => void) => {
-    const listener = (): void => cb()
-    ipcRenderer.on('window:zoom-changed', listener)
-    return () => ipcRenderer.removeListener('window:zoom-changed', listener)
-  },
   // Plan-window side receiver: main asks an already-open plan window to switch
   // to a newly clicked plan instead of reopening the window. Returns a disposer.
   onPlanOpenDoc: (handler: (relPath: string) => void): (() => void) => {
@@ -962,15 +942,6 @@ contextBridge.exposeInMainWorld('agentTeam', {
       branch_diff_base: args.base,
       branch_diff_compare: args.compare ?? '',
     }),
-  onOpenEditorBranchDiff: (cb: (params: Record<string, string>) => void): void => {
-    ipcRenderer.on('editor:openBranchDiff', (_event, params: Record<string, string>) => cb(params))
-  },
-  gitDiffHead: (args: {
-    workspace_path: string
-    base?: string
-    compare?: string
-  }): Promise<{ ok: boolean; diff: string; error?: string }> =>
-    ipcRenderer.invoke('git:diff-head', args),
   saveJson: (args: {
     defaultName?: string
     content: string

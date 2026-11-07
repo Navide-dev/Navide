@@ -4,7 +4,7 @@ import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { parseHunks, buildPatch, hunkHasChanges, toSideBySide, type Hunk } from '../lib/git-diff'
 import { loadImageDataUrl } from '../lib/imageData'
 import type { GitTransport } from '../../../shared/gitCompatibility'
-import type { GitFileAccessPort } from '../ports/gitSurface'
+import type { FileAccessPort } from '../ports/fileAccess'
 
 const props = defineProps<{
   workspacePath: string
@@ -12,7 +12,7 @@ const props = defineProps<{
   staged: boolean
   name: string
   gitTransport: GitTransport
-  fileAccess: GitFileAccessPort
+  fileAccess: FileAccessPort
   // When set, shows the diff this commit introduced (read-only: no stage/
   // unstage/discard actions) instead of the working-tree/staged diff.
   commit?: string

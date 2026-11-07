@@ -1,4 +1,4 @@
-import type { GitFileAccessPort } from '../ports/gitSurface'
+import type { FileAccessPort } from '../ports/fileAccess'
 
 /**
  * Load an image file as a base64 `data:` URL via the backend `fs.read_image`
@@ -8,7 +8,7 @@ import type { GitFileAccessPort } from '../ports/gitSurface'
  * Returns '' on any failure so callers can fall back to a placeholder.
  */
 export async function loadImageDataUrl(
-  fileAccess: GitFileAccessPort,
+  fileAccess: FileAccessPort,
   workspacePath: string,
   relPath: string,
 ): Promise<string> {

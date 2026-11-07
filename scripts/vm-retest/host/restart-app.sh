@@ -9,7 +9,9 @@ set -u
 . "$(dirname "$0")/env.sh"
 p="${1:-}"; mode="${2:-restart}"; need_platform "$p"
 if [ "$p" = linux ]; then
-  "$HERE/gsh.sh" linux "bash linux-app.sh stop; pgrep -u \$(id -u) -c -x navide || true"
+  out="$("$HERE/gsh.sh" linux "bash linux-app.sh stop; pgrep -u \$(id -u) -c -x navide || true")"; echo "$out"
+  # SIGTERM raises the "Quit Navide?" dialog; a second start then only hits the single-instance lock.
+  case "$out" in *still-alive*) die "the app is still running (Quit dialog?): click Quit, then run linux-app.sh start" ;; esac
   [ "$mode" = quit ] || "$HERE/gsh.sh" linux "bash linux-app.sh start"
   exit 0
 fi

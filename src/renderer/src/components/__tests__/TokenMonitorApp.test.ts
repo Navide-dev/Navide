@@ -9,7 +9,7 @@ import type { MonitorResult } from '../../composables/useTokenMonitor'
 const wire = vi.hoisted(() => ({ send: vi.fn(), initSettings: vi.fn(), settingsChanged: null as null | ((keys: string[]) => void), locale: 'en-US' }))
 vi.mock('../../composables/useBackend', () => ({ useBackend: () => ({ status: ref('connected'), lastError: ref(''), send: wire.send }) }))
 vi.mock('@navide/plugin-ui/shared', async importOriginal => ({ ...(await importOriginal<object>()), initSettingsBackend: wire.initSettings, settingsGet: (key: string, fallback: unknown) => key === 'agent-team:language' ? wire.locale : fallback, onSettingsChanged: (callback: (keys: string[]) => void) => { wire.settingsChanged = callback; return () => { wire.settingsChanged = null } } }))
-vi.mock('../../composables/hostSurfacePorts', () => ({ createHostGitSettingsPort: () => ({ monitorSettings: true }) }))
+vi.mock('../../composables/hostSettingsPort', () => ({ createHostSettingsPort: () => ({ monitorSettings: true }) }))
 const wrappers: VueWrapper[] = []
 function answer(): MonitorResult {
   return { ok: true, scope: 'local-claude-history', account_attribution: 'unknown',

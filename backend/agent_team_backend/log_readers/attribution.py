@@ -45,6 +45,11 @@ log = logging.getLogger("agent_team_backend.log_readers.attribution")
 _KV_KEY = "workspace_associations"
 
 
+# _lookup_workspace_for's answer for a Claude session no workspace owns, though
+# its file sits in a registered workspace's project folder (see AttributedUsage).
+_GLOBAL_ONLY = "\0global-only"
+
+
 @dataclass
 class AttributedUsage:
     usage: TokenUsage
@@ -53,6 +58,11 @@ class AttributedUsage:
     stage_id: str | None
     slot_key: str | None = None  # stable "stageId:slotLabel" — use as tokens_store by_pane key
     group_id: str = ""           # sidebar run group ("" = ungrouped) — tokens_store by_group key
+    # No workspace, but not external either: a Claude transcript in a registered
+    # workspace's project folder that ran somewhere else (or names no cwd while
+    # several workspaces share the folder). It counts in the global and account
+    # totals and in no workspace.
+    global_only: bool = False
 
 
 @dataclass
@@ -421,6 +431,16 @@ class Attribution:
             # Pane attribution within the current run (best-effort for "By Pane")
             pane_id, stage_id, slot_key = self._lookup_pane_for(usage)
             reg = self._panes.get(pane_id) if pane_id else None
+            if ws_path is _GLOBAL_ONLY:
+                # A pane can still claim a transcript that names no cwd yet
+                # (pane_cwd_match never lets it claim one that ran elsewhere);
+                # then the session is that pane's.
+                if reg is None:
+                    return AttributedUsage(
+                        usage=usage, pane_id=None, workspace_path=None, stage_id=None,
+                        global_only=True,
+                    )
+                ws_path = reg.workspace_path
             return AttributedUsage(
                 usage=usage,
                 pane_id=pane_id,
@@ -813,6 +833,11 @@ class Attribution:
                 session_file=session_file,
             )
 
+    def bound_session_ids(self) -> frozenset[str]:
+        """Every session id a pane has claimed (the session archive leaves these alone)."""
+        with self._lock:
+            return frozenset(self._session_owner)
+
     def pane_for_session(
         self, session_id: str
     ) -> tuple[str | None, str | None, str | None]:
@@ -872,19 +897,27 @@ class Attribution:
     def _pick_claude_workspace(
         self, usage: TokenUsage, hits: list[str], owner_ws: str | None
     ) -> str | None:
-        """Workspaces whose names encode alike share a project folder, so ``hits``
-        can hold several. Only then is the transcript's own cwd read. A session the
-        file cannot place stays on the first hit, as it always did: dropping it here
-        would take its usage out of the global and account totals as well."""
-        if len(hits) < 2:
-            return hits[0] if hits else None
+        """Workspaces whose names encode alike share a project folder, and a folder
+        can also hold a neighbour that was never opened here. The transcript's own
+        cwd decides, even with one hit (read once per file, then cached). A session
+        that ran in none of the hits belongs to no workspace but still counts
+        globally (_GLOBAL_ONLY): dropping it would take its usage out of the global
+        and account totals as well. One that names no cwd stays on a lone hit, as
+        it always did; among several hits that would be a guess, so it is
+        unattributed (_GLOBAL_ONLY) too."""
+        if not hits:
+            return None
         if owner_ws in hits:
             return owner_ws
         reader = self._readers["claude"]
-        return next(
-            (ws for ws in hits if reader.session_in_workspace(usage.file_path, ws)),
-            hits[0],
-        )
+        verdict: bool | None = None
+        for ws in hits:
+            verdict = reader.session_in_workspace(usage.file_path, ws)
+            if verdict:
+                return ws
+        if verdict is None and len(hits) == 1:
+            return hits[0]
+        return _GLOBAL_ONLY
 
     def _lookup_pane_for(
         self, usage: TokenUsage

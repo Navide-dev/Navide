@@ -617,6 +617,11 @@
       "open-accounts": "Mở tài khoản Git"
     },
     "left-view-unavailable": "Chế độ xem Git nhúng tạm thời không khả dụng.",
+    "recovery-title": "Không thể khởi động Git tích hợp",
+    "recovery-reason": "Lý do: {reason}",
+    "recovery-reinstall": "Cài lại Git tích hợp",
+    "recovery-reinstalling": "Đang cài lại…",
+    "recovery-reinstall-failed": "Cài lại thất bại: {reason}",
     "detail-open-failed": "Không mở được chế độ xem chi tiết. Bảng Git vẫn giữ mục tiêu hiện tại.",
     "open-workspace": "Hãy mở một workspace để dùng Git.",
     "settings-unavailable": "Không tải được tùy chọn Git.",
@@ -1615,6 +1620,22 @@
       "cannot-rebuild": "Không có cuộc trò chuyện đã lưu để tiếp tục",
       "rebuild": "Dựng lại"
     },
+    "archive": {
+      "hint": "Nén các nhật ký phiên Claude Code đã lâu không được ghi, và nếu muốn thì tải chúng lên bucket S3 của riêng bạn. Mọi mục ở đây đều tắt cho đến khi bạn bật.",
+      "compress": "Nén nhật ký phiên không hoạt động",
+      "compress-hint": "Mỗi ngày một lần, mỗi nhật ký phiên Claude Code không hoạt động đủ số ngày đã đặt sẽ có một bản .zst bên cạnh, và Navide kiểm tra rằng bản đó giải nén ra đúng các byte ban đầu. Các phiên mà một ô đang mở sử dụng sẽ không bị đụng tới.",
+      "idle-days": "Số ngày không ghi trước khi nén",
+      "remove-originals": "Xóa bản gốc sau khi .zst được xác minh",
+      "remove-originals-hint": "Giải phóng dung lượng đĩa. Nhật ký đã xóa không thể tiếp tục trong Claude Code hay đọc trong bảng Token nữa, nhưng .zst giữ lại từng byte. Khi tắt, cả hai tệp đều được giữ.",
+      "upload": "Tải bản lưu trữ lên bucket S3 của riêng bạn",
+      "upload-hint": "Gửi mỗi .zst vào bucket của riêng bạn, dưới tiền tố bên dưới, được S3 mã hóa. Thông tin xác thực lấy từ chuỗi chuẩn của AWS (biến môi trường, một hồ sơ ~/.aws hoặc SSO). Navide không bao giờ lưu khóa AWS.",
+      "upload-after-days": "Số ngày trước khi tải lên",
+      "bucket": "Bucket S3",
+      "prefix": "Tiền tố khóa",
+      "region": "Vùng",
+      "region-placeholder": "theo hồ sơ AWS của bạn",
+      "save-failed": "Không thể lưu cài đặt lưu trữ"
+    },
     "limits": {
       "hint": "Các giới hạn tùy chọn giúp Navide và các agent nó chạy không làm quá tải máy này. Mỗi giới hạn đều tắt hoặc giữ hành vi trước đây của Navide, cho đến khi bạn thay đổi.",
       "test-workers": "Giới hạn số worker chạy test trong pane mới",
@@ -2116,7 +2137,6 @@
           "previousChanged": "Gói của phiên bản trước đã thay đổi trên đĩa, nên không quay lui về nó.",
           "grantUnavailable": "Không tìm thấy các quyền đã cấp cho {id}, nên không quay lui.",
           "factoryUnavailable": "Không quay lui về phiên bản đi kèm được.",
-          "gitLegacyRecovery": "Không khôi phục được Git đi kèm khi NAVIDE_GIT_RECOVERY=legacy đang buộc khôi phục kiểu cũ.",
           "factoryRestoreFailed": "Không tải được phiên bản đi kèm."
         }
       },
@@ -7656,6 +7676,7 @@
     "section": {
       "general-behavior": "Hành vi chung",
       "resource-limits": "Giới hạn tài nguyên",
+      "session-archive": "Lưu trữ nhật ký phiên",
       "settings-management": "Quản lý cài đặt",
       "theme": "Chủ đề",
       "other": "Khác"

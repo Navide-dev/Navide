@@ -21,8 +21,9 @@ For the package archive format alone, see
 
 ## Status: third-party publishing is open for Manifest v2
 
-Third-party plugins are published to the Navide Marketplace at
-`https://server.navide.dev/registry` as **Manifest v2** packages, after a
+Third-party plugins are published to the Navide Marketplace
+(`https://marketplace.navide.dev`; API `https://server.navide.dev/registry`)
+as **Manifest v2** packages, after a
 review. Follow [Publishing to the Navide Marketplace](marketplace-publishing.md)
 for the whole workflow, from `navide-plugin init` to a reviewed listing. This
 guide's manifest v1 runtime is legacy: the Registry still accepts v1 packages,
@@ -100,8 +101,8 @@ window.nav.ready()
 ### 2. Add a Vite config
 
 Each plugin is a **separate Vite build**, not an entry in the core renderer
-build. Copy `vite.git.config.ts` and change `pluginRoot`, `outDir`, and the
-manifest emitted by the `emitManifest()` plugin.
+build. Copy `vite.mini-ide.config.ts` and change `pluginRoot`, `outDir`, and the
+manifest emitted by its manifest plugin.
 
 The separate build exists for a specific reason: it lets you alias
 `composables/useBackend` to a `capabilityBackend` shim. A single module graph
@@ -498,7 +499,9 @@ The archive is a ZIP with `manifest.json` at its root; its format is
 `https://server.navide.dev/registry`. Its root key is pinned in the App build
 (`resources/official-registry-root.pem`), and only that exact URL (scheme,
 host, and the `/registry` path; a trailing slash is ignored) carries Official
-Registry authority. Development builds default to a local self-hosted Registry
+Registry authority. The website hosts, `https://marketplace.navide.dev` and
+`https://developers.navide.dev`, serve no API and carry no Registry authority.
+Development builds default to a local self-hosted Registry
 at `http://localhost:8787`. `AGENT_TEAM_MARKETPLACE_URL` overrides either
 default, and plaintext HTTP is rejected outside loopback in production builds.
 To try a package without a Registry, use Settings → Navide Plugins → **Install

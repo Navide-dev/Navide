@@ -36,13 +36,10 @@ function stub(name: string, props: string[] = []) {
 
 vi.mock('../../components/ExplorerPane.vue', () => stub('ExplorerPane'))
 vi.mock('../../components/SearchPane.vue', () => stub('SearchPane'))
-vi.mock('../../components/GitPane.vue', () => stub('GitPane'))
 vi.mock('../../components/ProblemsPane.vue', () => stub('ProblemsPane'))
 vi.mock('../../components/NotificationHost.vue', () => stub('NotificationHost'))
 vi.mock('../PlanFileView.vue', () => stub('PlanFileView', ['workspacePath', 'relPath']))
 vi.mock('../DiffPane.vue', () => stub('DiffPane'))
-vi.mock('../ConflictPane.vue', () => stub('ConflictPane'))
-vi.mock('../BranchDiffPane.vue', () => stub('BranchDiffPane'))
 vi.mock('../FilePreviewPane.vue', () => stub('FilePreviewPane', ['workspacePath', 'relPath']))
 
 // EditorPane records which root its save() ran against — `workbench.action.
@@ -143,7 +140,6 @@ beforeEach(() => {
       onLanguageChanged: (callback: (locale: string) => void) => { localeWire.languageChanged = callback },
       onOpenEditorFile: (cb: (p: Record<string, string>) => void) => { bridge.onOpenEditorFile = cb },
       onOpenEditorDiff: vi.fn(),
-      onOpenEditorBranchDiff: vi.fn(),
       pickFile: vi.fn(async () => pickFileResult),
       realpath: vi.fn(async (p: string) => realpaths[p] ?? p),
       openEditorWindow: vi.fn(async () => undefined),

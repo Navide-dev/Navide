@@ -7,9 +7,11 @@ Electron app or `backend/agent_team_backend/` — it is purely additive under
 
 See [`FORMAT.md`](./FORMAT.md) for the `.vsix`-style package format.
 
-> **Deployment status.** The Official Registry is planned at
+> **Deployment status.** The Official Registry API is served at
 > `https://server.navide.dev/registry` (a path prefix on the Navide server
-> host); packaged App builds point there by default. See
+> host); packaged App builds point there by default. The website is at
+> `https://marketplace.navide.dev` (storefront) and
+> `https://developers.navide.dev` (developer console); see Host routing. See
 > [Deployment](#deployment-official-registry-at-servernavidedevregistry) for
 > the container, secrets and operational requirements. Known limit before
 > wider use: package blobs live on the local data volume
@@ -321,6 +323,28 @@ Deployment files live in `deploy/`:
 path unchanged, which the app accepts; a proxy that strips the prefix works
 too. The load balancer health check is `GET /registry/api/health`.
 
+**Host routing.** The website moves to its own hosts while the API stays on
+`server.navide.dev/registry`, which released Apps and CLIs have built in. Set
+`REGISTRY_STORE_ORIGIN` and `REGISTRY_DEVELOPER_ORIGIN` (together) to turn it
+on; the load balancer forwards every host to this one container with the path
+unchanged, and the `Host` header picks the role (`registry/host_routing.py`):
+
+| Host | Serves | Redirects (GET/HEAD only, 301) | `X-Robots-Tag` |
+|---|---|---|---|
+| Storefront, e.g. `https://marketplace.navide.dev` | `/`, `/extensions/{ns}/{name}` and its `/report`, `/removed`, package assets, rating and report forms, `/login`, `/auth/*`, `/logout`, `/static/*`, `/robots.txt` (allow); pages carry `<link rel="canonical">` | console pages → the console, same path | none |
+| Developer console, e.g. `https://developers.navide.dev` | `/publish`, `/publisher*`, `/developer/apply`, `/cli/authorize`, `/admin/*` (Testplace included), their forms, `/login`, `/auth/*`, `/logout`, `/static/*`, `/robots.txt` (disallow) | storefront pages → the storefront, same path; `/` → `/publisher` | `noindex, nofollow` |
+| Legacy, `REGISTRY_LEGACY_HOSTS` (e.g. `server.navide.dev`), under `REGISTRY_ROOT_PATH` | the API, downloads, package assets, `/auth/*`, `/api/health`, every POST, `/robots.txt` | every website page (the list above, plus `/login`) → `REGISTRY_LEGACY_REDIRECT_TO`, except `/cli/authorize` → the console with its query (older CLIs open it to sign in) | `noindex, nofollow` |
+| Any other host (health checks by IP, the container healthcheck) | everything, as with routing off | none | `noindex, nofollow` |
+
+Neither the storefront nor the console serves `/api/*` (404 there). Each of the
+two signs in on its own host: its callback is `<origin>/auth/callback` and its
+cookies are host-only, so both callbacks must be in navide-auth's
+`REGISTRY_RETURN_URLS`; `REGISTRY_AUTH_RETURN_URL` stays the legacy callback so
+a sign-in begun there before the move still finishes. The legacy
+`/robots.txt` allows crawling by default so search engines see the redirects
+and the `noindex`; set `REGISTRY_LEGACY_ROBOTS_DISALLOW=true` once the old URLs
+have left the index.
+
 **Secrets.** The root and signer private keys must reach the process as
 regular, non-symlink, owner-only (`0600`) files; the Registry refuses to start
 otherwise. Docker/Swarm secrets are mounted `0444` (Compose file secrets keep
@@ -387,10 +411,13 @@ scripts/publish-first-party-plugins.sh
 ```
 
 The script builds, packs, signs and publishes `navide.git` and
-`navide.mini-ide` as `universal` and `navide.plans` for the host target (for
-example `darwin-arm64`), reusing the `navide-plugin` CLI. `--skip-build` reuses
-`dist-plugins/`, `--only git|plans|mini-ide` publishes one. Plans carries a PyInstaller backend, so each other target must
-be built on a machine of that platform and architecture.
+`navide.mini-ide` as `universal`, and `navide.plans` and `navide.browser` for
+the host target (for example `darwin-arm64`), reusing the `navide-plugin` CLI.
+`--skip-build` reuses `dist-plugins/`, `--only git|plans|mini-ide|browser`
+publishes one. Plans and Browser carry a PyInstaller backend, so each other
+target must be built on a machine of that platform and architecture (or by
+`plugin-packages.yml` / `browser-plugin-package.yml` and published with
+`--from-run`).
 
 Running the script with the same version on each platform adds that
 platform's artifact to the version (see
@@ -575,6 +602,11 @@ approved by default.
 | `REGISTRY_SESSION_SECRET` / `_FILE` | _(unset)_ | Signs the session and login-state cookies (≥ 32 chars, different from the auth secret). |
 | `REGISTRY_ADMIN_MEMBER_IDS` | _(empty)_ | Comma-separated Navide member ids allowed into the review queue and blocklist UI. |
 | `REGISTRY_COOKIE_SECURE` | `true` | `false` only for a plain-http local run (then http auth URLs are accepted). |
+| `REGISTRY_STORE_ORIGIN` | _(unset)_ | Storefront origin, e.g. `https://marketplace.navide.dev`; set with `REGISTRY_DEVELOPER_ORIGIN` to turn on [host routing](#deployment-official-registry-at-servernavidedevregistry). |
+| `REGISTRY_DEVELOPER_ORIGIN` | _(unset)_ | Developer console origin, e.g. `https://developers.navide.dev`. |
+| `REGISTRY_LEGACY_HOSTS` | _(empty)_ | Comma-separated hosts that keep the API under `REGISTRY_ROOT_PATH`, e.g. `server.navide.dev`; the first one is the API address the website shows. |
+| `REGISTRY_LEGACY_REDIRECT_TO` | `https://navide.dev/` | Where website pages on a legacy host redirect. |
+| `REGISTRY_LEGACY_ROBOTS_DISALLOW` | `false` | `true` makes the legacy `/robots.txt` disallow crawling. |
 
 ## Seams left for later Phase 3 todos
 

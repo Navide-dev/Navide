@@ -77,7 +77,6 @@ describe('factory first-party package boundary', () => {
       productionSourceText(join(repositoryRoot, 'src', 'preload')),
       productionSourceText(join(repositoryRoot, 'src', 'renderer')),
       readFileSync(join(repositoryRoot, 'electron.vite.config.ts'), 'utf8'),
-      readFileSync(join(repositoryRoot, 'vite.git.config.ts'), 'utf8'),
       readFileSync(join(repositoryRoot, 'vite.mini-ide.config.ts'), 'utf8'),
       readFileSync(join(repositoryRoot, 'vite.plans.config.ts'), 'utf8'),
       readFileSync(join(repositoryRoot, 'vitest.config.ts'), 'utf8'),
@@ -99,17 +98,17 @@ describe('factory first-party package boundary', () => {
     expectTypeOf<HostGitTransportStatusSource>().toEqualTypeOf<GitTransportStatusSource>()
   })
 
-  it('ships retained legacy recovery resources and versioned factory artifacts', () => {
+  it('ships versioned factory artifacts and no legacy Git bundle', () => {
     const manifest = readJson(join(repositoryRoot, 'package.json'))
     const scripts = (manifest.scripts ?? {}) as Record<string, string>
     const build = (manifest.build ?? {}) as { extraResources?: Array<{ from?: string }> }
     const resourceSources = (build.extraResources ?? []).map((entry) => entry.from ?? '')
 
     expect(scripts.build).toContain('build:official-plugins')
-    expect(scripts.build).toContain('build:git:legacy')
+    expect(scripts.build).not.toContain('build:git:legacy')
     expect(resourceSources).toContain('dist-plugins/mini-ide')
     expect(resourceSources).toContain('dist-plugins/plans')
-    expect(resourceSources).toContain('dist-plugins/git')
+    expect(resourceSources).not.toContain('dist-plugins/git')
     expect(resourceSources).toContain('dist-plugins/official-artifacts/factory-resources')
   })
 })
