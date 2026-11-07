@@ -38,7 +38,7 @@ export function agentToolViewId(method: unknown): string | null {
 /** Prefixes no plugin may derive. `navide_` is reserved on top of the design list (impersonation), and so
  *  are the prefixes the built-in packages derive (`git_`, `plans_`, `miniide_`). */
 export const RESERVED_TOOL_PREFIXES = [
-  'cli_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
+  'channels_', 'cli_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
   'plan_', 'plans_', 'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'skills_', 'stage_', 'ui_',
   'workspace_',
 ] as const
@@ -52,7 +52,7 @@ export const CORE_TOOL_NAMES = [
   'cli_get_status', 'cli_inbox_summary', 'cli_interrupt', 'cli_list_sessions', 'cli_list_targets',
   'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
   'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',
-  'cli_usage', 'cli_wait_idle', 'cli_whoami', 'credentials_findings', 'credentials_list', 'evolve_report', 'evolve_retro',
+  'cli_usage', 'cli_wait_idle', 'cli_whoami', 'channels_bindings', 'channels_status', 'credentials_findings', 'credentials_list', 'evolve_report', 'evolve_retro',
   'marketplace_detail', 'marketplace_request_install', 'marketplace_request_rollback',
   'marketplace_request_status', 'marketplace_request_update', 'marketplace_search', 'mcp_list', 'memory_list',
   'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',

@@ -63,7 +63,7 @@ export const UI_ACTION_SPECS: Readonly<Record<string, UiActionSpec>> = {
   'ui.plugins.openMarketplace': { args: '{id?}', summary: "Open the Marketplace, or one Navide plugin's page" },
   'ui.preview.show': { args: '{kind, …}', summary: 'Show a file, diff or snippet in the preview panel' },
   'ui.settings.close': { summary: 'Close Settings' },
-  'ui.settings.open': { args: '{tab?}', summary: 'Open Settings, optionally to a specific tab' },
+  'ui.settings.open': { args: '{tab?, platform?, account?}', summary: 'Open Settings, optionally to a specific tab; with tab "channels", platform (and account, "default" when omitted) picks that bot, and a bot not found just opens the page' },
   'ui.settings.yolo': { args: '{yolo?}', summary: 'Read the global permission-bypass switch, or set it', humanOnly: 'yolo is true' },
   'ui.tab.switch': { args: '{tabId}', summary: 'Switch the active stage tab' },
   'ui.window.close': { args: '{windowId}', summary: 'Close a window', dedicatedTool: 'window_close' },

@@ -4,6 +4,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
 import { createMockBackend } from '../../composables/__tests__/mockBackend'
 import ChannelsPane from '../settings/ChannelsPane.vue'
+import { channelsBotRequest, requestChannelsBot } from '../../channelsBotRequest'
 
 vi.mock('@navide/plugin-ui/shared', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@navide/plugin-ui/shared')>()),
@@ -402,5 +403,36 @@ describe('ChannelsPane two columns', () => {
       expect(pane(w)).toBe('detail')
       expect(w.find('[data-testid="channel-nav-back"]').exists()).toBe(false)
     })
+  })
+})
+
+describe('ChannelsPane picked by ui.settings.open', () => {
+  afterEach(() => { channelsBotRequest.value = null })
+
+  it('opens on the bot an open request named', async () => {
+    seed()
+    requestChannelsBot({ platform: 'telegram', account: 'bot-c2' })
+    const w = await render()
+    expect(activeKey(w)).toBe('telegram:bot-c2')
+    expect(channelsBotRequest.value).toBeNull()
+  })
+
+  it('moves an open page to the named bot, the default one when no account is given', async () => {
+    seed()
+    const w = await render()
+    requestChannelsBot({ platform: 'telegram', account: 'bot-b1' })
+    await flushPromises()
+    expect(activeKey(w)).toBe('telegram:bot-b1')
+    requestChannelsBot({ platform: 'telegram', account: '' })
+    await flushPromises()
+    expect(activeKey(w)).toBe('telegram:default')
+  })
+
+  it('stays on its usual row for a bot it does not have', async () => {
+    seed()
+    requestChannelsBot({ platform: 'telegram', account: 'bot-zz' })
+    const w = await render()
+    expect(activeKey(w)).toBe('telegram:default')
+    expect(channelsBotRequest.value).toBeNull()
   })
 })
