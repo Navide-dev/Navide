@@ -159,7 +159,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.39 terminal prefill (previous pin 8a95e7e9…): cli_send and
 #: cli_open_agent take `submit` (false prefills a terminal command without
 #: Enter) and their descriptions say so. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "fa11a5ab8d72eebcb04f33f9edc5570db308965693bccf57c7c354594a74cf70"
+#: Re-pinned for the 0.2.39 cost ledger (previous pin fa11a5ab…): cli_token_stats
+#: takes `cost_by`, `since`, `until` and `pane`, and its description says what
+#: `cost` holds. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "2c0667170f6edb961adb459acf41cfe5540452c7e24fa414ee48d50a2d60fea4"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
