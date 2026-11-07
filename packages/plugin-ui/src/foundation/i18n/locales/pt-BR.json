@@ -723,22 +723,6 @@
     }
   },
   "pane": {
-    "web": {
-      "signed-in": "Conectado",
-      "signed-out": "Não conectado",
-      "unloaded": "Descarregado",
-      "memory": "{mb} MB",
-      "reload": "Recarregar",
-      "open-browser": "Abrir no navegador do sistema",
-      "clear": "Sair e limpar",
-      "clear-confirm": "Clique de novo para sair deste site e limpar os dados dele em todos os web panes",
-      "clear-confirm-short": "Confirmar",
-      "unloaded-title": "Descarregado para economizar memória",
-      "unloaded-hint": "Clique para carregar de novo. Você continua conectado.",
-      "google-hint": "O Google pode recusar o login dentro de um navegador incorporado. Se isso acontecer, faça login pelo navegador do sistema.",
-      "cloudflare-hint": "Verificando o navegador. Aguarde um momento; se aparecer uma caixa \"Verify you are human\", marque-a você mesmo.",
-      "privacy": "Entre com a sua própria conta. O login fica neste computador e o Navide não o lê."
-    },
     "acp": {
       "unconfirmed": "Não confirmado",
       "unsent": "Não enviado",
@@ -2644,10 +2628,6 @@
       "download-retry": "Tentar baixar novamente"
     },
     "general": {
-      "web-pane-idle": "Descarregar web pane ocioso (minutos)",
-      "web-pane-idle-hint": "Um web pane sem foco por este tempo descarrega a página para liberar memória. Clicar carrega de novo, ainda conectado.",
-      "web-pane-limit": "Limite de web panes ativos",
-      "web-pane-limit-hint": "Quantos web panes mantêm uma página carregada ao mesmo tempo. Abrir mais um descarrega o usado há mais tempo.",
       "auto-resume-reconnect": "Retomar as sessions após o serviço em segundo plano do Navide reiniciar",
       "resume-interrupted-on-launch": "Retomar os panes que estavam trabalhando após reiniciar o Navide",
       "system-notify": "Notificações do sistema",

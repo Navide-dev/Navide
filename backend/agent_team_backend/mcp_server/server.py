@@ -1113,10 +1113,6 @@ def _taint_spawned(caller: _Caller, pane_id: str) -> None:
 #: agent key of a plain login-shell pane (see cli_open_agent / cli_send).
 _TERMINAL_AGENT = "terminal"
 
-#: agent key prefix of a web pane (`web:grok`): an agent website in a pane.
-#: Nothing is ever typed into one; cli_send only focuses it (src/shared/webPaneSites.ts).
-_WEB_PANE_PREFIX = "web:"
-
 #: Whether this platform can tell a terminal's shell at its prompt from a
 #: program it started (tcgetpgrp). Windows cannot: its PTY handle reports the
 #: shell as the foreground whatever runs, so the window falls back to holding
@@ -2442,37 +2438,6 @@ TERMINAL_EXTERNAL_ERROR = (
 LOGIN_PANE_INPUT_REFUSED = "login-pane-input-refused"
 
 
-async def _focus_web_pane(entry: Any) -> dict[str, Any]:
-    """cli_send to a web pane: bring it to the user's attention, deliver nothing.
-
-    A web pane shows a website the user is signed in to; typing into it would
-    be acting on their account. The text is dropped, the window focuses the
-    pane (opening it if it was a restore placeholder or unloaded), and the
-    answer says so — there is no msg_key because no message exists.
-    """
-    ui = await _ui_request(
-        entry.workspace_path,
-        "invoke",
-        caller=_pane_caller(entry.pane_id),
-        action="ui.pane.focus",
-        args={"paneId": entry.pane_id},
-    )
-    if not ui.get("ok"):
-        return {
-            "ok": False,
-            "error": ui.get("error") or "the window holding that web pane did not answer",
-            "error_code": ui.get("error_code") or "ui_action_timeout",
-        }
-    return {
-        "ok": True,
-        "target": entry.qualified_name,
-        "web_pane": True,
-        "focused": True,
-        "delivered": False,
-        "note": "a web pane takes no input: it was focused for the user and the text was not delivered",
-    }
-
-
 def _login_pane_input_refusal(pane_id: str, name: str) -> dict[str, Any] | None:
     """The answer for input addressed to a CLI sign-in pane, or None.
 
@@ -2599,12 +2564,6 @@ async def cli_send(
     MSG block addressed to it), which Navide posts to your bound chat when the
     turn ends. Sent here, nothing goes out — the answer is {ok: true,
     handed_to_channel: true, note} and the text is dropped.
-
-    A web pane (agent_key "web:<site>", e.g. "web:grok") shows an agent's
-    website the user is signed in to. Nothing is ever typed into it: cli_send
-    only focuses it for the user and answers {ok: true, web_pane: true,
-    focused: true, delivered: false} with no msg_key. It is left out of
-    `to: "group"` broadcasts.
 
     A plain terminal pane (agent_key "terminal" in cli_get_status) is a
     login shell, not an agent: `text` is typed in bare — no sender line, no
@@ -2933,8 +2892,6 @@ async def _send(
     refused = _login_pane_input_refusal(result.pane.pane_id, result.pane.qualified_name)
     if refused is not None:
         return refused
-    if result.pane.agent_key.startswith(_WEB_PANE_PREFIX):
-        return await _focus_web_pane(result.pane)
 
     # Only the single-target path gets here: the group broadcast and the
     # cross-device relay returned above, so open_target cannot reach them.

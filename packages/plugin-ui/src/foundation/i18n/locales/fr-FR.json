@@ -723,22 +723,6 @@
     }
   },
   "pane": {
-    "web": {
-      "signed-in": "Connecté",
-      "signed-out": "Non connecté",
-      "unloaded": "Déchargé",
-      "memory": "{mb} Mo",
-      "reload": "Recharger",
-      "open-browser": "Ouvrir dans le navigateur du système",
-      "clear": "Se déconnecter et effacer",
-      "clear-confirm": "Cliquez à nouveau pour vous déconnecter de ce site et effacer ses données dans tous les web panes",
-      "clear-confirm-short": "Confirmer",
-      "unloaded-title": "Déchargé pour économiser la mémoire",
-      "unloaded-hint": "Cliquez pour le recharger. Vous restez connecté.",
-      "google-hint": "Google peut refuser la connexion dans un navigateur intégré. Dans ce cas, connectez-vous depuis le navigateur du système.",
-      "cloudflare-hint": "Vérification du navigateur en cours. Patientez un instant et, si une case « Verify you are human » apparaît, cochez-la vous-même.",
-      "privacy": "Connectez-vous avec votre propre compte. La connexion reste sur cet ordinateur et Navide ne la lit pas."
-    },
     "acp": {
       "unconfirmed": "Non confirmé",
       "unsent": "Non envoyé",
@@ -2644,10 +2628,6 @@
       "download-retry": "Relancer le téléchargement"
     },
     "general": {
-      "web-pane-idle": "Déchargement des web panes inactifs (minutes)",
-      "web-pane-idle-hint": "Un web pane sans focus pendant ce délai décharge sa page pour libérer de la mémoire. Un clic la recharge, toujours connecté.",
-      "web-pane-limit": "Limite de web panes actifs",
-      "web-pane-limit-hint": "Nombre de web panes qui gardent une page chargée en même temps. En ouvrir un de plus décharge celui utilisé le moins récemment.",
       "auto-resume-reconnect": "Reprendre les sessions après un redémarrage du service d’arrière-plan de Navide",
       "resume-interrupted-on-launch": "Reprendre les panes actifs après le redémarrage de Navide",
       "system-notify": "Notifications système",

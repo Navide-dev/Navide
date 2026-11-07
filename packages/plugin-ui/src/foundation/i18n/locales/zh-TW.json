@@ -723,22 +723,6 @@
     }
   },
   "pane": {
-    "web": {
-      "signed-in": "已登入",
-      "signed-out": "未登入",
-      "unloaded": "已卸載",
-      "memory": "{mb} MB",
-      "reload": "重新整理",
-      "open-browser": "在系統瀏覽器開啟",
-      "clear": "登出並清除",
-      "clear-confirm": "再按一次即登出此網站，並清除所有網頁分格裡這個網站的資料",
-      "clear-confirm-short": "確認",
-      "unloaded-title": "已卸載以節省記憶體",
-      "unloaded-hint": "點一下重新載入，登入狀態仍在。",
-      "google-hint": "Google 可能不允許在嵌入式瀏覽器內登入；若被擋，請改用系統瀏覽器登入。",
-      "cloudflare-hint": "正在檢查瀏覽器，請稍候；若出現「Verify you are human」勾選框，請自己勾選。",
-      "privacy": "請用你自己的帳號登入。登入狀態只存在這台電腦，Navide 不會讀取。"
-    },
     "acp": {
       "unconfirmed": "未確認",
       "unsent": "未送出",
@@ -2644,10 +2628,6 @@
       "download-retry": "重新下載"
     },
     "general": {
-      "web-pane-idle": "網頁分格閒置卸載（分鐘）",
-      "web-pane-idle-hint": "網頁分格超過這段時間沒被聚焦，就卸載頁面以釋放記憶體；點一下重新載入，登入狀態仍在。",
-      "web-pane-limit": "網頁分格同時活躍上限",
-      "web-pane-limit-hint": "同時保持頁面載入的網頁分格數量；再開一個時，會卸載最久沒用的那一格。",
       "auto-resume-reconnect": "Navide 背景服務重啟後自動接回工作階段",
       "resume-interrupted-on-launch": "重開 Navide 後自動接回工作中的分格",
       "system-notify": "系統通知",

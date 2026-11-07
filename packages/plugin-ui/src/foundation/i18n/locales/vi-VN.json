@@ -723,22 +723,6 @@
     }
   },
   "pane": {
-    "web": {
-      "signed-in": "Đã đăng nhập",
-      "signed-out": "Chưa đăng nhập",
-      "unloaded": "Đã gỡ tải",
-      "memory": "{mb} MB",
-      "reload": "Tải lại",
-      "open-browser": "Mở trong trình duyệt hệ thống",
-      "clear": "Đăng xuất và xóa",
-      "clear-confirm": "Nhấn lần nữa để đăng xuất khỏi trang này và xóa dữ liệu của nó trong mọi web pane",
-      "clear-confirm-short": "Xác nhận",
-      "unloaded-title": "Đã gỡ tải để tiết kiệm bộ nhớ",
-      "unloaded-hint": "Nhấn để tải lại. Bạn vẫn đăng nhập.",
-      "google-hint": "Google có thể từ chối đăng nhập trong trình duyệt nhúng. Nếu vậy, hãy đăng nhập bằng trình duyệt hệ thống.",
-      "cloudflare-hint": "Đang kiểm tra trình duyệt. Vui lòng chờ; nếu xuất hiện ô \"Verify you are human\", hãy tự đánh dấu.",
-      "privacy": "Hãy đăng nhập bằng tài khoản của bạn. Trạng thái đăng nhập chỉ ở trên máy này và Navide không đọc nó."
-    },
     "acp": {
       "unconfirmed": "Chưa xác nhận",
       "unsent": "Chưa gửi",
@@ -2644,10 +2628,6 @@
       "download-retry": "Thử tải lại"
     },
     "general": {
-      "web-pane-idle": "Gỡ tải web pane khi rảnh (phút)",
-      "web-pane-idle-hint": "Web pane không được focus trong khoảng này sẽ gỡ tải trang để giải phóng bộ nhớ. Nhấn vào sẽ tải lại, vẫn đăng nhập.",
-      "web-pane-limit": "Giới hạn web pane hoạt động",
-      "web-pane-limit-hint": "Số web pane giữ trang đã tải cùng lúc. Mở thêm một cái sẽ gỡ tải cái lâu nhất chưa dùng.",
       "auto-resume-reconnect": "Tiếp tục session sau khi dịch vụ nền của Navide khởi động lại",
       "resume-interrupted-on-launch": "Tiếp tục các pane đang làm việc sau khi khởi động lại Navide",
       "system-notify": "Thông báo hệ thống",

@@ -59,7 +59,7 @@ describe('plain terminal panes over MCP', () => {
 
   it('leaves terminals out of a group broadcast', () => {
     const cmd = block("registerCommand('ui.groupPeers'", "\nregisterCommand('ui.pane.getStatus'")
-    expect(cmd).toContain('.filter((p) => p.agentKey !== TERMINAL_AGENT_KEY && !isWebPaneAgentKey(p.agentKey))')
+    expect(cmd).toContain('.filter((p) => p.agentKey !== TERMINAL_AGENT_KEY)')
   })
 
   it('holds a terminal whose shell is not in front of its tty (a quiet program)', () => {

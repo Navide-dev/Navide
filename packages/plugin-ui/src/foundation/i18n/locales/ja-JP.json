@@ -723,22 +723,6 @@
     }
   },
   "pane": {
-    "web": {
-      "signed-in": "ログイン済み",
-      "signed-out": "未ログイン",
-      "unloaded": "アンロード済み",
-      "memory": "{mb} MB",
-      "reload": "再読み込み",
-      "open-browser": "システムのブラウザで開く",
-      "clear": "ログアウトして消去",
-      "clear-confirm": "もう一度クリックすると、このサイトからログアウトし、すべての web pane にあるこのサイトのデータを消去します",
-      "clear-confirm-short": "確認",
-      "unloaded-title": "メモリ節約のためアンロードしました",
-      "unloaded-hint": "クリックすると再読み込みします。ログイン状態はそのままです。",
-      "google-hint": "Google は埋め込みブラウザでのログインを拒否することがあります。拒否された場合はシステムのブラウザでログインしてください。",
-      "cloudflare-hint": "ブラウザを確認しています。しばらくお待ちください。「Verify you are human」のチェックボックスが出たらご自身でチェックしてください。",
-      "privacy": "ご自身のアカウントでログインしてください。ログイン状態はこのコンピュータにだけ保存され、Navide は読み取りません。"
-    },
     "acp": {
       "unconfirmed": "未確認",
       "unsent": "未送信",
@@ -2644,10 +2628,6 @@
       "download-retry": "ダウンロードを再試行"
     },
     "general": {
-      "web-pane-idle": "web pane のアイドルアンロード（分）",
-      "web-pane-idle-hint": "この時間フォーカスされなかった web pane はページをアンロードしてメモリを解放します。クリックするとログインしたまま再読み込みします。",
-      "web-pane-limit": "アクティブな web pane の上限",
-      "web-pane-limit-hint": "同時にページを読み込んでおく web pane の数です。さらに開くと、最も長く使われていないものをアンロードします。",
       "auto-resume-reconnect": "Navide のバックグラウンドサービスの再起動後にセッションを再開",
       "resume-interrupted-on-launch": "Navide の再起動後に作業中のペインを再開",
       "system-notify": "システム通知",
