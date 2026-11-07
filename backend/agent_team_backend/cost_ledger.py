@@ -16,6 +16,11 @@ answer "what did this cost".
 
 ``usage_daily`` is a view over ``usage_calls`` (day × cwd × vendor × model), so
 it can never drift from the rows it sums.
+
+``pane_sessions`` (schema 2) maps each pane to the sessions it ran, written
+with every call that names a pane. Rows that name no pane (a backfill, a call
+read before its pane claimed the session) take their session's pane from it,
+and cost_report compares the two views per pane.
 """
 
 from __future__ import annotations
@@ -92,6 +97,29 @@ def _create_schema_v1(cur: sqlite3.Cursor) -> None:
         " SUM(output) AS output"
         " FROM usage_calls GROUP BY day, cwd, vendor, model"
     )
+
+
+def _create_schema_v2(cur: sqlite3.Cursor) -> None:
+    cur.execute(
+        "CREATE TABLE pane_sessions ("
+        " pane TEXT NOT NULL,"
+        " vendor TEXT NOT NULL,"
+        " session_id TEXT NOT NULL,"
+        " workspace TEXT NOT NULL,"
+        " first_ts INTEGER NOT NULL,"
+        " last_ts INTEGER NOT NULL,"
+        " PRIMARY KEY (pane, vendor, session_id))"
+    )
+    cur.execute("CREATE INDEX pane_sessions_session ON pane_sessions (vendor, session_id)")
+
+
+_UPSERT_PANE_SESSION = (
+    "INSERT INTO pane_sessions (pane, vendor, session_id, workspace, first_ts, last_ts)"
+    " VALUES (?, ?, ?, ?, ?, ?)"
+    " ON CONFLICT(pane, vendor, session_id) DO UPDATE SET"
+    " first_ts = min(first_ts, excluded.first_ts), last_ts = max(last_ts, excluded.last_ts),"
+    " workspace = CASE WHEN excluded.workspace != '' THEN excluded.workspace ELSE workspace END"
+)
 
 
 _claude_reader: Any = None
@@ -183,6 +211,7 @@ class CostLedger:
     def __init__(self, db: Database) -> None:
         self._db = db
         self._db.migrate("cost_ledger", 1, _create_schema_v1)
+        self._db.migrate("cost_ledger", 2, _create_schema_v2)
         self._keyless_vendors: set[str] = set()
 
     def _accept(self, usage: TokenUsage) -> bool:
@@ -199,12 +228,23 @@ class CostLedger:
         try:
             if not self._accept(usage):
                 return False
+            row = _row(usage, workspace, pane)
             with self._db.transaction() as cur:
-                cur.execute(_sql(usage), _row(usage, workspace, pane))
-                return cur.rowcount == 1
+                cur.execute(_sql(usage), row)
+                written = cur.rowcount == 1
+                if pane and usage.session_id:
+                    ts = row[7]
+                    cur.execute(_UPSERT_PANE_SESSION, (
+                        pane, usage.vendor, usage.session_id, workspace or "", ts, ts,
+                    ))
+                return written
         except Exception as err:  # noqa: BLE001
             log.warning("cost ledger write failed: %s", err)
             return False
+
+    def report(self, by: str, **filters: Any) -> dict[str, Any]:
+        """cost_report over this ledger's database."""
+        return cost_report(self._db, by, **filters)
 
     def record_many(self, events: Iterable[TokenUsage]) -> tuple[int, int]:
         """Batch insert for the backfill. Returns (written, skipped)."""
@@ -241,6 +281,122 @@ def call_cost_usd(row: dict[str, Any], pricing: dict[str, Any]) -> float | None:
         + row["cache_write_1h"] * price["cache_write_1h"]
         + row["output"] * price["output"]
     ) / per_token
+
+
+_TOKEN_FIELDS = ("input", "cache_read", "cache_write_5m", "cache_write_1h", "output")
+
+# A call's pane: its own, else the pane its session ran in (the latest one, when
+# a session moved between panes).
+_EFFECTIVE_PANE = (
+    "CASE WHEN u.pane != '' THEN u.pane ELSE COALESCE((SELECT ps.pane FROM pane_sessions ps"
+    " WHERE ps.vendor = u.vendor AND ps.session_id = u.session_id"
+    " ORDER BY ps.last_ts DESC LIMIT 1), '') END"
+)
+
+_GROUP_KEYS = {
+    "cwd": "u.cwd",
+    "pane": "epane",
+    "day": "date(u.ts, 'unixepoch')",
+    "session": "u.session_id",
+    "model": "u.model",
+}
+
+COST_REPORT_GROUPS = tuple(_GROUP_KEYS)
+
+
+def _blank_bucket(key: str) -> dict[str, Any]:
+    return {"key": key, "calls": 0, **{f: 0 for f in _TOKEN_FIELDS}, "usd": 0.0, "unpriced_calls": 0}
+
+
+def cost_report(
+    db: Database,
+    by: str,
+    *,
+    cwd: str = "",
+    pane: str = "",
+    since: str = "",
+    until: str = "",
+    pricing: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Tokens and dollars from the ledger, grouped by cwd, pane, day, session or model.
+
+    ``cwd`` keeps calls made in that folder or below it; ``since`` and ``until``
+    are inclusive UTC days (YYYY-MM-DD). A model the pricing table does not know
+    adds its calls to ``unpriced_calls`` and nothing to ``usd``. Grouped by pane,
+    the answer also reconciles: per pane, the tokens of the calls that name it
+    against the tokens of every call of the sessions mapped to it; ``differences``
+    lists the panes where the two disagree.
+    """
+    if by not in _GROUP_KEYS:
+        raise ValueError(f"by must be one of {', '.join(COST_REPORT_GROUPS)}")
+    pricing = pricing if pricing is not None else load_pricing()
+    where, params = [], []
+    if cwd:
+        root = unicodedata.normalize("NFC", cwd.rstrip("/\\"))
+        where.append("(u.cwd = ? OR substr(u.cwd, 1, ?) IN (?, ?))")
+        params += [root, len(root) + 1, root + "/", root + "\\"]
+    if since:
+        where.append("date(u.ts, 'unixepoch') >= ?")
+        params.append(since)
+    if until:
+        where.append("date(u.ts, 'unixepoch') <= ?")
+        params.append(until)
+    inner = (
+        f"SELECT u.*, {_EFFECTIVE_PANE} AS epane FROM usage_calls u"
+        + (f" WHERE {' AND '.join(where)}" if where else "")
+    )
+    outer_where = " WHERE epane = ?" if pane else ""
+    if pane:
+        params.append(pane)
+    sums = ", ".join(f"SUM({f})" for f in _TOKEN_FIELDS)
+    key = _GROUP_KEYS[by].replace("u.", "")
+    sql = (
+        f"SELECT {key} AS k, model, COUNT(*), {sums} FROM ({inner}){outer_where}"
+        " GROUP BY k, model"
+    )
+    buckets: dict[str, dict[str, Any]] = {}
+    with db.transaction() as cur:
+        rows = cur.execute(sql, params).fetchall()
+        for k, model, calls, *tokens in rows:
+            bucket = buckets.setdefault(k or "", _blank_bucket(k or ""))
+            part = dict(zip(_TOKEN_FIELDS, (int(t or 0) for t in tokens)), model=model)
+            bucket["calls"] += calls
+            for f in _TOKEN_FIELDS:
+                bucket[f] += part[f]
+            usd = call_cost_usd(part, pricing)
+            if usd is None:
+                bucket["unpriced_calls"] += calls
+            else:
+                bucket["usd"] += usd
+        differences = _pane_differences(cur) if by == "pane" else None
+    groups = sorted(buckets.values(), key=lambda b: b["usd"], reverse=True)
+    for bucket in groups:
+        bucket["usd"] = round(bucket["usd"], 4)
+    answer: dict[str, Any] = {
+        "by": by,
+        "groups": groups,
+        "pricing": {"version": pricing.get("version"), "effective": pricing.get("effective")},
+    }
+    if differences is not None:
+        answer["differences"] = [d for d in differences if not pane or d["pane"] == pane]
+    return answer
+
+
+def _pane_differences(cur: sqlite3.Cursor) -> list[dict[str, Any]]:
+    total = " + ".join(_TOKEN_FIELDS)
+    tagged = dict(cur.execute(
+        f"SELECT pane, SUM({total}) FROM usage_calls WHERE pane != '' GROUP BY pane"
+    ).fetchall())
+    mapped = dict(cur.execute(
+        f"SELECT ps.pane, SUM({total}) FROM pane_sessions ps"
+        " JOIN usage_calls u ON u.vendor = ps.vendor AND u.session_id = ps.session_id"
+        " GROUP BY ps.pane"
+    ).fetchall())
+    return [
+        {"pane": p, "tagged_tokens": int(tagged.get(p) or 0), "session_tokens": int(mapped.get(p) or 0)}
+        for p in sorted(set(tagged) | set(mapped))
+        if int(tagged.get(p) or 0) != int(mapped.get(p) or 0)
+    ]
 
 
 def backfill(ledger: CostLedger, readers: Iterable[Any]) -> tuple[int, int]:

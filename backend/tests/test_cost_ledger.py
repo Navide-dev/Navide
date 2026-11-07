@@ -44,11 +44,11 @@ def test_schema_goes_through_migrate_with_indexes(tmp_path: Path) -> None:
     db = Database(tmp_path / "navide.db")
     CostLedger(db)
     CostLedger(db)  # second open is a no-op step
-    assert db.schema_version("cost_ledger") == 1
+    assert db.schema_version("cost_ledger") == 2
     with db.transaction() as cur:
         names = {r["name"] for r in cur.execute("SELECT name FROM sqlite_master")}
     assert {"usage_calls", "usage_daily", "usage_calls_ts", "usage_calls_cwd_ts",
-            "usage_calls_session"} <= names
+            "usage_calls_session", "pane_sessions", "pane_sessions_session"} <= names
 
 
 def test_claude_call_splits_tokens_and_uses_transcript_cwd(
@@ -230,3 +230,82 @@ def test_cwd_is_nfc(monkeypatch: pytest.MonkeyPatch) -> None:
     ev = TokenUsage(vendor="codex", input_tokens=1, output_tokens=1, cwd=nfd,
                     session_id="s", file_path="/x.jsonl", dedup_key="k")
     assert cost_ledger.transcript_cwd(ev) == "/Users/me/café"
+
+
+# ── B: pane ↔ session map, cost report, reconciliation ─────────────────────
+
+
+def _call(key: str, session: str, *, cwd: str = "/w", ts: str = "2026-11-05T02:00:00Z",
+          model: str = "claude-opus-5-5", inp: int = 1_000_000, out: int = 0) -> TokenUsage:
+    return TokenUsage(vendor="codex", input_tokens=inp, output_tokens=out, cwd=cwd,
+                      session_id=session, file_path=f"/{session}.jsonl", dedup_key=key,
+                      timestamp=ts, model=model)
+
+
+def _pricing() -> dict:
+    return {"version": 7, "effective": "2026-10-06", "models": {"claude-opus-5-5": {
+        "input": 5.0, "cache_read": 0.2, "cache_write_5m": 6.25, "cache_write_1h": 10.0, "output": 25.0,
+    }}}
+
+
+def test_a_call_naming_a_pane_maps_its_session(tmp_path: Path) -> None:
+    db = Database(tmp_path / "navide.db")
+    ledger = CostLedger(db)
+    ledger.record(_call("k1", "s1", ts="2026-11-05T02:00:00Z"), "/w", "01:dev")
+    ledger.record(_call("k2", "s1", ts="2026-11-05T03:00:00Z"), "/w", "01:dev")
+    ledger.record(_call("k3", "s2"), "/w", "")
+    with db.transaction() as cur:
+        rows = [dict(r) for r in cur.execute("SELECT * FROM pane_sessions")]
+    assert len(rows) == 1
+    assert rows[0]["pane"] == "01:dev" and rows[0]["session_id"] == "s1"
+    assert rows[0]["last_ts"] - rows[0]["first_ts"] == 3600
+
+
+def test_report_prices_groups_and_keeps_unpriced_apart(tmp_path: Path) -> None:
+    ledger = CostLedger(Database(tmp_path / "navide.db"))
+    ledger.record(_call("k1", "s1", inp=1_000_000, out=1_000_000), "/w", "01:dev")
+    ledger.record(_call("k2", "s2", model="gpt-x"), "/w", "02:qa")
+    report = ledger.report("pane", pricing=_pricing())
+    by_key = {g["key"]: g for g in report["groups"]}
+    assert by_key["01:dev"]["usd"] == 30.0
+    assert by_key["01:dev"]["unpriced_calls"] == 0
+    assert by_key["02:qa"]["usd"] == 0.0 and by_key["02:qa"]["unpriced_calls"] == 1
+    assert report["pricing"] == {"version": 7, "effective": "2026-10-06"}
+    with pytest.raises(ValueError):
+        ledger.report("vendor", pricing=_pricing())
+
+
+def test_report_filters_by_folder_day_and_pane(tmp_path: Path) -> None:
+    ledger = CostLedger(Database(tmp_path / "navide.db"))
+    ledger.record(_call("k1", "s1", cwd="/w"), "/w", "01:dev")
+    ledger.record(_call("k2", "s1", cwd="/w/sub", ts="2026-11-06T02:00:00Z"), "/w", "01:dev")
+    ledger.record(_call("k3", "s3", cwd="/w2"), "/w2", "01:dev")
+    ledger.record(_call("k4", "s4", cwd="/w"), "/w", "02:qa")
+
+    def keys(**filters) -> dict[str, int]:
+        return {g["key"]: g["calls"] for g in ledger.report(filters.pop("by"), pricing=_pricing(), **filters)["groups"]}
+
+    # "/w" keeps "/w/sub" but not its neighbour "/w2".
+    assert keys(by="cwd", cwd="/w") == {"/w": 2, "/w/sub": 1}
+    assert keys(by="day", cwd="/w", since="2026-11-06") == {"2026-11-06": 1}
+    assert keys(by="day", cwd="/w", until="2026-11-05") == {"2026-11-05": 2}
+    assert keys(by="session", cwd="/w", pane="01:dev") == {"s1": 2}
+
+
+def test_a_call_without_a_pane_takes_its_sessions_pane(tmp_path: Path) -> None:
+    """A backfilled call names no pane; the map says whose session it was."""
+    ledger = CostLedger(Database(tmp_path / "navide.db"))
+    ledger.record(_call("live", "s1"), "/w", "01:dev")
+    ledger.record_many([_call("old", "s1"), _call("orphan", "s9")])
+    groups = {g["key"]: g["calls"] for g in ledger.report("pane", pricing=_pricing())["groups"]}
+    assert groups == {"01:dev": 2, "": 1}
+
+
+def test_pane_reconciliation_lists_only_the_panes_that_disagree(tmp_path: Path) -> None:
+    ledger = CostLedger(Database(tmp_path / "navide.db"))
+    ledger.record(_call("a1", "s1", inp=10), "/w", "01:dev")
+    ledger.record(_call("b1", "s2", inp=10), "/w", "02:qa")
+    ledger.record_many([_call("b0", "s2", inp=5)])  # read before 02:qa claimed s2
+    report = ledger.report("pane", pricing=_pricing())
+    assert report["differences"] == [{"pane": "02:qa", "tagged_tokens": 10, "session_tokens": 15}]
+    assert ledger.report("pane", pane="01:dev", pricing=_pricing())["differences"] == []

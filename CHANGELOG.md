@@ -16,6 +16,7 @@ All notable released changes to Navide will be documented in this file. The form
 ### Added
 
 - Navide (0.2.39): a per-call usage ledger in `navide.db` keeps each model call's session, working directory, model and uncached input, cache read, cache write and output tokens (one running total per session for Codex), so AI cost can be computed and re-priced from the ledger after the CLI's own session logs are gone.
+- MCP (0.2.39): `cli_token_stats` takes `cost_by` (`cwd`, `pane`, `day`, `session` or `model`) and answers with `cost`, the dollars spent in the workspace's folder from the per-call usage ledger, priced by a versioned price table; a model it does not price is counted apart instead of as zero. `since`, `until` and `pane` narrow it. The ledger also remembers which pane ran each session, so a call read without its pane (such as a backfilled one) still counts toward that pane, and grouped by pane the answer lists the panes whose own calls and whose sessions' calls add up differently. Without `cost_by` the answer is exactly what it was.
 - Terminal panes (0.2.39): `cli_send` and `cli_open_agent(agent: "terminal")` take `submit` (default true). With `submit: false` the command is prefilled on the shell's command line as a single line, without Enter, so you check it and run it yourself; a command the terminal protection refuses can be prefilled this way, and it is still written to the Guard audit log, as a prefill. Until you type into that terminal, other messages to it fail instead of being typed after the prefill.
 
 ### Changed
