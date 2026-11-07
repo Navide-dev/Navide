@@ -553,6 +553,15 @@ the manifest side is:
 }
 ```
 
+Allowing the package is what lets agents call these tools (C3, 0.2.39): the
+install consent card and the native-backend prompt list every declared tool
+with its read/write claim, and the user's "Allow" turns on Settings → Navide
+Plugins → "Let agents call tools from third-party Navide plugins" when it was
+off, as the dialog says. No separate switch has to be found afterwards; the
+switch stays in Settings as the way to stop every third-party tool at once,
+and turning it off there holds until the user allows the next package that
+offers tools. A tool that changes files still asks once per workspace.
+
 | Tool field | Required | Rule |
 |---|---|---|
 | `name` | yes | `^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$`, unique in the package, and starting with the prefix derived from the plugin id: its last dot segment with every `-` removed (`nerdtechnic.dev-map` → `devmap_`). A prefix that cannot be derived, a reserved prefix (`cli_`, `plan_`, `navide_`, `window_`, the built-in packages' `git_`, `plans_`, `miniide_`, ... see the contract) and every core tool name are refused. `window_` was reserved in 0.2.28 for the core window tools (`window_list`, `window_focus`, ...): a plugin whose id ends in `.window` can no longer derive an agent tool prefix |

@@ -603,3 +603,35 @@ describe('PluginAgentToolsHost first-party agent tools (navide.browser)', () => 
     expect(h.host.snapshot()).toEqual([])
   })
 })
+
+describe('C3: the consent card is the switch', () => {
+  it('turns the master switch on when the user allows a third-party package that offers tools', async () => {
+    const h = harness()
+    expect(await h.host.consented('nerdtechnic.devmap')).toBe(true)
+    expect(h.switches.enabled).toBe(true)
+    expect(h.sent).toHaveLength(1)
+    expect(h.sent[0].tools.map((entry) => [entry.name, entry.state])).toEqual([
+      ['devmap_read', 'available'],
+      ['devmap_set_status', 'available'],
+    ])
+  })
+
+  it('only refreshes for a package without tools, an unknown id, or a switch already on', async () => {
+    const h = harness()
+    h.packages = [spec('acme.silent', '1.0.0', [])]
+    expect(await h.host.consented('acme.silent')).toBe(false)
+    expect(await h.host.consented('acme.never-installed')).toBe(false)
+    expect(h.switches.enabled).toBe(false)
+    expect(h.sent).toEqual([])
+    const on = harness({}, { enabled: true })
+    expect(await on.host.consented('nerdtechnic.devmap')).toBe(false)
+    expect(on.switches.enabled).toBe(true)
+    expect(on.sent).toHaveLength(1)
+  })
+
+  it('never turns external callers on with it', async () => {
+    const h = harness()
+    await h.host.consented('nerdtechnic.devmap')
+    expect(h.switches).toMatchObject({ enabled: true, externalCallers: false })
+  })
+})

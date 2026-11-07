@@ -1330,8 +1330,10 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
-  onConsentGranted: () => {
-    void agentToolsHost?.refresh().catch(() => undefined)
+  // C3: allowing a package whose consent card listed its agent tools turns
+  // the third-party agent-tools switch on (and refreshes the catalog).
+  onConsentGranted: (pluginId) => {
+    void agentToolsHost?.consented(pluginId).catch(() => undefined)
   },
   promptAgentToolWrite: promptAgentToolWorkspaceWrite,
   agentToolCall: (initiatorId) => frontendPluginManager.agentToolCallFor(initiatorId),
@@ -2179,7 +2181,14 @@ const pluginTrustRefresh = registerPluginIpc(
     // run in a worker thread (the scanner's budget is up to 30 s).
     scanLocalPackage: scanLocalPackageInWorker,
     forgetBackendConsent: (pluginId, keepInstallConsentFor) => nativeBackendStore.forgetGrants(pluginId, keepInstallConsentFor),
-    noteInstallConsent: (pluginId, packageVersion) => nativeBackendStore.noteInstallConsent(pluginId, packageVersion),
+    noteInstallConsent: (pluginId, packageVersion) => {
+      nativeBackendStore.noteInstallConsent(pluginId, packageVersion)
+      // C3: the install consent card listed the package's agent tools. A
+      // package whose backend is not registered yet is caught by the
+      // controller's onConsentGranted when its first start records the
+      // install consent as the backend's consent.
+      void agentToolsHost?.consented(pluginId).catch(() => undefined)
+    },
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),
     carryPluginViewState: (pluginId, fromVersion, toVersion) =>

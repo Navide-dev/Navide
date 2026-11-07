@@ -2019,7 +2019,7 @@
           "firstParty": "Agents erlauben, Tools aus offiziellen Navide-Plug-ins aufzurufen",
           "firstPartyDescription": "Standardmäßig an. Lässt Agents in Ihren Bereichen die Tools offizieller Navide-Plug-ins aufrufen, also der von Navide selbst wie Navide Browser, ohne für jede Version zu fragen. Ihre Ergebnisse gelten weiterhin als externe Inhalte, und ein Tool, das etwas ändert, fragt weiterhin einmal pro Arbeitsbereich.",
           "enable": "Agents erlauben, Tools aus Navide-Plug-ins von Drittanbietern aufzurufen",
-          "description": "Lässt Agents in Ihren Bereichen Tools aufrufen, die von Ihnen erlaubte Navide-Plug-ins deklarieren; ein Tool, das Dateien ändert, fragt einmal pro Arbeitsbereich.",
+          "description": "Lässt Agents in Ihren Bereichen Tools aufrufen, die von Ihnen erlaubte Navide-Plug-ins deklarieren; ein Tool, das Dateien ändert, fragt einmal pro Arbeitsbereich. Er schaltet sich selbst ein, wenn Sie ein Navide-Plug-in erlauben, dessen Zustimmungskarte Tools aufführt; schalten Sie ihn hier aus, um alle Drittanbieter-Tools auf einmal zu stoppen.",
           "externalCallers": "Auch externen MCP-Clients den Aufruf erlauben",
           "externalCallersDisclosure": "Externe Programme teilen sich ein einziges Token, daher kann der Eintrag eines Aufrufs nur „ein externer Client“ angeben, nicht welches Programm es war. Die Host-Anmeldeinformation wird genauso behandelt."
         },

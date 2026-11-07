@@ -2019,7 +2019,7 @@
           "firstParty": "Cho phép agent gọi công cụ từ plugin Navide chính thức",
           "firstPartyDescription": "Bật theo mặc định. Cho phép agent trong pane gọi công cụ của plugin Navide chính thức, do Navide làm như Navide Browser, mà không hỏi cho từng phiên bản. Kết quả vẫn được đánh dấu là nội dung bên ngoài, và công cụ thay đổi thứ gì đó vẫn hỏi một lần cho mỗi không gian làm việc.",
           "enable": "Cho phép agent gọi công cụ từ plugin Navide của bên thứ ba",
-          "description": "Cho phép agent trong pane gọi công cụ do plugin Navide bạn đã cho phép khai báo; công cụ thay đổi tệp sẽ hỏi một lần cho mỗi không gian làm việc.",
+          "description": "Cho phép agent trong pane gọi công cụ do plugin Navide bạn đã cho phép khai báo; công cụ thay đổi tệp sẽ hỏi một lần cho mỗi không gian làm việc. Nó tự bật khi bạn cho phép một plugin Navide có thẻ đồng ý liệt kê công cụ; tắt ở đây để dừng mọi công cụ bên thứ ba cùng lúc.",
           "externalCallers": "Cho phép cả client MCP bên ngoài gọi chúng",
           "externalCallersDisclosure": "Các chương trình bên ngoài dùng chung một token, nên bản ghi một lệnh gọi chỉ có thể ghi là “một client bên ngoài”, không biết là chương trình nào. Thông tin xác thực của Host cũng được xử lý như vậy."
         },
