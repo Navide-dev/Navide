@@ -5,7 +5,11 @@
 #   codex [anything]        -> a line editor in the terminal: echoes what is typed (bracketed paste too); on Enter, a
 #                              line with ROLEWK or "manager dispatch" prints a fixed REPORT block for the run's nonce,
 #                              anything else prints "ok". It writes no rollout, so Navide has no turn text for it.
-import os, re, sys, time
+#   With ~/wh/fakecodex-rollout present it also writes a minimal rollout ($CODEX_HOME or ~/.codex, sessions/Y/M/D):
+#   a session_meta (cwd = its working directory) and, per Enter, a token_count whose running totals grow by
+#   input 1000 (600 of them cached) and output 50 (20 of them reasoning), as the real codex reports them: cached is
+#   inside input_tokens and reasoning inside output_tokens. Totals go to ~/wh/fakecodex-tokens.log for the check.
+import json, os, re, sys, time, uuid
 if "--version" in sys.argv[1:] or "-V" in sys.argv[1:]:
     print("codex-cli 0.55.0"); sys.exit(0)
 import termios, tty
@@ -13,6 +17,27 @@ LOG = os.path.join(os.path.expanduser("~"), "wh", "fakecodex.log")
 def log(s):
     with open(LOG, "a", encoding="utf-8") as f: f.write(time.strftime("%H:%M:%S ") + s + "\n")
 def out(s): os.write(1, s.encode())
+ROLLOUT = None; TOT = {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "reasoning_output_tokens": 0}
+if os.path.exists(os.path.join(os.path.expanduser("~"), "wh", "fakecodex-rollout")):
+    sid = str(uuid.uuid4()); now = time.gmtime()
+    d = os.path.join(os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex"), "sessions",
+                     time.strftime("%Y/%m/%d", now))
+    os.makedirs(d, exist_ok=True)
+    ROLLOUT = os.path.join(d, "rollout-" + time.strftime("%Y-%m-%dT%H-%M-%S", now) + "-" + sid + ".jsonl")
+    with open(ROLLOUT, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", now), "type": "session_meta", "payload": {
+            "id": sid, "cwd": os.getcwd(), "originator": "fakecodex", "cli_version": "0.55.0",
+            "model_provider": "openai"}}) + "\n")
+def token_turn():
+    if ROLLOUT is None: return
+    for k, v in (("input_tokens", 1000), ("cached_input_tokens", 600), ("output_tokens", 50), ("reasoning_output_tokens", 20)):
+        TOT[k] += v
+    t = dict(TOT, total_tokens=TOT["input_tokens"] + TOT["output_tokens"])
+    with open(ROLLOUT, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "type": "event_msg",
+                            "payload": {"type": "token_count", "info": {"total_token_usage": t}}}) + "\n")
+    with open(os.path.join(os.path.expanduser("~"), "wh", "fakecodex-tokens.log"), "a", encoding="utf-8") as f:
+        f.write(json.dumps({"rollout": ROLLOUT, **t}) + "\n")
 fd = 0; old = termios.tcgetattr(fd); tty.setraw(fd)
 try:
     out("\x1b[?2004h>_ OpenAI Codex (fake test stub, v0.55.0)\r\n\r\n› ")
@@ -35,6 +60,7 @@ try:
                     log("printed REPORT " + n)
                 else:
                     out("ok\r\n")
+                token_turn()
                 out("\r\n› ")
             elif c in "\x7f\b":
                 if buf: buf = buf[:-1]; out("\b \b")
