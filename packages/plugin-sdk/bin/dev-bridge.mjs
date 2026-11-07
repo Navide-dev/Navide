@@ -1,0 +1,285 @@
+// The local Host bridge of `navide-plugin dev-backend --workspace <dir>`:
+// answers the backend's `navide/host/call` requests on the developer's own
+// machine under the same admission rules as Navide's Host
+// (pluginThirdPartyBackends.packageBridgeDispatcher, plansBridge's
+// filesystem port, host_shell's public policy), so that a request the local
+// bridge refuses is refused by Navide too. What the manifest does not
+// declare is CAPABILITY_DENIED with reason `undeclared`; writes need
+// `--allow-writes`, the developer's stand-in for the per-workspace write
+// prompt; without `--workspace` every request is denied (`no-workspace`),
+// as before 0.2.39. Every request is appended to `<data>/activity.jsonl`
+// in the shape of Navide's `plugin_activity` rows.
+
+import {
+  appendFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync,
+  rmSync, statSync, writeFileSync, closeSync,
+} from 'node:fs'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { declaredExecutables, parseCommand, validatePublicArgv, ShellPolicyError } from './dev-shell-policy.mjs'
+
+export class DevBridgeError extends Error {
+  constructor(code, reason, message) {
+    super(message ?? code)
+    this.code = code
+    if (reason) this.reason = reason
+  }
+}
+
+const PORTS = new Set([
+  'filesystem', 'workspace-storage', 'terminal', 'agent-messaging', 'routes', 'streams', 'spawn', 'shell', 'web',
+  'agents', 'agent-message-bodies',
+])
+const FS_READ = new Set(['read_file', 'read_range', 'list_dir', 'stat_path'])
+const FS_WRITE = new Set(['write_file', 'write_part', 'write_commit', 'write_abort', 'delete', 'rename'])
+const MAX_READ_BYTES = 5 * 1024 * 1024
+const MAX_RANGE_BYTES = 96 * 1024
+const MAX_DIR_ENTRIES = 2_000
+const SHELL_OUTPUT_CHARS = 8_000
+const SHELL_TIMEOUT_MS = 15_000
+
+function isRecord(value) { return typeof value === 'object' && value !== null && !Array.isArray(value) }
+function exactKeys(value, required, optional = []) {
+  if (!isRecord(value)) throw new DevBridgeError('INVALID_ARGUMENT')
+  const keys = Object.keys(value)
+  if (required.some((key) => !keys.includes(key)) || keys.some((key) => !required.includes(key) && !optional.includes(key))) {
+    throw new DevBridgeError('INVALID_ARGUMENT')
+  }
+  return value
+}
+
+/** The manifest's declared permissions, as the Host projects them. */
+export function declaredPermissions(manifest) {
+  const permissions = isRecord(manifest.permissions) ? manifest.permissions : {}
+  const system = Array.isArray(permissions.system) ? permissions.system.filter((v) => typeof v === 'string') : []
+  const shell = typeof permissions.shell === 'string'
+    ? { mode: permissions.shell, executables: new Set() }
+    : isRecord(permissions.shell) && permissions.shell.mode === 'allowlist'
+      ? { mode: 'allowlist', executables: declaredExecutables(permissions.shell.executables) }
+      : null
+  return { system, shell }
+}
+
+export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = false, activityFile, dataDir, runShell, now = Date.now }) {
+  const declared = declaredPermissions(manifest)
+  const root = workspaceRoot === null ? null : realpathSync(workspaceRoot)
+  if (root !== null && !statSync(root).isDirectory()) throw new Error(`--workspace is not a directory: ${workspaceRoot}`)
+  const rows = []
+  const staging = new Map()
+
+  function record(row) {
+    const full = {
+      at: now(),
+      plugin_id: manifest.id,
+      plugin_version: manifest.version,
+      workspace: root ?? '',
+      source: row.source,
+      address: row.address,
+      outcome: row.outcome,
+      denied_reason: row.denied_reason ?? '',
+      fs_path: row.fs_path ?? '',
+      shell_command: row.shell_command ?? '',
+    }
+    rows.push(full)
+    if (activityFile) {
+      mkdirSync(dirname(activityFile), { recursive: true })
+      appendFileSync(activityFile, `${JSON.stringify(full)}\n`)
+    }
+    return full
+  }
+
+  /** A workspace-relative path as the Host's filesystem service resolves it:
+   *  inside the root, through no symbolic link that leaves it. */
+  function workspacePath(value) {
+    if (typeof value !== 'string' || value.includes('\0')) throw new DevBridgeError('INVALID_ARGUMENT')
+    if (isAbsolute(value)) throw new DevBridgeError('WORKSPACE_SCOPE_VIOLATION')
+    const target = resolve(root, value)
+    const rel = relative(root, target)
+    if (rel.startsWith('..') || isAbsolute(rel)) throw new DevBridgeError('WORKSPACE_SCOPE_VIOLATION')
+    // The nearest existing ancestor must still be inside the root (symlinks).
+    let probe = target
+    while (!existsSync(probe)) probe = dirname(probe)
+    const real = realpathSync(probe)
+    if (real !== root && !real.startsWith(`${root}/`)) throw new DevBridgeError('WORKSPACE_SCOPE_VIOLATION')
+    return target
+  }
+
+  function mtimeOf(path) { return Math.floor(statSync(path).mtimeMs) }
+
+  function filesystem(operation, args) {
+    switch (operation) {
+      case 'read_file': {
+        const values = exactKeys(args, ['rel_path'], ['include_mtime'])
+        if (values.include_mtime !== undefined && typeof values.include_mtime !== 'boolean') throw new DevBridgeError('INVALID_ARGUMENT')
+        const path = workspacePath(values.rel_path)
+        const stat = statSync(path)
+        if (stat.size > MAX_READ_BYTES) throw new DevBridgeError('RESULT_TOO_LARGE')
+        return { content: readFileSync(path, 'utf8'), mtime: Math.floor(stat.mtimeMs) }
+      }
+      case 'read_range': {
+        const values = exactKeys(args, ['rel_path', 'offset', 'length'])
+        const { offset, length } = values
+        if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1 || length > MAX_RANGE_BYTES) {
+          throw new DevBridgeError('INVALID_ARGUMENT')
+        }
+        const path = workspacePath(values.rel_path)
+        const stat = statSync(path)
+        const buffer = Buffer.alloc(Math.min(length, Math.max(0, stat.size - offset)))
+        const fd = openSync(path, 'r')
+        try { readSync(fd, buffer, 0, buffer.length, offset) } finally { closeSync(fd) }
+        return { data_base64: buffer.toString('base64'), size: stat.size, eof: offset + buffer.length >= stat.size, mtime: Math.floor(stat.mtimeMs) }
+      }
+      case 'list_dir': {
+        const values = exactKeys(args, ['rel_path'], ['mode'])
+        if (values.mode !== undefined && values.mode !== 'discovery' && values.mode !== 'display') throw new DevBridgeError('INVALID_ARGUMENT')
+        const path = workspacePath(values.rel_path)
+        const names = readdirSync(path).sort()
+        const truncated = names.length > MAX_DIR_ENTRIES
+        return { entries: names.slice(0, MAX_DIR_ENTRIES), ...(truncated ? { truncated: true } : {}) }
+      }
+      case 'stat_path': {
+        const path = workspacePath(exactKeys(args, ['rel_path']).rel_path)
+        if (!existsSync(path)) return { exists: false, isDirectory: false, size: 0 }
+        const stat = statSync(path)
+        return { exists: true, isDirectory: stat.isDirectory(), size: stat.size }
+      }
+      case 'write_file': {
+        const values = exactKeys(args, ['rel_path', 'content'], ['expected_mtime'])
+        if (typeof values.content !== 'string' || (values.expected_mtime !== undefined && !Number.isFinite(values.expected_mtime))) {
+          throw new DevBridgeError('INVALID_ARGUMENT')
+        }
+        const path = workspacePath(values.rel_path)
+        if (values.expected_mtime !== undefined && existsSync(path) && mtimeOf(path) !== values.expected_mtime) {
+          return { ok: false, conflict: true, mtime: mtimeOf(path) }
+        }
+        mkdirSync(dirname(path), { recursive: true })
+        writeFileSync(path, values.content)
+        return { ok: true, mtime: mtimeOf(path) }
+      }
+      case 'write_part': {
+        const values = exactKeys(args, ['rel_path', 'upload_id', 'offset', 'data_base64'])
+        if (typeof values.upload_id !== 'string' || !values.upload_id || typeof values.data_base64 !== 'string' || !Number.isSafeInteger(values.offset) || values.offset < 0) {
+          throw new DevBridgeError('INVALID_ARGUMENT')
+        }
+        const path = workspacePath(values.rel_path)
+        const key = `${values.upload_id}\0${path}`
+        const part = staging.get(key) ?? { chunks: [], size: 0 }
+        if (part.size !== values.offset) throw new DevBridgeError('INVALID_ARGUMENT', undefined, 'parts must arrive in order')
+        const bytes = Buffer.from(values.data_base64, 'base64')
+        if (bytes.length > MAX_RANGE_BYTES) throw new DevBridgeError('INVALID_ARGUMENT')
+        part.chunks.push(bytes)
+        part.size += bytes.length
+        staging.set(key, part)
+        return { ok: true, size: part.size }
+      }
+      case 'write_commit': {
+        const values = exactKeys(args, ['rel_path', 'upload_id', 'total_size'], ['expected_mtime'])
+        const path = workspacePath(values.rel_path)
+        const part = staging.get(`${values.upload_id}\0${path}`)
+        if (!part || !Number.isSafeInteger(values.total_size) || part.size !== values.total_size) throw new DevBridgeError('INVALID_ARGUMENT')
+        if (values.expected_mtime !== undefined && existsSync(path) && mtimeOf(path) !== values.expected_mtime) {
+          return { ok: false, conflict: true, mtime: mtimeOf(path) }
+        }
+        staging.delete(`${values.upload_id}\0${path}`)
+        mkdirSync(dirname(path), { recursive: true })
+        writeFileSync(path, Buffer.concat(part.chunks))
+        return { ok: true, mtime: mtimeOf(path) }
+      }
+      case 'write_abort': {
+        const values = exactKeys(args, ['rel_path', 'upload_id'])
+        staging.delete(`${values.upload_id}\0${workspacePath(values.rel_path)}`)
+        return { ok: true }
+      }
+      case 'delete': {
+        const path = workspacePath(exactKeys(args, ['rel_path']).rel_path)
+        rmSync(path, { recursive: true, force: false })
+        return { ok: true }
+      }
+      case 'rename': {
+        const values = exactKeys(args, ['from', 'to'])
+        renameSync(workspacePath(values.from), workspacePath(values.to))
+        return { ok: true }
+      }
+    }
+    throw new DevBridgeError('METHOD_NOT_FOUND')
+  }
+
+  const defaultRunShell = (argv, cwd) => {
+    const result = spawnSync(argv[0], argv.slice(1), { cwd, encoding: 'utf8', timeout: SHELL_TIMEOUT_MS, shell: false, env: process.env })
+    if (result.error && result.error.code === 'ENOENT') throw new DevBridgeError('BACKEND_UNAVAILABLE', undefined, `${argv[0]} is not installed`)
+    const stdout = result.stdout ?? ''
+    const stderr = result.stderr ?? ''
+    return {
+      exitCode: result.status ?? 126,
+      stdout: stdout.slice(0, SHELL_OUTPUT_CHARS),
+      stderr: stderr.slice(0, SHELL_OUTPUT_CHARS),
+      ...(stdout.length > SHELL_OUTPUT_CHARS || stderr.length > SHELL_OUTPUT_CHARS ? { truncated: true } : {}),
+    }
+  }
+
+  function shell(operation, args) {
+    if (operation !== 'run') throw new DevBridgeError('METHOD_NOT_FOUND')
+    if (!isRecord(args) || Object.keys(args).length !== 1 || typeof args.command !== 'string') {
+      throw new DevBridgeError('INVALID_ARGUMENT', undefined, 'shell.run takes exactly { command }')
+    }
+    let argv
+    try {
+      argv = validatePublicArgv(parseCommand(args.command), { workspaceRoot: root, allowedExecutables: declared.shell.executables })
+    } catch (error) {
+      if (error instanceof ShellPolicyError) throw new DevBridgeError('CAPABILITY_DENIED', 'policy', error.message)
+      throw error
+    }
+    return (runShell ?? defaultRunShell)(argv, root)
+  }
+
+  /** One `navide/host/call` `params`; returns `{ value }` or `{ error: { code, reason?, message? } }`. */
+  async function handle(params) {
+    if (!isRecord(params) || Object.keys(params).length !== 4 || !isRecord(params.origin) || typeof params.port !== 'string' ||
+      typeof params.operation !== 'string' || !('arguments' in params)) {
+      return { error: { code: 'PROTOCOL_ERROR' } }
+    }
+    if (!PORTS.has(params.port)) return { error: { code: 'PROTOCOL_ERROR' } }
+    const address = `${params.port}.${params.operation}`
+    const source = params.port === 'shell' ? 'shell' : 'broker'
+    const argsRecord = isRecord(params.arguments) ? params.arguments : {}
+    const detail = params.port === 'filesystem'
+      ? { fs_path: typeof argsRecord.rel_path === 'string' ? argsRecord.rel_path : typeof argsRecord.from === 'string' ? argsRecord.from : '' }
+      : params.port === 'shell' ? { shell_command: typeof argsRecord.command === 'string' ? argsRecord.command : '' } : {}
+    const deny = (code, reason, message) => {
+      record({ source, address, outcome: 'denied', denied_reason: reason ?? code, ...detail })
+      return { error: { code, ...(reason ? { reason } : {}), ...(message ? { message } : {}) } }
+    }
+    const declaredPort = params.port === 'filesystem' ? declared.system.includes('fs')
+      : params.port === 'shell' ? declared.shell?.mode === 'allowlist'
+        : params.port === 'agents' ? declared.system.includes('agents')
+          : params.port === 'agent-message-bodies' ? declared.system.includes('agentMessages')
+            : false
+    if (!declaredPort) return deny('CAPABILITY_DENIED', 'undeclared', `the manifest does not declare what '${params.port}' needs`)
+    if (root === null) return deny('CAPABILITY_DENIED', 'no-workspace', 'run dev-backend with --workspace <dir> to serve this request')
+    if (params.port === 'agents' || params.port === 'agent-message-bodies') {
+      return deny('BACKEND_UNAVAILABLE', 'dev-backend', 'there are no agents in dev-backend; Navide serves this port')
+    }
+    if (params.port === 'filesystem' && FS_WRITE.has(params.operation) && !allowWrites) {
+      return deny('CAPABILITY_DENIED', 'write-not-granted', 'run dev-backend with --allow-writes to let the backend change the workspace')
+    }
+    if (params.port === 'filesystem' && !FS_READ.has(params.operation) && !FS_WRITE.has(params.operation)) {
+      return deny('METHOD_NOT_FOUND')
+    }
+    try {
+      const value = params.port === 'filesystem' ? filesystem(params.operation, params.arguments) : shell(params.operation, params.arguments)
+      record({ source, address, outcome: 'allowed', ...detail })
+      return { value }
+    } catch (error) {
+      if (error instanceof DevBridgeError) {
+        if (error.code === 'CAPABILITY_DENIED') return deny(error.code, error.reason, error.message !== error.code ? error.message : undefined)
+        record({ source, address, outcome: 'error', denied_reason: error.code, ...detail })
+        return { error: { code: error.code, ...(error.reason ? { reason: error.reason } : {}), ...(error.message !== error.code ? { message: error.message } : {}) } }
+      }
+      const code = error?.code === 'ENOENT' ? 'INVALID_ARGUMENT' : 'INTERNAL_ERROR'
+      record({ source, address, outcome: 'error', denied_reason: code, ...detail })
+      return { error: { code, message: error instanceof Error ? error.message : String(error) } }
+    }
+  }
+
+  return { handle, rows, root, declared, dataDir }
+}

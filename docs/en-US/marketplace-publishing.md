@@ -183,11 +183,43 @@ navide-plugin dev-backend dist/package
   place. The backend has no network access and cannot read your home folder.
 - Calls to methods, and subscriptions to events, that `manifest.json` does not
   declare are refused before they reach the backend, as in Navide.
-- The Host bridge is not emulated: each `navide/host/call` the backend makes
-  is printed and answered with `CAPABILITY_DENIED`.
+- The Host bridge is served locally (0.2.39) when you name a workspace:
+  `--workspace <directory>` answers the backend's `navide/host/call` requests
+  under **the same admission rules Navide's Host applies** — the `filesystem`
+  port only when the manifest declares `fs`, inside that directory only
+  (`WORKSPACE_SCOPE_VIOLATION` outside it, symbolic links included), reads
+  always and writes only with `--allow-writes` (your stand-in for the
+  per-workspace write prompt a user answers in Navide); the `shell` port only
+  when it declares `shell: "allowlist"`, running git, gh, glab and the declared
+  executables through the same public command policy as the Host broker, in
+  that directory; `agents` ports answer `BACKEND_UNAVAILABLE` (there are no
+  agents in dev-backend); every other port, and anything the manifest does not
+  declare, is `CAPABILITY_DENIED` with reason `undeclared`. A request the
+  local bridge refuses is one Navide refuses too. Without `--workspace`
+  every request is denied (reason `no-workspace`), as before.
+- Each bridge request is printed (`← bridge filesystem.read_file {...} →
+  allowed` or `→ denied CAPABILITY_DENIED (undeclared): ...`) and appended to
+  `<data>/activity.jsonl` as a row in the shape of Navide's Activity page
+  (`plugin_activity`: `at`, `plugin_id`, `plugin_version`, `workspace`,
+  `source`, `address`, `outcome`, `denied_reason`, `fs_path`,
+  `shell_command`), so what you see here is what a user would see in Settings
+  → Navide Plugins → Activity.
 - Results print as `← result`, events as `← event`, and the backend's stderr
   as `[backend]` lines. When the backend ends, `• backend exited` means exit
   code 0 and `× backend exited` means it failed or was killed.
+
+**Hot module replacement (assessed for 0.2.39, not built).** Developer Mode
+already reloads a loaded folder on change, re-opens each view hidden and
+checks its readiness before swapping, and restarts the backend only when
+`backend` changed; a Vite dev server can serve a view's entry (its origin is
+admitted by the network policy). What HMR would add is in-page state across
+an edit, which needs the dev server's HMR client inside the plugin frame (a
+WebSocket to the dev origin, allowed by the C1 policy), the view's own state
+restore (`createPluginViewState` covers the stored part), and a rule for a
+changed `manifest.json` (still a full reload with consent). The gain is
+seconds per edit; the cost is a second reload path next to the folder reload,
+so it waits for the SDK's in-memory Host mock (batch 3, E4), which gives a
+view a far faster loop than any reload: run it in vitest against the mock.
 
 ## 3. Test against a local registry
 
@@ -669,5 +701,5 @@ navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-brow
 navide-plugin testplace invite add <namespace.name> <label>... | invite list <namespace.name> | invite revoke <namespace.name> <invite-id>
 navide-plugin testplace code create <namespace.name> --max-testers <n> | code list <namespace.name> | code revoke <namespace.name> <code-id>
 navide-plugin testplace versions <namespace.name> | revoke <namespace.name> <version> [--reason <text>] | promote <namespace.name> <version>
-navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]
+navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes]
 ```

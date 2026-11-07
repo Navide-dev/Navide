@@ -560,7 +560,7 @@ function usage() {
     '  navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]',
     '  navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]',
     '  navide-plugin testplace invite|code|versions|revoke|promote ... (run `navide-plugin testplace` for details)',
-    '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]',
+    '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes]',
     '',
     `The registry defaults to $NAVIDE_REGISTRY_URL, then https://server.navide.dev/registry.`,
     'publish, whoami and status read the token from NAVIDE_PLUGIN_TOKEN, then `navide-plugin login`. Registries must use https unless they are on loopback.',
@@ -582,7 +582,7 @@ const COMMANDS = {
   status: [1, ['--registry'], ['--json'], true],
   logout: [0, ['--registry'], []],
   publish: [1, ['--registry', '--target', '--signature', '--token', '--channel'], ['--insecure-http', '--via-navide', '--no-browser']],
-  'dev-backend': [1, ['--call', '--args', '--subscribe', '--data'], []],
+  'dev-backend': [1, ['--call', '--args', '--subscribe', '--data', '--workspace'], ['--allow-writes']],
 }
 
 function parseArgs(argv) {
@@ -672,6 +672,8 @@ async function main(argv) {
       args: options.get('--args'),
       subscribe: (options.get('--subscribe') ?? '').split(',').filter(Boolean),
       dataDir: options.get('--data'),
+      workspace: options.get('--workspace') ?? null,
+      allowWrites: options.has('--allow-writes'),
     })
     return
   }

@@ -1,0 +1,144 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+// @ts-expect-error - plain ESM module without type declarations
+import { createDevBridge } from './dev-bridge.mjs'
+// @ts-expect-error - plain ESM module without type declarations
+import { parseCommand, validatePublicArgv } from './dev-shell-policy.mjs'
+
+const roots: string[] = []
+function workspace(): string {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'dev-bridge-')))
+  roots.push(root)
+  writeFileSync(join(root, 'a.txt'), 'hello')
+  mkdirSync(join(root, 'sub'))
+  writeFileSync(join(root, 'sub', 'b.txt'), 'b')
+  return root
+}
+afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
+
+const manifest = (permissions: Record<string, unknown>) => ({
+  schemaVersion: 2, id: 'acme.files', version: '1.0.0', permissions,
+  backend: { entry: 'backend/x', protocolVersion: 1, activation: 'startup', methods: ['files.read'] },
+})
+const request = (port: string, operation: string, args: unknown) => ({ origin: { kind: 'call', requestId: 'r1' }, port, operation, arguments: args })
+
+describe('dev-backend local Host bridge', () => {
+  it('serves declared filesystem reads inside the workspace and nothing outside it', async () => {
+    const root = workspace()
+    const activityFile = join(mkdtempSync(join(tmpdir(), 'dev-bridge-data-')), 'activity.jsonl')
+    roots.push(join(activityFile, '..'))
+    const bridge = createDevBridge({ manifest: manifest({ system: ['fs'] }), workspaceRoot: root, activityFile })
+    await expect(bridge.handle(request('filesystem', 'read_file', { rel_path: 'a.txt' }))).resolves.toMatchObject({ value: { content: 'hello' } })
+    await expect(bridge.handle(request('filesystem', 'list_dir', { rel_path: '.' }))).resolves.toEqual({ value: { entries: ['a.txt', 'sub'] } })
+    await expect(bridge.handle(request('filesystem', 'stat_path', { rel_path: 'sub/b.txt' }))).resolves.toEqual({ value: { exists: true, isDirectory: false, size: 1 } })
+    await expect(bridge.handle(request('filesystem', 'stat_path', { rel_path: 'nope' }))).resolves.toEqual({ value: { exists: false, isDirectory: false, size: 0 } })
+    const range = await bridge.handle(request('filesystem', 'read_range', { rel_path: 'a.txt', offset: 1, length: 2 }))
+    expect(range).toMatchObject({ value: { data_base64: Buffer.from('el').toString('base64'), size: 5, eof: false } })
+    for (const rel of ['../secret', '/etc/passwd', 'sub/../../x']) {
+      await expect(bridge.handle(request('filesystem', 'read_file', { rel_path: rel }))).resolves.toEqual({ error: { code: 'WORKSPACE_SCOPE_VIOLATION' } })
+    }
+    symlinkSync('/', join(root, 'escape'))
+    await expect(bridge.handle(request('filesystem', 'list_dir', { rel_path: 'escape' }))).resolves.toEqual({ error: { code: 'WORKSPACE_SCOPE_VIOLATION' } })
+    await expect(bridge.handle(request('filesystem', 'read_file', { rel_path: 'a.txt', extra: 1 }))).resolves.toEqual({ error: { code: 'INVALID_ARGUMENT' } })
+    await expect(bridge.handle(request('filesystem', 'watch', { rel_path: '.' }))).resolves.toEqual({ error: { code: 'METHOD_NOT_FOUND' } })
+    // Writes need --allow-writes: the developer's stand-in for the per-workspace prompt.
+    await expect(bridge.handle(request('filesystem', 'write_file', { rel_path: 'c.txt', content: 'x' }))).resolves.toEqual({
+      error: { code: 'CAPABILITY_DENIED', reason: 'write-not-granted', message: expect.stringContaining('--allow-writes') },
+    })
+    expect(existsSync(join(root, 'c.txt'))).toBe(false)
+    const rows = readFileSync(activityFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
+    expect(rows.map((row) => [row.source, row.address, row.outcome, row.denied_reason, row.fs_path])).toEqual([
+      ['broker', 'filesystem.read_file', 'allowed', '', 'a.txt'],
+      ['broker', 'filesystem.list_dir', 'allowed', '', '.'],
+      ['broker', 'filesystem.stat_path', 'allowed', '', 'sub/b.txt'],
+      ['broker', 'filesystem.stat_path', 'allowed', '', 'nope'],
+      ['broker', 'filesystem.read_range', 'allowed', '', 'a.txt'],
+      ['broker', 'filesystem.read_file', 'error', 'WORKSPACE_SCOPE_VIOLATION', '../secret'],
+      ['broker', 'filesystem.read_file', 'error', 'WORKSPACE_SCOPE_VIOLATION', '/etc/passwd'],
+      ['broker', 'filesystem.read_file', 'error', 'WORKSPACE_SCOPE_VIOLATION', 'sub/../../x'],
+      ['broker', 'filesystem.list_dir', 'error', 'WORKSPACE_SCOPE_VIOLATION', 'escape'],
+      ['broker', 'filesystem.read_file', 'error', 'INVALID_ARGUMENT', 'a.txt'],
+      ['broker', 'filesystem.watch', 'denied', 'METHOD_NOT_FOUND', '.'],
+      ['broker', 'filesystem.write_file', 'denied', 'write-not-granted', 'c.txt'],
+    ])
+    expect(rows[0]).toMatchObject({ plugin_id: 'acme.files', plugin_version: '1.0.0', workspace: root, shell_command: '' })
+  })
+
+  it('writes, chunked writes, deletes and renames with --allow-writes, with the Host conflict check', async () => {
+    const root = workspace()
+    const bridge = createDevBridge({ manifest: manifest({ system: ['fs'] }), workspaceRoot: root, allowWrites: true })
+    const written = await bridge.handle(request('filesystem', 'write_file', { rel_path: 'new/c.txt', content: 'c' }))
+    expect(written).toMatchObject({ value: { ok: true } })
+    expect(readFileSync(join(root, 'new', 'c.txt'), 'utf8')).toBe('c')
+    await expect(bridge.handle(request('filesystem', 'write_file', { rel_path: 'new/c.txt', content: 'd', expected_mtime: 1 }))).resolves.toMatchObject({ value: { ok: false, conflict: true } })
+    const data = Buffer.from('chunked').toString('base64')
+    await expect(bridge.handle(request('filesystem', 'write_part', { rel_path: 'big.bin', upload_id: 'u1', offset: 0, data_base64: data }))).resolves.toEqual({ value: { ok: true, size: 7 } })
+    await expect(bridge.handle(request('filesystem', 'write_part', { rel_path: 'big.bin', upload_id: 'u1', offset: 3, data_base64: data }))).resolves.toMatchObject({ error: { code: 'INVALID_ARGUMENT' } })
+    await expect(bridge.handle(request('filesystem', 'write_commit', { rel_path: 'big.bin', upload_id: 'u1', total_size: 7 }))).resolves.toMatchObject({ value: { ok: true } })
+    expect(readFileSync(join(root, 'big.bin'), 'utf8')).toBe('chunked')
+    await expect(bridge.handle(request('filesystem', 'rename', { from: 'big.bin', to: 'sub/big.bin' }))).resolves.toEqual({ value: { ok: true } })
+    await expect(bridge.handle(request('filesystem', 'rename', { from: 'sub/big.bin', to: '../out.bin' }))).resolves.toEqual({ error: { code: 'WORKSPACE_SCOPE_VIOLATION' } })
+    await expect(bridge.handle(request('filesystem', 'delete', { rel_path: 'sub/big.bin' }))).resolves.toEqual({ value: { ok: true } })
+    expect(existsSync(join(root, 'sub', 'big.bin'))).toBe(false)
+  })
+
+  it('refuses what the manifest does not declare, and everything without a workspace, exactly as Navide does', async () => {
+    const root = workspace()
+    const none = createDevBridge({ manifest: manifest({ system: ['ui'] }), workspaceRoot: root })
+    await expect(none.handle(request('filesystem', 'read_file', { rel_path: 'a.txt' }))).resolves.toMatchObject({ error: { code: 'CAPABILITY_DENIED', reason: 'undeclared' } })
+    await expect(none.handle(request('shell', 'run', { command: 'git status' }))).resolves.toMatchObject({ error: { code: 'CAPABILITY_DENIED', reason: 'undeclared' } })
+    await expect(none.handle(request('web', 'navigate', {}))).resolves.toMatchObject({ error: { code: 'CAPABILITY_DENIED', reason: 'undeclared' } })
+    await expect(none.handle(request('network', 'fetch', {}))).resolves.toEqual({ error: { code: 'PROTOCOL_ERROR' } })
+    await expect(none.handle({ port: 'filesystem' })).resolves.toEqual({ error: { code: 'PROTOCOL_ERROR' } })
+    expect(none.rows.map((row: { denied_reason: string }) => row.denied_reason)).toEqual(['undeclared', 'undeclared', 'undeclared'])
+
+    const noWorkspace = createDevBridge({ manifest: manifest({ system: ['fs', 'agents'] }), workspaceRoot: null })
+    await expect(noWorkspace.handle(request('filesystem', 'read_file', { rel_path: 'a.txt' }))).resolves.toMatchObject({ error: { code: 'CAPABILITY_DENIED', reason: 'no-workspace' } })
+    const agents = createDevBridge({ manifest: manifest({ system: ['fs', 'agents'] }), workspaceRoot: root })
+    await expect(agents.handle(request('agents', 'list', {}))).resolves.toMatchObject({ error: { code: 'BACKEND_UNAVAILABLE', reason: 'dev-backend' } })
+  })
+
+  it('runs allowlisted shell commands through the public policy and records them', async () => {
+    const root = workspace()
+    const calls: Array<[string[], string]> = []
+    const bridge = createDevBridge({
+      manifest: manifest({ system: ['fs'], shell: { mode: 'allowlist', executables: ['npm', 'bad.exe'] } }),
+      workspaceRoot: root,
+      runShell: (argv: string[], cwd: string) => { calls.push([argv, cwd]); return { exitCode: 0, stdout: 'ok', stderr: '' } },
+    })
+    await expect(bridge.handle(request('shell', 'run', { command: 'git status --short' }))).resolves.toEqual({ value: { exitCode: 0, stdout: 'ok', stderr: '' } })
+    await expect(bridge.handle(request('shell', 'run', { command: 'npm test -- --watch=false' }))).resolves.toMatchObject({ value: { exitCode: 0 } })
+    expect(calls).toEqual([[['git', 'status', '--short'], root], [['npm', 'test', '--', '--watch=false'], root]])
+    for (const command of ['rm -rf /', 'git -c core.editor=x status', 'git config user.name', 'git status; rm x', 'gh auth login', 'bad.exe', 'git log -- ../other']) {
+      await expect(bridge.handle(request('shell', 'run', { command }))).resolves.toMatchObject({ error: { code: 'CAPABILITY_DENIED', reason: 'policy' } })
+    }
+    await expect(bridge.handle(request('shell', 'run', { command: 'git status', cwd: '/' }))).resolves.toMatchObject({ error: { code: 'INVALID_ARGUMENT' } })
+    await expect(bridge.handle(request('shell', 'exec', { command: 'git status' }))).resolves.toEqual({ error: { code: 'METHOD_NOT_FOUND' } })
+    expect(bridge.rows.filter((row: { source: string }) => row.source === 'shell').map((row: { outcome: string; shell_command: string }) => [row.outcome, row.shell_command]).slice(0, 3)).toEqual([
+      ['allowed', 'git status --short'], ['allowed', 'npm test -- --watch=false'], ['denied', 'rm -rf /'],
+    ])
+  })
+})
+
+describe('the ported public shell policy', () => {
+  it('splits commands like the broker and refuses shell syntax', () => {
+    expect(parseCommand(`git commit -m "a b" 'c d' e\\ f`)).toEqual(['git', 'commit', '-m', 'a b', 'c d', 'e f'])
+    expect(() => parseCommand('git status | cat')).toThrow('one allowlisted executable')
+    expect(() => parseCommand('git commit -m "open')).toThrow('quoting')
+  })
+
+  it('accepts the Host-allowlisted commands and refuses the documented escapes', () => {
+    const ok = ['git status', 'git log -5 --oneline', 'git diff --stat HEAD~1', 'git commit -m msg', 'git push origin main',
+      'git clone https://github.com/x/y.git dest', 'gh pr list --limit 5', 'gh api repos/x/y', 'glab issue list', 'git remote -v',
+      'git push user@host:path']
+    for (const command of ok) expect(() => validatePublicArgv(parseCommand(command))).not.toThrow()
+    const refused = ['git --exec-path=/x status', 'git -C /tmp status', 'git credential fill', 'git submodule update', 'git bisect run x',
+      'git clone ext::sh x', 'git -- push origin', 'gh auth status', 'gh pr merge 1', 'gh api -X POST repos', 'glab mr merge 1',
+      'git log /etc/passwd', 'git worktree remove x', 'gh issue list --input f', '/usr/bin/git status', 'ls']
+    for (const command of refused) expect(() => validatePublicArgv(parseCommand(command)), command).toThrow()
+    expect(validatePublicArgv(['npm', 'run', 'x'], { allowedExecutables: new Set(['npm']) })).toEqual(['npm', 'run', 'x'])
+    expect(() => validatePublicArgv(['npm', 'run', 'x'])).toThrow('not allowlisted')
+  })
+})

@@ -99,6 +99,11 @@ navide-plugin package dist/package           # a deterministic .vsix; one per ta
   manifest or the code until the red list is empty.
 - `package` writes `acme.hello-<version>-<target>.vsix`; packaging the same
   files again gives the same bytes.
+- A backend: `navide-plugin dev-backend dist/package --workspace <dir>` runs
+  it in Navide's sandbox and answers its Host bridge calls under Navide's own
+  rules (declared `fs` in that directory, `--allow-writes` for changes,
+  declared `shell` through the same command policy; undeclared is refused the
+  way Navide refuses it), listing every request in `<data>/activity.jsonl`.
 - Readiness: every view must call `ready()` (`createPluginViewRuntimeClient().ready()`
   from `@navide/plugin-sdk`, or `window.nav.ready()` in the no-build scaffold)
   within 10 seconds of loading, or the install and the folder load fail

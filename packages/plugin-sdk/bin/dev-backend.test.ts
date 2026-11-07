@@ -130,8 +130,34 @@ describe.runIf(canRunLive)('dev-backend against a tiny fixture backend (live)', 
       await expect(session.call('echo.emit', {})).resolves.toEqual({ emitted: true })
       expect(output).toContainEqual(['event', { event: 'echo.changed', payload: { n: 1 } }])
       await expect(session.call('echo.bridge', {})).resolves.toEqual({ denied: true })
-      expect(output).toContainEqual(['bridge', { port: 'filesystem', operation: 'read_file', arguments: { rel_path: 'a.txt' } }])
+      expect(output).toContainEqual(['bridge', {
+        port: 'filesystem', operation: 'read_file', arguments: { rel_path: 'a.txt' },
+        denied: { code: 'CAPABILITY_DENIED', reason: 'undeclared', message: expect.stringContaining('does not declare') },
+      }])
+      expect(session.activity()).toEqual([expect.objectContaining({ address: 'filesystem.read_file', outcome: 'denied', denied_reason: 'undeclared' })])
+      expect(readFileSync(join(root, 'data', 'activity.jsonl'), 'utf8').trim().split('\n')).toHaveLength(1)
       await expect(session.call('echo.escape', {})).resolves.toEqual({ readSecret: false })
+    } finally {
+      await session.close()
+    }
+  }, 30_000)
+
+  it('serves a declared filesystem read from --workspace through the local bridge (batch 4)', async () => {
+    const ws = join(root, 'ws')
+    mkdirSync(ws, { recursive: true })
+    writeFileSync(join(ws, 'a.txt'), 'from the workspace')
+    const output: Array<[string, unknown]> = []
+    const session = await startDevBackend({
+      directory: pluginDir,
+      manifest: { ...manifest, permissions: { system: ['fs'] } },
+      dataDir: join(root, 'data-ws'),
+      workspace: ws,
+      onOutput: (kind: string, detail: unknown) => output.push([kind, detail]),
+    })
+    try {
+      await expect(session.call('echo.bridge', {})).resolves.toEqual({ denied: false })
+      expect(output).toContainEqual(['bridge', { port: 'filesystem', operation: 'read_file', arguments: { rel_path: 'a.txt' }, allowed: true }])
+      expect(session.activity()).toEqual([expect.objectContaining({ address: 'filesystem.read_file', outcome: 'allowed', fs_path: 'a.txt', workspace: realpathSync(ws) })])
     } finally {
       await session.close()
     }
@@ -201,5 +227,9 @@ describe('dev-backend output and data (DX-REPORT 7.1 #6, #9)', () => {
     expect(formatOutput('exit', { code: 1, signal: null })).toBe('× backend exited {"code":1,"signal":null}')
     expect(formatOutput('exit', { code: null, signal: 'SIGKILL' })).toBe('× backend exited {"code":null,"signal":"SIGKILL"}')
     expect(formatOutput('result', { count: 2 })).toBe('← result {"count":2}')
+    expect(formatOutput('bridge', { port: 'filesystem', operation: 'read_file', arguments: { rel_path: 'a.txt' }, allowed: true }))
+      .toBe('← bridge filesystem.read_file {"rel_path":"a.txt"} → allowed')
+    expect(formatOutput('bridge', { port: 'shell', operation: 'run', arguments: { command: 'ls' }, denied: { code: 'CAPABILITY_DENIED', reason: 'policy', message: 'executable is not allowlisted' } }))
+      .toBe('← bridge shell.run {"command":"ls"} → denied CAPABILITY_DENIED (policy): executable is not allowlisted')
   })
 })

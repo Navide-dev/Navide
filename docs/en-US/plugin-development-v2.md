@@ -203,7 +203,7 @@ navide-plugin status [<namespace.name>[@<version>]] [--registry <url>] [--json]
 navide-plugin logout [--registry <url>]
 navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--insecure-http]
 navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]
-navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]
+navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes]
 ```
 
 Every staging directory includes an `artifact-files.json` control file with one
@@ -220,8 +220,10 @@ scaffolds a frontend-only package that validates without a build step, and
 project with its own tests (see [Build for Navide](build-for-navide.md));
 `login` and `publish` talk to a Registry (see
 [Publishing to the Navide Marketplace](marketplace-publishing.md)). Apart from
-`dev-backend`, which launches a built backend under the sandbox, the CLI has
-no Host transport, process execution, or development server.
+`dev-backend`, which launches a built backend under the sandbox and (with
+`--workspace`) serves its Host bridge locally under the Host's own admission
+rules, the CLI has no Host transport, process execution, or development
+server.
 
 ## Issue 06 external workspace workflow
 
@@ -740,7 +742,11 @@ it running. The first-party Plans backend is not affected.
 Before publishing, run the built backend locally with
 `navide-plugin dev-backend <directory>`: it launches the backend under the same
 sandbox profile, refuses undeclared methods and events, prints results, events
-and stderr, and answers every Host bridge request with `CAPABILITY_DENIED`. See
+and stderr, and, with `--workspace <directory>`, answers Host bridge requests
+locally under the rules Navide applies (declared `fs` inside that directory,
+writes with `--allow-writes`, declared `shell` through the public command
+policy; anything undeclared `CAPABILITY_DENIED`), writing each one to
+`<data>/activity.jsonl`. See
 [marketplace-publishing.md](marketplace-publishing.md), "Test a native backend
 before publishing".
 

@@ -3,14 +3,17 @@
 // it on stdio, so an author can exercise methods and events before publishing.
 //
 // The sandbox profile and bubblewrap arguments below must stay identical to
-// src/main/plugins/pluginBackendSandbox.ts (a parity test enforces it). The
-// Host bridge is not emulated: every `navide/host/call` from the backend is
-// printed and refused with CAPABILITY_DENIED.
+// src/main/plugins/pluginBackendSandbox.ts (a parity test enforces it). Since
+// 0.2.39 the Host bridge is served locally by dev-bridge.mjs under the Host's
+// own admission rules (`--workspace <dir>`, `--allow-writes`); without a
+// workspace every `navide/host/call` is printed and refused as before, and
+// every request lands in `<data>/activity.jsonl`.
 
 import { spawn, spawnSync } from 'node:child_process'
 import { accessSync, constants, lstatSync, mkdirSync, readdirSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, posix, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
+import { createDevBridge } from './dev-bridge.mjs'
 
 const PROTOCOL_REVISION = '2026-07-28'
 const SANDBOX_EXEC_PATH = '/usr/bin/sandbox-exec'
@@ -189,7 +192,7 @@ function meta() {
  * Returns a session with `call`, `subscribe` and `close`; every frame the
  * backend sends is reported through `onOutput(kind, detail)`.
  */
-export async function startDevBackend({ directory, manifest, dataDir, onOutput, platform, probe }) {
+export async function startDevBackend({ directory, manifest, dataDir, onOutput, platform, probe, workspace = null, allowWrites = false, runShell }) {
   if (!manifest.backend) throw new Error(`${manifest.id} has no backend`)
   const packageDir = realpathSync(directory)
   const entryFile = realpathSync(join(packageDir, backendEntryForTarget(manifest.backend.entry)))
@@ -198,6 +201,9 @@ export async function startDevBackend({ directory, manifest, dataDir, onOutput, 
   mkdirSync(join(dataDir, 'tmp'), { recursive: true, mode: 0o700 })
   const canonicalDataDir = realpathSync(dataDir)
   const paths = { packageDir, dataDir: canonicalDataDir, entryFile }
+  const bridge = createDevBridge({
+    manifest, workspaceRoot: workspace, allowWrites, activityFile: join(canonicalDataDir, 'activity.jsonl'), dataDir: canonicalDataDir, runShell,
+  })
   const sandbox = resolveDevSandbox(paths, platform, probe)
   if (sandbox instanceof Error) throw sandbox
   // Leftovers that escaped an earlier run are removed before a new one starts.
@@ -255,8 +261,20 @@ export async function startDevBackend({ directory, manifest, dataDir, onOutput, 
       return
     }
     if (frame.method === 'navide/host/call') {
-      onOutput('bridge', { port: frame.params?.port, operation: frame.params?.operation, arguments: frame.params?.arguments })
-      write({ jsonrpc: '2.0', id: frame.id, error: { code: 1000, message: 'Host Bridge request failed.', data: { code: 'CAPABILITY_DENIED' } } })
+      void bridge.handle(frame.params).then((answer) => {
+        onOutput('bridge', {
+          port: frame.params?.port, operation: frame.params?.operation, arguments: frame.params?.arguments,
+          ...(answer.error ? { denied: answer.error } : { allowed: true }),
+        })
+        if (answer.error) {
+          write({ jsonrpc: '2.0', id: frame.id, error: { code: 1000, message: 'Host Bridge request failed.', data: answer.error } })
+        } else {
+          write({
+            jsonrpc: '2.0', id: frame.id,
+            result: { resultType: 'complete', value: answer.value, _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'navide.host-bridge', version: '1.0.0' } } },
+          })
+        }
+      })
       return
     }
     if (frame.method === 'notifications/navide/event') {
@@ -336,6 +354,8 @@ export async function startDevBackend({ directory, manifest, dataDir, onOutput, 
     },
     exit,
     sandbox: sandbox.command,
+    /** The local bridge's Activity rows so far (also in `<data>/activity.jsonl`). */
+    activity: () => [...bridge.rows],
   }
   await session.health()
   return session
@@ -343,12 +363,19 @@ export async function startDevBackend({ directory, manifest, dataDir, onOutput, 
 
 /** One line of dev-backend output; a clean exit (code 0) gets no failure cross. */
 export function formatOutput(kind, detail) {
+  if (kind === 'bridge' && detail && typeof detail === 'object') {
+    const { port, operation, arguments: args, denied, allowed } = detail
+    const call = `${port}.${operation} ${JSON.stringify(args ?? null)}`
+    if (allowed) return `← bridge ${call} → allowed`
+    const why = denied ? `${denied.code}${denied.reason ? ` (${denied.reason})` : ''}${denied.message ? `: ${denied.message}` : ''}` : 'denied'
+    return `← bridge ${call} → denied ${why}`
+  }
   const text = typeof detail === 'string' ? detail : JSON.stringify(detail)
   const cleanExit = kind === 'exit' && detail?.code === 0 && !detail?.signal
   const prefix = {
     result: '← result',
     event: '← event',
-    bridge: '← bridge (denied in dev-backend)',
+    bridge: '← bridge',
     stderr: '[backend]',
     exit: cleanExit ? '• backend exited' : '× backend exited',
     error: '× error',
@@ -381,8 +408,13 @@ function parseJsonArgument(text, label) {
 /** CLI entry: one-shot (`--call`) or interactive (lines `<method> [json]`). */
 export async function runDevBackend(directory, manifest, options) {
   const dataDir = options.dataDir ?? defaultDataDir(directory)
-  const session = await startDevBackend({ directory, manifest, dataDir, onOutput: print })
+  const session = await startDevBackend({
+    directory, manifest, dataDir, onOutput: print, workspace: options.workspace ?? null, allowWrites: options.allowWrites === true,
+  })
   console.log(`Backend ${manifest.id}@${manifest.version} is running in the ${session.sandbox} sandbox (data: ${dataDir}).`)
+  console.log(options.workspace
+    ? `Host bridge: workspace ${resolve(options.workspace)}${options.allowWrites ? ' (writes allowed)' : ' (read-only; --allow-writes to change files)'}; every request is in ${join(dataDir, 'activity.jsonl')}.`
+    : `Host bridge: denied (no --workspace); requests are still listed in ${join(dataDir, 'activity.jsonl')}.`)
   for (const event of options.subscribe ?? []) {
     await session.subscribe(event)
     console.log(`Subscribed to ${event}.`)
