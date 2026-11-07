@@ -194,6 +194,14 @@ describe('PluginFrameNetworkObserver', () => {
     ])
   })
 
+  it('refuses a request from a plugin-frame origin that no live mount names', () => {
+    const { obs, rows } = observer()
+    const { ses, decide } = session()
+    obs.observe(contents(ses).wc)
+    expect(decide({ url: 'https://api.github.com/', webContentsId: 1, frame: { url: 'navide-plugin-frame://bbbb/index.html' } })).toEqual({ cancel: true })
+    expect(rows).toEqual([])
+  })
+
   it('records a frame’s connect-src refusal from the console once, and not again as an error', () => {
     const { obs, rows } = observer()
     const { ses, listeners } = session()

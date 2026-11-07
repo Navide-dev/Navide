@@ -27,12 +27,18 @@
  * tag-sourced `partition`), and Electron allows one `webRequest` listener per
  * event per session, so each session is observed once and the requester is
  * attributed per request: a frame by its URL (a live mount names the package),
- * a surface by `webContentsId`.
+ * a surface by `webContentsId`. A request nothing attributes to a plugin is
+ * left alone, because the Host's own windows share that session; what that
+ * leaves open is bounded: a dedicated or shared worker of a surface runs in
+ * the surface's renderer and carries its `webContentsId`, a page loaded from
+ * `file:` or a custom scheme cannot register a service worker, and a frame
+ * whose URL is a plugin frame origin but names no live mount (revoked, or
+ * never mounted) is refused rather than trusted.
  */
 
 import { networkHostMatches } from '../../shared/pluginDisclosureScan'
 import type { PluginActivityRow } from './pluginActivity'
-import type { PluginFrameAssetMount } from './pluginFrameAssetProtocol'
+import { PLUGIN_FRAME_SCHEME, type PluginFrameAssetMount } from './pluginFrameAssetProtocol'
 
 export const NETWORK_ACTIVITY_SOURCE = 'network'
 const NETWORK_ADDRESS_PREFIX = 'network.'
@@ -65,6 +71,10 @@ export function networkHostOf(url: string | undefined): string | null {
 /** Whether `host` is covered by the declared list (exact, or below a `*.` wildcard). */
 export function hostDeclared(hosts: readonly string[], host: string): boolean {
   return hosts.some((declared) => networkHostMatches(declared, host))
+}
+
+function isPluginFrameUrl(url: string | undefined): boolean {
+  return typeof url === 'string' && url.startsWith(`${PLUGIN_FRAME_SCHEME}://`)
 }
 
 /** The host a `connect-src` refusal names, or null for any other console line. */
@@ -202,6 +212,9 @@ export class PluginFrameNetworkObserver {
       const host = networkHostOf(details.url)
       if (!host) return {}
       const requester = this.requesterOf(details)
+      // A frame on the plugin frame scheme that no live mount names is a
+      // revoked or forged origin: nothing vouches for it, so nothing leaves.
+      if (!requester && isPluginFrameUrl(details.frame?.url)) return { cancel: true }
       if (!requester || requester.hosts === null) return {}
       if (requester.devOrigin && new URL(details.url).origin === requester.devOrigin) return {}
       if (hostDeclared(requester.hosts, host)) return {}
