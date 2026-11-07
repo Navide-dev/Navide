@@ -12566,6 +12566,8 @@
       "no-key": "Se crea la primera vez que inicias sesión como editor",
       "key-registered": "Registrada",
       "key-unregistered": "Aún sin registrar",
+      "key-conflict": "El Registry ya tiene otra clave de firma para este publicador (huella {fingerprint}), normalmente la registrada para la CLI navide-plugin. Publicar desde este Navide requiere reemplazarla; la CLI sigue publicando hasta entonces.",
+      "replace-key": "Usar la clave de este Navide en su lugar",
       "expires": "El inicio de sesión caduca",
       "sign-in": "Iniciar sesión con Navide Cloud",
       "sign-in-publish": "Iniciar sesión como editor",

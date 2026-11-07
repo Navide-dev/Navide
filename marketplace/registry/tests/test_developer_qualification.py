@@ -412,7 +412,7 @@ def test_local_install_trust_lists_vetted_keys_and_blocked_digests(client):
     token = approved_publisher(client)
     first, second = generate_keypair()[1], generate_keypair()[1]
     client.put("/api/publisher/me/key", json={"public_key": first}, headers=bearer(token))
-    client.put("/api/publisher/me/key", json={"public_key": second}, headers=bearer(token))
+    client.put("/api/publisher/me/key", json={"public_key": second, "replace": True}, headers=bearer(token))
     official_pem = generate_keypair()[1]
     client.post("/api/publishers", json={"name": "navide", "public_key": official_pem}, headers=ADMIN_HEADERS)
     # A namespace whose owner was never approved does not appear.
@@ -555,3 +555,27 @@ def test_a_concurrent_second_first_application_gets_409_not_500(client, monkeypa
     resp = apply(client, token)
     assert resp.status_code == 409, resp.text
     assert resp.json()["detail"]["code"] == "APPLICATION_EXISTS"
+
+
+# -- L1d: a second key never silently replaces the first --------------------------
+def test_a_second_signing_key_does_not_replace_the_first_unless_asked(client):
+    """Reproduces the 0.2.39 L1d finding: a developer registers the CLI's key on
+    the dashboard, later signs in from the App, whose automatic registration
+    used to overwrite the key and make every CLI-signed package fail with 403.
+    Now the second PUT is a 409 naming the current key, publishing with the
+    first key keeps working, and only an explicit replace changes the key."""
+    token = approved_publisher(client)
+    cli_private, cli_public = generate_keypair()
+    assert client.put("/api/publisher/me/key", json={"public_key": cli_public}, headers=bearer(token)).status_code == 200
+    app_public = generate_keypair()[1]
+    conflict = client.put("/api/publisher/me/key", json={"public_key": app_public}, headers=bearer(token))
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["code"] == "KEY_EXISTS"
+    assert conflict.json()["detail"]["public_key_fingerprint"] == public_key_fingerprint(cli_public)
+    # The same key again is not a conflict.
+    assert client.put("/api/publisher/me/key", json={"public_key": cli_public}, headers=bearer(token)).status_code == 200
+    me = client.get("/api/publisher/me", headers=bearer(token)).json()
+    assert me["public_key_fingerprint"] == public_key_fingerprint(cli_public)
+    # An explicit replace is honoured.
+    replaced = client.put("/api/publisher/me/key", json={"public_key": app_public, "replace": True}, headers=bearer(token))
+    assert replaced.status_code == 200 and replaced.json()["public_key_fingerprint"] == public_key_fingerprint(app_public)

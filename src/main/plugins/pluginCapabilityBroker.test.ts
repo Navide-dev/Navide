@@ -13,6 +13,7 @@ import {
   isCallAllowed,
   isEventAllowed,
   planPublicCapabilityCall,
+  sameExecutables,
   isPublicCapabilityEventAllowed,
   HOST_EVENT_SOURCE_PLUGIN_ID,
   shellTopLevelExecutables,
@@ -1378,7 +1379,8 @@ describe('C2: declared shell executables', () => {
       kind: 'allow', plan: { address: 'shell.run', shellMode: 'allowlist', shellExecutables: ['npm', 'terraform'] },
     })
     expect(planPublicCapabilityCall(run('git status'), declaredPolicy, context(grant()))).toMatchObject({ kind: 'allow' })
-    expect(planPublicCapabilityCall(run('env npm test'), declaredPolicy, context(grant()))).toMatchObject({ kind: 'allow' })
+    // A wrapper is an executable too: `env` is neither Host-allowlisted nor declared, so it stays denied.
+    expect(planPublicCapabilityCall(run('env npm test'), declaredPolicy, context(grant()))).toMatchObject({ kind: 'deny' })
   })
 
   it('still refuses anything not declared, a path, or a wrapper to something undeclared', () => {

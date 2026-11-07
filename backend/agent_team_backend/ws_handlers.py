@@ -7876,7 +7876,9 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
             str(resolved_cwd),
             workspace_root=str(registered_root),
             timeout=30.0,
-            allowed_executables=allowed,
+            # Only when the package declared any: a call without declared
+            # executables is exactly the call it was before C2.
+            **({"allowed_executables": allowed} if allowed else {}),
         )
         await session.send_json(make_response(msg_id, msg_type, {
             "ok": True,

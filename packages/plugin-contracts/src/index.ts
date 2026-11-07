@@ -42,9 +42,21 @@ export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agen
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
 /** Most executables one package may declare in `permissions.shell.executables`. */
 export const MAX_SHELL_EXECUTABLES = 32
-/** One declared executable: a bare lowercase name as it is spelled on PATH,
- *  never a path, an extension or a shell word. */
+/** One declared executable: a bare lowercase name as it is spelled on PATH
+ *  (`npm`, `python3.12`), never a path or a shell word. */
 export const V2_SHELL_EXECUTABLE = /^[a-z0-9][a-z0-9._+-]{0,63}$/
+/** A declared name may not be a Host-family executable (those have their own
+ *  policy and are always admitted) nor spell one through a Windows extension
+ *  (`git.exe`, `gh.cmd`): the broker and the backend admit bare names only,
+ *  and a suffixed spelling would reach the Git family's binary without its
+ *  subcommand policy. Checked after the spelling rule. */
+export function shellExecutableRefusal(name: string): string | null {
+  const suffix = /\.(exe|cmd|bat|com|ps1)$/.exec(name)
+  if (suffix) return `a declared executable is a bare name: ${JSON.stringify(name)} must not carry the ${suffix[0]} extension`
+  if (HOST_SHELL_FAMILY.includes(name)) return `${JSON.stringify(name)} is always available to a shell: "allowlist" package and cannot be declared`
+  return null
+}
+const HOST_SHELL_FAMILY: readonly string[] = ['git', 'gh', 'glab']
 /** Executables that run any program handed to them (shells, interpreters,
  *  package runners, privilege wrappers). Disclosure only: a package may
  *  declare them; the card then says "can run any program" (TA-2, highest). */
@@ -54,6 +66,7 @@ export const SHELL_ANY_PROGRAM_EXECUTABLES: readonly string[] = [
   'npx', 'pnpm', 'npm', 'yarn', 'pip', 'pipx', 'uv', 'uvx', 'cargo', 'go', 'make', 'cmake', 'gradle', 'mvn',
   'docker', 'podman', 'kubectl', 'nix', 'brew', 'apt', 'winget', 'choco',
   'sudo', 'doas', 'su', 'runas',
+  'env', 'xargs', 'nohup', 'timeout', 'nice', 'find', 'awk', 'ssh', 'busybox', 'setsid',
 ]
 /** Most hosts one package may declare in `permissions.network.hosts`. */
 export const MAX_NETWORK_HOSTS = 32
@@ -568,7 +581,11 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
       )
       const invalid = executables.find((name) => !V2_SHELL_EXECUTABLE.test(name))
       if (invalid !== undefined) {
-        fail(`manifest permissions.shell.executables contains an invalid name ${JSON.stringify(invalid)}; a name is lowercase such as npm or terraform, with no path, extension or shell word`)
+        fail(`manifest permissions.shell.executables contains an invalid name ${JSON.stringify(invalid)}; a name is lowercase such as npm or terraform, as spelled on PATH, with no path or shell word`)
+      }
+      for (const name of executables) {
+        const refusal = shellExecutableRefusal(name)
+        if (refusal) fail(`manifest permissions.shell.executables: ${refusal}`)
       }
       shell = 'allowlist'
       shellExecutables = executables

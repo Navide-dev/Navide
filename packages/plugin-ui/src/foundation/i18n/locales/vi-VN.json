@@ -12566,6 +12566,8 @@
       "no-key": "Được tạo khi bạn đăng nhập lần đầu với tư cách nhà phát hành",
       "key-registered": "Đã đăng ký",
       "key-unregistered": "Chưa đăng ký",
+      "key-conflict": "Registry đã có một khóa ký khác cho nhà phát hành này (vân tay {fingerprint}), thường là khóa bạn đã đăng ký cho CLI navide-plugin. Để xuất bản từ Navide này cần thay khóa đó; CLI vẫn xuất bản được cho tới khi bạn thay.",
+      "replace-key": "Dùng khóa của Navide này thay thế",
       "expires": "Phiên đăng nhập hết hạn",
       "sign-in": "Đăng nhập bằng Navide Cloud",
       "sign-in-publish": "Đăng nhập với tư cách nhà phát hành",

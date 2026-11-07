@@ -12566,6 +12566,8 @@
       "no-key": "Criada no seu primeiro login como publicador",
       "key-registered": "Registrada",
       "key-unregistered": "Ainda não registrada",
+      "key-conflict": "O Registry já tem outra chave de assinatura para este publicador (impressão digital {fingerprint}), normalmente a registrada para a CLI navide-plugin. Publicar deste Navide exige substituí-la; a CLI continua publicando até então.",
+      "replace-key": "Usar a chave deste Navide no lugar",
       "expires": "O login expira em",
       "sign-in": "Entrar com o Navide Cloud",
       "sign-in-publish": "Entrar como publicador",

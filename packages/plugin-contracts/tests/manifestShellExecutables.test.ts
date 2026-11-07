@@ -51,7 +51,7 @@ describe('permissions.shell with declared executables', () => {
     for (const name of invalid) expect(() => parseManifestV2(read('invalid', name)), name).toThrow()
     expect(refusal(manifest({ mode: 'full', executables: ['npm'] }))).toContain('must be "allowlist"')
     expect(refusal(manifest({ mode: 'allowlist', executables: ['/usr/bin/npm'] }))).toContain('"/usr/bin/npm"')
-    expect(refusal(manifest({ mode: 'allowlist', executables: ['npm.cmd'] }))).toContain('npm or terraform')
+    expect(refusal(manifest({ mode: 'allowlist', executables: ['npm test'] }))).toContain('npm or terraform')
     expect(refusal(manifest({ mode: 'allowlist', executables: ['NPM'] }))).toContain('"NPM"')
     expect(refusal(manifest({ mode: 'allowlist', executables: [] }))).toContain('1-32 item(s)')
     expect(refusal(manifest({ mode: 'allowlist', executables: ['a', 'a'] }))).toContain('duplicate')
@@ -59,6 +59,12 @@ describe('permissions.shell with declared executables', () => {
     expect(refusal(manifest({ mode: 'allowlist' }))).toContain('executables')
     expect(refusal(manifest({ mode: 'allowlist', executables: ['npm'], extra: 1 }))).toContain('permissions.shell')
     expect(refusal(manifest('sudo'))).toContain('{ "mode": "allowlist", "executables": [...] }')
+    // A Host-family name, or one spelled through a Windows extension, is never "declared".
+    for (const name of ['git', 'gh', 'glab']) expect(refusal(manifest({ mode: 'allowlist', executables: [name] })), name).toContain('cannot be declared')
+    for (const name of ['git.exe', 'gh.cmd', 'npm.cmd', 'tool.bat', 'x.com', 'run.ps1']) {
+      expect(refusal(manifest({ mode: 'allowlist', executables: [name] })), name).toContain('extension')
+    }
+    expect(parseManifestV2(manifest({ mode: 'allowlist', executables: ['python3.12'] })).permissions.shellExecutables).toEqual(['python3.12'])
   })
 
   it('spells the executable rule as the schema copies do', () => {

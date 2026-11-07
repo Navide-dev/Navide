@@ -415,7 +415,7 @@ def test_manifest_v2_shell_object_form_is_normalized() -> None:
     m = parse_manifest(contract_manifest("shell-executables.json"))
     assert m.permissions.shell == "allowlist"
     assert m.permissions.shellExecutables == ["npm", "terraform"]
-    plain = parse_manifest(contract_manifest("fs-scopes-declared.json"))
+    plain = parse_manifest(contract_manifest("frontend-multi-view.json"))
     assert plain.permissions.shell == "allowlist" and plain.permissions.shellExecutables is None
 
 
@@ -430,6 +430,9 @@ def test_manifest_v2_shell_object_form_is_normalized() -> None:
         {"mode": "allowlist"},
         {"mode": "allowlist", "executables": ["npm"], "extra": 1},
         {"mode": "allowlist", "executables": [f"t{i}" for i in range(33)]},
+        {"mode": "allowlist", "executables": ["git"]},
+        {"mode": "allowlist", "executables": ["gh.cmd"]},
+        {"mode": "allowlist", "executables": ["npm.exe"]},
     ],
 )
 def test_manifest_v2_shell_object_form_rejected(shell: dict) -> None:

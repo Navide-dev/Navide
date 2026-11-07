@@ -12566,6 +12566,8 @@
       "no-key": "게시자로 처음 로그인할 때 만들어져요",
       "key-registered": "등록됨",
       "key-unregistered": "아직 등록 안 됨",
+      "key-conflict": "Registry에 이 게시자의 다른 서명 키(지문 {fingerprint})가 이미 등록되어 있어요. 대개 navide-plugin CLI용으로 등록한 키예요. 이 Navide에서 게시하려면 그 키를 바꿔야 하고, 바꾸기 전까지 CLI는 그대로 게시할 수 있어요.",
+      "replace-key": "이 Navide의 키로 바꾸기",
       "expires": "로그인 만료",
       "sign-in": "Navide Cloud로 로그인",
       "sign-in-publish": "게시자로 로그인",

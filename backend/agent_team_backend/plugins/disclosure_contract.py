@@ -26,6 +26,7 @@ HOST_SHELL_ALLOWLIST = ("gh", "git", "glab")
 #: disclosed as able to run any program (TA-2). Twin: SHELL_ANY_PROGRAM_EXECUTABLES.
 SHELL_ANY_PROGRAM_EXECUTABLES = frozenset((
     "sh", "bash", "zsh", "fish", "dash", "ksh", "pwsh", "powershell", "cmd", "node", "deno", "bun", "python", "python3", "ruby", "perl", "php", "lua", "osascript", "npx", "pnpm", "npm", "yarn", "pip", "pipx", "uv", "uvx", "cargo", "go", "make", "cmake", "gradle", "mvn", "docker", "podman", "kubectl", "nix", "brew", "apt", "winget", "choco", "sudo", "doas", "su", "runas",
+    "env", "xargs", "nohup", "timeout", "nice", "find", "awk", "ssh", "busybox", "setsid",
 ))
 
 DisclosureRiskLevel = Literal["low", "medium", "high", "highest"]

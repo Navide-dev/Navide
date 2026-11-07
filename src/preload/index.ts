@@ -1412,7 +1412,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
     state: () => ipcRenderer.invoke('developer:state'),
     signIn: (scope) => ipcRenderer.invoke('developer:signIn', scope),
     signOut: () => ipcRenderer.invoke('developer:signOut'),
-    registerKey: () => ipcRenderer.invoke('developer:registerKey'),
+    registerKey: (options) => ipcRenderer.invoke('developer:registerKey', options ?? {}),
     application: () => ipcRenderer.invoke('developer:application'),
     submitApplication: (input) => ipcRenderer.invoke('developer:submitApplication', input),
     versions: () => ipcRenderer.invoke('developer:versions'),

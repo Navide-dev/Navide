@@ -931,6 +931,13 @@ PLUGIN_BACKEND_CALL_ADDRESS_PREFIX = "backend."
 #: under this one address: such names are the caller's free text, with no
 #: length or variety limit, so they are never keys.
 PLUGIN_BACKEND_CALL_UNDECLARED_ADDRESS = "backend.<undeclared>"
+#: C4: the life of a plugin's backend child, counted beside its calls under
+#: three fixed addresses no declared method can spell: the child failed
+#: (``error``), an automatic restart brought it back (``allowed``), and the
+#: Host gave up restarting it within the crash window (``error``).
+PLUGIN_BACKEND_CRASHED_ADDRESS = "backend.<crashed>"
+PLUGIN_BACKEND_RESTARTED_ADDRESS = "backend.<restarted>"
+PLUGIN_BACKEND_STOPPED_AFTER_CRASHES_ADDRESS = "backend.<stopped-after-crashes>"
 #: ``cancelled``: the caller cancelled the call (abort, cancel message); not a refusal.
 PLUGIN_BACKEND_CALL_OUTCOMES = ("allowed", "denied", "cancelled", "error")
 #: Minute counts are kept as long as activity detail rows, day counts as long

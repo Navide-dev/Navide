@@ -192,11 +192,27 @@ export class DeveloperAccount {
     return this.state()
   }
 
-  /** Register Navide's public key for the signed-in publisher (PUT /api/publisher/me/key). */
-  async registerKey(): Promise<DeveloperPublicState> {
+  /** Register Navide's public key for the signed-in publisher (PUT /api/publisher/me/key).
+   *  L1d: a different key the Registry already holds (the developer's CLI
+   *  key, registered on the dashboard) is never replaced by itself — the
+   *  Registry answers 409 KEY_EXISTS, which is recorded as the state's
+   *  `keyConflictFingerprint` and is not an error: the other key keeps
+   *  publishing. Only `replace: true`, the user's explicit choice in
+   *  Settings, replaces it. */
+  async registerKey(options: { replace?: boolean } = {}): Promise<DeveloperPublicState> {
     const base = this.base()
     const { publicKeyPem } = this.deps.vault.signingKey(base)
-    const res = await this.registryFetch('/api/publisher/me/key', { method: 'PUT', json: { public_key: publicKeyPem } }, 'publisher')
+    const res = await this.registryFetch(
+      '/api/publisher/me/key',
+      { method: 'PUT', json: { public_key: publicKeyPem, ...(options.replace ? { replace: true } : {}) } },
+      'publisher',
+    )
+    if (res.status === 409 && registryError(res.body).code === 'KEY_EXISTS') {
+      const detail = (res.body as { detail?: { public_key_fingerprint?: unknown } } | null)?.detail
+      const fingerprint = typeof detail?.public_key_fingerprint === 'string' ? detail.public_key_fingerprint : 'unknown'
+      this.deps.vault.markKeyConflict(base, fingerprint)
+      return this.state()
+    }
     if (res.status !== 200) {
       const { code, message } = registryError(res.body)
       throw new Error(`the signing key was not registered (${res.status}${code ? ` ${code}` : ''}): ${message}`)
@@ -284,6 +300,21 @@ export class DeveloperAccount {
     const base = this.base()
     if (!this.deps.vault.token(base, 'publisher')) return { status: 401, body: NOT_SIGNED_IN, digest: '' }
     if (!this.state().keyRegistered) await this.registerKey()
+    const conflict = this.state().keyConflictFingerprint
+    if (!this.state().keyRegistered && conflict) {
+      // L1d: the Registry holds another key; a package signed here would be
+      // refused as "invalid package signature", so say what is going on.
+      return {
+        status: 409,
+        body: {
+          detail: {
+            code: 'KEY_EXISTS',
+            message: `the Registry has another signing key registered for this publisher (fingerprint ${conflict}); publish with that key, or replace it with this Navide's key in Settings → Navide Plugins → Developer`,
+          },
+        },
+        digest: '',
+      }
+    }
     const digest = packageDigest(bytes)
     const signature = signPackageDigest(digest, this.deps.vault.signingKey(base).privateKeyPem)
     const form = new FormData()

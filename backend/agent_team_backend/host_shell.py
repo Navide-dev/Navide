@@ -247,6 +247,7 @@ _CAPPED_READ_CHUNK = 64 * 1024
 #: V2_SHELL_EXECUTABLE); the Host sends the package's declared set with each
 #: public call, and only names of that shape are ever admitted here.
 _DECLARED_EXECUTABLE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
+_DECLARED_EXTENSION = re.compile(r"\.(exe|cmd|bat|com|ps1)$")
 MAX_DECLARED_EXECUTABLES = 32
 #: Characters cmd.exe reads again when it runs a `.cmd`/`.bat` shim (TA-2,
 #: BatBadBut): an argument carrying one is refused for a declared executable
@@ -269,6 +270,11 @@ def declared_executables(value: object) -> frozenset[str]:
         or any(not isinstance(name, str) or _DECLARED_EXECUTABLE.fullmatch(name) is None for name in value)
     ):
         raise ValueError("declared executables must be a short list of bare lowercase names")
+    # A Host-family name (or one spelled through a Windows extension, which
+    # CreateProcess resolves to the same binary) never comes in as "declared":
+    # it would reach git/gh/glab without their subcommand policy.
+    if any(_DECLARED_EXTENSION.search(name) or name in HOST_SHELL_EXECUTABLE_ALLOWLIST for name in value):
+        raise ValueError("declared executables may not name git, gh, glab or carry a .exe/.cmd/.bat/.com/.ps1 extension")
     return frozenset(value)
 
 
@@ -284,7 +290,9 @@ def validate_argv(args: Sequence[str], allowed_executables: frozenset[str] = fro
     if executable != Path(executable).name or (
         executable not in HOST_SHELL_EXECUTABLE_ALLOWLIST and executable not in allowed_executables
     ):
-        raise ValueError("executable is not allowlisted or declared")
+        raise ValueError(
+            "executable is not allowlisted or declared" if allowed_executables else "executable is not allowlisted"
+        )
     return list(args)
 
 

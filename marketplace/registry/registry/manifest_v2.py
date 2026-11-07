@@ -323,6 +323,7 @@ class ManifestV2Network(ManifestV2Model):
 
 
 _SHELL_EXECUTABLE_RE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
+_SHELL_EXTENSION_RE = re.compile(r"\.(exe|cmd|bat|com|ps1)$")
 
 
 class ManifestV2Permissions(ManifestV2Model):
@@ -373,8 +374,14 @@ class ManifestV2Permissions(ManifestV2Model):
             raise ValueError("permissions.shell.executables must contain unique names")
         if any(_SHELL_EXECUTABLE_RE.fullmatch(name) is None for name in value):
             raise ValueError(
-                "permissions.shell.executables must contain lowercase names such as npm, with no path, extension or shell word"
+                "permissions.shell.executables must contain lowercase names such as npm, as spelled on PATH, with no path or shell word"
             )
+        # A Host-family name is always admitted and has its own policy; a
+        # Windows extension would reach that family's binary without it.
+        if any(_SHELL_EXTENSION_RE.search(name) for name in value):
+            raise ValueError("permissions.shell.executables must be bare names without a .exe/.cmd/.bat/.com/.ps1 extension")
+        if any(name in ("git", "gh", "glab") for name in value):
+            raise ValueError("permissions.shell.executables must not declare git, gh or glab, which allowlist always admits")
         return value
 
     @field_validator("system")

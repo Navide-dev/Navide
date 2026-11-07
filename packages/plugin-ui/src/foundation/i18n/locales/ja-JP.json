@@ -12566,6 +12566,8 @@
       "no-key": "公開者として初めてサインインしたときに作成されます",
       "key-registered": "登録済み",
       "key-unregistered": "未登録",
+      "key-conflict": "Registry にはこのパブリッシャーの別の署名鍵（フィンガープリント {fingerprint}）がすでに登録されています。多くは navide-plugin CLI 用に登録した鍵です。この Navide から公開するにはその鍵を置き換える必要があります。置き換えるまで CLI からの公開はそのまま使えます。",
+      "replace-key": "この Navide の鍵に置き換える",
       "expires": "サインインの期限",
       "sign-in": "Navide Cloud でサインイン",
       "sign-in-publish": "公開者としてサインイン",

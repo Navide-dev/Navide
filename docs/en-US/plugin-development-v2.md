@@ -481,7 +481,7 @@ needs more names them (C2, per [TA-2](security/ta-2-declared-executables.md)):
 ```
 
 `executables` is 1–32 unique bare lowercase names as they are spelled on
-PATH (`npm`, not `npm.cmd` or `/usr/bin/npm`); `mode` must be `allowlist`
+PATH (`npm`, `python3.12`; never `/usr/bin/npm`, never a Windows extension such as `npm.cmd`, and never `git`, `gh` or `glab`, which are always admitted and keep their own policy); `mode` must be `allowlist`
 (`full` runs any executable and declares none). The SDK, the Host and the
 Registry validate the same rule, and the parser names the name it refused.
 The Host keeps the mode in `permissions.shell` and the names in
@@ -490,8 +490,9 @@ The Host keeps the mode in `permissions.shell` and the names in
 **What it governs.** A view's `shell.run` and a backend's `port: "shell"` may
 start a declared executable, as a plain command without shell syntax, in the
 bound workspace, with the same lexical resolution as before (a wrapper such as
-`env` or `sh -c` is followed to the executable it runs; a path, a `$`
-expansion or a leading assignment is refused). The Git family keeps its
+`env` or `sh -c` is itself an executable that must be allowlisted or declared,
+and the executable it runs must be too; a path, a `$` expansion or a leading
+assignment is refused). The Git family keeps its
 subcommand policy and isolated environment; a declared executable has no
 subcommand policy — what a plugin may run is disclosed, not curated (ruling of
 2026-10-17) — and runs as the user runs it from a terminal: the user's own

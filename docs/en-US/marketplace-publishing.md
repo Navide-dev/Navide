@@ -297,6 +297,18 @@ your namespace's dashboard (`/publisher/acme`) and press **Save public key**.
 Keep `acme.key` out of Git and out of your package; anyone holding it can sign
 submissions for your namespace.
 
+A publisher has one signing key at a time. Signing in as a publisher from
+Navide's Settings → Navide Plugins → Developer creates a second key, kept in
+that computer's secure storage, and offers to register it — but it never
+replaces a key the dashboard already holds by itself (0.2.39): the Registry
+answers that a key is registered, the dashboard key keeps publishing, and
+Settings shows the registered key's fingerprint with a button to **use this
+Navide's key instead**. Press it only if you mean to publish from Navide from
+now on; packages signed with the CLI key are refused afterwards until you
+save that key on the dashboard again. (Before 0.2.39 the sign-in replaced
+the key silently and the next CLI publish failed with `403 invalid package
+signature`.)
+
 ### Log in from the CLI
 
 ```bash

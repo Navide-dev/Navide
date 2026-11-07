@@ -1509,7 +1509,8 @@ def test_declared_executables_admit_only_bare_lowercase_names() -> None:
 
     assert declared_executables(None) == frozenset()
     assert declared_executables(["npm", "terraform"]) == frozenset({"npm", "terraform"})
-    for bad in (["/usr/bin/npm"], ["NPM"], ["npm;rm"], "npm", [7], [f"t{i}" for i in range(33)]):
+    for bad in (["/usr/bin/npm"], ["NPM"], ["npm;rm"], "npm", [7], [f"t{i}" for i in range(33)],
+                ["git"], ["gh"], ["git.exe"], ["gh.cmd"], ["npm.cmd"], ["run.ps1"]):
         with pytest.raises(ValueError):
             declared_executables(bad)
 

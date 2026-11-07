@@ -12566,6 +12566,8 @@
       "no-key": "Wird bei Ihrer ersten Anmeldung als Herausgeber erstellt",
       "key-registered": "Registriert",
       "key-unregistered": "Noch nicht registriert",
+      "key-conflict": "Die Registry hat für diesen Publisher bereits einen anderen Signaturschlüssel (Fingerabdruck {fingerprint}), meist den für das navide-plugin-CLI registrierten. Zum Veröffentlichen aus diesem Navide muss er ersetzt werden; bis dahin veröffentlicht das CLI weiter.",
+      "replace-key": "Stattdessen den Schlüssel dieses Navide verwenden",
       "expires": "Anmeldung läuft ab",
       "sign-in": "Mit Navide Cloud anmelden",
       "sign-in-publish": "Als Herausgeber anmelden",

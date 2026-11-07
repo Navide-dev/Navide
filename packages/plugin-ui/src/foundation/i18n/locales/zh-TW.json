@@ -12566,6 +12566,8 @@
       "no-key": "第一次以發佈者身分登入時建立",
       "key-registered": "已登記",
       "key-unregistered": "尚未登記",
+      "key-conflict": "Registry 上這個發佈者已經登記了另一把簽章金鑰（指紋 {fingerprint}），通常是你為 navide-plugin CLI 登記的那把。要從這個 Navide 上架得先換成這把；換之前 CLI 仍可照常上架。",
+      "replace-key": "改用這個 Navide 的金鑰",
       "expires": "登入到期",
       "sign-in": "用 Navide Cloud 登入",
       "sign-in-publish": "以發佈者身分登入",

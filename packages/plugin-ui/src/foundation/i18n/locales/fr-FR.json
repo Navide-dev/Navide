@@ -2019,7 +2019,7 @@
           "firstParty": "Autoriser les agents à appeler les outils des plugins Navide officiels",
           "firstPartyDescription": "Activé par défaut. Permet aux agents de vos panes d’appeler les outils des plugins Navide officiels, ceux que fait Navide comme Navide Browser, sans demander pour chaque version. Leurs résultats restent marqués comme contenu externe, et un outil qui modifie quelque chose demande toujours une fois par espace de travail.",
           "enable": "Autoriser les agents à appeler les outils des plugins Navide tiers",
-          "description": "Permet aux agents de vos panes d’appeler les outils déclarés par les plugins Navide que vous avez autorisés ; un outil qui modifie des fichiers demande une fois par espace de travail. Tant que vous ne l’avez jamais réglé ici, il s’active de lui-même lorsque vous autorisez un plugin Navide dont la carte de consentement liste des outils ; un choix fait ici est conservé. Désactivez-le ici pour arrêter d’un coup tous les outils tiers.",
+          "description": "Permet aux agents de vos panes d’appeler les outils déclarés par les plugins Navide que vous avez autorisés ; un outil qui modifie des fichiers demande une fois par espace de travail. Tant que vous ne l’avez jamais réglé ici, il s’active de lui-même lorsque vous autorisez un plugin Navide dont la carte de consentement liste des outils ; un choix fait ici est conservé. Désactivez-le ici pour arrêter d’un coup tous les outils tiers.",
           "externalCallers": "Les autoriser aussi pour les clients MCP externes",
           "externalCallersDisclosure": "Les programmes externes partagent un seul token ; l’enregistrement d’un appel peut donc seulement indiquer « un client externe », pas quel programme. L’identifiant de l’hôte est traité de la même façon."
         },
@@ -12566,6 +12566,8 @@
       "no-key": "Créée lors de votre première connexion en tant qu’éditeur",
       "key-registered": "Enregistrée",
       "key-unregistered": "Pas encore enregistrée",
+      "key-conflict": "Le Registry a déjà une autre clé de signature pour cet éditeur (empreinte {fingerprint}), le plus souvent celle enregistrée pour la CLI navide-plugin. Publier depuis ce Navide demande de la remplacer ; la CLI continue de publier jusque-là.",
+      "replace-key": "Utiliser la clé de ce Navide à la place",
       "expires": "La connexion expire",
       "sign-in": "Se connecter avec Navide Cloud",
       "sign-in-publish": "Se connecter en tant qu’éditeur",

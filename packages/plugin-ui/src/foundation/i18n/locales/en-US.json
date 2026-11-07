@@ -12566,6 +12566,8 @@
       "no-key": "Created when you first sign in as a publisher",
       "key-registered": "Registered",
       "key-unregistered": "Not registered yet",
+      "key-conflict": "The Registry already has a different signing key for this publisher (fingerprint {fingerprint}), most likely the one you registered for the navide-plugin CLI. Publishing from this Navide needs that key replaced; the CLI keeps publishing until you do.",
+      "replace-key": "Use this Navide's key instead",
       "expires": "Sign-in expires",
       "sign-in": "Sign In with Navide Cloud",
       "sign-in-publish": "Sign In as a Publisher",
