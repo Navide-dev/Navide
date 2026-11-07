@@ -99,7 +99,7 @@ import {
   type InstalledRegistryTrustContext,
 } from './pluginInstalledTrust'
 import { verifyLocalInstalledPackage } from './pluginLocalInstall'
-import { legacyCapabilityPolicy, type PluginCapabilityPolicy } from './pluginPermissions'
+import { legacyCapabilityPolicy, type ManifestV2CapabilityPolicy, type PluginCapabilityPolicy } from './pluginPermissions'
 import {
   createWsClient,
   type WsClient,
@@ -7844,12 +7844,24 @@ export class FrontendPluginManager {
     const root = resolve(workspacePath)
     const workspaceId = this.workspaceIdForPath(root)
     if (!workspaceId) throw new InterPluginCallError('BACKEND_UNAVAILABLE', 'the workspace is not bound')
+    // The target runs only under its own user Grant for this exact version,
+    // which includes `fs` when it declares fs (as for its agent tools).
+    const targetPolicy = descriptor!.capabilityPolicy as ManifestV2CapabilityPolicy
+    const targetGrant = this.capabilityGrantResolver?.(targetId, descriptor!.packageVersion!) ?? null
+    if (
+      !targetGrant || targetGrant.packageVersion !== descriptor!.packageVersion ||
+      (targetPolicy.system.includes('fs') && !targetGrant.system.includes('fs'))
+    ) {
+      throw new InterPluginCallError('METHOD_NOT_FOUND', `'${targetId}' is not approved by the user`)
+    }
     try {
       const instanceId = await this.bindHeadlessApiBackend(
         targetId, descriptor!.packageVersion!, descriptor!.packageDir!, root, workspaceId,
       )
+      // The caller's initiator: a person in the caller's view, or the agent
+      // driving it (which the broker allowed only under a full policy).
       const result = await this.pluginBackendHost.call(instanceId, method, plan.args.args as JsonValue, {
-        ...(plan.initiator ? { initiator: plan.initiator } : {}),
+        initiator: plan.initiator ?? HOST_USER_INITIATOR,
       })
       return { result }
     } catch (error) {
