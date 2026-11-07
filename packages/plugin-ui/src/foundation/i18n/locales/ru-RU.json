@@ -10999,6 +10999,13 @@
     },
     "enable-platform": "Включить {platform}",
     "bot": {
+      "bound-none": "Не привязан ни к одной панели",
+      "bound-many": "Панелей: {n} ({workspaces})",
+      "flag-running": "Работает",
+      "flag-unbound": "Не привязан",
+      "flag-pane-closed": "Панель закрыта",
+      "flag-token": "Токен недействителен",
+      "flag-failed": "Ошибка подключения",
       "default": "Основной bot",
       "add": "Добавить bot",
       "new": "Новый bot",

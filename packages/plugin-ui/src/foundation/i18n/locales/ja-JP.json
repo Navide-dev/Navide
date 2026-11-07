@@ -10999,6 +10999,13 @@
     },
     "enable-platform": "{platform} を有効化",
     "bot": {
+      "bound-none": "どの pane にも接続されていません",
+      "bound-many": "{n} 個の pane（{workspaces}）",
+      "flag-running": "稼働中",
+      "flag-unbound": "未接続",
+      "flag-pane-closed": "pane が閉じています",
+      "flag-token": "token が無効",
+      "flag-failed": "接続に失敗",
       "default": "メイン bot",
       "add": "bot を追加",
       "new": "新しい bot",

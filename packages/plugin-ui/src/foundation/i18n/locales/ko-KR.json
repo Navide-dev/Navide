@@ -10999,6 +10999,13 @@
     },
     "enable-platform": "{platform} 사용",
     "bot": {
+      "bound-none": "연결된 pane이 없어요",
+      "bound-many": "pane {n}개 ({workspaces})",
+      "flag-running": "작동 중",
+      "flag-unbound": "연결 안 됨",
+      "flag-pane-closed": "pane 닫힘",
+      "flag-token": "token 무효",
+      "flag-failed": "연결 실패",
       "default": "기본 bot",
       "add": "bot 추가",
       "new": "새 bot",

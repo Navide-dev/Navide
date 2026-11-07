@@ -10999,6 +10999,13 @@
     },
     "enable-platform": "啟用 {platform}",
     "bot": {
+      "bound-none": "尚未綁到任何分格",
+      "bound-many": "{n} 個分格（{workspaces}）",
+      "flag-running": "運作中",
+      "flag-unbound": "未綁定",
+      "flag-pane-closed": "分格已關閉",
+      "flag-token": "token 失效",
+      "flag-failed": "連線失敗",
       "default": "主要 bot",
       "add": "新增 bot",
       "new": "新的 bot",

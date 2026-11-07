@@ -882,11 +882,9 @@ class ChannelManager:
         finally:
             if bot not in self._quick_add_undos:
                 self._quick_adding.discard(bot)
+        # The name stays the user's own label: the handle is read live from the bot
+        # (status.identity), so a later token change cannot leave a stale one behind.
         identity = adapter.status.identity
-        async with self._lock:
-            acct = self.store.accounts().get(bot)
-            if acct is not None and not acct["config"].get("name") and identity:
-                self.store.upsert_account(platform, {**acct["config"], "name": identity}, account=account)
         await self._changed()
         name = str(((self.store.accounts().get(bot) or {}).get("config") or {}).get("name") or "")
         link = self.link_create(platform, link_target, account) if link_target else {}

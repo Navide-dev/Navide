@@ -77,6 +77,42 @@ describe('ChannelsPane two columns', () => {
     expect(navItem(w, 'telegram:bot-b1').get('[data-testid="channel-nav-summary"]').text()).toContain('Off')
   })
 
+  it('names each bot by its live handle with its label, slot id, Telegram id and where it is bound', async () => {
+    const binding = { pane_id: 'p1', pane_name: 'HelperCTO', pane_exists: true, workspace_path: '/w/nt-notify-bridge',
+      workspace_name: 'nt-notify-bridge', chat_title: 'HelperCTO', created_at: 1 }
+    seed({ platforms: [platform('telegram', [account('bot-2e7877', '@NerdtechnicSalesBot', {
+      status: { ...ready, identity: '@nt_test_bot', display_name: 'test' }, bot_id: '7421', bindings: [binding],
+      last_activity_at: Math.floor(Date.now() / 1000) - 7200,
+    })])] })
+    const w = await render()
+    const row = navItem(w, 'telegram:bot-2e7877')
+    expect(row.text()).toContain('@nt_test_bot')
+    expect(row.text()).not.toContain('NerdtechnicSalesBot')
+    expect(row.get('[data-testid="channel-nav-tag"]').text()).toContain('test')
+    expect(row.get('[data-testid="channel-nav-ids"]').text()).toBe('bot-2e7877 · id 7421')
+    expect(row.get('[data-testid="channel-nav-binding"]').text()).toBe('nt-notify-bridge / HelperCTO · 2 hours ago')
+  })
+
+  it('flags a bot running, not linked, with its pane closed, or with a bad token', async () => {
+    const bound = (exists: boolean) => [{ pane_id: 'p', pane_name: 'api', pane_exists: exists, workspace_path: '/w/A',
+      workspace_name: 'A', chat_title: '', created_at: 1 }]
+    seed({ platforms: [platform('telegram', [
+      account('default', 'Run', { bindings: bound(true) }),
+      account('bot-b1', 'Free', { bindings: [] }),
+      account('bot-c2', 'Shut', { bindings: bound(false) }),
+      account('bot-d3', 'Bad', { status: { ...ready, lifecycle: 'blocked', last_error: 'HTTP 401 Unauthorized' }, bindings: [] }),
+      account('bot-e4', 'Down', { status: { ...ready, lifecycle: 'blocked', last_error: 'timed out' }, bindings: [] }),
+    ])] })
+    const w = await render()
+    const flag = (key: string) => navItem(w, key).get('[data-testid="channel-nav-flag"]').text()
+    expect(flag('telegram:default')).toBe('Running')
+    expect(flag('telegram:bot-b1')).toBe('Not linked')
+    expect(flag('telegram:bot-c2')).toBe('Pane closed')
+    expect(flag('telegram:bot-d3')).toBe('Token invalid')
+    expect(flag('telegram:bot-e4')).toBe('Connection failed')
+    expect(navItem(w, 'telegram:bot-b1').get('[data-testid="channel-nav-binding"]').text()).toBe('Not linked to any pane')
+  })
+
   it('opens on the first bot waiting for approval', async () => {
     seed({ requests: [{ platform: 'telegram', account: 'bot-c2', code: 'K7Q2M9XA', sender_id: '42', sender_name: 'neil', created_at: 1 }] })
     const w = await render()

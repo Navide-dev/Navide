@@ -41,6 +41,18 @@ export interface ChannelCapabilities {
 
 /** One bot on a platform. A platform may run several; `default` is the one every
  *  platform had before that, and added bots get a generated id (see newAccountId). */
+/** Where one binding of a bot points, as channels.list summarises it. */
+export interface ChannelBotBinding {
+  pane_id: string
+  pane_name: string
+  /** False while the bound pane is closed (it keeps the name it was bound under). */
+  pane_exists: boolean
+  workspace_path: string
+  workspace_name: string
+  chat_title: string
+  created_at: number
+}
+
 export interface ChannelAccountState {
   account: string
   /** Display name the user gave the bot; '' when unnamed. */
@@ -51,6 +63,12 @@ export interface ChannelAccountState {
   /** Non-secret config only; the backend never sends a secret back. */
   config: Record<string, unknown>
   capabilities: ChannelCapabilities | null
+  /** Telegram's numeric bot id ('' elsewhere); absent on older backends. */
+  bot_id?: string
+  /** The panes this bot is bound to; absent on older backends. */
+  bindings?: ChannelBotBinding[]
+  /** Epoch seconds of its latest message, seen chat or binding; null when none. */
+  last_activity_at?: number | null
 }
 
 export interface ChannelPlatformState {

@@ -10999,6 +10999,13 @@
     },
     "enable-platform": "Bật {platform}",
     "bot": {
+      "bound-none": "Chưa liên kết pane nào",
+      "bound-many": "{n} pane ({workspaces})",
+      "flag-running": "Đang chạy",
+      "flag-unbound": "Chưa liên kết",
+      "flag-pane-closed": "Pane đã đóng",
+      "flag-token": "Token không hợp lệ",
+      "flag-failed": "Kết nối thất bại",
       "default": "Bot chính",
       "add": "Thêm bot",
       "new": "Bot mới",

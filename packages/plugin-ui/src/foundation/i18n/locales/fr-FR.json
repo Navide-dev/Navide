@@ -10999,6 +10999,13 @@
     },
     "enable-platform": "Activer {platform}",
     "bot": {
+      "bound-none": "Lié à aucun pane",
+      "bound-many": "{n} panes ({workspaces})",
+      "flag-running": "Actif",
+      "flag-unbound": "Non lié",
+      "flag-pane-closed": "Pane fermé",
+      "flag-token": "Token non valide",
+      "flag-failed": "Échec de connexion",
       "default": "Bot principal",
       "add": "Ajouter un bot",
       "new": "Nouveau bot",

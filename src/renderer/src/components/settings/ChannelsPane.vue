@@ -21,7 +21,8 @@ import {
   clipboardTokenField,
   type RegisteredChannelPlatform,
 } from '../../platform/channels'
-import { channelBotLabel } from '../../lib/channelIdentity'
+import { channelBotLabel, channelBotTag } from '../../lib/channelIdentity'
+import { relativeTime } from '../../lib/relativeTime'
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
 import ChannelAccessRows from './ChannelAccessRows.vue'
 import ChannelBotNav, { type ChannelNavGroup, type ChannelNavItem } from './ChannelBotNav.vue'
@@ -573,19 +574,59 @@ const orphanRequests = computed(() => store.pairing.value.filter((r) => !hasBot(
 const orphanEntries = computed(() => store.allow.value.filter((e) => !hasBot(e)))
 const hasOrphans = computed(() => orphanRequests.value.length + orphanEntries.value.length > 0)
 
+/** Where a bot is bound ("workspace / pane", or how many) and when it was last active. */
+function bindingText(bot: BotRow): string {
+  const bindings = bot.bindings
+  if (!bindings) return ''
+  let where: string
+  if (!bindings.length) where = t('channels.bot.bound-none')
+  else if (bindings.length === 1) where = [bindings[0].workspace_name, bindings[0].pane_name].filter(Boolean).join(' / ')
+  else {
+    const workspaces = [...new Set(bindings.map((b) => b.workspace_name).filter(Boolean))]
+    where = t('channels.bot.bound-many', { n: bindings.length, workspaces: workspaces.join(', ') })
+  }
+  if (!bot.last_activity_at) return where
+  const { unit, count } = relativeTime(bot.last_activity_at * 1000, Date.now())
+  return `${where} · ${t(`time.ago-${unit}`, { count })}`
+}
+
+const BAD_TOKEN = /\b401\b|unauthori[sz]ed/i
+
+/** Running / not linked / pane closed for a connected bot; token invalid / failed for a blocked one. */
+function botFlag(bot: BotRow): ChannelNavItem['flag'] {
+  if (!bot.configured || !bot.enabled) return undefined
+  const { lifecycle, last_error: error } = bot.status
+  if (lifecycle === 'blocked') {
+    return BAD_TOKEN.test(error) ? { kind: 'bad', text: t('channels.bot.flag-token') } : { kind: 'bad', text: t('channels.bot.flag-failed') }
+  }
+  if (lifecycle !== 'ready' || !bot.bindings) return undefined
+  if (!bot.bindings.length) return { kind: 'off', text: t('channels.bot.flag-unbound') }
+  return bot.bindings.some((b) => b.pane_exists)
+    ? { kind: 'ok', text: t('channels.bot.flag-running') }
+    : { kind: 'warn', text: t('channels.bot.flag-pane-closed') }
+}
+
 function navItem(spec: RegisteredChannelPlatform, bot: BotRow): ChannelNavItem {
   const tone = statusTone(bot)
   const counts = t('channels.bot.summary', { people: allowedOf(spec.id, bot).length, chats: chatsOf(spec.id, bot).length })
   const status = bot.configured ? statusText(bot) : t('channels.status.not-configured')
+  // The live handle names the bot; a stored name is only the user's label beside it.
+  const name = bot.configured ? bot.status.identity || botLabel(bot) : bot.isNew ? t('channels.bot.new') : platformName(spec.id)
   return {
     key: bot.key,
     badge: spec.badge,
-    name: bot.configured ? botLabel(bot) : bot.isNew ? t('channels.bot.new') : platformName(spec.id),
+    name,
     tone,
     status,
     // Connected is the usual case: only the other states take room on the line.
     summary: !bot.configured ? status : tone === 'ok' ? counts : `${status} · ${counts}`,
     pending: pendingOf(spec.id, bot).length,
+    ...(bot.configured ? {
+      tag: channelBotTag(bot, name),
+      ids: [bot.account, bot.bot_id ? `id ${bot.bot_id}` : ''].filter(Boolean).join(' · '),
+      binding: bindingText(bot),
+      flag: botFlag(bot),
+    } : {}),
   }
 }
 

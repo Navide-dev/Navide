@@ -13,6 +13,14 @@ export interface ChannelNavItem {
   status: string
   summary: string
   pending: number
+  /** The user's label or display name beside a live handle; '' for none. */
+  tag?: string
+  /** The bot's slot id and platform id ("bot-2e7877 · id 7421…"). */
+  ids?: string
+  /** Where it is bound and when it was last active. */
+  binding?: string
+  /** Running / not linked / pane closed / token invalid; absent when none applies. */
+  flag?: { kind: 'ok' | 'off' | 'warn' | 'bad'; text: string }
 }
 
 /** The bots of one platform; `label` is '' while there is only one platform to tell apart. */
@@ -77,9 +85,12 @@ watch(() => props.active, async (key) => {
           </span>
           <span class="ch-nav-text">
             <span class="ch-nav-title">
-              <span class="ch-nav-name" v-truncate>{{ item.name }}</span>
+              <span class="ch-nav-name" v-truncate>{{ item.name }}<span v-if="item.tag" class="ch-nav-tag" data-testid="channel-nav-tag"> · {{ item.tag }}</span></span>
+              <span v-if="item.flag" class="ch-nav-flag" :class="item.flag.kind" :data-flag="item.flag.kind" data-testid="channel-nav-flag">{{ item.flag.text }}</span>
               <span v-if="item.pending" class="ch-nav-pending" data-testid="channel-nav-pending">{{ t('channels.pending-count', { n: item.pending }) }}</span>
             </span>
+            <span v-if="item.ids" class="ch-nav-summary ch-nav-ids" v-truncate data-testid="channel-nav-ids">{{ item.ids }}</span>
+            <span v-if="item.binding" class="ch-nav-summary" v-truncate data-testid="channel-nav-binding">{{ item.binding }}</span>
             <span class="ch-nav-summary" v-truncate data-testid="channel-nav-summary">{{ item.summary }}</span>
           </span>
         </button>
@@ -168,6 +179,21 @@ watch(() => props.active, async (key) => {
 .ch-nav-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .ch-nav-name { flex: 1; min-width: 0; font-size: var(--font-xs); font-weight: 600; color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch-nav-summary { font-size: var(--font-2xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-nav-tag { font-weight: 400; color: var(--text-secondary); }
+.ch-nav-ids { font-family: var(--font-mono); }
+.ch-nav-flag {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: var(--font-2xs);
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+}
+.ch-nav-flag.ok { background: var(--success-subtle); color: var(--success-fg); }
+.ch-nav-flag.warn { background: var(--attention-subtle); color: var(--attention-fg); }
+.ch-nav-flag.bad { background: var(--danger-subtle); color: var(--danger-fg); }
 .ch-nav-pending {
   flex-shrink: 0;
   padding: 0 6px;

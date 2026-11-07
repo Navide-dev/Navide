@@ -10999,6 +10999,13 @@
     },
     "enable-platform": "激活 {platform}",
     "bot": {
+      "bound-none": "尚未绑定任何分格",
+      "bound-many": "{n} 个分格（{workspaces}）",
+      "flag-running": "运行中",
+      "flag-unbound": "未绑定",
+      "flag-pane-closed": "分格已关闭",
+      "flag-token": "token 失效",
+      "flag-failed": "连接失败",
       "default": "主要 bot",
       "add": "添加 bot",
       "new": "新的 bot",
