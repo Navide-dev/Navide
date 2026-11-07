@@ -111,10 +111,21 @@ commit about to be pushed) also run the secret scan CI runs, gitleaks with
 without it the hooks print a warning and skip the scan. Record a false positive
 by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
 
+The scan is a backstop, not the rule. The rule is that secrets never leave the
+machine (see "Secrets never leave the machine" in
+[Architecture](docs/en-US/architecture.md#trust-boundaries)): no real API key,
+token, password or signing key goes into a commit, branch, PR, issue,
+CHANGELOG, test fixture, log or screenshot, and none is uploaded to Navide
+Cloud, S3 or a backup. Tests build fake values at run time (for example
+`['sk', 'test', label].join('-')`) instead of writing a key-shaped literal. A
+key that reached git history is compromised even after the commit is
+rewritten: rotate it.
+
 > 每個 clone 執行一次 `git config core.hooksPath .githooks`。pre-commit 會擋下
 > 「staged 的檔 import 了還沒進 index 的相對模組」——本機 typecheck 看得到工作樹的檔所以會過，
 > 只有 CI 會紅。pre-commit 與 pre-push 也會跑和 CI 相同的 gitleaks 密鑰掃描；誤判請把
-> fingerprint 加進 `.gitleaksignore`。
+> fingerprint 加進 `.gitleaksignore`。掃描只是最後一道防線：金鑰絕不上雲、絕不進 git 與任何歷史，
+> 測試假值一律執行期拼接；金鑰一旦進過 git 歷史就視同外洩，要換掉。
 
 ---
 

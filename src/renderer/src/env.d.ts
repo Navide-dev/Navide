@@ -577,7 +577,8 @@ declare global {
           skippedDestroyedHostWindows: number
         }>
         discardCandidate?: (id: string) => Promise<{ ok: boolean }>
-        remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<{ ok: boolean }>
+        remove: (id: string, nativeBackendData?: 'keep' | 'delete', secrets?: 'keep' | 'delete') => Promise<{ ok: boolean }>
+        secretCount?: (id: string) => Promise<{ count: number }>
         nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
         /** The installed version's disclosure (Manifest v2), or null. */
         installedDisclosure?: (id: string) => Promise<import('../../shared/pluginDisclosure').ManifestDisclosure | null>

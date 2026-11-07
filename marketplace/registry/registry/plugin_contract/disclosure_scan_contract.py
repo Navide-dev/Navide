@@ -358,7 +358,7 @@ def declared_vs_scanned(disclosure: ManifestDisclosure, scan: ScanReport) -> dic
     namespaces = {entry["address"].split(".", 1)[0] for entry in scan["capabilities"]}
     if shell is None and "shell" in namespaces:
         undeclared.add(("shell", "shell.run"))
-    for namespace in ("aiCli", "fs", "ui", "web", "agents", "agentMessages"):
+    for namespace in ("aiCli", "fs", "ui", "web", "agents", "agentMessages", "secrets"):
         if namespace in namespaces and namespace not in system:
             undeclared.add(("system", namespace))
     files = scan["files"]

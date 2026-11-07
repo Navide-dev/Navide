@@ -5,6 +5,7 @@ import {
   createPluginViewRuntimeClient,
   createPluginBackendClient,
   PluginBackendError,
+  createPluginSecretStore,
   createPluginSettingsStore,
   createPluginViewState,
   hideView,
@@ -880,11 +881,30 @@ describe('createPluginViewState', () => {
   })
 })
 
+describe('createPluginSecretStore', () => {
+  it('maps each method to its secrets.* capability and passes nothing else', async () => {
+    const invoke = vi.fn(async () => ({ ok: true }))
+    const secrets = createPluginSecretStore({ capabilities: { invoke } } as never)
+    const value = ['sk', 'test', 'sdk'].join('-')
+    await secrets.set('API_KEY', value)
+    await secrets.get('API_KEY')
+    await secrets.delete('API_KEY')
+    await secrets.list()
+    expect(invoke.mock.calls).toEqual([
+      ['secrets.set', { name: 'API_KEY', value }],
+      ['secrets.get', { name: 'API_KEY' }],
+      ['secrets.delete', { name: 'API_KEY' }],
+      ['secrets.list', {}],
+    ])
+  })
+})
+
 const SDK_EXPORTS = [
   'PluginBackendError',
   'PluginError',
   'createPluginBackendClient',
   'createPluginCapabilityClient',
+  'createPluginSecretStore',
   'createPluginSettingsStore',
   'createPluginViewRuntimeClient',
   'createPluginViewState',

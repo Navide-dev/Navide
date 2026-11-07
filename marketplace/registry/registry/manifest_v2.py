@@ -27,7 +27,7 @@ V2_RESERVED_COMMAND_HEADS: frozenset[str] = frozenset({"workbench", "ui", "edito
 # src/main/plugins/pluginBackendSupervisor.ts); an agent tool forwarded to any
 # other name could never be served, so publish refuses it.
 _AGENT_TOOL_METHOD_RE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
-V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli", "web", "agents", "agentMessages"})
+V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets"})
 V2_SHELL_MODES: frozenset[str] = frozenset({"allowlist", "full"})
 MAX_EXTENSION_PACK_MEMBERS = 20
 # Manifest-level guard for recognizable source/script filenames. Proving that
@@ -455,8 +455,8 @@ class ManifestV2Permissions(ManifestV2Model):
     ``permissions.shell`` keeps comparing a mode string.
     """
 
-    system: list[Literal["fs", "ui", "aiCli", "web", "agents", "agentMessages"]] | None = Field(
-        default=None, min_length=1, max_length=6
+    system: list[Literal["fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets"]] | None = Field(
+        default=None, min_length=1, max_length=7
     )
     shell: Literal["allowlist", "full"] | None = None
     shellExecutables: list[str] | None = Field(default=None, min_length=1, max_length=32)

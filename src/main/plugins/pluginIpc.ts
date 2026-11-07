@@ -4811,7 +4811,7 @@ export function registerPluginIpc(
     }
   })
 
-  const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown): Promise<{ ok: true }> => {
+  const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown, rawSecretsChoice?: unknown): Promise<{ ok: true }> => {
     const id = assertPluginRemovalTarget(pluginsRoot, rawId)
     // Plans, Git, Mini-IDE and Browser ship with Navide and can only be
     // disabled; no other `navide.` package is removable, so its storage and
@@ -4826,6 +4826,11 @@ export function registerPluginIpc(
       throw new Error('invalid native backend data choice')
     }
     const deleteNativeBackendData = rawDataChoice === 'delete'
+    // The plugin's own secrets (`secrets`) are kept unless the user chose to
+    // delete them too, so a reinstall finds them again.
+    if (rawSecretsChoice !== undefined && rawSecretsChoice !== 'keep' && rawSecretsChoice !== 'delete') {
+      throw new Error('invalid plugin secrets choice')
+    }
     const nativeBackendDataRoot = options.nativeBackendDataRoot
     if (deleteNativeBackendData && !nativeBackendDataRoot) {
       throw new Error('native backend data cleanup is unavailable')
@@ -4859,6 +4864,7 @@ export function registerPluginIpc(
         // data here keeps a refused deletion on the same fail-closed path:
         // the package stays installed and its backend registration returns.
         if (deleteNativeBackendData) removeNativeBackendData(nativeBackendDataRoot!, id)
+        if (rawSecretsChoice === 'delete') manager.clearPluginSecrets(id)
       } catch (error) {
         if (previousBackend) {
           try {
@@ -4924,11 +4930,18 @@ export function registerPluginIpc(
 
   ipcMain.handle(
     'plugins:remove',
-    async (event, args: { id?: unknown; nativeBackendData?: unknown } | null) => {
+    async (event, args: { id?: unknown; nativeBackendData?: unknown; secrets?: unknown } | null) => {
       assertAuthorized(event)
-      return uninstallPlugin(args?.id, args?.nativeBackendData)
+      return uninstallPlugin(args?.id, args?.nativeBackendData, args?.secrets)
     },
   )
+
+  // What the remove dialog asks about: how many secrets (`secrets`) the plugin
+  // keeps on this device. Never their names or values.
+  ipcMain.handle('plugins:secretCount', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return { count: manager.pluginSecretCount(assertPluginRemovalTarget(pluginsRoot, args?.id)) }
+  })
 
   // What the remove dialog discloses: whether this plugin's native backend left
   // private data on this device, how large it is and where.
@@ -5147,6 +5160,7 @@ export function registerPluginIpc(
         return result
       },
       notify: (notice) => options.onPluginAgentAction?.(notice),
+      clearSecrets: (pluginId) => manager.clearPluginSecrets(pluginId),
       isDisabled: (pluginId) => disabledPlugins.has(pluginId),
       disableSource: (pluginId) => disableSources.get(pluginId),
       now: () => Date.now(),

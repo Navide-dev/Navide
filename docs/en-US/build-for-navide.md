@@ -68,6 +68,7 @@ reference is [Plugin development v2](plugin-development-v2.md).
 | Start an AI CLI session and read its output | `permissions.system: ["aiCli"]` | high | [aiCli](plugin-development-v2.md#capabilities-and-permissions) |
 | Open and browse real web pages (Navide's browser partition) | `permissions.system: ["web"]` | high | [web](plugin-development-v2.md#capabilities-and-permissions) |
 | See the user's agent panes, lineage and message records; read message text | `permissions.system: ["agents"]`; `["agents", "agentMessages"]` for the text | medium / high | [agents](plugin-development-v2.md#capabilities-and-permissions) |
+| Keep your own API keys and tokens (encrypted on the user's device, never synced or shown) | `permissions.system: ["secrets"]` (0.2.39); `createPluginSecretStore(context)` from the SDK | high | [Plugin secrets](plugin-development-v2.md#plugin-secrets-secrets) |
 | Be told when panes, turns, plans, pipelines or schedules change | `permissions.agents.events: [...]` (0.2.39) | medium | [Events](plugin-development-v2.md#capabilities-and-permissions) |
 | Run `git`, `gh`, `glab` in the workspace | `permissions.shell: "allowlist"` | high | [Shell](plugin-development-v2.md#declared-executables-permissionsshellexecutables) |
 | Run other executables (`npm`, `terraform`, …) | `permissions.shell: { "mode": "allowlist", "executables": [...] }` (0.2.39) | high; highest for a name that runs any program | [Declared executables](plugin-development-v2.md#declared-executables-permissionsshellexecutables) |
@@ -109,6 +110,14 @@ navide-plugin package dist/package           # a deterministic .vsix; one per ta
   within 10 seconds of loading, or the install and the folder load fail
   their check. The `vue` template calls it in `src/main.ts`; its test suite
   drives the backend over Backend Wire v1 the way the Host does.
+- **Keys go in `secrets`, nowhere else.** An API key, token or password
+  (yours, the user's or a service's) is stored only through the `secrets`
+  capability, where the user pastes it once. Never write one into your code,
+  manifest, `contributes.settings` or `storage.*` (plain JSON), tests or
+  fixtures (build fake values at run time), a README, a screenshot, a log line,
+  an agent tool result, or a commit: a key that reached git history is
+  compromised even after you delete it. `scan` and the Registry's secret scan
+  refuse a package that carries one.
 - The author checklist the reviewer applies — signature, name similarity,
   secret scan, permissions, size — is in
   [Review](marketplace-publishing.md#5-review); run `scan` and keep secrets out

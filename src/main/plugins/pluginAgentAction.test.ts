@@ -253,3 +253,24 @@ describe('O1: an agent update whose disclosure is unchanged', () => {
     expect(prepareUpdate).not.toHaveBeenCalled()
   })
 })
+
+describe('plugins_disable clear_secrets', () => {
+  it('keeps the secrets by default and clears them only when asked', async () => {
+    const clearSecrets = vi.fn()
+    const kept = deps({ clearSecrets })
+    await expect(answerPluginAgentAction(request, kept)).resolves.not.toHaveProperty('secretsCleared')
+    expect(clearSecrets).not.toHaveBeenCalled()
+
+    const cleared = deps({ clearSecrets })
+    await expect(answerPluginAgentAction({ ...request, clear_secrets: true }, cleared)).resolves.toMatchObject({
+      ok: true, disabled: true, secretsCleared: true,
+    })
+    expect(clearSecrets).toHaveBeenCalledWith('nerdtechnic.devmap')
+  })
+
+  it('accepts clear_secrets only as true, and only on disable', () => {
+    expect(parsePluginAgentActionRequest({ ...request, clear_secrets: true })).toMatchObject({ clearSecrets: true })
+    expect(parsePluginAgentActionRequest({ ...request, clear_secrets: false })).toBeNull()
+    expect(parsePluginAgentActionRequest({ ...request, action: 'enable', clear_secrets: true })).toBeNull()
+  })
+})

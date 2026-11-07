@@ -238,6 +238,7 @@ _CAPABILITY_HINTS = {
     "aiCli": "drives AI CLI agents",
     "web": "browses websites with your sign-ins and keeps them",
     "agentMessages": "reads the text of messages between your agents",
+    "secrets": "keeps its own API keys encrypted on your device",
 }
 
 

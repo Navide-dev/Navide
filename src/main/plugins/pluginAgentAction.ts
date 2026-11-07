@@ -82,6 +82,8 @@ export interface PluginAgentActionDeps {
   commitUpdate?(pluginId: string, requester?: PluginAgentRequester): Promise<void | { switched?: true; switchError?: string }>
   /** O1: drop the held version. */
   discardUpdate?(pluginId: string): void
+  /** `plugins_disable` with `clear_secrets`: delete the package's own secrets. */
+  clearSecrets?(pluginId: string): void
 }
 
 const REQUESTER_KEYS = ['paneId', 'paneName', 'workspace', 'callerKind']
@@ -107,11 +109,16 @@ function parseRequester(value: unknown): PluginAgentRequester | null {
  *  An `update` (O1) carries one more key, `version`. */
 export function parsePluginAgentActionRequest(
   value: unknown,
-): { action: PluginAgentActionKind; pluginId: string; requester: PluginAgentRequester; version?: string } | null {
+): { action: PluginAgentActionKind; pluginId: string; requester: PluginAgentRequester; version?: string; clearSecrets?: true } | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const record = value as Record<string, unknown>
   const keys = Object.keys(record)
-  const expected = ['request_id', 'action', 'plugin_id', 'requester', ...(record.action === 'update' ? ['version'] : [])]
+  // A disable may carry `clear_secrets: true` (never false, never on another action).
+  const expected = [
+    'request_id', 'action', 'plugin_id', 'requester',
+    ...(record.action === 'update' ? ['version'] : []),
+    ...(record.action === 'disable' && 'clear_secrets' in record ? ['clear_secrets'] : []),
+  ]
   if (keys.length !== expected.length || !expected.every((key) => keys.includes(key))) {
     return null
   }
@@ -119,9 +126,11 @@ export function parsePluginAgentActionRequest(
   if (action !== 'disable' && action !== 'enable' && action !== 'update') return null
   if (typeof pluginId !== 'string' || !isValidManifestV2PluginId(pluginId)) return null
   if (action === 'update' && (typeof version !== 'string' || compareSemver(version, version) === null)) return null
+  if ('clear_secrets' in record && record.clear_secrets !== true) return null
   const requester = parseRequester(record.requester)
   if (!requester) return null
-  return action === 'update' ? { action, pluginId, requester, version: version as string } : { action, pluginId, requester }
+  if (action === 'update') return { action, pluginId, requester, version: version as string }
+  return record.clear_secrets === true ? { action, pluginId, requester, clearSecrets: true } : { action, pluginId, requester }
 }
 
 /** O1: an agent's update, carried out only when nothing it discloses changes;
@@ -222,8 +231,19 @@ export async function answerPluginAgentAction(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
   }
+  // Secrets go only when asked for, whether or not the switch changed.
+  if (disabled && request.clearSecrets) {
+    if (!deps.clearSecrets) return { ok: false, error: 'Navide cannot clear plugin secrets now', error_code: 'ACTION_FAILED' }
+    try {
+      deps.clearSecrets(pluginId)
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
+    }
+  }
   // Nothing changed (already in that state): no notice, so no undo that
   // would flip the user's own choice.
   if (changed) deps.notify({ action, pluginId, pluginVersion: version, requester })
-  return { ok: true, pluginId, pluginVersion: version, disabled, changed }
+  return disabled && request.clearSecrets
+    ? { ok: true, pluginId, pluginVersion: version, disabled, changed, secretsCleared: true }
+    : { ok: true, pluginId, pluginVersion: version, disabled, changed }
 }

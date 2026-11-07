@@ -1621,8 +1621,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }> => ipcRenderer.invoke('plugins:rollback', { id, ...(options.consentConfirmed === true ? { consentConfirmed: true } : {}) }),
     /** Drop the version staged for the next restart (the downgrade of an agent's O1 update). */
     discardCandidate: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:discardCandidate', { id }),
-    remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('plugins:remove', nativeBackendData === undefined ? { id } : { id, nativeBackendData }),
+    remove: (id: string, nativeBackendData?: 'keep' | 'delete', secrets?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('plugins:remove', {
+        id,
+        ...(nativeBackendData === undefined ? {} : { nativeBackendData }),
+        ...(secrets === undefined ? {} : { secrets }),
+      }),
+    /** How many secrets (`secrets`) the plugin keeps on this device; never names or values. */
+    secretCount: (id: string): Promise<{ count: number }> => ipcRenderer.invoke('plugins:secretCount', { id }),
     nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
       ipcRenderer.invoke('plugins:nativeBackendData', { id }),
     installedDisclosure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:installedDisclosure', { id }),

@@ -1966,7 +1966,8 @@
         "aiCli": "Sessões de AI CLI",
         "web": "Navegação na web",
         "agents": "Panes de agentes",
-        "agentMessages": "Mensagens entre agentes"
+        "agentMessages": "Mensagens entre agentes",
+        "secrets": "Segredos do plug-in do Navide"
       },
       "shellLabel": "Executáveis de shell",
       "shellHint": "Permita apenas nomes de executáveis de nível superior. Caminhos e expressões de shell não são aceitos.",
@@ -2212,6 +2213,10 @@
         "uninstallConfirmBody": "{name} será removido deste dispositivo. Você pode instalá-lo de novo pelo Navide Marketplace.",
         "uninstallConfirmBodyWithData": "{name} será removido deste dispositivo. O back-end nativo dele também armazenou {size} de dados privados neste dispositivo, no local abaixo. O Navide exclui esses dados também, a menos que você escolha mantê-los.",
         "uninstallKeepNativeData": "Manter estes dados para que uma reinstalação possa usá-los de novo",
+        "uninstallSecretsTitle": "Excluir também os segredos salvos por este plug-in do Navide?",
+        "uninstallSecretsBody": "{name} guarda chaves de API ou tokens criptografados neste dispositivo ({count} no total). Mantenha-os para que uma reinstalação possa usá-los de novo, ou exclua-os agora.",
+        "uninstallSecretsDelete": "Excluir segredos",
+        "uninstallSecretsKeep": "Manter segredos",
         "uninstallClearsWebData": "Remover {name} também exclui os logins em sites, os cookies e o cache dele neste computador.",
         "updatesCount": "Atualizações disponíveis: {count}",
         "retry": "Tentar novamente",
@@ -2418,6 +2423,7 @@
           "web": "Pode abrir e navegar por qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (eles podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent que já estão em execução em uma página só param quando você a recarrega; enquanto você deixa os agents controlarem uma página, este plug-in do Navide também pode executar scripts nela e lê-la junto com o estado de login; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
           "agents": "Vê seus panes de agent, qual pane abriu qual e quando trocaram mensagens, mas não o que disseram.",
           "agentMessages": "Lê o texto completo das mensagens entre seus agents; ele pode conter código, conteúdo de arquivos ou segredos.",
+          "secrets": "Guarda as próprias chaves de API e tokens criptografados neste computador; o Navide nunca os envia nem os mostra.",
           "shell": "Executar comandos no seu computador.",
           "terminal": "Abrir e controlar terminais do Navide."
         }
@@ -12448,6 +12454,7 @@
       "web": "Pode abrir e navegar em qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent já em execução em uma página só param quando você a recarrega; enquanto você deixa os agents controlarem uma página, este plug-in do Navide também pode executar scripts nela e lê-la junto com o estado de login; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
       "agents": "Vê os panes de agent deste projeto, qual pane abriu qual, os registros de entrega das mensagens (sem o conteúdo) e a lista de sessions (sem o conteúdo das conversas)",
       "agentMessages": "Lê o texto completo das mensagens entre seus agents neste projeto, que pode conter código, conteúdo de arquivos ou segredos",
+      "secrets": "Guarda as próprias chaves de API e tokens criptografados neste computador; o Navide nunca os envia nem os mostra",
       "ui": "Mostra visualizações próprias",
       "agentTools": "Oferece ferramentas que os agents podem chamar ({read} somente leitura, {write} de escrita)",
       "network": "Suas visualizações podem se conectar a: {hosts}",

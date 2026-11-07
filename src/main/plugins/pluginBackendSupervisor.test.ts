@@ -431,6 +431,8 @@ function bridgeOperationForPort(port: PlansBridgePort): string {
       return 'list_panes'
     case 'agent-message-bodies':
       return 'read_message'
+    case 'secrets':
+      return 'list'
   }
   const exhaustive: never = port
   return exhaustive
@@ -922,9 +924,9 @@ describe('PluginBackendSupervisor', () => {
     expect(bridgeDispatcher).not.toHaveBeenCalled()
   })
 
-  // `web`, `agents` and `agent-message-bodies` are mapped to their own policy
-  // namespaces, like filesystem and shell.
-  const POLICY_MAPPED_PORTS: readonly PlansBridgePort[] = ['filesystem', 'shell', 'web', 'agents', 'agent-message-bodies']
+  // `web`, `agents`, `agent-message-bodies` and `secrets` are mapped to their
+  // own policy namespaces, like filesystem and shell.
+  const POLICY_MAPPED_PORTS: readonly PlansBridgePort[] = ['filesystem', 'shell', 'web', 'agents', 'agent-message-bodies', 'secrets']
   it.each(PLANS_BRIDGE_PORTS.filter((port) => !POLICY_MAPPED_PORTS.includes(port)))(
     'rejects agent Bridge use of unmapped %s even in full policy',
     async (port) => {
@@ -1039,6 +1041,11 @@ describe('PluginBackendSupervisor', () => {
     // A denylist written before agentMessages existed never names it.
     ['agent-message-bodies', 'read_message', 'denylist', [], false],
     ['agent-message-bodies', 'read_message', 'full', [], true],
+    ['secrets', 'get', 'allowlist', ['secrets'], true],
+    ['secrets', 'get', 'allowlist', ['fs'], false],
+    // A denylist written before secrets existed never names it.
+    ['secrets', 'get', 'denylist', [], false],
+    ['secrets', 'get', 'full', [], true],
   ] as const)(
     'checks agent use of the %s Bridge port (%s) against the agent Execution Policy (%s %j)',
     async (port, operation, mode, system, allowed) => {

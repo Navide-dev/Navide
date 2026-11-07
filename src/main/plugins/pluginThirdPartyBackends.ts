@@ -24,6 +24,7 @@ import {
   isFirstPartyBackendPlugin,
 } from './pluginFirstPartyBackends'
 import { validateAgentsOperation } from './agentsCapability'
+import { validateSecretsOperation, type SecretsOperation } from './pluginSecrets'
 import {
   createHostSandboxProbe,
   resolveBackendSandbox,
@@ -155,6 +156,7 @@ export function thirdPartyBackendLaunchSpec(
       ...(manifest.permissions.shell === 'allowlist' ? ['shell' as const] : []),
       ...(system.includes('agents') ? ['agents' as const] : []),
       ...(system.includes('agentMessages') ? ['agent-message-bodies' as const] : []),
+      ...(system.includes('secrets') ? ['secrets' as const] : []),
     ],
     thirdParty: {
       name: manifest.name,
@@ -739,6 +741,8 @@ export interface ThirdPartyBackendControllerOptions {
   shellPort?: () => PackageShellPort | undefined
   /** Host agent data port (the same backend query a view's agents.* uses). */
   agentsPort?: () => PackageAgentsPort | undefined
+  /** The package's own secrets (`secrets` port); see PackageSecretsPort. */
+  secretsPort?: () => PackageSecretsPort | undefined
   /** Stop running children: one plugin, or every third-party plugin (null). */
   stopBackends?: (pluginId: string | null) => Promise<void>
   watchResources?: (
@@ -804,6 +808,12 @@ export interface PackageShellPort {
  * already validated, for the workspace the binding authorized. */
 export interface PackageAgentsPort {
   query(operation: string, args: Record<string, JsonValue>, context: PlansBridgeContext): Promise<JsonValue>
+}
+
+/** A third-party backend's own secrets (pluginSecrets.ts): `run` is given an
+ * operation and arguments already validated; the plugin id is the binding's. */
+export interface PackageSecretsPort {
+  run(operation: SecretsOperation, args: Record<string, unknown>, context: PlansBridgeContext): JsonValue
 }
 
 /** Shell syntax the Host broker refuses (host_shell.py `_SHELL_SYNTAX`). */
@@ -1276,6 +1286,7 @@ export class ThirdPartyBackendController {
         if (request.port === 'agents' || request.port === 'agent-message-bodies') {
           return this.dispatchAgents(spec, request, context)
         }
+        if (request.port === 'secrets') return this.dispatchSecrets(spec, request, context)
         if (request.port !== 'filesystem' || !spec.thirdParty.system.includes('fs')) {
           throw new PlansBridgeError('CAPABILITY_DENIED')
         }
@@ -1392,6 +1403,28 @@ export class ThirdPartyBackendController {
     const port = this.options.agentsPort?.()
     if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
     return port.query(request.operation, args as Record<string, JsonValue>, context)
+  }
+
+  /** The package's own secrets. The supervisor has already applied the agent
+   * Execution Policy; an agent reaches them only inside an admitted agent-tool
+   * call of this package, and every tool result is redacted against them. */
+  private dispatchSecrets(
+    spec: ThirdPartyLaunchSpec,
+    request: PlansBridgeRequest,
+    context: PlansBridgeContext,
+  ): JsonValue {
+    if (!spec.thirdParty.system.includes('secrets')) throw new PlansBridgeError('CAPABILITY_DENIED')
+    const operation = request.operation as SecretsOperation
+    if (!validateSecretsOperation(operation, request.arguments)) throw new PlansBridgeError('INVALID_ARGUMENT')
+    if (context.runtime.initiator.kind === 'agent') {
+      const call = this.options.agentToolCall?.(context.runtime.initiator.id)
+      if (!call || call.pluginId !== spec.pluginId || call.workspaceRoot !== context.authorizedPlanRoot) {
+        throw new PlansBridgeError('CAPABILITY_DENIED')
+      }
+    }
+    const port = this.options.secretsPort?.()
+    if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
+    return port.run(operation, request.arguments as Record<string, unknown>, context)
   }
 
   private async ensureWorkspaceWrite(spec: ThirdPartyLaunchSpec, workspacePath: string): Promise<boolean> {
