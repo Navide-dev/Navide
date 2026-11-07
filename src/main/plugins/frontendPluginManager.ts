@@ -51,6 +51,7 @@ import {
   type HostCapabilityGrant,
   type PublicCapabilityExecutionPlan,
   type TerminalOutputBatcher,
+  sameExecutables,
 } from './pluginCapabilityBroker'
 import { WebViewError, type PluginWebViewRegistry, type WebGuestView, type WebHostSurface } from './pluginWebViews'
 import { pluginWebViewRegistry, setPluginWebViewChangedHook } from './pluginWebViewHost'
@@ -2959,6 +2960,8 @@ export class FrontendPluginManager {
     ) return false
     const grant = this.capabilityGrantResolver?.(runtime.pluginId, runtime.packageVersion) ?? null
     if (!grant || grant.packageVersion !== runtime.packageVersion || grant.shell !== 'allowlist') return false
+    // C2: the approved executables must be the declared ones, as for a view.
+    if (!sameExecutables(grant.shellExecutables, activation.thirdParty?.shellExecutables)) return false
     const root = canonicalExistingDirectory(context.workspacePath)
     return root !== null && root === context.authorizedPlanRoot
   }
@@ -2970,9 +2973,15 @@ export class FrontendPluginManager {
     }
     let response: unknown
     try {
+      const declared = this.pluginBackendHost.activationForPlugin(context.runtime.pluginId)?.thirdParty?.shellExecutables
       response = await this.sendPublicBackend(
         'shell.run',
-        { workspace_path: context.authorizedPlanRoot, command, host_mode: 'allowlist' },
+        {
+          workspace_path: context.authorizedPlanRoot,
+          command,
+          host_mode: 'allowlist',
+          ...(declared?.length ? { allowed_executables: [...declared] } : {}),
+        },
         () => this.thirdPartyShellGrantAllows(context),
         THIRD_PARTY_SHELL_RUN_TIMEOUT_MS,
       )
@@ -7080,6 +7089,9 @@ export class FrontendPluginManager {
           workspace_path: workspacePath,
           command,
           host_mode: plan.shellMode ?? 'allowlist',
+          // C2: the executables the package declared and the user approved;
+          // the backend admits them beside git, gh and glab.
+          ...(plan.shellExecutables?.length ? { allowed_executables: [...plan.shellExecutables] } : {}),
         },
         () => this.publicPlanCanDispatch(plan, plugin),
       )

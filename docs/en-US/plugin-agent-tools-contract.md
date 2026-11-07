@@ -324,7 +324,7 @@ optional manifest arrays become `[]`.
 |---|---|
 | `plugin` | `id`, `version`, `publisher` of the manifest |
 | `permissions.system` | `permissions.system`, sorted; `[]` when absent |
-| `permissions.shell` | `allowlist` → `{mode: "allowlist", executables: ["gh","git","glab"]}` (the Host shell allowlist); `full` → `{mode: "full", executables: null}` (any executable); absent → `null` |
+| `permissions.shell` | `allowlist` → `{mode: "allowlist", executables: ["gh","git","glab"]}` (the Host shell allowlist), plus the package's declared executables sorted into the list when the manifest spells `shell` as `{mode: "allowlist", executables: [...]}` (C2; a parsed manifest carries them as `permissions.shellExecutables`); `full` → `{mode: "full", executables: null}` (any executable); absent → `null` |
 | `permissions.scopes` | `scopes.fs` with `root` defaulted to `workspace` and `read`/`write` sorted (absent → `[]`); `null` when no scopes |
 | `permissions.network` | `{hosts}` with `permissions.network.hosts` sorted; the key is **absent** (not `null`) when the manifest declares no hosts, so the disclosure and digest of every earlier manifest are unchanged |
 | `nativeBackend` | `{methods, events}` sorted when the manifest has `backend` (also when it lists none); otherwise `null` |
@@ -376,9 +376,11 @@ none apply. Reasons are listed in this fixed order:
 | `system.agents` | `system` contains `agents` (agent panes, lineage, message delivery records, session list; no message text) | medium |
 | `system.agentMessages` | `system` contains `agentMessages` (the text of messages between agents) | high |
 | `shell.allowlist` | `shell` is `allowlist` | high |
+| `shell.executables` | the package declares executables beyond the Host's three (C2) | high |
 | `nativeBackend` | the manifest has `backend` | high |
 | `agentTools.write` | at least one tool has `risk: "write"` | high |
 | `shell.full` | `shell` is `full` | highest |
+| `shell.interpreter` | a declared executable runs any program handed to it (`SHELL_ANY_PROGRAM_EXECUTABLES`: shells, interpreters, package runners, privilege wrappers) | highest |
 | `network` | `permissions.network.hosts` declared (a view can send what it reads to a named party) | highest |
 
 These are the manifest reasons. The level every surface shows is

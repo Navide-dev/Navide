@@ -1499,3 +1499,114 @@ async def test_on_windows_a_timed_out_run_still_ends_its_tree(monkeypatch) -> No
     assert sorted(killed) == [4242, 4243]
     assert reread == [4242]
     assert kernel32.calls == []
+
+
+# ── C2: executables a package declares (permissions.shell.executables) ─────
+
+
+def test_declared_executables_admit_only_bare_lowercase_names() -> None:
+    from agent_team_backend.host_shell import declared_executables
+
+    assert declared_executables(None) == frozenset()
+    assert declared_executables(["npm", "terraform"]) == frozenset({"npm", "terraform"})
+    for bad in (["/usr/bin/npm"], ["NPM"], ["npm;rm"], "npm", [7], [f"t{i}" for i in range(33)]):
+        with pytest.raises(ValueError):
+            declared_executables(bad)
+
+
+def test_a_declared_executable_is_admitted_as_written_in_the_workspace(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    declared = frozenset({"npm", "terraform"})
+    argv = parse_public_allowlisted_command(
+        "npm test -- --coverage", cwd=str(workspace), workspace_root=str(workspace), allowed_executables=declared
+    )
+    assert argv == ["npm", "test", "--", "--coverage"]
+    # The Git family keeps its own policy whatever else is declared.
+    with pytest.raises(ValueError):
+        parse_public_allowlisted_command(
+            "git -c alias.pwn=!sh status", cwd=str(workspace), workspace_root=str(workspace), allowed_executables=declared
+        )
+    # Not declared, a path, or shell syntax: refused as before.
+    for command in ("pnpm test", "./npm test", "npm test; rm -rf .", "/usr/bin/terraform plan"):
+        with pytest.raises(ValueError):
+            parse_public_allowlisted_command(
+                command, cwd=str(workspace), workspace_root=str(workspace), allowed_executables=declared
+            )
+    # Without a declaration nothing changed.
+    with pytest.raises(ValueError):
+        parse_public_allowlisted_command("npm test", cwd=str(workspace), workspace_root=str(workspace))
+
+
+@pytest.mark.asyncio
+async def test_a_declared_executable_runs_with_the_users_own_environment(tmp_path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    seen: dict = {}
+
+    class Proc:
+        returncode = 0
+        pid = 4_194_306
+
+        async def communicate(self, *_a):
+            return b"ok\n", b""
+
+    async def fake_exec(*a, **k):
+        seen["argv"] = a
+        seen["env"] = k.get("env")
+        seen["cwd"] = k.get("cwd")
+        return Proc()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: f"/usr/local/bin/{name}")
+    monkeypatch.setenv("NAVIDE_TEST_MARKER", "present")
+
+    rc, stdout, _ = await run_public_allowlisted_text(
+        ["npm", "test"], str(workspace), workspace_root=str(workspace), allowed_executables=frozenset({"npm"})
+    )
+    assert rc == 0 and stdout == "ok\n"
+    assert seen["argv"][0].endswith("npm") and seen["argv"][1:] == ("test",)
+    assert seen["cwd"] == str(workspace)
+    # The user's environment, not the Git family's isolated home.
+    assert seen["env"]["NAVIDE_TEST_MARKER"] == "present"
+    assert "GIT_CONFIG_GLOBAL" not in seen["env"]
+
+    rc, _, stderr = await run_public_allowlisted_text(
+        ["terraform", "plan"], str(workspace), workspace_root=str(workspace), allowed_executables=frozenset({"npm"})
+    )
+    assert rc == 126 and "not allowlisted or declared" in stderr
+
+
+@pytest.mark.asyncio
+async def test_a_declared_executable_behind_a_windows_shim_refuses_cmd_metacharacters(monkeypatch) -> None:
+    """npm on Windows is `npm.cmd`, run through cmd.exe, which re-reads its
+    arguments (TA-2, BatBadBut): an argument cmd would read as a command is
+    refused with the argument named; plain arguments still run."""
+    from agent_team_backend.osplat import _windows
+
+    argv: list[tuple] = []
+
+    class Proc:
+        returncode = 0
+        pid = 4_194_307
+
+        async def communicate(self, *_a):
+            return b"ok\n", b""
+
+    async def fake_exec(*a, **_k):
+        argv.append(a)
+        return Proc()
+
+    monkeypatch.setattr(host_shell, "paths", _windows.paths)
+    monkeypatch.setattr(_windows.paths, "resolve_program", lambda name, *, path=None: rf"C:\npm\{name}.cmd")
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
+
+    rc, _, _ = await run_allowlisted_text(["npm", "test"], allowed_executables=frozenset({"npm"}))
+    assert rc == 0 and argv[0] == ("cmd.exe", "/d", "/c", r"C:\npm\npm.cmd", "test")
+
+    for bad in ("%PATH%", "a^b", 'say "hi"', "wow!"):
+        argv.clear()
+        rc, _, stderr = await run_allowlisted_text(["npm", "run", bad], allowed_executables=frozenset({"npm"}))
+        assert rc == 126 and bad in stderr and ".cmd shim" in stderr and argv == []

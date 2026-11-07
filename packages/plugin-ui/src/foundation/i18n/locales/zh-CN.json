@@ -12313,7 +12313,7 @@
     "undeclared": {
       "shell": "会运行 {key}，但没有声明 shell 权限",
       "shellDynamic": "有运行时才组出来的指令，但没有声明 shell 权限",
-      "shellExecutable": "会运行 {key}，但声明的 shell 范围只有 git、gh、glab",
+      "shellExecutable": "会运行 {key}，但不在它声明的 shell 范围内",
       "networkHost": "会连到 {key}，但没有声明",
       "system": "会使用 {key}，但没有声明这项权限",
       "fsScopeWrite": "会写入 {key}，不在声明的写入范围内",

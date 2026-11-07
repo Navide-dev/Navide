@@ -1431,13 +1431,18 @@ const sortedStrings = (values: readonly string[] | undefined): string[] => [...(
 export function disclosurePermissions(manifest: unknown): StaticScanPermissions {
   const declared = ((manifest as { permissions?: unknown } | null)?.permissions ?? {}) as {
     system?: string[]
-    shell?: string
+    shell?: string | { mode?: string; executables?: string[] }
+    shellExecutables?: string[]
     scopes?: { fs?: { root?: 'workspace' | 'repository'; read?: string[]; write?: string[] } }
   }
+  // C2: `shell` may be the object form, or a parsed manifest's mode plus `shellExecutables`.
+  const mode = typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.mode : declared.shell
+  const declaredExecutables =
+    (typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.executables : declared.shellExecutables) ?? []
   const shell: StaticScanPermissions['shell'] =
-    declared.shell === 'allowlist'
-      ? { mode: 'allowlist', executables: [...HOST_SHELL_ALLOWLIST] }
-      : declared.shell === 'full'
+    mode === 'allowlist'
+      ? { mode: 'allowlist', executables: sortedStrings([...new Set([...HOST_SHELL_ALLOWLIST, ...declaredExecutables])]) }
+      : mode === 'full'
         ? { mode: 'full', executables: null }
         : null
   const fsScope = declared.scopes?.fs

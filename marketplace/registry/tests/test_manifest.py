@@ -406,3 +406,41 @@ def test_manifest_v2_network_rejects_unknown_keys_and_extension_packs() -> None:
     pack["permissions"] = {"network": {"hosts": ["api.github.com"]}}
     with pytest.raises(ManifestError, match="permissions"):
         parse_manifest(pack)
+
+
+# -- permissions.shell.executables (PR C2) --------------------------------------
+
+
+def test_manifest_v2_shell_object_form_is_normalized() -> None:
+    m = parse_manifest(contract_manifest("shell-executables.json"))
+    assert m.permissions.shell == "allowlist"
+    assert m.permissions.shellExecutables == ["npm", "terraform"]
+    plain = parse_manifest(contract_manifest("fs-scopes-declared.json"))
+    assert plain.permissions.shell == "allowlist" and plain.permissions.shellExecutables is None
+
+
+@pytest.mark.parametrize(
+    "shell",
+    [
+        {"mode": "full", "executables": ["npm"]},
+        {"mode": "allowlist", "executables": []},
+        {"mode": "allowlist", "executables": ["/usr/bin/npm"]},
+        {"mode": "allowlist", "executables": ["NPM"]},
+        {"mode": "allowlist", "executables": ["npm", "npm"]},
+        {"mode": "allowlist"},
+        {"mode": "allowlist", "executables": ["npm"], "extra": 1},
+        {"mode": "allowlist", "executables": [f"t{i}" for i in range(33)]},
+    ],
+)
+def test_manifest_v2_shell_object_form_rejected(shell: dict) -> None:
+    manifest = contract_manifest("shell-executables.json")
+    manifest["permissions"]["shell"] = shell
+    with pytest.raises(ManifestError, match="shell"):
+        parse_manifest(manifest)
+
+
+def test_manifest_v2_shell_executables_is_not_a_manifest_field() -> None:
+    manifest = contract_manifest("fs-scopes-declared.json")
+    manifest["permissions"]["shellExecutables"] = ["npm"]
+    with pytest.raises(ManifestError, match="shell"):
+        parse_manifest(manifest)

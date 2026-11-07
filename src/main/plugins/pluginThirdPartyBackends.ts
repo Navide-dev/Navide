@@ -157,6 +157,9 @@ export function thirdPartyBackendLaunchSpec(
       name: manifest.name,
       system,
       ...(manifest.permissions.shell ? { shell: manifest.permissions.shell } : {}),
+      ...(manifest.permissions.shell === 'allowlist' && manifest.permissions.shellExecutables
+        ? { shellExecutables: [...manifest.permissions.shellExecutables] }
+        : {}),
       ...(agentTools ?? {}),
     },
   }
@@ -274,6 +277,8 @@ export function backendPermissionsKey(spec: ThirdPartyLaunchSpec): string {
   return JSON.stringify({
     system: [...spec.thirdParty.system].sort(),
     shell: spec.thirdParty.shell ?? null,
+    // C2: a version that declares another executable set needs a new consent.
+    ...(spec.thirdParty.shellExecutables?.length ? { shellExecutables: [...spec.thirdParty.shellExecutables].sort() } : {}),
     methods: [...spec.approvedMethods].sort(),
     events: [...spec.approvedEvents].sort(),
     ...(agentTools.length > 0 ? { agentTools: agentToolsDigest(agentTools) } : {}),
@@ -477,6 +482,8 @@ export interface NativeBackendConsentPrompt {
   system: PluginSystemNamespace[]
   /** Declared shell mode; `allowlist` is disclosed as high risk (DB5). */
   shell?: 'allowlist' | 'full'
+  /** C2: executables declared beyond the Host's `git`, `gh`, `glab`. */
+  shellExecutables?: string[]
   methods: string[]
   /** Declared agent tools, listed in the dialog; empty when there are none. */
   agentTools: DisclosureAgentTool[]
@@ -783,10 +790,10 @@ const SHELL_SYNTAX = /[;&|<>`\n\r]/u
 
 /** Lexical pre-check before the broker: one plain command whose first token
  * is a Host-allowlisted executable, with no shell syntax. */
-function isAllowlistedShellCommand(command: string): boolean {
+function isAllowlistedShellCommand(command: string, declared: readonly string[] = []): boolean {
   if (SHELL_SYNTAX.test(command)) return false
   const executable = command.trim().split(/\s+/u)[0] ?? ''
-  return HOST_SHELL_EXECUTABLE_ALLOWLIST.includes(executable)
+  return HOST_SHELL_EXECUTABLE_ALLOWLIST.includes(executable) || declared.includes(executable)
 }
 
 /** Read-only VCS commands an agent call made through a `read` tool may run
@@ -1298,8 +1305,8 @@ export class ThirdPartyBackendController {
       throw new PlansBridgeError('INVALID_ARGUMENT', 'shell.run takes exactly { command }')
     }
     if (!context.authorizedPlanRoot) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
-    if (!isAllowlistedShellCommand(args.command)) {
-      throw new PlansBridgeError('CAPABILITY_DENIED', 'shell executable is not Host-allowlisted')
+    if (!isAllowlistedShellCommand(args.command, spec.thirdParty.shellExecutables)) {
+      throw new PlansBridgeError('CAPABILITY_DENIED', 'shell executable is not Host-allowlisted or declared')
     }
     if (context.runtime.initiator.kind === 'agent') {
       // Agent calls: only inside an admitted agent-tool call; a read tool

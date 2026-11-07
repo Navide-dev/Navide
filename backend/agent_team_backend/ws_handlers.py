@@ -56,7 +56,7 @@ from .ipc import make_error, make_event, make_response
 from .log_readers.claude import ClaudeLogReader, first_user_prompts
 from .applog import app_data_dir, in_data_dir
 from .credential_vault import DEFAULT_SLOT_ID, vault_to_thread
-from .host_shell import parse_public_allowlisted_command, run_public_allowlisted_text
+from .host_shell import parse_public_allowlisted_command, run_public_allowlisted_text, declared_executables
 from .mcp_settings import (
     MCPSettingsConflictError,
     MCPSettingsError,
@@ -7859,10 +7859,14 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
             await session.send_json(make_response(msg_id, msg_type, {"ok": False, "error": "invalid workspace path"}))
             return
         try:
+            # C2: the executables the package declared and the user approved,
+            # sent by the Host with the call; refused whole when malformed.
+            allowed = declared_executables(payload.get("allowed_executables"))
             argv = parse_public_allowlisted_command(
                 cmd,
                 cwd=str(resolved_cwd),
                 workspace_root=str(registered_root),
+                allowed_executables=allowed,
             )
         except ValueError as exc:
             await session.send_json(make_response(msg_id, msg_type, {"ok": False, "error": str(exc)}))
@@ -7872,6 +7876,7 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
             str(resolved_cwd),
             workspace_root=str(registered_root),
             timeout=30.0,
+            allowed_executables=allowed,
         )
         await session.send_json(make_response(msg_id, msg_type, {
             "ok": True,

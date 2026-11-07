@@ -12313,7 +12313,7 @@
     "undeclared": {
       "shell": "Führt {key} aus, deklariert aber keine Shell-Berechtigung",
       "shellDynamic": "Erstellt Befehle zur Laufzeit, deklariert aber keine Shell-Berechtigung",
-      "shellExecutable": "Führt {key} aus, aber sein deklarierter Shell-Bereich umfasst nur git, gh und glab",
+      "shellExecutable": "Führt {key} aus, das sein deklarierter Shell-Bereich nicht umfasst",
       "networkHost": "Verbindet sich mit {key}, ohne es zu deklarieren",
       "system": "Verwendet {key}, deklariert diese Berechtigung aber nicht",
       "fsScopeWrite": "Schreibt {key}, außerhalb seines deklarierten Schreibbereichs",

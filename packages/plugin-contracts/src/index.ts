@@ -40,6 +40,21 @@ export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'win
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
 export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
+/** Most executables one package may declare in `permissions.shell.executables`. */
+export const MAX_SHELL_EXECUTABLES = 32
+/** One declared executable: a bare lowercase name as it is spelled on PATH,
+ *  never a path, an extension or a shell word. */
+export const V2_SHELL_EXECUTABLE = /^[a-z0-9][a-z0-9._+-]{0,63}$/
+/** Executables that run any program handed to them (shells, interpreters,
+ *  package runners, privilege wrappers). Disclosure only: a package may
+ *  declare them; the card then says "can run any program" (TA-2, highest). */
+export const SHELL_ANY_PROGRAM_EXECUTABLES: readonly string[] = [
+  'sh', 'bash', 'zsh', 'fish', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd',
+  'node', 'deno', 'bun', 'python', 'python3', 'ruby', 'perl', 'php', 'lua', 'osascript',
+  'npx', 'pnpm', 'npm', 'yarn', 'pip', 'pipx', 'uv', 'uvx', 'cargo', 'go', 'make', 'cmake', 'gradle', 'mvn',
+  'docker', 'podman', 'kubectl', 'nix', 'brew', 'apt', 'winget', 'choco',
+  'sudo', 'doas', 'su', 'runas',
+]
 /** Most hosts one package may declare in `permissions.network.hosts`. */
 export const MAX_NETWORK_HOSTS = 32
 /** One declared network host: lowercase DNS labels, at most one leading `*.`
@@ -88,7 +103,14 @@ export type PluginManifestV2Network = {
 
 export type PluginManifestV2Permissions = {
   system?: PluginSystemNamespace[]
+  /** The shell mode. The manifest may spell `allowlist` as
+   *  `{ "mode": "allowlist", "executables": [...] }`; the parser keeps the
+   *  mode here and the declared names in `shellExecutables`. */
   shell?: PluginShellMode
+  /** Executables a `shell: "allowlist"` package declares beyond the Host's
+   *  `git`, `gh`, `glab` (C2): bare names, enforced by the broker, each
+   *  disclosed; names that run any program are disclosed as highest risk. */
+  shellExecutables?: string[]
   /** Optional declared resource scopes; disclosure only, never a grant. */
   scopes?: PluginManifestV2Scopes
   /** Optional declared network hosts; enforced on views, disclosed everywhere. */
@@ -530,11 +552,32 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
     system = values as PluginSystemNamespace[]
   }
   let shell: PluginShellMode | undefined
+  let shellExecutables: string[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'shell')) {
-    if (!V2_SHELL_MODES.includes(permissions.shell as PluginShellMode)) {
-      fail(`manifest permissions.shell contains an unknown mode ${JSON.stringify(permissions.shell)}; allowed: ${V2_SHELL_MODES.join(', ')}`)
+    if (typeof permissions.shell === 'object' && permissions.shell !== null && !Array.isArray(permissions.shell)) {
+      const declared = permissions.shell as Record<string, unknown>
+      assertOnlyKeys(declared, ['mode', 'executables'], 'manifest permissions.shell')
+      if (required(declared, 'mode', 'manifest permissions.shell') !== 'allowlist') {
+        fail(`manifest permissions.shell.mode must be "allowlist" when executables are declared, got ${JSON.stringify(declared.mode)}; full mode runs any executable and declares none`)
+      }
+      const executables = uniqueStringArray(
+        required(declared, 'executables', 'manifest permissions.shell'),
+        'manifest permissions.shell.executables',
+        1,
+        MAX_SHELL_EXECUTABLES
+      )
+      const invalid = executables.find((name) => !V2_SHELL_EXECUTABLE.test(name))
+      if (invalid !== undefined) {
+        fail(`manifest permissions.shell.executables contains an invalid name ${JSON.stringify(invalid)}; a name is lowercase such as npm or terraform, with no path, extension or shell word`)
+      }
+      shell = 'allowlist'
+      shellExecutables = executables
+    } else {
+      if (!V2_SHELL_MODES.includes(permissions.shell as PluginShellMode)) {
+        fail(`manifest permissions.shell contains an unknown mode ${JSON.stringify(permissions.shell)}; allowed: ${V2_SHELL_MODES.join(', ')}, or { "mode": "allowlist", "executables": [...] }`)
+      }
+      shell = permissions.shell as PluginShellMode
     }
-    shell = permissions.shell as PluginShellMode
   }
   const scopes = Object.prototype.hasOwnProperty.call(permissions, 'scopes')
     ? parseScopes(permissions.scopes)
@@ -545,6 +588,7 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
   return {
     ...(system ? { system } : {}),
     ...(shell ? { shell } : {}),
+    ...(shellExecutables ? { shellExecutables } : {}),
     ...(scopes ? { scopes } : {}),
     ...(network ? { network } : {}),
   }

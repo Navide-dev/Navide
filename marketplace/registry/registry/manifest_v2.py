@@ -322,15 +322,60 @@ class ManifestV2Network(ManifestV2Model):
         return value
 
 
+_SHELL_EXECUTABLE_RE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
+
+
 class ManifestV2Permissions(ManifestV2Model):
-    """Coarse Manifest v2 grants; method access remains Host-catalog-owned."""
+    """Coarse Manifest v2 grants; method access remains Host-catalog-owned.
+
+    ``shell`` may be spelled in the manifest as ``{"mode": "allowlist",
+    "executables": [...]}`` (C2): the object form is normalized here into
+    ``shell="allowlist"`` plus ``shellExecutables``, so every reader of
+    ``permissions.shell`` keeps comparing a mode string.
+    """
 
     system: list[Literal["fs", "ui", "aiCli", "web", "agents", "agentMessages"]] | None = Field(
         default=None, min_length=1, max_length=6
     )
     shell: Literal["allowlist", "full"] | None = None
+    shellExecutables: list[str] | None = Field(default=None, min_length=1, max_length=32)
     scopes: ManifestV2Scopes | None = None
     network: ManifestV2Network | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_shell_object(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+        if "shellExecutables" in value:
+            raise ValueError("permissions.shellExecutables is not a manifest field; declare permissions.shell as an object")
+        shell = value.get("shell")
+        if not isinstance(shell, Mapping):
+            return value
+        if set(shell) != {"mode", "executables"}:
+            raise ValueError("permissions.shell as an object takes exactly mode and executables")
+        if shell["mode"] != "allowlist":
+            raise ValueError('permissions.shell.mode must be "allowlist" when executables are declared')
+        executables = shell["executables"]
+        if not isinstance(executables, list) or not all(isinstance(name, str) for name in executables):
+            raise ValueError("permissions.shell.executables must be a list of names")
+        normalized = dict(value)
+        normalized["shell"] = "allowlist"
+        normalized["shellExecutables"] = executables
+        return normalized
+
+    @field_validator("shellExecutables")
+    @classmethod
+    def _check_shell_executables(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        if len(set(value)) != len(value):
+            raise ValueError("permissions.shell.executables must contain unique names")
+        if any(_SHELL_EXECUTABLE_RE.fullmatch(name) is None for name in value):
+            raise ValueError(
+                "permissions.shell.executables must contain lowercase names such as npm, with no path, extension or shell word"
+            )
+        return value
 
     @field_validator("system")
     @classmethod

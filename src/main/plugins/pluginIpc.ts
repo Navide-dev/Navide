@@ -1253,6 +1253,7 @@ export function registerPluginIpc(
                     packageVersion: grant.packageVersion,
                     system: [...grant.system],
                     ...(grant.shell ? { shell: grant.shell } : {}),
+                    ...(grant.shellExecutables ? { shellExecutables: [...grant.shellExecutables] } : {}),
                     ...(grant.highRiskShellConfirmed !== undefined
                       ? { highRiskShellConfirmed: grant.highRiskShellConfirmed }
                       : {}),
@@ -2622,6 +2623,7 @@ export function registerPluginIpc(
             packageVersion: candidate.packageVersion,
             system: [...policy.system],
             ...(policy.shell ? { shell: policy.shell } : {}),
+            ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
             ...(policy.shell === 'full' && args.riskConfirmed === true
               ? { highRiskShellConfirmed: true as const }
               : {}),
@@ -2930,6 +2932,7 @@ export function registerPluginIpc(
             packageVersion: candidate.packageVersion,
             system: [...policy.system],
             ...(policy.shell ? { shell: policy.shell } : {}),
+            ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
             ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
             storage: true,
           }
@@ -3262,6 +3265,7 @@ export function registerPluginIpc(
         packageVersion: scanned.descriptor.packageVersion,
         system: [...policy.system],
         ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
         ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
         storage: true,
       })
@@ -4038,6 +4042,7 @@ export function registerPluginIpc(
         packageVersion: selectedBeforeRestart.candidate.packageVersion,
         system: [...policy.system],
         ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
         ...(fullShellConfirmed ? { highRiskShellConfirmed: true as const } : {}),
         storage: true,
       }
@@ -4553,6 +4558,7 @@ export function registerPluginIpc(
         packageVersion,
         system: [...policy.system],
         ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
         ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
         storage: true,
       }

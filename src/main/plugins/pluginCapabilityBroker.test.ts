@@ -1346,3 +1346,64 @@ describe('agent initiator pane', () => {
     expect(isAuthenticatedInitiator({ ...base, pane: 'Reviewer', caller: null })).toBe(false)
   })
 })
+
+describe('C2: declared shell executables', () => {
+  const declaredPolicy = manifestV2CapabilityPolicy({ system: ['fs'], shell: 'allowlist', shellExecutables: ['npm', 'terraform'] })
+  const binding = {
+    pluginId: 'acme.builder',
+    packageVersion: '1.0.0',
+    workspaceId: 'workspace-1',
+    instanceId: 'instance-1',
+    audience: 'audience-1',
+  } as const
+  const grant = (overrides: Partial<HostCapabilityContext['userGrant'] & object> = {}) => ({
+    packageVersion: '1.0.0', system: ['fs'] as const, shell: 'allowlist' as const, shellExecutables: ['terraform', 'npm'], ...overrides,
+  })
+  const context = (userGrant: HostCapabilityContext['userGrant']): HostCapabilityContext => ({
+    publisherEligible: true,
+    userGrant,
+    runtimeBinding: binding,
+  })
+  const run = (command: string): CapabilityCall => ({
+    pluginId: 'acme.builder', ns: 'shell', method: 'run', args: { command }, reqId: 'r-1',
+  } as CapabilityCall)
+
+  it('carries the declared names on the policy, only for allowlist mode', () => {
+    expect(declaredPolicy).toMatchObject({ shell: 'allowlist', shellExecutables: ['npm', 'terraform'] })
+    expect(manifestV2CapabilityPolicy({ system: ['fs'], shell: 'full', shellExecutables: ['npm'] })).not.toHaveProperty('shellExecutables')
+  })
+
+  it('admits a declared executable beside the Host three and hands the names to the plan', () => {
+    expect(planPublicCapabilityCall(run('npm test'), declaredPolicy, context(grant()))).toMatchObject({
+      kind: 'allow', plan: { address: 'shell.run', shellMode: 'allowlist', shellExecutables: ['npm', 'terraform'] },
+    })
+    expect(planPublicCapabilityCall(run('git status'), declaredPolicy, context(grant()))).toMatchObject({ kind: 'allow' })
+    expect(planPublicCapabilityCall(run('env npm test'), declaredPolicy, context(grant()))).toMatchObject({ kind: 'allow' })
+  })
+
+  it('still refuses anything not declared, a path, or a wrapper to something undeclared', () => {
+    for (const command of ['pnpm test', './npm test', 'NPM test', 'sh -c "npm test"', 'npm test && pnpm test']) {
+      expect(planPublicCapabilityCall(run(command), declaredPolicy, context(grant())), command)
+        .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED' } } })
+    }
+  })
+
+  it('needs the user to have approved exactly the declared set', () => {
+    expect(planPublicCapabilityCall(run('npm test'), declaredPolicy, context(grant({ shellExecutables: ['npm'] }))))
+      .toMatchObject({ kind: 'deny', response: { error: { message: expect.stringContaining('shell executables are not user-approved') } } })
+    const withoutNames = grant()
+    delete (withoutNames as { shellExecutables?: string[] }).shellExecutables
+    expect(planPublicCapabilityCall(run('git status'), declaredPolicy, context(withoutNames))).toMatchObject({ kind: 'deny' })
+    expect(sameExecutables(undefined, [])).toBe(true)
+    expect(sameExecutables(['a', 'b'], ['b', 'a'])).toBe(true)
+    expect(sameExecutables(['a'], ['a', 'b'])).toBe(false)
+  })
+
+  it('does not widen a package that declares nothing', () => {
+    const plain = manifestV2CapabilityPolicy({ system: ['fs'], shell: 'allowlist' })
+    const plainGrant = { packageVersion: '1.0.0', system: ['fs'] as const, shell: 'allowlist' as const }
+    expect(planPublicCapabilityCall(run('npm test'), plain, context(plainGrant))).toMatchObject({ kind: 'deny' })
+    expect(planPublicCapabilityCall(run('git status'), plain, context(plainGrant))).toMatchObject({ kind: 'allow', plan: { address: 'shell.run' } })
+    expect((planPublicCapabilityCall(run('git status'), plain, context(plainGrant)) as { plan: { shellExecutables?: unknown } }).plan).not.toHaveProperty('shellExecutables')
+  })
+})

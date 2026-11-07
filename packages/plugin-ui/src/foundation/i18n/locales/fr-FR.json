@@ -12313,7 +12313,7 @@
     "undeclared": {
       "shell": "Exécute {key}, mais ne déclare aucune autorisation shell",
       "shellDynamic": "Construit des commandes à l’exécution, mais ne déclare aucune autorisation shell",
-      "shellExecutable": "Exécute {key}, mais son périmètre shell déclaré se limite à git, gh et glab",
+      "shellExecutable": "Exécute {key}, qui n’est pas dans son périmètre shell déclaré",
       "networkHost": "Se connecte à {key} sans le déclarer",
       "system": "Utilise {key}, mais ne déclare pas cette autorisation",
       "fsScopeWrite": "Écrit {key}, hors de son périmètre d’écriture déclaré",

@@ -21,6 +21,12 @@ DISCLOSURE_SCHEMA_VERSION = 1
 DISCLOSURE_SUMMARY_TEMPLATE = "plugin-disclosure.summary.v1"
 #: The Host shell allowlist (plugin-development-v2.md, "Host-managed storage partitions").
 HOST_SHELL_ALLOWLIST = ("gh", "git", "glab")
+#: Executables that run any program handed to them (shells, interpreters,
+#: package runners, privilege wrappers): a package that declares one is
+#: disclosed as able to run any program (TA-2). Twin: SHELL_ANY_PROGRAM_EXECUTABLES.
+SHELL_ANY_PROGRAM_EXECUTABLES = frozenset((
+    "sh", "bash", "zsh", "fish", "dash", "ksh", "pwsh", "powershell", "cmd", "node", "deno", "bun", "python", "python3", "ruby", "perl", "php", "lua", "osascript", "npx", "pnpm", "npm", "yarn", "pip", "pipx", "uv", "uvx", "cargo", "go", "make", "cmake", "gradle", "mvn", "docker", "podman", "kubectl", "nix", "brew", "apt", "winget", "choco", "sudo", "doas", "su", "runas",
+))
 
 DisclosureRiskLevel = Literal["low", "medium", "high", "highest"]
 _RISK_RANK = {"low": 0, "medium": 1, "high": 2, "highest": 3}
@@ -34,9 +40,11 @@ DISCLOSURE_RISK_RULES = (
     ("system.agents", "medium"),
     ("system.agentMessages", "high"),
     ("shell.allowlist", "high"),
+    ("shell.executables", "high"),
     ("nativeBackend", "high"),
     ("agentTools.write", "high"),
     ("shell.full", "highest"),
+    ("shell.interpreter", "highest"),
     ("network", "highest"),
 )
 
@@ -114,12 +122,26 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
     """The disclosure of a manifest that already passed Manifest v2 validation and validate_agent_tools."""
     declared = manifest.get("permissions") or {}
     system = sorted(declared.get("system") or [])
-    if declared.get("shell") == "allowlist":
-        shell: dict[str, Any] | None = {"mode": "allowlist", "executables": list(HOST_SHELL_ALLOWLIST)}
-    elif declared.get("shell") == "full":
+    # `shell` is a mode string, or (C2) `{mode: "allowlist", executables}`;
+    # a Registry-normalized manifest carries the names as `shellExecutables`.
+    declared_shell = declared.get("shell")
+    declared_executables: list[str] = []
+    if isinstance(declared_shell, dict):
+        declared_executables = list(declared_shell.get("executables") or [])
+        declared_shell = declared_shell.get("mode")
+    elif declared.get("shellExecutables"):
+        declared_executables = list(declared["shellExecutables"])
+    if declared_shell == "allowlist":
+        shell: dict[str, Any] | None = {
+            "mode": "allowlist",
+            "executables": sorted(set(HOST_SHELL_ALLOWLIST) | set(declared_executables)),
+        }
+    elif declared_shell == "full":
         shell = {"mode": "full", "executables": None}
+        declared_executables = []
     else:
         shell = None
+        declared_executables = []
     fs_scope = (declared.get("scopes") or {}).get("fs")
     scopes = None
     if fs_scope:
@@ -168,6 +190,10 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         present.add("system.agentMessages")
     if shell and shell["mode"] == "allowlist":
         present.add("shell.allowlist")
+    if declared_executables:
+        present.add("shell.executables")
+        if any(name in SHELL_ANY_PROGRAM_EXECUTABLES for name in declared_executables):
+            present.add("shell.interpreter")
     if native is not None:
         present.add("nativeBackend")
     if write_tools:

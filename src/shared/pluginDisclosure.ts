@@ -21,6 +21,12 @@ export const DISCLOSURE_SCHEMA_VERSION = 1
 export const DISCLOSURE_SUMMARY_TEMPLATE = 'plugin-disclosure.summary.v1'
 /** The Host shell allowlist (plugin-development-v2.md, "Host-managed storage partitions"). */
 export const HOST_SHELL_ALLOWLIST = ['gh', 'git', 'glab'] as const
+/** Executables that run any program handed to them (shells, interpreters,
+ *  package runners, privilege wrappers): a package that declares one is
+ *  disclosed as able to run any program (TA-2). Twin: disclosure_contract.py. */
+export const SHELL_ANY_PROGRAM_EXECUTABLES: ReadonlySet<string> = new Set([
+  'sh', 'bash', 'zsh', 'fish', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd', 'node', 'deno', 'bun', 'python', 'python3', 'ruby', 'perl', 'php', 'lua', 'osascript', 'npx', 'pnpm', 'npm', 'yarn', 'pip', 'pipx', 'uv', 'uvx', 'cargo', 'go', 'make', 'cmake', 'gradle', 'mvn', 'docker', 'podman', 'kubectl', 'nix', 'brew', 'apt', 'winget', 'choco', 'sudo', 'doas', 'su', 'runas',
+])
 
 export type DisclosureRiskLevel = 'low' | 'medium' | 'high' | 'highest'
 const RISK_RANK: Record<DisclosureRiskLevel, number> = { low: 0, medium: 1, high: 2, highest: 3 }
@@ -33,9 +39,11 @@ export type DisclosureRiskReasonKey =
   | 'system.agents'
   | 'system.agentMessages'
   | 'shell.allowlist'
+  | 'shell.executables'
   | 'nativeBackend'
   | 'agentTools.write'
   | 'shell.full'
+  | 'shell.interpreter'
   | 'network'
 
 /** Every reason with its level, in the order reasons are listed. */
@@ -47,9 +55,11 @@ export const DISCLOSURE_RISK_RULES: ReadonlyArray<readonly [DisclosureRiskReason
   ['system.agents', 'medium'],
   ['system.agentMessages', 'high'],
   ['shell.allowlist', 'high'],
+  ['shell.executables', 'high'],
   ['nativeBackend', 'high'],
   ['agentTools.write', 'high'],
   ['shell.full', 'highest'],
+  ['shell.interpreter', 'highest'],
   ['network', 'highest'],
 ]
 
@@ -190,7 +200,10 @@ export interface DisclosureManifestInput {
   publisher: string
   permissions?: {
     system?: string[]
-    shell?: 'allowlist' | 'full'
+    /** A mode, or (C2) the manifest's object form; a parsed manifest carries
+     *  the mode here and the declared names in `shellExecutables`. */
+    shell?: 'allowlist' | 'full' | { mode: 'allowlist'; executables: string[] }
+    shellExecutables?: string[]
     scopes?: { fs: { root?: 'workspace' | 'repository'; read?: string[]; write?: string[] } }
     network?: { hosts: string[] }
   }
@@ -225,10 +238,14 @@ export function riskLevelForReasons(reasons: ReadonlyArray<{ key: string; level:
 export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDisclosure {
   const declared = manifest.permissions ?? {}
   const system = sorted(declared.system) as DisclosurePermissions['system']
+  const declaredShell = typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.mode : declared.shell
+  const declaredExecutables = declaredShell === 'allowlist'
+    ? (typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.executables : declared.shellExecutables) ?? []
+    : []
   const shell: DisclosurePermissions['shell'] =
-    declared.shell === 'allowlist'
-      ? { mode: 'allowlist', executables: [...HOST_SHELL_ALLOWLIST] }
-      : declared.shell === 'full'
+    declaredShell === 'allowlist'
+      ? { mode: 'allowlist', executables: sorted([...new Set([...HOST_SHELL_ALLOWLIST, ...declaredExecutables])]) }
+      : declaredShell === 'full'
         ? { mode: 'full', executables: null }
         : null
   const fsScope = declared.scopes?.fs
@@ -261,6 +278,10 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (system.includes('agents')) present.add('system.agents')
   if (system.includes('agentMessages')) present.add('system.agentMessages')
   if (shell?.mode === 'allowlist') present.add('shell.allowlist')
+  if (declaredExecutables.length > 0) {
+    present.add('shell.executables')
+    if (declaredExecutables.some((name) => SHELL_ANY_PROGRAM_EXECUTABLES.has(name))) present.add('shell.interpreter')
+  }
   if (nativeBackend) present.add('nativeBackend')
   if (writeTools > 0) present.add('agentTools.write')
   if (shell?.mode === 'full') present.add('shell.full')

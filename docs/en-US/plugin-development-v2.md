@@ -434,7 +434,8 @@ The backend never executes anything itself (the sandbox lets it exec only files
 of its own package). It sends the Host bridge request `port: "shell"`,
 `operation: "run"`, `arguments: {"command": "<command>"}`, and the Host runs it
 through the same shell broker as a view's `shell.run` in `allowlist` mode: only
-`git`, `gh` and `glab` as a plain command without shell syntax, in the
+`git`, `gh` and `glab` (plus the executables the package declares, see
+[Declared executables](#declared-executables-permissionsshellexecutables)) as a plain command without shell syntax, in the
 workspace the view is bound to, with credential/auth subcommands, `-c`/`-C` and
 the other overrides refused (the Host shell executable allowlist in
 "Host-managed storage partitions" below). The
@@ -469,6 +470,52 @@ row; the
 disclosure data's `network` field is still `"none"` in contract v1 and is
 being revisited separately. The broker rules are exactly those of a view's
 `shell.run`.
+
+#### Declared executables (`permissions.shell.executables`)
+
+`shell: "allowlist"` admits the Host's `git`, `gh` and `glab`. A package that
+needs more names them (C2, per [TA-2](security/ta-2-declared-executables.md)):
+
+```json
+"permissions": { "system": ["fs", "ui"], "shell": { "mode": "allowlist", "executables": ["npm", "terraform"] } }
+```
+
+`executables` is 1–32 unique bare lowercase names as they are spelled on
+PATH (`npm`, not `npm.cmd` or `/usr/bin/npm`); `mode` must be `allowlist`
+(`full` runs any executable and declares none). The SDK, the Host and the
+Registry validate the same rule, and the parser names the name it refused.
+The Host keeps the mode in `permissions.shell` and the names in
+`permissions.shellExecutables` once parsed.
+
+**What it governs.** A view's `shell.run` and a backend's `port: "shell"` may
+start a declared executable, as a plain command without shell syntax, in the
+bound workspace, with the same lexical resolution as before (a wrapper such as
+`env` or `sh -c` is followed to the executable it runs; a path, a `$`
+expansion or a leading assignment is refused). The Git family keeps its
+subcommand policy and isolated environment; a declared executable has no
+subcommand policy — what a plugin may run is disclosed, not curated (ruling of
+2026-10-17) — and runs as the user runs it from a terminal: the user's own
+environment and PATH, the workspace as the working directory, the broker's
+30 s limit. On Windows a declared name that resolves to a `.cmd`/`.bat` shim
+(every npm-family command) runs through `cmd.exe`, which re-reads its
+arguments; an argument carrying `%`, `^`, `"` or `!` is therefore refused
+with the argument named rather than quoted, because no quoting makes
+`cmd.exe` leave them alone. That is the one refusal here, and it closes an
+exploitable bug, not a feature. The agent Execution Policy is unchanged: an
+agent-initiated call still needs the user's policy to name the executable.
+
+**Disclosure and record.** The consent card lists every executable it may run
+(the Host's three and the declared ones); declaring any adds the risk reason
+`shell.executables` (high), and declaring a name that runs any program — a
+shell, an interpreter, a package runner such as `npm` or `npx`, a privilege
+wrapper (`SHELL_ANY_PROGRAM_EXECUTABLES` in the contracts) — adds
+`shell.interpreter` (**highest**): the honest statement is "this plugin can
+run any program as you". The Registry's static scan compares the commands it
+finds in the code with the declared set: an executable no declaration covers
+is red ("found by the scan but not declared"). A version that changes the set
+asks for consent again (the grant and the native-backend consent both bind
+to it). Every run is an Activity row with executable and subcommand, as
+today.
 
 #### Network hosts (`permissions.network`)
 
@@ -1033,7 +1080,7 @@ matches.
 | `backend` | no | Object | See [Backend source, development, and publish contract](#backend-source-development-and-publish-contract) |
 | `extensionPack` | no | 1–20 member plugin ids | See [Extension Packs](#extension-packs) |
 | `permissions.system` | no | `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages` | 1–6 unique entries; `agentMessages` requires `agents` |
-| `permissions.shell` | no | `allowlist`, `full` | Omission denies `shell.run` |
+| `permissions.shell` | no | allowlist, full, or an object with mode allowlist and an executables list | Omission denies `shell.run`; the object form declares executables beyond git, gh and glab, see [Declared executables](#declared-executables-permissionsshellexecutables) |
 | `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
 | `permissions.network` | no | Object with a required hosts array | Hosts the package's views may connect to; enforced on views, see [Network hosts](#network-hosts-permissionsnetwork) |
 | `contributes.views[].id` | yes | Lowercase view id | |

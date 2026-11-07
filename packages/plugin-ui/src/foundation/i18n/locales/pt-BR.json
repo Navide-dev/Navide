@@ -12313,7 +12313,7 @@
     "undeclared": {
       "shell": "Executa {key}, mas não declara permissão de shell",
       "shellDynamic": "Monta comandos durante a execução, mas não declara permissão de shell",
-      "shellExecutable": "Executa {key}, mas o escopo de shell declarado é apenas git, gh e glab",
+      "shellExecutable": "Executa {key}, que não está no escopo de shell declarado",
       "networkHost": "Conecta-se a {key} sem declará-lo",
       "system": "Usa {key}, mas não declara essa permissão",
       "fsScopeWrite": "Grava {key}, fora do escopo de gravação declarado",

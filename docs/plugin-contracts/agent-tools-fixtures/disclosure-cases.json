@@ -2700,6 +2700,257 @@
           "projectWrites": "none"
         }
       }
+    },
+    {
+      "name": "shell-executables-npm",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.builder",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "npm",
+              "terraform"
+            ]
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "bottom",
+              "title": "Builder",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.builder",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab",
+                  "npm",
+                  "terraform"
+                ]
+              }
+            },
+            {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "highest",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            },
+            {
+              "key": "shell.executables",
+              "level": "high"
+            },
+            {
+              "key": "shell.interpreter",
+              "level": "highest"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab",
+              "npm",
+              "terraform"
+            ]
+          },
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "via-shell",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "undeclared"
+        }
+      }
+    },
+    {
+      "name": "shell-executables-terraform",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.planner",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "terraform"
+            ]
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "bottom",
+              "title": "Builder",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.planner",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab",
+                  "terraform"
+                ]
+              }
+            },
+            {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            },
+            {
+              "key": "shell.executables",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab",
+              "terraform"
+            ]
+          },
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "via-shell",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "undeclared"
+        }
+      }
     }
   ]
 }

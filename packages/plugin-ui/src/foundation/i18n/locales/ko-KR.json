@@ -12313,7 +12313,7 @@
     "undeclared": {
       "shell": "{key}을(를) 실행하지만 셸 권한을 선언하지 않았어요",
       "shellDynamic": "실행 시점에 명령을 만들지만 셸 권한을 선언하지 않았어요",
-      "shellExecutable": "{key}을(를) 실행하지만 선언한 셸 범위는 git, gh, glab뿐이에요",
+      "shellExecutable": "{key}을(를) 실행하지만 선언한 셸 범위에 들어 있지 않아요",
       "networkHost": "{key}에 연결하지만 선언하지 않았어요",
       "system": "{key}을(를) 사용하지만 해당 권한을 선언하지 않았어요",
       "fsScopeWrite": "선언한 쓰기 범위 밖의 {key}에 써요",

@@ -12313,7 +12313,7 @@
     "undeclared": {
       "shell": "Runs {key}, but declares no shell permission",
       "shellDynamic": "Builds commands at run time, but declares no shell permission",
-      "shellExecutable": "Runs {key}, but its declared shell scope is only git, gh and glab",
+      "shellExecutable": "Runs {key}, which its declared shell scope does not include",
       "networkHost": "Connects to {key}, which it does not declare",
       "system": "Uses {key}, but does not declare that permission",
       "fsScopeWrite": "Writes {key}, outside its declared write scope",

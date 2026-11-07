@@ -12313,7 +12313,7 @@
     "undeclared": {
       "shell": "Chạy {key}, nhưng không khai báo quyền shell",
       "shellDynamic": "Tạo lệnh lúc chạy, nhưng không khai báo quyền shell",
-      "shellExecutable": "Chạy {key}, nhưng phạm vi shell đã khai báo chỉ gồm git, gh và glab",
+      "shellExecutable": "Chạy {key}, không nằm trong phạm vi shell đã khai báo",
       "networkHost": "Kết nối tới {key} nhưng không khai báo",
       "system": "Dùng {key}, nhưng không khai báo quyền đó",
       "fsScopeWrite": "Ghi {key}, nằm ngoài phạm vi ghi đã khai báo",

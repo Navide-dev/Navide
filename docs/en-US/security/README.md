@@ -16,6 +16,6 @@ a feature the user already has.
 | Assessment | Boundary it covers | Status (0.2.39) |
 |---|---|---|
 | [TA-1 Backend sandbox network](ta-1-backend-network.md) | Letting a sandboxed third-party backend reach declared network hosts | Assessment only; the view-side `permissions.network` (CSP) ships as PR C1 |
-| [TA-2 Declared shell executables](ta-2-declared-executables.md) | `permissions.shell.executables`: a plugin names the executables its `shell.run` may start | Assessment done; PR C2 implements it |
+| [TA-2 Declared shell executables](ta-2-declared-executables.md) | `permissions.shell.executables`: a plugin names the executables its `shell.run` may start | Implemented as PR C2 (option A: any name, graded disclosure; Windows batch-shim arguments refused) |
 | [TA-3 Windows backend without a sandbox](ta-3-windows-unsandboxed-backend.md) | Running third-party backends on Windows, where no sandbox exists yet | Assessment only; no implementation this version |
 | [TA-4 Channel adapter contribution point](ta-4-channel-adapter-contribution.md) | A plugin providing a chat-platform adapter, with the bot token kept by the Host | Assessment only; no implementation this version |

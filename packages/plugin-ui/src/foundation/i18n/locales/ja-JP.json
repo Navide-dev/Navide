@@ -12313,7 +12313,7 @@
     "undeclared": {
       "shell": "{key} を実行しますが、shell 権限を宣言していません",
       "shellDynamic": "実行時にコマンドを組み立てますが、shell 権限を宣言していません",
-      "shellExecutable": "{key} を実行しますが、宣言した shell の範囲は git・gh・glab だけです",
+      "shellExecutable": "{key} を実行しますが、宣言した shell の範囲に含まれていません",
       "networkHost": "{key} に接続しますが、宣言していません",
       "system": "{key} を使いますが、この権限を宣言していません",
       "fsScopeWrite": "{key} に書き込みますが、宣言した書き込み範囲の外です",
