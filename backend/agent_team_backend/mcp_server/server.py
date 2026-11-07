@@ -6902,6 +6902,11 @@ async def ui_invoke(
     refusal = _human_only_refusal(action, args)
     if refusal is not None:
         return refusal
+    if action == "ui.pipeline.start":
+        # Who started the run is recorded with its plugin nodes; a caller of
+        # this tool is an agent, whatever its args say. Only the scheduler and
+        # webhook paths (_start_pipeline_run) name another origin.
+        args = {**(args or {}), "origin": "agent"}
     if action in _PANE_PRIVATE_UI_ACTIONS:
         # Refused here as well as in the window: the renderer check is the one
         # that holds for every path a request can take, this one gives the
