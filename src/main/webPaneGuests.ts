@@ -15,9 +15,7 @@
  *   passing Electron's default UA and blocking a spoofed Chrome one.
  */
 import { app, session, webContents, type IpcMain, type WebContents } from 'electron'
-import { execFile } from 'node:child_process'
 import {
-  WEB_PANE_SITES,
   isWebPaneSameSite,
   webPanePartition,
   webPaneSite,
@@ -126,25 +124,6 @@ export function registerWebPaneIpc(ipc: IpcMain, isTrusted: (event: Electron.Ipc
       if (kb !== undefined) out[String(id)] = Math.round(kb / 1024)
     }
     return out
-  })
-  // The ＋ menu's "↗ App": which sites' desktop apps are installed (macOS,
-  // looked up by bundle id through Spotlight), and opening one.
-  ipc.handle('webPane:installedApps', async (event) => {
-    if (!isTrusted(event) || process.platform !== 'darwin') return []
-    const found = await Promise.all(WEB_PANE_SITES.map((site) => site.macAppBundleId
-      ? new Promise<boolean>((resolve) => {
-        execFile('mdfind', [`kMDItemCFBundleIdentifier == "${site.macAppBundleId}"`], { timeout: 5000 },
-          (err, stdout) => resolve(!err && stdout.trim().length > 0))
-      })
-      : Promise.resolve(false)))
-    return WEB_PANE_SITES.filter((_s, i) => found[i]).map((s) => s.id)
-  })
-  ipc.handle('webPane:openApp', async (event, siteId: unknown) => {
-    const bundleId = typeof siteId === 'string' ? webPaneSite(siteId)?.macAppBundleId : undefined
-    if (!isTrusted(event) || !bundleId || process.platform !== 'darwin') return false
-    return new Promise<boolean>((resolve) => {
-      execFile('open', ['-b', bundleId], { timeout: 10_000 }, (err) => resolve(!err))
-    })
   })
   ipc.handle('webPane:clearData', async (event, siteId: unknown) => {
     if (!isTrusted(event) || typeof siteId !== 'string' || !webPaneSite(siteId)) return false

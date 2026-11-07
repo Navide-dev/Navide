@@ -439,10 +439,10 @@ const COMPONENT_SRC = readFileSync(
 const ROW_PX = 24
 
 /** Everything in the menu that is not the scroller: its own padding, the role
- *  picker, three dividers, the Standalone agents block (heading, two CLI rows,
- *  six web-pane rows and the note, ~268px), and the Terminal + Manual-spawn
+ *  picker, three dividers, the Standalone agents block (heading, three rows
+ *  and the two-line Grok note, ~136px), and the Terminal + Manual-spawn
  *  buttons. */
-const FURNITURE_PX = 348
+const FURNITURE_PX = 216
 
 function scrollerCapPx(): number {
   const m = COMPONENT_SRC.match(/\.ws-add-scroll\s*\{[\s\S]*?max-height:\s*min\((\d+)px/)
@@ -458,9 +458,8 @@ function flipThresholdPx(): number {
 
 // OpenClaw and Hermes Agent are general agents with their own runtime and
 // keys, not coding CLIs: they get their own block in the ＋ menu and stay out
-// of the CLI list, Manual spawn and "Handle Issue As…". The cloud agents
-// (Grok Bot, OpenAI dots, …) have no CLI at all: each opens its official site
-// in a web pane, with "↗ App" beside it when its desktop app is installed.
+// of the CLI list, Manual spawn and "Handle Issue As…". Grok Bot has no CLI at
+// all, so its entry opens the official page instead of a pane.
 describe('ControlPane – the ＋ menu\'s Standalone agents block', () => {
   let wrapper: VueWrapper
   afterEach(() => {
@@ -482,10 +481,9 @@ describe('ControlPane – the ＋ menu\'s Standalone agents block', () => {
     const block = wrapper.find('.ws-add-sa')
     expect(block.find('.ws-add-sa-hd').text()).toBe('label.standalone-agents')
     expect(block.findAll('.ws-add-sa-opt .ws-add-lb').map((o) => o.text())).toEqual([
-      'OpenClaw', 'Hermes Agent',
-      'Grok Bot', 'OpenAI dots', 'Meta Muse', 'Manus', 'Gemini Tasks', 'Perplexity Computer',
+      'OpenClaw', 'Hermes Agent', 'Grok Bot ↗',
     ])
-    expect(block.find('.ws-add-sa-note').text()).toBe('label.web-pane-menu-note label.grok-bot-pane-hint')
+    expect(block.find('.ws-add-sa-note').text()).toBe('label.grok-bot-pane-hint')
   })
 
   it('keeps standalone agents out of the Manual spawn dropdown', async () => {
@@ -512,7 +510,7 @@ describe('ControlPane – the ＋ menu\'s Standalone agents block', () => {
     expect(wrapper.findAll('.ws-add-sa-tag').map((t) => t.text())).toEqual([
       'label.standalone-badge-not-installed',
       'label.standalone-badge-pane',
-      ...Array(6).fill('label.standalone-badge-web-pane'),
+      'label.standalone-badge-opens-app',
     ])
     await wrapper.findAll('.ws-add-sa-opt')[0].trigger('click')
     await new Promise((r) => setTimeout(r, 0))
@@ -520,26 +518,13 @@ describe('ControlPane – the ＋ menu\'s Standalone agents block', () => {
     expect(wrapper.emitted('install-cli')?.[0]?.[0]).toEqual({ agentKey: 'openclaw', label: 'OpenClaw' })
   })
 
-  it('opens a cloud agent in a web pane, with no role, into the menu\'s workspace', async () => {
+  it('opens Grok Bot\'s official page instead of a pane', async () => {
+    const openExternal = vi.fn().mockResolvedValue({ ok: true })
+    ;(window as { agentTeam?: unknown }).agentTeam = { openExternal }
     wrapper = mountWith({ agentSpecs: withStandalone })
     await openMenu(wrapper)
-    await wrapper.find('.ws-add-role').setValue('reviewer')
-    await wrapper.find('.ws-add-web-row[data-site="grok"] .ws-add-web').trigger('click')
-    expect(wrapper.emitted('spawn')?.[0]?.[0]).toMatchObject({ agentKey: 'web:grok', roleKey: '', stageId: '' })
-    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
-  })
-
-  it('offers "↗ App" only for a site whose desktop app is installed, and opens the app', async () => {
-    const installedApps = vi.fn().mockResolvedValue(['dots'])
-    const openApp = vi.fn().mockResolvedValue(true)
-    ;(window as { agentTeam?: unknown }).agentTeam = { webPane: { installedApps, openApp } }
-    wrapper = mountWith({ agentSpecs: withStandalone })
-    await openMenu(wrapper)
-    await new Promise((r) => setTimeout(r, 0))
-    const apps = wrapper.findAll('.ws-add-web-app')
-    expect(apps.map((b) => b.element.closest('.ws-add-web-row')?.getAttribute('data-site'))).toEqual(['dots'])
-    await apps[0].trigger('click')
-    expect(openApp).toHaveBeenCalledWith('dots')
+    await wrapper.find('.ws-add-grokbot').trigger('click')
+    expect(openExternal).toHaveBeenCalledWith('https://cursor.com/dashboard/bot')
     expect(wrapper.emitted('spawn')).toBeUndefined()
     expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
   })

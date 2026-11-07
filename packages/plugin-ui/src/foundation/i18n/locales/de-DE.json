@@ -8651,8 +8651,6 @@
     }
   },
   "label": {
-    "standalone-badge-web-pane": "Web-Bereich",
-    "web-pane-menu-note": "Ein Web-Bereich öffnet die offizielle Website in einem Bereich, angemeldet mit deinem eigenen Konto; die Anmeldung bleibt auf diesem Computer. ↗ App erscheint nur, wenn die Desktop-App installiert ist.",
     "step-count": "{count} Schritt | {count} Schritte",
     "imported-from-n8n": "Aus n8n importiert",
     "resume-other-pipeline": "Ein nicht abgeschlossener Lauf gehört zu „{name}“. Wechseln Sie zu dieser Pipeline, um ihn fortzusetzen.",

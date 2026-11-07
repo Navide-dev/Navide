@@ -15,14 +15,11 @@ export interface WebPaneSite {
   /** Registrable domains that count as "this site": a window.open to one of
    *  them stays in the pane, anything else goes to the system browser. */
   hosts: readonly string[]
-  /** macOS bundle id of the site's desktop app, when it has one Navide can
-   *  find (Spotlight) and open (`open -b`). Absent: the site is web only. */
-  macAppBundleId?: string
 }
 
 export const WEB_PANE_SITES: readonly WebPaneSite[] = [
   { id: 'grok', name: 'Grok Bot', url: 'https://cursor.com/dashboard/bot', hosts: ['cursor.com'] },
-  { id: 'dots', name: 'OpenAI dots', url: 'https://chatgpt.com', hosts: ['chatgpt.com', 'openai.com'], macAppBundleId: 'com.openai.chat' },
+  { id: 'dots', name: 'OpenAI dots', url: 'https://chatgpt.com', hosts: ['chatgpt.com', 'openai.com'] },
   { id: 'muse', name: 'Meta Muse', url: 'https://muse.ai', hosts: ['muse.ai'] },
   { id: 'manus', name: 'Manus', url: 'https://manus.im', hosts: ['manus.im'] },
   { id: 'gemini', name: 'Gemini Tasks', url: 'https://gemini.google.com', hosts: ['google.com'] },

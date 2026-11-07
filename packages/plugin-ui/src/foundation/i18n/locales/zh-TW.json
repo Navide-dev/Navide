@@ -8651,8 +8651,6 @@
     }
   },
   "label": {
-    "standalone-badge-web-pane": "網頁分格",
-    "web-pane-menu-note": "網頁分格：在分格裡開官方網頁，用你自己的帳號登入，登入狀態只存在這台電腦。↗ App 只在已安裝桌面 App 時出現。",
     "step-count": "{count} 個步驟",
     "imported-from-n8n": "來自 n8n",
     "resume-other-pipeline": "有一個未完成的執行屬於「{name}」。切換到該流程即可繼續。",

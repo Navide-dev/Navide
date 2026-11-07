@@ -8651,8 +8651,6 @@
     }
   },
   "label": {
-    "standalone-badge-web-pane": "pane web",
-    "web-pane-menu-note": "Un web pane ouvre le site officiel dans un pane, avec votre propre compte ; la connexion reste sur cet ordinateur. ↗ App n’apparaît que si l’app de bureau est installée.",
     "step-count": "{count} étape | {count} étapes",
     "imported-from-n8n": "Importé depuis n8n",
     "resume-other-pipeline": "Une exécution inachevée appartient à « {name} ». Passez à ce pipeline pour la poursuivre.",

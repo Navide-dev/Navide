@@ -8651,8 +8651,6 @@
     }
   },
   "label": {
-    "standalone-badge-web-pane": "pane web",
-    "web-pane-menu-note": "Web pane mở trang chính thức trong một pane, đăng nhập bằng tài khoản của bạn; trạng thái đăng nhập chỉ ở trên máy này. ↗ App chỉ xuất hiện khi đã cài ứng dụng máy tính.",
     "step-count": "{count} bước",
     "imported-from-n8n": "Đã nhập từ n8n",
     "resume-other-pipeline": "Một lượt chạy chưa xong thuộc về “{name}”. Hãy chuyển sang pipeline đó để tiếp tục.",
