@@ -2,6 +2,7 @@ import { ref, computed, watch, onScopeDispose } from 'vue'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import type { GitRequestType, GitTransport } from '../../../shared/gitCompatibility'
 import type { GitCredentialPort } from '../ports/gitSurface'
+import { sameWorkspacePath } from './useGitStatusBadges'
 
 export interface GitFileEntry {
   path: string
@@ -195,18 +196,6 @@ const emptyStatus = (): GitStatus => ({
   ignored: [],
   operation_in_progress: '',
 })
-
-/** A workspace path in one comparable form: forward slashes, no trailing
- *  slash, and lower case for a Windows path (drive letter or UNC), whose file
- *  system ignores case — `C:\Users\me` and `c:/users/me` are one folder. */
-export function normalizeWorkspacePath(path: string): string {
-  const p = path.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
-  return /^[a-zA-Z]:(\/|$)/.test(p) || p.startsWith('//') ? p.toLowerCase() : p
-}
-
-export function sameWorkspacePath(a: string, b: string): boolean {
-  return normalizeWorkspacePath(a) === normalizeWorkspacePath(b)
-}
 
 export function useGit(
   workspacePath: () => string,

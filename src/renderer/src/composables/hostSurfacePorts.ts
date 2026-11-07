@@ -1,4 +1,5 @@
 import { revealPath as shellRevealPath } from './hostShell'
+import { createHostFileAccessPort } from './hostFileAccess'
 import type { GitTransport } from '../../../shared/gitCompatibility'
 import { shellCommandArgv } from '../../../shared/osplat'
 import type { useBackend } from './useBackend'
@@ -14,10 +15,6 @@ import type {
   GitAccountPort,
   GitCredential,
   GitCredentialPort,
-  GitFileAccessPort,
-  GitFileReadResult,
-  GitFileWriteResult,
-  GitSettingsPort,
   GitPaneUiPort,
   GitWindowUiPort,
   IssuePort,
@@ -48,40 +45,6 @@ async function requireOk<T>(promise: Promise<BackendResponse<T>>): Promise<T | n
   const response = await promise
   if (!response.ok) throw new Error(errorMessage(response))
   return (response.payload as T | null) ?? null
-}
-
-export function createHostGitFileAccessPort(backend: HostBackend): GitFileAccessPort {
-  return {
-    async readFile(workspacePath: string, relPath: string): Promise<GitFileReadResult> {
-      const response = await backend.send<{ ok: boolean; content: string; error?: string }>('fs.read_file', {
-        workspace_path: workspacePath,
-        rel_path: relPath,
-      })
-      return {
-        ok: response.ok && response.payload?.ok === true,
-        content: response.payload?.content ?? '',
-        error: response.payload?.error || response.error?.message,
-      }
-    },
-    async writeFile(workspacePath: string, relPath: string, content: string): Promise<GitFileWriteResult> {
-      const response = await backend.send<{ ok: boolean; error?: string }>('fs.write_file', {
-        workspace_path: workspacePath,
-        rel_path: relPath,
-        content,
-      })
-      return {
-        ok: response.ok && response.payload?.ok === true,
-        error: response.payload?.error || response.error?.message,
-      }
-    },
-    async readImage(workspacePath: string, relPath: string): Promise<string> {
-      const response = await backend.send<{ ok: boolean; data_url?: string }>('fs.read_image', {
-        workspace_path: workspacePath,
-        rel_path: relPath,
-      })
-      return response.ok && response.payload?.ok ? (response.payload.data_url ?? '') : ''
-    },
-  }
 }
 
 export function createHostGitWindowUiPort(backend: HostBackend): GitWindowUiPort {
@@ -244,24 +207,6 @@ export function createHostIssuePort(backend: HostBackend): IssuePort {
   }
 }
 
-export function createHostGitSettingsPort(backend: HostBackend): GitSettingsPort {
-  return {
-    status: backend.status,
-    async getAll(): Promise<Record<string, unknown> | null> {
-      const response = await backend.send<{ settings?: Record<string, unknown> }>('ui.settings.get', {})
-      if (!response.ok) throw new Error(errorMessage(response))
-      return response.payload?.settings ?? null
-    },
-    async setMany(updates: Record<string, unknown>): Promise<void> {
-      const response = await backend.send('ui.settings.set', { updates })
-      if (!response.ok) throw new Error(errorMessage(response))
-    },
-    onChanged(callback) {
-      return backend.on('ui.settings_changed' as never, callback)
-    },
-  }
-}
-
 export function createHostTerminalDockPort(backend: HostBackend): TerminalDockPort {
   const send = <T = unknown>(type: string, payload: Record<string, unknown> = {}, timeoutMs?: number) =>
     timeoutMs === undefined ? backend.send<T>(type, payload) : backend.send<T>(type, payload, timeoutMs)
@@ -418,7 +363,7 @@ export function createHostTerminalDockPort(backend: HostBackend): TerminalDockPo
 export function createHostGitSurfacePorts(backend: HostBackend, gitTransport: GitTransport) {
   return {
     gitTransport,
-    fileAccess: createHostGitFileAccessPort(backend),
+    fileAccess: createHostFileAccessPort(backend),
     ui: createHostGitWindowUiPort(backend),
     paneUi: createHostGitPaneUiPort(backend),
     branchDiff: createHostGitBranchDiffPort(backend),

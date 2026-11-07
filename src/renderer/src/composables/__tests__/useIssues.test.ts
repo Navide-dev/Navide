@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
 import { ref } from 'vue'
-import { useIssues, formatIssueForDispatch } from '../useIssues'
+import { useIssues } from '../useIssues'
+import { formatIssueForDispatch } from '../../lib/issueDispatch'
 import type { IssueDetail } from '../useIssues'
 import { createMockBackend, withScope, flush } from './mockBackend'
 

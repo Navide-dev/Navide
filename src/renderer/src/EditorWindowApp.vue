@@ -3,7 +3,8 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useBackend } from './composables/useBackend'
 import { createHostEditorPort } from './composables/hostEditorPort'
 import { createHostGitTransport } from './composables/hostGitTransport'
-import { createHostGitSettingsPort, createHostGitSurfacePorts, createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostGitSurfacePorts, createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostSettingsPort } from './composables/hostSettingsPort'
 import { revealPath } from './composables/hostShell'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import ExplorerPane from './components/ExplorerPane.vue'
@@ -91,7 +92,7 @@ const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to this window's own ws connection: flushes writes
 // (sidebar/panel widths) and receives ui.settings_changed broadcasts from the
 // main window (theme changes — see the onSettingsChanged subscription below).
-initSettingsBackend(createHostGitSettingsPort(backend))
+initSettingsBackend(createHostSettingsPort(backend))
 initKeybindingsPort(createHostKeybindingsPort())
 const { confirm, toast } = useNotify()
 

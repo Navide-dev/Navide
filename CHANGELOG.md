@@ -4,6 +4,11 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- Git (0.2.39): when the built-in Git plugin fails to start, the Git tab now says so, shows why, and offers Reinstall built-in Git (the same restore as the bundled row in Settings → Navide Plugins), instead of loading the old copy of the Git interface that was kept in the app for this case.
+- Git (0.2.39): the file badges in the Explorer now read only Git status (one git process per refresh), instead of loading the whole Git panel's data (status, history, branches, stashes, remotes, tags, worktrees and config) for them. A folder that is not a repository backs off the same way the Git panel does.
+
 ## [0.2.38] — 2026-11-07
 
 ### Added
@@ -20,10 +25,6 @@ All notable released changes to Navide will be documented in this file. The form
 ### Changed
 
 - Interface wording (0.2.39): the Chinese interface (zh-TW and zh-CN) now calls a pane 分格 everywhere, instead of the English "pane" or the 面板 / CLI 視窗 / 子視窗 it was also written as. 視窗 (zh-CN 窗口) now means only a real window, 面板 only a panel, 對話框 (zh-CN 对话框) a dialog, and the English "workspace" and "tab" left in Chinese text read 工作區 and 分頁 (zh-CN 工作区 and 标签页). The help pages, the setup wizard and the zh-TW user guide explain the word where it first appears: "分格＝視窗裡的一格，通常跑一個 agent". The same applies to What's New, the Navide Browser and Plans plugin texts and the zh-TW docs; docs/en-US/glossary.md records the vocabulary. Navide Git 1.0.3, Navide Mini-IDE 1.0.3, Navide Plans 1.1.3.
-
-### Changed
-
-- Git (0.2.39): when the built-in Git plugin fails to start, the Git tab now says so, shows why, and offers Reinstall built-in Git (the same restore as the bundled row in Settings → Navide Plugins), instead of loading the old copy of the Git interface that was kept in the app for this case.
 
 ### Fixed
 

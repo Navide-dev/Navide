@@ -99,7 +99,8 @@ import { sameRenderedPaneViews } from './lib/paneViews'
 import { paneStatusLabelText } from './lib/paneStatusLabel'
 import { statusBadgeStyle } from './composables/useStatusBadgePrefs'
 import { useBackend } from './composables/useBackend'
-import { createHostGitSettingsPort, createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostSettingsPort } from './composables/hostSettingsPort'
 import { useSettings } from './composables/useSettings'
 import { useRoles } from './composables/useRoles'
 import {
@@ -126,7 +127,7 @@ import { useUpdater } from './composables/useUpdater'
 import { usePaneReorderDrag } from './composables/usePaneReorderDrag'
 import { cliHealthGuideForLaunch, type CliHealthStatus, type OnboardStatus } from './composables/useOnboarding'
 import { playDoneSound, playAttentionSound } from './composables/useSoundNotify'
-import { formatIssueForDispatch, buildIssueKickoff, type IssueDetail, type Issue, type IssueProvider, type IssueHandlerMode } from './composables/useIssues'
+import { formatIssueForDispatch, buildIssueKickoff, type IssueDetail, type Issue, type IssueProvider, type IssueHandlerMode } from './lib/issueDispatch'
 import { normalizeGitContributionAction, type GitContributionAction } from './ports/gitContribution'
 import type { RoleKey } from './data/roles'
 import {
@@ -515,7 +516,7 @@ setDiagnosticSink((entry) => {
 const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to the ws: reconciles + flushes queued writes once
 // connected, and applies ui.settings_changed broadcasts from other windows.
-initSettingsBackend(createHostGitSettingsPort(backend))
+initSettingsBackend(createHostSettingsPort(backend))
 initKeybindingsPort(createHostKeybindingsPort())
 // Per-CLI quota badges: configure the backend poller and mirror its
 // usage.changed broadcasts (read by TerminalPane's UsageBadge).

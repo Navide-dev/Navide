@@ -1,5 +1,8 @@
 import type { GitTransport } from '../../../shared/gitCompatibility'
 import type { InjectionKey } from 'vue'
+import type { FileAccessPort, FileReadResult, FileWriteResult } from './fileAccess'
+import type { SettingsPort } from './settings'
+import type { GitAccountInput, GitAccountPublic } from '../composables/useGitAccounts'
 import type { PortResponse, ReactiveValue } from '@navide/plugin-ui/shared'
 import type {
   ConflictStages,
@@ -14,22 +17,10 @@ import type {
   IssueProviderInfo,
 } from '../composables/useIssues'
 
-export interface GitFileReadResult {
-  ok: boolean
-  content: string
-  error?: string
-}
-
-export interface GitFileWriteResult {
-  ok: boolean
-  error?: string
-}
-
-export interface GitFileAccessPort {
-  readFile(workspacePath: string, relPath: string): Promise<GitFileReadResult>
-  writeFile(workspacePath: string, relPath: string, content: string): Promise<GitFileWriteResult>
-  readImage(workspacePath: string, relPath: string): Promise<string>
-}
+// Legacy names for the neutral file-access contract (ports/fileAccess).
+export type GitFileReadResult = FileReadResult
+export type GitFileWriteResult = FileWriteResult
+export type GitFileAccessPort = FileAccessPort
 
 export interface GitWindowUiPort {
   openInEditor(args: {
@@ -86,20 +77,7 @@ export interface GitCredential {
   expectedHost: string
 }
 
-export interface GitAccountPublic {
-  id: string
-  label: string
-  host: string
-  username: string
-  tokenLast4: string
-}
-
-export interface GitAccountInput {
-  label: string
-  host: string
-  username: string
-  token: string
-}
+export type { GitAccountInput, GitAccountPublic }
 
 export interface GitAccountViewPort {
   accounts: ReactiveValue<GitAccountPublic[]>
@@ -150,12 +128,7 @@ export interface IssuePort {
   }>>
 }
 
-export interface GitSettingsPort {
-  status: ReactiveValue<'starting' | 'connecting' | 'connected' | 'disconnected' | 'error'>
-  getAll(): Promise<Record<string, unknown> | null>
-  setMany(updates: Record<string, unknown>): Promise<void>
-  onChanged(callback: (payload: unknown) => void): () => void
-}
+export type GitSettingsPort = SettingsPort
 
 export interface GitSurfacePorts {
   gitTransport: GitTransport

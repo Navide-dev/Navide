@@ -1,12 +1,14 @@
 import { ref, effectScope, type EffectScope } from 'vue'
 import type { useBackend, WsResponse, BackendStatus } from '../useBackend'
 import {
-  createHostGitFileAccessPort,
-  createHostGitSettingsPort,
   createHostIssuePort,
   createHostTerminalDockPort,
 } from '../hostSurfacePorts'
-import type { GitFileAccessPort, GitSettingsPort, IssuePort } from '../../ports/gitSurface'
+import { createHostFileAccessPort } from '../hostFileAccess'
+import { createHostSettingsPort } from '../hostSettingsPort'
+import type { IssuePort } from '../../ports/gitSurface'
+import type { FileAccessPort } from '../../ports/fileAccess'
+import type { SettingsPort } from '../../ports/settings'
 import type { TerminalDockPort } from '@navide/terminal'
 
 // Lightweight stand-in for useBackend() used by composable tests. It records
@@ -103,8 +105,8 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
   }
 
   const rawBackend = { status, wsUrl, httpUrl, lastError, shell, autoRestart, send, on } as unknown as Backend
-  const fileAccess = createHostGitFileAccessPort(rawBackend)
-  const settingsPort = createHostGitSettingsPort(rawBackend)
+  const fileAccess = createHostFileAccessPort(rawBackend)
+  const settingsPort = createHostSettingsPort(rawBackend)
   const issuePort = createHostIssuePort(rawBackend)
   const terminalPort = createHostTerminalDockPort(rawBackend)
 
@@ -124,7 +126,7 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
     }
     return terminalPort.create(first as Parameters<TerminalDockPort['create']>[0], rest[0] as number)
   })
-  const backend = rawBackend as Backend & GitFileAccessPort & GitSettingsPort & IssuePort & TerminalDockPort
+  const backend = rawBackend as Backend & FileAccessPort & SettingsPort & IssuePort & TerminalDockPort
 
   return {
     backend,
