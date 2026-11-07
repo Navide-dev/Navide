@@ -28,6 +28,7 @@ from sqlalchemy import Engine
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session
 
+from . import host_routing
 from .config import Settings
 from .models import MemberSession
 
@@ -70,8 +71,8 @@ def decode_payload(sso: str) -> dict[str, str] | None:
     return dict(urllib.parse.parse_qsl(raw, keep_blank_values=True))
 
 
-def build_login_redirect(settings: Settings, nonce: str) -> str:
-    sso = encode_payload({"nonce": nonce, "return_sso_url": settings.auth_return_url})
+def build_login_redirect(settings: Settings, nonce: str, return_url: str | None = None) -> str:
+    sso = encode_payload({"nonce": nonce, "return_sso_url": return_url or settings.auth_return_url})
     query = urllib.parse.urlencode({"sso": sso, "sig": sign(settings.auth_secret, sso)})
     return f"{settings.auth_url}/{CLIENT_ID}/sso?{query}"
 
@@ -160,7 +161,20 @@ def clear_cookie(response: Response, request: Request, settings: Settings, name:
     )
 
 
-def start_login(settings: Settings, next_path: str, now: float) -> tuple[str, str]:
+def return_url(request: Request) -> str:
+    """The callback navide-auth returns to: the storefront and the developer
+    console each sign in on their own host (host-only cookies), and any other
+    host uses the configured REGISTRY_AUTH_RETURN_URL."""
+    settings: Settings = request.app.state.registry.settings
+    role = host_routing.request_role(request)
+    if role in (host_routing.STORE, host_routing.DEVELOPER):
+        return host_routing.origin_for(settings, role) + "/auth/callback"
+    return settings.auth_return_url
+
+
+def start_login(
+    settings: Settings, next_path: str, now: float, return_url: str | None = None
+) -> tuple[str, str]:
     """Return (login-state cookie value, navide-auth redirect URL)."""
     nonce = secrets.token_urlsafe(24)
     state = seal(
@@ -168,7 +182,7 @@ def start_login(settings: Settings, next_path: str, now: float) -> tuple[str, st
         "login-state",
         {"nonce": nonce, "next": next_path, "exp": now + LOGIN_STATE_TTL_SECONDS},
     )
-    return state, build_login_redirect(settings, nonce)
+    return state, build_login_redirect(settings, nonce, return_url)
 
 
 def session_version(engine: Engine, member_id: str) -> int:
@@ -241,8 +255,8 @@ def viewer_context(request: Request) -> dict:
     }
 
 
-def safe_next(value: str | None) -> str:
+def safe_next(value: str | None, default: str = "/publisher") -> str:
     """A local path under the site, never an absolute or protocol-relative URL."""
     if not value or not value.startswith("/") or value.startswith("//") or "\\" in value:
-        return "/publisher"
+        return default
     return value
