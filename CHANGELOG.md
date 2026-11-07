@@ -21,6 +21,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Interface wording (0.2.39): the Chinese interface (zh-TW and zh-CN) now calls a pane 分格 everywhere, instead of the English "pane" or the 面板 / CLI 視窗 / 子視窗 it was also written as. 視窗 (zh-CN 窗口) now means only a real window, 面板 only a panel, 對話框 (zh-CN 对话框) a dialog, and the English "workspace" and "tab" left in Chinese text read 工作區 and 分頁 (zh-CN 工作区 and 标签页). The help pages, the setup wizard and the zh-TW user guide explain the word where it first appears: "分格＝視窗裡的一格，通常跑一個 agent". The same applies to What's New, the Navide Browser and Plans plugin texts and the zh-TW docs; docs/en-US/glossary.md records the vocabulary. Navide Git 1.0.3, Navide Mini-IDE 1.0.3, Navide Plans 1.1.3.
 
+### Changed
+
+- Git (0.2.39): when the built-in Git plugin fails to start, the Git tab now says so, shows why, and offers Reinstall built-in Git (the same restore as the bundled row in Settings → Navide Plugins), instead of loading the old copy of the Git interface that was kept in the app for this case.
+
 ### Fixed
 
 - Git (0.2.38): a workspace set to the home folder no longer sets off a storm of git processes and `git.changed` refreshes. Every write under AppData, Library or a dot-folder there (browser caches, tool and OS state), or to a dot-file such as `.zsh_history` or `.DS_Store`, refreshed every Git view, each repository under the folder was watched a second time, and every refresh ran `git rev-parse` once per repository found: one Windows machine ran it 898 times in 2.5 minutes. These are now skipped when they are not inside a repository (a repository's own `.github`, `.gitignore`, `.env` or `Library` still counts), a repository inside a watched folder shares that folder's watch and still gets its own refresh, the branch shown for each repository is read from its `.git/HEAD` file instead of a git process, and repository scans that run at the same time share one scan. Git views refresh as they did before.

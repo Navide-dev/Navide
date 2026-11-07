@@ -10,7 +10,6 @@ import { effectScope, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GitTransport } from '../../../shared/gitCompatibility'
 import { useGit } from './useGit'
-import { useRepoDiscovery } from './useRepoDiscovery'
 
 const HOME = 'C:\\Users\\navide'
 
@@ -122,33 +121,5 @@ describe('Git panel on a workspace that is not a repository', () => {
     await advance(1_000)
     scope.stop()
     expect(backend.counts['git.log'] ?? 0).toBeGreaterThan(1)
-  })
-
-  // N = 36: discovery reads one status per repository (4). The mount costs 4,
-  // then each git.changed for the folder itself is backed off 400 ms doubling
-  // to 30 s while the scan keeps finding the same repositories: 7 rescans in
-  // 60 s (0.4 + 0.8 + … + 25.6 s), 32 reads; 36 leaves one rescan of slack.
-  // Before the fix every ~450 ms rescan cost 4: about 530 reads a minute.
-  it('keeps repository-badge reads under 36 in 60 s for a folder that keeps reporting changes', async () => {
-    const backend = echoingBackend({
-      rootIsRepo: false, repos: ['hwrepo1', 'hwrepo2', 'hwrepo3', 'hwrepo4'],
-    })
-    const scope = effectScope()
-    scope.run(() => useRepoDiscovery(() => HOME, backend.transport))
-    await advance(60_000)
-    scope.stop()
-    expect(backend.gitReads()).toBeLessThanOrEqual(36)
-  })
-
-  it('still refreshes a nested repository badge 400 ms after its own git.changed', async () => {
-    const backend = echoingBackend({
-      rootIsRepo: false, repos: ['hwrepo1'], echoPath: `${HOME}\\hwrepo1`,
-    })
-    const scope = effectScope()
-    scope.run(() => useRepoDiscovery(() => HOME, backend.transport))
-    await advance(2_000)
-    scope.stop()
-    // mount + one rescan per ~450 ms round
-    expect(backend.counts['git.status'] ?? 0).toBeGreaterThanOrEqual(4)
   })
 })

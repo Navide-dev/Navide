@@ -617,6 +617,11 @@
       "open-accounts": "Ouvrir les comptes Git"
     },
     "left-view-unavailable": "La vue Git intégrée est temporairement indisponible.",
+    "recovery-title": "Impossible de démarrer le Git intégré",
+    "recovery-reason": "Raison : {reason}",
+    "recovery-reinstall": "Réinstaller le Git intégré",
+    "recovery-reinstalling": "Réinstallation…",
+    "recovery-reinstall-failed": "Échec de la réinstallation : {reason}",
     "detail-open-failed": "Impossible d’ouvrir la vue détaillée. Le pane Git conserve la cible actuelle.",
     "open-workspace": "Ouvrez un espace de travail pour utiliser Git.",
     "settings-unavailable": "Impossible de charger les préférences Git.",

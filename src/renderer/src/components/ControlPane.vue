@@ -50,7 +50,6 @@ import type { BackendStatus, useBackend } from '../composables/useBackend'
 import type { DisplayStatus } from '@navide/terminal'
 import type { Role, RoleKey } from '../data/roles'
 import type { Stage, StageId } from '../data/stages'
-import type { Issue, IssueDetail, IssueProvider, IssueHandlerMode } from '../composables/useIssues'
 import { formatKeySpec, onSettingsChanged, registerCommand, settingsGet, settingsKeySpec, settingsSet, sidebarTabKeySpec } from '@navide/plugin-ui/shared'
 import { useUpdater } from '../composables/useUpdater'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -1199,10 +1198,6 @@ const emit = defineEmits<{
   (e: 'open-history', workspacePath?: string): void
   (e: 'switch-workspace'): void
   (e: 'workspace-browse', path: string): void
-  (e: 'dispatch-issue', payload: { paneId: string; issue: IssueDetail }): void
-  (e: 'spawn-for-issue', payload: { agentKey: string; mode: IssueHandlerMode; issue: Issue; provider: IssueProvider }): void
-  (e: 'open-git-accounts'): void
-  (e: 'changes-count', count: number): void
   (e: 'rename-pane', paneId: string, name: string): void
   /** A workspace's display name was edited. An empty `name` clears the alias
    *  and restores the folder name. */
@@ -3399,17 +3394,6 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <GitPluginHostSlot
             :workspace-path="workspace ?? ''"
             :visible="true"
-            :backend="backend"
-            :analyzer-model="analyzerModel"
-            :dispatch-targets="dispatchTargets"
-            :available-agents="availableAgents"
-            :issue-handoffs="issueHandoffs"
-            @changes-count="$emit('changes-count', $event)"
-            @open-workspace="$emit('workspace-browse', $event)"
-            @dispatch-issue="$emit('dispatch-issue', $event)"
-            @spawn-for-issue="$emit('spawn-for-issue', $event)"
-            @focus-pane="$emit('focus-pane', $event)"
-            @open-git-accounts="$emit('open-git-accounts')"
           />
         </template>
         <template v-if="legacyPlansRecovery && backend && sidebarTab === 'plans'">

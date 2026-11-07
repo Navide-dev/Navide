@@ -617,6 +617,11 @@
       "open-accounts": "Открыть аккаунты Git"
     },
     "left-view-unavailable": "Встроенное представление Git временно недоступно.",
+    "recovery-title": "Не удалось запустить встроенный Git",
+    "recovery-reason": "Причина: {reason}",
+    "recovery-reinstall": "Переустановить встроенный Git",
+    "recovery-reinstalling": "Переустановка…",
+    "recovery-reinstall-failed": "Не удалось переустановить: {reason}",
     "detail-open-failed": "Не удалось открыть подробное представление. Панель Git сохраняет текущую цель.",
     "open-workspace": "Откройте рабочую область, чтобы пользоваться Git.",
     "settings-unavailable": "Не удалось загрузить настройки Git.",

@@ -392,6 +392,8 @@ const mainWindows = new Set<BrowserWindow>()
 const contributionWindows = new Map<string, BrowserWindow>()
 const gitRecoveryForced = process.env['NAVIDE_GIT_RECOVERY'] === 'legacy'
 let gitRecoveryEnabled = gitRecoveryForced
+/** Why this session is in Git recovery, shown by the main-window recovery panel. */
+let gitRecoveryReason = gitRecoveryForced ? 'NAVIDE_GIT_RECOVERY=legacy is forcing legacy recovery' : ''
 let legacyGitRegisteredForForcedRecovery = false
 /** The ready-time legacy Git registration for a recovery session. */
 function registerForcedLegacyGit(): void {
@@ -1684,6 +1686,7 @@ if (shouldAttemptFactoryGit({
   if (selection.mode === 'v2') factoryGitActivations.push(selection.activation)
   else if (selection.mode === 'legacy') {
     gitRecoveryEnabled = true
+    gitRecoveryReason = selection.v2Reason
     warnMain(`[main] bundled navide.git v2 failed; using legacy recovery: ${selection.v2Reason}`)
   } else {
     warnMain(
@@ -1709,6 +1712,7 @@ frontendPluginManager.setActivationFailureHandler((failure) => {
         `[main] navide.git v2 activation failed (${failure.reason}); switched to legacy recovery`
       )
       gitRecoveryEnabled = true
+      gitRecoveryReason = failure.reason
       for (const [key, hostWindow] of contributionWindows) {
         if (key.startsWith('navide.git.') && !hostWindow.isDestroyed()) hostWindow.close()
       }
@@ -4617,7 +4621,7 @@ ipcMain.handle('window:openGitLeft', async (event, args: Record<string, unknown>
   if (!workspacePath) return { ok: false }
   await migrateGitStorage()
   const httpUrl = backend ? `http://${backend.host}:${backend.port}` : ''
-  return openGitLeftPluginView(
+  const result = await openGitLeftPluginView(
     hostWindow,
     workspacePath,
     bounds,
@@ -4625,6 +4629,7 @@ ipcMain.handle('window:openGitLeft', async (event, args: Record<string, unknown>
     currentUiTheme(),
     currentGitReadOnlyQuery(),
   )
+  return result.fallback === 'legacy' ? { ...result, reason: gitRecoveryReason } : result
 })
 
 ipcMain.handle('window:updateGitLeft', (event, args: Record<string, unknown>) => {
@@ -4632,7 +4637,8 @@ ipcMain.handle('window:updateGitLeft', (event, args: Record<string, unknown>) =>
   const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
   const bounds = pluginBoundsFrom(args?.bounds)
   if (!hostWindow || !bounds) return { ok: false }
-  return updateGitLeftPluginView(hostWindow, bounds, args?.visible === true)
+  const result = updateGitLeftPluginView(hostWindow, bounds, args?.visible === true)
+  return result.fallback === 'legacy' ? { ...result, reason: gitRecoveryReason } : result
 })
 
 ipcMain.handle('window:closeGitLeft', (event) => {

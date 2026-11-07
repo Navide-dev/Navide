@@ -617,6 +617,11 @@
       "open-accounts": "Mở tài khoản Git"
     },
     "left-view-unavailable": "Chế độ xem Git nhúng tạm thời không khả dụng.",
+    "recovery-title": "Không thể khởi động Git tích hợp",
+    "recovery-reason": "Lý do: {reason}",
+    "recovery-reinstall": "Cài lại Git tích hợp",
+    "recovery-reinstalling": "Đang cài lại…",
+    "recovery-reinstall-failed": "Cài lại thất bại: {reason}",
     "detail-open-failed": "Không mở được chế độ xem chi tiết. Bảng Git vẫn giữ mục tiêu hiện tại.",
     "open-workspace": "Hãy mở một workspace để dùng Git.",
     "settings-unavailable": "Không tải được tùy chọn Git.",

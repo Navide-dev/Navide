@@ -617,6 +617,11 @@
       "open-accounts": "開啟 Git 帳號"
     },
     "left-view-unavailable": "嵌入式 Git View 暫時無法使用。",
+    "recovery-title": "內建 Git 無法啟動",
+    "recovery-reason": "原因：{reason}",
+    "recovery-reinstall": "重新安裝內建 Git",
+    "recovery-reinstalling": "正在重新安裝…",
+    "recovery-reinstall-failed": "重新安裝失敗：{reason}",
     "detail-open-failed": "無法開啟詳細檢視，Git 面板會保留目前的目標。",
     "open-workspace": "請先開啟工作區以使用 Git。",
     "settings-unavailable": "Git 偏好設定載入失敗。",

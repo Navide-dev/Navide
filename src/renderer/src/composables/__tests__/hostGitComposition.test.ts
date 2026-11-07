@@ -59,30 +59,24 @@ describe('Host Git composition', () => {
 
   it('requires explicit transport composition for Host-owned Git composables', () => {
     const rawGitCall = /useGit\(\(\) => (?:props\.)?workspacePath,\s*(?:props\.)?backend\)/
-    const rawRepoDiscoveryCall = /useRepoDiscovery\(\(\) => props\.workspacePath,\s*props\.backend\)/
 
     for (const sourcePath of collectHostOwnedSources()) {
       const relativePath = relative(rendererRoot, sourcePath)
       const source = readFileSync(sourcePath, 'utf8')
       expect(source, relativePath).not.toMatch(rawGitCall)
-      expect(source, relativePath).not.toMatch(rawRepoDiscoveryCall)
     }
   })
 
-  it('keeps the legacy Git implementation behind a dynamic recovery adapter', () => {
+  it('shows the recovery panel instead of any legacy Git implementation', () => {
     const directGitImplementationImport = /from ['"][^'"]*(?:GitPane|MultiRepoGit|GitHistoryModal|GitCredentialModal)\.vue['"]/
-    const recoveryAdapter = 'components/GitLegacyLeftFallback.vue'
     const slot = readFileSync(join(rendererRoot, 'components', 'GitPluginHostSlot.vue'), 'utf8')
     const directImporters = collectProductionSources(rendererRoot)
       .filter((sourcePath) => v2GitHostCompositionSources.has(relative(rendererRoot, sourcePath)))
-      .filter((sourcePath) => relative(rendererRoot, sourcePath) !== recoveryAdapter)
       .filter((sourcePath) => directGitImplementationImport.test(readFileSync(sourcePath, 'utf8')))
       .map((sourcePath) => relative(rendererRoot, sourcePath))
 
     expect(directImporters).toEqual([])
-    expect(slot).not.toContain("import GitLegacyLeftFallback from './GitLegacyLeftFallback.vue'")
-    expect(slot).toContain("import('./GitLegacyLeftFallback.vue')")
-    expect(readFileSync(join(rendererRoot, recoveryAdapter), 'utf8'))
-      .toContain("import MultiRepoGit from './MultiRepoGit.vue'")
+    expect(slot).toContain("import GitRecoveryPanel from './GitRecoveryPanel.vue'")
+    expect(slot).not.toContain('GitLegacyLeftFallback')
   })
 })
