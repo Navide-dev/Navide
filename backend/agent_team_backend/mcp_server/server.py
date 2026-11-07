@@ -49,6 +49,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import Receive, Scope, Send
 
+from agent_team_backend import __version__ as _backend_version
 from agent_team_backend import login_panes
 from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
@@ -234,6 +235,12 @@ server = NavideMCP(
         "into the form channels_bot_add_open or channels_bot_add_fill opens."
     ),
 )
+# Every initialize response carries a server version. Left unset, the MCP SDK
+# reads it from the installed ``mcp`` package metadata on each new session; in
+# the onefile backend that metadata lives in the temp extraction directory,
+# which macOS purges after three idle days -- after that every session failed
+# to initialize until the app was restarted (2026-11-08).
+server._mcp_server.version = _backend_version
 
 #: Tools owned by a built-in Navide plugin, hidden from tools/list while the
 #: user has that plugin disabled. Filled by the plugin's installer.
