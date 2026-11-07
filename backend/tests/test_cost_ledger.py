@@ -52,6 +52,28 @@ def test_schema_goes_through_migrate_with_indexes(tmp_path: Path) -> None:
             "usage_calls_profile_ts"} <= names
 
 
+def test_a_failed_migration_disables_the_ledger_instead_of_raising(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """app.py builds the ledger at import time: a migration that fails must
+    leave the backend starting, with the ledger off."""
+    db = Database(tmp_path / "navide.db")
+    real_migrate = db.migrate
+
+    def migrate(component: str, version: int, step) -> None:
+        if component == "cost_ledger" and version == 3:
+            raise RuntimeError("ALTER TABLE failed")
+        real_migrate(component, version, step)
+
+    monkeypatch.setattr(db, "migrate", migrate)
+    ledger = CostLedger(db)  # does not raise
+    assert ledger.enabled is False
+    assert ledger.disabled_reason == "RuntimeError: ALTER TABLE failed"
+    assert ledger.record(_call("k1", "s1"), "/w", "01:dev") is False
+    with pytest.raises(ValueError, match="cost ledger is disabled"):
+        ledger.report("model")
+
+
 def test_claude_call_splits_tokens_and_uses_transcript_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
