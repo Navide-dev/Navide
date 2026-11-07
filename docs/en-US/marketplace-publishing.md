@@ -1,7 +1,9 @@
 # Publishing to the Navide Marketplace
 
 This guide takes a plugin from an empty directory to a listing on the Navide
-Marketplace (`https://server.navide.dev/registry`). Every step uses one tool,
+Marketplace (`https://marketplace.navide.dev`; the developer console is
+`https://developers.navide.dev`, and the API the App and the CLI talk to stays
+at `https://server.navide.dev/registry`). Every step uses one tool,
 the `navide-plugin` CLI from `@navide/plugin-sdk`.
 
 ```text
@@ -276,7 +278,7 @@ deadline and warns in the last seven days.
 
 ### Sign in and claim a namespace
 
-1. Open <https://server.navide.dev/registry/publish> and sign in with your
+1. Open <https://developers.navide.dev/publish> and sign in with your
    Navide account, and make sure your developer qualification is approved
    (above).
 2. Open **Claim a namespace** (`/publisher/claim`), check a name and claim it.
@@ -595,7 +597,7 @@ status and the moderator's resolution; the reporter's identity is not shown.
 Moderators handle them in the admin queue (`/admin/reports`) and either
 dismiss a report or act on it: yank the version, or block the package or the
 publisher. Removals, and why, are listed publicly at
-<https://server.navide.dev/registry/removed>.
+<https://marketplace.navide.dev/removed>.
 
 ## 10. Re-listing Navide's own plugins at a release
 

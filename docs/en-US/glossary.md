@@ -11,7 +11,7 @@ The rule behind every term: **name a thing by who owns its files.**
 | Concept | zh-TW | en | ja | Covers |
 |---|---|---|---|---|
 | A package that extends Navide itself | Navide 外掛 | Navide plugin | Navide プラグイン | Manifest v1/v2 packages, the plugin SDK and `navide-plugin`, the plugin backend sandbox, the bundled `navide.git`, `navide.plans` and `navide.mini-ide` |
-| Where Navide plugins are published | Navide 市集 | Navide Marketplace | Navide マーケットプレイス | `server.navide.dev/registry` |
+| Where Navide plugins are published | Navide 市集 | Navide Marketplace | Navide マーケットプレイス | `marketplace.navide.dev` |
 | A Host-drawn button the user adds to run actions | 動作按鈕 | Action button | アクションボタン | The bar at the right end of the stage tabs, Settings → Layout |
 | A bundle of Navide plugins | Navide 外掛組合 | Navide Plugin Pack | Navide プラグインパック | Packages that declare `extensionPack` |
 | The Settings group for what the AI CLIs work with | Agent 資產 | Agent Assets | エージェント資産 | The pages listed under it in the Settings sidebar, in its order: MCP, Skills, Prompts, Memory, Credentials & Keys, Extensions. Being an Agent Asset says nothing about sync: credentials and keys never leave the machine, and Memory and Extensions do not sync |
