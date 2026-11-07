@@ -346,7 +346,7 @@ Action —— `ui.pane.create`、`ui.preview.show`、`ui.window.openGit` —— 
 | Action | 參數 | 效果 |
 |---|---|---|
 | `ui.actions.describe` | `{prefix?}` | 描述已登記的 Action，或只列出以 `prefix` 開頭的 id。每個 Action 回傳一列：`{id, title, category, args?, summary?, humanOnly?, dedicatedTool?, workspaceScoped}`。`humanOnly` 為 `true` 或其適用條件，代表會以 `ui_human_only` 拒絕；`dedicatedTool` 指出 `ui_invoke` 拒絕時該改用的工具。只有 `ui.*` 列帶 `args` 與 `summary` |
-| `ui.settings.open` | `{tab?}`（`general`、`mcp`、`analyzer`、`updates`、`appearance`、`accounts`、`keybindings` 之一） | 開啟 Settings，可指定切到特定分頁 |
+| `ui.settings.open` | `{tab?, platform?, account?}`（`tab` 為 `general`、`mcp`、`analyzer`、`updates`、`appearance`、`accounts`、`keybindings`、`channels` 之一） | 開啟 Settings，可指定切到特定分頁。`tab: "channels"` 時，`platform`（`telegram`、`discord`…）與 `account`（`channels_status` 裡的 bot id，省略為 `default`）會開啟 Channels 頁並選到那個 bot；頁面上沒有那個 bot 時只開頁面，不報錯 |
 | `ui.settings.close` | — | 關閉 Settings |
 | `ui.settings.yolo` | `{yolo?}` | 讀取全域的 CLI 權限略過開關；有給 `yolo` 就設定它。回傳 `{yolo, agents}`，每個 agent 是 `{agent, mode, skipFlag}`。它不是 Workspace 範圍的：任何視窗都能回答，而且單一廠商的答案是 `skipFlag`，不是 `yolo` |
 | `ui.pane.create` | `{agent, name?, task?}` | 在該視窗已開啟的 Workspace 中為 `agent` Spawn 一個分格；若有給 `task`，會作為 Kickoff Prompt 送出並略過 Role 注入 |
@@ -477,6 +477,34 @@ Skills 工作流另提供經使用者授權的安裝與投遞變更；mutation a
 | `workspace_switch` | `path` | 把承載呼叫分格的那個視窗切換到它已持有的另一個 Workspace（一視窗多專案）；分格不受影響。視窗未持有 `path` 時回錯誤並指向 `workspace_open`；該視窗有 Pipeline 在跑時也會拒絕（先 `pipeline_abort`，或從側欄切換）。只限分格呼叫 —— host 或外部呼叫者沒有自己的視窗，會得到 `ok: false`（改用 `ui_invoke` 帶 `workspace_path` 與 action `ui.workspace.switch`）。回傳 `{ok, path}`，`path` 是現在畫面上的 Workspace |
 | `mcp_list` | — | 這裡設定的 MCP Server —— Navide 自己以 Client 身分連接的那些（附即時狀態），以及各家 CLI 自己設定檔裡（`~/.claude.json`、`~/.codex/config.toml` 等）反射出來的那些，照檔案寫的呈現。回傳 `{servers, native, agents}`。每個 Navide 管理的 Server 是 `{name, enabled, transport, command, args, env}` 或 `{name, enabled, transport, url, headers}`，外加 `status`（`disabled`／`connected`／`error`／`unknown`）與 `tool_count`；工具清單本身不帶。每個 native 條目是 `{name, agent, transport, path, command, args, url, env, headers, enabled, valid, error}`。`agents` 是每家廠商與 Navide 對它 MCP 能做的事（`wired`／`planned`／`unsupported`），以及它自己的設定有沒有被反射。所有長得像憑證的值 —— env 與 header 的值、`--api-key=` 這類引數、URL 裡的 userinfo 與機密查詢參數 —— 都已經遮成 `***`；名稱與主機保留，條目才認得出來。全域清單，不分 Workspace。唯讀 —— 新增、啟用或編輯 Server 是使用者在 Settings 裡的決定 |
 | `prompt_list` | `id=""` | 使用者放在 Settings → Prompts 的 Prompt 技能 —— 從 App 對 CLI 分格發射的已存指示。不帶 `id` 時只列 Metadata：`{skills, default_id}`，每個技能是 `{id, name, icon, description, category, enabled, isDefault, maxTurns}`，`default_id` 是標為預設的那個技能的 id（沒有則為 `""`）。使用者從沒存過任何一個時會多一個 `note`：App 會在第一次使用時植入一個內建技能，而那個從這裡看不到。帶 `id` 時回傳那一個技能的完整內容 —— `{skill}`，含 `prompt` 與 `resumePrompt`；未知的 id 回 `{ok: false, error}`。唯讀：建立或編輯是在 Settings 裡做的 |
+
+### 聊天頻道
+
+`channels_*` tool 操作 Navide 的聊天頻道 bot（設定 → Channels）：查詢有哪些 bot、聊天室、綁定與配對請求，做呼叫者權限範圍內的變更，其餘的向使用者提出請求。只有使用者能給的東西——讓某人進來、新增或移除 bot、超出呼叫者範圍的綁定——agent 只能提出請求：主視窗會顯示是誰提出、為什麼，只有在那裡按下才會生效。一次停掉所有 bot 的總開關不在任何 tool 上。要讓使用者看頁面，`ui_invoke` `ui.settings.open` `{tab: "channels", platform, account}` 會開啟頁面並選到那個 bot。
+
+| Tool | 參數 | 做什麼 |
+|---|---|---|
+| `channels_status` | — | 每個平台的每個 bot：`{ok, enabled, platforms: [{platform, configured, enabled, bots}], note}`，`enabled` 是頻道總開關。每個 bot 是 `{platform, account, name, configured, enabled, status, bot_id, bindings, last_activity_at}`：`status` 是連線狀態（`lifecycle`、`connected`、`last_error`、`identity`…），`bot_id` 是 Telegram bot id，`bindings` 是它驅動的分格 `{pane_id, pane_name, pane_exists, workspace_path, workspace_name, chat_title, created_at}` |
+| `channels_bindings` | — | 每個綁定：`{ok, bindings: [{pane_id, platform, account, chat_id, thread_id, title, verbosity, parent_pane_id, auto}], note}`。一個聊天室同時只驅動一個分格；`auto` 表示為子分格自動建立的主題 |
+| `channels_chats` | `platform=""`、`account=""` | 執行中的 bot 認得的聊天室，給 `channels_bind` 用：`{ok, bots: [{platform, account, chats: [{chat_id, title, kind, supports_topics, …}]}]}`。不帶 platform 時列出所有執行中的 bot |
+| `channels_pairing_requests` | `platform=""` | 等著被放行的人：`{ok, requests: [{platform, account, code, sender_id, sender_name, created_at, source}]}`，`source` 為 `invite`（兌換了連結碼）或 `pairing` |
+| `channels_link_code` | `platform`、`account=""`、`target="direct"` | 一次性連結碼（10 分鐘，每個 bot 最多 5 個），傳送它的人會成為一筆配對請求：`{ok, platform, code, target, expires_at, url, id}`。光有碼不會放任何人進來；`id` 可用 `channels_request_status` 追蹤 |
+| `channels_bind` | `platform`、`chat_id`、`pane=""`、`pane_id=""`、`account=""`、`mode="existing"`、`thread_id=""`、`title=""`、`verbosity=""`、`reason=""` | 把聊天室綁到分格（沒指定分格就是呼叫者自己）。呼叫者自己工作區的分格、bot 認得且有人被放行過的聊天室，直接綁定：`{ok, binding}`。其他情況——別的工作區的分格、bot 沒見過的聊天室、裡面沒人被放行過的聊天室——變成請求：`{ok, id, status: "pending", why, expires_at, note}`。`mode` 為 `new` 時在平台支援的地方建立新主題。聊天室會被告知它現在驅動哪個分格；已綁在別處的聊天室會被拒絕 |
+| `channels_unbind` | `pane=""`、`pane_id=""` | 解除呼叫者自己工作區某個分格的綁定：`{ok, removed}`。聊天室會被告知 |
+| `channels_set_verbosity` | `verbosity`、`pane=""`、`pane_id=""` | 分格的活動有多少會送到聊天室：`replies`、`minimal`、`standard` 或 `full`；子主題跟著變 |
+| `channels_bot_rename` | `platform`、`account`、`name` | 只改 bot 在 Navide 裡的顯示名稱 |
+| `channels_bot_set_enabled` | `platform`、`account`、`enabled` | 連線或中斷單一 bot；不會刪除任何東西 |
+| `channels_pairing_reject` | `platform`、`code` | 拒絕一筆配對請求 |
+| `channels_bot_add_open` | `platform` | 在 Navide 開啟空白的新增 bot 表單讓使用者填：`{ok, opened, platform, note}` |
+| `channels_bot_add_fill` | `platform`、`name=""`、`reason=""` | 新增 bot 的請求：表單開啟時 `name` 已填好並標示為 agent 填寫；憑證由使用者自己輸入並按新增。`result` 為 `{platform, account}` |
+| `channels_managed_bot_create` | `manager_account=""`、`username=""`、`name=""` | 由一個開了 Bot Management Mode、且有人連結的 Telegram bot 建立新 bot：`{ok, id, url, expires_at, note}`。那個人在 `url` 按下建立後，Navide 自己向 Telegram 取得新 bot 的憑證並加入；沒有任何人經手憑證。`result` 為 `{account, name, link}` |
+| `channels_pairing_approve_request` | `platform`、`code`、`bind_pane=""`、`bind_pane_id=""`、`reason=""` | 放某人進來的請求；指定分格時，同一次按下也會把他的聊天室綁到該分格。`result` 為 `{sender_id, binding?, bind_error?}` |
+| `channels_bot_remove_request` | `platform`、`account`、`reason=""` | 移除 bot 的請求（它儲存的憑證、被放行的人與綁定會一起刪除） |
+| `channels_request_status` | `id`、`wait_s=0` | 請求的進度：`{ok, id, kind, status, result, error, reason, target, created_at, expires_at}`，status 為 `pending`、`applying`、`completed`、`failed`、`rejected`（使用者拒絕）或 `expired`；還在等使用者的連結碼會多一個 `pairing_code`。`wait_s`（最多 60）會等到它結束。只有提出請求的分格讀得到，後端重啟會忘掉所有請求（`unknown-request`） |
+
+所有會做變更或提出請求的 tool 都需要 CLI 分格呼叫者（`pane-caller-required`），紀錄才能寫出是哪個分格；`channels_unbind` 與 `channels_set_verbosity` 還要求分格在呼叫者自己的工作區（`cross-workspace`），提出請求需要有開著的主視窗（`no-main-window`）。每個變更與請求都會連同呼叫者寫進 agent 操作紀錄（`agent-window-actions.jsonl`）；每個主視窗都會跳 toast 寫出是哪個分格做的變更，Channels 頁在「agent 的請求」下列出待決定的請求，附核准與拒絕（新增 bot 則是開啟表單）。決定只接受主視窗自己的連線，agent 沒有這條連線。頻道閘道回絕時是 `{ok: false, error, error_code: "channels-refused"}`；平台或 bot id 格式錯誤是 `bad-request`。
+
+bot 憑證絕不會到呼叫者手上：沒有任何 tool 收憑證，每個 bot 的設定（secret hint 放在那裡）都不回傳，名稱像憑證的鍵一律剝掉，文字也會遮蔽——執行中的 bot 登記過的所有 secret（不分平台）、`/bot<token>/` 網址段，以及長得像 Telegram、Slack 或 Discord token 的字串，都會變成 `<redacted>` 或 `[redacted]`。頻道閘道沒在跑時，每個 tool 都回 `{ok: false, error_code: "channels-not-running"}`。
 
 ### Navide 市集（唯讀）
 

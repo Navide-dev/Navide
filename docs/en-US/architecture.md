@@ -263,6 +263,15 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   and its panes lose the permission bypass unless the trigger is explicitly
   unattended, including when a pane reopens one of the run's sessions under a
   new pane id. Claude Code is the only CLI a webhook run can use. See [Pipeline webhooks](pipeline-webhooks.md).
+- An agent works the chat channels through the `channels_*` MCP tools
+  ([External MCP Control](external-mcp-control.md#chat-channels)). It binds a
+  chat directly only to a pane of its own workspace, and only the Telegram DM
+  of a sender already let in; letting a person in, adding or removing a bot and
+  every other bind are requests a main window decides
+  (`channels/agent_requests.py`), accepted only from a main window's own WS
+  session, which an agent does not have. No tool takes or returns a bot
+  credential. Because pane identity is not a process boundary (below), "its
+  own workspace" is the workspace of the pane the caller presents itself as.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is
