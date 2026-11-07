@@ -190,7 +190,7 @@ token 依事件時間，週期數依開始時間（未知時用重設時間）�
 
 ## Git 與 Review
 
-Navide 內建官方 Git Factory Package。其 Active Package Version 會同時提供嵌入式左側 View 與獨立 Git Window。Bundled Git 不能移除，只能在 Extensions 停用（見下文）。若存在已驗證的 Marketplace Version，會優先使用該版本。Git View 支援 Repository Discovery、Working Tree Inspection、Staging、Commit、Branch、Remote、Issue 與相關工作流；Multi-repository Workspace 可以在偵測到的 Repository 間切換。Discovery Scan 不會阻塞 Backend，並會在慢速 Filesystem 上經過受限的掃描時間後回傳部分結果。Repository Operation 仍經由 Navide Host／Backend 邊界處理；GitHub 與 GitLab Issue Detection 在可用時使用設定的 `gh` 或 `glab` CLI。若選定的 v2 Package 無法 Load、Mount 或回報 Ready，Navide 會明確標示並在該次 Process 使用保留的 Legacy Git Renderer；Security、Trust 或 Permission Denial 不會觸發 Fallback。
+Navide 內建官方 Git Factory Package。其 Active Package Version 會同時提供嵌入式左側 View 與獨立 Git Window。Bundled Git 不能移除，只能在 Extensions 停用（見下文）。若存在已驗證的 Marketplace Version，會優先使用該版本。Git View 支援 Repository Discovery、Working Tree Inspection、Staging、Commit、Branch、Remote、Issue 與相關工作流；Multi-repository Workspace 可以在偵測到的 Repository 間切換。Discovery Scan 不會阻塞 Backend，並會在慢速 Filesystem 上經過受限的掃描時間後回傳部分結果。Repository Operation 仍經由 Navide Host／Backend 邊界處理；GitHub 與 GitLab Issue Detection 在可用時使用設定的 `gh` 或 `glab` CLI。若選定的 Git Package 無法 Load、Mount 或回報 Ready，Git 分頁會明確說明並顯示原因，提供 **Reinstall built-in Git**；再次開啟分頁也會重試。Security、Trust 或 Permission Denial 不會觸發 Fallback。
 
 Commit 前務必審查變更，特別是在 Automation 或 Parallel Run 之後。Agent 生成的變更不會因為顯示在 Git Panel 中就自動變得安全。
 
