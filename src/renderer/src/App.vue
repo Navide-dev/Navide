@@ -84,7 +84,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, fenceExternalContent, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -16516,7 +16516,7 @@ async function runPluginNode(
   if (pipeline.state !== 'running') return
   if (answer.ok) {
     const summary = typeof answer.output === 'string' ? answer.output : JSON.stringify(answer.output)
-    pipelineDag.callFinished(call.nodeId, { status: 'done', output: answer.output, summary: `[external content from ${call.pluginId}]\n${summary}` })
+    pipelineDag.callFinished(call.nodeId, { status: 'done', output: answer.output, summary: fenceExternalContent(`${call.pluginId}:\n${summary}`) })
     pipelineLog(`◇ Plugin node "${call.label}" ✓`)
   } else {
     pipelineDag.callFinished(call.nodeId, { status: 'failed', error: `${answer.code}: ${answer.message}` })

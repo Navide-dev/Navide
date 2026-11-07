@@ -23,6 +23,7 @@
  * hooks are all no-ops, so linear runs behave exactly as before.
  */
 import type { Stage } from '../data/stages'
+import { fenceExternalContent } from './agentMessaging'
 import {
   BRANCH_DEFAULT,
   DEFAULT_MAX_LOOPS,
@@ -582,11 +583,15 @@ export function expandNodeOutputs(
 ): string {
   if (!text.includes('{{node.')) return text
   const ids = new Set(graph.nodes.map((n) => n.id))
+  // A plugin node's output came from a third-party package: external content
+  // wherever it lands in a prompt, never an instruction.
+  const external = new Set(graph.nodes.filter((n) => n.kind === 'plugin').map((n) => n.id))
   return text.replace(NODE_OUTPUT_RE, (whole, id: string, path: string) => {
     if (!ids.has(id)) return whole
     const v = path ? valueAtPath(outputOf(id), path.slice(1)) : outputOf(id)
     if (v === undefined || v === null) return ''
-    return typeof v === 'string' ? v : JSON.stringify(v)
+    const value = typeof v === 'string' ? v : JSON.stringify(v)
+    return external.has(id) ? fenceExternalContent(value) : value
   })
 }
 
