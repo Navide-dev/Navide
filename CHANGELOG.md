@@ -4,6 +4,12 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### New on Navide Marketplace
+
+<!-- Listings first published on Navide Marketplace in this release, and
+Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
+"- <Display name> (`<namespace.name>` <version>, by <publisher namespace>): what it does. Featured." -->
+
 ## [0.2.38] — 2026-11-07
 
 ### Added
