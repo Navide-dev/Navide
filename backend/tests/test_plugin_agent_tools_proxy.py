@@ -197,7 +197,8 @@ EVOLVE_RETRO_CORE_TOOLS = frozenset({"evolve_retro"})
 CHANNEL_CORE_TOOLS = frozenset({
     "channels_status", "channels_bindings", "channels_chats", "channels_pairing_requests", "channels_link_code",
     "channels_bind", "channels_unbind", "channels_set_verbosity", "channels_bot_rename", "channels_bot_set_enabled",
-    "channels_pairing_reject",
+    "channels_pairing_reject", "channels_bot_add_open", "channels_bot_add_fill", "channels_managed_bot_create",
+    "channels_pairing_approve_request", "channels_bot_remove_request", "channels_request_status",
 })
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server). Re-pinned in 0.2.32 when

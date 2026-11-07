@@ -9,6 +9,7 @@ import {
   newAccountId,
   useChannels,
   type ChannelAccountState,
+  type ChannelAgentRequest,
   type ChannelAllowEntry,
   type ChannelLinkInvite,
   type ChannelManagedCreatedEvent,
@@ -24,9 +25,10 @@ import {
 import { channelBotLabel, channelBotTag } from '../../lib/channelIdentity'
 import { relativeTime } from '../../lib/relativeTime'
 import { channelBotSearchFields } from '../../lib/channelSearch'
-import { channelsBotRequest, takeChannelsBotRequest } from '../../channelsBotRequest'
+import { channelsBotRequest, takeChannelsBotRequest, type ChannelsBotTarget } from '../../channelsBotRequest'
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
 import ChannelAccessRows from './ChannelAccessRows.vue'
+import ChannelAgentRequests from './ChannelAgentRequests.vue'
 import ChannelBotNav, { type ChannelNavGroup, type ChannelNavGrouping, type ChannelNavItem, type ChannelNavSort } from './ChannelBotNav.vue'
 import ChannelChatBindings from './ChannelChatBindings.vue'
 import SettingsCard from './SettingsCard.vue'
@@ -204,13 +206,34 @@ function toggleExpanded(spec: RegisteredChannelPlatform, bot: BotRow): void {
   if (usesQuickAdd(spec, bot)) void prefillFromClipboard(spec, bot.key)
 }
 
-function startAdding(spec: RegisteredChannelPlatform): void {
+function startAdding(spec: RegisteredChannelPlatform, readClipboard = true): string {
   const account = newAccountId()
   adding[spec.id] = account
   const bot = emptyBot(spec.id, account, true)
   openForm(spec, bot)
   show(bot.key)
-  if (usesQuickAdd(spec, bot)) void prefillFromClipboard(spec, bot.key)
+  if (readClipboard && usesQuickAdd(spec, bot)) void prefillFromClipboard(spec, bot.key)
+  return bot.key
+}
+
+// An add-a-bot form an agent opened (channels_bot_add_open / _fill), by the new bot's key:
+// its request, if it filed one, and who asked. The clipboard is never read for these.
+const agentAdd = reactive<Record<string, { requestId: string; requester: string }>>({})
+
+function openAgentAdd(add: NonNullable<ChannelsBotTarget['add']>, platform: string): void {
+  const spec = specs.value.find((s) => s.id === platform)
+  if (!spec) return
+  const key = startAdding(spec, false)
+  if (add.name && drafts[key]) drafts[key].name = add.name
+  agentAdd[key] = { requestId: add.requestId, requester: add.requester }
+}
+
+function fillAgentRequest(req: ChannelAgentRequest): void {
+  openAgentAdd({
+    name: req.draft.name ?? '',
+    requestId: req.id,
+    requester: req.requester.address || req.requester.pane_id || '',
+  }, req.target.platform ?? '')
 }
 
 /** A bot not set up yet, on a platform with a credential to verify (not iMessage). */
@@ -323,6 +346,11 @@ async function quickAdd(spec: RegisteredChannelPlatform, bot: BotRow): Promise<v
       return
     }
     closeForm(spec, bot)
+    const agent = agentAdd[bot.key]
+    if (agent) {
+      delete agentAdd[bot.key]
+      if (agent.requestId) void store.finishAgentRequest(agent.requestId, true, bot.account)
+    }
     // The link guide only shows on a connected bot: hand it the invite only then.
     const added = botsOf(spec.id).find((b) => b.account === bot.account)
     if (res.data.link && added && isConnected(added)) {
@@ -752,6 +780,10 @@ watch(() => store.loaded.value, (loaded) => {
 watch(() => [channelsBotRequest.value, store.loaded.value] as const, ([request, loaded]) => {
   if (!request || !loaded) return
   takeChannelsBotRequest()
+  if (request.add) {
+    openAgentAdd(request.add, request.platform)
+    return
+  }
   const key = botKey(request.platform, request.account || DEFAULT_ACCOUNT)
   if (viewExists(key)) show(key)
 }, { immediate: true })
@@ -809,6 +841,7 @@ function removeEntry(entry: ChannelAllowEntry): void {
       </SettingRow>
     </SettingsCard>
     <p v-if="listError || store.error.value" class="ch-error ch-list-error" role="alert">{{ listError || store.error.value }}</p>
+    <ChannelAgentRequests :store="store" @fill="fillAgentRequest" />
 
     <div class="ch-layout" :class="{ 'ch-layout--solo': !navGroups.length }" :data-narrow-pane="narrowPane" data-testid="channel-layout">
       <ChannelBotNav
@@ -1049,7 +1082,10 @@ function removeEntry(entry: ChannelAllowEntry): void {
                   :placeholder="f.secret && bot.configured ? t('channels.secret-stored') : ''"
                 />
               </label>
-              <details v-if="bot.isNew && usesQuickAdd(spec, bot)" class="ch-advanced" data-testid="channel-advanced">
+              <p v-if="agentAdd[bot.key]" class="ch-form-hint" data-testid="channel-agent-add-note">
+                {{ t('channels.agent.add-note', { requester: agentAdd[bot.key]!.requester || '?' }) }}
+              </p>
+              <details v-if="bot.isNew && usesQuickAdd(spec, bot)" class="ch-advanced" data-testid="channel-advanced" :open="!!agentAdd[bot.key]">
                 <summary>{{ t('channels.quick.advanced') }}</summary>
                 <label class="ch-field">
                   <span class="ch-field-label">{{ t('channels.bot.name') }} {{ t('channels.optional') }}</span>

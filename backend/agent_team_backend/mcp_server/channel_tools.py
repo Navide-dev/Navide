@@ -22,11 +22,14 @@ Registered on the core server by the import at the end of server.py.
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 from mcp.server.fastmcp import Context
 
-from ..channels import redact
+from ..channels import agent_requests, redact
+from ..channels.pairing import normalize_code
+from ..channels.registry import PLATFORMS
 from ..channels.store import DEFAULT_ACCOUNT
 from . import server as core
 from .marketplace_forms import _without_secrets
@@ -198,10 +201,20 @@ async def channels_link_code(platform: str, ctx: Context, account: str = "", tar
     the user to approve in the Channels settings page — the code alone lets
     nobody in. A code lasts 10 minutes; a bot keeps at most 5. Recorded with
     the caller and shown in Navide. Returns {ok, platform, code, target,
-    expires_at, url} or {ok: false, error, error_code}.
+    expires_at, url, id} or {ok: false, error, error_code}; pass `id` to
+    channels_request_status to learn when the chat is linked (`result`
+    {chat_id, title, kind}) or waits for the user (`pairing_code`).
     """
-    return await _act(ctx, "channels_link_code", {"platform": platform, "account": account or DEFAULT_ACCOUNT},
-                      lambda m: _sync(m.link_create(platform, target, account or DEFAULT_ACCOUNT)))
+    answer = await _act(ctx, "channels_link_code", {"platform": platform, "account": account or DEFAULT_ACCOUNT},
+                        lambda m: _sync(m.link_create(platform, target, account or DEFAULT_ACCOUNT)))
+    if answer.get("ok"):
+        caller = core._resolve_caller(ctx)
+        record = agent_requests.registry.file(
+            "link", core._caller_view(caller), "", {"platform": platform, "code": answer["code"]},
+            ttl_s=max(0.0, float(answer.get("expires_at") or 0) - time.time()),
+        )
+        answer["id"] = record["id"]
+    return answer
 
 
 @core.server.tool()
@@ -216,13 +229,18 @@ async def channels_bind(
     thread_id: str = "",
     title: str = "",
     verbosity: str = "",
+    reason: str = "",
 ) -> dict[str, Any]:
-    """Bind a chat to a pane in your own workspace, so its messages reach that pane.
+    """Bind a chat to a pane, so its messages reach that pane and it hears the pane.
 
     Only a CLI pane may call this. `pane` (a name, addressed as in cli_send)
-    or `pane_id` picks the pane; with neither it is you. The pane must be in
-    your own workspace — another workspace's pane is the user's to bind, in
-    the Channels settings page ("cross-workspace"). `chat_id` comes from
+    or `pane_id` picks the pane; with neither it is you. A pane in your own
+    workspace, on a chat the bot knows and someone was let in from, is bound
+    at once. Otherwise — another workspace's pane, a chat the bot has not
+    seen, or one nobody there was let in from yet — the bind goes to the
+    user: Navide shows it in the main window with `reason`, and the answer is
+    {ok, id, status: "pending", why, expires_at, note}; follow it with
+    channels_request_status. `chat_id` comes from
     channels_chats; `account` is the bot ("default" when omitted). `mode`
     "existing" uses the chat (and `thread_id`'s topic) as it is; "new" makes a
     new topic titled `title` where the platform can. `verbosity` is how much
@@ -231,19 +249,29 @@ async def channels_bind(
 
     A chat drives one pane at a time: one bound elsewhere is refused. A pane
     holds one chat: binding it to another moves it. The chat is told which
-    pane it now drives. If nobody there is allowed yet the answer carries
-    `needs_approval: true` and the chat is told how to ask; approving is the
-    user's. Recorded with the caller and shown in Navide. Returns {ok,
-    binding, needs_approval?} or {ok: false, error, error_code}.
+    pane it now drives. Recorded with the caller and shown in Navide.
+    Returns {ok, binding} when bound, or {ok: false, error, error_code}.
     """
-    caller, target, failure = _own_pane(ctx, pane, pane_id)
+    caller, target, failure = _own_pane(ctx, pane, pane_id, allow_other_workspace=True)
     if failure is not None:
         return failure
+    account = account or DEFAULT_ACCOUNT
+    manager = _manager()
+    if manager is None:
+        return dict(_NOT_RUNNING)
+    why = _bind_needs_user(manager, platform, account, chat_id, target.cross_workspace)
+    if why:
+        return await _file_request(caller, "bind", reason=f"{why} {reason}".strip(), target={
+            "platform": platform, "account": account, "chat_id": chat_id, "thread_id": thread_id,
+            "mode": mode, "title": title, "verbosity": verbosity, "pane_id": target.pane.pane_id,
+            "pane": target.pane.name, "workspace_path": target.pane.workspace_path, "why": why,
+        })
+    pane_entry = target.pane
     return await _act(ctx, "channels_bind",
-                      {"platform": platform, "account": account or DEFAULT_ACCOUNT, "chat_id": chat_id,
-                       "pane_id": target.pane_id, "pane": target.name},
-                      lambda m: m.bind(target.pane_id, target.name, platform, mode, chat_id, thread_id, title,
-                                       verbosity=verbosity, account=account or DEFAULT_ACCOUNT),
+                      {"platform": platform, "account": account, "chat_id": chat_id,
+                       "pane_id": pane_entry.pane_id, "pane": pane_entry.name},
+                      lambda m: m.bind(pane_entry.pane_id, pane_entry.name, platform, mode, chat_id, thread_id, title,
+                                       verbosity=verbosity, account=account),
                       caller=caller)
 
 
@@ -323,7 +351,239 @@ async def channels_pairing_reject(platform: str, code: str, ctx: Context) -> dic
                       lambda m: m.pairing_reject(platform, code))
 
 
+# ── P2: what the user decides in the main window ────────────────────────────
+
+_REQUEST_NOTE = (
+    "Navide shows this request in the main window with who asked and why; nothing happens until "
+    "the user decides there. Follow it with channels_request_status(id, wait_s)."
+)
+
+
+@core.server.tool()
+async def channels_bot_add_open(platform: str, ctx: Context) -> dict[str, Any]:
+    """Open the add-a-bot form for `platform` in Navide, empty, for the user.
+
+    Use it when the user wants to add the bot themselves: call it, then stop
+    and wait. The bot's credential (a token from BotFather, say) is typed
+    only into that form — never pass it to any tool, and if the user pastes
+    one into this conversation, tell them to paste it into the form instead.
+    Returns {ok, opened: true, platform, note} or {ok: false, error,
+    error_code} ("no-main-window", "bad-request").
+    """
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    caller, failure = _pane_caller(ctx)
+    if failure is not None:
+        return failure
+    if platform not in PLATFORMS:
+        return _bad_request(ValueError(f"unknown platform {platform!r}"))
+    if not app.has_main_window():
+        return {"ok": False, "error": "no Navide main window is open", "error_code": "no-main-window"}
+    await app.broadcast_main_windows(make_event("channels.agent_form.open", {
+        "platform": platform, "requester": core._caller_view(caller)}))
+    return {"ok": True, "opened": True, "platform": platform,
+            "note": "The form is open in Navide; nothing is added until the user presses Add there."}
+
+
+@core.server.tool()
+async def channels_bot_add_fill(platform: str, ctx: Context, name: str = "", reason: str = "") -> dict[str, Any]:
+    """Ask the user to add a bot, with its form filled in as far as you can.
+
+    Navide opens the add-a-bot form for `platform` with `name` written in
+    and marked as yours, and shows `reason`. The bot's credential is the one
+    field you cannot fill: the user types it there and presses Add, and it
+    never reaches you. (A Telegram bot can also be made with no credential
+    handled by anyone: channels_managed_bot_create.) Returns {ok, id, status:
+    "pending", expires_at, note}; channels_request_status(id) reports
+    `result` {platform, account} once the bot is added.
+    """
+    caller, failure = _pane_caller(ctx)
+    if failure is not None:
+        return failure
+    if platform not in PLATFORMS:
+        return _bad_request(ValueError(f"unknown platform {platform!r}"))
+    return await _file_request(caller, "bot-add", reason=reason, target={"platform": platform},
+                               draft={"name": name.strip()[:80]})
+
+
+@core.server.tool()
+async def channels_managed_bot_create(
+    ctx: Context, manager_account: str = "", username: str = "", name: str = "",
+) -> dict[str, Any]:
+    """Make a new Telegram bot through a bot in Telegram's Bot Management Mode.
+
+    `manager_account` is the managing bot's id from channels_status
+    ("default" when omitted); it must be connected, in Bot Management Mode
+    (BotFather) and have someone linked to it. Returns {ok, id, url,
+    expires_at, note}: give `url` (t.me/newbot/…) to that linked person; when
+    they press Create in Telegram, Navide fetches the new bot's credential
+    from Telegram itself and adds the bot — no one, you included, handles
+    the credential. channels_request_status(id) reports `result` {account,
+    name, link} once added (10 minutes at most). Navide cannot delete a bot
+    from Telegram afterwards. Recorded with the caller and shown in Navide.
+    """
+    caller, failure = _pane_caller(ctx)
+    if failure is not None:
+        return failure
+    manager_account = manager_account or DEFAULT_ACCOUNT
+    answer = await _act(ctx, "channels_managed_bot_create", {"platform": "telegram", "account": manager_account},
+                        lambda m: _sync(m.managed_create(manager_account, username, name)), caller=caller)
+    if not answer.get("ok"):
+        return answer
+    from agent_team_backend.channels.manager import MANAGED_REQUEST_TTL_S
+
+    record = agent_requests.registry.file(
+        "managed-create", core._caller_view(caller), "",
+        {"request_id": answer["request_id"], "manager_account": manager_account}, ttl_s=MANAGED_REQUEST_TTL_S,
+    )
+    return {"ok": True, "id": record["id"], "url": answer["url"], "expires_at": record["expires_at"],
+            "note": "Give the url to the person linked to the managing bot; they press Create in Telegram."}
+
+
+@core.server.tool()
+async def channels_pairing_approve_request(
+    platform: str, code: str, ctx: Context, bind_pane: str = "", bind_pane_id: str = "", reason: str = "",
+) -> dict[str, Any]:
+    """Ask the user to let a person in (a code from channels_pairing_requests).
+
+    Letting someone in lets them drive a pane, so the user decides it in the
+    main window; you cannot. Name `bind_pane` (as in cli_send) or
+    `bind_pane_id` to have the user's approval also bind that person's chat
+    to the pane, in one press. Returns {ok, id, status: "pending",
+    expires_at, note}; channels_request_status(id) reports `result`
+    {sender_id, binding?, bind_error?} once approved.
+    """
+    caller, failure = _pane_caller(ctx)
+    if failure is not None:
+        return failure
+    manager = _manager()
+    if manager is None:
+        return dict(_NOT_RUNNING)
+    wanted = normalize_code(code)
+    req = next((r for r in manager.store.list_pairing(platform or None) if r.code == wanted), None)
+    if req is None:
+        return {"ok": False, "error": "no pairing request has that code (it may have expired)",
+                "error_code": "unknown-code"}
+    target: dict[str, Any] = {
+        "platform": req.platform, "account": req.account, "code": req.code, "sender_id": req.sender_id,
+        "sender_name": req.sender_name, "chat_id": req.chat_id, "bind_pane_id": "", "bind_pane": "",
+        "workspace_path": "",
+    }
+    if bind_pane or bind_pane_id:
+        result, failure = core._resolve_pane_target(caller, caller.pane_id, bind_pane, bind_pane_id)
+        if failure is not None:
+            return failure
+        target.update(bind_pane_id=result.pane.pane_id, bind_pane=result.pane.name,
+                      workspace_path=result.pane.workspace_path)
+    return await _file_request(caller, "pairing-approve", reason=reason, target=target)
+
+
+@core.server.tool()
+async def channels_bot_remove_request(platform: str, account: str, ctx: Context, reason: str = "") -> dict[str, Any]:
+    """Ask the user to remove a bot from Navide.
+
+    Removing deletes the bot's stored credential, the people let in and its
+    bindings, so the user decides it in the main window. Returns {ok, id,
+    status: "pending", expires_at, note}; channels_request_status(id) follows
+    it.
+    """
+    caller, failure = _pane_caller(ctx)
+    if failure is not None:
+        return failure
+    manager = _manager()
+    if manager is None:
+        return dict(_NOT_RUNNING)
+    if (platform, account) not in manager.store.accounts():
+        return {"ok": False, "error": f"no bot {platform}/{account} is set up", "error_code": "unknown-bot"}
+    return await _file_request(caller, "bot-remove", reason=reason, target={"platform": platform, "account": account})
+
+
+@core.server.tool()
+async def channels_request_status(id: str, ctx: Context, wait_s: float = 0) -> dict[str, Any]:  # noqa: A002
+    """Where a channels request you made stands.
+
+    `id` is what channels_bind, channels_bot_add_fill,
+    channels_pairing_approve_request, channels_bot_remove_request,
+    channels_managed_bot_create or channels_link_code answered. `wait_s` (at
+    most 60) waits for it to settle. Returns {ok, id, kind, status, result,
+    error, reason, target, created_at, expires_at}: status is pending,
+    applying, completed, failed, rejected (the user said no) or expired. A
+    link code still waiting on the user adds `pairing_code`. Only the pane
+    that made a request can read it; a backend restart forgets every request
+    ({ok: false, error_code: "unknown-request"}).
+    """
+    caller, failure = _pane_caller(ctx)
+    if failure is not None:
+        return failure
+    record = await agent_requests.wait(id, wait_s)
+    if record is None or record["requester"].get("pane_id") != caller.pane_id:
+        return {"ok": False, "error": "no request with that id is yours (a restart forgets them)",
+                "error_code": "unknown-request"}
+    view = {"ok": True, **_scrub(agent_requests.public(record))}
+    view.pop("requester", None)
+    manager = _manager()
+    if record["kind"] == "link" and record["status"] == "pending" and manager is not None:
+        pairing_code = agent_requests.link_stage(manager, record["target"]["code"])
+        if pairing_code:
+            view["pairing_code"] = pairing_code
+    return view
+
+
+def _bind_needs_user(manager: Any, platform: str, account: str, chat_id: str, cross_workspace: bool) -> str:
+    """Why a bind is the user's to allow, or "" when an agent may make it."""
+    if cross_workspace:
+        return "The pane is in another workspace."
+    try:
+        chats = manager.locations(platform, account).get("locations") or []
+    except ValueError:
+        return ""  # the bind itself answers the bad id
+    chat = next((c for c in chats if str(c.get("chat_id")) == str(chat_id)), None)
+    if chat is None:
+        return "The bot has not seen this chat."
+    if not manager._chat_usable(platform, account, str(chat_id), str(chat.get("kind") or "")):  # noqa: SLF001
+        return "Nobody in this chat has been let in yet."
+    return ""
+
+
+async def _file_request(caller: Any, kind: str, *, reason: str, target: dict[str, Any],
+                        draft: dict[str, Any] | None = None) -> dict[str, Any]:
+    """File a request for the main window, record it, show it, answer the agent."""
+    from agent_team_backend import agent_window_actions, app
+
+    who = core._caller_view(caller)
+    if not app.has_main_window():
+        agent_window_actions.record(f"channels_request:{kind}", who, target, ok=False, error="no main window")
+        return {"ok": False, "error": "no Navide main window is open to decide it", "error_code": "no-main-window"}
+    record = agent_requests.registry.file(kind, who, reason, target, draft=draft)
+    agent_window_actions.record(f"channels_request:{kind}", who, {**target, "request_id": record["id"]}, ok=True)
+    await agent_requests.announce(record)
+    answer = {"ok": True, "id": record["id"], "status": record["status"], "expires_at": record["expires_at"],
+              "note": _REQUEST_NOTE}
+    if target.get("why"):
+        answer["why"] = target["why"]
+    return answer
+
+
+def _pane_caller(ctx: Context) -> tuple[Any, dict[str, Any] | None]:
+    try:
+        caller = core._resolve_caller(ctx)
+    except core.CallerUnknown as err:
+        return None, {"ok": False, "error": str(err), "error_code": "caller-unknown"}
+    if caller.kind != "pane":
+        return caller, dict(_PANE_CALLER_REQUIRED)
+    return caller, None
+
+
 # ── helpers for the tools that change something ─────────────────────────────
+
+
+_PANE_CALLER_REQUIRED = {
+    "ok": False,
+    "error": "only a CLI pane can change chat channels, so the record can say which pane did it; "
+             "ask the user to do it in Settings → Channels",
+    "error_code": "pane-caller-required",
+}
 
 
 def _bad_request(err: Exception) -> dict[str, Any]:
@@ -334,24 +594,24 @@ async def _sync(value: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
-def _own_pane(ctx: Context, pane: str, pane_id: str) -> tuple[Any, Any, dict[str, Any] | None]:
-    """(caller, target pane, failure): a pane in the caller's own workspace."""
+def _own_pane(ctx: Context, pane: str, pane_id: str, *,
+              allow_other_workspace: bool = False) -> tuple[Any, Any, dict[str, Any] | None]:
+    """(caller, target, failure): a pane in the caller's own workspace. With
+    ``allow_other_workspace`` any pane resolves and the target is the whole
+    resolution (``.pane``, ``.cross_workspace``) for the caller to judge."""
     try:
         caller = core._resolve_caller(ctx)
     except core.CallerUnknown as err:
         return None, None, {"ok": False, "error": str(err), "error_code": "caller-unknown"}
     if caller.kind != "pane":
-        return caller, None, {
-            "ok": False,
-            "error": "only a CLI pane can bind or unbind, and only panes in its own workspace; "
-                     "ask the user to do it in Settings → Channels",
-            "error_code": "pane-caller-required",
-        }
+        return caller, None, dict(_PANE_CALLER_REQUIRED)
     if not pane and not pane_id:
         pane_id = caller.pane_id
     result, failure = core._resolve_pane_target(caller, caller.pane_id, pane, pane_id)
     if failure is not None:
         return caller, None, failure
+    if allow_other_workspace:
+        return caller, result, None
     if result.cross_workspace:
         return caller, None, {
             "ok": False,
@@ -372,6 +632,10 @@ async def _act(ctx: Context, tool: str, target: dict[str, Any], run: Any, *, cal
             caller = core._resolve_caller(ctx)
         except core.CallerUnknown as err:
             return {"ok": False, "error": str(err), "error_code": "caller-unknown"}
+    if caller.kind != "pane":
+        # The record names the pane that made each change; a host or external
+        # client has none, so its changes are the user's, in Settings → Channels.
+        return dict(_PANE_CALLER_REQUIRED)
     manager = _manager()
     if manager is None:
         return dict(_NOT_RUNNING)

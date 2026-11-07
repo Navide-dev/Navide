@@ -552,6 +552,9 @@
     "agent-channels-disabled": "“{caller}”이(가) bot {bot}의 연결을 끊었어요",
     "agent-channels-link": "“{caller}”이(가) bot {bot}의 연결 코드를 만들었어요",
     "agent-channels-reject": "“{caller}”이(가) {bot}의 페어링 요청 {code}을(를) 거절했어요",
+    "agent-channels-managed": "“{caller}”이(가) Telegram bot {bot}에 새 bot 생성을 요청했어요",
+    "agent-channels-request": "“{caller}”의 채팅 채널 요청을 결정해 주세요",
+    "agent-channels-request-open": "열기",
     "undo": "되돌리기",
     "cross-workspace-toast": "다른 작업 영역의 지시: “{from}” → “{target}”",
     "cross-workspace-badge": "작업 영역 간",
@@ -10965,6 +10968,19 @@
     "token-linked": "token으로 연결됨"
   },
   "channels": {
+    "agent": {
+      "title": "에이전트의 요청",
+      "from": "{requester}의 요청",
+      "kind-bot-add": "{platform} bot 추가",
+      "kind-bot-remove": "bot {bot} 제거",
+      "kind-bind": "{bot}의 채팅 {chat}을(를) 창 “{pane}”에 연결",
+      "kind-pairing": "{sender}이(가) {bot}과(와) 대화하도록 허용",
+      "kind-pairing-bind": "{sender}이(가) {bot}과(와) 대화하도록 허용하고 그 채팅을 창 “{pane}”에 연결",
+      "approve": "승인",
+      "decline": "거절",
+      "fill": "양식 열기",
+      "add-note": "이 bot은 {requester}이(가) 추가를 요청했고 이름은 에이전트가 적었어요. 자격 증명은 직접 여기에 붙여 넣으세요. 에이전트에게는 전달되지 않아요."
+    },
     "shareOpenNotify": {
       "title": "공유 링크 열림 알림",
       "desc": "이 컴퓨터에서 만든 공유 링크를 새 기기가 열면 연결된 채팅에 알려요(링크 URL은 보내지 않아요). Navide Cloud가 필요해요."

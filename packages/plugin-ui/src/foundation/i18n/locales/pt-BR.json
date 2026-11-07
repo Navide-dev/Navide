@@ -552,6 +552,9 @@
     "agent-channels-disabled": "“{caller}” desconectou o bot {bot}",
     "agent-channels-link": "“{caller}” criou um código de vínculo para o bot {bot}",
     "agent-channels-reject": "“{caller}” recusou o pedido de pareamento {code} de {bot}",
+    "agent-channels-managed": "“{caller}” pediu ao bot do Telegram {bot} para criar um novo bot",
+    "agent-channels-request": "“{caller}” pede que você decida uma solicitação de canal de chat",
+    "agent-channels-request-open": "Abrir",
     "undo": "Desfazer",
     "cross-workspace-toast": "Instrução de outro workspace: “{from}” → “{target}”",
     "cross-workspace-badge": "entre workspaces",
@@ -10965,6 +10968,19 @@
     "token-linked": "Vinculado com um token"
   },
   "channels": {
+    "agent": {
+      "title": "Solicitações de agents",
+      "from": "Solicitado por {requester}",
+      "kind-bot-add": "Adicionar um bot do {platform}",
+      "kind-bot-remove": "Remover o bot {bot}",
+      "kind-bind": "Vincular o chat {chat} de {bot} ao pane “{pane}”",
+      "kind-pairing": "Permitir que {sender} converse com {bot}",
+      "kind-pairing-bind": "Permitir que {sender} converse com {bot} e vincular o chat ao pane “{pane}”",
+      "approve": "Aprovar",
+      "decline": "Recusar",
+      "fill": "Abrir o formulário",
+      "add-note": "{requester} pediu este bot; o nome foi escrito por um agent. Cole você mesmo a credencial aqui — ela nunca chega ao agent."
+    },
     "shareOpenNotify": {
       "title": "Avisos de abertura de link compartilhado",
       "desc": "Quando um novo dispositivo abre um link de compartilhamento criado neste computador, avisar os chats vinculados (a URL do link nunca é enviada). Requer o Navide Cloud."

@@ -552,6 +552,9 @@
     "agent-channels-disabled": "「{caller}」が bot {bot} を切断しました",
     "agent-channels-link": "「{caller}」が bot {bot} のリンクコードを作成しました",
     "agent-channels-reject": "「{caller}」が {bot} のペアリング要求 {code} を拒否しました",
+    "agent-channels-managed": "「{caller}」が Telegram bot {bot} に新しい bot の作成を依頼しました",
+    "agent-channels-request": "「{caller}」からチャットチャンネルのリクエストが届いています",
+    "agent-channels-request-open": "開く",
     "undo": "元に戻す",
     "cross-workspace-toast": "別のワークスペースからの指示：「{from}」→「{target}」",
     "cross-workspace-badge": "ワークスペース間",
@@ -10965,6 +10968,19 @@
     "token-linked": "トークンで接続済み"
   },
   "channels": {
+    "agent": {
+      "title": "エージェントからのリクエスト",
+      "from": "{requester} からの依頼",
+      "kind-bot-add": "{platform} の bot を追加",
+      "kind-bot-remove": "bot {bot} を削除",
+      "kind-bind": "{bot} のチャット {chat} をペイン「{pane}」に紐付け",
+      "kind-pairing": "{sender} が {bot} と話せるようにする",
+      "kind-pairing-bind": "{sender} が {bot} と話せるようにし、そのチャットをペイン「{pane}」に紐付け",
+      "approve": "承認",
+      "decline": "拒否",
+      "fill": "フォームを開く",
+      "add-note": "この bot は {requester} が追加を依頼したもので、名前はエージェントが入力しました。認証情報はご自身でここに貼り付けてください。エージェントには渡りません。"
+    },
     "shareOpenNotify": {
       "title": "共有リンクの開封通知",
       "desc": "このコンピューターで作成した共有リンクが新しいデバイスで開かれたとき、バインド済みのチャットに通知します（リンクの URL は送信しません）。Navide Cloud が必要です。"
