@@ -7257,6 +7257,13 @@ export class FrontendPluginManager {
       case 'web.clearData':
         await registry.clearData(pluginId)
         return { ok: true }
+      case 'web.cdp': {
+        // The Bridge port's own path: same allowlist, same USER_IN_CONTROL
+        // rule. A view is not a pane, so no caller (uploads need one).
+        const params = args.params as Record<string, unknown> | undefined
+        const result = await registry.cdp(pluginId, viewId, String(args.method), params)
+        return { result: result ?? null }
+      }
       default:
         throw new Error(`unsupported public capability '${plan.address}'`)
     }

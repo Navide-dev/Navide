@@ -15,6 +15,7 @@ export const WEB_METHODS = [
   'web.close',
   'web.capture',
   'web.clearData',
+  'web.cdp',
 ] as const
 export type WebMethod = typeof WEB_METHODS[number]
 
@@ -144,6 +145,14 @@ function isViewIdRequest(value: Record<string, unknown>): boolean {
   return hasOnlyKeys(value, ['viewId']) && isId(value.viewId)
 }
 
+/** One CDP command: the shape only. The Host view manager applies the method
+ *  allowlist and the agent-control rule, for the view and the Bridge alike. */
+function isCdpRequest(value: Record<string, unknown>): boolean {
+  return hasOnlyKeys(value, ['viewId', 'method', 'params']) && isId(value.viewId) &&
+    typeof value.method === 'string' && value.method.length <= MAX_ID_LENGTH && CDP_METHOD.test(value.method) &&
+    (value.params === undefined || isPlainObject(value.params))
+}
+
 /** Validate one view-side `web.*` request against its exact shape. */
 export function validateWebRequest(address: string, value: unknown): value is Record<string, unknown> {
   if (!isRecord(value)) return false
@@ -172,6 +181,8 @@ export function validateWebRequest(address: string, value: unknown): value is Re
       return hasOnlyKeys(value, ['viewId', 'maxWidth']) && isId(value.viewId) &&
         (value.maxWidth === undefined || (Number.isInteger(value.maxWidth) &&
           (value.maxWidth as number) >= 64 && (value.maxWidth as number) <= 2048))
+    case 'web.cdp':
+      return isCdpRequest(value)
     default:
       return false
   }
@@ -226,9 +237,7 @@ export function validateWebBridgeRequest(operation: string, value: unknown): val
     case 'close':
       return isViewIdRequest(value)
     case 'cdp':
-      return hasOnlyKeys(value, ['viewId', 'method', 'params']) && isId(value.viewId) &&
-        typeof value.method === 'string' && value.method.length <= MAX_ID_LENGTH && CDP_METHOD.test(value.method) &&
-        (value.params === undefined || isPlainObject(value.params))
+      return isCdpRequest(value)
     case 'setState':
       return hasOnlyKeys(value, ['viewId', 'state', 'note']) && isId(value.viewId) &&
         STATES.includes(value.state as string) &&

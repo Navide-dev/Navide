@@ -1773,7 +1773,10 @@ website, the sites' sign-ins are kept on this computer, an agent driving the
 package uses the user's sign-ins in it (it can send requests on websites as the
 user) and can read every page the package opened and its signed-in state, and
 agent script already running in a page stops only when the page is reloaded
-after the user takes over. All of a package's views share one partition, so an
+after the user takes over. The package's own UI can do what an agent does
+there: through `web.cdp` it can run script in a page it opened and read the
+page's content and signed-in state, while the user has handed that Space to
+agents. All of a package's views share one partition, so an
 agent's Space is signed in wherever the user signed in.
 `web` is in the sensitive set (`SENSITIVE_CAPABILITIES`), so installing asks
 for the second confirmation.
@@ -1806,6 +1809,7 @@ agent or a backend can never perform them.
 | `web.close` | `{viewId}` → `{ok}` | Destroys the view |
 | `web.capture` | `{viewId, maxWidth?}` → `{dataUrl}` | A thumbnail for an overview card; `maxWidth` is an integer from 64 to 2048 |
 | `web.clearData` | `{}` → `{ok}` | User gesture; clears every cookie, sign-in, cache, HTTP auth answer and cached host lookup in this package's browser partition |
+| `web.cdp` | `{viewId, method, params?}` → `{result}` | Since API 1.3.0. One Chrome DevTools Protocol command, exactly as the Bridge `cdp` operation: the same Host allowlist (see [Host-enforced boundaries](#host-enforced-boundaries)), the same `Domain.method` and `params` shape, and only while `owner` and `control` are `agent`, so the user hands the Space over with `web.setOwner` first. Any other method is `CAPABILITY_DENIED`; a Space the user owns or took over is `CAPABILITY_DENIED` with the `USER_IN_CONTROL` reason in the message. A view is not a pane, so `DOM.setFileInputFiles` is always `CAPABILITY_DENIED` here |
 
 `space` and `viewId` are non-empty strings of at most 128 characters. A `url`
 is accepted only when it is `http:` or `https:` without a user name or
@@ -1886,7 +1890,8 @@ someone it is not.
   and `control` set to that owner, created through the same rules as
   `create`; its `openerViewId` names the opener. At the 32-view cap the URL
   loads in the opener instead. Any other URL does nothing.
-- **CDP is a per-method allowlist.** The Bridge `cdp` operation accepts only
+- **CDP is a per-method allowlist.** The Bridge `cdp` operation and the view
+  capability `web.cdp` accept only
   these methods, which are what the Navide Browser backend uses to read and
   drive a page: `Accessibility.getFullAXTree`, `DOM.focus`, `DOM.getBoxModel`,
   `DOM.resolveNode`, `DOM.scrollIntoViewIfNeeded`,
