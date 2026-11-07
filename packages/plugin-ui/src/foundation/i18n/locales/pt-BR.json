@@ -723,22 +723,6 @@
     }
   },
   "pane": {
-    "web": {
-      "signed-in": "Conectado",
-      "signed-out": "Não conectado",
-      "unloaded": "Descarregado",
-      "memory": "{mb} MB",
-      "reload": "Recarregar",
-      "open-browser": "Abrir no navegador do sistema",
-      "clear": "Sair e limpar",
-      "clear-confirm": "Clique de novo para sair deste site e limpar os dados dele em todos os web panes",
-      "clear-confirm-short": "Confirmar",
-      "unloaded-title": "Descarregado para economizar memória",
-      "unloaded-hint": "Clique para carregar de novo. Você continua conectado.",
-      "google-hint": "O Google pode recusar o login dentro de um navegador incorporado. Se isso acontecer, faça login pelo navegador do sistema.",
-      "cloudflare-hint": "Verificando o navegador. Aguarde um momento; se aparecer uma caixa \"Verify you are human\", marque-a você mesmo.",
-      "privacy": "Entre com a sua própria conta. O login fica neste computador e o Navide não o lê."
-    },
     "acp": {
       "unconfirmed": "Não confirmado",
       "unsent": "Não enviado",
@@ -2644,10 +2628,6 @@
       "download-retry": "Tentar baixar novamente"
     },
     "general": {
-      "web-pane-idle": "Descarregar web pane ocioso (minutos)",
-      "web-pane-idle-hint": "Um web pane sem foco por este tempo descarrega a página para liberar memória. Clicar carrega de novo, ainda conectado.",
-      "web-pane-limit": "Limite de web panes ativos",
-      "web-pane-limit-hint": "Quantos web panes mantêm uma página carregada ao mesmo tempo. Abrir mais um descarrega o usado há mais tempo.",
       "auto-resume-reconnect": "Retomar as sessions após o serviço em segundo plano do Navide reiniciar",
       "resume-interrupted-on-launch": "Retomar os panes que estavam trabalhando após reiniciar o Navide",
       "system-notify": "Notificações do sistema",
@@ -8651,8 +8631,6 @@
     }
   },
   "label": {
-    "standalone-badge-web-pane": "pane web",
-    "web-pane-menu-note": "Um web pane abre o site oficial em um pane, com a sua própria conta; o login fica neste computador. ↗ App só aparece quando o app para desktop está instalado.",
     "step-count": "{count} passo | {count} passos",
     "imported-from-n8n": "Importado do n8n",
     "resume-other-pipeline": "Uma execução não concluída pertence a “{name}”. Mude para esse pipeline para continuá-la.",
@@ -8763,11 +8741,7 @@
     "run-group-active": "Em execução: um agent deste grupo está ativo",
     "run-group-awaiting": "Precisa de você: um agent deste grupo está bloqueado por uma permissão ou pergunta",
     "agent-not-installed": "{label}: não instalado",
-    "standalone-agents": "Agents independentes",
-    "standalone-badge-pane": "pane",
-    "standalone-badge-not-installed": "não instalado",
-    "standalone-badge-opens-app": "abre o app",
-    "grok-bot-pane-hint": "Para usar o Grok em um pane, abra a Grok CLI integrada.",
+    "cloud-agents-plugin-hint": "Agentes na nuvem (Grok Bot, dots e outros) são instalados como plug-in do Navide pelo Navide Marketplace.",
     "select-role": "Selecionar papel…",
     "waiting-backend": "Aguardando o back-end…",
     "set-workspace-first": "Defina primeiro o caminho do workspace",

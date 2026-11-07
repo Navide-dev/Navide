@@ -10,8 +10,7 @@ have since moved.
 
 Current built-in agent keys are `claude`, `codex`, `antigravity`, `grok`,
 `kimi`, `opencode`, `qwen`, `kilo`, `pi`, `copilot`, `cursor`, `aider`,
-`muse`, `droid`, `mcode`, `goose`, `devin`, and the standalone agents
-`openclaw` and `hermes`. One key identifies a vendor on both sides — `agentKey`
+`muse`, `droid`, `mcode`, `goose`, `devin`, `openclaw`, and `hermes`. One key identifies a vendor on both sides — `agentKey`
 in the frontend, `agent_key` in the backend.
 
 The [vendor matrix roster](cli-vendor-matrix.md#roster) lists the current UI
@@ -84,7 +83,7 @@ accounting, and the trap each CLI hides.
 
 ### Devin CLI (`devin`, Cognition) — added 2026-11-07
 
-A coding CLI (no `category`, so the ＋ menu's CLI list). Read from the
+A coding CLI (the ＋ menu's CLI list). Read from the
 official docs on 2026-11-07 (docs.devin.ai/cli, /cli/reference/commands,
 /cli/essential-commands, /cli/handoff, /cli/extensibility/rules,
 /cli/reference/configuration/config-file, /cli/changelog/stable); no binary
@@ -106,11 +105,10 @@ was installed, so nothing here is a live recording.
 
 ### OpenClaw (`openclaw`) and Hermes Agent (`hermes`) — added 2026-11-07
 
-Standalone agents: general assistants that own their runtime and model keys,
-declared `category="standalone"` on both specs so the ＋ menu offers them in
-a "Standalone agents" block and keeps them out of the CLI list, Manual spawn
-and "Handle Issue As…". Read from the official docs on 2026-11-07; neither
-binary was installed, so nothing here is a live recording.
+General assistants that own their runtime and model keys, wired as ordinary
+CLI vendors: the ＋ menu's CLI list, Manual spawn and "Handle Issue As…".
+Read from the official docs on 2026-11-07; neither binary was installed, so
+nothing here is a live recording.
 
 | Question | OpenClaw | Hermes Agent |
 |---|---|---|

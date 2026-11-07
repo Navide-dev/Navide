@@ -723,22 +723,6 @@
     }
   },
   "pane": {
-    "web": {
-      "signed-in": "Sesión iniciada",
-      "signed-out": "Sin sesión",
-      "unloaded": "Descargado",
-      "memory": "{mb} MB",
-      "reload": "Recargar",
-      "open-browser": "Abrir en el navegador del sistema",
-      "clear": "Cerrar sesión y borrar",
-      "clear-confirm": "Haz clic otra vez para cerrar sesión en este sitio y borrar sus datos en todos los web panes",
-      "clear-confirm-short": "Confirmar",
-      "unloaded-title": "Descargado para ahorrar memoria",
-      "unloaded-hint": "Haz clic para volver a cargarlo. Tu sesión sigue iniciada.",
-      "google-hint": "Google puede rechazar el inicio de sesión dentro de un navegador integrado. Si ocurre, inicia sesión desde el navegador del sistema.",
-      "cloudflare-hint": "Comprobando el navegador. Espera un momento; si aparece una casilla \"Verify you are human\", márcala tú.",
-      "privacy": "Inicia sesión con tu propia cuenta. La sesión se queda en este equipo y Navide no la lee."
-    },
     "acp": {
       "unconfirmed": "Sin confirmar",
       "unsent": "No enviado",
@@ -2644,10 +2628,6 @@
       "download-retry": "Reintentar descarga"
     },
     "general": {
-      "web-pane-idle": "Descarga por inactividad del web pane (minutos)",
-      "web-pane-idle-hint": "Un web pane sin foco durante este tiempo descarga su página para liberar memoria. Al hacer clic se vuelve a cargar con la sesión iniciada.",
-      "web-pane-limit": "Límite de web panes activos",
-      "web-pane-limit-hint": "Cuántos web panes mantienen una página cargada a la vez. Al abrir uno más se descarga el que lleva más tiempo sin usarse.",
       "auto-resume-reconnect": "Reanudar las sessions tras reiniciarse el servicio en segundo plano de Navide",
       "resume-interrupted-on-launch": "Reanudar los panes que estaban trabajando tras reiniciar Navide",
       "system-notify": "Notificaciones del sistema",
@@ -8651,8 +8631,6 @@
     }
   },
   "label": {
-    "standalone-badge-web-pane": "pane web",
-    "web-pane-menu-note": "Un web pane abre el sitio oficial en un pane, con tu propia cuenta; la sesión se queda en este equipo. ↗ App solo aparece si la app de escritorio está instalada.",
     "step-count": "{count} paso | {count} pasos",
     "imported-from-n8n": "Importado de n8n",
     "resume-other-pipeline": "Una ejecución sin terminar pertenece a «{name}». Cambia a esa pipeline para continuarla.",
@@ -8763,11 +8741,7 @@
     "run-group-active": "En ejecución: un agent de este grupo está activo",
     "run-group-awaiting": "Te necesita: un agent de este grupo está bloqueado por un permiso o una pregunta",
     "agent-not-installed": "{label}: no instalado",
-    "standalone-agents": "Agents independientes",
-    "standalone-badge-pane": "pane",
-    "standalone-badge-not-installed": "no instalado",
-    "standalone-badge-opens-app": "abre la app",
-    "grok-bot-pane-hint": "Para usar Grok en un pane, abre la Grok CLI integrada.",
+    "cloud-agents-plugin-hint": "Los agentes en la nube (Grok Bot, dots y otros) se instalan como complemento de Navide desde Navide Marketplace.",
     "select-role": "Seleccionar rol…",
     "waiting-backend": "Esperando al backend…",
     "set-workspace-first": "Define primero la ruta del área de trabajo",

@@ -16,11 +16,9 @@ from agent_team_backend.cli_vendors.base import VendorRuntimeContext
 SPEC = registry.VENDORS["devin"]
 
 
-def test_identity_and_category() -> None:
+def test_identity() -> None:
     assert SPEC.key == "devin"
     assert SPEC.label == "Devin CLI (Cognition)"
-    # A coding CLI: offered in the ＋ menu's CLI list, not the standalone block.
-    assert SPEC.category == "cli"
 
 
 def test_install_entry_runs_no_installer_on_any_platform() -> None:

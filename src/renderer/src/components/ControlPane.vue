@@ -77,7 +77,6 @@ import {
 } from '@navide/plugin-shell'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
-import { WEB_PANE_SITES, webPaneAgentKey } from '../../../shared/webPaneSites'
 
 /** CLIs YOLO mode actually affects: the ones declaring a bypass flag. Derived,
  *  because the hand-written hint here listed three while eight qualified. */
@@ -1471,31 +1470,8 @@ onUnmounted(() => {
 })
 
 const manualAgentSpecs = computed(() =>
-  props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal' && spec.category !== 'standalone')
+  props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal')
 )
-
-/** General agents with their own runtime and model keys (OpenClaw, Hermes
- *  Agent). Kept out of manualAgentSpecs — the CLI list, Manual spawn and
- *  "Handle Issue As…" are about coding CLIs — and offered in the ＋ menu's
- *  "Standalone agents" block instead, through the same spawnAs path. */
-const standaloneAgentSpecs = computed(() =>
-  props.agentSpecs.filter((spec) => spec.category === 'standalone')
-)
-
-/** Cloud agents with no API or CLI (Grok Bot, OpenAI dots, …): the ＋ menu
- *  opens each one's official site in a web pane (src/shared/webPaneSites.ts).
- *  A site whose desktop app is installed also gets a small "↗ App" button. */
-const webPaneSites = WEB_PANE_SITES
-const installedWebApps = ref<ReadonlySet<string>>(new Set())
-let installedWebAppsAsked = false
-function loadInstalledWebApps(): void {
-  if (installedWebAppsAsked) return
-  installedWebAppsAsked = true
-  void window.agentTeam?.webPane?.installedApps().then(
-    (ids) => { installedWebApps.value = new Set(ids) },
-    () => { installedWebAppsAsked = false },
-  )
-}
 
 // Available agent types for "Handle Issue As…" pane spawn.
 const availableAgents = computed(() =>
@@ -2703,14 +2679,13 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 // would clip a menu positioned inside it.
 const addMenuAnchor = ref<{ top: number; bottom: number; right: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
- *  408px) plus the fixed furniture around it — role picker, three dividers,
- *  the Standalone agents block (~268px: heading, two CLI rows, six web-pane
- *  rows, the two-line note),
- *  the Terminal and Manual-spawn buttons, and the menu's own padding. Only
+ *  456px) plus the fixed furniture around it — role picker, two dividers,
+ *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
+ *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 766
+const ADD_MENU_MAX_H = 618
 
 const addMenuStyle = computed(() => {
   const a = addMenuAnchor.value
@@ -2733,7 +2708,6 @@ function toggleAddMenu(ev: MouseEvent, wsPath = '', groupId = ''): void {
   addMenuWorkspace.value = wsPath
   addMenuGroup.value = groupId
   addMenuOpen.value = true
-  loadInstalledWebApps()
 }
 
 /** Pick a CLI from the menu and open it. This is a one-off: pickedAgent stays
@@ -2767,21 +2741,6 @@ function openTerminalFromMenu(): void {
   addMenuOpen.value = false
   if (!canSpawn.value) return
   emit('spawn', { agentKey: 'terminal', roleKey: '', stageId: '', workspacePath: ws, runGroupId: group || undefined })
-}
-
-/** A cloud agent's site in a web pane, into the workspace whose heading opened
- *  the menu. No role: nothing is ever typed into a website. */
-function openWebPaneFromMenu(siteId: string): void {
-  const ws = addMenuWorkspace.value || workspacePath.value
-  const group = addMenuGroup.value
-  addMenuOpen.value = false
-  if (!canSpawn.value) return
-  emit('spawn', { agentKey: webPaneAgentKey(siteId), roleKey: '', stageId: '', workspacePath: ws, runGroupId: group || undefined })
-}
-
-function openWebAppFromMenu(siteId: string): void {
-  addMenuOpen.value = false
-  void window.agentTeam?.webPane?.openApp(siteId)
 }
 
 function openSpawnCardFromMenu(): void {
@@ -2885,7 +2844,7 @@ async function spawnOrOfferInstall(agentKey: string): Promise<void> {
     emitSpawn(agentKey)
     return
   }
-  const spec = props.agentSpecs.find((s) => s.agentKey === agentKey)
+  const spec = manualAgentSpecs.value.find((s) => s.agentKey === agentKey)
   spawnWorkspaceOverride.value = ''
   spawnGroupOverride.value = ''
   emit('install-cli', { agentKey, label: spec?.label ?? agentKey })
@@ -4451,49 +4410,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             </span>
           </button>
         </div>
-        <div class="ws-add-div"></div>
-        <!-- Standalone agents: general agents with their own runtime and model
-             keys. OpenClaw and Hermes open in a pane through spawnAs (so a
-             missing one gets the guided install). The cloud agents below
-             have no CLI: each opens its official site in a web pane, with
-             "↗ App" beside it when its desktop app is installed. -->
-        <div class="ws-add-sa">
-          <div class="ws-add-sa-hd">{{ $t('label.standalone-agents') }}</div>
-          <button
-            v-for="spec in standaloneAgentSpecs"
-            :key="spec.agentKey"
-            class="ws-add-opt ws-add-sa-opt"
-            @click="spawnAs(spec.agentKey)"
-          >
-            <span class="ws-add-lb" v-truncate>{{ spec.label }}</span>
-            <span class="ws-add-sa-tag">{{
-              missingClis.has(spec.agentKey)
-                ? $t('label.standalone-badge-not-installed')
-                : $t('label.standalone-badge-pane')
-            }}</span>
-          </button>
-          <div
-            v-for="site in webPaneSites"
-            :key="site.id"
-            class="ws-add-web-row"
-            :data-site="site.id"
-          >
-            <button
-              class="ws-add-opt ws-add-sa-opt ws-add-web"
-              @click="openWebPaneFromMenu(site.id)"
-            >
-              <span class="ws-add-lb" v-truncate>{{ site.name }}</span>
-              <span class="ws-add-sa-tag">{{ $t('label.standalone-badge-web-pane') }}</span>
-            </button>
-            <button
-              v-if="installedWebApps.has(site.id)"
-              class="ws-add-web-app"
-              :title="$t('label.standalone-badge-opens-app')"
-              @click="openWebAppFromMenu(site.id)"
-            >↗ App</button>
-          </div>
-          <div class="ws-add-sa-note">{{ $t('label.web-pane-menu-note') }} {{ $t('label.grok-bot-pane-hint') }}</div>
-        </div>
+        <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
+             ship as Navide plugins, so the menu points there. -->
+        <div class="ws-add-hint">{{ $t('label.cloud-agents-plugin-hint') }}</div>
         <div class="ws-add-div"></div>
         <!-- A plain shell. Not in the list above: that list scrolls once there
              are more CLIs than fit, and an eleventh entry sat below the fold
@@ -6614,9 +6533,9 @@ button.icon-btn.muted:hover {
  * window still gets a menu that fits. 200px was set when ten vendors was the
  * whole list; at fourteen it cut the last four off with nothing on screen
  * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 408px carries seventeen. */
+ * 3px padding either side), so 456px carries nineteen. */
 .ws-add-scroll {
-  max-height: min(408px, 45vh);
+  max-height: min(456px, 45vh);
   overflow-y: auto;
   /* Scroll affordance. The two fades are painted in the scroller's own
    * coordinate space (`local`), so each one is visible only while content is
@@ -6649,27 +6568,7 @@ button.icon-btn.muted:hover {
 .ws-add-ck { flex: none; width: 10px; font-size: var(--font-3xs); }
 .ws-add-lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-add-more { color: var(--text-secondary); padding-left: 26px; }
-/* Standalone agents: tinted so the block reads as a different kind of entry
- * from the CLI list above it, with a tag saying what a click does. */
-.ws-add-sa { margin: 0 4px; padding: 3px 0; border-radius: var(--radius-sm, 4px); background: var(--accent-subtle); }
-.ws-add-sa-hd { padding: 2px 6px 3px 22px; color: var(--accent-fg); font-size: var(--font-3xs); font-weight: 600; }
-.ws-add-sa-opt { padding-left: 22px; }
-.ws-add-sa-tag { flex: none; margin-left: auto; color: var(--text-secondary); font-size: var(--font-3xs); }
-.ws-add-web-row { display: flex; align-items: center; }
-.ws-add-web-row .ws-add-web { flex: 1; min-width: 0; }
-.ws-add-web-app {
-  flex: none;
-  margin: 0 6px 0 2px;
-  padding: 0 5px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm, 4px);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-3xs);
-  cursor: pointer;
-}
-.ws-add-web-app:hover { color: var(--text-primary); }
-.ws-add-sa-note { padding: 2px 8px 2px 22px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
+.ws-add-hint { padding: 4px 8px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
 
 /* Right-click menu on a workspace heading. Fixed at the pointer, same reason
    the ＋ menu is fixed: the pane list scrolls. */

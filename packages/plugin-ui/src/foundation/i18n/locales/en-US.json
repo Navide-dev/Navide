@@ -723,22 +723,6 @@
     }
   },
   "pane": {
-    "web": {
-      "signed-in": "Signed in",
-      "signed-out": "Not signed in",
-      "unloaded": "Unloaded",
-      "memory": "{mb} MB",
-      "reload": "Reload",
-      "open-browser": "Open in system browser",
-      "clear": "Sign out and clear",
-      "clear-confirm": "Click again to sign out of this site and clear its data in every web pane",
-      "clear-confirm-short": "Confirm",
-      "unloaded-title": "Unloaded to save memory",
-      "unloaded-hint": "Click to load it again. You stay signed in.",
-      "google-hint": "Google may refuse sign-in inside an embedded browser. If it does, sign in from your system browser.",
-      "cloudflare-hint": "Checking your browser. Wait a moment; if a \"Verify you are human\" box appears, tick it yourself.",
-      "privacy": "Sign in with your own account. The sign-in stays on this computer and Navide does not read it."
-    },
     "acp": {
       "unconfirmed": "Not confirmed",
       "unsent": "Not sent",
@@ -2644,10 +2628,6 @@
       "download-retry": "Retry Download"
     },
     "general": {
-      "web-pane-idle": "Web pane idle unload (minutes)",
-      "web-pane-idle-hint": "A web pane not focused for this long unloads its page to free memory. Clicking it loads the page again, still signed in.",
-      "web-pane-limit": "Active web pane limit",
-      "web-pane-limit-hint": "How many web panes keep a loaded page at once. Opening one more unloads the one used least recently.",
       "auto-resume-reconnect": "Resume sessions after Navide's background service restarts",
       "resume-interrupted-on-launch": "Resume working panes after restarting Navide",
       "system-notify": "System notifications",
@@ -8651,8 +8631,6 @@
     }
   },
   "label": {
-    "standalone-badge-web-pane": "web pane",
-    "web-pane-menu-note": "Web pane: the official site in a pane, signed in with your own account; the sign-in stays on this computer. ↗ App appears only when the desktop app is installed.",
     "step-count": "{count} step | {count} steps",
     "imported-from-n8n": "Imported from n8n",
     "resume-other-pipeline": "An unfinished run belongs to \"{name}\". Switch to that pipeline to continue it.",
@@ -8763,11 +8741,7 @@
     "run-group-active": "Running — an agent in this group is active",
     "run-group-awaiting": "Needs you — an agent in this group is blocked on a permission or a question",
     "agent-not-installed": "{label} — not installed",
-    "standalone-agents": "Standalone agents",
-    "standalone-badge-pane": "pane",
-    "standalone-badge-not-installed": "not installed",
-    "standalone-badge-opens-app": "opens app",
-    "grok-bot-pane-hint": "To use Grok in a pane, open the built-in Grok CLI.",
+    "cloud-agents-plugin-hint": "Cloud agents (Grok Bot, dots and others) come as Navide plugins: install them from the Navide Marketplace.",
     "select-role": "Select role…",
     "waiting-backend": "Waiting for backend…",
     "set-workspace-first": "Set workspace path first",

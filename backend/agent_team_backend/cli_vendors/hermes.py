@@ -1,5 +1,5 @@
 """Hermes Agent (``hermes``, Nous Research) — a general AI agent, offered in
-the ＋ menu's "Standalone agents" block rather than among the coding CLIs.
+the ＋ menu's CLI list like any other vendor.
 
 Read from the official docs on 2026-11-07, not yet run against a real install
 (no ``hermes`` binary on the machine this was written on):
@@ -49,7 +49,6 @@ def _home(ctx: VendorRuntimeContext, platform: str | None = None) -> Path:
 SPEC = VendorSpec(
     key="hermes",
     label="Hermes Agent",
-    category="standalone",
     extensions=ExtensionsSpec(
         supported=False,
         note="Hermes skills and plugins (~/.hermes) are not inventoried yet",

@@ -65,8 +65,7 @@ describe('the restore funnel', () => {
   })
 
   it('is what every restore call site goes through', () => {
-    // The third is realizeRestoredWebPane, a web pane's restore.
-    expect(appSource.match(/await spawnRestoredPane\(\{/g)).toHaveLength(3)
+    expect(appSource.match(/await spawnRestoredPane\(\{/g)).toHaveLength(2)
   })
 })
 

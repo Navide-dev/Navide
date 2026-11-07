@@ -1,6 +1,6 @@
 """openclaw (OpenClaw) vendor spec.
 
-OpenClaw is a standalone agent: it owns its runtime (the optional Gateway)
+OpenClaw is a general agent: it owns its runtime (the optional Gateway)
 and its model keys. These lock down what Navide deliberately leaves to it.
 """
 
@@ -11,10 +11,9 @@ from agent_team_backend.cli_vendors import registry
 SPEC = registry.VENDORS["openclaw"]
 
 
-def test_identity_and_category() -> None:
+def test_identity() -> None:
     assert SPEC.key == "openclaw"
     assert SPEC.label == "OpenClaw"
-    assert SPEC.category == "standalone"
 
 
 def test_install_entry_runs_no_installer() -> None:

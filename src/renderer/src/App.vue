@@ -3,17 +3,6 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provi
 import ViewPanel, { type LayoutMode } from './components/ViewPanel.vue'
 import TerminalPane from './components/TerminalPane.vue'
 import AcpPane from './components/AcpPane.vue'
-import WebPane from './components/WebPane.vue'
-import {
-  clampWebPaneIdleMinutes,
-  clampWebPaneLimit,
-  createWebPaneHost,
-  WEB_PANE_IDLE_DEFAULT,
-  WEB_PANE_IDLE_SETTING_KEY,
-  WEB_PANE_LIMIT_DEFAULT,
-  WEB_PANE_LIMIT_SETTING_KEY,
-} from './lib/webPaneHost'
-import { isWebPaneAgentKey, webPaneSiteForAgentKey, type WebPaneSite } from '../../shared/webPaneSites'
 import { createAcpHost } from './lib/acpHost'
 import WindowControls from './components/WindowControls.vue'
 import RestoredPanePlaceholder from './components/RestoredPanePlaceholder.vue'
@@ -2047,17 +2036,6 @@ if (suppressPaneRestoreOnce) {
   )
 }
 const paneRefs = reactive<Record<string, InstanceType<typeof TerminalPane> | null>>({})
-// Web panes (an agent website in a <webview>, no PTY) are never in paneRefs
-// either; lib/webPaneHost.ts decides which of them keep a loaded <webview>.
-const webPanes = createWebPaneHost({
-  limit: () => clampWebPaneLimit(settingsGet(WEB_PANE_LIMIT_SETTING_KEY, WEB_PANE_LIMIT_DEFAULT)),
-  idleMinutes: () => clampWebPaneIdleMinutes(settingsGet(WEB_PANE_IDLE_SETTING_KEY, WEB_PANE_IDLE_DEFAULT)),
-})
-function isWebPane(paneId: string): boolean {
-  const pane = panes.value.find((p) => p.id === paneId)
-  return !!pane?.realized && isWebPaneAgentKey(pane.agentKey)
-}
-window.setInterval(() => webPanes.sweep(effectiveFocusPaneId.value ?? undefined), 30_000)
 // ACP panes (no PTY) live in lib/acpHost.ts, never in paneRefs: code that looks
 // a pane up there finds no ref for one and skips it.
 const acp = createAcpHost({
@@ -2864,12 +2842,6 @@ async function deliverAgentMessage(
   shouldAbort?: () => boolean,
 ): Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }> {
   if (acp.owns(paneId)) return acp.deliver(paneId, text)
-  // A web pane takes no input from Navide: nothing is typed into a website.
-  // The message brings the pane to the user's attention and goes no further.
-  if (isWebPane(paneId)) {
-    onFocusPane(paneId)
-    return { failed: rawReason('web pane: focused for the user; text is never typed into a website') }
-  }
   // Hold the badge on RUNNING until the recipient's log shows the message
   // consumed — released in the agent.activity handler, fused inside
   // useTerminal. Marked BEFORE the Enter, not after: an idle CLI writes the
@@ -3047,8 +3019,6 @@ function messagingHoldKey(
   opts: { ignoreTyping?: boolean } = {},
 ): string | null {
   if (acp.owns(paneId)) return acp.holdKey(paneId)
-  // A web pane never becomes ready the way a CLI does; deliver settles it at once.
-  if (isWebPane(paneId)) return null
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return 'gone'
   const status = messagingGateStatus(
@@ -7997,59 +7967,7 @@ async function sendSessionMarkerBootstrap(pane: ActivePane, tag: string): Promis
   }
 }
 
-/** A web pane: no PTY, no role, no kickoff, no session — a frame around the
- *  site's <webview>. It is recorded, restored, named, grouped, reordered and
- *  closed like any pane; restore brings it back as the usual placeholder,
- *  and clicking that comes back here. */
-function spawnWebPane(opts: SpawnInternal, site: WebPaneSite): string {
-  const id = crypto.randomUUID()
-  const pane: ActivePane = {
-    id,
-    realized: true,
-    agentKey: opts.agentKey,
-    agentLabel: site.name,
-    customName: opts.customName,
-    nameLocked: opts.nameLocked,
-    autoName: opts.autoName,
-    autoNameSource: opts.autoNameSource,
-    roleKey: '' as RoleKey,
-    stageId: opts.stageId,
-    slotLabel: opts.slotLabel ?? '',
-    command: '',
-    workspacePath: opts.workspacePath,
-    origin: opts.origin,
-    runGroupId: opts.runGroupId,
-    injectionStatus: 'skipped',
-    preparationStatus: 'ready',
-    injectionTimer: null,
-    kickoffStatus: 'none',
-    kickoffPrompt: '',
-    skipRoleInjection: true,
-    spawnedBy: opts.spawnedBy,
-    formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
-  }
-  if (opts.replacePaneId) {
-    const wasFocused = focusPaneId.value === opts.replacePaneId
-    if (opts.replacePaneId !== id) {
-      messaging.handOverQueue(opts.replacePaneId, id)
-      unregisterPaneMessaging(opts.replacePaneId, { keepPersisted: true })
-      useChannels(backend).paneReplaced(opts.replacePaneId, id)
-    }
-    const idx = panes.value.findIndex((p) => p.id === opts.replacePaneId)
-    if (idx >= 0) panes.value.splice(idx, 1, pane)
-    else panes.value.push(pane)
-    if (wasFocused) selectPane(id, { userInitiated: false })
-  } else {
-    panes.value.push(pane)
-  }
-  registerPaneMessaging(pane, opts.preferredMessagingName)
-  webPanes.activate(id)
-  return id
-}
-
 async function spawnPane(opts: SpawnInternal): Promise<string | null> {
-  const webSite = webPaneSiteForAgentKey(opts.agentKey)
-  if (webSite) return spawnWebPane(opts, webSite)
   const spec = agentSpecs.find((s) => s.agentKey === opts.agentKey)
   if (!spec) return null
   const id = crypto.randomUUID()
@@ -8924,7 +8842,6 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   if (activeQuestion.value?.paneId === paneId) activeQuestion.value = null
   const ref = paneRefs[paneId]
   if (acp.owns(paneId)) await acp.kill(paneId, { force })
-  webPanes.release(paneId)
   if (ref?.sessionId) {
     try {
       await ref.kill({ force: force })
@@ -11755,8 +11672,7 @@ registerCommand('ui.groupPeers', (args) => {
   // owns the sender. Unassigned panes share the synthetic 'manual' group, so
   // they broadcast to each other rather than to nobody.
   // Never a terminal: a broadcast is prose for agents, and a shell would run it.
-  // Nor a web pane, which takes no messages at all.
-  const peers = (groupPeers(panes.value, paneId) ?? []).filter((p) => p.agentKey !== TERMINAL_AGENT_KEY && !isWebPaneAgentKey(p.agentKey))
+  const peers = (groupPeers(panes.value, paneId) ?? []).filter((p) => p.agentKey !== TERMINAL_AGENT_KEY)
   return {
     group_id: sender.runGroupId ?? '',
     peers: peers.map((p) => ({ pane_id: p.id, name: p.messagingName as string })),
@@ -12737,7 +12653,6 @@ interface PaneSelectionOptions {
 
 function selectPane(paneId: string | null, options: PaneSelectionOptions): void {
   focusPaneId.value = paneId
-  if (paneId && isWebPane(paneId)) webPanes.activate(paneId)
   if (paneId && options.userInitiated) void realizeRestoredPane(paneId)
   if (paneId && options.scrollIntoView) {
     void nextTick(() => {
@@ -14463,44 +14378,6 @@ async function realizeRestoredPane(
   return promise
 }
 
-/** A web pane has no session to resume or ask about: it reopens on its site,
- *  where the partition still holds the sign-in. */
-async function realizeRestoredWebPane(
-  paneId: string,
-  placeholder: ActivePane,
-  deferred: NonNullable<ActivePane['deferredRestore']>,
-  opts?: { requireResume?: boolean },
-): Promise<RealizeOutcome> {
-  if (opts?.requireResume) return 'resume-unavailable'
-  const { saved, batch } = deferred
-  const wasMinimized = minimizedPanes.value.has(paneId)
-  const restored = await spawnRestoredPane({
-    saved,
-    workspacePath: batch.workspacePath,
-    runGroupId: placeholder.runGroupId || undefined,
-    spawnedBy: placeholder.spawnedBy,
-    commandOverride: '',
-    fallbackCommand: '',
-    isResume: false,
-    resumeSessionId: '',
-    sessionKnownOnDisk: false,
-    freshPipelineFallbackSessionId: '',
-    replacePaneId: paneId,
-    restoring: true,
-    shouldPersist: (newPaneId) =>
-      isLocalWorkspace(batch.workspacePath) && panes.value.some((p) => p.id === newPaneId),
-  })
-  if (!restored) return 'error'
-  if (wasMinimized) {
-    const minimized = new Set(minimizedPanes.value)
-    minimized.delete(paneId)
-    minimized.add(restored.paneId)
-    minimizedPanes.value = minimized
-    persistPaneMinimized(restored.paneId, true)
-  }
-  return 'opened'
-}
-
 async function performRealizeRestoredPane(
   paneId: string,
   aggregateReconnect = false,
@@ -14564,7 +14441,6 @@ async function performRealizeRestoredPane(
   syncViews()
 
   try {
-    if (isWebPaneAgentKey(saved.agent)) return await realizeRestoredWebPane(paneId, placeholder, deferred, opts)
     const decision = opts?.explicit
       ? explicitRestoreDecision(session)
       : await restoreSessionDecision(session, batch, true)
@@ -25473,24 +25349,6 @@ function paneIsCommander(p: ActivePane): boolean {
             @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
             @first-output="onPaneFirstOutput(p.id)"
             @context-menu="(ev) => openPaneCtxMenu(ev, p.id)"
-          />
-        </template>
-        <template v-else-if="p.realized && webPaneSiteForAgentKey(p.agentKey)">
-          <WebPane
-            v-show="onScreenPaneIds.has(p.id)"
-            :style="{ ...floatPaneStyle(p.id), ...dualFocusStyle(p.id) }"
-            :data-pane-id="p.id"
-            :pane-id="p.id"
-            :title="p.messagingName || p.customName || p.autoName || p.agentLabel"
-            :site="webPaneSiteForAgentKey(p.agentKey)!"
-            :loaded="webPanes.isLoaded(p.id)"
-            :is-focus="p.id === effectiveFocusPaneId"
-            :workspace-path="p.workspacePath"
-            :selection-batch-ids="selectionBatchIds"
-            @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
-            @activate="selectPane(p.id, { userInitiated: true })"
-            @context-menu="(ev) => openPaneCtxMenu(ev, p.id)"
-            @reorder-drop="(draggedId) => reorderPane(draggedId, p.id)"
           />
         </template>
         <template v-else>

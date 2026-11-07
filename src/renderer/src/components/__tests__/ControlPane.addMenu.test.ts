@@ -127,6 +127,13 @@ describe('ControlPane – the ＋ menu', () => {
     expect(wrapper.find('.ws-add-term').exists()).toBe(true)
   })
 
+  it('points cloud agents at the Navide Marketplace, below the CLI list', async () => {
+    wrapper = mountWith()
+    await openMenu(wrapper)
+    expect(wrapper.find('.ws-add-scroll .ws-add-hint').exists()).toBe(false)
+    expect(wrapper.find('.ws-add-hint').text()).toBe('label.cloud-agents-plugin-hint')
+  })
+
   it('says a heading can be dragged out, only when it can be', async () => {
     // Nothing about the row shows it is draggable, and with one workspace it
     // silently is not — which reads as broken rather than deliberate.
@@ -439,10 +446,9 @@ const COMPONENT_SRC = readFileSync(
 const ROW_PX = 24
 
 /** Everything in the menu that is not the scroller: its own padding, the role
- *  picker, three dividers, the Standalone agents block (heading, two CLI rows,
- *  six web-pane rows and the note, ~268px), and the Terminal + Manual-spawn
- *  buttons. */
-const FURNITURE_PX = 348
+ *  picker, two dividers, the cloud-agents hint (up to five lines, ~72px), and
+ *  the Terminal + Manual-spawn buttons. */
+const FURNITURE_PX = 152
 
 function scrollerCapPx(): number {
   const m = COMPONENT_SRC.match(/\.ws-add-scroll\s*\{[\s\S]*?max-height:\s*min\((\d+)px/)
@@ -456,99 +462,9 @@ function flipThresholdPx(): number {
   return Number(m[1])
 }
 
-// OpenClaw and Hermes Agent are general agents with their own runtime and
-// keys, not coding CLIs: they get their own block in the ＋ menu and stay out
-// of the CLI list, Manual spawn and "Handle Issue As…". The cloud agents
-// (Grok Bot, OpenAI dots, …) have no CLI at all: each opens its official site
-// in a web pane, with "↗ App" beside it when its desktop app is installed.
-describe('ControlPane – the ＋ menu\'s Standalone agents block', () => {
-  let wrapper: VueWrapper
-  afterEach(() => {
-    wrapper?.unmount()
-    delete (window as { agentTeam?: unknown }).agentTeam
-  })
-
-  const withStandalone = [
-    { agentKey: 'claude', label: 'Claude Code' },
-    { agentKey: 'openclaw', label: 'OpenClaw', category: 'standalone' },
-    { agentKey: 'hermes', label: 'Hermes Agent', category: 'standalone' },
-    { agentKey: 'terminal', label: 'Terminal' },
-  ]
-
-  it('lists standalone agents in their own block, not among the CLIs', async () => {
-    wrapper = mountWith({ agentSpecs: withStandalone })
-    await openMenu(wrapper)
-    expect(wrapper.findAll('.ws-add-scroll .ws-add-opt').map((o) => o.text())).toEqual(['✓Claude Code'])
-    const block = wrapper.find('.ws-add-sa')
-    expect(block.find('.ws-add-sa-hd').text()).toBe('label.standalone-agents')
-    expect(block.findAll('.ws-add-sa-opt .ws-add-lb').map((o) => o.text())).toEqual([
-      'OpenClaw', 'Hermes Agent',
-      'Grok Bot', 'OpenAI dots', 'Meta Muse', 'Manus', 'Gemini Tasks', 'Perplexity Computer',
-    ])
-    expect(block.find('.ws-add-sa-note').text()).toBe('label.web-pane-menu-note label.grok-bot-pane-hint')
-  })
-
-  it('keeps standalone agents out of the Manual spawn dropdown', async () => {
-    wrapper = mountWith({ agentSpecs: withStandalone })
-    await openMenu(wrapper)
-    await wrapper.find('.ws-add-card').trigger('click')
-    const options = wrapper.findAll('.spawn-card--modal select').at(0)!.findAll('option')
-    expect(options.map((o) => o.attributes('value'))).toEqual(['claude'])
-  })
-
-  it('opens a standalone agent in a pane, with the picked role', async () => {
-    wrapper = mountWith({ agentSpecs: withStandalone })
-    await openMenu(wrapper)
-    await wrapper.find('.ws-add-role').setValue('reviewer')
-    await wrapper.findAll('.ws-add-sa-opt')[1].trigger('click')
-    expect(wrapper.emitted('spawn')?.[0]?.[0]).toMatchObject({ agentKey: 'hermes', roleKey: 'reviewer' })
-    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
-  })
-
-  it('tags each entry with what a click does, and offers the guided install when missing', async () => {
-    wrapper = mountWith({ agentSpecs: withStandalone, backend: backendWithMissing(['openclaw']) })
-    await new Promise((r) => setTimeout(r, 0))
-    await openMenu(wrapper)
-    expect(wrapper.findAll('.ws-add-sa-tag').map((t) => t.text())).toEqual([
-      'label.standalone-badge-not-installed',
-      'label.standalone-badge-pane',
-      ...Array(6).fill('label.standalone-badge-web-pane'),
-    ])
-    await wrapper.findAll('.ws-add-sa-opt')[0].trigger('click')
-    await new Promise((r) => setTimeout(r, 0))
-    expect(wrapper.emitted('spawn')).toBeUndefined()
-    expect(wrapper.emitted('install-cli')?.[0]?.[0]).toEqual({ agentKey: 'openclaw', label: 'OpenClaw' })
-  })
-
-  it('opens a cloud agent in a web pane, with no role, into the menu\'s workspace', async () => {
-    wrapper = mountWith({ agentSpecs: withStandalone })
-    await openMenu(wrapper)
-    await wrapper.find('.ws-add-role').setValue('reviewer')
-    await wrapper.find('.ws-add-web-row[data-site="grok"] .ws-add-web').trigger('click')
-    expect(wrapper.emitted('spawn')?.[0]?.[0]).toMatchObject({ agentKey: 'web:grok', roleKey: '', stageId: '' })
-    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
-  })
-
-  it('offers "↗ App" only for a site whose desktop app is installed, and opens the app', async () => {
-    const installedApps = vi.fn().mockResolvedValue(['dots'])
-    const openApp = vi.fn().mockResolvedValue(true)
-    ;(window as { agentTeam?: unknown }).agentTeam = { webPane: { installedApps, openApp } }
-    wrapper = mountWith({ agentSpecs: withStandalone })
-    await openMenu(wrapper)
-    await new Promise((r) => setTimeout(r, 0))
-    const apps = wrapper.findAll('.ws-add-web-app')
-    expect(apps.map((b) => b.element.closest('.ws-add-web-row')?.getAttribute('data-site'))).toEqual(['dots'])
-    await apps[0].trigger('click')
-    expect(openApp).toHaveBeenCalledWith('dots')
-    expect(wrapper.emitted('spawn')).toBeUndefined()
-    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
-  })
-})
-
 describe('ControlPane – the ＋ menu fits its roster', () => {
   it('the scroller is tall enough to show every CLI at once', () => {
-    // Standalone agents sit in their own block below the scroller.
-    const needed = CLI_AGENT_SPECS.filter((s) => s.category !== 'standalone').length * ROW_PX
+    const needed = CLI_AGENT_SPECS.length * ROW_PX
     expect(scrollerCapPx()).toBeGreaterThanOrEqual(needed)
   })
 

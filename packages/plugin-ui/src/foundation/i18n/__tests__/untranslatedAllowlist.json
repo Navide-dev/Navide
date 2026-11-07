@@ -50,7 +50,6 @@
     "pane.plans.format-html",
     "pane.plans.format-markdown",
     "pane.terminal.loop-badge-estimate",
-    "pane.web.memory",
     "paneStatus.error",
     "plans.share.chat-target",
     "plugin-switch.source.marketplace",
@@ -612,8 +611,7 @@
     "webhooks.kind.webhook",
     "webhooks.nav",
     "webhooks.reveal.secret",
-    "webhooks.fieldType.text",
-    "pane.web.memory"
+    "webhooks.fieldType.text"
   ],
   "pt-BR": [
     "account.title",
@@ -671,7 +669,6 @@
     "msg.push-badge",
     "pane.plans.doc-badge",
     "pane.terminal.loop-badge-estimate",
-    "pane.web.memory",
     "pipelineEditor.inspector.status",
     "plans.share.chat-target",
     "plugin-request.workspace",
@@ -1063,8 +1060,7 @@
     "webhooks.kind.webhook",
     "webhooks.outcome.ping",
     "webhooks.reveal.secret",
-    "webhooks.fieldType.email",
-    "pane.web.memory"
+    "webhooks.fieldType.email"
   ],
   "ja-JP": [
     "webhooks.form.pipeline",

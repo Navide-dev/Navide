@@ -43,7 +43,7 @@ export const TURN_START_SIGNAL: Readonly<Record<string, boolean>> = {
   mcode: false,
   // No log reader yet: Devin's session store is undocumented.
   devin: false,
-  // No log readers yet (standalone agents; their sessions live in their own
+  // No log readers yet (general agents; their sessions live in their own
   // runtime).
   openclaw: false,
   hermes: false,

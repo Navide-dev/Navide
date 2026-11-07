@@ -1,6 +1,6 @@
 """hermes (Hermes Agent) vendor spec.
 
-Hermes is a standalone agent: its providers and keys live in its own home
+Hermes is a general agent: its providers and keys live in its own home
 (~/.hermes, $HERMES_HOME). These lock down what Navide deliberately leaves to
 it, and that Windows is offered (native PowerShell is an official install).
 """
@@ -15,10 +15,9 @@ from agent_team_backend.cli_vendors.base import VendorRuntimeContext
 SPEC = registry.VENDORS["hermes"]
 
 
-def test_identity_and_category() -> None:
+def test_identity() -> None:
     assert SPEC.key == "hermes"
     assert SPEC.label == "Hermes Agent"
-    assert SPEC.category == "standalone"
 
 
 def test_install_entry_runs_no_installer_on_any_platform() -> None:

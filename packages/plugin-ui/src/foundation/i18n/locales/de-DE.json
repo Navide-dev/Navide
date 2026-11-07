@@ -723,22 +723,6 @@
     }
   },
   "pane": {
-    "web": {
-      "signed-in": "Angemeldet",
-      "signed-out": "Nicht angemeldet",
-      "unloaded": "Entladen",
-      "memory": "{mb} MB",
-      "reload": "Neu laden",
-      "open-browser": "Im Systembrowser öffnen",
-      "clear": "Abmelden und löschen",
-      "clear-confirm": "Erneut klicken, um dich von dieser Website abzumelden und ihre Daten in allen Web-Bereichen zu löschen",
-      "clear-confirm-short": "Bestätigen",
-      "unloaded-title": "Entladen, um Speicher zu sparen",
-      "unloaded-hint": "Klicken, um sie neu zu laden. Du bleibst angemeldet.",
-      "google-hint": "Google kann die Anmeldung in einem eingebetteten Browser ablehnen. Melde dich in diesem Fall im Systembrowser an.",
-      "cloudflare-hint": "Browser wird geprüft. Bitte warten; erscheint ein Kästchen „Verify you are human“, hake es selbst an.",
-      "privacy": "Melde dich mit deinem eigenen Konto an. Die Anmeldung bleibt auf diesem Computer, Navide liest sie nicht."
-    },
     "acp": {
       "unconfirmed": "Nicht bestätigt",
       "unsent": "Nicht gesendet",
@@ -2644,10 +2628,6 @@
       "download-retry": "Download wiederholen"
     },
     "general": {
-      "web-pane-idle": "Web-Bereich bei Leerlauf entladen (Minuten)",
-      "web-pane-idle-hint": "Ein Web-Bereich, der so lange keinen Fokus hatte, entlädt seine Seite, um Speicher freizugeben. Ein Klick lädt sie neu, weiterhin angemeldet.",
-      "web-pane-limit": "Limit aktiver Web-Bereiche",
-      "web-pane-limit-hint": "Wie viele Web-Bereiche gleichzeitig eine geladene Seite behalten. Wird einer mehr geöffnet, wird der am längsten ungenutzte entladen.",
       "auto-resume-reconnect": "Sessions nach einem Neustart des Navide-Hintergrunddienstes fortsetzen",
       "resume-interrupted-on-launch": "Arbeitende Bereiche nach dem Neustart von Navide fortsetzen",
       "system-notify": "Systembenachrichtigungen",
@@ -8651,8 +8631,6 @@
     }
   },
   "label": {
-    "standalone-badge-web-pane": "Web-Bereich",
-    "web-pane-menu-note": "Ein Web-Bereich öffnet die offizielle Website in einem Bereich, angemeldet mit deinem eigenen Konto; die Anmeldung bleibt auf diesem Computer. ↗ App erscheint nur, wenn die Desktop-App installiert ist.",
     "step-count": "{count} Schritt | {count} Schritte",
     "imported-from-n8n": "Aus n8n importiert",
     "resume-other-pipeline": "Ein nicht abgeschlossener Lauf gehört zu „{name}“. Wechseln Sie zu dieser Pipeline, um ihn fortzusetzen.",
@@ -8763,11 +8741,7 @@
     "run-group-active": "Läuft – ein Agent in dieser Gruppe ist aktiv",
     "run-group-awaiting": "Benötigt Sie – ein Agent in dieser Gruppe wartet auf eine Berechtigung oder eine Antwort",
     "agent-not-installed": "{label} – nicht installiert",
-    "standalone-agents": "Eigenständige Agents",
-    "standalone-badge-pane": "Bereich",
-    "standalone-badge-not-installed": "nicht installiert",
-    "standalone-badge-opens-app": "öffnet App",
-    "grok-bot-pane-hint": "Um Grok in einem Bereich zu nutzen, öffnen Sie die integrierte Grok CLI.",
+    "cloud-agents-plugin-hint": "Cloud-Agents (Grok Bot, dots und weitere) gibt es als Navide-Plug-in im Navide Marketplace.",
     "select-role": "Rolle auswählen …",
     "waiting-backend": "Warten auf Backend …",
     "set-workspace-first": "Zuerst Arbeitsbereichspfad festlegen",
