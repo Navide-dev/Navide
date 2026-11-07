@@ -369,6 +369,29 @@ async def plugins_agent_tools_sync(
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("plugins.pipelineNodes.result")
+async def plugins_pipeline_nodes_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``plugins.pipelineNodes.request`` (E2)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.pipelineNodes.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plan_mcp.resolve_pipeline_nodes(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
 @handler("marketplace.query.result")
 async def marketplace_query_result(
     session: "Session", msg_id: str, msg_type: str, payload: dict
@@ -6889,6 +6912,9 @@ async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, p
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot import a pipeline while a project is running")
             )
             return
+    from .mcp_server import server as plan_mcp
+
+    plugin_nodes = await plan_mcp.host_plugin_pipeline_nodes()
     try:
         out = await asyncio.to_thread(
             import_into_store,
@@ -6897,6 +6923,7 @@ async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, p
             dry_run=dry_run,
             default_agent=str(payload.get("default_agent") or "claude"),
             name=str(payload.get("name") or ""),
+            plugin_nodes=plugin_nodes,
         )
     except N8nImportError as exc:
         code = {"too-large": "N8N_TOO_LARGE", "store-refused": "N8N_REFUSED"}.get(exc.reason, "N8N_INVALID")

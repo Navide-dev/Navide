@@ -9473,6 +9473,9 @@ export class FrontendPluginManager {
       client.on(HOST_AGENT_EVENT_TYPE, (payload) => {
         this.dispatchHostAgentEvent(payload)
       })
+      client.on('plugins.pipelineNodes.request', (payload) => {
+        void this.handlePipelineNodesRequest(client, payload)
+      })
       client.on('agent.capability.request', (payload) => {
         void this.handleAgentCapabilityRequest(client, payload)
       })
@@ -9935,6 +9938,33 @@ export class FrontendPluginManager {
     if (this.wsClient !== client) return
     await client.send(MARKETPLACE_DEVELOPER_RESULT_MESSAGE, { request_id: requestId, ...answer }, 10_000).catch(() => {
       // The backend's waiter has its own timeout and reports it there.
+    })
+  }
+
+  /** Answer one `plugins.pipelineNodes.request` (E2): the pipeline nodes of
+   *  enabled Manifest v2 packages the user granted, for an n8n import to map
+   *  steps onto. Names and n8n types only; nothing runs. */
+  private async handlePipelineNodesRequest(client: WsClient, payload: unknown): Promise<void> {
+    const record: Record<string, unknown> =
+      typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+        ? payload as Record<string, unknown>
+        : {}
+    const requestId = nonEmptyString(record.request_id) ? record.request_id : null
+    if (requestId === null || this.wsClient !== client || !this.hostSessionRegistered) return
+    const nodes: Array<{ pluginId: string; node: string; title: string; n8nTypes: string[] }> = []
+    for (const descriptor of this.enabledDescriptors()) {
+      if (descriptor.capabilityPolicy?.kind !== 'manifest-v2' || !nonEmptyString(descriptor.packageVersion)) continue
+      if (this.isPluginDisabled(descriptor.id)) continue
+      const grant = this.capabilityGrantResolver?.(descriptor.id, descriptor.packageVersion) ?? null
+      if (!grant || grant.packageVersion !== descriptor.packageVersion) continue
+      for (const entry of descriptor.pipelineNodes ?? []) {
+        if (entry.n8nTypes?.length) {
+          nodes.push({ pluginId: descriptor.id, node: entry.id, title: entry.title, n8nTypes: [...entry.n8nTypes] })
+        }
+      }
+    }
+    await client.send('plugins.pipelineNodes.result', { request_id: requestId, ok: true, nodes }, 10_000).catch(() => {
+      // The backend's waiter has its own timeout; an import then keeps agent slots.
     })
   }
 
