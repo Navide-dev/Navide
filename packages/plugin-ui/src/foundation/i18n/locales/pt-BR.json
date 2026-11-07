@@ -8651,6 +8651,8 @@
     }
   },
   "label": {
+    "standalone-badge-web-pane": "pane web",
+    "web-pane-menu-note": "Um web pane abre o site oficial em um pane, com a sua própria conta; o login fica neste computador. ↗ App só aparece quando o app para desktop está instalado.",
     "step-count": "{count} passo | {count} passos",
     "imported-from-n8n": "Importado do n8n",
     "resume-other-pipeline": "Uma execução não concluída pertence a “{name}”. Mude para esse pipeline para continuá-la.",

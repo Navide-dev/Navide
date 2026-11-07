@@ -8651,6 +8651,8 @@
     }
   },
   "label": {
+    "standalone-badge-web-pane": "web pane",
+    "web-pane-menu-note": "web pane は公式サイトを pane 内で開き、ご自身のアカウントでログインします。ログイン状態はこのコンピュータにだけ残ります。↗ App はデスクトップアプリがインストールされている場合だけ表示されます。",
     "step-count": "{count} ステップ",
     "imported-from-n8n": "n8n から取り込み",
     "resume-other-pipeline": "未完了の実行は「{name}」のものです。続けるには、そのパイプラインに切り替えてください。",

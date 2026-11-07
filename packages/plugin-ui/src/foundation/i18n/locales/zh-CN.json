@@ -8651,6 +8651,8 @@
     }
   },
   "label": {
+    "standalone-badge-web-pane": "网页分格",
+    "web-pane-menu-note": "网页分格：在分格里打开官方网页，用你自己的账号登录，登录状态只保存在这台电脑上。↗ App 仅在已安装桌面 App 时出现。",
     "step-count": "{count} 个步骤",
     "imported-from-n8n": "来自 n8n",
     "resume-other-pipeline": "有一个未完成的运行属于“{name}”。切换到该流程即可继续。",

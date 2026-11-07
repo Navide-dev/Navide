@@ -228,6 +228,8 @@ declare global {
       webPane?: {
         memory: (webContentsIds: number[]) => Promise<Record<string, number>>
         clearData: (siteId: string) => Promise<boolean>
+        installedApps: () => Promise<string[]>
+        openApp: (siteId: string) => Promise<boolean>
       }
       trashCreatedMemoryFile: (
         path: string,

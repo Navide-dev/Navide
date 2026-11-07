@@ -8651,6 +8651,8 @@
     }
   },
   "label": {
+    "standalone-badge-web-pane": "pane web",
+    "web-pane-menu-note": "Un web pane abre el sitio oficial en un pane, con tu propia cuenta; la sesión se queda en este equipo. ↗ App solo aparece si la app de escritorio está instalada.",
     "step-count": "{count} paso | {count} pasos",
     "imported-from-n8n": "Importado de n8n",
     "resume-other-pipeline": "Una ejecución sin terminar pertenece a «{name}». Cambia a esa pipeline para continuarla.",

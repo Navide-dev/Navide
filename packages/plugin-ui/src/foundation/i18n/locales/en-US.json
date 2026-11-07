@@ -8651,6 +8651,8 @@
     }
   },
   "label": {
+    "standalone-badge-web-pane": "web pane",
+    "web-pane-menu-note": "Web pane: the official site in a pane, signed in with your own account; the sign-in stays on this computer. ↗ App appears only when the desktop app is installed.",
     "step-count": "{count} step | {count} steps",
     "imported-from-n8n": "Imported from n8n",
     "resume-other-pipeline": "An unfinished run belongs to \"{name}\". Switch to that pipeline to continue it.",
