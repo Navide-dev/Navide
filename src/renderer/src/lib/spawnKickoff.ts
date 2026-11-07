@@ -88,8 +88,12 @@ export function terminalKickoffOutcome(input: {
   echo: EchoEvidence | null
   submit: SubmitEvidence | null
   promptReady: boolean
+  /** Typed without Enter (submit: false): there is no submit to observe, so
+   *  the echo alone says it is on the command line. */
+  prefill?: boolean
 }): KickoffVerdict {
   if (!input.typed) return 'failed'
+  if (input.prefill) return input.echo !== null ? 'sent' : 'unverified'
   return kickoffVerified(input.echo, input.submit, input.promptReady) ? 'sent' : 'unverified'
 }
 

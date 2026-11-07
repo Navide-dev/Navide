@@ -1073,6 +1073,12 @@ def _classify_pipeline(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads
         if _PLACEHOLDER in word_raw or "$" in word_raw:
             acc.opaque("dynamic-command", "command name is computed at run time")
             continue
+        if any(c.argv and os.path.basename(c.argv[0]) in DOWNLOADERS for c in pipeline[idx + 1:]) and any(
+            (path := _resolve(cand, ctx)) and _ssh_public_key(path, ctx) for a in argv[1:] for cand in _arg_paths(a)
+        ):
+            # Reading a public key is exempt from the credential check (see
+            # _ssh_public_key); piping it into a network tool is not.
+            acc.hit("critical", "credential-pipe-upload", "pipes a file from ~/.ssh into a network tool")
         if word == "eval":
             acc.opaque("eval", "eval runs a string that cannot be analysed statically")
             if any((i := _sub_index(a)) is not None and i in sub_downloads for a in argv[1:]):
@@ -1363,11 +1369,21 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
     for a in args:
         for cand in _arg_paths(a):
             path = _resolve(cand, ctx)
-            if path:
+            if path and not (not writes and _ssh_public_key(path, ctx)):
                 _check_path(acc, path, ctx, write=writes, list_only=list_only, store=False)
     if writes or word in _STORE_ONLY_WRITES:
         for a in _store_targets(word, args):
             _store_arg(acc, a, ctx)
+
+
+def _ssh_public_key(path: str, ctx: _Ctx) -> bool:
+    """A public key file in ~/.ssh (``*.pub``): a command that only reads it
+    (``ssh-copy-id -i ~/.ssh/k.pub``) does not touch a secret. Used by the
+    generic argument check alone; deletes, uploads and Grep keep grading it
+    with the rest of the store."""
+    if not path.endswith(".pub"):
+        return False
+    return any(_inside(posixpath.join(h, ".ssh"), path) for h in _homes(ctx))
 
 
 #: Commands that change files but grade normal elsewhere: only the plugin

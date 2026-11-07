@@ -92,6 +92,7 @@ _RULE_CATEGORY = {
     "download-then-exec": "pipe-to-shell",
     "credential-access": "credential",
     "credential-exfil": "credential",
+    "credential-pipe-upload": "credential",
     "credential-path-list": "credential",
     "keychain-access": "credential",
     "dotenv-outside-workspace": "credential",
@@ -102,7 +103,7 @@ _RULE_CATEGORY = {
 }
 #: Pipeline-context rules: judged on the whole line, never exempted by an
 #: allow prefix on one of its segments.
-_PIPELINE_RULES = {"pipe-download-to-shell", "download-then-exec", "decode-and-exec"}
+_PIPELINE_RULES = {"pipe-download-to-shell", "download-then-exec", "decode-and-exec", "credential-pipe-upload"}
 #: Opaque verdicts that mean "cannot be judged" rather than "an unknown script".
 _UNANALYZABLE_RULES = {"dynamic-command", "eval", "unbalanced-quotes", "nesting-too-deep", "too-long",
                        "decode-and-exec", "stdin-script", "dynamic-stdin-script"}
@@ -134,7 +135,21 @@ class Refusal:
 
     def message(self) -> str:
         what = f"refused to type into a terminal: `{_clip(self.segment)}` — {self.reason}"
-        return f"{what}. Run it yourself in the terminal if you really mean to."
+        # The two prefill refusals (ws_handlers): resending with submit: false
+        # is what got them here, so it is not the advice.
+        if self.rule == "prefill-pending":
+            return (
+                "refused to type into a terminal: a prefilled command is waiting on this terminal; "
+                "the user runs or clears it first."
+            )
+        if self.rule == "prefill-not-single-line":
+            return f"{what}."
+        return (
+            f"{what}. To let the user decide, send it again with submit: false — it is "
+            "prefilled on the command line without Enter, for the user to check and run; "
+            "or ask the user to add an allow prefix in Settings → Security, or to run it "
+            "themselves."
+        )
 
     def as_dict(self) -> dict[str, str]:
         out = {"rule": self.rule, "segment": self.segment, "reason": self.reason, "message": self.message()}
@@ -493,12 +508,27 @@ def check_with_store(text: str, *, workspace: str) -> Refusal | None:
     return check(text, workspace=workspace, settings=runtime.store().terminal_settings())
 
 
-def enforce(text: str, *, workspace: str, pane_id: str, via: str) -> Refusal | None:
+def prefill_line_error(text: str) -> str | None:
+    """Why ``text`` cannot be prefilled (typed without Enter), or None. Only a
+    single printable line: a newline or carriage return would run it, and a
+    control character can too (Ctrl-O, Ctrl-J) or end the bracketed paste."""
+    if "\n" in text or "\r" in text:
+        return "submit: false takes a single line — the text contains a newline or carriage return"
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in text):
+        return "submit: false takes printable text only — the text contains a control character"
+    return None
+
+
+def enforce(text: str, *, workspace: str, pane_id: str, via: str, prefill: bool = False) -> Refusal | None:
     """check_with_store(), and when it refuses: an audit row and a
     guard.decision event (the window shows it as a notice on that pane).
     ``via`` names the path that tried to type it (cli_send, cli_open_agent,
     agent_msg.route, terminal.input). Bookkeeping never overturns a refusal,
-    and a checker error refuses rather than letting the line through."""
+    and a checker error refuses rather than letting the line through.
+
+    ``prefill``: the line is typed without Enter for the user to run or clear,
+    so a refusal is not enforced by the caller. It is still audited, as action
+    "prefill", and no deny notice is shown — nothing was denied."""
     import logging
     import time
 
@@ -516,10 +546,13 @@ def enforce(text: str, *, workspace: str, pane_id: str, via: str) -> Refusal | N
         runtime.store().audit_add({
             "ts": time.time(), "pane_id": pane_id or "", "vendor": "terminal", "source": "agent",
             "tool": f"terminal:{via}", "excerpt": _clip(refusal.segment, 200), "level": "critical",
-            "action": "deny", "rule_ids": (f"terminal-{refusal.rule}",), "tainted": False,
+            "action": "prefill" if prefill else "deny", "rule_ids": (f"terminal-{refusal.rule}",),
+            "tainted": False,
         })
     except Exception:  # noqa: BLE001
         log.warning("guard: terminal refusal audit failed; refusal stands", exc_info=True)
+    if prefill:
+        return refusal
     try:
         runtime.emit("guard.decision", {
             "pane_id": pane_id, "action": "deny", "level": "critical",
